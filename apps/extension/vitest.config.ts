@@ -40,7 +40,6 @@ export default defineConfig({
 			// boot-failure classifier. The sandbox-bound specs under tests/e2e/**
 			// stay excluded below; only co-located script unit tests run here.
 			"scripts/**/*.test.ts",
-			"tests/helpers/**/*.test.ts",
 			"../../packages/wallet-core/src/**/*.test.ts",
 			"../../packages/wallet-crypto/src/**/*.test.ts",
 			"../../packages/extension-messaging/src/**/*.test.ts",

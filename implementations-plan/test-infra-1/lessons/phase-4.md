@@ -12,7 +12,7 @@
 | FAN-OUT PIN, CREATE-BALANCE PIN (`:500-511`, `:566-572`) | 3 single turns each, before a "not called" | reached signals on `getAccounts` / `allocateIdAvoiding`; the switch's reconcile queues behind the parked creation's lock, so CREATE-BALANCE starts the switch, releases, then awaits both |
 | `network/client.test.ts` `drain()` | 5 microtasks | `connectedClient()`: `holdReady`, `connect()`, `ready()`; Ready lands synchronously, so a request posts before its call returns; test 1 gains a control (a valid request posts at once) |
 | `importChainSync.test.ts:207,324` | 5 microtasks after the late answer | `await vi.runAllTimersAsync()`: the fake clock yields a real task, so every reaction at any depth has run |
-| local `deferred` (`FeeSettingsCard`, `scope-follow.core`), `held()` (`locked-state`) | copies | `deferred` from `@nulo/wallet-core/utils` |
+| local `deferred` (`scope-follow.core`), `held()` (`locked-state`) | copies | `deferred` from `@nulo/wallet-core/utils` |
 
 The delays inside the allocation mocks (`:824`, `:1074`) stay: they widen the races those tests pin.
 
@@ -20,6 +20,8 @@ The delays inside the allocation mocks (`:824`, `:1074`) stay: they widen the ra
 
 - FAN-OUT and CREATE-BALANCE were not in the plan's list (recon counted only multi-turn loops); they are the same file, the same bus, and single-turn guesses before a "not called". Moved with the rest.
 - `importChainSync`: the code's reaction to the late promise (`importChainSync.ts:122`) is a `.catch` passthrough into a race that already settled, so no handle reaches the test. The check is "nothing appends", which only holds at quiescence; `runAllTimersAsync` is the file's own idiom (`run`) and reaches it.
+
+- Collision holds, found before Phase 6: `vitest.config.ts` is in authwit-intent-1's diff and `FeeSettingsCard.test.ts` in fees-display-1's, so both wait for arc 3. The helper tests live in `scripts/test-helpers/` instead (collected by `scripts/**/*.test.ts` and type-checked by `tsconfig.scripts.json`, the precedent of `scripts/e2e/*.test.ts` over `tests/e2e/`), so neither `vitest.config.ts` nor `tsconfig.json` changes; `FeeSettingsCard`'s local `deferred` stays.
 
 ## Mutation proof (scratch; production restored; old test copied from origin/dev beside the new)
 
