@@ -28,9 +28,11 @@
 import { JobCancelledSentinel, type JobError, type JobProgress, normalizeError } from "@nulo/wallet-core/jobs"
 import { deferred } from "@nulo/wallet-core/utils"
 import { SessionEndedError, TooManyPendingError } from "@nulo/extension-messaging/errors"
-import { pickPrimaryMethod } from "@/utils/primary-method"
+import { pickPrimaryIndex } from "@/utils/primary-method"
 import type { LocalTxOrigin } from "@/wallet/services/transaction/service"
+import type { TxCall } from "@/wallet/services/transaction/spec"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { type JournalCallCarrier, journalCallOf } from "@/wallet/services/operation-journal/spec"
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { Network } from "@/wallet/services/network/service"
 import type { ProfileInfo } from "@/wallet/services/profile/service"
@@ -156,7 +158,7 @@ export class ExecutionLane {
 		networkId: string,
 		accountAddress: string,
 		origin: LocalTxOrigin,
-		calls?: { method?: string }[],
+		calls?: JournalCallCarrier[],
 		fence?: ExecutionFence,
 	): Promise<string | undefined> {
 		try {
@@ -167,7 +169,8 @@ export class ExecutionLane {
 			// stale operation into the wrong incarnation.
 			const profileId = fence?.profileId ?? (await this.deps.getActiveProfile())?.id
 			if (!profileId) return undefined
-			const primaryMethod = pickPrimaryMethod(calls)
+			const index = pickPrimaryIndex(calls)
+			const primary = index === undefined ? undefined : calls?.[index]
 			const op = await this.deps.operationJournal.createOperation({
 				kind: "dapp_execute",
 				origin: "dapp",
@@ -175,8 +178,9 @@ export class ExecutionLane {
 				profileEpoch: fence?.epoch ?? this.deps.captureProfileEpoch?.(profileId),
 				accountAddress,
 				networkId,
-				title: primaryMethod ?? "Transaction",
+				title: primary?.method ?? "Transaction",
 				subtitle: origin.name,
+				call: primary?.call,
 			})
 			return op.id
 		} catch (error) {
@@ -612,7 +616,7 @@ export class ExecutionLane {
 		networkId: string,
 		accountAddress: string,
 		origin: LocalTxOrigin,
-		calls: { method?: string }[] | undefined,
+		calls: JournalCallCarrier[] | undefined,
 		hooks: ExecutionHooks | undefined,
 		reuseController: AbortController | undefined,
 		fence: ExecutionFence,
@@ -657,6 +661,24 @@ export class ExecutionLane {
 		} catch (err) {
 			this.deps.logError("Failed to update journal operation", err)
 		}
+	}
+
+	/**
+	 * Names the record by the primary call a build made, the one its settled row will title: the title
+	 * and the call, class included, in one write, so the two never describe different calls. Nothing
+	 * depends on it: a refused write leaves the record as it was.
+	 */
+	public async recordBuiltCall(journalId: string | undefined, txCalls: readonly TxCall[]): Promise<void> {
+		if (!journalId || txCalls.length === 0) return
+		const primary = txCalls[pickPrimaryIndex(txCalls) ?? 0]
+		const call = journalCallOf(primary.contract, primary.args, primary.classId)
+		const written =
+			call !== undefined &&
+			(await this.deps.operationJournal.setOperationMeta(journalId, { title: primary.method, call }).then(
+				() => true,
+				() => false,
+			))
+		if (!written) this.deps.logDebug("journal call not recorded")
 	}
 
 	/** {@link markJournal} for a write the caller depends on: a refused write or a missing id rejects. */

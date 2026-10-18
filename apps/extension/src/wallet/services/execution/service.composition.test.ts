@@ -1245,7 +1245,7 @@ describe("ExecutionService composition — a send whose answer was lost is check
 		expect(getTxReceipt.mock.calls[0]?.[0].toString()).toBe(hash)
 		const answered = await h.journal.getOperation(h.getJournalId())
 		expect(answered?.progress).toEqual({ ...failed?.progress, check: "sent", inclusion: { block: 42, hash: blockHash } })
-		const card = answered && buildJournalTerminalCardProps(answered, { tokenById: () => undefined })
+		const card = answered && buildJournalTerminalCardProps(answered, { tokenById: () => undefined, tokens: [] })
 		expect(card).toMatchObject({ state: "sent", subtitle: "Sent", color: "green" })
 		expect(balances.refreshAccountBalances).toHaveBeenCalledWith(h.req.accountAddress)
 		expect(h.sendTx).toHaveBeenCalledTimes(1)

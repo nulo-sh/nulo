@@ -40,7 +40,7 @@ import {
 	journalTerminalDisplay,
 	sanitizeJournalSubtitle,
 } from "@/utils/journal-state"
-import { humanizeMethodName } from "@/utils/tx-enrichment"
+import { callTitle } from "@/utils/tx-enrichment"
 import { buildIncomingCardProps } from "@/utils/received-display"
 import {
 	buildCancelHandler,
@@ -185,9 +185,10 @@ const executingProgressTitle = computed(() => {
 	}
 	// Dapp path: title is the method name only — the dApp identity rides
 	// in the secondary-row chip (originLabel) so the title position stays
-	// stable across the lifecycle into the settled card.
+	// stable across the lifecycle into the settled card. The task names no
+	// contract, so a movement name reads as its contract spells it.
 	const method = executingTask.value.content?.primaryMethod
-	if (method) return humanizeMethodName(method)
+	if (method) return callTitle(method, undefined, false)
 	return "Transaction"
 })
 const executingProgressSubtitle = computed(() => {
@@ -461,7 +462,7 @@ async function sendReask() {
  *  shared helper deliberately omits `id` so other consumers (e.g.
  *  TransactionsList) don't carry an unused attr through fallthrough. */
 function journalTerminalCardProps(op) {
-	const props = buildJournalTerminalCardProps(op, { tokenById })
+	const props = buildJournalTerminalCardProps(op, { tokenById, tokens: tokens.value })
 	if (!props) return null
 	return { id: op.id, ...props }
 }
@@ -868,7 +869,7 @@ onBeforeUnmount(() => {
 			<TransactionAwaitingCard
 				v-for="op in renderedInFlightOps"
 				:key="`awaiting:${op.id}`"
-				:title="journalCardTitle(op, tokenById)"
+				:title="journalCardTitle(op, { tokenById, tokens })"
 				:subtitle="awaitingSubtitleFor(op)"
 				:reaskLine="reaskLineFor(op)"
 				:icon="journalCardIcon(op)"

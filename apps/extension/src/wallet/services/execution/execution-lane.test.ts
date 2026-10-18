@@ -608,6 +608,52 @@ describe("pre-claim wait heartbeat", () => {
 	})
 })
 
+describe("ExecutionLane: the call a record reads by", () => {
+	const TOKEN = `0x${"0d".repeat(32)}`
+	const CLASS = `0x${"0e".repeat(32)}`
+	const FEE = `0x${"0f".repeat(32)}`
+
+	test("beginJournal titles and names the record by one primary of the calls it is given", async () => {
+		const createOperation = vi.fn(async (input: unknown) => ({ id: "op-1", ...(input as object) }) as never)
+		const { lane } = makeLane({ operationJournal: { createOperation } as never })
+		const calls = [
+			{ method: "claim_and_end_setup", call: { contract: FEE, argCount: 0 } },
+			{ method: "transfer_in_public", call: { contract: TOKEN, argCount: 4 } },
+		]
+		await lane.beginJournal("net-1", "0xacct", { type: 1, name: "dapp" } as never, calls, FENCE)
+		expect(createOperation).toHaveBeenCalledWith(
+			expect.objectContaining({ title: "transfer_in_public", call: { contract: TOKEN, argCount: 4 } }),
+		)
+	})
+
+	test("a build writes the title and the call of its primary in one write, past an unnamed call and a fee call", async () => {
+		const setOperationMeta = vi.fn(async () => ({}))
+		const { lane, deps } = makeLane({ operationJournal: { setOperationMeta } as never })
+		await lane.recordBuiltCall("j1", [
+			{ contract: TOKEN, method: "", args: [] },
+			{ contract: FEE, method: "sponsor_unconditionally", args: [1], classId: CLASS },
+			{ contract: TOKEN, method: "transfer_in_public", args: [1, 2, 3, 4], classId: CLASS },
+		])
+		expect(setOperationMeta.mock.calls).toEqual([
+			["j1", { title: "transfer_in_public", call: { contract: TOKEN, argCount: 4, classId: CLASS } }],
+		])
+		expect(deps.logDebug).not.toHaveBeenCalled()
+	})
+
+	test("a refused or unreadable write never fails the send, and logs one fixed line at debug", async () => {
+		const setOperationMeta = vi.fn(async () => {
+			throw new Error("refused")
+		})
+		const { lane, deps } = makeLane({ operationJournal: { setOperationMeta } as never })
+		await expect(lane.recordBuiltCall("j1", [{ contract: TOKEN, method: "transfer_in_public", args: [] }])).resolves.toBeUndefined()
+		await lane.recordBuiltCall("j1", [{ contract: "0xc", method: "transfer_in_public", args: [] }])
+		await lane.recordBuiltCall(undefined, [{ contract: TOKEN, method: "transfer_in_public", args: [] }])
+		expect(setOperationMeta).toHaveBeenCalledTimes(1)
+		expect(vi.mocked(deps.logDebug).mock.calls).toEqual([["journal call not recorded"], ["journal call not recorded"]])
+		expect(deps.logError).not.toHaveBeenCalled()
+	})
+})
+
 describe("ExecutionLane.commitJournal", () => {
 	test("writes like markJournal, but a refused write or a missing id rejects instead of logging", async () => {
 		const { lane, transitions, deps } = makeLane()

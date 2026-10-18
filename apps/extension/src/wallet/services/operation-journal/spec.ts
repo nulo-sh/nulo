@@ -19,6 +19,7 @@
  */
 
 import { type JobError, type JobProgress, type JobStage, NORMALIZED_RAW_MAX_CHARS } from "@nulo/wallet-core/jobs"
+import { isFieldAddress } from "@nulo/wallet-bridge"
 import { z } from "zod"
 import { isFeeAmount } from "@nulo/wallet-core/jobs"
 import { TransferType } from "@/wallet/services/transaction/spec"
@@ -98,7 +99,33 @@ export interface JournalMetadata {
 	 * Private → Private chip).
 	 */
 	transferType?: TransferType
+	/** A `dapp_execute` record's primary call, as the settled history will read it. */
+	call?: JournalCall
 }
+
+/**
+ * What the settled rule reads of a call: its contract and argument count from the dApp's request,
+ * and the class only the wallet's own build records. One schema at every writer and the reader, so
+ * a value a writer stores never makes the row unreadable.
+ */
+export const JournalCallSchema = z.object({
+	contract: z.string().refine(isFieldAddress),
+	argCount: z.number().int().nonnegative().max(65_535),
+	classId: z.string().refine(isFieldAddress).optional(),
+})
+
+export type JournalCall = z.infer<typeof JournalCallSchema>
+
+/** The stored call for a contract and argument list, or none when the reader would refuse it, so a
+ *  dApp's hostile value never blocks the write that carries it. */
+export function journalCallOf(contract: unknown, args: unknown, classId?: unknown): JournalCall | undefined {
+	const argCount = Array.isArray(args) ? args.length : undefined
+	const parsed = JournalCallSchema.safeParse({ contract, argCount, ...(classId !== undefined && { classId }) })
+	return parsed.success ? parsed.data : undefined
+}
+
+/** A call as a journal creator names it: the method that titles the record and the call it reads by. */
+export type JournalCallCarrier = { method?: string; call?: JournalCall }
 
 export interface OperationRecord extends JournalMetadata {
 	/** Random 16-hex id assigned at `createOperation`. */
@@ -277,6 +304,7 @@ const journalMetadataShape = {
 	recipientAddress: z.string().optional(),
 	contractAddress: z.string().optional(),
 	transferType: z.enum(TransferType).optional(),
+	call: JournalCallSchema.optional(),
 } as const satisfies Record<keyof JournalMetadata, z.ZodType>
 
 export const OperationRecordSchema: z.ZodType<OperationRecord> = z.object({
@@ -374,12 +402,13 @@ export const OperationJournalMethodSchemas = {
 		result: OperationRecordSchema,
 	},
 	/**
-	 * Update non-FSM metadata on an existing record (title / subtitle). Unlike
+	 * Update non-FSM metadata on an existing record (title / subtitle / call). Unlike
 	 * `transitionOperation`, this never moves the stage and is safe to call on
 	 * terminal records. Used by `tokenService.addToken` to backfill the
 	 * resolved symbol as the title once metadata fetch returns — the journal
 	 * entry is created up-front (so the tokens-view in-flight row pops in
-	 * immediately) and gets its title rewritten when the symbol resolves.
+	 * immediately) and gets its title rewritten when the symbol resolves — and
+	 * by a dApp send's build, which names the call it built.
 	 */
 	setOperationMeta: {
 		params: z.tuple([
@@ -387,6 +416,7 @@ export const OperationJournalMethodSchemas = {
 			z.object({
 				title: z.string().optional(),
 				subtitle: z.string().optional(),
+				call: JournalCallSchema.optional(),
 			}),
 		]),
 		result: OperationRecordSchema,

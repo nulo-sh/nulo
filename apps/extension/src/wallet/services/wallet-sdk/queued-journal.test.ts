@@ -226,6 +226,29 @@ describe("tryCreateQueuedJournal", () => {
 		expect((await journal.getOperation(long as string))?.title).toBe(`transfer${"f".repeat(56)}…`)
 	})
 
+	test("the primary call's contract and argument count ride the record; a hostile `to` or `args` leaves out the call alone", async () => {
+		const { deps, journal } = makeDeps()
+		const token = `0x${"0d".repeat(32)}`
+		const message = (calls: unknown) => ({ messageId: "m", type: "sendTx", args: [{ calls }, {}] }) as unknown as WalletMessage
+		const read = async (calls: unknown) =>
+			journal.getOperation((await tryCreateQueuedJournal(message(calls), makeSession(), deps)) as string)
+		const fee = { name: "sponsor_unconditionally", to: `0x${"0f".repeat(32)}`, args: [] }
+		expect(await read([fee, { name: "transfer_in_public", to: token, args: ["1", "2", "3", "4"] }])).toMatchObject({
+			title: "transfer_in_public",
+			call: { contract: token, argCount: 4 },
+		})
+		for (const hostile of [
+			{ to: { toString: token }, args: [] },
+			{ to: `0x${"a".repeat(998)}`, args: [] },
+			{ to: token, args: "1,2,3,4" },
+			{ to: token, args: new Array(70_000).fill("0") },
+		]) {
+			const rec = await read([{ name: "transfer_in_public", ...hostile }])
+			expect(rec).toMatchObject({ title: "transfer_in_public", progress: { stage: "queued" } })
+			expect(rec?.call).toBeUndefined()
+		}
+	})
+
 	test("falls back to 'Transaction' title when calls have no method names", async () => {
 		const { deps, journal } = makeDeps()
 		const message = {
