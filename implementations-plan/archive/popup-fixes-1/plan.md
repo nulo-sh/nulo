@@ -172,7 +172,7 @@ As Phase 5, over arc 2's files. The PR body states `home-links.test.ts`'s wall-c
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 24c68cb4. Specific to this plan:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 24c68cb4. Specific to this plan:
 - Step 1 is absent (`code_review: off`). Step 2 runs per arc over `git diff origin/dev...HEAD` after its gate: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; prompts under `~/.cache/nulo-backlog/popup-fixes-1/`; hard stop at three rounds; one Opus review alongside round 1; rounds in `lessons/phase-5.md` and `lessons/phase-8.md`. After arc 2's loop, one fresh Codex session reads the net diff from 24c68cb4 across both arcs for seams, duplication and drift from the plan, in the same loop.
 - Approval boundary: a new control, a change to the logs toolbar's other buttons, a product test hook, a shared token-row component, or any copy beyond the label is a plan change and stops for the orchestrator.
 - Close-out (arc 2): file the logs toolbar's keyboard reach (D3) as an issue after a dedupe; Outcome block (`Known limits: #593`); `lessons.md` promotes nothing unless a retirement pays for it; `STATUS.md` deleted; `git mv` to `archive/` in its own commit. Teardown: slug `popup-fixes-1`, trunk `dev`.
