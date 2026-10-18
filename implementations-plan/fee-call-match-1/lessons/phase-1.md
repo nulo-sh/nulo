@@ -1,0 +1,6 @@
+# Phase 1: #796
+
+- 2026-10-18: `describeExternalFee` keeps its first match and reads "Private Fee Juice" only for `pay_fee` on the PrivateFPC; the `fee_entrypoint_private` line is gone. Tests as the plan lists; the no-`from` and no-origin `pay_fee` expectations share one test.
+- Red on base: with `tx-detail-helpers.ts` from `58e2b01b`, 2 of 33 fail (the page case: the row read "Private Fee Juice"; the app `pay_fee` case: "Private Fee Juice" for "Set by Foo"); the two precedence controls pass on both, as they guard a later scan of all calls. After: 33 of 33.
+- Lint failed once on formatting of the page case's fixture literal; `biome format --write` on the three files fixed it. `typecheck:all` exit 0.
+- Fix loop round 1: Codex (session `01a150f4`) and Opus both conditional approve, test-only: `0x5a…`, `0xac…`, `0xa7…` exceed the field modulus (`lessons.md`: check fixtures with `isValidAztecAddress`; valid picks `0x1a…`, `0x1c…`, `0x1d…`); the app `pay_fee` took one argument, so an `args.length === 0` rule passed; the sponsor-first precedence decoy sat on the app's contract, so a `some(pay_fee && isPrivateFpc)` scan passed. Fixed in `2fb5f5e0`; each mutation now fails one test (run and reverted). Round 2: approve.
