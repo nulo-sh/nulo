@@ -10,8 +10,28 @@ eli5_mode: skipped (orchestrator-owned)
 base: 18d29f23
 trunk: dev
 post_implementation_hardening: not scheduled
-status: approved (orchestrator, ed41c27b); arc 1 implementing
+status: completed (arc 1 carries this close-out)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** closed. Arc 1 carries this close-out, and the merge that lands it closes the plan and #714 #648 #616 #638 #579 #654 #615.
+- **Shipped:**
+  - Function names a dApp picks no longer reach `Object.prototype` in the label tables.
+  - The journal page's Method value wraps 16 px clear of its label.
+  - The logs viewer holds a selection or an open search through new lines and trims, and resumes on a downward scroll, the button or the timer.
+  - A drag that selects part of a copyable value copies nothing, and keys still copy.
+  - The feed's arrival tip is read in one attempt past the PXE, refused on a quarantined chain.
+  - Token-row bars are 11 px and marks 12 px, and the loading column takes the loaded box (a working default's row is 50 → 53 px).
+  - The remote-code note says a list can flag a token, with cites.
+- **Known limits:** #784 (KL-1), #785 (KL-2).
+- **Open items:**
+  - #786 (OA-2: Home's ghost rows, off-scale gap; owner's call).
+  - #773 (the logs toolbar's Clear logs never renders; found in Phase 3).
+- **Dropped:** none.
+- **Lessons:** none promoted. `lessons.md` is at its budget. The gotchas are in `lessons/phase-6.md` (a `Flex` gap outside the token scale renders as none) and `lessons/phase-8.md` (a scroller's height floors at the window's height, so a short log's growth undercounts).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # wallet-bugs-2: seven small popup defects, one arc
 
@@ -170,10 +190,15 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | 3 | Opus 5.5 lens | conditional approve | KL-1 longer under a newer read; the reader's doc; no execution test moves | keep all four callers on one attempt (Codex's narrower change wins: the action callers' behaviour is outside #579); delete the PXE tip method (moot: it keeps three callers) |
 | final | Codex, fresh session | conditional approve | the one-attempt read refuses a quarantined chain first, with its test (D6, Phase 5); Fact 2 corrected, the nameless record's journal page visited (Phase 2) | none |
 | final, resumed | Codex | approve | both conditions met as written; no new finding | none |
+| impl 1 | Codex, gpt-6.1-sol | approve | the height case selects a working seed row by its status, not `aria-busy` | none |
+| impl 1 | Opus 5.5 review | conditional approve | the store sentence cites where a flag reaches every token and the surfaces it marks; the burst comment made conditional; the height case compares to a tenth of a pixel | the tip read's missing recovery-mode refusal (KL-2: no encrypted state, nil consequence); the trim case's exact heights (a false red at worst, green every run); the follow left off after a shrink with no scroll (the UI-impact behaviour) |
+| impl 2 | Codex, resumed | approve | no new material finding | none |
 
 Round 2's blocking finding replaced D6: each page's `IncomingTransferServiceClient` fires its own `onConnected`, so a coordinator full read can start after the feed's stored read with no refresh behind it, and `settledAfter` holds the feed again. The new D6 leaves the coordinator alone and removes the slow transport instead, reusing the execution service's one-attempt tip read; round 1's KL-1 and KL-2 no longer arise.
 
-Known limit to file at close-out. **KL-1** (#579): a request that rejects promptly fails without retries; one that stays pending (DNS, connect, headers, body) holds a scope's first feed paint (no arrival row, or a pending floor) until the one attempt's 60 s request timeout, and longer while a newer coordinator read is in flight (`settledAfter` waits for it; base behaves the same). Rows arrive late, none is lost. Reopen on a report of late rows with such an endpoint, or evidence that one occurs.
+Known limits, filed at close-out. **KL-1** (#579, #784): a request that rejects promptly fails without retries; one that stays pending (DNS, connect, headers, body) holds a scope's first feed paint (no arrival row, or a pending floor) until the one attempt's 60 s request timeout, and longer while a newer coordinator read is in flight (`settledAfter` waits for it; base behaves the same). Rows arrive late, none is lost. Reopen on a report of late rows with such an endpoint, or evidence that one occurs.
+
+**KL-2** (#579, implementation review, #785): the one-attempt tip read refuses a quarantined chain, as the PXE client does, but not a profile in recovery mode (unlocked without its data key), where the PXE path fails because the runtime cannot open its store (`RecoveryModeError`, `wallet/runtime.ts:608`). In recovery mode the arrival read now reads the node's tip and may write a baseline or settle a floor; it touches no encrypted state, and the floor it settles is the node's own tip. Reopen if recovery mode comes to promise that no arrival state moves, or if a write behind this read gains a dependency on the key.
 
 ## Seeds
 

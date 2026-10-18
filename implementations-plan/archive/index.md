@@ -319,6 +319,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [vue-design-system](vue-design-system/plan.md) — completed — the Vue design system and component library built first
 - [vue-router-5](vue-router-5/plan.md) — completed — the archived router plugin dropped and vue-router moved to 5
 - [vue-shell-composites](vue-shell-composites/plan.md) — completed — the duplicated Vue shell pieces that survive review extracted, and the rest recorded
+- [wallet-bugs-2](wallet-bugs-2/plan.md) — completed — seven small popup defects in one PR: label tables, the journal Method wrap, the logs follow, drag-copy, the feed's arrival tip in one attempt, the 13 px bars, the remote-code note (#714 #648 #616 #638 #579 #654 #615)
 - [wallet-error-resilience](wallet-error-resilience/plan.md) — completed — resync and retry once on stale anchors, then fail with a named error
 - [wallet-followups](wallet-followups/plan.md) — completed — account name checks, the logs window trim, settings reads after a worker restart, the balances fuzz oracle
 - [wallet-followups-2](wallet-followups-2/plan.md) — completed — Send keeps a token after a delete, every service and every line in the logs filter, a failed clear keeps logs live, the fee card's gas retry runs
