@@ -19,7 +19,7 @@ describe("glyphs drift guard", () => {
 	test("the installed release is the one the third-party notices record", () => {
 		expect(
 			pkg.devDependencies["@tabler/icons"],
-			"A Tabler bump redraws what screens show: take pictures for the owner's sign-off, and move the DERIVED record in packages/third-party-notices/src/policy.ts with it.",
+			"A Tabler bump redraws what screens show: take pictures for the owner's sign-off, and move the DERIVED record in packages/third-party-notices/src/policy.ts and the version in render-glyphs.ts's header with it.",
 		).toBe("3.49.0")
 	})
 })

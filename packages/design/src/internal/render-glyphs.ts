@@ -1,11 +1,7 @@
 import { glyphSources } from "../core/glyph-sources"
 import type { Glyph } from "../core/glyphs"
 
-/**
- * Pure extractor: turns Tabler's published SVGs into the glyph table `src/core/glyphs.ts` holds.
- * Shared by `scripts/gen-glyphs.ts`, which writes the table, and `glyphs.drift.test.ts`, which pins it.
- * It refuses any attribute or element `Icon.vue` would not draw, so nothing is dropped in silence.
- */
+/** Refuses any attribute or element `Icon.vue` would not draw, so nothing is dropped in silence. */
 
 /** Every published file opens with this invisible box; it carries no drawing. */
 const NO_OP_BOX = '<path stroke="none" d="M0 0h24v24H0z" fill="none" />'
@@ -33,7 +29,10 @@ export function tablerSpecifier(source: string): string {
 
 function readAttributes(source: string, text: string): Map<string, string> {
 	const attributes = new Map<string, string>()
-	for (const [, name, value] of text.matchAll(ATTRIBUTE)) attributes.set(name, value)
+	for (const [, name, value] of text.matchAll(ATTRIBUTE)) {
+		if (attributes.has(name)) throw new Error(`${source}: root repeats ${name}`)
+		attributes.set(name, value)
+	}
 	if (text.replace(ATTRIBUTE, "").trim() !== "") throw new Error(`${source}: unreadable root attributes`)
 	return attributes
 }
@@ -58,7 +57,7 @@ function readPaths(source: string, body: string): string[] {
 	const rest = body.replace(NO_OP_BOX, "")
 	const paths = [...rest.matchAll(PATH)].map(([, d]) => spaced(d))
 	if (rest.replace(PATH, "").trim() !== "") throw new Error(`${source}: holds content other than bare <path d>`)
-	if (paths.length === 0) throw new Error(`${source}: draws nothing`)
+	if (paths.length === 0 || paths.some((d) => d.trim() === "")) throw new Error(`${source}: draws nothing`)
 	if (new Set(paths).size !== paths.length) throw new Error(`${source}: repeats a path`)
 	return paths
 }

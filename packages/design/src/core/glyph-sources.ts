@@ -18,6 +18,7 @@ export const glyphSources = {
 	close: "x",
 	check: "check",
 	"square-check": "filled/square-check",
+	/** Waiting: the signed pick is the hourglass, not Tabler's square-half. */
 	"square-half": "hourglass",
 	"square-cross": "square-x",
 	square: "square",
