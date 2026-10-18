@@ -6,7 +6,9 @@
  * full ExecutionService init graph is deliberately not constructed.
  */
 import { describe, expect, test, vi } from "vitest"
+import { PinMismatchError } from "@/wallet/services/token/seeder"
 import { ExecutionService } from "./service"
+import type { OperationApprovalEnvelope } from "./models"
 import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/service"
 
 const previewed = {
@@ -19,6 +21,8 @@ const previewed = {
 }
 const op = { networkId: "net1", address: "0xabc", accountAddress: "0xacc" } as never
 const origin = { type: OriginType.DAPP, name: "https://dapp.x" } as LocalTxOrigin
+const SHOWN = { name: "Test USDC", symbol: "USDC", decimals: 6, classId: `0x${"c1".repeat(32)}` }
+const approved: OperationApprovalEnvelope = { interactionId: "i-1", index: 0, tokenMetadata: SHOWN }
 
 function makeSelf(networkProfileId: string) {
 	const fence = { profileId: "pA", epoch: 7 }
@@ -32,12 +36,19 @@ function makeSelf(networkProfileId: string) {
 	return { self, fence, addTokenAuthorized }
 }
 
-const invoke = (self: unknown, authorizedFence?: unknown) =>
+const invoke = (self: unknown, authorizedFence?: unknown) => invokeWith(self, approved, origin, authorizedFence)
+const invokeWith = (self: unknown, approval: OperationApprovalEnvelope | undefined, from: LocalTxOrigin, authorizedFence?: unknown) =>
 	(
 		ExecutionService.prototype as unknown as {
-			executeRegisterToken: (op: never, origin: LocalTxOrigin, task?: never, fence?: unknown) => Promise<void>
+			executeRegisterToken: (
+				op: never,
+				origin: LocalTxOrigin,
+				task?: never,
+				fence?: unknown,
+				approval?: OperationApprovalEnvelope,
+			) => Promise<void>
 		}
-	).executeRegisterToken.call(self, op, origin, undefined, authorizedFence)
+	).executeRegisterToken.call(self, op, from, undefined, authorizedFence, approval)
 
 describe("executeRegisterToken — F11 identity chain", () => {
 	test("the write receives the ENTRY fence and its profileId, not a live re-read", async () => {
@@ -75,5 +86,38 @@ describe("executeRegisterToken — F11 identity chain", () => {
 		})
 		await expect(invoke(self)).rejects.toThrow("Wallet locked")
 		expect(addTokenAuthorized).not.toHaveBeenCalled()
+	})
+})
+
+describe("executeRegisterToken — the details the window showed", () => {
+	test("the parse is pinned to the window's class and the add expects the window's values (control)", async () => {
+		const { self, addTokenAuthorized } = makeSelf("pA")
+		await invoke(self)
+		expect(self.tokenService.parseTokenInterface).toHaveBeenCalledWith("net1", "0xabc", undefined, SHOWN.classId)
+		expect((addTokenAuthorized.mock.calls[0] as unknown[])[6]).toEqual({ name: "Test USDC", symbol: "USDC", decimals: 6 })
+	})
+
+	test("a contract whose class moved since the window refuses at the parse, before any add", async () => {
+		const { self, addTokenAuthorized } = makeSelf("pA")
+		self.tokenService.parseTokenInterface = vi.fn(async () => {
+			throw new PinMismatchError("class id moved")
+		})
+		await expect(invoke(self)).rejects.toBeInstanceOf(PinMismatchError)
+		expect(addTokenAuthorized).not.toHaveBeenCalled()
+	})
+
+	test("a dApp approval that carries no shown details is refused before the parse and the add", async () => {
+		const { self, addTokenAuthorized } = makeSelf("pA")
+		await expect(invokeWith(self, { interactionId: "i-1", index: 0 }, origin)).rejects.toThrow("Token details were not shown")
+		await expect(invokeWith(self, undefined, origin)).rejects.toThrow("Token details were not shown")
+		expect(self.tokenService.parseTokenInterface).not.toHaveBeenCalled()
+		expect(addTokenAuthorized).not.toHaveBeenCalled()
+	})
+
+	test("the wallet's own add, which has no window, is unpinned and expects nothing (control)", async () => {
+		const { self, addTokenAuthorized } = makeSelf("pA")
+		await invokeWith(self, undefined, { type: OriginType.UI } as LocalTxOrigin)
+		expect(self.tokenService.parseTokenInterface).toHaveBeenCalledWith("net1", "0xabc", undefined, undefined)
+		expect((addTokenAuthorized.mock.calls[0] as unknown[])[6]).toBeUndefined()
 	})
 })

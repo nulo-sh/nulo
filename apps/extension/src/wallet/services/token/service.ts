@@ -69,6 +69,9 @@ import { getTokenInfo, isTokenComplete } from "./utils"
 
 type TokenMetadata = { name: string; symbol: string; decimals: number }
 
+/** What a token-import record shows when the commit's read differs from what the approval window showed. */
+export const TOKEN_DETAILS_CHANGED = "Token details changed after you approved them."
+
 type PersistTokenInput = {
 	/** Deletion fence captured at the AUTHORIZING entry (addToken /
 	 *  addSeededToken), never minted here — a post-deletion mint would
@@ -78,7 +81,9 @@ type PersistTokenInput = {
 	networkId: string
 	tokenInterface: TokenInterface
 	journal: { origin: OperationOrigin; accountAddress: string; title: string | undefined; subtitle: string }
-	metadata: ({ kind: "seeded" } & TokenMetadata) | { kind: "live"; fetch: () => Promise<[string, string, number]> }
+	metadata:
+		| ({ kind: "seeded" } & TokenMetadata)
+		| { kind: "live"; fetch: () => Promise<[string, string, number]>; expected?: TokenMetadata }
 }
 
 /** How far a token add got under the tickets it held; the next attempt resumes from it. */
@@ -333,9 +338,11 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		accountAddress: string,
 		tokenInterface: TokenInterface,
 		opContext: OperationContext,
+		/** The details the approval window showed: the add stores only a read equal to them. */
+		expected?: TokenMetadata,
 	): Promise<TokenInfo> {
 		await this.ensureInitialized()
-		return await this.addTokenWithFence(fence, profileId, networkId, accountAddress, tokenInterface, opContext)
+		return await this.addTokenWithFence(fence, profileId, networkId, accountAddress, tokenInterface, opContext, expected)
 	}
 
 	private async addTokenWithFence(
@@ -345,6 +352,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		accountAddress: string,
 		tokenInterface: TokenInterface,
 		opContext: OperationContext,
+		expected?: TokenMetadata,
 	): Promise<TokenInfo> {
 		// A caller-supplied profileId that isn't the fence's fails closed.
 		if (fence.profileId !== profileId) throw new Error("unauthorized profile")
@@ -366,6 +374,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			metadata: {
 				kind: "live",
 				fetch: () => this.fetchTokenMetadata(profileId, networkId, accountAddress, tokenInterface),
+				expected,
 			},
 		})
 	}
@@ -485,6 +494,11 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		const { metadata } = input
 		if (metadata.kind === "seeded") return { name: metadata.name, symbol: metadata.symbol, decimals: metadata.decimals }
 		const [name, symbol, decimals] = await metadata.fetch()
+		// Compared raw and before the title shows any of it; a resumed attempt reuses this read.
+		const { expected } = metadata
+		if (expected && (expected.name !== name || expected.symbol !== symbol || expected.decimals !== decimals)) {
+			throw new Error(TOKEN_DETAILS_CHANGED)
+		}
 		// Backfill the title with the resolved symbol so the in-flight
 		// TokenImportRow stops falling back to the short contract
 		// address. Safe to call even if the row has already vanished

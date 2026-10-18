@@ -33,6 +33,8 @@ const executionServiceConnectMock = vi.fn(() => callLog.push("execution.connect"
 const executionServiceDisconnectMock = vi.fn(() => callLog.push("execution.disconnect"))
 const tokenServiceConnectMock = vi.fn(() => callLog.push("token.connect"))
 const getTokensMock = vi.fn(async (_profileId: string, _chainId: number): Promise<unknown[]> => [])
+// Resolves undefined by default, which the window records as a failed preview.
+const previewTokenMetadataMock = vi.fn(async (..._args: unknown[]): Promise<unknown> => undefined)
 const tokenUpdatedMock = { add: vi.fn(), remove: vi.fn() }
 const tokenServiceDisconnectMock = vi.fn(() => callLog.push("token.disconnect"))
 
@@ -99,7 +101,7 @@ vi.mock("@/wallet/services/token/client", () => ({
 		return {
 			connect: tokenServiceConnectMock,
 			disconnect: tokenServiceDisconnectMock,
-			previewTokenMetadata: vi.fn(async () => undefined),
+			previewTokenMetadata: previewTokenMetadataMock,
 			getTokens: getTokensMock,
 			onTokenUpdated: tokenUpdatedMock,
 		}
@@ -588,8 +590,12 @@ describe("execute window — approval envelope", () => {
 		},
 	})
 
-	test("approve sends deltas only: feeSettings for send-likes, the SW's estimate/preview ids, nothing else", async () => {
+	const CLASS_ID = `0x${"c1".repeat(32)}`
+	const preview = { name: "Test USDC", symbol: "USDC", decimals: 6, interface: { classId: CLASS_ID, contract: "0xtok" } }
+
+	test("approve sends deltas only: feeSettings for send-likes, the SW's ids, the token details shown, nothing else", async () => {
 		resolvable()
+		previewTokenMetadataMock.mockResolvedValueOnce(preview)
 		approval.payloadToLoad = payload()
 		w = factory()
 		await completeInit()
@@ -604,15 +610,52 @@ describe("execute window — approval envelope", () => {
 		expect(deltas).toEqual([
 			{ feeSettings: { paymentMethod: { kind: "fj" } }, estimateId: "est-0", previewId: "est-0", feeCeiling: "800" },
 			{ feeSettings: { paymentMethod: { kind: "embedded" } }, estimateId: undefined, previewId: "pv-1", feeCeiling: undefined },
-			{ feeSettings: undefined, estimateId: undefined, previewId: undefined, feeCeiling: undefined },
+			{
+				feeSettings: undefined,
+				estimateId: undefined,
+				previewId: undefined,
+				feeCeiling: undefined,
+				tokenMetadata: { name: "Test USDC", symbol: "USDC", decimals: 6, classId: CLASS_ID },
+			},
 		])
 		expect((approveInteractionMock.mock.calls[0] as unknown[]).length).toBe(2)
 		expect(feeMapInstances[0]!.api.handoffAll).toHaveBeenCalledTimes(1)
 		expect(feeMapInstances[1]!.api.handoffAll).toHaveBeenCalledTimes(1)
 	})
 
+	test("a token whose details could not be read keeps Confirm disabled and approve sends nothing", async () => {
+		const tokenOnly = () => ({
+			session: { profileId: "p1", dappMetadata: { name: "Test DApp", url: "https://example.com" } },
+			params: { operations: [{ kind: "register_token", account: `aztec:1:${OWNER}`, address: "0xtok" }] },
+		})
+		const confirm = () => w!.find('[data-testid="execute-confirm-btn"]')
+		const warned = vi.spyOn(console, "warn").mockImplementation(() => {})
+		try {
+			resolvable()
+			approval.payloadToLoad = tokenOnly()
+			w = factory()
+			await completeInit()
+			expect(confirm().attributes("disabled")).toBeDefined()
+			await (w.vm as unknown as ExecVm).approve()
+			expect(approveInteractionMock).not.toHaveBeenCalled()
+		} finally {
+			warned.mockRestore()
+		}
+
+		w.unmount()
+		resolvable()
+		previewTokenMetadataMock.mockResolvedValueOnce(preview)
+		approval.payloadToLoad = tokenOnly()
+		w = factory()
+		await completeInit()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await (w.vm as unknown as ExecVm).approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
 	test("a fee choice the card withdraws disables Confirm, and the pick that replaces it is what approval sends", async () => {
 		resolvable()
+		previewTokenMetadataMock.mockResolvedValueOnce(preview)
 		approval.payloadToLoad = payload()
 		w = factory()
 		await completeInit()

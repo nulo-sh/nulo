@@ -38,7 +38,7 @@ import {
 } from "@nulo/wallet-bridge"
 import { assertSilentExecutable, materializeRequest, type MaterializeDeps } from "./materialize"
 import { knownContracts } from "./known-contracts"
-import { applyFeeSelection, type OperationApprovalDelta } from "./approval-delta"
+import { applyFeeSelection, isShownTokenMetadata, type OperationApprovalDelta } from "./approval-delta"
 import {
 	DAPP_INTERACTION_SERVICE_NAME,
 	type ExecutionPayload,
@@ -239,6 +239,9 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		if (deltas.some((delta) => delta?.feeCeiling !== undefined && !isFeeAmount(delta.feeCeiling))) {
 			throw new Error("Invalid fee figure")
 		}
+		if (deltas.some((delta) => delta?.tokenMetadata !== undefined && !isShownTokenMetadata(delta.tokenMetadata))) {
+			throw new Error("Invalid token details")
+		}
 		// First service claim wins — service acceptance is the commit point, not
 		// the browser click. A cancel processed first leaves the record flagged;
 		// a later approve must refuse BEFORE claiming, so execution never
@@ -374,6 +377,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 					estimateId: delta.estimateId,
 					previewId: delta.previewId,
 					feeCeiling: delta.feeCeiling,
+					tokenMetadata: delta.tokenMetadata,
 				})
 			}
 			await this.profileService.refreshSession()

@@ -42,7 +42,12 @@ import {
 	type TransferFeeEstimate,
 } from "@/wallet/services/execution/client"
 import { type TokenInfo, TokenServiceClient } from "@/wallet/services/token/client"
-import { DappInteractionServiceClient, type ExecutionPayload, type OperationApprovalDelta } from "@/wallet/services/dapp-interaction/client"
+import {
+	DappInteractionServiceClient,
+	type ExecutionPayload,
+	type OperationApprovalDelta,
+	type ShownTokenMetadata,
+} from "@/wallet/services/dapp-interaction/client"
 import type { DappMetadata } from "@/wallet/services/dapp-session/client"
 
 /** Composables */
@@ -100,11 +105,18 @@ const tokenService = new TokenServiceClient()
  * address. Resolved by parseTokenInterface + fetchTokenMetadata in init() so
  * the OperationCard renders name + symbol + decimals alongside the address
  * BEFORE the user clicks Allow. The pre-fetch is the only anti-phishing
- * surface the user has — the popup must not be approvable while it's loading.
+ * surface the user has — the popup must not be approvable while it's loading,
+ * nor once it failed: an approval names the details its card showed.
  */
-const tokenMetadata = ref<Map<string, { name: string; symbol: string; decimals: number }>>(new Map())
+const tokenMetadata = ref<Map<string, ShownTokenMetadata>>(new Map())
 const tokenMetadataLoading = ref(false)
 const tokenMetadataError = ref<Map<string, string>>(new Map())
+/** A `register_token` card with no details to approve: still reading them, or failed to. */
+const tokenMetadataUnread = computed(
+	() =>
+		tokenMetadataLoading.value ||
+		operations.value.some((op) => op.kind === "register_token" && tokenMetadataError.value.has(op.address)),
+)
 
 /**
  * Display-only decodings the card renders: per operation index for its calls,
@@ -322,7 +334,12 @@ async function prefetchTokenMetadata(
 			registerOps.map(async (op) => {
 				try {
 					const meta = await tokenClient.previewTokenMetadata(op.networkId, op.accountAddress, op.address)
-					refs.metadata.value.set(op.address, { name: meta.name, symbol: meta.symbol, decimals: meta.decimals })
+					refs.metadata.value.set(op.address, {
+						name: meta.name,
+						symbol: meta.symbol,
+						decimals: meta.decimals,
+						classId: meta.interface.classId,
+					})
 				} catch (err) {
 					const msg = getErrorMessage(err)
 					refs.errors.value.set(op.address, msg)
@@ -395,9 +412,7 @@ const approve = async () => {
 	// exists. Without this guard, a fast click before payload materialization
 	// would approve an empty operations list.
 	if (!initComplete.value || operations.value.length === 0) return
-	// Also block while the popup is pre-fetching token metadata for any
-	// `register_token` op — D7 enforcement.
-	if (tokenMetadataLoading.value) return
+	if (tokenMetadataUnread.value) return
 	// UX gate: any send-like op still missing user-picked fee?
 	// Cast to DraftOperation works around a pre-existing AztecAddress/Fr
 	// structural mismatch between popup-resolved Operation and wallet-bridge's
@@ -417,7 +432,8 @@ const approve = async () => {
 		handoffFeeEstimates()
 		handoffAuthwitPreviews()
 		// The SW executes the dApp's stored request; per operation the popup
-		// contributes only its fee choice and the ids the SW minted for it.
+		// contributes only its fee choice, the ids the SW minted for it, and the
+		// token details its card showed.
 		const deltas: OperationApprovalDelta[] = operations.value.map((op, index) => {
 			const estimate = feeEstimates.value[index] ?? undefined
 			const feeSettings = carriesFeeSettings(op) ? op.feeSettings : undefined
@@ -426,6 +442,7 @@ const approve = async () => {
 				estimateId: estimate?.estimateId,
 				previewId: estimate?.previewId ?? authwitPreviews.value[index]?.previewId,
 				feeCeiling: estimate?.maxFee,
+				tokenMetadata: op.kind === "register_token" ? tokenMetadata.value.get(op.address) : undefined,
 			}
 		})
 		const stillOurs = scopeFollow.capture()
@@ -616,7 +633,7 @@ onUnmounted(() => {
 			:confirm-loading="isLoading"
 			:confirm-disabled="
 				processingError?.type === 'error' ||
-				tokenMetadataLoading ||
+				tokenMetadataUnread ||
 				!initComplete ||
 				operations.length === 0 ||
 				needsFeeSelection ||
