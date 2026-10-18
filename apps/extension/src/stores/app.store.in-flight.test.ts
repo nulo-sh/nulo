@@ -14,15 +14,20 @@ import { useAppStore } from "./app.store"
 
 const { mockGetOperations, journalEvents } = vi.hoisted(() => ({
 	mockGetOperations: vi.fn(),
-	journalEvents: { added: [] as ((op: unknown) => void)[], updated: [] as ((op: unknown) => void)[] },
+	journalEvents: {
+		added: [] as ((op: unknown) => void)[],
+		updated: [] as ((op: unknown) => void)[],
+		deleted: [] as ((op: unknown) => void)[],
+		connected: [] as (() => void)[],
+	},
 }))
 
 vi.mock("@/wallet/services/operation-journal/client", () => ({
 	OperationJournalServiceClient: class {
 		onOperationAdded = { add: (fn: (op: unknown) => void) => journalEvents.added.push(fn) }
 		onOperationUpdated = { add: (fn: (op: unknown) => void) => journalEvents.updated.push(fn) }
-		onOperationDeleted = { add: () => {} }
-		onConnected = { add: () => {} }
+		onOperationDeleted = { add: (fn: (op: unknown) => void) => journalEvents.deleted.push(fn) }
+		onConnected = { add: (fn: () => void) => journalEvents.connected.push(fn) }
 		connect = async () => {}
 		disconnect = () => {}
 		getOperations = mockGetOperations
@@ -70,6 +75,9 @@ const pickProfile = (store: ReturnType<typeof useAppStore>) => () => {
 const emitUpdated = (op: OperationRecord) => {
 	for (const fn of journalEvents.updated) fn(op)
 }
+const emit = (event: "added" | "deleted", op: OperationRecord) => {
+	for (const fn of journalEvents[event]) fn(op)
+}
 
 const readsFor = (profileId: string) => mockGetOperations.mock.calls.filter(([query]) => query?.profileId === profileId).length
 
@@ -78,6 +86,8 @@ beforeEach(() => {
 	mockGetOperations.mockReset()
 	journalEvents.added.length = 0
 	journalEvents.updated.length = 0
+	journalEvents.deleted.length = 0
+	journalEvents.connected.length = 0
 	vi.stubGlobal("managers", { transaction: { getTransactions: vi.fn() } })
 	// biome-ignore lint/suspicious/noExplicitAny: chrome stub assignment
 	;(chrome.storage as any).local = { get: vi.fn(async () => ({})), set: vi.fn(async () => {}) }
@@ -267,5 +277,30 @@ describe("late reads", () => {
 		await store.refreshInFlight({ invalidate: true })
 		emitUpdated(send("popup"))
 		expect(store.hasInFlightSend).toBe(true) // events count again once the unlock has re-read
+	})
+})
+
+describe("events and reconnects", () => {
+	test("an add for a listed send replaces it rather than counting it twice; a delete drops it and opens the guard", async () => {
+		const store = await viewing([send("popup")])
+		expect(store.approvedSendsInFlight).toBe(1)
+		emit("added", send("popup"))
+		expect(store.approvedSendsInFlight).toBe(1)
+		emit("added", { ...send("popup"), id: "second-send" })
+		expect(store.approvedSendsInFlight).toBe(2)
+
+		emit("deleted", send("popup"))
+		emit("deleted", { ...send("popup"), id: "second-send" })
+		expect(store.approvedSendsInFlight).toBe(0)
+		expect(store.hasInFlightSend).toBe(false)
+	})
+
+	test("a reconnect reads the journal again", async () => {
+		const store = await viewing([])
+		expect(store.hasInFlightSend).toBe(false)
+		mockGetOperations.mockResolvedValueOnce([send("popup")])
+		for (const fn of journalEvents.connected) fn()
+		await flush()
+		expect(store.hasInFlightSend).toBe(true)
 	})
 })
