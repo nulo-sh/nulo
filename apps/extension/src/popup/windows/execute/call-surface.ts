@@ -19,7 +19,7 @@ import {
 	VOCABULARY_SELECTORS,
 	vocabularySelector,
 } from "@/utils/token-transfer-vocabulary"
-import { callTitle, humanizeMethodName } from "@/utils/tx-enrichment"
+import { callTitle } from "@/utils/tx-enrichment"
 import { parseTransferIntent, projectArgument, smallFieldDecimal } from "@/utils/transfer-intent"
 import { safeWire } from "./humanize"
 
@@ -154,11 +154,10 @@ export const callSurface = (
 const surfaceName = (call: WireCall, surface: CallSurface): string =>
 	"fn" in surface ? safeWire(surface.fn, 64) : wire(call.name ?? call.selector, 64)
 
-/** The header names the function by its decoded name, which a structured reading has checked against
- *  the selector, and by the dApp's label only when there is no decode. Both are untrusted strings,
- *  and a curated label applies only on the contract it belongs to. */
-export const callName = (call: WireCall, surface: CallSurface): string => humanizeMethodName(surfaceName(call, surface), wire(call.to, 80))
-
+/** A call's title names the function by its decoded name, which a structured reading has checked
+ *  against the selector, and by the dApp's label only when there is no decode. Both are untrusted
+ *  strings; a movement label needs the wallet's reading, and a curated label applies only on the
+ *  contract it belongs to. */
 export const rowTitle = (call: WireCall, surface: CallSurface): string =>
 	callTitle(surfaceName(call, surface), wire(call.to, 80), surface.kind === "transfer" || surface.kind === "mint")
 

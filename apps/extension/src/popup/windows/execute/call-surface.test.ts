@@ -8,7 +8,6 @@ import {
 	amountLabel,
 	authwitLine,
 	authwitTitle,
-	callName,
 	callSurface,
 	nonceValue,
 	rawRows,
@@ -174,15 +173,15 @@ describe("callSurface", () => {
 		)
 	})
 
-	test("callName prefers the ABI's name once decoded, sanitizes it, and keeps protocol labels on their contract", () => {
+	test("rowTitle prefers the ABI's name once decoded, sanitizes it, and keeps protocol labels on their contract", () => {
 		const call = { name: "claim_lie", to: TO, selector: "0x11223344", args: [] }
-		expect(callName(call, { kind: "pending" })).toBe(callName({ name: "claim_lie", to: TO, args: [] }, { kind: "pending" }))
-		expect(callName(call, { kind: "decoded", fn: "claim_private", params: [] })).not.toContain("lie")
-		expect(callName(call, { kind: "decoded", fn: `claim${RLO}_private`, params: [] })).not.toContain(RLO)
-		expect(callName(call, { kind: "decoded", fn: "x".repeat(200), params: [] }).length).toBeLessThan(80)
+		expect(rowTitle(call, { kind: "pending" })).toBe(rowTitle({ name: "claim_lie", to: TO, args: [] }, { kind: "pending" }))
+		expect(rowTitle(call, { kind: "decoded", fn: "claim_private", params: [] })).not.toContain("lie")
+		expect(rowTitle(call, { kind: "decoded", fn: `claim${RLO}_private`, params: [] })).not.toContain(RLO)
+		expect(rowTitle(call, { kind: "decoded", fn: "x".repeat(200), params: [] }).length).toBeLessThan(80)
 		// A third-party `claim` is not the fee-juice claim, decoded or app-named.
-		expect(callName({ name: "claim", to: TO, args: [] }, { kind: "pending" })).toBe("Claim")
-		expect(callName(call, { kind: "decoded", fn: "claim", params: [] })).toBe("Claim")
+		expect(rowTitle({ name: "claim", to: TO, args: [] }, { kind: "pending" })).toBe("Claim")
+		expect(rowTitle(call, { kind: "decoded", fn: "claim", params: [] })).toBe("Claim")
 	})
 
 	test("a transfer row is titled by the function its selector runs, whatever the app labels it", () => {
@@ -192,7 +191,7 @@ describe("callSurface", () => {
 			const call = { name, to: TOKEN, selector, args }
 			const surface = callSurface(ctx, call, abi("transfer_in_public", FOUR), true)
 			expect(surface.kind).toBe("transfer")
-			expect(callName(call, surface)).toBe("Transfer (public)")
+			expect(rowTitle(call, surface)).toBe("Transfer (public)")
 		}
 	})
 })
@@ -378,17 +377,15 @@ describe("rowTitle, authwitTitle and authwitLine: the wallet's words only on wha
 		expect(rowTitle(call, { kind: "mint", fn: "mint_to_private", to: TO, amount: "5" })).toBe("Mint (private)")
 	})
 
-	test("every other name reads as callName gives it", () => {
-		for (const [name, surface] of [
-			["shield", decoded("shield")],
-			["claim", decoded("claim")],
-			["exit_to_l1", decoded("exit_to_l1")],
-			["checkpoint", { kind: "pending" as const }],
+	test("every other name reads by its curated label on its contract, else as its contract spells it", () => {
+		for (const [name, surface, title] of [
+			["shield", decoded("shield"), "Shield"],
+			["claim", decoded("claim"), "Claim"],
+			["exit_to_l1", decoded("exit_to_l1"), "Exit To L1"],
+			["checkpoint", { kind: "pending" as const }, "Checkpoint"],
 		] as const) {
-			const call = { name, to: TO, args: [] }
-			expect(rowTitle(call, surface)).toBe(callName(call, surface))
+			expect(rowTitle({ name, to: TO, args: [] }, surface)).toBe(title)
 		}
-		expect(rowTitle({ name: "shield", to: TO }, decoded("shield"))).toBe("Shield")
 	})
 
 	test("an authorization is titled by its decoded name under the same rule, by its selector until then", () => {

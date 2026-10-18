@@ -31,6 +31,13 @@ describe("FeeMethodRow", () => {
 		expect(w.findComponent(Skeleton).attributes("style")).toBe("width: 60px; height: 12px;")
 	})
 
+	test("pending, before any method is chosen: the Available row with a bar", () => {
+		const w = factory({ pending: true, method: null })
+		expect(w.text()).toBe("Available")
+		expect(w.findComponent(Skeleton).attributes("style")).toBe("width: 60px; height: 12px;")
+		expect(factory({ method: null }).text()).toBe("")
+	})
+
 	test("'private_fpc' method with registered fpc renders private FJ value", () => {
 		const w = factory({
 			method: { type: "private_fpc", fpc: { id: "p1", type: FpcType.PrivateFpc } },

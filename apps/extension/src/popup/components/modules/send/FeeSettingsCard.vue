@@ -199,7 +199,12 @@ const nudgeCopy = computed(() =>
 /** What the dropdown trigger shows: the paying method, or the saved pick's row while loading. */
 const displayMethod = computed(() => effectiveMethod.value ?? previewMethod.value)
 
-/** Who pays the estimate the readout shows; the readout draws only while a method is chosen. */
+/** Send's read for the live identity is in flight; the app windows keep their own loading look.
+ *  Priority needs no balance, so it answers before the read lands. */
+const readPending = computed(() => props.originPrivacy !== null && snapshotPending.value)
+const showsCostRows = computed(() => readPending.value || (Boolean(effectiveMethod.value) && !feeJuiceMissing.value))
+
+/** Who pays the estimate the readout shows; an estimate shows only while a method is chosen. */
 const feePayer = computed(() => {
 	const m = effectiveMethod.value
 	return feePayerOf(m && { type: m.type, isProtocol: m.fpc?.isProtocol }) ?? "self"
@@ -381,6 +386,7 @@ onBeforeUnmount(() => {
 			@update:modelValue="handleMethodPicked"
 			:methods="menuMethods"
 			:payerNoticeShape="payerNoticeShape"
+			:pending="readPending"
 			@open="isMethodsDropdownOpen = true"
 			@close="isMethodsDropdownOpen = false"
 		/>
@@ -403,9 +409,10 @@ onBeforeUnmount(() => {
 		</div>
 
 		<FeeMethodRow
-			v-if="!statusNotice"
+			v-if="readPending || !statusNotice"
 			:method="effectiveMethod"
 			:isLoading="isLoading"
+			:pending="readPending"
 			:feeJuiceBalanceFormatted="feeJuiceBalanceFormatted"
 			:privateFeeJuiceFormatted="privateFeeJuiceFormatted"
 		/>
@@ -456,7 +463,8 @@ onBeforeUnmount(() => {
 		</Flex>
 
 		<FeeCostReadout
-			v-if="effectiveMethod && !feeJuiceMissing"
+			v-if="showsCostRows"
+			:pending="readPending"
 			:estimate="estimatedFeeDisplay"
 			:isEstimating="isEstimating"
 			:isQueued="isQueued"
@@ -464,7 +472,7 @@ onBeforeUnmount(() => {
 			:queuedCap="queuedCapDisplay"
 		/>
 
-		<FeePriorityRow v-if="effectiveMethod && !feeJuiceMissing" v-model="selectedPriority" />
+		<FeePriorityRow v-if="showsCostRows" v-model="selectedPriority" />
 	</Flex>
 </template>
 

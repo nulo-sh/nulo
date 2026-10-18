@@ -389,6 +389,7 @@ export type HeldScope = AccountScope & { name: string; row: number }
  * `data` in place and returns the `accountScopeKey` allow-set of those accounts, which the balance
  * re-link requires for its chain-equality check: thread it, never re-derive it. A held account
  * (`networkChains` lacks its chain) brings back its row and key only, and is returned apart.
+ * `rows` places every restored account, held ones included, at its position in the slice.
  * Client lifecycle, the duplicate-account catch and stage markers stay with the caller; every
  * throw propagates with its identity intact (the caller matches `.message`, the outer catch
  * classifies disconnects).
@@ -398,9 +399,10 @@ export async function restoreAccountsAndFilterOwnedSlices(
 	accountService: AccountRestoreClient,
 	recordRestoreErrors: (serviceName: string, rows: unknown) => void,
 	networkChains: ReadonlySet<number>,
-): Promise<{ importedChainAddress: Set<string>; held: HeldScope[] }> {
+): Promise<{ importedChainAddress: Set<string>; held: HeldScope[]; rows: Map<string, number> }> {
 	const importedChainAddress = new Set<string>()
 	const held: HeldScope[] = []
+	const rows = new Map<string, number>()
 	const newAccounts = await accountService.restore(data.account)
 	recordRestoreErrors(ACCOUNT_SERVICE_NAME, newAccounts)
 
@@ -418,6 +420,7 @@ export async function restoreAccountsAndFilterOwnedSlices(
 	for (const a of newAccounts as Array<{ address?: unknown; chainId?: unknown; name?: unknown; restoreError?: unknown }>) {
 		row++
 		if (a.restoreError || typeof a.address !== "string") continue
+		if (typeof a.chainId === "number") rows.set(accountScopeKey(a.chainId, a.address), row)
 		// `AccountService.restore` refuses a derived row with no network, so this row is imported.
 		if (typeof a.chainId === "number" && !networkChains.has(a.chainId)) {
 			held.push({ chainId: a.chainId, address: a.address, name: typeof a.name === "string" ? a.name : "", row })
@@ -471,15 +474,55 @@ export async function restoreAccountsAndFilterOwnedSlices(
 		(tb) => typeof tb.account === "string" && importedAddresses.has(tb.account),
 		"token-balance(s)",
 	)
-	return { importedChainAddress, held }
+	return { importedChainAddress, held, rows }
+}
+
+/** The scope a backup row names, or undefined when it names none. */
+function scopeOfRow(row: unknown): AccountScope | undefined {
+	const { chainId, address } = (typeof row === "object" && row !== null ? row : {}) as { chainId?: unknown; address?: unknown }
+	return typeof chainId === "number" && typeof address === "string" ? { chainId, address } : undefined
 }
 
 /** Whether the key restore receives `row`: a key of an account this restore wrote, or a row without
  *  a scope to match, which the service refuses and records. A key no restored account uses is
  *  dropped: with no account row, the next start's orphan sweep would delete it anyway. */
 function keyOfRestoredAccount(row: unknown, restored: ReadonlySet<string>): boolean {
-	const { chainId, address } = (typeof row === "object" && row !== null ? row : {}) as { chainId?: unknown; address?: unknown }
-	return typeof chainId !== "number" || typeof address !== "string" || restored.has(accountScopeKey(chainId, address))
+	const scope = scopeOfRow(row)
+	return scope === undefined || restored.has(accountScopeKey(scope.chainId, scope.address))
+}
+
+const KEY_WITHOUT_ACCOUNT = "Skipped: no account in this backup uses this key"
+const ACCOUNT_WITHOUT_KEY = "Not restored: its key is not in this backup"
+
+/**
+ * Restores the keys of this restore's accounts and records, at its position in the slice, each key
+ * that no account row of the backup uses. A key whose account row is in the backup but was refused
+ * records nothing: that account's own row says why.
+ */
+async function restoreKeysOfRestoredAccounts(
+	keySlice: readonly unknown[],
+	accountSlice: unknown,
+	restored: ReadonlySet<string>,
+	deps: { accountService: AccountRestoreClient; profileId: string; io: RestoreIo },
+): Promise<void> {
+	const positions = keySlice.flatMap((row, i) => (keyOfRestoredAccount(row, restored) ? [i] : []))
+	const results = await deps.accountService.restoreImportedKeys(positions.map((i) => keySlice[i]))
+	const placed = atSourcePositions(results, positions)
+	const records: unknown[] = Array.isArray(placed) ? placed : []
+	const inBackup = new Set(
+		(Array.isArray(accountSlice) ? accountSlice : []).flatMap((row) => {
+			const scope = scopeOfRow(row)
+			return scope ? [accountScopeKey(scope.chainId, scope.address)] : []
+		}),
+	)
+	keySlice.forEach((row, i) => {
+		const scope = scopeOfRow(row)
+		if (scope === undefined) return
+		const key = accountScopeKey(scope.chainId, scope.address)
+		if (restored.has(key) || inBackup.has(key)) return
+		records[i] = { profileId: deps.profileId, chainId: scope.chainId, restoreError: KEY_WITHOUT_ACCOUNT }
+	})
+	deps.io.recordRestoreErrors(IMPORTED_KEYS_SERVICE_NAME, records)
 }
 
 /** Each result back at its row's position in the backup's slice, so the error log locates a failed
@@ -569,6 +612,14 @@ export function relinkRestoredTokenBalances(
 	return droppedBalances
 }
 
+/** The accounts stage's hand-off: the allow-set, the held accounts, and each restored account's
+ *  position in the backup's account slice, by `accountScopeKey`. */
+export type RestoredAccounts = {
+	importedChainAddress: ReadonlySet<string>
+	held: HeldScope[]
+	rows: ReadonlyMap<string, number>
+}
+
 /**
  * Accounts stage: account rows + imported-account key rows (RIGHT AFTER the account rows and
  * BEFORE reconciliation/finalize — the ciphertext is HKDF-bound to (master, chainId, address),
@@ -585,11 +636,11 @@ export async function restoreAccountsStage(
 		networks: ReadonlyArray<{ chainId: number }>
 		io: RestoreIo
 	},
-): Promise<({ kind: "proceed"; importedChainAddress: ReadonlySet<string>; held: HeldScope[] } & Record<never, never>) | StageFail> {
+): Promise<({ kind: "proceed" } & RestoredAccounts) | StageFail> {
 	const { accountService, profileService, profileId, io } = deps
 	try {
 		const networkChains = new Set(deps.networks.map((n) => n.chainId))
-		const { importedChainAddress, held } = await restoreAccountsAndFilterOwnedSlices(
+		const { importedChainAddress, held, rows } = await restoreAccountsAndFilterOwnedSlices(
 			data,
 			accountService,
 			io.recordRestoreErrors,
@@ -598,11 +649,9 @@ export async function restoreAccountsStage(
 		const importedKeySlice = data[IMPORTED_KEYS_SERVICE_NAME]
 		if (Array.isArray(importedKeySlice)) {
 			const restored = new Set([...importedChainAddress, ...held.map((h) => accountScopeKey(h.chainId, h.address))])
-			const positions = importedKeySlice.flatMap((row, i) => (keyOfRestoredAccount(row, restored) ? [i] : []))
-			const results = await accountService.restoreImportedKeys(positions.map((i) => importedKeySlice[i]))
-			io.recordRestoreErrors(IMPORTED_KEYS_SERVICE_NAME, atSourcePositions(results, positions))
+			await restoreKeysOfRestoredAccounts(importedKeySlice, data.account, restored, { accountService, profileId, io })
 		}
-		return { kind: "proceed", importedChainAddress, held }
+		return { kind: "proceed", importedChainAddress, held, rows }
 	} catch (err) {
 		// `AccountService` throws `new Error("Duplicate account")` when an imported row
 		// collides with one already in storage. Rows are keyed by `(profileId, chainId,
@@ -630,14 +679,15 @@ export async function restoreAccountsStage(
 }
 
 /**
- * Reconciles the imported accounts, then records each held account that kept its key, so the import
- * stops at its warning. Runs before the session opens; a reconcile failure propagates, so the created
- * profile is rolled back. The client is closed once the call settles.
+ * Reconciles the imported accounts, then records each account the reconcile dropped for want of a
+ * usable key and each held account that kept its key, so the import stops at its warning. Runs
+ * before the session opens; a reconcile failure propagates, so the created profile is rolled back.
+ * The client is closed once the call settles.
  */
 export async function settleHeldAccounts(
 	accountService: AccountRestoreClient,
 	profileId: string,
-	held: readonly HeldScope[],
+	accounts: Pick<RestoredAccounts, "held" | "rows">,
 	io: RestoreIo,
 ): Promise<HeldAccount[]> {
 	let dropped: AccountScope[]
@@ -649,12 +699,17 @@ export async function settleHeldAccounts(
 	// Scope COUNT only — the tuples carry on-chain account addresses.
 	if (dropped.length > 0) console.warn(`[import] dropped ${dropped.length} imported account(s) with no key row`)
 	const gone = new Set(dropped.map((scope) => accountScopeKey(scope.chainId, scope.address)))
-	const kept = held.filter((h) => !gone.has(accountScopeKey(h.chainId, h.address)))
+	const kept = accounts.held.filter((h) => !gone.has(accountScopeKey(h.chainId, h.address)))
 	// Each record sits at its account's position in the slice, as the account restore's own do, and
 	// names the chain only: the name is backup content, and an address links on-chain activity.
 	const records: unknown[] = []
 	for (const h of kept) {
 		records[h.row] = { profileId, chainId: h.chainId, restoreError: `Waiting for a network with chain ID ${h.chainId}` }
+	}
+	// The reconcile reads only this restore's accounts, so every dropped scope has its row.
+	for (const scope of dropped) {
+		const row = accounts.rows.get(accountScopeKey(scope.chainId, scope.address))
+		if (row !== undefined) records[row] = { profileId, chainId: scope.chainId, restoreError: ACCOUNT_WITHOUT_KEY }
 	}
 	io.recordRestoreErrors(ACCOUNT_SERVICE_NAME, records)
 	return kept.map((h) => ({ name: sentenceName(h.name, DEFAULT_IMPORTED_ACCOUNT_NAME), chainId: h.chainId }))
