@@ -187,6 +187,18 @@ text:
 
 Simulating a registry call, its views included, is unaffected.
 
+A `createAuthWit` inner hash whose consumer is the signing account itself is
+refused before any window, whatever the grant, with the same code and its own
+text:
+
+```jsonc
+{
+  "code": 4100,
+  "message": "An authorization's consumer cannot be the account that signs it. Name the contract that consumes it.",
+  "data": { "walletErrorCode": "SCOPE_VIOLATION" }
+}
+```
+
 A call whose arguments the wallet API's schema refuses (a value that is not
 an address or a field, a call without its selector, a missing option, a
 `requestCapabilities` header without its version or metadata, a raw message

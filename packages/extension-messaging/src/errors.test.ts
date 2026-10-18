@@ -19,6 +19,7 @@ import {
 	RECEIVER_GONE_MESSAGE,
 	JobCancelledError,
 	OperationNotRecordedError,
+	OwnAccountIntentRefusalError,
 	ProfileIdConflictError,
 	PxeStaleAnchorError,
 	PxeStoreKeyMissingError,
@@ -177,6 +178,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			ctor: AuthRegistryRefusalError,
 			make: () => new AuthRegistryRefusalError("Scope violation: createAuthWit intent targets the authorization registry"),
 			name: "AuthRegistryRefusalError",
+			code: "SCOPE_VIOLATION",
+			rebuild: { kind: "by-message" },
+		},
+		{
+			ctor: OwnAccountIntentRefusalError,
+			make: () => new OwnAccountIntentRefusalError(),
+			name: "OwnAccountIntentRefusalError",
 			code: "SCOPE_VIOLATION",
 			rebuild: { kind: "by-message" },
 		},
@@ -394,6 +402,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 		"Scope violation: a transaction's authorization request targets the authorization registry",
 	])("SCOPE_VIOLATION carrying %j rebuilds as AuthRegistryRefusalError, under no other code", (message) => {
 		const own = { ctor: AuthRegistryRefusalError, name: "AuthRegistryRefusalError", message, details: undefined }
+		expectRebuilt({ code: "SCOPE_VIOLATION", message, details: { k: 1 } }, own)
+		expectRebuilt({ code: "VALIDATION", message }, { ctor: ValidationError, name: "ValidationError", message, details: undefined })
+	})
+
+	test("SCOPE_VIOLATION carrying the own-account intent message rebuilds as OwnAccountIntentRefusalError, under no other code", () => {
+		const { message } = new OwnAccountIntentRefusalError()
+		const own = { ctor: OwnAccountIntentRefusalError, name: "OwnAccountIntentRefusalError", message, details: undefined }
 		expectRebuilt({ code: "SCOPE_VIOLATION", message, details: { k: 1 } }, own)
 		expectRebuilt({ code: "VALIDATION", message }, { ctor: ValidationError, name: "ValidationError", message, details: undefined })
 	})

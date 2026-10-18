@@ -6,6 +6,7 @@ import {
 	ChainNotSupportedError,
 	TermsAcceptanceRequiredError,
 	JobCancelledError,
+	OwnAccountIntentRefusalError,
 	RpcDisconnectedError,
 	RpcTimeoutError,
 	ScopeViolationError,
@@ -27,6 +28,7 @@ import { assertSelectorBinding, CALL_BINDING } from "@/wallet/services/execution
 import { classifyOperationCatch } from "@/wallet/services/execution/rpc-cancel"
 import {
 	AUTH_REGISTRY_REFUSAL_ENVELOPE,
+	OWN_ACCOUNT_INTENT_REFUSAL_ENVELOPE,
 	SCOPE_VIOLATION_ENVELOPE,
 	toWalletResponseError,
 	UNCLASSIFIED_ERROR_MESSAGE,
@@ -96,6 +98,20 @@ describe("toWalletResponseError", () => {
 		expect(env === AUTH_REGISTRY_REFUSAL_ENVELOPE && Object.isFrozen(env) && Object.isFrozen(AUTH_REGISTRY_REFUSAL_ENVELOPE.data)).toBe(
 			true,
 		)
+	})
+
+	test("an inner hash naming the signing account keeps the scope refusal's code with its own constant text", () => {
+		const env = toWalletResponseError(new OwnAccountIntentRefusalError())
+		expect(env).toEqual({
+			code: 4100,
+			message: "An authorization's consumer cannot be the account that signs it. Name the contract that consumes it.",
+			data: { walletErrorCode: "SCOPE_VIOLATION" },
+		})
+		expect(
+			env === OWN_ACCOUNT_INTENT_REFUSAL_ENVELOPE &&
+				Object.isFrozen(env) &&
+				Object.isFrozen(OWN_ACCOUNT_INTENT_REFUSAL_ENVELOPE.data),
+		).toBe(true)
 	})
 
 	test("SessionEndedError → {code:4900, walletErrorCode SESSION_ENDED} with the constant message; only the class maps", () => {
