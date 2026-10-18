@@ -122,6 +122,7 @@ export type Methods = {
 		accounts: string[],
 		confirmationLevel: AccessLevel,
 		chainId: string,
+		expectedProfileId: string,
 	): DappSession
 	updateDappSession(sessionId: string, permissions: DappPermissions[], accounts: string[], confirmationLevel: AccessLevel): DappSession
 	deleteDappSession(sessionId: string): DappSession

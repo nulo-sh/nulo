@@ -136,7 +136,7 @@ Rewrite `incoming-transfer/service.ts:1916` to name the scan's cursor writes and
 
 ## Arc 2 (after dapp-boundary-3 arc 2)
 
-### Phase 5: bind the Allow's row (#680)
+### Phase 5: bind the Allow's row (#680) ✓
 1. Recheck the trace at the new base; stop and revise if the connect path moved.
 2. Write the reproducer, `wallet-sdk/connect-profile-binding.composition.test.ts`: the background's real discovery path (`initWalletSdkHandler` over `fakeSdkServices`) with the REAL `DappSessionService` over `FakeBrowserApi` in place of the fake. Its `svc` ProfileService answers `getActiveProfile` with p1 and `captureExecutionFence` with p2: the order a switch queued between the two facade-lock turns produces (recon § #680 item 3). An Allow under p1 must write no row and reject the discovery. Run it on the base: it must be red, with a row under p2. `fakeSdkServices` gains a `dappSession` override if it has none (a test-only option).
 3. Implement the parameter and the refusal; update each caller and stub recon § #680 item 7 lists (the stubs with fewer parameters still typecheck).
@@ -209,6 +209,8 @@ The lane brief's no-ask record says "none"; nothing here goes beyond it.
 **Final pass** (fresh Codex session `01a14edf`): `conditional approve (with conditions: arm incoming-arrival correctly and require store-captures to execute before counting its gate as passed)`. Both verified (`incoming-arrival.test.ts:13`, `scripts/e2e/proverless-guard.sh:54-59`; `store-captures.test.ts:392`) and applied: `NULO_E2E_PROVERLESS=1` on the incoming-arrival run; store-captures removed from the gate. It found no security defect and judged plan A sound against outline B now that rendered identity is a release condition. Resumed on the two edits: `approve`.
 
 **Arc 1 post-implementation.** Codex (gpt-6.1-sol, high, session `01a14f33`) round 1: `conditional approve`, no production regression; two Low test findings (the post-unmount case tested its fake; "disconnects only its own" never had two pages mounted) and one comment nit, all accepted (D14). Opus 5.5 diff review beside it: `approve`; one Low (the same post-unmount case) and eight nits, seven accepted (a title typo, two missing assertions, three comment fixes, the index read in place of an `.at(-1)` guard the platform never needs); the changed existing test lines go in the PR body; the `Object.keys(rows)` line stays. Round 2 (resumed): `approve`, no new material findings.
+
+**Arc 2, post-implementation** (diff `9470d4e9..structure-2-a2`). Codex round 1 (gpt-6.1-sol, high, session `01a14f10`): `clean`. Opus 5.5 diff review beside it: `approve`, four notes. Accepted: the `persistAndApprove` comment overclaimed (a switch after the fence capture is not refused; it is now scoped to the read-to-capture window); the reproducer now hands over a connect window, which the refusal closes and the success control keeps. Not acted on: an A→B→A switch during a queued admission binds the Allow to the window's profile, pre-existing and within the plan's definition, filed as known limit #771; a dedupe waiter released by the refusal can reconnect on the active profile's own row, the existing known limit #681. Codex round 2 (resumed): `clean`, both fixes verified, both notes out of scope.
 
 ## Delivery
 
