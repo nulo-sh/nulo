@@ -8,6 +8,7 @@ import {
 	openDropdown,
 	openHoldings,
 	seedUsdQuoteAndReload,
+	waitForToast,
 	waitForToastGone,
 } from "./fixtures/helpers"
 import { readActivityScope, seedTransaction } from "./helpers/activity-seeds"
@@ -220,6 +221,7 @@ test("a drag selects the text around a control and none of the control's own but
 	await page.evaluate(() => window.getSelection()?.removeAllRanges())
 	await page.mouse.click(middle.x, middle.y)
 	expect(await copies()).toEqual([await getAccountAddress(page)])
+	await waitForToast(page, "Address is copied")
 
 	await navigateToSettings(page, "privacy")
 	await page.waitForSelector('[data-testid="explorer-trigger"]', { visible: true, timeout: 10_000 })
@@ -253,7 +255,7 @@ test("a drag selects the text around a control and none of the control's own but
 	await waitForHash(page, "#/popup/settings")
 	await navigateToSettings(page, "about")
 	await page.waitForSelector('[data-testid="legal-about-accepted"]', { visible: true, timeout: 10_000 })
-	// The address copy's snack sweeps the strip under it as it leaves, where both drags below end.
+	// The address copy's snack slides over the page's foot as it leaves, where the next two drags end.
 	await waitForToastGone(page, "Address is copied")
 
 	await page.$eval('[data-testid="legal-about-group"]', (group) => group.firstElementChild?.scrollIntoView({ block: "nearest" }))
