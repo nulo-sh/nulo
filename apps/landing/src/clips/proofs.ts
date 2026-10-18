@@ -90,7 +90,7 @@ const checked = scene(
 		node(packet, "rect", { class: "c-plate", width: 96, height: 56 })
 		glyph(packet, "private", 10, 10, 36)
 		const seal = glyph(packet, "mail-lock", 52, 10, 36)
-		const tick = glyph(g, "check", 470, 104, 48)
+		const tick = glyph(g, "check", 469, 82, 48)
 		const block = node(g, "rect", { class: "c-block c-block--new", x: 564, y: 268, width: 32, height: 32 })
 		return (t) => {
 			const travel = seg(t, at.goes, at.goes + 1.2)

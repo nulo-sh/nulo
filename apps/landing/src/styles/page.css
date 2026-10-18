@@ -799,13 +799,13 @@ section.s {
 .c-glyph-s {
 	fill: none;
 	stroke: currentColor;
-	stroke-width: 2.5;
-	stroke-linecap: square;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
 }
 
 .c-glyph-f {
 	fill: currentColor;
-	fill-rule: evenodd;
 }
 
 .c-track {
