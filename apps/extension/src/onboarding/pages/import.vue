@@ -14,6 +14,7 @@ import { useToast } from "@/composables/toast"
 /** Utils */
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
+import { passkeyImportFailedNotice } from "@/utils/profile-flow-notices"
 import { restoreNoticeText, retryResultText } from "@/components/composite/import/restore-warning"
 
 /** Stores */
@@ -109,19 +110,7 @@ const {
 			},
 		})
 	},
-	notifyImportFailed: () => {
-		notificationStore.create({
-			type: "warning",
-			payload: {
-				title: "Profile import failed",
-				description:
-					"An error occurred while importing the profile. This authenticator may not be supported or encountered an issue. Try again or use another one.",
-				note: "Windows Hello may not work correctly with some versions of Windows.",
-				confirmText: "OK",
-				onConfirm: () => {},
-			},
-		})
-	},
+	notifyImportFailed: () => notificationStore.create(passkeyImportFailedNotice()),
 	openToast,
 })
 
