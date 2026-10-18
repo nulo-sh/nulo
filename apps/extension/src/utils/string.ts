@@ -42,6 +42,12 @@ export function sanitizeString(s: string, length = 0): string {
 	return cleaned
 }
 
+/** `name` as a sentence may carry it: letters, digits, space and `-._` only, so no bidi, zero-width
+ *  or control character reaches the sentence; `fallback` when nothing is left. */
+export function sentenceName(name: string, fallback: string): string {
+	return sanitizeString(name, 32).trim() || fallback
+}
+
 export function stringCompare(a: string, b: string): number {
 	return (a || "").localeCompare(b || "", undefined, { sensitivity: "base", numeric: true })
 }

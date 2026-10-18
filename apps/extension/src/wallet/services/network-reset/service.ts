@@ -4,7 +4,7 @@ import { validateParams } from "@nulo/extension-messaging/zod"
 import type { BrowserApi, StorageChanges } from "@nulo/wallet-core/ports"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID } from "@/utils/chain-ids"
-import { sanitizeString } from "@/utils/string"
+import { sentenceName } from "@/utils/string"
 import { NOOP_RESTORE_GATE, type RestoreGate } from "@/e2e/restore-gate"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import type { ILogger } from "@/wallet/logger"
@@ -122,17 +122,13 @@ function journalAccounts(rows: Account[], resealed: ReadonlyMap<string, { newAdd
 	return { accounts, unmovable }
 }
 
-/** Letters, digits, space and `-._` only, so no bidi, zero-width or control character reaches a
- *  sentence. */
-const sentenceName = (name: string) => sanitizeString(name, 32).trim() || DEFAULT_IMPORTED_ACCOUNT_NAME
-
 /** The imported accounts deleting a paused network deletes: the journal's, moved or not, and every
  *  live imported row on the network's chain that the journal does not name. */
 function importedNames(journal: ResetJournal, live: Account[]): string[] {
 	const fromJournal = journal.accounts.filter((a) => a.type === AccountType.Imported)
 	const named = new Set(fromJournal.flatMap((a) => (a.newAddress ? [a.oldAddress, a.newAddress] : [a.oldAddress])))
 	const unnamed = live.filter((a) => a.type === AccountType.Imported && !named.has(a.address))
-	return [...fromJournal, ...unnamed].map((a) => sentenceName(a.name))
+	return [...fromJournal, ...unnamed].map((a) => sentenceName(a.name, DEFAULT_IMPORTED_ACCOUNT_NAME))
 }
 
 function conflictsOf(row: Network, networks: Network[], target: number, journal: ResetJournal | undefined) {

@@ -328,3 +328,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [wallet-sdk-implicit-account-grant](wallet-sdk-implicit-account-grant/plan.md) — completed — no implicit account grant: getAccounts before requestCapabilities throws
 - [wallet-ux-fixes](wallet-ux-fixes/plan.md) — completed — four wallet UX fixes in one change set
 - [zod-puppeteer](zod-puppeteer/plan.md) — completed — Zod 4 and Puppeteer 25 bumps as separate changes
+- [authwit-intent-1](authwit-intent-1/plan.md) — completed — a dApp's inner-hash authorization intent never names the account that signs it; the Fee Juice selector pin runs only where it can compute

@@ -18,6 +18,8 @@ const props = defineProps({
 	/** Names of the networks a Retry replays; the warning names them. */
 	unrestoredNetworks: { type: Array, default: () => [] },
 	hasOtherErrors: { type: Boolean, default: false },
+	/** Imported accounts the restore kept for networks the new profile lacks; the warning names them. */
+	heldAccounts: { type: Array, default: () => [] },
 	/** Replaces the warning the form words from `unrestoredNetworks` and `hasOtherErrors`. */
 	warningText: { type: String, default: undefined },
 	/** The failed-Retry line the page adds above its buttons, which raises their edge again. */
@@ -43,7 +45,9 @@ const warningRef = useTemplateRef("warningRef")
 
 const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""))
 const showWarning = computed(() => props.restoreStatus === "finished" && props.isRestoreHasErrors)
-const shownWarning = computed(() => props.warningText ?? restoreWarningText(props.unrestoredNetworks, props.hasOtherErrors))
+const shownWarning = computed(
+	() => props.warningText ?? restoreWarningText(props.unrestoredNetworks, props.hasOtherErrors, props.heldAccounts),
+)
 
 // The errors screen's footer buttons appear with the warning and shorten the popup's scroller,
 // which leaves the warning below its edge; the failed-Retry line shortens it once more.

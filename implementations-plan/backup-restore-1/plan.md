@@ -134,14 +134,14 @@ Light and dark screenshots of each surface go in its PR body, with the pick quot
 
 ## Arc 2 — keep held imported accounts and name them (Closes #663)
 
-### Phase 4: hold imported rows; keys follow the restore's accounts (#663 code)
+### Phase 4: hold imported rows; keys follow the restore's accounts (#663 code) ✓
 - `account/service.ts` `restore`: D1, with `getNetworksRaw` for absence. `composables/full-backup-restore.ts`: D2 a-c and `settleHeldAccounts` (D4). `useFullBackupImport.ts`: pass the seeded networks, call the helper, expose `heldAccounts`. Test stubs that provide only `getL1ChainIdStored` gain `getNetworksRaw` (`account/service.test.ts`, `composite-key.test.ts`, `full-backup-keys.test.ts`).
 - Tests (`account/service.test.ts`, one restore): an imported row with no network is written with no error; a derived row with no network is refused with today's message; a tampered seeded network row still refuses its accounts.
 - Stage tests: a refused account's key never reaches `restoreImportedKeys`; a held account's key does; a key row missing `address` still reaches it and is recorded; a well-formed key matching no account is not written; a held account's authwit and balance rows are not restored; of two same-name held accounts on one chain, one keyless, only the keyed one stays in `heldAccounts`; held log rows carry no name and respect the cap.
 - Restart test (`account/full-backup-keys.test.ts`): export with an imported account on chain 1337, restore with Testnet and Local only, then boot a second service collection over the same store. The account row is unchanged, and its key row unseals to the original signing key. The same steps on the base SHA leave no key row (the red proof, logged).
 - **Gate:** `bun run lint && bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/wallet/services/account src/wallet/services/network src/composables`. Pass: exit 0. Layers: lint, typecheck, unit.
 
-### Phase 5: the restore warning (P38-04 B)
+### Phase 5: the restore warning (P38-04 B) ✓
 - `restore-warning.ts`: `restoreWarningText(networkNames, hasOtherErrors, held)` words C6. `ImportFullBackupForm.vue`: a `heldAccounts` prop. `popup/pages/import.vue` and `onboarding/pages/import.vue`: one binding each.
 - Tests: `restore-warning.test.ts`, exact strings for one held account, two on one chain, two on two chains, four (the cap), and held beside network-retry names. `ImportFullBackupForm.test.ts`: a held-only log shows the warning with C6.
 - **Gate:** `bun run lint && bun run typecheck:all && bun run test:all && bun run build`. Smoke e2e: `cd apps/extension && bun run test:e2e -- tests/e2e/restore-outcome.test.ts tests/e2e/import-errors-scroll.test.ts tests/e2e/backup-imported-account.test.ts --retry=0`. Network e2e: `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/backup-restore-integrity.test.ts tests/e2e/network/backup-edited-local-network.test.ts tests/e2e/network/restore-again.test.ts --retry=0`. Pass: all green. No e2e scenario is added: the restart test proves the key survives, which a browser cannot show better.
@@ -189,6 +189,16 @@ Round 1, Codex (gpt-6.1-sol high, session `01a14b4c`): **conditional approve** (
 - Phase 3's network gate runs with `NULO_E2E_PROVERLESS=1`: `stale-network-resume.test.ts` is proverless-gated, and CI's network lane runs proverless too.
 
 **Arc 1 review loop.** Round 1, Codex (gpt-6.1-sol high, session `01a14b7d`): **findings (2 material)**, both accepted as local fixes: Delete chain reads the hold at the click, and the page re-reads on a route change; two comments removed. Opus diff review: **0 material**; three small items folded (inert-row assertion, `sentenceName` comment, fallback-name test). Round 2, resumed: fixes verified, **findings (2 material)** in the round-1 fix, both accepted: an unknown hold aborts Delete with the existing failure toast, and a continuation after unmount is dropped. Round 3, resumed: **clean**.
+
+**Arc 2 deviations from the plan (implementation).**
+- D1: absence is memoised per profile id inside one `restore` call (normally one id, since the composable remaps every row to the new profile). A derived row skips the absence read and meets `getL1ChainIdStored` as before, so its refusal text is unchanged and no other test stub needed `getNetworksRaw`.
+- D2a: "does not parse" is read as "has no numeric `chainId` or no string `address`": a scoped key row matching no restored account is dropped even if its other fields are malformed, where the service used to record a schema error for it. Its outcome is unchanged, since the next start's sweep deleted it.
+- D2a: through an import the backup gate already refuses a key row without a string `profileId`, a finite `chainId` and a non-empty `address`, so the pass-through for a scopeless row only serves a direct caller; its test calls `restoreAccountsStage`.
+- I2: the restart test reads `getAccounts(1337)` after the second boot without writing a network row, since `getAccounts` reads no network; it pins the per-chain read the popup asks once a network exists.
+- D4: each held record sits at its account's ordinal in the backup's account slice, as the account restore's own rows do, not at its position among the held accounts. Names are cleaned by `sentenceName` (`utils/string.ts`), now shared with the paused-reset names; a name that cleans to nothing reads `DEFAULT_IMPORTED_ACCOUNT_NAME`, as in arc 1. `useProfileImportFlow` passes `heldAccounts` through to both pages.
+- C6: past three chains the chain IDs take the same cap as the names (OA-4's addendum); lists join with `joinNames`, so "“C”, and 2 more", with the comma C6's draft omitted.
+
+**Arc 2 review loop.** Round 1, Codex (gpt-6.1-sol high, session `01a14c46`): **2 minor, 0 material**, both accepted: the key filter shifted the error log's key ordinals (results now go back to their slice positions), and two comments narrated. Opus diff review: **0 material**; folded: the restart test's no-op network write and its title, one L1-mismatch row in the service test, the D2a deviation line. Round 2, resumed: fixes verified, **clean**. The loop converged in two rounds.
 
 Final fresh Codex pass (gpt-6.1-sol high, session `01a14b63`): **conditional approve** (condition: an owner ask for D2c's orphan-key warning, with a "what ships now" form). Applied: D2c moved into OA-5, and the arc ships today's outcome. Round-1 dispositions and rejected alternatives held; arc 1 depends on no open ask. Resumed on the change: **approve**.
 
