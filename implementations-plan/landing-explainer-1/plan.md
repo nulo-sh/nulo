@@ -1,7 +1,7 @@
 ---
 plan: landing-explainer-1
 tier: light
-status: approved 2026-10-17; arc 1 open as draft; arc 2 (clips) held for the owner
+status: approved 2026-10-17; arc 1 open as draft (#723); arc 2 implemented 2026-10-18, a draft until the owner approves the clips (OA-8)
 issues: "#588 (Refs only: onboarding-3 closes it; no arc here closes an issue)"
 driver: claude-code
 claude_model: opus
@@ -51,6 +51,12 @@ For a new Nulo user who taps "How Aztec works" on Home and lands in a tab, and f
 | D7 | Text versions start from the wallet's signed glossary, narrowed where it says more than the record hides | New wording: more to approve, and a second voice |
 | D8 | The drawing's "3 clips" eyebrow waits for arc 2 | Shipping it now: false until clips exist |
 | D9 | Reversed by the orchestrator (D-orch, 2026-10-17): arc 2 stays in this lane, held until the owner answers OA-1 to OA-4, and the close-out ships with arc 2, never with arc 1 | The planner's version (close out with arc 1 and file the clips as an issue): the lane brief makes the clips this lane's arc 2 |
+| D10 | Each clip is an SVG stage whose scenes are pure functions of time, cued to words of the narration's alignment, in a page-only entry `src/clips/index.ts` | Canvas: text the page's fonts cannot style and no DOM to test; one shared entry: the home page would load the clips |
+| D11 | Media under `src/clips/media/`, hashed into `/assets/` (Vite rewrites `audio` and `track` `src`), and `build.assetsInlineLimit: 0` | Vite inlined the 1 to 2 KB caption tracks as `data:` URLs, which the CSP refuses for media; `public/clips/` would lose the immutable cache. No other asset was small enough to inline, so the build output is otherwise unchanged |
+| D12 | Captions: one line under the stage from `captions(timings)`, and the same lines as a WebVTT `<track kind="captions" default>` on each `audio`, pinned equal by a test | Browsers draw no captions for audio, so the track alone shows nothing; the line alone leaves the audio without a captions file (Biome's `useMediaCaption`) |
+| D13 | The transcript under the card's text, collapsed; no chapters | Chapters need a title per scene, words the owner has not seen (OA-9). OA-4 A named both |
+| D14 | Narration as written: `eleven_v4`, the key file's voice, no emotion tags; the skill's script review and four-look board skipped | P42-01 to -03 A approved the words, and tags would change what is sent; P42-04 A picked the landing's look |
+| D15 | One clip speaks at a time; a hidden tab pauses; the big play square shows only before the start and after the end | A square on a paused clip would hide the picture being looked at |
 
 ## Phase 1 (arc 1): the page ✓
 
@@ -87,16 +93,18 @@ Assumptions: F1 to F10, I1. Steps:
 4. When the owner has run OA-6 A's command on the PR's latest commit, load `/how-aztec-works` on that preview; expect the page's title. Put the link in the PR body.
 5. Mark the PR ready only when the orchestrator says so.
 
-## Phase 3 (arc 2): the clips
+## Phase 3 (arc 2): the clips ✓
 
-Precondition: OA-4 answered, and three finished clips the owner approved, made outside the repo (D6). Steps: copy the media in; put each clip at the top of its card, with its text version under it; add the "3 clips" eyebrow; update `README.md`. Gate: the Phase 1 gate, plus, in the browser check, each clip plays, seeks backward and forward, and shows captions, with no CSP violation and media from the site's own origin. Tests: for `<video>`, one test that every clip has a captions track and no `autoplay`. Before the PR: one fresh Codex session over the net diff from the plan's base, with the cross-arc ask.
+Owner picks (2026-10-17/18, quoted by id): P42-01, P42-02, P42-03 = A, "Approve the script and the card's text as written"; P42-04 = A, "The explainer skill: drawn scenes in the landing's look; your yes, your cap and voice or captions in the note", and in chat: "regarding voice: just use the voice we have set on our eleven labs file". Cap, set by the orchestrator under that yes: 15,000 ElevenLabs characters.
+
+Done: narration outside the repo (D6), 2,179 characters in one take per clip (Private balances 58.9 s, Proofs 50.7 s, Fees 40.6 s); the player and scenes (D10 to D15); each clip at the top of its card over the text version; the "3 clips" eyebrow; `README.md`. Media 2.4 MB in all. Tests: `timeline.test.ts` (cue lookup per scene, caption lines) and `clips.test.ts` (one player per clip, every cue spoken, preload none and no autoplay, the track equals the captions, the transcript equals the narration, media within 20 MB); each was proved red by a mutation. Gate results: `lessons/phase-3.md`. The clips go to the owner as OA-8.
 
 ## Security & Adversarial Considerations
 
 - **Surface.** A static page: no input, no form, no new script, no third-party request, CSP and `frame-ancestors 'none'` unchanged, Workers Logs off. The realistic harm is a false privacy claim on a public page. Each claim cites rc.3 docs or research, and no script says the record hides who was paid, the transaction's shape, or a public part (recon; audit round 1).
 - **Supply chain.** No dependency change; frozen lockfile and the 7-day age gate stand.
 - **OA-6 B (branch builds).** A branch build runs that branch's own `deploy:preview` script with the Workers Builds token, which can deploy nulo.sh. Any pushed branch, an agent's included, would hold that power; whether fork PRs build is unverified. The plan recommends A (a manual preview); B is the owner's security call. The lane changes no Cloudflare setting.
-- **Arc 2.** What leaves is the script (ElevenLabs), or the script, shot prompts and any style picture (Higgsfield), in an owner-authorized session under a cap. The ElevenLabs key is read only by the `explainer` skill's client.
+- **Arc 2.** What left: the three approved scripts, 2,179 characters, to ElevenLabs, through the `explainer` skill's launcher, which alone reads the key. No Higgsfield job. The page fetches its audio and captions from its own origin only after a press; no new header, no new script source.
 
 ## Assumptions
 
@@ -117,12 +125,12 @@ Precondition: OA-4 answered, and three finished clips the owner approved, made o
 
 - **New page `nulo.sh/how-aztec-works`:** the signed drawing `p33-aztec-a` (P33-03 A), with each player replaced by its card's text version until arc 2 (the lane brief's no-ask record: "Until approved, each section carries its illustrated still or a short text version, never a placeholder box"), and the "3 clips" eyebrow held (D8). Search and share text per OA-7. Screenshots in the PR body.
 - **Home page:** unchanged (OA-5, what ships now A).
-- **Arc 2:** the clips in the cards (OA-4).
+- **Arc 2:** each card gains its player at the top (the stage, a captions line, play, position and time) and a collapsed transcript under its text; "3 clips" above the heading. Before and after at 1440 and 390 px in the PR. The clips themselves: OA-8.
 
 ## Delivery
 
 - **Arc 1:** branch `worktree-landing-explainer-1`, `gh pr create --draft --base dev` after Phase 1's gate and the Codex loop. Title: `feat(landing): the how aztec works page at nulo.sh/how-aztec-works` (66 characters). Body: what and why; the picks P33-03 = A and P39-11 = A with the owner's note verbatim; the final URL `https://nulo.sh/how-aztec-works`, stated once; the validation runs; dark screenshots at desktop and phone width; OA-6 A's command, with the note that the preview appears after the owner runs it; OA-7's head copy, quoted for the owner to flip; `Refs #588`; "Draft until the owner approves the explainers (OA-1 to OA-3)". No labels: no extension e2e lane applies. onboarding-3's landing issue, #722, asks for the page with its clips and the wallet repoint, so arc 1 says `Refs #722`. Ready after Phase 2.
-- **Arc 2:** branch `landing-explainer-1-clips` off `origin/dev` after arc 1 merges; `gh pr create --base dev`; title `feat(landing): the three how aztec works clips`; `Refs #588`; `Closes #722` once the wallet repoint has landed, `Refs #722` until then.
+- **Arc 2:** arc 1 had not merged, so (orchestrator, 2026-10-18) branch `landing-explainer-1-a2` off `worktree-landing-explainer-1`, a draft PR with that base, retargeted to `dev` once #723 merges; title `feat(landing): the three how aztec works clips`; `Refs #588`; `Closes #722` once the wallet repoint has landed, `Refs #722` until then. A draft until the owner approves the clips (OA-8).
 - **Release order:** the wallet item points at this address, so arc 1 must reach `main` with or before the release that ships onboarding-3's item; until then the link shows the home page.
 - **Close-out** ships with arc 2 (D9 as reversed); arc 1's PR carries no archive move. No parallel lanes: one phase per arc.
 

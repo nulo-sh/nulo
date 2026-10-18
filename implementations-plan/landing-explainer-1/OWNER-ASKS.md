@@ -1,5 +1,7 @@
 # Owner asks: landing-explainer-1
 
+**Answered by the owner (2026-10-17/18):** P42-01, P42-02, P42-03 = A (the scripts and card texts as written) and P42-04 = A (the `explainer` skill, narrated with the voice in the owner's ElevenLabs file). Arc 2 made the clips; OA-8 and OA-9 below are what is still open.
+
 **Settled by the orchestrator (D-orch, 2026-10-17 22:0xZ), on the plan's approval:** OA-5 = A, the page ships unlinked from the home page. OA-6 = A, the owner runs the preview command by hand; nothing enables branch builds. OA-7 = A ships now, quoted in the PR body for the owner to flip. OA-1 to OA-4 stay the owner's: the three scripts and their text versions go on the owner's next decision page verbatim from this file, and the page ships the text versions until the owner picks.
 
 The page `https://nulo.sh/how-aztec-works` ships in arc 1 as the signed drawing `p33-aztec-a` (P33-03 A): the landing's header, grain, plates and footer, the heading "How Aztec works.", the two sentences, then three cards named Private balances, Proofs, Fees. Until a clip exists, each card shows its short text version, never an empty player. The PR stays a draft until you answer OA-1 to OA-3 (P39-11: "I want to approve the explainers though") and a Cloudflare preview of it exists (OA-6).
@@ -114,3 +116,29 @@ No landing branch build has run so far: Workers Builds has built `nulo-landing` 
 | **B. Turn on branch builds** | Cloudflare dashboard → Workers & Pages → nulo-landing → Settings → Builds → Branch control: enable "Builds for non-production branches", with the deploy command `bun run deploy:preview` (the README already names it). | Every pushed branch gets a preview link in its checks. The cost: a branch build runs that branch's build commands with the Workers Builds token, which can also deploy to nulo.sh. Any branch an agent or collaborator pushes would then run with that power, not only reviewed `main`. |
 
 **Recommendation: A** for this page: it keeps production deploys behind a reviewed merge. **Settled: A** (orchestrator, D-orch: production deploys stay behind a reviewed merge). The PR body carries A's command and says the preview appears after you run it; nothing enables branch builds.
+
+## OA-8. Approve the three clips (arc 2)
+
+**Surface:** the player at the top of each card of `nulo.sh/how-aztec-works`.
+
+The clips follow your approved scripts word for word, in the voice from your ElevenLabs file, drawn in the landing's look. The review folder (`REVIEW.md`, relayed by the orchestrator) holds, per clip: a review video of exactly what the page draws, its length, its characters, its captions and transcript, and a still of every scene. It also lists every word drawn inside the clips and what to listen for (how the voice reads "3.50" and "1.50").
+
+| Option | What happens |
+|---|---|
+| **A. Approve as they are** | The arc 2 PR leaves draft. |
+| **B. Approve with changes** | A note per clip. A changed picture costs nothing; a changed word means a new narration of that clip, about 600 to 800 of the 12,821 characters left under the cap. |
+
+**Recommendation: A.** **What ships now:** the arc 2 PR, as a draft.
+
+## OA-9. Chapters under each clip
+
+**Surface:** under each player, a numbered list of the clip's scenes, each one jumping to its start.
+
+Option A of OA-4 named chapters. They need a title per scene, words you have not seen, so arc 2 ships without them.
+
+| Option | What it looks like |
+|---|---|
+| **A. No chapters** | The player as it ships: picture, captions line, play, position, time. |
+| **B. Chapters** | Five to seven short rows under each player, for example "0:00 Public chains", "0:06 Two balances", "0:18 Sealed notes". The titles would come to you first. |
+
+**Recommendation: A.** Each clip runs under a minute, and the cards are narrow. **What ships now:** A.
