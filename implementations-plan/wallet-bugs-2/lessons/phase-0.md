@@ -1,0 +1,31 @@
+# wallet-bugs-2: phase 0 (planning)
+
+## Recon
+
+- Two Explore agents (sonnet): a reuse sweep over five capabilities, and a map of the incoming feed. The feed map found that 60 005 ms matches the popup client's 60 s RPC timeout, not the node client's retry chain (about 6 s per refused call).
+- Planner checks: `SelectTokenCard.vue:122` and `TransactionAwaitingCard.vue:88` stand for 11 px `caption` lines (out of #654); `getCapabilityInfo` has no production caller (out of #714); six cites in `remote-code.md` are stale (#615 named one); `rows.test.ts` already visits the journal page with #648's name.
+
+## Audit round 1 (plan at its first draft)
+
+- **Codex** (gpt-6.1-sol, high, session 01a14ecd): `reject`. Blocking: (1) the feed's `load` can still wait in `settledAfter` for a full read that starts after its stored read; (2) a stored state can install `sinceBlock: null` while a full read is about to write the baseline, so a receipt committed in between shows at rest; (3) smoke runs exercise a stale build, `audit:vue` missing, network retries default to two. Also: OA-1 overstated the flag's reach and the floor's guarantee; D3b changes how a person resumes the follow; a trim needs a browser proof; #638 needs a real drag case.
+- **Opus 5.5 lens** (Plan): `conditional approve`. D3b is a visible change (the scroll button and a person's scroll stop resuming the follow while search is open): drop it, or re-arm only on a scroll that moved the view down. KL for a scope whose baseline a feed visit used to write. Phase 5's existing load-race tests would steer the wrong read. Delete `seedArrivalRow` so `type-roles.test.ts` becomes #579's browser regression. Marks at 12 px, as beside `meta` on the token page. OA-1 reads "whoever added it" as a key. Gates must run typecheck from the root.
+- **Decisions**: both legs' visible-change finding on D3b taken (the hold rule dropped; the scroll-direction rule only if the trim case is red). Codex (1) answered by trace: every `startRead` trigger also refreshes the feed with the same coalescing, so a newer `load` supersedes the waiting one; a test pins it. Codex (2) accepted as KL-1: the receipt stays unplayed and eligible, so it plays on the next visit. Opus's later-baseline case accepted as KL-2. Everything else taken as listed in plan.md § Audit verdicts.
+
+## Audit round 2 (Codex resumed on the revision)
+
+- **Codex**: `reject`. Blocking: each page builds its own `IncomingTransferServiceClient`, whose `onConnected` is a local lifecycle signal (`extension-messaging/src/background/client.ts:35-42`); a coordinator full read can start after the feed's stored read with no feed refresh behind it, and `settledAfter` holds the feed again. My round-2 answer ("every trigger also refreshes the feed") missed that. Also: KL-1's "plays on the next visit" holds only for a new coordinator run (popup reopen), not a navigation; KL-2's 3-minute bound is wrong (price backoff reaches the 15-minute quote TTL); D3b needs the scroll button to re-arm itself.
+- **Decision**: replace D6. The feed keeps `load` → `getArrivalState`; the arrival tip moves to the one-attempt read the execution service already uses (`readChainTip`, moved to `NetworkService`). Coordinator, arrival rules and their tests are unchanged; round 1's two known limits disappear; one remains (a node that accepts and never answers, KL-1). D3b's comparison becomes strict and the button re-arms the follow.
+
+## Audit round 3 (Codex resumed on the new D6)
+
+- Planner check first: base's arrival tip also queues behind the chain write guard (`proveTx`, `simulateTx`, `getNotes`) and may bind a runtime up to three times (`packages/aztec-runtime/src/pxe/service.ts:890-969`); Fact 6 records it.
+- **Codex**: `conditional approve`. (1) One attempt for all four `readTip` callers changes unrelated behaviour: a blip on account add, Allow or token add leaves a scope unbaselined or a floor pending, a later read baselines past a fresh receipt, and that arrival never plays. Keep the retrying read there. (2) KL-1 is proportionate but too narrow: any attempt that stays pending (DNS, connect, headers, body) holds the paint until the request timeout. (3) The Arrivals security paragraph described the dropped stored-state read. Verified: the direct read removes the demonstrated path; both paths use the same endpoint and neither checks chain identity per read; bypassing the PXE guards is fine for a node-only scalar read.
+- **Decision**: all three taken. Only `getArrivalState` takes the one-attempt read; the three action callers keep the PXE read unchanged (smaller than Codex's `getNodeForUrl` suggestion, which would also move their transport).
+- **Opus 5.5 lens** (Plan, same round, on the all-four-callers draft): `conditional approve`. D6 removes the demonstrated wait: either browser's refusal rejects `fetch` at once, the single-attempt client has no retry wrapper, a failed tip leaves `getArrivalState` on storage reads only, and no service-lock section waits on the PXE or the network (it traced each). Conditions: KL-1 grows while a newer coordinator read is in flight; the PXE tip method would go dead. It would keep all four callers on one attempt (one reader method; shorter Allow waits behind `proveTx`).
+- **Decision on the split**: Codex's narrower change. The action callers' wait is no filed issue, and one attempt there trades a blip's recovery for an arrival that never plays, a behaviour nobody signed; the extra reader method is one line. The PXE method keeps three callers. KL-1's wording and the reader doc taken.
+
+## Final fresh Codex pass (new session 01a14ef6)
+
+- **Codex**: `conditional approve`. (1) Demonstrated: the coordinator stays scoped during the stale-network takeover (`popup/app.vue:83-90`), and the PXE client refuses a quarantined chain (`wallet/services/pxe/client.ts:95-98`); the direct read would call that chain's endpoint and could store a floor for it. (2) Fact 2 was false: `rows.test.ts` seeds both journal records but opens only the named one (`:966`). No other Fact false; collisions and gates clean.
+- **Decision**: both taken, both verified in the tree. The arrival read refuses a quarantined chain before building a node, with a test and a live control; Phase 2 adds the second journal visit.
+- Resumed on the two edits: `approve`, both conditions met, no new finding.
