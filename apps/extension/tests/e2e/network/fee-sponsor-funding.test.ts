@@ -72,7 +72,6 @@ async function watchShortNotice(page: Page): Promise<() => Promise<boolean>> {
 	return () => page.evaluate(() => (window as unknown as { sawSponsorShort?: boolean }).sawSponsorShort === true)
 }
 
-/** The app-set fee sentence's leading, its line count, and whether any of it leaves the fee block. */
 function readSentenceLayout(page: Page) {
 	return page.$eval('[data-testid="execute-op-app-fee"]', (el) => {
 		const style = getComputedStyle(el)
