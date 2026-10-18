@@ -18,7 +18,7 @@ export const Default: Story = {}
 export const Sheet: Story = {
 	render: () => ({
 		components: { Icon },
-		setup: () => ({ names: Object.keys(glyphs), sizes: [24, 12, 10, 9] }),
+		setup: () => ({ names: Object.keys(glyphs), sizes: [24, 14, 12, 10, 9] }),
 		template: `
 			<div data-testid="glyph-sheet" style="display: grid; width: max-content; grid-template-columns: repeat(3, max-content); gap: 8px 32px; padding: 24px;">
 				<div v-for="name in names" :key="name" style="display: flex; align-items: center; gap: 12px; height: 28px;">
