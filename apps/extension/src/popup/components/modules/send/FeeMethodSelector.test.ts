@@ -47,6 +47,19 @@ describe("FeeMethodSelector", () => {
 		expect(trigger.text()).toContain("Select method")
 	})
 
+	test("while the card reads, the trigger draws a bar a screen reader hears as Checking; a previewed pick names itself", () => {
+		const trigger = (w: ReturnType<typeof factory>) => w.get('[data-testid="send-fee-method-trigger"]')
+		const reading = factory({ pending: true })
+		expect(trigger(reading).text()).toBe("Checking")
+		expect(trigger(reading).attributes("aria-busy")).toBe("true")
+		expect(trigger(reading).findComponent(Skeleton).attributes("style")).toBe("width: 60px; height: 12px;")
+		const previewed = factory({ pending: true, modelValue: baseMethods[0] })
+		expect(trigger(previewed).text()).toBe("Public Fee Juice")
+		expect(trigger(previewed).attributes("aria-busy")).toBeUndefined()
+		expect(trigger(previewed).findComponent(Skeleton).exists()).toBe(false)
+		expect(trigger(factory()).findComponent(Skeleton).exists()).toBe(false)
+	})
+
 	test("trigger shows the active method title", () => {
 		const w = factory({ modelValue: baseMethods[0] })
 		expect(w.find('[data-testid="send-fee-method-trigger"]').text()).toContain("Public Fee Juice")

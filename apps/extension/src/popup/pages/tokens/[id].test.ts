@@ -254,3 +254,37 @@ describe("token page — a token the signed list flags", () => {
 		expect(plain.find('[data-testid="token-flagged-banner"]').exists()).toBe(false)
 	})
 })
+
+describe("token page — the balance stays while the activity scrolls", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		installChromeStorage()
+		H.store.current = reactive({
+			isLogined: true,
+			profile: { id: "p1" },
+			network: { id: "n1", chainId: 7 },
+			account: { address: "0xacct" },
+		})
+		H.cache.current = reactive({ confirm: {}, activeTokenIdx: undefined })
+		H.flagged.current = []
+		H.getToken.mockResolvedValue(tok(1, "AAA"))
+	})
+
+	test("the shadow under the hero shows once the activity has scrolled and leaves when it is back at the top", async () => {
+		const wrapper = await mountPage()
+		const scroller = wrapper.get('[data-testid="token-scroller"]')
+		const shadowShown = () =>
+			wrapper
+				.get('[data-testid="token-scroll-shadow"]')
+				.classes()
+				.some((c) => c.includes("scroll_shadow_visible"))
+		expect(wrapper.get('[data-testid="token-hero"]').find('[data-testid="stub-balance-view"]').exists()).toBe(true)
+		expect(shadowShown()).toBe(false)
+		scroller.element.scrollTop = 40
+		await scroller.trigger("scroll")
+		expect(shadowShown()).toBe(true)
+		scroller.element.scrollTop = 0
+		await scroller.trigger("scroll")
+		expect(shadowShown()).toBe(false)
+	})
+})

@@ -129,8 +129,3 @@ export function feeFigure({ amount }: FeeDisplay): string {
 export function feeText(display: FeeDisplay): string {
 	return display.usd ? `${feeFigure(display)} (${display.usd})` : feeFigure(display)
 }
-
-/** Format a gas amount with thousands separators */
-export function formatGas(gas: number): string {
-	return gas.toLocaleString("en-US")
-}
