@@ -9,7 +9,8 @@
 import { mount } from "@vue/test-utils"
 import { beforeAll, describe, expect, test } from "vitest"
 import type { DecodedGrant, UndecodedReason } from "@/wallet/services/execution/client"
-import { RAW_NOTICE } from "./call-surface"
+import DottedTerm from "@/components/composite/DottedTerm.vue"
+import { shownText } from "../../../../tests/helpers/shown-text"
 import { GRANT, HUB, MAIN, RECIPIENT, USDC, USDC_TOKEN, decodeGrantFixture, stubTokenSelectors } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
 
@@ -34,6 +35,15 @@ const stubs = {
 const mountGrant = (props: { decodedGrants?: readonly DecodedGrant[]; tokens?: readonly unknown[] }, op = grantOp()) =>
 	mount(OperationCard, { props: { op: op as never, index: 0, ...props } as never, global: { stubs } })
 const byTestid = (w: ReturnType<typeof mountGrant>, id: string) => w.find(`[data-testid="${id}"]`)
+
+/** Written out, not read from the source, so a changed line fails here. */
+const LINES: Record<UndecodedReason, string> = {
+	"unknown-contract": "Nulo doesn't have this contract's interface.",
+	"unknown-function": "This function isn't in the interface Nulo has.",
+	arguments: "The arguments don't fit the interface.",
+	unavailable: "Nulo couldn't read the arguments right now.",
+}
+const ADVICE = "Check what the app says this does before approving."
 
 let decoded: DecodedGrant
 beforeAll(async () => {
@@ -91,6 +101,25 @@ describe("OperationCard: a public grant", () => {
 		expect(lines[2]).toContain("Transfer (public)")
 	})
 
+	test("three grants, the first two unreadable: each says why, and the advice reads once, under the second", () => {
+		const grants = [GRANT, GRANT, GRANT].map((content) => ({ kind: "add_public_authwit" as const, content }))
+		const w = mountGrant(
+			{
+				decodedGrants: [
+					{ kind: "undecoded", reason: "unknown-contract" },
+					{ kind: "undecoded", reason: "unknown-function" },
+					decoded,
+				],
+				tokens: [USDC_TOKEN],
+			},
+			{ ...grantOp(), actions: grants } as never,
+		)
+		const blocks = w.findAll('[data-testid="execute-grant-args"]')
+		expect(blocks.map((b) => b.find('[data-testid="execute-grant-unverified-reason"]').exists())).toEqual([true, true, false])
+		expect(w.findAll('[data-testid="execute-grant-unverified-advice"]')).toHaveLength(1)
+		expect(blocks[1]!.find('[data-testid="execute-grant-unverified-advice"]').text()).toBe(ADVICE)
+	})
+
 	test("while the wallet decodes, its arguments read as pending", () => {
 		const w = mountGrant({ decodedGrants: undefined, tokens: [USDC_TOKEN] })
 		expect(byTestid(w, "execute-grant-args-pending").text()).toBe("Reading arguments…")
@@ -103,7 +132,9 @@ describe("OperationCard: a public grant", () => {
 			const args = byTestid(w, "execute-grant-unverified-args")
 			expect(args.attributes("data-reason")).toBe(reason)
 			expect(byTestid(w, "execute-grant-unverified-warning").text()).toBe("Can't read the arguments")
-			expect(args.text()).toContain(RAW_NOTICE[reason])
+			expect(shownText(byTestid(w, "execute-grant-unverified-reason").element)).toBe(LINES[reason])
+			expect(w.findAllComponents(DottedTerm).map((t) => t.props("term"))).toEqual(reason === "unavailable" ? [] : ["interface"])
+			expect(byTestid(w, "execute-grant-unverified-advice").text()).toBe(ADVICE)
 			await byTestid(w, "execute-grant-raw-toggle").trigger("click")
 			expect(w.findAll('[data-testid="execute-grant-arg-field"]').map((f) => f.text().split(" ")[0])).toEqual([MAIN, RECIPIENT])
 		},

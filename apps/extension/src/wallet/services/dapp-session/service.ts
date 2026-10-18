@@ -1,7 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
-import { CapabilityNotGrantedError, ValidationError } from "@nulo/extension-messaging/errors"
+import { CapabilityNotGrantedError, SessionEndedError, ValidationError } from "@nulo/extension-messaging/errors"
 import { coversAnyContract, projectStoredGrants, readConsent } from "@nulo/wallet-bridge"
 import type { ILogger } from "@/wallet/logger"
 import { ProfileService } from "@/wallet/services/profile/service"
@@ -192,6 +192,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		accounts: string[],
 		confirmationLevel: AccessLevel,
 		chainId: string,
+		expectedProfileId: string,
 	): Promise<DappSession> {
 		await this.ensureInitialized()
 		// Atomic read+capture: the expiry sweep + lock wait + id allocation below
@@ -204,6 +205,9 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		} catch {
 			throw new Error("Wallet is locked")
 		}
+		// The row is the caller's approval, so it is written under the profile that approval was given
+		// under or not at all: a switch landing before the capture must not hand it to another profile.
+		if (fence.profileId !== expectedProfileId) throw new SessionEndedError()
 		const deletion = this.profileService.getDeletionState()
 		await this.deleteExpired()
 		return await this.lock.withLock(async () => {
