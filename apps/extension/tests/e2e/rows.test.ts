@@ -909,7 +909,43 @@ async function expectAppValueBreaksAnywhere(page: Page, ids: { value: string; la
 	expect(app.gap).toBeGreaterThanOrEqual(16 - 0.5)
 }
 
-test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol and direction whole with its app chip cut beside them; the App value of the transaction and journal pages breaks anywhere against the box's right edge", async ({
+type MethodRow = { lines: number; overflow: number; gap: number }
+
+/** The journal page's Method row once it reads `text`: its value's line count, how far its widest line
+ *  passes the box's inner right edge, and the space between label and value. */
+async function readMethodRow(page: Page, shot: string, text: string): Promise<MethodRow> {
+	await page.waitForFunction(
+		(s: string, t: string) => document.querySelector(s)?.textContent?.trim() === t,
+		{ timeout: 15_000 },
+		sel("journal-detail-method"),
+		text,
+	)
+	await shotSend(page, shot, "journal-detail-method")
+	const row = await page.evaluate(
+		(valueSel: string, labelSel: string, boxSel: string) => {
+			const value = document.querySelector(valueSel) as HTMLElement
+			const label = document.querySelector(labelSel) as HTMLElement
+			const box = document.querySelector(boxSel) as HTMLElement
+			const style = getComputedStyle(box)
+			const inner = box.getBoundingClientRect().right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight)
+			const range = document.createRange()
+			range.selectNodeContents(value)
+			const lines = [...range.getClientRects()]
+			return {
+				lines: new Set(lines.map((r) => Math.round(r.top))).size,
+				overflow: Math.max(value.getBoundingClientRect().right, ...lines.map((r) => r.right)) - inner,
+				gap: value.getBoundingClientRect().left - label.getBoundingClientRect().right,
+			}
+		},
+		sel("journal-detail-method"),
+		sel("journal-detail-method-label"),
+		sel("journal-detail-box"),
+	)
+	console.log(`[rows] ${shot}: ${JSON.stringify(row)}`)
+	return row
+}
+
+test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol and direction whole with its app chip cut beside them; the App value of the transaction and journal pages breaks anywhere against the box's right edge; the journal page's Method value wraps 16px clear of its label", async ({
 	listedExtensionPerTest,
 }) => {
 	const page = await openPopup(listedExtensionPerTest)
@@ -969,6 +1005,17 @@ test("a dApp's long function name and host never widen Home or History, named or
 		{ value: "journal-detail-origin", label: "journal-detail-app-label", box: "journal-detail-box" },
 		JOURNAL_HOST,
 	)
+	const named = await readMethodRow(page, "journal-method-named", "Swap Exact Tokens For Tokens Supporting Fee On Transfer Tokens")
+	// The page reads its record when it mounts, so the second record is opened from another page.
+	await navigateByHash(page, "#/popup/activity")
+	await page.waitForSelector(sel("journal-detail-page"), { hidden: true, timeout: 15_000 })
+	await navigateByHash(page, `#/popup/journal/${NAMELESS_RECORD}`)
+	const nameless = await readMethodRow(page, "journal-method-nameless", "Swapexacttokensfortokenssupportingfeeontransfertokens")
+	expect(named.lines).toBeGreaterThanOrEqual(2)
+	for (const row of [named, nameless]) {
+		expect(row.overflow).toBeLessThanOrEqual(0.5)
+		expect(row.gap).toBeGreaterThanOrEqual(16 - 0.5)
+	}
 
 	expect(listedExtensionPerTest.consoleErrors).toEqual([])
 	expect(listedExtensionPerTest.pageErrors).toEqual([])

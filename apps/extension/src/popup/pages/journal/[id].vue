@@ -294,9 +294,9 @@ onBeforeUnmount(() => {
 					<span :class="$style.app_value" data-testid="journal-detail-origin">{{ originChip }}</span>
 				</Flex>
 
-				<Flex v-if="methodLabel" wide justify="between" align="center">
-					<span :class="$style.detail_key">Method</span>
-					<span :class="$style.detail_value_mono" data-testid="journal-detail-method">{{ methodLabel }}</span>
+				<Flex v-if="methodLabel" wide justify="between" align="start" gap="16">
+					<span :class="$style.app_key" data-testid="journal-detail-method-label">Method</span>
+					<span :class="$style.method_value" data-testid="journal-detail-method">{{ methodLabel }}</span>
 				</Flex>
 
 				<Flex v-if="recipientLabel" wide justify="between" align="center">
@@ -417,6 +417,15 @@ onBeforeUnmount(() => {
 
 .app_value {
 	composes: app_value from "../detail-page.module.css";
+}
+
+/* A function name wraps at its spaces and breaks inside a word only when the word outruns the line. */
+.method_value {
+	composes: detail_value_mono from "../detail-page.module.css";
+	min-width: 0;
+	text-align: right;
+	overflow-wrap: anywhere;
+	line-height: 1.4;
 }
 
 /* TxHashRow's link, so both linked values in Details read alike. */
