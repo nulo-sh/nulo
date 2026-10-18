@@ -14,3 +14,4 @@
 - 2026-10-18 arc 2: Codex loop converged (round 1 one low finding plus the Opus folds, fixed in 326232e8, 801bb6b1, dfd9cb5a; round 2 clean).
 - 2026-10-18 arc 2: network e2e (7 files: connect-dapp, connect-one-window, connect-locked-queue, cold-wake-discovery, session-tabClose, session-explicitDisconnect, session-profileSwitch) green on Chrome at dfd9cb5a, retry 0, 10 passed, vitest 380 s, 454 s wall with build and boot; load1 118 at start.
 - 2026-10-18 arc 2 final head: lint, typecheck:all and check:plans green; `bun run test:all` green (extension 13,670 passed; every package green). origin/dev unmoved since 138e0ded.
+- 2026-10-18 arc 2: origin/dev merged (#737, settings only); lint, typecheck:all, check:plans and `bun run test:all` green on the merged head (extension 13,682 passed). The local e2e stands from dfd9cb5a: the merge touches no file it drives.
