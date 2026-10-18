@@ -53,3 +53,9 @@ Resolution:
 Against the base `LogsViewer.vue` (Chrome), the three hold cases are red: the view moved 38, 36 and 19.75 px.
 
 #783's OA-3 (ci-e2e-hygiene-1) is #616 itself, and this PR ships its option A.
+
+After that merge, Firefox's selection-hold case failed once out of three runs: the view followed the case's two lines (36 px). #783's `logLines` logs at once, and the old one first spent two frames reading geometry. Firefox dispatches `selectionchange` in a later task, so the lines could land before the viewer stopped the follow.
+
+`selectAcross` now waits for a `selectionchange` that shows the selection. The viewer's listener is registered first, so it has run by then. With the fix, Firefox passed 4/4 and Chrome 1/1.
+
+PR CI on 0a582c4f, before this fix, was green across all five required checks.

@@ -235,12 +235,31 @@ async function expectHeld(page: Page, line: ShownLine): Promise<void> {
 
 /** Drags across part of `line`, leaving it selected. */
 async function selectAcross(page: Page, line: ShownLine): Promise<void> {
+	// The viewer stops its follow on `selectionchange`, which Firefox dispatches in a later task: the
+	// drag is done once a change that shows the selection has run its listeners, the viewer's first.
+	await page.evaluate((id) => {
+		const root = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot as
+			| (ShadowRoot & { getSelection?: () => Selection | null })
+			| null
+			| undefined
+		;(window as unknown as { __selectionSeen?: Promise<void> }).__selectionSeen = new Promise((resolve, reject) => {
+			const onChange = () => {
+				const selection = root?.getSelection ? root.getSelection() : document.getSelection()
+				if (!selection || selection.isCollapsed) return
+				document.removeEventListener("selectionchange", onChange)
+				resolve()
+			}
+			document.addEventListener("selectionchange", onChange)
+			setTimeout(() => reject(new Error("no selectionchange showed the drag's selection")), 10_000)
+		})
+	}, HOST)
 	await prepareClick(page)
 	await page.mouse.move(line.left, line.y)
 	await page.mouse.down()
 	await page.mouse.move(line.right, line.y, { steps: 5 })
 	await page.mouse.up()
-	const selected = await page.evaluate((id) => {
+	const selected = await page.evaluate(async (id) => {
+		await (window as unknown as { __selectionSeen?: Promise<void> }).__selectionSeen
 		const root = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot as
 			| (ShadowRoot & { getSelection?: () => Selection | null })
 			| null
