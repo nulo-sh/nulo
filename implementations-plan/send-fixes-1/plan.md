@@ -99,6 +99,8 @@ Steps 2-5 of [`implementations-plan/README.md` § Post-implementation standard](
 
 ## Audit verdicts
 
+**Implementation round 2 (Codex resume, 2026-10-18).** `approve`: "No new findings. Verified the profile-switch scrub and delayed-response guard, chain-0 refusal, latest-status-read fence, and comment fixes. No regressions found." The loop converged.
+
 **Implementation round 1 (2026-10-18).** Codex (gpt-6.1-sol, high): `conditional approve (with conditions: fix the held-account picker's profile scoping)`. Opus review (`general-purpose`): `approve`, three low findings and four comment nits. Adopted: the export page drops another profile's held rows and its flow on a profile switch (C1); a chain-0 answer stays a refusal, not "unreachable" (O1); only the latest status read writes the dot (O2); the comments C2, C3, O4-O7. Accepted as known limit K3 (O3): its fix is a copy change.
 
 **Round 3 (Codex resume, 2026-10-18).** `approve`: the condition is met, no regression, nothing adds persistence, a timer, a protocol or a lifecycle.

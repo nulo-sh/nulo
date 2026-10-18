@@ -7,3 +7,4 @@
   - O2 confirmed: a status read that rejects at the 60 s deadline could overwrite a newer read's answer after A→B→A. Fixed: a read generation in `syncNetworkStatus`; one test case.
   - O3 accepted as K3 (copy change needed).
   - Comment fixes: C2, C3, O4-O7.
+- Review round 2 (Codex resume): `approve`, "No new findings … No regressions found." The loop converged after two rounds.
