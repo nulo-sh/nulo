@@ -264,6 +264,16 @@ export async function revealSeedPhrase(page: Page, password: string): Promise<st
 	return readRecoveryWords(page)
 }
 
+/** A password wallet's Home without the Get started card: the phrase revealed, then Hide. The card
+ *  sits above Home's lists, so a spec that reads a row where Home rests needs it gone first. */
+export async function clearGetStarted(page: Page, password: string): Promise<void> {
+	await revealSeedPhrase(page, password)
+	await navigateByHash(page, "#/popup/general")
+	await page.waitForSelector('[data-testid="get-started-hide"]', { visible: true, timeout: 60_000 })
+	await clickByTestId(page, "get-started-hide")
+	await page.waitForFunction(() => !document.querySelector('[data-testid="get-started"]'), { timeout: 15_000, polling: 100 })
+}
+
 /** Open EditProfilePopup from /popup/settings/profile, replace the name,
  *  submit. Caller asserts on the new name elsewhere (toast / settings row /
  *  auth pill). */

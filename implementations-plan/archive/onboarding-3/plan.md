@@ -35,6 +35,7 @@ post_implementation_hardening: not scheduled
     - the Presto flag re-reads on reconnect;
     - Home settles only after the gas read;
     - Settings' three columns fit an eight-letter word (D16, found by the PR screenshots).
+  - E2E specs adjusted to the card, product unchanged: `rows.test` (the scroll probe lets the focus scroll pass) and `network/snack-placement` (clears the card through the shared `clearGetStarted`, found by the PR's CI).
 - **Dropped:** none. OA-1 to OA-13 ship their "what ships now". O8 (`Pick<GasSlice>`) was declined, with its reason under Audit verdicts.
 - **Known limits:** #726 (clipboard scrub), #727 (bootstrap after Back), #728 (Full Backup's flag on a popup close), #729 (the phrase step after a lock).
 - **Open items:**

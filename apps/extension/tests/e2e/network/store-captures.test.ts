@@ -30,6 +30,7 @@ import {
 import {
 	addContact,
 	captureBalanceBaseline,
+	clearGetStarted,
 	clickNavTab,
 	closeStuckPopup,
 	type FeeMethodSubtitle,
@@ -37,7 +38,6 @@ import {
 	navigateByHash,
 	navigateToSettings,
 	openNetworkDetail,
-	revealSeedPhrase,
 	seedUsdQuoteAndReload,
 	selectFeeMethod,
 	selectSendToken,
@@ -321,14 +321,6 @@ function clearAmountLine(): Fit {
 
 /** Saves the phrase and hides the card, as an established wallet has: the funded wallet otherwise
  *  opens on "Your funds have no backup". */
-async function establishWallet(page: Page): Promise<void> {
-	await revealSeedPhrase(page, TEST_PASSWORD)
-	await navigateByHash(page, "#/popup/general")
-	await page.waitForSelector('[data-testid="get-started-hide"]', { visible: true, timeout: 60_000 })
-	await clickByTestId(page, "get-started-hide")
-	await page.waitForFunction(() => !document.querySelector('[data-testid="get-started"]'), { timeout: 15_000, polling: 100 })
-}
-
 async function captureHome(page: Page): Promise<void> {
 	await seedUsdQuoteAndReload(page)
 	await waitForHomeTotal(page)
@@ -419,7 +411,7 @@ describe.skipIf(!process.env.STORE_CAPTURES || isFirefox)("store captures", () =
 			await stageWallet(page, chain)
 			await receive(page, chain)
 			await sendToContact(page, chain)
-			await establishWallet(page)
+			await clearGetStarted(page, TEST_PASSWORD)
 			await captureHome(page)
 			await captureSend(page, chain)
 			await captureHistory(page)
