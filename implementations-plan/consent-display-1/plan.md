@@ -235,6 +235,8 @@ Outline B (not committed) proposed a worker snapshot by id with a 120 s life, cl
 
 - **Codex round 1** (gpt-6.1-sol, high, session 01a1509a) on ef37a3a7: reject. Taken, all three: a restored token with no class also reads its past app transfers and mints as plain calls, title and icon, beyond OA-5's two effects (→ OA-5's addendum, the UI impact line, a test of the unclassed reading; the class stays dropped); `classId`'s doc comments still called a restored class unauthenticated; the notice's comments restated its template.
 - **Opus review** of ef37a3a7 and 2ce6d068: approve with fixes. Taken: the restore refresh runs once inside the import's 45 s budget and nothing retries it, so a failed one leaves the token unclassed until re-added (→ OA-5's addendum; a later read is a background step, a plan change, not taken); the restore stage's comment still said a token keeps the backup's values; the fee comment's 10 % holds only when the person's balance pays (→ comment, OA-7); a token could dodge the mark with a vocabulary name at another arity (→ D16).
+- **Codex round 2** (resumed) on 10f242ba: **approve**, no new material issue; it verified the four fixes and D16. The loop converged in two rounds.
+- **Cross-arc pass** (fresh Codex session 01a150ab over 34d97084, 767789b7 and arc 3): approve, no runtime seam. Taken: OA-1's "ships now" line still read C (→ marked answered A); `refreshRestoredTokens`' contract still said the backup's values are kept; the mark title's comment restated its placement. Not taken: a template comment in `OperationCard.vue`'s token card, which predates the lane and is outside its diff.
 
 ## Seeds
 

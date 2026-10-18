@@ -1,6 +1,6 @@
 # consent-display-1: owner asks
 
-Arc 1 (discovery admits secure origins only) depends on none of these: none concerns discovery. Each ask names what ships now; an arc builds that and waits for nothing, except arc 2, which waits for OA-1's answer so it builds the chosen option once (the orchestrator may release it on C).
+Arc 1 (discovery admits secure origins only) depends on none of these: none concerns discovery. Each ask names what ships now; an arc builds that and waits for nothing, except arc 2, which waited for OA-1's answer so it built the chosen option once. Answered: OA-1 = A (P42-08); OA-2 = A (P42-09); OA-3, OA-4 and OA-5 as planned (P42-10).
 
 ## OA-1: a dApp token add whose preview failed, and the message when the details changed (the execute window)
 
@@ -14,7 +14,7 @@ Arc 1 (discovery admits secure origins only) depends on none of these: none conc
 
 **Recommendation: A.** The card then never approves details nobody saw, and the person learns it before pressing anything. B fails after the click, with no wallet message.
 
-**What ships now: C.** Unchanged.
+**What ships now: C.** Unchanged. **Answered: A** (P42-08), shipped in arc 2.
 
 **The message, either way.** When a token's details change between the window and the commit, the add fails and its import row shows the error, as a failed read does today. Draft: "Token details changed after you approved them." It holds no token text. **What ships now:** the draft, shown in arc 2's PR for sign-off.
 

@@ -267,7 +267,7 @@ export type Methods = {
 	 * After a full-backup restore, reads each token of `fence`'s profile from its chain and keeps
 	 * the chain's class, interface, name, symbol and decimals where the row differs. It updates and
 	 * never adds, so no trust follows. A token whose read fails or ends after `deadlineAt` (epoch
-	 * ms) keeps the backup's values.
+	 * ms) keeps the backup's name, symbol and decimals, with no class.
 	 */
 	refreshRestoredTokens(fence: RunFence, deadlineAt: number): void
 }

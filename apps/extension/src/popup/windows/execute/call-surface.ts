@@ -249,7 +249,6 @@ export const RAW_LINE: Readonly<Record<UndecodedReason, readonly NoticeSegment[]
 /** Said once per window; `OperationCard` picks the one notice that carries it. */
 export const RAW_ADVICE = "Check what the app says this does before approving."
 
-/** Above a registered token's call whose parameter names are the contract's, not the standard roles. */
 export const LABELS_TITLE = "Labels from the contract"
 export const LABELS_LINE: readonly NoticeSegment[] = [
 	{ text: "These names come from the contract, not from Nulo. Check the addresses and amount before approving." },
