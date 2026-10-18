@@ -375,6 +375,7 @@
     "displaySymbol": true,
     "downloadFile": true,
     "effectScope": true,
+    "endsSelection": true,
     "errorLogWriters": true,
     "estimateWhenClear": true,
     "feeDisplay": true,
