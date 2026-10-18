@@ -224,9 +224,13 @@ function makeProfileStub(activeProfile: { id: string } | null = { id: "p1" }) {
 }
 
 function makeNetworkStub(
-	networks: { id: string; chainId: number; endpoints?: { id: string; rpcUrl: string }[]; primaryEndpointId?: string }[] = [
-		{ id: "n1", chainId: 1, endpoints: [{ id: "e1", rpcUrl: "http://n1" }], primaryEndpointId: "e1" },
-	],
+	networks: {
+		id: string
+		profileId?: string
+		chainId: number
+		endpoints?: { id: string; rpcUrl: string }[]
+		primaryEndpointId?: string
+	}[] = [{ id: "n1", chainId: 1, endpoints: [{ id: "e1", rpcUrl: "http://n1" }], primaryEndpointId: "e1" }],
 ) {
 	let purgeSub: ((profileId: string, chainId: number, networkId: string) => Promise<void>) | null = null
 	// getReceiptFee reaches through getNodeForUrl(endpoint).getTxReceipt(txHash) (or getNode(chainId) as a
@@ -2746,6 +2750,7 @@ function makePublicReader(init?: { tips?: Partial<PublicScanTips>; classStatus?:
 			return state.classStatus
 		},
 		getLatestBlockNumber: async () => 0,
+		getChainTipOnce: async () => 0,
 	}
 	return { reader, state }
 }
@@ -5005,16 +5010,21 @@ describe("IncomingTransferService — public-scan health (episodes, backoff, ret
 
 // ── Arrivals ─────────────────────────────────────────────────────────────
 
-/** A chain tip the test steers: each read takes the next queued answer (a number, an Error, or a
- *  promise the test settles), then the standing one. */
+/** A chain tip the test steers: each read, through either transport, takes the next queued answer
+ *  (a number, an Error, or a promise the test settles), then the standing one. `once` counts the
+ *  one-attempt reads. */
 function steeredTip(standing: number | Error) {
 	const { reader } = makePublicReader()
-	const tip = { standing, queue: [] as Array<number | Error | Promise<number>>, calls: 0 }
+	const tip = { standing, queue: [] as Array<number | Error | Promise<number>>, calls: 0, once: 0 }
 	reader.getLatestBlockNumber = async () => {
 		tip.calls++
 		const value = await (tip.queue.shift() ?? tip.standing)
 		if (value instanceof Error) throw value
 		return value
+	}
+	reader.getChainTipOnce = async (networkId) => {
+		tip.once++
+		return reader.getLatestBlockNumber(networkId)
 	}
 	return { reader, tip }
 }
@@ -5097,6 +5107,41 @@ describe("IncomingTransferService — arrival state", () => {
 		seedTrust(tokenA.contract, { arrivalFloorPending: true })
 		tip.standing = 50
 		expect((await service.getArrivalState("p1", "n1", "0xa")).sinceBlock).toBe(301)
+	})
+
+	test("the arrival state reads its tip in one attempt; an account add reads it through the PXE", async () => {
+		const { service, tip } = await bootArrivals(120)
+		await service.getArrivalState("p1", "n1", "0xa")
+		expect(tip).toMatchObject({ calls: 1, once: 1 })
+		await internals(service).onAccountAdded({ chainId: 1, address: "0xc" })
+		expect(tip).toMatchObject({ calls: 3, once: 1 })
+	})
+
+	test.each([
+		["refuses a quarantined chain before any request, so nothing is baselined or floored", true],
+		["reads a live chain's tip and baselines the scope", false],
+	])("the one-attempt tip %s", async (_, quarantined) => {
+		const network = makeNetworkStub([
+			{ id: "n1", profileId: "p1", chainId: 1, endpoints: [{ id: "e1", rpcUrl: "http://n1" }], primaryEndpointId: "e1" },
+		])
+		const readChainTip = vi.fn(async () => 120)
+		const isChainQuarantined = vi.fn(async () => quarantined)
+		const { service } = await bootService({
+			network: Object.assign(network, { readChainTip, isChainQuarantined }),
+			account: makeAccountStub([{ profileId: "p1", chainId: 1, address: "0xa" }]),
+			token: makeTokenStub([tokenA]),
+		})
+		await flushPromises()
+		seedTrust(tokenA.contract, { arrivalFloor: 5, arrivalFloorPending: true })
+
+		await service.getArrivalState("p1", "n1", "0xa")
+
+		expect(isChainQuarantined).toHaveBeenCalledWith("p1", 1)
+		expect(readChainTip.mock.calls).toEqual(quarantined ? [] : [["n1"]])
+		expect(arrivals.get("p1|n1|0xa")).toEqual(quarantined ? undefined : { sinceBlock: 120, played: [] })
+		expect(trust.get(trustKey("p1", "n1", tokenA.contract))).toMatchObject(
+			quarantined ? { arrivalFloor: 5, arrivalFloorPending: true } : { arrivalFloor: 120 },
+		)
 	})
 
 	test("a row with no pending floor reads no tip", async () => {

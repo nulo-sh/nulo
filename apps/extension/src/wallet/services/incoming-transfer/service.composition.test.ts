@@ -45,6 +45,7 @@ const reader: PublicEventReader = {
 	}),
 	getTokenClassStatus: async () => "standard",
 	getLatestBlockNumber: async () => TIP,
+	getChainTipOnce: async () => TIP,
 }
 
 function hiddenReceipt(n: number, accountAddress: string, l2BlockNumber: number): IncomingNoteRecord {
