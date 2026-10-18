@@ -28,11 +28,11 @@ Run through the repo's own parser (`tablerGlyph`):
 
 | Site | Glyph | Size |
 |---|---|---|
-| `popup/components/modules/general/TokenCard.vue:101,104` (Home's token row) | private, public | 12 px |
+| `popup/components/modules/general/TokenCard.vue:101,104` (the token rows on Home and Holdings) | private, public | 12 px |
 | `popup/components/modules/general/BalanceView.vue:325,335` (the token page) | private, public | 12 px |
 | `popup/components/modules/send/FeeMethodSelector.vue:36` (the "NAMES YOUR ADDRESS" tag) | public | 10 px |
 | `components/composite/send/PublishStrip.vue:31` | `publishGlyph(…)` | 10 px |
-| `popup/components/modules/send/SendReviewSheet.vue:143` | `publishGlyph(…)` | 10 px |
+| `popup/components/modules/send/SendReviewSheet.vue:143` (on Send, and reopened from Home's Recent activity) | `publishGlyph(…)` | 10 px |
 
 `publishGlyph` (`components/composite/send/publish-facts.ts:118`) is the only computed source; its consumers are the strip and the review sheet.
 
