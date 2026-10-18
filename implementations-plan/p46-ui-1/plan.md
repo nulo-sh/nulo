@@ -10,6 +10,16 @@ eli5_mode: skipped (orchestrator-owned)
 base: origin/dev 9470d4e9
 ---
 
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** closed. Arc 1 carries this close-out; the merge that lands it closes the plan and #698, #653, #652, #651.
+- **Shipped:** P46-02 B, a Pending chip on an unproven grant's row, cleared in place by a new `onAuthwitUpdated` event, Revoke enabled; P46-10 B, the header chips at 11 px with padding `6px 5px` (D4), both 28 px; P46-09 C, the imported marker above a 13 px address; P46-08 B, the window's values under their names, Send's "≈" kept with its figure, the token figure capped at 190 px. Measurements: [`lessons/phase-5.md`](lessons/phase-5.md).
+- **Known limits:** #780 (I4).
+- **Open items:** none. The owner observation in `lessons/phase-5.md` (the empty field's rate label) is in the PR body; it follows the signed rule.
+- **Dropped:** `mode: "resync"` for I4 (a list flash on every event). **Lessons:** none promoted; `lessons.md` is at its budget, and the zero-slack gotcha is in [`lessons/phase-2.md`](lessons/phase-2.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below. Over the 150-line target by this block.
+
 # p46-ui-1 — four signed picks from decision page 46
 
 Build the owner's four page-46 picks, as signed, in one PR against `dev`: a Pending chip on an unproven grant's row (#698), and three fixes for lines the 13 px scale broke (#653, #652, #651). [recon.md](recon.md) holds the reuse map and the tests that pin each site.
@@ -88,7 +98,7 @@ Each phase is one issue, with its change map, tests and gate. Paths are under `a
 - Tests, in `tests/e2e/account-import-export.test.ts`: reach the line through the imported row's `manage-accounts-address`, and keep the four clip checks and the tail length. Add two checks: the marker's bottom is at or above the line's top, and the head shows at least the tail's width (today it shows 1 px).
 - **Gate**: lint, typecheck, `bun run test`; `cd apps/extension && bun run test:e2e -- tests/e2e/account-import-export.test.ts --retry=0`, also on Firefox. Pass: all green, and the head check fails on the base.
 
-### Phase 5 — pictures, measurements, full gate
+### Phase 5 — pictures, measurements, full gate ✓
 
 - Pictures: copy the page's scratch specs (`~/.cache/nulo-backlog/shots-p46/specs/`) into the tree for the run only, drop their mock CSS, and shoot the six signed states. They are `p46-698-b`, `p46-651-b1`, `p46-652-c` and `p46-653-{exec,send,token}-b`, plus the registered-token grant, each in light and dark. The popup is 360 px wide and the window 400 px, its real width. Then delete the specs. The "before" pictures are the page's `-a` pictures (F8). Commit both sets under `implementations-plan/p46-ui-1/screenshots/`, and link them from the PR body by commit SHA.
 - Measurements for the PR body, read in the same run, each before and after: TESTNET's width against its box; each chip's size (the lock chip goes from 26 to 28 px, which the page said B needs); the gap from the kind to the Pending chip; the imported row's head width and row height; each grant value's lines and the card height; the Send card height; the token row's lines and height.
@@ -141,6 +151,7 @@ Follow [`implementations-plan/README.md` § Post-implementation standard](../REA
 - Codex (gpt-6.1-sol, high), round 1: **conditional approve**. (1) `AmountCard.test.ts` stubs `Flex`, so a class check fails on correct code: superseded by D7, which drops that test. (2) Use `mode: "resync"` for the I4 race: rejected, since it flashes "FETCHING AUTHWITS" over the list on every event; Codex withdrew it. (3) Send had no browser measurement: accepted (`send-amount-exact.test.ts`). Round 2 (resume): **approve**.
 - Opus 5.5 (Plan), round 1: **conditional approve**. Accepted: the `.title` wrapper and its pin and measurement (Medium); the Send measurement (Medium, as Codex 3); `HEADER` removed; the lock chip's 2 px stated in the PR body; testid-only e2e reads (row top, a head testid); armed rebuilds before smoke runs; unconditional wrap (D7); the search-after-add page test; I2 corrected; the registered-token grant pictured. The 190 px floor: fixed locally (D10). F1–F8 held.
 - Codex, round 3 (resume, on the revision): **approve**; a non-blocking note that D10's overflow is plausible but unverified, not unsupported. Acted on: fixed locally with `overflow-wrap: anywhere`, per § Proportion.
+- Post-implementation, over the net diff: Codex round 1 **changes requested** (Medium: the window check passed a shortened value and never read the value below its name; Low: the account tail by DOM position; comment nits), all accepted; Opus 5.5 (general-purpose) **approve**, one Low (the swept chip's presence unasserted) and nits, all accepted; Codex round 2 **approve**. Detail: `lessons/phase-5.md`.
 
 ## Seeds (draft; not run; `/goal` recommended, use one per session)
 

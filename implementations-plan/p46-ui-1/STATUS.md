@@ -1,7 +1,0 @@
-- 2026-10-18 phase 0.4: recon done (one Sonnet sweep); recon.md written
-- 2026-10-18 phase 1: plan drafted (light, one arc); sent to Codex and Opus
-- 2026-10-18 Codex audit: conditional approve (3 Medium) → amended → approve on resume
-- 2026-10-18 Opus audit: conditional approve → amended; Codex final (resume 3): approve. Gate passed; plan committed
-- 2026-10-18 arc 1 phase 1 gate: lint 0, typecheck:all 0, vitest auth-registry + authwits (4 files, 76 tests) pass; new page tests red on each reverted line
-- 2026-10-18 arc 1 phase 2 gate: lint 0, typecheck 0, vitest components + type-role-ban pass, appearance e2e green Chrome + Firefox; padding 6px 5px (D4)
-- 2026-10-18 arc 1 phases 3-4 gates: lint 0, typecheck 0, bun run test pass after re-pin; network e2e (3 files) green Chrome + Firefox at retry 0; smoke e2e (account-import-export, type-roles, appearance) green Chrome + Firefox
