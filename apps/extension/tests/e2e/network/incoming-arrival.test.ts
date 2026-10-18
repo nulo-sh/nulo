@@ -212,14 +212,13 @@ async function waitForRow(page: Page, id: string): Promise<void> {
 async function waitForRowOf(page: Page, account: string, txHash: string): Promise<string> {
 	const rowSeen = async () => {
 		const record = (await storedRecords(page, account)).find((r) => r.txHash === txHash)
-		if (record && record.id in (await recording(page)).first) return record.id
-		await refreshBalances(page).catch(() => undefined)
-		return undefined
+		return record && record.id in (await recording(page)).first ? record.id : undefined
 	}
 	const id = await pollUntil(rowSeen, (seen) => seen !== undefined, {
 		label: `the row of ${txHash} rendered`,
 		timeoutMs: RECEIPT_BUDGET_MS,
 		intervalMs: 4_000,
+		between: () => refreshBalances(page).catch(() => undefined),
 	})
 	return id as string
 }

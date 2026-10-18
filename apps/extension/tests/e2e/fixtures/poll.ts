@@ -5,6 +5,9 @@ export interface PollOptions<T> {
 	intervalMs: number
 	/** How the timeout error renders the last value; JSON by default. */
 	show?: (value: T) => string
+	/** The work that moves the state on (a block, a key, a refresh): it runs after a refused value
+	 *  while budget remains, before the pause, so it never starts past the deadline. */
+	between?: () => Promise<unknown>
 }
 
 /** The poll's budget ran out on a value `done` refused. `last` is that value. */
@@ -34,6 +37,7 @@ export async function pollUntil<T>(probe: () => Promise<T>, done: (value: T) => 
 		const value = await probe()
 		if (done(value)) return value
 		if (Date.now() >= deadline) throw new PollTimeoutError(opts.label, opts.timeoutMs, value, render(value, opts.show))
+		await opts.between?.()
 		await new Promise((resolve) => setTimeout(resolve, opts.intervalMs))
 	}
 }

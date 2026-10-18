@@ -84,18 +84,18 @@ async function showsCheck(page: Page): Promise<boolean> {
 
 /** Hold Enter at the focused Allow until the page shows the check, and a few repeats into it. */
 async function holdEnterThroughAllow(page: Page, created: () => Promise<CreatedWindow[]>): Promise<void> {
-	const pressUntilCheck = async () => {
-		const shown = await showsCheck(page)
-		if (!shown) await page.keyboard.down("Enter")
-		return shown
-	}
 	try {
 		await page.keyboard.down("Enter")
-		await pollUntil(pressUntilCheck, (shown) => shown, {
-			label: "the connect window showing the check",
-			timeoutMs: 30_000,
-			intervalMs: 100,
-		})
+		await pollUntil(
+			() => showsCheck(page),
+			(shown) => shown,
+			{
+				label: "the connect window showing the check",
+				timeoutMs: 30_000,
+				intervalMs: 100,
+				between: () => page.keyboard.down("Enter"),
+			},
+		)
 		for (let i = 0; i < 3; i++) {
 			await page.keyboard.down("Enter")
 			await sleep(100)

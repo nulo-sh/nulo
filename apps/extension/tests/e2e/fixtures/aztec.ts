@@ -471,22 +471,26 @@ export async function waitForL1ToL2Message(
 
 	// The node-admin `mineBlock` is not RPC-exposed, so callers pass `forceBlock` (a cheap sponsored
 	// tx), which runs until the latest block's message tree covers the message.
-	const claimable = async () => {
-		const ready = await isL1ToL2MessageReady(node, hash)
-		if (!ready && forceBlock) await forceBlock().catch((err) => console.warn(`[waitForL1ToL2Message] forceBlock failed: ${err}`))
-		return ready
-	}
-	try {
-		await pollUntil(claimable, (ready) => ready, {
-			label: `[waitForL1ToL2Message] leaf ${messageIndex} claimable`,
-			timeoutMs: start + timeoutMs - Date.now(),
-			intervalMs: 1_500,
-		})
-		console.log(`[waitForL1ToL2Message] claimable after ${Date.now() - start}ms`)
-	} catch (error) {
-		if (!(error instanceof PollTimeoutError)) throw error
-		console.warn(`[waitForL1ToL2Message] no block inserted leaf ${messageIndex} within ${timeoutMs}ms — proceeding best-effort`)
-	}
+	const remainingMs = start + timeoutMs - Date.now()
+	const claimable =
+		remainingMs > 0 &&
+		(await pollUntil(
+			() => isL1ToL2MessageReady(node, hash),
+			(ready) => ready,
+			{
+				label: `[waitForL1ToL2Message] leaf ${messageIndex} claimable`,
+				timeoutMs: remainingMs,
+				intervalMs: 1_500,
+				between: async () => {
+					if (forceBlock) await forceBlock().catch((err) => console.warn(`[waitForL1ToL2Message] forceBlock failed: ${err}`))
+				},
+			},
+		).catch((error: unknown) => {
+			if (error instanceof PollTimeoutError) return false
+			throw error
+		}))
+	if (claimable) console.log(`[waitForL1ToL2Message] claimable after ${Date.now() - start}ms`)
+	else console.warn(`[waitForL1ToL2Message] no block inserted leaf ${messageIndex} within ${timeoutMs}ms — proceeding best-effort`)
 }
 
 /** Claim bridged FeeJuice on L2. Uses SponsoredFPC to pay for the claim tx itself.
@@ -866,16 +870,11 @@ async function mineL1Blocks(count: number): Promise<void> {
 /** Mines empty L1 blocks until the node's finalized L2 block reaches `block`. The local anvil mines
  *  only on a transaction, so on a quiet chain the finalized tip stands still. */
 export async function finalizeThrough(node: ReturnType<typeof createAztecNodeClient>, block: number, timeoutMs = 180_000): Promise<void> {
-	const finalizedBlock = async () => {
-		const finalized = (await node.getBlockData("finalized"))?.header.getBlockNumber() ?? 0
-		if (finalized < block) await mineL1Blocks(3)
-		return finalized
-	}
-	await pollUntil(finalizedBlock, (finalized) => finalized >= block, {
-		label: `finalizeThrough: the finalized block at ${block}`,
-		timeoutMs,
-		intervalMs: 2_000,
-	})
+	await pollUntil(
+		async () => (await node.getBlockData("finalized"))?.header.getBlockNumber() ?? 0,
+		(finalized) => finalized >= block,
+		{ label: `finalizeThrough: the finalized block at ${block}`, timeoutMs, intervalMs: 2_000, between: () => mineL1Blocks(3) },
+	)
 }
 
 /**

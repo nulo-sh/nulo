@@ -42,6 +42,29 @@ describe("pollUntil", () => {
 		expect(Date.now()).toBe(start)
 	})
 
+	test("between runs after each refused value while budget remains, never past the deadline", async () => {
+		const order: string[] = []
+		const outcome = pollUntil(
+			async () => {
+				order.push("probe")
+				return false
+			},
+			(v) => v,
+			{
+				label: "never",
+				timeoutMs: 250,
+				intervalMs: 100,
+				between: async () => {
+					order.push("between")
+				},
+			},
+		).catch((e: unknown) => e)
+
+		await vi.advanceTimersByTimeAsync(300)
+		expect(await outcome).toBeInstanceOf(PollTimeoutError)
+		expect(order).toEqual(["probe", "between", "probe", "between", "probe", "between", "probe"])
+	})
+
 	test("two phases sharing one deadline time out at that deadline", async () => {
 		const start = Date.now()
 		const deadline = start + 1_000
