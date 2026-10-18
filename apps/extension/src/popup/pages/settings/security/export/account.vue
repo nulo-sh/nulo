@@ -39,10 +39,23 @@ if (appStore.profile?.type === "passkey") {
 	router.replace("/popup/settings/security/export")
 }
 
+/** The imported accounts a paused network reset holds only in its journal, on whichever network:
+ *  their rows are gone until the reset finishes, so their file comes from the journal. */
+const heldAccounts = ref([])
+const readHeldAccounts = async () => {
+	const pending = await managers.networkReset.getPendingReset()
+	if (!pending || pending.running) return []
+	const view = await managers.networkReset.getStaleNetwork(pending.networkId)
+	return (view?.reset?.heldImported ?? []).map((a) => ({ ...a, type: AccountType.Imported, held: true }))
+}
+
 /** The picker (and the preselect validation) only ever offers CURRENT-chain rows: during a
  *  network switch `appStore.accounts` can transiently hold the previous chain's rows, and an
  *  export must never bind an address to the wrong chainId. */
-const accounts = computed(() => (appStore.accounts ?? []).filter((a) => a.chainId === appStore.network?.chainId))
+const accounts = computed(() => {
+	const live = (appStore.accounts ?? []).filter((a) => a.chainId === appStore.network?.chainId)
+	return [...live, ...heldAccounts.value.filter((h) => !live.some((a) => a.address === h.address))]
+})
 
 const selectedAddress = ref("")
 const isAgreed = ref(false)
@@ -116,18 +129,18 @@ const handleAgree = () => {
 	isAgreed.value = true
 }
 
+/** A held account's file comes from the reset's journal; every other one from its row. */
+const exportSelected = (encrypt) =>
+	selectedAccount.value?.held
+		? managers.account.exportResetHeldAccount(appStore.profile.id, selectedAddress.value, password.value, encrypt)
+		: managers.account.exportAccount(appStore.profile.id, appStore.network.chainId, selectedAddress.value, password.value, encrypt)
+
 const handleCreate = async () => {
 	if (!password.value || isBusy.value) return
 	isBusy.value = true
 	const isCurrent = runs.snapshot()
 	try {
-		const body = await managers.account.exportAccount(
-			appStore.profile.id,
-			appStore.network.chainId,
-			selectedAddress.value,
-			password.value,
-			false,
-		)
+		const body = await exportSelected(false)
 		if (!isCurrent()) return
 		payload.value = body
 		fileStatus.value = "ready"
@@ -152,13 +165,7 @@ const handleProtect = async () => {
 	isBusy.value = true
 	const isCurrent = runs.snapshot()
 	try {
-		const body = await managers.account.exportAccount(
-			appStore.profile.id,
-			appStore.network.chainId,
-			selectedAddress.value,
-			password.value,
-			true,
-		)
+		const body = await exportSelected(true)
 		if (!isCurrent()) return
 		payload.value = body
 		fileStatus.value = "protected"
@@ -206,7 +213,10 @@ const onKeydown = (e) => {
 	if (!isAgreed.value) handleAgree()
 	else handleCreate()
 }
-onMounted(() => document.addEventListener("keydown", onKeydown))
+onMounted(async () => {
+	document.addEventListener("keydown", onKeydown)
+	heldAccounts.value = await readHeldAccounts().catch(() => [])
+})
 
 onBeforeUnmount(() => {
 	document.removeEventListener("keydown", onKeydown)

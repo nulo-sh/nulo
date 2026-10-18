@@ -66,18 +66,21 @@ export const paused = (name: string) => ({
 	primary: "TRY AGAIN",
 })
 
-export const pausedImported = (name: string, imported: readonly string[]) =>
+/** `exportable`: the person can export them first (`exportsHeld`). */
+export const pausedImported = (name: string, imported: readonly string[], exportable: boolean) =>
 	imported.length === 1
-		? `${quoted(imported)} is an imported account. Deleting ${name} deletes it.`
-		: `${quoted(imported)} are imported accounts. Deleting ${name} deletes them.`
+		? `${quoted(imported)} is an imported account. Deleting ${name} deletes it.${exportable ? " Export it first." : ""}`
+		: `${quoted(imported)} are imported accounts. Deleting ${name} deletes them.${exportable ? " Export them first." : ""}`
+
+export const EXPORT_IMPORTED = "EXPORT IMPORTED ACCOUNTS"
 
 export const endpointsHeld = (name: string) => `${name}’s reset is paused. Endpoints can be edited once it finishes.`
 
 /** Appended to Delete chain's confirmation while a paused reset holds the network. */
-export const deleteChainImported = (imported: readonly string[]) =>
+export const deleteChainImported = (imported: readonly string[], exportable: boolean) =>
 	imported.length === 1
-		? `It also deletes the imported account ${quoted(imported)}.`
-		: `It also deletes the imported accounts ${quoted(imported)}.`
+		? `It also deletes the imported account ${quoted(imported)}.${exportable ? " Export it first." : ""}`
+		: `It also deletes the imported accounts ${quoted(imported)}.${exportable ? " Export them first." : ""}`
 
 export const alreadyAdded = (name: string, holder: string) => ({
 	eyebrow: "NETWORK RESET",

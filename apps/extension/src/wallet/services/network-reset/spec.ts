@@ -44,8 +44,16 @@ export type StaleNetworkView = {
 	/** Another network of the profile has an unfinished reset. */
 	otherPending?: { networkId: string; name: string }
 	/** Present while this network has a journal or a running reset. `imported` names the imported
-	 *  accounts deleting the network would delete, cleaned for a sentence; empty until a run has saved its journal. */
-	reset?: { running: boolean; purged: boolean; doneCount: number; imported: string[] }
+	 *  accounts deleting the network would delete, cleaned for a sentence; empty until a run has saved its journal.
+	 *  `heldImported` lists the imported accounts whose key the journal holds, by the address the run moves
+	 *  them to, which `exportResetHeldAccount` exports; set on a journal's view only. */
+	reset?: {
+		running: boolean
+		purged: boolean
+		doneCount: number
+		imported: string[]
+		heldImported?: Array<{ name: string; address: string }>
+	}
 }
 
 export type PendingReset = { networkId: string; running: boolean }

@@ -131,6 +131,12 @@ function importedNames(journal: ResetJournal, live: Account[]): string[] {
 	return [...fromJournal, ...unnamed].map((a) => sentenceName(a.name, DEFAULT_IMPORTED_ACCOUNT_NAME))
 }
 
+function heldImported(journal: ResetJournal): Array<{ name: string; address: string }> {
+	return journal.accounts.flatMap((a) =>
+		a.type === AccountType.Imported && a.newAddress && a.encryptedSigningKey ? [{ name: a.name, address: a.newAddress }] : [],
+	)
+}
+
 function conflictsOf(row: Network, networks: Network[], target: number, journal: ResetJournal | undefined) {
 	const holder = networks.find((n) => n.id !== row.id && n.chainId === target)
 	const pending = journal && journal.networkId !== row.id ? journal.networkId : undefined
@@ -358,6 +364,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 				purged: journal.purged,
 				doneCount: journal.accounts.filter((a) => a.done).length,
 				imported: importedNames(journal, onChain),
+				heldImported: heldImported(journal),
 			},
 		}
 	}

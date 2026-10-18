@@ -97,6 +97,12 @@ async function unsealImportedScalar(dek: ImportedKeysDek, chainId: number, addre
 	}
 }
 
+/** The account file for `signingKey`; `encrypt` seals it under `password`. */
+function accountFileBody(signingKey: GrumpkinScalar, l1ChainId: number, address: string, password: string, encrypt: boolean) {
+	const envelope = buildAccountExport(signingKey, l1ChainId, address)
+	return encrypt ? encryptAccountExport(envelope, password) : serializeAccountExport(envelope)
+}
+
 /** `unattended` refuses a live L1 probe; the rest are the in-place reset's: the journal's index and
  *  visibility, and an L1 the reset already verified, so a create after the purge never probes. */
 type CreateOverrides = { unattended?: boolean; index?: number; visible?: boolean; l1ChainId?: number }
@@ -110,6 +116,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		"changeAccountName",
 		"changeAccountVisibility",
 		"exportAccount",
+		"exportResetHeldAccount",
 		"importAccount",
 		"previewImportAccount",
 		"exportFullBackupKeys",
@@ -667,8 +674,26 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 			await this.assertChainUsable(profileId, chainId)
 			await this.raiseRuntimeMismatch(profileId, chainId, account.index, address, derived)
 		}
-		const envelope = buildAccountExport(signingKey, account.l1ChainId, address)
-		return encrypt ? encryptAccountExport(envelope, password) : serializeAccountExport(envelope)
+		return accountFileBody(signingKey, account.l1ChainId, address, password, encrypt)
+	}
+
+	/**
+	 * Export an imported account that a paused reset holds only in its journal, whose old row and
+	 * key the reset already removed, as {@link exportAccount} does for a live one. The password opens
+	 * the DEK through a full unseal, the service-side check; the key must derive the journal's
+	 * address under this build, so the file names the address the person picked. Reads only.
+	 */
+	public async exportResetHeldAccount(profileId: string, address: string, password: string, encrypt: boolean): Promise<string> {
+		await this.ensureInitialized()
+		const journal = await this.staleNetworks.getJournal(profileId)
+		const entry = journal?.accounts.find((a) => a.type === AccountType.Imported && a.newAddress === address)
+		if (!journal || !entry?.encryptedSigningKey) throw new Error("unknown account address")
+		const dek = await this.profileService.exportImportedKeysDek(profileId, password)
+		const signingKey = await unsealImportedScalar(dek, journal.toChainId, address, entry.encryptedSigningKey)
+		if ((await NuloAccount.fromSigningKey(signingKey, this.logger, this.name)).address.toString() !== address) {
+			throw ImportedAccountUnusableError.because("address mismatch")
+		}
+		return accountFileBody(signingKey, journal.l1ChainId, address, password, encrypt)
 	}
 
 	/**
