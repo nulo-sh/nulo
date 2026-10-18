@@ -381,11 +381,8 @@ async function decodeAuthwitBatch(networkId: string, fresh: DiscoveredAuthwit[])
 
 const handleFeeUpdate = (index: number, value: FeeSettings | undefined) => {
 	const op = operations.value[index]
-	// `feeSettings` only exists on send-like draft kinds. Discriminant guard
-	// + targeted cast for the assignment: TS's union narrowing here is
-	// confused by a pre-existing AztecAddress/Fr structural mismatch
-	// between popup-resolved Operation and wallet-bridge's, so we cast to
-	// the draft shape explicitly. Runtime safety is in the kind check.
+	// The cast works around an AztecAddress/Fr mismatch between the popup's resolved operation and
+	// wallet-bridge's; the trait check is what keeps `feeSettings` off the other kinds.
 	if (!carriesFeeSettings(op)) return
 	;(op as { feeSettings?: FeeSettings }).feeSettings = value
 	clearError()

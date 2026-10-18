@@ -1,8 +1,8 @@
 /**
- * Per operation kind, the two facts every layer branches on: whether a request is scoped by a chain
- * or by an account, and whether the wallet, not the dApp, supplies its fee settings. The checks
- * below tie the table to the request and draft shapes, so a new kind does not compile until its
- * traits exist and agree with them.
+ * Per operation kind, the two facts the scope and fee-settings sites branch on: whether a request is
+ * scoped by a chain or by an account, and whether the wallet, not the dApp, supplies its fee
+ * settings. The checks below tie the table to the request and draft shapes, so a new kind does not
+ * compile until its traits exist and agree with them.
  */
 
 import type { OperationRequest } from "./dapp-interaction-protocol"
@@ -55,8 +55,8 @@ export function carriesFeeSettings<O extends { kind: string }>(op: O | null | un
 	return operationTraits(op?.kind)?.feeSettings === true
 }
 
-// Two-way equalities: a kind on either side alone fails. Each control moves one kind on one side and
-// must not compile, which proves the check is not a one-way `extends`.
+// Two-way equalities: a kind on either side alone fails. Each control moves one kind and must not
+// compile; between them they move a kind each way, so neither direction of the check is missing.
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
 type Expect<T extends true> = T
 /** The kinds whose variant declares `Key`, optional or not. */

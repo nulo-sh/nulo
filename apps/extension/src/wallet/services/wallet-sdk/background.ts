@@ -731,13 +731,8 @@ async function runEstablishedMessage(
 			message,
 			live,
 			hooks: {
-				// Bind the baton release into the `onExecutionEnqueued`
-				// slot — fired downstream by ExecutionService the instant
-				// the approved request enqueues on the execution mutex
-				// (which preserves execution order). The field name is
-				// shared across DispatchHooks → ExecutionHooks so the wiring
-				// is type-checked end-to-end (a past field-name drift here
-				// is exactly what left this release dead before).
+				// The FIFO releases once ExecutionService enqueues the approved request on the execution
+				// mutex, which keeps the session's sends in arrival order.
 				onExecutionEnqueued: releaseFifo,
 				queuedJournalId,
 			},
@@ -847,13 +842,10 @@ export type WalletMessageDeps = {
  * Every send and termination goes through `live`, so a call whose session
  * ended mid-flight never reaches a successor under the same id.
  *
- * `hooks` is the wallet-bridge `DispatchHooks` contract (imported, not a
- * local mirror) so the `onExecutionEnqueued` baton wiring is type-checked
- * against the dispatcher's expectation — preventing a recurrence of the
- * field-name drift that left the release dead. `onExecutionEnqueued` rides
- * to the sendTx path; `queuedJournalId` is used here (identity-guard fail
- * and catch paths) to decide whether an unclaimed `queued` record should be
- * transitioned to `failed`.
+ * `hooks` is the wallet-bridge `DispatchHooks` contract, imported rather than mirrored, so the
+ * `onExecutionEnqueued` wiring is type-checked against the dispatcher end to end. Its
+ * `queuedJournalId` decides, on the identity-guard and catch paths, whether an unclaimed `queued`
+ * record is failed.
  */
 export async function handleWalletMessage(
 	request: { session: ActiveSession; message: WalletMessage; live: LiveSession; hooks?: DispatchHooks },

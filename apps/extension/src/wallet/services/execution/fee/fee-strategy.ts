@@ -277,7 +277,6 @@ export function assertCustomGasLimitsWithinCap(fee: FeeOptions | undefined, txsL
 	}
 }
 
-/** `finalizeGasLimits`'s named inputs; its doc states each option's contract. */
 export type FinalizeGasOptions = {
 	readonly gasPadding: number
 	/** A cap already committed; absent, the call derives one or keeps an embedded payment's. */

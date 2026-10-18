@@ -714,7 +714,7 @@ describe("DappInteractionService — the session gate refuses what the session d
 		expect(h.executeOperations).not.toHaveBeenCalled()
 	}
 
-	test("an operation kind no case names is refused", async () => {
+	test("an operation kind the trait table does not name is refused", async () => {
 		const unknownKind = { kind: "aztec_unknownKind", account: ACCOUNT } as unknown as OperationRequest
 		await expectRefused(await windowHarness(), unknownKind, "Unsupported operation kind")
 	})
