@@ -119,7 +119,7 @@ No file under `apps/` changes. `send-outcome-rows`, `icon-names`, `PermissionRow
 
 ## Phases
 
-### Phase 1: the set from Tabler ☐
+### Phase 1: the set from Tabler ✓
 
 1. Run `cd packages/design && bun add -d --exact @tabler/icons@3.49.0`. Read `bun pm diff` and the lockfile hunk: one package, the recorded integrity.
 2. Write `glyph-sources.ts`, `render-glyphs.ts`, `scripts/gen-glyphs.ts` and the `gen:glyphs` script. Run `bun run gen:glyphs`.

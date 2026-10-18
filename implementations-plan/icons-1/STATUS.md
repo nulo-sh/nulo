@@ -5,3 +5,4 @@
 - 2026-10-18: plan.md drafted with Outline B; dual audit (Codex sol high, Opus Plan) started.
 - 2026-10-18: round 1: Codex conditional (6 findings, all accepted), Opus conditional (13, 12 accepted; the 1 px stroke floor rejected on Opus's own pixel read of the public mark). D3 = stroke 2 at every size, as signed. Fresh Codex pass next.
 - 2026-10-18: final fresh Codex pass (01a14f28): conditional approve (one baseline for before/after; D6 gated; caller-anchored resolve); all applied; resumed: approve. No owner ask open.
+- 2026-10-18: arc 1 phase 1 green (design 507/507, lint, typecheck:all, ci-gating 594/594, test:all; drift test red on a hand edit, green under Node).
