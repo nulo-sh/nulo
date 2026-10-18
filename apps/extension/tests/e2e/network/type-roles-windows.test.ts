@@ -195,8 +195,8 @@ type Request = {
 	approve?: true
 	/** Light and dark shots of the window, focused on this testid, when `NULO_E2E_SHOT_DIR` is set. */
 	shot?: { name: string; focus: string }
-	/** The grant's arguments, printed whole, each under its name. */
-	fullArguments?: readonly string[]
+	/** The grant's arguments, printed whole, each under its name: each name and its value's length in glyphs. */
+	fullArguments?: Readonly<Record<string, number>>
 }
 
 function requests({ tokenAddress, minterAddress }: AztecTestConfig, accountAddress: string): Request[] {
@@ -242,7 +242,7 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig, accountAddre
 			states: ["a grantPublicAuthwit request (network)"],
 			contained: true,
 			shot: { name: "grant", focus: "execute-grant-args" },
-			fullArguments: ["from", "to", "amount", "_nonce"],
+			fullArguments: { from: 66, to: 66, amount: 1, _nonce: 66 },
 		},
 		{
 			method: "registerToken",
@@ -328,10 +328,12 @@ async function stretchPayload(win: Page): Promise<void> {
 		set('[data-testid="execute-grant-decoded-param"] > :first-child', `${"W".repeat(32)}:`)
 	})
 }
-/** Each decoded grant argument as laid out: how far its value starts from its row's left edge, and its lines. */
-async function grantArguments(win: Page): Promise<{ param: string | null; glyphs: number; indent: number | null; lines: number }[]> {
+async function grantArguments(
+	win: Page,
+): Promise<{ param: string | null; glyphs: number; below: boolean; indent: number | null; lines: number }[]> {
 	return win.evaluate(() =>
 		[...document.querySelectorAll<HTMLElement>('[data-testid="execute-grant-decoded-param"]')].map((row) => {
+			const name = row.querySelector('[data-testid="execute-grant-decoded-param-name"]')
 			const value = row.querySelector('[data-testid="execute-grant-decoded-param-value"]')
 			const range = document.createRange()
 			if (value) range.selectNodeContents(value)
@@ -339,6 +341,7 @@ async function grantArguments(win: Page): Promise<{ param: string | null; glyphs
 			return {
 				param: row.getAttribute("data-param"),
 				glyphs: value?.textContent?.trim().length ?? 0,
+				below: !!name && !!value && value.getBoundingClientRect().top >= name.getBoundingClientRect().bottom,
 				indent: rects[0] ? Math.round(rects[0].left - row.getBoundingClientRect().left) : null,
 				lines: new Set(rects.map((rect) => Math.round(rect.top))).size,
 			}
@@ -346,13 +349,14 @@ async function grantArguments(win: Page): Promise<{ param: string | null; glyphs
 	)
 }
 
-/** A whole 66-glyph value beside its name breaks into three lines, its last glyphs alone. */
-async function expectFullArguments(win: Page, params: readonly string[]): Promise<void> {
+async function expectFullArguments(win: Page, expected: Readonly<Record<string, number>>): Promise<void> {
 	const args = await grantArguments(win)
-	expect(args.map(({ param }) => param)).toEqual(params)
+	expect(args.map(({ param, glyphs }) => [param, glyphs])).toEqual(Object.entries(expected))
 	for (const arg of args) {
-		expect.soft(arg.indent, `${arg.param} starts under its name: ${JSON.stringify(arg)}`).toBe(0)
-		if (arg.glyphs >= 64) expect.soft(arg.lines, `${arg.param} lines: ${JSON.stringify(arg)}`).toBeLessThanOrEqual(2)
+		const at = JSON.stringify(arg)
+		expect.soft(arg.below, `${arg.param} sits under its name: ${at}`).toBe(true)
+		expect.soft(arg.indent, `${arg.param} starts at the row's left edge: ${at}`).toBe(0)
+		expect.soft(arg.lines, `${arg.param} lines: ${at}`).toBeLessThanOrEqual(2)
 	}
 }
 

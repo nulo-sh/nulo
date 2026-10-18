@@ -388,8 +388,7 @@ onBeforeUnmount(() => {
 }
 
 /* With the label's role, `1lh` is the label's line while the label sets no line-height of its own, so
- * the chip keeps its height when the name is hidden; 14px is the padding and border. The lock chip
- * takes the same height. */
+ * the chip keeps its height when the name is hidden; 14px is the padding and border. */
 .network_chip {
 	composes: type--label-section from global;
 	display: inline-flex;
@@ -401,7 +400,7 @@ onBeforeUnmount(() => {
 	min-width: 0;
 	min-height: calc(1lh + 14px);
 
-	/* At the popup's width, 5px sides hold "TESTNET" whole with 2px to spare; 6px leave none. */
+	/* At the popup's width, 5px sides hold "TESTNET" whole with 2px to spare; 6px cut it by a fraction of a pixel. */
 	padding: 6px 5px;
 	background: transparent;
 	border: 1px solid var(--nulo-border);
@@ -423,7 +422,7 @@ onBeforeUnmount(() => {
 	color: var(--nulo-secondary);
 }
 
-/* Drawn as the network chip beside it: same border, type, height and hover. */
+/* Drawn as the network chip beside it; the two change together. */
 .lock_chip {
 	composes: type--label-section from global;
 	display: inline-flex;

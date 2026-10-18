@@ -20,8 +20,8 @@ const CONTENTS: readonly AuthwitContent[] = [
 const keyOf = (id: number) => `${AUTH_REGISTRY_STORAGE_ROOT}@${id}`
 
 /**
- * Stores an authwit row for each of `kinds`, as the registry keeps one once its send mines, and
- * deletes the other kinds' rows. The call row is still pending, as a public grant is until its send
+ * Stores an authwit row for each of `kinds`, as the registry keeps one, and deletes the other
+ * kinds' rows. The call row is still pending, as a public grant is until its send
  * is proven, so the page draws its Pending chip. The key's suffix is the row's id: the registry
  * hides a row whose key names another.
  */

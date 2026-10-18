@@ -91,13 +91,12 @@ const handleCopyAddress = (target) => {
 					data-testid="manage-accounts-row"
 					:data-account-name="account.name"
 				>
-					<!-- The imported marker takes its own line, so the address line holds only the address:
-					     its head is the one part that clips, with an ellipsis, beside a tail that never does. -->
+					<!-- The head is the only part that may clip, with an ellipsis; the tail never does. -->
 					<template #description>
 						<Text v-if="account.type === AccountType.Imported" variant="meta" color="tertiary" data-testid="account-imported-badge" :class="$style.marker">imported</Text>
 						<Text variant="meta" color="tertiary" :class="$style.desc_line" data-testid="manage-accounts-address">
 							<span :class="$style.addr_head" data-testid="manage-accounts-address-head">{{ account.address.slice(0, -4) }}</span>
-							<span :class="$style.desc_fixed">{{ account.address.slice(-4) }}</span>
+							<span :class="$style.desc_fixed" data-testid="manage-accounts-address-tail">{{ account.address.slice(-4) }}</span>
 						</Text>
 					</template>
 					<template #right>

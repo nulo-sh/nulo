@@ -18,7 +18,6 @@ const AUTHWIT = { id: "a1", kindName: "Call", content: { kind: "call", caller: "
 const mountCard = (authwit: object = AUTHWIT) =>
 	mount(AuthwitCard, { props: { authwit }, global: { stubs: STUBS, components: { RowAction } }, attachTo: document.body })
 
-/** The row's accessible name, as its `aria-labelledby` ids compose it. */
 const rowName = (w: ReturnType<typeof mountCard>) =>
 	(w.find("[data-row-target]").attributes("aria-labelledby") ?? "")
 		.split(" ")

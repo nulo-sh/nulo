@@ -408,7 +408,6 @@ async function expectPageClean(page: Page, label: string, states: readonly SiteS
 	if (states.length === 0) expect(await readHexOutsideMono(page), `${label}: hex outside a mono role`).toEqual([])
 }
 
-/** The seeded token row's dollar figure and its text lines. */
 async function readTokenFiat(page: Page): Promise<{ text: string; lines: number }> {
 	return page.$eval(sel("token-fiat"), (el) => {
 		const range = document.createRange()
@@ -711,6 +710,7 @@ async function expectAuthwits(page: Page, scope: ActivityScope): Promise<void> {
 		[AUTHWITS, "a backup restored with a message_hash authwit record"],
 	])
 	expect(await page.$$(sel("record-caller"))).toHaveLength(1)
+	expect(await page.$$(sel("authwit-pending-chip"))).toHaveLength(1)
 	await seedAuthwits(page, scope, ["encoded_call"])
 	await navigateByHash(page, "#/popup/general", 10_000)
 	await page.waitForSelector(sel("tokens-menu-trigger"), VISIBLE)

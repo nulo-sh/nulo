@@ -477,7 +477,7 @@ const handleFiatBalanceAction = (divisor) => {
 				}}</span>
 			</span>
 
-			<!-- Fiat mode's span has a zero basis, so only token mode's line ever wraps. -->
+			<!-- Fiat mode's span has a zero basis, so its line wraps only when the balance and Max alone overflow it. -->
 			<Flex align="center" justify="between" gap="8" wrap="wrap">
 				<span ref="conversionEl" :class="[$style.conversion, fiatMode && $style.conversion_fit]" data-testid="send-amount-meta">
 					<template v-if="fiatMode">

@@ -51,7 +51,6 @@ async function waitForAmount(page: Page, expected: string): Promise<void> {
 	}
 }
 
-/** Token mode's line under the amount: the dollar figure's text lines, and where the balance and Max sit. */
 async function readTokenLine(page: Page): Promise<{ text: string; lines: number; below: boolean; inside: boolean }> {
 	return page.evaluate(() => {
 		const box = (testid: string) => document.querySelector(`[data-testid="${testid}"]`)?.getBoundingClientRect()

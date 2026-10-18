@@ -104,7 +104,7 @@ const nonce = computed(() =>
 			justify="between"
 			:class="$style.row"
 		>
-			<Text variant="label-section" color="secondary">{{ safeWire(p.name, 32) }}:</Text>
+			<Text :data-testid="`${prefix}-decoded-param-name`" variant="label-section" color="secondary">{{ safeWire(p.name, 32) }}:</Text>
 			<AddressDisplay v-if="p.value.kind === 'address' && !full" :data-testid="`${prefix}-decoded-param-value`" :address="p.value.value" />
 			<Text
 				v-else
@@ -175,7 +175,7 @@ const nonce = computed(() =>
 	}
 }
 
-/* A whole value takes the full width under its name, so a 66-glyph field breaks into two even lines. */
+/* A whole value takes the row's full width, under its name, not the width its name leaves. */
 .full .row {
 	flex-direction: column;
 	gap: 2px;

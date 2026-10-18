@@ -74,7 +74,7 @@ test("account export → import into a SECOND profile (plaintext + encrypted rou
 			const line = row?.querySelector<HTMLElement>('[data-testid="manage-accounts-address"]')
 			const head = line?.querySelector<HTMLElement>('[data-testid="manage-accounts-address-head"]')
 			const wrapper = row?.querySelector<HTMLElement>('[data-testid="setting-description"]')
-			const tail = line?.lastElementChild as HTMLElement | null | undefined
+			const tail = line?.querySelector<HTMLElement>('[data-testid="manage-accounts-address-tail"]')
 			if (!badge || !line || !head || !wrapper || !tail) return null
 			return {
 				badgeClipped: badge.scrollWidth > badge.clientWidth,
