@@ -4,7 +4,7 @@ The lane brief's no-ask records cover every arc ("UI impact: none"; #517 pixel-i
 
 ## OA-1 (arcs A5 and A6, #548): converge the balance lists on Home's rules?
 
-**Answered 2026-10-18: P44-02 = B**, "Converge every row above onto Home's rule; the two deliberate differences stay options." The question showed seven rows of the first table: Holdings' three, Select token's two, and Send's worker restart and deleted row. Arc A7 converges those seven; Holdings keeps its unfiltered delete and its replace on Added, and Send keeps its failure card. The five rows added after the question was built are OA-3.
+**Answered 2026-10-18: P44-02 = B**, "Converge every row above onto Home's rule; the two deliberate differences stay options." The question showed seven rows of the first table: Holdings' three, Select token's two, and Send's worker restart and deleted row. Arc A7 converges six of them; Holdings keeps its unfiltered delete and its replace on Added, and Send keeps its failure card. Holdings' unseen-update row waits on OA-3, with which it must move. The five rows added after the question was built are OA-3.
 
 - **Surface**:
   - Holdings;
@@ -64,7 +64,8 @@ The lane brief's no-ask records cover every arc ("UI impact: none"; #517 pixel-i
   - A. Keep each as an option of its mirror (ships now).
   - B. Converge all five onto Home's rules, as P44-02 did for the seven.
 - **What ships now**: A.
-- **Recommendation**: B, for P44-02's reason: none was chosen. Against: Home's import rows and History change what they show in a rare order, so B needs its own pictures.
+- **Held from P44-02, because it depends on the first row above**: Holdings' row "a balance update for a row it never saw adds the row at once". On its own, Home's rule there ("waits for the next read") would leave Holdings worse than today: when a read lands over a token being added, today's next balance update puts the token back; with the rule alone it stays missing until the popup reconnects or Holdings reopens. Home never drops it, because Home reads again instead. So that row converges with Holdings' read-over-add row, or not at all.
+- **Recommendation**: B, for P44-02's reason: none was chosen, and B lets Holdings take both rows together. Against: Home's import rows and History change what they show in a rare order, so B needs its own pictures.
 
 ## Conditional (no entry yet)
 
