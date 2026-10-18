@@ -419,6 +419,7 @@ declare global {
   const unwrapPasskeyFailure: typeof import('../utils/passkey-copy').unwrapPasskeyFailure
   const usdThresholdToMicro: typeof import('../utils/incoming-dust').usdThresholdToMicro
   const useActivityStore: typeof import('../stores/activity.store').useActivityStore
+  const useAppFeeSelection: typeof import('../composables/useFeeSelection').useAppFeeSelection
   const useAppStore: typeof import('../stores/app.store').useAppStore
   const useArrivals: typeof import('../composables/useArrivals').useArrivals
   const useAttrs: typeof import('vue').useAttrs
@@ -436,6 +437,7 @@ declare global {
   const useEvent: typeof import('../composables/outside.js').useEvent
   const useFeeEstimation: typeof import('../composables/useFeeEstimation').useFeeEstimation
   const useFeeEstimationMap: typeof import('../composables/useFeeEstimationMap').useFeeEstimationMap
+  const useFeeSnapshot: typeof import('../composables/useFeeSnapshot').useFeeSnapshot
   const useFormState: typeof import('../composables/useFormState').useFormState
   const useFullBackupExport: typeof import('../composables/useFullBackupExport').useFullBackupExport
   const useFullBackupImport: typeof import('../composables/useFullBackupImport').useFullBackupImport
@@ -474,12 +476,14 @@ declare global {
   const useSecretClipboardCopy: typeof import('../composables/useSecretClipboardCopy').useSecretClipboardCopy
   const useSecretCountdown: typeof import('../composables/useSecretCountdown').useSecretCountdown
   const useSeedStatus: typeof import('../composables/useSeedStatus').useSeedStatus
+  const useSendFeeSelection: typeof import('../composables/useFeeSelection').useSendFeeSelection
   const useSendReview: typeof import('../composables/useSendReview').useSendReview
   const useSendStageLine: typeof import('../composables/useSendStageLine').useSendStageLine
   const useSettingUpdate: typeof import('../composables/useSettingUpdate').useSettingUpdate
   const useSettingsRowHighlight: typeof import('../composables/useSettingsRowHighlight').useSettingsRowHighlight
   const useSlots: typeof import('vue').useSlots
   const useSnackInset: typeof import('../composables/snackInset').useSnackInset
+  const useSponsorVerdicts: typeof import('../composables/useSponsorVerdicts').useSponsorVerdicts
   const useStaleNetwork: typeof import('../composables/useStaleNetwork').useStaleNetwork
   const useSyncedRef: typeof import('../composables/syncedRef.js').useSyncedRef
   const useTemplateRef: typeof import('vue').useTemplateRef
@@ -497,7 +501,9 @@ declare global {
   const walletChainId: typeof import('../utils/chain-ids').walletChainId
   const watch: typeof import('vue').watch
   const watchEffect: typeof import('vue').watchEffect
+  const watchFeeSnapshot: typeof import('../composables/useFeeSnapshot').watchFeeSnapshot
   const watchPostEffect: typeof import('vue').watchPostEffect
+  const watchSponsorVerdicts: typeof import('../composables/useSponsorVerdicts').watchSponsorVerdicts
   const watchSyncEffect: typeof import('vue').watchSyncEffect
   const wireTitle: typeof import('../utils/primary-method').wireTitle
   const withTimeout: typeof import('../stores/balances.store').withTimeout
@@ -547,6 +553,12 @@ declare global {
   // @ts-ignore
   export type { UseFeeEstimationMapOptions, UseFeeEstimationMapResult } from '../composables/useFeeEstimationMap'
   import('../composables/useFeeEstimationMap')
+  // @ts-ignore
+  export type { SelectionLoad, FeeSelection, FeeSelectionInput } from '../composables/useFeeSelection'
+  import('../composables/useFeeSelection')
+  // @ts-ignore
+  export type { SnapshotSelection, FeeSnapshotFailure, FeeSnapshot } from '../composables/useFeeSnapshot'
+  import('../composables/useFeeSnapshot')
   // @ts-ignore
   export type { FieldDef, FieldHandle, FormState } from '../composables/useFormState'
   import('../composables/useFormState')
@@ -619,6 +631,9 @@ declare global {
   // @ts-ignore
   export type { SendStageLineDeps, SendStageLine } from '../composables/useSendStageLine'
   import('../composables/useSendStageLine')
+  // @ts-ignore
+  export type { SponsorFundingVerdict, SponsorVerdicts, SponsorVerdictSources } from '../composables/useSponsorVerdicts'
+  import('../composables/useSponsorVerdicts')
   // @ts-ignore
   export type { StaleNetworkClient, StaleNetworkDeps, StaleNetwork } from '../composables/useStaleNetwork'
   import('../composables/useStaleNetwork')
@@ -1160,6 +1175,7 @@ declare module 'vue' {
     readonly unwrapPasskeyFailure: UnwrapRef<typeof import('../utils/passkey-copy')['unwrapPasskeyFailure']>
     readonly usdThresholdToMicro: UnwrapRef<typeof import('../utils/incoming-dust')['usdThresholdToMicro']>
     readonly useActivityStore: UnwrapRef<typeof import('../stores/activity.store')['useActivityStore']>
+    readonly useAppFeeSelection: UnwrapRef<typeof import('../composables/useFeeSelection')['useAppFeeSelection']>
     readonly useAppStore: UnwrapRef<typeof import('../stores/app.store')['useAppStore']>
     readonly useArrivals: UnwrapRef<typeof import('../composables/useArrivals')['useArrivals']>
     readonly useAttrs: UnwrapRef<typeof import('vue')['useAttrs']>
@@ -1177,6 +1193,7 @@ declare module 'vue' {
     readonly useEvent: UnwrapRef<typeof import('../composables/outside.js')['useEvent']>
     readonly useFeeEstimation: UnwrapRef<typeof import('../composables/useFeeEstimation')['useFeeEstimation']>
     readonly useFeeEstimationMap: UnwrapRef<typeof import('../composables/useFeeEstimationMap')['useFeeEstimationMap']>
+    readonly useFeeSnapshot: UnwrapRef<typeof import('../composables/useFeeSnapshot')['useFeeSnapshot']>
     readonly useFormState: UnwrapRef<typeof import('../composables/useFormState')['useFormState']>
     readonly useFullBackupExport: UnwrapRef<typeof import('../composables/useFullBackupExport')['useFullBackupExport']>
     readonly useFullBackupImport: UnwrapRef<typeof import('../composables/useFullBackupImport')['useFullBackupImport']>
@@ -1215,12 +1232,14 @@ declare module 'vue' {
     readonly useSecretClipboardCopy: UnwrapRef<typeof import('../composables/useSecretClipboardCopy')['useSecretClipboardCopy']>
     readonly useSecretCountdown: UnwrapRef<typeof import('../composables/useSecretCountdown')['useSecretCountdown']>
     readonly useSeedStatus: UnwrapRef<typeof import('../composables/useSeedStatus')['useSeedStatus']>
+    readonly useSendFeeSelection: UnwrapRef<typeof import('../composables/useFeeSelection')['useSendFeeSelection']>
     readonly useSendReview: UnwrapRef<typeof import('../composables/useSendReview')['useSendReview']>
     readonly useSendStageLine: UnwrapRef<typeof import('../composables/useSendStageLine')['useSendStageLine']>
     readonly useSettingUpdate: UnwrapRef<typeof import('../composables/useSettingUpdate')['useSettingUpdate']>
     readonly useSettingsRowHighlight: UnwrapRef<typeof import('../composables/useSettingsRowHighlight')['useSettingsRowHighlight']>
     readonly useSlots: UnwrapRef<typeof import('vue')['useSlots']>
     readonly useSnackInset: UnwrapRef<typeof import('../composables/snackInset')['useSnackInset']>
+    readonly useSponsorVerdicts: UnwrapRef<typeof import('../composables/useSponsorVerdicts')['useSponsorVerdicts']>
     readonly useStaleNetwork: UnwrapRef<typeof import('../composables/useStaleNetwork')['useStaleNetwork']>
     readonly useSyncedRef: UnwrapRef<typeof import('../composables/syncedRef.js')['useSyncedRef']>
     readonly useTemplateRef: UnwrapRef<typeof import('vue')['useTemplateRef']>
@@ -1238,7 +1257,9 @@ declare module 'vue' {
     readonly walletChainId: UnwrapRef<typeof import('../utils/chain-ids')['walletChainId']>
     readonly watch: UnwrapRef<typeof import('vue')['watch']>
     readonly watchEffect: UnwrapRef<typeof import('vue')['watchEffect']>
+    readonly watchFeeSnapshot: UnwrapRef<typeof import('../composables/useFeeSnapshot')['watchFeeSnapshot']>
     readonly watchPostEffect: UnwrapRef<typeof import('vue')['watchPostEffect']>
+    readonly watchSponsorVerdicts: UnwrapRef<typeof import('../composables/useSponsorVerdicts')['watchSponsorVerdicts']>
     readonly watchSyncEffect: UnwrapRef<typeof import('vue')['watchSyncEffect']>
     readonly wireTitle: UnwrapRef<typeof import('../utils/primary-method')['wireTitle']>
     readonly withTimeout: UnwrapRef<typeof import('../stores/balances.store')['withTimeout']>

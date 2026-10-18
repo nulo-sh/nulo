@@ -829,7 +829,6 @@ onBeforeUnmount(() => {
 						:isQueued="feeQueued"
 						:queuedCap="queueCap"
 						:originPrivacy="selectedSendType"
-						:destinationPrivacy="selectedReceiverType"
 						:payerNoticeShape="facts.noticeShape"
 						:txShape="feeTxShape"
 						v-model="feeSettings"

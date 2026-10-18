@@ -176,7 +176,7 @@ const STUBS = {
 	},
 	FeeSettingsCard: {
 		name: "FeeSettingsCard",
-		template: '<div data-testid="stub-fee-card" :data-origin="originPrivacy" :data-destination="destinationPrivacy" />',
+		template: '<div data-testid="stub-fee-card" :data-origin="originPrivacy" />',
 		props: [
 			"profile",
 			"network",
@@ -184,7 +184,6 @@ const STUBS = {
 			"feeEstimate",
 			"isEstimating",
 			"originPrivacy",
-			"destinationPrivacy",
 			"payerNoticeShape",
 			"modelValue",
 			"needsFeeJuice",
