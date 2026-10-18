@@ -1,0 +1,61 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:01.680
+Every Aztec transaction
+
+00:00:01.680 --> 00:00:03.160
+pays a network fee,
+
+00:00:03.160 --> 00:00:05.520
+the way Ethereum charges gas.
+
+00:00:05.520 --> 00:00:07.920
+The fee is paid in Fee Juice,
+
+00:00:07.920 --> 00:00:10.880
+the token that pays network fees on Aztec.
+
+00:00:10.880 --> 00:00:12.640
+You bring it over from Ethereum,
+
+00:00:12.640 --> 00:00:15.120
+and it is used only for fees.
+
+00:00:15.120 --> 00:00:17.320
+The price depends on the work:
+
+00:00:17.320 --> 00:00:19.160
+publishing the transaction's data,
+
+00:00:19.160 --> 00:00:21.120
+and running it on the network.
+
+00:00:21.120 --> 00:00:24.160
+Nulo shows you the fee before you send.
+
+00:00:24.160 --> 00:00:26.080
+How you pay matters.
+
+00:00:26.080 --> 00:00:27.680
+Pay with public Fee Juice,
+
+00:00:27.680 --> 00:00:30.120
+and the record names you as the payer,
+
+00:00:30.120 --> 00:00:31.120
+each time.
+
+00:00:31.120 --> 00:00:32.840
+Pay with private Fee Juice,
+
+00:00:32.840 --> 00:00:34.320
+and the payer on record is a
+
+00:00:34.320 --> 00:00:36.640
+contract many people share.
+
+00:00:36.640 --> 00:00:38.960
+Sometimes the fee is sponsored:
+
+00:00:38.960 --> 00:00:40.640
+someone else pays it for you.

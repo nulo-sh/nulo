@@ -1,0 +1,85 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:01.680
+On most blockchains,
+
+00:00:01.680 --> 00:00:03.840
+anyone who knows an address can read its
+
+00:00:03.840 --> 00:00:06.560
+balance and every amount it paid.
+
+00:00:06.560 --> 00:00:09.840
+Nulo shows two balances for each token.
+
+00:00:09.840 --> 00:00:11.480
+Your private balance:
+
+00:00:11.480 --> 00:00:13.240
+only you can see it.
+
+00:00:13.240 --> 00:00:14.880
+Your public balance:
+
+00:00:14.880 --> 00:00:16.080
+anyone can see it,
+
+00:00:16.080 --> 00:00:18.200
+like a balance on Ethereum.
+
+00:00:18.200 --> 00:00:19.640
+Your private balance is a
+
+00:00:19.640 --> 00:00:21.200
+set of encrypted notes,
+
+00:00:21.200 --> 00:00:23.600
+like cash in sealed envelopes.
+
+00:00:23.600 --> 00:00:25.400
+The network keeps a fingerprint
+
+00:00:25.400 --> 00:00:26.453
+of each note,
+
+00:00:26.453 --> 00:00:29.920
+and a sealed copy only its owner can open.
+
+00:00:29.920 --> 00:00:33.920
+Say you pay 3.50 from a note worth 5.
+
+00:00:33.920 --> 00:00:36.720
+Nulo spends that note and makes new ones:
+
+00:00:36.720 --> 00:00:39.440
+3.50 for the person you pay,
+
+00:00:39.440 --> 00:00:42.240
+and 1.50 change for you.
+
+00:00:42.240 --> 00:00:43.520
+In a private payment,
+
+00:00:43.520 --> 00:00:46.080
+the record shows that something was spent.
+
+00:00:46.080 --> 00:00:47.920
+It does not show which note,
+
+00:00:47.920 --> 00:00:49.360
+or how much.
+
+00:00:49.360 --> 00:00:50.880
+Moving money to your public
+
+00:00:50.880 --> 00:00:52.373
+balance is your choice,
+
+00:00:52.373 --> 00:00:54.880
+and the public side records the amount.
+
+00:00:54.880 --> 00:00:56.720
+Nulo labels each balance,
+
+00:00:56.720 --> 00:00:58.880
+so you always know which is which.
