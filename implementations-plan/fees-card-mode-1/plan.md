@@ -294,6 +294,8 @@ None. P40-03 A, quoted above: "the template is untouched, no pixel changes". The
 
 **D11.** The brief says "a pixel difference is a stop", and the plan keeps that rule as written. Two network runs at the base can differ: fresh entropy, and each run's own fee figures (Inference b). The control pair shows the orchestrator whether a stop is input-caused noise. It never waives a stop on its own: noise can hide a changed value, and a box can hold unchanged pixels between two noisy spots.
 
+**D11 outcome (2026-10-18).** The stop was raised at Phase 4: all 14 after pairs differed, as all 14 control pairs did. The evidence went to the orchestrator as `~/.cache/nulo-backlog/fees-card-mode-1/d11-stop.md` (lane scratch): per-pair counts and boxes with the control column, card-band counts, crops. Inside the two cards, `fee-sponsor-short` had 0 differing pixels in every pair, and `execute-fee-card` differed only on the "You pay" skeleton row, whose shimmer phase differs between the two base runs too. One whole-image difference had no control twin: the light `authwit-summary` shot caught the authorization's selector before and its decoded name after, a capture race with the asynchronous decode, outside the card. The orchestrator released the arc at 02:5xZ on the control pairs plus the zero-tolerance DOM proof, with three conditions: the PR body reports the counts as measured, this entry records the outcome, nothing else changes.
+
 ## Audit verdicts
 
 **Codex r1** (session `01a14bfd`, gpt-6.1-sol, high): `conditional approve (with conditions: resolve the live-origin contract, make pixel proof deterministic, and verify parent-visible watcher ordering)`.
@@ -315,7 +317,9 @@ None. P40-03 A, quoted above: "the template is untouched, no pixel changes". The
 
 **Final pass, resumed twice** (same session): first `conditional approve` (the noise box could hide a regression; the same-identity refresh), both fixed as above; then **`approve`**: "D11 consistently stops on every pixel difference, with controls used only as evidence. G3 correctly distinguishes initial loading from same-identity refreshes and requires re-tracing before disposition." No open disagreement remains.
 
-**Implementation review, round 1** (over `3f391f67`; Codex session `01a14cc6`, gpt-6.1-sol, high, read-only, beside the Phase 4 chain): `approve`, three non-blocking comment findings. **Opus** (general-purpose): `conditional approve`, two findings and one pre-existing note. Both confirm that no watcher's creation order, reactive source, teardown step or `this` binding moved, and that template and style are byte-identical. Dispositions in [lessons/phase-4.md](lessons/phase-4.md); every accepted fix is a comment or a test mock, and they land when the D11 stop is released.
+**Implementation review, round 1** (over `3f391f67`; Codex session `01a14cc6`, gpt-6.1-sol, high, read-only, beside the Phase 4 chain): `approve`, three non-blocking comment findings. **Opus** (general-purpose): `conditional approve`, two findings and one pre-existing note. Both confirm that no watcher's creation order, reactive source, teardown step or `this` binding moved, and that template and style are byte-identical. Dispositions in [lessons/phase-4.md](lessons/phase-4.md); every accepted fix is a comment or a test mock, landed in `7bd32565` after the orchestrator released the D11 stop.
+
+**Implementation review, round 2** (same Codex session, resumed over `7bd32565`): **`approve`**, "No new material finding. `7bd32565` leaves the parsed production syntax identical to `3f391f67` in both composables and the card's script. It changes no runtime behavior, watcher registration order, reactive dependency, or production `this` binding." The loop converged in two rounds.
 
 ## Delivery
 
