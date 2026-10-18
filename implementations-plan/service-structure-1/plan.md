@@ -1,7 +1,7 @@
 ---
 plan: service-structure-1
 tier: mid
-status: arc 1 merged (#703); arc 2 merged (#741); arc 3 implementing; arc 4 waits for release
+status: arc 1 merged (#703); arc 2 merged (#741); arc 3 in review; arc 4 waits for release
 issues: "#521 (arc 1); #545 (arc 2); #547 (arc 3); #549 #560 (arc 4)"
 driver: claude-code
 claude_model: opus
@@ -185,7 +185,7 @@ The arc gate adds `bun run test:all`, then one e2e invocation, started only when
 - [x] Add `balance-outbox.ts`, and rewire the service.
 - [x] Keep every outbox case in `service.scenarios.test.ts`; the `drain(service)` helper and the one `markBalanceDirty` cast point at `service.outbox`. No assertion changes.
 - [x] Add `balance-outbox.test.ts` over an in-memory repository fake and stubs, for what the service fixture cannot reach: a `withLock` whose ticket goes stale between the re-read and the write makes the anchor write skip (#443), and its control writes the anchor.
-- [ ] File the decomposition-map `enhancement` issue (the five sections; `## Record` names this plan).
+- [x] File the decomposition-map `enhancement` issue (the five sections; `## Record` names this plan): #750 (D15).
 - **Gate:** the common gate on `src/wallet/services/incoming-transfer`, then `bun run test:all`, then `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/incoming-public-transfers.test.ts tests/e2e/network/incoming-transfers.test.ts`.
 
 ### Arc 4, phase 4: #560

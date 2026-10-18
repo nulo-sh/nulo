@@ -18,3 +18,8 @@
 - 2026-10-18 arc 3 phase 3: branch service-structure-1-arc3 off origin/dev 77aad1e5; lint, typecheck:all and the incoming-transfer suite green (11 files, 446 tests); the moved block re-diffed against the original; one mutation check red.
 - 2026-10-18 arc 3: `bun run test:all` green at d13c9d5f (extension 13,737 passed; every package green).
 - 2026-10-18 arc 3: Codex round 1 findings (medium microtask, low header) and the Opus folds fixed in a036c0d1; lint, typecheck and the incoming-transfer suite green again.
+- 2026-10-18 arc 3: Codex round 2 clean; loop converged. Decomposition map filed as #750 (D15).
+- 2026-10-18 arc 3: network e2e (incoming-public-transfers, incoming-transfers) green on Chrome at a036c0d1, 2 files, 5 tests, vitest 366 s, 422 s wall; load1 80 at start. The run used the config's default retry (2) and none fired; a retry-0 rerun follows on the final head.
+- 2026-10-18 arc 3 final head 00f31d32: lint, typecheck:all and check:plans green.
+- 2026-10-18 arc 3: `bun run test:all` green at 00f31d32 (extension 13,737 passed); network e2e retry 0 green at 00f31d32 (2 files, 5 tests, vitest 259 s, 299 s wall; load1 100).
+- 2026-10-18 arc 3: origin/dev merged (#747, #748; #748 touches the balance display the public e2e reads); lint, typecheck:all, check:plans and `bun run test:all` green on c8591732 (extension 13,760 passed); network e2e retry 0 green there (2 files, 5 tests, vitest 281 s, 312 s wall; load1 54).
