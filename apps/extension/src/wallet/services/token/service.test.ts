@@ -189,6 +189,39 @@ describe("TokenService.addToken — journal/lock machinery (characterization)", 
 		expect((await tokenService.getTokens("p1"))[0].classId).toBe(classId)
 	})
 
+	test("a read name and symbol carrying bidi, format and control characters are stored and titled clean", async () => {
+		const { tokenService, journal, fetchStub } = await makeHarness()
+		fetchStub.mockResolvedValueOnce(["Tether‮ USD", "USD‮C‍\u0007", 6])
+
+		const info = await tokenService.addToken("p1", NETWORK.id, "0xacc", ti("0xd1d1"), { origin: "popup" })
+		await tokenService.addSeededToken({
+			profileId: "p1",
+			networkId: NETWORK.id,
+			accountAddress: "0xacc",
+			tokenInterface: ti("0x5eed"),
+			name: "Seeded",
+			symbol: "SE⁦ED",
+			decimals: 18,
+		})
+
+		expect(info).toMatchObject({ name: "Tether USD", symbol: "USDC" })
+		expect((await tokenService.getTokensRaw("p1")).map(({ name, symbol }) => [name, symbol])).toEqual([
+			["Tether USD", "USDC"],
+			["Seeded", "SEED"],
+		])
+		expect(journal.setOperationMeta).toHaveBeenCalledWith("op-1", { title: "USDC" })
+		expect(journal.createOperation).toHaveBeenLastCalledWith(expect.objectContaining({ origin: "seed", title: "SEED" }))
+	})
+
+	test("a plain name and symbol are stored as read (control)", async () => {
+		const { tokenService, fetchStub } = await makeHarness()
+		fetchStub.mockResolvedValueOnce(["Café Ünïcode · Token", "€URC", 2])
+
+		await tokenService.addToken("p1", NETWORK.id, "0xacc", ti("0xd1d1"), { origin: "popup" })
+
+		expect((await tokenService.getTokensRaw("p1"))[0]).toMatchObject({ name: "Café Ünïcode · Token", symbol: "€URC" })
+	})
+
 	test("seeded persistence never backfills a title (no setOperationMeta)", async () => {
 		const { tokenService, journal } = await makeHarness()
 
@@ -236,6 +269,16 @@ describe("TokenService.restore — per-row allocation", () => {
 		const raw = await api.storage.local.get(null)
 		expect(raw[`nulo:core:tokens@${max}`]).toBe(junk)
 		expect(restored[0].id).not.toBe(restored[1].id)
+	})
+
+	test("a backup row's name and symbol are stored clean", async () => {
+		const { tokenService } = await makeHarness()
+		const row = { id: 0, profileId: "p1", chainId: 1, contract: "0xaaa", name: "Tether‮ USD", symbol: "USD‮C‍\u0007", decimals: 6 }
+
+		const [restored] = await tokenService.restore([row])
+
+		expect(restored.restoreError).toBeUndefined()
+		expect((await tokenService.getTokensRaw("p1"))[0]).toMatchObject({ name: "Tether USD", symbol: "USDC" })
 	})
 })
 

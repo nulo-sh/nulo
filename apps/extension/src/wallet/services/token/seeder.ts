@@ -30,9 +30,10 @@ const MAX_CONTINUATION_DELAY_MS = 60_000
 /** Floor under every continuation timer, so no unforeseen non-consuming pass can spin. */
 const MIN_CONTINUATION_DELAY_MS = 1_000
 
-/** Metadata bounds (seeding is zero-interaction — no preview popup guards it). */
-const NAME_MAX_LENGTH = 80
-const SYMBOL_MAX_LENGTH = 32
+/** Metadata bounds (seeding is zero-interaction — no preview popup guards it). Every stored token row
+ *  and import title is cut to the same two. */
+export const NAME_MAX_LENGTH = 80
+export const SYMBOL_MAX_LENGTH = 32
 const DECIMALS_MAX = 18
 
 export type SeedMarkerEntry = {
