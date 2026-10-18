@@ -179,8 +179,31 @@ describe("getTxCategory and getTxTitle: the wallet's reading of the primary call
 	}
 
 	test.each<[string, TxCall[], "transfer" | "mint" | "tx", string]>([
-		["the wallet's own send", [call("transfer", [DAPP, field(5n)], { transfers: [sent] })], "transfer", "Transfer"],
-		["a vocabulary transfer on a listed token with its class", [call("transfer_in_private", transfer4)], "transfer", "Transfer"],
+		["the wallet's own send", [call("transfer", [DAPP, field(5n)], { transfers: [sent] })], "transfer", "Transfer (private)"],
+		[
+			"the wallet's own send through a function it was told to call by another name",
+			[call("send_tokens", [DAPP, field(5n)], { transfers: [{ ...sent, type: TransferType.Public }] })],
+			"transfer",
+			"Transfer (public)",
+		],
+		[
+			"the wallet's own send whose stored type is the enum's name",
+			[call("send_tokens", [DAPP, field(5n)], { transfers: [{ ...sent, type: "PublicToPrivate" as never }] })],
+			"transfer",
+			"Transfer to private",
+		],
+		[
+			"the wallet's own send with a type it does not know reads by its function",
+			[call("send_tokens", [DAPP, field(5n)], { transfers: [{ ...sent, type: 9 as never }] })],
+			"transfer",
+			"Send Tokens",
+		],
+		[
+			"a vocabulary transfer on a listed token with its class",
+			[call("transfer_in_private", transfer4)],
+			"transfer",
+			"Transfer (private)",
+		],
 		[
 			"the same call recorded with no class",
 			[call("transfer_in_private", transfer4, { classId: undefined })],

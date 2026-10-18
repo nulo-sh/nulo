@@ -37,13 +37,8 @@ describe("settings/glossary", () => {
 	})
 
 	test.each([
-		["private-balance", "Private balance", "Only you can see it. Marked with a solid square.", "Home · tokens · send"],
-		[
-			"public-balance",
-			"Public balance",
-			"Anyone can see it, like a balance on Ethereum. Marked with a dotted square.",
-			"Home · tokens · send",
-		],
+		["private-balance", "Private balance", "Only you can see it. Marked with a shield.", "Home · tokens · send"],
+		["public-balance", "Public balance", "Anyone can see it, like a balance on Ethereum. Marked with a globe.", "Home · tokens · send"],
 		["fee-juice", "Fee Juice", "The token that pays network fees on Aztec. Shown as FJ.", "Home · fee card"],
 		["public-fee-juice", "Public Fee Juice", "Paying a fee with it shows your address.", "Home · fee menu"],
 		["private-fee-juice", "Private Fee Juice", "Paying a fee with it keeps your address hidden.", "Home · fee menu"],

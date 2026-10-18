@@ -341,7 +341,7 @@ describe("TokenCard — R5 layout (subtitle left, private/public split right)", 
 		}
 	})
 
-	test("the split line renders an accent solid square (private) and a grey dotted square (public) with both amounts", async () => {
+	test("the split line renders the private mark and the public mark with both amounts", async () => {
 		mockQuotes = {}
 		const w = factory({ updatedAt: 1, privateBalance: (7n * 10n ** 18n).toString(), publicBalance: (3n * 10n ** 18n).toString() })
 		await flushPromises()

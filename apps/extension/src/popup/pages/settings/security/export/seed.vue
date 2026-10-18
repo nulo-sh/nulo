@@ -169,7 +169,7 @@ onBeforeUnmount(() => {
 				variant="cta"
 				data-testid="unlock-submit-btn"
 			>
-				Retrieve Recovery Phrase
+				Reveal Recovery Phrase
 			</Button>
 
 			<SecretCountdownClose

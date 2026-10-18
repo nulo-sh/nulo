@@ -216,6 +216,7 @@ const switchNetwork = createNetworkSwitchHandler({
 	liveScopeMatches: (scope) =>
 		appStore.profile?.id === scope.profileId && appStore.network?.id === scope.networkId && appStore.network?.chainId === scope.chainId,
 	syncNetworkStatus: () => appStore.syncNetworkStatus(),
+	markNetworkInactive: (networkId) => appStore.markNetworkInactive(networkId),
 	replaceAccountClient: () => {
 		managers.account?.disconnect()
 		managers.account = new AccountServiceClient()

@@ -327,7 +327,7 @@ onBeforeUnmount(() => {
 				priced assets only
 			</div>
 
-			<!-- Glyphs only: the two squares are the token rows' vocabulary, so no word doubles them. -->
+			<!-- Glyphs only: the two marks are the token rows' vocabulary, so no word doubles them. -->
 			<Flex v-if="tokenToDisplay" align="center" justify="center" gap="12" :class="$style.breakdown">
 				<Tooltip textAlign="left" delay="300">
 					<span :class="$style.breakdown_item">

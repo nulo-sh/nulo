@@ -113,8 +113,7 @@ export function factWord(cell: FactCell, facts: PublishFacts): string {
 	return FACT_WORDS[cell][facts[cell]]
 }
 
-/** The glyph Home and the token rows use for each side: the solid square only for hidden, and none
- *  while Nulo cannot tell, so a mark never claims more privacy than the send has. */
+/** Each side's balance mark: a mark never claims more privacy than the send has. */
 export function publishGlyph(visibility: Visibility): "private" | "public" | null {
 	switch (visibility) {
 		case "hidden":

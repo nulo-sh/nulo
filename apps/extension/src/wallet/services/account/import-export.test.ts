@@ -25,8 +25,8 @@ vi.mock("@nulo/aztec-runtime/account", async (importOriginal) => {
 	}
 })
 
-import { buildAccountExport, serializeAccountExport } from "@nulo/aztec-runtime/account"
-import { asImportedKeysDek } from "@nulo/wallet-crypto"
+import { buildAccountExport, decryptAccountExport, parseAccountExport, serializeAccountExport } from "@nulo/aztec-runtime/account"
+import { asImportedKeysDek, sealImportedSigningKeyV2 } from "@nulo/wallet-crypto"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
@@ -305,5 +305,61 @@ describe("AccountService import/export", () => {
 		// The registered awaited purge ran BEFORE the Account delete: zero rows remain
 		// for the scope — the re-import reattachment hole is closed at the graph level.
 		expect((await repo.getAll()).filter((r) => r.account === addrFor(SK))).toEqual([])
+	})
+})
+
+describe("AccountService — a paused reset's held imported account", () => {
+	const TO_CHAIN = 7
+	const NEW = addrFor(SK)
+	const JOURNAL = "nulo:core:network-reset@p1"
+	const held = async (over: Record<string, unknown> = {}) => ({
+		type: AccountType.Imported,
+		index: 0,
+		name: "Savings",
+		visible: true,
+		oldAddress: "0xOLD",
+		newAddress: NEW,
+		encryptedSigningKey: await sealImportedSigningKeyV2(dekOf(0x11), TO_CHAIN, NEW, SK.toBuffer() as Uint8Array<ArrayBuffer>),
+		done: true,
+		...over,
+	})
+	const seed = (api: FakeBrowserApi, accounts: unknown[]) =>
+		api.storage.local.set({
+			[JOURNAL]: JSON.stringify({
+				profileId: "p1",
+				networkId: "n1",
+				fromChainId: CHAIN,
+				toChainId: TO_CHAIN,
+				l1ChainId: L1,
+				cause: { networkReset: true, addressesMoved: false },
+				purged: true,
+				switchToSeedNode: false,
+				probedEndpoint: null,
+				accounts,
+			}),
+		})
+
+	test("a plain and a protected file both carry the key the journal holds, and nothing is written", async () => {
+		const { api, account } = await build()
+		await seed(api, [await held()])
+		const before = await api.storage.local.get()
+		const plain = parseAccountExport(await account.exportResetHeldAccount("p1", NEW, "correct-pass", false))
+		expect([plain.signingKey.toString(), plain.l1ChainId, plain.claimedAddress]).toEqual([SK.toString(), L1, NEW])
+		const sealed = await account.exportResetHeldAccount("p1", NEW, "correct-pass", true)
+		expect(parseAccountExport(await decryptAccountExport(sealed, "correct-pass")).claimedAddress).toBe(NEW)
+		expect(await api.storage.local.get()).toEqual(before)
+	})
+
+	test("a wrong password, an unknown address, a keyless entry, no journal and a key that moved each refuse", async () => {
+		const { NuloAccount } = await import("@nulo/aztec-runtime/account")
+		const { api, account } = await build()
+		await expect(account.exportResetHeldAccount("p1", NEW, "correct-pass", false)).rejects.toThrow("unknown account address")
+		await seed(api, [await held({ encryptedSigningKey: undefined })])
+		await expect(account.exportResetHeldAccount("p1", NEW, "correct-pass", false)).rejects.toThrow("unknown account address")
+		await seed(api, [await held()])
+		await expect(account.exportResetHeldAccount("p1", "0xOTHER", "correct-pass", false)).rejects.toThrow("unknown account address")
+		await expect(account.exportResetHeldAccount("p1", NEW, "wrong-pass", false)).rejects.toThrow("Invalid password")
+		vi.mocked(NuloAccount.fromSigningKey).mockResolvedValueOnce({ address: { toString: () => "0xROTATED" } } as never)
+		await expect(account.exportResetHeldAccount("p1", NEW, "correct-pass", false)).rejects.toBeInstanceOf(ImportedAccountUnusableError)
 	})
 })
