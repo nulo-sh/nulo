@@ -158,12 +158,19 @@ const activeToken = computed(() => tokens.value?.find((t) => t.id === cacheStore
 const isBlockedTransfer = computed(() => !activeToken.value?.hasPrivateTransfers && !activeToken.value?.hasPublicTransfers)
 
 const tokenBalances = ref([])
+/** Bumped by each balance read, an identity fetch's or a reconnect's; a read lands only if none
+ *  began after it. */
+let balanceReadSeq = 0
 const tokenBalanceService = new TokenBalanceServiceClient()
 const balances = useTokenBalanceSnapshot({
 	client: tokenBalanceService,
 	live: appStore,
 	rows: tokenBalances,
 	added: "append",
+	scopeFence: () => {
+		const myRead = ++balanceReadSeq
+		return () => myRead === balanceReadSeq
+	},
 })
 tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
 tokenBalanceService.onTokenBalanceUpdated.add(balances.onBalanceUpdated)
@@ -642,9 +649,7 @@ let identityFetchSeq = 0
 async function refetchIdentityScopedState() {
 	const mySeq = ++identityFetchSeq
 	const isCurrent = () => mySeq === identityFetchSeq
-	// The rows are this fetch's from here: a reconnect's re-read or retry for the previous identity
-	// must not land after it.
-	balances.invalidate()
+	const myBalanceRead = ++balanceReadSeq
 	tokenReadSeq++
 	tokensFailed.value = false
 	if (!appStore.profile?.id || !appStore.network?.id || !appStore.account?.address) {
@@ -676,7 +681,7 @@ async function refetchIdentityScopedState() {
 		}
 		if (!isCurrent()) return
 		tokens.value = t
-		tokenBalances.value = tb
+		if (myBalanceRead === balanceReadSeq) tokenBalances.value = tb
 		contacts.value = c
 		// The tokens watch makes the first token added to an empty list the active one. A refused
 		// load must not arm it, or the Retry's list would lose the active or requested token.

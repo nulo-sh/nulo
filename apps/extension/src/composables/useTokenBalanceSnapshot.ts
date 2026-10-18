@@ -6,25 +6,28 @@ import type { TokenBalanceInfo, TokenBalanceServiceClient } from "@/wallet/servi
 /** `loading` and `unavailable` both mean "not known yet": only `loaded` may say the list is empty. */
 export type TokenBalanceSnapshotState = "loading" | "unavailable" | "loaded"
 
-/** How an add lands: an in-scope add for a listed id keeps the listed row (the default) or
- *  replaces it; `append` lists every add for the active account as it comes, from any chain and for
- *  a listed id too. */
-type AddedRule = "keep" | "replace" | "append"
+/** How live events land; each default is the snapshot's own rule. */
+interface TokenBalanceEventRules {
+	/** An in-scope add for a listed id keeps the listed row (the default) or replaces it; `append`
+	 *  lists every add for the active account as it comes, from any chain and for a listed id too. */
+	added?: "keep" | "replace" | "append"
+	/** An in-scope update for an unseen id is listed at once rather than at the next read. */
+	insertUnseenUpdated?: boolean
+}
 
-interface TokenBalanceSnapshotDeps<T> {
+interface TokenBalanceSnapshotDeps<T> extends TokenBalanceEventRules {
 	/** Connected and disconnected by the parent; the snapshot only requests and listens. */
 	client: Pick<TokenBalanceServiceClient, "getTokenBalances" | "onConnected">
 	live: LiveTokenScope
 	rows: Ref<T[]>
 	/** Omitted by a parent that shows no state of its own. */
 	state?: Ref<TokenBalanceSnapshotState>
-	/** Captured at run start; a run whose fence goes false lands nothing. For a parent whose scope
-	 *  change awaits before refetching, so the run's own generation cannot fence the old scope yet. */
+	/** Captured at run start; a run whose fence is false when it settles lands nothing and arms no
+	 *  retry. For a parent whose own reads or scope changes the run's generation cannot see. */
 	scopeFence?: () => () => boolean
 	/** Applied to each row a read or an event lists; an update that replaces a listed row writes it
 	 *  as received. */
 	mapRow?: (row: TokenBalanceInfo) => T
-	added?: AddedRule
 	/** An in-scope event during a run makes it read again rather than land (the default). */
 	refetchWhenDirty?: boolean
 }
@@ -37,7 +40,7 @@ function tokenBalanceEvents<T>(
 	rows: Ref<T[]>,
 	mapRow: ((row: TokenBalanceInfo) => T) | undefined,
 	markDirty: () => void,
-	added: AddedRule | undefined,
+	rules: TokenBalanceEventRules,
 ) {
 	const inActiveScope = (tb: TokenBalanceInfo) => isActiveScopeRow(live, tb)
 	const indexOf = (id: unknown) => rows.value.findIndex((row) => (row as { id: unknown }).id === id)
@@ -48,20 +51,22 @@ function tokenBalanceEvents<T>(
 	function onBalanceAdded(tb: TokenBalanceInfo) {
 		const inScope = inActiveScope(tb)
 		if (inScope) markDirty()
-		if (added === "append") {
+		if (rules.added === "append") {
 			if (tb.account === live.account?.address) rows.value.push(mapped(tb))
 			return
 		}
 		if (!inScope) return
 		const idx = indexOf(tb.id)
 		if (idx === -1) rows.value.push(mapped(tb))
-		else if (added === "replace") rows.value[idx] = mapped(tb)
+		else if (rules.added === "replace") rows.value[idx] = mapped(tb)
 	}
 
 	function onBalanceUpdated(tb: TokenBalanceInfo) {
-		if (inActiveScope(tb)) markDirty()
+		const inScope = inActiveScope(tb)
+		if (inScope) markDirty()
 		const idx = indexOf(tb.id)
 		if (idx !== -1) rows.value[idx] = tb as T
+		else if (inScope && rules.insertUnseenUpdated) rows.value.push(mapped(tb))
 	}
 
 	function onBalanceDeleted(tb: TokenBalanceInfo) {
@@ -156,7 +161,7 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalance
 	return {
 		fetchTokenBalances,
 		markDirty,
-		...tokenBalanceEvents(live, rows, mapRow, markDirty, deps.added),
+		...tokenBalanceEvents(live, rows, mapRow, markDirty, deps),
 		invalidate,
 		reset,
 		dispose,

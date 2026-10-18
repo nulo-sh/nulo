@@ -75,6 +75,11 @@ const balances = useTokenBalanceSnapshot({
 	rows,
 	state: balancesState,
 	refetchWhenDirty: false,
+	// A reconnect reads without `load()`: one begun without a whole scope lands nothing.
+	scopeFence: () => {
+		const whole = activeScope() !== undefined
+		return () => whole
+	},
 })
 tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
 tokenBalanceService.onTokenBalanceUpdated.add((tb) => balances.inActiveScope(tb) && balances.onBalanceUpdated(tb))

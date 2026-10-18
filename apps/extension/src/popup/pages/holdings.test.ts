@@ -191,7 +191,7 @@ describe("holdings page", () => {
 		expect(usePopupStore().isOpened("new_token")).toBe(true)
 	})
 
-	test("live events: a delete from any chain removes its row, an add replaces a listed row, an unseen update waits for the next read", async () => {
+	test("live events: a delete from any chain removes its row, an add replaces a listed row, an update lists an unseen one of this chain", async () => {
 		installChromeStorage()
 		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET), row("b2", "BBB", CHAIN_IDS.TESTNET), row("b3", "CCC", CHAIN_IDS.TESTNET)]
 		const w = await mountPage()
@@ -204,7 +204,7 @@ describe("holdings page", () => {
 		await flushPromises()
 
 		const symbols = w.findAll('[data-testid="token-symbol"]').map((s) => s.attributes("data-symbol"))
-		expect(symbols).toEqual(["BB2", "CCC"])
+		expect(symbols).toEqual(["BB2", "CCC", "DDD"])
 		w.unmount()
 	})
 
@@ -287,6 +287,8 @@ describe("holdings page", () => {
 		balanceEvents.connected.invoke(undefined as never)
 		await flushPromises()
 		balanceEvents.added.invoke(row("b2", "BBB", CHAIN_IDS.TESTNET))
+		await flushPromises()
+		expect(symbols()).toEqual(["AAA", "BBB"])
 		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET), row("b2", "BBB", CHAIN_IDS.TESTNET)]
 		release([row("b1", "AAA", CHAIN_IDS.TESTNET)])
 		await flushPromises()

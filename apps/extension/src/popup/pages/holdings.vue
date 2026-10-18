@@ -51,6 +51,7 @@ const balances = useTokenBalanceSnapshot({
 	rows,
 	state: balancesState,
 	added: "replace",
+	insertUnseenUpdated: true,
 	refetchWhenDirty: false,
 })
 tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)

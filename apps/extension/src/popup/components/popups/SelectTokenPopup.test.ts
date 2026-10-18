@@ -272,13 +272,20 @@ describe("SelectTokenPopup", () => {
 		wrapper.unmount()
 	})
 
-	test("the connect a load opens is not a reconnect; a port drop mid-load reloads with no error shown", async () => {
+	test("the connect a load opens is not a reconnect; a port drop mid-load keeps the error line until the reconnect's re-read lands", async () => {
 		let rejectFirst: ((e: Error) => void) | undefined
+		let releaseSecond: (rows: ReturnType<typeof row>[]) => void = () => {}
 		H.getTokenBalances
 			.mockImplementationOnce(
 				() =>
 					new Promise((_resolve, rej) => {
 						rejectFirst = rej
+					}),
+			)
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						releaseSecond = resolve
 					}),
 			)
 			.mockResolvedValue([row(1, "A"), row(2, "B")])
@@ -290,11 +297,16 @@ describe("SelectTokenPopup", () => {
 		await flushPromises()
 		expect(H.getTokenBalances).toHaveBeenCalledTimes(1)
 
-		// The client rejects the pending request and reconnects synchronously, before the rejection settles.
+		// The client rejects the pending request as the port drops, and reports the next Ready in a later task.
 		rejectFirst?.(new Error("port closed"))
+		await flushPromises()
+		expect(wrapper.find('[data-testid="select-token-error"]').exists()).toBe(true)
 		H.balanceConnected.emit()
 		await flushPromises()
 		expect(H.getTokenBalances).toHaveBeenCalledTimes(2)
+		expect(wrapper.find('[data-testid="select-token-error"]').exists()).toBe(true)
+		releaseSecond([row(1, "A"), row(2, "B")])
+		await flushPromises()
 		expect(wrapper.find('[data-testid="select-token-error"]').exists()).toBe(false)
 		expect(rowSymbols(wrapper)).toEqual(["A", "B"])
 
@@ -328,6 +340,32 @@ describe("SelectTokenPopup", () => {
 		H.balanceConnected.emit()
 		await flushPromises()
 		expect(H.getTokenBalances).toHaveBeenCalledTimes(3)
+	})
+
+	test("a reconnect's read begun without a whole scope lands nothing: refused, it shows no error and arms no retry", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		try {
+			const wrapper = await mountOpen([row(1, "A")])
+			H.balanceConnected.emit()
+			H.store.current.network = null
+			await flushPromises()
+			expect(rowSymbols(wrapper)).toEqual([])
+
+			H.getTokenBalances.mockRejectedValueOnce(new Error("port closed"))
+			H.balanceConnected.emit()
+			await flushPromises()
+			await vi.advanceTimersByTimeAsync(2_000)
+			await flushPromises()
+			expect(H.getTokenBalances).toHaveBeenCalledTimes(2)
+			expect(wrapper.find('[data-testid="select-token-error"]').exists()).toBe(false)
+
+			H.store.current.network = { id: "net-main", chainId: CHAIN }
+			await flushPromises()
+			expect(rowSymbols(wrapper)).toEqual(["A"])
+			wrapper.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	test("a port drop re-reads in place: the list stays while the read is out", async () => {
@@ -386,6 +424,8 @@ describe("SelectTokenPopup", () => {
 		await wrapper.setProps({ show: true })
 		await flushPromises()
 		H.balanceAdded.emit(row(2, "MINE"))
+		await nextTick()
+		expect(rowSymbols(wrapper)).toEqual(["MINE"])
 		release([row(1, "A")])
 		await flushPromises()
 		expect(rowSymbols(wrapper)).toEqual(["A"])

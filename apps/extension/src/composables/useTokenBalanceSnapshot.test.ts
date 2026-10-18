@@ -169,17 +169,6 @@ describe("useTokenBalanceSnapshot", () => {
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(4)
 	})
 
-	test("an update for an unseen id lists nothing, in scope or not, until the next read", async () => {
-		const s = setup()
-		s.client.getTokenBalances.mockResolvedValueOnce([row(1)]).mockResolvedValueOnce([row(1), row(9)])
-		await s.snap.fetchTokenBalances()
-		s.snap.onBalanceUpdated(row(8, 2))
-		s.snap.onBalanceUpdated(row(9))
-		expect(ids(s.rows)).toEqual([1])
-		await s.snap.fetchTokenBalances()
-		expect(ids(s.rows)).toEqual([1, 9])
-	})
-
 	test("an add for a listed id adds nothing; a new id lands through mapRow", async () => {
 		const s = setup({ mapRow: (r) => ({ ...r, mapped: true }) as never })
 		s.client.getTokenBalances.mockResolvedValue([row(1)])
@@ -265,6 +254,24 @@ describe("useTokenBalanceSnapshot — the rules a view keeps over the defaults",
 	})
 	afterEach(() => {
 		vi.useRealTimers()
+	})
+
+	test("an unseen update is ignored; with insertUnseenUpdated an in-scope one is listed through mapRow", async () => {
+		const home = setup()
+		home.client.getTokenBalances.mockResolvedValue([row(1)])
+		await home.snap.fetchTokenBalances()
+		home.snap.onBalanceUpdated(row(9))
+		expect(ids(home.rows)).toEqual([1])
+
+		const s = setup({ insertUnseenUpdated: true, mapRow: (r) => ({ ...r, mapped: true }) as never })
+		s.client.getTokenBalances.mockResolvedValue([row(1)])
+		await s.snap.fetchTokenBalances()
+		s.snap.onBalanceUpdated(row(8, 2))
+		s.snap.onBalanceUpdated(row(9))
+		expect(s.rows.value).toEqual([
+			{ ...row(1), mapped: true },
+			{ ...row(9), mapped: true },
+		])
 	})
 
 	test("added: replace swaps a listed row for the add, through mapRow; a new id is appended", async () => {
