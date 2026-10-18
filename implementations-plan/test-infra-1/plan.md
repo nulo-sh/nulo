@@ -1,7 +1,7 @@
 ---
 plan: test-infra-1
 tier: mid
-status: arc 1 merged (#706); arc 2 in progress (Phases 4-5 ✓)
+status: arc 1 merged (#706); arc 2 implemented, in review (Phases 4-6 ✓)
 issues: "#550 (arc 1 Closes), #561 (arc 3 Closes), #536 (arc 3 Closes), #540 (arc 4 Closes)"
 driver: claude-code
 claude_model: opus
@@ -110,7 +110,7 @@ Four test-infrastructure refactors the owner picked on decision page 37 (option 
 - **Tests:** `tests/helpers/chrome-storage-mock.test.ts` covers: `persist: false` records `set` and `remove` and keeps nothing; the default mode still persists. Each moved suite keeps its test count.
 - **Validation gate:** Phase 4's commands plus `bun run test:all`. Pass: exit 0; test counts unchanged per moved file, logged.
 
-### Phase 6 — one e2e poll
+### Phase 6 — one e2e poll ✓
 1. Add `apps/extension/tests/e2e/fixtures/poll.ts`, with `scripts/e2e/poll.test.ts`.
 2. Write the per-loop inventory first (predicate, terminal failures, timeout result, deadline owner), into the PR body. Then move the deadline loops in fixture files no lane edits: `session.ts`, `tokens.ts`, `journal.ts` (the accepted predicates stay byte-identical), `send-burst.ts`, `aztec.ts`, `token-list.ts`, `incoming-poll-gate.ts`, `mining-hold.ts`, `popups.ts`, `browser/firefox.ts`, `browser/webdriver-classic.ts` (its `done` accepts the driver exiting, as the loop does today), `boot-guard.ts`, `extension.ts`. Then move the in-spec loops in specs no lane edits. At the arc's start, re-check each file with `git diff --name-only origin/dev...worktree-<lane>` for every running lane; a file in any lane's diff waits for arc 3.
 3. `passkey-backup.test.ts`: parameterise `armProgressObserver` by its predicate, arm it for Encrypting (the card text only, as the poll checks today) before the second Protect click, and delete the 100 ms poll.
@@ -247,6 +247,8 @@ It found `awaitedBus`, the storage moves, `world(opts)`, the L and B catches and
 **Arc 2 Opus diff review** (opus, beside round 1, read at 9cf6bd6f): `approve with fixes`. Taken in f68a6e98: `waitForTarget` throws its old text again (two triage rows in the e2e-testing skill key on it); a test for a handler that dispatches re-entrantly (it fails when the outer collector is not restored). Not taken: the CREATE-BALANCE test parks in allocation, before the write its title names, so no test pins the post-write switch fence (a mutant without it passes 154 tests). The park point predates this arc and the queue's own gates probably drop the event: a closed known limit, #742. It re-ran the token-balance mutations on scratch copies (M1-M4 fail; FAN-OUT and CREATE-BALANCE turn red with all their redundant fences removed) and found every other moved loop's interval, deadline, contract and diagnostics kept.
 
 **Arc 2 Codex fix loop, round 2** (resumed, verification of 9cf6bd6f and f68a6e98): `approve`. Its three reproductions now show no forced block, mine or refresh past the deadline; `between` runs after the deadline check and before the pause; `waitForL1ToL2Message`'s success, warning and error branches hold; the restored `waitForTarget` text keeps its inventory; the re-entrant dispatch keeps the outer collection. No new material defect. The loop converged in two rounds.
+
+**Arc 2 Codex fix loop, round 3** (resumed, the `origin/dev` merge fd52d5be only; it touched two files the arc's storage-stub moves edit, `useFullBackupExport.test.ts` and `export/full-passkey.pins.test.ts`): `approve`. Dev's added tests use in-memory state and mocked export material, with no storage write read back, so the discard-write stub holds; each file keeps one helper import and one discard-write setup; no arc change was lost or doubled. Both files pass (55 tests) with titles equal to `origin/dev`'s.
 
 ## Seeds
 

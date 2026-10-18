@@ -24,3 +24,14 @@ Fast layers on f68a6e98: `bun run lint` 0, `bun run typecheck:all` 0, `bun run t
 - Smoke Firefox on f68a6e98, attempt 1: 59 files passed, 1 failed: `viewers-csp` (untouched by this arc), `logLines` timed out waiting for the editor to grow by its 60 probe lines; two later tests in the file passed through the same helper. Traced to a plausible cause in the viewer's 100-line trim at 1,100 lines and filed as #749 (`flake`). The one rerun: 60 files passed, 3 skipped, 260 tests, 41 min.
 - Network Chrome on f68a6e98: the run was stopped by the agent tool's two-hour limit for a background command with 128 of 129 files reported (123 run, 5 skipped on Chrome). Every run file passed except `import-handshake-note-matrix`'s passkey row, the pre-existing red of #643 (its import refuses a resealed MAC-bound backup; red since #598, the file is skipped on CI); it failed after 343 s, inside `importPasskeyFullBackup`'s 300 s wait, which this arc does not touch. The one file never reported, `import-handshake-note`, then ran alone on the same head: 2 tests passed. Later long suites run detached (`setsid nohup`) with a waiter, so the tool limit cannot stop them.
 - Network Firefox on f68a6e98, detached: 28 of 129 files reported in 45 min, none failed; stopped (SIGTERM to its process group, the runner tore down its own services) when the gate moved to the head merged with `dev`, which supersedes every run above.
+
+### The gate on the merged head (fd52d5be, `origin/dev` merged)
+
+Fast layers: `bun install --frozen-lockfile`, `bun run lint` 0, `bun run typecheck:all` 0, `bun run test:all` 0 (extension 847 files, 13879 tests). E2E at retry 0 (no `retry x` line in any log), load1 under 150 at each start. To fit the host's time, suites that share nothing ran side by side: network Firefox beside smoke Chrome, then smoke Firefox from a second armed build passed through `EXTENSION_PATH` (smoke's setup kills every browser loading its extension path, so it must not share `dist/firefox` with a network run), and network Chrome from a temporary detached worktree at the same commit (a network run owns its worktree's `.e2e-state`), removed afterwards.
+
+- Smoke Chrome: 57 files passed, 6 skipped, 260 tests, 29 min.
+- Smoke Firefox: 60 files passed, 3 skipped, 260 tests, 40 min.
+- Network Firefox: 123 files passed, 5 skipped, 1 failed, 226 tests passed, 2 h 22 min. The failure is #643's passkey row again (`importPasskeyFullBackup`'s 300 s `waitForHash`, `helpers/handshake-import.ts:233`, untouched); the Firefox reproduction is on the issue.
+- Network Chrome: 123 files passed, 5 skipped, 1 failed, 228 tests passed, 1 h 57 min; the failure is #643's passkey row, as on Firefox.
+
+Every suite passed except #643's passkey row, which fails the same way on both browsers in a file CI skips and this arc does not touch; no rerun was spent on it.
