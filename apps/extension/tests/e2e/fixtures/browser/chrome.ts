@@ -280,6 +280,7 @@ export const chromeDriver: BrowserDriver = {
 	virtualAuthenticator: cdpVirtualAuthenticator,
 	holdNextCredentialGet: async () => {},
 	pxeHostState,
+	closePxeHost: (page) => page.evaluate(() => chrome.offscreen.closeDocument()),
 	stopBackground,
 	backgroundAlive,
 	evaluateInBackground,
