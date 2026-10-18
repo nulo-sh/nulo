@@ -107,8 +107,8 @@ function hasActionsContent() {
 				</div>
 			</Flex>
 
-			<Flex direction="column" gap="4" :class="$style.text">
-				<Flex align="center" :gap="wrapTrailing ? undefined : '6'" :class="wrapTrailing && $style.title_row_wrap">
+			<Flex direction="column" gap="4" :class="$style.text" data-testid="activity-text">
+				<Flex align="center" :gap="wrapTrailing ? undefined : '6'" :class="wrapTrailing && $style.title_row_wrap" data-testid="activity-title-row">
 					<span :id="titleId" :class="[$style.title, oneLineTitle && $style.title_one_line]" data-testid="activity-title">{{ title }}</span>
 					<span v-if="wrapTrailing" :class="$style.trailing"><slot name="title-trailing" /></span>
 					<slot v-else name="title-trailing" />
@@ -240,10 +240,11 @@ function hasActionsContent() {
 	white-space: nowrap;
 }
 
-/* Equal and opposite margins cancel on one line; wrapped, the group starts 8.78 px (the separator's
- * 2.78 px glyph at 14 px Space Grotesk 700, plus its 6 px gap) left of the clip, the chip under the title. */
+/* Equal and opposite margins cancel on one line; wrapped, the group starts its separator's box and gap
+ * left of the clip, the chip under the title. The box is the glyph's own width at 14 px Space Grotesk
+ * 700, so a row that fits lays out as without it, and no font metric moves the wrapped chip. */
 .title_row_wrap {
-	--sep-room: 8.78px;
+	--sep-room: calc(2.78px + 6px);
 	flex-wrap: wrap;
 	gap: 4px 6px;
 	overflow-x: clip;
@@ -258,6 +259,11 @@ function hasActionsContent() {
 	align-items: center;
 	gap: 6px;
 	margin-left: calc(-1 * var(--sep-room));
+}
+
+.trailing > :first-child {
+	flex: none;
+	width: 2.78px;
 }
 
 .secondary_row {

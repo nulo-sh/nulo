@@ -697,16 +697,20 @@ type ReceiptChip = {
 function readReceiptChip(page: Page): Promise<ReceiptChip> {
 	return page.evaluate(() => {
 		const row = document.querySelector('[data-testid="tx-incoming-card"]')
-		const titleEl = row?.querySelector('[data-testid="activity-title"]')
-		const chipEl = row?.querySelector('[data-testid="tx-incoming-kind-chip"]')
-		const sepEl = chipEl?.previousElementSibling
-		const titleRow = titleEl?.parentElement
-		const amountCol = row?.querySelector('[data-testid="activity-amount-col"]')
-		if (!titleEl || !chipEl || !sepEl || !titleRow?.parentElement || !amountCol) throw new Error("the receipt row is incomplete")
-		const [title, chip, sep, clip] = [titleEl, chipEl, sepEl, titleRow].map((el) => el.getBoundingClientRect())
+		const ids = [
+			"activity-title",
+			"tx-incoming-kind-chip",
+			"tx-incoming-kind-sep",
+			"activity-title-row",
+			"activity-text",
+			"activity-amount-col",
+		]
+		const els = ids.map((id) => row?.querySelector(`[data-testid="${id}"]`))
+		if (els.some((el) => !el)) throw new Error("the receipt row is incomplete")
+		const [title, chip, sep, clip, text, amountCol] = els.map((el) => (el as Element).getBoundingClientRect())
 		return {
 			need: title.width + 6 + sep.width + 6 + chip.width,
-			space: amountCol.getBoundingClientRect().left - 10 - titleRow.parentElement.getBoundingClientRect().left,
+			space: amountCol.left - 10 - text.left,
 			wrapped: chip.top >= title.bottom - 0.5,
 			gaps: { titleToSep: sep.left - title.right, sepToChip: chip.left - sep.right },
 			chipLeft: chip.left - clip.left,
@@ -790,7 +794,7 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 		dapp: DAPP_NAME,
 	})
 	await seedTokenRow(page, scope, RECEIPT_TOKEN_ID)
-	// The owner's case: "Received privately" beside "+28.43950" has no room at 360px.
+	// "Received privately" beside "+28.43950" has no room at 360px.
 	await seedReceipt(page, scope, {
 		tokenId: RECEIPT_TOKEN_ID,
 		amount: "28439501",
