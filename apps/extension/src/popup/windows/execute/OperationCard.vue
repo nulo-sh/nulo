@@ -23,7 +23,7 @@
  */
 import AppFeeLine from "@/popup/components/modules/send/AppFeeLine.vue"
 import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue"
-import { isSelfPay } from "@nulo/wallet-bridge"
+import { carriesFeeSettings, isSelfPay } from "@nulo/wallet-bridge"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import type {
 	DecodedCall,
@@ -119,7 +119,7 @@ const emit = defineEmits<{
 // TS type predicate so the template's `v-if="isSendTx(op)"` narrows op
 // to the send-like subtype downstream (lets us access `op.feeSettings`
 // without TS complaining that non-send kinds don't carry that field).
-const isSendTx = (op: UIOperation): op is SendLikeUIOp => op.kind === "send_transaction" || op.kind === "aztec_sendTx"
+const isSendTx = (op: UIOperation): op is SendLikeUIOp => carriesFeeSettings(op)
 
 /** The method a dApp asked for by naming the account itself as payer with no fee call: the card
  *  locks to it, so the sponsored FPC is never on offer for a transaction the app expects the

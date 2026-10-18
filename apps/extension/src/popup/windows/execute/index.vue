@@ -20,7 +20,7 @@ import { resolveOperationScope, scopeBannerCopy, scopeBannerState } from "./scop
 import { createScopeFollow } from "./scope-follow"
 import { requireNetwork } from "@/utils/core"
 import { storageLocalSet } from "@/utils/storage"
-import { isSelfPay } from "@nulo/wallet-bridge"
+import { carriesFeeSettings, isSelfPay } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
 import { type FeePayerPick, personPaysAppPayment, waitsForFeeFigure } from "./fee-figure"
 import { authwitDisplayCall, grantContentsOf, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
@@ -170,8 +170,7 @@ const {
 })
 
 /** A send whose fee the app pays through its own payload. */
-const isAppPaid = (op: UIOperation | undefined): boolean =>
-	(op?.kind === "aztec_sendTx" || op?.kind === "send_transaction") && isEmbeddedFeePayment(op)
+const isAppPaid = (op: UIOperation | undefined): boolean => carriesFeeSettings(op) && isEmbeddedFeePayment(op)
 
 /** The figure an approval carries is on screen before Confirm; a failed estimate keeps Confirm off. */
 const awaitsFeeFigure = computed(() =>
@@ -387,7 +386,7 @@ const handleFeeUpdate = (index: number, value: FeeSettings | undefined) => {
 	// confused by a pre-existing AztecAddress/Fr structural mismatch
 	// between popup-resolved Operation and wallet-bridge's, so we cast to
 	// the draft shape explicitly. Runtime safety is in the kind check.
-	if (op.kind !== "send_transaction" && op.kind !== "aztec_sendTx") return
+	if (!carriesFeeSettings(op)) return
 	;(op as { feeSettings?: FeeSettings }).feeSettings = value
 	clearError()
 	if (value) scheduleFeeEstimate(index, { index, feeSettings: value })
@@ -424,7 +423,7 @@ const approve = async () => {
 		// contributes only its fee choice and the ids the SW minted for it.
 		const deltas: OperationApprovalDelta[] = operations.value.map((op, index) => {
 			const estimate = feeEstimates.value[index] ?? undefined
-			const feeSettings = op.kind === "aztec_sendTx" || op.kind === "send_transaction" ? op.feeSettings : undefined
+			const feeSettings = carriesFeeSettings(op) ? op.feeSettings : undefined
 			return {
 				feeSettings,
 				estimateId: estimate?.estimateId,
