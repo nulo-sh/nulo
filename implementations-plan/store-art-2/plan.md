@@ -1,7 +1,7 @@
 ---
 plan: store-art-2
 tier: light
-status: planned, Codex approve (round 2); awaiting the orchestrator
+status: approved by the panel 2026-10-18 (auto-continue); arc 1 phases 1-2 green, in review
 issues: "#627 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -61,7 +61,7 @@ F5 and F6 hold at the plan base; phase 1 step 2 checks them again when `B` moves
 - I2. The tile renders byte-identical again (F5). If not, D2 applies.
 - I3. Home's fit may differ from 31 px; the spec computes it. Nothing in the fit keeps the Holdings row clear of the fixed hero, so phase 2 checks it.
 
-**Asks:** none beyond the set's signature, which the orchestrator's decision page carries ([OWNER-ASKS.md](OWNER-ASKS.md)).
+**Asks:** none at planning beyond the set's signature, which the orchestrator's decision page carries. Phase 2 raised OA-1 (screenshot 3's cut row, D4 (b)); the set ships as produced ([OWNER-ASKS.md](OWNER-ASKS.md)).
 
 ## UI impact
 
@@ -69,7 +69,7 @@ The store listing's pictures (both stores): the five framed screenshots, their f
 
 ## Arc 1 (#627)
 
-### Phase 1: capture and frame
+### Phase 1: capture and frame ✓
 1. Run `git fetch origin dev`. Record `B` = `git rev-parse origin/dev`.
 2. If `B` equals this plan's base, run `git switch -c store-art-2-a1`. Otherwise run `git switch -c store-art-2-a1 origin/dev`, then cherry-pick the plan commit, and write `git log --oneline b53e1d4a..B -- apps/extension/src packages/design apps/extension/tests/e2e apps/extension/store apps/extension/scripts/store-art.ts` and F6's state (`gh pr view 743 --json state`) to `lessons/phase-1.md`.
 3. Copy the 11 committed PNGs at `B` into `S/pairs/old/`, in the store's layout (`captures/*.png`, `*.png`), with `git show B:<path>`.
@@ -86,8 +86,9 @@ The store listing's pictures (both stores): the five framed screenshots, their f
 - `git status --short apps/extension/store` lists only modified PNGs: at most the five captures, the five screenshots and the tile.
 - The IHDR sizes are 720×1200 (captures) and 1280×800 (screenshots).
 Layers: e2e-live-network (the sandbox run).
+Result: pass on the first run at `B` = `b53e1d4a` (344 s; fits 58 and 46 px; the tile byte-identical, so D2 did not apply). [lessons/phase-1.md](lessons/phase-1.md).
 
-### Phase 2: review against the captions
+### Phase 2: review against the captions ✓
 1. View each new picture beside its old one and its caption. Write one verdict per frame in `lessons/phase-2.md` ("pass" or "pending owner", D4), with what changed.
 2. Check every frame: each glyph draws (no empty box, no icon name as text); no spinner, skeleton or toast; the header's network chip reads Testnet (the approve window's account card reads "SANDBOX", as in the signed set).
 3. Check each frame. Home: the hero reads `$1,250.00` and `1,000 FJ` twice; the USD Coin row is whole below the hero's shadow, its private and public split readable; no activity row is cut by the nav. Send: the recipient card reads Alice; both type toggles read private; the amount line (≈ $120.00, the balance, MAX) sits clear of the footer; the footer's publish strip reads You, To and Amount hidden. Approve: the request names the app and the account; its grant sections and both buttons are whole. Security: the Lock page shows Lock now, Auto-lock and the strict mode line naming the password. History: every row's private or public chip is whole (a chip may drop under its title).
@@ -100,6 +101,7 @@ Layers: e2e-live-network (the sandbox run).
 - `bun run lint`, `bun run typecheck:all`, `bun run test:all` and `bun run check:plans` (after staging) exit 0, each started with load1 under 150.
 - `git diff --name-only B...HEAD` lists only the phase 1 PNGs, `implementations-plan/` files, and `store-captures.test.ts` if D4 fixed it.
 Layers: lint, typecheck, unit, the plans gate.
+Result: pass. Four frames pass; frame 3 is pending owner (OA-1). `I` = `7081a393`. [lessons/phase-2.md](lessons/phase-2.md).
 
 ## Decision ledger
 
