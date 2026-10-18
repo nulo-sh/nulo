@@ -47,3 +47,4 @@
 - 2026-10-18 15:02Z A7 smoke Firefox, whole suite, armed build at 1f185f10, retry 0: 60 files passed, 3 skipped (standing env gates), 260 tests passed, 14 skipped, in 2702 s.
 - 2026-10-18 15:11Z A7 network Chrome send-picker 1/1 in 211 s (prover on, retry 0; a first start over load1 150 was stopped after 6 s and rerun). A7 ✓.
 - 2026-10-18 15:15Z A7 dev merged again at 2d9ba315 (#772, #778; no A7 file, lockfile unchanged): lint 0, typecheck:all 0, test:all 0 (extension 13886 passed), check:plans 0. The e2e ran on the A7 head before the merge.
+- 2026-10-18 15:38Z PR #781 CI on 06a64409: 50 checks pass, 6 skipped; all five required checks green (both smoke and both network lanes ran by path filter, no label).
