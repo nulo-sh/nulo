@@ -202,6 +202,8 @@ Assumes F8.
 
 **Arc 1, Opus diff review** (alongside round 1): conditional approve, 5 findings, all checked and accepted. It confirmed the capture-phase fix and the rejection above. `passkey-backup.test.ts`'s closing note said a real passkey round trip was not landed and the export ceremony fails; both are stale, so it now points to the matrix's passkey row and `passkey-toolbar-panel`. The follow check's two assertions name what failed, and its doc says a scroll away is refused. `security-reset` states that the stand-in's 400 ends a discovery at once, which is why the seed can follow Home. An `OWNER-ASKS.md` line still said "neither" of three asks.
 
+**Arc 1, post-implementation round 2** (Codex resume, over `ba49b48a..b761f0dc`): approve, no new material finding. The loop converged.
+
 ## Delivery
 
 - **Arc 1**, branch `ci-e2e-hygiene-1-a1` off `origin/dev` with the plan commit cherry-picked (the orchestrator's call), phases 1-4. Title: `test(e2e): fix four e2e reds at their cause; run the passkey import row in ci`. Body: `Closes #749`, `Closes #630`, `Closes #612`, `Closes #643`.

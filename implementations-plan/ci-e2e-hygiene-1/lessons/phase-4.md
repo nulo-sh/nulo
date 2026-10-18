@@ -7,3 +7,8 @@
   - `bun run lint` 0 (its `noImportCycles` step included), `bun run typecheck:all` 0, `bun run test` 0 (848 files).
   - Smoke, retry 0: Chrome `passkey-backup` 3/3 and `passkey-retry` 9/9 (`passkey-toolbar-panel` is Firefox-only); Firefox all three, 18/18 (310 s).
   - Network, `NULO_E2E_PROVERLESS=1`, retry 0, both matrix rows and `import-handshake-note`: Chrome 4/4, Firefox 4/4. The passkey row took 65 s on Chrome and 44 s on Firefox, against the plan's estimate of about 4 min; the settings row 92 s and 88 s.
+
+## Post-implementation, arc 1
+
+- Round 1, Codex (session `01a14f71`): conditional approve, 3 findings; the capture-phase scroll guard and the narrower `passkeyBackupVerifies` doc accepted, a text-change tracker rejected (`showScrollBtn` has two setters, both covered). Opus diff review alongside: conditional approve, 5 small findings, all accepted (assertion messages, a stale note, a stated stand-in assumption, two wording fixes).
+- Round 2, Codex resume: approve, no new material finding.
