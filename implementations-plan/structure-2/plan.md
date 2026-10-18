@@ -17,12 +17,12 @@ Four issues, three arcs, each one PR against `dev`, not stacked (D-orch-1). Reco
 
 | Arc | Issues | PR lines | Released when |
 |---|---|---|---|
-| 1 | #735: settings rows (Privacy, Display, Lock), detail hero line, explorer name, hero observer | `Refs #735` | #735 carries the owner's recorded pick (OA-1) |
+| 1 | #735: settings rows (Privacy, Display, Lock), detail hero line, explorer name, hero observer; #750's map and comment | `Refs #735`, `Closes #750` | #735 carries the owner's recorded pick (OA-1) |
 | 2 | #680 | `Closes #680` | dapp-boundary-3 arc 2 merges |
 | 3 | #735: profile-flow notices, Developer plumbing; #730 | `Closes #735`, `Closes #730` | #743, test-infra-1 arc 3 and arc 1 merge; with OA-1 = C, #743 alone, and the PR carries `Closes #730` only |
-| none | #750 | none | no split pays at HEAD (§ #750); the issue stays open for the decision page its body names |
+| (arc 1) | #750 | `Closes #750` | no split pays at HEAD (§ #750); the owner's P47-05 closes it with the map recorded (D13) |
 
-Arc 1 runs on `worktree-structure-2`, which carries this plan. Arcs 2 and 3 do not depend on each other; each branches from `dev` at its release as `structure-2-a2` / `structure-2-a3`. At each arc's start, `git diff --name-only origin/dev...<branch>` of every running lane must miss the arc's files; a hit waits.
+Arc 1 ran on `structure-2-a1` off `origin/dev` with this plan cherry-picked, in worktree `structure-2-arc1` (D13). Arcs 2 and 3 do not depend on each other; each branches from `dev` at its release as `structure-2-a2` / `structure-2-a3`. At each arc's start, `git diff --name-only origin/dev...<branch>` of every running lane must miss the arc's files; a hit waits.
 
 ## Outcome & Quality Bar
 
@@ -107,22 +107,22 @@ Arc 1 runs on `worktree-structure-2`, which carries this plan. Arcs 2 and 3 do n
 
 ## Arc 1 (after OA-1)
 
-### Phase 1: the settings control row (#735)
+### Phase 1: the settings control row (#735) ✓
 1. Add `.control_title`, `SettingControlRow.vue` and `SettingControlRow.test.ts`.
 2. Widen `useSettingUpdate` and extend its test.
 3. Move Privacy P1-P3, Display D1-D4 and Lock L1 onto the row, in the setup order above. Lock L2's title composes `.control_title`. Display's and Lock's failure toasts use the label. Delete Display's `.item` rules.
 Files: `components/ui/Settings/{SettingControlRow.vue,SettingControlRow.test.ts,settings-row.module.css}`, `composables/useSettingUpdate{,.test}.ts`, `popup/pages/settings/{privacy,display,lock}.vue`, the generated `src/types/{components.d.ts,auto-imports.d.ts,.eslintrc-auto-import.json}`.
 Tests: the row, 5 cases: title and caption with their testids; no testid attribute when none is passed; the control slot; `align`, `gap` and `data-testid` reach the root; the directive reaches the root element. `useSettingUpdate`, 4 cases: `landSettings` copies a stored value, skips a key updated since, ignores a key with no row; `onSettingUpdate` applies a moved value, paired with its never-happens case for an unchanged one.
 
-### Phase 2: the detail hero line and the explorer name (#735)
+### Phase 2: the detail hero line and the explorer name (#735) ✓
 Files: `wallet/constants/explorers{,.test}.ts`, `popup/components/modules/tx/DetailHeroMeta{.vue,.test.ts}`, `popup/pages/{tx,received,journal}/[id].vue`, `popup/components/popups/IncomingTrustPopup.vue`, `popup/pages/detail-page.styles.test.ts`.
 Tests: `explorerDisplayName`, 3 cases (known id, `null`, unknown id). `DetailHeroMeta`, 7 cases: time alone shows no separator; a link with a time; the copy fallback emits `copy` with the hash; no hash and no URL shows neither; testids land; the link opens a new tab with `noopener noreferrer`; a click on the link does not reach the parent. `detail-page.styles.test.ts`, 1 case: the component's hero classes compose from `detail-page.module.css` with no rule of their own.
 
-### Phase 3: the hero observer (#735)
+### Phase 3: the hero observer (#735) ✓
 Files: `composables/useHeroVisible{,.test}.ts`, `popup/pages/activity.vue`, `popup/pages/settings/index.vue`, the generated types.
 Tests: `useHeroVisible`, 10 cases (CLAUDE.md minimum): starts true; no element creates no observer; observes on mount with `threshold: 0`; a leaving entry sets false; a returning entry sets true; a batch reads its last entry, in both orders; disconnects on scope dispose; no update after dispose; one observer per mount.
 
-### Phase 4: the #750 comment
+### Phase 4: the #750 comment ✓
 Rewrite `incoming-transfer/service.ts:1916` to name the scan's cursor writes and the two lifecycle writers. No code change.
 
 ### Arc 1 validation gate
@@ -194,6 +194,9 @@ The lane brief's no-ask record says "none"; nothing here goes beyond it.
 | D9 | Identity: titles, unchanged bodies, normalised DOM and pixels | titles alone; DOM snapshots committed | both asked for more than titles |
 | D10 | #735's enhancement gate goes to the owner (OA-1) | the lane launch as the record | both flagged it |
 | D11 | Arc 1 deviation: `a11y-css.test.ts`'s per-file anchor table follows the hero link into `DetailHeroMeta` (one row added, three counts down by one; title and check unchanged) | leaving the pin unchanged (impossible once the link moves) | implementer, [lessons/phase-2.md](lessons/phase-2.md) |
+| D12 | Arc 1 deviation: the rendered-identity DOM comparison also renumbers Vue `useId` values by first appearance and replaces the run's random profile and network ids; captures wait for the header's health poll to sit still. A base-vs-base control is identical under the same rules | comparing raw ids (a base-vs-base run differs on them) | implementer, [lessons/phase-4.md](lessons/phase-4.md) |
+| D13 | Arc 1 deviations from the spawn: branch `structure-2-a1`, not `worktree-structure-2`; #750 closes with arc 1 (owner pick P47-05), where D7 kept it open | D7's open issue | owner (P47-05), orchestrator |
+| D14 | Arc 1 review: `useHeroVisible`'s "nothing after unmount" case, which only tested its fake, became two cases with two pages mounted at once | keeping a case that cannot fail alone | Codex and Opus round 1 |
 
 ## Audit verdicts
 
@@ -205,13 +208,15 @@ The lane brief's no-ask record says "none"; nothing here goes beyond it.
 
 **Final pass** (fresh Codex session `01a14edf`): `conditional approve (with conditions: arm incoming-arrival correctly and require store-captures to execute before counting its gate as passed)`. Both verified (`incoming-arrival.test.ts:13`, `scripts/e2e/proverless-guard.sh:54-59`; `store-captures.test.ts:392`) and applied: `NULO_E2E_PROVERLESS=1` on the incoming-arrival run; store-captures removed from the gate. It found no security defect and judged plan A sound against outline B now that rendered identity is a release condition. Resumed on the two edits: `approve`.
 
+**Arc 1 post-implementation.** Codex (gpt-6.1-sol, high, session `01a14f33`) round 1: `conditional approve`, no production regression; two Low test findings (the post-unmount case tested its fake; "disconnects only its own" never had two pages mounted) and one comment nit, all accepted (D14). Opus 5.5 diff review beside it: `approve`; one Low (the same post-unmount case) and eight nits, seven accepted (a title typo, two missing assertions, three comment fixes, the index read in place of an `.at(-1)` guard the platform never needs); the changed existing test lines go in the PR body; the `Object.keys(rows)` line stays. Round 2 (resumed): `approve`, no new material findings.
+
 ## Delivery
 
-- Arc 1: `refactor(ui): one settings control row, detail hero line and hero observer` (74 characters). Body: `Refs #735`, the #750 comment and where the map lives, the identity tables, each browser's smoke wall-clock (no e2e scenario added).
+- Arc 1: `refactor(ui): one settings control row, detail hero line and hero observer` (74 characters). Body: `Refs #735`, `Closes #750` (P47-05) with the map's permalink, the identity tables, each browser's smoke wall-clock (no e2e scenario added).
 - Arc 2: `fix(connect): bind an allow's session row to the profile it was given under` (75). `Closes #680`.
 - Arc 3: `refactor: profile-flow notices, developer rows, presto onboarding leftovers` (75). `Closes #735`, `Closes #730`.
 - Open each PR without labels; add `e2e:extension-smoke` or `e2e:extension-network` only when the path filter would skip a suite the arc needs.
-- At arc 1's PR, comment on #750 with the verdict and this plan's section; the issue stays open.
+- At arc 1's PR, comment on #750 with the verdict, this plan's section and the reopening condition; the PR closes it (P47-05).
 - Arcs 2 and 3 are disjoint and may run at once; arc 1's phases share pages and run in order.
 
 ## Post-implementation

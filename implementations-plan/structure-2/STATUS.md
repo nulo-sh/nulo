@@ -8,3 +8,4 @@
 - 2026-10-18 arc 1 phase 1 gate (fast: lint, typecheck:all, test 13879/13879, phase files): pass.
 - 2026-10-18 arc 1 phase 2 gate (fast: lint, typecheck:all, test 13890/13890 after D11, phase files): pass; first unit run red on a11y-css anchor table (D11).
 - 2026-10-18 arc 1 phases 3 and 4 gate (fast: lint, typecheck:all, test 13900/13900, phase files): pass.
+- 2026-10-18 arc 1 gate: test identity pass; test:all, audit:vue, check:plans pass; smoke chrome 60/62 and firefox 56/62 pass (retry 0); rendered identity chrome 64/64, firefox 64/64; Codex r1 conditional approve (fixed), r2 approve.
