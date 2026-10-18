@@ -67,7 +67,7 @@ Each phase is one issue, with its change map, tests and gate. Paths are under `a
   - `tests/e2e/appearance.test.ts`: in the existing chip test, at 360 px, assert that `network-name` is not cut (`scrollWidth <= clientWidth`) and that `header-lock` is as tall as `network-button`.
 - **Gate**: lint, typecheck; `cd apps/extension && bun --bun vitest run src/components src/utils/type-role-ban.test.ts`; `bun run test:e2e -- tests/e2e/appearance.test.ts --retry=0`, also with `NULO_E2E_BROWSER=firefox`. Pass: all green, and the cut assertion fails on the base's 10 px padding at 11 px.
 
-### Phase 3 — #653 three 13 px wraps
+### Phase 3 — #653 three 13 px wraps ✓
 
 - First, before any edit: shoot the grant on a registered token (structured rows, which `.full .row` also stacks) with the scratch window spec, as its "before" picture.
 - `src/popup/windows/execute/CallArguments.vue`: replace `.full .row > :first-child { flex-shrink: 0; max-width: 50% }` with `.full .row { flex-direction: column; gap: 2px }` and `.full .row > :last-child { text-align: left }`. Each key then sits above its value (picture `p46-653-exec-b`).
@@ -80,7 +80,7 @@ Each phase is one issue, with its change map, tests and gate. Paths are under `a
   - Every line count uses text-line rectangles from a `Range`, and requires the expected non-empty text first.
 - **Gate**: lint, typecheck; `cd apps/extension && bun --bun vitest run src/popup/windows/execute src/components/composite/send src/popup/components/modules/general`; `bun run test:e2e -- tests/e2e/type-roles.test.ts --retry=0`; `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/type-roles-windows.test.ts tests/e2e/network/send-amount-exact.test.ts tests/e2e/network/authwit-lifecycle.test.ts`. Run each e2e command again under `NULO_E2E_BROWSER=firefox`. Pass: all green.
 
-### Phase 4 — #652 Manage accounts on two lines
+### Phase 4 — #652 Manage accounts on two lines ✓
 
 - `src/popup/pages/settings/accounts/index.vue`: an imported row's description has two lines. The first is `<Text variant="meta" color="tertiary" data-testid="account-imported-badge">imported</Text>`, as a block. The second is the address line (`manage-accounts-address`), with its head and tail only. Delete the " · " separator, the 11 px rule and the stale template comment. Write one sentence on the single-truncation invariant.
 - `scripts/type-roles/exceptions.ts`: delete the accounts `OVERRIDES` entry and `ACCOUNTS` once it is unused. `identifier-sites.expected.json` stays unchanged, because the nesting is kept.
