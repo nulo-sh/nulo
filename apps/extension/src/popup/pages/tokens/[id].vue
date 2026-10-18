@@ -50,6 +50,7 @@ const router = useRouter()
 const token = ref()
 const tokenBalance = ref()
 const isRefreshingBalance = ref(false)
+const scrolled = ref(false)
 
 const tokenService = new TokenServiceClient()
 tokenService.onTokenDeleted.add(onTokenDeleted)
@@ -110,6 +111,10 @@ watch(
 		scheduleRefresh()
 	},
 )
+
+function onScroll(event) {
+	scrolled.value = event.currentTarget.scrollTop > 0
+}
 
 /** Trailing actions */
 const handleRefreshBalance = () => scheduleRefresh()
@@ -213,99 +218,114 @@ onBeforeUnmount(() => {
 
 <template>
 	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper">
-		<SubPageHeader
-			:title="token?.symbol || ''"
-			:backTo="'/popup/general'"
-			leadingIcon="holdings"
-		>
-			<template #trailing>
-				<Tooltip position="end" :disabled="isRefreshingBalance || !tokenBalance?.updatedAt">
-					<button
-						@click="handleRefreshBalance"
-						type="button"
-						:disabled="isRefreshingBalance"
-						:class="$style.icon_btn"
-						aria-label="Refresh balance"
-					>
-						<Icon name="refresh" :size="18" color="secondary" />
-					</button>
-
-					<template #content>
-						<Text color="secondary">Latest balance refresh - </Text>
-						<Text>{{ DateTime.fromSeconds(tokenBalance?.updatedAt / 1_000).toRelative({ locale: "en" }) }}</Text>
-					</template>
-				</Tooltip>
-
-				<Dropdown>
-					<button type="button" :class="$style.icon_btn" aria-label="Token actions" data-testid="token-menu-trigger">
-						<Icon name="more" :rotate="90" :size="18" color="secondary" />
-					</button>
-
-					<template #popup>
-						<DropdownItem @click="handleTogglePin" data-testid="token-menu-pin" :data-pinned="isPinned ? 'true' : 'false'">
-							<Flex align="center" gap="8">
-								<Icon name="pin" :size="14" color="primary" />
-								{{ isPinned ? "Unpin from Home" : "Pin to Home" }}
-							</Flex>
-						</DropdownItem>
-						<DropdownItem @click="handleCopy(token?.contract, 'Token address')">
-							<Flex align="center" gap="8">
-								<Icon name="copy" size="14" color="primary" />
-								Copy address
-							</Flex>
-						</DropdownItem>
-						<DropdownItem @click="popupStore.open('token_metadata')" data-testid="token-menu-metadata">
-							<Flex align="center" gap="8">
-								<Icon name="code" size="14" color="primary" />
-								Show metadata
-							</Flex>
-						</DropdownItem>
-						<DropdownItem
-							@click="router.push('/popup/settings/contacts')"
-							data-testid="token-manage-contacts"
+		<div :class="$style.hero" data-testid="token-hero">
+			<SubPageHeader
+				:title="token?.symbol || ''"
+				:backTo="'/popup/general'"
+				leadingIcon="holdings"
+			>
+				<template #trailing>
+					<Tooltip position="end" :disabled="isRefreshingBalance || !tokenBalance?.updatedAt">
+						<button
+							@click="handleRefreshBalance"
+							type="button"
+							:disabled="isRefreshingBalance"
+							:class="$style.icon_btn"
+							aria-label="Refresh balance"
 						>
-							<Flex align="center" gap="8">
-								<Icon name="user" size="14" color="primary" />
-								Manage contacts
-							</Flex>
-						</DropdownItem>
-						<DropdownDivider />
-						<DropdownItem @click="handleDeleteToken" :class="$style.hover_red">
-							<Flex align="center" gap="8">
-								<Icon name="remove" size="14" color="primary" />
-								<Text>Remove token</Text>
-							</Flex>
-						</DropdownItem>
-					</template>
-				</Dropdown>
-			</template>
-		</SubPageHeader>
+							<Icon name="refresh" :size="18" color="secondary" />
+						</button>
 
-		<div v-if="isFlagged" :class="$style.flagged">
-			<FlaggedTokenBanner />
+						<template #content>
+							<Text color="secondary">Latest balance refresh - </Text>
+							<Text>{{ DateTime.fromSeconds(tokenBalance?.updatedAt / 1_000).toRelative({ locale: "en" }) }}</Text>
+						</template>
+					</Tooltip>
+
+					<Dropdown>
+						<button type="button" :class="$style.icon_btn" aria-label="Token actions" data-testid="token-menu-trigger">
+							<Icon name="more" :rotate="90" :size="18" color="secondary" />
+						</button>
+
+						<template #popup>
+							<DropdownItem @click="handleTogglePin" data-testid="token-menu-pin" :data-pinned="isPinned ? 'true' : 'false'">
+								<Flex align="center" gap="8">
+									<Icon name="pin" :size="14" color="primary" />
+									{{ isPinned ? "Unpin from Home" : "Pin to Home" }}
+								</Flex>
+							</DropdownItem>
+							<DropdownItem @click="handleCopy(token?.contract, 'Token address')">
+								<Flex align="center" gap="8">
+									<Icon name="copy" size="14" color="primary" />
+									Copy address
+								</Flex>
+							</DropdownItem>
+							<DropdownItem @click="popupStore.open('token_metadata')" data-testid="token-menu-metadata">
+								<Flex align="center" gap="8">
+									<Icon name="code" size="14" color="primary" />
+									Show metadata
+								</Flex>
+							</DropdownItem>
+							<DropdownItem
+								@click="router.push('/popup/settings/contacts')"
+								data-testid="token-manage-contacts"
+							>
+								<Flex align="center" gap="8">
+									<Icon name="user" size="14" color="primary" />
+									Manage contacts
+								</Flex>
+							</DropdownItem>
+							<DropdownDivider />
+							<DropdownItem @click="handleDeleteToken" :class="$style.hover_red">
+								<Flex align="center" gap="8">
+									<Icon name="remove" size="14" color="primary" />
+									<Text>Remove token</Text>
+								</Flex>
+							</DropdownItem>
+						</template>
+					</Dropdown>
+				</template>
+			</SubPageHeader>
+
+			<div v-if="isFlagged" :class="$style.flagged">
+				<FlaggedTokenBanner />
+			</div>
+
+			<BalanceView :tokenBalance />
+
+			<div v-if="!token?.hasPublicTransfers && !token?.hasPrivateTransfers" :class="$style.warning">
+				<Banner variant="warning">Private and public transfers disabled</Banner>
+			</div>
+			<div aria-hidden="true" :class="[$style.scroll_shadow, scrolled && $style.scroll_shadow_visible]" data-testid="token-scroll-shadow" />
 		</div>
 
-		<BalanceView :tokenBalance />
-
-		<Flex direction="column" justify="between" :class="$style.content">
-			<Flex direction="column" gap="32">
-				<Banner v-if="!token?.hasPublicTransfers && !token?.hasPrivateTransfers" variant="warning">
-					Private and public transfers disabled
-				</Banner>
-
+		<div :class="$style.scroller" data-testid="token-scroller" @scroll.passive="onScroll">
+			<Flex direction="column" :class="$style.content">
 				<RecentActivityView :token />
 			</Flex>
-		</Flex>
-
+		</div>
 	</Flex>
 </template>
 
 <style module>
 .wrapper {
-	flex: 1;
-	overflow: auto;
-	background: var(--app-bg);
-	scrollbar-gutter: stable;
+	composes: wrapper from "../pinned-hero.module.css";
+}
+
+.hero {
+	composes: hero from "../pinned-hero.module.css";
+}
+
+.scroll_shadow {
+	composes: scroll_shadow from "../pinned-hero.module.css";
+}
+
+.scroll_shadow_visible {
+	composes: scroll_shadow_visible from "../pinned-hero.module.css";
+}
+
+.scroller {
+	composes: scroller from "../pinned-hero.module.css";
 }
 
 /* Inset as BalanceView and the page's other banners are. */
@@ -313,8 +333,12 @@ onBeforeUnmount(() => {
 	padding: 0 24px 16px;
 }
 
+/* With the content's top padding, the 32px the warning always had above the activity. */
+.warning {
+	padding: 24px 24px 8px;
+}
+
 .content {
-	flex: 1;
 	padding: 24px 24px var(--nav-clearance) 24px;
 }
 

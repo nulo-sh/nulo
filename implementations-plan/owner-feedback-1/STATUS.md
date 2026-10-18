@@ -9,3 +9,4 @@
 - 2026-10-18: phase 1 (#760) gate F pass (lint, typecheck:all, test).
 - 2026-10-18: phase 2 (#761) gate F pass.
 - 2026-10-18: phase 3 (#765) gate F pass; `navigation.test.ts` Chrome 8/8 and Firefox 8/8 at retry 0; red on the base pages.
+- 2026-10-18: phase 4 (#762) gate pass: F; rows, home-links, token-list, type-roles on Chrome and Firefox at retry 0; network pin-to-home.

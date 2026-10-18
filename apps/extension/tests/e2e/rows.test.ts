@@ -977,58 +977,57 @@ test("a dApp's long function name and host never widen Home or History, named or
 /** Five priced sends: more than Home's middle shows at 360 × 600 and in the 900px-tall panels. */
 const HOME_ROWS = Array.from({ length: 5 }, (_, i) => `0x${(0x71 + i).toString(16).repeat(32)}`)
 
-type HomeLayout = { heroTop: number; scrollTop: number; maxScroll: number; shadow: string; navBottom: number; viewport: number }
+/** The two pages whose hero stays over a scrolling middle; each names its parts `<page>-hero`, `-scroller`, `-scroll-shadow`. */
+type PinnedPage = "home" | "token"
+/** The token row the token page opens on: the scope's token, which every seeded row moves. */
+const TOKEN_PAGE_ID = 1
 
-function readHome(page: Page): Promise<HomeLayout> {
-	return page.evaluate(() => {
+type PinnedLayout = {
+	heroTop: number
+	scrollTop: number
+	maxScroll: number
+	rootScrollTop: number
+	shadow: string
+	navBottom: number
+	viewport: number
+}
+
+function readPinned(page: Page, kind: PinnedPage): Promise<PinnedLayout> {
+	return page.evaluate((k: string) => {
 		const q = (id: string) => document.querySelector(`[data-testid="${id}"]`) as HTMLElement
-		const scroller = q("home-scroller")
+		const scroller = q(`${k}-scroller`)
 		return {
 			heroTop: q("balance-amount").getBoundingClientRect().top,
 			scrollTop: scroller.scrollTop,
 			maxScroll: scroller.scrollHeight - scroller.clientHeight,
-			shadow: getComputedStyle(q("home-scroll-shadow")).opacity,
+			rootScrollTop: (q(`${k}-hero`).parentElement as HTMLElement).scrollTop,
+			shadow: getComputedStyle(q(`${k}-scroll-shadow`)).opacity,
 			navBottom: q("bottom-nav").getBoundingClientRect().bottom,
 			viewport: window.innerHeight,
 		}
-	})
+	}, kind)
 }
 
-/** Scrolls Home's middle and waits for the scroll to land and the shadow's fade to finish. */
-async function scrollHome(page: Page, top: number, shadow: "0" | "1"): Promise<HomeLayout> {
-	await page.$eval(sel("home-scroller"), (el, y) => el.scrollTo(0, y as number), top)
+/** Scrolls the page's middle and waits for the scroll to land and the shadow's fade to finish. */
+async function scrollPinned(page: Page, kind: PinnedPage, top: number, shadow: "0" | "1"): Promise<PinnedLayout> {
+	await page.$eval(sel(`${kind}-scroller`), (el, y) => el.scrollTo(0, y as number), top)
 	await page
 		.waitForFunction(
 			(s: string, o: string) => getComputedStyle(document.querySelector(s) as Element).opacity === o,
 			{ timeout: 5_000, polling: 50 },
-			sel("home-scroll-shadow"),
+			sel(`${kind}-scroll-shadow`),
 			shadow,
 		)
 		.catch(async (error: unknown) => {
-			throw new Error(`the shadow never read ${shadow} at ${top}: ${JSON.stringify(await readHome(page))}; ${String(error)}`)
+			throw new Error(`the shadow never read ${shadow} at ${top}: ${JSON.stringify(await readPinned(page, kind))}; ${String(error)}`)
 		})
-	return readHome(page)
+	return readPinned(page, kind)
 }
 
-test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the middle still covers it; the shadow shows only once the middle has scrolled and lets a press through to the row under it; a tall panel keeps the nav at its bottom; PageDown on a row scrolls the middle", async ({
-	listedExtensionPerTest,
-	skip,
-}) => {
-	skipUnlessListPrices(skip)
-	const page = await openPopup(listedExtensionPerTest)
-	await waitForHash(page, "#/popup/general")
-	const scope = await readActivityScope(page, { priced: true })
-	const now = Date.now()
-	for (const [i, hash] of HOME_ROWS.entries()) await seedTransaction(page, scope, { hash, amount: "1500000", at: now - i * 1_000 })
-	await seedUsdQuoteAndReload(page, scope.token.priceId)
-	await page.bringToFront()
-	await settledRows(page, HOME_ROWS.length)
-
-	const rest = await scrollHome(page, 0, "0")
-	console.log(`[rows] Home at rest: ${JSON.stringify(rest)}`)
-	// A popup draws its scrim where it is mounted, and a row's review sheet mounts in the middle: the
-	// scrim must still cover the hero and the nav, as it does on every other page.
-	const scrimCovers = await page.$eval(sel("home-scroller"), (scroller) => {
+/** A popup draws its scrim where it is mounted, and a row's review sheet mounts in the middle: the
+ *  scrim must still cover the hero and the nav, as it does on every other page. */
+function scrimCovers(page: Page, kind: PinnedPage): Promise<{ hero: boolean; nav: boolean }> {
+	return page.$eval(sel(`${kind}-scroller`), (scroller) => {
 		const scrim = document.createElement("div")
 		scrim.style.cssText = "position: absolute; inset: 0; z-index: 400"
 		scroller.firstElementChild?.append(scrim)
@@ -1040,9 +1039,28 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 		scrim.remove()
 		return covers
 	})
-	expect(scrimCovers).toEqual({ hero: true, nav: true })
+}
+
+test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the middle still covers it; the shadow shows only once the middle has scrolled and lets a press through to the row under it; a tall panel keeps the nav at its bottom; PageDown on a row scrolls the middle; a token's page holds its balance over its scrolling activity the same way", async ({
+	listedExtensionPerTest,
+	skip,
+}) => {
+	skipUnlessListPrices(skip)
+	const page = await openPopup(listedExtensionPerTest)
+	await waitForHash(page, "#/popup/general")
+	const scope = await readActivityScope(page, { priced: true })
+	const now = Date.now()
+	for (const [i, hash] of HOME_ROWS.entries()) await seedTransaction(page, scope, { hash, amount: "1500000", at: now - i * 1_000 })
+	await seedTokenRow(page, scope, TOKEN_PAGE_ID)
+	await seedUsdQuoteAndReload(page, scope.token.priceId)
+	await page.bringToFront()
+	await settledRows(page, HOME_ROWS.length)
+
+	const rest = await scrollPinned(page, "home", 0, "0")
+	console.log(`[rows] Home at rest: ${JSON.stringify(rest)}`)
+	expect(await scrimCovers(page, "home")).toEqual({ hero: true, nav: true })
 	await shotSend(page, "home-rest", "home-hero")
-	const scrolled = await scrollHome(page, 200, "1")
+	const scrolled = await scrollPinned(page, "home", 200, "1")
 	console.log(`[rows] Home scrolled: ${JSON.stringify(scrolled)}`)
 	expect(scrolled.scrollTop).toBe(Math.min(200, rest.maxScroll))
 	expect(scrolled.scrollTop).toBeGreaterThan(0)
@@ -1067,7 +1085,7 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 		(band.top + band.bottom) / 2,
 	)
 	expect(target.hit).toBe(true)
-	await scrollHome(page, await page.$eval(sel("home-scroller"), (el) => el.scrollTop), "1")
+	await scrollPinned(page, "home", await page.$eval(sel("home-scroller"), (el) => el.scrollTop), "1")
 	await shotSend(page, "home-scrolled", "home-hero")
 	await page.mouse.click(target.x, (band.top + band.bottom) / 2)
 	await waitForHashPrefix(page, `#/popup/tx/${target.hash}`)
@@ -1077,8 +1095,8 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 	for (const width of [360, 480]) {
 		await page.setViewport({ width, height: 900 })
 		await settledRows(page, HOME_ROWS.length)
-		const top = await scrollHome(page, 0, "0")
-		const end = await scrollHome(page, top.maxScroll, "1")
+		const top = await scrollPinned(page, "home", 0, "0")
+		const end = await scrollPinned(page, "home", top.maxScroll, "1")
 		console.log(`[rows] Home at ${width} × 900: ${JSON.stringify({ top, end })}`)
 		expect(end.scrollTop).toBeGreaterThan(0)
 		expect(Math.abs(end.heroTop - top.heroTop)).toBeLessThanOrEqual(0.5)
@@ -1087,7 +1105,7 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 
 	await page.setViewport({ width: 360, height: 600 })
 	await settledRows(page, HOME_ROWS.length)
-	await scrollHome(page, 0, "0")
+	await scrollPinned(page, "home", 0, "0")
 	await page.$eval(`${sel("tx-card")} [data-row-target]`, (el) => (el as HTMLElement).focus())
 	const before = await page.$eval(sel("home-scroller"), (el) => el.scrollTop)
 	await page.keyboard.press("PageDown")
@@ -1099,8 +1117,23 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 			before,
 		)
 		.catch(async (error: unknown) => {
-			throw new Error(`PageDown from a row left the middle at ${before}: ${JSON.stringify(await readHome(page))}; ${String(error)}`)
+			throw new Error(
+				`PageDown from a row left the middle at ${before}: ${JSON.stringify(await readPinned(page, "home"))}; ${String(error)}`,
+			)
 		})
+
+	// A token's page holds its balance and actions the same way: only its recent activity scrolls.
+	await navigateByHash(page, `#/popup/tokens/${TOKEN_PAGE_ID}`)
+	await page.waitForSelector(sel("token-scroller"), { visible: true, timeout: 15_000 })
+	await settledRows(page, HOME_ROWS.length)
+	const tokenTop = await scrollPinned(page, "token", 0, "0")
+	expect(tokenTop.maxScroll, `the activity must overflow at 360 × 600: ${JSON.stringify(tokenTop)}`).toBeGreaterThan(0)
+	expect(await scrimCovers(page, "token")).toEqual({ hero: true, nav: true })
+	const tokenEnd = await scrollPinned(page, "token", tokenTop.maxScroll, "1")
+	console.log(`[rows] the token page at 360 × 600: ${JSON.stringify({ tokenTop, tokenEnd })}`)
+	expect(tokenEnd.scrollTop).toBeGreaterThan(0)
+	expect(tokenEnd.rootScrollTop).toBe(0)
+	expect(Math.abs(tokenEnd.heroTop - tokenTop.heroTop)).toBeLessThanOrEqual(0.5)
 
 	expect(listedExtensionPerTest.consoleErrors).toEqual([])
 	expect(listedExtensionPerTest.pageErrors).toEqual([])
