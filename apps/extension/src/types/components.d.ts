@@ -39,6 +39,7 @@ declare module 'vue' {
     DropdownTitle: typeof import('./../components/ui/Dropdown/DropdownTitle.vue')['default']
     DropdownTrigger: typeof import('./../components/ui/Dropdown/DropdownTrigger.vue')['default']
     EmojiGrid: typeof import('./../components/composite/general/EmojiGrid.vue')['default']
+    FeeAmount: typeof import('./../components/composite/FeeAmount.vue')['default']
     Flex: typeof import('@nulo/design')['Flex']
     FormPopup: typeof import('./../components/composite/FormPopup.vue')['default']
     Header: typeof import('./../components/Header.vue')['default']

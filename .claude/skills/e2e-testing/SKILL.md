@@ -202,7 +202,7 @@ runtime env var can never arm a build-time flag.
 
 ### Retry policy is a per-class decision
 
-- PR gates run `retry: 0` (`pr-extension-network-e2e.yml` passes it on every lane; smoke's config keeps 2).
+- PR gates run `retry: 0` (`pr-extension-network-e2e.yml` hands it to its lane call, which passes it to every job; smoke's config keeps 2).
   A masked flake in a required gate is worse than a visible one.
 - Nightly omits the input, so the config default (2) plus the exit-86 boot retry applies: absorb,
   then ship. The exception is `send-chaos`, which pins its own retry 0: a retry replays the burst
@@ -221,8 +221,9 @@ runtime env var can never arm a build-time flag.
   (`--shard=N/3`), each a 30-minute job with its own in-job armed build; nightly/release run an artifact
   (`artifact_name` / `extension_path`) whole, in one 45-minute job.
   Required check `extension-smoke-e2e-status` on both branches.
-- **Network** — `pr-extension-network-e2e.yml` → `_extension-network-e2e.yml`. Filter `extension-network`, label
-  `e2e:extension-network`. Lanes: 5 vitest shards (`--shard=N/5`, SHA-1 of the file path, proverless, retry 0,
+- **Network** — `pr-extension-network-e2e.yml` → `_extension-network-e2e-lane.yml` → `_extension-network-e2e.yml`.
+  Filter `extension-network`, label `e2e:extension-network`. The lane file is the partition every caller runs (both
+  PR lanes, the nightly, release's opt-in run); a file moves between the pool and a dedicated job there alone. Lanes: 5 vitest shards (`--shard=N/5`, SHA-1 of the file path, proverless, retry 0,
   the 12 dedicated files excluded); three heavy lanes (`fee-methods` + `selfpay-phase`,
   `concurrent-sendtx-confirm` + `same-token-concurrent-sends`, and `snack-placement` + `failed-send-check`,
   proverless); the **canary** lane prover-ON with the SHA-256-pinned
@@ -230,7 +231,7 @@ runtime env var can never arm a build-time flag.
   `frozen-account-canary`, `passkey-execution-canary`, `delete-after-prove`) — a canary run with zero `Proving succeeded` lines fails; the
   `disable_presto` dispatch input (or the `NULO_E2E_DISABLE_PRESTO` variable) is the
   rollback to WASM. The **chaos** lane replays two fixed `send-chaos` seeds (one matrix leg each, proverless,
-  retry 0); a red seed is fixed or proven a flake by replaying it (a re-run of the leg does), never given
+  retry 0; the nightly hands its own seed and runs `chaos / sends` instead); a red seed is fixed or proven a flake by replaying it (a re-run of the leg does), never given
   a test retry or rotated away (rotation: CI.md).
   Exit 86 retries the agent once. After every run the built bundle is grepped for
   `(PROBE|nulo:probe:|VITE_E2E_PROBE)` and any hit fails the workflow (`_extension-network-e2e.yml` skips the

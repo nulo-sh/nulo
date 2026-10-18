@@ -77,14 +77,11 @@ export type GasBalances = {
 }
 
 export type TransferFeeEstimate = {
-	/** Raw max fee as string (bigint serialized) */
+	/** Raw max fee as string (bigint serialized); the popup formats it with the quote it holds. */
 	readonly maxFee: string
-	/** Human-readable fee amount, e.g. "0.000123" */
-	readonly maxFeeFormatted: string
-	/** The part of `maxFee` an app's priority fee may take (raw), and its human-readable form; set
-	 *  together, only when the formatted form is not "0". */
+	/** The part of `maxFee` an app's priority fee may take (raw); set only when the fee readout
+	 *  would not print it as zero. */
 	readonly priorityFee?: string
-	readonly priorityFeeFormatted?: string
 	/** Gas breakdown */
 	readonly gasDetails: {
 		l2GasLimit: number

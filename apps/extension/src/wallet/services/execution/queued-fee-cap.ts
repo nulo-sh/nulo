@@ -9,13 +9,10 @@ import type { FeeSettings, PriorityLevel } from "@nulo/wallet-bridge"
 import { isFeeAmount, type QueuedFeePayer } from "@nulo/wallet-core/jobs"
 import type { Fpc } from "@/wallet/services/fpc/fpc"
 import { FpcType } from "@/wallet/services/fpc/spec"
+import { FEE_READOUT_UNIT } from "@/utils/fee-estimation"
 import { OriginType, type TransferType, type Tx } from "@/wallet/services/transaction/spec"
 
 export const QUEUED_FEE_MARGIN_PERCENT = 25n
-
-/** The readout shows six of Fee Juice's 18 decimals; the cap is cut to them so the Y on screen is
- *  the Y enforced. */
-const READOUT_UNIT = 10n ** 12n
 
 /** The figures a queued answer offers: the last fee of this token's like sends, and the cap above it. */
 export type QueuedFeeCap = { basis: string; cap: string }
@@ -92,7 +89,7 @@ export function queuedFeeBasis(
 
 /** The basis plus the margin, rounded down to what the readout shows; none when that is not a fee. */
 export function queuedFeeCap(basis: string): string | undefined {
-	const cap = (((BigInt(basis) * (100n + QUEUED_FEE_MARGIN_PERCENT)) / 100n / READOUT_UNIT) * READOUT_UNIT).toString()
+	const cap = (((BigInt(basis) * (100n + QUEUED_FEE_MARGIN_PERCENT)) / 100n / FEE_READOUT_UNIT) * FEE_READOUT_UNIT).toString()
 	return isFeeAmount(cap) ? cap : undefined
 }
 

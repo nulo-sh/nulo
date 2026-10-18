@@ -7,14 +7,23 @@ import { formatBaseUnits } from "@/utils/amount"
  */
 export const FEE_JUICE_DECIMALS = 18
 
-/** The ONE gas-balance display formatter (both cards render through it). Truncates (round-down) so
- *  the shown balance is always ≤ actual. Default 4 decimals for the send fee card, where sub-cent
- *  fee amounts carry signal; the home card passes 2 — fee juice is cheap, the tail digits are noise. */
-export function formatGasBalance(raw: string | null | undefined, maxDecimals = 4): string {
+/** Every fee prints at this many of Fee Juice's decimals, rounded half-up. */
+export const FEE_DECIMALS = 6
+
+/** One unit of a fee's last printed digit. The worker cuts the queued cap to it and asks again only
+ *  for a rise of at least one, so a figure on screen is the figure enforced. */
+export const FEE_READOUT_UNIT = 10n ** BigInt(FEE_JUICE_DECIMALS - FEE_DECIMALS)
+
+/** Balances truncate, so a shown balance never exceeds the real one: Send keeps the sub-cent digits
+ *  a fee is paid from, Home drops them. */
+export const BALANCE_DECIMALS = { send: 4, home: 2 } as const
+
+/** The one Fee Juice balance formatter. */
+export function formatGasBalance(raw: string | null | undefined, maxDecimals: number = BALANCE_DECIMALS.send): string {
 	return formatBaseUnits(raw ?? "0", FEE_JUICE_DECIMALS, { maxDecimals })
 }
 
-export type AssetPricing = {
+type AssetPricing = {
 	address: string
 	usdRate: number
 	symbol: string
@@ -27,7 +36,7 @@ export type AssetPricing = {
  * display disabled, provider down) fee USD is OMITTED, never faked — the old
  * hardcoded 0.02 rate is gone.
  */
-export function feeJuicePricingFromUsd(usd: number | undefined): AssetPricing | undefined {
+function feeJuicePricingFromUsd(usd: number | undefined): AssetPricing | undefined {
 	if (usd === undefined || !Number.isFinite(usd) || usd <= 0) return undefined
 	return {
 		address: "0x0000000000000000000000000000000000000000000000000000000000000005",
@@ -58,7 +67,7 @@ function halfUpRound(value: bigint, fromDecimals: number, toDecimals: number): b
  * estimated fee) prefer half-up over truncate so the displayed value
  * doesn't systematically understate the actual paid amount.
  */
-export function formatFeeJuice(amount: bigint, maxDecimals: number = 6): string {
+function formatFeeJuice(amount: bigint, maxDecimals: number = FEE_DECIMALS): string {
 	if (amount === 0n) return "0"
 	if (maxDecimals < 0) maxDecimals = 0
 	if (maxDecimals >= FEE_JUICE_DECIMALS) {
@@ -82,7 +91,7 @@ const RATE_SCALE = 1_000_000n
  * `feeJuicePricingFromUsd`) and get `null` back when none is available —
  * the fee-USD element is omitted, not faked.
  */
-export function feeToUsd(feeAmount: bigint, pricing: AssetPricing | undefined): string | null {
+function feeToUsd(feeAmount: bigint, pricing: AssetPricing | undefined): string | null {
 	if (!pricing) return null
 	if (feeAmount === 0n) return "$0.000"
 	const scaledRate = BigInt(Math.round(pricing.usdRate * Number(RATE_SCALE)))
@@ -96,6 +105,29 @@ export function feeToUsd(feeAmount: bigint, pricing: AssetPricing | undefined): 
 	if (num < milliDivisor) return "<$0.001"
 	const usdMilli = (num + milliDivisor / 2n) / milliDivisor
 	return `$${formatBaseUnits(usdMilli, 3, { minDecimals: 3, trimTrailingZeros: false })}`
+}
+
+/** A fee as every screen prints it: the amount at `FEE_DECIMALS`, and its USD at today's quote, or
+ *  null without a usable one. */
+export interface FeeDisplay {
+	amount: string
+	usd: string | null
+}
+
+/** `raw` is a fee in base units, as the worker sends it. */
+export function feeDisplay(raw: string | bigint, usdPerFeeJuice: number | undefined): FeeDisplay {
+	const fee = BigInt(raw)
+	return { amount: formatFeeJuice(fee), usd: feeToUsd(fee, feeJuicePricingFromUsd(usdPerFeeJuice)) }
+}
+
+/** The figure of the one fee grammar: `~X FJ`. */
+export function feeFigure({ amount }: FeeDisplay): string {
+	return `~${amount} FJ`
+}
+
+/** The one fee grammar, `~X FJ ($Y)`, for a fee inside a string. */
+export function feeText(display: FeeDisplay): string {
+	return display.usd ? `${feeFigure(display)} (${display.usd})` : feeFigure(display)
 }
 
 /** Format a gas amount with thousands separators */

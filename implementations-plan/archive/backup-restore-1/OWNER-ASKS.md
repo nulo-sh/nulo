@@ -43,3 +43,10 @@ Each ask names a surface, its options and what ships now. The arcs ship the "wha
 - **Options:** (a) hide the network warning while the keys-lost warning shows, or show both; (b) keep "a network you added", or say "a network a restore does not re-create".
 - **Recommendation:** hide it; keep "a network you added", since an old-Testnet hold is rare and K1 records it.
 - **What ships now:** hidden, and "a network you added".
+
+## OA-7: the export warning's plural forms (arc 3)
+
+- **Why:** C7 was drafted for one account. Two or more need the sentence inflected, and the accounts can sit on one added network or several.
+- **Options:** (1) inflect C7: "2 imported accounts are on a network you added. A restore re-creates only the default networks, so add that network again to restore them." and, across several networks, "3 imported accounts are on networks you added. … so add those networks again to restore them."; (2) one form for every count: "Imported accounts in this backup are on networks you added. …".
+- **Recommendation:** 1: it keeps the count the drawing shows.
+- **What ships now:** option 1.

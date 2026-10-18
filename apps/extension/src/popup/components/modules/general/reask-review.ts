@@ -4,7 +4,7 @@
  */
 import type { QueuedFeeReask } from "@nulo/wallet-core/jobs"
 import { type PayerKind, payerKindOf, type PublishFacts, publishFacts, type TransferSide } from "@/components/composite/send/publish-facts"
-import { feeAmountDisplay, feeInWords } from "@/popup/components/modules/send/fee-helpers"
+import { feeDisplay, feeText } from "@/utils/fee-estimation"
 import { TransferType } from "@/wallet/services/transaction/spec"
 
 const SIDES: Record<TransferType, [TransferSide, TransferSide]> = {
@@ -18,7 +18,8 @@ export type ReaskReview = {
 	facts: PublishFacts
 	payerKind: PayerKind
 	payerType: QueuedFeeReask["payer"]["type"]
-	reask: { now: string; nowAmount: string; capAmount: string }
+	/** The new fee and the cap the person accepted, each in the one fee grammar. */
+	reask: { now: string; cap: string }
 }
 
 /** None for a record that is not a transfer asking at `queued`, or whose sides are unknown. The
@@ -33,11 +34,10 @@ export function reaskReview(
 	const { payer } = reask
 	const settings = { paymentMethod: payer.type === "fj" ? { kind: "fj" } : { kind: "fpc", fpcId: payer.fpcId } }
 	const payerKind = payerKindOf(settings, payer)
-	const now = feeAmountDisplay(reask.fee, usdPerFeeJuice)
 	return {
 		facts: publishFacts(sides[0], sides[1], payerKind),
 		payerKind,
 		payerType: payer.type,
-		reask: { now: feeInWords(now), nowAmount: now.amount, capAmount: feeAmountDisplay(reask.cap, usdPerFeeJuice).amount },
+		reask: { now: feeText(feeDisplay(reask.fee, usdPerFeeJuice)), cap: feeText(feeDisplay(reask.cap, usdPerFeeJuice)) },
 	}
 }

@@ -1,7 +1,7 @@
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { OriginType } from "@/wallet/services/transaction/client"
 import { FEE_METHODS } from "@/utils/tx-enrichment"
-import { formatFeeJuice, formatGas } from "@/utils/fee-estimation"
+import { formatGas } from "@/utils/fee-estimation"
 
 export interface GasDetailsRaw {
 	feePerL2Gas: string | bigint
@@ -12,12 +12,13 @@ export interface GasDetailsRaw {
 	teardownDaGasLimit: number | string
 }
 
-/** The gas limits already hold the teardown's, so the L2 and DA lines alone add up to the fee limit. */
+/** The gas limits already hold the teardown's, so the L2 and DA lines alone add up to the fee limit.
+ *  The costs stay in base units for the row to price. */
 export interface GasBreakdown {
 	l2Gas: string
 	daGas: string
-	l2Cost: string
-	daCost: string
+	l2Cost: bigint
+	daCost: bigint
 }
 
 export function buildGasBreakdown(gd: GasDetailsRaw | undefined | null): GasBreakdown | null {
@@ -25,8 +26,8 @@ export function buildGasBreakdown(gd: GasDetailsRaw | undefined | null): GasBrea
 	return {
 		l2Gas: formatGas(Number(gd.l2GasLimit)),
 		daGas: formatGas(Number(gd.daGasLimit)),
-		l2Cost: formatFeeJuice(BigInt(gd.l2GasLimit) * BigInt(gd.feePerL2Gas)),
-		daCost: formatFeeJuice(BigInt(gd.daGasLimit) * BigInt(gd.feePerDaGas)),
+		l2Cost: BigInt(gd.l2GasLimit) * BigInt(gd.feePerL2Gas),
+		daCost: BigInt(gd.daGasLimit) * BigInt(gd.feePerDaGas),
 	}
 }
 

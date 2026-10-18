@@ -12,7 +12,7 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Utils */
 import { balanceFormatted } from "@/utils/amount.js"
-import { knownDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
+import { knownDecimals, parseRawBalance } from "@/utils/token-amount"
 import { aggregateFiat, awaitingFirstPriceAnswer, pricesUnavailable } from "@/utils/token-aggregate"
 import { storageLocalGet, storageLocalSet } from "@/utils/storage"
 import { createBalanceCount } from "./balance-count"
@@ -102,7 +102,7 @@ const displayedTokenFiat = computed(() => {
 	return prices.tokenFiatLabel(tokenToDisplay.value, sides.publicRaw + sides.privateRaw)
 })
 
-const fiatOf = safeFiatOf((tb) => prices.tokenFiatMicro(tb.token, parseRawBalance(tb)))
+const fiatOf = prices.fiatOfRow
 const aggregate = computed(() => aggregateFiat(tokenBalances.value, fiatOf))
 
 /** Holdings that lack a price count as $0.00 under the "priced assets only" caption, unless every

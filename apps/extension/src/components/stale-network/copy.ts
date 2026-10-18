@@ -66,7 +66,6 @@ export const paused = (name: string) => ({
 	primary: "TRY AGAIN",
 })
 
-/** The paused screen's notice: the imported accounts that deleting the network deletes. */
 export const pausedImported = (name: string, imported: readonly string[]) =>
 	imported.length === 1
 		? `${quoted(imported)} is an imported account. Deleting ${name} deletes it.`

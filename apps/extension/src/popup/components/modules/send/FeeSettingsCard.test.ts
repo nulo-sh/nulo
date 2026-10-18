@@ -2360,7 +2360,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 		const EDITED_AT = `0x${"0c".repeat(32)}`
 		const NULO = { ...SPONSOR, address: NULO_AT }
 		const HAND = { id: "s2", type: 1, name: "Dev sponsor", isProtocol: false, address: HAND_AT }
-		const FEE = { maxFee: "1000", maxFeeFormatted: "0.000000000000001" }
+		const FEE = { maxFee: "1000" }
 		const verdict = (funded: boolean, over: Record<string, unknown> = {}) => ({
 			...FEE,
 			sponsorFunding: { fpcId: "s1", address: NULO_AT, funded, ...over },
@@ -2657,7 +2657,6 @@ describe("FeeSettingsCard — a sponsor that can't cover this fee, outside Send"
 	const HAND = { id: "s2", type: 1, name: "Dev sponsor", isProtocol: false, address: `0x${"0b".repeat(32)}` }
 	const shortOn = (row: { id: string; address: string }) => ({
 		maxFee: "1000",
-		maxFeeFormatted: "0.000000000000001",
 		sponsorFunding: { fpcId: row.id, address: row.address, funded: false },
 	})
 
@@ -2702,7 +2701,6 @@ describe("FeeSettingsCard — a card that falls back on a short sponsor", () => 
 	const NULO = { id: "s1", type: 1, name: "Sponsored", isProtocol: true, address: `0x${"0a".repeat(32)}` }
 	const SHORT = {
 		maxFee: "1000",
-		maxFeeFormatted: "0.000000000000001",
 		sponsorFunding: { fpcId: "s1", address: NULO.address, funded: false },
 	}
 
@@ -2741,7 +2739,6 @@ describe("FeeSettingsCard — the fee-juice nudge outside Send", () => {
 	const PRIVATE_FPC = { id: "p1", type: 2, name: "Private FPC", isProtocol: true }
 	const SHORT = {
 		maxFee: "1000",
-		maxFeeFormatted: "0.000000000000001",
 		sponsorFunding: { fpcId: "s1", address: NULO.address, funded: false },
 	}
 	const nudge = (w: ReturnType<typeof mount>) => w.find('[data-testid="send-fee-nudge"]')
@@ -2782,7 +2779,6 @@ describe("FeeSettingsCard — the account's own Fee Juice short of the fee", () 
 	const NULO = { id: "s1", type: 1, name: "Sponsored", isProtocol: true, address: `0x${"0a".repeat(32)}` }
 	const SHORT = {
 		maxFee: "2100000000000000",
-		maxFeeFormatted: "0.0021",
 		feeJuiceShortfall: { maxFee: "2100000000000000", balance: "1500000000000000" },
 	}
 	const shortfall = (w: ReturnType<typeof mount>) => w.find('[data-testid="fee-juice-shortfall"]')
@@ -2798,7 +2794,26 @@ describe("FeeSettingsCard — the account's own Fee Juice short of the fee", () 
 
 		await w.setProps({ feeEstimate: SHORT })
 		await flushPromises()
-		expect(w.get('[data-testid="fee-sponsor-live"]').text()).toBe("This send can cost up to 0.0021 FJ. You have 0.0015 FJ.")
+		expect(w.get('[data-testid="fee-sponsor-live"]').text()).toBe("This send can cost up to ~0.0021 FJ. You have 0.0015 FJ.")
+		w.unmount()
+	})
+
+	test("one balance, two precisions: the Available row truncates at four decimals, the refusal at the fee's six", async () => {
+		mocks.getFpcs.mockResolvedValue([])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1512345678900000", privateFeeJuice: null })
+		const row = {
+			props: ["feeJuiceBalanceFormatted"],
+			template: '<div data-testid="fee-method-row" :data-balance="feeJuiceBalanceFormatted" />',
+		}
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: { ...STUBS, FeeMethodRow: row } } })
+		await flushPromises()
+		await w.get('[data-testid="pick-fj"]').trigger("click")
+		await w.setProps({
+			feeEstimate: { maxFee: "2100000000000000", feeJuiceShortfall: { maxFee: "2100000000000000", balance: "1512345678900000" } },
+		})
+		await flushPromises()
+		expect(w.get('[data-testid="fee-method-row"]').attributes("data-balance")).toBe("0.0015")
+		expect(w.get('[data-testid="fee-sponsor-live"]').text()).toBe("This send can cost up to ~0.0021 FJ. You have 0.001512 FJ.")
 		w.unmount()
 	})
 
@@ -3122,7 +3137,6 @@ describe("FeeSettingsCard — the identity guards, field by field", () => {
 		await w.setProps({
 			feeEstimate: {
 				maxFee: "1000",
-				maxFeeFormatted: "0.000000000000001",
 				sponsorFunding: { fpcId: "s1", address: NULO_AT, funded: false },
 			},
 		})
