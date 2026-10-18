@@ -1,4 +1,5 @@
 import type { Page } from "puppeteer"
+import { pollUntil } from "./poll"
 import { INCOMING_POLL_HOLD_KEY, INCOMING_POLL_STATUS_KEY, type IncomingPollPhase } from "@/e2e/chrome-storage-incoming-poll-gate"
 
 /**
@@ -44,12 +45,9 @@ export async function waitForIncomingPollPhase(
 	txHash: string,
 	timeoutMs = 20_000,
 ): Promise<void> {
-	const deadline = Date.now() + timeoutMs
-	let last: IncomingPollStatus | null = null
-	do {
-		last = await readIncomingPollStatus(extensionPage)
-		if (last && last.phase === phase && last.txHash === txHash) return
-		await new Promise((r) => setTimeout(r, 150))
-	} while (Date.now() < deadline)
-	throw new Error(`incoming-poll gate did not reach "${phase}" for ${txHash} within ${timeoutMs}ms (last: ${JSON.stringify(last)})`)
+	await pollUntil(
+		() => readIncomingPollStatus(extensionPage),
+		(status) => status?.phase === phase && status.txHash === txHash,
+		{ label: `incoming-poll gate at "${phase}" for ${txHash}`, timeoutMs, intervalMs: 150 },
+	)
 }

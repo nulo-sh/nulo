@@ -3,6 +3,7 @@ import { Flex, Icon, Text } from "@nulo/design"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../tests/helpers/chrome-storage-mock"
 import { nextTick } from "vue"
 import type { ConfigProp } from "@/wallet/config"
 import { expectOwnedRows, settingsContext, settingsRouter } from "../../../../tests/helpers/settings-rows"
@@ -44,11 +45,7 @@ beforeEach(() => {
 	fakes.config.onUpdate = new EventHandler<ConfigProp>()
 	fakes.config.onConnected = new EventHandler<void>()
 	fakes.config.getValue.mockImplementation(async (key: string) => (key === "sessionTtl" ? 1_800_000 : true))
-	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
-	if (c) {
-		c.storage.local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }
-		c.storage.onChanged = { addListener: vi.fn(), removeListener: vi.fn() }
-	}
+	installChromeStorage({}, { persist: false })
 })
 
 async function mountLock(type: "password" | "passkey" = "password") {

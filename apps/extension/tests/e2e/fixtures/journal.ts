@@ -25,6 +25,7 @@ import { execSync } from "node:child_process"
 import type { EvaluateFunc, Page } from "puppeteer"
 import { EXTENSION_SCHEME } from "./browser"
 import { type TickState, TICK_STATE_CAUSE, tickStateBefore } from "./balance-queue-trail"
+import { PollTimeoutError, pollUntil } from "./poll"
 
 /** Non-terminal, claimed stages — "an op is in flight right now". */
 export const ACTIVE_STAGES = ["pending", "simulating", "proving", "submitting"] as const
@@ -92,13 +93,11 @@ export async function waitForDappExecuteOutcomes(
 	holds: (rows: DappExecuteOutcome[]) => boolean,
 	timeout = 30_000,
 ): Promise<DappExecuteOutcome[]> {
-	const deadline = Date.now() + timeout
-	for (;;) {
-		const rows = await readDappExecuteOutcomes(page)
-		if (holds(rows)) return rows
-		if (Date.now() > deadline) throw new Error(`waitForDappExecuteOutcomes: ${what} within ${timeout}ms; rows: ${JSON.stringify(rows)}`)
-		await new Promise((resolve) => setTimeout(resolve, 200))
-	}
+	return pollUntil(() => readDappExecuteOutcomes(page), holds, {
+		label: `waitForDappExecuteOutcomes: ${what}`,
+		timeoutMs: timeout,
+		intervalMs: 200,
+	})
 }
 
 /** A send's record: its owner and how far it got. `enteredProveAt` is stamped just before a held
@@ -133,15 +132,12 @@ export async function waitForSendRecord(
 	match: (record: SendRecordView) => boolean,
 	timeoutMs = 60_000,
 ): Promise<SendRecordView> {
-	const deadline = Date.now() + timeoutMs
-	for (;;) {
-		const records = await readSendRecords(page)
-		const found = records.find(match)
-		if (found) return found
-		if (Date.now() > deadline)
-			throw new Error(`waitForSendRecord: no matching record within ${timeoutMs}ms (records: ${JSON.stringify(records)})`)
-		await new Promise((resolve) => setTimeout(resolve, 250))
-	}
+	const records = await pollUntil(
+		() => readSendRecords(page),
+		(records) => records.some(match),
+		{ label: "waitForSendRecord: a matching send record", timeoutMs, intervalMs: 250 },
+	)
+	return records.find(match) as SendRecordView
 }
 
 /**
@@ -351,30 +347,38 @@ export async function readSwLogTrail(page: Page, opts: { limit?: number; match?:
  */
 export async function waitForBalanceQueueIdle(page: Page, timeoutMs = 60_000): Promise<void> {
 	const deadline = Date.now() + timeoutMs
-	let state: TickState = { kind: "absent" }
-	while (Date.now() < deadline) {
-		const marker = `e2e-balance-queue-barrier-${Math.random().toString(36).slice(2, 12)}`
-		await page.evaluate((m: string) => console.debug(m), marker)
-		state = await tickStateAtMarker(page, marker, deadline)
-		if (state.kind === "idle") {
-			console.log(`[balance-queue-barrier] idle: ${state.linesSinceEnd} lines between the last tick's end and the marker`)
-			return
-		}
-	}
-	throw new Error(`the balance queue never read idle within ${timeoutMs} ms: ${TICK_STATE_CAUSE[state.kind]}`)
+	const idle = (await pollUntil(
+		async () => {
+			const marker = `e2e-balance-queue-barrier-${Math.random().toString(36).slice(2, 12)}`
+			await page.evaluate((m: string) => console.debug(m), marker)
+			return tickStateAtMarker(page, marker, deadline)
+		},
+		(state) => state.kind === "idle",
+		{ label: "the balance queue reading idle", timeoutMs, intervalMs: 0, show: (state) => TICK_STATE_CAUSE[state.kind] },
+	)) as Extract<TickState, { kind: "idle" }>
+	console.log(`[balance-queue-barrier] idle: ${idle.linesSinceEnd} lines between the last tick's end and the marker`)
 }
 
-/** Polls the stored trail until `marker` is in it, then reads the balance queue's state before it. */
+/** Polls the stored trail until `marker` is in it, then reads the balance queue's state before it;
+ *  at the shared deadline, the state read last. */
 async function tickStateAtMarker(page: Page, marker: string, deadline: number): Promise<TickState> {
-	for (;;) {
+	const readState = async () => {
 		const lines = await page.evaluate(async () => {
 			const res = (await chrome.storage.session.get("nulo:logs")) as Record<string, unknown>
 			const logs = (res["nulo:logs"] as { data?: unknown[] }[] | undefined) ?? []
 			return logs.map((log) => (typeof log.data?.[0] === "string" ? (log.data[0] as string) : ""))
 		})
-		const state = tickStateBefore(lines, marker)
-		if (state.kind !== "absent" || Date.now() >= deadline) return state
-		await new Promise((r) => setTimeout(r, 250))
+		return tickStateBefore(lines, marker)
+	}
+	try {
+		return await pollUntil(readState, (state) => state.kind !== "absent", {
+			label: "the marker in the stored trail",
+			timeoutMs: deadline - Date.now(),
+			intervalMs: 250,
+		})
+	} catch (error) {
+		if (error instanceof PollTimeoutError) return error.last as TickState
+		throw error
 	}
 }
 

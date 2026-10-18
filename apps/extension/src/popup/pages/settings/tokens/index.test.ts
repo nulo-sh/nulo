@@ -2,6 +2,7 @@ import { Tooltip } from "@nulo/design"
 import { createTestingPinia } from "@pinia/testing"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import { useAppStore } from "@/stores/app.store"
 import TokensIndex from "./index.vue"
 
@@ -29,18 +30,9 @@ const bubble = () => document.querySelector('[data-testid="tooltip-bubble"]')
 // The app store reads and watches `chrome.storage.local` when it is created.
 beforeEach(() => {
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: {
-				get: vi.fn((_k: unknown, cb?: (r: Record<string, unknown>) => void) => {
-					cb?.({})
-					return Promise.resolve({})
-				}),
-				set: vi.fn(async () => undefined),
-				remove: vi.fn(async () => undefined),
-			},
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 	})
+	installChromeStorage({}, { persist: false })
 	document.body.innerHTML = '<div id="tooltip"></div>'
 })
 afterEach(() => {

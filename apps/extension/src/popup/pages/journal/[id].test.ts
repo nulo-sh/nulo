@@ -1,6 +1,7 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../tests/helpers/chrome-storage-mock"
 import type { SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { CHAIN_IDS } from "@/utils/chain-ids"
@@ -53,12 +54,10 @@ vi.mock("@/wallet/services/operation-journal/client", () => ({
 beforeEach(() => {
 	mocks.tokens = [{ id: 7, symbol: "TST", decimals: 0, hasDecimals: true }]
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) },
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
 	})
+	installChromeStorage({}, { persist: false })
 })
 
 afterEach(() => {

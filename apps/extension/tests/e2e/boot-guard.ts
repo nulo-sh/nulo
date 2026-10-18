@@ -1,6 +1,7 @@
 import type { ChildProcess } from "node:child_process"
 import { readFileSync, readdirSync, readlinkSync } from "node:fs"
 import { createServer } from "node:net"
+import { PollTimeoutError, pollUntil } from "./fixtures/poll"
 import { type EnvironReader, ownedProcesses, readEnviron } from "./owned-processes"
 
 /**
@@ -126,18 +127,17 @@ export async function waitWhileAlive(
 	pollMs: number,
 	ours: () => boolean | undefined = () => undefined,
 ): Promise<void> {
+	const label = `Timed out waiting for ${what}`
 	const deadline = Date.now() + timeoutMs
-	for (;;) {
+	const probe = async () => {
 		const answer = await answerBefore(child, ready, deadline)
 		if (answer === "exited" || hasExited(child))
 			throw new Error(
 				`${what}: the process this run started exited (code ${child.exitCode}, signal ${child.signalCode}) before it answered`,
 			)
-		if (answer === true) {
-			if (ours() === false) throw new Error(`${what}: answered by a listener this run did not start`)
-			return
-		}
-		if (answer === "timeout" || Date.now() >= deadline) throw new Error(`Timed out waiting for ${what} (${timeoutMs}ms)`)
-		await new Promise((resolve) => setTimeout(resolve, pollMs))
+		if (answer === "timeout") throw new PollTimeoutError(label, timeoutMs, answer, "no answer")
+		if (answer && ours() === false) throw new Error(`${what}: answered by a listener this run did not start`)
+		return answer
 	}
+	await pollUntil(probe, (answer) => answer, { label, timeoutMs: deadline - Date.now(), intervalMs: pollMs })
 }

@@ -368,29 +368,12 @@ test.skipIf(!hasConfig)(
 			txHash,
 		})
 
-		let held = false
-		for (let i = 0; i < 40 && !held; i++) {
-			await refreshBalances(page)
-			for (let j = 0; j < 15 && !held; j++) {
-				const status = await readIncomingPollStatus(page)
-				if (status?.phase === "discovery-held" && status.txHash === txHash) {
-					held = true
-					break
-				}
-				await new Promise((r) => setTimeout(r, 300))
-			}
-		}
-		expect(held).toBe(true)
+		expect(await driveScanUntilHeld(page, txHash)).toBe(true)
 		await waitForIncomingPollPhase(page, "discovery-held", txHash, 5_000)
 		await releaseIncomingPoll(page)
 		await waitForIncomingPollPhase(page, "committed", txHash, 20_000)
 
-		let record: StoredIncomingRecord | null = null
-		for (let i = 0; i < 25 && !record; i++) {
-			record = await findIncomingRecordByHash(page, txHash)
-			if (record) break
-			await new Promise((r) => setTimeout(r, 200))
-		}
+		const record = await pollIncomingRecordByHash(page, txHash)
 		expect(record?.accountAddress).toBe(accountA)
 		expect(record?.hidden).toBe(false)
 		console.log("✓ A's incoming note committed (persisted, visible)")
