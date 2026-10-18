@@ -6,3 +6,4 @@
 - The Fee Juice shortfall line on Send has no e2e path: it needs a self-paid account holding less Fee Juice than the fee. Its text is pinned by `FeeSettingsCard.test.ts`; the PR carries no picture of it.
 - `same-token-concurrent-sends` is `@requires-proverless`: run it with `NULO_E2E_PROVERLESS=1`, or the guard exits 2 before the build.
 - Codex's `resume-codex.sh` takes the Codex output directory as its third argument; passing the worktree wrote the session's files into it.
+- The CI wall-clocks showed the priority test 27 s slower, not the seed's 11 s. Its poll for the priced line tested the raw `innerText`, which the `DottedTerm`'s hidden block definition breaks with a newline, so the poll never matched and its swallowed 15 s timeout ran every time; the assertion after it normalised whitespace and passed. The poll now reads the line as the assertion does (32 s locally, from 42 to 46 s).

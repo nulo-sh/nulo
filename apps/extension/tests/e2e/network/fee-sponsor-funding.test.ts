@@ -261,11 +261,15 @@ test.skipIf(!hasConfig)(
 				popup.$eval(`[data-testid="${testid}"]`, (el) => (el as HTMLElement).innerText.replace(/\s+/g, " ").trim())
 			expect(await read("execute-op-app-legend")).toMatch(/^Fee payment method set by \S/)
 			// The line renders when the estimate lands, and adds each figure's dollars once its quote answers.
+			// Read as `read` does: the hidden definition's block box breaks the line's `innerText`.
 			await popup
 				.waitForFunction(
 					() =>
 						/\(.+\), includes a .+ \(.+\) priority/.test(
-							(document.querySelector('[data-testid="execute-op-app-fee"]') as HTMLElement | null)?.innerText ?? "",
+							((document.querySelector('[data-testid="execute-op-app-fee"]') as HTMLElement | null)?.innerText ?? "").replace(
+								/\s+/g,
+								" ",
+							),
 						),
 					{ timeout: 15_000, polling: 100 },
 				)
