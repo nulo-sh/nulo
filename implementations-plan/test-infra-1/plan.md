@@ -1,7 +1,7 @@
 ---
 plan: test-infra-1
 tier: mid
-status: arc 1 merged (#706); arc 2 in progress (Phase 4 ✓)
+status: arc 1 merged (#706); arc 2 in progress (Phases 4-5 ✓)
 issues: "#550 (arc 1 Closes), #561 (arc 3 Closes), #536 (arc 3 Closes), #540 (arc 4 Closes)"
 driver: claude-code
 claude_model: opus
@@ -104,7 +104,7 @@ Four test-infrastructure refactors the owner picked on decision page 37 (option 
 - **Tests:** `tests/helpers/held-read.test.ts` covers: `dispatch` resolves only after an async handler settles (control: `invoke` alone does not wait); a synchronous throw rejects `dispatch` while its sibling still runs; an async rejection rejects it; a repeated `add` runs once; `remove` of the original callback stops it; two overlapping dispatches settle independently. Each "has not happened" assertion it touches keeps or gains a success control in the same test.
 - **Validation gate:** `bun run lint && bun run typecheck:all && bun run test`. Pass: exit 0; none of the five token-balance sites, `network/client.test.ts` or `importChainSync.test.ts:207,324` counts turns. The delays inside the mocks (`:824`, `:1074`) stay: they widen the race those tests pin, they are not waits.
 
-### Phase 5 — storage stubs and the balance builder
+### Phase 5 — storage stubs and the balance builder ✓
 1. Add `{ persist: false }` to `installChromeStorage`. Move the 19 discard-write stubs in files no lane edits (recon § Test collaborators lists 24; five wait for arc 3). Each test must see the same `chrome` members it saw before, added or removed (`settings/tokens/index.test.ts:30-43` stubs a `chrome` with no `runtime`); a file where that cannot hold keeps its stub, with the reason in the PR body.
 2. Make `startWorld` the token-balance file's one `world(opts)` builder; move the 13 inline builds and `boot()`.
 - **Tests:** `tests/helpers/chrome-storage-mock.test.ts` covers: `persist: false` records `set` and `remove` and keeps nothing; the default mode still persists. Each moved suite keeps its test count.

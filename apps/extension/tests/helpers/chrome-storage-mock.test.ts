@@ -9,7 +9,7 @@ describe("installChromeStorage", () => {
 
 		expect(storage.set).toHaveBeenCalledExactlyOnceWith({ written: 2, seeded: 3 })
 		expect(storage.remove).toHaveBeenCalledExactlyOnceWith("seeded")
-		expect(await chrome.storage.local.get(null)).toEqual({ seeded: 1 })
+		expect(await chrome.storage.local.get()).toEqual({ seeded: 1 })
 	})
 
 	test("the default mode persists writes and removals", async () => {
@@ -17,6 +17,6 @@ describe("installChromeStorage", () => {
 		await chrome.storage.local.set({ written: 2 })
 		await chrome.storage.local.remove("seeded")
 
-		expect(await chrome.storage.local.get(null)).toEqual({ written: 2 })
+		expect(await chrome.storage.local.get()).toEqual({ written: 2 })
 	})
 })
