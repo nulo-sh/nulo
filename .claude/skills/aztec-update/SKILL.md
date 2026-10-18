@@ -142,9 +142,10 @@ SHA-pinned binary from `_extension-network-e2e.yml`; the variable is scoped to t
 auto-approves the wallet's origin), build the wallet with `VITE_NULO_PRESTO_REQUIRED=1`, and confirm at
 least one `Proving succeeded` in the presto log during the run (`Received /prove request` is logged
 before authorization, so a denied request prints it too). In CI this is
-automatic: both canaries are named files in the prover-ON `network-e2e-canary` job of **both** network
-lanes — `pr-extension-network-e2e.yml`, enforced by the required `extension-network-e2e-status` check, and
-`pr-extension-network-e2e-firefox.yml`, advisory as a check — and each lane's `Assert canary results` step
+automatic: both canaries are named files in the prover-ON `network-e2e-canary` job of
+`_extension-network-e2e-lane.yml`, which **both** network lanes call — `pr-extension-network-e2e.yml`
+(`extension-network-e2e-status`) and `pr-extension-network-e2e-firefox.yml` (`extension-network-e2e-firefox-status`,
+required on `dev`, advisory on `main`) — and each lane's `Assert canary results` step
 reads the run's json report back against `scripts/ci-cd/canary-expectations.json`, so a canary that
 skipped, vanished or never ran reds the job. That is the authoritative gate; the local run is a
 pre-flight. The frozen canary proves the regime's frozen account bytecode still simulates, proves natively,

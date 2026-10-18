@@ -34,9 +34,9 @@ import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { contactListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
-import { FEE_JUICE_BRIDGE_URL, feeLine, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
+import { FEE_JUICE_BRIDGE_URL, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
+import { feeText } from "@/utils/fee-estimation"
 import { validateSendAmount } from "@/popup/pages/send-amount"
-import { applyBalanceAdd, applyBalanceUpdate } from "@/popup/pages/send-balance-events"
 import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
 import { submitTransfer } from "@/popup/pages/send-submit"
 import { NO_FACTS, payerKindOf, publishFacts } from "@/components/composite/send/publish-facts"
@@ -51,6 +51,7 @@ import { usePrices } from "@/composables/usePrices"
 import { vSnackFooter } from "@/composables/snackInset"
 import { useSendReview } from "@/composables/useSendReview"
 import { useTicker } from "@/composables/ticker"
+import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
 const { openToast } = useToast()
 
 /** Store */
@@ -156,17 +157,17 @@ const tokensFailed = ref(false)
 const activeToken = computed(() => tokens.value?.find((t) => t.id === cacheStore.activeTokenIdx))
 const isBlockedTransfer = computed(() => !activeToken.value?.hasPrivateTransfers && !activeToken.value?.hasPublicTransfers)
 
-const tokenBalanceService = new TokenBalanceServiceClient()
-tokenBalanceService.onTokenBalanceAdded.add(onBalanceAdded)
-tokenBalanceService.onTokenBalanceUpdated.add(onBalanceUpdated)
-function onBalanceAdded(balance) {
-	applyBalanceAdd(tokenBalances.value, appStore.account.address, balance)
-}
-function onBalanceUpdated(balance) {
-	applyBalanceUpdate(tokenBalances.value, balance)
-}
-
 const tokenBalances = ref([])
+const tokenBalanceService = new TokenBalanceServiceClient()
+const balances = useTokenBalanceSnapshot({
+	client: tokenBalanceService,
+	live: appStore,
+	rows: tokenBalances,
+	added: "append",
+	reconnect: "off",
+})
+tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
+tokenBalanceService.onTokenBalanceUpdated.add(balances.onBalanceUpdated)
 const tokenBalance = computed(() => {
 	return tokenBalances.value?.find((b) => b?.token.id === cacheStore.activeTokenIdx)
 })
@@ -344,7 +345,7 @@ const openReview = () => {
 const closeReview = () => popupStore.close(REVIEW_KEY)
 
 const amountText = computed(() => (amountTerm.value ? String(amountTerm.value) : undefined))
-const feeText = computed(() => feeLine(feeDisplay.value))
+const reviewFeeText = computed(() => (feeDisplay.value ? feeText(feeDisplay.value) : undefined))
 
 const transferType = computed(() => {
 	if (selectedSendType.value === "private" && selectedReceiverType.value === "private") return TransferType.Private
@@ -396,12 +397,22 @@ const {
 } = useFeeEstimation({
 	debounceMs: 800,
 	estimate: (params, estimateToken, signal) => {
-		const { networkId, accountAddress, tokenId, transferType: tt, destination, amount, settings } = params
+		const { networkId, accountAddress, tokenId, tokenContract, transferType: tt, destination, amount, settings } = params
 		lastEstimateParams = params
 		console.debug(`[send:${sendInstanceId}] estimateTransferFee firing`)
 		return estimateWhenClear(
 			() =>
-				executionService.estimateTransferFee(networkId, accountAddress, tokenId, tt, destination, amount, settings, estimateToken),
+				executionService.estimateTransferFee(
+					networkId,
+					accountAddress,
+					tokenId,
+					tokenContract,
+					tt,
+					destination,
+					amount,
+					settings,
+					estimateToken,
+				),
 			signal,
 			{
 				onQueued: (answer) => {
@@ -571,6 +582,7 @@ watch(
 		() => feeSettings.value,
 		() => legal.isCurrent.value,
 		() => activeToken.value?.id,
+		() => activeToken.value?.contract,
 		() => appStore.network?.id,
 		() => appStore.account?.address,
 	],
@@ -597,6 +609,7 @@ watch(
 			networkId: appStore.network.id,
 			accountAddress: appStore.account.address,
 			tokenId: activeToken.value.id,
+			tokenContract: activeToken.value.contract,
 			transferType: transferType.value,
 			destination: searchTerm.value,
 			amount: amountValidation.value.integerized,
@@ -720,6 +733,7 @@ onBeforeUnmount(() => {
 	closeReview()
 
 	contactService.disconnect()
+	balances.dispose()
 	tokenBalanceService.disconnect()
 	tokenService.disconnect()
 	prices.dispose()
@@ -815,7 +829,6 @@ onBeforeUnmount(() => {
 						:isQueued="feeQueued"
 						:queuedCap="queueCap"
 						:originPrivacy="selectedSendType"
-						:destinationPrivacy="selectedReceiverType"
 						:payerNoticeShape="facts.noticeShape"
 						:txShape="feeTxShape"
 						v-model="feeSettings"
@@ -863,7 +876,7 @@ onBeforeUnmount(() => {
 			:symbol="activeToken?.symbol"
 			:recipientName="selectedContact?.name"
 			:recipientAddress="searchTerm"
-			:feeText="feeText"
+			:feeText="reviewFeeText"
 			:payerKind="payerKind"
 			:payerType="payer?.type"
 			:canSend="isAllowedToSend"

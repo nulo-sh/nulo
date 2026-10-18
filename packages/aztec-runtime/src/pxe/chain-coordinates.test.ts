@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { PXE_DATA_DIR_ROOT, chainDataDir, chainDataDirPrefix, chainRegistryKey, chainRegistryKeyPrefix } from "./chain-coordinates"
+import { PXE_DATA_DIR_ROOT, chainDataDir, chainRegistryKey, chainRegistryKeyPrefix } from "./chain-coordinates"
 
 describe("chain-coordinates codec", () => {
 	const c = { profileId: "p1", chainId: 31337 }
@@ -21,11 +21,8 @@ describe("chain-coordinates codec", () => {
 		expect(chainDataDir(c)).toBe(`pxe/${c.profileId}/${c.chainId}`)
 	})
 
-	test("dataDirPrefix + root match the persisted name", () => {
+	test("root matches the persisted name", () => {
 		expect(PXE_DATA_DIR_ROOT).toBe("pxe/")
-		expect(chainDataDirPrefix("p1")).toBe("pxe/p1/")
-		expect(chainDataDir(c).startsWith(chainDataDirPrefix("p1"))).toBe(true)
 		expect(chainDataDir(c).startsWith(PXE_DATA_DIR_ROOT)).toBe(true)
-		expect(chainDataDir({ profileId: "p10", chainId: 1 }).startsWith(chainDataDirPrefix("p1"))).toBe(false)
 	})
 })

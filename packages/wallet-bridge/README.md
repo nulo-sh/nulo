@@ -167,6 +167,38 @@ name claims. That check runs at execution, so this refusal can come after the
 approval window, and no wider manifest fixes it: the call itself must name the
 function its selector runs.
 
+The authorization registry's grant functions (`set_authorized`, `set_reject_all`,
+`set_authorized_private`) answer only the wallet's own authorization action, so
+a public authorization a dApp obtains by naming the registry is one the wallet
+indexes and can revoke. No grant, a wildcard included, admits a `sendTx` call to them (matched
+by selector, never by name) or a `createAuthWit` intent whose call or consumer
+is the registry; both are refused before any window. A transaction whose own
+contracts ask the account to authorize the registry is refused before the
+wallet signs that authorization. These refusals keep the scope refusal's code with their own
+text:
+
+```jsonc
+{
+  "code": 4100,
+  "message": "Apps cannot set public authorizations directly. Ask the wallet with grantPublicAuthwit.",
+  "data": { "walletErrorCode": "SCOPE_VIOLATION" }
+}
+```
+
+Simulating a registry call, its views included, is unaffected.
+
+A `createAuthWit` inner hash whose consumer is the signing account itself is
+refused before any window, whatever the grant, with the same code and its own
+text:
+
+```jsonc
+{
+  "code": 4100,
+  "message": "An authorization's consumer cannot be the account that signs it. Name the contract that consumes it.",
+  "data": { "walletErrorCode": "SCOPE_VIOLATION" }
+}
+```
+
 A call whose arguments the wallet API's schema refuses (a value that is not
 an address or a field, a call without its selector, a missing option, a
 `requestCapabilities` header without its version or metadata, a raw message

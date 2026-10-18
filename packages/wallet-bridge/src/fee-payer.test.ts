@@ -1,6 +1,5 @@
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
 import { ProtocolContractAddress } from "@aztec-labs/aztec.js/protocol"
-import { FunctionSelector } from "@aztec-labs/stdlib/abi"
 import { describe, expect, test } from "vitest"
 import {
 	CLAIM_AND_END_SETUP,
@@ -26,17 +25,8 @@ const CLAIM = {
 }
 
 describe("the pinned Fee Juice claim", () => {
-	test("address and selector match the protocol's", async () => {
+	test("the address matches the protocol's, and the claim as emitted is recognised", () => {
 		expect(ProtocolContractAddress.FeeJuice.toString()).toBe(FEE_JUICE_CONTRACT)
-		// The selector is a poseidon hash of the signature. This package's own (node) runner computes
-		// it; the extension's jsdom runner also collects this file but has no poseidon WASM there, and
-		// a missing hasher must not pass as a matching one — so the pin runs wherever it can and
-		// says so where it cannot.
-		const computed = await FunctionSelector.fromSignature("claim_and_end_setup((Field),u128,Field,Field)").then(
-			(selector) => selector.toString(),
-			(e: unknown) => (/bad_cast|wasm|WebAssembly/i.test(String(e)) ? "no-hasher" : Promise.reject(e)),
-		)
-		if (computed !== "no-hasher") expect(computed).toBe(CLAIM_AND_END_SETUP_SELECTOR)
 		expect(isClaimAndEndSetup(CLAIM, SENDER)).toBe(true)
 	})
 

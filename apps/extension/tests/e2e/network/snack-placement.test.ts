@@ -28,6 +28,7 @@ import {
 	waitForToast,
 } from "../fixtures/helpers"
 import { readSendRecords, waitForBalanceQueueIdle } from "../fixtures/journal"
+import { pollUntil } from "../fixtures/poll"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { shotSend } from "../fixtures/send-page"
 import { approveExecute, rejectExecute, waitForExecuteContent, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
@@ -229,11 +230,7 @@ async function storedValue<T>(page: Page, key: string): Promise<T | undefined> {
 }
 
 async function waitFor(what: string, done: () => Promise<boolean>, timeoutMs = 120_000): Promise<void> {
-	const deadline = Date.now() + timeoutMs
-	while (!(await done())) {
-		if (Date.now() > deadline) throw new Error(`${what} within ${timeoutMs} ms`)
-		await new Promise((r) => setTimeout(r, 500))
-	}
+	await pollUntil(done, (met) => met, { label: what, timeoutMs, intervalMs: 500 })
 }
 
 /** The wallet acted on the public receipt `txHash`: its record exists and no balance refresh it
@@ -327,15 +324,11 @@ async function settledGrantFinality(page: Page, node: TxNode, account: string, g
 	const started = Date.now()
 	await finalizeThrough(node, block)
 	const chainFinal = Date.now()
-	let grant = await soleGrantRow(page, account, grantHash)
-	const deadline = chainFinal + FINAL_READ_MS
-	while (grant.status !== TxStatus.Finalized || grant.awaitingFinality) {
-		if (Date.now() > deadline) {
-			throw new Error(`the wallet never read its grant final within ${FINAL_READ_MS} ms: ${JSON.stringify(grant)}`)
-		}
-		await new Promise((r) => setTimeout(r, 500))
-		grant = await soleGrantRow(page, account, grantHash)
-	}
+	const grant = await pollUntil(
+		() => soleGrantRow(page, account, grantHash),
+		(row) => row.status === TxStatus.Finalized && !row.awaitingFinality,
+		{ label: "the wallet reading its grant final", timeoutMs: FINAL_READ_MS, intervalMs: 500 },
+	)
 	console.log(
 		`[snack-placement] grant block ${block}: chain final in ${chainFinal - started} ms, wallet final ${Date.now() - chainFinal} ms later`,
 	)

@@ -28,6 +28,7 @@ import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-me
 /** Composables */
 import { ARRIVALS_KEY } from "@/composables/useArrivals"
 import { useIncomingTransfers } from "@/composables/useIncomingTransfers"
+import { useJournalMirror } from "@/composables/useJournalMirror"
 import { useScopedTokens } from "@/composables/useScopedTokens"
 
 /** Store */
@@ -77,34 +78,27 @@ const {
 /** Journal terminal records.
  *  Loaded on mount + refreshed on every journal event so the list reacts to
  *  late-arriving cancellations / failures while the user is on this page. */
-const terminalJournalOps = ref([])
+const {
+	rows: terminalJournalOps,
+	resnapshot: resnapshotTerminalOps,
+	dispose: disposeTerminalOps,
+	...terminalOpEvents
+} = useJournalMirror({
+	read: () => journalService.getOperations({ profileId: appStore.profile.id, isTerminal: true }),
+	accept: (op) => op.terminalAt !== null,
+	place: "front",
+	dropRefusedUpdate: true,
+	supersede: false,
+})
 
 async function loadTerminalJournalOps() {
 	if (!appStore.profile?.id) return
-	const records = await journalService.getOperations({ profileId: appStore.profile.id, isTerminal: true })
-	terminalJournalOps.value = records
+	await resnapshotTerminalOps()
 }
 
-function onJournalAdded(op) {
-	if (op.terminalAt === null) return
-	terminalJournalOps.value = [op, ...terminalJournalOps.value.filter((x) => x.id !== op.id)]
-}
-function onJournalUpdated(op) {
-	if (op.terminalAt === null) {
-		terminalJournalOps.value = terminalJournalOps.value.filter((x) => x.id !== op.id)
-		return
-	}
-	const idx = terminalJournalOps.value.findIndex((x) => x.id === op.id)
-	if (idx !== -1) terminalJournalOps.value[idx] = op
-	else terminalJournalOps.value = [op, ...terminalJournalOps.value]
-}
-function onJournalDeleted(op) {
-	terminalJournalOps.value = terminalJournalOps.value.filter((x) => x.id !== op.id)
-}
-
-journalService.onOperationAdded.add(onJournalAdded)
-journalService.onOperationUpdated.add(onJournalUpdated)
-journalService.onOperationDeleted.add(onJournalDeleted)
+journalService.onOperationAdded.add(terminalOpEvents.onOperationAdded)
+journalService.onOperationUpdated.add(terminalOpEvents.onOperationUpdated)
+journalService.onOperationDeleted.add(terminalOpEvents.onOperationDeleted)
 journalService.onConnected.add(loadTerminalJournalOps)
 
 /** Discriminated row model — see TransactionsList for shape. Three sources
@@ -195,6 +189,7 @@ onBeforeUnmount(() => {
 	incomingTransferService.disconnect()
 	configService.disconnect()
 	incomingPriceService.disconnect()
+	disposeTerminalOps()
 	disposeIncomingTransfers()
 	scopedTokens.dispose()
 	heroObserver?.disconnect()

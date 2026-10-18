@@ -16,7 +16,6 @@ import type { TxExecutionRequest } from "@aztec-labs/stdlib/tx"
 import { type JobError, type JobProgress, JobCancelledSentinel, normalizeError, type QueuedFeePayer } from "@nulo/wallet-core/jobs"
 import { JournaledRejection, OperationNotRecordedError, SessionEndedError, WalletError } from "@nulo/extension-messaging/errors"
 import type { IAccountContract } from "@nulo/aztec-runtime/account"
-import { formatFeeJuice } from "@/utils/fee-estimation"
 import type { Network } from "@/wallet/services/network/service"
 import { findPrimaryEndpoint, primaryEndpointUrl } from "@/wallet/services/network/spec"
 import type { NewOperationInput, OperationRecord } from "@/wallet/services/operation-journal/spec"
@@ -128,7 +127,6 @@ export interface TransferExecutorDeps {
 	lane: TransferExecutorLane
 	sequencer: SendSequencer
 	chainTip: Pick<ChainTipGate, "unconfirmed" | "wait">
-	getTokenContract(tokenId: number): Promise<string>
 	/** The validated row a build pays with: owned, with its protocol addresses derived even on a cold worker. */
 	getFpcImpl(fpcId: string): Promise<Fpc>
 	getTransactions(account: string): Promise<Tx[]>
@@ -190,8 +188,7 @@ export class TransferExecutor {
 
 	/** The account's line this transfer joins, and the keys it holds there (`transfer-sequence-keys.ts`). */
 	public async sequence(req: TransferRequest): Promise<TransferSequence> {
-		const [token, network] = await Promise.all([this.deps.getTokenContract(req.tokenId), this.deps.getNetwork(req.networkId)])
-		const chainId = network.chainId
+		const { chainId } = await this.deps.getNetwork(req.networkId)
 		const [fpc, history] = await Promise.all([
 			this.payingFpc(req.feeSettings),
 			this.deps.getTransactions(req.accountAddress).then((txs) => txs.filter((tx) => tx.chainId === chainId)),
@@ -199,7 +196,7 @@ export class TransferExecutor {
 		const feeSpender = feeSpenderOf(fpc, chainId)
 		const keys = transferSequenceKeys({
 			me: req.accountAddress,
-			token,
+			token: req.tokenContract,
 			type: req.transferType,
 			recipient: req.recipientAddress,
 			feeSpender,
@@ -290,7 +287,7 @@ export class TransferExecutor {
 			})
 			// Released at submit, as a dApp send's: the ticket, not the slot, holds until inclusion.
 			run.release?.()
-			transferTask.complete()
+			transferTask.completeIfTracked()
 			return txHash.toString()
 		} catch (error) {
 			// Journal already in `cancelled` (cancelJob did it); convert the
@@ -813,7 +810,6 @@ export class TransferExecutor {
 
 		return {
 			maxFee: maxFeeRaw.toString(),
-			maxFeeFormatted: formatFeeJuice(maxFeeRaw),
 			gasDetails: getGasDetails(txRequest),
 			estimateId,
 			...(sponsorFunding ? { sponsorFunding } : {}),

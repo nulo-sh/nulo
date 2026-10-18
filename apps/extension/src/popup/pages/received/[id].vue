@@ -21,6 +21,7 @@
 /** Components */
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import AddressCardLink from "@/popup/components/modules/tx/AddressCardLink.vue"
+import FeeAmount from "@/components/composite/FeeAmount.vue"
 
 /** Vendor */
 import { DateTime } from "luxon"
@@ -46,7 +47,7 @@ import { trimAddress } from "@/utils/string"
 import { receivedLabel, resolveFromDisplay, resolveReceivedType, tokenForReceipt } from "@/utils/received-display"
 import { knownDecimals } from "@/utils/token-amount"
 import { getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
-import { formatFeeJuice, feeToUsd, feeJuicePricingFromUsd } from "@/utils/fee-estimation"
+import { feeDisplay } from "@/utils/fee-estimation"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -162,9 +163,7 @@ const fromLabelId = useId()
 const toLabelId = useId()
 
 /** Derived — fee at today's rate (mirrors tx/[id].vue's fee valuation). */
-const feeJuicePricing = computed(() => feeJuicePricingFromUsd(prices.feeJuiceQuote.value?.usd))
-const formattedFee = computed(() => (feeJuiceRaw.value ? formatFeeJuice(BigInt(feeJuiceRaw.value)) : null))
-const formattedFeeUsd = computed(() => (feeJuiceRaw.value ? feeToUsd(BigInt(feeJuiceRaw.value), feeJuicePricing.value) : null))
+const fee = computed(() => (feeJuiceRaw.value ? feeDisplay(feeJuiceRaw.value, prices.feeJuiceQuote.value?.usd) : null))
 
 /** Handlers */
 const copy = async (value, label) => {
@@ -363,12 +362,13 @@ onBeforeUnmount(() => {
 						</Flex>
 						<Flex align="center" gap="6">
 							<span v-if="feeState === 'loading'" :class="$style.fee_shimmer" data-testid="received-fee-loading" />
-							<template v-else-if="feeState === 'shown' && formattedFee">
-								<span :class="$style.detail_value_mono" data-testid="received-fee-value">{{ formattedFee }} FJ</span>
-								<span v-if="formattedFeeUsd" :class="$style.detail_value_aux" title="At today's AZTEC price">{{
-									formattedFeeUsd
-								}}</span>
-							</template>
+							<FeeAmount
+								v-else-if="feeState === 'shown' && fee"
+								:display="fee"
+								:class="$style.detail_value_mono"
+								:usdClass="$style.detail_value_aux"
+								data-testid="received-fee-value"
+							/>
 							<button
 								v-else-if="feeState === 'tap'"
 								type="button"

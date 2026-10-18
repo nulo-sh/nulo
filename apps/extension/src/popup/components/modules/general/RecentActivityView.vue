@@ -22,6 +22,7 @@ import { TokenServiceClient } from "@/wallet/services/token/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { OriginType } from "@/wallet/services/transaction/spec"
 import { createRunFence } from "@/composables/runFence"
+import { useJournalMirror } from "@/composables/useJournalMirror"
 
 /** Utils */
 import { usePrices } from "@/composables/usePrices"
@@ -161,8 +162,8 @@ const executingSubtasks = ref([])
  *  fence let a standalone journal reconnect silently kill parked task loads
  *  AFTER the switch-clear, starving the feed until an unrelated event. The
  *  scope watcher begins both so its clear + reloads form one supersede unit
- *  per loader; the token lookup fences itself. */
-const journalFence = createRunFence()
+ *  per loader; the journal mirror carries the journal's, and the token lookup
+ *  fences itself. */
 const taskFence = createRunFence()
 
 /** UI Transfer tasks and journal rows carry a tokenId; the lookup resolves it to symbol + decimals
@@ -227,7 +228,22 @@ taskService.onTaskDeleted.add(onExecutingTaskDeleted)
  *  progress card. Filtered to in-flight states only — submitted/failed drop
  *  off automatically. */
 const journalService = new OperationJournalServiceClient()
-const journalOps = ref([])
+const journal = useJournalMirror({
+	accept: journalRecordInActiveScope,
+	place: "front",
+	read: readJournalSnapshot,
+	onRecord: (op) => {
+		clearExecutingTaskIfPendingCancelTerminal(op)
+		clearExecutingTaskIfThisIsTerminalMatch(op)
+		clearAwaitingTransactionFallback(op)
+	},
+	// v4 cancel-dupe (snapshot path): catches close-popup-mid-cancel-and-
+	// reopen + SW disconnect mid-cancel. Uses 30s window to avoid
+	// sweeping in old terminals that don't actually correspond to the
+	// current executingTask.
+	onSnapshot: () => clearExecutingTaskIfRecentTerminalMatch(),
+})
+const journalOps = journal.rows
 /** A snapshot that fails while the port stays up has no reconnect to retry it. */
 const JOURNAL_RETRY_MS = 2_000
 let journalRetry
@@ -242,6 +258,8 @@ const incomingTransferService = new IncomingTransferServiceClient()
 const configService = new ConfigServiceClient()
 const incomingPriceService = new PriceServiceClient()
 const incomingPrices = usePrices(incomingPriceService)
+/** Whether a re-ask opened now prices its figures: the sheet keeps the quote it opens with. */
+const feeQuoteState = computed(() => (incomingPrices.feeJuiceQuote.value ? "ready" : "none"))
 const arrivals = inject(ARRIVALS_KEY, undefined)
 const { incomingTransfers, dispose: disposeIncomingTransfers } = useIncomingTransfers({
 	incomingTransferService,
@@ -572,29 +590,17 @@ function clearAwaitingTransactionFallback(op) {
 	if (placeholder) appStore.removeAwaitingTransaction(placeholder.id)
 }
 
-function onJournalAdded(op) {
-	if (!journalRecordInActiveScope(op)) return
-	journalOps.value = [op, ...journalOps.value.filter((x) => x.id !== op.id)]
-	clearExecutingTaskIfPendingCancelTerminal(op)
-	clearExecutingTaskIfThisIsTerminalMatch(op)
-	clearAwaitingTransactionFallback(op)
-}
-function onJournalUpdated(op) {
-	if (!journalRecordInActiveScope(op)) return
-	const idx = journalOps.value.findIndex((x) => x.id === op.id)
-	if (idx !== -1) journalOps.value[idx] = op
-	else journalOps.value = [op, ...journalOps.value]
-	clearExecutingTaskIfPendingCancelTerminal(op)
-	clearExecutingTaskIfThisIsTerminalMatch(op)
-	clearAwaitingTransactionFallback(op)
-}
-function onJournalDeleted(op) {
-	journalOps.value = journalOps.value.filter((x) => x.id !== op.id)
-}
+journalService.onOperationAdded.add(journal.onOperationAdded)
+journalService.onOperationUpdated.add(journal.onOperationUpdated)
+journalService.onOperationDeleted.add(journal.onOperationDeleted)
 
-journalService.onOperationAdded.add(onJournalAdded)
-journalService.onOperationUpdated.add(onJournalUpdated)
-journalService.onOperationDeleted.add(onJournalDeleted)
+async function readJournalSnapshot() {
+	const captured = appStore.account?.address
+	const ops = await journalService.getOperations({ accountAddress: captured })
+	if (captured !== appStore.account?.address) return undefined
+	// The read filters by account and profile, not network.
+	return ops.filter(journalRecordInActiveScope).sort((a, b) => b.createdAt - a.createdAt)
+}
 
 /**
  * SW-restart safety: re-snapshot the full journal list on every port
@@ -606,25 +612,14 @@ journalService.onOperationDeleted.add(onJournalDeleted)
  * `subscribeWithSnapshot`). The durable-job reaper is what generates those
  * terminal transitions during SW down windows.
  */
-async function resnapshotJournal(isCurrent = journalFence.begin()) {
-	// A stale run reads nothing: after unmount the read would reconnect the client.
-	if (!isCurrent()) return
+async function resnapshotJournal(isCurrent = journal.begin()) {
 	try {
 		// Generation guard (not captured-equality): equality re-validates on
 		// A→B→A, letting the ABA run's stale snapshot land. Every trigger is a
 		// run on the shared scope fence — a standalone call (mount, reconnect,
 		// journal event) begins its own run; the scope watcher passes ITS run
 		// so the clear + both reloads share one supersede unit.
-		const captured = appStore.account?.address
-		const ops = await journalService.getOperations({ accountAddress: captured })
-		if (!isCurrent() || captured !== appStore.account?.address) return
-		// The read filters by account and profile, not network.
-		journalOps.value = ops.filter(journalRecordInActiveScope).sort((a, b) => b.createdAt - a.createdAt)
-		// v4 cancel-dupe (snapshot path): catches close-popup-mid-cancel-and-
-		// reopen + SW disconnect mid-cancel. Uses 30s window to avoid
-		// sweeping in old terminals that don't actually correspond to the
-		// current executingTask.
-		clearExecutingTaskIfRecentTerminalMatch()
+		await journal.resnapshot(isCurrent)
 	} catch {
 		if (!isCurrent()) return
 		clearTimeout(journalRetry)
@@ -741,7 +736,7 @@ watch(
 	scopeTripleKey,
 	(nv, ov) => {
 		if (nv === ov) return
-		const journalRun = journalFence.begin()
+		const journalRun = journal.begin()
 		const taskRun = taskFence.begin()
 		journalOps.value = []
 		executingTask.value = null
@@ -788,7 +783,7 @@ defineExpose({ journalOps, executingTask, executingSubtasks, pendingCancelJobIds
 
 onMounted(async () => {
 	// Begun before the awaits below, so an unmount during them leaves this run stale.
-	const journalRun = journalFence.begin()
+	const journalRun = journal.begin()
 	await scopedTokens.reload()
 
 	// ServiceClient doesn't auto-connect on listener registration — make
@@ -830,7 +825,7 @@ onBeforeUnmount(() => {
 	disposeIncomingTransfers()
 	syncHealth.dispose()
 	scopedTokens.dispose()
-	journalFence.invalidate()
+	journal.dispose()
 	clearTimeout(journalRetry)
 })
 </script>
@@ -843,6 +838,7 @@ onBeforeUnmount(() => {
 		gap="16"
 		data-testid="activity-feed-root"
 		:data-active-account="appStore.account?.address"
+		:data-fee-quote="feeQuoteState"
 	>
 		<Flex align="end" justify="between">
 			<SectionLabel label="Recent activity" />

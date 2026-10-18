@@ -11,7 +11,7 @@ import type { IPXE } from "@/wallet/services/pxe/client"
 import type { TaskService, WrappedTask } from "@/wallet/services/task/service"
 import { ExecutionCoordinator, ProvePhaseEventSchema } from "./execution-coordinator"
 
-const fakeTask = { complete: vi.fn(), fail: vi.fn(), startSubtask: vi.fn() } as unknown as WrappedTask
+const fakeTask = { complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), startSubtask: vi.fn() } as unknown as WrappedTask
 ;(fakeTask.startSubtask as ReturnType<typeof vi.fn>).mockReturnValue(fakeTask)
 const tasks = { startNewTask: () => fakeTask } as unknown as TaskService
 

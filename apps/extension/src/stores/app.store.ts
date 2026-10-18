@@ -21,6 +21,7 @@ import { type AwaitingTx, txBelongsToScope, txScope, useActivityStore } from "@/
 import { approvedSendsInFlight as countApprovedSendsInFlight, hasInFlightSend as inFlightHasSend } from "@/utils/in-flight-send"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
+import { journalAdded, journalDeleted, journalUpdated } from "@/utils/journal-mirror"
 import { createContactImportGuard } from "./contact-import-guard"
 
 /**
@@ -44,10 +45,11 @@ export const useAppStore = defineStore("app", () => {
 	const isLogined = ref<boolean>(false)
 	const isSessionChecked = ref<boolean>(false)
 	const pageAwaitingAuth = ref<string>("")
-	/** Identity-keyed record of a DEFINITIVE bootstrap failure. The unlock
-	 *  flow's activation wait joins on it so a failed bootstrap releases the
-	 *  waiter immediately instead of burning the full timeout; cleared at the
-	 *  start of every unlock attempt and on any successful bootstrap. */
+	/** Identity-keyed record of a DEFINITIVE bootstrap failure. The activation
+	 *  waits (unlock, create, import) join on it so a failed bootstrap releases the
+	 *  waiter immediately instead of burning the full timeout; cleared at the start
+	 *  of every unlock attempt, when a new activation of its profile starts, and on
+	 *  any successful bootstrap. */
 	const bootstrapFailure = ref<{ profileId: string; message: string } | null>(null)
 	/** Bumped by the shell on every lock and on every profile, network or account change. A
 	 *  result that settles under another value belongs to a screen that is gone: it announces
@@ -334,21 +336,14 @@ function publishInFlight(state: InFlightState, rows: OperationRecord[]): void {
 }
 
 function subscribeInFlight(state: InFlightState, profile: Ref<ProfileInfo | undefined>): void {
-	const upsertInFlight = (op: OperationRecord) => {
+	const applyInFlight = (reduce: (rows: OperationRecord[], op: OperationRecord) => OperationRecord[]) => (op: OperationRecord) => {
 		if (state.suspended) return
 		state.revision++
-		const idx = state.ops.value.findIndex((row) => row.id === op.id)
-		if (idx === -1) state.ops.value.push(op)
-		else state.ops.value.splice(idx, 1, op)
+		state.ops.value = reduce(state.ops.value, op)
 	}
-	const dropInFlight = (op: OperationRecord) => {
-		if (state.suspended) return
-		state.revision++
-		state.ops.value = state.ops.value.filter((row) => row.id !== op.id)
-	}
-	state.journal.onOperationAdded.add(upsertInFlight)
-	state.journal.onOperationUpdated.add(upsertInFlight)
-	state.journal.onOperationDeleted.add(dropInFlight)
+	state.journal.onOperationAdded.add(applyInFlight((rows, op) => journalAdded(rows, op, { place: "back" })))
+	state.journal.onOperationUpdated.add(applyInFlight((rows, op) => journalUpdated(rows, op, "back")))
+	state.journal.onOperationDeleted.add(applyInFlight(journalDeleted))
 	// A reconnect can drop events, so re-read rather than trusting the cache.
 	state.journal.onConnected?.add(() => void refreshInFlightOps(state, profile))
 }

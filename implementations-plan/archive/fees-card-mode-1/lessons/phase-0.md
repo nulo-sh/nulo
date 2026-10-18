@@ -1,0 +1,8 @@
+# fees-card-mode-1: phase 0 (planning) consults
+
+- 2026-10-17 19:01Z: both Sonnet recon explorers failed on the account's session limit (HTTP 429); the run stopped and was restarted at 22:1xZ. No consult result was lost; recon re-ran from scratch.
+- 2026-10-17 22:2xZ: recon re-run, two Sonnet explorers (reuse sweep; test and e2e map). Findings in recon.md.
+- 2026-10-17 22:5xZ: Codex r1 (session `01a14bfd`, gpt-6.1-sol, high): conditional approve. F1 the copy computeds need the live origin; F2 network picture pairs are not deterministic; F3 the out-model watchers have a parent observer (`accountUnusable` → `leaveUnusable`). Dispositions in plan.md § Audit verdicts.
+- 2026-10-17 22:5xZ: Opus Plan leg: conditional approve, O1-O9, all accepted. O1 corrected a wrong premise of mine: watchers on different props run in prop-update order, not creation order, so the planned identity-vs-verdict card pin would fail on today's code.
+- 2026-10-17 22:44Z: probe: a scratch Vitest spec and config under `~/.cache/nulo-backlog/fees-card-mode-1/` run the real card's children when the config spreads `apps/extension/vitest.config.ts`, sets `root`, and aliases `@vue/test-utils` and `pinia` to the app's `node_modules` (bare packages otherwise resolve from the spec's directory). Basis of the Phase 3 DOM comparison.
+- 2026-10-17 23:0xZ: final fresh Codex pass (session `01a14c0b`, gpt-6.1-sol, high): conditional approve (G1 D11 waiver, G2 DOM harness, G3 stored-metadata claim). Resumed: conditional approve (the noise box can hide a regression; a same-identity refresh derives settings from the pre-fill). Resumed again: approve.

@@ -297,8 +297,6 @@ export class ExecutionCoordinator {
 			await this.legal.assertCurrent()
 			assertLive()
 			await node.sendTx(tx)
-			onSent?.()
-			task.complete()
 		} catch (error) {
 			const classified =
 				initializesAccount === true && isExistingNullifierError(error)
@@ -307,6 +305,8 @@ export class ExecutionCoordinator {
 			task.fail(classified)
 			throw classified
 		}
+		onSent?.()
+		task.completeIfTracked()
 	}
 
 	/** The shared prove → toTx → send → record → journal SUCCESS pipeline.

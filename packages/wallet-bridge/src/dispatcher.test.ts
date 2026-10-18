@@ -1,9 +1,11 @@
 import "@nulo/wallet-sdk-schema-patch/register"
 import { describe, test, expect, beforeAll } from "vitest"
 import {
+	AuthRegistryRefusalError,
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
 	ContractNotRegisteredError,
+	OwnAccountIntentRefusalError,
 	InvalidWalletArgumentsError,
 	JobCancelledError,
 	PxeStaleAnchorError,
@@ -12,6 +14,7 @@ import {
 	ValidationError,
 } from "@nulo/extension-messaging/errors"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { NoUsableAccountError } from "./account-resolution"
 import { dataFieldsCovered, projectKnownCapability, ungrantedAccounts, unwrapOperationResult, WalletSdkDispatcher } from "./dispatcher"
 import type { Capability, DataCapability, GrantedCapabilityRecord, RejectedCapabilityRecord } from "./capabilities"
@@ -2772,6 +2775,28 @@ describe("dispatcher — createAuthWit asks unless the authorizations consent is
 	test("a batch leg with the consent absent opens the window", async () => {
 		const h = harness({ capabilityGrants: [accounts, listed] })
 		await h.batch(intent(TOKEN))
+		expect(h.counts).toEqual({ signed: 0, windows: 1 })
+	})
+
+	test("an intent naming the authorization registry is refused under any scope and consent: nothing signs, no window opens", async () => {
+		const REGISTRY = STANDARD_AUTH_REGISTRY_ADDRESS.toString()
+		const h = harness({ capabilityGrants: [accounts, anyContract], authorizationsWithoutAsking: { broad: true } })
+		await expect(h.authwit(intent(REGISTRY))).rejects.toBeInstanceOf(AuthRegistryRefusalError)
+		await expect(h.authwit({ consumer: REGISTRY, innerHash: `0x${"01".repeat(32)}` })).rejects.toBeInstanceOf(AuthRegistryRefusalError)
+		expect(h.counts).toEqual({ signed: 0, windows: 0 })
+
+		await expect(h.authwit(intent(TOKEN))).resolves.toBe("0xsigned")
+		expect(h.counts).toEqual({ signed: 1, windows: 0 })
+	})
+
+	test("an inner hash whose consumer is the signing account is refused top-level and batched: nothing signs, no window opens", async () => {
+		const innerHash = `0x${"01".repeat(32)}`
+		const h = harness({ capabilityGrants: [accounts, anyContract], authorizationsWithoutAsking: { broad: true } })
+		await expect(h.authwit({ consumer: ACCOUNT, innerHash })).rejects.toBeInstanceOf(OwnAccountIntentRefusalError)
+		await expect(h.batch({ consumer: ACCOUNT, innerHash })).rejects.toBeInstanceOf(OwnAccountIntentRefusalError)
+		expect(h.counts).toEqual({ signed: 0, windows: 0 })
+
+		await expect(h.authwit({ consumer: TOKEN, innerHash })).resolves.toBe("0xconfirmed")
 		expect(h.counts).toEqual({ signed: 0, windows: 1 })
 	})
 })

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest"
 import {
+	AuthRegistryRefusalError,
 	AccountAddressInconsistencyError,
 	ChainNotSupportedError,
 	DuplicateWalletError,
@@ -18,6 +19,7 @@ import {
 	RECEIVER_GONE_MESSAGE,
 	JobCancelledError,
 	OperationNotRecordedError,
+	OwnAccountIntentRefusalError,
 	ProfileIdConflictError,
 	PxeStaleAnchorError,
 	PxeStoreKeyMissingError,
@@ -132,6 +134,7 @@ describe("every WalletError subclass: identity and wire shape", () => {
 		| { kind: "constant"; message: string } // neither: the class's own sentence
 		| { kind: "capability" } // see the capabilityType table
 		| { kind: "base" } // not rebuilt: a plain WalletError keeps code, message and details
+		| { kind: "by-message" } // rebuilt only from its own messages; any other is its parent's
 	type Ctor = new (...args: never[]) => WalletError
 	type Row = { ctor: Ctor; make: () => WalletError; name: string; code: string; rebuild: Rebuild }
 	type Expected = { ctor: Ctor; name: string; message: string; details: unknown }
@@ -170,6 +173,20 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			name: "ScopeViolationError",
 			code: "SCOPE_VIOLATION",
 			rebuild: { kind: "drop-details" },
+		},
+		{
+			ctor: AuthRegistryRefusalError,
+			make: () => new AuthRegistryRefusalError("Scope violation: createAuthWit intent targets the authorization registry"),
+			name: "AuthRegistryRefusalError",
+			code: "SCOPE_VIOLATION",
+			rebuild: { kind: "by-message" },
+		},
+		{
+			ctor: OwnAccountIntentRefusalError,
+			make: () => new OwnAccountIntentRefusalError(),
+			name: "OwnAccountIntentRefusalError",
+			code: "SCOPE_VIOLATION",
+			rebuild: { kind: "by-message" },
 		},
 		{
 			ctor: TooManyPendingError,
@@ -318,6 +335,8 @@ describe("every WalletError subclass: identity and wire shape", () => {
 				throw new Error("capability rows have their own table")
 			case "base":
 				return { ctor: WalletError, name: "WalletError", message: payload.message, details: payload.details }
+			case "by-message":
+				return { ctor: ScopeViolationError, name: "ScopeViolationError", message: payload.message, details: undefined }
 		}
 	}
 
@@ -375,6 +394,23 @@ describe("every WalletError subclass: identity and wire shape", () => {
 		],
 	])("%s keeps its default message", (_name, make, message) => {
 		expect(make().message).toBe(message)
+	})
+
+	test.each([
+		"Scope violation: sendTx call targets an authorization registry grant function",
+		"Scope violation: createAuthWit intent targets the authorization registry",
+		"Scope violation: a transaction's authorization request targets the authorization registry",
+	])("SCOPE_VIOLATION carrying %j rebuilds as AuthRegistryRefusalError, under no other code", (message) => {
+		const own = { ctor: AuthRegistryRefusalError, name: "AuthRegistryRefusalError", message, details: undefined }
+		expectRebuilt({ code: "SCOPE_VIOLATION", message, details: { k: 1 } }, own)
+		expectRebuilt({ code: "VALIDATION", message }, { ctor: ValidationError, name: "ValidationError", message, details: undefined })
+	})
+
+	test("SCOPE_VIOLATION carrying the own-account intent message rebuilds as OwnAccountIntentRefusalError, under no other code", () => {
+		const { message } = new OwnAccountIntentRefusalError()
+		const own = { ctor: OwnAccountIntentRefusalError, name: "OwnAccountIntentRefusalError", message, details: undefined }
+		expectRebuilt({ code: "SCOPE_VIOLATION", message, details: { k: 1 } }, own)
+		expectRebuilt({ code: "VALIDATION", message }, { ctor: ValidationError, name: "ValidationError", message, details: undefined })
 	})
 
 	const foreignDetails = { jobId: "j", existingProfileName: "n", capabilityType: "accounts", k: 1 }

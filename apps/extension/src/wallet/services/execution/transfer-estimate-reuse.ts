@@ -17,17 +17,16 @@
  * dependencies (node lookup only after endpoint checks pass, etc.).
  */
 
-import type { MinFeeNode } from "@nulo/aztec-runtime/fee-juice"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
+import { sameFieldAddress } from "@nulo/wallet-bridge"
 import type { Fpc } from "@/wallet/services/fpc/fpc"
-import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { TransferType } from "@/wallet/services/transaction/spec"
 import type { Network } from "@/wallet/services/network/service"
 import { findPrimaryEndpoint } from "@/wallet/services/network/spec"
 import {
-	type ChainIdentity,
 	chainIdentityDrift,
+	type EstimateReuseDeps,
 	ESTIMATE_REUSE_TTL_MS,
 	fpcIdentityDrift,
 	pendingHashesChanged,
@@ -84,29 +83,17 @@ export type TransferEstimateReuseEntry = ReuseEntryBase & {
 	readonly sequenceEpoch: number | undefined
 	/** Inputs for the activity-feed record. We persist a transfer-only
 	 *  call shape (no FPC fee payload) so the card title stays the token
-	 *  symbol regardless of payment method. */
+	 *  symbol regardless of payment method. `token.contract` is also an
+	 *  input: a request for another contract misses. */
 	readonly token: { contract: string; name: string; symbol: string; decimals: number }
 	readonly fnName: string
 	readonly args: readonly unknown[]
 }
 
-/** Lazy dependency lookups — injected so the rejection ladder's laziness
- *  survives extraction (early rejects never touch later deps). */
-export interface TransferEstimateReuseDeps {
-	getNetwork(networkId: string): Promise<Network>
-	getNode(chainId: number): Promise<MinFeeNode>
-	/** Asserts the live chain against the network row and returns its raw pair. */
-	getLiveChainIdentity(network: Network): Promise<ChainIdentity>
-	getFpcInfo(fpcId: string): Promise<FpcInfo>
-	getPendingForAccount(account: string): { hash: string }[]
-	sequenceEpoch(chainId: number, account: string): number
-	logDebug(msg: string): void
-}
-
 export class TransferEstimateReuse {
 	private readonly cache = new SingleShotTtlCache<TransferEstimateReuseEntry>(ESTIMATE_REUSE_TTL_MS)
 
-	public constructor(private readonly deps: TransferEstimateReuseDeps) {}
+	public constructor(private readonly deps: EstimateReuseDeps) {}
 
 	/** Store an entry under a fresh id (the store sweeps expired entries so the
 	 *  map doesn't grow when the popup re-estimates without ever consuming). */
@@ -148,6 +135,7 @@ export class TransferEstimateReuse {
 			entry.networkId !== inputs.networkId ||
 			entry.accountAddress !== inputs.accountAddress ||
 			entry.tokenId !== inputs.tokenId ||
+			!sameFieldAddress(entry.token.contract, inputs.tokenContract) ||
 			entry.transferType !== inputs.transferType ||
 			entry.recipientAddress !== inputs.recipientAddress ||
 			entry.amount !== inputs.amount ||

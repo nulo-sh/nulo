@@ -13,6 +13,7 @@ import type { TokenInfo, TokenServiceClient, TokenUpdated } from "@/wallet/servi
 import { parseCaipAccount, parseCaipChain, resolveNetworkByChainId } from "@/wallet/utils/caip"
 import { displayCallsOf, undecodedAll } from "./display-calls"
 import { isEmbeddedFeePayment } from "./operation-validation"
+import { carriesFeeSettings, isAccountScoped, isNetworkScoped } from "@nulo/wallet-bridge"
 import type { DraftUIOperation } from "./types"
 
 /** Resolve every requested operation SEQUENTIALLY (op N+1's lookups start only after op N
@@ -39,59 +40,26 @@ export async function resolveOperations(
 	const accounts: Account[] = []
 	const operations: DraftUIOperation[] = []
 	for (const op of requested) {
-		switch (op.kind) {
-			case "register_contract":
-			case "register_sender":
-			case "aztec_getContractClassMetadata":
-			case "aztec_getContractMetadata":
-			case "aztec_getChainInfo":
-			case "aztec_registerSender":
-			case "aztec_getAddressBook":
-			case "aztec_registerContract":
-			case "aztec_getPrivateEvents": {
-				const network = await getNetwork(op.chain)
-				operations.push({ ...op, network, networkId: network.id })
-				break
-			}
-			case "register_token":
-			case "simulate_transaction":
-			case "simulate_utility":
-			case "aztec_simulateTx":
-			case "aztec_executeUtility":
-			case "aztec_profileTx":
-			case "aztec_createAuthWit": {
-				const [network, account] = await getNetworkAndAccount(op.account)
-				operations.push({
-					...op,
-					network,
-					networkId: network.id,
-					account,
-					accountAddress: account.address,
-				})
-				pushUniqueAccount(accounts, account)
-				break
-			}
-			case "aztec_sendTx":
-			case "send_transaction": {
-				const [network, account] = await getNetworkAndAccount(op.account)
-				// A dApp-supplied fee path pre-fills embedded so the FeeSettingsCard is suppressed. A
-				// requested self-pay (the account named as payer with no fee call) renders the card locked
-				// to Fee Juice and derives the settings once a verified balance can pay — nothing is
-				// pre-filled, so Confirm stays off over an empty or unread balance. Otherwise leave
-				// feeSettings undefined for the user; `requiresFeeSelection` at approve() gates undefined.
-				operations.push({
-					...op,
-					network,
-					networkId: network.id,
-					account,
-					accountAddress: account.address,
-					feeSettings: isEmbeddedFeePayment(op) ? { paymentMethod: { kind: "embedded" } } : undefined,
-				})
-				pushUniqueAccount(accounts, account)
-				break
-			}
-			default:
-				throw new Error("Invalid operation kind")
+		if (isNetworkScoped(op)) {
+			const network = await getNetwork(op.chain)
+			operations.push({ ...op, network, networkId: network.id })
+		} else if (isAccountScoped(op)) {
+			const [network, account] = await getNetworkAndAccount(op.account)
+			const resolved = { network, networkId: network.id, account, accountAddress: account.address }
+			// A dApp-supplied fee path pre-fills embedded so the FeeSettingsCard is suppressed. A
+			// requested self-pay (the account named as payer with no fee call) renders the card locked
+			// to Fee Juice and derives the settings once a verified balance can pay — nothing is
+			// pre-filled, so Confirm stays off over an empty or unread balance. Otherwise leave
+			// feeSettings undefined for the user; `requiresFeeSelection` at approve() gates undefined.
+			operations.push(
+				carriesFeeSettings(op)
+					? { ...op, ...resolved, feeSettings: isEmbeddedFeePayment(op) ? { paymentMethod: { kind: "embedded" } } : undefined }
+					: { ...op, ...resolved },
+			)
+			pushUniqueAccount(accounts, account)
+		} else {
+			const _unhandled: never = op
+			throw new Error("Invalid operation kind")
 		}
 	}
 	return { operations, accounts }

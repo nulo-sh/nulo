@@ -1,54 +1,26 @@
 import { mount } from "@vue/test-utils"
-import { afterEach, describe, expect, test, vi } from "vitest"
-import { nextTick, ref } from "vue"
+import { describe, expect, test } from "vitest"
 import PopupCard from "./PopupCard.vue"
-
-afterEach(() => {
-	vi.unstubAllGlobals()
-})
-
-/** The composable is auto-imported by the SFC; the test provides it the way the build would. */
-const stubSetting = (showFullscreen: boolean, calls: string[] = []) => {
-	const setting = ref(showFullscreen)
-	vi.stubGlobal("useFullscreenPopupSetting", () => ({
-		showFullscreen: setting,
-		start: async () => {
-			calls.push("start")
-		},
-		dispose: () => {
-			calls.push("dispose")
-		},
-	}))
-	return setting
-}
 
 const FlexStub = { template: '<div v-bind="$attrs"><slot /></div>', inheritAttrs: false }
 const mountCard = (props: Record<string, unknown> = {}) =>
-	mount(PopupCard, { props: { displaceIdx: 1, ...props }, global: { stubs: { Flex: FlexStub } } })
-const flexOf = (w: ReturnType<typeof mountCard>) => (w.element as HTMLElement).style.flexGrow
-
-describe("PopupCard", () => {
-	test("starts the fullscreen setting on mount and disposes it on unmount", () => {
-		const calls: string[] = []
-		stubSetting(false, calls)
-		const wrapper = mountCard()
-		expect(calls).toEqual(["start"])
-		wrapper.unmount()
-		expect(calls).toEqual(["start", "dispose"])
+	mount(PopupCard, {
+		props: { displaceIdx: 1, ...props },
+		slots: { default: '<button data-testid="slot-control">Close</button>' },
+		global: { stubs: { Flex: FlexStub } },
 	})
 
-	test("fills the popup while the setting says so", async () => {
-		const setting = stubSetting(true)
+describe("PopupCard", () => {
+	test("sits at its content height: no grow and nothing above the content, which renders in the body", () => {
 		const w = mountCard()
-		expect(flexOf(w)).toBe("10")
-		setting.value = false
-		await nextTick()
-		expect(flexOf(w)).toBe("")
+		const card = w.element as HTMLElement
+		expect(card.style.flexGrow).toBe("")
+		expect([...card.children].map((el) => el.getAttribute("data-testid"))).toEqual(["popup-card-body"])
+		expect(w.find('[data-testid="popup-card-body"] [data-testid="slot-control"]').exists()).toBe(true)
 		w.unmount()
 	})
 
 	test("sits back only below the top of the stack: depth 2, not depth 1 or a closed key's NaN", () => {
-		stubSetting(false)
 		const displaced = (displaceIdx: number) => {
 			const w = mountCard({ displaceIdx })
 			const out = w.classes().some((c) => c.includes("displace"))
@@ -58,17 +30,5 @@ describe("PopupCard", () => {
 		expect(displaced(2)).toBe(true)
 		expect(displaced(1)).toBe(false)
 		expect(displaced(Number.NaN)).toBe(false)
-	})
-
-	test("fit: sized to the content whatever the setting says; the handle expands it for this open only", async () => {
-		const setting = stubSetting(true)
-		const w = mountCard({ fit: true })
-		expect(flexOf(w)).toBe("")
-		await w.get('[class*="handle_zone"]').trigger("click")
-		expect(flexOf(w)).toBe("10")
-		expect(setting.value).toBe(true)
-		await w.get('[class*="handle_zone"]').trigger("click")
-		expect(flexOf(w)).toBe("")
-		w.unmount()
 	})
 })

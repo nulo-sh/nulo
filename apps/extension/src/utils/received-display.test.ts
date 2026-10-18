@@ -10,8 +10,7 @@ const REAL = AztecAddress.fromBigIntUnsafe(0xabcn).toString()
 
 const noteRec = (): IncomingNoteRecord => ({
 	kind: "note",
-	id: "note:p1|n1|0xsn",
-	siloedNullifier: "0xsn",
+	id: "note:p1|n1|0xuh",
 	noteHash: "0xnh",
 	owner: "0xa",
 	profileId: "p1",
@@ -58,8 +57,8 @@ describe("resolveReceivedType + receivedLabel", () => {
 	test("public from MAGIC → Private → Public", () => {
 		expect(receivedLabel(resolveReceivedType(pubRec(PRIVATE_ADDRESS_MAGIC_VALUE)))).toBe("Private → Public")
 	})
-	test("public from zero → Minted", () => {
-		expect(receivedLabel(resolveReceivedType(pubRec(ZERO)))).toBe("Minted")
+	test("public from zero → Mint (public)", () => {
+		expect(receivedLabel(resolveReceivedType(pubRec(ZERO)))).toBe("Mint (public)")
 	})
 })
 

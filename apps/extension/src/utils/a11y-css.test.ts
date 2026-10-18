@@ -2,7 +2,7 @@
  * jsdom evaluates neither media queries nor `:focus-visible`, so these rules are pinned in their
  * sources; the screenshot harness and the computed-style probe cover them in real browsers.
  */
-import { readdirSync, readFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { describe, expect, test } from "vitest"
 import { declarationsOf, enclosingRule, parseSource, REPO_ROOT, resolveSelector, sourceFiles } from "../../scripts/type-roles/source-scan"
@@ -58,12 +58,15 @@ describe("reduced motion and Disable animations both stop the shakes and the shi
 	})
 
 	test("no extension file draws its own skeleton shimmer: they all render the design package's Skeleton", () => {
-		const root = resolve(__dirname, "..")
-		const own = readdirSync(root, { recursive: true, encoding: "utf8" })
-			.filter((file) => /\.(vue|css)$/.test(file))
-			.filter((file) => /^\s*\.skeleton\s*\{/m.test(readFileSync(resolve(root, file), "utf8")))
+		const own = sourceFiles({ roots: ["apps/extension/src"], exts: ["vue", "css"] }).filter((file) =>
+			/^\s*\.skeleton\s*\{/m.test(readFileSync(resolve(REPO_ROOT, file), "utf8")),
+		)
 		expect(own).toEqual([])
 	})
+})
+
+test("the execute window's disclosure chevron turns without a transition under reduced motion", () => {
+	expect(reducedMotionRules(read("popup/windows/execute/DetailsToggle.vue")).get(".chevron")).toBe("transition: none;")
 })
 
 describe("a settings search's row outline holds with no fade under reduced motion and Disable animations", () => {

@@ -27,14 +27,15 @@ export interface DefaultSeed {
 /**
  * RPC URL stamped into the "Local Network" preset at build time. Defaults
  * to `http://localhost:8080`; e2e runs override via `VITE_LOCAL_NETWORK_RPC_URL`
- * so each parallel agent's wallet build talks to its own aztec sandbox.
+ * so each parallel agent's wallet build talks to its own aztec sandbox. The
+ * override must be a loopback URL: chain 0 is built only on one.
  *
  * The chainId-zero check in `service.ts` also normalizes against this value so that
  * if a user (or test fixture) edits the seed's endpoint URL via the
  * settings UI, the chainId resolution still recognizes it as Local Network.
  * For the structural path, callers that already know they're touching a
- * `kind === "local"` network pass `kindHint` to `_getChainId` and bypass
- * the URL comparison entirely.
+ * `kind === "local"` network pass `kindHint` to `_getChainId`, which
+ * replaces the URL comparison; the URL must still be loopback.
  */
 export const LOCAL_NETWORK_RPC_URL: string = (import.meta.env.VITE_LOCAL_NETWORK_RPC_URL as string | undefined) ?? "http://localhost:8080"
 
@@ -57,6 +58,12 @@ export const DEFAULT_SEEDS: DefaultSeed[] = [
 		isPrimaryActive: false,
 	},
 ]
+
+/** Whether this build seeds a network on `chainId`: the only networks a new profile, and so a
+ *  restore, starts with. */
+export function isSeedChain(chainId: number): boolean {
+	return DEFAULT_SEEDS.some((seed) => seed.chainId === chainId)
+}
 
 /** The one seed marked `isPrimaryActive` (Testnet). Single source
  *  for the primary/default network — consumed by `getOrInitNetworks` (fresh seed) AND

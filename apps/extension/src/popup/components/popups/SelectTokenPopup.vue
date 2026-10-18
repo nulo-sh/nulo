@@ -15,14 +15,14 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 
 /** Utils */
-import { parseRawBalance, safeFiatOf } from "@/utils/token-amount"
-import { HOME_TOKEN_ROWS, forChain, isActiveScopeRow, orderTokenRows } from "@/utils/token-order"
+import { HOME_TOKEN_ROWS, orderTokenRows } from "@/utils/token-order"
 import { matchesQuery } from "@/utils/token-search"
 
 /** Composables */
 import { pinScopeOf, usePinnedTokens } from "@/composables/usePinnedTokens"
 import { usePrices } from "@/composables/usePrices"
 import { usePopupStack } from "@/composables/usePopupStack"
+import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -42,12 +42,13 @@ const router = useRouter()
 
 const rows = ref([])
 const query = ref("")
-const loadError = ref(false)
+const balancesState = ref("loading")
+const loadError = computed(() => balancesState.value === "unavailable")
 
 /** Prices order the rows; the composable owns a shared ticker, so it lives with the component. */
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
-const fiatOf = safeFiatOf((tb) => prices.tokenFiatMicro(tb.token, parseRawBalance(tb)))
+const fiatOf = prices.fiatOfRow
 const pins = usePinnedTokens({
 	getScope: () => pinScopeOf(appStore.profile?.id, appStore.network?.chainId),
 	knownContracts: () => new Set(rows.value.map((tb) => tb.token.contract)),
@@ -66,34 +67,20 @@ const activeScope = () => {
 	const chainId = appStore.network?.chainId
 	return account && chainId !== undefined ? { account, chainId } : undefined
 }
-const inActiveScope = (tb) => isActiveScopeRow(appStore, tb)
-
+// The hide disconnects the client, so no event or connect reaches a hidden sheet.
 const tokenBalanceService = new TokenBalanceServiceClient()
-tokenBalanceService.onTokenBalanceAdded.add(onBalanceAdded)
-tokenBalanceService.onTokenBalanceUpdated.add(onBalanceUpdated)
-tokenBalanceService.onTokenBalanceDeleted.add(onBalanceDeleted)
-tokenBalanceService.onConnected.add(onReconnected)
-function onBalanceAdded(tb) {
-	if (!props.show || !inActiveScope(tb)) return
-	if (!rows.value.some((r) => r.id === tb.id)) rows.value.push(tb)
-}
-function onBalanceUpdated(tb) {
-	if (!inActiveScope(tb)) return
-	const idx = rows.value.findIndex((r) => r.id === tb.id)
-	if (idx !== -1) rows.value[idx] = tb
-}
-function onBalanceDeleted(tb) {
-	const idx = rows.value.findIndex((r) => r.id === tb.id)
-	if (idx !== -1) rows.value.splice(idx, 1)
-}
-// The first connect after a show is the one the load itself opened. Any later connect is a port
-// drop and reconnect: the request that was in flight has been rejected, so reload — the new
-// generation fences that rejection out.
-let connectsSinceShow = 0
-function onReconnected() {
-	connectsSinceShow++
-	if (props.show && connectsSinceShow > 1) void load()
-}
+const balances = useTokenBalanceSnapshot({
+	client: tokenBalanceService,
+	live: appStore,
+	rows,
+	state: balancesState,
+	retryOnReject: false,
+	refetchWhenDirty: false,
+	onReconnect: () => void load(),
+})
+tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
+tokenBalanceService.onTokenBalanceUpdated.add((tb) => balances.inActiveScope(tb) && balances.onBalanceUpdated(tb))
+tokenBalanceService.onTokenBalanceDeleted.add(balances.onBalanceDeleted)
 
 const handleSelectToken = (id) => {
 	cacheStore.activeTokenIdx = id
@@ -105,33 +92,22 @@ const handleManageTokens = () => {
 	popupStore.closeAll()
 }
 
-// The scope is captured before the fetch; a response for an older scope, or one that arrives after
-// the popup closed (the hide disconnects the port, which rejects the request), is dropped.
-let loadGeneration = 0
-const load = async () => {
-	const generation = ++loadGeneration
-	const scope = activeScope()
+// Without a whole scope nothing is read, and a read still out for the previous scope never lands.
+const load = () => {
 	rows.value = []
-	loadError.value = false
-	if (!scope) return
+	balancesState.value = "loading"
+	if (!activeScope()) return balances.invalidate()
 	void pins.refresh()
-	let all
-	try {
-		all = await tokenBalanceService.getTokenBalances(undefined, scope.account)
-	} catch {
-		if (props.show && generation === loadGeneration) loadError.value = true
-		return
-	}
-	if (!props.show || generation !== loadGeneration) return
-	rows.value = forChain(all, scope.chainId)
+	return balances.fetchTokenBalances()
 }
 
+// The hide disconnects the port, which rejects a read in flight; the next show's first connect is
+// again the one its load opens.
 const close = () => {
-	loadGeneration++
-	connectsSinceShow = 0
+	balances.reset()
 	rows.value = []
 	query.value = ""
-	loadError.value = false
+	balancesState.value = "loading"
 	tokenBalanceService.disconnect()
 }
 
@@ -147,7 +123,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
-	tokenBalanceService.onConnected.remove(onReconnected)
+	balances.dispose()
 	tokenBalanceService.disconnect()
 	prices.dispose()
 	priceService.disconnect()

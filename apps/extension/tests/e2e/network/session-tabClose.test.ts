@@ -18,7 +18,7 @@ const hasConfig = aztecConfig !== undefined
  * → `terminateForTab`), close-handling tears down the secure-channel transport
  * but keeps the DappSession record in storage. On reconnect from a fresh tab,
  * the canonical flow (`handleDiscovery`'s returning-session auto-approve in
- * `background.ts`) auto-approves discover (DappSession exists
+ * `wallet-sdk/discovery-flow.ts`) auto-approves discover (DappSession exists
  * for origin + unlocked + non-expired) and re-pops verify, as every reconnect does.
  */
 test.skipIf(!hasConfig)(

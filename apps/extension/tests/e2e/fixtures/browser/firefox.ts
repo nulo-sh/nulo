@@ -24,6 +24,7 @@ import {
 } from "./ownership"
 import { WebDriverSession } from "./webdriver-classic"
 import { EGRESS_CANARY_HOST } from "../egress-guard"
+import { PollTimeoutError, pollUntil } from "../poll"
 
 const SCHEME = "moz-extension://"
 
@@ -357,13 +358,12 @@ async function hostFromWindows({ session }: LaunchContext): Promise<string | und
 
 async function discoverExtensionId(browser: Browser): Promise<string> {
 	const context = contextFor(browser)
-	const deadline = Date.now() + 30_000
-	while (Date.now() < deadline) {
-		const host = hostFromPrefs(context) ?? (await hostFromWindows(context).catch(() => undefined))
-		if (host) return host
-		await new Promise((resolve) => setTimeout(resolve, 250))
-	}
-	throw new Error(`no per-profile UUID for ${context.addonId} in prefs.js and no open ${SCHEME} window after 30s`)
+	const host = await pollUntil(
+		async () => hostFromPrefs(context) ?? (await hostFromWindows(context).catch(() => undefined)),
+		(host) => Boolean(host),
+		{ label: `a per-profile UUID for ${context.addonId} in prefs.js or an open ${SCHEME} window`, timeoutMs: 30_000, intervalMs: 250 },
+	)
+	return host as string
 }
 
 /**
@@ -407,6 +407,34 @@ async function openScratchPage(browser: Browser, extensionId: string): Promise<P
  */
 const prepareClick = (page: Page): Promise<void> => page.bringToFront().catch(() => {})
 
+type BiDiPointerAction =
+	| { type: "pointerMove"; x: number; y: number }
+	| { type: "pointerDown" | "pointerUp"; button: number }
+	| { type: "pause"; duration: number }
+
+/** Puppeteer's BiDi mouse sends every `down` and `up` as a chain of its own, which Firefox never
+ *  counts as one double-click, so the whole sequence goes out as one chain on the page's context. */
+async function doubleClick(page: Page, x: number, y: number, gapMs: number): Promise<void> {
+	const frame = page.mainFrame() as unknown as {
+		browsingContext?: { performActions(sources: { type: "pointer"; id: string; actions: BiDiPointerAction[] }[]): Promise<void> }
+	}
+	if (!frame.browsingContext) throw new Error("doubleClick: the page's frame has no BiDi browsing context")
+	const press: BiDiPointerAction[] = [
+		{ type: "pointerDown", button: 0 },
+		{ type: "pointerUp", button: 0 },
+	]
+	// Through Puppeteer's mouse first, so its record of where the pointer stands stays true; the chain
+	// then drives the same input source, and a move to where it already stands changes nothing.
+	await page.mouse.move(x, y)
+	await frame.browsingContext.performActions([
+		{
+			type: "pointer",
+			id: "__puppeteer_mouse",
+			actions: [{ type: "pointerMove", x: Math.round(x), y: Math.round(y) }, ...press, { type: "pause", duration: gapMs }, ...press],
+		},
+	])
+}
+
 const KEYS_FOCUS_BUDGET_MS = 5_000
 const KEYS_FOCUS_ATTEMPT_MS = 500
 
@@ -415,18 +443,20 @@ const KEYS_FOCUS_ATTEMPT_MS = 500
  * a bringToFront made in between; so `page` is brought forward again until it reports focus.
  */
 async function prepareKeys(page: Page): Promise<void> {
-	const deadline = Date.now() + KEYS_FOCUS_BUDGET_MS
-	while (Date.now() < deadline) {
+	const focus = async () => {
 		await page.bringToFront()
-		const focused = await page
+		return page
 			.waitForFunction(() => document.hasFocus(), { timeout: KEYS_FOCUS_ATTEMPT_MS, polling: 50 })
 			.then(
 				() => true,
 				() => false,
 			)
-		if (focused) return
 	}
-	throw new Error(`prepareKeys: the page did not take focus within ${KEYS_FOCUS_BUDGET_MS / 1000}s`)
+	await pollUntil(focus, (focused) => focused, {
+		label: "prepareKeys: the page taking focus",
+		timeoutMs: KEYS_FOCUS_BUDGET_MS,
+		intervalMs: 0,
+	})
 }
 
 const BACKGROUND_NOT_RUNNING = "the background page is not running"
@@ -646,14 +676,19 @@ async function holdNextCredentialGet(page: Page): Promise<void> {
 
 /** `targets()` is a synchronous read of Puppeteer's own map, so a tight poll costs no round trip. */
 async function waitForTarget(browser: Browser, predicate: (target: Target) => boolean, timeout: number): Promise<Target> {
-	const deadline = Date.now() + timeout
-	while (Date.now() < deadline) {
-		const match = browser.targets().find(predicate)
-		if (match) return match
-		await new Promise((resolve) => setTimeout(resolve, 100))
+	try {
+		const match = await pollUntil(
+			async () => browser.targets().find(predicate),
+			(match) => match !== undefined,
+			{ label: "waitForTarget: a matching target", timeoutMs: timeout, intervalMs: 100 },
+		)
+		return match as Target
+	} catch (error) {
+		if (!(error instanceof PollTimeoutError)) throw error
+		// The e2e-testing skill's triage rows key on this exact text.
+		const failure = `waitForTarget: no matching target after ${timeout}ms`
+		throw new Error(await withInventory(failure, () => windowInventory(browser), INVENTORY_BUDGET_MS))
 	}
-	const failure = `waitForTarget: no matching target after ${timeout}ms`
-	throw new Error(await withInventory(failure, () => windowInventory(browser), INVENTORY_BUDGET_MS))
 }
 
 const INVENTORY_BUDGET_MS = 5_000
@@ -708,13 +743,12 @@ async function waitForNewTab(browser: Browser, open: () => Promise<void>, timeou
 	const session = classicSessionFor(browser)
 	const before = new Set(await session.listWindows())
 	await open()
-	const deadline = Date.now() + timeout
-	while (Date.now() < deadline) {
-		const handle = (await session.listWindows()).find((listed) => !before.has(listed))
-		if (handle) return { close: () => closeTab(session, handle) }
-		await pause(100)
-	}
-	throw new Error(`waitForNewTab: no new tab or window after ${timeout}ms`)
+	const handle = await pollUntil(
+		async () => (await session.listWindows()).find((listed) => !before.has(listed)),
+		(handle) => handle !== undefined,
+		{ label: "waitForNewTab: a new tab or window", timeoutMs: timeout, intervalMs: 100 },
+	)
+	return { close: () => closeTab(session, handle as string) }
 }
 
 /** By handle, from Firefox's own scope: a classic close would switch to the tab first, which selects it. */
@@ -733,11 +767,11 @@ async function closeTab(session: WebDriverSession, handle: string): Promise<void
 	)
 	if (outcome !== "removing" && outcome !== "gone") throw new Error(`closeTab: ${outcome}`)
 	// `removeTab` can return with the tab still open: a refused unload, or a last tab's window closing.
-	const deadline = Date.now() + 5_000
-	while ((await session.listWindows()).includes(handle)) {
-		if (Date.now() >= deadline) throw new Error(`closeTab: ${handle} is still open 5s after removeTab`)
-		await pause(100)
-	}
+	await pollUntil(
+		async () => (await session.listWindows()).includes(handle),
+		(open) => !open,
+		{ label: `closeTab: ${handle} closed after removeTab`, timeoutMs: 5_000, intervalMs: 100 },
+	)
 }
 
 /**
@@ -827,6 +861,7 @@ export const firefoxDriver: BrowserDriver = {
 	interceptRpc: (browser, _extensionId, fromOrigin, mode) => observeAndIntercept(classicSessionFor(browser), fromOrigin, mode),
 	prepareClick,
 	prepareKeys,
+	doubleClick,
 	pickFile,
 	virtualAuthenticator: sessionAuthenticator,
 	holdNextCredentialGet,

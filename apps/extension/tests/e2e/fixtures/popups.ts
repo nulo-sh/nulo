@@ -11,6 +11,7 @@ import { join } from "node:path"
 import type { Page, Target } from "puppeteer"
 import { waitForTarget } from "./browser"
 import { clickByTestId, clickSelector, patchPagePolling, waitForHash } from "./dom"
+import { pollUntil } from "./poll"
 import type { ExtensionContext } from "./extension"
 import { selectFeeMethod, type FeeMethodSubtitle } from "./transfers"
 import { recordPageErrors } from "./wallet-pages"
@@ -120,16 +121,15 @@ export async function waitForPopup(
 }
 
 export async function waitForMainFrame(page: Page, timeout = 5_000): Promise<void> {
-	const start = Date.now()
-	while (Date.now() - start < timeout) {
+	const ready = async () => {
 		try {
 			page.mainFrame()
-			return
+			return true
 		} catch {
-			await new Promise((r) => setTimeout(r, 50))
+			return false
 		}
 	}
-	throw new Error(`waitForMainFrame: page main frame not ready after ${timeout}ms`)
+	await pollUntil(ready, (ok) => ok, { label: "waitForMainFrame: the page's main frame ready", timeoutMs: timeout, intervalMs: 50 })
 }
 
 export type CreatedWindow = { id?: number; type?: string }
@@ -148,12 +148,15 @@ export async function recordCreatedWindows(control: Page): Promise<() => Promise
  *  opening a second popup of the same kind so waitForTarget doesn't match
  *  the still-closing first popup. */
 export async function waitForPopupClosed(page: Page, timeout = 5_000): Promise<void> {
-	const start = Date.now()
-	while (Date.now() - start < timeout) {
-		if (page.isClosed()) return
-		await new Promise((r) => setTimeout(r, 50))
-	}
-	throw new Error(`waitForPopupClosed: popup did not close within ${timeout}ms`)
+	await pollUntil(
+		async () => page.isClosed(),
+		(closed) => closed,
+		{
+			label: "waitForPopupClosed: the popup closed",
+			timeoutMs: timeout,
+			intervalMs: 50,
+		},
+	)
 }
 
 export async function approveDiscover(page: Page): Promise<void> {
@@ -310,8 +313,12 @@ export async function readCapabilitySwitch(page: Page, rowKey: string): Promise<
 
 const APP_SWITCH = '[data-testid="connected-app-authorizations-toggle"]'
 
-/** Open Settings → Connected apps → the app served from `host`. A miss names the hosts listed. */
-async function openConnectedApp(page: Page, host: string): Promise<void> {
+/**
+ * Open Settings → Connected apps → the app served from `host`, ready once `ready` shows: the
+ * authorizations switch by default, which a grant with no call scope does not render. A miss names
+ * the hosts listed.
+ */
+export async function openConnectedApp(page: Page, host: string, ready = APP_SWITCH): Promise<void> {
 	await page.evaluate(() => {
 		window.location.hash = "#/popup/settings/connected-apps"
 	})
@@ -320,7 +327,7 @@ async function openConnectedApp(page: Page, host: string): Promise<void> {
 		const hosts = await page.$$eval('[data-testid="connected-app-row"]', (rows) => rows.map((r) => r.getAttribute("data-app-host")))
 		throw new Error(`no connected-app row for ${host}; rows: ${JSON.stringify(hosts)}`, { cause: err })
 	})
-	await page.waitForSelector(APP_SWITCH, { visible: true, timeout: 15_000 })
+	await page.waitForSelector(ready, { visible: true, timeout: 15_000 })
 }
 
 const switchIs = (page: Page, on: boolean) =>

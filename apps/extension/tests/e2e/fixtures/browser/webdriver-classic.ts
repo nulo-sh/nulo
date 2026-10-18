@@ -7,6 +7,8 @@
  * both channels stay open against the same session for the life of a launch.
  */
 
+import { pollUntil } from "../poll"
+
 export interface SessionCapabilities {
 	browserVersion: string
 	/** BiDi endpoint, present because the session was requested with `webSocketUrl: true`. */
@@ -57,15 +59,13 @@ export class WebDriverSession {
 		running: () => boolean,
 		timeoutMs = 20_000,
 	): Promise<WebDriverSession> {
-		const deadline = Date.now() + timeoutMs
-		let up = false
-		while (!up && running() && Date.now() < deadline) {
-			up = await fetch(`${base}/status`, { signal: AbortSignal.timeout(2_000) }).then(
+		const status = async () =>
+			running() &&
+			(await fetch(`${base}/status`, { signal: AbortSignal.timeout(2_000) }).then(
 				(r) => r.ok,
 				() => false,
-			)
-			if (!up) await new Promise((resolve) => setTimeout(resolve, 100))
-		}
+			))
+		await pollUntil(status, (up) => up || !running(), { label: `geckodriver serving ${base}`, timeoutMs, intervalMs: 100 })
 		if (!running()) throw new Error(`geckodriver exited before serving ${base} — most likely another launch took its port; retry`)
 		const value = await request(base, "POST", "/session", { capabilities: { alwaysMatch: capabilities } })
 		const { sessionId, capabilities: caps } = value as { sessionId?: string; capabilities?: SessionCapabilities }

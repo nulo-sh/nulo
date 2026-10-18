@@ -15,7 +15,6 @@ import { NoteService, type RawNote } from "@/wallet/services/note/service"
 import { ConfigService } from "@/wallet/services/config/service"
 import { TokenBalanceService } from "@/wallet/services/token-balance/service"
 import { TaskService } from "@/wallet/services/task/service"
-import { TaskStatus } from "@/wallet/services/task/spec"
 import { PriceService, type PriceSnapshot } from "@/wallet/services/price/service"
 import { getPriceMapEntry } from "@/wallet/services/price/price-map"
 import { isAmountAboveDustThreshold, usdThresholdToMicro } from "@/utils/incoming-dust"
@@ -24,15 +23,15 @@ import { TxHash } from "@aztec-labs/stdlib/tx"
 import type { PublicEventCursor, PublicScanTips, PublicTokenClassStatus, PublicTransferEvent } from "@nulo/aztec-runtime/pxe/public-events"
 import type { IncomingPollGate } from "@/e2e/incoming-poll-gate"
 import { IncomingTransferRepository } from "./repository"
+import { BalanceRefreshOutbox } from "./balance-outbox"
 import { PublicEventIndexer, type PublicEventReader, type PublicScanResult } from "./public-event-indexer"
 import { ScanEpisodeStore, scanEpisodeKey, scanEpisodeNetworkPrefix } from "./scan-episodes"
 import { isScanSuccess, type ScanOutcome } from "./scan-health"
 import { ARRIVAL_ID_MAX, ARRIVAL_PLAYED_CAP, type ArrivalState, arrivalStateOf, claimPlayed, isArrivalEligible } from "./arrival-state"
-import { type NoteRowDecision, decideNoteRow, isVerifiedBracket, movedRows, needsBracket, notesByNullifier } from "./note-reconcile"
+import { type NoteRowDecision, decideNoteRow, isVerifiedBracket, movedRows, needsBracket, notesById } from "./note-reconcile"
 import {
 	INCOMING_TRANSFER_SERVICE_NAME,
 	type Events,
-	type IncomingBalanceOutboxRow,
 	type IncomingNoteRecord,
 	type IncomingPublicEventRecord,
 	type IncomingSyncHealth,
@@ -114,9 +113,6 @@ type ScopeClear = { dropsEpisode: (key: string) => boolean; evictFees: () => voi
 
 type TrustFence = (isCurrent: () => boolean) => { live: () => boolean; kept: () => boolean }
 
-type OutboxRowKey = { profileId: string; networkId: string; accountAddress: string; tokenId: number }
-type RefreshRequestResult = { taskId: string } | { busy: true } | { missing: true }
-
 /** The highest `l2BlockNumber` among `records`, or undefined for none. */
 function maxBlock(records: { l2BlockNumber: number }[]): number | undefined {
 	let max: number | undefined
@@ -153,14 +149,6 @@ function trustedRow(stored: IncomingTrustRecord, floor: { arrivalFloor: number |
 	return row
 }
 
-/** What an anchored outbox row's task state asks of the drain: terminal-success
- *  deletes the row, terminal-failure/missing clears the anchor, pending waits. */
-function anchoredRowAction(state: "success" | "failure" | "pending" | "missing"): "delete" | "clear" | "wait" {
-	if (state === "success") return "delete"
-	if (state === "failure" || state === "missing") return "clear"
-	return "wait"
-}
-
 /**
  * IncomingTransferService — surfaces decrypted notes that arrived from known
  * fungible-token contracts as "Received" rows in the activity feed.
@@ -179,7 +167,7 @@ function anchoredRowAction(state: "success" | "failure" | "pending" | "missing")
  *   iterates the registered contract list and calls
  *   `noteService.getNotesRaw(networkId, account, contract)`. For each note,
  *   the 3-source dedupe gates record creation: prior records
- *   (`siloedNullifier`), user's own outgoing tx hashes, in-flight journal
+ *   (`uniqueNoteHash`), user's own outgoing tx hashes, in-flight journal
  *   `progress.txHash`.
  *
  * Trust state machine (per `(profileId, networkId, contract)`):
@@ -248,8 +236,6 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	private operationJournalService: OperationJournalService = null!
 	private noteService: NoteService = null!
 	private configService: ConfigService = null!
-	private tokenBalanceService: TokenBalanceService = null!
-	private taskService: TaskService = null!
 	private priceService: PriceService = null!
 
 	/** Singleflight scheduler per `(networkId, accountAddress)`. The interval
@@ -282,6 +268,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	private pxeService: PxeServiceClient = null!
 	private reader: PublicEventReader = null!
 	private indexer: PublicEventIndexer = null!
+	private outbox: BalanceRefreshOutbox = null!
 	/** Single global lock serializing every writer on this service's storage
 	 *  surface. Replaces the ad-hoc race guards (scanGenerations,
 	 *  txDeleteInflight, compensating reverts) that earlier
@@ -381,9 +368,15 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		this.operationJournalService = services.get(OperationJournalService.name)
 		this.noteService = services.get(NoteService.name)
 		this.configService = services.get(ConfigService.name)
-		this.tokenBalanceService = services.get(TokenBalanceService.name)
-		this.taskService = services.get(TaskService.name)
 		this.priceService = services.get(PriceService.name)
+		this.outbox = new BalanceRefreshOutbox({
+			repo: this.repo,
+			activeProfile: () => this.profileService.getActiveProfile(),
+			withLock: (fn) => this.withServiceLock(fn),
+			tokenBalances: services.get<TokenBalanceService>(TokenBalanceService.name),
+			tasks: services.get<TaskService>(TaskService.name),
+			warn: (...data) => this.logWarn(...data),
+		})
 
 		// Public-event scan arm: its own PXE client + the injected indexer collaborator.
 		// The reader curries `networkId → NetworkInfo` (via the same `networkInfoFrom` the note arm
@@ -454,7 +447,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 		// Drain any balance-refresh outbox rows that survived an SW death (pull-based recovery —
 		// re-requests the refresh, no lost or mis-attributed enqueue).
-		await this.drainBalanceOutbox().catch((err) => this.logWarn("init drain failed", err))
+		await this.outbox.drain().catch((err) => this.logWarn("init drain failed", err))
 	}
 
 	private onActiveProfileChanged = async (): Promise<void> => {
@@ -1166,7 +1159,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 				await this.scanAndRecord(key, target, episodeKey, force)
 				this.announceHealth(target.profileId, target.networkId)
 			}
-			await this.drainBalanceOutbox()
+			await this.outbox.drain()
 		} catch (error) {
 			this.logWarn(`Public scan failed for ${key}`, error)
 		} finally {
@@ -1450,7 +1443,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			if (scan) await this.scanNoteTarget(key, { profileId, networkId, accountAddress }, contracts, force)
 			// Drain the balance-refresh outbox each tick (both arms). The drain is service-global +
 			// active-profile-scoped, so any scheduler tick makes progress on the causal ack.
-			await this.drainBalanceOutbox()
+			await this.outbox.drain()
 		} finally {
 			this.polling.delete(key)
 		}
@@ -1545,7 +1538,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		}
 		let reached = true
 		for (const note of notes) {
-			if (!note.siloedNullifier) continue
+			if (!note.uniqueNoteHash) continue
 			if (this.serviceEpoch === epochAtStart && (await this.commitReadsBlockTime(ctx, note))) {
 				await blockTimestampFor(note.l2BlockNumber)
 			}
@@ -1561,7 +1554,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		// Tell the test the parked scan's locked commit is done (the late emission,
 		// if any, has fired) — its precondition before asserting cross-account isolation.
 		if (heldTxHash) await this.incomingPollGate?.markCommitted(heldTxHash)
-		const reconciled = await this.reconcileNoteRows(ctx, notesByNullifier(notes), tips, epochAtStart)
+		const reconciled = await this.reconcileNoteRows(ctx, notesById(profileId, networkId, notes), tips, epochAtStart)
 		return reached && reconciled
 	}
 
@@ -1588,7 +1581,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const bracket = tips ? await this.readNoteBracket(ctx, tips) : undefined
 		if (!tips || !bracket) return false
 		for (const row of rest) {
-			const note = bracket.notes.get(row.siloedNullifier)
+			const note = bracket.notes.get(row.id)
 			if (note) this.noteStrikes.delete(row.id)
 			const decision = decideNoteRow(row, note, bracket, this.noteStrikes.has(row.id))
 			if (!(await this.applyNoteDecision(ctx, row, decision, scopeKey, epochAtStart))) reached = false
@@ -1598,7 +1591,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 	/** A strike lasts while its row is unsettled and missing from the scope's reads. */
 	private forgetStrikes(scopeKey: string, rows: IncomingNoteRecord[], active: Map<string, RawNote>): void {
-		const missing = new Set(rows.filter((r) => !active.has(r.siloedNullifier)).map((r) => r.id))
+		const missing = new Set(rows.filter((r) => !active.has(r.id)).map((r) => r.id))
 		for (const [id, key] of this.noteStrikes) if (key === scopeKey && !missing.has(id)) this.noteStrikes.delete(id)
 	}
 
@@ -1613,7 +1606,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			const notes = await this.noteService.getNotesRaw(networkId, accountAddress, contract, "active-or-nullified")
 			const after = await this.noteService.getSyncedBlock(networkId)
 			return {
-				notes: notesByNullifier(notes),
+				notes: notesById(ctx.profileId, networkId, notes),
 				finalized: tips.finalizedBlockNumber,
 				synced: after.number,
 				verified: isVerifiedBracket(before, after, tips.proposedBlockHash),
@@ -1661,6 +1654,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (blockTimestamp === undefined) return false
 		const moved: IncomingNoteRecord = {
 			...row,
+			txHash: note.txHash,
 			l2BlockNumber: note.l2BlockNumber,
 			txIndexInBlock: note.txIndexInBlock,
 			indexInTx: note.noteIndexInTx,
@@ -1699,7 +1693,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			if (!fenced()) return false
 			const current = await this.repo.getRecord(row.id)
 			if (!fenced() || !current || !sameRow(current, row)) return false
-			if (row.tokenId !== undefined) await this.markBalanceDirty(profileId, networkId, accountAddress, row.tokenId)
+			if (row.tokenId !== undefined) await this.outbox.markDirty(profileId, networkId, accountAddress, row.tokenId)
 			if (!fenced()) return false
 			await this.repo.deleteRecord(row.id)
 			this.noteStrikes.delete(row.id)
@@ -1713,7 +1707,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  Neither an own send's change note nor a note without an amount ever gets a row, so without
 	 *  those exclusions every scan would fetch its block. */
 	private async commitReadsBlockTime(ctx: NoteScanContext, note: RawNote): Promise<boolean> {
-		const existing = await this.repo.getRecord(noteRecordId(ctx.profileId, ctx.networkId, note.siloedNullifier))
+		const existing = await this.repo.getRecord(noteRecordId(ctx.profileId, ctx.networkId, note.uniqueNoteHash))
 		if (existing) return existing.blockTimestamp === undefined
 		return parseNoteAmount(note) !== null && !(await this.isOwnSend(ctx, note.txHash))
 	}
@@ -1729,7 +1723,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const token = findToken(tokens, contract, chainId)
 		if (!token) return // Token removed concurrently.
 
-		const existing = await this.repo.getRecord(noteRecordId(profileId, networkId, note.siloedNullifier))
+		const existing = await this.repo.getRecord(noteRecordId(profileId, networkId, note.uniqueNoteHash))
 		if (!fenced()) return
 		if (existing) {
 			if (existing.blockTimestamp === undefined) await this.backfillNoteTimestamp(ctx, existing, note, fenced)
@@ -1804,7 +1798,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			trustState,
 			blockTimestamp,
 		})
-		await this.markBalanceDirty(profileId, networkId, accountAddress, token.id)
+		await this.outbox.markDirty(profileId, networkId, accountAddress, token.id)
 		if (!fenced()) return
 		await this.repo.upsertRecord(record)
 
@@ -2390,7 +2384,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 				if (!orphanedByReconciliation(record, marker, canonicalByHeight)) continue
 				// Enqueue the balance refresh BEFORE deleting (delete-first would lose the refresh on MV3
 				// suspension), never driven by the recipient filter.
-				if (record.tokenId !== undefined) await this.markBalanceDirty(profileId, networkId, record.accountAddress, record.tokenId)
+				if (record.tokenId !== undefined) await this.outbox.markDirty(profileId, networkId, record.accountAddress, record.tokenId)
 				await this.repo.deleteRecord(record.id)
 				this.emit("onIncomingTransferDeleted", record)
 			}
@@ -2538,7 +2532,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		fenced: () => boolean,
 	): Promise<PublicCommit> {
 		const { profileId, networkId, accountAddress } = ctx
-		await this.markBalanceDirty(profileId, networkId, accountAddress, token.id)
+		await this.outbox.markDirty(profileId, networkId, accountAddress, token.id)
 		if (!fenced()) return "revoked"
 		const record = this.buildPublicRecord({ ev, profileId, networkId, account: accountAddress, token, trustState })
 		await this.repo.upsertRecord(record)
@@ -2578,147 +2572,6 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		}
 	}
 
-	/**
-	 * Write-side: mark a balance dirty (written BEFORE the record). A new receipt OVERWRITES
-	 * `dirtyAt` and CLEARS any prior task anchor — the old anchor is stale w.r.t. the newer receipt.
-	 * The drain reads these rows and issues the causal refresh.
-	 */
-	private async markBalanceDirty(profileId: string, networkId: string, account: string, tokenId: number): Promise<void> {
-		await this.repo.setOutbox(profileId, networkId, account, tokenId, { dirtyAt: Date.now() })
-	}
-
-	/**
-	 * Causal task-anchored drain of the balance-refresh outbox. Runs on init + every scan
-	 * tick. ACTIVE-PROFILE-SCOPED — `TokenBalanceService`'s balance map is active-profile-only, so
-	 * draining a background profile's row would look up a missing balance and false-classify it
-	 * stale. Per row (re-read under the lock so a concurrent receipt's `dirtyAt` overwrite / anchor
-	 * clear wins):
-	 *  - anchored + terminal-SUCCESS → the task was minted strictly after this `dirtyAt`, so its
-	 *    projection read chain state INCLUDING the receipt → delete the row (causal).
-	 *  - anchored + terminal-FAILURE/MISSING → clear the anchor; the next drain re-requests.
-	 *  - no anchor → `requestBalanceRefresh`: `{taskId}` (a FRESH task) → anchor it; `{busy}` → keep
-	 *    the row unanchored (a later drain, after the in-flight task drains, mints a fresh one);
-	 *    `{missing}` (the balance pair is positively gone — token/account removed) → delete the row.
-	 *  - `requestBalanceRefresh` THROWS (a transient storage/task failure, NOT a missing pair) → KEEP
-	 *    the row and retry next drain; deleting on a transient throw would discard the sole durable
-	 *    refresh marker.
-	 */
-	private async drainBalanceOutbox(): Promise<void> {
-		const profile = await this.profileService.getActiveProfile()
-		if (!profile) return
-		let rows: Array<[string, IncomingBalanceOutboxRow]>
-		try {
-			rows = await this.repo.listOutbox()
-		} catch (error) {
-			this.logWarn("drainBalanceOutbox: listOutbox failed", error)
-			return
-		}
-		for (const [key] of rows) {
-			const parts = key.split("|")
-			if (parts.length !== 4) continue
-			const [profileId, networkId, accountAddress, tokenIdStr] = parts
-			if (profileId !== profile.id) continue // active-profile-scoped
-			const tokenId = Number(tokenIdStr)
-			if (!Number.isInteger(tokenId)) continue
-			const row: OutboxRowKey = { profileId, networkId, accountAddress, tokenId }
-			await this.withServiceLock((isCurrent) => this.drainOutboxRow(row, isCurrent))
-		}
-	}
-
-	/** The per-row locked drain. Every write is guarded by `isCurrent()`, read
-	 *  fresh immediately before the write dispatch: a watchdog handoff admits a
-	 *  receipt writer whose fresher dirtyAt this displaced section must not
-	 *  clobber (an anchor overwrite here launders the new receipt into a
-	 *  PRE-receipt task's causality; the next drain's success-delete then drops
-	 *  the sole refresh marker — permanent until an unrelated refresh). The
-	 *  ticket flips on ANY successor acquisition, so a displaced drain stands
-	 *  down at the first write. */
-	private async drainOutboxRow(row: OutboxRowKey, isCurrent: () => boolean): Promise<void> {
-		const { profileId, networkId, accountAddress, tokenId } = row
-		const current = await this.repo.getOutbox(profileId, networkId, accountAddress, tokenId)
-		if (!current) return
-		if (current.pendingTaskId) {
-			const action = anchoredRowAction(this.readTaskState(current.pendingTaskId))
-			// pending → keep waiting for the anchored task.
-			if (action !== "wait" && isCurrent()) await this.settleAnchoredRow(row, current, action)
-			return
-		}
-		const result = await this.requestRefreshOrKeep(tokenId, accountAddress)
-		if (!result) return
-		if ("missing" in result) {
-			// The (token, account) balance pair is positively gone (removed) → delete the stale row.
-			if (!isCurrent()) return
-			await this.repo.deleteOutbox(profileId, networkId, accountAddress, tokenId)
-			return
-		}
-		if ("taskId" in result) await this.anchorFreshTask(row, current, result.taskId, isCurrent)
-		// busy → keep the row unanchored; a later drain mints a fresh post-`dirtyAt` task.
-	}
-
-	/** Terminal-success → delete the row; terminal-failure/missing → clear the
-	 *  anchor so the next drain re-requests. Entered only after `isCurrent()`. */
-	private async settleAnchoredRow(row: OutboxRowKey, current: IncomingBalanceOutboxRow, action: "delete" | "clear"): Promise<void> {
-		const { profileId, networkId, accountAddress, tokenId } = row
-		if (action === "delete") {
-			await this.repo.deleteOutbox(profileId, networkId, accountAddress, tokenId)
-		} else {
-			await this.repo.setOutbox(profileId, networkId, accountAddress, tokenId, { dirtyAt: current.dirtyAt })
-		}
-	}
-
-	/** `requestBalanceRefresh` with a TRANSIENT throw (storage/task, NOT a
-	 *  missing pair) mapped to undefined = keep the row + retry next drain.
-	 *  Deleting on a throw would lose the only durable refresh marker. */
-	private async requestRefreshOrKeep(tokenId: number, accountAddress: string): Promise<RefreshRequestResult | undefined> {
-		try {
-			return await this.tokenBalanceService.requestBalanceRefresh(tokenId, accountAddress)
-		} catch (error) {
-			this.logWarn("drainBalanceOutbox: refresh request failed transiently, keeping row", error)
-			return undefined
-		}
-	}
-
-	/** Re-read at commit: a wipe (row gone) or a fresh markBalanceDirty bump
-	 *  (dirtyAt moved) during the refresh await must not be overwritten with
-	 *  this older snapshot — stand down and let the next drain see the row's new
-	 *  state. Writing anyway would anchor stale dirt to the minted task. The
-	 *  receipt writer can only interleave by ACQUIRING the lock (a watchdog
-	 *  handoff), which flips the ticket — so the `isCurrent()` check is a true
-	 *  guard, not a smaller race window: either the receipt landed before it
-	 *  (ticket flipped → stand down) or its write is dispatched after this set
-	 *  and last-writer-wins is the receipt. One atomic span: re-read → compare
-	 *  → ticket → write. */
-	private async anchorFreshTask(
-		row: OutboxRowKey,
-		current: IncomingBalanceOutboxRow,
-		taskId: string,
-		isCurrent: () => boolean,
-	): Promise<void> {
-		const { profileId, networkId, accountAddress, tokenId } = row
-		const fresh = await this.repo.getOutbox(profileId, networkId, accountAddress, tokenId)
-		if (!fresh || fresh.dirtyAt !== current.dirtyAt) return
-		if (!isCurrent()) return
-		await this.repo.setOutbox(profileId, networkId, accountAddress, tokenId, {
-			dirtyAt: current.dirtyAt,
-			pendingTaskId: taskId,
-		})
-	}
-
-	/** Terminal state of an anchored refresh task via the TaskService ledger (`missing` = expired/gone). */
-	private readTaskState(taskId: string): "success" | "failure" | "pending" | "missing" {
-		let status: TaskStatus
-		let finished: boolean
-		try {
-			const task = this.taskService.getTaskSync(taskId)
-			status = task.status
-			finished = task.finishedAt !== undefined
-		} catch {
-			return "missing"
-		}
-		if (!finished) return "pending"
-		return status === TaskStatus.Completed ? "success" : "failure"
-	}
-
 	private buildRecord(params: {
 		note: RawNote
 		profileId: string
@@ -2733,8 +2586,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const hidden = trustState !== "trusted"
 		return {
 			kind: "note",
-			id: noteRecordId(profileId, networkId, note.siloedNullifier),
-			siloedNullifier: note.siloedNullifier,
+			id: noteRecordId(profileId, networkId, note.uniqueNoteHash),
 			profileId,
 			networkId,
 			accountAddress,

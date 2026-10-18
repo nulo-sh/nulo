@@ -9,12 +9,17 @@
 
 import { describe, expect, test } from "vitest"
 import backgroundSource from "@/wallet/services/wallet-sdk/background.ts?raw"
+import discoverySource from "@/wallet/services/wallet-sdk/discovery-flow.ts?raw"
 import dispatcherSource from "../../../../../../packages/wallet-bridge/src/dispatcher.ts?raw"
 
 describe("PriceService dApp exposure", () => {
-	test("wallet-sdk background handler does not wire the price service", () => {
-		expect(backgroundSource).not.toContain("PriceService")
-		expect(backgroundSource).not.toContain("services/price")
+	test.each([
+		["background handler", backgroundSource, "export function initWalletSdkHandler("],
+		["discovery workflow", discoverySource, "export async function handleDiscovery("],
+	])("wallet-sdk %s does not wire the price service", (_, source, entry) => {
+		expect(source).toContain(entry)
+		expect(source).not.toContain("PriceService")
+		expect(source).not.toContain("services/price")
 	})
 
 	test("wallet-bridge dispatcher has no price dependency", () => {

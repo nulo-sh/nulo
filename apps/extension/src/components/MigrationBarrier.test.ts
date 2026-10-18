@@ -37,7 +37,9 @@ describe("MigrationBarrier", () => {
 		await flushPromises()
 		expect(w.find("[data-testid='migration-blocked']").exists()).toBe(true)
 		expect(w.text()).toContain("UPDATE FAILED")
-		expect(w.text()).toContain("funds are safe")
+		expect(w.text()).toContain(
+			"Your funds are safe. Your secret phrase still recovers your accounts. It does not recover imported accounts or passkey profiles. Reinstall the extension to start clean.",
+		)
 		expect(w.find("[data-testid='migration-blocked-detail']").text()).toContain("kaboom at v2")
 	})
 

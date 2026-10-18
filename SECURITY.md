@@ -28,18 +28,18 @@ existing keys and profiles.
 
 - **KDF domain separator labels**
   - `nulo:profile:v1` — WebAuthn PRF input label
-    (`src/wallet/services/passkey/spec.ts:PASSKEY_PRF_LABEL`)
+    (`packages/wallet-crypto/src/constants.ts:PASSKEY_PRF_LABEL`)
   - `nulo:kdf:v1` — HKDF salt label
-    (`src/wallet/services/passkey/credential.ts:PASSKEY_KDF_LABEL`)
+    (`packages/wallet-crypto/src/passkey-credential.ts:PASSKEY_KDF_LABEL`)
   - `nulo:master:v1` — HKDF info label
-    (`src/wallet/services/passkey/credential.ts:PASSKEY_MASTER_LABEL`)
+    (`packages/wallet-crypto/src/passkey-credential.ts:PASSKEY_MASTER_LABEL`)
 - **`AccountType.Nulo_v1 = 0`** — embedded in the Poseidon hash used to derive
   account secrets from the master secret. The numeric value is part of the
   hash input; renaming the enum is fine, but reassigning the numeric value
   is not (`src/wallet/services/account/spec.ts`).
 - **AES-GCM ciphertext format** — `[1 version byte][12 byte IV][ciphertext]`
   stored base64 in `profile.secret` and `profile.guard`
-  (`src/wallet/services/profile/encryption/encryption-key.ts`).
+  (`packages/wallet-crypto/src/encryption-key.ts`).
 - **Passkey RP ID** — `passkey.nulo.sh`, used at credential creation AND at
   WebAuthn `get` (both literals must match — they're the same crypto
   binding). Changing it invalidates every existing passkey credential.
@@ -57,10 +57,12 @@ existing keys and profiles.
   ever challenges it) — the edge that already terminates the host's TLS,
   so no new trust root, and the page's CSP refuses any script a zone
   feature would inject; the README lists the dashboard settings to keep
-  off. The derivation trusts the browser to let only this extension
-  evaluate the credential's PRF for this RP ID; another extension the
-  browser authorizes for it is a compromised browser, outside the threat
-  model (known limit #597).
+  off. The wallet holds no factor of its own: the master derives from the
+  passkey alone, which is what lets a fresh install recover the master and
+  every derived account from the passkey (imported keys come back only with
+  a full backup). Who may use the passkey for this RP ID is decided by the
+  browser and the authenticator, not by the wallet, which adds no
+  restriction beyond the measures above (known limit #597).
   - **Build-time gate** (`scripts/check-rp-id.ts`): single source
     of truth is `RP_ID` exported from
     `src/wallet/services/passkey/spec.ts`. The gate fails the build if
@@ -242,23 +244,51 @@ sits at the SW seam where content-script messages arrive:
 | Compromised page can post arbitrary `window.postMessage` payloads | Limited — discovery requires user approval via popup; encrypted channel uses ECDH P-256 + AES-GCM with verification hash; content script filters cross-frame spoofing. Bugs in upstream `ContentScriptConnectionHandler` are still page-reachable. |
 | Compromised content script (XSS in upstream relay) | High — would bypass the SW envelope check, which cannot mitigate it; depends on upstream code review + minimization. |
 
+The background sets `chrome.storage.local` to trusted contexts at every start
+(`src/wallet/utils/storage-access.ts`): the extension's pages and workers read it, a content script
+does not, and Chrome keeps the level across restarts. Firefox has no such setting, so there the
+area keeps the browser's default access.
+
 ## Authorization enforcement
 
 Two layers:
 
-1. **Capability type** (`src/wallet/services/wallet-sdk/capability-map.ts`)
+1. **Capability type** (`packages/wallet-bridge/src/capability-map.ts`)
    — maps each wallet-sdk method to the capability type it requires
    (`accounts`, `transaction`, `simulation`, `data`, `contracts`,
    `contractClasses`).
-2. **Per-operation scope** (`src/wallet/services/wallet-sdk/scope-enforcement.ts`)
+2. **Per-operation scope** (`packages/wallet-bridge/src/scope-enforcement.ts`)
    — validates that the specific contract/function targeted by an operation
    falls within the scope granted.
 
-`createAuthWit` validates both the `from` account and, when the request
-carries a `CallIntent`, the target call itself against transaction or
-simulation scope. When it carries an `IntentInnerHash`, the `consumer`
-contract is validated at wildcard function. Raw message hashes cannot be
-validated beyond the account check (no semantic info).
+`createAuthWit` takes a `CallIntent` or an `IntentInnerHash`, never a raw
+message hash: the argument schema refuses a raw hash before the scope check
+and before any window (`packages/wallet-bridge/src/wallet-schema-args.ts`),
+and the scope check refuses it again
+(`packages/wallet-bridge/src/method-scope-checkers.ts`). The `from` account
+must be one the app's accounts grant allows. When the app holds a
+transaction grant, or a simulation grant with a transaction scope, a
+`CallIntent` whose call is outside that scope is refused, and so is an
+`IntentInnerHash` whose `consumer` contract that scope does not grant at
+every function (a `*` function pattern); with no such grant, nothing else
+is refused on scope. A `CallIntent`
+inside the scope is signed without a window only while the app's consent to
+sign authorizations without asking is in effect
+(`packages/wallet-bridge/src/dispatcher.ts`). Every other admitted request
+opens a confirmation: for a `CallIntent` it shows the authorized caller, the
+target contract, the function and its arguments; for an `IntentInnerHash`,
+the consumer contract and the inner hash, with a warning that the wallet
+cannot show what the hash authorizes. An `IntentInnerHash` whose consumer is
+the signing account itself is refused before any window, whatever the grant:
+only the wallet's own send authorizes that account's transactions.
+
+The authorization registry's grant functions answer only the wallet's own
+authorization action (`grantPublicAuthwit`), so a public authorization a dApp
+obtains by naming the registry is always in the wallet's index, where a person
+can review and revoke it. A dApp's
+`sendTx` call to a grant function, a `createAuthWit` intent naming the registry,
+and a registry authorization request raised inside a dApp transaction are each
+refused, whatever the grant (`packages/wallet-bridge/src/auth-registry.ts`).
 
 ## RPC endpoint as user input
 
@@ -276,17 +306,31 @@ which makes the endpoint trust boundary explicit.
   user, decrypt session material, or write to storage. The threat model
   reduces to: a malicious endpoint can serve crafted RPC responses to a
   PXE / wallet that already trusts the **chain**.
-- **Chain-id verification is mandatory at adoption.** `addEndpoint` /
-  `updateEndpoint` probe the candidate URL via
-  `AztecNode.getNodeInfo()` and reject when `l1ChainId` (or the chain
-  identifier carried in the response) doesn't match the parent
-  `Network.chainId`. Errors surface as `EndpointChainMismatchError`
-  inline in the popup.
+- **Chain identity is checked at adoption.** `addNetwork` probes the node's
+  `getNodeInfo()` and records its exact L1 chain id and its wallet chain id:
+  0 for a loopback node at the Local Network's URL or on the Local Network's
+  row, otherwise the composite `walletChainId(l1ChainId, rollupVersion)`.
+  `addEndpoint` / `updateEndpoint` refuse a node unless both equal the row's;
+  the refusal carries `ENDPOINT_CHAIN_MISMATCH` and shows inline in the popup.
+  Chain 0 is the Local Network: L1 31337 (`LOCAL_L1_CHAIN_ID`) on `localhost`
+  or `127.0.0.1`. Any other node whose answer computes to 0 is refused.
+- **Chain identity is checked at use.** Every step that builds the chain
+  metadata a signature, proof or simulation commits to compares the live
+  node with the stored row (`assertLiveChainIdentity`): the L1 and the
+  wallet chain id on a non-zero chain, and L1 31337 on chain 0, whose
+  rollup version is not pinned because every local sandbox redeploys it.
+  Promotion to primary does not probe. Loopback is checked when an endpoint
+  is adopted, built into a row or promoted, not at use. The guarantee
+  covers the metadata the wallet builds and the accounts it allocates: an
+  existing account is re-derived from its own stored L1 for verification
+  and export, and an imported key or an opaque message hash carries no
+  chain (§ Authorization enforcement).
 - **Duplicate-URL guard per Network.** Adding the same `rpcUrl` twice to
-  the same `Network` is rejected (`DuplicateEndpointError`).
+  the same `Network` is rejected (`DUPLICATE_ENDPOINT`).
 - **Per-URL `AztecNode` cache** with 3-strike eviction: each unique URL
-  gets its own client; transient failures don't poison neighbours;
-  consecutive failures evict.
+  gets its own client; transient failures don't poison neighbours; three
+  reported failures, which a success does not reset, evict the client and
+  the next use rebuilds the same URL.
 
 ### Pending-tx polling pin
 
@@ -299,7 +343,8 @@ URL via `getNodeForUrl`. This avoids:
   seen the bundle yet, and
 - a malicious endpoint shadowing receipts for txs it never received.
 
-Failover happens only after the original URL trips the 3-strike eviction.
+Three reported failures rebuild that URL's client; the poll never moves to
+another endpoint.
 
 ### What endpoints can still do
 
@@ -318,8 +363,8 @@ explicit and per-Network.
 ### What endpoints cannot do
 
 - Spend or sign without account material the SW already holds.
-- Inject arbitrary data into PXE state — every input is bound to a chain
-  via the `chainId` check at adoption + reverification on `setPrimaryEndpoint`.
+- Make the wallet build signing or proving metadata for a chain other than
+  the stored one.
 - Read decrypted master secrets or session records (none of these cross
   the wire).
 - Trigger storage writes outside the network/endpoint surface.
@@ -334,6 +379,9 @@ Plaintext at rest (`chrome.storage.local`):
 - Profile metadata, networks, accounts, contacts, dApp sessions, tokens,
   token balances, tx history, auth registry state, FPC definitions,
   config, storage version.
+- Incoming receipts: account, token, amount, transaction hash and, for a
+  private one, the note's hashes. A note's nullifier is never stored; it stays
+  in the PXE's encrypted store.
 
 Expanding the encrypted boundary to cover profile-scoped metadata (contacts,
 dApp sessions, tx history) is not done: a large refactor, not a near-term

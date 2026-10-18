@@ -5,10 +5,10 @@
  * activity feed, which previously only showed outgoing tx records.
  *
  * Scope guarantees:
- *   - Records are keyed by `siloedNullifier` — cryptographically unique per
- *     note, so duplicate inserts are idempotent.
- *   - Dedupe runs against three sources: prior records (siloedNullifier
- *     equality), the user's own outgoing tx hashes (TransactionService),
+ *   - Note records are keyed by the note's unique note hash — one per note,
+ *     so duplicate inserts are idempotent.
+ *   - Dedupe runs against three sources: prior records (key equality), the
+ *     user's own outgoing tx hashes (TransactionService),
  *     and in-flight journal records with a `progress.txHash` (OperationJournal).
  *   - Pollution defense via the `IncomingTrustState` state machine:
  *     `unknown` → first note arrival → `pending` (record hidden, popup
@@ -87,8 +87,6 @@ type IncomingTransferRecordCommon = {
 /** A privately-delivered note receipt (the pre-existing arm). */
 export type IncomingNoteRecord = IncomingTransferRecordCommon & {
 	kind: "note"
-	/** Cryptographically-unique nullifier (`Fr` string) — the note's identity. */
-	siloedNullifier: string
 	/** Note's commitment hash (additional identity field). */
 	noteHash: string
 	/** Note's owner (the user's account at note-encoded time). */
@@ -113,9 +111,10 @@ export type IncomingPublicEventRecord = IncomingTransferRecordCommon & {
 /** Persisted shape per discovered incoming receipt (discriminated on `kind`). */
 export type IncomingTransferRecord = IncomingNoteRecord | IncomingPublicEventRecord
 
-/** Build the profile+network-scoped PK for a note record. */
-export function noteRecordId(profileId: string, networkId: string, siloedNullifier: string): string {
-	return `note:${profileId}|${networkId}|${siloedNullifier}`
+/** Build the profile+network-scoped PK for a note record. A note row never holds the note's
+ *  nullifier, in its key or its fields: that stays in the PXE's encrypted store. */
+export function noteRecordId(profileId: string, networkId: string, uniqueNoteHash: string): string {
+	return `note:${profileId}|${networkId}|${uniqueNoteHash}`
 }
 
 /** Build the profile+network-scoped PK for a public-event record. */
@@ -145,7 +144,6 @@ export const IncomingTransferRecordSchema: z.ZodType<IncomingTransferRecord> = z
 	z.object({
 		kind: z.literal("note"),
 		...incomingTransferRecordCommonShape,
-		siloedNullifier: z.string(),
 		noteHash: z.string(),
 		owner: z.string(),
 		settled: z.literal(true).optional(),

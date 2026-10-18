@@ -283,7 +283,7 @@ describe("buildJournalTerminalCardProps", () => {
 		expect(props?.oneLineTitle).toBe(true)
 	})
 
-	test("dapp_execute from a dApp that named itself nothing still cuts its title to one line", () => {
+	test("dapp_execute from a dApp that named itself nothing keeps the dApp chip and its one-line title", () => {
 		const props = buildJournalTerminalCardProps(
 			recordWith({
 				kind: "dapp_execute",
@@ -294,7 +294,7 @@ describe("buildJournalTerminalCardProps", () => {
 			}),
 			TEST_CTX,
 		)
-		expect(props?.originLabel).toBeNull()
+		expect(props?.originLabel).toBe("dApp")
 		expect(props?.oneLineTitle).toBe(true)
 	})
 
@@ -530,7 +530,7 @@ describe("a failed send its record proves never left the wallet", () => {
 	})
 })
 
-describe("journalCardOriginLabel — the in-flight row's app chip", () => {
+describe("journalCardOriginLabel — a dApp operation's app chip and App row", () => {
 	test.each([
 		["", "dApp"],
 		["uniswap.example", "uniswap.example"],
@@ -699,6 +699,7 @@ describe("refusals filed before any window: card and detail", () => {
 		["terms_refused", "Terms not accepted", "Accept Nulo's Terms to let apps send. Nothing was sent."],
 		["wallet_refused", "Refused before sending", "The wallet refused this request before anything was signed. Nothing was sent."],
 		["scope_refused", "Not allowed", "The app asked for more than you allowed. Nothing was sent."],
+		["registry_refused", "Not allowed", "Apps cannot change your public authorizations. Nothing was sent."],
 	])("%s reads %s on the card and in the detail", (kind, label, context) => {
 		const op = refused(kind)
 		expect(categoricalLabel(op)).toEqual({ label, context })

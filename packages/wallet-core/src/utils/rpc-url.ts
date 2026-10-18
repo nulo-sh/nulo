@@ -17,10 +17,18 @@ export function rpcTransportVerdict(url: URL): RpcTransportVerdict {
 	if (scheme === "https") return { allowed: true }
 	if (scheme === "http") {
 		const host = url.hostname.toLowerCase()
-		if (host === "localhost" || host === "127.0.0.1") return { allowed: true }
+		if (isLoopbackHost(host)) return { allowed: true }
 		return { allowed: false, refusal: "http-host", host }
 	}
 	return { allowed: false, refusal: "scheme", scheme }
+}
+
+/** Whether a parsed `URL.hostname` names this machine: exactly `localhost` or `127.0.0.1`, the two
+ *  hosts the transport rule admits over plain HTTP. Any other spelling (a trailing dot, a
+ *  `*.localhost` name, another `127.x` address, `[::1]`) is not loopback here. */
+export function isLoopbackHost(hostname: string): boolean {
+	const host = hostname.toLowerCase()
+	return host === "localhost" || host === "127.0.0.1"
 }
 
 /** Spaces, control characters and invisible format characters (zero-width, bidirectional controls,

@@ -19,8 +19,12 @@ export interface ChromeStorageMock {
 
 /** Install a controllable `chrome.storage.local` + `onChanged` mock over the
  *  vitest setup's empty `chrome.storage` stub. Shared by the facade, barrier,
- *  and any future storage-adjacent suites so the mock surface can't drift. */
-export function installChromeStorage(initial: Record<string, unknown> = {}): ChromeStorageMock {
+ *  and any future storage-adjacent suites so the mock surface can't drift.
+ *  `persist: false` records `set` and `remove` and keeps nothing, so every read answers `initial`. */
+export function installChromeStorage(
+	initial: Record<string, unknown> = {},
+	{ persist = true }: { persist?: boolean } = {},
+): ChromeStorageMock {
 	const data: Record<string, unknown> = { ...initial }
 	const listeners: ChangeListener[] = []
 	let gate: Promise<void> | null = null
@@ -36,9 +40,10 @@ export function installChromeStorage(initial: Record<string, unknown> = {}): Chr
 		return out
 	})
 	const set = vi.fn(async (items: Record<string, unknown>) => {
-		Object.assign(data, items)
+		if (persist) Object.assign(data, items)
 	})
 	const remove = vi.fn(async (keys: string | string[]) => {
+		if (!persist) return
 		for (const k of Array.isArray(keys) ? keys : [keys]) delete data[k]
 	})
 

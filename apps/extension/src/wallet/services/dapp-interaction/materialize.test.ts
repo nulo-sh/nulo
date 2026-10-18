@@ -163,6 +163,14 @@ describe("materializeRequest", () => {
 		await expect(materializeRequest({ kind: "nope" as never } as never, deps)).rejects.toThrow(/unknown operation kind: nope/)
 	})
 
+	test.each(["constructor", "__proto__", "toString"])("a %s kind resolves nothing and throws", async (kind) => {
+		const deps = makeDeps()
+		const request = { kind, account: "eip155:1337:0xabc", chain: "eip155:1337" } as never
+		await expect(materializeRequest(request, deps)).rejects.toThrow(`unknown operation kind: ${kind}`)
+		expect(deps.resolveNetwork).not.toHaveBeenCalled()
+		expect(deps.resolveNetworkAndAccount).not.toHaveBeenCalled()
+	})
+
 	test("delegates chain resolution exactly once per chain-scoped op", async () => {
 		const deps = makeDeps()
 		await materializeRequest({ kind: "register_contract", chain: "eip155:1337", address: "0xdef", artifact: {} } as never, deps)

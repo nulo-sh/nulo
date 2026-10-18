@@ -147,6 +147,12 @@ export interface BrowserDriver {
 	 * back to the popup before pressing it.
 	 */
 	prepareKeys(page: Page): Promise<void>
+	/**
+	 * Two primary presses at viewport point (`x`, `y`), the second `gapMs` after the first's release,
+	 * which the page sees as one double-click: `detail` 1, then 2. CDP takes the count as given;
+	 * Firefox counts presses only inside one action chain, and restarts the count on any pointer move.
+	 */
+	doubleClick(page: Page, x: number, y: number, gapMs: number): Promise<void>
 	/** Answer the file picker that `open` asks for with `filePath`. `open` is a scripted click. */
 	pickFile(page: Page, open: () => Promise<void>, filePath: string): Promise<void>
 	/** A PRF-capable virtual authenticator. `anchorPage` matters where one is scoped to a page. */
@@ -255,6 +261,7 @@ export const holdRpcInterception = (
 export const openScratchPage = (browser: Browser, extensionId: string): Promise<Page> => driver.openScratchPage(browser, extensionId)
 export const prepareClick = (page: Page): Promise<void> => driver.prepareClick(page)
 export const prepareKeys = (page: Page): Promise<void> => driver.prepareKeys(page)
+export const doubleClick = (page: Page, x: number, y: number, gapMs: number): Promise<void> => driver.doubleClick(page, x, y, gapMs)
 export const pickFile = (page: Page, open: () => Promise<void>, filePath: string): Promise<void> => driver.pickFile(page, open, filePath)
 export const virtualAuthenticator = (browser: Browser, anchorPage: Page): Promise<VirtualAuthenticator> =>
 	driver.virtualAuthenticator(browser, anchorPage)

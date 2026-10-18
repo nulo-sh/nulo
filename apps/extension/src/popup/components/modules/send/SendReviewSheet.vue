@@ -45,7 +45,7 @@ const props = defineProps<{
 	/** Set while the send is queued with Nulo's sponsor paying, which needs no cap. */
 	queuedSponsored?: boolean
 	/** Set for a queued send whose fee came out above the cap the person accepted. */
-	reask?: { now: string; nowAmount: string; capAmount: string }
+	reask?: { now: string; cap: string }
 }>()
 const emit = defineEmits<{ close: []; send: [] }>()
 
@@ -63,7 +63,7 @@ const toLine = computed(() => {
 const paid = computed(() => paidBy(props.payerKind, props.payerType))
 const sendable = computed(() => props.show && props.canSend && props.ready && !props.sending)
 const submitLabel = computed(() => {
-	if (props.reask) return `Send for ${props.reask.nowAmount} FJ`
+	if (props.reask) return `Send for ${props.reask.now}`
 	return props.queuedCapText || props.queuedSponsored ? "Queue send" : "Send now"
 })
 
@@ -110,7 +110,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 <template>
 	<div data-testid="send-review-sheet" :data-open="show" hidden />
 	<Popup :show="show" :displaceIdx="order" initial-focus="#send-review-title" @onClose="emit('close')">
-		<PopupCard :displaceIdx="depth" fit>
+		<PopupCard :displaceIdx="depth">
 			<div role="dialog" aria-modal="true" aria-labelledby="send-review-title">
 				<PopupHeader closable @onClose="emit('close')">
 					<template #title>
@@ -162,7 +162,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 
 					<div :class="$style.fee" data-testid="send-review-fee" :data-payer="payerKind ?? 'none'">
 						<span v-if="payerKind === 'unvouched'">Fee · <span aria-hidden="true">—</span><span :class="$style.visually_hidden">{{ UNVOUCHED_FEE_SENTENCE }}</span></span>
-						<span v-else-if="reask" data-testid="send-review-fee-reask">Fee is now {{ reask.now }}, above the {{ reask.capAmount }} FJ you accepted.</span>
+						<span v-else-if="reask" data-testid="send-review-fee-reask">Fee is now {{ reask.now }}, above the {{ reask.cap }} you accepted.</span>
 						<span v-else-if="queuedCapText" data-testid="send-review-fee-cap">Fee up to {{ queuedCapText }}, based on your last send. If it comes out higher, we ask again.</span>
 						<span v-else-if="queuedSponsored" data-testid="send-review-fee-queued">Fee · {{ QUEUED_SPONSORED_COPY }}</span>
 						<span v-else>Fee · {{ feeText || "—" }}</span>

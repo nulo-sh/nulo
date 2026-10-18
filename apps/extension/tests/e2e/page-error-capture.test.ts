@@ -12,6 +12,7 @@ import { evaluateInBackground, extensionUrl, gotoExtensionPage, newPage, reloadE
 import { openPopup, recordPageErrors, test } from "./fixtures/extension"
 import { ensureUnlocked } from "./fixtures/helpers"
 import { pageErrorOf } from "./fixtures/page-errors"
+import { pollUntil } from "./fixtures/poll"
 import { waitForPopup } from "./fixtures/popups"
 
 const DEADLINE_MS = 10_000
@@ -31,11 +32,11 @@ const rejectingPrimitive = (n: string) => `void Promise.reject(${literal(n)})`
 const nativeConsoleError = (n: string) => `console._error(${literal(n)})`
 
 async function until(condition: () => boolean | Promise<boolean>, what: string): Promise<void> {
-	const deadline = Date.now() + DEADLINE_MS
-	while (!(await condition())) {
-		if (Date.now() > deadline) throw new Error(`${what} within ${DEADLINE_MS} ms`)
-		await new Promise((resolve) => setTimeout(resolve, 50))
-	}
+	await pollUntil(
+		async () => condition(),
+		(met) => met,
+		{ label: what, timeoutMs: DEADLINE_MS, intervalMs: 50 },
+	)
 }
 
 const count = (texts: readonly string[], n: string) => texts.filter((text) => text.includes(n)).length

@@ -52,12 +52,19 @@ import {
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
 	TooManyPendingError,
+	UnsupportedMethodError,
 } from "@nulo/extension-messaging/errors"
 import { isFeeAmount, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity, liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { assertArtifactClassId } from "@nulo/aztec-runtime/pxe"
-import { type DraftOperation, type FeeSettingsReaders, refuseUnknownPriorities } from "@nulo/wallet-bridge"
+import {
+	type DraftOperation,
+	type FeeSettingsReaders,
+	carriesFeeSettings,
+	fieldAddressKey,
+	refuseUnknownPriorities,
+} from "@nulo/wallet-bridge"
 import {
 	EXECUTION_SERVICE_NAME,
 	type Methods,
@@ -91,7 +98,7 @@ import { coerceAmount } from "./coerce-amount"
 import { OperationPlanner, type TransferRequest } from "./operation-planner"
 import { type QueuedFeeCap, QueuedFeeAnswers, queuedFeeBasis, queuedFeeCap, sendShapeOf } from "./queued-fee-cap"
 import { TransferEstimateReuse } from "./transfer-estimate-reuse"
-import { type ChainIdentity, feeMultiplierFor } from "./estimate-reuse-shared"
+import { type ChainIdentity, type EstimateReuseDeps, feeMultiplierFor } from "./estimate-reuse-shared"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { PreviewSnapshots } from "./preview-snapshots"
 import { TransferExecutor, type TransferSequence } from "./transfer-executor"
@@ -158,15 +165,20 @@ const FENCED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set([
 	"aztec_createAuthWit",
 ])
 
+/** `tokenContract` as a transfer request carries it, or the refusal of `method`'s arguments. */
+function tokenContractKey(method: string, tokenContract: unknown): string {
+	const key = typeof tokenContract === "string" ? fieldAddressKey(tokenContract) : undefined
+	if (key === undefined) throw InvalidWalletArgumentsError.forMethod(method)
+	return key
+}
+
 /** The popup's fee settings: one per transfer or estimate, one per broadcasting operation. */
 const FEE_SETTINGS_OF = {
-	executeTransfer: ([, , , , , , feeSettings]) => [feeSettings],
-	estimateTransferFee: ([, , , , , , feeSettings]) => [feeSettings],
+	executeTransfer: ([, , , , , , , feeSettings]) => [feeSettings],
+	estimateTransferFee: ([, , , , , , , feeSettings]) => [feeSettings],
 	estimateOperationFee: ([, , feeSettings]) => [feeSettings],
 	executeOperations: ([operations]) =>
-		Array.isArray(operations)
-			? operations.flatMap((op) => (op?.kind === "send_transaction" || op?.kind === "aztec_sendTx" ? [op.feeSettings] : []))
-			: [],
+		Array.isArray(operations) ? operations.flatMap((op) => (carriesFeeSettings(op) ? [op.feeSettings] : [])) : [],
 } satisfies FeeSettingsReaders<Methods>
 
 export class ExecutionService extends Service<Methods> implements ServiceSpec<Methods> {
@@ -348,7 +360,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
 			logError: (msg, ...rest) => this.logError(msg, ...rest),
 		})
-		this.estimateReuse = new TransferEstimateReuse({
+		const reuseDeps: EstimateReuseDeps = {
 			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
 			getNode: (chainId) => this.networkService.getNode(chainId),
 			getLiveChainIdentity: (network) => this.liveChainIdentity(network),
@@ -356,16 +368,9 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
 			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
 			logDebug: (msg) => this.logDebug(msg),
-		})
-		this.operationEstimateReuse = new OperationEstimateReuse({
-			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
-			getNode: (chainId) => this.networkService.getNode(chainId),
-			getLiveChainIdentity: (network) => this.liveChainIdentity(network),
-			getFpcInfo: (fpcId) => this.sponsorRow(fpcId),
-			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
-			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
-			logDebug: (msg) => this.logDebug(msg),
-		})
+		}
+		this.estimateReuse = new TransferEstimateReuse(reuseDeps)
+		this.operationEstimateReuse = new OperationEstimateReuse(reuseDeps)
 		this.previewSnapshots = new PreviewSnapshots()
 		this.estimateCancel = new EstimateCancelRegistry({
 			// Ids are UUID-unique across the caches — evict from each.
@@ -426,7 +431,6 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			},
 			sequencer: this.sendSequencer,
 			chainTip: this.chainTipGate,
-			getTokenContract: async (tokenId) => (await this.tokenService.getTokenRaw(tokenId)).contract,
 			getFpcImpl: (fpcId) => this.fpcService.getFpcImpl(fpcId),
 			getTransactions: (account) => this.transactionService.getTransactions(account),
 			getActiveProfile: () => this.profileService.getActiveProfile(),
@@ -597,6 +601,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		networkId: string,
 		accountAddress: string,
 		tokenId: number,
+		tokenContract: string,
 		transferType: TransferType,
 		recipientAddress: string,
 		amount: bigint,
@@ -606,12 +611,13 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	): Promise<string> {
 		await this.ensureInitialized()
 		if (feeCap !== undefined && !isFeeAmount(feeCap)) throw InvalidWalletArgumentsError.forMethod("executeTransfer")
+		const contract = tokenContractKey("executeTransfer", tokenContract)
 		// Early refusal only — the wall is in the coordinator. This spares the user a proof.
 		await this.legal.assertCurrent()
 		amount = coerceAmount(amount)
 		const fence = await this.captureFence()
 		return this.transferExecutor.execute(
-			{ networkId, accountAddress, tokenId, transferType, recipientAddress, amount, feeSettings },
+			{ networkId, accountAddress, tokenId, tokenContract: contract, transferType, recipientAddress, amount, feeSettings },
 			precomputedEstimateId,
 			fence,
 			feeCap,
@@ -622,6 +628,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		networkId: string,
 		accountAddress: string,
 		tokenId: number,
+		tokenContract: string,
 		transferType: TransferType,
 		recipientAddress: string,
 		amount: bigint,
@@ -629,8 +636,9 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		estimateToken?: string,
 	): Promise<TransferFeeEstimate | TransferFeeQueued> {
 		await this.ensureInitialized()
+		const contract = tokenContractKey("estimateTransferFee", tokenContract)
 		amount = coerceAmount(amount)
-		const req = { networkId, accountAddress, tokenId, transferType, recipientAddress, amount, feeSettings }
+		const req = { networkId, accountAddress, tokenId, tokenContract: contract, transferType, recipientAddress, amount, feeSettings }
 		// Before admission: a queued answer spends no slot and leaves the token unused, so the popup asks again with it.
 		const sequence = await this.transferExecutor.sequence(req)
 		// A send holding the slot is proving: the PXE runs one operation at a time, so this estimate
@@ -651,11 +659,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	private async queuedFeeCapFor(req: TransferRequest, profileId: string, sequence: TransferSequence): Promise<QueuedFeeCap | undefined> {
 		const shape = sendShapeOf(req.feeSettings, req.transferType, sequence.feeSpender)
 		if (!shape) return undefined
-		const [token, rows] = await Promise.all([
-			this.tokenService.getTokenRaw(req.tokenId),
-			this.transactionService.getTransactions(req.accountAddress),
-		])
-		const basis = queuedFeeBasis(rows, profileId, sequence.scope.chainId, token.contract, shape, Date.now())
+		const rows = await this.transactionService.getTransactions(req.accountAddress)
+		const basis = queuedFeeBasis(rows, profileId, sequence.scope.chainId, req.tokenContract, shape, Date.now())
 		const cap = basis ? queuedFeeCap(basis) : undefined
 		return basis && cap ? { basis, cap } : undefined
 	}
@@ -912,7 +917,9 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 					authorizedFence,
 					approvals?.[operationIndex],
 				)
-				operationTask.complete()
+				// A broadcast stands even when a profile switch has cleared its task meanwhile.
+				if (BROADCASTING_OPERATION_KINDS.has(operation.kind)) operationTask.completeIfTracked()
+				else operationTask.complete()
 				this.logDebug(`[${traceId}] executeOperations: ${operation.kind} completed`)
 				results.push({ status: "ok", result })
 			} catch (error) {
@@ -924,8 +931,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		return results
 	}
 
-	/** Level by reach: a Terms, scope, argument or capacity refusal is expected, and a connected dApp
-	 *  can repeat any of them, so at `error` they would fill every user's log buffer. */
+	/** Level by reach: a Terms, scope, argument, capacity or unsupported-method refusal is expected,
+	 *  and a connected dApp can repeat any of them, so at `error` they would fill every user's log buffer. */
 	private logOperationOutcome(traceId: string, kind: Operation["kind"], classified: CancelOrFailResult): void {
 		if (classified.status === "cancelled") {
 			this.logInfo(`[${traceId}] executeOperations: ${kind} cancelled by user`)
@@ -937,6 +944,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: invalid arguments`)
 		} else if (classified.code === TooManyPendingError.CODE) {
 			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: too many pending`)
+		} else if (classified.code === UnsupportedMethodError.CODE) {
+			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: unsupported method`)
 		} else {
 			this.logError(`[${traceId}] executeOperations: ${kind} failed:`, classified.error)
 		}

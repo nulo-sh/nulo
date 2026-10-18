@@ -329,6 +329,53 @@ describe("NetworkResetService — the view", () => {
 	})
 })
 
+describe("NetworkResetService — what deleting a paused network deletes", () => {
+	const importedEntry = (index: number, name: string, oldAddress: string, done: boolean) => ({
+		type: 1 as const,
+		index,
+		name,
+		visible: true,
+		oldAddress,
+		newAddress: `${oldAddress}-new`,
+		encryptedSigningKey: "sealed",
+		done,
+	})
+
+	test("names the journal's imported accounts, moved or not, and no derived one", async () => {
+		const h = await harness()
+		await staleTestnet(h)
+		const [derivedOne, derivedTwo] = journalOf().accounts
+		await putJournal(
+			h,
+			journalOf({
+				accounts: [
+					derivedOne,
+					importedEntry(0, "Savings", importedAddr(SK1), true),
+					derivedTwo,
+					importedEntry(1, "Trading", importedAddr(SK2), false),
+				],
+			}),
+		)
+		expect((await h.reset.getStaleNetwork("tn"))?.reset?.imported).toEqual(["Savings", "Trading"])
+
+		const d = await harness()
+		await putNetwork(d, { id: "tn", name: "Testnet", chainId: OLD, l1ChainId: L1, kind: "testnet" })
+		await putAccount(d, { chainId: OLD, address: derived(L1, 0), index: 0 })
+		await putJournal(d, journalOf())
+		expect((await d.reset.getStaleNetwork("tn"))?.reset?.imported).toEqual([])
+	})
+
+	test("after the rewrite, also names an imported row on the new chain the journal does not name, cleaned", async () => {
+		const h = await harness()
+		await putNetwork(h, { id: "tn", name: "Testnet", chainId: NEW, l1ChainId: L1, kind: "testnet" })
+		await putImported(h, NEW, SK1, 0, { address: `${importedAddr(SK1)}-new` })
+		await putImported(h, NEW, SK2, 1, { name: "Ho\u202eld\u200b" })
+		await putImported(h, NEW, SK1, 2, { address: "0xunnamed", name: "\u202e★" })
+		await putJournal(h, journalOf({ purged: true, accounts: [importedEntry(0, "Savings", importedAddr(SK1), true)] }))
+		expect((await h.reset.getStaleNetwork("tn"))?.reset?.imported).toEqual(["Savings", "Hold", "Imported account"])
+	})
+})
+
 describe("NetworkResetService — the node decision (A6)", () => {
 	const userNode = (h: H, info: { l1ChainId: number; rollupVersion: number } | Error) => {
 		const getNodeInfo = info instanceof Error ? vi.fn().mockRejectedValue(info) : vi.fn().mockResolvedValue(info)
@@ -691,6 +738,38 @@ describe("NetworkResetService — resume and forged journals", () => {
 		expect((await resume(h)).failed).toBe(true)
 		expect(h.pxe).not.toHaveBeenCalled()
 		expect(await storedKeys(h, "nulo:core:accounts@")).toEqual(before)
+	})
+
+	test.each([false, true])(
+		"a chain-0 journal on an L1 other than the local one is refused and kept, purging nothing (purged: %s)",
+		async (purged) => {
+			const h = await harness()
+			await putNetwork(h, { id: "tn", name: "Zero", chainId: 0, l1ChainId: L1 })
+			await putAccount(h, { chainId: 0, address: derived(L1, 0), index: 0 })
+			await putJournal(h, journalOf({ fromChainId: 0, toChainId: 0, purged, cause: { networkReset: false, addressesMoved: true } }))
+			const before = await storedKeys(h, "nulo:core:accounts@")
+			expect((await resume(h)).failed).toBe(true)
+			expect(h.pxe).not.toHaveBeenCalled()
+			expect(h.purgeForAccounts).not.toHaveBeenCalled()
+			expect(h.purgeForChain).not.toHaveBeenCalled()
+			expect(await storedKeys(h, "nulo:core:accounts@")).toEqual(before)
+			expect(await h.repo.getJournal("p1")).toBeDefined()
+		},
+	)
+
+	test("a chain-0 journal on the local L1 resumes and completes", async () => {
+		const h = await harness()
+		await putNetwork(h, { id: "tn", name: "Zero", chainId: 0, l1ChainId: LOCAL_L1_CHAIN_ID })
+		const journal = journalOf({
+			fromChainId: 0,
+			toChainId: 0,
+			l1ChainId: LOCAL_L1_CHAIN_ID,
+			cause: { networkReset: false, addressesMoved: true },
+		})
+		journal.accounts = [{ type: 0, index: 0, name: "Account 1", visible: true, oldAddress: "0xold", done: false }]
+		await putJournal(h, journal)
+		expect((await resume(h)).completed).toBeDefined()
+		expect((await accountsOn(h, 0)).map((a) => a.address)).toEqual([derived(LOCAL_L1_CHAIN_ID, 0)])
 	})
 
 	test("a forged address-only journal for a custom network on Mainnet's L1 purges nothing", async () => {

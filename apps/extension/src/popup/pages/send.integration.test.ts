@@ -229,7 +229,7 @@ function deferred<T>(): Deferred<T> {
 }
 
 /** What a landed estimate answers when a test names none. */
-const LANDED = { maxFee: "1000", maxFeeFormatted: "0.000000000000001", gasDetails: {} }
+const LANDED = { maxFee: "1000", gasDetails: {} }
 
 /** The page debounces its estimate by 800 ms; this lets the current input's estimate land. */
 async function estimateLands() {
@@ -290,7 +290,7 @@ function settled(w: W) {
 	return { action, you, to: strip(w).attributes("data-to"), amount: strip(w).attributes("data-amount") }
 }
 
-const submittedFee = () => (mocks.executeTransfer.mock.calls[0]?.[6] as { paymentMethod: unknown } | undefined)?.paymentMethod
+const submittedFee = () => (mocks.executeTransfer.mock.calls[0]?.[7] as { paymentMethod: unknown } | undefined)?.paymentMethod
 
 beforeEach(() => {
 	document.body.innerHTML = '<div id="popup"></div>'
@@ -574,7 +574,7 @@ describe("send page with the real fee card — a sponsor that can't cover the fe
 		fpcs: [PRIVATE_FPC, { ...SPONSOR, address: SPONSOR_AT }],
 		storage: { [SEND_PICKS]: { [ACCOUNT]: { private: { type: "fpc", fpc: { id: "s1" } } } } },
 	}
-	const ESTIMATE = { maxFee: "1000", maxFeeFormatted: "0.000000000000001", gasDetails: {} }
+	const ESTIMATE = { maxFee: "1000", gasDetails: {} }
 	const SHORT = { ...ESTIMATE, sponsorFunding: { fpcId: "s1", address: SPONSOR_AT, funded: false } }
 	const notice = (w: W) => w.find('[data-testid="fee-sponsor-short"]')
 	/** The menu item is unresolved here, so its `disabled` prop lands as an attribute. */
@@ -629,7 +629,7 @@ describe("send page with the real fee card — a sponsor that can't cover the fe
 
 describe("send page with the real fee card — the review sheet's fee", () => {
 	test("repeats the card's dollars, never the page's own quote", async () => {
-		mocks.estimateTransferFee.mockResolvedValue({ maxFee: HELD, maxFeeFormatted: "1", gasDetails: {} })
+		mocks.estimateTransferFee.mockResolvedValue({ maxFee: HELD, gasDetails: {} })
 		const { w } = await mountSend(FUNDING["public Fee Juice only"])
 		await fillForm(w)
 		await estimateLands()
@@ -669,7 +669,7 @@ describe("send page — the real token card while the tokens load", () => {
 })
 
 describe("send page — an estimate queued behind an earlier send", () => {
-	const ESTIMATE = { maxFee: "1000", maxFeeFormatted: "0.000000000000001", gasDetails: {} }
+	const ESTIMATE = { maxFee: "1000", gasDetails: {} }
 	const QUEUED = { queued: true, tokenSpent: false }
 	const queuedRow = (w: W) => w.get('[data-testid="stub-fee-cost"]').attributes("data-queued") === "true"
 	const sendDisabled = (w: W) => submit(w).attributes("disabled") !== undefined
@@ -723,14 +723,14 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		expect(sendDisabled(w)).toBe(false)
 		await strip(w).trigger("click")
 		expect(w.get('[data-testid="send-review-fee-cap"]').text()).toBe(
-			"Fee up to 4.47228 FJ, based on your last send. If it comes out higher, we ask again.",
+			"Fee up to ~4.47228 FJ, based on your last send. If it comes out higher, we ask again.",
 		)
 		await closeSheet(w)
 		await submit(w).trigger("click")
 		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
 		const args = mocks.executeTransfer.mock.calls[0] as unknown[]
-		expect(args[7]).toBeUndefined()
-		expect(args[8]).toBe("4472280000000000000")
+		expect(args[8]).toBeUndefined()
+		expect(args[9]).toBe("4472280000000000000")
 		w.unmount()
 	})
 
@@ -749,9 +749,9 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		await submit(w).trigger("click")
 		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
 		const args = mocks.executeTransfer.mock.calls[0] as unknown[]
-		expect(args[6]).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
-		expect(args[7]).toBeUndefined()
+		expect(args[7]).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
 		expect(args[8]).toBeUndefined()
+		expect(args[9]).toBeUndefined()
 		w.unmount()
 	})
 
@@ -848,7 +848,7 @@ describe("send page — Confirm waits for the current input's estimate", () => {
 		const { w } = await mountSend(PUBLIC_FJ)
 		await fillForm(w)
 		await estimateLands()
-		expect(w.get('[data-testid="fee-juice-shortfall"]').text()).toBe("This send can cost up to 0.0021 FJ. You have 0.0015 FJ.")
+		expect(w.get('[data-testid="fee-juice-shortfall"]').text()).toBe("This send can cost up to ~0.0021 FJ. You have 0.0015 FJ.")
 		expect(sendDisabled(w)).toBe(true)
 		await submit(w).trigger("click")
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()

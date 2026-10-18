@@ -6,7 +6,7 @@ import { ConfigService } from "./service"
 
 const noopLogger = { log: () => {} } as unknown as ILogger
 
-function makeStore(): { config: Config; store: IConfigStore } {
+function makeStore(onSet?: (key: ConfigKey) => void): { config: Config; store: IConfigStore } {
 	const config = defaultConfig()
 	const onUpdate = new EventHandler<ConfigProp>()
 	const store = {
@@ -17,6 +17,7 @@ function makeStore(): { config: Config; store: IConfigStore } {
 			return config[key]
 		},
 		async set<TKey extends ConfigKey>(key: TKey, value: Config[TKey]): Promise<void> {
+			onSet?.(key)
 			config[key] = value
 		},
 		async reset(): Promise<void> {},
@@ -70,5 +71,39 @@ describe("ConfigService.restore — backup allowlist", () => {
 		expect(config.sidePanel).toBe(true)
 		expect(config.showNode).toBe(false)
 		expect(config.incomingTransfersVisible).toBe(false)
+	})
+
+	test("every skip warning logs before the first write, naming the key as a property", async () => {
+		const events: unknown[] = []
+		const logger = {
+			log: (_source: string, _level: unknown, ...data: unknown[]) => events.push(["log", ...data]),
+		} as unknown as ILogger
+		const { store } = makeStore((key) => events.push(["set", key]))
+		const svc = new ConfigService(store, logger)
+		events.length = 0
+
+		await svc.restore([prop("theme", "dark"), prop("sessionTtl", 0), prop("sidePanel", true), prop("totallyUnknownKey", 42)])
+
+		expect(events).toEqual([
+			["log", "Skipping a non-restorable config key from backup", { configKey: "sessionTtl" }],
+			["log", "Skipping a non-restorable config key from backup", { configKey: "totallyUnknownKey" }],
+			["set", "theme"],
+			["set", "sidePanel"],
+		])
+	})
+
+	test("a write that fails is recorded on its row and the rest still restore", async () => {
+		const { config, store } = makeStore((key) => {
+			if (key === "theme") throw new Error("store refused")
+		})
+		const svc = new ConfigService(store, noopLogger)
+
+		const result = await svc.restore([prop("theme", "dark"), prop("sidePanel", true)])
+
+		expect(result).toEqual([
+			{ key: "theme", value: "dark", restoreError: "store refused" },
+			{ key: "sidePanel", value: true },
+		])
+		expect(config.sidePanel).toBe(true)
 	})
 })

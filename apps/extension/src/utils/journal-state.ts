@@ -122,7 +122,6 @@ export function journalTerminalDisplay(op: OperationRecord): JournalTerminalDisp
  * glance. Returns null on null/undefined/empty input.
  *
  * Pure helper to keep the regression pin testable without mounting Vue.
- * Consumed by `journal/[id].vue`.
  */
 export function sanitizeJournalSubtitle(raw: string | undefined | null): string | null {
 	if (!raw) return null
@@ -250,6 +249,8 @@ function kindLabel(kind: JobErrorKind): CategoricalFailureLabel {
 			return { label: "Popup closed early", context: "The popup closed before this transaction could finish." }
 		case "scope_refused":
 			return { label: "Not allowed", context: "The app asked for more than you allowed. Nothing was sent." }
+		case "registry_refused":
+			return { label: "Not allowed", context: "Apps cannot change your public authorizations. Nothing was sent." }
 		case "malformed_request":
 			return { label: "Couldn't read request", context: "The app sent a request the wallet could not read. Nothing was sent." }
 		case "terms_refused":
@@ -309,6 +310,7 @@ function failedSubtitleFor(kind: JobErrorKind): string {
 		case "session_ended":
 			return "Stopped when the wallet locked"
 		case "scope_refused":
+		case "registry_refused":
 			return "Not allowed"
 		case "malformed_request":
 			return "Couldn't read request"
@@ -414,7 +416,7 @@ function dappCardFields(op: OperationRecord): JournalCardFields {
 	return {
 		title: dappTitle(op),
 		activityIcon: "zap",
-		originLabel: sanitizeJournalSubtitle(op.subtitle),
+		originLabel: journalCardOriginLabel(op),
 		transferTypeLabel: null,
 		amount: null,
 		amountSymbol: null,
@@ -424,8 +426,7 @@ function dappCardFields(op: OperationRecord): JournalCardFields {
 
 /*
  * The awaiting card's fields, built from the same leaves as the terminal card's so a journal op
- * reads the same across its lifecycle; only a nameless dApp's chip takes the settled row's fallback.
- * Each checks the kind before reading anything else.
+ * reads the same across its lifecycle. Each checks the kind before reading anything else.
  */
 
 export function journalCardTitle(op: OperationRecord, tokenById: JournalTerminalCardCtx["tokenById"]): string {

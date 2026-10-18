@@ -33,6 +33,7 @@ import { type AztecTestConfig, mintPublicTokensForAccount } from "../fixtures/az
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { setDebugMode, setDeveloperMode } from "../fixtures/helpers"
 import { readSwLogTrail } from "../fixtures/journal"
+import { pollUntil } from "../fixtures/poll"
 import {
 	assertPgOk,
 	callExpectingNoPopup,
@@ -98,12 +99,15 @@ async function reorgPastTip(node: Node, rollupAddress: string): Promise<{ tip: B
 }
 
 async function waitForPrune(node: Node, tip: BlockNumber, hash: string, timeoutMs: number): Promise<void> {
-	const deadline = Date.now() + timeoutMs
-	while (Date.now() < deadline) {
-		if ((await tipHash(node, tip)) !== hash) return
-		await new Promise((r) => setTimeout(r, 1_000))
-	}
-	throw new Error(`the node never pruned L2 block ${tip} after the L1 reorg (${timeoutMs}ms)`)
+	await pollUntil(
+		() => tipHash(node, tip),
+		(current) => current !== hash,
+		{
+			label: `the node pruning L2 block ${tip} after the L1 reorg`,
+			timeoutMs,
+			intervalMs: 1_000,
+		},
+	)
 }
 
 /** The service worker's most recent retained lines, for a failure that the dApp only sees as the
