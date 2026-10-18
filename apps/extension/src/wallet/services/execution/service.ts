@@ -795,7 +795,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	}
 
 	/** A refusal is the request's, not one attempt's: the attempt that met it may be one the window
-	 *  already dropped as superseded, so every later attempt answers it before running. */
+	 *  already dropped as superseded, so every attempt answers the first one recorded, the window
+	 *  and the dApp's answer agreeing on it. */
 	private async refusalBound<T>(interactionId: string, run: () => Promise<T>): Promise<T> {
 		const source = this.interactionOperations()
 		const recorded = source.refusalOf(interactionId)
@@ -803,8 +804,9 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		try {
 			return await run()
 		} catch (error) {
-			if (error instanceof ScopeViolationError) source.recordRefusal(interactionId, error)
-			throw error
+			if (!(error instanceof ScopeViolationError)) throw error
+			source.recordRefusal(interactionId, error)
+			throw source.refusalOf(interactionId) ?? error
 		}
 	}
 

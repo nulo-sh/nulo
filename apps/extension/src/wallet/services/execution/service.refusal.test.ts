@@ -61,6 +61,20 @@ describe("a refusal an estimate or preview meets is the request's", () => {
 		},
 	)
 
+	test("an attempt that started before another recorded its refusal answers the recorded one", async () => {
+		const { self, interactions, dappSendExecutor } = makeSelf()
+		const [first, second] = [
+			new AuthRegistryRefusalError(REGISTRY),
+			new ScopeViolationError("Scope violation: authwit call name does not match selector's function"),
+		]
+		dappSendExecutor.estimateOperationFee.mockImplementationOnce(async () => {
+			interactions.recordRefusal("req-1", first)
+			throw second
+		})
+		await expect(self.estimateOperationFee("req-1", 0, FEE)).rejects.toBe(first)
+		expect(interactions.refusalOf("req-1")).toBe(first)
+	})
+
 	test("a failure that is not a scope refusal records nothing, and the next estimate runs", async () => {
 		const { self, interactions, dappSendExecutor } = makeSelf()
 		dappSendExecutor.estimateOperationFee.mockRejectedValueOnce(new Error("node unreachable"))

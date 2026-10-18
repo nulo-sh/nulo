@@ -25,8 +25,9 @@ const hasConfig = aztecConfig !== undefined
  * one scope-refusal envelope, and the send's journal record and its History card read as not
  * allowed, the record's developer view showing the refusal's fixed text, which names no address.
  * A call whose selector runs another function than the name its grant check read is refused while
- * its window estimates the fee: the window offers only Reject, which answers the same refusal. A refused row is titled by what the wallet resolved, never by the name the
- * app claimed: "Transaction" when nothing resolved it, the selector's function otherwise.
+ * its window estimates the fee: the window offers only Reject, which answers the same refusal.
+ * A refused row is titled by what the wallet resolved, never by the name the app claimed:
+ * "Transaction" when nothing resolved it, the selector's function otherwise.
  */
 
 const OTHER = `0x${"0a".repeat(32)}`

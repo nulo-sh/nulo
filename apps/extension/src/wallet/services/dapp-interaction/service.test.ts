@@ -776,8 +776,7 @@ describe("DappInteractionService — a request an estimate refused ends as that 
 		const approved = await h.open()
 		await h.dapp.approveInteraction(approved.id, [{}])
 		h.dapp.recordRefusal(approved.id, binding())
-		await expect.poll(() => approved.outcome.settled).toBe(true)
-		expect(approved.outcome.ok).toEqual([{ status: "ok", result: "0xsigned" }])
+		expect(h.dapp.refusalOf(approved.id)).toBeUndefined()
 	})
 })
 
