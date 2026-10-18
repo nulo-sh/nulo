@@ -53,3 +53,15 @@ Arc 1 ships each answered ask in the form recorded under it.
 - **Option b:** the row shows with a switch, Off when the app did not ask and On when it did; "It always knows the account you connect with." stays under it in both states, and the person decides whether the app may list. Needs the switch's accessible name and the decision to carry `canGet` from the switch.
 - **Option c:** a row with the line alone, "It always knows the account you connect with.", and no listing title.
 - **Recommendation:** a until a dApp asks this way; b if the owner wants the person, not the app, to decide listing.
+
+## OA-7: the busiest first connect window no longer fits 400 × 800
+
+**Open.** The arc's PR waits on it.
+
+- **Surface:** the connect window on a first request for transactions on listed contracts the wallet does not recognize: the account to share, "Always asks you first", "If you allow, it can", "Without asking, it can" with three rows, the unrecognized-contracts note and Details. The window opens at 400 × 800 in both browsers.
+- **What moved:** the line P41-01 puts under the address row, "It always knows the account you connect with.", adds 12 px. That window's rows were pinned to fit 400 × 800 with Details closed; they now scroll by 12 px (699 px of content in 687 px). On Firefox a scrolling area is a Tab stop, so Tab gains a stop between the rows and the buttons. The `cap-window` smoke e2e fails on both browsers until this is answered (Chrome: 1 of 5 tests; Firefox: 3 of the 4 it runs).
+- **Ships now:** nothing; the arc waits.
+- **Option a:** the window's sections sit 16 px apart instead of 20 px, on every connect window. Measured at retry 0: `cap-window` passes on Chrome and Firefox with no test edit.
+- **Option b:** keep 20 px; the busiest window scrolls 12 px at 400 × 800, Firefox's Tab order gains the scroll area, and the two tests are re-pinned to say so.
+- **Option c:** the line shows on the app page only, not under the connect window's row. Departs from P41-01's words.
+- **Recommendation:** a: every row and its words stay, and the window fits as before.
