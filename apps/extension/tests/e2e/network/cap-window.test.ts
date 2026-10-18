@@ -23,9 +23,9 @@ const hasConfig = aztecConfig !== undefined
 
 /**
  * The permission window in a browser: what jsdom cannot show. Keys press native buttons, the Tab
- * order runs as drawn, the layout fits the drawings' 400×800, and a widening to any contract turns
- * the authorizations switch Off again. Every flow connects on its own launch, so no flow's grant
- * turns another's first request into a re-request.
+ * order runs as drawn, the busiest window scrolls by a pinned amount at the drawings' 400×800, and
+ * a widening to any contract turns the authorizations switch Off again. Every flow connects on its
+ * own launch, so no flow's grant turns another's first request into a re-request.
  */
 
 type Connected = ExtensionContext & { playgroundPage: Page }
@@ -119,6 +119,12 @@ async function rejectWindow(ctx: Connected, popup: Page, seq: number): Promise<v
 	await waitForPopupClosed(popup)
 }
 
+/** A layout pin, not a tolerance: S2 scrolls by exactly this much at 400×800 with Details closed. */
+const S2_OVERFLOW_PX = 12
+
+/** Firefox puts a scrolling region in the Tab order ahead of its controls, and S2 scrolls. */
+const scrollStop: Stop[] = isFirefox ? [{ testid: "cap-scroll-area", tag: "DIV" }] : []
+
 test.skipIf(!hasConfig)(
 	"cap-window — Tab runs account, rename, term, switch, Details; Enter opens Details, a row and the rename field",
 	{ timeout: 180_000 },
@@ -137,6 +143,7 @@ test.skipIf(!hasConfig)(
 			}
 		}
 		expect(stops).toEqual([
+			...scrollStop,
 			{ testid: "cap-account-item", tag: "BUTTON" },
 			{ testid: "cap-account-rename-btn", tag: "BUTTON" },
 			{ testid: "cap-auth-term", row: "authorizations", tag: "SPAN" },
@@ -177,14 +184,14 @@ test.skipIf(!hasConfig)(
 	},
 )
 
-// Its own connect: after a rejection the same request is a re-request, whose badged rows make the
-// window scroll, and Firefox puts a scrolling region in the Tab order ahead of its controls.
+// Its own connect: after a rejection the same request is a re-request, another window with badged rows.
 test.skipIf(!hasConfig)(
 	"cap-window — on a fresh window, Space and Enter press the account target, and Space the rename link",
 	{ timeout: 180_000 },
 	async ({ dappConnectedExtensionPerTest: ctx }) => {
 		const fresh = await openWindow(ctx, "transaction-listed")
 		await fresh.popup.bringToFront()
+		for (const stop of scrollStop) expect(await pressTab(fresh.popup)).toEqual(stop)
 		expect(await pressTab(fresh.popup)).toEqual({ testid: "cap-account-item", tag: "BUTTON" })
 		expect(await focusedAttr(fresh.popup, "aria-pressed")).toBe("true")
 		await fresh.popup.keyboard.press(" ")
@@ -216,7 +223,7 @@ test.skipIf(!hasConfig || isFirefox)(
 )
 
 test.skipIf(!hasConfig)(
-	"cap-window — S2's rows fit 400×800 with Details closed, and the dotted term sits inside its line",
+	"cap-window — S2 scrolls its pinned amount at 400×800 with nothing clipped, and the dotted term sits inside its line",
 	{ timeout: 180_000 },
 	async ({ dappConnectedExtensionPerTest: ctx }) => {
 		const { popup, seq } = await openWindow(ctx, "transaction-listed")
@@ -230,16 +237,42 @@ test.skipIf(!hasConfig)(
 		expect(await popup.$(sel("cap-unknown-contracts-note"))).not.toBeNull()
 		expect(await attrOf(popup, "cap-detail-toggle", "aria-expanded")).toBe("false")
 
-		// S1 is this window without the note, so S2 fitting means S1 fits.
-		const overflow = await popup.$eval(sel("cap-scroll-area"), (area) => ({
-			overflowY: getComputedStyle(area).overflowY,
-			heights: [area.scrollHeight, area.clientHeight],
-			documentHeight: document.documentElement.scrollHeight,
-			viewportHeight: window.innerHeight,
-		}))
-		expect(overflow.overflowY, "the scroll area is the window's scroll container").toMatch(/^(auto|scroll)$/)
-		expect(overflow.heights[0], "the scroll area overflows (scrollHeight vs clientHeight)").toBeLessThanOrEqual(overflow.heights[1])
-		expect(overflow.documentHeight).toBeLessThanOrEqual(overflow.viewportHeight)
+		const fit = await popup.$eval(sel("cap-scroll-area"), (area) => {
+			const box = (testid: string) => {
+				const el = document.querySelector(`[data-testid="${testid}"]`)
+				if (!el) throw new Error(`no ${testid}`)
+				const { top, bottom, height } = el.getBoundingClientRect()
+				return { top, bottom, height }
+			}
+			area.scrollTop = 0
+			const first = box("capabilities-hostname")
+			area.scrollTop = area.scrollHeight
+			const scrolled = area.scrollTop
+			const last = box("cap-detail-toggle")
+			area.scrollTop = 0
+			const view = area.getBoundingClientRect()
+			return {
+				overflowY: getComputedStyle(area).overflowY,
+				overflow: area.scrollHeight - area.clientHeight,
+				scrolled,
+				view: { top: view.top, bottom: view.top + area.clientHeight },
+				first,
+				last,
+				confirm: box("cap-approve-btn"),
+				note: box("cap-unknown-contracts-note").height,
+				documentHeight: document.documentElement.scrollHeight,
+				viewportHeight: window.innerHeight,
+			}
+		})
+		expect(fit.overflowY, "the scroll area is the window's scroll container").toMatch(/^(auto|scroll)$/)
+		expect(fit.overflow, "S2 overflows by its pinned amount (scrollHeight - clientHeight)").toBe(S2_OVERFLOW_PX)
+		expect(fit.documentHeight, "only the scroll area scrolls, never the page").toBeLessThanOrEqual(fit.viewportHeight)
+		expect(fit.first.top, "the top of the window is in view at rest").toBeGreaterThanOrEqual(fit.view.top - 0.5)
+		expect(fit.scrolled, "the area scrolls exactly its overflow").toBe(S2_OVERFLOW_PX)
+		expect(fit.last.bottom, "scrolled to its end, Details is whole").toBeLessThanOrEqual(fit.view.bottom + 0.5)
+		expect(fit.confirm.top, "the Confirm row sits below the area").toBeGreaterThanOrEqual(fit.view.bottom - 0.5)
+		expect(fit.confirm.bottom, "and inside the window").toBeLessThanOrEqual(fit.viewportHeight + 0.5)
+		expect(fit.note, "S1, this window without the note, fits").toBeGreaterThan(S2_OVERFLOW_PX)
 
 		// An empty inline-block sits on its line's baseline: one goes at the end of the term, one just
 		// before its tooltip host in the sentence, and both come out once measured.

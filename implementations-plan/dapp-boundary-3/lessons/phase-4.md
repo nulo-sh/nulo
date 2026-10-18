@@ -24,3 +24,8 @@
 
 - At the arc's head: Chrome 4 of 5 pass, Firefox 1 of the 4 it runs (reduced motion is Chrome-only). Every failure is one cause: the line under the address row adds 12 px, so the busiest first window (transactions on listed contracts, unrecognized-contracts note) scrolls at 400 × 800 (scroll height 699 vs 687), and on Firefox the scrolling area becomes a Tab stop the two Tab-order tests do not expect. A layout change, so OA-7.
 - Measured, uncommitted: the sections 16 px apart instead of 20 px. Chrome 5 of 5, Firefox 4 of the 4 it runs, no test edit.
+
+## OA-7 = B (P45-01), 2026-10-18
+
+- `cap-window` re-pinned, no product change: the fit test pins S2's overflow at exactly 12 px and checks both ends (the hostname in view at rest; Details whole at the end of the scroll; the Confirm row below the area and inside the window; the page never scrolls; the note taller than the overflow, so S1 fits); both Tab-order tests expect Firefox's scroll-area stop first.
+- After merging `origin/dev` (18d29f23), retry 0: Chrome 5 of 5 (file 78.9 s), Firefox 4 of the 4 it runs (file 92.5 s).
