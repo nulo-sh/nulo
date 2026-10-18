@@ -1,7 +1,7 @@
 ---
 plan: e2e-flakes-2
 tier: light
-status: arc 1 merged (#813); arc 2 in progress
+status: arc 1 merged (#813); arc 2 implemented, Codex loop converged, PR pending
 issues: "#774 (arc 1, closed by #813); #816 (arc 2 closes)"
 driver: claude-code
 claude_model: opus
@@ -127,11 +127,9 @@ Scope: `tests/e2e/navigation.test.ts`'s drag-select test, red 3 of 3 on one Fire
 - CI: run 39166471199 (job 117791281807) red at `:253` on three attempts; run 39168239864 (job 117795684862, not in the issue) red at `:253` twice and at `:264`, the note, once, 1.98 s after the copy log. Eight green Firefox runs logged the link-rows drag 2.13-2.63 s after it.
 - The issue's hypothesis did not hold: the sub-page header spans y 64-120, and the failing point is at y 593.
 
-**Not a product bug.** A snack overlays the page by design; the spec presses under a transient overlay it opened itself.
+**Change** (the spec only; not a product bug, since a snack overlays the page by design and the spec presses under one it opened itself): after About shows `legal-about-accepted` and before its first scroll, `await waitForToastGone(page, "Address is copied")` (`fixtures/widgets.ts`, re-exported by `fixtures/helpers`), which counts a leaving card as present, with one comment line saying why. Cost: the snack's remaining life, from about 0.4 s on Firefox to 1.4 s on Chrome per the probe. A `waitForToast` for the same label right after the click proves the snack opened, so a renamed label cannot turn the wait into a no-op.
 
-**Change** (the spec only): after About shows `legal-about-accepted` and before its first scroll, `await waitForToastGone(page, "Address is copied")` (`fixtures/widgets.ts`, re-exported by `fixtures/helpers`), which counts a leaving card as present, with one comment line saying why. Cost: the snack's remaining life, from about 0.4 s on Firefox to 1.4 s on Chrome per the probe. A `waitForToast` for the same label right after the click proves the snack opened, so a renamed label cannot turn the wait into a no-op.
-
-### Phase 2 — wait for the copy snack to leave
+### Phase 2 — wait for the copy snack to leave ✓
 
 1. Add the wait and its comment, and the presence check after the click; import both helpers.
 2. Negative controls, never committed, Firefox, one run each. Both adopt a stylesheet in the popup, `[data-testid="snackbar"] { transition-duration: 4s !important; transition-timing-function: step-start !important }`, so a leaving card holds its swept-down place for 4 s. **A**, the unfixed spec plus a wait until a card carries its leave class before About's scroll: red at `:253` with #816's message. **B**, the fixed spec under the same stylesheet: green, the wait lasting until the card is removed. Restore; `git diff` shows only the fix.
@@ -142,6 +140,8 @@ Scope: `tests/e2e/navigation.test.ts`'s drag-select test, red 3 of 3 on one Fire
 - Armed builds per browser (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:<browser>`), then ten Firefox and five Chrome runs, one at a time: `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 env -u EXTENSION_PATH taskset -c 0,1 bun run test:e2e --retry=0 tests/e2e/navigation.test.ts` (with `NULO_E2E_BROWSER=firefox` for Firefox). Pass: every run `8 passed`. Smoke claims its own loopback ports in `~/.agents/ports.md`; `agent.sh` is the network runner and builds no smoke dist.
 - Record the file's and the drag test's time per run, and one unfixed run per browser as the base. No pass bound on them.
 - What the runs certify: the wait holds under CI's build and a two-core pin. The race's closure rests on the mechanism and on controls A and B.
+
+**Arc 2 audit verdicts** (diff a4edec20..30821a65; log: [lessons/phase-2.md](lessons/phase-2.md)). Round 1, Codex (gpt-6.1-sol, high, session 01a1512e): approve; the seeds still drove phase 1, rewritten. Opus diff review: approve, 3 nits accepted: a presence check pairs the gone-wait so a renamed label cannot make it a no-op, the comment names the next two drags, the Firefox cost is about 0.4 s. Round 2 (resume): conditional approve; the presence check sat after a storage read, moved before it (`455f7b90`). Round 3: approve, no findings. Gate on the merged head 30821a65: lint, `typecheck:all`, `test:all` exit 0; controls A red at the original `:253`, B green; Firefox 10/10 (test 6.0-7.5 s) and Chrome 5/5 (4.1-4.6 s) at retry 0, every run 8 passed.
 
 ## Seeds
 

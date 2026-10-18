@@ -63,3 +63,31 @@ CI before: Firefox test 4.9-6.1 s, file 27.6-36.9 s (eight green shards); Chrome
   "both drags below" is ambiguous with three drags after it: accepted, the comment now says the
   next two. #3 the Firefox cost is about 0.4 s, not 0.3: accepted.
 - The spec fixes landed after the batch, in their own commit; the batch reran on the final head.
+
+## Validation (e3871553), the round-1 fixes
+
+| Browser | Runs | File (s) | Drag test (s) |
+|---|---|---|---|
+| Firefox | 10/10 | 48.8, 45.8, 44.8, 55.9, 57.1, 43.1, 44.1, 41.7, 47.2, 47.1 | 6.9, 6.5, 5.9, 6.7, 7.4, 6.5, 6.5, 6.3, 6.6, 5.4 |
+| Chrome | 5/5 | 32.5, 45.6, 44.5, 45.5, 41.3 | 4.3, 5.2, 5.2, 5.5, 5.0 |
+
+## Review rounds 2-3 (Codex resume, session 01a1512e)
+
+- **Round 2**: conditional approve, 1 finding. The presence check ran after `copies()` and
+  `getAccountAddress()`, a storage read; a read slower than the snack's 2.15 s life would time it
+  out though the copy worked. Accepted (`455f7b90`): the check now runs straight after the click.
+  Codex's extra step, reading the address before the click, was not needed: the handler records
+  the copy before it opens the snack, so the assertion after the check still holds.
+- **Round 3**: approve, no findings. The loop converged.
+
+## Validation (30821a65, the merge of origin/dev at 0c340d37: #817, #822)
+
+Rebuilt armed for both browsers; `bun run lint`, `typecheck:all`, `test:all` exit 0.
+
+| Browser | Runs | File (s) | Drag test (s) |
+|---|---|---|---|
+| Firefox | 10/10 | 54.6, 55.8, 48.7, 43.0, 45.2, 54.4, 50.6, 46.8, 45.9, 46.6 | 7.4, 7.5, 7.4, 6.5, 6.4, 6.6, 6.9, 6.1, 6.6, 6.0 |
+| Chrome | 5/5 | 31.3, 32.8, 35.7, 32.3, 33.9 | 4.1, 4.5, 4.5, 4.3, 4.6 |
+
+Every run `8 passed` at retry 0 under `taskset -c 0,1`. Against the base runs the drag test grew
+by the snack's remaining life: Firefox 5.6 to 6.0-7.5 s, Chrome 3.4 to 4.1-4.6 s.
