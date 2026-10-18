@@ -10,6 +10,7 @@ import { BUFFER_BINDINGS, withBuffer } from "../../../../../../tests/helpers/shi
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import { useAppStore } from "@/stores/app.store"
 import { usePopupStore } from "@/stores/popup.store"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 import FullExportPage from "./full.vue"
 
 /**
@@ -503,6 +504,51 @@ describe("export/full.vue — the password backup's keys and run fence", () => {
 		await reachUnlockAndSubmit(wrapper)
 		await vi.waitFor(() => expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to create the backup" }))
 		expect(exportFullBackupKeys).not.toHaveBeenCalled()
+	})
+})
+
+describe("export/full.vue — imported accounts a restore holds until their network is added", () => {
+	const keyRow = (chainId: number, address: string) => ({ profileId: "p1", chainId, address, encryptedSigningKey: "sealed" })
+	const networkBanner = (wrapper: ReturnType<typeof mountPage>) => wrapper.find("[data-testid='backup-imported-network-banner']")
+	const LEAD = "A restore re-creates only the default networks"
+
+	it.each([
+		{
+			rows: [keyRow(1337, "0xa")],
+			text: `1 imported account is on a network you added. ${LEAD}, so add that network again to restore it.`,
+		},
+		{
+			rows: [keyRow(1337, "0xa"), keyRow(1337, "0xb"), keyRow(CHAIN_IDS.TESTNET, "0xc")],
+			text: `2 imported accounts are on a network you added. ${LEAD}, so add that network again to restore them.`,
+		},
+		{
+			rows: [keyRow(1337, "0xa"), keyRow(1338, "0xb")],
+			text: `2 imported accounts are on networks you added. ${LEAD}, so add those networks again to restore them.`,
+		},
+	])("$text", async ({ rows, text }) => {
+		exportFullBackupKeys.mockResolvedValue({ ...material, importedKeyRows: rows })
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		const banner = networkBanner(wrapper)
+		expect(banner.text()).toBe(`Some imported accounts need their network ${text}`)
+		const ready = wrapper.get("[data-testid='backup-ready-banner']").element
+		expect(banner.element.compareDocumentPosition(ready) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+	})
+
+	it("rows on Testnet and the local network alone show no such warning", async () => {
+		exportFullBackupKeys.mockResolvedValue({ ...material, importedKeyRows: [keyRow(CHAIN_IDS.TESTNET, "0xa"), keyRow(0, "0xb")] })
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		expect(wrapper.find("[data-testid='backup-ready-banner']").exists()).toBe(true)
+		expect(networkBanner(wrapper).exists()).toBe(false)
+	})
+
+	it("a replaced imported-keys key shows its own warning instead", async () => {
+		exportFullBackupKeys.mockResolvedValue({ ...material, dekReplaced: true, importedKeyRows: [keyRow(1337, "0xa")] })
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		expect(wrapper.find("[data-testid='backup-keys-lost-banner']").exists()).toBe(true)
+		expect(networkBanner(wrapper).exists()).toBe(false)
 	})
 })
 
