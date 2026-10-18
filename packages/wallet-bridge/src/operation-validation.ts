@@ -18,6 +18,7 @@
 
 import { isSelfPay } from "./fee-payer"
 import type { DraftOperation, Operation } from "./operation"
+import { carriesFeeSettings } from "./operation-traits"
 
 /**
  * True iff `op` is a send-like operation that still needs the user to pick a fee
@@ -28,7 +29,7 @@ import type { DraftOperation, Operation } from "./operation"
  * Non-send kinds never need fee selection.
  */
 export function requiresFeeSelection(op: DraftOperation): boolean {
-	if (op.kind !== "send_transaction" && op.kind !== "aztec_sendTx") return false
+	if (!carriesFeeSettings(op)) return false
 	return op.feeSettings === undefined && !isEmbeddedFeePayment(op)
 }
 
@@ -63,7 +64,7 @@ export function isEmbeddedFeePayment(op: FeePathFields): boolean {
  * compiler treats the value as `Operation`.
  */
 export function assertExecutableOperation(op: DraftOperation): asserts op is Operation {
-	if ((op.kind === "send_transaction" || op.kind === "aztec_sendTx") && op.feeSettings === undefined) {
+	if (carriesFeeSettings(op) && op.feeSettings === undefined) {
 		throw new Error(`assertExecutableOperation: ${op.kind} is missing feeSettings`)
 	}
 }
