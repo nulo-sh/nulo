@@ -44,7 +44,7 @@ async function harness() {
 	await collection.start()
 	for (const profileId of ["p2", "p1"]) {
 		active = profileId
-		await sessions.addDappSession({ url: ORIGIN }, [], [], AccessLevel.Transactions, "1")
+		await sessions.addDappSession({ url: ORIGIN }, [], [], AccessLevel.Transactions, "1", profileId)
 	}
 
 	const live = new Set(["approved-under-p1", "stamped-to-p2"])
