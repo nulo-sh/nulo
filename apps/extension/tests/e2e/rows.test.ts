@@ -47,14 +47,11 @@ type Probe = {
 }
 
 const TOKEN_ROWS = `${sel("tokens-card")}, ${sel("token-seed-row")}`
+/** A default token's placeholder in any status but a terminal one. */
+const SEED_WORKING = `${sel("token-seed-row")}:not([data-status="failed"]):not([data-status="rejected"])`
 /** A token row still on its way in: a balance's first sync, a ghost row, an import's row (it leaves
- *  when the import ends), a default token's placeholder in any status but a terminal one. */
-const TOKEN_LOADING = [
-	sel("token-balance-loading"),
-	sel("tokens-skeleton-row"),
-	sel("token-import-row"),
-	`${sel("token-seed-row")}:not([data-status="failed"]):not([data-status="rejected"])`,
-].join(", ")
+ *  when the import ends), a working default's placeholder. */
+const TOKEN_LOADING = [sel("token-balance-loading"), sel("tokens-skeleton-row"), sel("token-import-row"), SEED_WORKING].join(", ")
 
 /** A release artifact seeds the default tokens against the launch's stand-in node, which fails them
  *  only after the seeder's two retry waits (15 s, then 60 s) and three attempts. The tests that open
@@ -1046,9 +1043,8 @@ test.skipIf(inject("liveLeg") === true)(
 			await createProfileAcceptingTerms(ctx)
 			const seeder = await openPopup(ctx)
 			await waitForHash(seeder, "#/popup/general", 30_000)
-			const working = `${sel("token-seed-row")}[aria-busy="true"]`
-			await seeder.waitForSelector(working, { visible: true, timeout: 30_000 })
-			const loading = await rowHeight(seeder, working)
+			await seeder.waitForSelector(SEED_WORKING, { visible: true, timeout: 30_000 })
+			const loading = await rowHeight(seeder, SEED_WORKING)
 			await shotSend(seeder, "home-token-rows-loading", "tokens-list")
 
 			const scope = await readActivityScope(seeder)
