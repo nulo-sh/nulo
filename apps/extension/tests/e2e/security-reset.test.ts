@@ -1,8 +1,10 @@
 import { expect } from "vitest"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
-import { interceptRpc } from "./fixtures/browser"
+import { interceptRpc, reloadExtensionPage } from "./fixtures/browser"
 import { test, openPopup, waitForHash } from "./fixtures/extension"
 import { captureSoleProfileId, resetProfile, waitForProfilePurged } from "./fixtures/helpers"
+import { readActivityScope } from "./helpers/activity-seeds"
+import { SEEDED_FPC_IDS, fpcRowIds, seedProtocolFpcs } from "./helpers/fpc-seeds"
 
 const TESTNET_RPC_ORIGIN = new URL(TESTNET_RPC_URL).origin
 
@@ -33,16 +35,23 @@ test("reset profile wipes state and routes to register", async ({ registeredExte
 }, 60_000)
 
 // Only the production PXE makes the boot, sync and op node calls a purge drains, so only a browser
-// proves no retry of theirs still holds it. Same 15 s purge budget as the reachable case.
+// proves no retry of theirs still holds it. Same 15 s purge budget as the reachable case. Both
+// protocol FPC rows are stored before the node refuses: a discovery still retrying holds the FPC
+// lock the purge takes before it stops PXE retries, and this test does not measure that wait.
 test("reset purges within the same budget while the node refuses connections", async ({ registeredExtensionPerTest: ctx }) => {
+	const page = await openPopup(ctx)
+	await waitForHash(page, "#/popup/general")
+	const scope = await readActivityScope(page)
+	await seedProtocolFpcs(page, scope)
+	expect(await fpcRowIds(page)).toEqual([...SEEDED_FPC_IDS].sort())
+
 	const node = await interceptRpc(ctx.browser, ctx.extensionId, TESTNET_RPC_ORIGIN, { kind: "refuse" })
 	try {
-		const page = await openPopup(ctx)
+		await reloadExtensionPage(page)
 		await waitForHash(page, "#/popup/general")
 
-		const profileId = await captureSoleProfileId(page)
 		await resetProfile(page)
-		await waitForProfilePurged(page, profileId, { timeoutMs: 15_000 })
+		await waitForProfilePurged(page, scope.profileId, { timeoutMs: 15_000 })
 		await page.waitForFunction(() => window.location.hash.includes("/popup/register"), { timeout: 10_000 })
 
 		expect(await node.failures()).toEqual([])

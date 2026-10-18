@@ -69,7 +69,7 @@ Assumes F1, I1. `ext/tests/e2e/viewers-csp.test.ts`, `logLines`:
 
 **Deviation** ([lessons/phase-1.md](lessons/phase-1.md)): the wallet's own lines reach the window at any time, so the gap is read after two frames with no line change (`gapToEnd`), and the follow check is armed before the stop step (D10). The search row can still go red on Firefox through #616, the product defect (OA-3).
 
-### Phase 2. #630: the refused-node reset starts with both protocol FPC rows present
+### Phase 2. #630: the refused-node reset starts with both protocol FPC rows present ✓
 Assumes F2, F3, I2. `ext/tests/e2e/security-reset.test.ts`, second test:
 1. Open the popup behind the launch's stand-in, then read the scope (`readActivityScope`).
 2. Seed both protocol rows (`seedProtocolFpcs`) and check them with `fpcRowIds`.
