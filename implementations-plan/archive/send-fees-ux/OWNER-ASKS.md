@@ -1,6 +1,6 @@
 # Owner asks: send-fees-ux
 
-Answers (decision page 20, 2026-10-16, quoted on each issue): OA-1 B (#503), OA-2 B (#504, with the owner's request to see the whole fee block as a skeleton first), OA-3 B (#505), OA-4 B (#316). Arc 2 ships OA-1, OA-3 and OA-4; OA-2 waits for the mockup; OA-5 has no answer and ships as is.
+Answers (decision page 20, 2026-10-16, quoted on each issue): OA-1 B (#503), OA-2 B (#504, with the owner's request to see the whole fee block as a skeleton first), OA-3 B (#505), OA-4 B (#316). Arc 2 ships OA-1, OA-3 and OA-4; OA-5 has no answer and ships as is. Page 23 (2026-10-16): P23-02 C, the whole fee card as a skeleton with Priority live, on top of OA-2 B; arc 3 ships it. OA-6 and OA-7 come from building it and ship as A.
 
 Five issues. Two carry signed words and ship in full: #316 and #340 (decision page 18, P18-09 A and P18-11 A). Four calls are open. Each has a "what ships now" line, which is what the arc builds if the ask is still open when its PR opens. An answer that lands before then ships with the arc.
 
@@ -93,5 +93,38 @@ A sponsor you added yourself ("You pay: —") keeps A either way.
 B is one line: the refusal keeps its own kind on the Send path too, as a lock or a first-transaction race already does.
 
 **Recommendation: B.** The same refusal reads the same wherever the send came from, and the current line names causes that did not happen.
+
+**What ships now: A.**
+
+## OA-6. The skeleton is taller than a sponsored card with no amount
+
+**Surface:** Send's fee card, at the moment its balance read lands (arc 3, P23-02 C).
+
+**As shipped:** the card draws four rows from the first paint (Fee, Available, You pay, Priority), 220 px tall at 360 px wide. Page 23's text promised "the card keeps its final height, so nothing jumps when the read lands". That holds for a Fee Juice payer once a fee is estimated. On the common open, with Nulo's sponsor paying and no amount typed yet, the settled card is Fee, "Fee estimated after simulation", Priority: 164 px. So the card shrinks by 56 px once, where before the arc it grew from 60 px to 164 px. Measured on five opens; pictures `screenshots/arc3-send-fee-card-pending-*` and `arc3-send-fee-card-settled-*`.
+
+| Option | While the read runs | Change when it lands (sponsor, no amount) |
+|---|---|---|
+| **A. As shipped** | four rows, three bars, Priority live | shrinks 56 px |
+| **B. "You pay" as it will read** | with no amount typed, the You pay row already reads "Fee estimated after simulation" (it needs no balance, like Priority); a bar only once an amount is typed | only the Available row leaves |
+| **C. B, and no Available row for a saved sponsor pick** | as B; when the field already names a saved sponsor, no Available row | nothing, for a saved sponsor; the Available row leaves when the default turns out to be a sponsor |
+
+The method the read will pick is unknown until it lands, so no option keeps every open still.
+
+**Recommendation: B.** It removes the larger part of the change on the most common open and adds no words.
+
+**What ships now: A.**
+
+## OA-7. A failed read's notice over the next account's skeleton
+
+**Surface:** Send's fee card, when the account is switched with Send open after the previous account's read failed.
+
+**Today:** the previous read's line ("Couldn't load fee data. Retrying in the background." or "Couldn't load fee data. Close and reopen to try again.") stays above the new account's bars until its read lands, although a new read is running. Before arc 3 it stayed above "Select method" the same way.
+
+| Option | While the new account's read runs |
+|---|---|
+| **A. As today** | the old line, then the bars |
+| **B. Hide it** | the bars alone; the line comes back only if the new read fails |
+
+**Recommendation: B.** The line describes a read that is no longer on screen.
 
 **What ships now: A.**
