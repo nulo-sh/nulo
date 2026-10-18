@@ -29,6 +29,7 @@ import {
 } from "./fixtures/extension"
 import { navigateByHash, readProfileNames, readSessionRow } from "./fixtures/helpers"
 import { waitForMainFrame, waitForPopupClosed } from "./fixtures/popups"
+import { PollTimeoutError, pollUntil } from "./fixtures/poll"
 import { refusePasskeyStep, registerPasskeyProfile } from "./fixtures/passkey"
 import { downloadPlainPasskeyBackup } from "./helpers/backup-export"
 import { completeResetRitual } from "./helpers/crash-truth"
@@ -55,20 +56,21 @@ const PANEL_STATE = `return content.location.hash + " — " + (content.document.
  *  routes on its own clock. Each read is privileged and focuses a browser window, which fails a
  *  passkey prompt that opens at that moment: none may run while a passkey window is up. */
 async function untilInPanel<T>(browser: Browser, body: string, what: string, timeoutMs = 30_000): Promise<T> {
-	const deadline = Date.now() + timeoutMs
 	let failure = ""
-	for (;;) {
+	const read = async () => {
 		try {
-			const value = await evaluateInActionPopup<T | null>(browser, body)
-			if (value !== null) return value
+			return await evaluateInActionPopup<T | null>(browser, body)
 		} catch (err) {
 			failure = `: ${err instanceof Error ? err.message : String(err)}`
+			return null
 		}
-		if (Date.now() > deadline) {
-			const seen = await evaluateInActionPopup<string>(browser, PANEL_STATE).catch(() => "unreadable")
-			throw new Error(`the panel never ${what}${failure} (it shows ${seen})`)
-		}
-		await sleep(200)
+	}
+	try {
+		return (await pollUntil(read, (value) => value !== null, { label: `the panel ${what}`, timeoutMs, intervalMs: 200 })) as T
+	} catch (error) {
+		if (!(error instanceof PollTimeoutError)) throw error
+		const seen = await evaluateInActionPopup<string>(browser, PANEL_STATE).catch(() => "unreadable")
+		throw new Error(`the panel never ${what}${failure} (it shows ${seen})`)
 	}
 }
 
@@ -254,11 +256,12 @@ const popupWindowIds = (control: Page) =>
 	control.evaluate(async () => (await chrome.windows.getAll()).filter((win) => win.type === "popup").map((win) => win.id))
 
 async function untilFocused(control: Page, focused: (id: number | undefined) => boolean): Promise<void> {
-	const deadline = Date.now() + 15_000
-	while (!focused(await focusedWindow(control))) {
-		if (Date.now() > deadline) throw new Error(`the focused window is still ${await focusedWindow(control)}`)
-		await sleep(100)
-	}
+	await pollUntil(() => focusedWindow(control), focused, {
+		label: "the expected window focused",
+		timeoutMs: 15_000,
+		intervalMs: 100,
+		show: (id) => `window ${id} focused`,
+	})
 }
 
 /** Until the export flow's registered window is `id`, or none when `id` is null. */

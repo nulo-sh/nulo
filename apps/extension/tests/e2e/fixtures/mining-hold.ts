@@ -10,6 +10,8 @@
  * timeout abandons the test body.
  */
 
+import { pollUntil } from "./poll"
+
 const ADMIN = (): string => {
 	const port = process.env.AZTEC_ADMIN_PORT
 	if (!port) throw new Error("AZTEC_ADMIN_PORT is not set: the mining hold needs the e2e agent's node")
@@ -57,11 +59,9 @@ export async function pendingTxCount(nodeUrl: string): Promise<number> {
 
 /** Waits until the node's mempool is empty, so a case never pairs with a tx an earlier case left behind. */
 export async function waitForEmptyMempool(nodeUrl: string, timeoutMs = 120_000): Promise<void> {
-	const deadline = Date.now() + timeoutMs
-	for (;;) {
-		const count = await pendingTxCount(nodeUrl)
-		if (count === 0) return
-		if (Date.now() > deadline) throw new Error(`the node still holds ${count} pending txs`)
-		await new Promise((r) => setTimeout(r, 500))
-	}
+	await pollUntil(
+		() => pendingTxCount(nodeUrl),
+		(count) => count === 0,
+		{ label: "the node's mempool empty", timeoutMs, intervalMs: 500, show: (count) => `${count} pending txs` },
+	)
 }

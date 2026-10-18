@@ -35,6 +35,7 @@ import { TokenContract } from "@aztec-foundation/aztec-standards/artifacts/src/a
 import type { Logger } from "@aztec-labs/foundation/log"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import type { Chain } from "@aztec/viem"
+import { PollTimeoutError, pollUntil } from "./poll"
 
 /**
  * Aztec L2 node URL. Defaults to http://localhost:8080 (the standard sandbox port).
@@ -77,16 +78,15 @@ export async function checkNodeHealth(url = LOCAL_NODE_URL): Promise<boolean> {
 /** Wait for the local node to become healthy (with timeout). */
 export async function waitForLocalNode(url = LOCAL_NODE_URL, timeoutMs = 60_000): Promise<void> {
 	const node = createAztecNodeClient(url)
-	const start = Date.now()
-	while (Date.now() - start < timeoutMs) {
-		try {
-			await node.getNodeInfo()
-			return
-		} catch {
-			await new Promise((r) => setTimeout(r, 2_000))
-		}
-	}
-	throw new Error(`Local Aztec node at ${url} did not become healthy within ${timeoutMs}ms`)
+	await pollUntil(
+		() =>
+			node.getNodeInfo().then(
+				() => true,
+				() => false,
+			),
+		(healthy) => healthy,
+		{ label: `Local Aztec node at ${url} healthy`, timeoutMs, intervalMs: 2_000 },
+	)
 }
 
 /**
@@ -462,28 +462,31 @@ export async function waitForL1ToL2Message(
 ): Promise<void> {
 	const hash = Fr.fromString(messageHash)
 	const start = Date.now()
-	let messageIndex: bigint | undefined
-	while (Date.now() - start < timeoutMs) {
-		messageIndex = await node.getL1ToL2MessageIndex(hash)
-		if (messageIndex !== undefined) {
-			console.log(`[waitForL1ToL2Message] message at leaf ${messageIndex} after ${Date.now() - start}ms`)
-			break
-		}
-		await new Promise((r) => setTimeout(r, 2_000))
-	}
-	if (messageIndex === undefined) throw new Error(`[waitForL1ToL2Message] ${messageHash} not seen by the node within ${timeoutMs}ms`)
+	const messageIndex = await pollUntil(
+		() => node.getL1ToL2MessageIndex(hash),
+		(index) => index !== undefined,
+		{ label: `[waitForL1ToL2Message] ${messageHash} seen by the node`, timeoutMs, intervalMs: 2_000 },
+	)
+	console.log(`[waitForL1ToL2Message] message at leaf ${messageIndex} after ${Date.now() - start}ms`)
 
 	// The node-admin `mineBlock` is not RPC-exposed, so callers pass `forceBlock` (a cheap sponsored
 	// tx), which runs until the latest block's message tree covers the message.
-	while (Date.now() - start < timeoutMs) {
-		if (await isL1ToL2MessageReady(node, hash)) {
-			console.log(`[waitForL1ToL2Message] claimable after ${Date.now() - start}ms`)
-			return
-		}
-		if (forceBlock) await forceBlock().catch((err) => console.warn(`[waitForL1ToL2Message] forceBlock failed: ${err}`))
-		await new Promise((r) => setTimeout(r, 1_500))
+	const claimable = async () => {
+		const ready = await isL1ToL2MessageReady(node, hash)
+		if (!ready && forceBlock) await forceBlock().catch((err) => console.warn(`[waitForL1ToL2Message] forceBlock failed: ${err}`))
+		return ready
 	}
-	console.warn(`[waitForL1ToL2Message] no block inserted leaf ${messageIndex} within ${timeoutMs}ms — proceeding best-effort`)
+	try {
+		await pollUntil(claimable, (ready) => ready, {
+			label: `[waitForL1ToL2Message] leaf ${messageIndex} claimable`,
+			timeoutMs: start + timeoutMs - Date.now(),
+			intervalMs: 1_500,
+		})
+		console.log(`[waitForL1ToL2Message] claimable after ${Date.now() - start}ms`)
+	} catch (error) {
+		if (!(error instanceof PollTimeoutError)) throw error
+		console.warn(`[waitForL1ToL2Message] no block inserted leaf ${messageIndex} within ${timeoutMs}ms — proceeding best-effort`)
+	}
 }
 
 /** Claim bridged FeeJuice on L2. Uses SponsoredFPC to pay for the claim tx itself.
@@ -863,14 +866,16 @@ async function mineL1Blocks(count: number): Promise<void> {
 /** Mines empty L1 blocks until the node's finalized L2 block reaches `block`. The local anvil mines
  *  only on a transaction, so on a quiet chain the finalized tip stands still. */
 export async function finalizeThrough(node: ReturnType<typeof createAztecNodeClient>, block: number, timeoutMs = 180_000): Promise<void> {
-	const deadline = Date.now() + timeoutMs
-	for (;;) {
-		const finalized = await node.getBlockData("finalized")
-		if ((finalized?.header.getBlockNumber() ?? 0) >= block) return
-		if (Date.now() > deadline) throw new Error(`finalizeThrough: the finalized block stayed below ${block} for ${timeoutMs} ms`)
-		await mineL1Blocks(3)
-		await new Promise((resolve) => setTimeout(resolve, 2_000))
+	const finalizedBlock = async () => {
+		const finalized = (await node.getBlockData("finalized"))?.header.getBlockNumber() ?? 0
+		if (finalized < block) await mineL1Blocks(3)
+		return finalized
 	}
+	await pollUntil(finalizedBlock, (finalized) => finalized >= block, {
+		label: `finalizeThrough: the finalized block at ${block}`,
+		timeoutMs,
+		intervalMs: 2_000,
+	})
 }
 
 /**

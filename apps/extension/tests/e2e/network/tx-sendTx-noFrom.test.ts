@@ -4,6 +4,7 @@ import { UNCLASSIFIED_ERROR_MESSAGE } from "@/wallet/services/wallet-sdk/error-e
 import { waitForTxMined, type AztecTestConfig } from "../fixtures/aztec"
 import { clickByTestId, type ExtensionContext, grantCapBundle, openPopup, test } from "../fixtures/extension"
 import { readSendRecords, type SendRecordView, waitForSendRecord } from "../fixtures/journal"
+import { pollUntil } from "../fixtures/poll"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult, waitForPgResults } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
 import { PROOF_GATE_HOLD_MS, holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
@@ -64,20 +65,21 @@ const heldPair = (sends: SendRecordView[]): SendRecordView | undefined =>
  * itself, and a `queued` record would prove nothing about the mutex.
  */
 async function expectQueuedBehindHeld(wallet: Page): Promise<void> {
-	const pairBy = Date.now() + 60_000
-	let sends = await dappSends(wallet)
-	let held = heldPair(sends)
-	while (!held) {
-		if (Date.now() > pairBy) throw new Error(`no send held at proving with the other queued; sends: ${JSON.stringify(sends)}`)
-		await sleep(250)
-		sends = await dappSends(wallet)
-		held = heldPair(sends)
-	}
+	const paired = await pollUntil(
+		() => dappSends(wallet),
+		(sends) => heldPair(sends) !== undefined,
+		{
+			label: "a send held at proving with the other queued",
+			timeoutMs: 60_000,
+			intervalMs: 250,
+		},
+	)
+	const held = heldPair(paired) as SendRecordView
 	const gateHoldsUntil = (held.enteredProveAt ?? Number.NaN) + PROOF_GATE_HOLD_MS
 	const observeUntil = Date.now() + QUEUED_HELD_MS
 	for (;;) {
 		await sleep(250)
-		sends = await dappSends(wallet)
+		const sends = await dappSends(wallet)
 		const readAt = Date.now()
 		expect(heldPair(sends)?.id, `the second send must stay queued behind the held first: ${JSON.stringify(sends)}`).toBe(held.id)
 		expect(readAt, "every read must fall while the first send's gate certainly still holds").toBeLessThanOrEqual(gateHoldsUntil)

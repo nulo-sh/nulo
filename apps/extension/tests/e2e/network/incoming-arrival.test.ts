@@ -36,6 +36,7 @@ import {
 	waitForToast,
 } from "../fixtures/helpers"
 import { holdIncomingPoll, readIncomingPollStatus, releaseIncomingPoll, waitForIncomingPollPhase } from "../fixtures/incoming-poll-gate"
+import { pollUntil } from "../fixtures/poll"
 import { confirmImport, exportAccountBody, previewImport } from "../helpers/account-io"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -125,13 +126,12 @@ async function storedRecords(page: Page, account: string): Promise<StoredRecord[
 
 /** The first record of `account` whose id `known` does not hold, polled from storage. */
 async function waitForNewRecord(page: Page, account: string, known: Set<string>, contract?: string): Promise<StoredRecord> {
-	const deadline = Date.now() + RECEIPT_BUDGET_MS
-	while (Date.now() < deadline) {
-		const fresh = (await storedRecords(page, account)).find((r) => !known.has(r.id) && (!contract || r.contract === contract))
-		if (fresh) return fresh
-		await new Promise((r) => setTimeout(r, 1_000))
-	}
-	throw new Error(`no new incoming record for ${account} within ${RECEIPT_BUDGET_MS}ms`)
+	const fresh = await pollUntil(
+		async () => (await storedRecords(page, account)).find((r) => !known.has(r.id) && (!contract || r.contract === contract)),
+		(record) => record !== undefined,
+		{ label: `a new incoming record for ${account}`, timeoutMs: RECEIPT_BUDGET_MS, intervalMs: 1_000 },
+	)
+	return fresh as StoredRecord
 }
 
 async function readJson<T>(page: Page, key: string): Promise<T | undefined> {
@@ -196,25 +196,32 @@ const recording = (page: Page) => page.evaluate(() => (window as unknown as { __
 
 /** Wait until the recorder has seen the row of receipt `id`. */
 async function waitForRow(page: Page, id: string): Promise<void> {
-	const deadline = Date.now() + RECEIPT_BUDGET_MS
-	while (Date.now() < deadline) {
-		if (id in (await recording(page)).first) return
-		await new Promise((r) => setTimeout(r, 1_000))
-	}
-	throw new Error(`the row of ${id} never rendered within ${RECEIPT_BUDGET_MS}ms`)
+	await pollUntil(
+		async () => id in (await recording(page)).first,
+		(seen) => seen,
+		{
+			label: `the row of ${id} rendered`,
+			timeoutMs: RECEIPT_BUDGET_MS,
+			intervalMs: 1_000,
+		},
+	)
 }
 
 /** Wait until the receipt `txHash` delivered is stored and its row seen; returns the receipt's id.
  *  Refreshing balances meanwhile advances the wallet's PXE sync, so a note is discovered sooner. */
 async function waitForRowOf(page: Page, account: string, txHash: string): Promise<string> {
-	const deadline = Date.now() + RECEIPT_BUDGET_MS
-	while (Date.now() < deadline) {
+	const rowSeen = async () => {
 		const record = (await storedRecords(page, account)).find((r) => r.txHash === txHash)
 		if (record && record.id in (await recording(page)).first) return record.id
 		await refreshBalances(page).catch(() => undefined)
-		await new Promise((r) => setTimeout(r, 4_000))
+		return undefined
 	}
-	throw new Error(`the row of ${txHash} never rendered within ${RECEIPT_BUDGET_MS}ms`)
+	const id = await pollUntil(rowSeen, (seen) => seen !== undefined, {
+		label: `the row of ${txHash} rendered`,
+		timeoutMs: RECEIPT_BUDGET_MS,
+		intervalMs: 4_000,
+	})
+	return id as string
 }
 
 /** Drive the PXE until a scan discovers `txHash` and parks at the gate. */

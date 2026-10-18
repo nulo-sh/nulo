@@ -14,6 +14,7 @@ import type { AztecTestConfig } from "../fixtures/aztec"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { openAccountState } from "../fixtures/helpers"
 import { settleClosedPopup } from "../fixtures/popup-leave"
+import { PollTimeoutError, pollUntil } from "../fixtures/poll"
 import { pointerClick } from "../helpers/legal-drivers"
 import { activeTestId, focusInPopupOf, pressEscape, waitForFocus } from "../helpers/pointer-probes"
 
@@ -76,15 +77,13 @@ async function expectNoToggle(page: Page, what: string): Promise<void> {
 /** Polls in short reads: a proving transaction outlasts the connection's protocol timeout, which
  *  bounds a single `waitForFunction`. */
 async function waitForToggleToFinish(page: Page): Promise<void> {
-	const deadline = Date.now() + 780_000
-	while (Date.now() < deadline) {
-		const busy = await page.evaluate(
-			(s: string) => document.querySelector(s)?.getAttribute("aria-busy") === "true",
-			sel("registry-toggle-submit"),
-		)
-		if (!busy) break
-		await new Promise((resolve) => setTimeout(resolve, 2_000))
-	}
+	const busy = () =>
+		page.evaluate((s: string) => document.querySelector(s)?.getAttribute("aria-busy") === "true", sel("registry-toggle-submit"))
+	await pollUntil(busy, (isBusy) => !isBusy, { label: "the registry toggle finished", timeoutMs: 780_000, intervalMs: 2_000 }).catch(
+		(error: unknown) => {
+			if (!(error instanceof PollTimeoutError)) throw error
+		},
+	)
 	await settleClosedPopup(page, "registry-toggle-submit").catch(() => false)
 }
 
