@@ -1,7 +1,7 @@
 ---
 plan: consent-display-1
 tier: mid
-status: arc 1 merged (#712); arc 2 in review (its PR against dev); arc 3 not started
+status: completed (arc 3's PR carries this record)
 issues: "none: no public issue exists for this lane's items, so no PR closes one"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 2c0df3b9
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** closed. Arc 1 (#712, 34d97084) and arc 2 (#795, 767789b7) are on `dev`; arc 3's PR carries this record, and its merge closes the plan.
+- **Shipped:** discovery admits `https:` origins and loopback `http:` ones only (arc 1); token names, symbols and import titles are cleaned at every write, and a dApp's token add stores the details its window showed or nothing, with Confirm disabled while they are unread (arc 2); the consent windows name the full origin, wrapped; the app-set fee sentence says "About"; Send carries a caveat under the strip for a token outside the bundled classes, and a restored row holds no class until the chain supplies one; a registered token's call that claims the vocabulary but fails it carries the label mark (arc 3).
+- **Owner asks:** OA-1 = A (P42-08), OA-2 = A (P42-09), OA-3 to OA-5 as planned (P42-10); OA-5's addendum and OA-7 shipped in arc 3 for sign-off in its PR; OA-6 is #803.
+- **Known limits:** #794.
+- **Open items:** #803 (the failed-preview warning's second sentence), #804 (a restored token whose read failed is never read again).
+- **Dropped:** none. Deviations from the plan are D10 to D16.
+- **Lessons:** none promoted: `lessons.md` is at its 8 KiB budget, and arc 3's gotchas (the type-roles inventory's keys, Storybook's chunk-cycle guard) stay in [lessons/phase-4.md](lessons/phase-4.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # consent-display-1: what the consent windows say about a dApp, a fee and a token
 
@@ -155,21 +167,25 @@ Fast layers in every phase gate: `bun run lint`, `bun run typecheck:all`, `bun r
 - Change map: `composables/useDappHostname.ts` → `useDappOrigin.ts` (+ test), `DappIdentityBlock.vue` (+ test), the six windows and their tests, `src/types/*.d.ts` (regenerated).
 - Tests: four same-host origins (`https`, `https:8443`, `http`, `http:8080`) give four strings; the IDN flag unchanged; a 65-character origin renders whole, and `.dapp_hostname` computes `overflow-wrap: anywhere` with no `text-overflow: ellipsis` and no `white-space: nowrap` (the `WRAPS` idiom of `OperationCard.long-strings.test.ts`).
 - Gate: the fast layers.
+- **Done** (e32c1472): gate green, STATUS.md.
 
 ### Arc 3, phase 5: "About" on the app-set fee row
 - Change map: `AppFeeLine.vue` and its test (or `OperationCard.vue`, `OperationCard.fee.test.ts`), `apps/extension/tests/e2e/network/fee-sponsor-funding.test.ts` (its regex).
 - Tests: the loaded and the estimating rows read "About"; neither contains "Fee up to".
 - Gate: the fast layers.
+- **Done** (509a7831): gate green; the row's words are P47-02 C's sentence (D15, OA-7).
 
 ### Arc 3, phase 6: the strip's caveat
 - Change map: `components/composite/send/publish-facts.ts` (+ test), `popup/pages/send.vue`, `popup/pages/send.integration.test.ts`, `token/service.ts` (`restoreRow`).
 - Tests: `isValidatedTokenClass`: the bundled id, and the same id upper-cased, are in; another id and an absent one are out. Page: a token of another class shows `send-token-caveat` with the sentence; a validated token shows none (control); a blocked transfer shows none. `restore()` stores no `classId`; a failed and a late refresh leave none (the caveat shows; `txAmount` gives no mint amount), and a successful refresh writes the chain's (control).
 - Gate: the fast layers.
+- **Done** (5c142d61): gate green, STATUS.md.
 
 ### Arc 3, phase 7: the label mark
 - Change map: `popup/windows/execute/call-surface.ts` (+ `call-surface.test.ts`), `CallArguments.vue`, `UnreadableArgsNotice.vue` → `ArgsNotice.vue`, `SendTxSummary.vue`, their tests.
 - Tests: on a registered token, `transfer_private_to_private` decoded as `(to, from, amount, _nonce)` is marked; a call carrying `transfer_private_to_private`'s selector whose decode names another function (`claim_x`) is marked; the corroborating order reads as a transfer (control); the same rows on an unregistered contract, and a non-vocabulary function on a token, are not marked. `CallArguments` renders `${prefix}-labels-warning` above marked rows only, from a wire-shaped fixture (`0x` + 64 hex fields).
 - Gate: the fast layers, `bun run test:all`, then network `register-token.test.ts connect-unserved-chain.test.ts fee-sponsor-funding.test.ts` (under `tests/e2e/network/`) and smoke `send-fee-privacy.test.ts send-keyboard.test.ts`.
+- **Done** (ef37a3a7; review fixes 2ce6d068, 10f242ba, 27165609): gate green, plus network `cap-window.test.ts`; the review deviation is D16.
 
 ## Delivery
 
