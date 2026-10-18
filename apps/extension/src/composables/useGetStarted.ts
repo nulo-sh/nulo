@@ -1,7 +1,7 @@
 import { computed, shallowRef, watch } from "vue"
-import { changedGetStarted, type GetStartedFlag, type GetStartedFlags, markGetStarted, readGetStarted } from "@/utils/get-started"
+import { changedGetStarted, type GetStartedFlags, type MarkableGetStartedFlag, markGetStarted, readGetStarted } from "@/utils/get-started"
 
-const NOTHING_DONE: GetStartedFlags = { phraseSaved: false, backupSaved: false, aztecOpened: false, hidden: false }
+const NOTHING_DONE: GetStartedFlags = { phraseSaved: false, backupSaved: false, aztecOpened: false, hidden: false, imported: false }
 
 /**
  * The active profile's Get started flags, kept current across pages: another page (Settings'
@@ -51,7 +51,7 @@ export function useGetStarted(opts: { profileId: () => string | undefined }) {
 		return current && current.profileId === opts.profileId() ? current.flags : undefined
 	})
 
-	async function mark(flag: GetStartedFlag): Promise<void> {
+	async function mark(flag: MarkableGetStartedFlag): Promise<void> {
 		const profileId = opts.profileId()
 		if (profileId) await markGetStarted(profileId, flag)
 	}

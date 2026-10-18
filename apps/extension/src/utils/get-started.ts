@@ -3,13 +3,22 @@
  * person did or dismissed, never proof of a backup; they live per profile beside the other UI keys
  * (`profile-ui-keys.ts`), so a deletion or a row commit clears them and no backup carries them.
  */
-import { getStartedAztecOpenedKey, getStartedBackupSavedKey, getStartedHiddenKey, getStartedPhraseSavedKey } from "@/utils/profile-ui-keys"
+import {
+	getStartedAztecOpenedKey,
+	getStartedBackupSavedKey,
+	getStartedHiddenKey,
+	getStartedPhraseSavedKey,
+	profileImportedKey,
+} from "@/utils/profile-ui-keys"
 import { storageLocalGet, storageLocalSet } from "@/utils/storage"
 
 /** The slice of a gas balance read the reminders need (`stores/balances.store.ts`' `GasSlice`). */
 type GasRead = { display?: { publicFeeJuice: string | null; privateFeeJuice: string | null }; status: string }
 
-export type GetStartedFlag = "phraseSaved" | "backupSaved" | "aztecOpened" | "hidden"
+export type GetStartedFlag = "phraseSaved" | "backupSaved" | "aztecOpened" | "hidden" | "imported"
+
+/** The flags a page may set; `imported` has one writer, the profile service, beside the row. */
+export type MarkableGetStartedFlag = Exclude<GetStartedFlag, "imported">
 
 export type GetStartedFlags = Readonly<Record<GetStartedFlag, boolean>>
 
@@ -18,6 +27,7 @@ const KEYS: Readonly<Record<GetStartedFlag, (profileId: string) => string>> = {
 	backupSaved: getStartedBackupSavedKey,
 	aztecOpened: getStartedAztecOpenedKey,
 	hidden: getStartedHiddenKey,
+	imported: profileImportedKey,
 }
 
 const FLAGS = Object.keys(KEYS) as GetStartedFlag[]
@@ -44,7 +54,7 @@ export async function readGetStarted(profileId: string): Promise<GetStartedFlags
 
 /** Records a flag. Never rejects: a lost write leaves the reminder up, and the action it rides on
  *  (a link, a download, leaving the phrase step) must go ahead. */
-export async function markGetStarted(profileId: string, flag: GetStartedFlag): Promise<void> {
+export async function markGetStarted(profileId: string, flag: MarkableGetStartedFlag): Promise<void> {
 	try {
 		await storageLocalSet({ [KEYS[flag](profileId)]: true })
 	} catch (error) {
@@ -103,6 +113,8 @@ type Ready = GetStartedInput & { type: "password" | "passkey"; flags: GetStarted
 export function getStartedView(input: GetStartedInput): GetStartedView | null {
 	const { type, flags, prestoReached, funds } = input
 	if (type === undefined || flags === undefined || prestoReached === undefined || funds === "unknown") return null
+	// A wallet the person brought in is an established one: Home asks nothing of it.
+	if (flags.imported) return { banner: false, items: [], canHide: false }
 	const ready: Ready = { ...input, type, flags, prestoReached }
 	const phrase = phraseShown(ready)
 	const banner = phrase && funds === "some"

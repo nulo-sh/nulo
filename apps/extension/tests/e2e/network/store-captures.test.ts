@@ -9,8 +9,8 @@
  * row is renamed out of the way, since network names are unique. The wallet holds only USD Coin
  * and Fee Juice: the harness token is never imported, and no harness transaction touches the
  * captured account. USD Coin is priced at $1 by the seeded quote, with the price host refused, so a
- * live quote cannot move the totals. The wallet is an established one: its phrase is saved and
- * Home's Get started card hidden through the wallet's own screens, so Home frames as a user's does.
+ * live quote cannot move the totals. The wallet arrives by phrase import, so Home shows no Get
+ * started card and frames as an established user's does.
  */
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
@@ -30,7 +30,6 @@ import {
 import {
 	addContact,
 	captureBalanceBaseline,
-	clearGetStarted,
 	clickNavTab,
 	closeStuckPopup,
 	type FeeMethodSubtitle,
@@ -319,8 +318,6 @@ function clearAmountLine(): Fit {
 	return { scrolled: need }
 }
 
-/** Saves the phrase and hides the card, as an established wallet has: the funded wallet otherwise
- *  opens on "Your funds have no backup". */
 async function captureHome(page: Page): Promise<void> {
 	await seedUsdQuoteAndReload(page)
 	await waitForHomeTotal(page)
@@ -411,7 +408,6 @@ describe.skipIf(!process.env.STORE_CAPTURES || isFirefox)("store captures", () =
 			await stageWallet(page, chain)
 			await receive(page, chain)
 			await sendToContact(page, chain)
-			await clearGetStarted(page, TEST_PASSWORD)
 			await captureHome(page)
 			await captureSend(page, chain)
 			await captureHistory(page)

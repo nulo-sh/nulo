@@ -317,6 +317,7 @@ declare global {
   const preflightNetworkConnectivity: typeof import('../composables/importPreflight').preflightNetworkConnectivity
   const pricesUnavailable: typeof import('../utils/token-aggregate').pricesUnavailable
   const profileFileNameSegment: typeof import('../utils/files').profileFileNameSegment
+  const profileImportedKey: typeof import('../utils/profile-ui-keys').profileImportedKey
   const profileTypeLabel: typeof import('../utils/settings-labels').profileTypeLabel
   const profileUiKeys: typeof import('../utils/profile-ui-keys').profileUiKeys
   const projectArgument: typeof import('../utils/transfer-intent').projectArgument
@@ -710,7 +711,7 @@ declare global {
   export type { AssemblyAbortedError, BackupFileType, BackupSelection, ProcessBackupResult, BackupSource, AssembledBackup } from '../utils/full-backup-helpers'
   import('../utils/full-backup-helpers')
   // @ts-ignore
-  export type { GetStartedFlag, GetStartedFlags, Holdings, GetStartedItem, GetStartedInput, GetStartedView } from '../utils/get-started'
+  export type { GetStartedFlag, MarkableGetStartedFlag, GetStartedFlags, Holdings, GetStartedItem, GetStartedInput, GetStartedView } from '../utils/get-started'
   import('../utils/get-started')
   // @ts-ignore
   export type { GlossaryEntry, GlossaryKey } from '../utils/glossary'
@@ -1091,6 +1092,7 @@ declare module 'vue' {
     readonly preflightNetworkConnectivity: UnwrapRef<typeof import('../composables/importPreflight')['preflightNetworkConnectivity']>
     readonly pricesUnavailable: UnwrapRef<typeof import('../utils/token-aggregate')['pricesUnavailable']>
     readonly profileFileNameSegment: UnwrapRef<typeof import('../utils/files')['profileFileNameSegment']>
+    readonly profileImportedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileImportedKey']>
     readonly profileTypeLabel: UnwrapRef<typeof import('../utils/settings-labels')['profileTypeLabel']>
     readonly profileUiKeys: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileUiKeys']>
     readonly projectArgument: UnwrapRef<typeof import('../utils/transfer-intent')['projectArgument']>

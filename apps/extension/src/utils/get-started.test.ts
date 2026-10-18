@@ -32,17 +32,24 @@ afterEach(() => {
 })
 
 describe("get started flags (storage)", () => {
-	test("the four flags are the profile's own keys", () => {
+	test("the flags are the profile's own keys", () => {
 		expect(getStartedKeys("p1")).toEqual([
 			"nulo:ui:getStartedPhraseSaved@p1",
 			"nulo:ui:getStartedBackupSaved@p1",
 			"nulo:ui:getStartedAztecOpened@p1",
 			"nulo:ui:getStartedHidden@p1",
+			"nulo:ui:profileImported@p1",
 		])
 	})
 
-	test("one storage read answers all four, and nothing stored reads as nothing done", async () => {
-		expect(await readGetStarted("p1")).toEqual({ phraseSaved: false, backupSaved: false, aztecOpened: false, hidden: false })
+	test("one storage read answers every flag, and nothing stored reads as nothing done", async () => {
+		expect(await readGetStarted("p1")).toEqual({
+			phraseSaved: false,
+			backupSaved: false,
+			aztecOpened: false,
+			hidden: false,
+			imported: false,
+		})
 		const reads = get.mock.calls.filter(([keys]) => Array.isArray(keys))
 		expect(reads).toEqual([[getStartedKeys("p1")]])
 	})
@@ -54,7 +61,13 @@ describe("get started flags (storage)", () => {
 			"nulo:ui:getStartedAztecOpened@p1": true,
 			"nulo:ui:getStartedHidden@p2": true,
 		}
-		expect(await readGetStarted("p1")).toEqual({ phraseSaved: false, backupSaved: false, aztecOpened: true, hidden: false })
+		expect(await readGetStarted("p1")).toEqual({
+			phraseSaved: false,
+			backupSaved: false,
+			aztecOpened: true,
+			hidden: false,
+			imported: false,
+		})
 	})
 
 	test("a mark writes `true` under the profile's key, and reads back as done", async () => {
@@ -86,7 +99,7 @@ describe("get started flags (storage)", () => {
 })
 
 describe("get started view (pure)", () => {
-	const NONE = { phraseSaved: false, backupSaved: false, aztecOpened: false, hidden: false }
+	const NONE = { phraseSaved: false, backupSaved: false, aztecOpened: false, hidden: false, imported: false }
 	const base = { type: "password" as const, flags: NONE, funds: "none" as const, feeJuice: "none" as const, prestoReached: false }
 	const view = (over: Partial<GetStartedInput> = {}, flags: Partial<GetStartedFlags> = {}) =>
 		getStartedView({ ...base, ...over, flags: { ...NONE, ...flags } })
@@ -147,6 +160,13 @@ describe("get started view (pure)", () => {
 
 	test("a hidden passkey card is gone, backup row included", () => {
 		expect(view({ type: "passkey" }, { hidden: true })).toEqual({ banner: false, items: [], canHide: false })
+	})
+
+	test("an imported profile shows no card and no banner, password or passkey, funded or not", () => {
+		const nothing = { banner: false, items: [], canHide: false }
+		expect(view({}, { imported: true })).toEqual(nothing)
+		expect(view({ funds: "some" }, { imported: true })).toEqual(nothing)
+		expect(view({ type: "passkey" }, { imported: true })).toEqual(nothing)
 	})
 
 	test("no card once every item is done", () => {

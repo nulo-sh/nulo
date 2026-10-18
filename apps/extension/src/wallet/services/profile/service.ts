@@ -3,7 +3,7 @@ import { getErrorMessage } from "@nulo/wallet-core/utils"
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { toRestoreError } from "@/utils/restore-error"
 import type { BrowserApi, StorageArea } from "@nulo/wallet-core/ports"
-import { feePicksKey, profileUiKeys, sendFeePicksKey } from "@/utils/profile-ui-keys"
+import { feePicksKey, profileImportedKey, profileUiKeys, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { applyFeePickUpdate, type FeePickUpdate, parseFeePickUpdate } from "@/utils/fee-picks"
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import type { IConfig } from "@/wallet/config"
@@ -1453,6 +1453,18 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.local.remove(profileUiKeys(id))
 	}
 
+	/** After an import's row: the person brought this wallet in, so Home shows it no Get started
+	 *  card. Here rather than in the page, because a passkey window or a closed popup can end the
+	 *  page first. A lost write only leaves Home's reminders up, so it never fails the import. Caller
+	 *  MUST hold the facade lock, so a deletion cannot fall between the row and this write. */
+	private async markImportedHoldingLock(id: string): Promise<void> {
+		try {
+			await this.local.set({ [profileImportedKey(id)]: true })
+		} catch (error) {
+			this.logDebug("imported-profile flag write failed", { error })
+		}
+	}
+
 	/** Marker BEFORE row (fail-closed): a crash between the two writes leaves an orphan
 	 *  marker with no row — lazily purged — never a row without its restore-in-progress
 	 *  marker. A rejected row write compensates by removing the marker it just wrote so
@@ -2137,6 +2149,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				const dekSealed = await this.sealDekWithPasshash(passhash, dek)
 				const profile = await newPasswordRow({ id, name, slots: encrypted, dekSealed, walletFingerprint }, secret, dek)
 				await this.persistNewProfileHoldingLock(profile)
+				await this.markImportedHoldingLock(id)
 				await this.openSessionVerified(profile, secret, passhash, dek)
 				return this.getProfileInfo(profile)
 			})
@@ -2184,6 +2197,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 				const profile = newPasskeyRow({ id: userHandle, name, dekSealed, walletFingerprint, credentialId })
 				await this.persistNewProfileHoldingLock(profile)
+				await this.markImportedHoldingLock(userHandle)
 				await this.openSessionVerified(profile, secret, undefined, dek)
 				return this.getProfileInfo(profile)
 			})
@@ -2359,6 +2373,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			)
 
 			await this.writeMarkerThenRowHoldingLock(id, newProfile)
+			await this.markImportedHoldingLock(id)
 
 			this.emit("onProfileAdded", this.getProfileInfo(newProfile))
 
@@ -2514,6 +2529,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		// Same marker-before-row bracket as the password branch (a torn passkey
 		// import must not escape detection).
 		await this.writeMarkerThenRowHoldingLock(id, newProfile)
+		await this.markImportedHoldingLock(id)
 
 		this.emit("onProfileAdded", this.getProfileInfo(newProfile))
 

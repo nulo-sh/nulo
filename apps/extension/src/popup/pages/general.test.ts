@@ -83,8 +83,8 @@ const AZTEC_KEY = "nulo:ui:getStartedAztecOpened@p1"
 const wrappers: VueWrapper[] = []
 let storage: ChromeStorageMock
 
-async function mountHome(type: "password" | "passkey" = "password") {
-	storage = installChromeStorage()
+async function mountHome(type: "password" | "passkey" = "password", stored: Record<string, unknown> = {}) {
+	storage = installChromeStorage(stored)
 	const pinia = createTestingPinia({ stubActions: false })
 	const appStore = useAppStore(pinia)
 	appStore.isLogined = true
@@ -155,6 +155,33 @@ describe("Home — the backup reminder's sources", () => {
 		const w = await mountHome("passkey")
 		expect(has(w, "backup-reminder-banner")).toBe(false)
 		expect(has(w, "get-started-backup")).toBe(true)
+	})
+})
+
+describe("Home — an imported profile", () => {
+	const IMPORTED = { "nulo:ui:profileImported@p1": true }
+
+	test.each(["password", "passkey"] as const)("an imported %s profile shows no card, and Home still settles", async (type) => {
+		gas = ZERO
+		const w = await mountHome(type, IMPORTED)
+		expect(has(w, "get-started")).toBe(false)
+		expect(has(w, "backup-reminder-banner")).toBe(false)
+		expect(w.get('[data-testid="home-scroller"]').attributes("data-reminders-settled")).toBe("true")
+	})
+
+	test("an imported password wallet holding funds gets no banner either", async () => {
+		gas = ZERO
+		tokenHoldings = "some"
+		const w = await mountHome("password", IMPORTED)
+		expect(has(w, "backup-reminder-banner")).toBe(false)
+		expect(has(w, "get-started")).toBe(false)
+	})
+
+	test.each(["password", "passkey"] as const)("a new %s profile shows the card (control)", async (type) => {
+		gas = ZERO
+		const w = await mountHome(type)
+		expect(has(w, "get-started")).toBe(true)
+		expect(has(w, "get-started-aztec")).toBe(true)
 	})
 })
 

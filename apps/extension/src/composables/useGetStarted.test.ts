@@ -58,7 +58,7 @@ describe("useGetStarted", () => {
 		const { hook } = mountHook("p1")
 		expect(hook.flags.value).toBeUndefined()
 		await flushPromises()
-		expect(hook.flags.value).toEqual({ phraseSaved: false, backupSaved: false, aztecOpened: true, hidden: false })
+		expect(hook.flags.value).toEqual({ phraseSaved: false, backupSaved: false, aztecOpened: true, hidden: false, imported: false })
 		hook.dispose()
 	})
 
@@ -127,7 +127,7 @@ describe("useGetStarted", () => {
 		fire({ [KEY("AztecOpened", "p1")]: true })
 		pendingReads[0].resolve()
 		await flushPromises()
-		expect(hook.flags.value).toEqual({ phraseSaved: false, backupSaved: false, aztecOpened: true, hidden: false })
+		expect(hook.flags.value).toEqual({ phraseSaved: false, backupSaved: false, aztecOpened: true, hidden: false, imported: false })
 		hook.dispose()
 	})
 
@@ -161,7 +161,7 @@ describe("useGetStarted", () => {
 		)
 		const { hook } = mountHook("p1")
 		await flushPromises()
-		expect(hook.flags.value).toEqual({ phraseSaved: false, backupSaved: false, aztecOpened: false, hidden: false })
+		expect(hook.flags.value).toEqual({ phraseSaved: false, backupSaved: false, aztecOpened: false, hidden: false, imported: false })
 		hook.dispose()
 	})
 

@@ -65,7 +65,7 @@ import { ProfileService } from "./service"
 import type { ProfileInfo } from "./spec"
 import { RESTORE_PENDING_ROOT, RestorePendingRepository } from "./restore-pending-repository"
 import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME } from "./session-manager"
-import { feePicksKey, pinnedTokensKey, profileUiKeys, sendFeePicksKey } from "@/utils/profile-ui-keys"
+import { feePicksKey, pinnedTokensKey, profileImportedKey, profileUiKeys, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { recordWrites } from "../storage-write-log"
 import { PROFILE_TOMBSTONE_ROOT, type Tombstone } from "./tombstone-repository"
 import { WalletLockedError } from "./wallet-locked-error"
@@ -1334,6 +1334,7 @@ describe("ProfileService integration", () => {
 				...profileUiKeys("abc12345").map((key) => `remove:${key}`),
 				`set:${RESTORE_PENDING_ROOT}@abc12345`,
 				"set:nulo:core:profiles@abc12345",
+				`set:${profileImportedKey("abc12345")}`,
 			])
 			expect(await keysOf(api)).toContain(pinnedTokensKey("feed0001"))
 		}, 30_000)
@@ -1369,6 +1370,71 @@ describe("ProfileService integration", () => {
 
 			expect("restoreError" in outcome && outcome.restoreError).toMatch(/storage refused/)
 			expect((await keysOf(api)).filter((key) => key.endsWith("@abc12345"))).toEqual([])
+		}, 30_000)
+	})
+
+	describe("an import records its profile as imported; a create does not", () => {
+		type Built = Awaited<ReturnType<typeof makeService>>
+		const imported = async (api: FakeBrowserApi, id: string) =>
+			(await api.storage.local.get(profileImportedKey(id)))[profileImportedKey(id)]
+
+		async function restorePasskey({ service }: Built) {
+			const original = await service.createPasskeyProfile("PK")
+			const credentialId = await service.getPasskeyCredentialId(original.id)
+			await service.lockActiveProfile()
+			await service.deleteProfile(original.id)
+			const out = await service.restore(
+				{ id: "ignored", name: "PK", type: "passkey" },
+				{ type: "passkey", credentialId: asBase64CredentialId(credentialId), dekSealed: await fakeDekSealedFor(credentialId) },
+				undefined,
+				fakeCredentialData(credentialId, original.id),
+			)
+			if ("restoreError" in out && out.restoreError) throw new Error(String(out.restoreError))
+			return out
+		}
+
+		test.each<[string, (built: Built) => Promise<{ id: string }>]>([
+			["a phrase import", async ({ service }) => service.importMnemonic("M", await wordsForFill(0x51), "pass1234")],
+			["a passkey import", ({ service }) => service.importPasskey("IK", fakeCredentialData("cred-imp-1", "uh-imp-1"))],
+			["a passkey import whose prompt ran in the passkey window", ({ service }) => service.importPasskey("IW")],
+			[
+				"a password backup restore",
+				async ({ service }) => service.restore({ id: "r", name: "R", type: "password" }, await restoreSecretFor(0x52), "pass1234"),
+			],
+			["a passkey backup restore", restorePasskey],
+		])(
+			"%s marks its profile",
+			async (_label, run) => {
+				const built = await makeService()
+				const { id } = await run(built)
+				expect(await imported(built.api, id)).toBe(true)
+			},
+			30_000,
+		)
+
+		test.each<[string, (built: Built) => Promise<{ id: string }>]>([
+			["a password create", ({ service }) => service.createProfile("P", "pass1234")],
+			["a passkey create", ({ service }) => service.createPasskeyProfile("PK", fakeCredentialData("cred-new-1", "uh-new-1"))],
+		])(
+			"%s leaves it unmarked (control)",
+			async (_label, run) => {
+				const built = await makeService()
+				const { id } = await run(built)
+				expect(await imported(built.api, id)).toBeUndefined()
+			},
+			30_000,
+		)
+
+		test("a refused flag write still completes the import", async () => {
+			const { api, service } = await makeService()
+			const set = api.storage.local.set.bind(api.storage.local)
+			api.storage.local.set = async (items) => {
+				if (Object.keys(items).some((key) => key.startsWith("nulo:ui:profileImported@"))) throw new Error("storage refused")
+				await set(items)
+			}
+			const profile = await service.importMnemonic("M", await wordsForFill(0x53), "pass1234")
+			expect((await service.getActiveProfile())?.id).toBe(profile.id)
+			expect(await imported(api, profile.id)).toBeUndefined()
 		}, 30_000)
 	})
 
