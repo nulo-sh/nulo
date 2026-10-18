@@ -108,10 +108,8 @@ const tokenService = new TokenServiceClient()
 const tokenMetadata = ref<Map<string, ShownTokenMetadata>>(new Map())
 const tokenMetadataLoading = ref(false)
 const tokenMetadataError = ref<Map<string, string>>(new Map())
-const tokenMetadataUnread = computed(
-	() =>
-		tokenMetadataLoading.value ||
-		operations.value.some((op) => op.kind === "register_token" && tokenMetadataError.value.has(op.address)),
+const tokenMetadataUnread = computed(() =>
+	operations.value.some((op) => op.kind === "register_token" && !tokenMetadata.value.has(op.address)),
 )
 
 /**

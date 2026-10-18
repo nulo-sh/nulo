@@ -240,7 +240,7 @@ describe("TokenService.addToken — journal/lock machinery (characterization)", 
 
 	test("a read name and symbol carrying bidi, format and control characters are stored and titled clean", async () => {
 		const { tokenService, journal, fetchStub } = await makeHarness()
-		fetchStub.mockResolvedValueOnce(["Tether‮ USD", "USD‮C‍\u0007", 6])
+		fetchStub.mockResolvedValueOnce(["Tether\u202e USD", "USD\u202eC\u200d\u0007", 6])
 
 		const info = await tokenService.addToken("p1", NETWORK.id, "0xacc", ti("0xd1d1"), { origin: "popup" })
 		await tokenService.addSeededToken({
@@ -249,7 +249,7 @@ describe("TokenService.addToken — journal/lock machinery (characterization)", 
 			accountAddress: "0xacc",
 			tokenInterface: ti("0x5eed"),
 			name: "Seeded",
-			symbol: "SE⁦ED",
+			symbol: "SE\u2066ED",
 			decimals: 18,
 		})
 
@@ -322,7 +322,15 @@ describe("TokenService.restore — per-row allocation", () => {
 
 	test("a backup row's name and symbol are stored clean", async () => {
 		const { tokenService } = await makeHarness()
-		const row = { id: 0, profileId: "p1", chainId: 1, contract: "0xaaa", name: "Tether‮ USD", symbol: "USD‮C‍\u0007", decimals: 6 }
+		const row = {
+			id: 0,
+			profileId: "p1",
+			chainId: 1,
+			contract: "0xaaa",
+			name: "Tether\u202e USD",
+			symbol: "USD\u202eC\u200d\u0007",
+			decimals: 6,
+		}
 
 		const [restored] = await tokenService.restore([row])
 

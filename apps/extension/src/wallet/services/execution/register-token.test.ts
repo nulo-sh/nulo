@@ -97,10 +97,12 @@ describe("executeRegisterToken — the details the window showed", () => {
 		expect((addTokenAuthorized.mock.calls[0] as unknown[])[6]).toEqual({ name: "Test USDC", symbol: "USDC", decimals: 6 })
 	})
 
-	test("a contract whose class moved since the window refuses at the parse, before any add", async () => {
+	test("a contract whose class differs from the window's refuses at the parse, before any add", async () => {
 		const { self, addTokenAuthorized } = makeSelf("pA")
-		self.tokenService.parseTokenInterface = vi.fn(async () => {
-			throw new PinMismatchError("class id moved")
+		const chainClass = `0x${"c2".repeat(32)}`
+		self.tokenService.parseTokenInterface = vi.fn(async (_net: string, _address: string, _task: unknown, pin?: string) => {
+			if (pin !== undefined && pin !== chainClass) throw new PinMismatchError("class id differs")
+			return previewed
 		})
 		await expect(invoke(self)).rejects.toBeInstanceOf(PinMismatchError)
 		expect(addTokenAuthorized).not.toHaveBeenCalled()
