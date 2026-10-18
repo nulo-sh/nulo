@@ -201,13 +201,13 @@ Every arc is one PR against `dev`, not stacked (orchestrator rule D-orch-1). A1 
 
 ### A6 (#548): the journal family
 
-- **New `apps/extension/src/utils/journal-mirror.ts`**, pure reducers over `(rows, op, { accept, place: "front" | "back" })`:
+- **New `apps/extension/src/utils/journal-mirror.ts`**, pure reducers over `(rows, op, { accept, place: "front" | "back" })` (as shipped, acceptance is the mirror's gate and the reducers take `place` and `appendAdded`; D604–D607):
   - a known Updated is replaced in place, for every caller (today's rule: `activity.vue:97-99`, `RecentActivityView.vue:584-586`, `TokensView.vue:229-233`);
   - a new row (Added, or an unseen Updated) goes to the `place` edge. Activity and RecentActivityView use `front`, so a re-added known row moves to the front as today. TokensView and the store use `back`, so a re-added known row is replaced in place;
   - an unseen Updated is inserted (all four copies do this);
-  - an Updated that fails `accept` removes its row (Activity's non-terminal rule);
+  - an Updated that fails `accept` removes its row (Activity's non-terminal rule; History only, D605);
   - Deleted is unfiltered.
-- **New `useJournalMirror({ client, read, accept, place, onRecord, onSnapshot })`**, C1, for the three views. It returns:
+- **New `useJournalMirror({ client, read, accept, place, onRecord, onSnapshot })`**, C1, for the three views (no `client`, no `invalidate()`, D607). It returns:
   - `rows`;
   - `begin()`;
   - `resnapshot(run = begin())`, so RecentActivityView's sync scope watcher, its `onMounted` and its retry timer share one run as today (`RecentActivityView.vue:609-631`, `:741-756`, `:791`);
@@ -217,7 +217,7 @@ Every arc is one PR against `dev`, not stacked (orchestrator rule D-orch-1). A1 
 - `onRecord` fires only for an accepted Added or Updated, never for a Deleted or a refused event. RecentActivityView's three record clears match only account and token (`:290-294`), so a foreign event must not reach them. `onSnapshot` carries the recent-terminal scan (`:627`).
 - **Migrations**:
   - RecentActivityView keeps its 2 s retry and its flat task and cancel state (#152).
-  - Activity's terminal list and TokensView's `token_import` list gain the fence. TokensView pushes a duplicate when an Added arrives for a row already listed. Whether that happens is a release check: a snapshot can include a row whose Added is still being delivered (`operation-journal/service.ts:140-143`, `:326`, `:523-526`). If the check shows that overlap, TokensView keeps its append until OA-1 decides. Otherwise the ordering evidence is recorded and it converges onto replace-in-place (D603). No row changes its position because of the move: a reducer test and a TokensView case prove `[A, B]` stays `[A, B]` through an update of B.
+  - Activity's terminal list and TokensView's `token_import` list gain the fence (not built, D606). TokensView pushes a duplicate when an Added arrives for a row already listed. Whether that happens is a release check: a snapshot can include a row whose Added is still being delivered (`operation-journal/service.ts:140-143`, `:326`, `:523-526`). If the check shows that overlap, TokensView keeps its append until OA-1 decides. Otherwise the ordering evidence is recorded and it converges onto replace-in-place (D603). The check found the overlap: TokensView keeps its append (D604). No row changes its position because of the move: a reducer test and a TokensView case prove `[A, B]` stays `[A, B]` through an update of B.
 - **`app.store.ts`'s in-flight tracker** uses the reducers with `place: "back"`. It keeps its lifetime client, its suspend-on-lock and its revision settle loop.
 - **Tests**:
   - the reducer suite;
@@ -331,6 +331,10 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
 | G | gate fixes: smoke armed build, exact specs and runners, `origin/dev...HEAD` plus `HEAD` | — | Codex C4, Opus O10; final pass F2 |
 | D602 | a known Updated stays in place for every caller; `place` decides only where a new row goes | move a known row to the front (reorders Home's imports) | final pass F1 |
 | D603 | TokensView's Added-on-a-listed-row converges only if A6's release check shows no snapshot/Added overlap; else it keeps its append pending OA-1 | assert the sequence cannot occur | final pass F3 |
+| D604 | at release (dev `1cff707d`): the overlap is plausible by trace. The journal fans an event out behind the profile facade lock after its write, and a read passes that lock before its storage read, so a locked operation holding it across I/O (`refreshSession`) lets a reply carrying the record post before its Added. TokensView keeps its append (`appendAdded`); the duplicate joins OA-1 | converge onto replace-in-place | Codex consult `01a14cd7`: agree, with a cleaner schedule |
+| D605 | a refused update drops its row on History only (`dropRefusedUpdate`); Home ignores it; joins OA-1. History's arm is reachable: the same deferral delivers an earlier in-flight update after a read that saw the record end. Home's rule keeps a card re-filed in place to another account or network (`refileOperationScope`) until its next read | the plan's rule for every caller (changes Home); History converged as unreachable (the draft's claim, since `terminalAt` is never cleared) | Codex consult rejected the draft's claim with a schedule, verified |
+| D606 | History and the token list do not gain the fence: every read lands as it answers (`supersede: false`); joins OA-1. Fenced, the first connect's read supersedes the mount's, and a refused one loses the rows the mount read listed until an event or a reconnect. Under OA-1's B they take the fence and Home's retry together | the plan's fence alone | Codex consult, verified |
+| D607 | at implementation: no `client` option and no exposed `invalidate()` (the hook subscribes nothing; every teardown is `dispose()`); acceptance is one gate before the reducers; `resnapshot` rejects to the caller (History propagates, Home retries on the same run, the token list swallows); Home's `read` does its captured-account check, filter and sort and answers `undefined` when the account moved, so its landing moves one microtask (every scope change bumps the fence synchronously); the store's `splice`/`push` become new arrays behind its suspend gate and revision count (D510's rule) | the plan's `client` and `invalidate` | Codex consult: agree; implementer |
 
 ## Delivery
 
