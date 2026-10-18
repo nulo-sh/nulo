@@ -91,7 +91,7 @@ Six asks, all resolved (§ Resolution, at the end). Every other change in this l
 |---|---|---|
 | OA-1 | P47-03, option B: "and tell us what you find." The pick covered the pronoun too: "in their early days". | #791 |
 | OA-2 | A, follow the tag: footer `early days`, screen-reader name "Early days notice". The orchestrator's reading of the owner's "it's not a PREVIEW", named as such in the PR for the owner's veto; it merged without one. | #791 |
-| OA-3 | B, the owner's words read literally: the transfers-disabled warning stays fixed with the balance. | #788 |
-| OA-4 | A, "Sponsored". | #788 |
-| OA-5 | A, leave it: no change. | #788 |
+| OA-3 | B, the owner's words read literally: the transfers-disabled warning stays fixed with the balance. The plan's "what ships now", approved with the plan by the orchestrator; no owner pick. | #788 |
+| OA-4 | A, "Sponsored". The plan's "what ships now", approved with the plan; no owner pick. | #788 |
+| OA-5 | A, leave it: no change. Raised in arc 1's review and shipped as is; no owner pick. | #788 |
 | OA-6 | P52-04, option A: "'Fee payment method set by {app}' (ships now)." | #793 |
