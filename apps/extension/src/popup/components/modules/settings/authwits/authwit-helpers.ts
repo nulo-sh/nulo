@@ -15,6 +15,7 @@ export interface AuthwitContent {
 export interface RawAuthwit {
 	id: string
 	content: AuthwitContent
+	pending?: boolean
 }
 
 export interface DecoratedAuthwit extends RawAuthwit {

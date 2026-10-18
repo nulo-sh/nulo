@@ -44,7 +44,7 @@ Asks: none open. The details the picks leave open are the lead's calls, in the l
 
 Each phase is one issue, with its change map, tests and gate. Paths are under `apps/extension/` unless they say otherwise. Every smoke run, and every check that a new assertion fails on the base, first rebuilds the armed build for its browser: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:<browser>`. It then runs with `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1`. Smoke loads `dist/<browser>` as it finds it.
 
-### Phase 1 — #698 Pending chip
+### Phase 1 — #698 Pending chip ✓
 
 - `src/wallet/services/auth-registry/spec.ts`: add `onAuthwitUpdated: Authwit` to `Events`. It fires when a pending grant is proven and carries the row with `pending: false`.
 - `src/wallet/services/auth-registry/service.ts` and `client.ts`: add the `EventHandler`. In `reconcileAuthwits`, for `"mined"`, emit the confirmed row after its `set`.

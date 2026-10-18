@@ -93,18 +93,27 @@ describe("AuthRegistryService — pending/reconcile/cap", () => {
 		expect((await rowsOf(s)).map((r) => r.id)).toEqual([2])
 	})
 
-	test("reconcileAuthwits('mined') clears pending → confirmed (durable, kept)", async () => {
+	test("reconcileAuthwits('mined') clears pending → confirmed (durable, kept), and announces the confirmed row", async () => {
 		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
+		const updated: Authwit[] = []
+		svc.onAuthwitUpdated.add((a) => void updated.push(a))
 		await svc.reconcileAuthwits(P1, TX1, "mined")
 		const rows = await rowsOf(svc)
 		expect(rows).toHaveLength(1)
 		expect(rows[0].pending).toBe(false)
+		expect(updated).toEqual([rows[0]])
 	})
 
-	test("reconcileAuthwits('dropped') removes the pending row (grant never landed)", async () => {
+	test("reconcileAuthwits('dropped') removes the pending row (grant never landed), announcing a delete and no update", async () => {
 		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
+		const updated: Authwit[] = []
+		const deleted: Authwit[] = []
+		svc.onAuthwitUpdated.add((a) => void updated.push(a))
+		svc.onAuthwitDeleted.add((a) => void deleted.push(a))
 		await svc.reconcileAuthwits(P1, TX1, "dropped")
 		expect(await rowsOf(svc)).toHaveLength(0)
+		expect(deleted.map((a) => a.hash)).toEqual(["0xh1"])
+		expect(updated).toEqual([])
 	})
 
 	test("reconcileAuthwits only touches rows for the matching txHash AND the tx's own scope tuple", async () => {

@@ -98,6 +98,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	public static name = AUTH_REGISTRY_SERVICE_NAME
 
 	public readonly onAuthwitAdded = new EventHandler<Authwit>()
+	public readonly onAuthwitUpdated = new EventHandler<Authwit>()
 	public readonly onAuthwitDeleted = new EventHandler<Authwit>()
 	public readonly onRegistryEnabled = new EventHandler<AuthwitRegistryScope>()
 	public readonly onRegistryDisabled = new EventHandler<AuthwitRegistryScope>()
@@ -289,7 +290,9 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 			)
 			for (const row of rows) {
 				if (outcome === "mined") {
-					await this.authwits.set(`${row.id}`, { ...row, pending: false })
+					const confirmed = { ...row, pending: false }
+					await this.authwits.set(`${row.id}`, confirmed)
+					this.emit("onAuthwitUpdated", confirmed)
 				} else {
 					await this.authwits.delete(`${row.id}`)
 					this.emit("onAuthwitDeleted", row)

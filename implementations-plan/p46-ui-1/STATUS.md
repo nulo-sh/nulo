@@ -2,3 +2,4 @@
 - 2026-10-18 phase 1: plan drafted (light, one arc); sent to Codex and Opus
 - 2026-10-18 Codex audit: conditional approve (3 Medium) → amended → approve on resume
 - 2026-10-18 Opus audit: conditional approve → amended; Codex final (resume 3): approve. Gate passed; plan committed
+- 2026-10-18 arc 1 phase 1 gate: lint 0, typecheck:all 0, vitest auth-registry + authwits (4 files, 76 tests) pass; new page tests red on each reverted line
