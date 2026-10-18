@@ -1,6 +1,6 @@
 # Owner asks: icons-1
 
-The owner's pick is signed (P48-01 C, #764). The lane brief delegates the stroke, the fill rule and the near rows to the plan; the plan keeps every signed pick and stroke 2 at every size. One ask is open, and the PR waits on it (plan D6).
+The owner's pick is signed (P48-01 C, #764). The lane brief delegates the stroke, the fill rule and the near rows to the plan; the plan keeps every signed pick and stroke 2 at every size. Ask 1 is answered (plan D6, D12).
 
 ## Ask 1: the public mark at 10 px on a 1x screen is not a dotted square
 
@@ -20,3 +20,5 @@ On the screen, the publish strip at 4x shows before on the left and after on the
 4. **Keep today's dotted public mark** beside the 57 Tabler glyphs. Its square ends and separate dots differ from the rest of the set, and it departs from the signed pick.
 
 **Recommendation: 2.** It keeps the signed set and the glossary's word, and it fixes the cause, the 10 px size, rather than the text. Option 1 is the cheap choice if a gray outline on 1x screens is acceptable.
+
+**Answer** (the orchestrator, 2026-10-18 15:5xZ, within the owner's pick P48-01, option C): ship as signed now. Options 1 and 2 share the same PR. The glossary is not changed (3), and today's dotted mark is not kept (4). The 12 px follow-up, the second half of option 2, is the owner's call: #787 (`owner-decision`), with the four options and recommendation 2.

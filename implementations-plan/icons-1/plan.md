@@ -1,7 +1,7 @@
 ---
 plan: icons-1
 tier: mid
-status: approved by the panel (final Codex pass: approve), arc 1 next
+status: closed (arc 1's PR carries the close-out; the merge closes the plan)
 issues: "#764 (closed by the one arc)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,23 @@ base: origin/dev at 9470d4e9
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** closed. Arc 1 carries this close-out; the merge that lands it closes the plan and #764.
+- **Shipped:** each of the 58 glyphs is its signed Tabler Icons 3.49.0 drawing.
+  - `bun run gen:glyphs` writes them from `glyph-sources.ts` and the exact devDependency, through a parser that refuses anything `Icon.vue` would not draw.
+  - `glyphs.drift.test.ts` pins them.
+  - `Icon.vue` strokes at 2 with round caps and joins at every size, and fills with the nonzero rule.
+  - The third-party notices name Tabler Icons 3.49.0 with its MIT text.
+- **Known limits:** none.
+- **Open items:**
+  - #787 (`owner-decision`): the public mark at 10 px on a 1x screen reads as an outline, not a dotted square. It ships as signed; options 2 to 4 are the owner's.
+  - #627: the store captures predate this change, and their regeneration also picks up the new glyphs.
+  - #654 stays with wallet-bugs-2.
+- **Dropped:** the 1 px stroke floor (D3); a glossary rewording (D6, Ask 1's answer). **Lessons:** none promoted, because `lessons.md` is at its budget (8188 of 8192 bytes). The gotchas are in `lessons/phase-3.md`: a 1.67 px dash period blurs at 1x, and load1 has to be read in the launching command.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # icons-1: the wallet's 58 glyphs drawn from Tabler Icons
 
@@ -52,7 +69,7 @@ One arc, one PR against `dev`, `Closes #764`. Every glyph in `packages/design/sr
 - I1. At 1x, glyphs under 12 px look fainter at stroke 2 than with a 1 px floor (peak darkness 142-168 of 224 against 171-193 at 10 px), but no fainter than 12 px diagonals at stroke 2 (51-65 %), which nobody disputes. Measured on scratch sheets, not a contrast test (`lessons/phase-0.md`).
 - I2. The wallet-bugs-2 arc lands first or near this one. Its marks move 9 → 12 px; this lane's pictures are taken after merging `dev`.
 
-**Asks**: one open, Ask 1 in `OWNER-ASKS.md` (D6's check failed: the 10 px public mark at 1x). A1 (a stroke floor) is settled as stroke 2 at every size, as signed (D3).
+**Asks**: Ask 1 in `OWNER-ASKS.md` (D6's check failed: the 10 px public mark at 1x) is answered: ship as signed; #787 holds the follow-up. A1 (a stroke floor) is settled as stroke 2 at every size, as signed (D3).
 
 ## Architecture & Implementation
 
@@ -108,7 +125,7 @@ No file under `apps/` changes. `send-outcome-rows`, `icon-names`, `PermissionRow
 - **D9. Order**: build on `dev` as it stands; merge `dev` and retake the mark pictures if wallet-bugs-2 lands first. Neither lane edits the other's files.
 - **D10. Bumps are UI changes**: `README.md` § Icons and the drift test's failure message say a Tabler bump or a regeneration that changes a path is a UI change: pictures and owner sign-off, and the `DERIVED` record edited in the same PR. A mapping edit in `glyph-sources.ts` is one too; review is its guard (Codex, Opus).
 - **D11. Deviation, Phase 3 "before" build** (implementation): the baseline's runtime differs from the head only in `glyphs.ts` and `Icon.vue` (`git diff --stat` against the baseline, tests, docs and notices aside; `glyph-sources.ts` and `render-glyphs.ts` are never imported at run time). So "before" swaps those two files to the baseline's in this worktree, builds and captures with the same harness, then restores them (`git status` clean), instead of a second install in a scratch worktree. Same pixels, one install.
-- **D12. D6's check failed; the PR waits** (implementation): at 10 px on a 1x screen each side of `square-dashed` keeps 77 to 105 darkness of 255 in Chrome and in Firefox, with no gap; today's mark drops to 17 between its dots. The 4-unit dash period is 1.67 screen pixels at 10 px; at 12 px (2 pixels) and 9 px the dashes separate, and at 2x they separate at every size. The three 10 px sites are `FeeMethodSelector.vue:36`, `SendReviewSheet.vue:143` and `PublishStrip.vue:31`. Per D6, Ask 1 carries the crops and the options, and the arc stops before its PR. Every other gate runs to green first, so the answer is the only thing left.
+- **D12. D6's check failed; the PR waits** (implementation): at 10 px on a 1x screen each side of `square-dashed` keeps 77 to 105 darkness of 255 in Chrome and in Firefox, with no gap; today's mark drops to 17 between its dots. The 4-unit dash period is 1.67 screen pixels at 10 px; at 12 px (2 pixels) and 9 px the dashes separate, and at 2x they separate at every size. The three 10 px sites are `FeeMethodSelector.vue:36`, `SendReviewSheet.vue:143` and `PublishStrip.vue:31`. Per D6, Ask 1 carries the crops and the options, and the arc stops before its PR. Every other gate runs to green first, so the answer is the only thing left. Answered by the orchestrator within P48-01 C (2026-10-18, 15:5xZ): ship as signed now, glossary and mark unchanged. The 12 px follow-up is the owner's call: #787 (`owner-decision`).
 
 ## Security & Adversarial Considerations
 
@@ -137,7 +154,7 @@ No file under `apps/` changes. `send-outcome-rows`, `icon-names`, `PermissionRow
 
 **Validation gate.** Commands: `bun run --cwd packages/third-party-notices test`, `bun run --cwd apps/extension build:full`, `bun packages/third-party-notices/bin/check-minimum.ts both apps/extension/dist`, `curl -sfL https://raw.githubusercontent.com/tabler/tabler-icons/bbed884d15354b5cebf2493371f20dc2d5e83eaf/LICENSE | cmp - packages/third-party-notices/texts/tabler-icons.MIT.txt`. Pass: all exit 0; each build's `THIRD-PARTY-NOTICES.txt` lists `Tabler Icons@3.49.0` under MIT. Layers: unit, build.
 
-### Phase 3: proof on both browsers ✓ (but D6: Ask 1 open)
+### Phase 3: proof on both browsers ✓ (D6 failed; Ask 1 answered: ship as signed, #787)
 
 1. Check `uptime`: the one-minute load is under 150. Merge `origin/dev` first if it moved, and record its SHA as the baseline.
 2. Build armed, then run the smoke suite: `cd apps/extension && VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:chrome`, then `env -u EXTENSION_PATH NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- --retry=0`. Repeat with `build:firefox` and `NULO_E2E_BROWSER=firefox`.
@@ -167,6 +184,20 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 **Round 1, Opus** (Plan, opus): *conditional approve*. Accepted: the root-attribute allowlist and whole-document parse (P1); the declared-version assertion with a message naming the record (P2, route a); D10 (P3); the raw commit URL for `cmp` (P4); Fact 1 (P5); 19 tags under 12 px including `open`, and a 10 px non-mark crop (P6); the `square-check` subpath case dropped (P7); no glued `M` decimal in fixtures (P8); Biome chained in the script entry (P9); the install footprint in D1 (P11); "6 past the gate" (P12); a Tabler line in the generated header (P13); the commit permalink as `source`; the armed smoke build and `env -u EXTENSION_PATH`; the base build in a scratch worktree; store captures at close-out. Rejected: keeping the 1 px floor (A1): its own pixel read shows the floor closing the public mark's gaps at 10 px, 1x (D3). Rejected: a path-grammar regex (D7). P10 (the public mark at 10 px, 1x) stays a Phase 3 check under D6.
 
 **Final pass, Codex** (fresh session 01a14f28): *conditional approve* (conditions: the before and after pictures on one integrated `dev` baseline; D6's failure branch gated; caller-anchored resolution that works under Node `test:watch`). All three accepted (Phase 3, D6, the drift test and generator). Also accepted: `JSON.stringify` for every generated string; variant-specific root checks (a filled root with a stroke or `fill-rule` refuses); a string parser, no `DOMParser`; a frozen install in the scratch worktree; armed rebuilds after a network run; the showcase specs' switch removed; the publish strip captured; `OWNER-ASKS.md` no longer claims glossary wording for the panel. It found no rejected alternative better and no open disagreement. Resumed to verify the five edits: *approve*, no regression.
+
+**Post-implementation, Codex** (gpt-6.1-sol, high, session 01a14f6b):
+- Round 1: *changes requested*, all accepted (cd0b0152).
+  - R1: a repeated root attribute overwrote the first silently.
+  - R2: an empty or blank `d` passed.
+  - C1: two introductory comments.
+- Round 2: *approve*. R1, R2 and C1 are closed; the 58 icons (169 paths) re-extract unchanged and 174 mutations are refused.
+
+**Post-implementation, Opus** (general-purpose, opus): *changes requested*, all accepted (cd0b0152).
+- Refusal rows for a single-quoted root attribute and a root that lacks a paint.
+- Each refusal row asserts its exact reason.
+- The blank `d`.
+- The drift message names the header's version.
+- The `square-half` doc comment.
 
 ## Seeds
 
