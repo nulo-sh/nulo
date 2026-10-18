@@ -5,11 +5,9 @@ import { openPopup, test, waitForHash } from "./fixtures/extension"
 import { navigateByHash, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { shotSend } from "./fixtures/send-page"
 import { readActivityScope, secondToken, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
-import { activeTestId, focusRing, pressEscape, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
+import { activeTestId, focusInPopupOf, focusRing, pressEscape, SPACE, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
-/** Puppeteer's BiDi keyboard (Firefox) knows the space bar only by its key value, not as "Space". */
-const SPACE = " "
 
 /** The seeded transaction's token, registered so its page opens. */
 const TOKEN_ID = 1
@@ -212,6 +210,8 @@ test("Send and Receive on Home are the Tab stops after the hero, with the accent
 	await page.waitForSelector(sel("receive-close"), { visible: true, timeout: 15_000 })
 	expect(await page.$$eval(sel("receive-close"), (closes) => closes.length)).toBe(1)
 	expect(await activeTestId(page)).toBe("actions-receive")
+	await page.keyboard.press("Tab")
+	expect(await focusInPopupOf(page, "receive-close"), "Tab moves into the sheet").toBe(true)
 
 	expect(await pressEscape(page), "Escape is handled").toBe(true)
 	await page.waitForFunction((s: string) => !document.querySelector(s), { timeout: 5_000, polling: 50 }, sel("receive-close"))

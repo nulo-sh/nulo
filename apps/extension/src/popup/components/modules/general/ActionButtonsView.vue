@@ -51,9 +51,7 @@ const handleReceive = () => {
 
 <style module>
 .button {
-	user-select: none;
 	height: 52px;
-	margin: 0;
 
 	font: inherit;
 	cursor: pointer;
