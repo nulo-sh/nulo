@@ -6,3 +6,4 @@
 - The extension page's CSP refuses `fetch("data:…")`: decode a picture with `atob` into a `Blob` for `createImageBitmap`.
 - Review loop: Codex round 1 `approve with fixes`, Opus diff review no correctness bug; round 2 `approve` (plan.md § Audit verdicts). Known limit #775 filed and closed; OA-5 written.
 - The orchestrator's A1 asks `rows.test.ts` to keep its titles: the fixed-hero case's title change was reverted.
+- `dev` took #779 (structure-2 arc 1) while #788 was open: the PR went `CONFLICTING`, and no check ran. The merge moved the first-report rule into `useHeroVisible` (D6); lint, typecheck:all, test (851 files) 0; Codex round 3 approve; the arc's e2e files (navigation, rows, home-links, token-list, type-roles) Chrome 32 passed + 1 skipped, Firefox 33 passed.
