@@ -48,6 +48,7 @@ import {
 	AccountSchema,
 	AccountType,
 	DEFAULT_ACCOUNT_NAME,
+	DEFAULT_IMPORTED_ACCOUNT_NAME,
 	ImportedAccountKeySchema,
 	ImportedAccountUnusableError,
 	type FullBackupKeys,
@@ -721,7 +722,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 					l1ChainId,
 					// User-chosen display name; the export envelope deliberately carries none (the v1
 					// file format is frozen), so the UI asks at import time.
-					name: (typeof name === "string" && name.trim().slice(0, 40)) || "Imported account",
+					name: (typeof name === "string" && name.trim().slice(0, 40)) || DEFAULT_IMPORTED_ACCOUNT_NAME,
 					visible: true,
 				}
 				await this.commitImportedAccount(account, sealed, epoch)

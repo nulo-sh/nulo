@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs"
-import { dirname, join, relative } from "node:path"
+import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parse as parseSfc } from "@vue/compiler-sfc"
 import postcss, { type ChildNode, type Container, type Document, type Root, type Rule } from "postcss"
@@ -15,8 +15,32 @@ export const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..
 export const SCAN_ROOTS = ["apps/extension/src", "packages/design/src"] as const
 /** The generated layer and its inputs: the roles themselves live here. */
 export const EXEMPT = /^packages\/design\/src\/(base\.css|utilities\.css|token-contract\.ts|tokens\.ts|internal\/)/
-export const SKIPPED = /\.(test|stories)\.[jt]s$|\.d\.ts$/
-const SCANNED = /\.(vue|ts|js|css|scss)$/
+export const TEST_FILE = /\.test\.[jt]s$/
+export const STORY_FILE = /\.stories\.[jt]s$/
+export const DECLARATION = /\.d\.ts$/
+/** The extension's generated shims (auto-imports, component and route types). */
+export const GENERATED_TYPES = /^apps\/extension\/src\/types\//
+
+/**
+ * The files a guard reads: every file under `roots` with one of `exts`, plus `files` as named, minus
+ * any repo-relative path a `skip` pattern matches.
+ */
+export type SourcePolicy = {
+	roots: readonly string[]
+	files?: readonly string[]
+	exts: readonly string[]
+	skip?: readonly RegExp[]
+}
+
+/** Every `src` directory one level under `apps` or `packages`, so a new workspace is read the day it exists. */
+export function workspaceSrcRoots(parent: "apps" | "packages"): string[] {
+	return readdirSync(join(REPO_ROOT, parent), { withFileTypes: true })
+		.filter((entry) => entry.isDirectory() && isDirectory(join(REPO_ROOT, parent, entry.name, "src")))
+		.map((entry) => `${parent}/${entry.name}/src`)
+		.sort()
+}
+
+export const PACKAGE_SRC_ROOTS = workspaceSrcRoots("packages")
 
 /** compiler-core's `NodeTypes`, which compiler-sfc does not re-export. */
 export const NODE = { ELEMENT: 1, TEXT: 2, INTERPOLATION: 5, ATTRIBUTE: 6, DIRECTIVE: 7 } as const
@@ -26,8 +50,8 @@ export type Expression = { content: string; loc: { start: Position; source: stri
 export type TemplateProp = {
 	type: number
 	name: string
-	value?: { content: string; loc: { start: Position } }
-	arg?: { content: string } | null
+	value?: { content: string; loc: { start: Position; source: string } }
+	arg?: (Expression & { isStatic: boolean }) | null
 	exp?: Expression | null
 	loc: { start: Position; source: string }
 }
@@ -50,21 +74,47 @@ export type ParsedSource = {
 	styles: StyleSheet[]
 }
 
-function walk(dir: string, out: string[]): string[] {
-	for (const name of readdirSync(dir)) {
-		const full = join(dir, name)
-		if (statSync(full).isDirectory()) walk(full, out)
-		else if (SCANNED.test(name) && !SKIPPED.test(name)) out.push(full)
+const TYPOGRAPHY: SourcePolicy = {
+	roots: SCAN_ROOTS,
+	exts: ["vue", "ts", "js", "css", "scss"],
+	skip: [TEST_FILE, STORY_FILE, DECLARATION, EXEMPT],
+}
+
+function isDirectory(path: string): boolean {
+	try {
+		return statSync(path).isDirectory()
+	} catch {
+		return false
+	}
+}
+
+function walk(dir: string, rel: string, out: string[]): string[] {
+	for (const entry of readdirSync(dir, { withFileTypes: true })) {
+		if (entry.isDirectory()) {
+			walk(join(dir, entry.name), `${rel}/${entry.name}`, out)
+		} else out.push(`${rel}/${entry.name}`)
 	}
 	return out
 }
 
-/** Every scanned file under the roots, repo-relative, minus the generated layer. */
-export function sourceFiles(): string[] {
-	return SCAN_ROOTS.flatMap((root) => walk(join(REPO_ROOT, root), []))
-		.map((full) => relative(REPO_ROOT, full).split("\\").join("/"))
-		.filter((file) => !EXEMPT.test(file))
-		.sort()
+/**
+ * The files `policy` reads, repo-relative with `/` separators, sorted; with no policy, the typography
+ * walk. A root that is missing or holds no file the policy reads throws, so a moved directory fails
+ * the guard instead of emptying it.
+ */
+export function sourceFiles(policy: SourcePolicy = TYPOGRAPHY): string[] {
+	const read = (file: string) =>
+		policy.exts.some((ext) => file.endsWith(`.${ext}`)) && !policy.skip?.some((pattern) => pattern.test(file))
+	const fromRoots = policy.roots.flatMap((root) => {
+		if (!isDirectory(join(REPO_ROOT, root))) throw new Error(`source root ${root} is not a directory`)
+		const files = walk(join(REPO_ROOT, root), root, []).filter(read)
+		if (files.length === 0) throw new Error(`source root ${root} holds no file the policy reads`)
+		return files
+	})
+	for (const file of policy.files ?? []) {
+		if (!statSync(join(REPO_ROOT, file), { throwIfNoEntry: false })?.isFile()) throw new Error(`source file ${file} does not exist`)
+	}
+	return [...new Set([...fromRoots, ...(policy.files ?? [])])].sort()
 }
 
 function parseCss(content: string, file: string): Root {

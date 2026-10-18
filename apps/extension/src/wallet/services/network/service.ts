@@ -25,7 +25,7 @@ import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { LOCAL_L1_CHAIN_ID, walletChainId } from "@/utils/chain-ids"
 import { hasNetworkCause } from "@/wallet/services/stale-network/classify"
 import { quarantinedBy, StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
-import { ERR_NOT_RESETTABLE, ERR_STALE_CHANGED, type ProbedEndpoint } from "@/wallet/services/stale-network/types"
+import { ERR_NOT_RESETTABLE, ERR_RESET_PENDING, ERR_STALE_CHANGED, type ProbedEndpoint } from "@/wallet/services/stale-network/types"
 import { DEFAULT_SEEDS, type DefaultSeed, LOCAL_NETWORK_RPC_URL, PRIMARY_SEED, SEED_L1_BY_KIND, seedForKind } from "./seeds"
 import {
 	type ChainKind,
@@ -694,6 +694,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		const probed = await this._probeChainIdentity(rpcUrl, peek.kind)
 		return await this.lock.withLock(async () => {
 			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
+			await this.refuseWhileResetHolds(profile.id, networkId)
 			assertSameChainIdentity(probed, network)
 			const normalized = normalizeRpcUrl(rpcUrl)
 			if (network.endpoints.some((e) => e.rpcUrl === normalized)) {
@@ -731,6 +732,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		const probed = await this._probeChainIdentity(rpcUrl, peek.kind)
 		return await this.lock.withLock(async () => {
 			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
+			await this.refuseWhileResetHolds(profile.id, networkId)
 			assertSameChainIdentity(probed, network)
 			const idx = network.endpoints.findIndex((e) => e.id === endpointId)
 			if (idx < 0) throw new Error("Invalid endpoint id")
@@ -761,6 +763,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		const profile = await requireActiveProfile(this.profileService)
 		return await this.lock.withLock(async () => {
 			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
+			await this.refuseWhileResetHolds(profile.id, networkId)
 			const idx = network.endpoints.findIndex((e) => e.id === endpointId)
 			if (idx < 0) throw new Error("Invalid endpoint id")
 			if (network.endpoints.length === 1) {
@@ -783,6 +786,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		const profile = await requireActiveProfile(this.profileService)
 		return await this.lock.withLock(async () => {
 			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
+			await this.refuseWhileResetHolds(profile.id, networkId)
 			const endpoint = network.endpoints.find((e) => e.id === endpointId)
 			if (!endpoint) throw new Error("Invalid endpoint id")
 			if (network.chainId === 0 && !isLocalNetworkTarget(endpoint.rpcUrl, network.kind)) {
@@ -796,6 +800,15 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			this.emit("onNetworkUpdated", network)
 			return network
 		})
+	}
+
+	/** A reset's resume keeps the primary endpoint only while it is the one the capture probed, and
+	 *  otherwise adds the seed's, so a network a journal names keeps its endpoints as captured. Runs
+	 *  under `this.lock`, which the capture holds while it writes the journal. */
+	private async refuseWhileResetHolds(profileId: string, networkId: string): Promise<void> {
+		if ((await this.staleNetworks.getJournal(profileId))?.networkId === networkId) {
+			throw new Error(`${ERR_RESET_PENDING}: Finish the network reset before editing its endpoints.`)
+		}
 	}
 
 	// ── Status / node accessors ──────────────────────────────────────────
@@ -1058,8 +1071,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	 *       - OperationJournalService (wipes journal by networkId)
 	 *  2. Offscreen PXE clear via PxeServiceClient — ALWAYS last, hardcoded
 	 *     here (not a subscriber) because peer-state must be wiped before
-	 *     PXE resets, otherwise SW services could read against a fresh
-	 *     empty IDB and get inconsistent state.
+	 *     PXE resets, otherwise SW services could read against a fresh,
+	 *     empty PXE store and get inconsistent state.
 	 *
 	 * Every step runs even when an earlier one fails, and any failure then
 	 * rejects the purge, so no caller treats a partial purge as complete. The

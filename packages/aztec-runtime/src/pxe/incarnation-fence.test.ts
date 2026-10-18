@@ -67,14 +67,6 @@ function makeService(): { service: PxeService; disposeShouldFail: (v: boolean) =
 describe("incarnation fence", () => {
 	beforeEach(() => {
 		vi.stubGlobal("chrome", { runtime: { onMessage: { addListener: () => {} } } })
-		vi.stubGlobal("indexedDB", {
-			databases: async () => [],
-			deleteDatabase: () => {
-				const req = { onsuccess: undefined as (() => void) | undefined } as never as IDBOpenDBRequest
-				queueMicrotask(() => (req as unknown as { onsuccess?: () => void }).onsuccess?.())
-				return req
-			},
-		})
 	})
 	afterEach(() => {
 		vi.unstubAllGlobals()

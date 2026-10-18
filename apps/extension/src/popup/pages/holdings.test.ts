@@ -197,25 +197,62 @@ describe("holdings page", () => {
 describe("holdings page — prices unavailable", () => {
 	const summaryOf = (w: Awaited<ReturnType<typeof mountPage>>) => w.get('[data-testid="holdings-summary"]').text()
 
-	test("once the first answer prices no holding, the total is Home's dash and the meta line says why, with no count", async () => {
+	test.each([
+		["an answer that prices no holding", ANSWER],
+		["a rejected answer", () => Promise.reject(new Error("port closed"))],
+	])("after %s, the total is Home's dash and the meta line says why, with no count", async (_, answer) => {
 		installChromeStorage()
+		answerQuotes = answer
 		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
 		const w = await mountPage()
+		expect(w.find('[data-testid="holdings-total-loading"]').exists()).toBe(false)
+		expect(w.get('[data-testid="holdings-total"]').text()).toBe("—")
 		expect(summaryOf(w)).toContain("—")
 		expect(summaryOf(w)).toContain("Prices unavailable")
 		expect(summaryOf(w)).not.toContain("$")
 		expect(summaryOf(w)).not.toContain("tokens")
 		expect(w.get('[data-testid="holdings-summary"] span[style]').attributes("aria-hidden")).toBe("true")
 	})
+})
 
-	test("before the first answer the summary reads as it did", async () => {
+// The summary also holds a hidden ruler that repeats the figure and the meta line, so these read the
+// visible spans only.
+describe("holdings page — before the first price answer", () => {
+	const total = (w: Awaited<ReturnType<typeof mountPage>>) => w.get('[data-testid="holdings-total"]')
+	const meta = (w: Awaited<ReturnType<typeof mountPage>>) => w.get('[data-testid="holdings-meta"]').text()
+	const skeleton = (w: Awaited<ReturnType<typeof mountPage>>) => w.find('[data-testid="holdings-total-loading"]')
+
+	test("a priced holding shows a skeleton in the total's place and the count alone, until the answer brings the figure", async () => {
+		installChromeStorage()
+		// Each token row asks too; the service answers every caller with its one refresh.
+		const held: Array<(snapshot: unknown) => void> = []
+		answerQuotes = () => new Promise((resolve) => held.push(resolve))
+		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC), row("b2", "BBB", CHAIN_IDS.TESTNET)]
+		const w = await mountPage()
+		expect(skeleton(w).exists()).toBe(true)
+		expect(total(w).attributes("aria-busy")).toBe("true")
+		expect(total(w).text()).toBe("")
+		expect(meta(w)).toBe("2 tokens")
+
+		const snapshot = await ANSWER()
+		for (const resolve of held) resolve(snapshot)
+		await flushPromises()
+		expect(skeleton(w).exists()).toBe(false)
+		expect(total(w).attributes("aria-busy")).toBeUndefined()
+		expect(total(w).text()).toBe("$1,250.00")
+		expect(meta(w)).toBe("2 tokens · priced assets only")
+	})
+
+	test("a wallet the signed list prices nothing of shows $0.00 and its count, no skeleton, while the answer is held", async () => {
 		installChromeStorage()
 		answerQuotes = () => new Promise(() => {})
-		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET)]
 		const w = await mountPage()
-		expect(summaryOf(w)).toContain("$0.00")
-		expect(summaryOf(w)).toContain("1 tokens")
-		expect(summaryOf(w)).not.toContain("Prices unavailable")
+		expect(skeleton(w).exists()).toBe(false)
+		expect(total(w).attributes("aria-busy")).toBeUndefined()
+		expect(total(w).text()).toBe("$0.00")
+		expect(meta(w)).toBe("1 tokens · priced assets only")
 	})
 })
 

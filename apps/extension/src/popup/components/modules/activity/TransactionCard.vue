@@ -41,7 +41,7 @@ const props = defineProps({
 })
 
 const call = computed(() => getPrimaryCall(props.tx.calls))
-const type = computed(() => getTxCategory(props.tx.calls))
+const type = computed(() => getTxCategory(props.tx.calls, props.tokens))
 const transfer = computed(() => (call.value?.transfers ? call.value.transfers[0] : null))
 const amount = computed(() => txAmount(props.tx.calls, props.tokens))
 /** The record's decimals are no better than a guess while the wallet's token for the contract has
@@ -99,7 +99,7 @@ const txStatusAttr = computed(() => {
 
 const title = computed(() => {
 	if (type.value === "transfer" && amount.value?.symbol) return amount.value.symbol
-	return getTxTitle(props.tx.calls)
+	return getTxTitle(props.tx.calls, props.tokens)
 })
 
 const transferTypeLabel = computed(() => {

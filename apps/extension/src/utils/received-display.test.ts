@@ -57,8 +57,8 @@ describe("resolveReceivedType + receivedLabel", () => {
 	test("public from MAGIC → Private → Public", () => {
 		expect(receivedLabel(resolveReceivedType(pubRec(PRIVATE_ADDRESS_MAGIC_VALUE)))).toBe("Private → Public")
 	})
-	test("public from zero → Minted", () => {
-		expect(receivedLabel(resolveReceivedType(pubRec(ZERO)))).toBe("Minted")
+	test("public from zero → Mint (public)", () => {
+		expect(receivedLabel(resolveReceivedType(pubRec(ZERO)))).toBe("Mint (public)")
 	})
 })
 
