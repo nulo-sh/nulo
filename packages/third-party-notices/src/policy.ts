@@ -328,6 +328,14 @@ export const DERIVED: readonly VendoredComponent[] = [
 		texts: ["azguard-wallet.Apache-2.0.txt"],
 		note: 'Nulo is derived from Azguard Wallet; each source file derived from it carries a "Modified from Azguard Wallet" notice, or is listed in ACKNOWLEDGEMENTS.md if its format cannot carry one. The upstream repository ships no NOTICE file.',
 	},
+	{
+		name: "Tabler Icons",
+		version: "3.49.0",
+		license: "MIT",
+		source: "https://github.com/tabler/tabler-icons/blob/bbed884d15354b5cebf2493371f20dc2d5e83eaf/LICENSE",
+		texts: ["tabler-icons.MIT.txt"],
+		note: "The path data of every glyph in packages/design/src/core/glyphs.ts, generated from @tabler/icons 3.49.0 (npm integrity sha512-l+GnSkFETx0U26icxv1VUFnxxiTqXfCcVRiRAnyMwibupM2S2L/hSaZ9gmSgz01rkrsH/93NvLsxykqdanc6lw==, tag v3.49.0 at the source commit). Each path is as published but for a space after its M command.",
+	},
 ]
 
 export const POLICY: Policy = {

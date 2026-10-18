@@ -128,7 +128,7 @@ No file under `apps/` changes. `send-outcome-rows`, `icon-names`, `PermissionRow
 
 **Validation gate.** Commands: `bun run --cwd packages/design test`, `bun run lint`, `bun run typecheck:all`, `bun run test:ci-gating`, `bun run test:all`. Pass: every command exits 0; the drift test's key set equals `glyphSources`' 58 names; `test:ci-gating` passes `workflow-refs`; a scratch edit of one path in `glyphs.ts` makes the drift test fail, and reverting it passes. Layers: lint, typecheck, unit.
 
-### Phase 2: attribution and docs ☐
+### Phase 2: attribution and docs ✓
 
 1. Fetch `https://raw.githubusercontent.com/tabler/tabler-icons/bbed884d15354b5cebf2493371f20dc2d5e83eaf/LICENSE` into `texts/tabler-icons.MIT.txt`. Add the `DERIVED` record and the `expected-minimum.txt` line.
 2. Rewrite `packages/design/README.md` § Icons: the source and its record, the weight (2 units, round), adding a glyph (one `glyph-sources.ts` line, `bun run gen:glyphs`, the sheet at 24, 14, 12, 10 and 9 px in both themes), and D10.
