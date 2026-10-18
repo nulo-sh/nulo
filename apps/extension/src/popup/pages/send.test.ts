@@ -1058,6 +1058,30 @@ describe("send page — the token card while the tokens load", () => {
 		w.unmount()
 	})
 
+	test("an identity fetch's balance read lands when the reconnect's read that began after it is refused", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		const { w, appStore } = await mountSend()
+		balanceConnected().invoke()
+		// A re-read landed for the previous identity first.
+		balanceConnected().invoke()
+		await flushPromises()
+		const reads = holdTokenReads()
+		mocks.getTokenBalances.mockResolvedValueOnce([{ ...BALANCE, id: "b2", account: "0xbob" }])
+		appStore.account = { address: "0xbob" } as never
+		await flushPromises()
+		mocks.getTokenBalances.mockRejectedValue(new Error("port closed"))
+		balanceConnected().invoke()
+		await flushPromises()
+		await vi.advanceTimersByTimeAsync(2_000)
+		await flushPromises()
+		expect(mocks.getTokenBalances).toHaveBeenCalledTimes(5)
+		reads[0]?.resolve([TOKEN])
+		await flushPromises()
+		expect(card(w)).toEqual({ loading: "false", symbol: "TST" })
+		expect(amount(w).attributes("data-balance")).toBe("5")
+		w.unmount()
+	})
+
 	test("a deleted balance row drops its amount; a delete for another row keeps it", async () => {
 		const { w } = await mountSend()
 		expect(amount(w).attributes("data-balance")).toBe("5")
