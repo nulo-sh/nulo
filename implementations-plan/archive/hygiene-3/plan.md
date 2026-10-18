@@ -20,7 +20,7 @@ standard: implementations-plan/README.md § Post-implementation standard, read a
 - **Known limits:** none.
 - **Open items:** #831 (OA-1, `owner-decision`).
 - **Dropped:** none. Other plans: structure-2's arc 3 keeps #730 only (#735's notices and Developer shipped in #817); ui-dedupe-1's A4 (#517) is delivered here, so that arc has no work left.
-- **Lessons:** the Vue-tests line in `lessons.md` now names the cause for any clock, not only fake timers, and the raw `pressOn` helper.
+- **Lessons:** the Vue-tests line in `lessons.md` corrected in place, with no growth (the file is at its budget): a raw event in its listener's mount millisecond runs only the first Vue listener on its path, fake timers being one way to get there (F5, D4). `tests/helpers/press-key.ts`'s `pressOn` dispatches raw too; no flake traced to it (O6).
 - **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # hygiene-3: the rest of #735, the countdown Close on Button, the held-Escape flake
