@@ -230,6 +230,18 @@ describe("getTxCategory and getTxTitle: the wallet's reading of the primary call
 		expect(getTxCategory(calls, tokens)).toBe(category)
 		expect(getTxTitle(calls, tokens)).toBe(title)
 	})
+
+	test("a listed token holding no class, as a restored row does before its refresh, reads its calls as plain calls", () => {
+		const unclassed = [{ contract: TOKEN }]
+		for (const [calls, title] of [
+			[[call("transfer_in_private", transfer4)], "Transfer In Private"],
+			[[call("mint_to_private", [ACCOUNT, field(5n)])], "Mint To Private"],
+		] as const) {
+			expect(getTxCategory([...calls], unclassed)).toBe("tx")
+			expect(getTxTitle([...calls], unclassed)).toBe(title)
+		}
+		expect(getTxTitle([call("transfer", [DAPP, field(5n)], { transfers: [sent] })], unclassed)).toBe("Transfer")
+	})
 })
 
 describe("getOriginLabel — dApp identity for DAPP origin only", () => {

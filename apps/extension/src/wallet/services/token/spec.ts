@@ -16,7 +16,7 @@ export type Token = {
 
 	chainId: number
 	contract: string
-	/** Absent on a row added before classes were recorded. */
+	/** Absent on a row added before classes were recorded, and on a restored row until its refresh reads one. */
 	classId?: string
 
 	name: string
@@ -67,8 +67,8 @@ export type TokenInfo = {
 	/** Token contract address. */
 	contract: string
 	/**
-	 * The class the wallet resolved when the token was added: trust on first use, unauthenticated
-	 * when restored, so a reader compares it only as a field element.
+	 * The class the wallet resolved from the chain, when the token was added or a restored row was
+	 * refreshed: trust on first use, so a reader compares it only as a field element.
 	 */
 	classId?: string
 	/** Token name. */

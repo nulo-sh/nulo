@@ -1,14 +1,11 @@
 <script setup lang="ts">
-/** A warning above a call's arguments: what the wallet could not vouch for, and what to check instead. */
 import DottedTerm from "@/components/composite/DottedTerm.vue"
 import { type NoticeSegment, RAW_ADVICE } from "./call-surface"
 
 defineProps<{
 	title: string
 	body: readonly NoticeSegment[]
-	/** Prefix for every `data-testid`, so each host surface stays addressable. */
 	prefix: string
-	/** Names the notice in its testids: `${prefix}-${kind}-warning`, `-reason` and `-advice`. */
 	kind: "unverified" | "labels"
 	/** Carries the window's closing advice; `OperationCard` picks the one notice. */
 	advice?: boolean

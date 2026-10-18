@@ -71,6 +71,8 @@ Arc 1 (discovery admits secure origins only) depends on none of these: none conc
 
 **What ships now: A,** in arc 3, named in its PR for sign-off.
 
+**Also, found in arc 3's review (P42-10 signed A on the two effects above).** Until the read succeeds, a restored token's past app transfers and mints also read as plain calls on Activity and the transaction page: "Transfer Private To Private" or "Mint To Public" with the generic icon, in place of "Transfer" or "Mint (public)" with the send or mint icon. The wallet's own sends keep their titles, since they record what they moved. Shipped with A, shown in arc 3's PR for sign-off.
+
 
 ## OA-6: the failed-preview warning's second sentence (the execute window)
 
