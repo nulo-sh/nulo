@@ -178,6 +178,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [home-refresh](home-refresh/plan.md) — completed — the locked home-screen spec implemented as a light, reversible change
 - [hygiene](hygiene/plan.md) — completed — technical follow-ups that change no screen
 - [icons-d2-1](icons-d2-1/plan.md) — completed — Direction 2 glyphs everywhere, icons.json and the Material font retired, the private and public marks as squares (#602, #590)
+- [iface-line-1](iface-line-1/plan.md) — completed — the execute window's unreadable-call lines: one short reason, `interface` dotted, the advice once per window, the glossary entry (#516)
 - [import-stage-deadlines](import-stage-deadlines/plan.md) — completed — import stage timing and console-capture fixes in the e2e suite
 - [incoming-public-transfers](incoming-public-transfers/plan.md) — completed — incoming public token transfers indexed into the activity feed
 - [incoming-sync-indicator](incoming-sync-indicator/plan.md) — superseded by holdings-loading-sync — a per-token indicator for incoming history backfill

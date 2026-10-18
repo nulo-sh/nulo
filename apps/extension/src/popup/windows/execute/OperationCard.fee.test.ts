@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
 import { GLOSSARY } from "@/utils/glossary"
 import { priceFake } from "../../../../tests/helpers/price-client-fake"
+import { shownText } from "../../../../tests/helpers/shown-text"
 import OperationCard from "./OperationCard.vue"
 
 const mocks = vi.hoisted(() => ({
@@ -139,13 +140,6 @@ function spokenText(el: Element): string {
 		if (text) parts.push(text)
 	}
 	return parts.join(" ")
-}
-
-/** The text a sighted person reads in `el`: a dotted term's always-mounted definition is `hidden`. */
-function shownText(el: Element): string {
-	const clone = el.cloneNode(true) as Element
-	for (const node of clone.querySelectorAll("[hidden]")) node.remove()
-	return clone.textContent?.replace(/\s+/g, " ").trim() ?? ""
 }
 
 const fee = (w: VueWrapper) => w.find('[data-testid="fee-settings-card"]')
@@ -360,8 +354,8 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		expect(priceFake.refreshes()).toBe(1)
 	})
 
-	// An approval window carries one operation and nothing else on it is dotted, so the card's
-	// dotted terms are the screen's, which the glossary rule caps at two.
+	// An approval window carries one operation, so the card's dotted terms are the screen's: this one
+	// and, on a call Nulo cannot read, `interface`. The glossary rule caps distinct terms at two.
 	test("the app asked for a priority fee: one sentence under the legend, its priority fee the screen's one dotted term, defined by the glossary", async () => {
 		const w = await mountWith({
 			...ESTIMATE,
