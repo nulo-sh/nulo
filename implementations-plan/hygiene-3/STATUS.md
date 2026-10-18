@@ -9,3 +9,4 @@
 - 2026-10-18 23:20Z arc 1 test identity: pass (suites gain 4 titles, 0 lines removed).
 - 2026-10-18 23:55Z arc 1 gate: test:all 0 (extension 14003 passed), audit:vue 0; smoke Chrome settings-routes, navigation, sw-resilience, auth-flows, onboarding-tab 40/40 in 272 s at retry 0 (armed head build); rendered identity Developer off and on, both themes, Chrome: base vs head 8/8 byte-equal, control differs; base vs base 1 pixel apart (capture noise). Pass.
 - 2026-10-19 00:20Z arc 1 review loop converged: Codex r1 findings 1, Opus changes requested (3 applied), Codex r2 clean.
+- 2026-10-19 00:45Z arc 1 final head 3049183c (dev 97ffa088 merged): lint 0, typecheck:all 0, test:all 0 (extension 14005 passed), check:plans 0; smoke Chrome 5 files 40/40 in 213 s at retry 0 (armed build).
