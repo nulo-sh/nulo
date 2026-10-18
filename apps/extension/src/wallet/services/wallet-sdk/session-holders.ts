@@ -33,8 +33,11 @@ export class SessionHolders {
 	readonly establishmentStatus = new Map<string, Promise<boolean>>()
 	/** Per-session gate on dispatch until the person confirms the session's check (see `verification-hold.ts`). */
 	readonly holds = new VerificationHolds()
-	/** Per-session decrypt lane, which also carries refusal replies (see `serializeDecryption`). */
-	// maxHoldMs: null — the prior hand-rolled decrypt chain had no watchdog.
+	/**
+	 * Per-session decrypt lane, which also carries refusal replies (`serializeDecryption` in
+	 * `background.ts`). No watchdog: a force-release would let the next decrypt run beside a slow
+	 * one, out of order.
+	 */
 	readonly decryptLocks = new KeyedLock({ maxHoldMs: null })
 
 	/** The session ended: forget everything it held, and drop its unsettled hold as `wallet_refused`. */
