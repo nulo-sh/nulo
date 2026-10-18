@@ -719,6 +719,13 @@ describe("DappInteractionService — the session gate refuses what the session d
 		await expectRefused(await windowHarness(), unknownKind, "Unsupported operation kind")
 	})
 
+	// The operation names a held account and a granted chain, so falling through to either scope's
+	// checks would pass them.
+	test.each(["constructor", "__proto__", "toString"])("an operation kind named %s is refused", async (kind) => {
+		const prototypeKind = { kind, account: ACCOUNT, chain: "aztec:1" } as unknown as OperationRequest
+		await expectRefused(await windowHarness(), prototypeKind, "Unsupported operation kind")
+	})
+
 	test("private events for an address outside the session's accounts are refused", async () => {
 		const events = {
 			kind: "aztec_getPrivateEvents",
