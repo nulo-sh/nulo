@@ -391,7 +391,11 @@ describe("restoreAccountsAndFilterOwnedSlices — stage 2a contract", () => {
 		} as never
 		const recorder = vi.fn()
 
-		const { importedChainAddress: set, held } = await restoreAccountsAndFilterOwnedSlices(
+		const {
+			importedChainAddress: set,
+			held,
+			rows,
+		} = await restoreAccountsAndFilterOwnedSlices(
 			data,
 			fakeAccountService([
 				{ address: "0xa", chainId: 1 },
@@ -405,6 +409,11 @@ describe("restoreAccountsAndFilterOwnedSlices — stage 2a contract", () => {
 		expect([...set]).toEqual(["1:0xa"]) // failed and held accounts never enter the allow-set
 		// A held account brings back its row and key only, never its dependents.
 		expect(held).toEqual([{ chainId: 1337, address: "0xheld", name: "Savings", row: 2 }])
+		// Every restored account, held ones included, is placed at its row; a refused one is not.
+		expect([...rows]).toEqual([
+			["1:0xa", 0],
+			["1337:0xheld", 2],
+		])
 		const d = data as Record<string, Array<Record<string, unknown>>>
 		expect(d.transaction.map((t) => t.hash)).toEqual(["keep"])
 		// authwits are keyed by the (chainId, account) tuple like txs: the same address on a
@@ -423,11 +432,15 @@ describe("restoreAccountsAndFilterOwnedSlices — stage 2a contract", () => {
 })
 
 describe("restoreAccountsStage — which key rows reach the key restore", () => {
-	it("passes the keys of restored accounts, held ones included, and every row without a scope; drops the rest", async () => {
+	it("passes the keys of restored accounts, held ones included, and every row without a scope; records a key no account row uses", async () => {
 		const key = (chainId: number, address: string) => ({ profileId: "p", chainId, address, encryptedSigningKey: "sealed" })
 		const scopeless = { profileId: "p", chainId: 1, encryptedSigningKey: "sealed" }
 		const data: Record<string, unknown> = {
-			account: [{}, {}, {}],
+			account: [
+				{ address: "0xa", chainId: 1, type: 1 },
+				{ address: "0xheld", chainId: 1337, type: 1 },
+				{ address: "0xrefused", chainId: 1, type: 1 },
+			],
 			"imported-account-keys": [key(1, "0xa"), key(1337, "0xheld"), key(1, "0xrefused"), scopeless, key(1, "0xorphan")],
 		}
 		const restoreImportedKeys = vi.fn(async (rows: Array<Record<string, unknown>>) =>
@@ -455,8 +468,13 @@ describe("restoreAccountsStage — which key rows reach the key restore", () => 
 		})
 
 		expect(restoreImportedKeys).toHaveBeenCalledWith([key(1, "0xa"), key(1337, "0xheld"), scopeless])
-		// The refused row is recorded at its position in the backup's slice, not among the rows passed.
-		expect(log.value["imported-account-keys"]).toEqual([{ row: 3, profileId: "p", chainId: 1, restoreError: "address: Required" }])
+		// Each record sits at its row's position in the backup's slice, not among the rows passed. The
+		// refused account's key says nothing: that account's own row explains it.
+		expect(log.value["imported-account-keys"]).toEqual([
+			{ row: 3, profileId: "p", chainId: 1, restoreError: "address: Required" },
+			{ row: 4, profileId: "p", chainId: 1, restoreError: "Skipped: no account in this backup uses this key" },
+		])
+		expect(JSON.stringify(log.value)).not.toContain("0xorphan")
 		expect(out).toMatchObject({ kind: "proceed", held: [{ chainId: 1337, address: "0xheld", row: 1 }] })
 		expect([...(out as { importedChainAddress: ReadonlySet<string> }).importedChainAddress]).toEqual(["1:0xa"])
 	})
@@ -481,21 +499,74 @@ describe("settleHeldAccounts — what the import records and shows of a held acc
 		const log = ref<Record<string, unknown[]>>({})
 		const accountService = accountServiceDropping([{ chainId: 1337, address: "0xkeyless" }])
 
-		const shown = await settleHeldAccounts(
-			accountService,
-			"p",
-			[
-				{ chainId: 1337, address: "0xkeyed", name: "Savings", row: 3 },
-				{ chainId: 1337, address: "0xkeyless", name: "Savings", row: 4 },
-			],
-			ioOver(log),
-		)
+		const held = [
+			{ chainId: 1337, address: "0xkeyed", name: "Savings", row: 3 },
+			{ chainId: 1337, address: "0xkeyless", name: "Savings", row: 4 },
+		]
+		const rows = new Map([
+			["1337:0xkeyed", 3],
+			["1337:0xkeyless", 4],
+		])
+
+		const shown = await settleHeldAccounts(accountService, "p", { held, rows }, ioOver(log))
 
 		expect(shown).toEqual([{ name: "Savings", chainId: 1337 }])
+		// The dropped one says why at its own row, and no longer waits for a network.
 		expect(log.value.account).toEqual([
 			{ row: 3, profileId: "p", chainId: 1337, restoreError: "Waiting for a network with chain ID 1337" },
+			{ row: 4, profileId: "p", chainId: 1337, restoreError: "Not restored: its key is not in this backup" },
 		])
 		expect(accountService.disconnect).toHaveBeenCalledOnce()
+	})
+
+	it("records an imported account dropped on a network the profile has at its row; no drop records nothing", async () => {
+		const log = ref<Record<string, unknown[]>>({})
+		const rows = new Map([
+			["1:0xkept", 0],
+			["1:0xdropped", 2],
+		])
+
+		expect(
+			await settleHeldAccounts(accountServiceDropping([{ chainId: 1, address: "0xdropped" }]), "p", { held: [], rows }, ioOver(log)),
+		).toEqual([])
+		expect(log.value.account).toEqual([
+			{ row: 2, profileId: "p", chainId: 1, restoreError: "Not restored: its key is not in this backup" },
+		])
+
+		const clean = ref<Record<string, unknown[]>>({})
+		await settleHeldAccounts(accountServiceDropping([]), "p", { held: [], rows }, ioOver(clean))
+		expect(clean.value).toEqual({})
+	})
+
+	it("a key that failed to rewrap keeps its own row beside its account's", async () => {
+		const log = ref<Record<string, unknown[]>>({})
+		const io = ioOver(log)
+		const sealed = { profileId: "p", chainId: 1, address: "0xstale", encryptedSigningKey: "sealed-under-a-lost-key" }
+		const accountService = {
+			restore: vi.fn(async () => [{ address: "0xstale", chainId: 1, type: 1, name: "Savings" }]),
+			restoreImportedKeys: vi.fn(async (keys: unknown[]) =>
+				keys.map((k) => ({ ...(k as object), restoreError: "Could not unwrap key" })),
+			),
+			reconcileImportedAccounts: vi.fn(async () => [{ chainId: 1, address: "0xstale" }]),
+			disconnect: vi.fn(),
+		}
+		const data: Record<string, unknown> = { account: [{ address: "0xstale", chainId: 1, type: 1 }], "imported-account-keys": [sealed] }
+
+		const out = await restoreAccountsStage(data, {
+			accountService,
+			profileService: {} as never,
+			profileId: "p",
+			networks: [{ chainId: 1 }],
+			io,
+		})
+		if (out.kind !== "proceed") throw new Error(`expected the stage to proceed, got ${out.kind}`)
+		await settleHeldAccounts(accountService, "p", out, io)
+
+		expect(log.value).toEqual({
+			"imported-account-keys": [{ row: 0, profileId: "p", chainId: 1, restoreError: "Could not unwrap key" }],
+			account: [{ row: 0, profileId: "p", chainId: 1, restoreError: "Not restored: its key is not in this backup" }],
+		})
+		expect(JSON.stringify(log.value)).not.toMatch(/0xstale|Savings/)
 	})
 
 	it("records no name or address, keeps the log's cap, and cleans every name it returns", async () => {
@@ -511,7 +582,7 @@ describe("settleHeldAccounts — what the import records and shows of a held acc
 		const shown = await settleHeldAccounts(
 			accountServiceDropping([]),
 			"p",
-			[...held, { ...held[0]!, name: "\u200b", row: 250 }],
+			{ held: [...held, { ...held[0]!, name: "\u200b", row: 250 }], rows: new Map() },
 			ioOver(log),
 		)
 

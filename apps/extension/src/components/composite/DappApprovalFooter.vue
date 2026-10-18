@@ -24,6 +24,8 @@ defineProps({
 	rejectDisabled: { type: Boolean, default: false },
 	confirmTestid: { type: String, required: true },
 	confirmLabel: { type: String, required: true },
+	/** A second line under the label, read with it as one name: `Send for ~X FJ ($Y)`. */
+	confirmDetail: { type: String, default: undefined },
 	confirmLoading: { type: Boolean, default: false },
 	confirmDisabled: { type: Boolean, default: false },
 	/** A request the wallet refused offers only Reject, full width. */
@@ -62,7 +64,7 @@ const emit = defineEmits(["reject", "approve"])
 				:loading="confirmLoading"
 				:disabled="confirmDisabled"
 			>
-				<Text color="inverse">{{ confirmLabel }}</Text>
+				<Text color="inverse" align="center">{{ confirmLabel }}<template v-if="confirmDetail">{{ " " }}<span :class="$style.detail" data-testid="dapp-approval-confirm-detail">{{ confirmDetail }}</span></template></Text>
 			</Button>
 		</Flex>
 	</Flex>
@@ -75,5 +77,11 @@ const emit = defineEmits(["reject", "approve"])
 	padding: 16px;
 	border-top: 1px solid var(--nulo-border);
 	background: var(--nulo-surface);
+}
+
+/* Two 13 px lines and this gap fit the medium button's 40 px, so a window with a detail moves nothing. */
+.detail {
+	display: block;
+	margin-top: 4px;
 }
 </style>

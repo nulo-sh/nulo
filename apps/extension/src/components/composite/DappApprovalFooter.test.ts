@@ -65,6 +65,19 @@ describe("composite/DappApprovalFooter", () => {
 		expect(w.emitted("approve")).toHaveLength(1)
 	})
 
+	test("a confirm detail is the label's second line, read with it as one name", () => {
+		const w = factory({ confirmLabel: "Send for ~0.021 FJ", confirmDetail: "($0.042)" })
+		const confirm = w.get('[data-testid="x-confirm-btn"]')
+		expect(confirm.get('[data-testid="dapp-approval-confirm-detail"]').text()).toBe("($0.042)")
+		expect(confirm.element.textContent).toBe("Send for ~0.021 FJ ($0.042)")
+	})
+
+	test("without a detail the label is one line", () => {
+		const confirm = factory({ confirmLabel: "Send for ~0.021 FJ" }).get('[data-testid="x-confirm-btn"]')
+		expect(confirm.find('[data-testid="dapp-approval-confirm-detail"]').exists()).toBe(false)
+		expect(confirm.element.textContent).toBe("Send for ~0.021 FJ")
+	})
+
 	test("rejectDisabled disables the reject button", () => {
 		const w = factory({ rejectDisabled: true })
 		expect((w.find('[data-testid="x-reject-btn"]').element as HTMLButtonElement).disabled).toBe(true)

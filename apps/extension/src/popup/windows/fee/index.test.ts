@@ -210,14 +210,17 @@ describe("the fee question window", () => {
 		expect(byId("fee-raised-priority").text()).toContain("Normal")
 		expect(getGasBalancesMock).toHaveBeenCalledExactlyOnceWith("n1", OWNER, true)
 		expect(confirm().text()).toBe("Send for ~0.021 FJ")
+		expect(byId("dapp-approval-confirm-detail").exists()).toBe(false)
 		expect(confirm().attributes("disabled")).toBeUndefined()
 	})
 
-	test("with a quote the card prices both figures; Confirm names the new one alone, without its dollars", async () => {
+	test("with a quote the card prices both figures; Confirm repeats the new one's dollars on its second line", async () => {
 		priceFake.reset(2)
 		await opened()
 		expect(byId("fee-raised-now").text()).toBe("Now ~0.021 FJ ($0.042)")
-		expect(confirm().text()).toBe("Send for ~0.021 FJ")
+		expect(confirm().text()).toBe("Send for ~0.021 FJ ($0.042)")
+		expect(byId("dapp-approval-confirm-detail").text()).toBe("($0.042)")
+		expect(priceFake.refreshes()).toBe(1)
 	})
 
 	test("while the request's operation resolves, Confirm already names the new fee, off and with no price read", async () => {
@@ -226,6 +229,7 @@ describe("the fee question window", () => {
 		await opened()
 		expect(byId("fee-raised-card").exists()).toBe(false)
 		expect(confirm().text()).toBe("Send for ~0.021 FJ")
+		expect(byId("dapp-approval-confirm-detail").exists()).toBe(false)
 		expect(confirm().attributes("disabled")).toBeDefined()
 		expect(priceFake.refreshes()).toBe(0)
 	})

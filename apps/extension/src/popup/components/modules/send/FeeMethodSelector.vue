@@ -10,6 +10,8 @@ const props = defineProps({
 	/** "private-private" | "private-public" while this send's fee names the account, else null. The
 	 *  page decides; this only draws the tag. */
 	payerNoticeShape: { type: String, default: null },
+	/** The card is still reading what can pay. */
+	pending: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(["update:modelValue", "open", "close"])
@@ -48,8 +50,13 @@ const onRowClick = (method, event) => {
 					:class="$style.trigger"
 					data-testid="send-fee-method-trigger"
 					:data-fee-method="modelValue?.subtitle"
+					:aria-busy="!modelValue && pending ? 'true' : undefined"
 				>
 					<span v-if="modelValue" :class="$style.fee_value">{{ modelValue.title }}</span>
+					<span v-else-if="pending" :class="$style.fee_value" data-testid="send-fee-method-checking">
+						<Skeleton :class="$style.bar" />
+						<span :class="$style.visually_hidden">Checking</span>
+					</span>
 					<span v-else :class="[$style.fee_value, $style.fee_placeholder]">Select method</span>
 					<Icon name="chevron" :rotate="90" :size="16" color="secondary" aria-hidden="true" />
 				</Flex>
@@ -119,6 +126,12 @@ const onRowClick = (method, event) => {
 
 .fee_placeholder {
 	color: var(--nulo-secondary);
+}
+
+/* Centred on the line, the bar stays inside the text's line box, so the trigger keeps its height when
+   the title replaces it. */
+.bar {
+	vertical-align: middle;
 }
 
 /* A disabled method already reads in tertiary ink, so DropdownItem's own fade would dim it twice.
