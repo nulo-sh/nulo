@@ -1883,7 +1883,13 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 				resolver: {},
 				logger: {},
 				ensureInitialized: async () => {},
-				services: { get: () => ({ materializeStoredOperation: async () => noFromOp() }) },
+				services: {
+					get: () => ({
+						materializeStoredOperation: async () => noFromOp(),
+						refusalOf: () => undefined,
+						recordRefusal: () => {},
+					}),
+				},
 				dappSendExecutor: h.executor,
 				logDebug: () => {},
 				logError: () => {},

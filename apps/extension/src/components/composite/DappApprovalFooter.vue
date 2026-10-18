@@ -26,6 +26,8 @@ defineProps({
 	confirmLabel: { type: String, required: true },
 	confirmLoading: { type: Boolean, default: false },
 	confirmDisabled: { type: Boolean, default: false },
+	/** A request the wallet refused offers only Reject, full width. */
+	confirmHidden: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(["reject", "approve"])
@@ -50,6 +52,7 @@ const emit = defineEmits(["reject", "approve"])
 			</Button>
 
 			<Button
+				v-if="!confirmHidden"
 				:data-testid="confirmTestid"
 				@click="emit('approve')"
 				@keydown.enter="refuseRepeatEnter"
