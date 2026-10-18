@@ -18,6 +18,7 @@ import { ExecutionServiceClient } from "@/wallet/services/execution/client"
 
 /** Composables */
 import { useConfigRead } from "@/composables/useConfigRead"
+import { useHeroVisible } from "@/composables/useHeroVisible"
 import { usePrestoCheck } from "@/composables/usePrestoCheck"
 
 /** Utils */
@@ -87,35 +88,9 @@ onBeforeMount(async () => {
 /** Hero visibility → compact sticky title fade */
 const heroRef = useTemplateRef("heroRef")
 const barRef = useTemplateRef("barRef")
-const heroVisible = ref(true)
-/** False until the first report is drawn: a return to a scrolled page shows its bar at once. */
-const heroSettled = ref(false)
-let heroObserver = null
-
-async function settleHero() {
-	await nextTick()
-	if (!barRef.value) return
-	// The read commits the drawn state with no transition, so dropping the class starts no fade.
-	getComputedStyle(barRef.value).opacity
-	heroSettled.value = true
-}
-
-onMounted(() => {
-	if (heroRef.value) {
-		// One delivery batches every change since the last, oldest first: only the newest is current.
-		heroObserver = new IntersectionObserver(
-			(entries) => {
-				heroVisible.value = entries.at(-1).isIntersecting
-				if (!heroSettled.value) void settleHero()
-			},
-			{ threshold: 0 },
-		)
-		heroObserver.observe(heroRef.value)
-	}
-})
+const { visible: heroVisible, settled: heroSettled } = useHeroVisible(heroRef, barRef)
 
 onBeforeUnmount(() => {
-	heroObserver?.disconnect()
 	executionService.disconnect()
 	configService.disconnect()
 	hubRead.dispose()

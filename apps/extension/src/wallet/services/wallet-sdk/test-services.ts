@@ -42,6 +42,8 @@ export function fakeSdkServices(
 		setVerificationHash?: () => Promise<unknown>
 		/** The operation journal; empty by default. */
 		operationJournal?: Record<string, unknown>
+		/** A dApp-session service in place of the row map, which then stays empty. */
+		dappSession?: unknown
 	} = {},
 ): {
 	services: never
@@ -90,7 +92,7 @@ export function fakeSdkServices(
 					discover: opts.popup ?? (async () => ({ approved: true })),
 					notifyNetworkUnavailable: opts.notice ?? (async () => undefined),
 				},
-				"dapp-session": {
+				"dapp-session": opts.dappSession ?? {
 					onDappSessionDeleted,
 					onVerificationRefused,
 					onVerificationConfirmed,
