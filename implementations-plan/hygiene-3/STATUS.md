@@ -11,3 +11,6 @@
 - 2026-10-19 00:20Z arc 1 review loop converged: Codex r1 findings 1, Opus changes requested (3 applied), Codex r2 clean.
 - 2026-10-19 00:45Z arc 1 final head 3049183c (dev 97ffa088 merged): lint 0, typecheck:all 0, test:all 0 (extension 14005 passed), check:plans 0; smoke Chrome 5 files 40/40 in 213 s at retry 0 (armed build).
 - 2026-10-19 01:15Z arc 1 head 2c8653fd (dev a4edec20 merged; PR #817 was conflicting on index.md): lint 0, typecheck:all 0, test:all 0 (extension 14028 passed); smoke Chrome 40/40 in 254 s at retry 0.
+- 2026-10-18 23:08Z arc 2 phase 3 gate (pinned clock on the base helper: 6 of 9 key cases red; new helper 30/30 runs green; mutation of the repeat cancel reds the held-Escape case only; fast: lint 0, typecheck:all 0, test 14028 passed): pass.
+- 2026-10-18 23:12Z arc 2 phase 4 gate (fast: lint 0, typecheck:all 0, test 14029 passed; the new case red on the base component): pass.
+- 2026-10-18 23:35Z arc 2 pixel proof (armed builds; base at dffd5e28, head eee64174's tree; 7 states x 2 themes at 400x600): Chrome base vs base 14/14, base vs head 14/14 (png, box, computed transition, outline, background, colour); Firefox base vs base 14/14, base vs head 14/14; rest vs focus differ on every build; B (overrides removed) differs from base on exactly the three overrides. Pass. OA-1 pictures captured.

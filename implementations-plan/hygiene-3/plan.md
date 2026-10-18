@@ -75,10 +75,10 @@ Files: `popup/pages/settings/developer/index{.vue,.test.ts}`. Tests: 1 case, a w
 
 ## Arc 2 (#797, #517), after arc 1 merges
 
-### Phase 3: the held-Escape flake (#797)
+### Phase 3: the held-Escape flake (#797) ✓
 Files: `popup/components/modules/settings/SettingsSearch.test.ts`. Proof: the frozen-clock describe on the base helper is red; on the new helper, 30 runs of the file are green. Name both in the PR body with the measurement above.
 
-### Phase 4: the countdown Close on Button (#517)
+### Phase 4: the countdown Close on Button (#517) ✓
 Files: `components/composite/SecretCountdownClose{.vue,.test.ts}`. Tests: the 11 cases keep their titles and bodies and run through the real `Button`, with nothing registered for it in the test; 1 case proves the override class and Button's `cta_outline` land on the root `<button>`.
 
 ### Arc 2 validation gate
@@ -107,6 +107,7 @@ The lane brief's no-ask record is "UI impact: none". Settings › Developer, the
 | D4 | #797: `trigger` plus a clock pinned before mount, nonzero, over the `keys` cases | a fake clock per key; a manual `_vts` stamp (Vue's private field in the test); a `@keydown.capture` in the component (runs before Input's listener, breaks the `defaultPrevented` check); a wait for the clock | both agree |
 | D5 | #517 on `Button`'s default slot, imported explicitly, three overrides under one doubled class | an exported CTA class (a package export and a Button restyle for one caller); dropping the drifts (OA-1) | both agree |
 | D6 | Arc 1 deviation: the import builder is `passkeyImportFailedNotice`, not `importFailedNotice`: its copy names an authenticator and only the passkey import path calls it | a doc comment saying so | Opus arc 1 review |
+| D7 | Arc 2 deviations in the pixel proof: a seventh state, pressed by the mouse and held off the button, since Firefox's BiDi Space sets no `:active`; the clock pinned by `page.evaluate` on the open popup 60 s ahead (the reveal is a hash navigation, so an init script never runs, and listeners attached earlier must still pass Vue's guard); every capture at 400x600 | an init script plus a reload; a Chrome-only proof of the held press | driver, recorded in lessons/phase-3.md |
 
 ## Audit verdicts
 
