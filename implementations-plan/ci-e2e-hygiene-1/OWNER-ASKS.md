@@ -1,6 +1,6 @@
 # Owner asks: ci-e2e-hygiene-1
 
-Two asks. Each has a "what ships now" line, which the arc builds without waiting for the answer. Neither changes a screen.
+Three asks. Each has a "what ships now" line, which the arc builds without waiting for the answer. Neither changes a screen.
 
 ## OA-1. #630 and #553: a reset started from Home waits for FPC discovery while the node is down
 
@@ -38,3 +38,20 @@ A third option, neither row with only a check of the export's MAC in smoke, was 
 **Recommendation: B.** The settings row proves nothing in CI that another test does not.
 
 **What ships now: B.** The settings row keeps its CI skip, and the header says why. A is a one-line change on your word.
+
+## OA-3. #616: the logs view at its end loses a selection or an open search when a line arrives
+
+**Surface:** the logs window, with the view resting at its end, while a person selects text or has the search panel open.
+
+**Today** (#616, measured again here on both browsers): the first new line shows the scroll-to-end button, and about 5 ms later CodeMirror scrolls the view back to its end on its own. The viewer reads that scroll as the person returning to the end and follows again, so every later line moves the selection or the search match up. On Firefox, opening the search panel can do the same before any line arrives.
+
+**Why it is asked now:** `viewers-csp.test.ts`'s "focusing the search panel stops the follow" goes red on Firefox when the panel's own scroll comes first (1 in 11 runs here). That test runs in the Firefox smoke lane, a required check, so the race can block a merge until the viewer's behaviour is decided.
+
+| Option | What a person sees |
+|---|---|
+| **A. A selection or an open search holds the view** | the view stays where it is while the selection or the search panel is active; the button shows; following resumes on the button, a scroll to the end, or the 30 s timeout |
+| **B. Follow as today** | the view keeps following; the test's claim changes to the button only, and the search case is rewritten to match |
+
+**Recommendation: A.** The viewer already means to stop (its 30 s timer); CodeMirror's own scroll defeats it.
+
+**What ships now:** the test-side fixes only. The search row stays as it is, so the defect stays visible.

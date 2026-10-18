@@ -59,13 +59,15 @@ Test, CI and doc changes only; reuse per recon's map, plus the wallet's own back
 
 ## Arc 1: four e2e reds (closes #749 #630 #612 #643)
 
-### Phase 1. #749: the logs probe waits for its own last line
+### Phase 1. #749: the logs probe waits for its own last line ✓
 Assumes F1, I1. `ext/tests/e2e/viewers-csp.test.ts`, `logLines`:
 - Stamp a per-call nonce on the lines (`viewer probe <nonce> <i>`); match the last index as a whole token.
 - Wait with `pollUntil` (10 s, 50 ms) until the shadow root renders that line's `.cm-line`, then await `scroller()`'s two frames before returning, so the follow latch and the geometry are read after layout. Each caller appends at the end, or one line past a view that rests there, and CodeMirror renders past the viewport.
 - Drop the height arithmetic, the stillness latch and their window globals. The timeout's last value names the highest probe index rendered.
 
 **Gate:** `bun run lint`, `bun run typecheck:all`; the file 5 times per browser at `--retry=0` (smoke commands below), all 4 tests green.
+
+**Deviation** ([lessons/phase-1.md](lessons/phase-1.md)): the wallet's own lines reach the window at any time, so the gap is read after two frames with no line change (`gapToEnd`), and the follow check is armed before the stop step (D10). The search row can still go red on Firefox through #616, the product defect (OA-3).
 
 ### Phase 2. #630: the refused-node reset starts with both protocol FPC rows present
 Assumes F2, F3, I2. `ext/tests/e2e/security-reset.test.ts`, second test:
@@ -177,6 +179,8 @@ Assumes F8.
 | D7 | #555: checked ids plus the action's digest check | export `artifact-digest` and re-check it; tree manifests | the service's record is the upload's digest; a second check duplicates it |
 | D8 | #555: jscpd in `bun.lock` | `cache: "false"` on `dup-trend` | CLAUDE.md bans root `bunx`; the binary is pinned and small |
 | D9 | two independent arcs, one PR each | one PR; a stack | the lane groups them so; D-orch-1 |
+| D10 | #749: arm the follow check before the stop step; refuse a scroll that leaves the view `SCROLL_DISABLE_THRESHOLD` from its end before the first show | arm after it; count `.cm-line` insertions | a wallet line between the stop and the check used up the stop (measured); re-renders add `.cm-line` nodes too |
+| D11 | #749: leave #616's search-panel race visible | filter the viewer to the probe's source; settle the panel, then re-focus it | the filter needs testids in a product file; settling first hides a defect people hit (#616) |
 
 ## Audit verdicts
 
@@ -191,7 +195,7 @@ Assumes F8.
 
 ## Delivery
 
-- **Arc 1**, branch `worktree-ci-e2e-hygiene-1`, phases 1-4. Title: `test(e2e): fix four e2e reds at their cause; run the passkey import row in ci`. Body: `Closes #749`, `Closes #630`, `Closes #612`, `Closes #643`.
+- **Arc 1**, branch `ci-e2e-hygiene-1-a1` off `origin/dev` with the plan commit cherry-picked (the orchestrator's call), phases 1-4. Title: `test(e2e): fix four e2e reds at their cause; run the passkey import row in ci`. Body: `Closes #749`, `Closes #630`, `Closes #612`, `Closes #643`.
 - **Arc 2**, branch `worktree-ci-e2e-hygiene-1-arc2` off `origin/dev`, phases 5-7. If arc 1 is still open, cherry-pick the plan commit. Title: `ci: guard network e2e egress; take artifacts by id; jscpd from the lockfile`. Body: `Closes #620`, `Closes #555`. Its close-out commits come after arc 1 merges.
 - **Labels:** `code_review: off` for both arcs. Open each PR without labels. Add `e2e:extension-network` or `e2e:extension-smoke` only if a path filter skips a suite the PR needs.
 - **Collisions:** #743 also changes `bun.lock`, `fixtures/egress-guard.ts`, `fixtures/extension.ts` and `helpers/import-drivers.ts`, in other hunks. Whichever lands second merges `dev` and reruns `bun install --frozen-lockfile --force`.
