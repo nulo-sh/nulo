@@ -5,6 +5,7 @@ import {
 	ChainNotSupportedError,
 	DuplicateWalletError,
 	ImportedAccountUnusableError,
+	NodeUnreachableError,
 	RecoveryModeError,
 	RestoreTornError,
 	CapabilityNotGrantedError,
@@ -318,6 +319,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			make: () => ImportedAccountUnusableError.because("address mismatch"),
 			name: "ImportedAccountUnusableError",
 			code: "IMPORTED_ACCOUNT_UNUSABLE",
+			rebuild: pass,
+		},
+		{
+			ctor: NodeUnreachableError,
+			make: () => new NodeUnreachableError(),
+			name: "NodeUnreachableError",
+			code: "NODE_UNREACHABLE",
 			rebuild: pass,
 		},
 	]

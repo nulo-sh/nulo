@@ -157,6 +157,7 @@ declare global {
   const endsSelection: typeof import('../utils/selection').endsSelection
   const errorLogWriters: typeof import('../composables/useFullBackupImport').errorLogWriters
   const estimateWhenClear: typeof import('../utils/estimate-when-clear').estimateWhenClear
+  const exportsHeld: typeof import('../composables/useStaleNetwork').exportsHeld
   const feeDisplay: typeof import('../utils/fee-estimation').feeDisplay
   const feeFigure: typeof import('../utils/fee-estimation').feeFigure
   const feePicksKey: typeof import('../utils/profile-ui-keys').feePicksKey
@@ -918,6 +919,7 @@ declare module 'vue' {
     readonly endsSelection: UnwrapRef<typeof import('../utils/selection')['endsSelection']>
     readonly errorLogWriters: UnwrapRef<typeof import('../composables/useFullBackupImport')['errorLogWriters']>
     readonly estimateWhenClear: UnwrapRef<typeof import('../utils/estimate-when-clear')['estimateWhenClear']>
+    readonly exportsHeld: UnwrapRef<typeof import('../composables/useStaleNetwork')['exportsHeld']>
     readonly feeDisplay: UnwrapRef<typeof import('../utils/fee-estimation')['feeDisplay']>
     readonly feeFigure: UnwrapRef<typeof import('../utils/fee-estimation')['feeFigure']>
     readonly feePicksKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['feePicksKey']>

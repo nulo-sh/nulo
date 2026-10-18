@@ -163,6 +163,29 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 		expect(await previewImport(page, foreignBody)).toBeTruthy()
 		await confirmImport(page, "Imported 1")
 		await closeStuckPopup(page)
+
+		// R1b: a paused reset whose journal holds an imported key: export leads, at both scroll
+		// positions, and the export page lists the held account. An address change keeps the chain, so
+		// the key still opens; the network-reset seed renames its chain, which its seal binds.
+		await relock(page, () => seedStaleNetwork(page, "address-change"))
+		await takeoverScreen(page, "new-addresses")
+		await armHold(ctx, "fail-purged")
+		await clickByTestId(page, "stale-network-reset")
+		await clickByTestId(page, "stale-confirm-submit")
+		await takeoverScreen(page, "paused")
+		await page.waitForSelector('[data-testid="stale-network-export"]', { visible: true, timeout: 15_000 })
+		await capture(page, "R1b-paused-export")
+		await page.evaluate(() => document.querySelector('[data-testid="stale-network-note"]')?.scrollIntoView({ block: "end" }))
+		await capture(page, "R1b-paused-export-scrolled")
+		await clickByTestId(page, "stale-network-export")
+		await waitForHash(page, "#/popup/settings/security/export/account")
+		await page.waitForSelector('[data-testid="export-account-row"][data-account-name="Imported 1"]', { visible: true, timeout: 15_000 })
+		await capture(page, "R1b-export-held")
+		await releaseHold(ctx)
+		await navigateByHash(page, "#/popup/general", 15_000)
+		await takeoverScreen(page, "paused")
+		await clickByTestId(page, "stale-network-retry")
+		await waitForToast(page, "Your accounts have new addresses.", 120_000)
 		await relock(page, async () => {
 			await seedStaleNetwork(page, "network-reset")
 			expect(await corruptImportedKeys(page)).toBe(1)

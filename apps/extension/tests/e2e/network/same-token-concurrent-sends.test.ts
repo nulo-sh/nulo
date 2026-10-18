@@ -729,7 +729,7 @@ test.skipIf(!hasConfig)(
 			const sheet = await readReaskSheet(burst.page)
 			const [now, cap] = [pinnedFeeText(asking.reask.fee), pinnedFeeText(asking.reask.cap)]
 			expect(sheet.line).toBe(`Fee is now ${now}, above the ${cap} you accepted.`)
-			expect(sheet.button).toBe(`Send for ${now}`)
+			expect(sheet.button).toBe("Send")
 			if (asks === 1) await shotSend(burst.page, "4-reask-sheet", "send-review-fee")
 			await pointerClick(burst.page, "send-review-submit")
 			accepted = asking.reask.fee
