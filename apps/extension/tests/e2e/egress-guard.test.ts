@@ -142,8 +142,8 @@ describe("the launch's egress guard", () => {
 	let canary: EgressCanary
 
 	beforeAll(async () => {
-		// Every e2e setup arms the guard, so an unarmed run fails here rather than skipping unproven.
-		if (!guardArmed(inject("egressGuard"))) throw new Error("this run's global setup did not arm the egress guard")
+		if (!guardArmed(inject("egressGuard")))
+			throw new Error("this run's global setup did not arm the egress guard, as every e2e setup must")
 		site = await startSite()
 		ctx = await launchExtension()
 		if (!ctx.egress) throw new Error("the setup armed the guard, but the launch carries none")
