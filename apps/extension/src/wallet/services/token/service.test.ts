@@ -369,6 +369,12 @@ describe("TokenService.refreshRestoredTokens — the chain's metadata over the b
 	}
 	const later = () => Date.now() + 5_000
 
+	test("a restored row holds no class until the chain supplies one", async () => {
+		const { tokenService, id } = await restored()
+		expect(await tokenService.getToken(id)).toMatchObject({ symbol: "USDT", decimals: 2 })
+		expect((await tokenService.getTokensRaw("p1"))[0]).not.toHaveProperty("classId")
+	})
+
 	test("a row the chain disagrees with takes the chain's class, name, symbol and decimals, with no add", async () => {
 		const { tokenService, id, preview, added, updated } = await restored()
 		await tokenService.refreshRestoredTokens(FENCE, later())
@@ -378,7 +384,7 @@ describe("TokenService.refreshRestoredTokens — the chain's metadata over the b
 		expect(added).not.toHaveBeenCalled()
 	})
 
-	test("a chain that agrees writes nothing (control)", async () => {
+	test("a chain that agrees on every field writes its class alone, and a second read writes nothing (control)", async () => {
 		const { getNameFn, getSymbolFn, getDecimalsFn } = chainInterface
 		const agreeing = {
 			...backupRow,
@@ -390,12 +396,15 @@ describe("TokenService.refreshRestoredTokens — the chain's metadata over the b
 			getSymbolFn,
 			getDecimalsFn,
 		}
-		const { tokenService, api, updated } = await restored([agreeing])
+		const { tokenService, api, id, updated } = await restored([agreeing])
+		await tokenService.refreshRestoredTokens(FENCE, later())
+		expect(await tokenService.getToken(id)).toMatchObject({ classId: "0xclass", symbol: "TST", decimals: 18 })
+		expect(updated).toHaveBeenCalledOnce()
 		const writes = recordWrites(api.storage.local, "nulo:core:tokens@")
 		await tokenService.refreshRestoredTokens(FENCE, later())
 		writes.restore()
 		expect(writes.log).toEqual([])
-		expect(updated).not.toHaveBeenCalled()
+		expect(updated).toHaveBeenCalledOnce()
 	})
 
 	test.each([
@@ -407,7 +416,9 @@ describe("TokenService.refreshRestoredTokens — the chain's metadata over the b
 		const startedAt = Date.now()
 		await tokenService.refreshRestoredTokens(FENCE, startedAt + 50)
 		expect(Date.now() - startedAt).toBeLessThan(2_000)
-		expect(await tokenService.getToken(id)).toMatchObject({ symbol: "USDT", decimals: 2 })
+		const row = await tokenService.getToken(id)
+		expect(row).toMatchObject({ symbol: "USDT", decimals: 2 })
+		expect(row.classId).toBeUndefined()
 		expect(updated).not.toHaveBeenCalled()
 	})
 
@@ -418,7 +429,9 @@ describe("TokenService.refreshRestoredTokens — the chain's metadata over the b
 		await tokenService.refreshRestoredTokens(FENCE, Date.now() + 50)
 		land(chain)
 		await new Promise((resolve) => setTimeout(resolve, 20))
-		expect(await tokenService.getToken(id)).toMatchObject({ symbol: "USDT", decimals: 2 })
+		const row = await tokenService.getToken(id)
+		expect(row).toMatchObject({ symbol: "USDT", decimals: 2 })
+		expect(row.classId).toBeUndefined()
 		expect(updated).not.toHaveBeenCalled()
 	})
 

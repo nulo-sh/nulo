@@ -1,8 +1,10 @@
+import { BUNDLED_TOKEN_CLASS_IDS } from "@nulo/token-list"
 import { describe, expect, test } from "vitest"
 import {
 	FACT_SENTENCES,
 	FACT_WORDS,
 	factWord,
+	isValidatedTokenClass,
 	NO_FACTS,
 	noticeBodyFor,
 	PAID_BY,
@@ -15,6 +17,7 @@ import {
 	rowSentence,
 	UNVOUCHED_FEE_SENTENCE,
 	stripAriaLabel,
+	TOKEN_CAVEAT,
 	type TransferSide,
 } from "./publish-facts"
 
@@ -97,6 +100,20 @@ describe("publishGlyph", () => {
 	})
 })
 
+describe("isValidatedTokenClass", () => {
+	const bundled = BUNDLED_TOKEN_CLASS_IDS[0] ?? ""
+
+	test("a bundled class is in, in either case", () => {
+		expect(isValidatedTokenClass(bundled)).toBe(true)
+		expect(isValidatedTokenClass(`0x${bundled.slice(2).toUpperCase()}`)).toBe(true)
+	})
+
+	test("another class, and a row with none, are out", () => {
+		expect(isValidatedTokenClass(`0x${"1".repeat(64)}`)).toBe(false)
+		expect(isValidatedTokenClass(undefined)).toBe(false)
+	})
+})
+
 describe("copy", () => {
 	test("pins the approved words and sentences", () => {
 		expect(FACT_WORDS).toEqual({
@@ -116,6 +133,7 @@ describe("copy", () => {
 			sponsor: "paid by the sponsor",
 		})
 		expect(UNVOUCHED_FEE_SENTENCE).toBe("Nulo can't tell what this fee contract charges you.")
+		expect(TOKEN_CAVEAT).toBe("Nulo can't check this token's contract. What a send publishes depends on its code.")
 	})
 
 	test("each cell's word is the one for its visibility", () => {
