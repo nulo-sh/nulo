@@ -127,6 +127,12 @@ export function journalCallOf(contract: unknown, args: unknown, classId?: unknow
 /** A call as a journal creator names it: the method that titles the record and the call it reads by. */
 export type JournalCallCarrier = { method?: string; call?: JournalCall }
 
+/** What a failure renames its record to. Its call replaces the record's, absent or not, so the title
+ *  and the call never describe two calls. */
+export const JournalRetitleSchema = z.object({ title: z.string(), call: JournalCallSchema.optional() })
+
+export type JournalRetitle = z.infer<typeof JournalRetitleSchema>
+
 export interface OperationRecord extends JournalMetadata {
 	/** Random 16-hex id assigned at `createOperation`. */
 	id: string
@@ -398,7 +404,7 @@ export const OperationJournalMethodSchemas = {
 	 * other stages it MUST be `null` (or omitted). The service throws on mismatch.
 	 */
 	transitionOperation: {
-		params: z.tuple([z.string().min(1), JobProgressSchema, JobErrorSchema.nullable().optional(), z.string().optional()]),
+		params: z.tuple([z.string().min(1), JobProgressSchema, JobErrorSchema.nullable().optional(), JournalRetitleSchema.optional()]),
 		result: OperationRecordSchema,
 	},
 	/**
@@ -407,8 +413,7 @@ export const OperationJournalMethodSchemas = {
 	 * terminal records. Used by `tokenService.addToken` to backfill the
 	 * resolved symbol as the title once metadata fetch returns — the journal
 	 * entry is created up-front (so the tokens-view in-flight row pops in
-	 * immediately) and gets its title rewritten when the symbol resolves — and
-	 * by a dApp send's build, which names the call it built.
+	 * immediately) and gets its title rewritten when the symbol resolves.
 	 */
 	setOperationMeta: {
 		params: z.tuple([

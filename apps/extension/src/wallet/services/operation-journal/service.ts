@@ -14,6 +14,7 @@ import { nextRandomId } from "@/wallet/services/id-allocators"
 import {
 	type Events,
 	type JournalMetadata,
+	type JournalRetitle,
 	type Methods,
 	type NewOperationInput,
 	OPERATION_JOURNAL_SERVICE_NAME,
@@ -333,18 +334,18 @@ export class OperationJournalService extends Service<Methods, Events> implements
 	 * Transition a record's stage. Enforces the FSM legality rules in
 	 * `@nulo/wallet-core/jobs` and the "error iff failed" invariant.
 	 *
-	 * Sets `terminalAt` if the new stage is terminal. `failedTitle` retitles the record in the same
-	 * write that fails it, so only the producer whose transition lands renames the row.
+	 * Sets `terminalAt` if the new stage is terminal. `retitle` renames the record in the same write
+	 * that fails it, so only the producer whose transition lands renames the row.
 	 */
 	public async transitionOperation(
 		id: string,
 		progress: JobProgress,
 		error?: JobError | null,
-		failedTitle?: string,
+		retitle?: JournalRetitle,
 	): Promise<OperationRecord> {
 		validateParams(
 			OperationJournalMethodSchemas.transitionOperation.params,
-			[id, progress, error ?? null, failedTitle],
+			[id, progress, error ?? null, retitle],
 			"transitionOperation",
 		)
 		await this.ensureInitialized()
@@ -353,7 +354,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		// the claim-vs-cancel race this closes. Critical section is small
 		// (one load + one validate + one write), so global is acceptable.
 		return await this.transitionLock.withLock(async () => {
-			return await this._transitionLocked(id, progress, error, failedTitle)
+			return await this._transitionLocked(id, progress, error, retitle)
 		})
 	}
 
@@ -361,7 +362,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		id: string,
 		progress: JobProgress,
 		error?: JobError | null,
-		failedTitle?: string,
+		retitle?: JournalRetitle,
 	): Promise<OperationRecord> {
 		const existing = await this._loadValidated(id)
 		if (!existing) {
@@ -371,7 +372,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		// FSM legality — throws IllegalTransitionError on a bad transition.
 		assertCanTransition(existing.progress.stage, progress.stage)
 		assertErrorInvariant(progress, error)
-		if (failedTitle !== undefined && progress.stage !== "failed") {
+		if (retitle !== undefined && progress.stage !== "failed") {
 			throw new ValidationError("transitionOperation: a title rides only a transition to 'failed'")
 		}
 		if (progress.stage === "succeeded") {
@@ -386,7 +387,8 @@ export class OperationJournalService extends Service<Methods, Events> implements
 			error: error ?? null,
 			terminalAt: isTerminal(progress.stage) ? now : existing.terminalAt,
 			updatedAt: now,
-			title: failedTitle ?? existing.title,
+			title: retitle?.title ?? existing.title,
+			call: retitle ? retitle.call : existing.call,
 		}
 		await this.storage.set(id, updated)
 		this.emit("onOperationUpdated", updated)
@@ -580,14 +582,14 @@ export class OperationJournalService extends Service<Methods, Events> implements
 	 * snapshot (equality CAS; a monotonic check would mishandle clock rollback).
 	 * The reaper's sweep decisions ride this: its snapshot goes stale across the
 	 * per-record awaits, and an unconditional transition would fail a record
-	 * that was claimed or heartbeat-touched mid-sweep. A no-op writes no `failedTitle`.
+	 * that was claimed or heartbeat-touched mid-sweep. A no-op writes no `retitle`.
 	 */
 	public async transitionIfStage(
 		id: string,
 		allowedStages: readonly JobProgress["stage"][],
 		progress: JobProgress,
 		error?: JobError | null,
-		opts?: { ifUpdatedAtIs?: number; failedTitle?: string },
+		opts?: { ifUpdatedAtIs?: number; retitle?: JournalRetitle },
 	): Promise<
 		| { outcome: "transitioned"; record: OperationRecord }
 		| { outcome: "missing" }
@@ -600,7 +602,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 			if (!existing) return { outcome: "missing" }
 			if (!allowedStages.includes(existing.progress.stage)) return { outcome: "stage", stage: existing.progress.stage }
 			if (opts?.ifUpdatedAtIs !== undefined && existing.updatedAt !== opts.ifUpdatedAtIs) return { outcome: "touched" }
-			const record = await this._transitionLocked(id, progress, error, opts?.failedTitle)
+			const record = await this._transitionLocked(id, progress, error, opts?.retitle)
 			return { outcome: "transitioned", record }
 		})
 	}

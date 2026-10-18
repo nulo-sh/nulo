@@ -32,7 +32,7 @@ import { pickPrimaryIndex } from "@/utils/primary-method"
 import type { LocalTxOrigin } from "@/wallet/services/transaction/service"
 import type { TxCall } from "@/wallet/services/transaction/spec"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
-import { type JournalCallCarrier, journalCallOf } from "@/wallet/services/operation-journal/spec"
+import { type JournalCallCarrier, type JournalRetitle, journalCallOf } from "@/wallet/services/operation-journal/spec"
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { Network } from "@/wallet/services/network/service"
 import type { ProfileInfo } from "@/wallet/services/profile/service"
@@ -653,11 +653,11 @@ export class ExecutionLane {
 		journalId: string | undefined,
 		progress: JobProgress,
 		error?: JobError | null,
-		failedTitle?: string,
+		retitle?: JournalRetitle,
 	): Promise<void> {
 		if (!journalId) return
 		try {
-			await this.deps.operationJournal.transitionOperation(journalId, progress, error, failedTitle)
+			await this.deps.operationJournal.transitionOperation(journalId, progress, error, retitle)
 		} catch (err) {
 			this.deps.logError("Failed to update journal operation", err)
 		}

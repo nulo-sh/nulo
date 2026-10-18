@@ -260,7 +260,7 @@ export async function failQueuedIfUnclaimed(
 			["queued"],
 			{ stage: "failed" },
 			{ kind, message, normalizedRaw: null },
-			kind === "popup_bound" ? undefined : { failedTitle: "Transaction" },
+			kind === "popup_bound" ? undefined : { retitle: { title: "Transaction" } },
 		)
 	} catch (transitionError) {
 		logger.log("wallet-sdk", LogLevel.Warn, `Failed to mark queued record ${journalId} as failed`, transitionError)

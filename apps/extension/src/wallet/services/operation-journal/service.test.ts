@@ -993,29 +993,51 @@ describe("a refusal's title rides the write that fails the record", () => {
 
 	test("a failing transition writes the title with the stage", async () => {
 		const id = await claimedSend()
-		await service.transitionOperation(id, { stage: "failed" }, REFUSED, "transfer_public_to_public")
+		await service.transitionOperation(id, { stage: "failed" }, REFUSED, { title: "transfer_public_to_public" })
 		const rec = await service.getOperation(id)
 		expect({ stage: rec?.progress.stage, title: rec?.title }).toEqual({ stage: "failed", title: "transfer_public_to_public" })
 	})
 
+	test("a retitle replaces the call with its own, so the title and the call describe one call", async () => {
+		const feeJuice = `0x${"05".padStart(64, "0")}`
+		const other = `0x${"0c".repeat(32)}`
+		const { id } = await service.createOperation({
+			kind: "dapp_execute",
+			origin: "dapp",
+			profileId: "profile-a",
+			title: "balance_of_public",
+			call: { contract: feeJuice, argCount: 1 },
+		})
+		await service.transitionOperation(id, { stage: "failed" }, REFUSED, { title: "claim", call: { contract: other, argCount: 2 } })
+		expect(await service.getOperation(id)).toMatchObject({ title: "claim", call: { contract: other, argCount: 2 } })
+
+		const unnamed = await claimedSend()
+		await service.transitionOperation(unnamed, { stage: "failed" }, REFUSED, { title: "Transaction" })
+		expect((await service.getOperation(unnamed))?.call).toBeUndefined()
+	})
+
 	test("a title on any other transition is refused and writes nothing", async () => {
 		const id = await claimedSend()
-		await expect(service.transitionOperation(id, { stage: "simulating" }, null, "transfer_public_to_public")).rejects.toBeInstanceOf(
-			ValidationError,
-		)
+		await expect(
+			service.transitionOperation(id, { stage: "simulating" }, null, { title: "transfer_public_to_public" }),
+		).rejects.toBeInstanceOf(ValidationError)
 		const rec = await service.getOperation(id)
 		expect({ stage: rec?.progress.stage, title: rec?.title }).toEqual({ stage: "pending", title: "balance_of_public" })
 	})
 
 	test("a conditional transition that does not land writes no title (never-happens), one that lands does (control)", async () => {
 		const failedId = await claimedSend()
-		await service.transitionOperation(failedId, { stage: "failed" }, REFUSED, "transfer_public_to_public")
-		const noop = await service.transitionIfStage(failedId, ["pending"], { stage: "failed" }, REFUSED, { failedTitle: "Transaction" })
+		await service.transitionOperation(failedId, { stage: "failed" }, REFUSED, { title: "transfer_public_to_public" })
+		const noop = await service.transitionIfStage(failedId, ["pending"], { stage: "failed" }, REFUSED, {
+			retitle: { title: "Transaction" },
+		})
 		expect(noop.outcome).toBe("stage")
 		expect((await service.getOperation(failedId))?.title).toBe("transfer_public_to_public")
 
 		const liveId = await claimedSend()
-		const landed = await service.transitionIfStage(liveId, ["pending"], { stage: "failed" }, REFUSED, { failedTitle: "Transaction" })
+		const landed = await service.transitionIfStage(liveId, ["pending"], { stage: "failed" }, REFUSED, {
+			retitle: { title: "Transaction" },
+		})
 		expect(landed.outcome).toBe("transitioned")
 		expect((await service.getOperation(liveId))?.title).toBe("Transaction")
 	})

@@ -441,7 +441,7 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 			id,
 			{ stage: "failed" },
 			{ kind: "scope_refused", message: "x", normalizedRaw: null },
-			"transfer_in_public",
+			{ title: "transfer_in_public" },
 		)
 		// The rebuilt error then reaches the ingress, which finds the record already terminal.
 		await failQueuedForError(journal, id, new Error("Scope violation"), deps.logger)

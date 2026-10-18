@@ -43,7 +43,7 @@ import { type JobError, type JobProgress, JobCancelledSentinel, type QueuedFeeRe
 import { markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
 import { feeDisplay } from "@/utils/fee-estimation"
 import { pickPrimaryIndex, pickPrimaryWireCall } from "@/utils/primary-method"
-import { type JournalCallCarrier, journalCallOf } from "@/wallet/services/operation-journal/spec"
+import { type JournalCallCarrier, type JournalRetitle, journalCallOf } from "@/wallet/services/operation-journal/spec"
 import { findPrimaryEndpoint, primaryEndpointUrl } from "@/wallet/services/network/spec"
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { WrappedTask } from "@/wallet/services/task/service"
@@ -94,14 +94,13 @@ import { detectEmbeddedFeePayment } from "./utils/fee-detection"
  *  because that helper is layer-agnostic — importing `Action` from the execution spec would invert
  *  the dependency direction. */
 function primaryActionCalls(actions: readonly Action[] | undefined): JournalCallCarrier[] | undefined {
-	const carriers: JournalCallCarrier[] = []
-	for (const action of actions ?? []) {
-		if (action.kind === "call") carriers.push({ method: action.method, call: journalCallOf(action.contract, action.args) })
-		else if (action.kind === "encoded_call")
-			carriers.push({ method: action.name ?? action.selector, call: journalCallOf(action.to, action.args) })
-	}
-	const index = pickPrimaryIndex(carriers)
-	return index === undefined ? undefined : [carriers[index]]
+	const calls = (actions ?? []).filter((a) => a.kind === "call" || a.kind === "encoded_call")
+	const index = pickPrimaryIndex(calls.map((a) => ({ method: a.kind === "call" ? a.method : (a.name ?? a.selector) })))
+	const primary = index === undefined ? undefined : calls[index]
+	if (primary?.kind === "call") return [{ method: primary.method, call: journalCallOf(primary.contract, primary.args) }]
+	if (primary?.kind === "encoded_call")
+		return [{ method: primary.name ?? primary.selector, call: journalCallOf(primary.to, primary.args) }]
+	return undefined
 }
 
 /** Execution-lane subset the dApp-send flows depend on: the FIFO slot,
@@ -133,7 +132,7 @@ export interface DappSendExecutorLane {
 		fence?: ExecutionFence,
 	): Promise<string | undefined>
 	recordBuiltCall(journalId: string | undefined, txCalls: Tx["calls"]): Promise<void>
-	markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null, failedTitle?: string): Promise<void>
+	markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null, retitle?: JournalRetitle): Promise<void>
 	commitJournal(journalId: string | undefined, progress: JobProgress): Promise<void>
 	parkSlot(
 		release: ExecutionMutexRelease,

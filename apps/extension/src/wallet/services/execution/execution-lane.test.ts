@@ -19,6 +19,9 @@ import { describe, expect, test, vi } from "vitest"
 import { SessionEndedError, TooManyPendingError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { deferred } from "@nulo/wallet-core/utils"
+import { journalCallTitle } from "@/utils/journal-state"
+import { getTxTitle } from "@/utils/tx-enrichment"
+import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { ExecutionLane, type ExecutionLaneDeps } from "./execution-lane"
 import type { ExecutionMutex } from "./execution-mutex"
 
@@ -638,6 +641,37 @@ describe("ExecutionLane: the call a record reads by", () => {
 			["j1", { title: "transfer_in_public", call: { contract: TOKEN, argCount: 4, classId: CLASS } }],
 		])
 		expect(deps.logDebug).not.toHaveBeenCalled()
+	})
+
+	test("the record a build names reads as the settled row of the same calls will", async () => {
+		const OTHER = `0x${"0c".repeat(32)}`
+		const tokens = [{ contract: TOKEN, classId: CLASS }]
+		const transfer = (contract: string, classId: string, args = [1, 2, 3, 4]) => ({
+			contract,
+			method: "transfer_in_public",
+			args,
+			classId,
+		})
+		const lists = [
+			[{ contract: FEE, method: "sponsor_unconditionally", args: [1], classId: CLASS }, transfer(TOKEN, CLASS)],
+			[{ contract: FEE, method: "sponsor_unconditionally", args: [1], classId: CLASS }],
+			[transfer(OTHER, CLASS)],
+			[transfer(TOKEN, `0x${"0a".repeat(32)}`)],
+			[transfer(TOKEN, CLASS, [1, 2, 3])],
+			[{ contract: OTHER, method: "claim", args: [1, 2] }],
+			[
+				{ contract: TOKEN, method: "approve", args: [1] },
+				{ contract: TOKEN, method: "mint_to_public", args: [1, 2], classId: CLASS },
+			],
+		]
+		for (const txCalls of lists) {
+			const setOperationMeta = vi.fn(async () => ({}))
+			const { lane } = makeLane({ operationJournal: { setOperationMeta } as never })
+			await lane.recordBuiltCall("j1", txCalls)
+			const [, meta] = setOperationMeta.mock.calls[0] as unknown as [string, Pick<OperationRecord, "title" | "call">]
+			const record = { kind: "dapp_execute", ...meta } as OperationRecord
+			expect(journalCallTitle(record, tokens)).toBe(getTxTitle(txCalls, tokens))
+		}
 	})
 
 	test("a refused or unreadable write never fails the send, and logs one fixed line at debug", async () => {
