@@ -22,6 +22,7 @@ import { awaitProfileActivation } from "@/composables/unlockWait"
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { OWN_WINDOW_ROUTES, closeOwnWindow, moveToOwnWindow, releaseOwnWindow } from "@/utils/own-window"
+import { importFailedNotice } from "@/utils/profile-flow-notices"
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
 import { redirectToOnboardingTabIfNeeded } from "@/wallet/utils/onboarding-tab"
 import { resolveFullBackupEnterAction } from "./import-helpers"
@@ -135,19 +136,7 @@ const {
 		cacheStore.viewerData = withNetworkNames(errors, byNetworkId)
 		popupStore.open("data_viewer")
 	},
-	notifyImportFailed: () => {
-		notificationStore.create({
-			type: "warning",
-			payload: {
-				title: "Profile import failed",
-				description:
-					"An error occurred while importing the profile. This authenticator may not be supported or encountered an issue. Try again or use another one.",
-				note: "Windows Hello may not work correctly with some versions of Windows.",
-				confirmText: "OK",
-				onConfirm: () => {},
-			},
-		})
-	},
+	notifyImportFailed: () => notificationStore.create(importFailedNotice()),
 	openToast,
 })
 
