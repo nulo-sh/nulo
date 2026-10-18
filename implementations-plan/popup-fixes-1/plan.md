@@ -171,6 +171,10 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | 1 | Codex, gpt-6.1-sol | conditional approve | A1 and A2 surfaced as OA-1 and OA-2 (D1, arc 2); D2's #582 rule restated as the code runs; Fact 6 and Phase 4 say the run proves the window path only; I2 checked by a held Enter (Phase 7) | none |
 | 1 | Opus 5.5 lens | conditional approve | OA-1, OA-2; the Clear check's success control (Phase 1); pictures of the actions unfocused, before and after; `font: inherit` on the buttons (D6); `type-roles` and `send-fee-privacy` in Phase 7's gate, the three network runs dropped (traced: none crosses the new stops); `audit:vue` before the armed builds (Phase 5); D2's replace clause; Fact 2's path; the gas card's stops; `GHOST_ROWS = 2`; the Downloads line (Security) | records for #773 and Home's #626 (the lane brief is the orchestrator's record for both, and the spawn brief makes it the visible budget) |
 | final | Codex, fresh session | approve (arc 1 may proceed; arc 2 gated) | OA-1's option B heights corrected (45 or 47 px); the cross-arc fresh pass written into Post-implementation | none |
+| arc 1, impl 1 | Codex, gpt-6.1-sol | approve with changes | the redundant `waitForShownLine` comment deleted | none |
+| arc 1, impl 1 | Opus 5.5 review | approve with changes | the clear case waits for the log to empty, not only the marker to leave the rendered range; CLAUDE.md states the call-site guard's whole rule; the `Input` stub is a `div`; the file header names the menu case; D2's wording matches what shipped | none |
+| arc 1, impl 2 | Codex, resumed | approve with changes | the bound after Clear is a fixed 100 lines, since a trim at the cap drops 100 lines with no clear | none |
+| arc 1, impl 3 | Codex, resumed | approve | no new material finding | none |
 
 ## Seeds
 
