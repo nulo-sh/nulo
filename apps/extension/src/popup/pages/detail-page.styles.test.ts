@@ -56,4 +56,11 @@ describe("the detail pages share one look", () => {
 			'composes: detail_value_mono from "../detail-page.module.css"; composes: detail_link from "../detail-page.module.css";',
 		)
 	})
+
+	test("the hero line's classes are the shared ones, with no rule of their own", () => {
+		const r = rules("../components/modules/tx/DetailHeroMeta.vue")
+		const names = ["hero_meta", "tx_time", "meta_sep", "hero_link"]
+		expect([...r.keys()]).toEqual(names.map((name) => `.${name}`))
+		for (const name of names) expect(r.get(`.${name}`)).toBe(`composes: ${name} from "../../../pages/detail-page.module.css";`)
+	})
 })

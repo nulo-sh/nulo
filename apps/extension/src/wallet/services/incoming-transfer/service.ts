@@ -1924,8 +1924,10 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		return status
 	}
 
-	/** The sole cursor writer: persists inside the lock + epoch check. Returns false when the
-	 *  epoch moved (a concurrent reset ran) — the write was skipped and the caller should bail. */
+	/** The scan's cursor write, inside the lock + epoch check. Returns false when the epoch moved (a
+	 *  concurrent reset ran) — the write was skipped and the caller should bail. The other writers,
+	 *  `onAccountAdded`'s reset, `onTokenDeleted`'s delete and the scope wipes, bump the epoch under
+	 *  the lock first, so a scan that read before them fails this check. */
 	private async persistCursorLocked(
 		profileId: string,
 		networkId: string,

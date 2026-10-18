@@ -1,7 +1,13 @@
 /** Every explorer link the popup renders comes from these builders; a null leaves the page on its copy fallback or shows no link. */
 import { describe, expect, test } from "vitest"
 import { CHAIN_IDS } from "@/utils/chain-ids"
-import { getAccountExplorerUrl, getBlockExplorerUrl, getContractExplorerUrl, getTransactionExplorerUrl } from "./explorers"
+import {
+	explorerDisplayName,
+	getAccountExplorerUrl,
+	getBlockExplorerUrl,
+	getContractExplorerUrl,
+	getTransactionExplorerUrl,
+} from "./explorers"
 
 const TX = `0x${"ab".repeat(32)}`
 
@@ -81,5 +87,19 @@ describe("every new builder", () => {
 		["an unresolved chain", null, "aztecscan"],
 	] as const)("returns null under %s", (_, chainId, explorerId) => {
 		expect(urls(chainId, explorerId)).toEqual([null, null, null])
+	})
+})
+
+describe("explorerDisplayName", () => {
+	test("names the chosen explorer", () => {
+		expect(explorerDisplayName("aztecscan")).toBe("Aztecscan")
+	})
+
+	test("says explorer under explorer None", () => {
+		expect(explorerDisplayName(null)).toBe("explorer")
+	})
+
+	test("says explorer for an id no explorer has", () => {
+		expect(explorerDisplayName("etherscan" as never)).toBe("explorer")
 	})
 })

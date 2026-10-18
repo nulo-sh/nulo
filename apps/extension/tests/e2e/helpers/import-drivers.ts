@@ -16,7 +16,6 @@ import { type Page, TimeoutError } from "puppeteer"
 import { expect } from "vitest"
 import { defaultProfileName } from "@/utils/profile-name"
 import { PASSKEY_PRF_LABEL, RP_ID } from "@/wallet/services/passkey/spec"
-import { computeBackupMac, PasskeyCredential } from "@nulo/wallet-crypto"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { prepareClick, type VirtualAuthenticator } from "../fixtures/browser"
 import {
@@ -28,10 +27,12 @@ import {
 	withTimeoutMessage,
 } from "../fixtures/dom"
 import type { ExtensionContext } from "../fixtures/extension"
+import { pollUntil } from "../fixtures/poll"
 import { expectNewProfileNamed, readProfileNames } from "../fixtures/profiles"
 import { openOnboarding, openPopup, waitForServiceReady } from "../fixtures/wallet-pages"
 import { refusePasskeyStep } from "../fixtures/passkey"
 import { readSwLogTrail } from "../fixtures/journal"
+import { sealPasskeyBackup } from "./backup-seal"
 import {
 	appendImportRecord,
 	buildImportRecord,
@@ -249,12 +250,22 @@ export async function submitFullBackupImport(page: Page, filePath: string, passw
 }
 
 /** Restore a PASSKEY backup from the full-backup form already on screen. A passkey backup has no
- *  new-password section: the submit runs the in-page passkey step, and the page lands on Home. */
+ *  new-password section: the submit runs the in-page passkey step, and the page lands on Home. A
+ *  refusal fails at once with the error box's text. */
 export async function submitPasskeyFullBackup(page: Page, filePath: string, timeoutMs = 30_000): Promise<void> {
 	await page.waitForSelector('[data-testid="import-full-backup-pick-file"]', { visible: true, timeout: 10_000 })
 	await pickFileByTestId(page, "import-full-backup-pick-file", filePath)
 	await submitWhenEnabled(page, "import-full-backup-submit-btn")
-	await waitForHash(page, "#/popup/general", timeoutMs)
+	const { refusal } = await pollUntil(
+		() =>
+			page.evaluate(() => ({
+				home: window.location.hash === "#/popup/general",
+				refusal: document.querySelector('[data-testid="import-full-backup-error"]')?.textContent?.trim() ?? null,
+			})),
+		({ home, refusal }) => home || refusal !== null,
+		{ label: "the passkey restore landing on Home or refusing the backup", timeoutMs, intervalMs: 250 },
+	)
+	if (refusal !== null) throw new Error(`the passkey restore refused the backup: ${refusal}`)
 }
 
 /** Drive the full-backup import. Lands on the shell's success hash, or — when
@@ -513,7 +524,7 @@ export async function readRegisteredPasskey(page: Page): Promise<RegisteredPassk
 
 /** The PRF output the wallet's ceremony reads from `credentialId`, asked in `page`, where the
  *  credential's virtual authenticator answers. */
-async function readPasskeyPrf(page: Page, credentialId: string): Promise<string> {
+export async function readPasskeyPrf(page: Page, credentialId: string): Promise<string> {
 	const prfInput = [...createHash("sha256").update(PASSKEY_PRF_LABEL).digest()]
 	await prepareClick(page)
 	return await page.evaluate(
@@ -556,9 +567,7 @@ export async function buildSyntheticPasskeyBackup(page: Page, passkey: Registere
 			contact: [],
 		},
 	}
-	const checksum = createHash("sha256").update(JSON.stringify(body)).digest("hex")
-	const credential = await PasskeyCredential.create({ id: passkey.credentialId, prf: await readPasskeyPrf(page, passkey.credentialId) })
-	return JSON.stringify({ ...body, checksum, "backup-mac": await computeBackupMac(credential, checksum) })
+	return sealPasskeyBackup(body, { id: passkey.credentialId, prf: await readPasskeyPrf(page, passkey.credentialId) })
 }
 
 /** Chooses `filePath` in the full-backup form and submits it with the passkey refused once; the

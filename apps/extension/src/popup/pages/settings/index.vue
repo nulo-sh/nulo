@@ -18,6 +18,7 @@ import { ExecutionServiceClient } from "@/wallet/services/execution/client"
 
 /** Composables */
 import { useConfigRead } from "@/composables/useConfigRead"
+import { useHeroVisible } from "@/composables/useHeroVisible"
 import { usePrestoCheck } from "@/composables/usePrestoCheck"
 
 /** Utils */
@@ -86,24 +87,9 @@ onBeforeMount(async () => {
 
 /** Hero visibility → compact sticky title fade */
 const heroRef = useTemplateRef("heroRef")
-const heroVisible = ref(true)
-let heroObserver = null
-
-onMounted(() => {
-	if (heroRef.value) {
-		// One delivery batches every change since the last, oldest first: only the newest is current.
-		heroObserver = new IntersectionObserver(
-			(entries) => {
-				heroVisible.value = entries.at(-1).isIntersecting
-			},
-			{ threshold: 0 },
-		)
-		heroObserver.observe(heroRef.value)
-	}
-})
+const heroVisible = useHeroVisible(heroRef)
 
 onBeforeUnmount(() => {
-	heroObserver?.disconnect()
 	executionService.disconnect()
 	configService.disconnect()
 	hubRead.dispose()

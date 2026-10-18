@@ -1,0 +1,14 @@
+# Status: ci-e2e-hygiene-1
+
+- 2026-10-18: worktree adopted at 18d29f23 and registered; six issues read (#749 #630 #612 #643 #620 #555); recon done (3 sonnet explorers).
+- 2026-10-18: planner measurements at retry 0: #749's trim refuted (38-39 lines at open, both browsers); #630's purge is 9.1-9.2 s of FPC lock wait (#553) out of 10.2-10.6 s; #612's path removed by #701.
+- 2026-10-18: plan.md, recon.md and OWNER-ASKS.md (OA-1) drafted; Codex audit and Opus Plan leg started.
+- 2026-10-18: round 1 (Codex and Opus, both conditional approve) folded in; Codex round 2 conditional approve, folded in (D5 → passkey row in CI; backend recorded per inventory run).
+- 2026-10-18: Codex round 3 approve; plan committed for the orchestrator's approval.
+- 2026-10-18: arc 1 branch ci-e2e-hygiene-1-a1 (off origin/dev 9470d4e9, plan commit cherry-picked). Phase 1 gate: lint 0, typecheck:all 0, viewers-csp 5/5 Chrome and 5/5 Firefox at retry 0 (third attempt; lessons/phase-1.md). #616's search-panel race stays visible (OA-3).
+- 2026-10-18: phase 2 gate: lint 0, typecheck:all 0, security-reset 5/5 per browser at retry 0 with the trail overlay (purge ≤ 2.3 s, a PXE retry in flight at submit in every run), committed test 1/1 per browser (lessons/phase-2.md).
+- 2026-10-18: phase 3 gate: lint 0, typecheck:all 0, network/sim-methods proverless retry 0 green on Chrome (57 s) and Firefox (86 s) (lessons/phase-3.md).
+- 2026-10-18: phase 4 gate: lint 0, typecheck:all 0, test 0; smoke passkey files green on both browsers; network matrix (both rows) and import-handshake-note proverless green on both browsers, passkey row 65 s Chrome / 44 s Firefox (lessons/phase-4.md).
+- 2026-10-18: arc 1 gate: test:all 0 (every workspace), check:plans 0; the phase e2e files green at retry 0 per phase. Codex round 1 conditional approve (3 findings: 2 accepted, 1 rejected); Opus diff review running.
+- 2026-10-18: Codex round 2 approve, no new material finding; loop converged at b761f0dc.
+- 2026-10-18: final gates on the merged head (origin/dev 2d9ba315): lint 0, typecheck:all 0, test:all 0, check:plans 0; smoke (viewers-csp, security-reset, passkey-backup, passkey-retry, passkey-toolbar-panel) Chrome 18/18 + 6 Firefox-only skipped, Firefox 24/24; network proverless (sim-methods, matrix both rows, import-handshake-note) 7/7 per browser.

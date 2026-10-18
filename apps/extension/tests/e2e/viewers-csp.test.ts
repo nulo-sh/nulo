@@ -1,28 +1,155 @@
 /**
  * The logs window's editor under `style-src` without `'unsafe-inline'`: its styles reach it in its
- * shadow root, and a selection or focus inside the root holds the view where it rests while lines
- * arrive, a line that trims the log included. The launch's CSP recorder fails the file on a blocked
- * style. A hold is read off where a shown line lands and off the viewer's scroll-to-end button.
+ * shadow root, new lines are followed, and a selection or focus inside the root holds the view where
+ * it rests while lines arrive, a line that trims the log included. The launch's CSP recorder fails the
+ * file on a blocked style. The wallet logs its own lines into the window at any time, so a test waits
+ * for its own lines by a nonce, and reads a hold off where a shown line lands and off the viewer's
+ * scroll-to-end button.
  */
+import { randomUUID } from "node:crypto"
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { extensionUrl, gotoExtensionPage, newPage, prepareClick } from "./fixtures/browser"
 import { readEditorStyles } from "./fixtures/code-editor"
 import { type ExtensionContext, test } from "./fixtures/extension"
+import { pollUntil } from "./fixtures/poll"
 
 const HOST = "logs-editor"
 /** Under one line's height: the follow's scroll to the end, give or take CodeMirror's margin. */
 const AT_END = 10
-/** The viewer's cap with Debug mode off, plus the 100 entries it drops at a time: the next entry drops 100. */
+/** The viewer's `SCROLL_DISABLE_THRESHOLD`: a scroll that leaves the view this far from its end
+ *  shows the button too, and that show is not a line left unfollowed. */
+const SCROLLED_AWAY = 20
+/** The viewer's cap with Debug mode off, plus the 100 entries it drops at a time. */
 const LOG_CAP = 1_100
 
+/** The scroller's gap to its end, read after two frames with no change to the editor's lines: the
+ *  wallet's own lines land at any time, each in the DOM a frame before CodeMirror scrolls to it. */
+async function gapToEnd(page: Page): Promise<number> {
+	return page.evaluate(async (id) => {
+		const root = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot
+		const el = root?.querySelector(".cm-scroller")
+		const content = root?.querySelector(".cm-content")
+		if (!(el instanceof HTMLElement) || !content) throw new Error("the logs editor has no scroller")
+		let changed = true
+		const observer = new MutationObserver(() => {
+			changed = true
+		})
+		observer.observe(content, { childList: true, subtree: true, characterData: true })
+		const giveUp = performance.now() + 5_000
+		try {
+			while (changed) {
+				if (performance.now() > giveUp) throw new Error("the logs editor kept changing for 5 s")
+				changed = false
+				await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+			}
+		} finally {
+			observer.disconnect()
+		}
+		return el.scrollHeight - el.scrollTop - el.clientHeight
+	}, HOST)
+}
+
+/**
+ * Logs `count` lines from the window, then waits until the editor renders the last of them and has
+ * settled. Every caller appends at the end of a view resting there, and CodeMirror renders lines past
+ * the viewport, so the last line is in the DOM whether or not the view followed it.
+ */
+async function logLines(page: Page, count: number, timeoutMs = 10_000): Promise<void> {
+	const tag = `viewer probe ${randomUUID().slice(0, 8)}`
+	await page.evaluate(
+		(t, n) => {
+			for (let i = 0; i < n; i++) console.info(`${t} ${i}`)
+		},
+		tag,
+		count,
+	)
+	await pollUntil(
+		() =>
+			page.evaluate(
+				(id, t) => {
+					let highest = -1
+					for (const line of document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelectorAll(".cm-line") ?? []) {
+						const text = line.textContent ?? ""
+						const at = text.lastIndexOf(`${t} `)
+						const index = at < 0 ? "" : text.slice(at + t.length + 1)
+						if (/^\d+$/.test(index)) highest = Math.max(highest, Number(index))
+					}
+					return highest
+				},
+				HOST,
+				tag,
+			),
+		(highest) => highest === count - 1,
+		{
+			label: `the logs editor rendering probe line ${count - 1}`,
+			timeoutMs,
+			intervalMs: 50,
+			show: (highest) => `highest probe line rendered ${highest}`,
+		},
+	)
+	await gapToEnd(page)
+}
+
+/**
+ * Arms the follow check before the step that should stop the follow, so a wallet line landing after
+ * that step is seen too. Latched: CodeMirror's stick to the end scrolls the view back, which hides
+ * the button again. A scroll away from the end before the first show is recorded and refused.
+ */
+async function armFollowCheck(page: Page): Promise<void> {
+	const shownAlready = await page.evaluate(
+		(id, away) => {
+			const el = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelector(".cm-scroller")
+			if (!(el instanceof HTMLElement)) throw new Error("the logs editor has no scroller")
+			const button = '[data-testid="logs-scroll-btn"]'
+			const latch = { shown: false, scrolledAway: false, stop: () => {} }
+			const onScroll = () => {
+				if (el.scrollHeight - el.scrollTop - el.clientHeight >= away) latch.scrolledAway = true
+			}
+			const observer = new MutationObserver((records) => {
+				const added = records.some(({ addedNodes }) =>
+					[...addedNodes].some((node) => node instanceof Element && (node.matches(button) || node.querySelector(button))),
+				)
+				if (!added) return
+				latch.shown = true
+				latch.stop()
+			})
+			latch.stop = () => {
+				observer.disconnect()
+				el.removeEventListener("scroll", onScroll, { capture: true })
+			}
+			// Capture runs before the viewer's own listener, whose button can stop the latch mid-dispatch.
+			el.addEventListener("scroll", onScroll, { capture: true })
+			observer.observe(document.body, { childList: true, subtree: true })
+			;(window as unknown as { __followCheck?: typeof latch }).__followCheck = latch
+			return document.querySelector(button) !== null
+		},
+		HOST,
+		SCROLLED_AWAY,
+	)
+	expect(shownAlready, "the button showed before the stop step").toBe(false)
+}
+
+/** Logs one line and reports whether the viewer followed every line since `armFollowCheck`. */
+async function followedSinceArmed(page: Page): Promise<boolean> {
+	await logLines(page, 1)
+	const { shown, scrolledAway } = await page.evaluate(() => {
+		const latch = (window as unknown as { __followCheck?: { shown: boolean; scrolledAway: boolean; stop: () => void } }).__followCheck
+		if (!latch) throw new Error("the follow check was never armed")
+		latch.stop()
+		return { shown: latch.shown, scrolledAway: latch.scrolledAway }
+	})
+	expect(scrolledAway, "the view scrolled away from its end before the button showed").toBe(false)
+	return !shown
+}
+
 /** The scroller's geometry, read once the frames after a change have run. */
-async function scroller(page: Page): Promise<{ height: number; gapToEnd: number; shown: number }> {
+async function scroller(page: Page): Promise<{ height: number; gapToEnd: number }> {
 	return page.evaluate(async (id) => {
 		await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
 		const el = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelector(".cm-scroller")
 		if (!(el instanceof HTMLElement)) throw new Error("the logs editor has no scroller")
-		return { height: el.scrollHeight, gapToEnd: el.scrollHeight - el.scrollTop - el.clientHeight, shown: el.clientHeight }
+		return { height: el.scrollHeight, gapToEnd: el.scrollHeight - el.scrollTop - el.clientHeight }
 	}, HOST)
 }
 
@@ -32,18 +159,6 @@ function lineHeight(page: Page): Promise<number> {
 		if (!(line instanceof HTMLElement)) throw new Error("the logs editor rendered no line")
 		return line.getBoundingClientRect().height
 	}, HOST)
-}
-
-/** Logs `count` lines from the window, numbered across the run so a line can be found again. */
-function logProbes(page: Page, count: number): Promise<number> {
-	return page.evaluate((n) => {
-		const w = window as unknown as { __probes?: number }
-		for (let i = 0; i < n; i++) {
-			w.__probes = (w.__probes ?? 0) + 1
-			console.info(`viewer probe #${w.__probes}.`)
-		}
-		return w.__probes ?? 0
-	}, count)
 }
 
 /**
@@ -68,38 +183,6 @@ async function settle(page: Page, lo: number, hi = Number.MAX_SAFE_INTEGER, time
 		lo,
 		hi,
 	)
-}
-
-/** Logs `count` lines and waits until the editor has grown by that many. */
-async function logLines(page: Page, count: number): Promise<void> {
-	const { height } = await scroller(page)
-	const line = await lineHeight(page)
-	await logProbes(page, count)
-	await settle(page, height + count * line - 1)
-}
-
-/** Logs one line and reports whether the viewer followed it. */
-async function followsNextLine(page: Page): Promise<boolean> {
-	expect(await page.$('[data-testid="logs-scroll-btn"]')).toBeNull()
-	await page.evaluate(() => {
-		const w = window as unknown as { __scrollBtnShown?: boolean }
-		w.__scrollBtnShown = false
-		// Latched: CodeMirror's stick to the end scrolls the view back, which hides the button again.
-		new MutationObserver((records, observer) => {
-			const shown = records.some(({ addedNodes }) =>
-				[...addedNodes].some(
-					(node) =>
-						node instanceof Element &&
-						(node.matches('[data-testid="logs-scroll-btn"]') || node.querySelector('[data-testid="logs-scroll-btn"]')),
-				),
-			)
-			if (!shown) return
-			w.__scrollBtnShown = true
-			observer.disconnect()
-		}).observe(document.body, { childList: true, subtree: true })
-	})
-	await logLines(page, 1)
-	return !(await page.evaluate(() => (window as unknown as { __scrollBtnShown?: boolean }).__scrollBtnShown))
 }
 
 type ShownLine = { text: string; top: number; left: number; right: number; y: number }
@@ -179,30 +262,11 @@ async function openLogs(ctx: ExtensionContext): Promise<Page> {
 	return page
 }
 
-/** Followed, the last of a batch is rendered once every line in it has landed. */
-async function lastLineShown(page: Page, last: number, timeout: number): Promise<void> {
-	await page.waitForFunction(
-		(id, t) =>
-			[...(document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelectorAll(".cm-line") ?? [])].some((el) =>
-				el.textContent?.endsWith(t),
-			),
-		{ timeout, polling: 100 },
-		HOST,
-		`viewer probe #${last}.`,
-	)
-	await settle(page, 0)
-}
-
-/**
- * A logs window with more lines than it shows, resting at the end. A log shorter than the window
- * leaves the scroller at the window's height, so its growth cannot count this batch.
- */
+/** A logs window with more lines than it shows, resting at the end. */
 async function filledLogs(ctx: ExtensionContext): Promise<Page> {
 	const page = await openLogs(ctx)
-	await lastLineShown(page, await logProbes(page, 60), 10_000)
-	const { height, gapToEnd, shown } = await scroller(page)
-	expect(height).toBeGreaterThan(shown)
-	expect(gapToEnd).toBeLessThan(AT_END)
+	await logLines(page, 60)
+	expect(await gapToEnd(page)).toBeLessThan(AT_END)
 	return page
 }
 
@@ -212,35 +276,42 @@ async function filledLogs(ctx: ExtensionContext): Promise<Page> {
  */
 async function cappedLogs(ctx: ExtensionContext): Promise<Page> {
 	const page = await openLogs(ctx)
-	await lastLineShown(page, await logProbes(page, LOG_CAP), 60_000)
+	await logLines(page, LOG_CAP, 60_000)
 	let trimmed = false
 	for (let i = 0; i < 100 && !trimmed; i++) {
 		const { height } = await scroller(page)
-		await logProbes(page, 1)
-		await page.waitForFunction(
-			(id, was) =>
-				(document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelector(".cm-scroller") as HTMLElement | null)
-					?.scrollHeight !== was,
-			{ timeout: 5_000, polling: 20 },
-			HOST,
-			height,
-		)
+		await logLines(page, 1)
 		trimmed = (await scroller(page)).height < height
 	}
 	expect(trimmed).toBe(true)
-	// A line the test did not log would make one of these trim, and the editor would never grow by 99.
+	const before = await scroller(page)
 	await logLines(page, LOG_CAP - 1_001)
-	expect((await scroller(page)).gapToEnd).toBeLessThan(AT_END)
+	const after = await scroller(page)
+	expect(after.height - before.height, "a wallet line trimmed the log while it filled").toBeGreaterThanOrEqual(
+		(LOG_CAP - 1_001) * (await lineHeight(page)) - 1,
+	)
+	expect(after.gapToEnd).toBeLessThan(AT_END)
 	return page
 }
 
-/** Logs `count` lines, one of which trims the log, and waits for the editor to land 100 lines short. */
+/**
+ * Logs `count` lines, one of which trims the log, and waits for the editor to land 100 lines short;
+ * a few wallet lines may land with them. A held view renders too little past its end for a burst's
+ * last line to show, so the height is the measure.
+ */
 async function logTrimming(page: Page, count: number): Promise<void> {
 	const { height } = await scroller(page)
 	const line = await lineHeight(page)
-	await logProbes(page, count)
+	const tag = `viewer trim ${randomUUID().slice(0, 8)}`
+	await page.evaluate(
+		(t, n) => {
+			for (let i = 0; i < n; i++) console.info(`${t} ${i}`)
+		},
+		tag,
+		count,
+	)
 	const landed = height + (count - 100) * line
-	await settle(page, landed - line / 2, landed + line / 2)
+	await settle(page, landed - line / 2, landed + 3 * line)
 }
 
 test("the logs editor takes its styles from its shadow root", async ({ registeredExtension: ctx }) => {
@@ -251,8 +322,9 @@ test("the logs editor takes its styles from its shadow root", async ({ registere
 
 test("with nothing selected and the search panel closed, new lines are followed", async ({ registeredExtension: ctx }) => {
 	const page = await filledLogs(ctx)
-	expect(await followsNextLine(page)).toBe(true)
-	expect((await scroller(page)).gapToEnd).toBeLessThan(AT_END)
+	await armFollowCheck(page)
+	expect(await followedSinceArmed(page)).toBe(true)
+	expect(await gapToEnd(page)).toBeLessThan(AT_END)
 	await page.close()
 })
 
@@ -290,7 +362,7 @@ test("the search panel open at the end holds the view while lines arrive", async
 		field.blur()
 		return new Promise<void>((r) => requestAnimationFrame(() => r(field.focus())))
 	}, HOST)
-	expect((await scroller(page)).gapToEnd).toBeLessThan(AT_END)
+	expect(await gapToEnd(page)).toBeLessThan(AT_END)
 	const line = await middleLine(page)
 	await logLines(page, 2)
 	await expectHeld(page, line)
