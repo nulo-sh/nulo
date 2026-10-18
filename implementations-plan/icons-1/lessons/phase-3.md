@@ -1,0 +1,7 @@
+# Phase 3: proof on both browsers
+
+- Smoke, armed build, retry 0. Chrome: 57 files passed, 6 skipped, 260 tests, 1967 s. Firefox: 60 files passed, 3 skipped, 260 tests, 2603 s. No spec or fixture changed, so the suite gains no scenario; no baseline wall-clock was taken on this host.
+- Network windows sweep (`type-roles-windows`), retry 0. Chrome: 7 tests in 2 files, the scratch capture spec included, 498 s.
+- D6's check failed (D12). At 10 px on a 1x screen, `square-dashed` repeats its dash every 4 units, which is 1.67 screen pixels. Along each side the darkness stays at 77 to 105 of 255 in both browsers, so the sides read as a thin gray outline. Today's mark drops to 17 between its dots. At 12 px (a 2-pixel period), at 9 px and at 2x the dashes separate. The method is a scratch page that inlines the glyph's paths with `Icon.vue`'s paint and dumps the 1x screenshot's pixels; the baseline used the old paint (stroke `max(2.5, 36/size)`, square caps, even-odd). The result went to `OWNER-ASKS.md` Ask 1 and holds the PR.
+- A Firefox network run was launched at load1 209, over the 150 limit. It was stopped by its process group within a minute, during the build, before any service started. The rerun waited for load1 under 150. Read the load in the same command that launches the run, not one call earlier.
+- Codex round 2 (resumed 01a14f6b): approve. R1 (a repeated root attribute) and R2 (a blank `d`) are closed by cd0b0152. Codex re-extracted all 58 icons (169 paths unchanged) and rejected 174 mutations.

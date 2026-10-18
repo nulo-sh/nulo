@@ -52,7 +52,7 @@ One arc, one PR against `dev`, `Closes #764`. Every glyph in `packages/design/sr
 - I1. At 1x, glyphs under 12 px look fainter at stroke 2 than with a 1 px floor (peak darkness 142-168 of 224 against 171-193 at 10 px), but no fainter than 12 px diagonals at stroke 2 (51-65 %), which nobody disputes. Measured on scratch sheets, not a contrast test (`lessons/phase-0.md`).
 - I2. The wallet-bugs-2 arc lands first or near this one. Its marks move 9 → 12 px; this lane's pictures are taken after merging `dev`.
 
-**Asks**: none open. A1 (a stroke floor) is settled as stroke 2 at every size, as signed (D3). A2 (the glossary) is settled as no change (D6); Phase 3's 1x crop of a 10 px public mark is the check.
+**Asks**: one open, Ask 1 in `OWNER-ASKS.md` (D6's check failed: the 10 px public mark at 1x). A1 (a stroke floor) is settled as stroke 2 at every size, as signed (D3).
 
 ## Architecture & Implementation
 
@@ -107,6 +107,8 @@ No file under `apps/` changes. `send-outcome-rows`, `icon-names`, `PermissionRow
 - **D8. `Icon.test.ts` after the change**: stroked paths are unfilled, the stroke is 2 at 24 and at 9 px, caps and joins are round; a filled glyph's path has no stroke and no `fill-rule`; the root keeps `fill`/`stroke` `currentColor` and `role="img"`; `private` is one filled path, `public` stroked paths only, neither equals `lock`; `rotate` and the unknown-name cases (`check` draws one path, which also catches a kept no-op box) are unchanged. The old `square-check` two-subpath case goes: the drift test pins that path.
 - **D9. Order**: build on `dev` as it stands; merge `dev` and retake the mark pictures if wallet-bugs-2 lands first. Neither lane edits the other's files.
 - **D10. Bumps are UI changes**: `README.md` § Icons and the drift test's failure message say a Tabler bump or a regeneration that changes a path is a UI change: pictures and owner sign-off, and the `DERIVED` record edited in the same PR. A mapping edit in `glyph-sources.ts` is one too; review is its guard (Codex, Opus).
+- **D11. Deviation, Phase 3 "before" build** (implementation): the baseline's runtime differs from the head only in `glyphs.ts` and `Icon.vue` (`git diff --stat` against the baseline, tests, docs and notices aside; `glyph-sources.ts` and `render-glyphs.ts` are never imported at run time). So "before" swaps those two files to the baseline's in this worktree, builds and captures with the same harness, then restores them (`git status` clean), instead of a second install in a scratch worktree. Same pixels, one install.
+- **D12. D6's check failed; the PR waits** (implementation): at 10 px on a 1x screen each side of `square-dashed` keeps 77 to 105 darkness of 255 in Chrome and in Firefox, with no gap; today's mark drops to 17 between its dots. The 4-unit dash period is 1.67 screen pixels at 10 px; at 12 px (2 pixels) and 9 px the dashes separate, and at 2x they separate at every size. The three 10 px sites are `FeeMethodSelector.vue:36`, `SendReviewSheet.vue:143` and `PublishStrip.vue:31`. Per D6, Ask 1 carries the crops and the options, and the arc stops before its PR. Every other gate runs to green first, so the answer is the only thing left.
 
 ## Security & Adversarial Considerations
 
@@ -135,7 +137,7 @@ No file under `apps/` changes. `send-outcome-rows`, `icon-names`, `PermissionRow
 
 **Validation gate.** Commands: `bun run --cwd packages/third-party-notices test`, `bun run --cwd apps/extension build:full`, `bun packages/third-party-notices/bin/check-minimum.ts both apps/extension/dist`, `curl -sfL https://raw.githubusercontent.com/tabler/tabler-icons/bbed884d15354b5cebf2493371f20dc2d5e83eaf/LICENSE | cmp - packages/third-party-notices/texts/tabler-icons.MIT.txt`. Pass: all exit 0; each build's `THIRD-PARTY-NOTICES.txt` lists `Tabler Icons@3.49.0` under MIT. Layers: unit, build.
 
-### Phase 3: proof on both browsers ☐
+### Phase 3: proof on both browsers ✓ (but D6: Ask 1 open)
 
 1. Check `uptime`: the one-minute load is under 150. Merge `origin/dev` first if it moved, and record its SHA as the baseline.
 2. Build armed, then run the smoke suite: `cd apps/extension && VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:chrome`, then `env -u EXTENSION_PATH NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- --retry=0`. Repeat with `build:firefox` and `NULO_E2E_BROWSER=firefox`.
