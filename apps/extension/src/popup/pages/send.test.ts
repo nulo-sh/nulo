@@ -990,10 +990,10 @@ describe("send page — the token card while the tokens load", () => {
 		const NEW = { ...TOKEN, id: 9, contract: `0x${"9".repeat(64)}`, symbol: "NEW" }
 		mocks.getTokens.mockResolvedValue([TOKEN, NEW])
 		const { w, cacheStore } = await mountSend()
-		cacheStore.activeTokenIdx = NEW.id
-		await flushPromises()
-		expect(amount(w).attributes("data-balance")).toBe("0")
 		balanceAdded().invoke({ ...BALANCE, token: NEW, privateBalance: "4000000" })
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("5")
+		cacheStore.activeTokenIdx = NEW.id
 		await flushPromises()
 		expect(amount(w).attributes("data-balance")).toBe("4")
 		w.unmount()

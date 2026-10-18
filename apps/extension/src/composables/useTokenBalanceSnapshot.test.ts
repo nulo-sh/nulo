@@ -243,7 +243,7 @@ describe("useTokenBalanceSnapshot", () => {
 	})
 })
 
-describe("useTokenBalanceSnapshot — the rules a view keeps over Home's", () => {
+describe("useTokenBalanceSnapshot — the rules a view keeps over the defaults", () => {
 	beforeEach(() => {
 		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
 	})
@@ -336,16 +336,17 @@ describe("useTokenBalanceSnapshot — the rules a view keeps over Home's", () =>
 		every.connect()
 		expect(every.client.getTokenBalances).toHaveBeenCalledTimes(1)
 
-		const getTokenBalances = vi.fn()
+		// A client with no connect event at all: subscribing or unsubscribing would throw.
+		const rows = ref<TokenBalanceInfo[]>([])
 		const off = useTokenBalanceSnapshot({
-			client: { getTokenBalances } as never,
+			client: { getTokenBalances: vi.fn() } as never,
 			live: { account: { address: "0xa" }, network: { chainId: 1 } },
-			rows: ref<TokenBalanceInfo[]>([]),
+			rows,
 			reconnect: "off",
 		})
 		off.onBalanceAdded(row(1))
 		off.dispose()
-		expect(getTokenBalances).not.toHaveBeenCalled()
+		expect(ids(rows)).toEqual([1])
 	})
 
 	test("a counted reconnect runs onReconnect in place of the read", async () => {

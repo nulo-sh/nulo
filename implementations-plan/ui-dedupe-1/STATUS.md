@@ -22,5 +22,8 @@
 - 2026-10-17 23:52Z A3 review round 1: Opus findings (1: the composable's cascade cases ran a copy of the page's), fixed in 2c674859; pre-existing double apply filed as closed known limit #736. Round 2: Codex clean; loop converged.
 - 2026-10-18 00:00Z A3 final gates on 2c674859 (dev 138e0ded, nothing newer): lint 0, typecheck:all 0, test:all 0, check:plans 0; smoke Chrome (rebuilt armed bundle, retry 0, load1 65) appearance, settings-routes, sw-resilience 20/20 in 88 s. A3 ✓.
 - 2026-10-18 00:29Z A5 start: branch ui-dedupe-1-a5 off dev 46df7df9 (A3 merged as #737); lockfile unchanged.
-- 2026-10-18 00:55Z A5 recon rebuilt: #678/#707 changed no mirror rule. Codex consult (session 01a14c71): F1, D-a–D-f, D-h, D-i agree; D-g (Send's Added convergence) rejected with two id-reuse paths, verified; Send keeps its rule as `added: "append"`.
-- 2026-10-18 01:05Z A5 G-fast on the migration: lint 0, typecheck:all 0, the 8 touched suites 304/304 unchanged.
+- 2026-10-18 00:45Z A5 recon rebuilt: #678/#707 changed no mirror rule. Codex consult (session 01a14c71): F1, D-a–D-f, D-h, D-i agree; D-g (Send's Added convergence) rejected with two id-reuse paths, verified; Send keeps its rule as `added: "append"`.
+- 2026-10-18 00:50Z A5 G-fast on the migration: lint 0, typecheck:all 0, the 8 touched suites 304/304 unchanged.
+- 2026-10-18 01:00Z A5 unit phase gate on a395b0db: test:all exit 0 (extension 13688 passed, 5 skipped, 7 todo; every package green); new cases green on the base pages; 17 mutations each red. Codex round 1: findings (1, P3 comments), no behaviour regression.
+- 2026-10-18 01:08Z A5 smoke on f5c7e92f (armed builds, retry 0): Chrome rows, navigation, token-list 19/19 in 97 s (load1 131); Firefox token-list 2/2 in 28 s (load1 79). Network send-picker on Chrome started.
+- 2026-10-18 01:25Z A5 review round 1 folded: Codex findings 1 (comments), Opus findings 2 + nits (page cases pin each parent's options; Send's case rules out keep and replace); 4 touched suites 144/144; page suites over base pages 118/118; 27 mutations each red. Network send-picker Chrome at f5c7e92f 1/1 in 191 s.

@@ -25,7 +25,8 @@ interface TokenBalanceSnapshotDeps<T> extends TokenBalanceEventRules {
 	/** Captured at run start; a run whose fence goes false lands nothing. For a parent whose scope
 	 *  change awaits before refetching, so the run's own generation cannot fence the old scope yet. */
 	scopeFence?: () => () => boolean
-	/** Applied to each landed or added row, after the chain filter. */
+	/** Applied to each row a read or an event lists; an update that replaces a listed row writes it
+	 *  as received. */
 	mapRow?: (row: TokenBalanceInfo) => T
 	/** Every run reads `loading`, so a refused one reads `unavailable` over rows already shown. */
 	loadingOnRefresh?: boolean

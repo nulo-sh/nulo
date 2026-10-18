@@ -228,6 +228,37 @@ describe("holdings page", () => {
 		w.unmount()
 	})
 
+	test("a refused read is not retried on a timer, and a read in flight lands over an add that came meanwhile", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		try {
+			installChromeStorage()
+			fetchError = new Error("port closed")
+			const w = await mountPage()
+			const symbols = () => w.findAll('[data-testid="token-symbol"]').map((s) => s.attributes("data-symbol"))
+			fetchError = undefined
+			seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET)]
+			await vi.advanceTimersByTimeAsync(2_000)
+			await flushPromises()
+			expect(w.find('[data-testid="holdings-error"]').exists()).toBe(true)
+
+			let release: (rows: unknown[]) => void = () => {}
+			seedRows = new Promise((resolve) => {
+				release = resolve
+			}) as never
+			balanceEvents.connected.invoke(undefined as never)
+			await flushPromises()
+			balanceEvents.added.invoke(row("b2", "BBB", CHAIN_IDS.TESTNET))
+			seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET), row("b2", "BBB", CHAIN_IDS.TESTNET)]
+			release([row("b1", "AAA", CHAIN_IDS.TESTNET)])
+			await flushPromises()
+			expect(w.find('[data-testid="holdings-error"]').exists()).toBe(false)
+			expect(symbols()).toEqual(["AAA"])
+			w.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	test("a failed fetch shows the error line, not an empty list", async () => {
 		installChromeStorage()
 		fetchError = new Error("port closed")

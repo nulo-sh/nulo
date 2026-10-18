@@ -13,4 +13,11 @@
 - The hook passed Biome's cognitive budget only with `land()` kept as its own function; the event handlers moved to a module-level `tokenBalanceEvents()` to keep the hook under 80 lines.
 - `send.test.ts`'s balance-client mock has no `onConnected`, so `reconnect: "off"` must not touch it, in `dispose()` too.
 - Proof the new page cases test the pages, not the change: with the base `holdings.vue`, `send.vue` (and `send-balance-events.ts`) and `SelectTokenPopup.vue` restored over the new tests, all three suites stay green (113/113, Select token 16/16, Send 80/80).
-- Mutation run: 17 mutations of the hook's options and the parents' wiring each turn a case red. The first run left one green (Send without `append`); the id-reuse Send case closed it.
+- Mutation run, first pass: 17 mutations of the hook's branches and of three parents' wrappers; one stayed green (Send without `append`), closed by the id-reuse Send case. That pass did not drop a parent's option, so it proved the hook's rules but not which view chose which (Opus, round 1).
+- Second pass, after round 1: 27 mutations, the 17 plus every option each view passes removed or swapped (Holdings' six, Select token's three, Send's two). Each turns a case red. The new page cases still pass over the base pages (118/118).
+
+## Review round 1 (2026-10-18)
+
+- Codex (gpt-6.1-sol, high, read-only, session `01a14c83-34c6-7d52-8135-37e147e01115`): `findings`, one P3: the hook's doc promised the dirty refetch and the keep rule unconditionally, and three page comments restated their options. Fixed in `f5c7e92f`. No behaviour regression found; Codex traced Home's defaults, Holdings, Select token and Send against base in memory.
+- Opus (general-purpose): `findings`, no behaviour difference. F1: Send's id-reuse case passed under `replace` too; it now asserts the selected token keeps its amount before the other token's row is read. F2: the parents' option choices had no page case; added below. Nits: the `mapRow` doc, a vacuous assertion in the `off` case, a test title naming a caller, D510's wording and two traces it lacked, the plan's § A5 body still naming `replaceOnAdded` (now points at D507–D509).
+- Network `send-picker` on Chrome ran during the round at `f5c7e92f` (its build finished before the mutation pass edited any file): 1/1 in 191 s.
