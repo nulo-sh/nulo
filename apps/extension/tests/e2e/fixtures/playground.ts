@@ -139,7 +139,8 @@ export type PgResult = { seq: number; method: string; status: "ok" | "error"; re
 /**
  * Wait for the next result row matching `method` to settle (status="ok"|"error").
  * Pass `fromSeq` (snapshot taken before the action) so we ignore previous rows
- * with the same method. Returns the parsed JSON result/error.
+ * with the same method. Returns the parsed JSON result/error. A timeout dumps nothing: a caller
+ * that races it against a window expects it, so a caller that cannot afford one dumps its own.
  */
 export async function waitForPgResult(page: Page, method: string, fromSeq: number, timeout = 30_000): Promise<PgResult> {
 	const handle = await page.waitForFunction(
@@ -314,7 +315,11 @@ export async function callExpectingNoPopup(
 	ctx.browser.on("targetcreated", onCreated)
 	try {
 		await action()
-		const result = await waitForPgResult(page, method, fromSeq, timeoutMs)
+		const result = await waitForPgResult(page, method, fromSeq, timeoutMs).catch(async (err) => {
+			console.error(`[pg-diag] callExpectingNoPopup(${method}, after ${fromSeq}) TIMEOUT`)
+			await dumpDeepDiagnostics(page, `callExpectingNoPopup(${method})`)
+			throw err
+		})
 		// A window created during the call may still be navigating when its `targetcreated` fired, so
 		// the popup test reads each candidate's URL now, not at creation.
 		const candidates = new Set([...created, ...ctx.browser.targets().filter((t) => !before.has(t))])

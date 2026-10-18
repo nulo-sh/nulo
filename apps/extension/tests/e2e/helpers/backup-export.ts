@@ -1,13 +1,10 @@
-import { createHash } from "node:crypto"
 import type { Page } from "puppeteer"
+import { openFullBackupText } from "@/utils/full-backup-helpers"
 import { TEST_PASSWORD } from "../fixtures/constants"
 import { clickByTestId, type ExtensionContext, openPopup, replaceInputValue, waitForHash } from "../fixtures/extension"
 import { navigateByHash } from "../fixtures/helpers"
-import { openFullBackupText } from "@/utils/full-backup-helpers"
+import type { PlainBackup } from "./backup-seal"
 import { armDownloadCapture, readCapturedDownload } from "./download-capture"
-
-/** A full backup's content: the plain file's JSON, or an encrypted file's once opened. */
-export type PlainBackup = { checksum?: string; data: Record<string, unknown> } & Record<string, unknown>
 
 /** A press on a testid: `clickByTestId`, or real pointer input where a spec proves nothing covers it. */
 export type Press = (page: Page, testid: string) => Promise<void>
@@ -65,14 +62,6 @@ export function accountChainId(backup: PlainBackup, address: string): number {
 	const chainId = accounts.find((a) => a.address === address)?.chainId
 	if (chainId === undefined) throw new Error(`account ${address} is missing from the exported backup`)
 	return chainId
-}
-
-/** The file content of `backup` with its checksum recomputed over the doctored body: a plain
- *  backup's checksum detects corruption and authenticates nothing. */
-export function sealPlainBackup(backup: PlainBackup): string {
-	const { checksum: _stale, ...body } = backup
-	const checksum = createHash("sha256").update(JSON.stringify(body)).digest("hex")
-	return JSON.stringify({ ...body, checksum })
 }
 
 /** Keeps only `chainId`'s account-state items: public-chain recovery material would make the import
