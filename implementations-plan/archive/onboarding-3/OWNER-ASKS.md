@@ -2,7 +2,7 @@
 
 The arc builds every signed pick in full (decision pages 28, 29, 30, 33 and 35; see plan.md § Signed scope). Each ask below is a visible choice the picks do not settle. Each has a "what ships now" line: the arc builds that line, and an answer that lands before the PR opens ships with the arc. The PR stays a draft until the owner tests the build (the owner's note on P33-01). The PR's light and dark screenshots show every "what ships now" as built.
 
-**Answers.** The owner answered OA-1 to OA-12 on decision page 39 (2026-10-17 19:03Z) and OA-12's third warning on page 41 (2026-10-18 00:08Z); the same draft PR ships every answer. OA-13 ships its "what ships now". OA-14 and OA-15 came up while building the answers.
+**Answers.** The owner answered OA-1 to OA-12 on decision page 39 (2026-10-17 19:03Z) and OA-12's third warning on page 41 (2026-10-18 00:08Z); the same draft PR ships every answer. OA-13 ships its "what ships now". OA-14 and OA-15 came up while building the answers. OA-16 is the owner's note from the build test (#768), shipped in the same PR.
 
 ## OA-1. Where Copy sits on the phrase grid (the owner's note on P33-02)
 
@@ -194,3 +194,19 @@ The wallet clears the clipboard 60 seconds after a copy, but only while the page
 - **Other options:** add a full stop to the first two, or drop the third's.
 
 **Recommendation: add a full stop to the first two**, each being a sentence. **What ships now: as worded.**
+
+## OA-16. An imported profile shows no Get started card (#768)
+
+**Surface:** Home, the Get started card and the urgent banner above the balance.
+
+**Answered (owner, 2026-10-18, on the #743 preview build, #768):** "When importing a Passkey, the steps on Home say 'Backup… etc'. but… if I imported: means I already have it backed up. Feels like when we import, we shouldn't show any of those things (getting started)."
+
+**What ships:**
+- A profile made by an import (Recovery Phrase, Passkey or Full Backup; password or passkey alike) shows no Get started card.
+- It shows no "Your funds have no backup" banner either: the banner is the card's phrase row once the wallet holds funds.
+- This supersedes P39-16 B, where a phrase import started with only the phrase row done and a backup-file import kept it.
+- A profile made in the wallet keeps the card and the banner as before.
+
+**How it is recorded:** the profile service writes one per-profile, device-local key when an import saves the profile, so a passkey window or a closed popup cannot lose it. No backup carries the key, and deleting the profile removes it. Creating a profile never writes it.
+
+**Not a profile import:** Settings › Accounts › Import adds an account file to an existing profile, so that profile keeps its card.

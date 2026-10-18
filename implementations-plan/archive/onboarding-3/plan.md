@@ -1,8 +1,8 @@
 ---
 plan: onboarding-3
 tier: mid
-status: completed (2026-10-18): one draft PR carries the arc, the owner's page 39 and 41 answers and this close-out, held for the owner's build test; OA-14 and OA-15 wait on the owner
-issues: "#588 #585 #581 #636 (one arc closes all four)"
+status: completed (2026-10-18): one draft PR carries the arc, the owner's page 39 and 41 answers, OA-16 from the build test and this close-out, held for the owner's build test; OA-14 and OA-15 wait on the owner
+issues: "#588 #585 #581 #636 #768 (one arc closes all five)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -32,7 +32,7 @@ post_implementation_hardening: not scheduled
   - P33-01 D: Home's Get started card, and the urgent banner for a funded password wallet whose phrase is unsaved. Its flags are per-profile UI keys, never proof of a backup.
   - P33-03 A, P39-11 A and its note: How Aztec works opens `https://nulo.sh/how-aztec-works`; the landing builds that page in #723 (#722).
   - P39-08 F: Welcome's first line is "A wallet that keeps your balance to yourself."
-  - P39-16 B: a wallet imported from its recovery phrase starts with "Save your recovery phrase" done; a backup-file import keeps it.
+  - #768, OA-16 (the owner's build-test note): a profile made by an import (phrase, passkey or Full Backup) shows no Get started card and no banner. It supersedes P39-16 B. The profile service records the import (D24).
   - #581, #636 (P35-02 B): the done tip is the one sentence.
   - Review: three Codex rounds (gpt-6.1-sol, high) and one Opus review. Fixed in review:
     - a locked bootstrap shows no words;
@@ -44,6 +44,7 @@ post_implementation_hardening: not scheduled
 - **Dropped:** none. OA-1 to OA-12 ship the owner's page 39 and 41 answers; P39-09 A, P39-10 A, P39-15 A and P39-17 A were already built. OA-13 ships its "what ships now". O8 (`Pick<GasSlice>`) was declined, with its reason under Audit verdicts.
 - **Known limits:** #726 (clipboard scrub), #727 (bootstrap after Back), #728 (Full Backup's flag on a popup close), #729 (the phrase step after a lock).
 - **Open items:**
+  - #769: the card's steps for a second profile, drawn for a decision page and not built; #770: the phrase page's "Retrieve Recovery Phrase", held for the owner's pick;
   - #722: the landing's How Aztec works page, built in #723;
   - #730: Presto's onboarding-only leftovers;
   - OA-14 (the popup's first-run line) and OA-15 (the warnings' full stops), in [OWNER-ASKS.md](OWNER-ASKS.md).
@@ -89,6 +90,7 @@ Decision page 39 (signed 2026-10-17 19:03Z) answered OA-1 to OA-12, and page 41 
 | P39-17 A | "Go on to Ready; Home's item stays and Settings shows the phrase after the password." | as built |
 | P39-18 C + note | "Settings' three Keep in mind warnings under the grid." "Though the third warning, I'd improve it. Because it is not true it's considered one of the best ways, if it's unencrypted. So it kinda contradicts itself with the second bullet point." | the warnings under the tab's grid (D22) |
 | P41-04 C | "Paper keeps the phrase off every computer; keep it somewhere safe from loss, water and fire." | the third warning on both screens |
+| OA-16 (#768, 2026-10-18, build test) | "When importing a Passkey, the steps on Home say 'Backup… etc'. but… if I imported: means I already have it backed up. Feels like when we import, we shouldn't show any of those things (getting started)." | no card and no banner for an imported profile; supersedes P39-16 B (D24) |
 
 ## Issue claims that did not hold
 
@@ -96,6 +98,7 @@ Decision page 39 (signed 2026-10-17 19:03Z) answered OA-1 to OA-12, and page 41 
 - **#581.** At HEAD the done page names no browser: #642 (f695dea4) replaced "Chrome toolbar". #636's dropped sentence is what is left; the PR closes both.
 - **Lane brief, out of scope.** It lists #636 as out of scope and also asks to close it; P35-02 B is signed, so it is in.
 - **P28's "the fees page shrinks to one sentence"** is superseded by P30-01 A: the fees step leaves.
+- **The OA-16 brief's "an account file".** No import makes a profile from an account file: Settings › Accounts › Import adds an account to an existing profile, which keeps its card.
 - **The Ready drawing's copy** ("Pin Nulo so it's one click away…") and pin picture yield to the signed P35-02 B sentence.
 
 ## Outcome & Quality Bar
@@ -313,7 +316,7 @@ All signed; the PR body quotes each pick id with the owner's notes, and carries 
 | Onboarding phrase step | grid, three warnings, Copy beside "I saved it", "Do it later" | P33-02 C + note; P39-07 C, P39-17 A, P39-18 C, P41-04 C |
 | Welcome | first line: pair 5 | P39-08 F |
 | Ready | tip sentence alone | P35-02 B |
-| Home | Get started card; urgent banner; How Aztec works opens its final address | P30-01 A, P30-02 A, P33-01 D; P39-09 A, P39-10 A, P39-11 A, P39-16 B |
+| Home | Get started card; urgent banner; How Aztec works opens its final address; neither card nor banner for an imported profile | P30-01 A, P30-02 A, P33-01 D; P39-09 A, P39-10 A, P39-11 A; OA-16 |
 | Settings › Backup › Recovery Phrase | numbered grid with Copy under it, in place of the one-line field; the third warning reworded | P33-02 C; P39-14 A, P41-04 C |
 | Settings › Profiles › New profile | Passkey first and selected | P39-13 B |
 | Store listing captures | Home as an established wallet | P39-15 A |
@@ -357,6 +360,8 @@ Outline B (local `outline-b.md`, safest-first) split the arc into two PRs: B1 (t
 | D21 | The How Aztec works address (P39-11 A) | one constant, `HOW_AZTEC_WORKS_URL` | a `VITE_` override like the fee card's: CI's build-env guard allows only two, and widening it is a security-control change |
 | D22 | The warnings on two screens (P39-18 C) | one constant, `utils/recovery-phrase-warnings.ts`, rendered by each screen | an L3 component for three lines of static text |
 | D23 | The Firefox BiDi socket (found by the PR's CI) | `bidi-attach.ts` opens it with `ws` and the options of Puppeteer's own BiDi transport; the e2e skill's row 57 holds the evidence. The dependency change is only what the import needs under the isolated linker: `apps/extension` devDependencies gain `ws` 8.21.3, exact, the version puppeteer-core already locks, so no new `ws` code enters the tree, and `@types/ws` ^8.18.2 for the e2e typecheck, the one package new to `bun.lock` (published 2026-09-29, past the 7-day gate). In `bun.lock` the hoisted `ws` key now names 8.21.3 and viem keeps its pinned 8.18.3 nested; the one consumer that moves is `isows`, whose any-version `ws` peer now resolves 8.21.3 (below 8.21.0 sit two `ws` advisories the audit acks hold for viem's copy). Neither `ws` nor `isows` reaches the extension's bundle: `isows`'s browser export uses the page's WebSocket, and the built notices list neither | reverting Passkey first (hides the trigger, keeps the broken client); a retry or a longer timeout (masks it); reaching `ws` through puppeteer-core undeclared (the linker rule) |
+
+| D24 | How Home knows a profile was imported (OA-16) | a fifth per-profile flag, `nulo:ui:profileImported@`, written by the profile service right after each import's row (phrase, passkey, both restores), under the lock and best effort; `getStartedView` returns nothing when it is set | writing `phraseSaved`, `backupSaved` and `hidden` at import (records actions that never happened); the write in the import pages (a Firefox passkey window or a closed popup ends the page first, and a restore left on its errors screen never completes); a profile-row field (backup surface) |
 
 ## Audit verdicts
 
@@ -435,6 +440,19 @@ Outline B (local `outline-b.md`, safest-first) split the arc into two PRs: B1 (t
 | P39-R1-2: three comments narrate or carry release coordination (`useProfileCreateFlow.ts`, `RecoveryPhraseGrid.vue`'s `testId` doc, `get-started.ts`) | demonstrated | removed or trimmed |
 
 **Page 39 round 2** (same session, verify only, over 0ab5a6f7): "No remaining findings; high confidence." The loop stops here.
+
+**OA-16 consult** (2026-10-18, new Codex session, gpt-6.1-sol high, read-only): "Choose B; confidence high" (the `imported` flag over reusing three flags); suppress the banner too, high; place the write in the service's import commits for the literal invariant, since a finalize failure or an abandoned errors screen never reaches the page's completion; keep both network specs' proofs by asserting the imported wallet's empty Home, then removing its record to drive the banner. All taken (D24).
+
+**OA-16 review** (same Codex session, over the working-tree diff; Opus `general-purpose` alongside):
+
+| Finding | Evidence | Disposition |
+|---|---|---|
+| Cx P2: `useProfileImportFlow.test.ts` still pins the removed `phraseSaved` write | demonstrated: the file had reverted to the branch's copy during a baseline build | restored to `dev`'s copy; 20 of 20 pass |
+| Op P3: `markGetStarted` and `mark` accept `imported`, a second writer outside the lock | plausible | page writers take `MarkableGetStartedFlag` |
+| Op P3: two comments call an imported wallet backed up, against "never proof of a backup" | demonstrated | reworded to what the rule does |
+| Op P3: `components.d.ts` churn from a vitest run | not in the tree | none |
+
+Verify round (same Codex session): "No remaining findings." The loop stops here.
 
 ## Post-implementation
 
