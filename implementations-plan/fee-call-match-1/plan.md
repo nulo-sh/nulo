@@ -9,7 +9,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 58e2b01b
 trunk: dev
-issues: "#796 (A1 Closes, in part: D2)"
+issues: "#796 (A1 Closes, in part: D2); #821 (D2, owner-decision, no arc)"
 post_implementation_hardening: not scheduled
 ---
 
@@ -21,7 +21,7 @@ One arc, one PR against `dev` (D-orch-1). The transaction page's Fee method row 
 
 - **#796** (bug, ux; filed as plausible, traced, not run). The trace holds at `58e2b01b`: `describeExternalFee` (`popup/components/modules/tx/tx-detail-helpers.ts:55-64`) takes the first call whose method is in `FEE_METHODS` and never reads its `contract`. **Demonstrated by code trace** for an app fee call named `fee_entrypoint_private` or `pay_fee` on its own contract: the row reads "Private Fee Juice". That label names the person's own Private Fee Juice, which only the PrivateFPC draws on; here the app's contract is the network payer, and a token FPC's `fee_entrypoint_private` charges the person in a token. Consequence: a wrong screen on the person's own record. Attacker capability: a dApp names its functions; the label feeds no send, fee or key.
 - **The lane brief's premise holds only on the no-`from` path.** On a dApp send with `from`, a fee the person picks in the window and a fee the app embeds both record `EXTERNAL` with origin DAPP ([recon.md § What records which calls](recon.md#what-records-which-calls-the-fee-rows-input)). So "the name match only where the wallet chose" cannot be read from origin: applied by origin, it would relabel the person's own pick on every dApp send as "Set by {app}" (D1).
-- **The sponsor half is demonstrated too, and not decidable from the record** (D2): an app's own `sponsor_unconditionally` reads "Sponsored", even for a fee contract that charges the person. It stays as today: its fix needs new persisted state, the owner's call (OA-1). A1 says `Closes #796` and resolves it in part, explicitly: the PR body says the sponsor half is not fixed and links its `owner-decision` issue.
+- **The sponsor half is demonstrated too, and not decidable from the record** (D2): an app's own `sponsor_unconditionally` reads "Sponsored", even for a fee contract that charges the person. It stays as today: its fix needs new persisted state, the owner's call (OA-1). A1 says `Closes #796` and resolves it in part, explicitly: the PR body says the sponsor half is not fixed and links its `owner-decision` issue, #821 (no arc: it waits on the owner).
 
 ## Outcome & Quality Bar
 
@@ -46,7 +46,7 @@ Fee method row of the transaction page only (no-ask record, lane brief): "The Fe
 | # | Question | Decision | Codex r1 | Opus |
 |---|---|---|---|---|
 | D1 | What says "the wallet chose the method" | The fee call's address where it is decisive: the PrivateFPC for `pay_fee`. Not origin. | sound | sound |
-| D2 | `sponsor_unconditionally` on a dApp send | Stays matched by name; OA-1; an `owner-decision` issue filed before the PR, linked from its body | not a known limit: keep open | known limit; say what it can hide |
+| D2 | `sponsor_unconditionally` on a dApp send | Stays matched by name; OA-1; `owner-decision` issue #821, filed before the PR and linked from its body | not a known limit: keep open | known limit; say what it can hide |
 | D3 | Test layer | Helper unit tests plus one page case, rows shaped as their writers store them; no e2e scenario | add the page case | add the page case |
 
 **D2.** The wallet pays through any sponsor row, the protocol sponsor or one a person adds (`NewFpcPopup.vue`), so no address the popup holds marks the wallet's own sponsor, and the record does not say who chose. (a) Pin the protocol sponsor's address: a dApp send through a sponsor the person added would read "Set by {app}", the same wrong attribution reversed; an app that embeds the protocol sponsor would still read "Sponsored"; the pin moves with every Aztec bump. (b) Read the person's FPC rows in the page: a history label would change with a setting, and the page would gain a service client. (c) Record on the row who chose the fee: new persisted state, with obligations at every writer, the backup restore and old rows; refused for #760 (`implementations-plan/archive/owner-feedback-1/plan.md` § Decision ledger, D1) and outside this lane ("the journal's shape"). `EXTERNAL` names a network payer other than the account, not who bore the cost: a sponsor's function is checked by signature only, and a custom sponsor may spend the sender's notes (`wallet/services/execution/transfer-executor.ts:171-176`). So an app can make a fee that charged the person read "Sponsored". The path is demonstrated and its consequence matters, so it is no known limit (Codex over Opus); its fix is a product and persistence decision, so its home is an `owner-decision` issue (`implementations-plan/README.md` § Where open work lives). Codex preferred `Refs #796`; `Closes #796` stands because the PR body states the split and links that issue, as both legs require, and #796's Private Fee Juice half is fixed.

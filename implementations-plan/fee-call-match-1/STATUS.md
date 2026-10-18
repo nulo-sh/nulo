@@ -7,3 +7,5 @@
 - 2026-10-18: A1 Phase 0 pass (branch `fee-call-match-1-a1`, frozen install). Phase 1 pass: vitest tx-detail-helpers + pages/tx 33/33 (2 red on the base helper), lint and typecheck:all exit 0; commit 6f73a18c.
 - 2026-10-18: A1 Phase 2 partial: audit:vue exit 0, test:all exit 0 (on 6f73a18c). Fix loop: Codex r1 + Opus conditional approve (test-only), folded in 2fb5f5e0; Codex r2 approve. Smoke suite next.
 - 2026-10-18: A1 Phase 2 pass: smoke suite on Chrome, armed build, 57 files passed and 6 skipped (about 32 min); picture light and dark; Phase 2 ✓. Merging origin/dev next.
+- 2026-10-18: merged origin/dev a4edec20 (index.md conflict resolved by hand, both sides kept); install, lint, typecheck:all exit 0 on the merged head; filed #821 (D2, owner-decision).
+- 2026-10-18: test:all exit 0 on the merged head; check:plans exit 0. Delivery next.

@@ -12,4 +12,4 @@ A1 depends on none: it ships under either answer.
 - **A (ships now): keep "Sponsored" for every `sponsor_unconditionally` call.** Nothing is stored. A1's Private Fee Juice fix ships either way. An app's own sponsor keeps reading "Sponsored".
 - **B: record who chose the fee on each new transaction.** Your own pick reads as today ("Sponsored", "Private Fee Juice"); an app's own fee contract reads "Set by {app}" whatever its function is called. Rows saved before the change keep today's reading. A later arc: a new field at every place the wallet records a transaction, accepted by backup restore.
 
-**Recommendation.** B, before launch: it is the only option that makes the row say who chose, and before launch no migration is needed. A ships now, and A1 does not wait. This ask is also filed as an `owner-decision` issue before A1's PR opens, so it outlives this plan.
+**Recommendation.** B, before launch: it is the only option that makes the row say who chose, and before launch no migration is needed. A ships now, and A1 does not wait. This ask is also filed as `owner-decision` issue [#821](https://github.com/nulo-sh/nulo/issues/821), so it outlives this plan.
