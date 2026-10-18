@@ -1,7 +1,7 @@
 /**
- * Unit tests for `BalanceRefreshOutbox` over an in-memory repository and a controllable lock ticket:
- * the window between the anchor's re-read and its write, which the service fixture's real lock cannot
- * time. The drain's state machine runs against the real service lock in `service.scenarios.test.ts`.
+ * Unit tests for `BalanceRefreshOutbox` over an in-memory repository and a controllable lock ticket,
+ * isolating a ticket revoked during the anchor's re-read. The drain's state machine runs against the
+ * real service lock in `service.scenarios.test.ts`.
  */
 import { describe, expect, test, vi } from "vitest"
 import { BalanceRefreshOutbox, type BalanceRefreshOutboxDeps } from "./balance-outbox"
@@ -30,7 +30,7 @@ function makeOutbox(opts: { revokeOnReRead: boolean }) {
 	}
 	const outbox = new BalanceRefreshOutbox({
 		repo,
-		activeProfileId: async () => "p1",
+		activeProfile: async () => ({ id: "p1" }),
 		withLock: (fn) => fn(() => current),
 		tokenBalances: { requestBalanceRefresh: async () => ({ taskId: "T1" }) },
 		tasks: { getTaskSync: vi.fn() },

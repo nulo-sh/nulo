@@ -371,7 +371,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		this.priceService = services.get(PriceService.name)
 		this.outbox = new BalanceRefreshOutbox({
 			repo: this.repo,
-			activeProfileId: async () => (await this.profileService.getActiveProfile())?.id,
+			activeProfile: () => this.profileService.getActiveProfile(),
 			withLock: (fn) => this.withServiceLock(fn),
 			tokenBalances: services.get<TokenBalanceService>(TokenBalanceService.name),
 			tasks: services.get<TaskService>(TaskService.name),

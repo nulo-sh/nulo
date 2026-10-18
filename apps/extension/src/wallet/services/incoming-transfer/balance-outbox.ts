@@ -9,7 +9,7 @@ type RefreshRequestResult = { taskId: string } | { busy: true } | { missing: tru
 
 export interface BalanceRefreshOutboxDeps {
 	repo: Pick<IncomingTransferRepository, "getOutbox" | "setOutbox" | "deleteOutbox" | "listOutbox">
-	activeProfileId: () => Promise<string | undefined>
+	activeProfile: () => Promise<{ id: string } | undefined>
 	/** The incoming-transfer service lock; `isCurrent` turns false once a watchdog hands it over. */
 	withLock: <T>(fn: (isCurrent: () => boolean) => Promise<T>) => Promise<T>
 	tokenBalances: Pick<TokenBalanceService, "requestBalanceRefresh">
@@ -27,7 +27,8 @@ function anchoredRowAction(state: "success" | "failure" | "pending" | "missing")
 
 /**
  * The balance-refresh outbox: a receipt marks its (account, token) balance dirty, and the drain turns
- * each dirty row into a balance refresh, deleting the row only once a task minted after it succeeds.
+ * each dirty row into a balance refresh, deleting the row only once a task minted after it succeeds
+ * or its balance pair is gone.
  *
  * Every write runs under the service lock: `markDirty`'s callers already hold it, and `drain` takes
  * it once per row. The rows belong to the repository, so scope and token wipes delete them there.
@@ -61,8 +62,8 @@ export class BalanceRefreshOutbox {
 	 *    refresh marker.
 	 */
 	public async drain(): Promise<void> {
-		const activeId = await this.deps.activeProfileId()
-		if (activeId === undefined) return
+		const profile = await this.deps.activeProfile()
+		if (!profile) return
 		let rows: Array<[string, IncomingBalanceOutboxRow]>
 		try {
 			rows = await this.deps.repo.listOutbox()
@@ -74,7 +75,7 @@ export class BalanceRefreshOutbox {
 			const parts = key.split("|")
 			if (parts.length !== 4) continue
 			const [profileId, networkId, accountAddress, tokenIdStr] = parts
-			if (profileId !== activeId) continue // active-profile-scoped
+			if (profileId !== profile.id) continue // active-profile-scoped
 			const tokenId = Number(tokenIdStr)
 			if (!Number.isInteger(tokenId)) continue
 			const row: OutboxRowKey = { profileId, networkId, accountAddress, tokenId }
