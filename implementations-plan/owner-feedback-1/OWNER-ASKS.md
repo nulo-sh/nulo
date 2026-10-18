@@ -57,3 +57,16 @@ Four asks. OA-1 and OA-2 hold arc 2 (the landing, #767): it opens only once both
 **Recommendation: A.** It names the method, as the row's label says.
 
 **What ships now: A.**
+
+## OA-6. #766: the app-set fee block with no amount to state
+
+**Surface:** the execute window's fee block when the app sets the fee payment method and no estimate runs or has landed: a failed estimate, or an operation the wallet never estimates. The signed sentence (P47-02 C) names an amount, so it cannot read here.
+
+| Option | The block reads |
+|---|---|
+| **A. The shipped legend** | "Fee payment method set by {app}" |
+| **B. The sentence's second half** | "Payment method set by {app}." |
+
+**Recommendation: A.** No new words; it is the line you saw on page 47 as the shipped form.
+
+**What ships now: A.**
