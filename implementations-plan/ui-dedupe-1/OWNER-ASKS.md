@@ -4,6 +4,8 @@ The lane brief's no-ask records cover every arc ("UI impact: none"; #517 pixel-i
 
 ## OA-1 (arcs A5 and A6, #548): converge the balance lists on Home's rules?
 
+**Answered 2026-10-18: P44-02 = B**, "Converge every row above onto Home's rule; the two deliberate differences stay options." The question showed seven rows of the first table: Holdings' three, Select token's two, and Send's worker restart and deleted row. Arc A7 converges those seven; Holdings keeps its unfiltered delete and its replace on Added, and Send keeps its failure card. The five rows added after the question was built are OA-3.
+
 - **Surface**:
   - Holdings;
   - the Select token sheet over Send;
@@ -50,6 +52,19 @@ The lane brief's no-ask records cover every arc ("UI impact: none"; #517 pixel-i
   - B. Add the one missing check, so a dropped run stops before it builds clients or calls the service.
 - **What ships now**: A. The owner's rule for #541: a behaviour change is an ask, never a quiet fix.
 - **Recommendation**: B. It is one line, and it is the class of slip #541 was opened for.
+
+## OA-3 (#548): the five rows P44-02 did not show
+
+- **Surface**: Holdings, the Select token sheet over Send, Send's amount, History's cancelled and failed rows, Home's import rows.
+- **Background**: P44-02 showed seven rows. Five more were recorded in OA-1 while the question was out; A7 did not converge them, since nobody saw them:
+  - Holdings and Select token: a read still out when a token is added or changes lands over it, so the token can drop out of the list until the next read. Home reads again and keeps the change.
+  - Send: every added balance row for the account is listed as it comes, from any chain and again for an id already listed. Home lists the active chain's rows, once per id.
+  - The three journal rows of OA-1's second table (Home's import rows listed twice, History's row removed by a late update, History and Home's import rows landing every read and retrying none).
+- **Options**:
+  - A. Keep each as an option of its mirror (ships now).
+  - B. Converge all five onto Home's rules, as P44-02 did for the seven.
+- **What ships now**: A.
+- **Recommendation**: B, for P44-02's reason: none was chosen. Against: Home's import rows and History change what they show in a rare order, so B needs its own pictures.
 
 ## Conditional (no entry yet)
 
