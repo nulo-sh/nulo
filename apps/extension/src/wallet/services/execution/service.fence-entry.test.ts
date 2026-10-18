@@ -4,10 +4,12 @@
  * when its caller passed none — which no production caller does, because a
  * capture taken after any await can observe a session the user never acted in.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { join, relative } from "node:path"
 import { describe, expect, test, vi } from "vitest"
 import { SessionEndedError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
+import { callsTo } from "../../../../scripts/type-roles/source-code"
+import { REPO_ROOT, sourceFiles, TEST_FILE } from "../../../../scripts/type-roles/source-scan"
 import { startedTaskService } from "@/wallet/services/task/test-task-service"
 import { type LocalTxOrigin, OriginType } from "@/wallet/services/transaction/spec"
 import { ExecutionService } from "./service"
@@ -228,40 +230,7 @@ describe("ExecutionService.executeAztecCreateAuthWit: the sign runs under the fe
 	})
 })
 
-const SRC = join(__dirname, "..", "..", "..")
-const OPENERS = new Set(["(", "[", "{"])
-const CLOSERS = new Set([")", "]", "}"])
-const QUOTES = new Set(['"', "'", "`"])
-
-function productionSources(dir: string): string[] {
-	return readdirSync(dir).flatMap((name) => {
-		const path = join(dir, name)
-		if (statSync(path).isDirectory()) return productionSources(path)
-		return /\.(ts|vue)$/.test(name) && !name.endsWith(".test.ts") ? [path] : []
-	})
-}
-
-/** The top-level argument texts of the call whose `(` sits at `open`; string contents are skipped. */
-function callArguments(source: string, open: number): string[] {
-	const parts: string[] = []
-	let depth = 0
-	let start = open + 1
-	for (let i = open; i < source.length; i++) {
-		const ch = source[i] as string
-		if (QUOTES.has(ch)) {
-			i = source.indexOf(ch, i + 1)
-			continue
-		}
-		if (OPENERS.has(ch)) depth++
-		if (CLOSERS.has(ch)) depth--
-		if (depth === 0) return [...parts, source.slice(start, i)].map((part) => part.trim()).filter(Boolean)
-		if (ch === "," && depth === 1) {
-			parts.push(source.slice(start, i))
-			start = i + 1
-		}
-	}
-	throw new Error(`unbalanced call at offset ${open}`)
-}
+const SRC = "apps/extension/src"
 
 /** Whether the nearest declaration of `name` before `offset` admits an absent value; an
  *  expression or an undeclared name counts as possibly absent. */
@@ -273,23 +242,27 @@ function mayBeAbsent(source: string, name: string, offset: number): boolean {
 	return nearest[1] === "?" || /\|\s*undefined/.test(nearest[2] ?? "")
 }
 
+/** Every production `….executeSendTransaction(…)` but the executor's own, whose fence parameter is required. */
+function facadeCalls(): { site: string; args: number; absent: boolean }[] {
+	return sourceFiles({ roots: [SRC], exts: ["ts", "vue"], skip: [TEST_FILE] }).flatMap((file) => {
+		const path = relative(SRC, file)
+		return callsTo(path, readFileSync(join(REPO_ROOT, file), "utf8"), /\.executeSendTransaction$/)
+			.filter((call) => !/\bdappSendExecutor\.executeSendTransaction$/.test(call.callee))
+			.map(({ line, args }) => {
+				const fence = args[4]
+				const absent = !fence || mayBeAbsent(fence.getSourceFile().text, fence.getText(), fence.getStart())
+				return { site: `${path}:${line}`, args: args.length, absent }
+			})
+	})
+}
+
 test("no production caller relies on that capture: every facade call passes a fence", () => {
-	const calls: { site: string; args: string[]; absent: boolean }[] = []
-	for (const file of productionSources(SRC)) {
-		const source = readFileSync(file, "utf8")
-		for (const match of source.matchAll(/(\w+)\.executeSendTransaction\(/g)) {
-			// The executor's own method takes the fence as a required parameter.
-			if (match[1] === "dappSendExecutor") continue
-			const open = (match.index ?? 0) + match[0].length - 1
-			const args = callArguments(source, open)
-			calls.push({ site: `${relative(SRC, file)}@${open}`, args, absent: mayBeAbsent(source, args[4] ?? "undefined", open) })
-		}
-	}
+	const calls = facadeCalls()
 	// The dispatch arm and the two registry sends, at least. The fence is the fifth argument; the
 	// dispatch arm adds the popup's approval envelope after it.
 	expect(calls.length).toBeGreaterThanOrEqual(3)
 	for (const { site, args, absent } of calls) {
-		expect([5, 6], site).toContain(args.length)
+		expect([5, 6], site).toContain(args)
 		expect(absent, `${site}: the fence argument may be undefined`).toBe(false)
 	}
 })
