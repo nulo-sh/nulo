@@ -6,6 +6,7 @@
  */
 
 /** Utils */
+import { endsSelection } from "@/utils/selection"
 import { trimAddress } from "@/utils/string"
 
 defineProps({
@@ -31,7 +32,7 @@ const emit = defineEmits(["copy"])
 		>{{ trimAddress(hash, 6, 4) }}</a>
 		<span
 			v-else
-			@click="emit('copy', hash)"
+			@click="endsSelection($event) || emit('copy', hash)"
 			:data-testid="copyTestid"
 			:class="[$style.detail_value_mono, 'copyable']"
 		>{{ trimAddress(hash, 6, 4) }}</span>

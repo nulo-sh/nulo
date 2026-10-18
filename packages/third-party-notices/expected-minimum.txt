@@ -53,3 +53,4 @@ JetBrains Mono
 
 # source adapted into first-party files
 Azguard Wallet
+Tabler Icons

@@ -25,13 +25,16 @@ export { comparePublicPositions }
 
 export type PublicIndexerLogger = (level: "warn" | "debug", msg: string, ...rest: unknown[]) => void
 
-/** The network-resolved RPC transport the indexer drives (the SW-side PxeServiceClient, curried per networkId). */
+/** The network-resolved reads the indexer and the arrival state drive, curried per networkId. */
 export interface PublicEventReader {
 	fetchTransferPage(networkId: string, contract: string, args: PublicTransferFetchArgs): Promise<PublicTransferPage>
 	getScanTips(networkId: string): Promise<PublicScanTips>
 	getTokenClassStatus(networkId: string, contract: string, checkpointHash: string): Promise<PublicTokenClassStatus>
 	/** The latest proposed block, which the arrival floors are taken from. */
 	getLatestBlockNumber(networkId: string): Promise<number>
+	/** The same tip in one attempt at the network's primary endpoint, past the PXE, refused for a
+	 *  quarantined chain: for a read whose caller reads again on its own schedule. */
+	getChainTipOnce(networkId: string): Promise<number>
 }
 
 /** The accumulated result of a bounded, multi-page forward scan. */

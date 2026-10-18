@@ -82,6 +82,7 @@ const reader: PublicEventReader = {
 	}),
 	getTokenClassStatus: async () => "standard",
 	getLatestBlockNumber: async () => 1,
+	getChainTipOnce: async () => 1,
 }
 
 type Hold = { at: RestoreGateHoldPoint; reached: Promise<void>; hit: () => void; released: Promise<void>; release: () => void }

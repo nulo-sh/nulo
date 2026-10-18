@@ -44,6 +44,7 @@ import { useReceiptFee } from "@/composables/useReceiptFee"
 import { DETAIL_TIME_FORMAT } from "../detail-page"
 import { balanceFormatted } from "@/utils/amount.js"
 import { copyReceivedValue } from "./received-copy"
+import { endsSelection } from "@/utils/selection"
 import { trimAddress } from "@/utils/string"
 import { receivedLabel, resolveFromDisplay, resolveReceivedType, tokenForReceipt } from "@/utils/received-display"
 import { knownDecimals } from "@/utils/token-amount"
@@ -268,7 +269,7 @@ onBeforeUnmount(() => {
 					gap="4"
 					:class="[$style.address_card, !fromClickable && $style.card_static]"
 					data-testid="received-from-card"
-					@click="fromClickable && copy(fromDisplay.address, 'From address')"
+					@click="fromClickable && !endsSelection($event) && copy(fromDisplay.address, 'From address')"
 				>
 					<AddressDisplay
 						v-if="fromDisplay.kind === 'address'"
@@ -296,7 +297,7 @@ onBeforeUnmount(() => {
 					direction="column"
 					gap="4"
 					:class="$style.address_card"
-					@click="copy(received.accountAddress, 'Account address')"
+					@click="endsSelection($event) || copy(received.accountAddress, 'Account address')"
 				>
 					<AddressDisplay
 						static
@@ -333,7 +334,7 @@ onBeforeUnmount(() => {
 						>
 						<span
 							v-else
-							@click="copy(received.txHash, 'Tx hash')"
+							@click="endsSelection($event) || copy(received.txHash, 'Tx hash')"
 							:class="[$style.detail_value_mono, 'copyable']"
 							data-testid="tx-hash-copy"
 							>{{ trimAddress(received.txHash, 6, 4) }}</span
@@ -392,7 +393,7 @@ onBeforeUnmount(() => {
 							<span
 								v-else-if="isPublic"
 								data-testid="tx-block-hash"
-								@click="copy(received.blockHash, 'Block hash')"
+								@click="endsSelection($event) || copy(received.blockHash, 'Block hash')"
 								:class="[$style.detail_value_aux, 'copyable']"
 							>
 								{{ trimAddress(received.blockHash, 6, 4) }}

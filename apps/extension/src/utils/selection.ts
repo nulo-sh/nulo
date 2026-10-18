@@ -19,3 +19,9 @@ export function selectedWithin(el: EventTarget | null): boolean {
 	}
 	return false
 }
+
+/** A pointer click that ends a selection inside its target; Enter and Space reach a native button
+ *  as a click with `detail` 0, so a key copies even over a selection. */
+export function endsSelection(e: MouseEvent): boolean {
+	return e.detail > 0 && selectedWithin(e.currentTarget)
+}
