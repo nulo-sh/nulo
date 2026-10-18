@@ -21,7 +21,7 @@ const REGISTERED = {
 	Popover: passThrough("div"),
 	Icon: passThrough("span"),
 	Text: passThrough("span"),
-	Input: passThrough("input"),
+	Input: passThrough("div"),
 }
 
 let dropdownRoot: HTMLDivElement
