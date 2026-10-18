@@ -92,6 +92,7 @@ declare module 'vue' {
     SecretUnlockSection: typeof import('./../components/composite/SecretUnlockSection.vue')['default']
     SectionLabel: typeof import('@nulo/design')['SectionLabel']
     SendTypesCard: typeof import('./../components/composite/send/SendTypesCard.vue')['default']
+    SettingControlRow: typeof import('./../components/ui/Settings/SettingControlRow.vue')['default']
     SettingField: typeof import('./../components/ui/Settings/SettingField.vue')['default']
     SettingItem: typeof import('./../components/ui/Settings/SettingItem.vue')['default']
     SettingsPageShell: typeof import('./../components/composite/SettingsPageShell.vue')['default']

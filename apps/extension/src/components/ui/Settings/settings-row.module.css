@@ -64,6 +64,12 @@
 	white-space: nowrap;
 }
 
+/* A settings page's control-row title. It owns the role class, so the `Text` drawing it takes no `variant`. */
+.control_title {
+	composes: type--row-title from global;
+	font-size: 13px;
+}
+
 /* No role: its consumers differ, so each composes its own. */
 .row_sub {
 	color: var(--nulo-secondary);
