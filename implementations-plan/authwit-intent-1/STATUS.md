@@ -9,3 +9,4 @@
 - 2026-10-17: Phase 1 gate green: lint, typecheck:all, wallet-bridge (794), extension-messaging (418), `bun run test` (13677); both red proofs red then green; `authwit-variants` network e2e at retry 0, 4 passed, 342 s with build (suite 83 s).
 - 2026-10-17: Phase 2 gate green: lint, typecheck:all, wallet-bridge (795, 20 files), `bun run test` (pin file not collected), `test:all` exit 0; selector red proof red then green.
 - 2026-10-18: review round 1: Codex raised 2 points, the Opus diff review 4, all accepted and fixed; lint, typecheck:all and the touched suites green; the new pin's red proof red then green.
+- 2026-10-18: review round 2 (Codex resume): clean; loop converged after two rounds.

@@ -126,6 +126,7 @@ The contract is this plan plus `implementations-plan/README.md` § Post-implemen
 - **Codex round 2** (resumed): **approve**, nothing new and material. Two wording fixes applied: recon's reuse rows for the rebuild and the test's dependency, and Outcome 2's call-intent routing.
 - **Implementation, Codex round 1** (`gpt-6.1-sol`, high): 2 points, both accepted. The binding test's third-party control could pass on an unsigned `undefined` (now: one signing call asserted, and the exact third-party hash); two comments restated code (one deleted, one compressed).
 - **Implementation, Opus diff review:** 4 points, all accepted. The pin checked a typed signature, not what upstream emits (D7); one constant name meant two texts (the internal one renamed); the envelope comment and the binding file's header; `SECURITY.md`'s "nothing is refused on scope" now reads "nothing else". Its note on the binding test's name was taken: the name states what the test asserts.
+- **Implementation, Codex round 2** (resumed): clean; the loop converged.
 - **Opus leg:** conditional approve. Accepted: the rebuild line and `errors.test.ts` row (F7), the test moved to the extension (D5), the signer's precedence plus a mixed-intent control, the comment at the guard, the wording pass. Rejected: "`lessons/` is empty" (`lessons/phase-0.md` exists).
 
 ## Seeds
