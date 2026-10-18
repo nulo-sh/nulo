@@ -8,8 +8,10 @@
 
 import type { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import type { TxExecutionRequest } from "@aztec-labs/stdlib/tx"
+import type { MinFeeNode } from "@nulo/aztec-runtime/fee-juice"
 import type { PriorityLevel } from "@nulo/wallet-bridge"
 import { FpcType, type FpcIdentitySnapshot, type FpcInfo } from "@/wallet/services/fpc/spec"
+import type { Network } from "@/wallet/services/network/service"
 import type { NetworkEndpoint } from "@/wallet/services/network/spec"
 import type { FeeCapRule } from "./fee/fee-cap"
 import { DEFAULT_FEE_MULTIPLIER, FEE_MULTIPLIERS } from "./fee/fee-strategy"
@@ -45,6 +47,20 @@ export function reuseCapRule(
 /** The raw pair a node reports. The network row's stored chainId is an XOR composite — `(1,4)` and
  *  `(2,7)` collide — so a snapshot compares this pair, never the composite. */
 export type ChainIdentity = { readonly l1ChainId: number; readonly rollupVersion: number }
+
+/** Lazy dependency lookups for both caches: a rejection ladder that rejects early never touches a
+ *  later dep. */
+export interface EstimateReuseDeps {
+	getNetwork(networkId: string): Promise<Network>
+	getNode(chainId: number): Promise<MinFeeNode>
+	/** Asserts the live chain against the network row (throws on drift) and returns its raw pair. */
+	getLiveChainIdentity(network: Network): Promise<ChainIdentity>
+	/** Fresh resolved-FPC lookup for identity revalidation. */
+	getFpcInfo(fpcId: string): Promise<FpcInfo>
+	getPendingForAccount(account: string): { hash: string }[]
+	sequenceEpoch(chainId: number, account: string): number
+	logDebug(msg: string): void
+}
 
 /** The snapshot fields both entry types carry: what was true at estimate time, and the build reused on confirm. */
 export type ReuseEntryBase = {

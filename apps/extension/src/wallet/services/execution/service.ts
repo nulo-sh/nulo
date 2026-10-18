@@ -92,7 +92,7 @@ import { coerceAmount } from "./coerce-amount"
 import { OperationPlanner, type TransferRequest } from "./operation-planner"
 import { type QueuedFeeCap, QueuedFeeAnswers, queuedFeeBasis, queuedFeeCap, sendShapeOf } from "./queued-fee-cap"
 import { TransferEstimateReuse } from "./transfer-estimate-reuse"
-import { type ChainIdentity, feeMultiplierFor } from "./estimate-reuse-shared"
+import { type ChainIdentity, type EstimateReuseDeps, feeMultiplierFor } from "./estimate-reuse-shared"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { PreviewSnapshots } from "./preview-snapshots"
 import { TransferExecutor, type TransferSequence } from "./transfer-executor"
@@ -356,7 +356,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
 			logError: (msg, ...rest) => this.logError(msg, ...rest),
 		})
-		this.estimateReuse = new TransferEstimateReuse({
+		const reuseDeps: EstimateReuseDeps = {
 			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
 			getNode: (chainId) => this.networkService.getNode(chainId),
 			getLiveChainIdentity: (network) => this.liveChainIdentity(network),
@@ -364,16 +364,9 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
 			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
 			logDebug: (msg) => this.logDebug(msg),
-		})
-		this.operationEstimateReuse = new OperationEstimateReuse({
-			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
-			getNode: (chainId) => this.networkService.getNode(chainId),
-			getLiveChainIdentity: (network) => this.liveChainIdentity(network),
-			getFpcInfo: (fpcId) => this.sponsorRow(fpcId),
-			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
-			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
-			logDebug: (msg) => this.logDebug(msg),
-		})
+		}
+		this.estimateReuse = new TransferEstimateReuse(reuseDeps)
+		this.operationEstimateReuse = new OperationEstimateReuse(reuseDeps)
 		this.previewSnapshots = new PreviewSnapshots()
 		this.estimateCancel = new EstimateCancelRegistry({
 			// Ids are UUID-unique across the caches — evict from each.
