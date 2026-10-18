@@ -23,7 +23,16 @@ const mocks = vi.hoisted(() => ({
 	saveFeePick: vi.fn(),
 }))
 
-vi.mock("@/utils/core", () => ({ managers: { profile: { saveFeePick: mocks.saveFeePick } } }))
+// The real `saveFeePick` is a client method, so the card must call it on `managers.profile`.
+vi.mock("@/utils/core", () => {
+	const profile = {
+		saveFeePick(this: unknown, ...args: unknown[]) {
+			if (this !== profile) throw new Error("saveFeePick called off managers.profile")
+			return mocks.saveFeePick(...args)
+		},
+	}
+	return { managers: { profile } }
+})
 
 // Vitest 4 requires `function` expressions (not arrow functions) for mocks
 // instantiated with `new`. Arrow factories error: "() => ... is not a constructor".
@@ -529,22 +538,19 @@ describe("FeeSettingsCard — user actions", () => {
 		expect(stored?.type).toBe("fj")
 	})
 
-	test("picking the same Sponsored FPC twice: cacheStore.feePaymentMethods has exactly one entry", async () => {
-		const { useCacheStore } = await import("@/stores/cache.store")
-		mocks.getFpcs.mockResolvedValue([{ id: "s1", type: 1, name: "Sponsor" }])
+	test("the mode is chosen when the card opens: an app card handed an origin later still saves an app pick", async () => {
+		mocks.getFpcs.mockResolvedValue([])
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
 
 		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
 		await flushPromises()
-
-		await w.find('[data-testid="pick-fpc"]').trigger("click")
-		await flushPromises()
-		await w.find('[data-testid="pick-fpc"]').trigger("click")
+		await w.setProps({ originPrivacy: "private" })
+		await w.find('[data-testid="pick-fj"]').trigger("click")
 		await flushPromises()
 
-		const cacheStore = useCacheStore()
-		const s1Entries = (cacheStore.feePaymentMethods as Array<{ fpc?: { id?: string } }>).filter((m) => m.fpc?.id === "s1")
-		expect(s1Entries).toHaveLength(1)
+		expect(mocks.saveFeePick.mock.calls.map(([, update]) => (update as { kind: string }).kind)).toEqual(["app"])
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+		w.unmount()
 	})
 
 	test("priority change: emits settings with priorityLevel set; payment method preserved", async () => {
@@ -576,7 +582,6 @@ describe("FeeSettingsCard — the saved pick, outside Send", () => {
 	const lastPayer = (w: ReturnType<typeof mount>) => w.emitted<unknown[]>("update:payer")?.at(-1)?.[0]
 
 	test("a hand-added sponsor's pick is saved as plain data and is what the next card opens on", async () => {
-		const { useCacheStore } = await import("@/stores/cache.store")
 		mocks.getFpcs.mockResolvedValue([NULO, HAND_ADDED])
 		mocks.getGasBalances.mockResolvedValue(HELD)
 		const first = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
@@ -590,7 +595,6 @@ describe("FeeSettingsCard — the saved pick, outside Send", () => {
 			subtitle: "sponsored",
 			fpc: { id: "s2", isProtocol: false },
 		})
-		expect((useCacheStore().feePaymentMethods as Array<{ fpc?: { id?: string } }>).map((m) => m.fpc?.id)).toEqual(["s2"])
 		first.unmount()
 
 		// A fresh store has no FPC list to answer early, so only the saved record can name the sponsor.
@@ -654,8 +658,7 @@ describe("FeeSettingsCard — the saved pick, outside Send", () => {
 		},
 	)
 
-	test("a failed save is logged once under a named key and leaves the pick, the saved map and the cache as they were", async () => {
-		const { useCacheStore } = await import("@/stores/cache.store")
+	test("a failed save is logged once under a named key and leaves the pick and the saved map as they were", async () => {
 		const otherAccount = { "0xother": { type: "fj", title: "Public Fee Juice", subtitle: "public" } }
 		storageBacking[FEE_METHOD_LS_KEY] = structuredClone(otherAccount)
 		mocks.getFpcs.mockResolvedValue([NULO, HAND_ADDED])
@@ -676,7 +679,6 @@ describe("FeeSettingsCard — the saved pick, outside Send", () => {
 			logged.mockRestore()
 		}
 		expect(storageBacking[FEE_METHOD_LS_KEY]).toEqual(otherAccount)
-		expect(useCacheStore().feePaymentMethods).toEqual([])
 		expect(selector(w).attributes("data-active-title")).toBe("Dev sponsor")
 		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s2" } })
 		w.unmount()
@@ -1852,8 +1854,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 		}
 	})
 
-	const sendProps = (over: Record<string, unknown> = {}) =>
-		baseProps({ originPrivacy: "private", destinationPrivacy: "private", ...over })
+	const sendProps = (over: Record<string, unknown> = {}) => baseProps({ originPrivacy: "private", ...over })
 	const mountSend = (over: Record<string, unknown> = {}) => mount(FeeSettingsCard, { props: sendProps(over), global: { stubs: STUBS } })
 	const activeType = (w: ReturnType<typeof mount>) => w.find('[data-testid="fee-method-selector"]').attributes("data-active-type")
 	const activeTitle = (w: ReturnType<typeof mount>) => w.find('[data-testid="fee-method-selector"]').attributes("data-active-title")
@@ -2051,7 +2052,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			expect(everEmittedSettings(w)).toEqual([{ paymentMethod: { kind: "fj" } }])
 		})
 
-		test("during a recovery recommit's storage read: ends resolved for the live origin", async () => {
+		test("a Send recovery reads no saved app picks, and an origin flip right after the retry resolves for the live origin", async () => {
 			vi.useFakeTimers()
 			try {
 				mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, SPONSOR])
@@ -2060,14 +2061,19 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 				const w = mountSend()
 				await vi.advanceTimersByTimeAsync(0)
 				expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+				expect(degradedText(w)).toBe("Couldn't load fee data. Retrying in the background.")
 
+				// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
+				const reads = vi.spyOn((globalThis as any).chrome.storage.local, "get")
 				storageGate = deferred<void>()
 				await vi.advanceTimersByTimeAsync(INIT_RETRY_BACKOFF_MS[0])
 				await w.setProps({ originPrivacy: "public" })
+				await vi.advanceTimersByTimeAsync(0)
+				expect(reads.mock.calls.flat(2)).not.toContain(FEE_METHOD_LS_KEY)
+				expect(degradedText(w)).toBeNull()
+				expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
 				storageGate.resolve()
 				storageGate = undefined
-				await vi.advanceTimersByTimeAsync(0)
-				expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
 				w.unmount()
 			} finally {
 				vi.useRealTimers()
@@ -2836,7 +2842,7 @@ describe("FeeSettingsCard — Send: the fee-source tag", () => {
 
 	const mountSend = (over: Record<string, unknown> = {}) =>
 		mount(FeeSettingsCard, {
-			props: baseProps({ originPrivacy: "private", destinationPrivacy: "private", ...over }),
+			props: baseProps({ originPrivacy: "private", ...over }),
 			global: { stubs: STUBS },
 		})
 	const everyPayer = () => {
@@ -2895,7 +2901,7 @@ describe("FeeSettingsCard — Send: the payer model", () => {
 
 	const mountSend = (over: Record<string, unknown> = {}) =>
 		mount(FeeSettingsCard, {
-			props: baseProps({ originPrivacy: "private", destinationPrivacy: "private", ...over }),
+			props: baseProps({ originPrivacy: "private", ...over }),
 			global: { stubs: STUBS },
 		})
 	/** The model's value as the parent sees it: its `null` default until the first emission. */
@@ -3077,31 +3083,13 @@ describe("FeeSettingsCard — the identity guards, field by field", () => {
 		expect(degraded(w)).toBe(true)
 	})
 
-	test("Send: a pending selection keeps its cached result while unread identity fields change", async () => {
-		let live: Identity | undefined
-		const w = await sendAcross((i) => {
-			live = i
-		})
-		if (!live) throw new Error("no identity")
-		const vm = w.vm as unknown as { sendSelection: { kind: string } }
-		expect(vm.sendSelection.kind).toBe("selected")
-		live.profile.id = "p2"
-		await flushPromises()
-		const pending = vm.sendSelection
-		expect(pending.kind).toBe("pending")
-		live.network.chainId = 222
-		live.network.id = "n2"
-		await flushPromises()
-		expect(vm.sendSelection).toBe(pending)
-	})
-
 	/** Send's settled selection, then `mutate`. */
 	const sendAcross = async (mutate: (i: Identity) => void) => {
 		mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: HELD })
 		const live = liveIdentity()
 		const w = mount(FeeSettingsCard, {
-			props: baseProps({ ...live, originPrivacy: "private", destinationPrivacy: "private" }),
+			props: baseProps({ ...live, originPrivacy: "private" }),
 			global: { stubs: STUBS },
 		})
 		await flushPromises()
@@ -3130,7 +3118,7 @@ describe("FeeSettingsCard — the identity guards, field by field", () => {
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: "0" })
 		storageBacking[sendFeePicksKey("p1")] = { [account.address]: { public: { type: "fpc", fpc: { id: "s1" } } } }
 		const w = mount(FeeSettingsCard, {
-			props: baseProps({ originPrivacy: "public", destinationPrivacy: "private" }),
+			props: baseProps({ originPrivacy: "public" }),
 			global: { stubs: STUBS },
 		})
 		await flushPromises()

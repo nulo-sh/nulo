@@ -23,6 +23,7 @@ import { capHomeSlots, defaultKey, homeSlots, isDefaultPending } from "./home-sl
 /** Composables */
 import { usePinnedTokens, pinScopeOf } from "@/composables/usePinnedTokens"
 import { usePrices } from "@/composables/usePrices"
+import { useJournalMirror } from "@/composables/useJournalMirror"
 import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
 
 /** Store */
@@ -54,7 +55,19 @@ const tasks = ref([])
 const FAILED_RETENTION_MS = 30_000
 /** The one journal kind this view scopes to: the filters and the query must not drift apart. */
 const TOKENS_VIEW_KIND = "token_import"
-const tokenImports = ref([])
+const journalService = new OperationJournalServiceClient()
+const {
+	rows: tokenImports,
+	resnapshot: resnapshotImports,
+	dispose: disposeImports,
+	...importEvents
+} = useJournalMirror({
+	read: () => journalService.getOperations({ kind: TOKENS_VIEW_KIND }),
+	accept: (op) => op.kind === TOKENS_VIEW_KIND,
+	place: "back",
+	appendAdded: true,
+	supersede: false,
+})
 // 5s tick is a generous fraction of the 30s retention window — the failed
 // row visibly disappears even if no new journal event fires.
 const tickNow = useTicker(5_000)
@@ -216,30 +229,16 @@ tokenBalanceService.onTokenBalanceAdded.add(onBalanceAdded)
 tokenBalanceService.onTokenBalanceUpdated.add(onBalanceUpdated)
 tokenBalanceService.onTokenBalanceDeleted.add(onBalanceDeleted)
 
-const journalService = new OperationJournalServiceClient()
-journalService.onOperationAdded.add(onJournalAdded)
-journalService.onOperationUpdated.add(onJournalUpdated)
-journalService.onOperationDeleted.add(onJournalDeleted)
+journalService.onOperationAdded.add(importEvents.onOperationAdded)
+journalService.onOperationUpdated.add(importEvents.onOperationUpdated)
+journalService.onOperationDeleted.add(importEvents.onOperationDeleted)
 journalService.onConnected.add(fetchTokenImports)
-function onJournalAdded(op) {
-	if (op.kind !== TOKENS_VIEW_KIND) return
-	tokenImports.value.push(op)
-}
-function onJournalUpdated(op) {
-	if (op.kind !== TOKENS_VIEW_KIND) return
-	const idx = tokenImports.value.findIndex((x) => x.id === op.id)
-	if (idx === -1) tokenImports.value.push(op)
-	else tokenImports.value[idx] = op
-}
-function onJournalDeleted(op) {
-	tokenImports.value = tokenImports.value.filter((x) => x.id !== op.id)
-}
 // SW restarts / port reconnects can leave the list stale (an event fired
 // while we were disconnected is dropped). Resnapshot the kind-scoped slice
 // every time the port reconnects — same pattern as RecentActivityView.
 async function fetchTokenImports() {
 	try {
-		tokenImports.value = await journalService.getOperations({ kind: TOKENS_VIEW_KIND })
+		await resnapshotImports()
 	} catch {
 		// Reconnect may race the port — next event or the next reconnect retries.
 	}
@@ -335,6 +334,7 @@ onBeforeUnmount(() => {
 	taskService.disconnect()
 	disposeBalances()
 	tokenBalanceService.disconnect()
+	disposeImports()
 	journalService.disconnect()
 	prices.dispose()
 	priceService.disconnect()

@@ -42,8 +42,6 @@ export const useCacheStore = defineStore("cache", () => {
 	const preselectedTokenAddressToAdd = ref()
 	const preselectedAuthwits = ref([])
 
-	const feePaymentMethods = ref([])
-
 	const importType = ref("")
 
 	const importContacts = ref([])
@@ -66,7 +64,6 @@ export const useCacheStore = defineStore("cache", () => {
 		preselectedBalanceType,
 		preselectedTokenAddressToAdd,
 		preselectedAuthwits,
-		feePaymentMethods,
 		importType,
 		importContacts,
 		importPromise,

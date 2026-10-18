@@ -986,3 +986,85 @@ describe("TokensView — the balance snapshot's fences", () => {
 		stop(own)
 	})
 })
+
+describe("TokensView — the token-import rows' events and reads", () => {
+	let wrapper: ReturnType<typeof mount> | undefined
+	beforeEach(() => {
+		resetHarness()
+		// Views mounted by earlier cases are never unmounted and still hold handlers on these events.
+		for (const ev of [H.journalAdded, H.journalUpdated, H.journalDeleted, H.journalConnected]) ev.clear()
+	})
+	afterEach(() => {
+		wrapper?.unmount()
+		wrapper = undefined
+	})
+
+	const imp = (id: string, over: Record<string, unknown> = {}) => ({
+		id,
+		kind: "token_import",
+		profileId: "p1",
+		accountAddress: H.store.current.account?.address,
+		contractAddress: `0x${id}`,
+		terminalAt: null,
+		progress: { stage: "pending" },
+		...over,
+	})
+	const importRows = () =>
+		(wrapper as ReturnType<typeof mount>)
+			.findAllComponents({ name: "TokenImportRow" })
+			.map((c) => c.props("op") as { id: string; progress: { stage: string } })
+
+	test("an update keeps a listed import where it is, an unseen one goes last, and a delete removes it", async () => {
+		H.getOperations.mockResolvedValue([imp("a"), imp("b")])
+		wrapper = mount(TokensView, { shallow: true })
+		await flushPromises()
+		H.journalUpdated.emit(imp("b", { progress: { stage: "simulating" } }))
+		H.journalUpdated.emit(imp("c"))
+		await nextTick()
+		expect(importRows().map((op) => [op.id, op.progress.stage])).toEqual([
+			["a", "pending"],
+			["b", "simulating"],
+			["c", "pending"],
+		])
+
+		H.journalDeleted.emit(imp("a"))
+		H.journalUpdated.emit(imp("b", { kind: "transfer" }))
+		await nextTick()
+		expect(importRows().map((op) => op.id)).toEqual(["b", "c"])
+	})
+
+	test("(BUG PIN) an add for a listed import lists it again, and its end reaches only the first copy", async () => {
+		// A read can answer with a record whose add the worker has not delivered yet.
+		H.getOperations.mockResolvedValue([imp("a")])
+		wrapper = mount(TokensView, { shallow: true })
+		await flushPromises()
+		H.journalAdded.emit(imp("a"))
+		await nextTick()
+		expect(importRows().map((op) => op.id)).toEqual(["a", "a"])
+
+		H.journalUpdated.emit(imp("a", { terminalAt: 2, progress: { stage: "succeeded" } }))
+		await nextTick()
+		expect(importRows().map((op) => [op.id, op.progress.stage])).toEqual([["a", "pending"]])
+	})
+
+	test("a reconnect reads again, and its refused read keeps what the mount's read listed", async () => {
+		const mountRead = deferred<unknown[]>()
+		const reconnectRead = deferred<unknown[]>()
+		H.getOperations.mockReturnValueOnce(mountRead.promise).mockReturnValueOnce(reconnectRead.promise)
+		wrapper = mount(TokensView, { shallow: true })
+		await flushPromises()
+		H.journalConnected.emit()
+		mountRead.resolve([imp("a")])
+		await flushPromises()
+		expect(importRows().map((op) => op.id)).toEqual(["a"])
+
+		reconnectRead.reject(new Error("port closed"))
+		await flushPromises()
+		expect(importRows().map((op) => op.id)).toEqual(["a"])
+
+		H.getOperations.mockResolvedValueOnce([imp("a"), imp("b")])
+		H.journalConnected.emit()
+		await flushPromises()
+		expect(importRows().map((op) => op.id)).toEqual(["a", "b"])
+	})
+})

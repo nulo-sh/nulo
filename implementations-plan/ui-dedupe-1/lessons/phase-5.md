@@ -26,3 +26,7 @@
 
 - Codex, resumed: `clean`. F1 resolved, no regression, the new page cases realistic with success controls; Send's case rejects both `keep` and `replace`. Loop converged after 2 rounds.
 - `dev` merged again at `e8da7b59` (#738, #739; no A5 file in common). Final head `88da43e8`: lint, typecheck:all, test, test:all (extension 13717 passed, 5 skipped, 7 todo), check:plans; smoke retry 0 on armed builds, Chrome `rows`, `navigation`, `token-list` 19/19 in 116 s, Firefox `token-list` 2/2 in 38 s; network Chrome `send-picker` 1/1 in 268 s (prover on). No e2e scenario added.
+
+## CI (2026-10-18)
+
+- PR #748: every required check green after one rerun. The first Firefox network run failed shard 1/5 on `stale-network-resume` N3 (a 60 s "Token added" toast wait in `importToken` after a background death; the New token popup's own balance client, no A5 file). The rerun passed, and the file passed locally on Firefox at the PR head (2/2 in 132 s, proverless). A concurrent lane's Firefox run failed on `snack-placement` the same hour.

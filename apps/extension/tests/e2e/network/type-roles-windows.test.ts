@@ -214,6 +214,7 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig, accountAddre
 			],
 			contained: true,
 			details: true,
+			shot: { name: "execute-fee-card", focus: "fee-settings-card" },
 		},
 		{
 			method: "createAuthWit",
