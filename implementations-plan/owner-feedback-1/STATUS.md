@@ -8,3 +8,4 @@
 - 2026-10-18: arc 1 branch `owner-feedback-1-a1` off `origin/dev` at 9470d4e9 with the plan commit cherry-picked (the spawn's branch names replace the plan's).
 - 2026-10-18: phase 1 (#760) gate F pass (lint, typecheck:all, test).
 - 2026-10-18: phase 2 (#761) gate F pass.
+- 2026-10-18: phase 3 (#765) gate F pass; `navigation.test.ts` Chrome 8/8 and Firefox 8/8 at retry 0; red on the base pages.

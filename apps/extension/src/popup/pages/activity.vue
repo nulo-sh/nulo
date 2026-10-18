@@ -140,8 +140,19 @@ const titleRef = useTemplateRef("titleRef")
 
 /** Hero visibility → compact sticky title fade */
 const heroRef = useTemplateRef("heroRef")
+const barRef = useTemplateRef("barRef")
 const heroVisible = ref(true)
+/** False until the first report is drawn: a return to a scrolled page shows its bar at once. */
+const heroSettled = ref(false)
 let heroObserver = null
+
+async function settleHero() {
+	await nextTick()
+	if (!barRef.value) return
+	// The read commits the drawn state with no transition, so dropping the class starts no fade.
+	getComputedStyle(barRef.value).opacity
+	heroSettled.value = true
+}
 
 /** The chip leaves with the focused control, so focus moves to the title rather than the page. */
 async function clearTokenFilter() {
@@ -163,6 +174,7 @@ onMounted(async () => {
 		heroObserver = new IntersectionObserver(
 			(entries) => {
 				heroVisible.value = entries.at(-1).isIntersecting
+				if (!heroSettled.value) void settleHero()
 			},
 			{ threshold: 0 },
 		)
@@ -206,7 +218,11 @@ onBeforeUnmount(() => {
 		:data-incoming-loaded="incomingLoaded ? 'true' : undefined"
 	>
 		<!-- The hero's h1 names the page for a screen reader; this bar repeats it for sight only. -->
-		<div :class="[$style.page_title_bar, !heroVisible && $style.page_title_bar_visible]" aria-hidden="true">
+		<div
+			ref="barRef"
+			:class="[$style.page_title_bar, !heroVisible && $style.page_title_bar_visible, !heroSettled && $style.page_title_bar_instant]"
+			aria-hidden="true"
+		>
 			<span :class="$style.page_title_label" data-testid="page-title-bar">HISTORY</span>
 		</div>
 
@@ -262,6 +278,10 @@ onBeforeUnmount(() => {
 
 .page_title_bar_visible {
 	composes: page_title_bar_visible from "./tab-hero.module.css";
+}
+
+.page_title_bar_instant {
+	composes: page_title_bar_instant from "./tab-hero.module.css";
 }
 
 .page_title_label {

@@ -363,4 +363,27 @@ describe("the compact title bar", () => {
 		await deliverHero(false, true)
 		expect(barShown(w)).toBe(false)
 	})
+	test("the first report draws the bar at once, its state committed before the fade comes back; later reports fade", async () => {
+		const w = await mountHub()
+		const bar = w.get('[data-testid="page-title-bar"]').element.parentElement as HTMLElement
+		expect(bar.className).toContain("page_title_bar_instant")
+		const read = window.getComputedStyle.bind(window)
+		const readWith: string[] = []
+		vi.spyOn(window, "getComputedStyle").mockImplementation((el, pseudo) => {
+			if (el === bar) readWith.push(bar.className)
+			return read(el, pseudo)
+		})
+		await deliverHero(false)
+		expect(readWith).toHaveLength(1)
+		expect(readWith[0]).toContain("page_title_bar_visible")
+		expect(readWith[0]).toContain("page_title_bar_instant")
+		expect(barShown(w)).toBe(true)
+		expect(bar.className).not.toContain("page_title_bar_instant")
+
+		await deliverHero(true)
+		await deliverHero(false)
+		expect(barShown(w)).toBe(true)
+		expect(bar.className).not.toContain("page_title_bar_instant")
+		expect(readWith).toHaveLength(1)
+	})
 })
