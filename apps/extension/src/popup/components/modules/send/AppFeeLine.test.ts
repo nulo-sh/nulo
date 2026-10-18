@@ -13,7 +13,7 @@ const STUBS = {
 }
 const GAS = { l2GasLimit: 1, daGasLimit: 1, teardownL2GasLimit: 0, teardownDaGasLimit: 0, feePerL2Gas: "1", feePerDaGas: "1" }
 const factory = async (feeEstimate?: Record<string, unknown>) => {
-	const w = mount(AppFeeLine, { props: { feeEstimate: feeEstimate as never }, global: { stubs: STUBS } })
+	const w = mount(AppFeeLine, { props: { feeEstimate: feeEstimate as never }, slots: { default: "Swap" }, global: { stubs: STUBS } })
 	await flushPromises()
 	return w
 }
@@ -24,17 +24,20 @@ describe("AppFeeLine", () => {
 	test("the app's limit and its priority part, each priced at the one quote the line reads", async () => {
 		const w = await factory({ maxFee: "16000000000000000", priorityFee: "4000000000000000", gasDetails: GAS })
 		expect(w.get('[data-testid="execute-op-app-fee"]').text()).toBe(
-			"Fee up to ~0.016 FJ (<$0.001), includes a ~0.004 FJ (<$0.001) priority fee the app asked for",
+			"Fee could be up to ~0.016 FJ (<$0.001); payment method set by Swap. Includes a ~0.004 FJ (<$0.001) priority fee the app asked for.",
 		)
 		expect(priceFake.clients).toHaveLength(1)
 		expect(priceFake.refreshes()).toBe(1)
 	})
 
-	test("no priority part unless the worker set one, and the loading bar until the estimate lands", async () => {
-		expect((await factory({ maxFee: "3577823500000000001", gasDetails: GAS })).text()).toBe("Fee up to ~3.577824 FJ ($0.215)")
-		const waiting = await factory()
-		expect(waiting.find('[data-testid="execute-op-app-fee-estimating"]').exists()).toBe(true)
-		expect(waiting.find('[data-testid="skeleton"]').exists()).toBe(true)
+	test("no priority part unless the worker set one, and the loading bar in the amount's place until the estimate lands", async () => {
+		expect((await factory({ maxFee: "3577823500000000001", gasDetails: GAS })).text()).toBe(
+			"Fee could be up to ~3.577824 FJ ($0.215); payment method set by Swap.",
+		)
+		const waiting = (await factory()).get('[data-testid="execute-op-app-fee-estimating"]')
+		expect(waiting.html()).toMatch(
+			/Fee could be up to <i data-testid="skeleton"[^>]*><\/i>; payment method set by Swap\.(<!--v-if-->)?<\/span>$/,
+		)
 	})
 
 	test("unmounting closes the price client and drops the quote listener it added", async () => {

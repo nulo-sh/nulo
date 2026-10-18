@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * The fee line of an operation whose app pays its own fee. The parent mounts it only while an estimate
- * runs or has landed, so an operation the wallet never estimates reads no price.
+ * The fee sentence of an operation whose app pays its own fee; the default slot is the app's name. The
+ * parent mounts it only while an estimate runs or has landed, so an operation the wallet never
+ * estimates reads no price.
  */
 /** Vendor */
 import type { PropType } from "vue"
@@ -36,14 +37,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<Text v-if="fee" variant="body" color="secondary" data-testid="execute-op-app-fee">
-		Fee up to
-		<FeeAmount :display="fee" :class="$style.figure" /><template v-if="priority">, includes a <FeeAmount :display="priority" :class="$style.fee_figure" /> <DottedTerm term="priority-fee" testid="execute-op-priority-term">priority fee</DottedTerm> the app asked for</template>
+	<Text variant="body" color="secondary" height="150" :data-testid="fee ? 'execute-op-app-fee' : 'execute-op-app-fee-estimating'">
+		Fee could be up to
+		<FeeAmount v-if="fee" :display="fee" :class="$style.figure" /><Skeleton v-else :class="$style.bar" />; payment method set by <slot />.<template v-if="priority"> Includes a <FeeAmount :display="priority" :class="$style.fee_figure" /> <DottedTerm term="priority-fee" testid="execute-op-priority-term">priority fee</DottedTerm> the app asked for.</template>
 	</Text>
-	<Flex v-else align="center" gap="4" data-testid="execute-op-app-fee-estimating">
-		<Text variant="body" color="secondary">Fee up to</Text>
-		<Skeleton />
-	</Flex>
 </template>
 
 <style module>
@@ -54,5 +51,9 @@ onBeforeUnmount(() => {
 
 .fee_figure {
 	composes: fee_figure from "./fee-shared.module.css";
+}
+
+.bar {
+	vertical-align: middle;
 }
 </style>

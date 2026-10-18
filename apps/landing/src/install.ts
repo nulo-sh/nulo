@@ -1,4 +1,4 @@
-/** The store listings, named by item id so a listing rename never breaks a link. `index.html` carries the same URLs for visitors without JavaScript. */
+/** The store listings, named by item id so a listing rename never breaks a link. `index.html` and `how-aztec-works.html` carry the same URLs for visitors without JavaScript. */
 export const STORES = {
 	chrome: { url: "https://chromewebstore.google.com/detail/jlmiaokmjoicmclelpiiocdhncddkdmc", name: "Chrome" },
 	firefox: { url: "https://addons.mozilla.org/firefox/addon/3077967/", name: "Firefox" },

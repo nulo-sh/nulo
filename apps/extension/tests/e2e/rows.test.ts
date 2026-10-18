@@ -680,6 +680,79 @@ function readTwoChipRow(page: Page, hash: string): Promise<TwoChipRow> {
 	}, hash)
 }
 
+type ReceiptChip = {
+	/** The title, separator and chip on one line, with their two 6px gaps. */
+	need: number
+	/** From the text column's left edge to 10px short of the amount column. */
+	space: number
+	wrapped: boolean
+	gaps: { titleToSep: number; sepToChip: number }
+	/** The chip's left edge and the separator's right edge, each from the title row's clipping edge. */
+	chipLeft: number
+	sepRight: number
+	/** From the title's bottom to the wrapped chip's top. */
+	rowGap: number
+}
+
+/** The page's one receipt: its kind chip beside its title, or under it where the line has no room. */
+function readReceiptChip(page: Page): Promise<ReceiptChip> {
+	return page.evaluate(() => {
+		const row = document.querySelector('[data-testid="tx-incoming-card"]')
+		const ids = [
+			"activity-title",
+			"tx-incoming-kind-chip",
+			"tx-incoming-kind-sep",
+			"activity-title-row",
+			"activity-text",
+			"activity-amount-col",
+		]
+		const els = ids.map((id) => row?.querySelector(`[data-testid="${id}"]`))
+		if (els.some((el) => !el)) throw new Error("the receipt row is incomplete")
+		const [title, chip, sep, clip, text, amountCol] = els.map((el) => (el as Element).getBoundingClientRect())
+		return {
+			need: title.width + 6 + sep.width + 6 + chip.width,
+			space: amountCol.left - 10 - text.left,
+			wrapped: chip.top >= title.bottom - 0.5,
+			gaps: { titleToSep: sep.left - title.right, sepToChip: chip.left - sep.right },
+			chipLeft: chip.left - clip.left,
+			sepRight: sep.right - clip.left,
+			rowGap: chip.top - title.bottom,
+		}
+	})
+}
+
+function expectReceiptWrapped(chip: ReceiptChip, where: string): void {
+	expect(chip.wrapped, where).toBe(true)
+	expect(chip.need, where).toBeGreaterThan(chip.space)
+	expect(Math.abs(chip.chipLeft), where).toBeLessThanOrEqual(0.5)
+	expect(chip.sepRight, where).toBeLessThanOrEqual(0)
+	expect(chip.rowGap, where).toBeCloseTo(4, 0)
+}
+
+/** A row that fits stays as it was: the receipt keeps its one line from the first popup width that holds
+ *  it, and wraps a pixel short of it. The popup's body is `--base-width` wide whatever the viewport. */
+async function expectReceiptFitsFromItsWidth(page: Page): Promise<void> {
+	const short = await readReceiptChip(page)
+	const fits = 360 + Math.ceil(short.need - short.space)
+	for (const width of [fits, fits - 1]) {
+		await page.setViewport({ width, height: 600 })
+		await page.evaluate((w: number) => document.documentElement.style.setProperty("--base-width", `${w}px`), width)
+		await settledRows(page, 5)
+		const receipt = await readReceiptChip(page)
+		console.log(`[rows] History at ${width}px: the receipt ${JSON.stringify(receipt)}`)
+		if (width === fits - 1) {
+			expectReceiptWrapped(receipt, `${width}px`)
+			continue
+		}
+		expect(receipt.wrapped).toBe(false)
+		expect(receipt.need).toBeLessThanOrEqual(receipt.space)
+		expect(receipt.gaps.titleToSep).toBeCloseTo(6, 1)
+		expect(receipt.gaps.sepToChip).toBeCloseTo(6, 1)
+	}
+	await page.evaluate(() => document.documentElement.style.removeProperty("--base-width"))
+	await page.setViewport({ width: 360, height: 600 })
+}
+
 /** Opens a surface by its hash and waits for the rows on screen to leave: the hash changes before
  *  the router swaps the page, so the old page's rows could pass for the new page's. */
 async function openSurface(page: Page, hash: string): Promise<void> {
@@ -696,7 +769,7 @@ const SURFACES = [
 	{ name: "History", hash: "#/popup/activity" },
 ]
 
-test("rows sit 10px apart on Home, a token's page and History, the date heading 12px above the first; a dApp's long title, a nine-digit amount, a dApp's large transfer with its app chip under its direction and a priced receipt stay inside their rows and never cover an amount, dark and light", async ({
+test("rows sit 10px apart on Home, a token's page and History, the date heading 12px above the first; a dApp's long title, a nine-digit amount, a dApp's large transfer with its app chip under its direction and a priced receipt stay inside their rows and never cover an amount, the receipt's chip under its title only where it does not fit, dark and light", async ({
 	listedExtensionPerTest,
 	skip,
 }) => {
@@ -722,9 +795,10 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 		dapp: DAPP_NAME,
 	})
 	await seedTokenRow(page, scope, RECEIPT_TOKEN_ID)
+	// "Received privately" beside "+28.43950" has no room at 360px.
 	await seedReceipt(page, scope, {
 		tokenId: RECEIPT_TOKEN_ID,
-		amount: "4200000",
+		amount: "28439501",
 		uniqueNoteHash: `0x${"5c".repeat(32)}`,
 		at: now - 3_000,
 	})
@@ -753,6 +827,9 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 			expect(large.chip.gap).toBeCloseTo(CHIP_ROW_GAP, 0)
 			expect(large.chip.left).toBeCloseTo(0, 0)
 			expect(large.chip.width).toBeCloseTo(APP_CHIP_CAP, 0)
+			const receipt = await readReceiptChip(page)
+			console.log(`[rows] ${theme}, ${surface.name}: the receipt ${JSON.stringify(receipt)}`)
+			expectReceiptWrapped(receipt, `${theme}, ${surface.name}`)
 			if (surface.name === "History" && theme === "dark") await shotSend(page, "dapp-transfer-rows", "activity-app-chip")
 			if (surface.name !== "History") continue
 			const clearance = await page.evaluate((rowsSel: string) => {
@@ -764,6 +841,8 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 			expect(clearance).toBeCloseTo(12, 0)
 		}
 	}
+
+	await expectReceiptFitsFromItsWidth(page)
 
 	expect(listedExtensionPerTest.consoleErrors).toEqual([])
 	expect(listedExtensionPerTest.pageErrors).toEqual([])
