@@ -8,3 +8,5 @@
   - O3 accepted as K3 (copy change needed).
   - Comment fixes: C2, C3, O4-O7.
 - Review round 2 (Codex resume): `approve`, "No new findings … No regressions found." The loop converged after two rounds.
+- Whole smoke, Chrome, retry 0, before the round 1 fixes: 56 files passed, 7 skipped (opt-in or artifact-only), 1 failed: `backup-migration.test.ts`'s arming contract, because the run lacked `NULO_E2E_MIGRATION_FIXTURE=1` (CI sets it with the build flag). After the fixes and the merge of `dev`: the nine related files, both migration files among them with the fixture armed, 32 passed, 1 skipped, 434 s.
+- Pictures: real popup frames at 360 px in both themes. Before frames for #498 and #710 come from this branch with the change disabled in a throwaway build (the helper rethrows; `exportsHeld` answers false), which renders `dev`'s path; P42-05's before is the decision record's frame. Smoke wall-clock before (CI, `pr-extension-smoke-e2e*.yml` envelopes): Chrome 11 min (run 39163756084), Firefox 17 min (run 39163756150).
