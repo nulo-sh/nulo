@@ -724,13 +724,14 @@ function expectReceiptWrapped(chip: ReceiptChip, where: string): void {
 	expect(chip.rowGap, where).toBeCloseTo(4, 0)
 }
 
-/** A row that fits stays as it was: the receipt keeps its one line from the first width that holds it,
- *  and wraps a pixel short of it. */
+/** A row that fits stays as it was: the receipt keeps its one line from the first popup width that holds
+ *  it, and wraps a pixel short of it. The popup's body is `--base-width` wide whatever the viewport. */
 async function expectReceiptFitsFromItsWidth(page: Page): Promise<void> {
 	const short = await readReceiptChip(page)
 	const fits = 360 + Math.ceil(short.need - short.space)
 	for (const width of [fits, fits - 1]) {
 		await page.setViewport({ width, height: 600 })
+		await page.evaluate((w: number) => document.documentElement.style.setProperty("--base-width", `${w}px`), width)
 		await settledRows(page, 5)
 		const receipt = await readReceiptChip(page)
 		console.log(`[rows] History at ${width}px: the receipt ${JSON.stringify(receipt)}`)
@@ -743,6 +744,8 @@ async function expectReceiptFitsFromItsWidth(page: Page): Promise<void> {
 		expect(receipt.gaps.titleToSep).toBeCloseTo(6, 1)
 		expect(receipt.gaps.sepToChip).toBeCloseTo(6, 1)
 	}
+	await page.evaluate(() => document.documentElement.style.removeProperty("--base-width"))
+	await page.setViewport({ width: 360, height: 600 })
 }
 
 /** Opens a surface by its hash and waits for the rows on screen to leave: the hash changes before
