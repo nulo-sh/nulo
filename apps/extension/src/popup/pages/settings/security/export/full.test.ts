@@ -509,6 +509,17 @@ describe("export/full.vue — the password backup's keys and run fence", () => {
 
 describe("export/full.vue — imported accounts a restore holds until their network is added", () => {
 	const keyRow = (chainId: number, address: string) => ({ profileId: "p1", chainId, address, encryptedSigningKey: "sealed" })
+	const importedAccount = ({ chainId, address }: { chainId: number; address: string }) => ({
+		profileId: "p1",
+		chainId,
+		address,
+		index: 0,
+		type: 1,
+		l1ChainId: 1,
+		name: "Imp",
+		visible: true,
+	})
+	const fileOf = (rows: ReturnType<typeof keyRow>[]) => ({ ...material, importedKeyRows: rows, accounts: rows.map(importedAccount) })
 	const networkBanner = (wrapper: ReturnType<typeof mountPage>) => wrapper.find("[data-testid='backup-imported-network-banner']")
 	const LEAD = "A restore re-creates only the default networks"
 
@@ -526,7 +537,7 @@ describe("export/full.vue — imported accounts a restore holds until their netw
 			text: `2 imported accounts are on networks you added. ${LEAD}, so add those networks again to restore them.`,
 		},
 	])("$text", async ({ rows, text }) => {
-		exportFullBackupKeys.mockResolvedValue({ ...material, importedKeyRows: rows })
+		exportFullBackupKeys.mockResolvedValue(fileOf(rows))
 		const wrapper = mountPage()
 		await reachBackupReady(wrapper)
 		const banner = networkBanner(wrapper)
@@ -535,8 +546,17 @@ describe("export/full.vue — imported accounts a restore holds until their netw
 		expect(banner.element.compareDocumentPosition(ready) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 	})
 
-	it("rows on Testnet and the local network alone show no such warning", async () => {
-		exportFullBackupKeys.mockResolvedValue({ ...material, importedKeyRows: [keyRow(CHAIN_IDS.TESTNET, "0xa"), keyRow(0, "0xb")] })
+	it.each([
+		{ name: "accounts on Testnet and the local network", file: fileOf([keyRow(CHAIN_IDS.TESTNET, "0xa"), keyRow(0, "0xb")]) },
+		{
+			name: "a key whose account the file lacks",
+			file: {
+				...fileOf([keyRow(CHAIN_IDS.TESTNET, "0xa")]),
+				importedKeyRows: [keyRow(CHAIN_IDS.TESTNET, "0xa"), keyRow(1337, "0xb")],
+			},
+		},
+	])("$name show no such warning", async ({ file }) => {
+		exportFullBackupKeys.mockResolvedValue(file)
 		const wrapper = mountPage()
 		await reachBackupReady(wrapper)
 		expect(wrapper.find("[data-testid='backup-ready-banner']").exists()).toBe(true)
@@ -544,7 +564,7 @@ describe("export/full.vue — imported accounts a restore holds until their netw
 	})
 
 	it("a replaced imported-keys key shows its own warning instead", async () => {
-		exportFullBackupKeys.mockResolvedValue({ ...material, dekReplaced: true, importedKeyRows: [keyRow(1337, "0xa")] })
+		exportFullBackupKeys.mockResolvedValue({ ...fileOf([keyRow(1337, "0xa")]), dekReplaced: true })
 		const wrapper = mountPage()
 		await reachBackupReady(wrapper)
 		expect(wrapper.find("[data-testid='backup-keys-lost-banner']").exists()).toBe(true)

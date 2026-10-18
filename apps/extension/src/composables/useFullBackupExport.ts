@@ -3,7 +3,7 @@ import { computed, type ComputedRef, type Ref, ref } from "vue"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { managers } from "@/utils/core"
 import { ACCOUNT_SERVICE_NAME, AccountServiceClient, IMPORTED_KEYS_SERVICE_NAME } from "@/wallet/services/account/client"
-import type { ImportedAccountKey } from "@/wallet/services/account/spec"
+import { type Account, AccountType, accountScopeKey, type ImportedAccountKey } from "@/wallet/services/account/spec"
 import { ACCOUNT_STATE_SERVICE_NAME, AccountStateServiceClient } from "@/wallet/services/account-state/client"
 import { AUTH_REGISTRY_SERVICE_NAME, AuthRegistryServiceClient } from "@/wallet/services/auth-registry/client"
 import { CONFIG_SERVICE_NAME, ConfigServiceClient } from "@/wallet/services/config/client"
@@ -74,8 +74,8 @@ interface ExportState {
 	/** Imported-key rows that did not open, so travel as stored and will not restore. A replaced DEK
 	 *  has its own warning, which covers them. */
 	unopenedImportedKeys: Ref<number>
-	/** Imported accounts a restore keeps without their network, which it does not re-create; none
-	 *  when a replaced DEK has its own warning. */
+	/** The file's imported accounts with a key in it, on chains a restore does not re-create; a key
+	 *  that did not open counts too. None when a replaced DEK has its own warning. */
 	importsOnAddedNetworks: Ref<AddedNetworkImports>
 }
 
@@ -115,8 +115,11 @@ function disconnectAll(clients: NamedClient[]) {
 
 const noAddedNetworkImports = (): AddedNetworkImports => ({ accounts: 0, networks: 0 })
 
-function importsOnAddedNetworks(rows: readonly ImportedAccountKey[]): AddedNetworkImports {
-	const chains = rows.filter((row) => !isSeedChain(row.chainId)).map((row) => row.chainId)
+function importsOnAddedNetworks(accounts: readonly Account[], rows: readonly ImportedAccountKey[]): AddedNetworkImports {
+	const imported = new Set(accounts.filter((a) => a.type === AccountType.Imported).map((a) => accountScopeKey(a.chainId, a.address)))
+	const chains = rows
+		.filter((row) => !isSeedChain(row.chainId) && imported.has(accountScopeKey(row.chainId, row.address)))
+		.map((row) => row.chainId)
 	return { accounts: chains.length, networks: new Set(chains).size }
 }
 
@@ -202,7 +205,7 @@ async function exportKeyMaterial(
 				dekSealedB64: passkeyKeys.dekSealed,
 				dekReplaced: passkeyKeys.dekReplaced,
 				unopenedImportedKeys: passkeyKeys.unopenedImportedKeys,
-				importsOnAddedNetworks: importsOnAddedNetworks(passkeyKeys.importedKeyRows),
+				importsOnAddedNetworks: importsOnAddedNetworks(passkeyKeys.accounts, passkeyKeys.importedKeyRows),
 				heldSlices: { [ACCOUNT_SERVICE_NAME]: passkeyKeys.accounts, [IMPORTED_KEYS_SERVICE_NAME]: passkeyKeys.importedKeyRows },
 			}
 		}
@@ -214,7 +217,7 @@ async function exportKeyMaterial(
 			dekB64: material.importedKeysKey,
 			dekReplaced: material.dekReplaced,
 			unopenedImportedKeys: material.unopenedImportedKeys,
-			importsOnAddedNetworks: importsOnAddedNetworks(material.importedKeyRows),
+			importsOnAddedNetworks: importsOnAddedNetworks(material.accounts, material.importedKeyRows),
 			heldSlices: { [ACCOUNT_SERVICE_NAME]: material.accounts, [IMPORTED_KEYS_SERVICE_NAME]: material.importedKeyRows },
 		}
 	} catch (error) {
