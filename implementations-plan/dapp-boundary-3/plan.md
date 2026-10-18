@@ -1,7 +1,7 @@
 ---
 plan: dapp-boundary-3
 tier: mid
-status: approved 2026-10-17 (orchestrator); arc 1 merged (#716); arc 2 (Form B) in review
+status: completed 2026-10-18; arc 1 merged (#716), arc 2's PR carries the close-out
 issues: none (P38-06 and P38-08 carry no public issue)
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,20 @@ base: origin/dev at 2c0df3b9
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18
+- **Status:** completed. Arc 1 merged as #716; arc 2's PR carries this close-out, and merging it is the orchestrator's call.
+- **Shipped:**
+  - #716 (P38-06 = A): a dApp request that names the authorization registry's grant functions is refused at its three routes: a `sendTx` call by grant selector, a `createAuthWit` intent naming the registry, and an inner authorization request at the decode loop. The refusal is `AuthRegistryRefusalError`, under the scope-refusal code, with its own dApp text and History kind (D1-D11).
+  - Arc 2 (P41-01 = B, P45-01 = B, P45-02 = A): the connect window's address row reads "Let this app list all your accounts" / "It always knows the account you connect with." wherever the grant lets the app list. The app page's line follows `canGet === true`, and the account-naming plumbing is gone. The busiest first window scrolls 12 px, which `cap-window` pins along with Firefox's scroll-area Tab stop (D20-D23).
+- **Owner asks:** OA-1 b, OA-2 a, OA-4 a and OA-5 a (orchestrator, 2026-10-17); OA-3 (P41-01 = B), OA-6 (P45-02 = A) and OA-7 (P45-01 = B) (owner, 2026-10-18), each verbatim in [OWNER-ASKS.md](OWNER-ASKS.md).
+- **Dropped:** Outline B; refusing `simulateTx` and `profileTx` (D7); Form A for P38-08; the 16 px section gap (OA-7 a). D9 stands: a nested relay that brings its own witness is not refused, since it obtains nothing from this wallet; reopening condition: a dApp report.
+- **Known limits:** none.
+- **Open items:** #758 (OA-4 b: the execute window settles a refused request itself); one point from the planning review, tracked privately.
+- **Lessons:** none promoted. `lessons.md` is at 8188 of 8192 bytes; Firefox's scroll-area Tab stop is recorded where it belongs, in `apps/extension/tests/e2e/FIREFOX.md`.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # dapp-boundary-3: the authorization registry's grant functions answer only the wallet's own action
 
