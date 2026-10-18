@@ -1,7 +1,7 @@
 ---
 plan: service-structure-1
 tier: mid
-status: arc 1 merged (#703); arc 2 merged (#741); arc 3 in review; arc 4 waits for release
+status: completed (#703, #741, #751 and the arc 4 PR), awaiting merge
 issues: "#521 (arc 1); #545 (arc 2); #547 (arc 3); #549 #560 (arc 4)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 0fe841be
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18
+- **Status:** completed. Four PRs against `dev`: #703 (arc 1), #741 (arc 2) and #751 (arc 3) merged; the arc 4 PR carries #549, #560 and this close-out, and merging it is the orchestrator's call.
+- **Shipped:** #703: popup import waits through the shared activation waiter, so it stops at once on a recorded bootstrap failure, and a fenced bootstrap retires its own profile's earlier failure record (#521, P37-09). #741: discovery in `wallet-sdk/discovery-flow.ts`, the five session-keyed holders in one `SessionHolders` registry with one teardown (#545, P37-08). #751: the balance-refresh outbox as its own class, `BalanceRefreshOutbox` (#547, P37-07). Arc 4: named options for `finalizeGasLimits`, `handleWalletMessage` and the two restore commits, one `EstimateReuseDeps`, three more redaction keys (#560, P37-05); one compiler-checked operation-trait table read by the three scope sites and the fee-settings sites (#549, P37-06).
+- **Not changed:** the execution dispatch keeps its switch (it routes to executors, a fact the table does not name); per-kind sites keep their own kind checks (D4), the send card's `isSendTx` among them (D20); no further split of `IncomingTransferService` (D15).
+- **Owner asks:** none.
+- **Known limits:** #700.
+- **Open items:** #750, the decomposition map of `IncomingTransferService` for the owner's next decision page.
+- **Lessons:** none promoted: `lessons.md` is at 8188 of 8192 bytes; this plan's notes stay in [lessons/phase-0.md](lessons/phase-0.md) to [phase-4](lessons/phase-4.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # service-structure-1: five structural refactors from decision page 37
 
@@ -190,15 +202,15 @@ The arc gate adds `bun run test:all`, then one e2e invocation, started only when
 
 ### Arc 4, phase 4: #560
 
-- [ ] Re-read every site at the arc's base.
-- [ ] Change, one commit each: `EstimateReuseDeps`, `finalizeGasLimits`, `handleWalletMessage`, the restore commits with their redaction keys. No test assertion changes; only call shapes and imports do.
+- [x] Re-read every site at the arc's base (244badd3; shifts in D16).
+- [x] Change, one commit each: `EstimateReuseDeps`, `finalizeGasLimits`, `handleWalletMessage`, the restore commits with their redaction keys. No test assertion changes; only call shapes and imports do.
 - **Gate:** the common gate on `src/wallet/services/execution src/wallet/services/wallet-sdk src/wallet/services/profile src/wallet/logger`.
 
 ### Arc 4, phase 5: #549
 
-- [ ] Add `operation-traits.ts` with its equalities and negative controls. Then change the scope readers and the fee-settings readers, one commit per file group.
-- [ ] Add `packages/wallet-bridge/src/operation-traits.test.ts`: `operationTraits` answers all 18 kinds and `undefined` for `"constructor"`, `"__proto__"`, `"toString"` and `"aztec_unknown"`; `carriesFeeSettings(null)` is false.
-- [ ] Add one prototype-name case, carrying a held account, in `materialize.test.ts`, `dapp-interaction/service.test.ts` and `operation-display.test.ts`. In `fee-settings-rpc-guard.test.ts`: a prototype-name element yields no settings, and a valid send still has its settings checked.
+- [x] Add `operation-traits.ts` with its equalities and negative controls. Then change the scope readers and the fee-settings readers, one commit per file group.
+- [x] Add `packages/wallet-bridge/src/operation-traits.test.ts`: `operationTraits` answers all 18 kinds and `undefined` for `"constructor"`, `"__proto__"`, `"toString"` and `"aztec_unknown"`; `carriesFeeSettings(null)` is false.
+- [x] Add one prototype-name case, carrying a held account, in `materialize.test.ts`, `dapp-interaction/service.test.ts` and `operation-display.test.ts`. In `fee-settings-rpc-guard.test.ts`: a prototype-name element yields no settings, and a valid send still has its settings checked.
 - **Gate:** the common gate on `src/wallet/services/dapp-interaction src/popup/windows/execute src/wallet/services/fee-settings-rpc-guard.test.ts src/wallet/services/execution` and the wallet-bridge suite, then `bun run test:all`, then `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/sim-methods.test.ts tests/e2e/network/data-privateEvents.test.ts tests/e2e/network/execute-scope-account.test.ts tests/e2e/network/execute-scope-chain.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/tx-sendTx-feePayer.test.ts tests/e2e/network/tx-sendTx-selfPay.test.ts tests/e2e/network/fee-methods.test.ts tests/e2e/network/backup-restore-integrity.test.ts`. The passkey restore commit is proven by `profile/service.integration.test.ts:1517`.
 
 ## Delivery
@@ -242,6 +254,11 @@ The steps are `implementations-plan/README.md` § Post-implementation standard, 
 | D13 | Arc 3: the plan's `activeProfileId` dep | r1, medium, demonstrated: its async adapter adds a microtask before `listOutbox`, which a receipt writer's lock release can observe | low, same | **`activeProfile`, wired as a synchronous closure over `getActiveProfile()`**, so `drain` keeps its one await and `!profile` check. The moved body then differs from the original only in that call. |
 | D14 | Arc 3: moved log lines still say `drainBalanceOutbox:` | — | strings and arguments unchanged: clean | **Kept verbatim.** A log line is behaviour a filter or a report may match; renaming it is not part of a move. |
 | D15 | Arc 3: the decomposition map's "which split pays next" | the public arm next, after a shared commit collaborator; defensible, moderate confidence | rethink: the suite already runs on an in-memory repository and a fake reader, so a split saves no test cost; a collaborator first has one caller; the arm's churn is two PRs | **Stop at the map; the public arm, as one PR, when its next substantial change is scheduled.** Opus's points are verified in the tree; Codex's ranking survives as "which split" once one pays. The issue records both. |
+| D16 | Arc 4: the cited lines at its base (244badd3) | — | — | **Shifted, same content**, except: the reuse wiring is `execution/service.ts:359-376` and `FEE_SETTINGS_OF` `:175-177`; `handleWalletMessage` is `background.ts:843`, its caller `:728`; `operation-validation.ts` is wallet-bridge's (the window's file is a re-export shim) and `approval-delta.ts` is `dapp-interaction/`'s; four test files name the reuse deps, not six. |
+| D17 | Arc 4: where the negative controls live | — | — | **Beside their equalities**, as `@ts-expect-error` lines in `operation-traits.ts`, so the type helpers stay unexported. Three table mutations (a fee flag, a scope, a dropped kind) fail to compile. |
+| D18 | Arc 4: `operation-display.test.ts` had no `resolveOperations` case | — | — | **Its first tests**: the prototype-name case, with a control that resolves account-scoped rows and pins which carry the `feeSettings` key. |
+| D19 | Arc 4: other sites the plan did not list | — | — | `auth-registry` and `dapp-interaction` also have a `FEE_SETTINGS_OF`; neither reads a kind, so neither changes. `validateSession`'s nested-action `forEach` takes a block body: Biome's `useIterableCallbackReturn` warned on it at base. The new redaction keys are camelCase only: no backup JSON spells them, as with `sourceDek`. |
+| D20 | Arc 4: `OperationCard.vue`'s `isSendTx`, on the plan's fee-settings list | — | low, plausible: it gates the whole send card, so a new fee kind would get a send card with no payload rows | **Keeps its literal kinds.** By D4's own rule it is per-kind display logic: it gates the From row, the payload and the fee card. A future fee kind then fails closed (the generic card; Confirm stays blocked). |
 
 ## Audit verdicts
 
@@ -252,6 +269,7 @@ The steps are `implementations-plan/README.md` § Post-implementation standard, 
 - **Arc 1 known limit**: #700, I1's full-backup case, filed and closed as not planned.
 - **Arc 2, Codex round 1** (session 01a14c56): one low finding, demonstrated: the PriceService exposure pin read only `background.ts`; it now reads `discovery-flow.ts` too, each case with an entry-point control. **Opus review**: findings, low. Accepted: two e2e headers and a moved comment named the wrong file, and the decrypt lane's comment stated history, not its invariant. Its stale store citation was already fixed (found by `test:all`). Kept: the allowlist test imports the real `background.ts` graph (about 24 s cold), since a mock would fence another object. **Round 2**: clean ("no regression found").
 - **Arc 3, Codex round 1** (session 01a14cbb): findings. Medium, demonstrated: the `activeProfileId` adapter added a microtask before `listOutbox` (D13). Low: the class suite's header overclaimed. **Opus review**: findings, low and nit: the same two, and the class doc omitted the delete on a gone balance pair. All fixed in a036c0d1. **Round 2**: clean ("both fixes are verified; no new findings").
+- **Arc 4, Codex round 1** (session 01a14d24): findings, three low, comments only; 770 base/head comparisons of the readers matched (key order, check order, `feeSettings` presence), all 31 `finalizeGasLimits` calls carry their arguments. Accepted: the `FinalizeGasOptions` doc line deleted, the moved FIFO comment cut to its invariant, the card predicate's comment to one sentence. **Opus review**: no behaviour change; one low design risk (D20) and nits. Accepted: D20, the controls comment and the header overclaims, the stale test title, `handleFeeUpdate`'s comment. Kept: `handleFeeUpdate` now returns quietly on an out-of-range index where `op.kind` threw (unreachable; the card emits its own index). **Cross-arc pass** (fresh session 01a14d26, arcs 1 to 4): no functional seam; `handleWalletMessage` takes arc 2's `sessionProfiles` map and reads `switchEpoch` late. Accepted: the `handleWalletMessage` doc's duplicated history, and the init-order pins header's "pre-extraction", stale since arc 2. All in fbed541b. **Round 2** (both sessions resumed): clean ("accepted fixes verified; no new findings"; `isSendTx` byte-identical to base, the other files emit unchanged JavaScript). The cross-arc pass: clean ("both findings are resolved; no new cross-arc regression found").
 
 ## Seeds
 

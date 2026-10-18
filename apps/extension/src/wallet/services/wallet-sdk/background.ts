@@ -726,28 +726,27 @@ async function runEstablishedMessage(
 		return dropUnrunMessage(message, session.sessionId, queuedJournalId, kind, deps.operationJournal, deps.logger)
 	}
 	return handleWalletMessage(
-		session,
-		message,
-		live,
-		deps.dispatcher,
-		deps.profileService,
-		deps.operationJournal,
-		state.sessions.sessionProfiles,
-		state.late.switchEpoch!,
-		deps.logger,
-		deps.legal,
 		{
-			// Bind the baton release into the `onExecutionEnqueued`
-			// slot — fired downstream by ExecutionService the instant
-			// the approved request enqueues on the execution mutex
-			// (which preserves execution order). The field name is
-			// shared across DispatchHooks → ExecutionHooks so the wiring
-			// is type-checked end-to-end (a past field-name drift here
-			// is exactly what left this release dead before).
-			onExecutionEnqueued: releaseFifo,
-			queuedJournalId,
+			session,
+			message,
+			live,
+			hooks: {
+				// The FIFO releases once ExecutionService enqueues the approved request on the execution
+				// mutex, which keeps the session's sends in arrival order.
+				onExecutionEnqueued: releaseFifo,
+				queuedJournalId,
+			},
 		},
-		deps.resetRun,
+		{
+			dispatcher: deps.dispatcher,
+			profileService: deps.profileService,
+			operationJournal: deps.operationJournal,
+			sessionProfiles: state.sessions.sessionProfiles,
+			switchEpoch: state.late.switchEpoch!,
+			logger: deps.logger,
+			legal: deps.legal,
+			resetRun: deps.resetRun,
+		},
 	)
 }
 
@@ -824,6 +823,17 @@ function discoveryDeps(deps: SdkDeps, state: SdkHandlerState): DiscoveryDeps {
 	}
 }
 
+export type WalletMessageDeps = {
+	dispatcher: WalletSdkDispatcher
+	profileService: ProfileService
+	operationJournal: OperationJournalService
+	sessionProfiles: Map<string, string>
+	switchEpoch: ProfileSwitchEpoch
+	logger: ILogger
+	legal: LegalAdmission
+	resetRun?: ResetRunGate
+}
+
 /**
  * Handle an incoming wallet message from a connected dApp.
  *
@@ -832,28 +842,17 @@ function discoveryDeps(deps: SdkDeps, state: SdkHandlerState): DiscoveryDeps {
  * Every send and termination goes through `live`, so a call whose session
  * ended mid-flight never reaches a successor under the same id.
  *
- * `hooks` is the wallet-bridge `DispatchHooks` contract (imported, not a
- * local mirror) so the `onExecutionEnqueued` baton wiring is type-checked
- * against the dispatcher's expectation — preventing a recurrence of the
- * field-name drift that left the release dead. `onExecutionEnqueued` rides
- * to the sendTx path; `queuedJournalId` is used here (identity-guard fail
- * and catch paths) to decide whether an unclaimed `queued` record should be
- * transitioned to `failed`.
+ * `hooks` is the wallet-bridge `DispatchHooks` contract, imported rather than mirrored, so the
+ * `onExecutionEnqueued` wiring is type-checked against the dispatcher end to end. Its
+ * `queuedJournalId` decides, on the identity-guard and catch paths, whether an unclaimed `queued`
+ * record is failed.
  */
 export async function handleWalletMessage(
-	session: ActiveSession,
-	message: WalletMessage,
-	live: LiveSession,
-	dispatcher: WalletSdkDispatcher,
-	profileService: ProfileService,
-	operationJournal: OperationJournalService,
-	sessionProfiles: Map<string, string>,
-	switchEpoch: ProfileSwitchEpoch,
-	logger: ILogger,
-	legal: LegalAdmission,
-	hooks?: DispatchHooks,
-	resetRun?: ResetRunGate,
+	request: { session: ActiveSession; message: WalletMessage; live: LiveSession; hooks?: DispatchHooks },
+	deps: WalletMessageDeps,
 ): Promise<void> {
+	const { session, message, live, hooks } = request
+	const { dispatcher, profileService, operationJournal, sessionProfiles, switchEpoch, logger, legal, resetRun } = deps
 	const response: WalletResponse = {
 		messageId: message.messageId,
 		walletId: "nulo",

@@ -11,13 +11,8 @@ import { PRIORITY_MULTIPLIERS } from "@nulo/wallet-bridge"
 import { TransferType } from "@/wallet/services/transaction/spec"
 import type { TransferRequest } from "./operation-planner"
 import type { FeeSettings } from "./spec"
-import { ESTIMATE_REUSE_TTL_MS } from "./estimate-reuse-shared"
-import {
-	TransferEstimateReuse,
-	type TransferEstimateReuseDeps,
-	type TransferEstimateReuseEntry,
-	fingerprintFeeSettings,
-} from "./transfer-estimate-reuse"
+import { ESTIMATE_REUSE_TTL_MS, type EstimateReuseDeps } from "./estimate-reuse-shared"
+import { TransferEstimateReuse, type TransferEstimateReuseEntry, fingerprintFeeSettings } from "./transfer-estimate-reuse"
 
 const calls = vi.hoisted(() => [] as string[])
 
@@ -86,9 +81,9 @@ function entry(feeSettings: FeeSettings = { paymentMethod: { kind: "fj" } }, ove
 
 type Network = { chainId: number; primaryEndpointId: string; endpoints: Array<{ id: string; rpcUrl: string }> }
 
-function harness(o: { network?: Network; deps?: Partial<TransferEstimateReuseDeps> } = {}) {
+function harness(o: { network?: Network; deps?: Partial<EstimateReuseDeps> } = {}) {
 	const logDebug = vi.fn()
-	const deps: TransferEstimateReuseDeps = {
+	const deps: EstimateReuseDeps = {
 		getNetwork: vi.fn(async () => {
 			calls.push("getNetwork")
 			return (o.network ?? { chainId: 7, primaryEndpointId: "e1", endpoints: [{ id: "e1", rpcUrl: "http://primary" }] }) as never

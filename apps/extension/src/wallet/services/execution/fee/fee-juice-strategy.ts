@@ -62,16 +62,12 @@ export class FeeJuiceStrategy implements FeeStrategy {
 					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.account.address), task)
 				}
 			}
-			await finalizeGasLimits(
-				built.node,
-				built.txRequest,
-				simulatedTx,
-				ctx.gasPadding,
-				undefined,
-				ctx.op.fee,
-				ctx.feeMultiplier,
-				built.txsLimits,
-			)
+			await finalizeGasLimits(built.node, built.txRequest, simulatedTx, {
+				gasPadding: ctx.gasPadding,
+				customLimits: ctx.op.fee,
+				feeMultiplier: ctx.feeMultiplier,
+				txsLimits: built.txsLimits,
+			})
 			task.complete()
 			return { ...built, feePaymentMethod: AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE }
 		} catch (error) {

@@ -9,10 +9,10 @@ import { predictedWorstMinFees } from "@nulo/aztec-runtime/fee-juice"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import { PRIORITY_MULTIPLIERS } from "@nulo/wallet-bridge"
 import type { Action } from "@nulo/wallet-bridge"
-import { OperationEstimateReuse, type OperationEstimateReuseDeps, type OperationEstimateReuseEntry } from "./operation-estimate-reuse"
+import { OperationEstimateReuse, type OperationEstimateReuseEntry } from "./operation-estimate-reuse"
 import { fingerprintOperation, type OperationFingerprintInput } from "./operation-fingerprint"
 import type { FeeSettings } from "./spec"
-import { ESTIMATE_REUSE_TTL_MS } from "./estimate-reuse-shared"
+import { ESTIMATE_REUSE_TTL_MS, type EstimateReuseDeps } from "./estimate-reuse-shared"
 
 const calls = vi.hoisted(() => [] as string[])
 
@@ -84,15 +84,10 @@ function entry(feeSettings?: FeeSettings, overrides: Partial<OperationEstimateRe
 type Network = { chainId: number; primaryEndpointId: string; endpoints: Array<{ id: string; rpcUrl: string }> }
 
 function harness(
-	o: {
-		network?: Network
-		live?: { l1ChainId: number; rollupVersion: number }
-		fpc?: object
-		deps?: Partial<OperationEstimateReuseDeps>
-	} = {},
+	o: { network?: Network; live?: { l1ChainId: number; rollupVersion: number }; fpc?: object; deps?: Partial<EstimateReuseDeps> } = {},
 ) {
 	const logDebug = vi.fn()
-	const deps: OperationEstimateReuseDeps = {
+	const deps: EstimateReuseDeps = {
 		getNetwork: vi.fn(async () => {
 			calls.push("getNetwork")
 			return (o.network ?? { chainId: 7, primaryEndpointId: "e1", endpoints: [{ id: "e1", rpcUrl: "http://primary" }] }) as never

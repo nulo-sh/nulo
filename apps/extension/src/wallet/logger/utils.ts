@@ -99,6 +99,7 @@ export const REDACTED_KEYS: ReadonlySet<string> = new Set([
 	"importedKeysKey",
 	"importedKeyRows",
 	"sourceDek",
+	"destinationDek",
 	"transferKey",
 	"dek",
 	"dekSealed",
@@ -111,6 +112,8 @@ export const REDACTED_KEYS: ReadonlySet<string> = new Set([
 	"bearer",
 	// Seed / recovery material.
 	"entropy",
+	"plainEntropy",
+	"plainSecret",
 	"mnemonic",
 	"seedPhrase",
 	// Authentication material.

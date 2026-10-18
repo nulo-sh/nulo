@@ -1211,7 +1211,7 @@ export class DappSendExecutor {
 					{ simulatePublic: true, skipFeeEnforcement: true, scopes: scopesWithAccount },
 					parentTask,
 				)
-				await finalizeGasLimits(node, txRequest, simulatedTx, 1, undefined, feeOpts, 1, txsLimits)
+				await finalizeGasLimits(node, txRequest, simulatedTx, { gasPadding: 1, customLimits: feeOpts, feeMultiplier: 1, txsLimits })
 				const submittedEndpointUrl = primaryEndpointUrl(network)
 				leaveLine()
 

@@ -116,9 +116,8 @@ const emit = defineEmits<{
 	updatePayer: [index: number, payer: FeePayerPick | null]
 }>()
 
-// TS type predicate so the template's `v-if="isSendTx(op)"` narrows op
-// to the send-like subtype downstream (lets us access `op.feeSettings`
-// without TS complaining that non-send kinds don't carry that field).
+// A predicate, so the template's `v-if` narrows `op` to the send-like row: it gates the whole send
+// card, not only its fee settings, so it names the two kinds the card renders.
 const isSendTx = (op: UIOperation): op is SendLikeUIOp => op.kind === "send_transaction" || op.kind === "aztec_sendTx"
 
 /** The method a dApp asked for by naming the account itself as payer with no fee call: the card
