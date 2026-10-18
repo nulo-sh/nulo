@@ -161,7 +161,7 @@ None. P40-03 A, quoted above: "the template is untouched, no pixel changes". The
   - write the scratch DOM spec and take its "before" set (Phase 3);
   - take the "before" pictures and their control (Phase 4).
 
-### Phase 1: the sponsor verdicts
+### Phase 1: the sponsor verdicts ✓
 - **Change map:**
   - Add `composables/useSponsorVerdicts.ts`.
   - Edit `FeeSettingsCard.vue`: remove the verdict refs and watchers, and add the two calls in the setup order above.
@@ -177,7 +177,7 @@ None. P40-03 A, quoted above: "the template is untouched, no pixel changes". The
   - **Order pin:** a tx change while the paying sponsor is short ends with that sponsor re-checked. The shorts must clear before the arm; both watchers hang on `txShape`, so creation order decides.
 - **Gate:** the fast gate; `FeeSettingsCard.test.ts` unchanged.
 
-### Phase 2: the snapshot lifecycle
+### Phase 2: the snapshot lifecycle ✓
 - **Change map:**
   - Add `composables/useFeeSnapshot.ts`. No function may go over 80 lines or over a cognitive complexity of 15.
   - Edit `FeeSettingsCard.vue`:
@@ -196,7 +196,7 @@ None. P40-03 A, quoted above: "the template is untouched, no pixel changes". The
   - `dispose` releases the lease, and a later `run()` subscribes nothing.
 - **Gate:** the fast gate; `FeeSettingsCard.test.ts` unchanged.
 
-### Phase 3: the two rule books, the mode chosen once, the leftovers
+### Phase 3: the two rule books, the mode chosen once, the leftovers ✓
 - **Change map:**
   - Add `composables/useFeeSelection.ts`.
   - Edit `FeeSettingsCard.vue`:
@@ -284,6 +284,13 @@ None. P40-03 A, quoted above: "the template is untouched, no pixel changes". The
 | D9 | `isMethodsDropdownOpen` | keep; an Outcome disposition line | "closed disposition" | O9: no failure hypothesis, so no `known-limit` |
 | D10 | Send's recovery read | removed; test rewritten with a control | agree | agree; it narrows a race window |
 | D11 | A picture pair that differs | stop, always; the control is evidence for the orchestrator, never a waiver | final: G1 (twice), no waiver | the orchestrator decides |
+| D12 | The arc's base | `2247f9f7`: `origin/dev` `689d0934` merged in, fees-display-1 (#733) included | n/a | n/a |
+| D13 | Lines that moved at `<base>` | recorded below; no fact changed | n/a | n/a |
+| D14 | DOM states beyond the plan's list | added: the menu open (Send short sponsor, execute default) and two app states (nudge, saved pick) | n/a | n/a |
+| D15 | Small shapes the plan left open | the snapshot's hooks take a whole `BalanceScope` (one cast where the run opens); `run()` returns at once after `dispose()`; the run's opening is a synchronous `beginRun` (cognitive budget, same tick for the commit and its `finally`); the card maps `failure` inside `statusNotice` | n/a | n/a |
+| D16 | Card-test edits beyond the list | the two `useCacheStore` imports the removed assertions used, and one title that named the removed cache | n/a | n/a |
+
+**D13.** fees-display-1 changed the card's imports, `estimatedFeeDisplay`, `queuedCapDisplay`, the shortfall (`shortfallText` became `shortfall`, a `<FeeAmount>` row) and added a `.fee_figure` style. None of it touches a mode line; Facts 1-8 hold, and Fact 9 is now history. Card lines move by -1 above `estimatedFeeDisplay` and +1 below it (verdict refs `:132-145`; `data-origin` `:889`; `destinationPrivacy` `:73`). In the test: the internal-access test is `:3080-3096`; `destinationPrivacy` is at `:1856,2839,2898,3104,3133`; `:532-548,593,679` and `:2054-2074` did not move. `send.vue`'s binding is `:831`. The `send.test.ts` stub also binds `:data-destination` (`:179`), which goes with the prop. The worktree's install predated `dc4a88ec`'s new dependency: `bun install --frozen-lockfile` fixed it, with no lockfile change. The shot on `type-roles-windows.test.ts` landed before Phase 1, since the "before" pictures need it.
 
 **D11.** The brief says "a pixel difference is a stop", and the plan keeps that rule as written. Two network runs at the base can differ: fresh entropy, and each run's own fee figures (Inference b). The control pair shows the orchestrator whether a stop is input-caused noise. It never waives a stop on its own: noise can hide a changed value, and a box can hold unchanged pixels between two noisy spots.
 
@@ -307,6 +314,8 @@ None. P40-03 A, quoted above: "the template is untouched, no pixel changes". The
 - **G3:** the security statement is qualified, including the same-identity refresh the resumed pass found (`:685-690`). Close-out re-traces it, then files a closed `known-limit` or a private draft advisory.
 
 **Final pass, resumed twice** (same session): first `conditional approve` (the noise box could hide a regression; the same-identity refresh), both fixed as above; then **`approve`**: "D11 consistently stops on every pixel difference, with controls used only as evidence. G3 correctly distinguishes initial loading from same-identity refreshes and requires re-tracing before disposition." No open disagreement remains.
+
+**Implementation review, round 1** (over `3f391f67`; Codex session `01a14cc6`, gpt-6.1-sol, high, read-only, beside the Phase 4 chain): `approve`, three non-blocking comment findings. **Opus** (general-purpose): `conditional approve`, two findings and one pre-existing note. Both confirm that no watcher's creation order, reactive source, teardown step or `this` binding moved, and that template and style are byte-identical. Dispositions in [lessons/phase-4.md](lessons/phase-4.md); every accepted fix is a comment or a test mock, and they land when the D11 stop is released.
 
 ## Delivery
 
