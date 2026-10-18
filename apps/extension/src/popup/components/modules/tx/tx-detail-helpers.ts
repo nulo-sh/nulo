@@ -1,6 +1,7 @@
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { OriginType } from "@/wallet/services/transaction/client"
 import { FEE_METHODS } from "@/utils/tx-enrichment"
+import { isPrivateFpc } from "@/wallet/services/fpc/private-fpc-address"
 import { formatGas } from "@/utils/fee-estimation"
 
 export interface GasDetailsRaw {
@@ -44,6 +45,7 @@ export interface FeePaymentLabelInput {
 	feePaymentMethod?: number
 	calls?: { method?: string }[]
 	origin?: { type: number; name?: string }
+	feeSpender?: string
 }
 
 export function describeFeePaymentMethod(tx: FeePaymentLabelInput | undefined | null): string | null {
@@ -51,13 +53,17 @@ export function describeFeePaymentMethod(tx: FeePaymentLabelInput | undefined | 
 	const method = tx.feePaymentMethod
 	if (method === AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE) return "Public Fee Juice"
 	if (method === AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM) return "Public Fee Juice (with claim)"
-	if (method === AccountFeePaymentMethodOptions.EXTERNAL) {
-		const fpcMethod = tx.calls?.find((c) => c.method && FEE_METHODS.has(c.method))?.method
-		if (fpcMethod === "sponsor_unconditionally") return "Sponsored"
-		if (fpcMethod === "fee_entrypoint_private") return "Private Fee Juice"
-		if (fpcMethod === "pay_fee") return "Private Fee Juice"
-		if (tx.origin?.type === OriginType.DAPP) return `Set by ${tx.origin.name ?? "the app"}`
-		return "External FPC"
-	}
+	if (method === AccountFeePaymentMethodOptions.EXTERNAL) return describeExternalFee(tx)
 	return method !== undefined ? `Unknown (${method})` : null
+}
+
+function describeExternalFee(tx: FeePaymentLabelInput): string {
+	const fpcMethod = tx.calls?.find((c) => c.method && FEE_METHODS.has(c.method))?.method
+	if (fpcMethod === "sponsor_unconditionally") return "Sponsored"
+	if (fpcMethod === "fee_entrypoint_private") return "Private Fee Juice"
+	if (fpcMethod === "pay_fee") return "Private Fee Juice"
+	// A popup Send records only its transfer, so the FPC it paid through is its only fee trace.
+	if (!fpcMethod && tx.origin?.type === OriginType.UI) return isPrivateFpc(tx.feeSpender) ? "Private Fee Juice" : "Sponsored"
+	if (tx.origin?.type === OriginType.DAPP) return `Set by ${tx.origin.name ?? "the app"}`
+	return "External FPC"
 }
