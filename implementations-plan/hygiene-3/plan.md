@@ -106,6 +106,7 @@ The lane brief's no-ask record is "UI impact: none". Settings › Developer, the
 | D3 | Notice builders return the store argument; shells call the store | the store call inside the composables | structure-2's shape |
 | D4 | #797: `trigger` plus a clock pinned before mount, nonzero, over the `keys` cases | a fake clock per key; a manual `_vts` stamp (Vue's private field in the test); a `@keydown.capture` in the component (runs before Input's listener, breaks the `defaultPrevented` check); a wait for the clock | both agree |
 | D5 | #517 on `Button`'s default slot, imported explicitly, three overrides under one doubled class | an exported CTA class (a package export and a Button restyle for one caller); dropping the drifts (OA-1) | both agree |
+| D6 | Arc 1 deviation: the import builder is `passkeyImportFailedNotice`, not `importFailedNotice`: its copy names an authenticator and only the passkey import path calls it | a doc comment saying so | Opus arc 1 review |
 
 ## Audit verdicts
 
@@ -123,6 +124,8 @@ The lane brief's no-ask record is "UI impact: none". Settings › Developer, the
 **Round 2** (Codex, resumed): `conditional approve (with conditions: expand the screenshot clip by the outline width plus its offset)`. Accepted: the clip grows to 4px on every side; the reveal is named click-driven, since under the pinned clock an Enter from the password field reaches only its first Vue listener. Codex verified the explicit `Button` import against CLAUDE.md and Biome, every gate command and file, and found no other defect.
 
 **Round 3** (Codex, resumed, verification): `approve`, no remaining findings.
+
+**Arc 1 post-implementation** (diff `c8aa0374..hygiene-3-a1`). Codex (gpt-6.1-sol, high, session `01a15107`) round 1: `findings: 1`, Low: both builders' doc comments named their callers → removed. Opus 5.5 diff review beside it: `changes requested`, no behaviour difference; one Low, the Developer case's second half could not fail (`updateSetting`'s own unchanged-value check absorbs a page regression) → removed; two nits → the passkey name (D6) and a dependent row's write named in `useSettingUpdate`'s TSDoc. Codex round 2 (resumed): `clean`.
 
 ## Delivery
 
