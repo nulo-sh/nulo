@@ -87,21 +87,21 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 				direction="column"
 				align="end"
 				justify="center"
-				gap="5"
+				gap="2"
 				data-testid="token-balance-loading"
 				aria-busy="true"
 				:class="$style.loading_block"
 			>
 				<Skeleton :width="64" :height="13" />
-				<Skeleton :width="92" :height="9" />
+				<Skeleton :width="92" :height="11" />
 			</Flex>
 			<Flex v-else direction="column" align="end" gap="2">
 				<span data-testid="token-amount" :class="[$style.amount, syncFailed && $style.amount_stale]" :data-malformed="isMalformed || undefined">{{ totalBalance || 0 }}</span>
 				<span v-if="!isMalformed" :class="$style.detail">
-					<span :class="$style.icon_private"><Icon name="private" size="9" /></span>
+					<span :class="$style.icon_private"><Icon name="private" size="12" /></span>
 					{{ privateFormatted }}
 					<span :class="$style.pub_group">
-						<span :class="$style.icon_public"><Icon name="public" size="9" /></span>
+						<span :class="$style.icon_public"><Icon name="public" size="12" /></span>
 						{{ publicFormatted }}
 					</span>
 				</span>
@@ -225,8 +225,9 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	margin-left: 6px;
 }
 
+/* The loaded column's box: an `amount-row` line, the 2px gap and a `meta` line. */
 .loading_block {
-	min-height: 32px;
+	min-height: 37px;
 }
 
 /* Last projection failed: keep the last-known amount visible, dimmed (the

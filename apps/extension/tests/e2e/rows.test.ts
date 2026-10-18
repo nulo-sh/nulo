@@ -2,8 +2,10 @@
  *  button, a modified click's new tab, the measured 24px box, what sits on top of a titled span
  *  and of the row's icon, and how far apart rows sit and whether anything leaves one. */
 import type { Page } from "puppeteer"
-import { expect } from "vitest"
-import { prepareKeys, waitForNewTab } from "./fixtures/browser"
+import { expect, inject } from "vitest"
+import { TOKEN_LIST_SOURCE_KEY } from "@/e2e/chrome-storage-token-list"
+import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { extensionUrl, interceptRpc, openScratchPage, prepareKeys, stopBackground, waitForNewTab } from "./fixtures/browser"
 import { type ExtensionContext, openPopup, test, waitForHash } from "./fixtures/extension"
 import {
 	addContact,
@@ -15,14 +17,16 @@ import {
 	seedUsdQuoteAndReload,
 	setDeveloperMode,
 	setTheme,
+	unlockAfterBackgroundDeath,
 } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
 import { shotSend } from "./fixtures/send-page"
 import { waitForPopup } from "./fixtures/popups"
-import { skipUnlessListPrices } from "./fixtures/token-list"
+import { e2eSigner, serveTokenList, signTestList, skipUnlessListPrices } from "./fixtures/token-list"
 import { readActivityScope, seedJournalRecord, seedReceipt, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
-import { pointerClick } from "./helpers/legal-drivers"
+import { createProfileAcceptingTerms, pointerClick } from "./helpers/legal-drivers"
 import { coveredAt, pressEscape, tabAround, waitForFocus } from "./helpers/pointer-probes"
+import { startStub } from "./helpers/rpc-stub"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const TX_HASH = `0x${"5e".repeat(32)}`
@@ -1020,6 +1024,67 @@ test("a dApp's long function name and host never widen Home or History, named or
 	expect(listedExtensionPerTest.consoleErrors).toEqual([])
 	expect(listedExtensionPerTest.pageErrors).toEqual([])
 }, 180_000)
+
+const rowHeight = (page: Page, selector: string) => page.$eval(selector, (row) => row.getBoundingClientRect().height)
+
+test.skipIf(inject("liveLeg") === true)(
+	"a default token's placeholder row, still working, stands as tall as a loaded token row",
+	{ timeout: 120_000 },
+	async ({ freshExtensionPerTest: ctx }) => {
+		const host = await serveTokenList()
+		// A node that never answers keeps the defaults working, and fails no balance read.
+		const node = await startStub(() => undefined)
+		const held = await interceptRpc(ctx.browser, ctx.extensionId, new URL(TESTNET_RPC_URL).origin, { kind: "redirect", to: node.url })
+		try {
+			host.serve(await signTestList())
+			const control = await openScratchPage(ctx.browser, ctx.extensionId)
+			const { pinned } = await e2eSigner()
+			await control.evaluate((key: string, source: unknown) => chrome.storage.session.set({ [key]: source }), TOKEN_LIST_SOURCE_KEY, {
+				url: host.url,
+				publicKey: pinned.publicKey,
+			})
+			await createProfileAcceptingTerms(ctx)
+			const seeder = await openPopup(ctx)
+			await waitForHash(seeder, "#/popup/general", 30_000)
+			const working = `${sel("token-seed-row")}[aria-busy="true"]`
+			await seeder.waitForSelector(working, { visible: true, timeout: 30_000 })
+			const loading = await rowHeight(seeder, working)
+			await shotSend(seeder, "home-token-rows-loading", "tokens-list")
+
+			const scope = await readActivityScope(seeder)
+			await seedTokenRow(seeder, scope, 1)
+			await seeder.evaluate(
+				(key: string, row: string) => chrome.storage.local.set({ [key]: row }),
+				"nulo:core:token-balances@1",
+				JSON.stringify({
+					id: 1,
+					token: 1,
+					account: scope.account,
+					profileId: scope.profileId,
+					chainId: scope.chainId,
+					contract: scope.token.contract,
+					publicBalance: "2500000",
+					privateBalance: "1500000",
+					updatedAt: Date.now(),
+				}),
+			)
+			// The balance service reads its token map only as it starts.
+			for (const open of await ctx.browser.pages()) {
+				if (open.url().startsWith(extensionUrl(ctx.extensionId, "/"))) await open.close()
+			}
+			await stopBackground(ctx)
+			const page = await openPopup(ctx)
+			await unlockAfterBackgroundDeath(page)
+			await page.waitForSelector(`${sel("tokens-card")} ${sel("token-amount")}`, { visible: true, timeout: 30_000 })
+			expect(await rowHeight(page, sel("tokens-card"))).toBe(loading)
+			await shotSend(page, "home-token-rows-loaded", "tokens-list")
+		} finally {
+			await held.stop()
+			await node.close()
+			await host.stop()
+		}
+	},
+)
 
 /** Five priced sends: more than Home's middle shows at 360 × 600 and in the 900px-tall panels. */
 const HOME_ROWS = Array.from({ length: 5 }, (_, i) => `0x${(0x71 + i).toString(16).repeat(32)}`)

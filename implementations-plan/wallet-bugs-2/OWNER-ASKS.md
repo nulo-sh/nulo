@@ -18,3 +18,16 @@ The lane brief's records cover #648's wrap and #654's sizes: those ship with bef
 - A (recommended, ships now): the two edits above. The note then lists every effect a fetched list has.
 - B: the new sentence alone, the conclusion unchanged. Shorter; the conclusion then names one of the two effects.
 - C: the owner's own wording for either edit.
+
+## OA-2 (#654, found while measuring): Home's ghost token rows
+
+**Surface.** Home's token card while it waits blank: the three ghost rows (`TokensView.vue`, `tokens-skeleton-row`).
+
+**Today** both of a ghost row's columns ask for `gap="5"`, which is no `Flex` gap token (the scale has 4 and 6), so each pair of bars touches. A ghost row is 16 px of padding plus a 25 px column (14 + 11 after this PR), about 41 px; a loaded token row is 53 px.
+
+**What ships now.** Only D7's bar heights (9 → 11 px). The gap and the row's height are unchanged: either would change how the waiting card reads, outside the plan's UI-impact line.
+
+**Options.**
+- A (recommended): give the ghost row's right column the loaded box (gap 2, `min-height: 37px`) and its left column gap 2, so a ghost row stands as tall as the row that replaces it. A follow-up issue with before and after pictures.
+- B: a valid gap only (4 or 6), the height unchanged.
+- C: leave it.

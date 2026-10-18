@@ -12,3 +12,4 @@
 - 2026-10-18: Phase 4 gate pass: unit 1751/1751, lint 0, typecheck:all 0, navigation.test.ts Chrome 8/8 and Firefox 8/8 (new cases red on base).
 - 2026-10-18: Phase 7 gate pass: store-listing.test.ts 8/8 (OA-1 form A, six cites re-pointed).
 - 2026-10-18: Phase 5 gate pass: unit 3212, type-roles.test.ts Chrome 13 (1 skipped) and Firefox 13 (seeded-Home case red on base), e2e:agent incoming-arrival 7/7 (needs NULO_E2E_PROVERLESS=1) and incoming-transfers 3/3.
+- 2026-10-18: Phase 6 gate pass: rows.test.ts Chrome 10/10 and Firefox 10/10 (new height case red on base: 53 vs 50), type-roles.test.ts both, shipped-token-list.test.ts skipped (live leg); OA-2 recorded (ghost rows).
