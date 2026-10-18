@@ -101,17 +101,13 @@ const interactionService = new DappInteractionServiceClient()
 const tokenService = new TokenServiceClient()
 
 /**
- * Pre-fetched metadata for `register_token` operations, keyed by contract
- * address. Resolved by parseTokenInterface + fetchTokenMetadata in init() so
- * the OperationCard renders name + symbol + decimals alongside the address
- * BEFORE the user clicks Allow. The pre-fetch is the only anti-phishing
- * surface the user has — the popup must not be approvable while it's loading,
- * nor once it failed: an approval names the details its card showed.
+ * Per contract address, the details a `register_token` card shows and the class they were read
+ * from. The approval names them and the SW stores only a read equal to them, so the window is not
+ * approvable while they load or once their read failed.
  */
 const tokenMetadata = ref<Map<string, ShownTokenMetadata>>(new Map())
 const tokenMetadataLoading = ref(false)
 const tokenMetadataError = ref<Map<string, string>>(new Map())
-/** A `register_token` card with no details to approve: still reading them, or failed to. */
 const tokenMetadataUnread = computed(
 	() =>
 		tokenMetadataLoading.value ||

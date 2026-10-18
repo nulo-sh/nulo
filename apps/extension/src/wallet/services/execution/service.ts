@@ -1102,8 +1102,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		if (network.profileId !== fence.profileId) throw new Error("unauthorized profile")
 
 		// Always parsed here: a popup-supplied interface would carry function
-		// mappings nothing authenticated, and they are what gets persisted. The
-		// window's class is a pin: a contract upgraded since refuses before any record.
+		// mappings nothing authenticated, and they are what gets persisted. Pinned
+		// to the class the window read: an interface of another class refuses before any record.
 		const ti = await this.tokenService.parseTokenInterface(op.networkId, op.address, parentTask, shown?.classId)
 
 		if (
