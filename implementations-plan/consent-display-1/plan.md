@@ -227,6 +227,7 @@ Outline B (not committed) proposed a worker snapshot by id with a 120 s life, cl
 
 - **Codex round 1** (gpt-6.1-sol, high, session 01a15024) on ce8cc3d7: approve. Taken: the pin comment claimed an upgrade is refused, but a PXE-held instance reports its original class (`hydratePreimage`), so it now says an interface of another class refuses; the window's doc block cut to its invariant, the computed's restating comment removed. Not taken: rewording the failed preview's "Verify the contract address before approving." (copy; OA-1 A keeps the warning): OA-6.
 - **Opus review** of ce8cc3d7 and 13eb2fa3: approve. Taken: the window's guard keys on a card with no details, which covers a read in flight and a failed one; the pin test's stub refuses only a pinned parse of another class; the hidden characters in the cleaning cases written as escapes; `packages/wallet-bridge/README.md` states the commit's contract. Not taken: a released add whose read matched can title its import record with that read and then succeed against another add's same-contract row; it needs a five-minute storage stall, and a succeeded `token_import` record renders nowhere (Home drops it, the activity feed excludes the kind).
+- **Codex round 2** (resumed) on 473a2867: **approve**, no new material issue; it verified the guard, the pin test, the comments, the escapes and the README, and held the copy and the known limit settled. The loop converged in two rounds.
 
 ## Seeds
 

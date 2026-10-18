@@ -5,3 +5,4 @@
 - 2026-10-18: network e2e at ce8cc3d7, retry 0, load1 31: `register-token.test.ts` pass (13.4 s) and `type-roles-windows.test.ts` pass (190 s); the run took 4.9 min. No e2e scenario added.
 - 2026-10-18: the PR's pictures come from a scratch spec copied into `tests/e2e/network/` for the run and deleted after: an address no contract holds makes the window's read fail; failed import rows are seeded into storage and read after a page reload, since Home reads the journal once at mount. The "before" window ran with `index.vue` from c8a423f2, restored after the run.
 - 2026-10-18: Codex arc 2 round 1 (gpt-6.1-sol, high, read-only, session 01a15024): approve; two comment fixes taken, one copy point filed as OA-6. Opus review: approve; four local fixes taken, one known limit (plan, Arc 2 implementation review).
+- 2026-10-18: Codex arc 2 round 2 (resumed, on 473a2867): approve, no new material issue. The loop converged in two rounds.

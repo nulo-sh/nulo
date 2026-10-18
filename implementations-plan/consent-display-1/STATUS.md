@@ -12,3 +12,4 @@
 - 2026-10-18: arc 2 phase 2 gate at ebdf337c: `bun run lint`, `bun run typecheck:all`, `bun run test` pass; with the cleaning removed, both new cleaning cases fail.
 - 2026-10-18: arc 2 phase 3 fast layers at ce8cc3d7: `bun run lint` red once (`approve()` in the execute window scored 16 against 15; D13), then pass; `bun run typecheck:all`, `bun run test:all` pass; each new guard, removed, fails its test.
 - 2026-10-18: arc 2 phase 3 network e2e at ce8cc3d7 (retry 0): `register-token.test.ts` and `type-roles-windows.test.ts` pass. Codex round 1 approve (comment fixes in 13eb2fa3; the copy point is OA-6); Opus approve (fixes in 473a2867). Pictures taken; Codex round 2 next.
+- 2026-10-18: Codex round 2 approve; the loop converged. Merging origin/dev, then the final gates.
