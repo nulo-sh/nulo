@@ -4,6 +4,8 @@ The lane brief's no-ask record is "UI impact: none". Each ask names its surface,
 
 ## OA-1 (arc 2, #517): the recovery-phrase Close's focus ring and press
 
+Open as #831.
+
 - **Surface**: Settings › Backup › Recovery phrase, after the words show: the Close button with its countdown bar.
 - **Background**: the Close is drawn from a hand copy of the design system's outline button that drifted in two ways. Page 37 (2026-10-17, option A) kept both as overrides "unless you say otherwise"; the lane brief asks the Close to take the design button's look instead. The two records disagree, so this asks once.
   - Focus ring, shown when the button is reached with Tab: dotted today; solid on every design button. Hand-styled controls in the wallet (the legal sheet, the send review, onboarding's back and skip links) also use the dotted ring.

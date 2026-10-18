@@ -11,9 +11,21 @@ base: dev @ 7eada4c6
 standard: implementations-plan/README.md § Post-implementation standard, read at 7eada4c6
 ---
 
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** closed by the merge into `dev` of arc 2's PR, which closes #797 and #517; arc 1 (#817) closed #735.
+- **Shipped:** one pair of profile-flow notice builders and Developer's rows on the shared settings plumbing and title (#735, arc 1); SettingsSearch's keys sent through `trigger` under a pinned clock, so the held-Escape case reads the root's work every run and a raw-dispatch helper reds every run (#797); the recovery-phrase Close on the design `Button`, its dotted ring, filled press and eased fade kept as three overrides, pixel-identical to the base on Chrome and Firefox in both themes (#517). OA-1's pictures: `screenshots/arc2/`.
+- **Owner asks:** OA-1 (#831) open: A ships; B deletes one CSS rule.
+- **Known limits:** none.
+- **Open items:** #831 (OA-1, `owner-decision`).
+- **Dropped:** none. Other plans: structure-2's arc 3 keeps #730 only (#735's notices and Developer shipped in #817); ui-dedupe-1's A4 (#517) is delivered here, so that arc has no work left.
+- **Lessons:** the Vue-tests line in `lessons.md` now names the cause for any clock, not only fake timers, and the raw `pressOn` helper.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+
 # hygiene-3: the rest of #735, the countdown Close on Button, the held-Escape flake
 
-Three code-only issues in two arcs, each one PR against `dev`, not stacked (D-orch-1). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md). Gate log: `STATUS.md`.
+Three code-only issues in two arcs, each one PR against `dev`, not stacked (D-orch-1). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md).
 
 | Arc | Issues | Branch | PR line |
 |---|---|---|---|
