@@ -365,6 +365,28 @@ describe("NetworkResetService — what deleting a paused network deletes", () =>
 		expect((await d.reset.getStaleNetwork("tn"))?.reset?.imported).toEqual([])
 	})
 
+	test("offers for export each imported account whose key the journal holds, done or not, at its new address", async () => {
+		const h = await harness()
+		await staleTestnet(h)
+		const [derivedOne] = journalOf().accounts
+		const keyless = { ...importedEntry(2, "Cold", "0xcold", false), encryptedSigningKey: undefined }
+		await putJournal(
+			h,
+			journalOf({
+				accounts: [
+					derivedOne,
+					importedEntry(0, "Savings", importedAddr(SK1), true),
+					importedEntry(1, "Trading", importedAddr(SK2), false),
+					keyless,
+				],
+			}),
+		)
+		expect((await h.reset.getStaleNetwork("tn"))?.reset?.heldImported).toEqual([
+			{ name: "Savings", address: `${importedAddr(SK1)}-new` },
+			{ name: "Trading", address: `${importedAddr(SK2)}-new` },
+		])
+	})
+
 	test("after the rewrite, also names an imported row on the new chain the journal does not name, cleaned", async () => {
 		const h = await harness()
 		await putNetwork(h, { id: "tn", name: "Testnet", chainId: NEW, l1ChainId: L1, kind: "testnet" })
