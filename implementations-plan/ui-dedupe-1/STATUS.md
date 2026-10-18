@@ -21,3 +21,6 @@
 - 2026-10-17 23:48Z A3 smoke Chrome on b99bbff3 (armed build, retry 0, load1 113): appearance, settings-routes, sw-resilience 20/20 (1 standing test.skip) in 108 s.
 - 2026-10-17 23:52Z A3 review round 1: Opus findings (1: the composable's cascade cases ran a copy of the page's), fixed in 2c674859; pre-existing double apply filed as closed known limit #736. Round 2: Codex clean; loop converged.
 - 2026-10-18 00:00Z A3 final gates on 2c674859 (dev 138e0ded, nothing newer): lint 0, typecheck:all 0, test:all 0, check:plans 0; smoke Chrome (rebuilt armed bundle, retry 0, load1 65) appearance, settings-routes, sw-resilience 20/20 in 88 s. A3 ✓.
+- 2026-10-18 00:29Z A5 start: branch ui-dedupe-1-a5 off dev 46df7df9 (A3 merged as #737); lockfile unchanged.
+- 2026-10-18 00:55Z A5 recon rebuilt: #678/#707 changed no mirror rule. Codex consult (session 01a14c71): F1, D-a–D-f, D-h, D-i agree; D-g (Send's Added convergence) rejected with two id-reuse paths, verified; Send keeps its rule as `added: "append"`.
+- 2026-10-18 01:05Z A5 G-fast on the migration: lint 0, typecheck:all 0, the 8 touched suites 304/304 unchanged.
