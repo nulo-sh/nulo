@@ -1034,9 +1034,9 @@ export class DappSendExecutor {
 		const { op, identity, fence, parentTask, checkCancelled, preview, approval } = run
 		const before = await this.reuseSnapshot(op.networkId, op.accountAddress)
 		const built = await this.resolveStandardBuild(op, identity, reuseId, fence, parentTask, checkCancelled)
+		await run.recordCall(built.txCalls)
 		if (preview) assertWithinPreview(preview, built.discoveredHashes)
 		checkCancelled()
-		await run.recordCall(built.txCalls)
 		const reask = overCeiling(approval, ceiling, built)
 		if (!reask) return { built }
 		const shown = preview?.kind === "found" ? preview.snapshot.discoveredAuthwits : undefined

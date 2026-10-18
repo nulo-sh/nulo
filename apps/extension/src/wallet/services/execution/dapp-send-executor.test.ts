@@ -1641,6 +1641,8 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			changed.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: "pv" }),
 		).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
 		expect(changed.proveAndSend).not.toHaveBeenCalled()
+		// The refused build still names its record: it ran, and its class is what the row reads.
+		expect(changed.deps.lane.recordBuiltCall).toHaveBeenCalledTimes(1)
 	})
 
 	test("a popup pairing one interaction's estimateId with another's previewId is refused before either id is consumed", async () => {

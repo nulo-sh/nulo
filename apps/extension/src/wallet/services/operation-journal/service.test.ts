@@ -7,6 +7,8 @@
  * itself is covered in `@nulo/wallet-core/jobs/fsm.test.ts`).
  */
 
+import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { ValidationError } from "@nulo/extension-messaging/errors"
 import { IllegalTransitionError, type JobProgress, type SendExpiry } from "@nulo/wallet-core/jobs"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
@@ -999,19 +1001,23 @@ describe("a refusal's title rides the write that fails the record", () => {
 	})
 
 	test("a retitle replaces the call with its own, so the title and the call describe one call", async () => {
-		const feeJuice = `0x${"05".padStart(64, "0")}`
+		const feeJuice = AztecAddress.fromNumberUnsafe(FEE_JUICE_ADDRESS).toString()
 		const other = `0x${"0c".repeat(32)}`
-		const { id } = await service.createOperation({
-			kind: "dapp_execute",
-			origin: "dapp",
-			profileId: "profile-a",
-			title: "balance_of_public",
-			call: { contract: feeJuice, argCount: 1 },
-		})
+		const built = { contract: feeJuice, argCount: 1, classId: `0x${"0e".repeat(32)}` }
+		const created = () =>
+			service.createOperation({
+				kind: "dapp_execute",
+				origin: "dapp",
+				profileId: "profile-a",
+				title: "balance_of_public",
+				call: built,
+			})
+		const { id } = await created()
 		await service.transitionOperation(id, { stage: "failed" }, REFUSED, { title: "claim", call: { contract: other, argCount: 2 } })
-		expect(await service.getOperation(id)).toMatchObject({ title: "claim", call: { contract: other, argCount: 2 } })
+		expect((await service.getOperation(id))?.call).toEqual({ contract: other, argCount: 2 })
 
-		const unnamed = await claimedSend()
+		const unnamed = (await created()).id
+		expect((await service.getOperation(unnamed))?.call).toEqual(built)
 		await service.transitionOperation(unnamed, { stage: "failed" }, REFUSED, { title: "Transaction" })
 		expect((await service.getOperation(unnamed))?.call).toBeUndefined()
 	})
