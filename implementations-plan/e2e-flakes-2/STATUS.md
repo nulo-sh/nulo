@@ -9,3 +9,4 @@
 - 2026-10-18: lint, typecheck:all, test:all exit 0 on bf7db153.
 - 2026-10-18: Firefox 10/10 green at retry 0 (proverless, taskset 0,1): 81.4 89.1 162.0 81.5 81.2 131.2 108.9 124.4 73.4 67.5 s.
 - 2026-10-18: Chrome 5/5 green; review round 2 (Codex resume): approve, loop converged; comments fixed in 78b82faa.
+- 2026-10-18: merged origin/dev (7eada4c6); final head: lint, typecheck:all, test:all, check:plans exit 0; spec green once per browser (Firefox 64.0 s, Chrome 38.5 s). PR opened.
