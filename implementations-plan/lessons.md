@@ -18,8 +18,7 @@
 - A `pull_request` run takes workflows from the merge ref but builds `head.sha`, so a later `dev` fix is absent: merge `dev` first. [Evidence](archive/dedup-ledger/plan.md#merge-ref)
 - A job needing a skipped job is skipped unless its `if` calls a status function; `always()` also runs after a cancel: use `always() && !cancelled()`. [Evidence](archive/release-pipeline-hardening/plan.md#always)
 - `git diff -M`'s R100 is not byte identity (compare blob ids and modes), and a pathspec splits a move across it into a delete and an add. [Evidence](archive/plans-scaffolding/plan.md#renames)
-- A `gh stack` runs the plans gate on every arc head, so an arc cannot link a later arc's file; after the squash merge, merging `dev` into the old head is add/add. [Evidence](archive/ux-feedback/plan.md#stack-gate)
-- Parallel arcs of one plan each took the next free decision id and collided at every merge: give each arc its own id range. [Evidence](archive/harden-security-fixes-2/plan.md#decision-ledger)
+- Arcs of one plan collide: a `gh stack` gates each arc head (link no later arc's file), `dev` into a squashed head is add/add; parallel arcs need disjoint decision ids and each add the index line, kept twice by auto-merge: run `check:plans`. [Evidence](archive/ux-feedback/plan.md#stack-gate), [more](archive/harden-security-fixes-2/plan.md#decision-ledger), [more](owner-feedback-1/lessons/phase-8.md)
 
 ## Extension runtime
 
