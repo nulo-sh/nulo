@@ -1,8 +1,8 @@
 ---
 plan: send-fees-ux
 tier: light
-status: arcs 1 and 2 merged (#532, #608); arc 3 in progress (page 23: P23-02 C, the fee card as a skeleton)
-issues: "#316 #340 (closed by arc 1); #503 #505 (closed by arc 2); #504 (arc 3 closes)"
+status: closed (arcs 1 and 2 merged as #532 and #608; arc 3 carries this close-out)
+issues: "#316 #340 (arc 1); #503 #505 (arc 2); #504 (arc 3)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,20 @@ base: origin/dev at dfdf4c31
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** closed. Arc 3 carries this close-out, and the merge that lands it closes the plan and #504.
+- **Shipped:**
+  - Arc 1 (#532): "Already added" on both sponsor forms, the edit form refusing another row's address; "Refused before sending" for an app's send the waiting-sends cap refused; #504's wait measured.
+  - Arc 2 (#608): the app-set fee legend kept beside "Fee up to" with a loading bar while estimating; a send Nulo's sponsor pays queues behind an earlier one ("Queue send"), stopped before building if that sponsor row is re-pointed meanwhile; a re-cased own address counts as no change.
+  - Arc 3: Send's fee card drawn whole while it reads balances (the method field's bar with "Checking", Available and You pay as bars, Priority live), page 23's P23-02 C.
+- **Known limits:** #528, #529, #569.
+- **Open items:** #799 (OA-5 to OA-7, shipped in their default form; owner's call).
+- **Dropped:** phase 4, page 20's guessed method (OA-2 C), not picked (D13).
+- **Lessons:** none promoted. `lessons.md` is at its budget; the arcs' gotchas are plan-specific (`lessons/phase-3.md`, `lessons/phase-7.md`, `lessons/phase-8.md`).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # send-fees-ux: Send and fee-card follow-ups
 
@@ -68,7 +82,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
    - `transfer-executor.test.ts`, at the unit layer because the no-id path builds fresh, which a composition test may not simulate (`tests/COMPOSITION-TESTS.md`). (a) A cap-less sponsored send behind a held predecessor builds once after release and writes no `reask`. (b) Never: Nulo's sponsor row re-pointed while queued fails closed before any build. Controls: a self-paid send that becomes queued after its estimate, with an estimate id and without one, still builds.
    - `tests/e2e/fixtures/send-burst.ts` (`readEstimateState`, `expectEstimateQueued`: enabled exactly while a cap shows or the payer is Nulo's sponsor) and the spec header of `same-token-concurrent-sends`. One held-send scenario there submits the sponsored send while held and checks its row stays queued until release. Wall-clock before and after.
    - UI impact: OA-3, quoted. Gate: `F`, then `NULO_E2E_PROVERLESS=1` and `same-token-concurrent-sends` once.
-7. **#504, on OA-2 B and P23-02 C (arc 3).** P23-02 C: "B, with Priority live from the first paint (it needs no balance; the person can set it while the rest loads)", where B is "The whole card as a skeleton: all four rows present from the first paint, labels kept, every value a bar, Priority as three bars".
+7. ✓ **#504, on OA-2 B and P23-02 C (arc 3).** P23-02 C: "B, with Priority live from the first paint (it needs no balance; the person can set it while the rest loads)", where B is "The whole card as a skeleton: all four rows present from the first paint, labels kept, every value a bar, Priority as three bars".
    - Change: `FeeSettingsCard.vue` holds the skeleton while Send's read for the live identity is pending (an origin is set and `snapshotPending`), D14. `FeeMethodSelector.vue` shows the loading bar and "Checking" for a screen reader in place of "Select method" (a saved pick's preview still names itself). `FeeMethodRow.vue` shows "Available" with a bar and `FeeCostReadout.vue` "You pay" with a bar, ahead of its queued branches. `FeePriorityRow` renders from the first paint and is live. Every bar is the card's existing loading bar (D15).
    - Tests, wire-shaped where an estimate shows. `FeeSettingsCard.test.ts`: while pending, four rows, three bars, "Checking", Priority live, no settings or payer emitted (never); a Priority pick made while pending is in the first settings (control); after a hold or a failed init, "Select method" and no bar, never an endless skeleton; the app windows' card keeps "Select method" while it reads. The three children's own tests cover their `pending` branch.
    - Measure, before on `origin/dev` and after on the branch: a temporary network e2e samples the card every frame (height, trigger text, settle) over phase 3's five opens, prover on (D16). Numbers in `lessons/phase-7.md` and on #504.
@@ -111,7 +125,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`. Pass: ea
 | D11 | where "entered with Nulo's sponsor" lives | `sequence()` returns `sponsored` from the row it already resolves; `TransferRun` keeps the entry value | a second `getFpcImpl` read at entry (another await before the journal row, racing the first) |
 | D12 | #504 in arc 2 | left out on the orchestrator's word; phase 7 waits | build OA-2 B now: the owner asked to see a whole-block skeleton before it ships |
 | D13 | which "C" arc 3 builds | P23-02 C, page 23's whole-card skeleton with Priority live, on top of page 20's B; phase 4 stays unbuilt | phase 4 (page 20's OA-2 C, a guessed method): page 20 chose B over it, and page 23 offered no guess |
-| D14 | where the skeleton shows | Send's card only (one with an origin) | the app windows' card too: OA-2 and P23-02 name Send; the execute window's card is OA-6 |
+| D14 | where the skeleton shows | Send's card only (one with an origin) | the app windows' card too: OA-2 and P23-02 name Send, and nobody has reported a wait there |
 | D15 | the bars' size | the card's existing 60 by 12 px loading bar in every slot, the one the menu's checking rows, the Available row and the estimating "You pay" row already show | bars sized to sample values, as the mockup drew them: the estimating bar that follows the read is 60 px, so a wider "You pay" bar would shrink at the commit |
 | D16 | measuring arc 3 | a temporary network e2e samples the page every frame, before and after, no app probe | phase 3's app probes: the skeleton changes what paints, not the read |
 
@@ -140,6 +154,8 @@ The steps are `implementations-plan/README.md` § Post-implementation standard a
 **Implementation rounds 1-2** (phases 1-2 diff; round 2, Codex resume: approve, the loop converged). Codex (gpt-6.1-sol, high, session 01a141e3): conditional approve; its one in-scope finding, the rename control's out-of-field addresses, fixed (84e49ca0). Opus diff review: approve after the same fix. Pre-existing, outside the arc: the submit button is live while the duplicate list loads (#528, known limit); a row another network adds while a form is open (#529, known limit); a Send-page send the cap refused reads "Stopped before broadcast" (OA-5, ships as is). Log: [lessons/phase-8.md](lessons/phase-8.md).
 
 **Arc 2 implementation rounds 1-2** (phases 1b, 5 and 6; round 2, Codex resume: approve, the loop converged). Codex (gpt-6.1-sol, high, session 01a144e6): conditional approve, 2 findings: an edit of Nulo's sponsor row between the press and the worker's first read escapes the fail-closed rule, as it does for a send that is not queued (known limit #569: closing it needs the approved payer on the wire); the refusal's slot and ticket release was unasserted (test added). Opus diff review: approve; the same window (#569), a dead estimate-id change (reverted) and an overclaiming comment (narrowed). Log: [lessons/phase-8.md](lessons/phase-8.md).
+
+**Arc 3 implementation rounds 1-2** (phase 7; round 2, Codex resume: approve, the loop converged). Codex (gpt-6.1-sol, high, session 01a15066): conditional approve, 5 findings; Opus diff review: conditional approve, 5. Fixed in ee4235cc: a failed read's notice, left up while another account's read runs, hid that read's Available bar; the readout's pending test could not see a queued row replace the bar; the Priority test read only the last payer; the failure exits never checked the bar was up; three comments. To the owner, unchanged: the skeleton is taller than a sponsored card with no amount (OA-6); hiding that stale notice (OA-7). Log: [lessons/phase-7.md](lessons/phase-7.md).
 
 ## Seeds
 
