@@ -28,12 +28,19 @@ function fakeBrowser() {
 	return { browser: { target: () => ({ createCDPSession: async () => root }) }, sent }
 }
 
+/** Target.pdl's `TargetFilter`: the first entry with no `type` or the target's own decides. */
+function attaches(filter: unknown, type: string): boolean {
+	const entry = (filter as { type?: string; exclude?: boolean }[]).find((e) => e.type === undefined || e.type === type)
+	return entry !== undefined && !entry.exclude
+}
+
 // Detaching any session from a page clears that page's WebAuthn virtual authenticators, so a page
 // that holds a passkey spec's credential must never take one of this interception's sessions.
-test("auto-attaches service workers and background pages only, never a page", async () => {
+test("auto-attaches every node caller, under any type name, and never a page", async () => {
 	const { browser, sent } = fakeBrowser()
 	const armed = await cdpInterceptRpc(browser as never, "chrome-extension://x/", "https://node.example", { kind: "refuse" })
 	await armed.stop()
-	const attach = sent.find(({ method, params }) => method === "Target.setAutoAttach" && params?.autoAttach)
-	expect(attach?.params?.filter).toEqual([{ type: "service_worker" }, { type: "background_page" }, { exclude: true }])
+	const { filter } = sent.find(({ method, params }) => method === "Target.setAutoAttach" && params?.autoAttach)?.params ?? {}
+	for (const type of ["page", "tab", "browser"]) expect(attaches(filter, type), type).toBe(false)
+	for (const type of ["service_worker", "background_page", "other", "offscreen_document"]) expect(attaches(filter, type), type).toBe(true)
 })
