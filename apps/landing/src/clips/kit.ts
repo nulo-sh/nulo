@@ -14,7 +14,6 @@ export function entry(parent: Element, y: number, kind: string, value: string, w
 	return { g, light: (k) => line.light(0, k) }
 }
 
-/** A balance row: the wallet's private or public mark, its label and an amount. */
 export type BalanceRow = { readonly g: SVGGElement; readonly amount: SVGTextElement; light(k: number): void }
 
 /** `stacked` puts the amount under the label, for a narrow card. */

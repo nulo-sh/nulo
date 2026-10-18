@@ -1,6 +1,7 @@
 import { type CueTable, resolveCues, type SceneSpan, type Timings } from "./timeline"
 
-/** Draws one frame of a scene from the global time `t` and the seconds `local` since the scene began. */
+/** Draws a scene at global time `t`, `local` seconds after it began. It must set every value it changes
+ *  from those times alone, whatever frame came before, so a seek either way draws the right picture. */
 export type Frame = (t: number, local: number) => void
 
 export type Scene = {

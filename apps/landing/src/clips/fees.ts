@@ -6,7 +6,6 @@ import { lerp, seg } from "./timeline"
 const ME = "0x77be…02aa"
 const SHARED = "0x2f1c…9e04"
 
-/** A transaction card with its fee tag hanging from the bottom-right corner. */
 function transaction(g: SVGGElement, x: number) {
 	const card = plate(g, x, 64, 300, 200)
 	text(card, 24, 40, "TRANSACTION")

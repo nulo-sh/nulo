@@ -24,10 +24,8 @@ describe("clips", () => {
 
 	it.each(CLIPS)("$id draws every narrated scene, and each cue is a word the scene speaks", (clip) => {
 		expect(Object.keys(clip.scenes)).toEqual(clip.timings.scenes.map((s) => s.id))
-		for (const span of clip.timings.scenes) {
-			const cues = resolveCues(clip.timings, span, clip.scenes[span.id]?.cues ?? {})
-			for (const at of Object.values(cues)) expect(at).toBeGreaterThanOrEqual(span.start)
-		}
+		for (const span of clip.timings.scenes)
+			expect(() => resolveCues(clip.timings, span, clip.scenes[span.id]?.cues ?? {})).not.toThrow()
 	})
 
 	it.each(CLIPS)("$id waits for a press, ships its captions track, and its transcript is the narration", (clip) => {

@@ -1,8 +1,4 @@
-/**
- * The clips' drawing kit, in the landing's look: plates with corner ticks, mono labels and the wallet's
- * own glyphs on a 640×360 stage. A scene builds its elements once; each frame only rewrites attributes,
- * so a seek in either direction redraws the right picture.
- */
+/** The clips' drawing kit: plates, mono labels and the wallet's glyphs on a 640×360 SVG stage. */
 import { type GlyphName, glyphs } from "@nulo/design/core/glyphs.ts"
 import { clamp } from "./timeline"
 
@@ -82,7 +78,6 @@ export function record(parent: Element, x: number, y: number, w: number, h: numb
 	return { g, line: (i) => 68 + i * 34 }
 }
 
-/** An open note: a plate showing its amount, `w` wide. */
 export function note(parent: Element, amount: string, w = 112): SVGGElement {
 	const g = group(parent)
 	node(g, "rect", { class: "c-plate", width: w, height: 52 })
@@ -91,7 +86,7 @@ export function note(parent: Element, amount: string, w = 112): SVGGElement {
 	return g
 }
 
-/** A track with a fill; `set(k)` fills it to the fraction k. */
+/** Returns a setter that fills the bar to the fraction k. */
 export function bar(parent: Element, x: number, y: number, w: number, h = 10): (k: number) => void {
 	node(parent, "rect", { class: "c-track", x, y, width: w, height: h })
 	const fill = node(parent, "rect", { class: "c-fill", x, y, width: 0, height: h })

@@ -89,8 +89,7 @@ function findParts(root: HTMLElement): Parts | null {
 	return { svg, stage, play, seek, clock, caption, audio }
 }
 
-/** Wires one card's player. A root missing any of its parts stays inert. */
-export function mountClip(root: HTMLElement, clip: Clip): void {
+function mountClip(root: HTMLElement, clip: Clip): void {
 	const parts = findParts(root)
 	if (!parts) return
 	const { svg, stage, play, seek, clock, caption, audio } = parts
@@ -98,13 +97,16 @@ export function mountClip(root: HTMLElement, clip: Clip): void {
 	const lines = captions(clip.timings)
 	// The file is the authority on length once loaded; until then (preload="none") the alignment is.
 	const total = () => (Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : clip.timings.duration)
-	const playing = () => !audio.paused && !audio.ended
+	// A source that failed to load leaves `paused` false: the spec's failure steps set only `networkState`.
+	// `error` alone is no sign, since Firefox sets it when the audio output fails and keeps playing.
+	const unloaded = () => audio.networkState === audio.NETWORK_NO_SOURCE
+	const playing = () => !audio.paused && !audio.ended && !unloaded()
 	let raf = 0
 
 	const render = () => {
 		const t = clamp(audio.currentTime, 0, total())
 		draw(t)
-		caption.textContent = captionAt(lines, t)
+		caption.textContent = audio.ended ? "" : captionAt(lines, t)
 		seek.max = String(Math.ceil(total()))
 		seek.value = String(t)
 		seek.setAttribute("aria-valuetext", `${formatTime(t)} of ${formatTime(total())}`)
@@ -120,8 +122,7 @@ export function mountClip(root: HTMLElement, clip: Clip): void {
 	// play() runs inside the click: browsers refuse playback a gesture did not start.
 	const toggle = () => {
 		if (playing()) return audio.pause()
-		if (speaking !== player) speaking?.pause()
-		speaking = player
+		if (unloaded()) audio.load()
 		if (audio.currentTime >= total() - 0.05) audio.currentTime = 0
 		audio.play().catch(render)
 	}
@@ -135,11 +136,14 @@ export function mountClip(root: HTMLElement, clip: Clip): void {
 		audio.currentTime = Number(seek.value)
 		render()
 	})
+	// Here rather than in the click, so playback started by media keys or the browser's controls counts too.
 	audio.addEventListener("play", () => {
+		if (speaking !== player) speaking?.pause()
+		speaking = player
 		cancelAnimationFrame(raf)
 		tick()
 	})
-	for (const event of ["pause", "ended", "seeked", "durationchange"]) audio.addEventListener(event, render)
+	for (const event of ["pause", "ended", "seeked", "durationchange", "error"]) audio.addEventListener(event, render)
 	// Frames stop in a hidden tab while sound would go on; pausing keeps picture and voice together.
 	document.addEventListener("visibilitychange", () => document.hidden && audio.pause())
 	render()

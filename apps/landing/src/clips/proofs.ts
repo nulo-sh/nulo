@@ -7,7 +7,6 @@ import { lerp, seg } from "./timeline"
 const SCREEN_W = 250
 const SCREEN_H = 168
 
-/** The laptop on the left and the network on the right, as every scene of this clip shows them. */
 function setting(g: SVGGElement) {
 	const lap = laptop(g, 40, 56, SCREEN_W, SCREEN_H)
 	text(lap.g, 0, 236, "YOUR COMPUTER")

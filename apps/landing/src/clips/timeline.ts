@@ -15,8 +15,9 @@ const CLAUSE_CHARS = 18
 
 export const clamp = (x: number, lo = 0, hi = 1): number => Math.min(hi, Math.max(lo, x))
 const ease = (x: number): number => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2)
-/** 0 before `a`, 1 after `b`, eased between. Every tween is built from it, so a frame depends on time alone. */
-export const seg = (t: number, a: number, b: number): number => ease(clamp((t - a) / (b - a)))
+/** 0 before `a`, 1 after `b`, eased between; a step at `a` when `b <= a`, never NaN. Every tween is built
+ *  from it, so a frame depends on time alone. */
+export const seg = (t: number, a: number, b: number): number => (b > a ? ease(clamp((t - a) / (b - a))) : t < a ? 0 : 1)
 export const lerp = (a: number, b: number, k: number): number => a + (b - a) * k
 
 export const formatTime = (t: number): string => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`
@@ -41,13 +42,12 @@ export function resolveCues<K extends string>(timings: Timings, scene: SceneSpan
 
 const textLength = (line: readonly Word[]): number => line.reduce((n, w) => n + w.w.length, line.length - 1)
 
-/** Splits at each sentence end, and at a comma or colon once the phrase is CLAUSE_CHARS long. */
 function phrases(words: readonly Word[]): Word[][] {
 	const out: Word[][] = [[]]
 	for (const word of words) {
 		const phrase = out.at(-1) as Word[]
 		phrase.push(word)
-		if (/[.?!]$/.test(word.w) || (/[,:;]$/.test(word.w) && textLength(phrase) >= CLAUSE_CHARS)) out.push([])
+		if (/[.?!]$/.test(word.w) || (/[,:]$/.test(word.w) && textLength(phrase) >= CLAUSE_CHARS)) out.push([])
 	}
 	return out.filter((p) => p.length > 0)
 }
@@ -89,7 +89,6 @@ const vttTime = (t: number): string => {
 	return `${pad(Math.floor(ms / 3_600_000))}:${pad(Math.floor(ms / 60_000) % 60)}:${pad(Math.floor(ms / 1000) % 60)}.${pad(ms % 1000, 3)}`
 }
 
-/** The caption lines as WebVTT, the form the page's `<track>` serves. */
 export function toVtt(lines: readonly Caption[]): string {
 	return `WEBVTT\n\n${lines.map((c) => `${vttTime(c.start)} --> ${vttTime(c.end)}\n${c.text}\n`).join("\n")}`
 }
