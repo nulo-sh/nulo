@@ -238,7 +238,7 @@ Parallelism: arcs 1 and 2 share only `network/service.ts`, in different methods,
 
 ## Post-implementation
 
-The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 2c0df3b9. Specific to this plan:
+The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 2c0df3b9. Specific to this plan:
 - **Review loop**, per arc, before its PR: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. Prompt: the arc's diff, this plan and its ledger, the arc map ("arc N of 3"), the adversarial ask, and the README's two rules verbatim. Hard stop after three rounds with material findings. On arc 3, also run a fresh session over the net diff from 2c0df3b9 with the cross-arc ask.
 - **Approval boundaries.** A fix that adds persistent state, a lifecycle, a coordination protocol, a recovery policy or a public contract stops for the orchestrator (D3's hook is the known example). Copy beyond C1-C8 goes to `OWNER-ASKS.md`.
 - **Close-out** on arc 3's PR: file known limits K1 and K2 as closed `known-limit` issues; Open items: #710 and any open owner ask. Then delete `STATUS.md`, archive, and run `bun run check:plans`.
