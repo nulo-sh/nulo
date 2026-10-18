@@ -680,17 +680,14 @@ async function waitForTarget(browser: Browser, predicate: (target: Target) => bo
 		const match = await pollUntil(
 			async () => browser.targets().find(predicate),
 			(match) => match !== undefined,
-			{
-				label: "waitForTarget: a matching target",
-				timeoutMs: timeout,
-				intervalMs: 100,
-				show: () => "none",
-			},
+			{ label: "waitForTarget: a matching target", timeoutMs: timeout, intervalMs: 100 },
 		)
 		return match as Target
 	} catch (error) {
 		if (!(error instanceof PollTimeoutError)) throw error
-		throw new Error(await withInventory(error.message, () => windowInventory(browser), INVENTORY_BUDGET_MS))
+		// The e2e-testing skill's triage rows key on this exact text.
+		const failure = `waitForTarget: no matching target after ${timeout}ms`
+		throw new Error(await withInventory(failure, () => windowInventory(browser), INVENTORY_BUDGET_MS))
 	}
 }
 

@@ -64,6 +64,20 @@ describe("awaitedBus", () => {
 		expect(handler).toHaveBeenCalledTimes(1)
 	})
 
+	test("a handler that dispatches re-entrantly leaves the outer dispatch collecting its later siblings", async () => {
+		const bus = awaitedBus<string>()
+		let inner: Promise<void> | undefined
+		bus.add(async (key) => {
+			if (key === "outer") inner = bus.dispatch("inner")
+		})
+		bus.add(async (key) => {
+			if (key === "outer") throw new Error("outer sibling")
+		})
+
+		await expect(bus.dispatch("outer")).rejects.toThrow("outer sibling")
+		await expect(inner).resolves.toBeUndefined()
+	})
+
 	test("two overlapping dispatches each settle with their own handlers' work", async () => {
 		const bus = awaitedBus<string>()
 		const gates = { a: deferred(), b: deferred() }
