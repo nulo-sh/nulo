@@ -6,7 +6,7 @@ Marketing landing page for the wallet (nulo.sh). Standalone Vite app; ships inde
 
 | Path | Purpose |
 |---|---|
-| `index.html` | The whole page: head/meta, the camera-feed hero, the two-screens section, three promises, the illustrative public record, the preview notice, CTA, footer. All copy lives here, before any script runs. |
+| `index.html` | The whole page: head/meta, the camera-feed hero, the two-screens section, three promises, the illustrative public record, the early-days notice, CTA, footer. All copy lives here, before any script runs. |
 | `src/main.ts` | Vite entry: imports the stylesheets in order, narrows the install buttons, and mounts the page. |
 | `src/install.ts` | The two store URLs and `detectInstall`, which maps a desktop browser to its store and name, or `null` for a browser that cannot install (Safari, any phone). Pure; unit-tested in `install.test.ts`, which also pins the URLs `index.html` serves. |
 | `src/install-dom.ts` | Narrows the served fallback (both stores and a desktop-only note) to one "Add to <browser>" button and an "also on" link. Writes `href` and `textContent` only. |
