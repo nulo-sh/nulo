@@ -40,6 +40,9 @@ const props = defineProps({
 	arriving: { type: Boolean, default: false },
 	/** The title names the function a dApp called: it stays on one line, cut at its end. */
 	oneLineTitle: { type: Boolean, default: false },
+	/** `#title-trailing` opens with the shared separator: where the row has no room for it beside the
+	 *  title, it drops under the title without its separator. */
+	wrapTrailing: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(["activate"])
@@ -104,10 +107,11 @@ function hasActionsContent() {
 				</div>
 			</Flex>
 
-			<Flex direction="column" gap="4" :class="$style.text">
-				<Flex align="center" gap="6">
+			<Flex direction="column" gap="4" :class="$style.text" data-testid="activity-text">
+				<Flex align="center" :gap="wrapTrailing ? undefined : '6'" :class="wrapTrailing && $style.title_row_wrap" data-testid="activity-title-row">
 					<span :id="titleId" :class="[$style.title, oneLineTitle && $style.title_one_line]" data-testid="activity-title">{{ title }}</span>
-					<slot name="title-trailing" />
+					<span v-if="wrapTrailing" :class="$style.trailing"><slot name="title-trailing" /></span>
+					<slot v-else name="title-trailing" />
 				</Flex>
 				<Flex v-if="$slots.secondary" align="center" gap="6" :class="$style.secondary_row">
 					<slot name="secondary" />
@@ -235,6 +239,28 @@ function hasActionsContent() {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+
+/* Equal and opposite margins cancel on one line, so a row that fits lays out as without them; wrapped,
+ * the group starts 8.78 px (the separator's 2.78 px glyph at 14 px Space Grotesk 700, plus its 6 px gap)
+ * left of the clip, the chip under the title. A fixed box would move every fitting chip a sub-pixel. */
+.title_row_wrap {
+	--sep-room: 8.78px;
+	flex-wrap: wrap;
+	gap: 4px 6px;
+	overflow-x: clip;
+}
+
+.title_row_wrap > .title {
+	margin-right: var(--sep-room);
+}
+
+.trailing {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: calc(-1 * var(--sep-room));
+}
+
 
 .secondary_row {
 	min-height: 14px;
