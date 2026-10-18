@@ -139,7 +139,7 @@ One arc and one PR against `dev`, with no stack (D-orch-1). The branch is `p46-u
 
 ## Post-implementation
 
-Follow [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) as it reads at `9470d4e9`, with these values:
+Follow [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) as it reads at `9470d4e9`, with these values:
 
 - Step 1 is absent (`code_review: off`).
 - Step 2 runs once over the net diff from `9470d4e9`, after Phase 5: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, then `resume-codex.sh`. Hard stop after three rounds that still find material issues. Log each round in `lessons/phase-5.md` and in this plan's ledger.
