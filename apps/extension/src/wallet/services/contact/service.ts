@@ -187,7 +187,7 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 	 * Sender registrations are NOT touched here: `NetworkService.onProfileDeleted`
 	 * (network/service.ts:617) already iterates the deleted profile's networks
 	 * and calls `purgeChain → pxeServiceClient.clearChainState(profileId, chainId)`
-	 * which deletes `indexedDB pxe/${profileId}/${chainId}` — wiping the entire
+	 * which removes the OPFS store `pxe/${profileId}/${chainId}` — wiping the entire
 	 * PXE database for that profile + chain, senders included. So senders for
 	 * deleted profiles are cleaned up as a side-effect of the chain purge,
 	 * not by this listener.

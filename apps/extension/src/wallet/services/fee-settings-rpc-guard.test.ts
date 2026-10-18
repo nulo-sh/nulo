@@ -104,6 +104,19 @@ describe("unknown speed levels at the popup RPC boundary", () => {
 		expect(ran).toBe(false)
 	})
 
+	test.each(["constructor", "__proto__", "toString"])(
+		"executeOperations reads no settings from a %s kind; a send's still count",
+		async (kind) => {
+			const named = { kind, networkId: "net-1", accountAddress: "0xacc", feeSettings: fee("bogus") }
+			const alone = await harness().call("execution", "executeOperations", [[named], { type: 0 }])
+			expect(alone.reply?.errorPayload).toBeUndefined()
+			expect(alone.ran).toBe(true)
+			const beside = await harness().call("execution", "executeOperations", [[named, sendTx(fee("bogus"))], { type: 0 }])
+			expect(beside.reply?.errorPayload).toMatchObject(refusal("executeOperations"))
+			expect(beside.ran).toBe(false)
+		},
+	)
+
 	test.each([
 		{ label: "an absent level", service: "execution", method: "estimateOperationFee", params: ["interaction", 0, fee(), "token"] },
 		{

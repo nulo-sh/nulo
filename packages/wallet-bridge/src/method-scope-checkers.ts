@@ -9,7 +9,7 @@
  * `buildNetworkOperation` / `buildAccountOperation` in dispatcher.ts.
  */
 
-import { AuthRegistryRefusalError } from "@nulo/extension-messaging/errors"
+import { AuthRegistryRefusalError, OwnAccountIntentRefusalError } from "@nulo/extension-messaging/errors"
 import { isRecord } from "@nulo/wallet-core/utils"
 import { isAuthRegistry, isAuthRegistryGrantCall } from "./auth-registry"
 import type { Capability, GrantedCapabilityRecord, Scope, ScopePattern } from "./capabilities"
@@ -266,8 +266,18 @@ function refuseAuthRegistryIntent(intent: unknown): void {
 	}
 }
 
+/** Only the wallet's own send authorizes this account's transactions, so an inner hash the signing
+ *  account would consume is never signed for an app. A call intent is read first, as the signer
+ *  reads it. */
+function refuseOwnAccountIntent(from: unknown, intent: unknown): void {
+	if (!isCallIntent(intent) && isIntentInnerHash(intent) && sameFieldAddress(String(intent.consumer), String(from))) {
+		throw new OwnAccountIntentRefusalError()
+	}
+}
+
 export function checkCreateAuthWit(args: unknown[], grants: GrantedCapabilityRecord[]): void {
 	refuseAuthRegistryIntent(args[1])
+	refuseOwnAccountIntent(args[0], args[1])
 	const from = String(args[0])
 
 	const caps = grantsOfType(grants, "accounts")

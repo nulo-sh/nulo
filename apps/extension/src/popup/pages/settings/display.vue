@@ -19,6 +19,7 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useConfigRead } from "@/composables/useConfigRead"
+import { useSettingUpdate } from "@/composables/useSettingUpdate"
 import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
 const { openToast } = useToast()
 const { vSettingsRow } = useSettingsRowHighlight()
@@ -32,7 +33,6 @@ const defaultConfig = makeDefaultConfig()
 const theme = ref(defaultConfig.theme)
 const isSidePanelEnabled = ref(defaultConfig.sidePanel)
 const isShowNodeNameEnabled = ref(defaultConfig.showNode)
-const isShowPopupFullscreen = ref(defaultConfig.showPopupFullscreen)
 const isAnimationsDisabled = ref(defaultConfig.disableAnimations)
 const isIncomingTransfersVisible = ref(defaultConfig.incomingTransfersVisible)
 // D8 dust filter — a NUMBER, not a toggle, so it lives outside the `settings` toggle map.
@@ -47,7 +47,6 @@ const settings = {
 			}
 		: {}),
 	showNode: { ...settingsRow("display-network-name"), model: isShowNodeNameEnabled },
-	showPopupFullscreen: { ...settingsRow("display-full-height"), model: isShowPopupFullscreen },
 	disableAnimations: { ...settingsRow("display-animations"), model: isAnimationsDisabled },
 	incomingTransfersVisible: { ...settingsRow("display-incoming-transfers"), model: isIncomingTransfersVisible },
 }
@@ -76,17 +75,7 @@ async function updateDustThreshold(event) {
 	}
 }
 
-async function updateSetting(key, value) {
-	if (!settings[key]) return
-	if (settings[key].model.value === value) return
-
-	try {
-		await configService.setValue(key, value)
-		applySetting(key, value)
-	} catch (err) {
-		openToast({ kind: "error", label: "Failed to update setting" })
-	}
-}
+const { updateSetting } = useSettingUpdate(configService, settings, applySetting)
 
 async function applySetting(key, value) {
 	settings[key].model.value = value
@@ -233,7 +222,7 @@ onBeforeUnmount(() => {
 				</Flex>
 
 				<!-- type="text" (not number) so there are no spinner arrows widening the field; the $ prefix
-				     lives in the wrapper and updateDustThreshold parseFloat-normalizes any input on change. -->
+				     lives in the wrapper. -->
 				<label :class="$style.dust_field">
 					<span :class="$style.dust_prefix">$</span>
 					<input

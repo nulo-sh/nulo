@@ -1,6 +1,7 @@
 import { MessageType } from "@nulo/extension-messaging/messages"
 import { wrapParams } from "@nulo/extension-messaging/utils"
 import type { Page } from "puppeteer"
+import { pollUntil } from "./poll"
 
 /** The persisted session row's public fields: the unlocked profile, the last refresh, and when auto-lock is due. */
 export type SessionRow = { profile: string; since: number; lockedAt?: number }
@@ -26,15 +27,12 @@ export async function readSessionRow(page: Page): Promise<SessionRow | undefined
 
 /** Poll the session row until `predicate` accepts it. */
 export async function waitForSessionRow(page: Page, predicate: (row: SessionRow) => boolean, timeoutMs = 15_000): Promise<SessionRow> {
-	const deadline = Date.now() + timeoutMs
-	let row = await readSessionRow(page)
-	while (!row || !predicate(row)) {
-		if (Date.now() > deadline)
-			throw new Error(`waitForSessionRow: no matching row within ${timeoutMs}ms (last: ${JSON.stringify(row)})`)
-		await new Promise((resolve) => setTimeout(resolve, 200))
-		row = await readSessionRow(page)
-	}
-	return row
+	const row = await pollUntil(
+		() => readSessionRow(page),
+		(row) => row !== undefined && predicate(row),
+		{ label: "waitForSessionRow: a matching session row", timeoutMs, intervalMs: 200 },
+	)
+	return row as SessionRow
 }
 
 /** Call one background service method over a port of its own, as the popup's clients do. Unlike a

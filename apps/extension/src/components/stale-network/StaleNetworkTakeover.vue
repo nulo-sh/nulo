@@ -97,10 +97,12 @@ const SCREENS: Partial<Record<TakeoverScreen, (view: StaleNetworkView) => Conten
 	},
 	paused: (view) => {
 		const c = copy.paused(view.name)
+		const imported = view.reset?.imported ?? []
 		return {
 			eyebrow: { icon: "pause", text: c.eyebrow },
 			title: c.title,
 			body: c.body,
+			notice: imported.length > 0 ? copy.pausedImported(view.name, imported) : undefined,
 			box: {
 				label: c.label,
 				lines: [{ mark: "check", text: c.pickUp }, ...accountLine(view), { mark: "check", text: copy.KEEP_LINE }],

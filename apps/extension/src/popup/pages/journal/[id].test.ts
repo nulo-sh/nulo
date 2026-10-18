@@ -1,6 +1,7 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../tests/helpers/chrome-storage-mock"
 import type { SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { CHAIN_IDS } from "@/utils/chain-ids"
@@ -53,12 +54,10 @@ vi.mock("@/wallet/services/operation-journal/client", () => ({
 beforeEach(() => {
 	mocks.tokens = [{ id: 7, symbol: "TST", decimals: 0, hasDecimals: true }]
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) },
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
 	})
+	installChromeStorage({}, { persist: false })
 })
 
 afterEach(() => {
@@ -212,6 +211,18 @@ describe("the App row of a dApp's operation", () => {
 		expect(row(w, "origin").classes().join(" ")).toMatch(/app_value/)
 		expect(row(w, "app-label").text()).toBe("App")
 		expect(row(w, "app-label").classes().join(" ")).toMatch(/app_key/)
+	})
+
+	test("reads dApp for a dApp that named itself nothing, as its activity row does; a transfer has no App row", async () => {
+		const { tokenId: _tokenId, amountRaw: _amountRaw, ...base } = failedSend()
+		const nameless = await mountPage({ ...base, kind: "dapp_execute", origin: "dapp", title: "swap", subtitle: "" })
+		expect(row(nameless, "origin").text()).toBe("dApp")
+		expect(row(nameless, "app-label").text()).toBe("App")
+
+		const transfer = await mountPage(failedSend())
+		expect(row(transfer, "state").exists()).toBe(true)
+		expect(row(transfer, "origin").exists()).toBe(false)
+		expect(row(transfer, "app-label").exists()).toBe(false)
 	})
 })
 

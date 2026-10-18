@@ -251,8 +251,11 @@ describe("OperationCard — the ABI decode and the raw fallback", () => {
 		expect(w.text()).not.toContain(TO)
 		const toggle = one(w, "execute-op-raw-toggle")
 		expect(toggle.text()).toContain("Show 4 raw values")
+		expect(toggle.attributes("aria-controls")).toBeUndefined()
 		await toggle.trigger("click")
 		expect(toggle.text()).toContain("Hide raw values")
+		expect(one(w, "execute-op-raw-args").attributes("id")).toBeTruthy()
+		expect(toggle.attributes("aria-controls")).toBe(one(w, "execute-op-raw-args").attributes("id"))
 		const rows = all(w, "execute-op-arg")
 		expect(rows).toHaveLength(4)
 		expect(rows.every((r) => r.attributes("data-arg-kind") === "field")).toBe(true)
@@ -263,6 +266,7 @@ describe("OperationCard — the ABI decode and the raw fallback", () => {
 		expect(rows[0]!.text()).not.toContain("=")
 		await toggle.trigger("click")
 		expect(one(w, "execute-op-raw-args").exists()).toBe(false)
+		expect(toggle.attributes("aria-controls")).toBeUndefined()
 	})
 
 	test("a 40-field call renders 32 rows and points at the JSON view for the rest", async () => {

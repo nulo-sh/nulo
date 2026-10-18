@@ -33,14 +33,14 @@ const key = (el: Element, k: string, init: KeyboardEventInit = {}) =>
 	el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...init }))
 
 describe("results", () => {
-	test('"full" shows the Display caption over Full-height popups, then Open as Side Panel, each opening its row', async () => {
-		const { w } = await mountSearch("full")
+	test('"ation" shows the Display caption over Disable animations, then Theme, each opening its row', async () => {
+		const { w } = await mountSearch("ation")
 		expect(w.findAllComponents(ItemsContainer).map((g) => [g.props("title"), g.props("danger")])).toEqual([["Display", false]])
 		expect(results(w).map((r) => [r.dataset.testid, r.getAttribute("href")])).toEqual([
-			["settings-search-result-display-full-height", "/popup/settings/display?row=display-full-height"],
-			["settings-search-result-display-side-panel", "/popup/settings/display?row=display-side-panel"],
+			["settings-search-result-display-animations", "/popup/settings/display?row=display-animations"],
+			["settings-search-result-display-theme", "/popup/settings/display?row=display-theme"],
 		])
-		expect(results(w)[0].textContent).toContain("Open popups to the full height")
+		expect(results(w)[0].textContent).toContain("Minimize the use of animations")
 		expect(w.find('[data-testid="settings-search-empty"]').exists()).toBe(false)
 	})
 
@@ -52,9 +52,13 @@ describe("results", () => {
 		])
 	})
 
-	test("on a browser with no side panel, Full-height popups alone", async () => {
+	test('"full" finds Open as Side Panel, and on a browser with no side panel only the empty line', async () => {
+		const withPanel = await mountSearch("full")
+		expect(results(withPanel.w).map((r) => r.dataset.testid)).toEqual(["settings-search-result-display-side-panel"])
+		withPanel.w.unmount()
 		const { w } = await mountSearch("full", false)
-		expect(results(w).map((r) => r.dataset.testid)).toEqual(["settings-search-result-display-full-height"])
+		expect(results(w)).toEqual([])
+		expect(w.get('[data-testid="settings-search-empty"]').text()).toBe("No settings found")
 	})
 
 	test("a word nothing matches shows the one line and no row", async () => {
@@ -78,7 +82,7 @@ describe("results", () => {
 
 describe("keys", () => {
 	test("ArrowDown walks from the field through the results and wraps to the field", async () => {
-		const { w } = await mountSearch("full")
+		const { w } = await mountSearch("ation")
 		field(w).focus()
 		expect(key(field(w), "ArrowDown")).toBe(false)
 		expect(document.activeElement).toBe(results(w)[0])
@@ -89,7 +93,7 @@ describe("keys", () => {
 	})
 
 	test("ArrowUp from the field goes to the last result", async () => {
-		const { w } = await mountSearch("full")
+		const { w } = await mountSearch("ation")
 		field(w).focus()
 		key(field(w), "ArrowUp")
 		expect(document.activeElement).toBe(results(w)[1])
@@ -103,7 +107,7 @@ describe("keys", () => {
 	})
 
 	test("Escape on a result empties the field, focuses it, and is handled", async () => {
-		const { w } = await mountSearch("full")
+		const { w } = await mountSearch("ation")
 		results(w)[0].focus()
 		expect(key(results(w)[0], "Escape")).toBe(false)
 		await flushPromises()
@@ -119,16 +123,16 @@ describe("keys", () => {
 	})
 
 	test("a composing arrow or Escape does nothing", async () => {
-		const { w } = await mountSearch("full")
+		const { w } = await mountSearch("ation")
 		field(w).focus()
 		expect(key(field(w), "ArrowDown", { isComposing: true })).toBe(true)
 		expect(key(field(w), "Escape", { keyCode: 229 })).toBe(true)
 		expect(document.activeElement).toBe(field(w))
-		expect(field(w).value).toBe("full")
+		expect(field(w).value).toBe("ation")
 	})
 
 	test("a modified arrow or Enter keeps the field's own meaning", async () => {
-		const { w, push } = await mountSearch("full")
+		const { w, push } = await mountSearch("ation")
 		field(w).focus()
 		expect(key(field(w), "ArrowUp", { shiftKey: true })).toBe(true)
 		expect(key(field(w), "Enter", { ctrlKey: true })).toBe(true)
@@ -137,12 +141,12 @@ describe("keys", () => {
 	})
 
 	test("Enter in the field opens the first result; a repeat or composing Enter opens nothing", async () => {
-		const { w, push } = await mountSearch("full")
+		const { w, push } = await mountSearch("ation")
 		key(field(w), "Enter", { repeat: true })
 		key(field(w), "Enter", { isComposing: true })
 		expect(push).not.toHaveBeenCalled()
 		expect(key(field(w), "Enter")).toBe(false)
-		expect(push).toHaveBeenCalledExactlyOnceWith("/popup/settings/display?row=display-full-height")
+		expect(push).toHaveBeenCalledExactlyOnceWith("/popup/settings/display?row=display-animations")
 	})
 
 	test("Enter on a Settings-list result opens that row's own page", async () => {

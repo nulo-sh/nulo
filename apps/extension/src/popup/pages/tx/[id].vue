@@ -25,19 +25,18 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 /** Utils */
 import { DETAIL_TIME_FORMAT } from "../detail-page"
 import { balanceFormatted } from "@/utils/amount.js"
-import { displaySymbol, txAmount } from "@/utils/tx-amount"
+import { displaySymbol, settledReading, txAmount } from "@/utils/tx-amount"
 import { copyWithToast } from "@/utils/clipboard"
 import { trimAddress } from "@/utils/string"
 import {
+	callTitle,
 	getTxCategory,
 	getTxTitle,
 	getOriginLabel,
 	getPrimaryCall,
 	formatTransferType,
-	humanizeMethodName,
 	FEE_METHODS,
 } from "@/utils/tx-enrichment"
-import { formatFeeJuice, feeToUsd, feeJuicePricingFromUsd } from "@/utils/fee-estimation"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
 import { buildGasBreakdown, computeFeeSavings, describeFeePaymentMethod } from "@/popup/components/modules/tx/tx-detail-helpers"
@@ -64,14 +63,15 @@ const configService = new ConfigServiceClient()
 const showDebugPanel = ref(false)
 
 const tx = computed(() => appStore.transactions.find((t) => t.hash === route.params.id))
+const tokens = ref([])
 const call = computed(() => (tx.value?.calls ? getPrimaryCall(tx.value.calls) : undefined))
-const type = computed(() => (tx.value?.calls ? getTxCategory(tx.value.calls) : "tx"))
+const type = computed(() => (tx.value?.calls ? getTxCategory(tx.value.calls, tokens.value) : "tx"))
 
 // The explorer link renders for EVERY status — pending, dropped, reverted
 // (owner call): a possibly-404 explorer page is exactly what the user wants
 // to check when a tx never confirmed. Copy hash remains only when no
 // explorer URL exists (sandbox chain, explorer set to None).
-const popupTitle = computed(() => (tx.value?.calls ? getTxTitle(tx.value.calls) : "Transaction"))
+const popupTitle = computed(() => (tx.value?.calls ? getTxTitle(tx.value.calls, tokens.value) : "Transaction"))
 const originLabel = computed(() => getOriginLabel(tx.value?.origin))
 
 const transfer = computed(() => (call.value?.transfers ? call.value.transfers[0] : null))
@@ -79,7 +79,6 @@ const transferTypeLabel = computed(() => {
 	if (!transfer.value || transfer.value.type === undefined || transfer.value.type === null) return null
 	return formatTransferType(transfer.value.type)
 })
-const tokens = ref([])
 const token = computed(() => tokens.value.find((t) => call.value?.contract === t.contract))
 const transferSymbol = computed(() => displaySymbol(transfer.value?.token?.symbol))
 
@@ -101,15 +100,11 @@ const handleCopy = (target) => {
 
 const feePaymentLabel = computed(() => describeFeePaymentMethod(tx.value))
 
-const formattedFee = computed(() => (tx.value?.fee ? formatFeeJuice(BigInt(tx.value.fee)) : null))
 // Live pricing at TODAY'S AZTEC rate — historical fees are valued at the
 // current spot, not the price at execution time (TxFeeRow labels this).
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
-const feeJuicePricing = computed(() => feeJuicePricingFromUsd(prices.feeJuiceQuote.value?.usd))
-const formattedFeeUsd = computed(() => (tx.value?.fee ? feeToUsd(BigInt(tx.value.fee), feeJuicePricing.value) : null))
-const formattedEstFee = computed(() => (tx.value?.estimatedFee ? formatFeeJuice(BigInt(tx.value.estimatedFee)) : null))
-const formattedEstFeeUsd = computed(() => (tx.value?.estimatedFee ? feeToUsd(BigInt(tx.value.estimatedFee), feeJuicePricing.value) : null))
+const feeJuiceUsd = computed(() => prices.feeJuiceQuote.value?.usd)
 
 /** D2 hero line: fiat value of the transfer at TODAY'S rate, shown for
  *  EVERY status (owner call: a failed transfer's dollar context is still
@@ -148,6 +143,7 @@ const userCalls = computed(() => {
 	const filtered = tx.value.calls.filter((c) => !FEE_METHODS.has(c.method))
 	return filtered.length ? filtered : tx.value.calls
 })
+const callRowTitle = (c) => callTitle(c.method, c.contract, settledReading(c, tokens.value) !== null)
 
 onMounted(async () => {
 	tokens.value = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)
@@ -299,24 +295,23 @@ onBeforeUnmount(() => {
 					</Flex>
 
 					<TxFeeRow
-						v-if="formattedFee"
+						v-if="tx?.fee"
 						v-model="showFeeBreakdown"
 						label="Fee paid"
-						:feeAmount="formattedFee"
-						:feeUsd="formattedFeeUsd"
+						:fee="tx.fee"
+						:usdPerFeeJuice="feeJuiceUsd"
 						:gasBreakdown="gasBreakdown"
-						:estimatedFee="formattedEstFee"
-						:estimatedFeeUsd="formattedEstFeeUsd"
+						:estimatedFee="tx.estimatedFee"
 						:feeSavings="feeSavings"
 					/>
 
 					<TxFeeRow
-						v-else-if="formattedEstFee"
+						v-else-if="tx?.estimatedFee"
 						v-model="showFeeBreakdown"
 						estimated
 						label="Estimated fee"
-						:feeAmount="formattedEstFee"
-						:feeUsd="formattedEstFeeUsd"
+						:fee="tx.estimatedFee"
+						:usdPerFeeJuice="feeJuiceUsd"
 						:gasBreakdown="gasBreakdown"
 					/>
 
@@ -359,7 +354,7 @@ onBeforeUnmount(() => {
 						gap="4"
 						:class="[$style.call_row, idx > 0 && $style.call_row_divider]"
 					>
-						<span :class="$style.call_method">{{ humanizeMethodName(c.method) || "Call" }}</span>
+						<span data-testid="tx-call-method" :class="$style.call_method">{{ callRowTitle(c) }}</span>
 						<span data-testid="tx-call-contract" @click="handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">
 							{{ trimAddress(c.contract, 6, 4) }}
 						</span>

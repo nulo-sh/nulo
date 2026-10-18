@@ -44,16 +44,12 @@ const accounts = (canCreateAuthWit: boolean) => ({ type: "accounts", canGet: tru
 const listed = [{ contract: A, function: "transfer" }]
 
 describe("the row list, row by row", () => {
-	test("one account's address", () => {
-		expect(cells(accountAddressRow([{ name: "Account 1" }]))).toEqual(["Without asking", "See Account 1's address", "—"])
-	})
-
-	test("several accounts, none selected, and one the wallet no longer names, name no account", () => {
-		const row = ["Without asking", "See the addresses of the accounts you share", "—"]
-		expect(cells(accountAddressRow([{ name: "Account 1" }, { name: "Account 2" }]))).toEqual(row)
-		expect(cells(accountAddressRow([]))).toEqual(row)
-		expect(cells(accountAddressRow([{}]))).toEqual(row)
-		expect(cells(accountAddressRow([{ name: "Account 1" }, {}]))).toEqual(row)
+	test("listing your accounts, and the account the app always knows", () => {
+		expect(cells(accountAddressRow())).toEqual([
+			"Without asking",
+			"Let this app list all your accounts",
+			"It always knows the account you connect with.",
+		])
 	})
 
 	test("simulations on listed contracts", () => {
@@ -184,7 +180,7 @@ describe("the row list, row by row", () => {
 
 	test("each row's icon: the drawn ones, and add_circle, info and mail_lock for the three new rows", () => {
 		const icons = [
-			accountAddressRow([]),
+			accountAddressRow(),
 			simulationRow(sim("*")),
 			contractsRow({ type: "contracts", contracts: "*", canRegister: true })!,
 			contractsRow({ type: "contracts", contracts: [A], canGetMetadata: true })!,

@@ -21,16 +21,14 @@ import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/clien
 import type { TokenBalanceInfo } from "@/wallet/services/token-balance/spec"
 
 /** Utils */
-import { parseRawBalance, safeFiatOf } from "@/utils/token-amount"
-import { aggregateFiat, pricesUnavailable } from "@/utils/token-aggregate"
-import { forChain } from "@/utils/token-order"
+import { aggregateFiat, awaitingFirstPriceAnswer, pricesUnavailable } from "@/utils/token-aggregate"
 import { fitHero } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
 
 /** Composables */
-import { useEntityCrud } from "@/composables/useEntityCrud"
 import { pinScopeOf, usePinnedTokens } from "@/composables/usePinnedTokens"
 import { usePrices } from "@/composables/usePrices"
+import { type TokenBalanceSnapshotState, useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -41,37 +39,32 @@ const cacheStore = useCacheStore()
 const popupStore = usePopupStore()
 
 const activeChainId = () => appStore.network?.chainId
-const activeAccount = () => appStore.account?.address
 
-// The balance service returns a shared address's rows from every chain of the profile; this page
-// keeps the active chain's rows only, both on fetch and on every live event.
+const rows = ref<TokenBalanceInfo[]>([])
+const balancesState = ref<TokenBalanceSnapshotState>("loading")
+const isLoading = computed(() => balancesState.value === "loading")
+const error = computed(() => balancesState.value === "unavailable")
 const tokenBalanceService = new TokenBalanceServiceClient()
-const {
-	entities: rows,
-	isLoading,
-	error,
-	refresh,
-	dispose: disposeCrud,
-} = useEntityCrud<TokenBalanceInfo>({
-	fetch: async () => {
-		const account = activeAccount()
-		if (!account) return []
-		return forChain(await tokenBalanceService.getTokenBalances(undefined, account), activeChainId())
-	},
-	added: tokenBalanceService.onTokenBalanceAdded,
-	updated: tokenBalanceService.onTokenBalanceUpdated,
-	deleted: tokenBalanceService.onTokenBalanceDeleted,
-	accept: (tb) => tb.account === activeAccount() && tb.token.chainId === activeChainId(),
+const balances = useTokenBalanceSnapshot({
+	client: tokenBalanceService,
+	live: appStore,
+	rows,
+	state: balancesState,
+	added: "replace",
+	insertUnseenUpdated: true,
+	loadingOnRefresh: true,
+	retryOnReject: false,
+	refetchWhenDirty: false,
+	reconnect: "every",
 })
-// A port reconnect can drop events fired while disconnected; resnapshot.
-tokenBalanceService.onConnected.add(onReconnected)
-function onReconnected() {
-	void refresh()
-}
+tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
+tokenBalanceService.onTokenBalanceUpdated.add((tb) => balances.inActiveScope(tb) && balances.onBalanceUpdated(tb))
+tokenBalanceService.onTokenBalanceDeleted.add(balances.onBalanceDeleted)
+void balances.fetchTokenBalances()
 
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
-const fiatOf = safeFiatOf((tb: TokenBalanceInfo) => prices.tokenFiatMicro(tb.token, parseRawBalance(tb) ?? 0n))
+const fiatOf = prices.fiatOfRow
 const usdRateOf = (tb: TokenBalanceInfo) => prices.quoteFor(tb.token.chainId, tb.token.contract)?.usd
 
 const showFiatValues = ref(true)
@@ -111,6 +104,7 @@ const aggregate = computed(() => aggregateFiat(rows.value, fiatOf))
 /** Home's unavailable state, from the first price answer on: before it no quote has had a chance. */
 const unavailable = computed(() => showFiatValues.value && prices.settled.value && pricesUnavailable(rows.value, fiatOf, prices))
 const totalDisplay = computed(() => (unavailable.value ? "—" : prices.formatUsdMicro(aggregate.value.micro)))
+const awaitingPrices = computed(() => showFiatValues.value && awaitingFirstPriceAnswer(rows.value, prices))
 
 const openAddToken = (address: string) => {
 	cacheStore.preselectedTokenAddressToAdd = address
@@ -123,7 +117,7 @@ const metaRuler = useTemplateRef<HTMLElement>("metaRuler")
 const summaryMeta = computed(() =>
 	unavailable.value
 		? "Prices unavailable"
-		: `${rows.value.length} tokens${showFiatValues.value && aggregate.value.partial ? " · priced assets only" : ""}`,
+		: `${rows.value.length} tokens${showFiatValues.value && aggregate.value.partial && !awaitingPrices.value ? " · priced assets only" : ""}`,
 )
 /** The total's type as a fraction of its 26 px: full size while it fits beside the meta line
  *  wrapped to its narrowest, then the largest that does, with no floor, so no digit is ever hidden. */
@@ -165,7 +159,9 @@ watch([summary, totalDisplay, summaryMeta], fitTotal, { flush: "post" })
 watch(
 	() => [appStore.profile?.id, appStore.account?.address, appStore.network?.chainId],
 	() => {
-		void refresh({ clear: true })
+		rows.value = []
+		balancesState.value = "loading"
+		void balances.fetchTokenBalances()
 		void pins.refresh()
 	},
 )
@@ -178,8 +174,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
 	summaryResizes?.disconnect()
 	document.fonts?.removeEventListener("loadingdone", fitTotal)
-	tokenBalanceService.onConnected.remove(onReconnected)
-	disposeCrud()
+	balances.dispose()
 	tokenBalanceService.disconnect()
 	prices.dispose()
 	priceService.disconnect()
@@ -193,10 +188,16 @@ onBeforeUnmount(() => {
 	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper" data-testid="holdings-page">
 		<Flex direction="column" gap="16" :class="$style.content">
 			<Flex ref="summary" align="end" justify="between" :class="$style.summary" data-testid="holdings-summary">
-				<span v-if="showFiatValues" :class="[$style.summary_amount, { [$style.summary_amount_shrunk]: totalScale < 1 }]">
-					<span :class="$style.summary_fit" :style="{ '--hero-scale': totalScale }" :aria-hidden="unavailable || undefined">{{ totalDisplay }}</span>
+				<span
+					v-if="showFiatValues"
+					data-testid="holdings-total"
+					:aria-busy="awaitingPrices || undefined"
+					:class="[$style.summary_amount, { [$style.summary_amount_shrunk]: totalScale < 1 }]"
+				>
+					<Skeleton v-if="awaitingPrices" :width="96" :height="26" data-testid="holdings-total-loading" :class="$style.total_skeleton" />
+					<span v-else :class="$style.summary_fit" :style="{ '--hero-scale': totalScale }" :aria-hidden="unavailable || undefined">{{ totalDisplay }}</span>
 				</span>
-				<span :class="$style.summary_meta">{{ summaryMeta }}</span>
+				<span data-testid="holdings-meta" :class="$style.summary_meta">{{ summaryMeta }}</span>
 				<!-- The fit's ruler: the total in the line's classes at full size and the meta line at its
 				     narrowest, clipped to nothing, never drawn. -->
 				<span v-if="showFiatValues" aria-hidden="true" :class="$style.summary_ruler">
@@ -246,6 +247,11 @@ onBeforeUnmount(() => {
 
 .summary_amount_shrunk {
 	margin-right: 8px;
+}
+
+/* Centred on the figure's line box, so the summary keeps its height when the figure lands. */
+.total_skeleton {
+	vertical-align: middle;
 }
 
 /* The figure scales down from the total's size, while its line keeps the full size's height; the

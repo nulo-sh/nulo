@@ -1,4 +1,6 @@
 import { mount } from "@vue/test-utils"
+import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { describe, expect, test, vi } from "vitest"
 import { trimAddress } from "@/utils/string"
 import { humanizeMethodName } from "@/utils/tx-enrichment"
@@ -84,10 +86,22 @@ describe("windows/execute/OperationCard — action rows", () => {
 			expect(rows[1]?.text()).toContain("Authorize public spend")
 			const addresses = rows[1]?.findAll("i[data-address]").map((a) => a.attributes("data-address"))
 			expect(addresses).toEqual(["0xspender", "0xtoken"])
-			expect(rows[1]?.text()).toContain("Transfer (public)")
+			// No reading reaches this card, so the method reads as its contract spells it.
+			expect(rows[1]?.text()).toContain("Transfer In Public")
 			expect(rows[1]?.text()).not.toContain("add public authwit")
 		},
 	)
+
+	test("a grant's `claim` takes the Fee Juice label only on the Fee Juice contract", () => {
+		const claimOn = (contract: string) => {
+			const op = authwitOp("send_transaction")
+			op.actions[1] = { kind: "add_public_authwit", content: { ...op.actions[1].content, contract, method: "claim" } } as never
+			return mountCard(op).findAll("[data-testid='execute-op-payload-row']")[1]?.text()
+		}
+		expect(claimOn("0xtoken")).toContain("Claim")
+		expect(claimOn("0xtoken")).not.toContain("Claim Fee Juice")
+		expect(claimOn(AztecAddress.fromNumberUnsafe(FEE_JUICE_ADDRESS).toString())).toContain("Claim Fee Juice")
+	})
 
 	test("a simulation keeps a grant's arguments in its action line; a send moves them to the grant's own rows", () => {
 		// Args are wire strings: control characters stripped, capped at 48 code points plus an ellipsis.

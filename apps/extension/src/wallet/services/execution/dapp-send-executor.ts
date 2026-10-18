@@ -40,7 +40,7 @@ import { collectOffchainEffects, type TxProvingResult } from "@aztec-labs/stdlib
 import { liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { type JobError, type JobProgress, JobCancelledSentinel, type QueuedFeeReask } from "@nulo/wallet-core/jobs"
 import { markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
-import { formatFeeJuice } from "@/utils/fee-estimation"
+import { feeDisplay } from "@/utils/fee-estimation"
 import { pickPrimaryMethod, pickPrimaryWireMethod } from "@/utils/primary-method"
 import { findPrimaryEndpoint, primaryEndpointUrl } from "@/wallet/services/network/spec"
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
@@ -542,11 +542,9 @@ export class DappSendExecutor {
 
 		const maxFeeRaw = BigInt(getEstimatedFee(txRequest))
 		const priorityFee = priorityFeeOf(txRequest)
-		const priorityFeeFormatted = formatFeeJuice(priorityFee)
 		return {
 			maxFee: maxFeeRaw.toString(),
-			maxFeeFormatted: formatFeeJuice(maxFeeRaw),
-			...(priorityFeeFormatted !== "0" ? { priorityFee: priorityFee.toString(), priorityFeeFormatted } : {}),
+			...(feeDisplay(priorityFee, undefined).amount !== "0" ? { priorityFee: priorityFee.toString() } : {}),
 			gasDetails: getGasDetails(txRequest),
 			estimateId,
 			previewId,
@@ -1213,7 +1211,7 @@ export class DappSendExecutor {
 					{ simulatePublic: true, skipFeeEnforcement: true, scopes: scopesWithAccount },
 					parentTask,
 				)
-				await finalizeGasLimits(node, txRequest, simulatedTx, 1, undefined, feeOpts, 1, txsLimits)
+				await finalizeGasLimits(node, txRequest, simulatedTx, { gasPadding: 1, customLimits: feeOpts, feeMultiplier: 1, txsLimits })
 				const submittedEndpointUrl = primaryEndpointUrl(network)
 				leaveLine()
 

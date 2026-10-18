@@ -9,11 +9,14 @@ import type { PriceServiceClient, PriceSnapshot, PriceState, PriceQuote } from "
 import { isQuoteFresh } from "@/wallet/services/price/spec"
 import { getPriceMapEntry, FEE_JUICE_ENTRY, type PricedTokens } from "@/wallet/services/price/price-map"
 import { tokenAmountToUsdMicro, formatUsdMicro } from "@/wallet/services/price/convert"
-import { knownDecimals } from "@/utils/token-amount"
+import { knownDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
 import { isFlaggedToken } from "@/utils/token-flag"
 
 /** A token as pricing reads it: priced only when its decimals are known (`knownDecimals`). */
 export type PricedToken = { chainId?: number; contract?: string; decimals?: number; hasDecimals?: boolean }
+
+/** A balance row as pricing reads it. */
+type PricedRow = { token?: PricedToken; publicBalance?: string; privateBalance?: string }
 
 /** The signed list's half of every snapshot: which token each id prices and which pairs it flags. */
 function listState() {
@@ -131,6 +134,10 @@ export function usePrices(priceService: PriceServiceClient) {
 		return tokenAmountToUsdMicro(raw, decimals, quote.usd)
 	}
 
+	/** A balance row's fiat value (micro-USD), or undefined for an unpriced or malformed row. The
+	 *  `0n` is never read: `safeFiatOf` refuses a row whose balance does not parse. */
+	const fiatOfRow = safeFiatOf((row: PricedRow) => tokenFiatMicro(row.token, parseRawBalance(row) ?? 0n))
+
 	/** `≈ $1,249.38`-style display string, or undefined when unpriced. */
 	const tokenFiatLabel = (token: PricedToken | undefined, raw: bigint): string | undefined => {
 		const micro = tokenFiatMicro(token, raw)
@@ -152,6 +159,7 @@ export function usePrices(priceService: PriceServiceClient) {
 		quoteFor,
 		feeJuiceQuote,
 		tokenFiatMicro,
+		fiatOfRow,
 		tokenFiatLabel,
 		formatUsdMicro,
 		dispose,

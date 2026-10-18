@@ -72,7 +72,7 @@ A connected application's calls go through the interaction service. `isConfirmat
 (`apps/extension/src/wallet/services/dapp-interaction/service.ts:735-763`) shows the confirmation
 popup when the call's access level reaches the session's confirmation level, when a send spends the
 account's own Fee Juice (it names no fee payer, or pays itself), and always for token registration; the wallet-sdk session is created at
-`AccessLevel.Transactions` (`apps/extension/src/wallet/services/wallet-sdk/background.ts:1081`), so
+`AccessLevel.Transactions` (`apps/extension/src/wallet/services/wallet-sdk/discovery-flow.ts:530`), so
 sends prompt. Auth-witness creation prompts too, unless the user let that application sign, without
 asking, the authorizations its granted scopes cover: a consent stored on the session
 (`packages/wallet-bridge/src/dispatcher.ts:604-628`). Simulations and utility calls at lower

@@ -3,6 +3,7 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { Flex, Icon, Input, Spinner, Text } from "@nulo/design"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../tests/helpers/chrome-storage-mock"
 import type { ConfigProp } from "@/wallet/config"
 import { visibleSettingsRows } from "@/utils/settings-search"
 import { expectOwnedRows, settingsContext, settingsRouter } from "../../../../tests/helpers/settings-rows"
@@ -90,11 +91,7 @@ beforeEach(() => {
 	execution = { getLastProveOutcome: vi.fn(async () => ({ outcome: null, denial: null })), disconnect: vi.fn() }
 	clients.config = config
 	clients.execution = execution
-	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
-	if (c) {
-		c.storage.local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }
-		c.storage.onChanged = { addListener: vi.fn(), removeListener: vi.fn() }
-	}
+	installChromeStorage({}, { persist: false })
 	vi.stubGlobal(
 		"IntersectionObserver",
 		class {
@@ -248,7 +245,7 @@ describe("settings hub — search", () => {
 
 	test("a word in the field replaces the whole list with its results; emptying it brings the list back", async () => {
 		const w = await mountHub()
-		await search(w).setValue("full")
+		await search(w).setValue("motion")
 		expect(rowIds(w)).toEqual([])
 		expect(w.find('[data-testid="setting-nav-profile"]').exists()).toBe(false)
 		expect(w.findAll('[data-testid^="settings-search-result-"]')).toHaveLength(1)

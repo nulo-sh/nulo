@@ -23,7 +23,6 @@ function params(overrides: Partial<CapabilityWindowParams>): CapabilityWindowPar
 		accountsMembershipOnly: false,
 		consent: undefined,
 		networkName: "Testnet",
-		heldAccounts: [],
 		...overrides,
 	}
 }
@@ -233,12 +232,11 @@ describe("the held rows", () => {
 				delta: [cap({ type: "data", addressBook: true })],
 				heldGrants: toolsApp,
 				consent: { broad: false },
-				heldAccounts: [{ name: "Account 1" }],
 			}),
 		)
 		expect(keys(fresh(rows))).toEqual(["address-book"])
 		expect(held(rows).map((row) => [row.entry.key, row.entry.title, line(row)])).toEqual([
-			["account-address", "See Account 1's address", ""],
+			["account-address", "Let this app list all your accounts", "It always knows the account you connect with."],
 			["simulation", "Run simulations and read the results", "Results can include your private balances."],
 			["contracts", "Add contracts to your wallet", ""],
 			["authorizations", "Act for you in transactions you approve", "Nulo signs its authorizations without asking."],
@@ -247,18 +245,8 @@ describe("the held rows", () => {
 		expect(held(rows).every((row) => row.entry.switchLabel === undefined && row.selected && !row.reRequested)).toBe(true)
 	})
 
-	test("the folded address row names the session's accounts by their wallet names", () => {
-		const shown = (heldAccounts: CapabilityWindowParams["heldAccounts"]) =>
-			held(buildCapabilityItems(params({ heldGrants: [accounts(false)], heldAccounts })))[0].entry.title
-		expect(shown([{ name: "Savings" }])).toBe("See Savings's address")
-		expect(shown([{ name: "Account 1" }, { name: "Account 2" }])).toBe("See the addresses of the accounts you share")
-		expect(shown([{}])).toBe("See the addresses of the accounts you share")
-	})
-
 	test("a held accounts grant without canGet folds no address row", () => {
-		const rows = buildCapabilityItems(
-			params({ heldGrants: [cap({ ...accounts(true), canGet: false }), txListed], heldAccounts: [{ name: "Account 1" }] }),
-		)
+		const rows = buildCapabilityItems(params({ heldGrants: [cap({ ...accounts(true), canGet: false }), txListed] }))
 		expect(keys(held(rows))).toEqual(["authorizations", "transaction"])
 	})
 

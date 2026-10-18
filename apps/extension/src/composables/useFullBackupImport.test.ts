@@ -22,7 +22,7 @@
  */
 import { setActivePinia } from "pinia"
 import { createTestingPinia } from "@pinia/testing"
-import { ref, watch } from "vue"
+import { type Ref, ref, watch } from "vue"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { NodeStatus } from "@/wallet/services/network/spec"
 import {
@@ -152,6 +152,7 @@ vi.mock("@/wallet/services/account/spec", () => ({
 	IMPORTED_KEYS_STORAGE_ROOT: "nulo:core:imported-account-keys",
 	accountRowId: (profileId: string, chainId: number, address: string) => JSON.stringify(["account", profileId, chainId, address]),
 	accountScopeKey: (chainId: number, address: string) => `${chainId}:${address}`,
+	DEFAULT_IMPORTED_ACCOUNT_NAME: "Imported account",
 }))
 vi.mock("@/wallet/services/account-state/spec", () => ({ ACCOUNT_STATE_SERVICE_NAME: "account-state" }))
 vi.mock("@/utils/background-liveness", () => ({
@@ -202,7 +203,9 @@ import {
 	relinkRestoredTokenBalances,
 	resolvePasskeyCredential,
 	restoreAccountsAndFilterOwnedSlices,
+	restoreAccountsStage,
 	restoredNetworkIds,
+	settleHeldAccounts,
 } from "./full-backup-restore"
 import { deferred } from "@nulo/wallet-core/utils"
 import { DECRYPTION_FAILED, errorLogWriters, useFullBackupImport, validateAndMigrateBackup } from "./useFullBackupImport"
@@ -365,36 +368,43 @@ describe("restoredNetworkIds", () => {
 describe("restoreAccountsAndFilterOwnedSlices — stage 2a contract", () => {
 	const fakeAccountService = (rows: unknown) => ({ restore: vi.fn(async () => rows) }) as never
 
-	it("returns the allow-set from SUCCESSFUL accounts only and filters every account-owned slice in place", async () => {
+	it("returns the allow-set from SUCCESSFUL accounts on a network only and filters every account-owned slice in place", async () => {
 		const data = {
 			account: [{ address: "0xa", chainId: 1 }],
 			transaction: [
 				{ account: "0xa", chainId: 1, hash: "keep" },
 				{ account: "0xa", chainId: 2, hash: "wrong-chain" },
 				{ account: "0xevil", chainId: 1, hash: "foreign" },
+				{ account: "0xheld", chainId: 1337, hash: "held" },
 			],
 			"auth-registry": [
 				{ account: "0xa", chainId: 1, hash: "keep" },
 				{ account: "0xa", chainId: 2, hash: "wrong-chain" },
 				{ account: "0xevil", chainId: 1, hash: "foreign" },
+				{ account: "0xheld", chainId: 1337, hash: "held" },
 			],
 			"token-balance": [
 				{ account: "0xa", id: 1 },
 				{ account: "0xevil", id: 2 },
+				{ account: "0xheld", id: 3 },
 			],
 		} as never
 		const recorder = vi.fn()
 
-		const set = await restoreAccountsAndFilterOwnedSlices(
+		const { importedChainAddress: set, held } = await restoreAccountsAndFilterOwnedSlices(
 			data,
 			fakeAccountService([
 				{ address: "0xa", chainId: 1 },
 				{ address: "0xfail", chainId: 1, restoreError: "boom" },
+				{ address: "0xheld", chainId: 1337, name: "Savings" },
 			]),
 			recorder,
+			new Set([1]),
 		)
 
-		expect([...set]).toEqual(["1:0xa"]) // failed accounts never enter the allow-set
+		expect([...set]).toEqual(["1:0xa"]) // failed and held accounts never enter the allow-set
+		// A held account brings back its row and key only, never its dependents.
+		expect(held).toEqual([{ chainId: 1337, address: "0xheld", name: "Savings", row: 2 }])
 		const d = data as Record<string, Array<Record<string, unknown>>>
 		expect(d.transaction.map((t) => t.hash)).toEqual(["keep"])
 		// authwits are keyed by the (chainId, account) tuple like txs: the same address on a
@@ -408,7 +418,112 @@ describe("restoreAccountsAndFilterOwnedSlices — stage 2a contract", () => {
 		const boom = new Error("Duplicate account")
 		const failing = { restore: vi.fn(async () => Promise.reject(boom)) } as never
 
-		await expect(restoreAccountsAndFilterOwnedSlices({ account: [] } as never, failing, vi.fn())).rejects.toBe(boom)
+		await expect(restoreAccountsAndFilterOwnedSlices({ account: [] } as never, failing, vi.fn(), new Set())).rejects.toBe(boom)
+	})
+})
+
+describe("restoreAccountsStage — which key rows reach the key restore", () => {
+	it("passes the keys of restored accounts, held ones included, and every row without a scope; drops the rest", async () => {
+		const key = (chainId: number, address: string) => ({ profileId: "p", chainId, address, encryptedSigningKey: "sealed" })
+		const scopeless = { profileId: "p", chainId: 1, encryptedSigningKey: "sealed" }
+		const data: Record<string, unknown> = {
+			account: [{}, {}, {}],
+			"imported-account-keys": [key(1, "0xa"), key(1337, "0xheld"), key(1, "0xrefused"), scopeless, key(1, "0xorphan")],
+		}
+		const restoreImportedKeys = vi.fn(async (rows: Array<Record<string, unknown>>) =>
+			rows.map((row) => (typeof row.address === "string" ? row : { ...row, restoreError: "address: Required" })),
+		)
+		const accountService = {
+			restore: vi.fn(async () => [
+				{ address: "0xa", chainId: 1, type: 1 },
+				{ address: "0xheld", chainId: 1337, type: 1, name: "Savings" },
+				{ address: "0xrefused", chainId: 1, restoreError: "account/network chain identity mismatch: 9 vs 1" },
+			]),
+			restoreImportedKeys,
+			reconcileImportedAccounts: vi.fn(),
+			disconnect: vi.fn(),
+		}
+		const log = ref<Record<string, unknown[]>>({})
+		const io = { ...errorLogWriters(log), fillError: vi.fn(), setStatus: vi.fn(), setStage: vi.fn(), appendErrors: vi.fn() }
+
+		const out = await restoreAccountsStage(data, {
+			accountService,
+			profileService: {} as never,
+			profileId: "p",
+			networks: [{ chainId: 1 }],
+			io,
+		})
+
+		expect(restoreImportedKeys).toHaveBeenCalledWith([key(1, "0xa"), key(1337, "0xheld"), scopeless])
+		// The refused row is recorded at its position in the backup's slice, not among the rows passed.
+		expect(log.value["imported-account-keys"]).toEqual([{ row: 3, profileId: "p", chainId: 1, restoreError: "address: Required" }])
+		expect(out).toMatchObject({ kind: "proceed", held: [{ chainId: 1337, address: "0xheld", row: 1 }] })
+		expect([...(out as { importedChainAddress: ReadonlySet<string> }).importedChainAddress]).toEqual(["1:0xa"])
+	})
+})
+
+describe("settleHeldAccounts — what the import records and shows of a held account", () => {
+	const ioOver = (log: Ref<Record<string, unknown[]>>) => ({
+		...errorLogWriters(log),
+		fillError: vi.fn(),
+		setStatus: vi.fn(),
+		setStage: vi.fn(),
+		appendErrors: vi.fn(),
+	})
+	const accountServiceDropping = (dropped: Array<{ chainId: number; address: string }>) => ({
+		restore: vi.fn(),
+		restoreImportedKeys: vi.fn(),
+		reconcileImportedAccounts: vi.fn(async () => dropped),
+		disconnect: vi.fn(),
+	})
+
+	it("drops a held account the reconcile removed by its scope, not its name, and closes the client", async () => {
+		const log = ref<Record<string, unknown[]>>({})
+		const accountService = accountServiceDropping([{ chainId: 1337, address: "0xkeyless" }])
+
+		const shown = await settleHeldAccounts(
+			accountService,
+			"p",
+			[
+				{ chainId: 1337, address: "0xkeyed", name: "Savings", row: 3 },
+				{ chainId: 1337, address: "0xkeyless", name: "Savings", row: 4 },
+			],
+			ioOver(log),
+		)
+
+		expect(shown).toEqual([{ name: "Savings", chainId: 1337 }])
+		expect(log.value.account).toEqual([
+			{ row: 3, profileId: "p", chainId: 1337, restoreError: "Waiting for a network with chain ID 1337" },
+		])
+		expect(accountService.disconnect).toHaveBeenCalledOnce()
+	})
+
+	it("records no name or address, keeps the log's cap, and cleans every name it returns", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+		const log = ref<Record<string, unknown[]>>({})
+		const held = Array.from({ length: 250 }, (_, i) => ({
+			chainId: 1337,
+			address: `0xaddr${i}`,
+			name: `Sav\u202eings${i}`,
+			row: i,
+		}))
+
+		const shown = await settleHeldAccounts(
+			accountServiceDropping([]),
+			"p",
+			[...held, { ...held[0]!, name: "\u200b", row: 250 }],
+			ioOver(log),
+		)
+
+		expect(log.value.account).toHaveLength(201)
+		expect(log.value.account?.at(-1)).toEqual({ restoreError: "51 further error(s) not recorded" })
+		const recorded = JSON.stringify([log.value, warn.mock.calls])
+		expect(recorded).not.toContain("Sav")
+		expect(recorded).not.toContain("0xaddr")
+		expect(shown).toHaveLength(251)
+		expect(shown[0]).toEqual({ name: "Savings0", chainId: 1337 })
+		expect(shown.at(-1)).toEqual({ name: "Imported account", chainId: 1337 })
+		warn.mockRestore()
 	})
 })
 
@@ -530,6 +645,7 @@ beforeEach(() => {
 	networkClient.disconnect.mockReset()
 	accountClient.restore.mockReset()
 	accountClient.reconcileImportedAccounts.mockReset().mockResolvedValue([])
+	accountClient.restoreImportedKeys.mockReset().mockResolvedValue([])
 	accountClient.disconnect.mockReset()
 	tokenClient.restore.mockReset().mockResolvedValue([])
 	tokenClient.disconnect.mockReset()
@@ -617,6 +733,33 @@ describe("useFullBackupImport — the reconcile call's account client", () => {
 		expect(accountClient.disconnect).toHaveBeenCalledTimes(2)
 		expect(profileClient.deleteProfile).toHaveBeenCalledWith("new-id")
 		expect(c.restoreStatus.value).not.toBe("finished")
+	})
+})
+
+describe("useFullBackupImport — an imported account on a chain the new profile lacks", () => {
+	it("stops at the warning with the account held, its key restored, and its row in the log", async () => {
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		const held = { profileId: "src-profile-id", chainId: 1337, address: "0xbbbb", index: 0, type: 1, l1ChainId: 5, name: "Savings" }
+		const heldKey = { profileId: "src-profile-id", chainId: 1337, address: "0xbbbb", encryptedSigningKey: "sealed" }
+		const backup = await buildBackup({ data: { account: [held], "imported-account-keys": [heldKey] } })
+		c.selectedBackup.value = { name: "x.json", backup, kind: "plain", profileType: "password" }
+		profileClient.restore.mockResolvedValue({ id: "new-id", name: "Imported", type: "password" })
+		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
+		accountClient.restore.mockImplementation(async (rows: unknown[]) => rows)
+
+		await c.restoreBackup()
+
+		expect(accountClient.restoreImportedKeys).toHaveBeenCalledWith([{ ...heldKey, profileId: "new-id" }])
+		expect(opts.completeImport).not.toHaveBeenCalled()
+		expect(c.restoreStatus.value).toBe("finished")
+		expect(c.heldAccounts.value).toEqual([{ name: "Savings", chainId: 1337 }])
+		expect(c.restoreErrorLog.value).toEqual({
+			account: [{ row: 0, profileId: "new-id", chainId: 1337, restoreError: "Waiting for a network with chain ID 1337" }],
+		})
+
+		c.resetBackupState()
+		expect(c.heldAccounts.value).toEqual([])
 	})
 })
 
@@ -872,6 +1015,52 @@ describe("useFullBackupImport — guards before any writes", () => {
 		expect(profileClient.restore).toHaveBeenCalledOnce()
 		expect(profileClient.finalizeRestore).toHaveBeenCalledWith("new-id", "pass1234")
 		expect(c.restoreStatus.value).toBe("finished")
+	})
+
+	it("a body nested past the engine's stack gets the integrity message, and the next pick imports", async () => {
+		let deep: unknown[] = []
+		for (let i = 0; i < 1_000_000; i++) deep = [deep]
+		const valid = await buildBackup()
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		c.selectedBackup.value = {
+			name: "x.json",
+			backup: { ...valid, data: { ...valid.data, deep } },
+			kind: "plain",
+			profileType: "password",
+		}
+		await c.restoreBackup()
+		expect(c.restoreStatus.value).toBe("failed")
+		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Backup Integrity Check Failed", expect.any(String))
+		expect(profileClient.restore).not.toHaveBeenCalled()
+
+		opts.pickFile.mockResolvedValue(new File([JSON.stringify(valid)], "backup.json", { type: "application/json" }))
+		await c.pickBackupFile()
+		expect(c.restoreStatus.value).toBeNull()
+		opts.password.value = "pass1234"
+		opts.repeatedPassword.value = "pass1234"
+		profileClient.restore.mockResolvedValue({ id: "new-id", name: "Imported", type: "password" })
+		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
+		accountClient.restore.mockResolvedValue([{ address: "0xaaaa" }])
+		await c.restoreBackup()
+		expect(c.restoreStatus.value).toBe("finished")
+	})
+
+	it("a gate that throws ends the import with its message instead of leaving it in progress", async () => {
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		c.selectedBackup.value = { name: "x.json", backup: await buildBackup(), kind: "plain", profileType: "password" }
+		const digest = vi.spyOn(EncryptionKey, "getHashHex").mockRejectedValueOnce(new Error("digest unavailable"))
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			await c.restoreBackup()
+		} finally {
+			digest.mockRestore()
+			logged.mockRestore()
+		}
+		expect(c.restoreStatus.value).toBe("")
+		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Import failed", "digest unavailable")
+		expect(profileClient.restore).not.toHaveBeenCalled()
 	})
 
 	it("a migration failure aborts BEFORE any restore() call — zero-rollback atomicity", async () => {
@@ -1650,7 +1839,10 @@ describe("useFullBackupImport — token-balance (chainId,contract) key (P3)", ()
 		c.selectedBackup.value = { name: "x.json", backup, kind: "plain", profileType: "password" }
 
 		profileClient.restore.mockResolvedValue({ id: "new-id", name: "Imported", type: "password" })
-		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
+		networkClient.seedDefaultsForProfile.mockResolvedValue([
+			{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 },
+			{ id: "new-net-2", name: "Local Network", rpcUrl: "http://l/", chainId: 2 },
+		])
 		// 0xa is imported on BOTH chains (chain-distinct accounts) so each chain's
 		// balance passes the token/account chain-equality check.
 		accountClient.restore.mockResolvedValue([

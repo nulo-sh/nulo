@@ -1,6 +1,7 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 
 const profileClient = vi.hoisted(() => ({ changeProfilePassword: vi.fn(async () => undefined), disconnect: vi.fn() }))
 vi.mock("@/wallet/services/profile/client", () => ({
@@ -54,11 +55,7 @@ const submit = (w: VueWrapper) => w.get('[data-testid="change-password-submit-bt
 
 beforeEach(() => {
 	vi.clearAllMocks()
-	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
-	if (c) {
-		c.storage.local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }
-		c.storage.onChanged = { addListener: vi.fn(), removeListener: vi.fn() }
-	}
+	installChromeStorage({}, { persist: false })
 })
 
 afterEach(() => {

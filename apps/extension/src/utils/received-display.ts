@@ -1,7 +1,7 @@
 /**
  * Receiver-honest display resolution for incoming receipts. Maps a discriminated
  * `IncomingTransferRecord` to:
- *  - a THREE-label vocabulary + "Minted" (pub→priv is NOT distinguished — it's a note record shown
+ *  - a THREE-label vocabulary + "Mint (public)" (pub→priv is NOT distinguished — it's a note record shown
  *    as "Received privately");
  *  - a "From" treatment that states the truth without ever rendering the MAGIC/zero sentinel as a
  *    raw address.
@@ -40,7 +40,7 @@ const LABELS: Record<ReceivedType, string> = {
 	"received-privately": "Received privately",
 	"public-to-public": "Public → Public",
 	"private-to-public": "Private → Public",
-	minted: "Minted",
+	minted: "Mint (public)",
 }
 
 /** The chip / heading label for a resolved type. */

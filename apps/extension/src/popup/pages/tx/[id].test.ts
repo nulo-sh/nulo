@@ -1,6 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils"
-import { afterEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { OriginType, TransferType, TxStatus } from "@/wallet/services/transaction/spec"
 import TxDetail from "./[id].vue"
 
@@ -32,17 +33,9 @@ vi.mock("@/wallet/services/config/client", () => ({
 		return { getProps: vi.fn(async () => []), disconnect: vi.fn() }
 	}),
 }))
-vi.mock("@/wallet/services/price/client", () => ({
-	PriceServiceClient: vi.fn(function () {
-		return {
-			disconnect: vi.fn(),
-			onQuotesUpdated: { add: vi.fn(), remove: vi.fn() },
-			onConnected: { add: vi.fn(), remove: vi.fn() },
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
-			refreshIfStale: vi.fn().mockResolvedValue({ quotes: {}, pricedTokens: {} }),
-		}
-	}),
-}))
+vi.mock("@/wallet/services/price/client", async () => (await import("../../../../tests/helpers/price-client-fake")).priceClientModule())
+
+beforeEach(() => priceFake.reset(undefined))
 
 afterEach(() => {
 	vi.clearAllMocks()
@@ -134,6 +127,69 @@ describe("the transaction page's amount", () => {
 		const w = await mountPage(dappMint, Promise.resolve([]))
 		expect(amountBlock(w).exists()).toBe(false)
 		expect(w.text()).not.toContain("Mint amount")
+	})
+})
+
+describe("the transaction page's fee", () => {
+	const GAS = {
+		feePerL2Gas: "1000000000000",
+		feePerDaGas: "2000000000000",
+		l2GasLimit: 1_000,
+		daGasLimit: 500,
+		teardownL2GasLimit: 0,
+		teardownDaGasLimit: 0,
+	}
+	/** The row's header figure: the fee and, when priced, its dollars. */
+	const headerOf = (w: Awaited<ReturnType<typeof mountPage>>) => w.get("[class*='fee_row_toggle'] > span")
+
+	test("a settled send reads its paid fee, half up, and its estimate in the breakdown, both at the page's one quote", async () => {
+		priceFake.reset(0.06)
+		const tx = { ...sentTransfer, fee: "3577823500000000001", estimatedFee: "4000000000000000000", gasDetails: GAS }
+		const w = await mountPage(tx, Promise.resolve([listed]), { TxFeeRow: false })
+		expect(headerOf(w).text()).toBe("~3.577824 FJ ($0.215)")
+		await w.get("[class*='fee_row_toggle']").trigger("click")
+		expect(w.get('[data-testid="tx-estimate-usd"]').element.parentElement?.textContent).toBe("~4 FJ ($0.240)")
+	})
+
+	test("before the receipt, the estimate alone, in the same grammar", async () => {
+		priceFake.reset(0.06)
+		const w = await mountPage({ ...sentTransfer, estimatedFee: "4000000000000000000" }, Promise.resolve([listed]), { TxFeeRow: false })
+		expect(w.text()).toContain("Estimated fee")
+		expect(headerOf(w).text()).toBe("~4 FJ ($0.240)")
+	})
+})
+
+describe("the transaction page's words for a call", () => {
+	const header = { props: ["title"], template: "<h1 data-testid='header'>{{ title }}</h1>" }
+	const words = (w: Awaited<ReturnType<typeof mountPage>>) => [
+		w.get("[data-testid='header']").text(),
+		w.get("[data-testid='tx-call-method']").text(),
+	]
+	const OTHER = `0x${"0b".repeat(32)}`
+	const dappTransfer = (contract: string) =>
+		settled({ type: OriginType.DAPP, name: "example.dapp.io" }, [
+			{ contract, method: "transfer_in_private", args: [ACCOUNT, OTHER, field(5n), field(0n)], classId: CLASS },
+		])
+
+	test("a listed mint reads its own name until the token list loads, then the window's label", async () => {
+		let resolve: (tokens: unknown[]) => void = () => {}
+		const w = await mountPage(dappMint, new Promise((r) => (resolve = r)), { SubPageHeader: header })
+		expect(words(w)).toEqual(["Mint To Public", "Mint To Public"])
+		resolve([listed])
+		await flushPromises()
+		expect(words(w)).toEqual(["Mint (public)", "Mint (public)"])
+	})
+
+	test("a transfer on a contract the wallet did not list reads as its contract spells it; on a listed token, as the wallet read it", async () => {
+		const unread = await mountPage(dappTransfer(OTHER), Promise.resolve([listed]), { SubPageHeader: header })
+		expect(words(unread)).toEqual(["Transfer In Private", "Transfer In Private"])
+		const read = await mountPage(dappTransfer(TOKEN), Promise.resolve([listed]), { SubPageHeader: header })
+		expect(words(read)).toEqual(["Transfer", "Transfer (private)"])
+	})
+
+	test('a dApp\'s `claim` off the Fee Juice contract reads "Claim" in the header and the Calls box', async () => {
+		const claim = settled({ type: OriginType.DAPP, name: "example.dapp.io" }, [{ contract: OTHER, method: "claim", args: [ACCOUNT] }])
+		expect(words(await mountPage(claim, Promise.resolve([listed]), { SubPageHeader: header }))).toEqual(["Claim", "Claim"])
 	})
 })
 

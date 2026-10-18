@@ -48,6 +48,7 @@ import {
 	AccountSchema,
 	AccountType,
 	DEFAULT_ACCOUNT_NAME,
+	DEFAULT_IMPORTED_ACCOUNT_NAME,
 	ImportedAccountKeySchema,
 	ImportedAccountUnusableError,
 	type FullBackupKeys,
@@ -721,7 +722,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 					l1ChainId,
 					// User-chosen display name; the export envelope deliberately carries none (the v1
 					// file format is frozen), so the UI asks at import time.
-					name: (typeof name === "string" && name.trim().slice(0, 40)) || "Imported account",
+					name: (typeof name === "string" && name.trim().slice(0, 40)) || DEFAULT_IMPORTED_ACCOUNT_NAME,
 					visible: true,
 				}
 				await this.commitImportedAccount(account, sealed, epoch)
@@ -966,6 +967,15 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 			if (collides) throw new Error("Duplicate account")
 
 			const seen = new Set<string>()
+			const networkedChains = new Map<string, Set<number>>()
+			const hasNetwork = async (profileId: string, chainId: number) => {
+				let chains = networkedChains.get(profileId)
+				if (!chains) {
+					chains = new Set((await this.networkService.getNetworksRaw(profileId)).map((n) => n.chainId))
+					networkedChains.set(profileId, chains)
+				}
+				return chains.has(chainId)
+			}
 			return await restoreRows(accounts, async (account) => {
 				// H: validate + canonicalize the persisted shape (mirror the read codec).
 				const parsed = AccountSchema.parse(account)
@@ -973,9 +983,14 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 				// auth, so a doctored blob can carry a self-consistent (chainId, l1ChainId) pair.
 				// Networks restore BEFORE accounts in the full-backup order, so the stored
 				// (seeded-constant-validated) row is the reference; mismatch rejects the row.
-				const expectedL1 = await this.networkService.getL1ChainIdStored(parsed.profileId, parsed.chainId)
-				if (parsed.l1ChainId !== expectedL1) {
-					throw new Error(`account/network chain identity mismatch: ${parsed.l1ChainId} vs ${expectedL1}`)
+				// An imported row on a chain with no network is held unchecked: there is nothing to
+				// check it against, and refusing it would lose a key no recovery phrase re-derives.
+				// A derived row there is refused: it re-derives once its network exists.
+				if (parsed.type !== AccountType.Imported || (await hasNetwork(parsed.profileId, parsed.chainId))) {
+					const expectedL1 = await this.networkService.getL1ChainIdStored(parsed.profileId, parsed.chainId)
+					if (parsed.l1ChainId !== expectedL1) {
+						throw new Error(`account/network chain identity mismatch: ${parsed.l1ChainId} vs ${expectedL1}`)
+					}
 				}
 				// F: reject an empty/whitespace address. "Successfully restored" must NOT
 				// mean "set() didn't throw" for a blank address — a blank-account row

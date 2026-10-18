@@ -256,17 +256,21 @@ async function refuse(
 	const queuedJournalId = method === "sendTx" ? await tryCreateQueuedJournal(message, session, deps) : undefined
 
 	await handleWalletMessage(
-		session,
-		message,
-		bindLiveSession({ sendResponse, terminateSession: vi.fn(), getSession: () => session as never }, session as never),
-		dispatcher,
-		{ captureExecutionFence: async () => ({ profileId: "profile-1", epoch: 0, session: 1 }) } as never,
-		journal,
-		new Map([[session.sessionId, "profile-1"]]),
-		{ current: () => 0 } as never,
-		deps.logger,
-		{ assertCurrent: async () => {} },
-		{ queuedJournalId },
+		{
+			session,
+			message,
+			live: bindLiveSession({ sendResponse, terminateSession: vi.fn(), getSession: () => session as never }, session as never),
+			hooks: { queuedJournalId },
+		},
+		{
+			dispatcher,
+			profileService: { captureExecutionFence: async () => ({ profileId: "profile-1", epoch: 0, session: 1 }) } as never,
+			operationJournal: journal,
+			sessionProfiles: new Map([[session.sessionId, "profile-1"]]),
+			switchEpoch: { current: () => 0 } as never,
+			logger: deps.logger,
+			legal: { assertCurrent: async () => {} },
+		},
 	)
 
 	const refusal = await Promise.resolve(dispatch.mock.results[0]?.value).then(

@@ -49,6 +49,7 @@ import {
 } from "../fixtures/helpers"
 import { type PasskeyAuthSetup, registerPasskeyProfile, setupPasskeyVirtualAuth } from "../fixtures/passkey"
 import { holdAccountRegistration, isAccountRegistrationHeld, releaseAccountRegistration } from "../fixtures/projection-gate"
+import { pollUntil } from "../fixtures/poll"
 import {
 	accountChainId,
 	downloadEncryptedBackup,
@@ -234,16 +235,19 @@ async function importPasskeyFullBackup(page: Page, file: string): Promise<void> 
 
 /** The gate's acknowledgement: from here on the token is registered and the receiver is not. */
 export async function waitForHeldProjection(page: Page): Promise<void> {
-	const deadline = Date.now() + 180_000
-	while (!(await isAccountRegistrationHeld(page))) {
-		if (Date.now() > deadline) throw new Error("no projection of the receiver parked on the gate; is the build proverless-armed?")
-		await new Promise((resolve) => setTimeout(resolve, 500))
-	}
+	await pollUntil(
+		() => isAccountRegistrationHeld(page),
+		(held) => held,
+		{
+			label: "a projection of the receiver parked on the gate (is the build proverless-armed?)",
+			timeoutMs: 180_000,
+			intervalMs: 500,
+		},
+	)
 }
 
 /** The incoming-transfer scan's committed record of the note, read from storage: the card has no per-hash testid. */
 async function waitForIncomingRecord(page: Page, account: string, txHash: string): Promise<void> {
-	const deadline = Date.now() + DISCOVERY_TIMEOUT_MS
 	const found = () =>
 		page.evaluate(
 			async (want: { account: string; txHash: string }) => {
@@ -256,9 +260,9 @@ async function waitForIncomingRecord(page: Page, account: string, txHash: string
 			},
 			{ account, txHash },
 		)
-	while (!(await found())) {
-		if (Date.now() > deadline)
-			throw new Error("the incoming-transfer scan never discovered the receiver's note while its projections were held")
-		await new Promise((resolve) => setTimeout(resolve, 1_000))
-	}
+	await pollUntil(found, (seen) => seen, {
+		label: "the incoming-transfer scan discovering the receiver's note while its projections are held",
+		timeoutMs: DISCOVERY_TIMEOUT_MS,
+		intervalMs: 1_000,
+	})
 }

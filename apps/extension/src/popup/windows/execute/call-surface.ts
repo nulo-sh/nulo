@@ -11,7 +11,7 @@ import type { TokenInfo } from "@/wallet/services/token/client"
 import { formatBaseUnits } from "@/utils/amount"
 import { trimAddress } from "@/utils/string"
 import { abiNameFitsRole, findMintSignature, findTransferSignature, vocabularySelector } from "@/utils/token-transfer-vocabulary"
-import { humanizeMethodName, plainMethodName, tokenMovementLabel } from "@/utils/tx-enrichment"
+import { callTitle, humanizeMethodName } from "@/utils/tx-enrichment"
 import { parseTransferIntent, projectArgument, smallFieldDecimal } from "@/utils/transfer-intent"
 import { safeWire } from "./humanize"
 
@@ -131,21 +131,16 @@ export const callSurface = (
 	return { kind: "raw", reason: decoded.reason, ...rawRows(call.args, maxRows) }
 }
 
+const surfaceName = (call: WireCall, surface: CallSurface): string =>
+	"fn" in surface ? safeWire(surface.fn, 64) : wire(call.name ?? call.selector, 64)
+
 /** The header names the function by its decoded name, which a structured reading has checked against
  *  the selector, and by the dApp's label only when there is no decode. Both are untrusted strings,
  *  and a curated label applies only on the contract it belongs to. */
-export const callName = (call: WireCall, surface: CallSurface): string => {
-	const name = "fn" in surface ? safeWire(surface.fn, 64) : wire(call.name ?? call.selector, 64)
-	return humanizeMethodName(name, wire(call.to, 80))
-}
+export const callName = (call: WireCall, surface: CallSurface): string => humanizeMethodName(surfaceName(call, surface), wire(call.to, 80))
 
-/** A transaction body's title for one call: a transfer or mint label only on a call the wallet read
- *  as that transfer or mint, any other name that claims one as its contract spells it. */
-export const rowTitle = (call: WireCall, surface: CallSurface): string => {
-	if (surface.kind === "transfer" || surface.kind === "mint") return callName(call, surface)
-	const name = "fn" in surface ? safeWire(surface.fn, 64) : wire(call.name ?? call.selector, 64)
-	return tokenMovementLabel(name) ? plainMethodName(name) : callName(call, surface)
-}
+export const rowTitle = (call: WireCall, surface: CallSurface): string =>
+	callTitle(surfaceName(call, surface), wire(call.to, 80), surface.kind === "transfer" || surface.kind === "mint")
 
 /** A discovered authorization's function: its decoded name under the body's title rule, or the
  *  selector it carries while it has no decode. */

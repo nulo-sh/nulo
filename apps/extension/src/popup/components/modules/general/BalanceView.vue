@@ -12,8 +12,8 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Utils */
 import { balanceFormatted } from "@/utils/amount.js"
-import { knownDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
-import { aggregateFiat, isPriceableHolding, pricesUnavailable } from "@/utils/token-aggregate"
+import { knownDecimals, parseRawBalance } from "@/utils/token-amount"
+import { aggregateFiat, awaitingFirstPriceAnswer, pricesUnavailable } from "@/utils/token-aggregate"
 import { storageLocalGet, storageLocalSet } from "@/utils/storage"
 import { createBalanceCount } from "./balance-count"
 import { FULL_SIZE, fiatHeroCandidates, fitHero, holdHeroFit, tokenHeroCandidates } from "@/utils/hero-fit"
@@ -101,7 +101,7 @@ const displayedTokenFiat = computed(() => {
 	return prices.tokenFiatLabel(tokenToDisplay.value, sides.publicRaw + sides.privateRaw)
 })
 
-const fiatOf = safeFiatOf((tb) => prices.tokenFiatMicro(tb.token, parseRawBalance(tb)))
+const fiatOf = prices.fiatOfRow
 const aggregate = computed(() => aggregateFiat(tokenBalances.value, fiatOf))
 
 /** Holdings that lack a price count as $0.00 under the "priced assets only" caption, unless every
@@ -178,11 +178,7 @@ function restartCap() {
 		capElapsed.value = true
 	}, HERO_PENDING_CAP_MS)
 }
-/** A wallet holding a price-mapped token waits for the first price answer; an empty or unpriced
- *  wallet has none to wait for. */
-const awaitingQuotes = computed(
-	() => showFiatValues.value && !prices.settled.value && tokenBalances.value.some((tb) => isPriceableHolding(tb, prices)),
-)
+const awaitingQuotes = computed(() => showFiatValues.value && awaitingFirstPriceAnswer(tokenBalances.value, prices))
 /** Holds too once the cap passes with no price answer: no quote is a missing price. */
 const noPrices = computed(() => showFiatValues.value && pricesUnavailable(tokenBalances.value, fiatOf, prices))
 const heroPending = computed(() => (isTotalUnsettled.value || awaitingQuotes.value) && !capElapsed.value)

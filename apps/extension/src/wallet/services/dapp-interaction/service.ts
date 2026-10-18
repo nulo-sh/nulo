@@ -28,7 +28,14 @@ import type { WindowManager } from "@/wallet/services/window-manager/window-mana
 import { parseCaipAccount, parseCaipChain, resolveNetworkByChainId } from "@/wallet/utils/caip"
 import { isFeeAmount } from "@nulo/wallet-core/jobs"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { type DraftOperation, type FeeSettingsReaders, isSelfPay, refuseUnknownPriorities } from "@nulo/wallet-bridge"
+import {
+	type DraftOperation,
+	type FeeSettingsReaders,
+	isAccountScoped,
+	isNetworkScoped,
+	isSelfPay,
+	refuseUnknownPriorities,
+} from "@nulo/wallet-bridge"
 import { assertSilentExecutable, materializeRequest, type MaterializeDeps } from "./materialize"
 import { knownContracts } from "./known-contracts"
 import { applyFeeSelection, type OperationApprovalDelta } from "./approval-delta"
@@ -717,48 +724,22 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		}
 		// validate permissions
 		for (const operation of operations) {
-			switch (operation.kind) {
-				case "register_contract":
-				case "register_sender":
-				case "aztec_getContractClassMetadata":
-				case "aztec_getContractMetadata":
-				case "aztec_getChainInfo":
-				case "aztec_registerSender":
-				case "aztec_getAddressBook":
-				case "aztec_registerContract": {
-					this.checkMethodPermission(session, operation.kind, operation.chain)
-					break
+			if (isNetworkScoped(operation)) {
+				this.checkMethodPermission(session, operation.kind, operation.chain)
+				if (operation.kind === "aztec_getPrivateEvents") this.checkScopesPermissions(session, operation.eventFilter.scopes)
+			} else if (isAccountScoped(operation)) {
+				const chain = operation.account.substring(0, operation.account.lastIndexOf(":"))
+				this.checkAccountPermission(session, operation.account)
+				this.checkMethodPermission(session, operation.kind, chain)
+				if (operation.kind === "send_transaction" || operation.kind === "simulate_transaction") {
+					operation.actions.forEach((x) => {
+						this.checkMethodPermission(session, x.kind, chain)
+					})
 				}
-				case "aztec_getPrivateEvents": {
-					this.checkMethodPermission(session, operation.kind, operation.chain)
-					this.checkScopesPermissions(session, operation.eventFilter.scopes)
-					break
-				}
-				case "register_token":
-				case "simulate_utility":
-				case "aztec_simulateTx":
-				case "aztec_executeUtility":
-				case "aztec_profileTx":
-				case "aztec_sendTx":
-				case "aztec_createAuthWit": {
-					const chain = operation.account.substring(0, operation.account.lastIndexOf(":"))
-					this.checkAccountPermission(session, operation.account)
-					this.checkMethodPermission(session, operation.kind, chain)
-					break
-				}
-				case "send_transaction":
-				case "simulate_transaction": {
-					const chain = operation.account.substring(0, operation.account.lastIndexOf(":"))
-					this.checkAccountPermission(session, operation.account)
-					this.checkMethodPermission(session, operation.kind, chain)
-					operation.actions.forEach((x) => this.checkMethodPermission(session, x.kind, chain))
-					break
-				}
-				default: {
-					// A kind no arm names would otherwise skip every permission check.
-					const _unhandled: never = operation
-					throw new Error("Unsupported operation kind")
-				}
+			} else {
+				// A kind the trait table does not name would otherwise skip every permission check.
+				const _unhandled: never = operation
+				throw new Error("Unsupported operation kind")
 			}
 		}
 		return session

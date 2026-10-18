@@ -1,6 +1,7 @@
-import { readFileSync, readdirSync } from "node:fs"
-import { join, relative, resolve } from "node:path"
+import { readFileSync } from "node:fs"
+import { join, relative } from "node:path"
 import { expect, test } from "vitest"
+import { REPO_ROOT, sourceFiles, TEST_FILE } from "../../../../scripts/type-roles/source-scan"
 
 /**
  * Auto-lock is a security timer: only approved sends defer it, through the one slot `ExecutionService`
@@ -8,19 +9,15 @@ import { expect, test } from "vitest"
  * defeats it, which is what review is for.
  */
 
-const SRC = resolve(__dirname, "../../..")
+const SRC = "apps/extension/src"
 
-function walk(dir: string): string[] {
-	return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-		const path = join(dir, entry.name)
-		if (entry.isDirectory()) return walk(path)
-		return /\.(ts|vue)$/.test(entry.name) && !/\.test\.ts$/.test(entry.name) ? [path] : []
-	})
-}
+const files = sourceFiles({ roots: [SRC], exts: ["ts", "vue"], skip: [TEST_FILE] }).map((file) => ({
+	path: relative(SRC, file),
+	text: readFileSync(join(REPO_ROOT, file), "utf8"),
+}))
 
 test("the auto-lock deferral has exactly one caller", () => {
-	const callers = walk(SRC)
-		.map((path) => ({ path: relative(SRC, path), text: readFileSync(path, "utf8") }))
+	const callers = files
 		.filter(({ text }) => /\.setExpiryDeferral\(/.test(text))
 		.map(({ path, text }) => [path, text.match(/\.setExpiryDeferral\(/g)?.length])
 	// The profile service's line is the forwarder to its session manager, not a second caller.

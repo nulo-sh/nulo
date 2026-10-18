@@ -171,7 +171,7 @@ Every arc is one PR against `dev`, not stacked (orchestrator rule D-orch-1). A1 
 
 - **The rule for every difference**. Each view keeps every behaviour a person can observe and every behaviour a test pins. A difference that only a sequence the services cannot produce would show converges onto the family rule, with its trace in the ledger.
 - **`useTokenBalanceSnapshot` becomes the family's one mirror**. Its rules are Home's: dedupe on Added, ignore an unseen Updated, unfiltered Deleted, refetch after the first reconnect, dirty refetch, a 2 s retry after a refused read, no loading state on a refresh. The parent still subscribes the handlers it takes (F9).
-- **Always**:
+- **Always** (the shipped option shapes are D507–D509; Send's Added did not converge):
   - `replaceOnAdded` (Holdings; the decision's deliberate difference);
   - `reset()`, which clears the fence, the retry and `connectsSeen` for a popup that is mounted once and shown many times;
   - `usePrices.fiatOfRow(row)`, which replaces the four pricing lambdas (Holdings' `?? 0n` is dead behind `safeFiatOf`).
@@ -201,13 +201,13 @@ Every arc is one PR against `dev`, not stacked (orchestrator rule D-orch-1). A1 
 
 ### A6 (#548): the journal family
 
-- **New `apps/extension/src/utils/journal-mirror.ts`**, pure reducers over `(rows, op, { accept, place: "front" | "back" })`:
+- **New `apps/extension/src/utils/journal-mirror.ts`**, pure reducers over `(rows, op, { accept, place: "front" | "back" })` (as shipped, acceptance is the mirror's gate and the reducers take `place` and `appendAdded`; D604–D607):
   - a known Updated is replaced in place, for every caller (today's rule: `activity.vue:97-99`, `RecentActivityView.vue:584-586`, `TokensView.vue:229-233`);
   - a new row (Added, or an unseen Updated) goes to the `place` edge. Activity and RecentActivityView use `front`, so a re-added known row moves to the front as today. TokensView and the store use `back`, so a re-added known row is replaced in place;
   - an unseen Updated is inserted (all four copies do this);
-  - an Updated that fails `accept` removes its row (Activity's non-terminal rule);
+  - an Updated that fails `accept` removes its row (Activity's non-terminal rule; History only, D605);
   - Deleted is unfiltered.
-- **New `useJournalMirror({ client, read, accept, place, onRecord, onSnapshot })`**, C1, for the three views. It returns:
+- **New `useJournalMirror({ client, read, accept, place, onRecord, onSnapshot })`**, C1, for the three views (no `client`, no `invalidate()`, D607). It returns:
   - `rows`;
   - `begin()`;
   - `resnapshot(run = begin())`, so RecentActivityView's sync scope watcher, its `onMounted` and its retry timer share one run as today (`RecentActivityView.vue:609-631`, `:741-756`, `:791`);
@@ -217,7 +217,7 @@ Every arc is one PR against `dev`, not stacked (orchestrator rule D-orch-1). A1 
 - `onRecord` fires only for an accepted Added or Updated, never for a Deleted or a refused event. RecentActivityView's three record clears match only account and token (`:290-294`), so a foreign event must not reach them. `onSnapshot` carries the recent-terminal scan (`:627`).
 - **Migrations**:
   - RecentActivityView keeps its 2 s retry and its flat task and cancel state (#152).
-  - Activity's terminal list and TokensView's `token_import` list gain the fence. TokensView pushes a duplicate when an Added arrives for a row already listed. Whether that happens is a release check: a snapshot can include a row whose Added is still being delivered (`operation-journal/service.ts:140-143`, `:326`, `:523-526`). If the check shows that overlap, TokensView keeps its append until OA-1 decides. Otherwise the ordering evidence is recorded and it converges onto replace-in-place (D603). No row changes its position because of the move: a reducer test and a TokensView case prove `[A, B]` stays `[A, B]` through an update of B.
+  - Activity's terminal list and TokensView's `token_import` list gain the fence (not built, D606). TokensView pushes a duplicate when an Added arrives for a row already listed. Whether that happens is a release check: a snapshot can include a row whose Added is still being delivered (`operation-journal/service.ts:140-143`, `:326`, `:523-526`). If the check shows that overlap, TokensView keeps its append until OA-1 decides. Otherwise the ordering evidence is recorded and it converges onto replace-in-place (D603). The check found the overlap: TokensView keeps its append (D604). No row changes its position because of the move: a reducer test and a TokensView case prove `[A, B]` stays `[A, B]` through an update of B.
 - **`app.store.ts`'s in-flight tracker** uses the reducers with `place: "back"`. It keeps its lifetime client, its suspend-on-lock and its revision settle loop.
 - **Tests**:
   - the reducer suite;
@@ -265,25 +265,25 @@ A pass is exit 0, with every named test green and none skipped that ran on base.
   - The phase gate.
   - Smoke on Chrome: `backup-roundtrip`, `security-backup`, `passkey-backup`, `own-window`.
   - Smoke on Firefox: `passkey-backup`, `passkey-toolbar-panel` (the WebAuthn and own-window path moved).
-- **A2.1** ✗. Network, prover on, on Chrome and Firefox: `opfs-storage`, `frozen-account-canary`, with the new check. Record each outcome and the Aztec line in `lessons/phase-2.md`. A2 holds two browser windows (premise and post-deletion), so it is an exception to once per arc.
-- **A2.2** ✗.
+- **A2.1** ✓ (pxe `6.0.0-rc.3`, pre-deletion tree at 9b599dae: Chrome 3/3 in 238 s, Firefox 3/3 in 346 s, no `pxe/` database on either). Network, prover on, on Chrome and Firefox: `opfs-storage`, `frozen-account-canary`, with the new check. Record each outcome and the Aztec line in `lessons/phase-2.md`. A2 holds two browser windows (premise and post-deletion), so it is an exception to once per arc.
+- **A2.2** ✓ (on the merged head 2bbf7340: lint, typecheck:all, test:all, check:plans, grep gate; network prover-on retry 0: Chrome `opfs-storage` + `frozen-account-canary` 3/3 in 379 s, Firefox 3/3 in 457 s at f34e1935, Chrome `stale-network-reset` 2/2 in 310 s at 5e6018dd; Codex clean in round 2).
   - G-fast and the phase gate.
   - Network on Chrome and Firefox: `opfs-storage`, `frozen-account-canary`.
   - Network on Chrome: `stale-network-reset` (the chain purge).
   - `git grep -nE "LEGACY_SWEEP|VERIFIED_ERASE|deleteDb|isLegacyPxeDb|chainDataDirPrefix" -- ':!implementations-plan'` prints nothing.
-- **A3** ✗. G-fast; the three page suites and `useSettingUpdate.test.ts`; the phase gate; smoke on Chrome: `appearance`, `settings-routes`, `sw-resilience`.
+- **A3** ✓ (on 2c674859, dev 138e0ded: lint, typecheck:all, test:all, check:plans; smoke Chrome 20/20 in 88 s, one standing `test.skip`; Codex clean in round 2). G-fast; the three page suites and `useSettingUpdate.test.ts`; the phase gate; smoke on Chrome: `appearance`, `settings-routes`, `sw-resilience`.
 - **A4** ✗.
   - G-fast.
   - `SecretCountdownClose.test.ts`; the phase gate (the design package included).
   - The pixel proof: every hash equal, every control unequal.
   - Smoke on Chrome and Firefox: `security-backup`, `keyboard-guards`.
-- **A5** ✗.
+- **A5** ✓ (on the merged head 88da43e8, dev e8da7b59: lint, typecheck:all, test, test:all, check:plans; smoke retry 0 Chrome `rows`, `navigation`, `token-list` 19/19 in 116 s, Firefox `token-list` 2/2 in 38 s; network Chrome `send-picker` 1/1 in 268 s; Codex clean in round 2).
   - G-fast.
   - The suites of the hook, `holdings`, `SelectTokenPopup`, `send`, `send.integration`, `BalanceView` and `TokensView`.
   - The phase gate.
   - Smoke on Chrome: `rows`, `navigation`, `token-list`. Smoke on Firefox: `token-list` (focus moves on a pick).
   - Network on Chrome: `send-picker`.
-- **A6** ✗.
+- **A6** ✓ (on 400c1583, dev 1cff707d: lint, typecheck:all, test:all, check:plans; smoke retry 0 Chrome `rows`, `navigation` 17/17 in 77 s; network Chrome prover on, retry 0, `cancel-mid-prove`, `in-flight-send-guard` 2/2 in 264 s; Codex clean in round 2).
   - G-fast.
   - The suites of the reducers, the mirror, `activity`, `RecentActivityView`, `TokensView` and `app.store.in-flight`.
   - The phase gate.
@@ -307,7 +307,13 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
 | D109 | A1's PR title says `via` and backticks the identifier: the planned title was 95 characters, and commitlint's `subject-case` refuses a bare camelCase word | the planned title | implementer |
 | D201 | the premise check lives in `frozen-account-canary` (proves, both browsers, every bump) | `delete-after-prove` (proverless in CI); a scratch probe | Opus O6 adopted |
 | D202 | IndexedDB-stimulus tests are re-driven through a rejecting OPFS step; tick pins are re-derived exactly | delete them | Codex C3 adopted |
+| D203 | at implementation: the canary's check pairs the empty `pxe/` list with a control (the `pxe` OPFS root exists after the proves); five stale "PXE IndexedDB" lines the plan did not list (`ARCHITECTURE.md:127`, `CLAUDE.md` § Persisted-storage, `backup-migration-registry.ts`, `contact/service.ts`, `network/service.test.ts`) name the OPFS store; `service.test.ts`'s two IndexedDB-only honesty cases go, since the re-driven teardown case already proves both clears reject on a failed removal | a bare empty-list assertion; leaving the five lines | implementer |
+| D204 | A2 review round 1 (Codex `findings` 1, Opus `findings` 3, neither found a behaviour difference): stage 6 refuses any OPFS root entry but `pxe` (an upstream fallback pool would pass a `pxe`-exists control) and any IndexedDB name but `keyval-store` (a `pxe/` prefix saw one regression only); "opens no IndexedDB" corrected, since bb.js's CRS cache lives there; one more stale "IDB" comment; the sweep log's doubled slash; two history comments rewritten as invariants | a `pxe/` prefix check with a `pxe`-exists control | Codex F1, Opus F1–F3 and nits |
+| D205 | A2's PR title lower-cases `OPFS` and backticks `IndexedDB`: commitlint's `subject-case` refuses both as planned | the planned title | implementer |
 | D301 | `updateSetting` only; the F-21 items are filed as a new issue | take F-21 | both agree |
+| D302 | at implementation: the composable's catch has no binding (Biome warns on an unused `catch (err)` in a `.ts` file); Developer drops its now-unused `useToast`; the F-21 items are #735, re-verified at `138e0ded` | a byte-identical `catch (err)` with a lint warning | implementer |
+| D303 | A3's PR title backticks the identifier and lower-cases the page names: commitlint's `subject-case` refuses the planned title | the planned title | implementer |
+| D304 | A3 review round 1 (Codex `clean`, Opus `findings` 1, no behaviour difference found by either): Developer's page case pins its whole cascade, and the composable's hand copy goes, keeping one re-entry case; the pre-existing double apply is closed known limit #736. Round 2: Codex `clean` | a composable copy of the page's cascade (stays green when the page drifts) | Opus F1 |
 | D401 | the design `Button` with its slot and local overrides by specificity | a new global CTA class; an overlay slot | both agree; Opus O9 and Codex C8 adopted |
 | D501 | one mirror per family | one generic mirror (outline B) | both agree |
 | D502 | the store uses the reducers, `back` | the full composable | both agree; Opus O7 adopted |
@@ -315,10 +321,22 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
 | D504 | Send keeps its read and failure card; it uses only the hook's handlers | Send calls `fetchTokenBalances()` (it would show 0 instead of Retry) | Codex C2, Opus O2 |
 | D505 | observable differences are options until OA-1; only unreachable sequences converge | converge by "race window" | Codex C5 and C10, Opus O11 adopted |
 | D506 | `accept` dropped: Select token's hidden gate is unreachable, since `close()` disconnects (`packages/extension-messaging/src/background/client.ts:96-115`) | keep it | Opus O8 |
+| D507 | at release (dev `46df7df9`): #678 and #707 changed no mirror rule, so recon's table holds. A finer read found two observable rules the plan converged: Holdings and Select token land a read over events that came meanwhile (`refetchWhenDirty: false`), and Send appends every add for its account (`added: "append"`), since token and balance ids are reused (`token/service.ts:462`, `token-balance/service.ts:266-274`). Both stay options and join OA-1 | converge them (plan § A5) | Codex consult `01a14c71`: D-a agree, D-g reject with two id-reuse paths, verified |
+| D508 | the option shapes: `added: "keep" \| "replace" \| "append"` replaces `replaceOnAdded`; one `loadingOnRefresh` carries both Holdings rows (loading on each read, the error over a loaded list); `onReconnect` carries Select token's blanking reload; `state` is optional for Send; Holdings and Select token gate a known-id update by scope in the parent (D503's wrapper) | a boolean per rule; a hook-side gate | Codex consult agree; implementer |
+| D509 | Select token's load without a whole scope calls `invalidate()` (fence and retry), not `reset()`, which would zero the connect count and skip a later reload; `dispose()` is `invalidate()` plus the listener; its `props.show` gates converge, since `close()` clears before the render (extends D506) | a new fetch-policy option; `reset()` | Codex consult agree |
+| D510 | converged by trace: Holdings' no-account read settles in the same task instead of a microtask later (base draws the loading line and removes it within one task, so nothing paints between); Holdings reads the chain id when a read starts, not after its await (a chain change between fires the scope watcher, which supersedes the read in the same task); Holdings' new-array writes and Select token's `splice` on delete become in-place writes and `filter` (no sequence lists an id twice there, and the consumers are computeds, which track both) | keep them | Codex consult; Opus round 1 |
+| D511 | A5 review round 1 (Codex `findings` 1, Opus `findings` 2 + nits, neither found a behaviour difference): the hook's comments say which rule is the default and the page comments that restated their options go (Codex F1); page cases now pin each parent's choice, so dropping any option from a view turns its suite red: Holdings' and Select token's no-retry and no-dirty-refetch, Select token's blanking reload, Send's `append` against both `keep` and `replace` (Opus F1, F2); the `mapRow` doc, a vacuous hook assertion and a test title naming a caller (Opus nits) | correct only the lessons' claim | Codex F1, Opus F1, F2, nits |
+| D512 | A5 review round 2 (Codex, resumed): `clean`; the fixes verified, production code unchanged since round 1 (both composables transpile identically). Loop converged after 2 rounds | — | Codex |
 | D601 | the mirror exposes `begin`/`resnapshot`/`invalidate`; `onRecord` only on accepted events; `onSnapshot` separate | a lifecycle owned only by `dispose()` | Codex C7, Opus O7 |
 | G | gate fixes: smoke armed build, exact specs and runners, `origin/dev...HEAD` plus `HEAD` | — | Codex C4, Opus O10; final pass F2 |
 | D602 | a known Updated stays in place for every caller; `place` decides only where a new row goes | move a known row to the front (reorders Home's imports) | final pass F1 |
 | D603 | TokensView's Added-on-a-listed-row converges only if A6's release check shows no snapshot/Added overlap; else it keeps its append pending OA-1 | assert the sequence cannot occur | final pass F3 |
+| D604 | at release (dev `1cff707d`): the overlap is plausible by trace. The journal fans an event out behind the profile facade lock after its write, and a read passes that lock before its storage read, so a locked operation holding it across I/O (`refreshSession`) lets a reply carrying the record post before its Added. TokensView keeps its append (`appendAdded`); the duplicate joins OA-1 | converge onto replace-in-place | Codex consult `01a14cd7`: agree, with a cleaner schedule |
+| D605 | a refused update drops its row on History only (`dropRefusedUpdate`); Home ignores it; joins OA-1. History's arm is reachable: the same deferral delivers an earlier in-flight update after a read that saw the record end. Home's rule keeps a card re-filed in place to another account or network (`refileOperationScope`) until its next read | the plan's rule for every caller (changes Home); History converged as unreachable (the draft's claim, since `terminalAt` is never cleared) | Codex consult rejected the draft's claim with a schedule, verified |
+| D606 | History and the token list do not gain the fence: every read lands as it answers (`supersede: false`); joins OA-1. Fenced, the first connect's read supersedes the mount's, and a refused one loses the rows the mount read listed until an event or a reconnect. Under OA-1's B they take the fence and Home's retry together | the plan's fence alone | Codex consult, verified |
+| D607 | at implementation: no `client` option and no exposed `invalidate()` (the hook subscribes nothing; every teardown is `dispose()`); acceptance is one gate before the reducers; `resnapshot` rejects to the caller (History propagates, Home retries on the same run, the token list swallows); Home's `read` does its captured-account check, filter and sort and answers `undefined` when the account moved, so its landing moves one microtask (every scope change bumps the fence synchronously); the store's `splice`/`push` become new arrays behind its suspend gate and revision count (D510's rule) | the plan's `client` and `invalidate` | Codex consult: agree; implementer |
+| D608 | A6 review round 1 (Codex `findings` 4, Opus `findings` 3 P3, neither found a behaviour difference): History's case uses one end time so its stable sort shows the mirror's order, pinning `front` and the re-add move; the store's replace case lands a `succeeded` copy (ignoring the add would pass the old one); the hook's `undefined` case keeps a non-empty list; the reducers' header says what `place` decides for an add; Home's reconnect docblock moves back onto the resnapshot; the token list's duplicate case is a `(BUG PIN)`; Home's re-file case reads again and the card goes | TokensView's dispose after its disconnect (matches the file's own `disposeBalances` order, no effect: `disconnect()` fires only `onDisconnected`) | Codex F1–F4, Opus F1, F2 |
+| D609 | A6 review round 2 (Codex, resumed): `clean`; F1–F4 resolved, the Opus-leg changes verified, no regression. Loop converged after 2 rounds | — | Codex |
 
 ## Delivery
 
@@ -332,7 +350,7 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
 - **Titles** (each at most 93 characters):
   - A1 ``refactor(backup): one run object for the full-backup export; config restore via `restoreRows` `` (D109)
   - A2 `refactor(pxe): retire the pre-OPFS IndexedDB cleanup, guard that no pxe store opens one`
-  - A3 `refactor(settings): one updateSetting for Display, Privacy and Developer`
+  - A3 ``refactor(settings): one `updateSetting` for display, privacy and developer`` (D303)
   - A4 `refactor(ui): the countdown Close renders the design Button, pixel-identical`
   - A5 `refactor(tokens): one balance mirror for Home, Holdings, Select token and Send`
   - A6 `refactor(activity): one journal mirror for Activity, Home and the token list`

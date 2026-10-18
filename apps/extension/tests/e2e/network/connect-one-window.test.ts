@@ -5,6 +5,7 @@ import type { AztecTestConfig } from "../fixtures/aztec"
 import { BROWSER, prepareKeys } from "../fixtures/browser"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { openPlayground, selectPgBundle, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { pollUntil } from "../fixtures/poll"
 import {
 	approveVerify,
 	type CreatedWindow,
@@ -83,14 +84,18 @@ async function showsCheck(page: Page): Promise<boolean> {
 
 /** Hold Enter at the focused Allow until the page shows the check, and a few repeats into it. */
 async function holdEnterThroughAllow(page: Page, created: () => Promise<CreatedWindow[]>): Promise<void> {
-	const deadline = Date.now() + 30_000
 	try {
 		await page.keyboard.down("Enter")
-		while (!(await showsCheck(page))) {
-			if (Date.now() > deadline) throw new Error("the connect window never showed the check")
-			await page.keyboard.down("Enter")
-			await sleep(100)
-		}
+		await pollUntil(
+			() => showsCheck(page),
+			(shown) => shown,
+			{
+				label: "the connect window showing the check",
+				timeoutMs: 30_000,
+				intervalMs: 100,
+				between: () => page.keyboard.down("Enter"),
+			},
+		)
 		for (let i = 0; i < 3; i++) {
 			await page.keyboard.down("Enter")
 			await sleep(100)

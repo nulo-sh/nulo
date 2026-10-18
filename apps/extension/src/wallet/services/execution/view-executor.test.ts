@@ -22,6 +22,7 @@ import { ContractInitializationStatus } from "@aztec-labs/aztec.js/wallet"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { FunctionSelector, FunctionType } from "@aztec-labs/stdlib/abi"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { UtilityExecutionResult } from "@aztec-labs/stdlib/tx"
 import { toAppFacingSimulationResult } from "./app-facing-results"
 import { simulationFixture } from "./app-facing-results.fixtures"
 import { ContractResolver } from "./contract-resolver"
@@ -434,7 +435,7 @@ describe("ViewExecutor.executeAztecProfileTx", () => {
 	})
 })
 
-describe("ViewExecutor.executeAztecExecuteUtility — the selector binding, with the call as the dispatcher parses it", () => {
+describe("ViewExecutor.executeAztecExecuteUtility — the selector binding and the answer, with the call as the dispatcher parses it", () => {
 	const TO = AztecAddress.fromBigIntUnsafe(0x70c3n)
 	const SYMBOL = { name: "symbol", functionType: FunctionType.UTILITY, isStatic: true }
 
@@ -503,6 +504,28 @@ describe("ViewExecutor.executeAztecExecuteUtility — the selector binding, with
 		contractResolverMocks.findFunctionBySelector.mockResolvedValueOnce(SYMBOL)
 		await executor.executeAztecExecuteUtility(op("symbol"))
 		expect(pxe.executeUtility).toHaveBeenCalledTimes(1)
+	})
+
+	test("the dApp's answer keeps the call's result and drops the stats", async () => {
+		const { executor, pxe } = harness()
+		contractResolverMocks.findFunctionBySelector.mockResolvedValueOnce(SYMBOL)
+		const full = new UtilityExecutionResult(
+			[new Fr(7)],
+			[{ data: [new Fr(8)], contractAddress: TO }],
+			9n,
+			UtilityExecutionResult.random().stats,
+		)
+		pxe.executeUtility.mockResolvedValueOnce(full as never)
+
+		const answer = await executor.executeAztecExecuteUtility(op("symbol"))
+
+		expect(full.stats).toBeDefined()
+		expect(answer.stats).toBeUndefined()
+		expect([answer.result, answer.offchainEffects, answer.anchorBlockTimestamp]).toEqual([
+			full.result,
+			full.offchainEffects,
+			full.anchorBlockTimestamp,
+		])
 	})
 
 	test("an absent name (a direct call; the wire schema requires one) runs the selector's function", async () => {

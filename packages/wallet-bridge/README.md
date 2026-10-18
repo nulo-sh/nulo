@@ -160,7 +160,10 @@ The message is a constant and the envelope names no field and no value. A
 dApp reads the contracts, calls, classes and flags it holds from its own
 `requestCapabilities` answer, which is the stored grant, and asks again with a
 wider manifest. The answer lists the session's accounts only when the grant
-sets `canGet`.
+sets `canGet`, and `getAccounts` needs it too. `canGet` controls listing, not
+which account a session acts as: a call's `from` must name a session account,
+and a session with a simulation grant learns the account it ran as from any
+simulation's results.
 
 The same envelope answers a call whose selector does not run the function its
 name claims. That check runs at execution, so this refusal can come after the
@@ -186,6 +189,18 @@ text:
 ```
 
 Simulating a registry call, its views included, is unaffected.
+
+A `createAuthWit` inner hash whose consumer is the signing account itself is
+refused before any window, whatever the grant, with the same code and its own
+text:
+
+```jsonc
+{
+  "code": 4100,
+  "message": "An authorization's consumer cannot be the account that signs it. Name the contract that consumes it.",
+  "data": { "walletErrorCode": "SCOPE_VIOLATION" }
+}
+```
 
 A call whose arguments the wallet API's schema refuses (a value that is not
 an address or a field, a call without its selector, a missing option, a

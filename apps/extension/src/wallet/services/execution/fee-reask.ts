@@ -12,13 +12,14 @@ import {
 	type QueuedFeePayer,
 	type QueuedFeeReask,
 } from "@nulo/wallet-core/jobs"
+import { FEE_READOUT_UNIT } from "@/utils/fee-estimation"
 import { isPrivateFpc } from "@/wallet/services/fpc/private-fpc-address"
 import { FpcType, type FpcIdentitySnapshot } from "@/wallet/services/fpc/spec"
 import type { QueuedFeeAnswers } from "./queued-fee-cap"
 
 /** A rise a dApp send takes without asking: at most `percent` of the approved figure, or under one
- *  unit of the six-decimal readout, so a question's "Was" and "Now" never print alike. */
-export const FEE_RISE_ASKS = { percent: 10n, atLeast: 10n ** 12n } as const
+ *  unit of the fee readout, so a question's "Was" and "Now" never print alike. */
+export const FEE_RISE_ASKS = { percent: 10n, atLeast: FEE_READOUT_UNIT } as const
 
 /** Whether a build's `fee` is far enough above the approved `ceiling` to ask again; a fall never asks. */
 export function feeRiseAsks(fee: string, ceiling: string): boolean {

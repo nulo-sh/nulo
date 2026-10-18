@@ -54,7 +54,7 @@ function makeFacade(rows: Tx[] = [], feeSpender?: string) {
 		logDebug: () => {},
 	})
 	const admit = vi.fn(async () => new AbortController().signal)
-	const estimateFee = vi.fn(async () => ({ maxFee: "1", maxFeeFormatted: "1", gasDetails: {} }))
+	const estimateFee = vi.fn(async () => ({ maxFee: "1", gasDetails: {} }))
 	const lane = { isSlotBusy: vi.fn(() => false) }
 	const facade = Object.assign(Object.create(ExecutionService.prototype), {
 		ensureInitialized: async () => {},

@@ -1,6 +1,7 @@
-import { readFileSync, readdirSync } from "node:fs"
-import { join, relative, resolve } from "node:path"
+import { readFileSync } from "node:fs"
+import { join, relative } from "node:path"
 import { describe, expect, test } from "vitest"
+import { REPO_ROOT, sourceFiles, TEST_FILE } from "../../../../scripts/type-roles/source-scan"
 
 /**
  * The Terms gate is only as good as two structural facts a refactor can quietly undo: every
@@ -8,17 +9,13 @@ import { describe, expect, test } from "vitest"
  * reasoned about. Textual on purpose — aliasing defeats it, which is what review is for.
  */
 
-const SRC = resolve(__dirname, "../../..")
+const SRC = "apps/extension/src"
 
-function walk(dir: string): string[] {
-	return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-		const path = join(dir, entry.name)
-		if (entry.isDirectory()) return walk(path)
-		return /\.(ts|vue)$/.test(entry.name) && !/\.test\.ts$/.test(entry.name) ? [path] : []
-	})
-}
+const files = sourceFiles({ roots: [SRC], exts: ["ts", "vue"], skip: [TEST_FILE] }).map((file) => ({
+	path: relative(SRC, file),
+	text: readFileSync(join(REPO_ROOT, file), "utf8"),
+}))
 
-const files = walk(SRC).map((path) => ({ path: relative(SRC, path), text: readFileSync(path, "utf8") }))
 const filesMatching = (pattern: RegExp) => files.filter((file) => pattern.test(file.text)).map((file) => file.path)
 
 describe("the Terms wall", () => {
@@ -37,6 +34,7 @@ describe("the Terms wall", () => {
 			"wallet/services/execution/execution-coordinator.ts",
 			"wallet/services/execution/service.ts",
 			"wallet/services/wallet-sdk/background.ts",
+			"wallet/services/wallet-sdk/discovery-flow.ts",
 		])
 	})
 

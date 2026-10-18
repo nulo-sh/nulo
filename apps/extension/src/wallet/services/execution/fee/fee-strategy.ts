@@ -277,6 +277,15 @@ export function assertCustomGasLimitsWithinCap(fee: FeeOptions | undefined, txsL
 	}
 }
 
+export type FinalizeGasOptions = {
+	readonly gasPadding: number
+	/** A cap already committed; absent, the call derives one or keeps an embedded payment's. */
+	readonly maxFeesPerGas?: GasFees
+	readonly customLimits?: FeeOptions
+	readonly feeMultiplier?: number
+	readonly txsLimits?: Gas
+}
+
 /** Final gas-limit + maxFee calculation after a simulation. FJ / FJWC /
  *  Embedded call this; FPC has a custom post-simulation path.
  *
@@ -298,12 +307,10 @@ export async function finalizeGasLimits(
 	node: AztecNode,
 	txRequest: TxExecutionRequest,
 	simulatedTx: TxSimulationResult,
-	gasPadding: number,
-	maxFeesPerGas?: GasFees,
-	customLimits?: FeeOptions,
-	feeMultiplier?: number,
-	txsLimits?: Gas,
+	opts: FinalizeGasOptions,
 ): Promise<void> {
+	const { gasPadding, customLimits, feeMultiplier, txsLimits } = opts
+	let maxFeesPerGas = opts.maxFeesPerGas
 	const multiplier = feeMultiplier ?? DEFAULT_FEE_MULTIPLIER
 	if (!maxFeesPerGas) {
 		// An embedded payment's own cap was set before the simulation, and an app's fee contract may

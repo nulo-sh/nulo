@@ -5,7 +5,7 @@ import { useWalletTxEstimates } from "./useWalletTxEstimates"
 
 type P = { network: string; fee: number }
 
-const estimateFor = (p: P) => ({ maxFee: `${p.network}:${p.fee}`, maxFeeFormatted: "1", gasDetails: {} }) as unknown as TransferFeeEstimate
+const estimateFor = (p: P) => ({ maxFee: `${p.network}:${p.fee}`, gasDetails: {} }) as unknown as TransferFeeEstimate
 
 function setup(initial: Record<number, P | undefined> = { 0: { network: "A", fee: 1 } }) {
 	const inputs = ref<Record<number, P | undefined>>({ ...initial })

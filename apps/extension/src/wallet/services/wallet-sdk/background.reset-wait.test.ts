@@ -85,18 +85,21 @@ describe("a running reset holds dApp requests", () => {
 		const assertCurrent = vi.fn(async () => {})
 		const sendResponse = vi.fn(async () => {})
 		const done = handleWalletMessage(
-			SESSION,
-			{ messageId: "m1", type: "getAccounts", args: [] } as never,
-			bindLiveSession({ sendResponse, terminateSession: vi.fn(), getSession: () => SESSION }, SESSION),
-			{ dispatch } as never,
-			{ captureExecutionFence: async () => ({ profileId: "p1" }) } as never,
-			{} as never,
-			new Map([["s1", "p1"]]),
-			{ current: () => 0 } as never,
-			{ log: vi.fn() } as never,
-			{ assertCurrent },
-			undefined,
-			gate,
+			{
+				session: SESSION,
+				message: { messageId: "m1", type: "getAccounts", args: [] } as never,
+				live: bindLiveSession({ sendResponse, terminateSession: vi.fn(), getSession: () => SESSION }, SESSION),
+			},
+			{
+				dispatcher: { dispatch } as never,
+				profileService: { captureExecutionFence: async () => ({ profileId: "p1" }) } as never,
+				operationJournal: {} as never,
+				sessionProfiles: new Map([["s1", "p1"]]),
+				switchEpoch: { current: () => 0 } as never,
+				logger: { log: vi.fn() } as never,
+				legal: { assertCurrent },
+				resetRun: gate,
+			},
 		)
 		return { done, dispatch, assertCurrent, sendResponse }
 	}

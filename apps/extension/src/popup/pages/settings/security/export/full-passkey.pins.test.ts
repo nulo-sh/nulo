@@ -10,6 +10,7 @@ import { EncryptionKey, PasskeyCredential, verifyBackupMac } from "@nulo/wallet-
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { installChromeStorage } from "../../../../../../tests/helpers/chrome-storage-mock"
 import { pressOn } from "../../../../../../tests/helpers/press-key"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
@@ -177,11 +178,7 @@ vi.mock("@/composables/usePasskeyCeremony", () => ({
 }))
 
 beforeEach(() => {
-	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
-	if (c) {
-		c.storage.local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }
-		c.storage.onChanged = { addListener: vi.fn(), removeListener: vi.fn() }
-	}
+	installChromeStorage({}, { persist: false })
 	vi.clearAllMocks()
 	captureRunFence.mockReset()
 	captureRunFence.mockResolvedValue(FENCE)
@@ -387,6 +384,18 @@ describe("export/full.vue — imported accounts that will not restore", () => {
 		const wrapper = await run({ dekReplaced: true, unopenedImportedKeys: 2 })
 		expect(wrapper.text()).toContain(LOST)
 		expect(wrapper.text()).not.toContain(UNOPENED)
+	})
+
+	it.each([
+		["password", passwordExport],
+		["passkey", passkeyExport],
+	] as const)("a %s export counts an imported account on chain 1337, not one on the local network", async (_kind, run) => {
+		const row = (chainId: number) => ({ profileId: "p1", chainId, address: `0x${chainId}`, encryptedSigningKey: "sealed" })
+		const account = (chainId: number) => ({ profileId: "p1", chainId, address: `0x${chainId}`, type: 1, name: "Imp" })
+		const wrapper = await run({ importedKeyRows: [row(1337), row(0)], accounts: [account(1337), account(0)] })
+		expect(wrapper.get("[data-testid='backup-imported-network-banner']").text()).toContain(
+			"1 imported account is on a network you added.",
+		)
 	})
 
 	it("a passkey file carries the account and key rows the count was made over", async () => {
