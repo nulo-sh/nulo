@@ -9,6 +9,8 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import SectionLabel from "@nulo/design/ui/SectionLabel.vue"
 import AddressDisplay from "@/components/AddressDisplay.vue"
+import DottedTerm from "@/components/composite/DottedTerm.vue"
+import { GLOSSARY } from "@/utils/glossary"
 import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
 import type { DecodedCall } from "@/wallet/services/execution/client"
@@ -28,6 +30,7 @@ import {
 	VAULT,
 } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
+import { shownText } from "../../../../tests/helpers/shown-text"
 
 const lookups = vi.hoisted(() => ({ accounts: [] as { name: string; address: string }[] }))
 vi.mock("@/utils/core", () => ({ managers: { contact: { getContactByAddress: vi.fn(async () => null) } } }))
@@ -54,6 +57,9 @@ const mountFixture = async () => mountCard({ feeEstimate: feeEstimateWith(AUTHWI
 
 const read = (w: VueWrapper, testid: string): string[] => w.findAll(`[data-testid="${testid}"]`).map((el) => el.text().replace(/\s+/g, " "))
 const toggle = (w: VueWrapper) => w.get('[data-testid="execute-op-details-toggle"]')
+const advice = (w: VueWrapper) => w.findAll('[data-testid$="-unverified-advice"]')
+const ADVICE = "Check what the app says this does before approving."
+const UNREAD = (reason: "unknown-contract" | "unknown-function"): DecodedCall => ({ kind: "undecoded", reason })
 
 /** A one-call send of `name(args)` on USDC, decoded as the Token interface spells `roles`. */
 const tokenCall = (name: string, args: string[], roles: string[], extra: Record<string, unknown> = {}) => {
@@ -89,7 +95,9 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		expect(w.findAll('[data-testid="execute-op-call-line"]')[0]!.element.closest('[data-call-index="1"]')).not.toBeNull()
 		const unreadable = w.get('[data-call-index="2"] [data-testid="execute-op-summary-unverified-args"]')
 		expect(unreadable.text()).toContain("Can't read the arguments")
-		expect(unreadable.text()).toContain("Nulo doesn't have this contract's interface, so it can't read the arguments.")
+		expect(shownText(unreadable.get('[data-testid="execute-op-summary-unverified-reason"]').element)).toBe(
+			"Nulo doesn't have this contract's interface.",
+		)
 		expect(read(w, "execute-discovered-authwit-line")).toEqual([
 			`Lets ${trimAddress(HUB)} move 25 USDC from Main to ${trimAddress(HUB)}`,
 			`Lets ${trimAddress(HUB)} call Withdraw For on ${trimAddress(VAULT)}`,
@@ -116,6 +124,93 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		expect(w.findAll('[data-testid="execute-op-payload-row"]')).toHaveLength(3)
 		expect(w.findAll('[data-testid="execute-discovered-authwit-details"]')).toHaveLength(2)
 		expect(w.findAll('[data-testid="execute-op-summary-call"]')).toHaveLength(3)
+	})
+
+	test("three unreadable calls then a readable one: each says why with interface dotted, and the advice reads once, under the third", async () => {
+		const [exit, transfer, checkpoint] = (fixtureOp() as unknown as { exec: { calls: unknown[] } }).exec.calls
+		const { decodedCalls } = await decodeFixture()
+		const op = { ...(fixtureOp() as object), exec: { calls: [checkpoint, checkpoint, exit, transfer] } }
+		const decodes = [UNREAD("unknown-contract"), UNREAD("unknown-contract"), UNREAD("unknown-function"), decodedCalls[1]]
+		const w = await mountCard({ decodedCalls: decodes }, op)
+
+		const rows = w.findAll('[data-testid="execute-op-summary-call"]')
+		expect(rows.map((row) => row.find('[data-testid="execute-op-summary-unverified-warning"]').exists())).toEqual([
+			true,
+			true,
+			true,
+			false,
+		])
+		expect(rows.slice(0, 3).map((row) => shownText(row.get('[data-testid="execute-op-summary-unverified-reason"]').element))).toEqual([
+			"Nulo doesn't have this contract's interface.",
+			"Nulo doesn't have this contract's interface.",
+			"This function isn't in the interface Nulo has.",
+		])
+		const terms = w.findAllComponents(DottedTerm)
+		expect(terms.map((t) => [t.props("term"), shownText(t.element)])).toEqual(Array(3).fill(["interface", "interface"]))
+		const termIds = w.findAll('[data-testid="execute-op-summary-interface-term"]')
+		expect(termIds).toHaveLength(3)
+		for (const term of termIds) {
+			expect(term.attributes("tabindex")).toBe("0")
+			expect(w.element.querySelector(`[id="${term.attributes("aria-describedby")}"]`)?.textContent).toBe(
+				GLOSSARY.interface.definition,
+			)
+		}
+		expect(advice(w).map((a) => a.text())).toEqual([ADVICE])
+		expect(advice(w)[0]!.element.closest('[data-testid="execute-op-summary-call"]')?.getAttribute("data-call-index")).toBe("2")
+
+		await toggle(w).trigger("click")
+		expect(advice(w)).toHaveLength(1)
+		expect(advice(w)[0]!.element.closest('[data-testid="execute-op-summary-call"]')?.getAttribute("data-call-index")).toBe("2")
+		expect(w.findAll('[data-testid="execute-op-unverified-reason"]').map((r) => shownText(r.element))).toEqual([
+			"Nulo doesn't have this contract's interface.",
+			"Nulo doesn't have this contract's interface.",
+			"This function isn't in the interface Nulo has.",
+		])
+	})
+
+	test("an unreadable call and an unreadable authorization: the advice stays under the call, with the details open", async () => {
+		const w = await mountCard({ feeEstimate: feeEstimateWith(AUTHWITS), ...(await decodeFixture({ vaultDecoded: false })) })
+		await toggle(w).trigger("click")
+		expect(w.find('[data-testid="execute-discovered-authwit-unverified-reason"]').exists()).toBe(true)
+		expect(advice(w)).toHaveLength(1)
+		expect(advice(w)[0]!.element.closest('[data-testid="execute-op-summary-call"]')?.getAttribute("data-call-index")).toBe("2")
+	})
+
+	test("every call read: no advice and no dotted interface, until an unreadable authorization takes the advice, the last one still open", async () => {
+		const [, transfer] = (fixtureOp() as unknown as { exec: { calls: unknown[] } }).exec.calls
+		const { decodedCalls, decodedAuthwits } = await decodeFixture()
+		const op = { ...(fixtureOp() as object), exec: { calls: [transfer] } }
+		const readable = await mountCard(
+			{ feeEstimate: feeEstimateWith(AUTHWITS.slice(0, 1)), decodedCalls: [decodedCalls[1]], decodedAuthwits },
+			op,
+		)
+		await toggle(readable).trigger("click")
+		expect(readable.find('[data-testid$="-unverified-args"]').exists()).toBe(false)
+		expect(readable.findAllComponents(DottedTerm)).toHaveLength(0)
+		expect(advice(readable)).toHaveLength(0)
+		readable.unmount()
+
+		const vault = AUTHWITS[1]!
+		const second = { ...vault, messageHash: `0x${"3c".repeat(32)}` }
+		const w = await mountCard(
+			{
+				feeEstimate: feeEstimateWith([vault, second]),
+				decodedCalls: [decodedCalls[1]],
+				decodedAuthwits: new Map([
+					[vault.messageHash, UNREAD("unknown-contract")],
+					[second.messageHash, UNREAD("unknown-contract")],
+				]),
+			},
+			op,
+		)
+		await toggle(w).trigger("click")
+		const adviceIn = () => advice(w).map((a) => a.element.closest("[data-message-hash]")?.getAttribute("data-message-hash"))
+		expect(adviceIn()).toEqual([second.messageHash])
+		const closers = () => w.findAll('[data-testid="execute-discovered-authwit-toggle"]')
+		await closers()[1]!.trigger("click")
+		expect(adviceIn()).toEqual([vault.messageHash])
+		await closers()[1]!.trigger("click")
+		expect(adviceIn()).toEqual([second.messageHash])
 	})
 
 	test("a call still being read says so under its own name; once read, the transfer takes the wallet's label and line", async () => {

@@ -3812,7 +3812,7 @@ describe("dApp-session rows under same-phrase SIBLINGS — the real ProfileServi
 		const { api, profiles, sessions, p1, p2 } = await makeSiblings()
 		await profiles.lockActiveProfile()
 		await profiles.unlockProfile(p1.id, "pass1234")
-		const row = await sessions.addDappSession({ name: "dApp", url: "https://dapp.example" }, [], [], 0 as never, "1")
+		const row = await sessions.addDappSession({ name: "dApp", url: "https://dapp.example" }, [], [], 0 as never, "1", p1.id)
 		const [key] = await rowKeys(api)
 		const authentic = (await api.storage.local.get(key))[key] as string
 		expect(JSON.parse(authentic).profileId).toBe(p1.id)

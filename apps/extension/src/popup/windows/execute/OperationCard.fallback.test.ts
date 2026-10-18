@@ -12,6 +12,7 @@ import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import OperationCard from "./OperationCard.vue"
+import { shownText } from "../../../../tests/helpers/shown-text"
 
 vi.mock("@/utils/core", () => ({ managers: { contact: { getContactByAddress: vi.fn(async () => null) } } }))
 // The real store's setup opens chrome.storage; the card only needs its account list.
@@ -246,7 +247,7 @@ describe("OperationCard — the ABI decode and the raw fallback", () => {
 		const block = one(w, "execute-op-unverified-args")
 		expect(block.attributes("data-reason")).toBe("unknown-contract")
 		expect(one(w, "execute-op-unverified-warning").text()).toContain("Can't read the arguments")
-		expect(block.text()).toContain("doesn't have this contract's interface")
+		expect(shownText(one(w, "execute-op-unverified-reason").element)).toBe("Nulo doesn't have this contract's interface.")
 		expect(one(w, "execute-op-raw-args").exists()).toBe(false)
 		expect(w.text()).not.toContain(TO)
 		const toggle = one(w, "execute-op-raw-toggle")
