@@ -1,7 +1,7 @@
 ---
 plan: authwit-intent-1
 tier: light
-status: approved 2026-10-17 (orchestrator); arc 1 implemented, in review
+status: completed (#738), awaiting merge
 issues: none; the PR closes nothing
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 4ad2a80d
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18
+- **Status:** completed. One PR against `dev`, #738, carries the arc and this close-out; merging it is the orchestrator's call.
+- **Shipped:** #738. `createAuthWit` refuses an inner-hash intent whose consumer is the signing account, as `OwnAccountIntentRefusalError` with its own dApp text (phase 1). The Fee Juice claim selector pin runs only in wallet-bridge's node runner and checks the claim upstream emits (phase 2, D7).
+- **Owner asks:** OA-1 shipped as written; OA-2 shipped as "no History row".
+- **Dropped:** none.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` is at 8188 of 8192 bytes, and this arc's notes ([lessons/phase-1.md](lessons/phase-1.md), [lessons/phase-2.md](lessons/phase-2.md)) are plan-local.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # authwit-intent-1: a dApp's inner-hash intent never names the account that signs it
 
