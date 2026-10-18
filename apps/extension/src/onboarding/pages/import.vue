@@ -80,6 +80,7 @@ const {
 	unrestoredNetworkNames,
 	retryFailedAgain,
 	hasOtherRestoreErrors,
+	heldAccounts,
 	isRetryingAccountState,
 	retryAccountState,
 	continueImport,
@@ -177,6 +178,7 @@ onBeforeUnmount(() => {
 			:isRestoreHasErrors="isRestoreHasErrors"
 			:unrestoredNetworks="unrestoredNetworkNames"
 			:hasOtherErrors="hasOtherRestoreErrors"
+			:heldAccounts="heldAccounts"
 			:retryFailedAgain="retryFailedAgain"
 			:error="error"
 			:isCopied="isCopied"

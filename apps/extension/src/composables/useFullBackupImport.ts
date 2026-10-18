@@ -53,6 +53,7 @@ import {
 	retryAccountStateStage,
 	retryReplacedRows,
 	runRestoreFailurePath,
+	settleHeldAccounts,
 	verifyPasskeyBody,
 	INTEGRITY_FAILED,
 } from "./full-backup-restore"
@@ -63,6 +64,7 @@ export type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import { isNewPasswordValid } from "@/utils/password"
+import type { HeldAccount } from "@/components/composite/import/restore-warning"
 
 /** The full-backup envelope: the checksum, a passkey body's MAC of it, and the checksum-covered body. */
 export type FullBackupEnvelope = {
@@ -275,6 +277,8 @@ export interface UseFullBackupImportResult {
 	retryFailedAgain: Ref<boolean>
 	/** The error log holds a row that no Retry replaces. */
 	hasOtherRestoreErrors: Ref<boolean>
+	/** The imported accounts the finished import kept for networks the new profile lacks. */
+	heldAccounts: Ref<HeldAccount[]>
 	/** A Retry is running; Continue and View Errors wait for it. */
 	isRetryingAccountState: Ref<boolean>
 	/**
@@ -385,6 +389,7 @@ async function executeRestore(
 ): Promise<{
 	profile: { id: string; restoreError?: unknown }
 	networks: RestoredNetwork[]
+	heldAccounts: HeldAccount[]
 	accountStateRetry?: AccountStateRetryContext
 } | null> {
 	const { data, backup } = validated
@@ -435,6 +440,7 @@ async function executeRestore(
 		accountService,
 		profileService,
 		profileId: newProfile.id,
+		networks: nets.seeded,
 		io,
 	})
 	if (accounts.kind !== "proceed") {
@@ -454,24 +460,9 @@ async function executeRestore(
 	io.setStage("restoring:services")
 	await restoreServiceSlices(data, sliceClients, scratch.createdProfileId, io)
 
-	// Reconcile imported accounts BEFORE activation: an epoch-4 backup carrying a type-1
-	// Account row with no matching key row would restore as a zombie that fails at signing —
-	// drop it now (both slices have landed). Fail-fast, deliberately uncaught: a
-	// reconcile/purge failure escapes to the outer catch, which (pre-finalize) rolls the
-	// created profile back — the import must not commit with orphaned balance rows. Inside
-	// the call, registered dependents (token balances) are purged BEFORE the Account rows.
-	// The accounts stage closed this client; the call reconnects it, and nothing uses it after,
-	// so it is closed again once the call settles — including on the failure path above.
-	let droppedImported: Awaited<ReturnType<typeof accountService.reconcileImportedAccounts>>
-	try {
-		droppedImported = await accountService.reconcileImportedAccounts(newProfile.id)
-	} finally {
-		accountService.disconnect()
-	}
-	if (droppedImported.length > 0) {
-		// Scope COUNT only — the tuples carry on-chain account addresses.
-		console.warn(`[import] dropped ${droppedImported.length} imported account(s) with no key row`)
-	}
+	// Before activation: a type-1 Account row with no key row would restore as a zombie that
+	// fails at signing.
+	const heldAccounts = await settleHeldAccounts(accountService, newProfile.id, accounts.held, io)
 
 	// Late activation: open the session NOW that all backup data is in storage. This emits
 	// `onActiveProfileChanged` → app.vue's handler → `getOrInitNetworks`/`ensureDefaultAccount`
@@ -495,7 +486,7 @@ async function executeRestore(
 	const tailDeadlineAt = Date.now() + IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS
 	const tail = await restoreAccountStateStage(data, nets.seeded, networkService, io, restoreRun, profileService, tailDeadlineAt)
 	await refreshRestoredTokensStage(restoreRun.fence, tailDeadlineAt)
-	return { profile: newProfile, networks: nets.seeded, accountStateRetry: tail.retry }
+	return { profile: newProfile, networks: nets.seeded, heldAccounts, accountStateRetry: tail.retry }
 }
 
 /** The composable's reactive state, bundled for the module-level flow functions. */
@@ -509,6 +500,7 @@ interface ImportRefs {
 	parsedBackupName: Ref<string | null>
 	/** The networks the last restore seeded; error surfaces name rows by them. */
 	restoredNetworks: ShallowRef<RestoredNetwork[]>
+	heldAccounts: ShallowRef<HeldAccount[]>
 	retryFailedAgain: Ref<boolean>
 	/** What a Retry replays; a reset, a new import and an unmount drop it. */
 	accountStateRetry: ShallowRef<AccountStateRetryContext | null>
@@ -659,12 +651,14 @@ async function runRestoreBackup(
 		}
 		state.restoreErrorLog.value = {}
 		state.restoredNetworks.value = []
+		state.heldAccounts.value = []
 		const restored = await executeRestore(validated, scratch, io, { profileService, networkService, opts })
 		if (!restored) return
 
 		state.restoreStatus.value = "finished"
 		state.restoreStage.value = "finished"
 		state.restoredNetworks.value = restored.networks
+		state.heldAccounts.value = restored.heldAccounts
 		if (!guards.hasErrors()) {
 			await completeAfterRestore(opts, restored.profile)
 			return
@@ -771,6 +765,7 @@ function createImportRefs(): ImportRefs {
 		importedProfile: ref<unknown>(null),
 		parsedBackupName: ref<string | null>(null),
 		restoredNetworks: shallowRef<RestoredNetwork[]>([]),
+		heldAccounts: shallowRef<HeldAccount[]>([]),
 		retryFailedAgain: ref(false),
 		accountStateRetry: shallowRef<AccountStateRetryContext | null>(null),
 		retryingAccountState: shallowRef<AccountStateRetryContext | null>(null),
@@ -788,6 +783,7 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 		importedProfile,
 		parsedBackupName,
 		restoredNetworks,
+		heldAccounts,
 		retryFailedAgain,
 		accountStateRetry,
 		retryingAccountState,
@@ -844,6 +840,7 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 		importedProfile.value = null
 		parsedBackupName.value = null
 		restoredNetworks.value = []
+		heldAccounts.value = []
 		dropAccountStateRetry(state)
 	}
 
@@ -861,6 +858,7 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 		unrestoredNetworkNames,
 		retryFailedAgain,
 		hasOtherRestoreErrors,
+		heldAccounts,
 		isRetryingAccountState,
 		retryAccountState,
 		continueImport,
