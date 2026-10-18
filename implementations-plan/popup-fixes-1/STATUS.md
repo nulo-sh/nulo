@@ -5,3 +5,4 @@
 - 2026-10-18: round 1 back (Codex and Opus, both conditional approve); OA-1 and OA-2 filed; plan split into two arcs; final fresh Codex pass sent.
 - 2026-10-18: final fresh Codex pass approve; OA-1 B heights corrected; plan committed; arc 1 auto-continues.
 - 2026-10-18: arc 1 phases 1-4 green on Chrome and Firefox; Codex fix loop converged (round 3 approve); #593 closed as a known limit (comment, `known-limit`, not planned).
+- 2026-10-18: origin/dev merged; final gates green on both browsers; pictures committed.
