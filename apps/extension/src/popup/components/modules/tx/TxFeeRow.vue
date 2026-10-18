@@ -57,11 +57,9 @@ const priced = (raw) => feeDisplay(raw, props.usdPerFeeJuice)
 		<Flex v-if="expanded && gasBreakdown" wide direction="column" gap="6" :class="$style.fee_breakdown">
 			<div :class="$style.fee_grid">
 				<span :class="$style.fee_grid_key">L2 gas</span>
-				<span :class="[$style.fee_grid_num, $style.fee_grid_aux]">{{ gasBreakdown.l2Gas }}</span>
 				<FeeAmount :display="priced(gasBreakdown.l2Cost)" :class="[$style.fee_grid_num, $style.fee_grid_val]" :usdClass="$style.fee_grid_aux" />
 
 				<span :class="$style.fee_grid_key">DA gas</span>
-				<span :class="[$style.fee_grid_num, $style.fee_grid_aux]">{{ gasBreakdown.daGas }}</span>
 				<FeeAmount :display="priced(gasBreakdown.daCost)" :class="[$style.fee_grid_num, $style.fee_grid_val]" :usdClass="$style.fee_grid_aux" />
 			</div>
 			<Flex v-if="estimatedFee" wide justify="between" align="center" :class="$style.fee_breakdown_divider">
@@ -118,7 +116,7 @@ const priced = (raw) => feeDisplay(raw, props.usdPerFeeJuice)
 
 .fee_grid {
 	display: grid;
-	grid-template-columns: auto 1fr auto;
+	grid-template-columns: 1fr auto;
 	gap: 4px 10px;
 	align-items: center;
 }

@@ -2,7 +2,6 @@ import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { OriginType } from "@/wallet/services/transaction/client"
 import { FEE_METHODS } from "@/utils/tx-enrichment"
 import { isPrivateFpc } from "@/wallet/services/fpc/private-fpc-address"
-import { formatGas } from "@/utils/fee-estimation"
 
 export interface GasDetailsRaw {
 	feePerL2Gas: string | bigint
@@ -16,8 +15,6 @@ export interface GasDetailsRaw {
 /** The gas limits already hold the teardown's, so the L2 and DA lines alone add up to the fee limit.
  *  The costs stay in base units for the row to price. */
 export interface GasBreakdown {
-	l2Gas: string
-	daGas: string
 	l2Cost: bigint
 	daCost: bigint
 }
@@ -25,8 +22,6 @@ export interface GasBreakdown {
 export function buildGasBreakdown(gd: GasDetailsRaw | undefined | null): GasBreakdown | null {
 	if (!gd) return null
 	return {
-		l2Gas: formatGas(Number(gd.l2GasLimit)),
-		daGas: formatGas(Number(gd.daGasLimit)),
 		l2Cost: BigInt(gd.l2GasLimit) * BigInt(gd.feePerL2Gas),
 		daCost: BigInt(gd.daGasLimit) * BigInt(gd.feePerDaGas),
 	}
