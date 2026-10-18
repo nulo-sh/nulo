@@ -1,7 +1,7 @@
 ---
 plan: landing-explainer-1
 tier: light
-status: approved 2026-10-17; arc 1 open as draft (#723); arc 2 implemented 2026-10-18, a draft until the owner approves the clips (OA-8)
+status: closed (arc 2's PR carries the close-out; the merge closes the plan); arc 1 merged as #723
 issues: "#588 (Refs only: onboarding-3 closes it; no arc here closes an issue)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,23 @@ base: origin/dev at 2c0df3b9
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** closed. Arc 1 merged as #723; arc 2's PR carries this close-out, a draft until the owner approves the clips (OA-8), and its merge closes the plan.
+- **Shipped:** the page `nulo.sh/how-aztec-works` with three narrated clips over their text versions.
+  - Each clip is an SVG stage drawn from the narration's word timings, with a captions line, a WebVTT track and a transcript (D10 to D15).
+  - Media is self-hosted and hashed under `/assets/`, fetched only on a press, 2.4 MB in all; the CSP is unchanged.
+  - Narration: 2,179 of the 15,000-character cap, one take per clip.
+  - CI fails a landing build that drops the page (D4).
+- **Known limits:** none.
+- **Open items:**
+  - OA-8 (approve the clips) and OA-9 (chapters; A, none, ships if unanswered) are answered on the PR before it leaves draft.
+  - #722 stays open: the wallet's `HOW_AZTEC_WORKS_URL` repoint ships with onboarding-3, which has not landed.
+  - Before ready, on the OA-6 preview: the MP3s answer range requests (206) and the tracks are served as `text/vtt`; `vite preview` cannot show either.
+- **Dropped:** chapters (D13, OA-9 A). **Lessons:** none promoted. Each gotcha is stated at the code it guards (`vite.config.ts`'s inline limit, the player's `networkState` read, the card's `min-width: 0`), and `lessons.md` is at its budget (8188 of 8192 bytes). Detail: `lessons/phase-3.md`.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # landing-explainer-1: the How Aztec works page on nulo.sh
 
@@ -97,7 +114,7 @@ Assumptions: F1 to F10, I1. Steps:
 
 Owner picks (2026-10-17/18, quoted by id): P42-01, P42-02, P42-03 = A, "Approve the script and the card's text as written"; P42-04 = A, "The explainer skill: drawn scenes in the landing's look; your yes, your cap and voice or captions in the note", and in chat: "regarding voice: just use the voice we have set on our eleven labs file". Cap, set by the orchestrator under that yes: 15,000 ElevenLabs characters.
 
-Done: narration outside the repo (D6), 2,179 characters in one take per clip (Private balances 58.9 s, Proofs 50.7 s, Fees 40.6 s); the player and scenes (D10 to D15); each clip at the top of its card over the text version; the "3 clips" eyebrow; `README.md`. Media 2.4 MB in all. Tests: `timeline.test.ts` (cue lookup per scene, caption lines) and `clips.test.ts` (one player per clip, every cue spoken, preload none and no autoplay, the track equals the captions, the transcript equals the narration, media within 20 MB); each was proved red by a mutation. Gate results: `lessons/phase-3.md`. The clips go to the owner as OA-8.
+Done: narration outside the repo (D6), 2,179 characters in one take per clip (Private balances 58.9 s, Proofs 50.7 s, Fees 40.6 s); the player and scenes (D10 to D15); each clip at the top of its card over the text version; the "3 clips" eyebrow; `README.md`. Media 2.4 MB in all. Tests: `timeline.test.ts` (cue lookup per scene, caption lines), `clips.test.ts` (one player per clip, every cue spoken, preload none and no autoplay, the track equals the captions, the transcript equals the narration, media within 20 MB) and `scenes.test.ts` (every scene swept forward and backward draws the same picture, with finite values, and moves); each was proved red by a mutation. The clips draw the wallet's glyphs as dev's #790 restyled them (Tabler outlines). Gate results: `lessons/phase-3.md`. The clips go to the owner as OA-8.
 
 ## Security & Adversarial Considerations
 
@@ -130,7 +147,7 @@ Done: narration outside the repo (D6), 2,179 characters in one take per clip (Pr
 ## Delivery
 
 - **Arc 1:** branch `worktree-landing-explainer-1`, `gh pr create --draft --base dev` after Phase 1's gate and the Codex loop. Title: `feat(landing): the how aztec works page at nulo.sh/how-aztec-works` (66 characters). Body: what and why; the picks P33-03 = A and P39-11 = A with the owner's note verbatim; the final URL `https://nulo.sh/how-aztec-works`, stated once; the validation runs; dark screenshots at desktop and phone width; OA-6 A's command, with the note that the preview appears after the owner runs it; OA-7's head copy, quoted for the owner to flip; `Refs #588`; "Draft until the owner approves the explainers (OA-1 to OA-3)". No labels: no extension e2e lane applies. onboarding-3's landing issue, #722, asks for the page with its clips and the wallet repoint, so arc 1 says `Refs #722`. Ready after Phase 2.
-- **Arc 2:** arc 1 had not merged, so (orchestrator, 2026-10-18) branch `landing-explainer-1-a2` off `worktree-landing-explainer-1`, a draft PR with that base, retargeted to `dev` once #723 merges; title `feat(landing): the three how aztec works clips`; `Refs #588`; `Closes #722` once the wallet repoint has landed, `Refs #722` until then. A draft until the owner approves the clips (OA-8).
+- **Arc 2:** branch `landing-explainer-1-a2`, cut off `worktree-landing-explainer-1` while #723 was open and moved onto `origin/dev` once it merged (the orchestrator's 2026-10-18 rule), a draft PR against `dev`; title `feat(landing): the three how aztec works clips`; `Refs #588`; `Closes #722` once the wallet repoint has landed, `Refs #722` until then. A draft until the owner approves the clips (OA-8).
 - **Release order:** the wallet item points at this address, so arc 1 must reach `main` with or before the release that ships onboarding-3's item; until then the link shows the home page.
 - **Close-out** ships with arc 2 (D9 as reversed); arc 1's PR carries no archive move. No parallel lanes: one phase per arc.
 
@@ -151,6 +168,14 @@ The steps are `implementations-plan/README.md` § Post-implementation standard a
 **Arc 1 implementation, Codex** (gpt-6.1-sol, session 01a14be2): round 1 approve, 1 low finding, accepted: two head comments restated their tags (removed). Round 2 (resume, xhigh): **approve**, no findings; every fix below verified, including the headings' accessible names.
 
 **Arc 1 implementation, Opus diff review:** approve, 3 low findings, all accepted: the README named a wallet item that has not shipped (clause dropped; onboarding-3 adds it with its item); the README and the `STORES` TSDoc overstated which pages the store pin reads (now the two hand-written pages); each heading's text ran its number into its title, "01Private" for indexers and copy (a space inside the hidden number, its margin cut 14 px to 5 px; the title moved 0.16 px).
+
+**Arc 2 implementation, Codex** (gpt-6.1-sol, high, read-only): round 1 conditional approve, 3 findings, all accepted: no focus ring on the position slider (added to the shared `:focus-visible` rule); the drawing kit's header restated as one contract beside `Frame`; comments that restated their code removed. Round 2 (resume): **approve**, no findings.
+
+**Arc 2 implementation, Opus diff review:** conditional approve, 7 findings, 6 accepted. A source that fails to load left the clip "playing" (the player reads `networkState`, not `error`, which Firefox sets while it plays, and reloads on the next press); the focus ring; the captions line kept its last line after the end; the one-voice swap ran only from the click (now on `play`, so media keys count); `seg` returned `NaN` on an empty interval, and a test that could not fail (now `scenes.test.ts`); a comment and a stray `;` in the clause pattern. Rejected: re-announcing `aria-valuetext` on a focused slider during playback (unverified, the common players do the same, and freezing the thumb hides the position from sighted keyboard users).
+
+**Cross-arc pass, Codex** (fresh session over the net diff from the plan's base): **approve**, 2 low findings, both accepted: the architecture and security lines' "no new TypeScript" and "no new script" scoped to arc 1; `kit.ts`'s export inventory removed. Seams verified: one bundled entry imports `main` once, clips stay off the home page, the store pin and the dist check cover both pages.
+
+**Arc 2 deviations:** the base moved to `origin/dev` when #723 merged mid-review (one README conflict, dev's wording kept); dev's #790 restyled the wallet's glyphs, so the clips' glyph rules followed and one check glyph moved clear of the packet. Gates and QA reran on the rebased branch.
 
 ## Seeds
 
