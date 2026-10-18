@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { createFailedNotice, importFailedNotice } from "./profile-flow-notices"
+import { createFailedNotice, passkeyImportFailedNotice } from "./profile-flow-notices"
 
 const WINDOWS_HELLO = "Windows Hello may not work correctly with some versions of Windows."
 
@@ -32,7 +32,7 @@ describe("profile-flow notices", () => {
 	})
 
 	test("a failed passkey import names the authenticator and notes Windows Hello", () => {
-		expect(importFailedNotice()).toStrictEqual({
+		expect(passkeyImportFailedNotice()).toStrictEqual({
 			type: "warning",
 			payload: {
 				title: "Profile import failed",

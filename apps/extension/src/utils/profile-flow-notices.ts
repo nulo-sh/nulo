@@ -1,6 +1,5 @@
 import type { NotificationItem } from "@/stores/notification.store"
 
-/** The notice a failed profile create shows, in onboarding and in the popup alike. */
 export function createFailedNotice(isPasskey: boolean): NotificationItem {
 	return {
 		type: "warning",
@@ -16,8 +15,7 @@ export function createFailedNotice(isPasskey: boolean): NotificationItem {
 	}
 }
 
-/** The notice a failed passkey profile import shows, in onboarding and in the popup alike. */
-export function importFailedNotice(): NotificationItem {
+export function passkeyImportFailedNotice(): NotificationItem {
 	return {
 		type: "warning",
 		payload: {

@@ -14,7 +14,7 @@ import { useToast } from "@/composables/toast"
 /** Utils */
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
-import { importFailedNotice } from "@/utils/profile-flow-notices"
+import { passkeyImportFailedNotice } from "@/utils/profile-flow-notices"
 import { restoreNoticeText, retryResultText } from "@/components/composite/import/restore-warning"
 
 /** Stores */
@@ -110,7 +110,7 @@ const {
 			},
 		})
 	},
-	notifyImportFailed: () => notificationStore.create(importFailedNotice()),
+	notifyImportFailed: () => notificationStore.create(passkeyImportFailedNotice()),
 	openToast,
 })
 

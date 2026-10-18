@@ -199,7 +199,6 @@ declare global {
   const hubValues: typeof import('../utils/settings-labels').hubValues
   const humanizeErrorKind: typeof import('../utils/journal-state').humanizeErrorKind
   const humanizeMethodName: typeof import('../utils/tx-enrichment').humanizeMethodName
-  const importFailedNotice: typeof import('../utils/profile-flow-notices').importFailedNotice
   const incomingInScope: typeof import('../utils/activity-rows').incomingInScope
   const incomingRow: typeof import('../utils/activity-rows').incomingRow
   const indexSavedContacts: typeof import('../utils/contact-import-rows').indexSavedContacts
@@ -292,6 +291,7 @@ declare global {
   const parseTransferIntent: typeof import('../utils/transfer-intent').parseTransferIntent
   const passkeyBackupAuthenticator: typeof import('../utils/full-backup-helpers').passkeyBackupAuthenticator
   const passkeyFailureCopy: typeof import('../utils/passkey-copy').passkeyFailureCopy
+  const passkeyImportFailedNotice: typeof import('../utils/profile-flow-notices').passkeyImportFailedNotice
   const passkeyNeedsOwnWindow: typeof import('../utils/browser-surface').passkeyNeedsOwnWindow
   const passkeyTag: typeof import('../utils/passkey-copy').passkeyTag
   const persistThemeHint: typeof import('../utils/general').persistThemeHint
@@ -960,7 +960,6 @@ declare module 'vue' {
     readonly hubValues: UnwrapRef<typeof import('../utils/settings-labels')['hubValues']>
     readonly humanizeErrorKind: UnwrapRef<typeof import('../utils/journal-state')['humanizeErrorKind']>
     readonly humanizeMethodName: UnwrapRef<typeof import('../utils/tx-enrichment')['humanizeMethodName']>
-    readonly importFailedNotice: UnwrapRef<typeof import('../utils/profile-flow-notices')['importFailedNotice']>
     readonly incomingInScope: UnwrapRef<typeof import('../utils/activity-rows')['incomingInScope']>
     readonly incomingRow: UnwrapRef<typeof import('../utils/activity-rows')['incomingRow']>
     readonly indexSavedContacts: UnwrapRef<typeof import('../utils/contact-import-rows')['indexSavedContacts']>
@@ -1053,6 +1052,7 @@ declare module 'vue' {
     readonly parseTransferIntent: UnwrapRef<typeof import('../utils/transfer-intent')['parseTransferIntent']>
     readonly passkeyBackupAuthenticator: UnwrapRef<typeof import('../utils/full-backup-helpers')['passkeyBackupAuthenticator']>
     readonly passkeyFailureCopy: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyFailureCopy']>
+    readonly passkeyImportFailedNotice: UnwrapRef<typeof import('../utils/profile-flow-notices')['passkeyImportFailedNotice']>
     readonly passkeyNeedsOwnWindow: UnwrapRef<typeof import('../utils/browser-surface')['passkeyNeedsOwnWindow']>
     readonly passkeyTag: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyTag']>
     readonly persistThemeHint: UnwrapRef<typeof import('../utils/general')['persistThemeHint']>

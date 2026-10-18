@@ -22,7 +22,7 @@ import { awaitProfileActivation } from "@/composables/unlockWait"
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { OWN_WINDOW_ROUTES, closeOwnWindow, moveToOwnWindow, releaseOwnWindow } from "@/utils/own-window"
-import { importFailedNotice } from "@/utils/profile-flow-notices"
+import { passkeyImportFailedNotice } from "@/utils/profile-flow-notices"
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
 import { redirectToOnboardingTabIfNeeded } from "@/wallet/utils/onboarding-tab"
 import { resolveFullBackupEnterAction } from "./import-helpers"
@@ -136,7 +136,7 @@ const {
 		cacheStore.viewerData = withNetworkNames(errors, byNetworkId)
 		popupStore.open("data_viewer")
 	},
-	notifyImportFailed: () => notificationStore.create(importFailedNotice()),
+	notifyImportFailed: () => notificationStore.create(passkeyImportFailedNotice()),
 	openToast,
 })
 

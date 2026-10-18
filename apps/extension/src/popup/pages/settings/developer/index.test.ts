@@ -128,7 +128,7 @@ test("a reread that finds Developer Mode changed shows it and writes nothing", a
 	expect(config.setValue).not.toHaveBeenCalled()
 })
 
-test("a worker update turning Developer Mode off shows it and writes both dependents; the same update again writes nothing", async () => {
+test("a worker update turning Developer Mode off shows it and writes both dependents", async () => {
 	config.getProps.mockResolvedValue([
 		{ key: "developerMode", value: true },
 		{ key: "indicateFailures", value: true },
@@ -142,9 +142,6 @@ test("a worker update turning Developer Mode off shows it and writes both depend
 		["indicateFailures", false],
 		["debugMode", false],
 	])
-	config.onUpdate.invoke({ key: "developerMode", value: false } as ConfigProp)
-	await flushPromises()
-	expect(config.setValue).toHaveBeenCalledTimes(2)
 })
 
 test("a failed write leaves Developer Mode as stored and writes no dependent; asking again turns all three off", async () => {

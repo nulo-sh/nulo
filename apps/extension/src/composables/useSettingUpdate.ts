@@ -15,7 +15,8 @@ export const SETTING_UPDATE_FAILED = "Failed to update setting"
  * worker has stored the value, and a refused write toasts and leaves the row on the stored value.
  * `onSettingUpdate` applies a worker update to a row showing another value. `landSettings` copies
  * a read into the rows, except the keys `updatedSince` names, and applies nothing, so an apply's
- * effects (a toast, a closing window) never replay on a reread. `applySetting` is not awaited.
+ * effects (a toast, a closing window, a dependent row's write) never replay on a reread.
+ * `applySetting` is not awaited.
  */
 export function useSettingUpdate(
 	configService: Pick<ConfigServiceClient, "setValue">,
