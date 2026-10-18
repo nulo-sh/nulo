@@ -124,7 +124,7 @@ Tests (each red on the base's copy of its source):
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `9470d4e9`. Specific to this plan:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `9470d4e9`. Specific to this plan:
 - Step 1 is absent (`code_review: off`). Step 2 runs once over the diff from `origin/dev` after Phase 1's gate: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; prompts under `~/.cache/nulo-backlog/iface-line-1/`; hard stop at three rounds; rounds logged in `lessons/phase-1.md`.
 - Approval boundary: a non-focusable term variant, a window-level coordinator for the advice, a split `UndecodedReason`, an at-rest flag for an unreadable discovered authorization, any copy beyond P44-01 and OA-1's ship-now lines, or a change to another dotted term is a plan change and stops for the orchestrator.
 - Close-out in this PR's final commits: Outcome block, lessons promotion (dedupe first; `lessons.md` is near its 8 KiB budget), OA-1 filed as an `owner-decision` issue if the owner has not answered it, `STATUS.md` deleted, the `git mv` into `archive/`. Teardown after the merge: `agent-worktree done iface-line-1 --merged`; trunk `dev`; `implementations-plan/archive/iface-line-1/plan.md`.
