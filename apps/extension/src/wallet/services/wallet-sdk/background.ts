@@ -79,7 +79,7 @@ import {
 	UnsupportedMethodError,
 	isReceiverGoneRejection,
 } from "@nulo/extension-messaging/errors"
-import { KeyedLock } from "@nulo/wallet-core/utils"
+import type { KeyedLock } from "@nulo/wallet-core/utils"
 import { VerifyAdmissionGate } from "./verify-admission"
 import { type DiscoveryDeps, handleDiscovery, type PendingWindow } from "./discovery-flow"
 import { failQueuedForError, failQueuedIfUnclaimed, type QueuedFailureKind, tryCreateQueuedJournal } from "./queued-journal"
@@ -89,7 +89,8 @@ import { chainInfoToChainId, handleSessionEstablished } from "./session-establis
 import { wireSessionTeardown } from "./session-revocation"
 import { wireTabLifecycle } from "./tab-lifecycle"
 import { bindLiveSession, type LiveSession } from "./live-session"
-import { MAX_PENDING_PER_SESSION, type VerificationHold, VerificationHolds, wireVerificationHold } from "./verification-hold"
+import { MAX_PENDING_PER_SESSION, type VerificationHold, wireVerificationHold } from "./verification-hold"
+import { SessionHolders } from "./session-holders"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
 
@@ -150,17 +151,17 @@ export function initWalletSdkHandler(
 	// A verify window's slot is freed only when the window itself is gone.
 	ports.windows.onRemoved((windowId) => state.admission.windowRemoved(windowId))
 
-	serializeDecryption(handler, state.decryptLocks, logger)
+	serializeDecryption(handler, state.sessions.decryptLocks, logger)
 	// The wallet's decision to end a session drops its held calls before the transport is told: a
 	// termination that throws leaves the session live, and its calls must not wait on it.
 	const endSession = (sessionId: string) => {
-		state.holds.get(sessionId)?.drop("wallet_refused")
+		state.sessions.holds.get(sessionId)?.drop("wallet_refused")
 		handler.terminateSession(sessionId)
 	}
 	wireSessionTeardown(
 		{ getActiveSessions: () => handler.getActiveSessions(), terminateSession: endSession },
 		deps.dappSessionService,
-		state,
+		{ sessionProfiles: state.sessions.sessionProfiles, pendingVerification: state.pendingVerification },
 		logger,
 	)
 
@@ -172,12 +173,12 @@ export function initWalletSdkHandler(
 	wireProfileSwitchTeardown({
 		onActiveProfileChanged: deps.profileService.onActiveProfileChanged,
 		getActiveSessions: () => handler.getActiveSessions(),
-		sessionProfiles: state.sessionProfiles,
+		sessionProfiles: state.sessions.sessionProfiles,
 		terminateSession: endSession,
 		logger,
 	})
 	wireVerificationHold({
-		holds: state.holds,
+		holds: state.sessions.holds,
 		onActiveProfileChanged: deps.profileService.onActiveProfileChanged,
 		onVerificationConfirmed: deps.dappSessionService.onVerificationConfirmed,
 		terminateSession: (sessionId) => handler.terminateSession(sessionId),
@@ -282,14 +283,8 @@ type SdkHandlerState = {
 	 * and the entry's `profileId` pins WHO approved for the skew check.
 	 */
 	pendingVerification: Map<string, PendingVerificationEntry>
-	/**
-	 * Live-channel identity binding: sessionId → owning profileId, stamped at
-	 * establishment from the validated DappSession row (approver-checked via
-	 * the pending-verification marker). Consumed by the dispatch guard and the
-	 * profile-switch teardown; same lifetime as the upstream activeSessions
-	 * (both die with the SW), cleaned in onSessionTerminated.
-	 */
-	sessionProfiles: Map<string, string>
+	/** What each live channel owns, ended together when its session terminates (see `session-holders.ts`). */
+	sessions: SessionHolders
 	/**
 	 * Guard against concurrent discoveries for the same `(origin, chainId)`
 	 * pair (prevents duplicate connect popups). Holds the open window's kind and
@@ -300,26 +295,6 @@ type SdkHandlerState = {
 	 * the chain-B discovery being auto-approved against a chain-A session).
 	 */
 	pendingDiscoveryPromises: Map<string, PendingWindow>
-	/**
-	 * Per-session message queue — ensures messages from the same dApp session
-	 * are processed sequentially (FIFO). Without this, the fire-and-forget
-	 * onWalletMessage callback processes messages concurrently, causing race
-	 * conditions (e.g. executeUtility runs before registerContract completes).
-	 */
-	sessionQueues: Map<string, Promise<void>>
-	/**
-	 * Per-session establishment-validation result. The SDK sends the
-	 * key-exchange response BEFORE invoking `onSessionEstablished`, whose async
-	 * validation (row lookup, hash persist, verify-window open) may then TERMINATE
-	 * the session as unverified. `onWalletMessage` awaits this promise before
-	 * dispatching, so a message can never ride a session that's concurrently being
-	 * torn down. Resolves `true` when established, `false` when terminated.
-	 */
-	establishmentStatus: Map<string, Promise<boolean>>
-	/** Per-session gate on dispatch until the person confirms the session's check (see `verification-hold.ts`). */
-	holds: VerificationHolds
-	/** Per-session decrypt lane, which also carries refusal replies (see `serializeDecryption`). */
-	decryptLocks: KeyedLock
 	/** Per-origin reconnect throttle and verify-window budget (see `verify-admission.ts`). */
 	admission: VerifyAdmissionGate
 	/** Handshakes currently waiting on another popup for the same `(origin, chainId)`, bounded. */
@@ -336,18 +311,13 @@ type SdkHandlerState = {
 	late: { handler?: BackgroundConnectionHandler; discoveryQueue?: DiscoveryQueue; switchEpoch?: ProfileSwitchEpoch }
 }
 
-function createSdkHandlerState(ports: { windows: WindowPort; clock: ClockPort }): SdkHandlerState {
+export function createSdkHandlerState(ports: { windows: WindowPort; clock: ClockPort }): SdkHandlerState {
 	const pendingVerification = new Map<string, PendingVerificationEntry>()
 	const closeWindow = (windowId: number) => void ports.windows.remove(windowId).catch(() => undefined)
 	return {
 		pendingVerification,
-		sessionProfiles: new Map(),
+		sessions: new SessionHolders(),
 		pendingDiscoveryPromises: new Map(),
-		sessionQueues: new Map(),
-		establishmentStatus: new Map(),
-		holds: new VerificationHolds(),
-		// maxHoldMs: null — the prior hand-rolled decrypt chain had no watchdog.
-		decryptLocks: new KeyedLock({ maxHoldMs: null }),
 		admission: new VerifyAdmissionGate(ports.clock, {
 			closeWindow,
 			navigateWindow: (windowId, url) => ports.windows.navigate(windowId, url),
@@ -536,7 +506,7 @@ function buildHandlerCallbacks(
 			const handler = state.late.handler!
 			// Upstream calls this synchronously after posting the key-exchange response, and a message
 			// needs a round trip and a decrypt to arrive, so the hold exists before any message does.
-			const hold = state.holds.open(session.sessionId, session.verificationHash)
+			const hold = state.sessions.holds.open(session.sessionId, session.verificationHash)
 			// Liveness and termination read this session object, not its id: an establishment paused
 			// across its own end and a same-id re-key must neither proceed on nor end the successor.
 			const live = bindLiveSession(handler, session)
@@ -548,7 +518,7 @@ function buildHandlerCallbacks(
 				terminateSession: () => live.terminate(),
 				pendingVerification: state.pendingVerification,
 				stampSessionProfile: (sessionId, profileId) =>
-					stampSessionProfileGuarded(state.sessionProfiles, sessionId, profileId, (id) =>
+					stampSessionProfileGuarded(state.sessions.sessionProfiles, sessionId, profileId, (id) =>
 						handler.getActiveSessions().some((s) => s.sessionId === id),
 					),
 				isSessionLive: () => live.isLive(),
@@ -561,17 +531,13 @@ function buildHandlerCallbacks(
 				(ok) => ok || hold.drop("wallet_refused"),
 				() => hold.drop("wallet_refused"),
 			)
-			state.establishmentStatus.set(session.sessionId, validated)
+			state.sessions.establishmentStatus.set(session.sessionId, validated)
 			return validated.then(() => undefined)
 		},
 
 		onSessionTerminated: (sessionId) => {
 			state.admission.onSessionGone(sessionId)
-			state.sessionProfiles.delete(sessionId)
-			state.sessionQueues.delete(sessionId)
-			state.decryptLocks.delete(sessionId)
-			state.establishmentStatus.delete(sessionId)
-			state.holds.end(sessionId, "wallet_refused")
+			state.sessions.end(sessionId)
 		},
 
 		onWalletMessage: (session, message) => onWalletMessage(session, message, deps, state),
@@ -594,7 +560,7 @@ function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: S
 	// Captured once, on arrival. Upstream reads the session before it awaits the decrypt, so a message
 	// whose session ended meanwhile arrives with the old object: it must not capture a successor's
 	// hold under the same id, and it has nowhere to be answered.
-	const hold = live.isLive() ? state.holds.get(key) : undefined
+	const hold = live.isLive() ? state.sessions.holds.get(key) : undefined
 	if (hold === undefined) {
 		deps.logger.log(
 			"wallet-sdk",
@@ -605,10 +571,10 @@ function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: S
 	}
 	const release = hold.admit()
 	if (release === undefined) {
-		refuseOverPendingCap(live, key, message, state.decryptLocks, deps.logger)
+		refuseOverPendingCap(live, key, message, state.sessions.decryptLocks, deps.logger)
 		return
 	}
-	const prev = state.sessionQueues.get(key) ?? Promise.resolve()
+	const prev = state.sessions.sessionQueues.get(key) ?? Promise.resolve()
 
 	// Baton-based FIFO (see `session-baton.ts` for mechanics).
 	// Resolves when the sendTx handler enqueues on the execution mutex
@@ -628,9 +594,9 @@ function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: S
 	// requests must BOTH show as `queued` before either is approved (the
 	// anti-lost-tx invariant `concurrent-sendtx.test.ts` pins); serializing
 	// only execution — never record creation — behind the baton preserves it.
-	const validation = state.establishmentStatus.get(key)
+	const validation = state.sessions.establishmentStatus.get(key)
 	const establishedPromise = (validation ?? Promise.resolve(false)).then(
-		(established) => established && state.establishmentStatus.get(key) === validation,
+		(established) => established && state.sessions.establishmentStatus.get(key) === validation,
 	)
 
 	// Queued journal is created on arrival (concurrent across siblings),
@@ -657,7 +623,7 @@ function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: S
 		run: (queuedJournalId) =>
 			runEstablishedMessage(queuedJournalId, establishedPromise, releaseFifo, { session, live, hold }, message, deps, state),
 	}).then(release, release)
-	state.sessionQueues.set(
+	state.sessions.sessionQueues.set(
 		key,
 		baton.catch(() => {}),
 	)
@@ -676,7 +642,7 @@ function createQueuedJournalIfStamped(
 	deps: SdkDeps,
 	state: SdkHandlerState,
 ): ReturnType<typeof tryCreateQueuedJournal> | undefined {
-	const stampedProfileId = state.sessionProfiles.get(session.sessionId)
+	const stampedProfileId = state.sessions.sessionProfiles.get(session.sessionId)
 	return ok && stampedProfileId !== undefined
 		? tryCreateQueuedJournal(message, session, {
 				journal: deps.operationJournal,
@@ -766,7 +732,7 @@ async function runEstablishedMessage(
 		deps.dispatcher,
 		deps.profileService,
 		deps.operationJournal,
-		state.sessionProfiles,
+		state.sessions.sessionProfiles,
 		state.late.switchEpoch!,
 		deps.logger,
 		deps.legal,
