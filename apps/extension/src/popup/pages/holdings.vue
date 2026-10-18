@@ -21,16 +21,14 @@ import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/clien
 import type { TokenBalanceInfo } from "@/wallet/services/token-balance/spec"
 
 /** Utils */
-import { parseRawBalance, safeFiatOf } from "@/utils/token-amount"
 import { aggregateFiat, awaitingFirstPriceAnswer, pricesUnavailable } from "@/utils/token-aggregate"
-import { forChain } from "@/utils/token-order"
 import { fitHero } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
 
 /** Composables */
-import { useEntityCrud } from "@/composables/useEntityCrud"
 import { pinScopeOf, usePinnedTokens } from "@/composables/usePinnedTokens"
 import { usePrices } from "@/composables/usePrices"
+import { type TokenBalanceSnapshotState, useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -41,37 +39,35 @@ const cacheStore = useCacheStore()
 const popupStore = usePopupStore()
 
 const activeChainId = () => appStore.network?.chainId
-const activeAccount = () => appStore.account?.address
 
-// The balance service returns a shared address's rows from every chain of the profile; this page
-// keeps the active chain's rows only, both on fetch and on every live event.
+const rows = ref<TokenBalanceInfo[]>([])
+const balancesState = ref<TokenBalanceSnapshotState>("loading")
+const isLoading = computed(() => balancesState.value === "loading")
+const error = computed(() => balancesState.value === "unavailable")
+// This page's rules: every read shows the loading state, a refused one shows the error
+// until a connect or a scope change reads again, a live add replaces its row and an unseen update
+// lists one, and a read in flight lands over the events that came meanwhile.
 const tokenBalanceService = new TokenBalanceServiceClient()
-const {
-	entities: rows,
-	isLoading,
-	error,
-	refresh,
-	dispose: disposeCrud,
-} = useEntityCrud<TokenBalanceInfo>({
-	fetch: async () => {
-		const account = activeAccount()
-		if (!account) return []
-		return forChain(await tokenBalanceService.getTokenBalances(undefined, account), activeChainId())
-	},
-	added: tokenBalanceService.onTokenBalanceAdded,
-	updated: tokenBalanceService.onTokenBalanceUpdated,
-	deleted: tokenBalanceService.onTokenBalanceDeleted,
-	accept: (tb) => tb.account === activeAccount() && tb.token.chainId === activeChainId(),
+const balances = useTokenBalanceSnapshot({
+	client: tokenBalanceService,
+	live: appStore,
+	rows,
+	state: balancesState,
+	added: "replace",
+	insertUnseenUpdated: true,
+	loadingOnRefresh: true,
+	retryOnReject: false,
+	refetchWhenDirty: false,
+	reconnect: "every",
 })
-// A port reconnect can drop events fired while disconnected; resnapshot.
-tokenBalanceService.onConnected.add(onReconnected)
-function onReconnected() {
-	void refresh()
-}
+tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
+tokenBalanceService.onTokenBalanceUpdated.add((tb) => balances.inActiveScope(tb) && balances.onBalanceUpdated(tb))
+tokenBalanceService.onTokenBalanceDeleted.add(balances.onBalanceDeleted)
+void balances.fetchTokenBalances()
 
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
-const fiatOf = safeFiatOf((tb: TokenBalanceInfo) => prices.tokenFiatMicro(tb.token, parseRawBalance(tb) ?? 0n))
+const fiatOf = prices.fiatOfRow
 const usdRateOf = (tb: TokenBalanceInfo) => prices.quoteFor(tb.token.chainId, tb.token.contract)?.usd
 
 const showFiatValues = ref(true)
@@ -166,7 +162,9 @@ watch([summary, totalDisplay, summaryMeta], fitTotal, { flush: "post" })
 watch(
 	() => [appStore.profile?.id, appStore.account?.address, appStore.network?.chainId],
 	() => {
-		void refresh({ clear: true })
+		rows.value = []
+		balancesState.value = "loading"
+		void balances.fetchTokenBalances()
 		void pins.refresh()
 	},
 )
@@ -179,8 +177,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
 	summaryResizes?.disconnect()
 	document.fonts?.removeEventListener("loadingdone", fitTotal)
-	tokenBalanceService.onConnected.remove(onReconnected)
-	disposeCrud()
+	balances.dispose()
 	tokenBalanceService.disconnect()
 	prices.dispose()
 	priceService.disconnect()

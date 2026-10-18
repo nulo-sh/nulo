@@ -306,6 +306,29 @@ describe("SelectTokenPopup", () => {
 		expect(H.getTokenBalances).toHaveBeenCalledTimes(3)
 	})
 
+	test("an incomplete scope while open reads nothing and drops the read still out; a later port drop still reloads", async () => {
+		const reads: Array<(rows: ReturnType<typeof row>[]) => void> = []
+		H.getTokenBalances.mockImplementation(() => new Promise((resolve) => reads.push(resolve)))
+		const wrapper = mount(SelectTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
+		await wrapper.setProps({ show: true })
+		H.balanceConnected.emit()
+		H.store.current.network = undefined
+		await flushPromises()
+		reads[0]?.([row(1, "OLD")])
+		await flushPromises()
+		expect(rowSymbols(wrapper)).toEqual([])
+		expect(H.getTokenBalances).toHaveBeenCalledTimes(1)
+
+		H.store.current.network = { id: "net-main", chainId: CHAIN }
+		await flushPromises()
+		reads[1]?.([row(1, "A")])
+		await flushPromises()
+		expect(rowSymbols(wrapper)).toEqual(["A"])
+		H.balanceConnected.emit()
+		await flushPromises()
+		expect(H.getTokenBalances).toHaveBeenCalledTimes(3)
+	})
+
 	test("hiding clears the list and query and disconnects the balance client; unmount tears down prices", async () => {
 		const wrapper = await mountOpen([row(1, "A"), row(2, "B"), row(3, "C"), row(4, "D")])
 		await wrapper.find('[data-testid="select-token-search"]').setValue("a")
