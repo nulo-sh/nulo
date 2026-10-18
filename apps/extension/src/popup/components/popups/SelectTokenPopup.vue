@@ -74,9 +74,7 @@ const balances = useTokenBalanceSnapshot({
 	live: appStore,
 	rows,
 	state: balancesState,
-	retryOnReject: false,
 	refetchWhenDirty: false,
-	onReconnect: () => void load(),
 })
 tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
 tokenBalanceService.onTokenBalanceUpdated.add((tb) => balances.inActiveScope(tb) && balances.onBalanceUpdated(tb))

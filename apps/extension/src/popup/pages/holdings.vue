@@ -51,11 +51,7 @@ const balances = useTokenBalanceSnapshot({
 	rows,
 	state: balancesState,
 	added: "replace",
-	insertUnseenUpdated: true,
-	loadingOnRefresh: true,
-	retryOnReject: false,
 	refetchWhenDirty: false,
-	reconnect: "every",
 })
 tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
 tokenBalanceService.onTokenBalanceUpdated.add((tb) => balances.inActiveScope(tb) && balances.onBalanceUpdated(tb))

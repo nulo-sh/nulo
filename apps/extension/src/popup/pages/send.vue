@@ -164,10 +164,10 @@ const balances = useTokenBalanceSnapshot({
 	live: appStore,
 	rows: tokenBalances,
 	added: "append",
-	reconnect: "off",
 })
 tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
 tokenBalanceService.onTokenBalanceUpdated.add(balances.onBalanceUpdated)
+tokenBalanceService.onTokenBalanceDeleted.add(balances.onBalanceDeleted)
 const tokenBalance = computed(() => {
 	return tokenBalances.value?.find((b) => b?.token.id === cacheStore.activeTokenIdx)
 })
@@ -642,6 +642,9 @@ let identityFetchSeq = 0
 async function refetchIdentityScopedState() {
 	const mySeq = ++identityFetchSeq
 	const isCurrent = () => mySeq === identityFetchSeq
+	// The rows are this fetch's from here: a reconnect's re-read or retry for the previous identity
+	// must not land after it.
+	balances.invalidate()
 	tokenReadSeq++
 	tokensFailed.value = false
 	if (!appStore.profile?.id || !appStore.network?.id || !appStore.account?.address) {

@@ -111,11 +111,16 @@ describe("useTokenBalanceSnapshot", () => {
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(2)
 	})
 
-	test("a rejection after a load keeps the rows and the loaded state", async () => {
+	test("a re-read keeps the rows and the loaded state while it is out, and when it is refused", async () => {
 		const s = setup()
-		s.client.getTokenBalances.mockResolvedValueOnce([row(1)]).mockRejectedValue(new Error("port closed"))
+		s.client.getTokenBalances.mockResolvedValueOnce([row(1)])
 		await s.snap.fetchTokenBalances()
-		await s.snap.fetchTokenBalances()
+		const refused = deferred<TokenBalanceInfo[]>()
+		s.client.getTokenBalances.mockReturnValueOnce(refused.promise)
+		const p = s.snap.fetchTokenBalances()
+		expect(s.state.value).toBe("loaded")
+		refused.reject(new Error("port closed"))
+		await p
 		expect(ids(s.rows)).toEqual([1])
 		expect(s.state.value).toBe("loaded")
 	})
@@ -162,6 +167,17 @@ describe("useTokenBalanceSnapshot", () => {
 		stale.resolve([row(1)])
 		await p2
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(4)
+	})
+
+	test("an update for an unseen id lists nothing, in scope or not, until the next read", async () => {
+		const s = setup()
+		s.client.getTokenBalances.mockResolvedValueOnce([row(1)]).mockResolvedValueOnce([row(1), row(9)])
+		await s.snap.fetchTokenBalances()
+		s.snap.onBalanceUpdated(row(8, 2))
+		s.snap.onBalanceUpdated(row(9))
+		expect(ids(s.rows)).toEqual([1])
+		await s.snap.fetchTokenBalances()
+		expect(ids(s.rows)).toEqual([1, 9])
 	})
 
 	test("an add for a listed id adds nothing; a new id lands through mapRow", async () => {
@@ -251,24 +267,6 @@ describe("useTokenBalanceSnapshot — the rules a view keeps over the defaults",
 		vi.useRealTimers()
 	})
 
-	test("an unseen update is ignored; with insertUnseenUpdated an in-scope one is listed through mapRow", async () => {
-		const home = setup()
-		home.client.getTokenBalances.mockResolvedValue([row(1)])
-		await home.snap.fetchTokenBalances()
-		home.snap.onBalanceUpdated(row(9))
-		expect(ids(home.rows)).toEqual([1])
-
-		const s = setup({ insertUnseenUpdated: true, mapRow: (r) => ({ ...r, mapped: true }) as never })
-		s.client.getTokenBalances.mockResolvedValue([row(1)])
-		await s.snap.fetchTokenBalances()
-		s.snap.onBalanceUpdated(row(8, 2))
-		s.snap.onBalanceUpdated(row(9))
-		expect(s.rows.value).toEqual([
-			{ ...row(1), mapped: true },
-			{ ...row(9), mapped: true },
-		])
-	})
-
 	test("added: replace swaps a listed row for the add, through mapRow; a new id is appended", async () => {
 		const s = setup({ added: "replace", mapRow: (r) => ({ ...r, mapped: true }) as never })
 		s.client.getTokenBalances.mockResolvedValue([row(1), row(2)])
@@ -292,29 +290,25 @@ describe("useTokenBalanceSnapshot — the rules a view keeps over the defaults",
 		expect(ids(s.rows)).toEqual([1, 1, 2])
 	})
 
-	test("loadingOnRefresh: every run reads loading, and a refused one reads unavailable over the rows kept", async () => {
-		const s = setup({ loadingOnRefresh: true })
-		s.client.getTokenBalances.mockResolvedValueOnce([row(1)])
-		await s.snap.fetchTokenBalances()
-		expect(s.state.value).toBe("loaded")
-		const refused = deferred<TokenBalanceInfo[]>()
-		s.client.getTokenBalances.mockReturnValueOnce(refused.promise)
-		const p = s.snap.fetchTokenBalances()
-		expect(s.state.value).toBe("loading")
-		refused.reject(new Error("port closed"))
-		await p
-		expect(s.state.value).toBe("unavailable")
+	test("added: append marks a run in flight dirty only for an add in scope", async () => {
+		const s = setup({ added: "append" })
+		const quiet = deferred<TokenBalanceInfo[]>()
+		s.client.getTokenBalances.mockReturnValueOnce(quiet.promise)
+		const p1 = s.snap.fetchTokenBalances()
+		s.snap.onBalanceAdded(row(7, 2))
+		quiet.resolve([row(1)])
+		await p1
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
 		expect(ids(s.rows)).toEqual([1])
-	})
 
-	test("retryOnReject: false arms no retry; a later run still reads", async () => {
-		const s = setup({ retryOnReject: false })
-		s.client.getTokenBalances.mockRejectedValueOnce(new Error("port closed")).mockResolvedValueOnce([row(1)])
-		await s.snap.fetchTokenBalances()
-		expect(s.state.value).toBe("unavailable")
-		expect(vi.getTimerCount()).toBe(0)
-		await s.snap.fetchTokenBalances()
-		expect(ids(s.rows)).toEqual([1])
+		const stale = deferred<TokenBalanceInfo[]>()
+		s.client.getTokenBalances.mockReturnValueOnce(stale.promise).mockResolvedValueOnce([row(1), row(9)])
+		const p2 = s.snap.fetchTokenBalances()
+		s.snap.onBalanceAdded(row(9))
+		stale.resolve([row(1)])
+		await p2
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(3)
+		expect(ids(s.rows)).toEqual([1, 9])
 	})
 
 	test("refetchWhenDirty: false lands the run's own answer over an event that came meanwhile", async () => {
@@ -328,35 +322,6 @@ describe("useTokenBalanceSnapshot — the rules a view keeps over the defaults",
 		await p
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
 		expect(ids(s.rows)).toEqual([1])
-	})
-
-	test("reconnect: every reads on the first connect too; off never touches the connect event", async () => {
-		const every = setup({ reconnect: "every" })
-		every.client.getTokenBalances.mockResolvedValue([row(1)])
-		every.connect()
-		expect(every.client.getTokenBalances).toHaveBeenCalledTimes(1)
-
-		// A client with no connect event at all: subscribing or unsubscribing would throw.
-		const rows = ref<TokenBalanceInfo[]>([])
-		const off = useTokenBalanceSnapshot({
-			client: { getTokenBalances: vi.fn() } as never,
-			live: { account: { address: "0xa" }, network: { chainId: 1 } },
-			rows,
-			reconnect: "off",
-		})
-		off.onBalanceAdded(row(1))
-		off.dispose()
-		expect(ids(rows)).toEqual([1])
-	})
-
-	test("a counted reconnect runs onReconnect in place of the read", async () => {
-		const onReconnect = vi.fn()
-		const s = setup({ onReconnect })
-		s.connect()
-		expect(onReconnect).not.toHaveBeenCalled()
-		s.connect()
-		expect(onReconnect).toHaveBeenCalledTimes(1)
-		expect(s.client.getTokenBalances).not.toHaveBeenCalled()
 	})
 
 	test("invalidate drops the pending retry and the run in flight, and keeps the connect count", async () => {
