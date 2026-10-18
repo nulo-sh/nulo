@@ -10,7 +10,7 @@ The lane brief's records cover #648's wrap and #654's sizes: those ship with bef
 
 **What ships now** (the PR carries it; the owner may reword it before the merge):
 
-- New sentence, before the conclusion: "A list can also flag a token by network and address, whoever added it, and the wallet then marks that token as a scam on its token rows, in the token picker, on its page and on Send (`packages/token-list/src/parse.ts:148-168`); as with every list, the wallet takes no list below the one it keeps or below the sequence compiled into the build (`apps/extension/src/wallet/services/token-list/service.ts:186-189`, `packages/token-list/src/index.ts:30-58`)."
+- New sentence, before the conclusion: "A list can also flag a token by network and address, whoever added it, and the wallet then marks that token as a scam on its token rows, in the token picker, on its page and on Send (`packages/token-list/src/parse.ts:148-168`, `packages/token-list/src/index.ts:41`, `apps/extension/src/utils/token-flag.ts:1-17`, `apps/extension/tests/e2e/token-list.test.ts:144`); as with every list, the wallet takes no list below the one it keeps or below the sequence compiled into the build (`apps/extension/src/wallet/services/token-list/service.ts:186-189`, `packages/token-list/src/index.ts:30-58`)."
 - The conclusion gains one clause: "So a list can name which bundled token contract to track at which address, and which tokens to warn about; it cannot supply bytecode, a script, or a host to call."
 - The six stale line cites in the section point at today's lines (no wording change).
 

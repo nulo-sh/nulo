@@ -97,9 +97,10 @@ wallet refuses a contract whose class on chain differs from the entry's before i
 that bundled artifact (`apps/extension/src/wallet/services/token/service.ts:715-722`). A list can
 also flag a token by network and address, whoever added it, and the wallet then marks that token as
 a scam on its token rows, in the token picker, on its page and on Send
-(`packages/token-list/src/parse.ts:148-168`); as with every list, the wallet takes no list below the
-one it keeps or below the sequence compiled into the build
-(`apps/extension/src/wallet/services/token-list/service.ts:186-189`,
+(`packages/token-list/src/parse.ts:148-168`, `packages/token-list/src/index.ts:41`,
+`apps/extension/src/utils/token-flag.ts:1-17`, `apps/extension/tests/e2e/token-list.test.ts:144`);
+as with every list, the wallet takes no list below the one it keeps or below the sequence compiled
+into the build (`apps/extension/src/wallet/services/token-list/service.ts:186-189`,
 `packages/token-list/src/index.ts:30-58`). So a list can name which bundled token contract to track
 at which address, and which tokens to warn about; it cannot supply bytecode, a script, or a host to
 call.
