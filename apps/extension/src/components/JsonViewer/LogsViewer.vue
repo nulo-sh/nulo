@@ -50,6 +50,8 @@ const maxLogsCount = ref(defaultConfig().debugMode ? 10_000 : 1_000)
 const shouldAutoScroll = ref(true)
 const showScrollBtn = ref(false)
 let scrollTimeout = null
+let snapshotPending = false
+let lastScrollTop = 0
 
 function onLogAdded(log) {
 	logs.value.push(log)
@@ -62,11 +64,25 @@ function onLogAdded(log) {
 	if (trimmed) changes.push({ from: 0, to: trimmed })
 	const appended = filters.isLogInclude(log)
 	if (appended) changes.push({ from: view.state.doc.length, insert: `${formatSingleLog(log)}\n` })
-	if (changes.length) view.dispatch({ changes })
+	if (changes.length) {
+		const set = view.state.changes(changes)
+		view.dispatch({ changes: set, effects: holdPlace(set) })
+	}
 	if (!appended) return
 
 	if (shouldAutoScroll.value) scrollToBottom()
 	else showScrollBtn.value = true
+}
+
+// CodeMirror keeps a view resting within 4px of its end at its end, which would carry a selection
+// or a search held there away, so while not following a change carries the view's place. A snapshot
+// taken before CodeMirror measures reads the old scroll offset against a trimmed document: a later
+// change in the same frame leaves the pending one for CodeMirror to map through its changes.
+function holdPlace(changes) {
+	if (shouldAutoScroll.value || snapshotPending) return []
+	snapshotPending = true
+	view.requestMeasure({ read: () => (snapshotPending = false) })
+	return view.scrollSnapshot().map(changes)
 }
 
 function enableAutoScroll() {
@@ -80,16 +96,19 @@ function disableAutoScroll() {
 		shouldAutoScroll.value = true
 	}, AUTO_SCROLL_TIMEOUT_MS)
 }
+// Only a scroll that moved the view down resumes the follow at the end: a trim's held view comes
+// back up into the end band, and must stay held.
 function updateShouldAutoScroll() {
 	const el = view?.scrollDOM
 	if (!el) return
-	const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_DISABLE_THRESHOLD
-	if (isAtBottom) {
-		showScrollBtn.value = false
-		enableAutoScroll()
-	} else {
+	const movedDown = el.scrollTop > lastScrollTop
+	lastScrollTop = el.scrollTop
+	if (el.scrollHeight - el.scrollTop - el.clientHeight >= SCROLL_DISABLE_THRESHOLD) {
 		showScrollBtn.value = true
 		disableAutoScroll()
+	} else if (movedDown) {
+		showScrollBtn.value = false
+		enableAutoScroll()
 	}
 }
 // Chrome reports a selection inside a shadow root only through the root, retargeting the
@@ -98,8 +117,10 @@ function editorSelection() {
 	const root = editorRef.value?.shadowRoot
 	return root?.getSelection ? root.getSelection() : document.getSelection()
 }
+// Resumes the follow itself: at the end the scroll moves nothing, so no scroll event would.
 function scrollToBottom() {
 	if (!view) return
+	enableAutoScroll()
 	const lastLine = view.state.doc.line(view.state.doc.lines)
 	view.dispatch({ effects: EditorView.scrollIntoView(lastLine.from, { y: "end" }) })
 	showScrollBtn.value = false

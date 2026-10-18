@@ -91,19 +91,12 @@ const handleCopyAddress = (target) => {
 					data-testid="manage-accounts-row"
 					:data-account-name="account.name"
 				>
-					<!-- Imported marker on the DESCRIPTION line in the address's own mono voice (owner
-					     pick: option B + V4). Exactly ONE truncation mechanism: the address's head span
-					     clips with a CSS ellipsis while the marker and the 4-char tail never shrink, so
-					     the line adapts to whatever width the action icons leave instead of a guessed
-					     trim length fighting the wrapper's own ellipsis. -->
+					<!-- The head is the only part that may clip, with an ellipsis; the tail never does. -->
 					<template #description>
+						<Text v-if="account.type === AccountType.Imported" variant="meta" color="tertiary" data-testid="account-imported-badge" :class="$style.marker">imported</Text>
 						<Text variant="meta" color="tertiary" :class="$style.desc_line" data-testid="manage-accounts-address">
-							<template v-if="account.type === AccountType.Imported">
-								<span data-testid="account-imported-badge" :class="$style.desc_fixed">imported</span>
-								<span :class="$style.desc_fixed">&nbsp;&#183;&nbsp;</span>
-							</template>
-							<span :class="$style.addr_head">{{ account.address.slice(0, -4) }}</span>
-							<span :class="$style.desc_fixed">{{ account.address.slice(-4) }}</span>
+							<span :class="$style.addr_head" data-testid="manage-accounts-address-head">{{ account.address.slice(0, -4) }}</span>
+							<span :class="$style.desc_fixed" data-testid="manage-accounts-address-tail">{{ account.address.slice(-4) }}</span>
 						</Text>
 					</template>
 					<template #right>
@@ -214,10 +207,8 @@ const handleCopyAddress = (target) => {
 	flex-shrink: 0;
 }
 
-/* The line keeps 11px: at 13px the marker and the tail alone outgrow the width the actions leave.
- * Every row's line has a head, so the `:has` only lifts the rule above the role's class. */
-.desc_line:has(.addr_head) {
-	font-size: 11px;
+.marker {
+	display: block;
 }
 
 /* Shrink-only (no grow), so on wide rows the tail sits flush against the head. */

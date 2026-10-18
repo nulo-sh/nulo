@@ -90,22 +90,27 @@ Avatar initials take no role: `AccountAvatar` sizes them from their box.
 
 ## Icons
 
-`Icon` draws one glyph of `src/core/glyphs.ts`, the set's only source: original drawings on a
-24-unit grid, none taken from a third-party icon set. `name` is a `GlyphName`. An unknown name draws
-nothing, so the extension's `icon-names.test.ts` refuses one in any template, and vue-tsc refuses
-one in a `lang="ts"` caller.
+`Icon` draws one glyph of `src/core/glyphs.ts`, the set's only source: Tabler Icons 3.49.0 (MIT),
+outline and filled, recorded as a `DERIVED` component in `@nulo/third-party-notices`. `name` is a
+`GlyphName`. An unknown name draws nothing, so the extension's `icon-names.test.ts` refuses one in any
+template, and vue-tsc refuses one in a `lang="ts"` caller.
 
+- **Source**: `src/core/glyph-sources.ts` maps each name to its Tabler icon (`filled/<name>` for the
+  solid variant). `bun run gen:glyphs` writes `glyphs.ts` from it and the exact `@tabler/icons`
+  devDependency; `glyphs.drift.test.ts` fails when the two disagree. Never edit `glyphs.ts` by hand.
 - **Paint**: a glyph paints only through `color`. The root sets `fill` and `stroke` to
   `currentColor`; the `color` prop adds `.color--<name>`, and without it the glyph takes its
   parent's colour. A stylesheet colours a glyph with `color`, never `fill` or `stroke`, which would
   fill a stroked path.
-- **Weight**: strokes are 2.5 units with square caps and mitred joins, thickened below 14.4 px so
-  no line renders under 1.5 px.
+- **Weight**: Tabler's own: strokes are 2 units on the 24-unit grid at every size, with round caps
+  and joins; filled paths use the default fill rule.
 - **Turns**: `rotate` turns the glyph about its centre. `chevron` points right; 90 points it down.
-- **Adding a glyph**: draw it on the 24-unit grid. Stroke paths go in `s`; each solid goes in `f`
-  as its own path, filled even-odd, with a knock-out as an inner subpath. Solids in one glyph
-  overlap only to cut a hole. A TSDoc line names the picture. Check it in the `Core / Icon` sheet
-  story at 24, 12, 10 and 9 px, light and dark.
+- **Adding a glyph**: add one `glyph-sources.ts` row naming a Tabler icon at the installed release,
+  run `bun run gen:glyphs`, and check it in the `Core / Icon` sheet story at 24, 14, 12, 10 and 9 px,
+  light and dark. The generator refuses an icon `Icon.vue` would not draw faithfully.
+- **Changing a picture**: a new row, a changed row, or a bump of `@tabler/icons` changes what screens
+  show: a UI change, with pictures and the owner's sign-off. A bump also moves the `DERIVED` record's
+  version, source and note in the same PR.
 
 ## Consumers compile the source
 
@@ -141,6 +146,7 @@ A missing root means the teleported content silently fails to mount (it is NOT a
 ## Scripts
 
 - `bun run gen:tokens` — regenerate `src/tokens.ts` and `src/utilities.css` from the contract.
+- `bun run gen:glyphs` — regenerate `src/core/glyphs.ts` from `glyph-sources.ts` and the installed `@tabler/icons`.
 - `bun run typecheck` — `vue-tsc --noEmit`.
 - `bun run test` — vitest (drift, boundary, component tests).
 

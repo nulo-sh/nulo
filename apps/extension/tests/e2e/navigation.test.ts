@@ -157,7 +157,7 @@ async function dragSelect(page: Page, from: Point, to: Point): Promise<string> {
 const textOf = (page: Page, testid: string) => page.$eval(`[data-testid="${testid}"]`, (el) => (el as HTMLElement).innerText.trim())
 const lower = (text: string) => text.toLowerCase()
 
-test("a drag selects the text around a control and none of the control's own but the header's address, which a click still copies whole: the nav, the header's buttons, a toggle, a dropdown, list rows", async ({
+test("a drag selects the text around a control and none of the control's own but the header's address, which a click still copies whole: the nav, the header's buttons, a toggle, a dropdown, list rows; a drag inside About's version line copies nothing", async ({
 	registeredExtension,
 }) => {
 	const page = await openPopup(registeredExtension)
@@ -245,6 +245,7 @@ test("a drag selects the text around a control and none of the control's own but
 	await waitForHash(page, "#/popup/settings")
 	await navigateToSettings(page, "about")
 	await page.waitForSelector('[data-testid="legal-about-accepted"]', { visible: true, timeout: 10_000 })
+
 	await page.$eval('[data-testid="legal-about-group"]', (group) => group.firstElementChild?.scrollIntoView({ block: "nearest" }))
 	const overLinks = await dragSelect(
 		page,
@@ -266,6 +267,23 @@ test("a drag selects the text around a control and none of the control's own but
 	expect(overLegal).toContain(await textOf(page, "legal-about-accepted"))
 	expect(overLegal).toContain(await textOf(page, "legal-about-note"))
 	for (const row of ["terms of use", "privacy policy", "open-source licences"]) expect(lower(overLegal)).not.toContain(row)
+
+	// A version line copies on a click, never on the click that ends a drag inside it. Last, as the
+	// copy's toast covers the foot of the page.
+	await page.$eval('[data-testid="about-wallet-version"]', (el) => el.scrollIntoView({ block: "center" }))
+	const copied = (await copies()).length
+	const inVersion = await dragSelect(
+		page,
+		await textEdge(page, "about-wallet-version", "first"),
+		await textEdge(page, "about-wallet-version", "last"),
+	)
+	console.log(`[select] inside the wallet version: ${JSON.stringify(inVersion)}`)
+	expect(inVersion).toContain("Wallet version")
+	expect(await copies()).toHaveLength(copied)
+	await page.evaluate(() => window.getSelection()?.removeAllRanges())
+	await clickByTestId(page, "about-wallet-version")
+	expect((await copies()).slice(copied)).toHaveLength(1)
+	expect(await textOf(page, "about-wallet-version")).toContain((await copies())[copied])
 
 	await page.evaluate(() => window.getSelection()?.removeAllRanges())
 	expect(registeredExtension.consoleErrors).toEqual([])

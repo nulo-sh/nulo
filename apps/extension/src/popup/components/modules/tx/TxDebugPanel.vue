@@ -8,6 +8,7 @@
  * section.
  */
 import { DateTime } from "luxon"
+import { endsSelection } from "@/utils/selection"
 import { trimAddress } from "@/utils/string"
 
 defineProps({
@@ -40,7 +41,7 @@ const formatTimestamp = (timestamp) => {
 		<Flex v-if="expanded" wide direction="column" gap="12" :class="$style.details_box">
 			<Flex wide justify="between" align="center">
 				<span :class="$style.detail_key">Tx hash</span>
-				<Flex @click="emit('copy', tx.hash)" align="center" gap="6" :class="'copyable'">
+				<Flex @click="endsSelection($event) || emit('copy', tx.hash)" align="center" gap="6" :class="'copyable'">
 					<span data-testid="tx-debug-hash" :class="$style.detail_value_mono">{{ trimAddress(tx.hash, 8, 6) }}</span>
 					<Icon name="copy" size="10" color="tertiary" />
 				</Flex>
@@ -82,7 +83,7 @@ const formatTimestamp = (timestamp) => {
 						<span
 							v-if="c.chunkNonce"
 							data-testid="tx-debug-chunk-nonce"
-							@click="emit('copy', c.chunkNonce)"
+							@click="endsSelection($event) || emit('copy', c.chunkNonce)"
 							:class="[$style.raw_call_aux, 'copyable']"
 						>
 							chunk: {{ trimAddress(c.chunkNonce, 6, 4) }}
