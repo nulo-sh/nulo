@@ -1,7 +1,7 @@
 ---
 plan: store-art-2
 tier: light
-status: approved by the panel 2026-10-18 (auto-continue); arc 1 phases 1-2 green, in review
+status: closed with its delivery (a draft PR that merges on the owner's signature of the new set)
 issues: "#627 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,20 @@ base: origin/dev at b53e1d4a
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** delivered as one draft PR against `dev`, which carries this close-out. It merges only after the owner signs the old and new pairs; then the orchestrator quotes the record, checks the head's store blobs against the PR's hashes and marks it ready (§ Delivery). That merge closes the plan.
+- **Shipped:** the five store captures and five framed screenshots regenerated at `b53e1d4a` (image commit `7081a393`), from one capture run (344 s, fits 58 and 46 px) and `store-art.ts`, with no hand edit; the promo tile rendered byte-identical and is unchanged. Closes #627, with its comments' #649 and #790.
+- **Owner asks:** OA-1 (screenshot 3's cut row; C recommended) and OA-2 (screenshot 1's top row under the hero's fade; A recommended), both D4 (b). Both ship A until answered; a B or C answer means a spec change, a new run and new pairs before the signature.
+- **Review loop:** the plan took Codex conditional then approve, and an Opus conditional approve. The arc: Codex approve twice, and an Opus review of every pair with six record fixes.
+- **Gates at the head:** `bun run lint`, `typecheck:all`, `test:all` and `check:plans`, all exit 0; the capture run itself. No e2e scenario changed.
+- **Deviations:** none from the procedure. D2 did not apply; D4 (b) applied twice.
+- **Known limits:** none.
+- **Open items:** none. OA-1 and OA-2 are answered before this PR merges; an answer that defers work becomes an issue then.
+- **Lessons:** none promoted (`lessons.md` is at its 8 KiB budget). The agent-shell trap of the run, zsh reading `$B:a` as a path modifier, is in [lessons/phase-1.md](lessons/phase-1.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # store-art-2: the store pictures after Home's fixed hero
 
