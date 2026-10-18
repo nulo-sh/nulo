@@ -10,7 +10,8 @@ import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import { balanceFormatted } from "@/utils/amount.js"
 import { knownDecimals } from "@/utils/token-amount"
-import { DAPP_LABEL, formatTransferType, humanizeMethodName } from "@/utils/tx-enrichment"
+import type { ListedToken } from "@/utils/tx-amount"
+import { DAPP_LABEL, callTitle, formatTransferType, settledCallTitle } from "@/utils/tx-enrichment"
 import { isSendCheckable, type OperationKind, type OperationRecord, wasNeverSent } from "@/wallet/services/operation-journal/spec"
 
 /**
@@ -337,6 +338,8 @@ export interface TokenForCardProps {
 
 export interface JournalTerminalCardCtx {
 	tokenById: (id: number) => TokenForCardProps | undefined
+	/** The listed tokens a dApp call's movement label is read against. */
+	tokens: readonly ListedToken[]
 }
 
 /** Props shape a terminal `TransactionTerminalCard` consumes, on Home and in History alike. */
@@ -379,7 +382,7 @@ export function buildJournalTerminalCardProps(op: OperationRecord, ctx: JournalT
 	const display = journalTerminalDisplay(op)
 	if (!display) return null
 
-	const fields = op.kind === "transfer" ? transferCardFields(op, ctx) : dappCardFields(op)
+	const fields = op.kind === "transfer" ? transferCardFields(op, ctx) : dappCardFields(op, ctx.tokens)
 	return { ...fields, ...display }
 }
 
@@ -412,9 +415,9 @@ function transferCardFields(op: OperationRecord, ctx: JournalTerminalCardCtx): J
 	}
 }
 
-function dappCardFields(op: OperationRecord): JournalCardFields {
+function dappCardFields(op: OperationRecord, tokens: readonly ListedToken[]): JournalCardFields {
 	return {
-		title: dappTitle(op),
+		title: journalCallTitle(op, tokens),
 		activityIcon: "zap",
 		originLabel: journalCardOriginLabel(op),
 		transferTypeLabel: null,
@@ -429,9 +432,9 @@ function dappCardFields(op: OperationRecord): JournalCardFields {
  * reads the same across its lifecycle. Each checks the kind before reading anything else.
  */
 
-export function journalCardTitle(op: OperationRecord, tokenById: JournalTerminalCardCtx["tokenById"]): string {
-	if (op.kind === "transfer") return transferTitle(op.tokenId !== undefined ? tokenById(op.tokenId) : undefined)
-	return dappTitle(op)
+export function journalCardTitle(op: OperationRecord, ctx: JournalTerminalCardCtx): string {
+	if (op.kind === "transfer") return transferTitle(op.tokenId !== undefined ? ctx.tokenById(op.tokenId) : undefined)
+	return journalCallTitle(op, ctx.tokens)
 }
 
 export function journalCardIcon(op: OperationRecord): GlyphName {
@@ -454,8 +457,16 @@ function transferTitle(token: TokenForCardProps | undefined): string {
 	return token?.symbol || "Transfer"
 }
 
-function dappTitle(op: OperationRecord): string {
-	return op.title ? humanizeMethodName(op.title) : "Transaction"
+/**
+ * A dApp call's title by the rule its settled row follows, from what its record holds: the call's
+ * contract and argument count from the request, its class once the wallet's build recorded one. A
+ * record with no call names no contract, so a movement name reads as its contract spells it.
+ */
+export function journalCallTitle(op: OperationRecord, tokens: readonly ListedToken[]): string {
+	if (!op.title) return "Transaction"
+	if (!op.call) return callTitle(op.title, undefined, false)
+	const { contract, argCount, classId } = op.call
+	return settledCallTitle({ contract, method: op.title, args: { length: argCount }, classId }, tokens)
 }
 
 function transferTypeLabel(op: OperationRecord): string | null {
