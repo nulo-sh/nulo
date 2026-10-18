@@ -58,12 +58,12 @@ Each phase is one issue, with its change map, tests and gate. Paths are under `a
   - `tests/e2e/helpers/authwit-seeds.ts`: seed one row `pending: true` with a `txHash`, so the type-role sweep reads the chip (role values, laid-out) at no extra runtime.
 - **Gate**: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/wallet/services/auth-registry src/popup/components/modules/settings/authwits src/popup/pages/settings/developer/account-state/authwits`. Pass: exit 0, and every new test fails when its line of the change is reverted.
 
-### Phase 2 — #651 header chips at 11 px
+### Phase 2 — #651 header chips at 11 px ✓
 
-- `src/components/Header.vue`: delete the 10 px compound rule and its comment. Set `.network_chip` padding to `6px` (8 px of room, picture `p46-651-b1`). `.lock_chip` composes `type--label-section` and takes `min-height: calc(1lh + 14px)` in place of `height: 26px`, so both chips are 28 px tall and stay in step with their type (D5).
+- `src/components/Header.vue`: delete the 10 px compound rule and its comment. Set `.network_chip` padding to `6px 5px` (10 px of room; picture `p46-651-b1` drew 6px sides, see D4). `.lock_chip` composes `type--label-section` and takes `min-height: calc(1lh + 14px)` in place of `height: 26px`, so both chips are 28 px tall and stay in step with their type (D5).
 - `scripts/type-roles/exceptions.ts`: delete the three header `OVERRIDES`, `HEADER`, `HEADER_CHIPS` and `HEADER_CHIP_SCOPE`.
 - Tests:
-  - `src/components/header-layout.test.ts`: pin padding `6px`, and pin the lock chip's `composes` and `min-height` beside the network chip's.
+  - `src/components/header-layout.test.ts`: pin padding `6px 5px`, and pin the lock chip's `composes` and `min-height` beside the network chip's.
   - `tests/e2e/appearance.test.ts`: in the existing chip test, at 360 px, assert that `network-name` is not cut (`scrollWidth <= clientWidth`) and that `header-lock` is as tall as `network-button`.
 - **Gate**: lint, typecheck; `cd apps/extension && bun --bun vitest run src/components src/utils/type-role-ban.test.ts`; `bun run test:e2e -- tests/e2e/appearance.test.ts --retry=0`, also with `NULO_E2E_BROWSER=firefox`. Pass: all green, and the cut assertion fails on the base's 10 px padding at 11 px.
 
@@ -99,7 +99,7 @@ Each phase is one issue, with its change map, tests and gate. Paths are under `a
 - D1. A live clear needs an update event (F2). The first choice is a new `onAuthwitUpdated`. Other options were rejected. Re-emitting `onAuthwitAdded` misnames a transition. A page refetch on transaction updates couples the page to another service. A clear only on remount draws a wrong chip for minutes.
 - D2. Decorate at render, not in `fetch` (F3). This is local, and it also stops the search from throwing on an event row.
 - D3. Compose the activity `.chip`; it is the drawn style. A local copy would duplicate seven declarations.
-- D4. #651: the padding form, not the icon-only lock. The page's reasoning chose it ("keeps the LOCK word").
+- D4. #651: the padding form, not the icon-only lock. The page's reasoning chose it ("keeps the LOCK word"). Implementation: the drawn 6px sides leave TESTNET 1/64 px short in Chrome (text 53.094 against a 53.078 box), the zero slack the page's "53 of 53 px" hid. 5px sides hold it with 2px to spare in both browsers. The lane brief makes the exact padding the lead's call; the PR body states it with its picture.
 - D5. The lock chip's height follows through the same `1lh` rule, not `align-self: stretch` (which collapses when the network chip is absent) and not a fixed 28 px (which drifts from the type).
 - D6. #653 window: use `.full .row`, the grant's full arguments (F1). Structured, decoded and raw rows read alike there; no other site changes.
 - D7. Send's meta row wraps in both modes. Fiat mode's zero-basis span never breaks a line, so a token-mode-only branch adds code for no change (Opus; first draft had the branch). Values sit left under their key, and the token cap covers the figure only, as drawn.
