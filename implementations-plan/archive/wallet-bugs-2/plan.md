@@ -174,7 +174,7 @@ One branch, `wallet-bugs-2-a1` → `dev` (D1), one PR. Title (75 chars): `fix(po
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 18d29f23. Specific to this plan:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 18d29f23. Specific to this plan:
 - Step 1 is absent (`code_review: off`). Step 2 runs once over `git diff 18d29f23...HEAD` after Phase 8: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; prompts under `~/.cache/nulo-backlog/wallet-bugs-2/`; hard stop at three rounds; rounds in `lessons/phase-8.md`.
 - Approval boundary: a background baseline write, a timeout or retry on the arrival or tip read, a change to the coordinator's generations, a hold rule on the follow, a new control, or a shared row or skeleton component is a plan change and stops for the orchestrator.
 - Close-out: file KL-1 as a closed `known-limit` issue (dedupe first); Outcome block; `lessons.md` promotes nothing unless a retirement pays for it (8 KiB budget); `STATUS.md` deleted; `git mv` to `archive/` in its own commit. Teardown: slug `wallet-bugs-2`, trunk `dev`, `implementations-plan/archive/wallet-bugs-2/plan.md`.
