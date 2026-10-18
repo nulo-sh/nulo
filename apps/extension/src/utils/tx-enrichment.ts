@@ -107,25 +107,29 @@ export function getTxCategory(calls: SettledCall[], tokens: readonly ListedToken
 	return call === undefined ? "tx" : (settledReading(call, tokens) ?? "tx")
 }
 
-/** The token function each of the wallet's own transfer types runs, by the enum's number and by its
- *  name: a stored row may carry either, and `0` and `"0"` share an own key. */
-const OWN_TRANSFER_KINDS: Readonly<Record<number | string, TransferKind>> = {
-	[TransferType.Private]: "transferPrivate",
-	[TransferType.PrivateToPublic]: "transferPrivateToPublic",
-	[TransferType.Public]: "transferPublic",
-	[TransferType.PublicToPrivate]: "transferPublicToPrivate",
-	Private: "transferPrivate",
-	PrivateToPublic: "transferPrivateToPublic",
-	Public: "transferPublic",
-	PublicToPrivate: "transferPublicToPrivate",
-}
+/** Each of the wallet's own transfer types: the token function it runs and its direction, by the
+ *  enum's number and by its name, since a stored row may carry either; `0` and `"0"` share an own
+ *  key, which a `Map` would split. */
+const TRANSFER_TYPES: Readonly<Record<number | string, { kind: TransferKind; direction: string }>> = Object.fromEntries(
+	(
+		[
+			[TransferType.Private, "transferPrivate", "Private → Private"],
+			[TransferType.PrivateToPublic, "transferPrivateToPublic", "Private → Public"],
+			[TransferType.Public, "transferPublic", "Public → Public"],
+			[TransferType.PublicToPrivate, "transferPublicToPrivate", "Public → Private"],
+		] as const
+	).flatMap(([type, kind, direction]) => [
+		[type, { kind, direction }],
+		[TransferType[type], { kind, direction }],
+	]),
+)
 
 /** A settled call's title: a transfer the wallet sent itself by its recorded type, whatever its
  *  function is named; any other call by `callTitle` with the wallet's reading of it. */
 export function settledCallTitle(call: SettledCall, tokens: readonly ListedToken[]): string {
 	const type: unknown = call.transfers?.[0]?.type
-	if ((typeof type === "number" || typeof type === "string") && Object.hasOwn(OWN_TRANSFER_KINDS, type)) {
-		return TRANSFER_LABELS[OWN_TRANSFER_KINDS[type]]
+	if ((typeof type === "number" || typeof type === "string") && Object.hasOwn(TRANSFER_TYPES, type)) {
+		return TRANSFER_LABELS[TRANSFER_TYPES[type].kind]
 	}
 	return callTitle(call.method, call.contract, settledReading(call, tokens) !== null)
 }
@@ -147,22 +151,9 @@ export function getOriginLabel(origin?: TxOrigin): string | null {
 	return origin.name || DAPP_LABEL
 }
 
-// TransferType enum values: Private=0, PrivateToPublic=1, Public=2, PublicToPrivate=3
-const TRANSFER_TYPE_LABELS: Record<number | string, string> = {
-	0: "Private → Private",
-	1: "Private → Public",
-	2: "Public → Public",
-	3: "Public → Private",
-	Private: "Private → Private",
-	PrivateToPublic: "Private → Public",
-	Public: "Public → Public",
-	PublicToPrivate: "Public → Private",
-}
-
 /**
  * Returns a human-readable transfer type label.
  */
 export function formatTransferType(type: number | string): string {
-	// A stored row's `type`, so own keys only; `0` and `"0"` share a key, which a `Map` would split.
-	return Object.hasOwn(TRANSFER_TYPE_LABELS, type) ? TRANSFER_TYPE_LABELS[type] : String(type)
+	return Object.hasOwn(TRANSFER_TYPES, type) ? TRANSFER_TYPES[type].direction : String(type)
 }

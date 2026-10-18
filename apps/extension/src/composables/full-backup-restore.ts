@@ -706,14 +706,12 @@ export async function settleHeldAccounts(
 	for (const h of kept) {
 		records[h.row] = { profileId, chainId: h.chainId, restoreError: `Waiting for a network with chain ID ${h.chainId}` }
 	}
-	const unplaced: unknown[] = []
+	// The reconcile reads only this restore's accounts, so every dropped scope has its row.
 	for (const scope of dropped) {
-		const record = { profileId, chainId: scope.chainId, restoreError: ACCOUNT_WITHOUT_KEY }
 		const row = accounts.rows.get(accountScopeKey(scope.chainId, scope.address))
-		if (row === undefined) unplaced.push(record)
-		else records[row] = record
+		if (row !== undefined) records[row] = { profileId, chainId: scope.chainId, restoreError: ACCOUNT_WITHOUT_KEY }
 	}
-	io.recordRestoreErrors(ACCOUNT_SERVICE_NAME, [...records, ...unplaced])
+	io.recordRestoreErrors(ACCOUNT_SERVICE_NAME, records)
 	return kept.map((h) => ({ name: sentenceName(h.name, DEFAULT_IMPORTED_ACCOUNT_NAME), chainId: h.chainId }))
 }
 

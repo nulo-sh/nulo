@@ -397,14 +397,14 @@ describe("holdings page — before the first price answer", () => {
 		readGate = new Promise((resolve) => {
 			answerRead = resolve
 		})
-		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET)]
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET), row("b2", "BBB", CHAIN_IDS.TESTNET)]
 		const w = await mountPage()
 		expect(w.find('[data-testid="holdings-total"]').exists()).toBe(false)
 		expect(meta(w)).toBe("")
 
 		answerRead()
 		await flushPromises()
-		expect(meta(w)).toBe("1 tokens")
+		expect(meta(w)).toBe("2 tokens")
 	})
 
 	test("an empty list, answered, reads $0.00 and 0 tokens", async () => {
