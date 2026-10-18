@@ -380,6 +380,7 @@ declare global {
   const settingsResultTo: typeof import('../utils/settings-search').settingsResultTo
   const settingsRow: typeof import('../utils/settings-search').settingsRow
   const settleHeldAccounts: typeof import('../composables/full-backup-restore').settleHeldAccounts
+  const settledCallTitle: typeof import('../utils/tx-enrichment').settledCallTitle
   const settledReading: typeof import('../utils/tx-amount').settledReading
   const shallowReactive: typeof import('vue').shallowReactive
   const shallowReadonly: typeof import('vue').shallowReadonly
@@ -521,7 +522,7 @@ declare global {
   export type { ImportCompletionDeps, ImportCompletionOutcome } from '../composables/completeImportWithRecovery'
   import('../composables/completeImportWithRecovery')
   // @ts-ignore
-  export type { RestoreIo, StageFail, StageOutcome, RestoreScratch, ProfileRestoreClient, RunFenceClient, NetworkRestoreClient, AccountRestoreClient, TailNetwork, RestoredNetwork, RestoreData, BackupProfile, HeldScope, SliceRestoreClient, AccountStateTail, RestoreRun, AccountStateRetryContext } from '../composables/full-backup-restore'
+  export type { RestoreIo, StageFail, StageOutcome, RestoreScratch, ProfileRestoreClient, RunFenceClient, NetworkRestoreClient, AccountRestoreClient, TailNetwork, RestoredNetwork, RestoreData, BackupProfile, HeldScope, RestoredAccounts, SliceRestoreClient, AccountStateTail, RestoreRun, AccountStateRetryContext } from '../composables/full-backup-restore'
   import('../composables/full-backup-restore')
   // @ts-ignore
   export type { ImportChainSyncDeps } from '../composables/importChainSync'
@@ -1139,6 +1140,7 @@ declare module 'vue' {
     readonly settingsResultTo: UnwrapRef<typeof import('../utils/settings-search')['settingsResultTo']>
     readonly settingsRow: UnwrapRef<typeof import('../utils/settings-search')['settingsRow']>
     readonly settleHeldAccounts: UnwrapRef<typeof import('../composables/full-backup-restore')['settleHeldAccounts']>
+    readonly settledCallTitle: UnwrapRef<typeof import('../utils/tx-enrichment')['settledCallTitle']>
     readonly settledReading: UnwrapRef<typeof import('../utils/tx-amount')['settledReading']>
     readonly shallowReactive: UnwrapRef<typeof import('vue')['shallowReactive']>
     readonly shallowReadonly: UnwrapRef<typeof import('vue')['shallowReadonly']>
