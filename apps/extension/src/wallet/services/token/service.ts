@@ -29,8 +29,9 @@ import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { feeJuiceAddress, feeJuiceName, feeJuiceSymbol } from "@/wallet/utils/fee-juice"
 import { buildViewCall, type ViewFn } from "@/wallet/utils/fn"
 import { TokenListService } from "@/wallet/services/token-list/service"
+import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 import { type DefaultTokenSeed, seedsFromList } from "./default-tokens"
-import { PinMismatchError, TokenSeeder } from "./seeder"
+import { NAME_MAX_LENGTH, PinMismatchError, SYMBOL_MAX_LENGTH, TokenSeeder } from "./seeder"
 import {
 	type Token,
 	type TokenAdded,
@@ -68,6 +69,9 @@ import { getTokenInfo, isTokenComplete } from "./utils"
 
 type TokenMetadata = { name: string; symbol: string; decimals: number }
 
+/** What a token-import record shows when the commit's read differs from what the approval window showed. */
+export const TOKEN_DETAILS_CHANGED = "Token details changed after you approved them."
+
 type PersistTokenInput = {
 	/** Deletion fence captured at the AUTHORIZING entry (addToken /
 	 *  addSeededToken), never minted here — a post-deletion mint would
@@ -77,7 +81,9 @@ type PersistTokenInput = {
 	networkId: string
 	tokenInterface: TokenInterface
 	journal: { origin: OperationOrigin; accountAddress: string; title: string | undefined; subtitle: string }
-	metadata: ({ kind: "seeded" } & TokenMetadata) | { kind: "live"; fetch: () => Promise<[string, string, number]> }
+	metadata:
+		| ({ kind: "seeded" } & TokenMetadata)
+		| { kind: "live"; fetch: () => Promise<[string, string, number]>; expected?: TokenMetadata }
 }
 
 /** How far a token add got under the tickets it held; the next attempt resumes from it. */
@@ -332,9 +338,11 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		accountAddress: string,
 		tokenInterface: TokenInterface,
 		opContext: OperationContext,
+		/** The details the approval window showed: the add stores only a read equal to them. */
+		expected?: TokenMetadata,
 	): Promise<TokenInfo> {
 		await this.ensureInitialized()
-		return await this.addTokenWithFence(fence, profileId, networkId, accountAddress, tokenInterface, opContext)
+		return await this.addTokenWithFence(fence, profileId, networkId, accountAddress, tokenInterface, opContext, expected)
 	}
 
 	private async addTokenWithFence(
@@ -344,6 +352,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		accountAddress: string,
 		tokenInterface: TokenInterface,
 		opContext: OperationContext,
+		expected?: TokenMetadata,
 	): Promise<TokenInfo> {
 		// A caller-supplied profileId that isn't the fence's fails closed.
 		if (fence.profileId !== profileId) throw new Error("unauthorized profile")
@@ -365,6 +374,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			metadata: {
 				kind: "live",
 				fetch: () => this.fetchTokenMetadata(profileId, networkId, accountAddress, tokenInterface),
+				expected,
 			},
 		})
 	}
@@ -484,11 +494,16 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		const { metadata } = input
 		if (metadata.kind === "seeded") return { name: metadata.name, symbol: metadata.symbol, decimals: metadata.decimals }
 		const [name, symbol, decimals] = await metadata.fetch()
+		// Compared raw and before the title shows any of it; a resumed attempt reuses this read.
+		const { expected } = metadata
+		if (expected && (expected.name !== name || expected.symbol !== symbol || expected.decimals !== decimals)) {
+			throw new Error(TOKEN_DETAILS_CHANGED)
+		}
 		// Backfill the title with the resolved symbol so the in-flight
 		// TokenImportRow stops falling back to the short contract
 		// address. Safe to call even if the row has already vanished
 		// (setOperationMeta tolerates terminal records).
-		await track(this.journal.setOperationMeta(opId, { title: symbol }))
+		await track(this.journal.setOperationMeta(opId, { title: cleanSymbol(symbol) }))
 		return { name, symbol, decimals }
 	}
 
@@ -635,7 +650,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			profileId,
 			networkId,
 			tokenInterface,
-			journal: { origin: "seed", accountAddress, title: symbol, subtitle: "Default token" },
+			journal: { origin: "seed", accountAddress, title: cleanSymbol(symbol), subtitle: "Default token" },
 			metadata: { kind: "seeded", name, symbol, decimals },
 		})
 	}
@@ -998,7 +1013,8 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		// `chainId: "1:"` would otherwise "succeed", have a balance
 		// relinked to it, then be rejected by the read codec — leaving an
 		// orphaned balance. Parsing here records it as a restoreError instead.
-		const row = TokenSchema.parse({ ...token, id })
+		const parsed = TokenSchema.parse({ ...token, id })
+		const row = { ...parsed, name: cleanName(parsed.name), symbol: cleanSymbol(parsed.symbol) }
 		assertRestoreEpoch(deletion, epochs, row.profileId)
 		// The chain sweep is LOCKLESS (see clearChainState), so a purge can
 		// interleave this batch despite the token lock — a row written after
@@ -1048,6 +1064,11 @@ async function settleBy<T>(
 	return await Promise.race([outcome, late]).finally(() => clearTimeout(timer))
 }
 
+/** A token's name and symbol are contract or backup text: every row and import title stores them
+ *  with no control, format or bidirectional character, within the seeder's bounds. */
+const cleanName = (name: string): string => sanitizeWireString(name, NAME_MAX_LENGTH)
+const cleanSymbol = (symbol: string): string => sanitizeWireString(symbol, SYMBOL_MAX_LENGTH)
+
 function buildToken(profileId: string, tokenInterface: TokenInterface, metadata: TokenMetadata, id: number): Token {
 	return {
 		id,
@@ -1055,8 +1076,8 @@ function buildToken(profileId: string, tokenInterface: TokenInterface, metadata:
 		chainId: tokenInterface.chainId,
 		contract: tokenInterface.contract,
 		classId: tokenInterface.classId,
-		name: metadata.name,
-		symbol: metadata.symbol,
+		name: cleanName(metadata.name),
+		symbol: cleanSymbol(metadata.symbol),
 		decimals: metadata.decimals,
 		getNameFn: tokenInterface.getNameFn,
 		getSymbolFn: tokenInterface.getSymbolFn,

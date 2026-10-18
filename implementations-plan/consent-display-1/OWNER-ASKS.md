@@ -71,3 +71,16 @@ Arc 1 (discovery admits secure origins only) depends on none of these: none conc
 
 **What ships now: A,** in arc 3, named in its PR for sign-off.
 
+
+## OA-6: the failed-preview warning's second sentence (the execute window)
+
+**Surface.** The execute window for a dApp's `registerToken` whose details the wallet could not read. Under OA-1 = A (P42-08) the card keeps its warning, "Couldn't resolve token metadata" over "Verify the contract address before approving.", and Confirm is greyed. The second sentence now asks for a check that cannot lead to approving.
+
+| Option | What it looks like |
+|---|---|
+| A. Keep | As signed: the warning unchanged, Confirm greyed, Reject the only exit. |
+| B. Point at Reject | "Couldn't resolve token metadata" over "Reject this request and ask the app to add the token again." |
+
+**Recommendation: B.** The sentence then names the one action the window allows.
+
+**What ships now: A.** OA-1 A reads "The warning stays", so arc 2 leaves the copy as it is.

@@ -1,5 +1,6 @@
 import type { QueuedFeeReask } from "@nulo/wallet-core/jobs"
 import type { DiscoveredAuthwit } from "@nulo/wallet-bridge"
+import type { ShownTokenMetadata } from "@/wallet/services/dapp-interaction/approval-delta"
 
 /** Operation type family lives in `@nulo/wallet-bridge`. This barrel
  *  re-exports the types so extension consumers can keep importing them
@@ -88,6 +89,8 @@ export type OperationApprovalEnvelope = {
 	readonly previewId?: string
 	/** The fee the window showed, in base units: a build the person pays above it is asked about again. */
 	readonly feeCeiling?: string
+	/** The token details the window showed: a `register_token` commit stores only a read of that class equal to them. */
+	readonly tokenMetadata?: ShownTokenMetadata
 }
 
 /** The `(interactionId, index)` a preview or estimate is written under. */

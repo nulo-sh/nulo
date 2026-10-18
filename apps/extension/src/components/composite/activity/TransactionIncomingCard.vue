@@ -56,6 +56,7 @@ const hashSlice = computed(() => {
 		:amountFiat="amountFiat"
 		:to="to"
 		:arriving="arriving"
+		wrapTrailing
 		testId="tx-incoming-card"
 	>
 		<template #badge>
@@ -63,7 +64,7 @@ const hashSlice = computed(() => {
 		</template>
 
 		<template #title-trailing>
-			<span :class="$style.title_sep">·</span>
+			<span :class="$style.title_sep" data-testid="tx-incoming-kind-sep">·</span>
 			<span :class="$style.chip" data-testid="tx-incoming-kind-chip">{{ receivedLabel }}</span>
 		</template>
 
