@@ -569,6 +569,8 @@ section.s {
 /* A card whose clip runs edge to edge above its text; the plate's corner ticks stay drawn over the clip. */
 .clip-card {
 	padding: 0;
+	/* Otherwise the player bar's minimum width (Firefox's range input) sets the column's and widens a phone's page. */
+	min-width: 0;
 }
 
 .clip-card::before,
