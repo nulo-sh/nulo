@@ -7,3 +7,4 @@
 - 2026-10-18 23:05Z arc 1 phase 1 gate (fast: lint 0, typecheck:all 0, test 14002 passed; phase suites 140/140; copy identical to base): pass.
 - 2026-10-18 23:15Z arc 1 phase 2 gate (fast: lint 0, typecheck:all 0, test 14003 passed; new case red with the subscription removed): pass.
 - 2026-10-18 23:20Z arc 1 test identity: pass (suites gain 4 titles, 0 lines removed).
+- 2026-10-18 23:55Z arc 1 gate: test:all 0 (extension 14003 passed), audit:vue 0; smoke Chrome settings-routes, navigation, sw-resilience, auth-flows, onboarding-tab 40/40 in 272 s at retry 0 (armed head build); rendered identity Developer off and on, both themes, Chrome: base vs head 8/8 byte-equal, control differs; base vs base 1 pixel apart (capture noise). Pass.
