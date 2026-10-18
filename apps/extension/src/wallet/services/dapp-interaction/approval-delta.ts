@@ -7,7 +7,7 @@
  */
 
 import type { DraftOperation, FeeSettings, Operation } from "@nulo/wallet-bridge"
-import { assertExecutableOperation, isSelfPay, requiresFeeSelection } from "@nulo/wallet-bridge"
+import { assertExecutableOperation, carriesFeeSettings, isSelfPay, requiresFeeSelection } from "@nulo/wallet-bridge"
 
 export type OperationApprovalDelta = {
 	/** The user's fee choice. Read only for send-likes that need one. */
@@ -33,7 +33,7 @@ function isRequestedSelfPay(op: DraftOperation): boolean {
  * otherwise. Non-send kinds never read the delta.
  */
 export function applyFeeSelection(op: DraftOperation, feeSettings: FeeSettings | undefined): Operation {
-	if (op.kind !== "aztec_sendTx" && op.kind !== "send_transaction") {
+	if (!carriesFeeSettings(op)) {
 		assertExecutableOperation(op)
 		return op
 	}

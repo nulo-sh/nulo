@@ -58,7 +58,13 @@ import { isFeeAmount, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity, liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { assertArtifactClassId } from "@nulo/aztec-runtime/pxe"
-import { type DraftOperation, type FeeSettingsReaders, fieldAddressKey, refuseUnknownPriorities } from "@nulo/wallet-bridge"
+import {
+	type DraftOperation,
+	type FeeSettingsReaders,
+	carriesFeeSettings,
+	fieldAddressKey,
+	refuseUnknownPriorities,
+} from "@nulo/wallet-bridge"
 import {
 	EXECUTION_SERVICE_NAME,
 	type Methods,
@@ -92,7 +98,7 @@ import { coerceAmount } from "./coerce-amount"
 import { OperationPlanner, type TransferRequest } from "./operation-planner"
 import { type QueuedFeeCap, QueuedFeeAnswers, queuedFeeBasis, queuedFeeCap, sendShapeOf } from "./queued-fee-cap"
 import { TransferEstimateReuse } from "./transfer-estimate-reuse"
-import { type ChainIdentity, feeMultiplierFor } from "./estimate-reuse-shared"
+import { type ChainIdentity, type EstimateReuseDeps, feeMultiplierFor } from "./estimate-reuse-shared"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { PreviewSnapshots } from "./preview-snapshots"
 import { TransferExecutor, type TransferSequence } from "./transfer-executor"
@@ -172,9 +178,7 @@ const FEE_SETTINGS_OF = {
 	estimateTransferFee: ([, , , , , , , feeSettings]) => [feeSettings],
 	estimateOperationFee: ([, , feeSettings]) => [feeSettings],
 	executeOperations: ([operations]) =>
-		Array.isArray(operations)
-			? operations.flatMap((op) => (op?.kind === "send_transaction" || op?.kind === "aztec_sendTx" ? [op.feeSettings] : []))
-			: [],
+		Array.isArray(operations) ? operations.flatMap((op) => (carriesFeeSettings(op) ? [op.feeSettings] : [])) : [],
 } satisfies FeeSettingsReaders<Methods>
 
 export class ExecutionService extends Service<Methods> implements ServiceSpec<Methods> {
@@ -356,7 +360,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
 			logError: (msg, ...rest) => this.logError(msg, ...rest),
 		})
-		this.estimateReuse = new TransferEstimateReuse({
+		const reuseDeps: EstimateReuseDeps = {
 			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
 			getNode: (chainId) => this.networkService.getNode(chainId),
 			getLiveChainIdentity: (network) => this.liveChainIdentity(network),
@@ -364,16 +368,9 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
 			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
 			logDebug: (msg) => this.logDebug(msg),
-		})
-		this.operationEstimateReuse = new OperationEstimateReuse({
-			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
-			getNode: (chainId) => this.networkService.getNode(chainId),
-			getLiveChainIdentity: (network) => this.liveChainIdentity(network),
-			getFpcInfo: (fpcId) => this.sponsorRow(fpcId),
-			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
-			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
-			logDebug: (msg) => this.logDebug(msg),
-		})
+		}
+		this.estimateReuse = new TransferEstimateReuse(reuseDeps)
+		this.operationEstimateReuse = new OperationEstimateReuse(reuseDeps)
 		this.previewSnapshots = new PreviewSnapshots()
 		this.estimateCancel = new EstimateCancelRegistry({
 			// Ids are UUID-unique across the caches — evict from each.

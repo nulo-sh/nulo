@@ -332,3 +332,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [zod-puppeteer](zod-puppeteer/plan.md) — completed — Zod 4 and Puppeteer 25 bumps as separate changes
 - [authwit-intent-1](authwit-intent-1/plan.md) — completed — a dApp's inner-hash authorization intent never names the account that signs it; the Fee Juice selector pin runs only where it can compute
 - [fees-card-mode-1](fees-card-mode-1/plan.md) — completed — one fee card handed Send's or the app windows' rule book: verdicts, snapshot and two rule books as composables, template untouched (#513)
+- [service-structure-1](service-structure-1/plan.md) — completed — five page-37 refactors in four arcs: the import waiter, discovery and session holders out of `background.ts`, the balance outbox class, named fee and message parameters and one operation-trait table (#521 #545 #547 #549 #560)

@@ -1,5 +1,5 @@
 /**
- * Pre-extraction pins for `initWalletSdkHandler`
+ * Pins for `initWalletSdkHandler`
  * and its discovery handler, driven through a mocked SDK `BackgroundConnectionHandler`
  * that captures the wired callbacks:
  *   - every listener/subscription installs ONCE, in the frozen order, with

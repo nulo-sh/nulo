@@ -31,6 +31,7 @@ export {
 	readConsent,
 } from "./method-scope-checkers"
 export * from "./operation"
+export * from "./operation-traits"
 export * from "./operation-validation"
 export * from "./operation-result"
 export * from "./scope-enforcement"

@@ -31,16 +31,20 @@ async function callFrom(sessionId: string, sessionProfiles: Map<string, string>)
 	const terminateSession = vi.fn()
 	const session = live(sessionId) as never
 	await handleWalletMessage(
-		session,
-		{ messageId: "m1", type: "getChainInfo", args: [] } as never,
-		bindLiveSession({ sendResponse, terminateSession, getSession: () => session }, session),
-		{ dispatch } as never,
-		{ captureExecutionFence: async () => ({ profileId: "p1" }) } as never,
-		{} as never,
-		sessionProfiles,
-		{ current: () => 0 } as never,
-		noopLogger,
-		{ assertCurrent: async () => undefined },
+		{
+			session,
+			message: { messageId: "m1", type: "getChainInfo", args: [] } as never,
+			live: bindLiveSession({ sendResponse, terminateSession, getSession: () => session }, session),
+		},
+		{
+			dispatcher: { dispatch } as never,
+			profileService: { captureExecutionFence: async () => ({ profileId: "p1" }) } as never,
+			operationJournal: {} as never,
+			sessionProfiles,
+			switchEpoch: { current: () => 0 } as never,
+			logger: noopLogger,
+			legal: { assertCurrent: async () => undefined },
+		},
 	)
 	return { dispatch, response: sendResponse.mock.calls[0]?.[1], terminateSession }
 }
