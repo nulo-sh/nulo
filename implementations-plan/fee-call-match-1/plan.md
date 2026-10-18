@@ -13,6 +13,18 @@ issues: "#796 (A1 Closes, in part: D2); #821 (D2, owner-decision, no arc)"
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** delivered in #822 (arc A1, one PR that carries this close-out); its merge closes the plan.
+- **Shipped:** the transaction page's Fee method row reads "Private Fee Juice" only for a `pay_fee` call on the PrivateFPC, so an app's own fee call reads "Set by {app}", or "External FPC" with no origin (#796, its Private Fee Juice half).
+- **Owner asks:** OA-1 open, filed as #821; A1 shipped its option A (no change to "Sponsored").
+- **Known limits:** none.
+- **Open items:** #821 (#796's sponsor half: telling the person's sponsor from an app's needs a record of who chose the fee).
+- **Dropped:** none. Not taken: `Refs #796`, D2 as a known limit (both in D2).
+- **Lessons:** none promoted: `lessons.md` is at its budget and already holds the address rule. The picture spec's wait and a self-matching `pkill -f` are in [lessons/phase-2.md](lessons/phase-2.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+
 # fee-call-match-1: the Fee method row reads an app's fee contract by address
 
 One arc, one PR against `dev` (D-orch-1). The transaction page's Fee method row names "Private Fee Juice" only for a `pay_fee` call on the PrivateFPC, so an app's own fee contract with a Nulo-like function name reads "Set by {app}". Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (OA-1; A1 depends on none). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are relative to `apps/extension/src` unless they start with `apps/` or `implementations-plan/`.
