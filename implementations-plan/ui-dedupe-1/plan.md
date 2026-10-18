@@ -23,6 +23,7 @@ Six owner picks (page 37, 2026-10-17), all option A, all with no screen change; 
 | A4 | #517 the countdown Close | `Closes #517` | onboarding-3's recovery-phrase change merges (`seed.vue` is the sole consumer) |
 | A5 | #548 token-balance family | `Refs #548` | PR #678 and sheet-1 merge; OA-1 answered or not |
 | A6 | #548 journal family | `Closes #548` | A5 merges |
+| A7 | #548 OA-1 answered B: the token-balance lists take Home's rules | `Refs #548` | A6 merged (#752); OA-1 answered 2026-10-18 |
 
 Every arc is one PR against `dev`, not stacked (orchestrator rule D-orch-1). A1 runs on `worktree-ui-dedupe-1`, which carries this plan. Each later arc branches from `dev` at its release as `ui-dedupe-1-aN` and merges `dev` again before its PR.
 
@@ -226,6 +227,26 @@ Every arc is one PR against `dev`, not stacked (orchestrator rule D-orch-1). A1 
   - every existing suite unchanged.
 - **At release**: any newly observable difference becomes an OA-1 entry before code.
 
+### A7 (#548): the token-balance lists take Home's rules
+
+- **The pick**: P44-02 = B, "Converge every row above onto Home's rule; the two deliberate differences stay options." Page 44 showed seven rows (D701). Six converge onto the hook's default, and the option that carried each goes with its last caller; row 3 waits on OA-3 (D704).
+
+| # | View: today | Home's rule, as built | Replaced test → new test |
+|---|---|---|---|
+| 1 | Holdings: LOADING HOLDINGS on every read, a reconnect included (`loadingOnRefresh`, `reconnect: "every"`) | the list stays while it re-reads; the first connect is the mount read's own | holdings "every connect reads again behind the loading state…" → "a later connect re-reads in place…" |
+| 2 | Holdings: a refused read shows Couldn't load holdings over a loaded list, until the next reconnect (`loadingOnRefresh`, `retryOnReject: false`) | a loaded list stays; a refused read is retried after 2 s | the same case's refused half, and the retry half of "a refused read is not retried on a timer…" → "a refused first read … retried after 2 s" |
+| 3 | Holdings: an update for an unseen row lists it (`insertUnseenUpdated`) | held (D704): kept until OA-3, since it heals the read-over-add row Holdings keeps | unchanged |
+| 4 | Select token: Couldn't load tokens until reopen (`retryOnReject: false`) | retried after 2 s | the retry half of "a refused read is not retried on a timer…" → "a refused read … retried after 2 s" |
+| 5 | Select token: a reconnect blanks the list and reloads it with pins (`onReconnect`) | re-reads in place, an error line kept until it lands; pins follow storage; a read begun without a whole scope lands nothing (D706) | "a port drop blanks the list while it reloads" → "a port drop re-reads in place"; "…a port drop mid-load reloads with no error shown" → "…keeps the error line until the reconnect's re-read lands" (the client's real order, D707); new "a reconnect's read begun without a whole scope lands nothing…" |
+| 6 | Send: no re-read after a worker restart (`reconnect: "off"`) | a counted reconnect re-reads, with the 2 s retry and the dirty refetch; the identity fetch's read gives way only to a newer read that landed (D708) | none → "a worker restart re-reads the balances…", "an account switch drops a re-read still out…", "an identity fetch's balance read never lands over a reconnect's read…", "…lands when the reconnect's read that began after it is refused" |
+| 7 | Send: a deleted balance row is ignored | drops the row | none → "a deleted balance row drops its amount…" |
+
+- **Hook** (`composables/useTokenBalanceSnapshot.ts`): `loadingOnRefresh`, `retryOnReject`, `reconnect` and `onReconnect` go. Kept: `added` (Holdings' `replace`, the deliberate one; Send's `append`, D701), `insertUnseenUpdated` (D704), `refetchWhenDirty` (D701), optional `state`, `scopeFence`, `mapRow`. An `append` in scope marks a run dirty (D703).
+- **Holdings** (`popup/pages/holdings.vue`) keeps `added: "replace"`, the hook's unfiltered delete and its scope-gated update; **Select token** (`popup/components/popups/SelectTokenPopup.vue`) keeps its gated update, `invalidate()` and `reset()`.
+- **Send** (`popup/pages/send.vue`) subscribes the hook's delete; its identity fetch drops the previous identity's re-read and retry, and lands its own read unless the hook has landed a newer one since it began (D708). Its identity read and failure card are unchanged.
+- **Tests**: the hook's option cases go with their options, the Home-rule cases stay, and the `append` case gains the dirty mark. The page cases follow the table; the uncovered rows keep their pins. The balance-client mocks of `send.test.ts` and `send.integration.test.ts` gain the events the real client has (`onConnected`, `onTokenBalanceDeleted`). A page case that ends on a refused read unmounts, so its retry timer dies with it.
+- **Files**: only the four above, their tests and this plan. None is in #743, #654, #579 or #762.
+
 ## Security & Adversarial Considerations
 
 - **Threat model**:
@@ -244,6 +265,7 @@ Every arc is one PR against `dev`, not stacked (orchestrator rule D-orch-1). A1 
 
 - A1, A2, A3, A5, A6: none. The lane brief: "UI impact: none … behaviour-identical by construction". A5's convergences ship only on OA-1's answer.
 - A4, the countdown Close on Settings, Backup, Recovery Phrase: none, proven pixel-identical. The PR body carries before and after screenshots in both themes. A pixel difference is an `OWNER-ASKS.md` entry, not a shipped change.
+- A7, signed by P44-02 = B (OA-1): Holdings keeps its list through a re-read and a refused one, and retries a refused read after 2 s. Select token retries a refused read after 2 s and re-reads in place on a reconnect. Send's amount is re-read after a worker restart, and a deleted balance row drops it. Before: Holdings shows LOADING HOLDINGS on every re-read and Couldn't load holdings over its list after a refused one, until a reconnect; Select token shows Couldn't load tokens until reopened. The PR body carries before and after pictures of Holdings during a re-read and after a refused one, and of Select token after a refused read, both themes at 360 px.
 
 ## Phases and validation gates
 
@@ -289,6 +311,12 @@ A pass is exit 0, with every named test green and none skipped that ran on base.
   - The phase gate.
   - Smoke on Chrome: `rows`, `navigation`.
   - Network on Chrome: `cancel-mid-prove`, `in-flight-send-guard`.
+- **A7** ✓ (on 1f185f10, code fc230fd6, dev 9470d4e9: lint, typecheck:all, test:all, check:plans; whole smoke suite at retry 0, Chrome 57 files passed and 6 skipped in 1952 s, Firefox 60 passed and 3 skipped in 2702 s; network Chrome `send-picker` 1/1 in 211 s; Codex clean in round 3).
+  - G-fast.
+  - The suites of the hook, `holdings`, `SelectTokenPopup`, `send`, `send.integration`, `BalanceView`, `TokensView` and `popup-stack.pins`; each new page case red on the base page, each replaced one red on the new page.
+  - The phase gate.
+  - The pictures: a scratch spec, not committed, over a base build and a change build.
+  - The whole smoke suite at retry 0 on Chrome and on Firefox (armed builds). Network on Chrome: `send-picker`.
 
 ## Decision ledger and audit verdicts
 
@@ -337,6 +365,15 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
 | D607 | at implementation: no `client` option and no exposed `invalidate()` (the hook subscribes nothing; every teardown is `dispose()`); acceptance is one gate before the reducers; `resnapshot` rejects to the caller (History propagates, Home retries on the same run, the token list swallows); Home's `read` does its captured-account check, filter and sort and answers `undefined` when the account moved, so its landing moves one microtask (every scope change bumps the fence synchronously); the store's `splice`/`push` become new arrays behind its suspend gate and revision count (D510's rule) | the plan's `client` and `invalidate` | Codex consult: agree; implementer |
 | D608 | A6 review round 1 (Codex `findings` 4, Opus `findings` 3 P3, neither found a behaviour difference): History's case uses one end time so its stable sort shows the mirror's order, pinning `front` and the re-add move; the store's replace case lands a `succeeded` copy (ignoring the add would pass the old one); the hook's `undefined` case keeps a non-empty list; the reducers' header says what `place` decides for an add; Home's reconnect docblock moves back onto the resnapshot; the token list's duplicate case is a `(BUG PIN)`; Home's re-file case reads again and the card goes | TokensView's dispose after its disconnect (matches the file's own `disposeBalances` order, no effect: `disconnect()` fires only `onDisconnected`) | Codex F1–F4, Opus F1, F2 |
 | D609 | A6 review round 2 (Codex, resumed): `clean`; F1–F4 resolved, the Opus-leg changes verified, no regression. Loop converged after 2 rounds | — | Codex |
+| D701 | A7 converges the seven rows page 44 showed. The five recorded after it was built (Holdings' and Select token's read landing over a meanwhile event, Send's `append`, A6's three journal rows) were not on it: they stay as shipped and are asked as OA-3 | converge all twelve on "every row above" (the owner saw seven; a screen change needs sign-off naming it) | orchestrator's release scope; implementer |
+| D702 | Send re-reads through the hook's fetch on a counted reconnect, and its identity fetch calls `invalidate()` first, dropping a re-read and a retry of the previous identity (superseded by D705) | a reconnect that re-runs the identity fetch (blanks the card and re-reads tokens and contacts, a change no row asked for); a `scopeFence` over the identity sequence (same fence, leaves the retry armed) | implementer |
+| D703 | an `append` in scope marks a run dirty: Send's re-read now runs through the hook, and Home's dirty refetch must see Send's adds | leave it unmarked (a re-read would land over an add) | implementer |
+| D704 | A7 review round 1: row 3 is held, and Holdings keeps `insertUnseenUpdated` until OA-3. Holdings keeps `refetchWhenDirty: false` (an OA-3 row), so a read landing over an add drops the token, and on base the projector's next update re-lists it through row 3's rule. Converged alone, row 3 leaves the token missing until a reconnect or a remount, worse than base and than Home (whose dirty refetch keeps the add). OA-3 asks for both together | ship row 3 alone (an unsigned regression); converge Holdings' read-over-add row too (an unsigned screen change) | Opus P1, verified |
+| D705 | A7 review round 1: Send numbers every balance read in one sequence (the hook's `scopeFence` takes the next number at each run's start; the identity fetch takes one and lands its rows only if it is still the latest), as its `tokenReadSeq` does for tokens. It replaces D702's `invalidate()`: a retry armed for an earlier identity reads the live one and takes a newer number (superseded by D708) | D702 alone (an identity fetch whose tokens or contacts answer late lands an older balance over the reconnect's); routing the identity fetch's balance read through the hook (D504: a refused read would show 0, not Retry) | Codex F1, verified |
+| D706 | A7 review round 1: Select token's `scopeFence` fixes "a whole scope at the run's start", so a reconnect read begun without one lands nothing and arms no retry, as `load()` reads nothing then | a hook-wide whole-scope check (changes Home's no-network read) | Codex F2, Opus P3 |
+| D707 | A7 review round 1: the Select token port-drop case follows the client's order (`client.ts`: a drop rejects pending requests at once; `onConnected` waits for the next Ready, in a task): the error line shows and stays until the re-read lands, Home's rule, now pinned; the two read-over-add cases assert the add listed before the land | keep the case's impossible order | Opus P2, P3 |
+| D708 | A7 review round 2 (Codex, resumed): `findings` 1. Under D705 a refused re-read that began after an identity fetch discarded the fetch's only good balance (amount 0, no Retry). The fetch now lands its read unless the hook has landed one since it began (Send passes the hook a `state` ref, set to `loading` at the fetch's start), and calls `invalidate()` at its start; D705's sequence goes | D705's start order (a refused newer read wins); D702 alone (Codex F1) | Codex R2 P1, verified |
+| D709 | A7 review round 3 (Codex, resumed): `clean`; D704's reasoning holds and no other converged row depends on a kept rule. Loop converged after 3 rounds | — | Codex |
 
 ## Delivery
 
@@ -354,6 +391,7 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
   - A4 `refactor(ui): the countdown Close renders the design Button, pixel-identical`
   - A5 `refactor(tokens): one balance mirror for Home, Holdings, Select token and Send`
   - A6 `refactor(activity): one journal mirror for Activity, Home and the token list`
+  - A7 `refactor(ui): holdings, select token and send take home's balance-list rules`
 - **Close-out**: it ships as the final commits of the last arc's PR (A6, or the last that merges if one is dropped). Until then each arc PR updates this plan's marks and ledger, and `index.md`'s status line.
 - **Parallelism**: A1 and A2 share no file. They run in sequence because one e2e host budget serves both. Lanes are not recommended.
 

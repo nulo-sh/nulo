@@ -72,8 +72,10 @@ vi.mock("@/wallet/services/token-balance/client", () => ({
 	TokenBalanceServiceClient: vi.fn(function () {
 		return {
 			disconnect: vi.fn(),
+			onConnected: new EventHandler(),
 			onTokenBalanceAdded: new EventHandler(),
 			onTokenBalanceUpdated: new EventHandler(),
+			onTokenBalanceDeleted: new EventHandler(),
 			getTokenBalances: mocks.getTokenBalances,
 		}
 	}),
@@ -904,6 +906,9 @@ describe("send page — the token card while the tokens load", () => {
 	const lastClient = <T>(ctor: unknown) => (ctor as { mock: { results: { value: T }[] } }).mock.results.at(-1)?.value as T
 	const tokenAdded = () => lastClient<{ onTokenAdded: EventHandler<unknown> }>(TokenServiceClient).onTokenAdded
 	const balanceAdded = () => lastClient<{ onTokenBalanceAdded: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceAdded
+	const balanceDeleted = () =>
+		lastClient<{ onTokenBalanceDeleted: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceDeleted
+	const balanceConnected = () => lastClient<{ onConnected: EventHandler<void> }>(TokenBalanceServiceClient).onConnected
 	const card = (w: W) => {
 		const el = w.get('[data-testid="stub-token-card"]')
 		return { loading: el.attributes("data-loading"), symbol: el.attributes("data-symbol") }
@@ -995,6 +1000,97 @@ describe("send page — the token card while the tokens load", () => {
 		cacheStore.activeTokenIdx = NEW.id
 		await flushPromises()
 		expect(amount(w).attributes("data-balance")).toBe("4")
+		w.unmount()
+	})
+
+	test("a worker restart re-reads the balances: the first connect is the load's own, a later one lands the new amount", async () => {
+		const { w } = await mountSend()
+		expect(amount(w).attributes("data-balance")).toBe("5")
+		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, privateBalance: "8000000" }])
+		balanceConnected().invoke()
+		await flushPromises()
+		expect(mocks.getTokenBalances).toHaveBeenCalledTimes(1)
+		expect(amount(w).attributes("data-balance")).toBe("5")
+		balanceConnected().invoke()
+		await flushPromises()
+		expect(mocks.getTokenBalances).toHaveBeenCalledTimes(2)
+		expect(amount(w).attributes("data-balance")).toBe("8")
+		w.unmount()
+	})
+
+	test("an account switch drops a re-read still out for the previous account", async () => {
+		const { w, appStore } = await mountSend()
+		balanceConnected().invoke()
+		let release: (rows: unknown[]) => void = () => {}
+		mocks.getTokenBalances.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					release = resolve
+				}),
+		)
+		balanceConnected().invoke()
+		await flushPromises()
+		mocks.getTokenBalances.mockResolvedValue([])
+		appStore.account = { address: "0xbob" } as never
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("0")
+		release([{ ...BALANCE, privateBalance: "8000000" }])
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("0")
+		w.unmount()
+	})
+
+	test("an identity fetch's balance read never lands over a reconnect's read that began after it", async () => {
+		const { w, appStore } = await mountSend()
+		balanceConnected().invoke()
+		const reads = holdTokenReads()
+		mocks.getTokenBalances.mockResolvedValueOnce([{ ...BALANCE, id: "b2", account: "0xbob" }])
+		appStore.account = { address: "0xbob" } as never
+		await flushPromises()
+		mocks.getTokenBalances.mockResolvedValueOnce([{ ...BALANCE, id: "b2", account: "0xbob", privateBalance: "8000000" }])
+		balanceConnected().invoke()
+		await flushPromises()
+		expect(mocks.getTokenBalances).toHaveBeenCalledTimes(3)
+		reads[0]?.resolve([TOKEN])
+		await flushPromises()
+		expect(card(w)).toEqual({ loading: "false", symbol: "TST" })
+		expect(amount(w).attributes("data-balance")).toBe("8")
+		w.unmount()
+	})
+
+	test("an identity fetch's balance read lands when the reconnect's read that began after it is refused", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		const { w, appStore } = await mountSend()
+		balanceConnected().invoke()
+		// A re-read landed for the previous identity first.
+		balanceConnected().invoke()
+		await flushPromises()
+		const reads = holdTokenReads()
+		mocks.getTokenBalances.mockResolvedValueOnce([{ ...BALANCE, id: "b2", account: "0xbob" }])
+		appStore.account = { address: "0xbob" } as never
+		await flushPromises()
+		mocks.getTokenBalances.mockRejectedValue(new Error("port closed"))
+		balanceConnected().invoke()
+		await flushPromises()
+		await vi.advanceTimersByTimeAsync(2_000)
+		await flushPromises()
+		expect(mocks.getTokenBalances).toHaveBeenCalledTimes(5)
+		reads[0]?.resolve([TOKEN])
+		await flushPromises()
+		expect(card(w)).toEqual({ loading: "false", symbol: "TST" })
+		expect(amount(w).attributes("data-balance")).toBe("5")
+		w.unmount()
+	})
+
+	test("a deleted balance row drops its amount; a delete for another row keeps it", async () => {
+		const { w } = await mountSend()
+		expect(amount(w).attributes("data-balance")).toBe("5")
+		balanceDeleted().invoke({ ...BALANCE, id: "b9" })
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("5")
+		balanceDeleted().invoke(BALANCE)
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("0")
 		w.unmount()
 	})
 

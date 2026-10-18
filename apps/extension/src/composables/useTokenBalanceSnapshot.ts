@@ -20,26 +20,16 @@ interface TokenBalanceSnapshotDeps<T> extends TokenBalanceEventRules {
 	client: Pick<TokenBalanceServiceClient, "getTokenBalances" | "onConnected">
 	live: LiveTokenScope
 	rows: Ref<T[]>
-	/** Omitted by a parent that never reads through the hook. */
+	/** Omitted by a parent that shows no state of its own. */
 	state?: Ref<TokenBalanceSnapshotState>
-	/** Captured at run start; a run whose fence goes false lands nothing. For a parent whose scope
-	 *  change awaits before refetching, so the run's own generation cannot fence the old scope yet. */
+	/** Captured at run start; a run whose fence is false when it settles lands nothing and arms no
+	 *  retry. For a parent whose own reads or scope changes the run's generation cannot see. */
 	scopeFence?: () => () => boolean
 	/** Applied to each row a read or an event lists; an update that replaces a listed row writes it
 	 *  as received. */
 	mapRow?: (row: TokenBalanceInfo) => T
-	/** Every run reads `loading`, so a refused one reads `unavailable` over rows already shown. */
-	loadingOnRefresh?: boolean
-	/** A refused read is retried once on a timer (the default); off, only a reconnect or a scope
-	 *  change reads again. */
-	retryOnReject?: boolean
 	/** An in-scope event during a run makes it read again rather than land (the default). */
 	refetchWhenDirty?: boolean
-	/** Which connects read again: each after the first, which the first request opened (the
-	 *  default), every one, or none. */
-	reconnect?: "after-first" | "every" | "off"
-	/** Runs on a counted reconnect in place of the read, for a parent that reloads its whole view. */
-	onReconnect?: () => void
 }
 
 /** A rejected snapshot is retried once on a timer; after that a reconnect or a scope change retries. */
@@ -59,12 +49,13 @@ function tokenBalanceEvents<T>(
 	/** The default keeps a listed row: an add carries its row as created, and where deletes are
 	 *  applied the listed row is that row or a newer one. */
 	function onBalanceAdded(tb: TokenBalanceInfo) {
+		const inScope = inActiveScope(tb)
+		if (inScope) markDirty()
 		if (rules.added === "append") {
 			if (tb.account === live.account?.address) rows.value.push(mapped(tb))
 			return
 		}
-		if (!inActiveScope(tb)) return
-		markDirty()
+		if (!inScope) return
 		const idx = indexOf(tb.id)
 		if (idx === -1) rows.value.push(mapped(tb))
 		else if (rules.added === "replace") rows.value[idx] = mapped(tb)
@@ -95,7 +86,7 @@ function tokenBalanceEvents<T>(
  * disconnects the client.
  */
 export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalanceSnapshotDeps<T>) {
-	const { client, live, rows, scopeFence, mapRow, reconnect = "after-first" } = deps
+	const { client, live, rows, scopeFence, mapRow } = deps
 	const state = deps.state ?? ref<TokenBalanceSnapshotState>("loading")
 	const fence = createRunFence()
 	let dirty = false
@@ -110,7 +101,7 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalance
 
 	function settleRejected(isTimedRetry: boolean) {
 		if (state.value !== "loaded") state.value = "unavailable"
-		if (!isTimedRetry && deps.retryOnReject !== false) retryTimer = setTimeout(() => void fetchTokenBalances(true), RETRY_MS)
+		if (!isTimedRetry) retryTimer = setTimeout(() => void fetchTokenBalances(true), RETRY_MS)
 	}
 
 	function land(fetched: TokenBalanceInfo[], chainId: number | undefined) {
@@ -125,7 +116,6 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalance
 		const superseded = () => (inScope && !inScope()) || !isCurrent()
 		clearTimeout(retryTimer)
 		dirty = false
-		if (deps.loadingOnRefresh) state.value = "loading"
 		const address = live.account?.address
 		const chainId = live.network?.chainId
 		if (!address) {
@@ -147,11 +137,9 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalance
 
 	function onReconnected() {
 		connectsSeen++
-		if (reconnect !== "every" && connectsSeen < 2) return
-		if (deps.onReconnect) deps.onReconnect()
-		else void fetchTokenBalances()
+		if (connectsSeen >= 2) void fetchTokenBalances()
 	}
-	if (reconnect !== "off") client.onConnected.add(onReconnected)
+	client.onConnected.add(onReconnected)
 
 	/** Drops the run in flight and the pending retry; the next run starts clean. */
 	function invalidate() {
@@ -167,7 +155,7 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalance
 
 	function dispose() {
 		invalidate()
-		if (reconnect !== "off") client.onConnected.remove(onReconnected)
+		client.onConnected.remove(onReconnected)
 	}
 
 	return {

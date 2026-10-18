@@ -36,7 +36,8 @@ import {
 	waitForFreshBalanceRow,
 	waitForTokenCardAmount,
 } from "../fixtures/helpers"
-import { accountChainId, exportBackupContent, keepChainAccountState, sealPlainBackup } from "../helpers/backup-export"
+import { accountChainId, exportBackupContent, keepChainAccountState } from "../helpers/backup-export"
+import { sealPlainBackup } from "../helpers/backup-seal"
 import { gotoPopupImport, importFullBackup, POPUP_IMPORT_SHELL, TEST_PASSWORD, writeBackupToTemp } from "../helpers/import-drivers"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined

@@ -9,7 +9,8 @@
 import type { Page } from "puppeteer"
 import { clickByTestId, waitForHash, withTimeoutMessage, type ExtensionContext, waitForServiceReady } from "../fixtures/extension"
 import { confirmProfileReset } from "../fixtures/helpers"
-import { accountChainId, exportBackupContent, keepChainAccountState, sealPlainBackup } from "./backup-export"
+import { accountChainId, exportBackupContent, keepChainAccountState } from "./backup-export"
+import { sealPlainBackup } from "./backup-seal"
 import { POPUP_IMPORT_SHELL, submitFullBackupImport, TEST_PASSWORD, writeBackupToTemp } from "./import-drivers"
 
 // The rollback/delete budget is STRUCTURAL, not sampled: the crash path's
