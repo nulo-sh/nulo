@@ -145,6 +145,26 @@ describe("OperationCard — aztec_createAuthWit", () => {
 		}
 	})
 
+	test("on a token the wallet does not hold, the Function row names a transfer by the function's own name, read or not", () => {
+		const call = { to: TOKEN, name: "transfer_in_public", selector: "0x8c9e5472", args: [OWNER, DELEGATE, field(5n), field(1n)] }
+		const decoded = {
+			kind: "decoded",
+			contract: "Token",
+			fn: "transfer_in_public",
+			params: [
+				{ name: "from", value: { kind: "address", value: OWNER } },
+				{ name: "to", value: { kind: "address", value: DELEGATE } },
+				{ name: "amount", value: { kind: "integer", value: "5" } },
+				{ name: "authwit_nonce", value: { kind: "field", value: field(1n) } },
+			],
+		}
+		const pending = mountCard(createAuthWit({ caller: DELEGATE, call }))
+		expect(pending.find('[data-testid="execute-authwit-function"]').text()).toBe("Transfer In Public")
+		const unread = mountCard(createAuthWit({ caller: DELEGATE, call }), { decodedCalls: [decoded] })
+		expect(unread.find('[data-testid="execute-authwit-structured-args"]').exists()).toBe(false)
+		expect(unread.find('[data-testid="execute-authwit-function"]').text()).toBe("Transfer In Public")
+	})
+
 	test("an unrecognized intent waits for the decode, then renders named parameters; a 2-arg transfer never claims a sender", () => {
 		const call = { to: TOKEN, name: "transfer", args: [DELEGATE, field(5n)] }
 		const pending = mountCard(createAuthWit({ caller: DELEGATE, call }))

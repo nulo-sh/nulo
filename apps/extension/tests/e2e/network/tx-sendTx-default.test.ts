@@ -1,6 +1,5 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
-import { feeDisplay, feeFigure } from "@/utils/fee-estimation"
 import { clickByTestId, openPopup, test } from "../fixtures/extension"
 import { pinnedFeeText, refusePrices, seedFeeJuiceQuote, settledText } from "../fixtures/fee-quote"
 import { shotSend } from "../fixtures/send-page"
@@ -197,7 +196,9 @@ test.skipIf(!hasConfig)(
 		expect(await settledText(feePopup, "fee-raised-was", was)).toBe(was)
 		expect(await settledText(feePopup, "fee-raised-now", now)).toBe(now)
 		expect(await text("fee-raised-method")).toBe("Public Fee Juice")
-		expect(await text("fee-confirm-btn")).toBe(`Send for ${feeFigure(feeDisplay(fee, undefined))}`)
+		// The Confirm repeats the card's figure, its dollars on a second line.
+		const confirmText = `Send for ${pinnedFeeText(fee)}`
+		expect(await settledText(feePopup, "fee-confirm-btn", confirmText)).toBe(confirmText)
 		expect(await prices.refused.failures(), "price interception failures").toEqual([])
 		await prices.refused.stop()
 		await shotSend(feePopup, "fee-window-raised", "fee-raised")

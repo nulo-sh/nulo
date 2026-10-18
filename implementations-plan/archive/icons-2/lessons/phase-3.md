@@ -1,0 +1,6 @@
+# Phase 3: after pictures and the full gates
+
+- 2026-10-18 (a) after capture (`raw/8ed7057d`, Chrome, prover on, with the base `marks.json` refused): exit 0, 255 s; every band's check passed against the head table; 28 PNGs.
+- 2026-10-18 (b) composed 8 pictures into `screenshots/`: `marks-{1x,2x}-{light,dark}.png` (five bands, before and after side by side) and `settings-{1x,2x}-{light,dark}.png` (Glossary and Edit network). The fiat figure and the account address differ between the two runs (a fresh sandbox account and its quote each run); nothing else moves.
+- 2026-10-18 (c) `bun run audit:vue`: exit 0 (typecheck, 13977 tests, lint, build with `THIRD-PARTY-NOTICES.txt`). (d) `build-storybook`: exit 0. (e) armed smoke build, then `type-roles.test.ts` + `tooltips-glossary.test.ts` at retry 0: 15 passed, 1 skipped (the Firefox-only toolbar case on Chrome), 89 s. (f) `type-roles-windows.test.ts` proverless at retry 0: 5 passed, 294 s. `git diff origin/dev -- packages/third-party-notices` is empty; no scratch spec in `git status`.
+- 2026-10-18 review round 1: Codex `approve with fixes` (the `publishGlyph` comment), Opus `approve with fixes` (two surfaces missing from the UI impact record). Both adopted; no code behaviour changed.

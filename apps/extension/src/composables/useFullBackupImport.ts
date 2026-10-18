@@ -462,7 +462,7 @@ async function executeRestore(
 
 	// Before activation: a type-1 Account row with no key row would restore as a zombie that
 	// fails at signing.
-	const heldAccounts = await settleHeldAccounts(accountService, newProfile.id, accounts.held, io)
+	const heldAccounts = await settleHeldAccounts(accountService, newProfile.id, accounts, io)
 
 	// Late activation: open the session NOW that all backup data is in storage. This emits
 	// `onActiveProfileChanged` → app.vue's handler → `getOrInitNetworks`/`ensureDefaultAccount`
