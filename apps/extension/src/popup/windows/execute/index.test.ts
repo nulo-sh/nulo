@@ -189,7 +189,6 @@ const STUBS = {
 
 // Lazy import after vi.mock hoist
 import Execute from "./index.vue"
-import { rawNotice } from "./call-surface"
 
 const factory = () => mount(Execute, { global: { stubs: STUBS } })
 
@@ -1060,6 +1059,15 @@ describe("execute window — a public grant", () => {
 		expect(confirm().attributes("disabled")).toBeUndefined()
 	})
 
+	// The tooltip cannot hold a dotted term, so each reason says it whole; the window cannot be
+	// approved, so it never carries the closing advice.
+	const REFUSAL = {
+		"unknown-contract": "Nulo doesn't have this contract's interface, so it can't read the arguments.",
+		"unknown-function": "This function isn't in the interface Nulo has for the contract, so it can't read the arguments.",
+		arguments: "The arguments don't fit the contract's interface, so Nulo can't read them.",
+		unavailable: "Nulo couldn't read the arguments right now.",
+	} as const
+
 	test.each([
 		["unknown-contract", () => decodeGrantsForDisplayMock.mockResolvedValueOnce([{ kind: "undecoded", reason: "unknown-contract" }])],
 		["unknown-function", () => decodeGrantsForDisplayMock.mockResolvedValueOnce([{ kind: "undecoded", reason: "unknown-function" }])],
@@ -1069,7 +1077,7 @@ describe("execute window — a public grant", () => {
 		arrange()
 		const { vm, confirm, error } = await opened()
 		expect(error().text()).toBe("Can't read the arguments")
-		expect(vm.grantRefusal?.tooltip).toBe(rawNotice(reason))
+		expect(vm.grantRefusal?.tooltip).toBe(REFUSAL[reason])
 		expect(confirm().attributes("disabled")).toBeDefined()
 		await vm.approve()
 		expect(approveInteractionMock).not.toHaveBeenCalled()
@@ -1079,7 +1087,7 @@ describe("execute window — a public grant", () => {
 		decodeGrantsForDisplayMock.mockResolvedValueOnce([])
 		const { vm, confirm, error } = await opened()
 		expect(error().text()).toBe("Can't read the arguments")
-		expect(vm.grantRefusal?.tooltip).toBe(rawNotice("unavailable"))
+		expect(vm.grantRefusal?.tooltip).toBe(REFUSAL.unavailable)
 		expect(confirm().attributes("disabled")).toBeDefined()
 	})
 
