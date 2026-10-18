@@ -47,7 +47,7 @@ For the next contributor reading a red e2e or CI job, and for the owner reviewin
 
 ## Architecture & Implementation
 
-Test, CI and doc changes only; reuse per recon's map, plus the wallet's own backup assembler (F5). Interfaces that change: `_extension-smoke-e2e.yml` gains an `artifact_id` input; `_build-extension.yml`, `select-assets`, `release-notes`, `attach-assets` and `nightly-notes` gain artifact-id outputs; `helpers/backup-export.ts` gains `sealPasskeyBackup`; `helpers/import-drivers.ts` exports `readPasskeyPrf`. The decision ledger records each alternative not taken.
+Test, CI and doc changes only; reuse per recon's map, plus the wallet's own backup assembler (F5). Interfaces that change: `_extension-smoke-e2e.yml` gains an `artifact_id` input; `_build-extension.yml`, `select-assets`, `release-notes`, `attach-assets` and `nightly-notes` gain artifact-id outputs; a new leaf `helpers/backup-seal.ts` holds `sealPlainBackup`, `sealPasskeyBackup` and `passkeyBackupVerifies`; `helpers/import-drivers.ts` exports `readPasskeyPrf`. The decision ledger records each alternative not taken.
 
 ## Security & Adversarial Considerations
 
@@ -84,7 +84,7 @@ Assumes F4, I4. In `ext/tests/e2e/fixtures/playground.ts`, `callExpectingNoPopup
 
 **Gate:** lint, typecheck; `network/sim-methods.test.ts` with `NULO_E2E_PROVERLESS=1`, both browsers, green.
 
-### Phase 4. #643: the passkey row verifies the wallet's MAC, then re-seals with its own passkey
+### Phase 4. #643: the passkey row verifies the wallet's MAC, then re-seals with its own passkey ✓
 Assumes F5.
 - **`helpers/backup-export.ts`:**
   - Import what it calls from the owning modules (`fixtures/dom`, `fixtures/wallet-pages`, `fixtures/navigation`), with `import type` for `ExtensionContext`. Then `import-drivers` may import it without a cycle (README § Fixture layout).
@@ -109,6 +109,8 @@ Assumes F5.
 - Smoke, both browsers: `passkey-backup`, `passkey-retry`, `passkey-toolbar-panel`.
 - With `NULO_E2E_PROVERLESS=1`, both browsers, both rows: `network/import-handshake-note-matrix` and `network/import-handshake-note`.
 - After the PR opens: both browsers' network lanes run the passkey row green at retry 0; the PR body gives its measured runtime.
+
+**Deviation** ([lessons/phase-4.md](lessons/phase-4.md)): the seals and the check live in a leaf, `helpers/backup-seal.ts`, which the unit test (`scripts/e2e/backup-seal.test.ts`) imports without the fixture graph; `backup-export.ts` keeps its imports. The passkey row measured 65 s (Chrome) and 44 s (Firefox).
 
 **Arc 1 gate:** `bun run test:all`, `bun run check:plans`; the e2e files above at retry 0.
 

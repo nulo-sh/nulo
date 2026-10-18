@@ -27,10 +27,12 @@ import { confirmProfileReset } from "./fixtures/helpers"
 import { registerPasskeyProfile, setupPasskeyVirtualAuth, stallNextPasskeyCeremony } from "./fixtures/passkey"
 import { shotSend } from "./fixtures/send-page"
 import { downloadPlainPasskeyBackup } from "./helpers/backup-export"
+import { type PlainBackup, passkeyBackupVerifies } from "./helpers/backup-seal"
 import { armDownloadCapture } from "./helpers/download-capture"
 import {
 	buildSyntheticPasskeyBackup,
 	readActiveAccount,
+	readPasskeyPrf,
 	readRegisteredPasskey,
 	submitPasskeyFullBackup,
 	writeBackupToTemp,
@@ -148,9 +150,12 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 			]),
 		)
 		expect(afterCancel).toBe("nothing")
-		const plain = JSON.parse(await downloadPlainPasskeyBackup(page)) as Record<string, unknown>
-		expect(plain["master-key"]).toBe((await readRegisteredPasskey(page)).credentialId)
+		const plain = JSON.parse(await downloadPlainPasskeyBackup(page)) as PlainBackup
+		const { credentialId } = await readRegisteredPasskey(page)
+		expect(plain["master-key"]).toBe(credentialId)
 		expect("entropy" in plain).toBe(false)
+		const passkey = { id: credentialId, prf: await readPasskeyPrf(page, credentialId) }
+		expect(await passkeyBackupVerifies(plain, passkey), "the export's checksum and MAC under its own passkey").toBe(true)
 
 		// Drive the encryption path so the second status card variant
 		// ("Encrypting your backup") is exercised too. For passkey profiles
