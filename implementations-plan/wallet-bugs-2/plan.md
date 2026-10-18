@@ -10,7 +10,7 @@ eli5_mode: skipped (orchestrator-owned)
 base: 18d29f23
 trunk: dev
 post_implementation_hardening: not scheduled
-status: planned, awaiting approval
+status: approved (orchestrator, ed41c27b); arc 1 implementing
 ---
 
 # wallet-bugs-2: seven small popup defects, one arc
@@ -61,7 +61,7 @@ One arc, one PR against `dev` (D1), closing #714, #648, #616, #638, #579, #654 a
 | `store/remote-code.md` | OA-1's sentence and clause; six cites re-pointed | #615 |
 
 **Decision ledger**
-- D1. One arc, one PR, no stack (orchestrator's D-orch-1).
+- D1. One arc, one PR, no stack (orchestrator's D-orch-1). Deviation at implementation: the orchestrator named the branch `wallet-bugs-2-a1`, cut from `origin/dev` at 9470d4e9 (#759 landed after the plan's base, touching none of this plan's files) with the plan commit cherry-picked; every "diff from base" below reads from 9470d4e9.
 - D2 (#714). `Map` for the two string tables, as `token-transfer-vocabulary.ts` does; `Object.hasOwn` for `TRANSFER_TYPE_LABELS`, whose number keys coerce to strings (a `Map` would split `0` from `"0"`). No new label row: `getMethodLabel` answers only for the wallet's allowlist.
 - D3 (#616). (a) In `onLogAdded`, while the viewer does not follow, the trim and append carry `view.scrollSnapshot()` mapped through their change set, so CodeMirror keeps the view instead of holding it at its end. (b) Only if Phase 3's trim case is red with (a) alone: `updateShouldAutoScroll` re-arms only on a scroll that moved `scrollTop` down, as a person's scroll does and a trim's restore (which moves it up) does not; the scroll button then re-arms the follow itself, since at the end it moves nothing (Codex round 2). Rejected: no re-arm while a selection or the search panel holds (both legs: it stops the button and a person's scroll from resuming the follow, a change nobody signed); a threshold under one line (misses a trim at gap 0); nudging the view off CodeMirror's band (moves the view).
 - D4 (#638). `endsSelection(e) = e.detail > 0 && selectedWithin(e.currentTarget)`: a pointer click that ends a selection inside its target; Enter and Space (detail 0) copy as today. Header adopts it; `ScopeAddress`/`ScopeClassId` keep theirs (collision). `AddressDisplay` guards its whole click and takes the event as a parameter (it reads the global `event` today); its parent cards get their guard in the same commit, and their inner explorer link keeps its propagation stop.
@@ -149,7 +149,7 @@ From the root: `bun run audit:vue`, `bun run test:all`, `bun run check:plans`; t
 
 ## Delivery
 
-One branch, `worktree-wallet-bugs-2` → `dev`, one PR. Title (75 chars): `fix(popup): seven small defects: labels, wraps, log follow, copy, feed, bars`. Body: each fix and its why; the validation runs with outcomes; the pictures for #648 and #654; OA-1 quoted; `Closes #714`, `Closes #648`, `Closes #616`, `Closes #638`, `Closes #579`, `Closes #654`, `Closes #615`; ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Open it without labels after Phase 8 and the Codex loop; add `e2e:extension-smoke` or `e2e:extension-network` only when the path filter skips a suite the change needs. The close-out lands as its final commits.
+One branch, `wallet-bugs-2-a1` → `dev` (D1), one PR. Title (75 chars): `fix(popup): seven small defects: labels, wraps, log follow, copy, feed, bars`. Body: each fix and its why; the validation runs with outcomes; the pictures for #648 and #654; OA-1 quoted; `Closes #714`, `Closes #648`, `Closes #616`, `Closes #638`, `Closes #579`, `Closes #654`, `Closes #615`; ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Open it without labels after Phase 8 and the Codex loop; add `e2e:extension-smoke` or `e2e:extension-network` only when the path filter skips a suite the change needs. The close-out lands as its final commits.
 
 ## Post-implementation
 

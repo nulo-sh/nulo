@@ -5,3 +5,5 @@
 - 2026-10-18: audit round 2: Codex reject (separate clients' onConnected); D6 replaced by the one-attempt tip read; D3b tightened.
 - 2026-10-18: audit round 3: Codex and Opus conditional approve; the one-attempt tip read narrowed to `getArrivalState`, KL-1 reworded.
 - 2026-10-18: final fresh Codex pass: conditional approve (quarantine refusal kept on the arrival read; Fact 2 corrected); both applied; resumed: approve.
+- 2026-10-18: orchestrator approved at ed41c27b; arc 1 on `wallet-bugs-2-a1` off origin/dev 9470d4e9, plan cherry-picked.
+- 2026-10-18: Phase 1 gate pass: tx-enrichment + execute vitest (333 pass; 5 new cases red on base), lint 0, typecheck:all 0.
