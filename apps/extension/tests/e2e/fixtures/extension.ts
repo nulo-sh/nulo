@@ -56,7 +56,7 @@ export interface ExtensionContext {
 	/** Check this launch's recorded CSP violations now rather than at `close`. A test calls it
 	 *  before it reloads the extension, which discards the record; `close` then only closes. */
 	checkCspViolations(): Promise<void>
-	/** The smoke suite's egress guard, canary and stand-in Testnet node for this launch; absent where
+	/** The launch's egress guard, canary and stand-in Testnet node; absent where
 	 *  no guard is armed, and no stand-in in a `live` launch. */
 	egress?: { guard: EgressGuard; canary: EgressCanary; node: HeldNode | undefined }
 }

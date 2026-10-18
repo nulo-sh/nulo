@@ -134,7 +134,7 @@ async function settledCount(guard: EgressGuard, canaryPort: number): Promise<num
 	throw new Error("requests for the canary kept arriving at the guard for 10s")
 }
 
-describe.skipIf(!guardArmed(inject("egressGuard")))("the smoke launch's egress guard", () => {
+describe("the launch's egress guard", () => {
 	let ctx: ExtensionContext
 	let site: Site
 	let page: Page
@@ -142,9 +142,11 @@ describe.skipIf(!guardArmed(inject("egressGuard")))("the smoke launch's egress g
 	let canary: EgressCanary
 
 	beforeAll(async () => {
+		// Every e2e setup arms the guard, so an unarmed run fails here rather than skipping unproven.
+		if (!guardArmed(inject("egressGuard"))) throw new Error("this run's global setup did not arm the egress guard")
 		site = await startSite()
 		ctx = await launchExtension()
-		if (!ctx.egress) throw new Error("the smoke setup armed the guard, but the launch carries none")
+		if (!ctx.egress) throw new Error("the setup armed the guard, but the launch carries none")
 		;({ guard, canary } = ctx.egress)
 		page = await newPage(ctx.browser)
 		await page.goto(`http://127.0.0.1:${site.port}/page`, { waitUntil: "domcontentloaded" })

@@ -1,5 +1,5 @@
 /**
- * The smoke suite's egress guard: every HTTP, HTTPS and WebSocket request a guarded browser makes
+ * The e2e suites' egress guard: every HTTP, HTTPS and WebSocket request a guarded browser makes
  * for a host outside the machine reaches this loopback proxy, which refuses it and records the
  * host. A per-launch canary, reachable only on a direct path, proves the routing held.
  *
@@ -61,7 +61,7 @@ export const LIVE_NODE_HOST = new URL(TESTNET_RPC_URL).hostname
 /** The published token list's host, which the live launch also sends direct. */
 export const LIVE_LIST_HOST = new URL(TOKEN_LIST_URL).hostname
 
-/** Wallet and spec hosts the smoke build tries and the guard refuses, each with why it is tried. */
+/** Wallet and spec hosts an e2e build tries and the guard refuses, each with why it is tried. */
 export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
 	[
 		"lb.drpc.live",
@@ -119,7 +119,7 @@ export function undeclared(attempts: readonly EgressAttempt[], browserOwnHosts: 
 		.sort()
 }
 
-/** Whether the run's global setup armed the guard. Only the smoke setup provides `true`. */
+/** Whether the run's global setup armed the guard; both e2e setups provide `true`. */
 export const guardArmed = (provided: unknown): boolean => provided === true
 
 export const canaryUrl = (port: number, scheme = "https"): string => `${scheme}://${EGRESS_CANARY_HOST}:${port}/`
