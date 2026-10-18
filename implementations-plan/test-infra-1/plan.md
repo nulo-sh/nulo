@@ -262,6 +262,9 @@ It found `awaitedBus`, the storage moves, `world(opts)`, the L and B catches and
 
 **Arc 3 Opus diff review** (opus, beside round 1, read at 15554ea0): `approve with fixes`. Taken: A3R1-1, found independently; a `(path, text)` reader with fixtures (the guard had no failing fixture); the new `)` fixture split into its own test, whose title says what it proves; `shipped` → `ships` and D13's and Phase 9's lane wording. Not taken: rewriting Phase 8's lane list, which records its gate; D13 names the two still open.
 
+**Arc 3 Codex fix loop, round 2** (resumed, verification of 488b5df8): `reject (blocking: encoded Vue directives can still bypass the fence-presence guard)`. Both round 1 fixes hold. Taken:
+- A3R2-1 (High, demonstrated; needs a template-level facade call, which the background-only facade does not allow) the template parser decodes a character reference (`&quot;`) in an expression's code but not in its `loc`, so a call after one got an offset inside the encoded text, and a `fence?:` parameter declared before the call in the same handler was missed (old red, new green). Mapping decoded positions back needs Vue's decoder (the `entities` package, which the extension does not declare). Instead `Call.offset` is undefined in a template expression whose code is not its source verbatim, and the fence guard counts a call it cannot place as absent: it fails closed there, where the old reader read the raw text. A `callsTo` test pins the undefined offset beside a placed control, and the fence fixture pins the closed failure.
+
 ## Seeds
 
 ```

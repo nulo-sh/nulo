@@ -61,6 +61,8 @@ describe("codeLines", () => {
 describe("callsTo", () => {
 	const shape = (calls: ReturnType<typeof callsTo>) =>
 		calls.map(({ line, callee, args }) => [line, callee, args.map((arg) => arg.getText())])
+	const at = (text: string, offset: number | undefined, length: number) =>
+		offset === undefined ? undefined : text.slice(offset, offset + length)
 
 	test("matches the callee's text: an optional call, a member suffix, a `new`", () => {
 		const text = ['this._logger?.log?.("a")', 'logger.log("b")', 'mylogger.log("c")', 'const l = new Lock("net", logger)'].join("\n")
@@ -69,7 +71,7 @@ describe("callsTo", () => {
 			[2, "logger.log", ['"b"']],
 		])
 		expect(shape(callsTo("x.ts", text, /^Lock$/))).toEqual([[4, "Lock", ['"net"', "logger"]]])
-		expect(callsTo("x.ts", text, /\blogger\.log$/).map((call) => text.slice(call.offset, call.offset + 6))).toEqual(['log("b'])
+		expect(callsTo("x.ts", text, /\blogger\.log$/).map((call) => at(text, call.offset, 6))).toEqual(['log("b'])
 	})
 
 	test("reads arguments as nodes, so a paren inside a string is text", () => {
@@ -97,11 +99,20 @@ describe("callsTo", () => {
 			[6, "y"],
 			[7, "z"],
 		])
-		expect(calls.map((call) => sfc.slice(call.offset, call.offset + 11))).toEqual([
-			"openToast(s",
-			"openToast(x",
-			"openToast(y",
-			"openToast(z",
+		expect(calls.map((call) => at(sfc, call.offset, 11))).toEqual(["openToast(s", "openToast(x", "openToast(y", "openToast(z"])
+	})
+
+	test("gives no offset in a template expression whose character references the parser decoded", () => {
+		const sfc = [
+			"<template>",
+			'  <b @click="say(&quot;)&quot;); openToast(x)" />',
+			"  <i @click=\"say(')'); openToast(y)\" />",
+			"</template>",
+		].join("\n")
+		const calls = callsTo("x.vue", sfc, /^openToast$/)
+		expect(calls.map((call) => [call.line, call.args[0]?.getText(), at(sfc, call.offset, 11)])).toEqual([
+			[2, "x", undefined],
+			[3, "y", "openToast(y"],
 		])
 	})
 })

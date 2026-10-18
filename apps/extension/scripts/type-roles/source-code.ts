@@ -123,14 +123,14 @@ export function codeLines(file: string, text: string): string[] {
 export type Call = {
 	/** The 1-based line of the callee's name. */
 	line: number
-	/** The file offset of the callee's name. */
-	offset: number
+	/** The file offset of the callee's name; undefined in a template expression whose code is not its source verbatim. */
+	offset?: number
 	/** The callee's source text: `this._logger.log`, `NuloAccount.new`, `Lock` for `new Lock(…)`. */
 	callee: string
 	args: readonly ts.Expression[]
 }
 
-type Fragment = { code: string; line: number; offset: number }
+type Fragment = { code: string; line: number; offset?: number }
 
 function isExpression(value: unknown): value is Expression {
 	return typeof value === "object" && value !== null && "content" in value && "loc" in value
@@ -143,12 +143,18 @@ function templateCode(node: TemplateNode): Fragment[] {
 		if (prop.type !== NODE.DIRECTIVE) continue
 		expressions.push(prop.exp, prop.arg?.isStatic === false ? prop.arg : undefined)
 	}
-	// A dynamic argument's `loc` spans its brackets; the code sits inside them.
-	return expressions.filter(isExpression).map((exp) => ({
-		code: exp.content,
-		line: exp.loc.start.line,
-		offset: exp.loc.start.offset + exp.loc.source.indexOf(exp.content),
-	}))
+	return expressions.filter(isExpression).map((exp) => ({ code: exp.content, line: exp.loc.start.line, offset: codeOffset(exp) }))
+}
+
+/**
+ * Where an expression's code starts in the file. A dynamic argument's `loc` spans its brackets. The
+ * parser decodes a character reference (`&quot;`) in the code and not in `loc`, so no position in
+ * such code maps to the file: undefined.
+ */
+function codeOffset({ content, loc }: Expression): number | undefined {
+	if (loc.source === content) return loc.start.offset
+	if (loc.source === `[${content}]`) return loc.start.offset + 1
+	return undefined
 }
 
 function callsIn({ code, line, offset }: Fragment, callee: RegExp): Call[] {
@@ -162,7 +168,12 @@ function callsIn({ code, line, offset }: Fragment, callee: RegExp): Call[] {
 				const name = ts.isPropertyAccessExpression(node.expression) ? node.expression.name : node.expression
 				const start = name.getStart(source)
 				const at = source.getLineAndCharacterOfPosition(start).line
-				calls.push({ line: line + at, offset: offset + start, callee: text, args: node.arguments ?? [] })
+				calls.push({
+					line: line + at,
+					offset: offset === undefined ? undefined : offset + start,
+					callee: text,
+					args: node.arguments ?? [],
+				})
 			}
 		}
 		node.forEachChild(visit)

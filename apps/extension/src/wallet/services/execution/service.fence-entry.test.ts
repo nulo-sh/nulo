@@ -242,13 +242,15 @@ function mayBeAbsent(source: string, name: string, offset: number): boolean {
 	return nearest[1] === "?" || /\|\s*undefined/.test(nearest[2] ?? "")
 }
 
-/** Each `….executeSendTransaction(…)` in `text` but the executor's own, whose fence parameter is required. */
+/** Each `….executeSendTransaction(…)` in `text` but the executor's own, whose fence parameter is required. A
+ *  call the reader cannot place in the file has no declaration to read, so its fence counts as absent. */
 function facadeCalls(path: string, text: string): { site: string; args: number; absent: boolean }[] {
 	return callsTo(path, text, /\.executeSendTransaction$/)
 		.filter((call) => !/\bdappSendExecutor\.executeSendTransaction$/.test(call.callee))
 		.map(({ line, offset, args }) => {
 			const fence = args[4]
-			return { site: `${path}:${line}`, args: args.length, absent: !fence || mayBeAbsent(text, fence.getText(), offset) }
+			const absent = !fence || offset === undefined || mayBeAbsent(text, fence.getText(), offset)
+			return { site: `${path}:${line}`, args: args.length, absent }
 		})
 }
 
@@ -265,7 +267,7 @@ test("no production caller relies on that capture: every facade call passes a fe
 	}
 })
 
-test("a fence's declaration is looked up in the whole file before the call, never inside it", () => {
+test("a fence's declaration is looked up in the whole file before its call, never inside it", () => {
 	const inArgs = "function f(fence?: Fence) {\n\tsvc.executeSendTransaction(op, { fence: live }, task, hooks, fence)\n}\n"
 	expect(facadeCalls("x.ts", inArgs)).toEqual([{ site: "x.ts:2", args: 5, absent: true }])
 	const vue = [
@@ -277,4 +279,6 @@ test("a fence's declaration is looked up in the whole file before the call, neve
 		"</script>",
 	].join("\n")
 	expect(facadeCalls("x.vue", vue)).toEqual([{ site: "x.vue:5", args: 5, absent: false }])
+	const decoded = `${vue}\n<template>\n  <b @click="say(&quot;&quot;); svc.executeSendTransaction(op, o, task, hooks, fence)" />\n</template>`
+	expect(facadeCalls("x.vue", decoded)[1]).toEqual({ site: "x.vue:8", args: 5, absent: true })
 })

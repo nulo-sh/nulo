@@ -36,3 +36,9 @@ Scratch, not committed, under `~/.cache/nulo-backlog/test-infra-1/p7/`:
 - `fixture-check.ts` runs both fixtures through the old reader, the round 1 reader and the fixed one: old and fixed agree (`true`, `false`), round 1 gives the opposite of each.
 - `offset-check.ts` checks every call `callsTo` finds in `apps/extension/src` and `packages/design/src`, tests included: 170,710 calls, 570 in `.vue` templates, each `offset` starting with its callee's name on the reported line, no mismatch.
 - The equal-lists comparison re-ran on the fixed reader with the walks re-dumped from the guards: 766 files each, the same three fence calls, 11 files and 18 amount calls, all equal (`compare-p7.r1fix.out`).
+
+## Review round 2
+
+- Vue's template parser decodes character references in expression code (`decodeHTML` for interpolations, the tokenizer's `onattribentity` for attribute values) and keeps `loc` on the raw text, so `loc.source.indexOf(content)` is `-1` after a `&quot;` and every later position is shifted. Directive values are otherwise kept verbatim (no trim), and a dynamic argument's `loc` adds only its brackets, so "code equals `loc.source`, or `[code]`" is the exact test for a placeable expression.
+- An exact map would need the same decoder, from `entities`, which `apps/extension` does not declare (the isolated linker refuses it, and the lane adds no dependency). `Call.offset` is undefined instead, and the fence guard fails closed on such a call.
+- Re-run on the fixed reader: `offset-check.ts` 170,714 calls, none unplaced, no mismatch; `compare-p7.ts` all equal (`compare-p7.r2fix.out`); `fixture-check.ts` unchanged.
