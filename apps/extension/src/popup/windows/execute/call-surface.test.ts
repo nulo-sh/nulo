@@ -103,6 +103,7 @@ describe("callSurface", () => {
 			kind: "decoded",
 			fn: "transfer",
 			params: swapped.params,
+			labels: "unchecked",
 		})
 		const wrongKind = {
 			...abi("transfer", ["to", "amount"]),
@@ -119,10 +120,32 @@ describe("callSurface", () => {
 		})
 	})
 
+	test("a registered token's call that claims the vocabulary but fails it marks its labels as the contract's", () => {
+		const args = [TO, OWNER, field(5n), field(0n)]
+		const p2p = sel("transfer_private_to_private", 4)
+		const marked = (fn: string, roles: string[], selector: string, tokenKnown = true) =>
+			callSurface(ctx, { name: fn, to: TOKEN, selector, args }, abi(fn, roles), tokenKnown)
+		const reversed = ["to", "from", "amount", "_nonce"]
+		expect(marked("transfer_private_to_private", reversed, p2p)).toMatchObject({ kind: "decoded", labels: "unchecked" })
+		expect(marked("claim_x", reversed, p2p)).toMatchObject({ kind: "decoded", fn: "claim_x", labels: "unchecked" })
+		expect(marked("transfer_private_to_private", reversed, "0x11223344")).toMatchObject({ kind: "decoded", labels: "unchecked" })
+		expect(marked("transfer_private_to_private", ["from", "to", "amount", "_nonce"], p2p)).toMatchObject({ kind: "transfer" })
+		expect(marked("transfer_private_to_private", reversed, p2p, false)).not.toHaveProperty("labels")
+		expect(marked("claim_x", reversed, "0x11223344")).toEqual({
+			kind: "decoded",
+			fn: "claim_x",
+			params: abi("claim_x", reversed).params,
+		})
+	})
+
 	test("a hidden msg_sender or a missing caller context falls through to the decode instead of claiming a sender", () => {
 		const two = abi("transfer", ["to", "amount"])
 		const call = { name: "transfer", selector: sel("transfer", 2), args: [TO, field(5n)] }
-		expect(callSurface(ctx, { ...call, hideMsgSender: true }, two, true)).toMatchObject({ kind: "decoded" })
+		expect(callSurface(ctx, { ...call, hideMsgSender: true }, two, true)).toEqual({
+			kind: "decoded",
+			fn: "transfer",
+			params: two.params,
+		})
 		expect(callSurface(undefined, call, two, true)).toMatchObject({ kind: "decoded" })
 		const tip = abi("transfer_in_private", FOUR)
 		const tipCall = { name: "transfer_in_private", selector: sel("transfer_in_private", 4), args: [OWNER, TO, field(5n), field(0n)] }
