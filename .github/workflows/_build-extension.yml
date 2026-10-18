@@ -41,6 +41,12 @@ on:
       firefox_artifact_url:
         description: Download URL of the uploaded Firefox build (empty when not uploaded).
         value: ${{ jobs.build.outputs.firefox_artifact_url }}
+      chrome_artifact_id:
+        description: Id of the uploaded Chrome build, which a consumer downloads by (empty when not uploaded).
+        value: ${{ jobs.build.outputs.chrome_artifact_id }}
+      firefox_artifact_id:
+        description: Id of the uploaded Firefox build, which a consumer downloads by (empty when not uploaded).
+        value: ${{ jobs.build.outputs.firefox_artifact_id }}
 
 jobs:
   build:
@@ -50,6 +56,8 @@ jobs:
     outputs:
       chrome_artifact_url: ${{ steps.upload-chrome.outputs.artifact-url }}
       firefox_artifact_url: ${{ steps.upload-firefox.outputs.artifact-url }}
+      chrome_artifact_id: ${{ steps.upload-chrome.outputs.artifact-id }}
+      firefox_artifact_id: ${{ steps.upload-firefox.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

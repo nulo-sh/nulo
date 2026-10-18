@@ -42,6 +42,8 @@ Reusables live as `.github/workflows/_*.yml` and are called from top-level workf
 
 The two suites and the lane take a `browser` input (`chrome` default, `firefox`); log-artifact and browser-cache names carry the browser so a Firefox lane can neither overwrite nor restore a Chrome lane's.
 
+A smoke or a publisher downloads each artifact by its producer's upload id, never by name (`_build-extension.yml` outputs `chrome_artifact_id` / `firefox_artifact_id`; `_extension-smoke-e2e.yml` takes `artifact_id`); [`CI.md` § `release.yml`](../CI.md#releaseyml) has why, and `scripts/ci-cd/artifact-handoffs.test.ts` pins it.
+
 Composite actions live in `.github/actions/` and are shared step fragments used inside jobs.
 
 | Composite | Purpose |
