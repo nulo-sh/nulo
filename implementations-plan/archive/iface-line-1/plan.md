@@ -139,6 +139,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | 3 | Codex, resumed | **approve** | none new: the open-authorization fallback verified, no regression | none |
 | arc 1, r1 | Codex, gpt-6.1-sol (session 01a14f44) | approve | a test loop over the term testids could run zero times: it asserts three first; a test comment named owner-pick ids, and `RAW_LINE`'s comment restated the map | none |
 | arc 1, r1 | Opus 5.5 (diff) | conditional approve | the same loop and comment; three comments claimed "under the last unreadable call" where the fallback differs; `adviceSite` reads `summaryAuthwits` instead of decoding again; `RAW_NOTICE` and `NoticeSegment` lose `export`; the grant-window advice on a refused request goes to OA-1 (option E) | rewording CLAUDE.md's rule to "distinct" terms: a ruleset change beyond the lane, D1 records the reading; an at-rest flag for an unreadable discovered authorization: pre-existing, D4, filed at close-out |
+| arc 1, r2 | Codex, resumed | **approve** | none new: the r1 fixes and the Opus items verified, no regression | none |
 
 ## Seeds
 
