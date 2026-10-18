@@ -1,8 +1,8 @@
 ---
 plan: e2e-flakes-2
 tier: light
-status: arc 1 implemented, Codex loop converged, PR pending
-issues: "#774 (arc 1 closes)"
+status: arc 1 merged (#813); arc 2 in progress
+issues: "#774 (arc 1, closed by #813); #816 (arc 2 closes)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -17,7 +17,7 @@ post_implementation_hardening: not scheduled
 
 # e2e-flakes-2: make the reconciliation spec's gap with no live writer
 
-One arc, one PR against `dev`, one e2e spec changed. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults and probe data: [lessons/phase-0.md](lessons/phase-0.md).
+Two arcs, one PR each against `dev`, one e2e spec changed per arc; arc 2 ([below](#arc-2--816-the-copy-snack-sweeps-abouts-foot)) was added after arc 1 merged. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults and probe data: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Root cause (#774)
 
@@ -89,17 +89,21 @@ Test code only: no product, permission, storage-shape, wire or CI change. The sp
 - D2 Seed the gap after `stopBackground` and a verified lock, before the unlock.
 - D3 The baseline is `gapMadeAt`, not 0. Each leg found the same vacuous pass: Codex through a late dead-worker write, Opus through a write-back before the stop.
 - D4 No new committed test. The spec is the test, and the race cannot be parked. The proof is the probe, the negative control and 15 green runs.
-- D5 The flake-ledger row (58, after #743's 57) lands in the close-out, after onboarding-3 merges. No other skill or `FIREFOX.md` edit.
+- D5 The flake-ledger rows (58, and 59 for arc 2, after #743's 57) land in the close-out, after onboarding-3 merges. No other skill or `FIREFOX.md` edit.
 - D6 The runs use CI's proverless build and the skill's two-core pin (Opus #1).
 - D7 No `onChanged` recorder in the spec to prove the sweep created the row (Codex r2 #1, rejected). Its path needs a stopped worker's write delivered after the lock check, which no browser was shown to do (zero writes in 35 s, both browsers), and a broken sweep at the same time. The negative control covers the broken sweep alone.
+- D8 (arc 2) Wait for the snack to leave, not reorder the steps or rescroll. Reordering hides the precondition in step order. `block: "center"` puts the coingecko line, the drag's start, off screen. A poll inside `textEdge` would hide a real cover.
+- D9 (arc 2) Wait for the named snack (`waitForToastGone`), not for any card: the reused helper names the cause, and an unexpected card still reds at `textEdge`.
 
 ## Delivery
 
-Single arc. Branch `e2e-flakes-2-a1` off `origin/dev`, with the plan commit on it. Open one PR against `dev` with `gh pr create`, after the gate passes and the Codex loop converges, and after merging `origin/dev`. Title: `test(e2e): make the balance-row gap with the worker stopped` (59 characters). Body: the root cause and its evidence, the 15 runs and the control with outcomes, the times, `UI impact: none`, `Closes #774`. Open it without labels: both network lanes run on `apps/extension/**`. No parallel lanes.
+Arc 1 shipped as #813. Arc 2: branch `e2e-flakes-2-a2` off `origin/dev` (a4edec20), its own PR against `dev` with `gh pr create` after the gate and the Codex loop. Title: `test(e2e): wait for the copy snack to leave before about's foot` (63 characters). Body: the path and its evidence, the controls, the 15 runs with the file and test times before and after, `UI impact: none`, `Closes #816`. No label: the smoke lanes run on `apps/extension/**`. The close-out (D5's ledger rows, the Outcome, the archive move) still waits for #743.
+
+Arc 1: Branch `e2e-flakes-2-a1` off `origin/dev`, with the plan commit on it. Open one PR against `dev` with `gh pr create`, after the gate passes and the Codex loop converges, and after merging `origin/dev`. Title: `test(e2e): make the balance-row gap with the worker stopped` (59 characters). Body: the root cause and its evidence, the 15 runs and the control with outcomes, the times, `UI impact: none`, `Closes #774`. Open it without labels: both network lanes run on `apps/extension/**`. No parallel lanes.
 
 ## Post-implementation
 
-Follow `implementations-plan/README.md` § Post-implementation standard at `24c68cb4`, single-arc placement. `code_review: off`: no `/code-review`. The Codex loop: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. Stop at three rounds; log each in `lessons/phase-1.md`. Run one Opus diff review beside round 1. A fix that grows the design stops for the orchestrator. Close-out: the PR's final commits, after `origin/dev` carries #743 (D5): the ledger row, the Outcome, the archive move. Teardown after merge: `agent-worktree done e2e-flakes-2 --merged`.
+Follow `implementations-plan/README.md` § Post-implementation standard at `24c68cb4`, once per arc over that arc's own diff (each arc is its own PR off `dev`, not a stack). `code_review: off`: no `/code-review`. The Codex loop: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. Stop at three rounds; log each in `lessons/phase-N.md` for arc N. Run one Opus diff review beside round 1. A fix that grows the design stops for the orchestrator. Close-out: the last PR's final commits, after `origin/dev` carries #743 (D5): one ledger row per arc, the Outcome, the archive move. Teardown after merge: `agent-worktree done e2e-flakes-2 --merged`.
 
 ## Audit verdicts
 
@@ -112,6 +116,32 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `24c6
 **Final pass, Codex** (fresh session 01a1506a, gpt-6.1-sol, high): **approve**, high confidence. Two wording fixes, applied: the Outcome and Security lines now say a late write cannot pass as the repair by itself; the negative control names the rebuilding `e2e:agent` command. It confirmed F1-F8, D7's proportion, and that `openPopup` waits for the worker's Ready, so init cannot stand in for the disabled unlock reconcile.
 
 **Implementation rounds 1-2** (diff 767789b7..78b82faa; round 2, Codex resume: approve, the loop converged). Codex (gpt-6.1-sol, high, session 01a15077): conditional approve, 2 comment findings, both fixed (78b82faa). Opus diff review: conditional approve; the same retry clause, fixed; the test title kept. Gate on bf7db153: lint, `typecheck:all`, `test:all` exit 0; negative control red at `waitForFreshBalanceRow`; Firefox 10/10 (67.5-162.0 s) and Chrome 5/5 (49.9-89.2 s) at retry 0. Log: [lessons/phase-1.md](lessons/phase-1.md).
+
+## Arc 2 — #816: the copy snack sweeps About's foot
+
+Scope: `tests/e2e/navigation.test.ts`'s drag-select test, red 3 of 3 on one Firefox smoke shard (`legal-about-group's first character is off screen or covered`, `:253`). Same lane rules: trace first, wait on the state, no retry, skip or longer timeout. Base: `origin/dev` at a4edec20. UI impact: none.
+
+**Path (demonstrated).** Initial conditions: the test clicks the header's address on Home, which opens the success snack `Address is copied` (`header-copy-address.ts`), alive 2 s (`SUCCESS_TOAST_MS`) plus a 150 ms leave. At rest the card spans y 546-588 of the 600 px popup (`bottom: SNACK_GAP`, 12 px). Its enter and leave slide it 20 px lower (`.enter_from, .leave_to` in `ToastManagerBase.vue`), over the band 588-608. Actions, in order: Privacy's drags, back, About; `scrollIntoView({ block: "nearest" })` puts the Legal title's first character at y 593, and the note's `block: "end"` puts its last at y 590.5, both in that band, on both browsers. If either hit test runs while the card slides, `elementFromPoint` returns the card and `textEdge` throws. Invariant broken: the spec's own precondition, nothing drawn over the point it presses. Consequence: a red required gate (`extension-smoke-e2e-firefox-status`). Evidence, in [lessons/phase-2.md](lessons/phase-2.md):
+
+- Probe (throwaway, one run per browser, `taskset -c 0,1`): on Firefox the note's hit test, 2.06 s after the card appeared, returned `snackbar-title`, the card mid-leave at y 564-606. Chrome reached About's foot 0.73 s after the copy, before the leave. A copy made on About itself showed the entering card covering the note there too (`hit: snackbar`).
+- CI: run 39166471199 (job 117791281807) red at `:253` on three attempts; run 39168239864 (job 117795684862, not in the issue) red at `:253` twice and at `:264`, the note, once, 1.98 s after the copy log. Eight green Firefox runs logged the link-rows drag 2.13-2.63 s after it.
+- The issue's hypothesis did not hold: the sub-page header spans y 64-120, and the failing point is at y 593.
+
+**Not a product bug.** A snack overlays the page by design; the spec presses under a transient overlay it opened itself.
+
+**Change** (the spec only): after About shows `legal-about-accepted` and before its first scroll, `await waitForToastGone(page, "Address is copied")` (`fixtures/widgets.ts`, re-exported by `fixtures/helpers`), which counts a leaving card as present, with one comment line saying why. Cost: the snack's remaining life, about 0.3 s on Firefox and 1.4 s on Chrome per the probe.
+
+### Phase 2 — wait for the copy snack to leave
+
+1. Add the wait and its comment; import `waitForToastGone`.
+2. Negative controls, never committed, Firefox, one run each. Both adopt a stylesheet in the popup, `[data-testid="snackbar"] { transition-duration: 4s !important; transition-timing-function: step-start !important }`, so a leaving card holds its swept-down place for 4 s. **A**, the unfixed spec plus a wait until a card carries its leave class before About's scroll: red at `:253` with #816's message. **B**, the fixed spec under the same stylesheet: green, the wait lasting until the card is removed. Restore; `git diff` shows only the fix.
+
+**Validation gate** (load1 under 150 before every build and run; one e2e run at a time in this worktree):
+
+- `bun run lint`, `bun run typecheck:all`, `bun run test:all`: each exits 0.
+- Armed builds per browser (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:<browser>`), then ten Firefox and five Chrome runs, one at a time: `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 env -u EXTENSION_PATH taskset -c 0,1 bun run test:e2e --retry=0 tests/e2e/navigation.test.ts` (with `NULO_E2E_BROWSER=firefox` for Firefox). Pass: every run `8 passed`. Smoke claims its own loopback ports in `~/.agents/ports.md`; `agent.sh` is the network runner and builds no smoke dist.
+- Record the file's and the drag test's time per run, and one unfixed run per browser as the base. No pass bound on them.
+- What the runs certify: the wait holds under CI's build and a two-core pin. The race's closure rests on the mechanism and on controls A and B.
 
 ## Seeds
 
