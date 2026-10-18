@@ -12,7 +12,11 @@ const props = defineProps({
 	/** Set while the send can be queued against a cap: `about` is the last fee of this token's like sends,
 	 *  `cap` the most it goes out for without asking again, both as the card writes a fee. */
 	queuedCap: { type: Object, default: null },
+	/** The card is still reading what can pay, so no estimate or queue applies yet. */
+	pending: { type: Boolean, default: false },
 })
+
+const estimating = computed(() => props.isEstimating && !props.estimate && !props.pending)
 
 /** Screen readers skip a strikethrough, so the sponsored row is spoken as this sentence alone. */
 const sponsoredSentence = computed(() => {
@@ -24,12 +28,12 @@ const sponsoredSentence = computed(() => {
 </script>
 
 <template>
-	<!-- Estimating and estimated share ONE geometry: the stacked label+value
+	<!-- Pending, estimating and estimated share ONE geometry: the stacked label+value
 	     layout is reserved from the first frame and the skeleton simply
 	     occupies the value's slot — the row never moves or grows when the
 	     number lands. -->
 	<Flex
-		v-if="isEstimating && isQueued && !estimate && queuedCap"
+		v-if="estimating && isQueued && queuedCap"
 		direction="column"
 		gap="4"
 		:class="$style.detail_row"
@@ -42,7 +46,7 @@ const sponsoredSentence = computed(() => {
 		<span :class="$style.queued" data-testid="fee-estimate-queued-cap-line">Goes out after your earlier send, for at most <FeeAmount :display="queuedCap.cap" :class="$style.fee_figure" />.</span>
 	</Flex>
 	<Flex
-		v-else-if="isEstimating && isQueued && !estimate && payer === 'sponsor'"
+		v-else-if="estimating && isQueued && payer === 'sponsor'"
 		direction="column"
 		gap="4"
 		:class="$style.detail_row"
@@ -52,11 +56,11 @@ const sponsoredSentence = computed(() => {
 		<span :class="$style.fee_value">Nothing</span>
 		<span :class="$style.queued" data-testid="fee-estimate-queued-sponsored-line">{{ QUEUED_SPONSORED_COPY }}</span>
 	</Flex>
-	<Flex v-else-if="isEstimating && isQueued && !estimate" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate-queued">
+	<Flex v-else-if="estimating && isQueued" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate-queued">
 		<span :class="$style.fee_label">You pay</span>
 		<span :class="$style.queued">{{ QUEUED_FEE_COPY }}</span>
 	</Flex>
-	<Flex v-else-if="isEstimating && !estimate" direction="column" gap="4" :class="$style.detail_row">
+	<Flex v-else-if="estimating || pending" direction="column" gap="4" :class="$style.detail_row">
 		<span :class="$style.fee_label">You pay</span>
 		<span :class="$style.fee_value"><Skeleton /></span>
 	</Flex>

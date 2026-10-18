@@ -11,10 +11,12 @@
  *
  * Sponsored FPC rows render nothing extra. The Token-FPC visibility
  * (Public/Private) toggle was removed alongside the deprecated type.
+ * While `pending`, no method is chosen yet and the row is drawn with a bar.
  */
 defineProps({
 	method: { type: Object, default: null },
 	isLoading: { type: Boolean, default: false },
+	pending: { type: Boolean, default: false },
 	/** Null = balance unknown (read failed/timed out) — rendered as an em
 	 *  dash, never as a fabricated zero. */
 	feeJuiceBalanceFormatted: { type: String, default: null },
@@ -24,9 +26,9 @@ defineProps({
 
 <template>
 	<!-- Fee Juice details -->
-	<Flex v-if="method?.type === 'fj'" align="center" justify="between" :class="$style.detail_row">
+	<Flex v-if="pending || method?.type === 'fj'" align="center" justify="between" :class="$style.detail_row">
 		<Text variant="label-section" color="secondary">Available</Text>
-		<Skeleton v-if="isLoading" />
+		<Skeleton v-if="pending || isLoading" />
 		<Text v-else variant="value" color="primary">
 			{{ feeJuiceBalanceFormatted ?? '—' }} FJ
 		</Text>

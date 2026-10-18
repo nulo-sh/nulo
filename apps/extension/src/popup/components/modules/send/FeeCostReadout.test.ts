@@ -45,6 +45,14 @@ describe("FeeCostReadout", () => {
 		expect(w.findComponent(Skeleton).attributes("style")).toBe("width: 60px; height: 12px;")
 	})
 
+	test("pending, the bar stands for any estimate or queue still on the props", () => {
+		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }
+		const w = factory({ pending: true, isEstimating: true, isQueued: true, queuedCap, estimate: ESTIMATE, payer: "sponsor" })
+		expect(w.text()).toBe("You pay")
+		expect(w.findComponent(Skeleton).attributes("style")).toBe("width: 60px; height: 12px;")
+		expect(factory({ pending: true }).text()).toBe("You pay")
+	})
+
 	test("estimate takes precedence over the estimating skeleton", () => {
 		const w = factory({ estimate: { amount: "1.0" }, isEstimating: true })
 		expect(w.text()).toContain("~1.0 FJ")

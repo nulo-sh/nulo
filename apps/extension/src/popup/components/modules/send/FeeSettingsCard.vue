@@ -199,6 +199,11 @@ const nudgeCopy = computed(() =>
 /** What the dropdown trigger shows: the paying method, or the saved pick's row while loading. */
 const displayMethod = computed(() => effectiveMethod.value ?? previewMethod.value)
 
+/** Send's read for the live identity is on its way: the card draws its rows with bars in place of
+ *  their values, and Priority, which needs no balance, already answers. */
+const readPending = computed(() => props.originPrivacy !== null && snapshotPending.value)
+const showsCostRows = computed(() => readPending.value || (Boolean(effectiveMethod.value) && !feeJuiceMissing.value))
+
 /** Who pays the estimate the readout shows; the readout draws only while a method is chosen. */
 const feePayer = computed(() => {
 	const m = effectiveMethod.value
@@ -381,6 +386,7 @@ onBeforeUnmount(() => {
 			@update:modelValue="handleMethodPicked"
 			:methods="menuMethods"
 			:payerNoticeShape="payerNoticeShape"
+			:pending="readPending"
 			@open="isMethodsDropdownOpen = true"
 			@close="isMethodsDropdownOpen = false"
 		/>
@@ -406,6 +412,7 @@ onBeforeUnmount(() => {
 			v-if="!statusNotice"
 			:method="effectiveMethod"
 			:isLoading="isLoading"
+			:pending="readPending"
 			:feeJuiceBalanceFormatted="feeJuiceBalanceFormatted"
 			:privateFeeJuiceFormatted="privateFeeJuiceFormatted"
 		/>
@@ -456,7 +463,8 @@ onBeforeUnmount(() => {
 		</Flex>
 
 		<FeeCostReadout
-			v-if="effectiveMethod && !feeJuiceMissing"
+			v-if="showsCostRows"
+			:pending="readPending"
 			:estimate="estimatedFeeDisplay"
 			:isEstimating="isEstimating"
 			:isQueued="isQueued"
@@ -464,7 +472,7 @@ onBeforeUnmount(() => {
 			:queuedCap="queuedCapDisplay"
 		/>
 
-		<FeePriorityRow v-if="effectiveMethod && !feeJuiceMissing" v-model="selectedPriority" />
+		<FeePriorityRow v-if="showsCostRows" v-model="selectedPriority" />
 	</Flex>
 </template>
 
