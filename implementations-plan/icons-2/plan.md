@@ -1,7 +1,7 @@
 ---
 plan: icons-2
 tier: light
-status: panel approve 2026-10-18 (Codex round 2); arc 1 in progress under auto-continue
+status: panel approve 2026-10-18 (Codex round 2); arc 1 implemented, in review
 issues: "#787 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -97,6 +97,8 @@ Steps 2-5 of [`implementations-plan/README.md` § Post-implementation standard](
 - **Not this lane's.** #627 (the store captures predate Home's fixed hero): the regenerated captures will show the new marks; nothing to add here (O). landing-explainer-1's clip 01 picture column names the squares (recon); the report names it for the orchestrator.
 
 **Arc 1, round 1 (2026-10-18).** Codex (gpt-6.1-sol, high, session `01a150bc-…`): `approve with fixes`; it found the table equal to the installed Tabler files and no regression. Opus diff review: `approve with fixes`, no bug; it reran the design tests (512) and checked every picture. Adopted: the `publishGlyph` comment cut to its invariant (C); the UI impact record names Holdings' token rows (the same `TokenCard`) and the review sheet reopened from Home's Recent activity, which the pictures cover through the same components (O). Left: the Settings pictures' header names the balance marks though none draws there (O, a nit in the scratch composer).
+
+**Arc 1, round 2 (resume).** Codex: `approve`; it verified both fixes and found no regression. Final head, after merging `dev` (`e945c354`): `lint`, `typecheck:all`, `test:all`, the armed smoke `type-roles` + `tooltips-glossary` (15 passed, 1 Firefox-only skip, 88 s) and `type-roles-windows` proverless (5/5, 260 s), all exit 0 at retry 0.
 
 ## Seeds
 
