@@ -10,3 +10,4 @@
 - 2026-10-18: phase 2 (#761) gate F pass.
 - 2026-10-18: phase 3 (#765) gate F pass; `navigation.test.ts` Chrome 8/8 and Firefox 8/8 at retry 0; red on the base pages.
 - 2026-10-18: phase 4 (#762) gate pass: F; rows, home-links, token-list, type-roles on Chrome and Firefox at retry 0; network pin-to-home.
+- 2026-10-18: arc 1 review loop converged (Codex round 2 approve); whole smoke Chrome 57/6 skipped, Firefox 60/3 skipped at retry 0; audit:vue and test:all 0.

@@ -1,0 +1,8 @@
+# Phase 5: arc 1 gate, pictures, review loop
+
+- 2026-10-18 gate: `audit:vue` 0; `test:all` 0 (15 workspaces); whole smoke at retry 0, Chrome 57 passed + 6 skipped in 1,723 s, Firefox 60 passed + 3 skipped in 2,472 s (on record 2026-10-17: 1,658 s and 2,333 s; no scenario added, assertions only inside existing cases). CI before (the latest PR runs where the suites ran, 39135798594 and 39135798544): Chrome 11 min, Firefox 15 min.
+- Pictures (`screenshots/{before,after}/`, both themes, 360 × 600): a scratch spec outside the repo seeds fixed timestamps so two builds draw the same rows; before is `9470d4e9`, after is the arc head. The tx page, the token page at rest and scrolled (a token with transfers, and one without, whose warning stays fixed), Home at rest and scrolled.
+- Home, A1: computed styles and boxes of all 194 elements under Home's root are identical between the two builds. Pixels are identical across the token-page commit. Base vs head differ by 2 px in dark at rest, in the antialiased edge of a row's arrow glyph; a bisect build after phase 3 (whose commits render nothing on Home) already has them, so the Home style change does not cause them. A same-build pair is otherwise pixel-stable, except a noisy spot at the balance (247 px in one base-vs-base pair).
+- The extension page's CSP refuses `fetch("data:…")`: decode a picture with `atob` into a `Blob` for `createImageBitmap`.
+- Review loop: Codex round 1 `approve with fixes`, Opus diff review no correctness bug; round 2 `approve` (plan.md § Audit verdicts). Known limit #775 filed and closed; OA-5 written.
+- The orchestrator's A1 asks `rows.test.ts` to keep its titles: the fixed-hero case's title change was reverted.

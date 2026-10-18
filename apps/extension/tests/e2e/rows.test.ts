@@ -1039,7 +1039,7 @@ function scrimCovers(page: Page, kind: PinnedPage): Promise<{ hero: boolean; nav
 	})
 }
 
-test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the middle still covers it; the shadow shows only once the middle has scrolled and lets a press through to the row under it; a tall panel keeps the nav at its bottom; PageDown on a row scrolls the middle; a token's page holds its balance over its scrolling activity the same way", async ({
+test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the middle still covers it; the shadow shows only once the middle has scrolled and lets a press through to the row under it; a tall panel keeps the nav at its bottom; PageDown on a row scrolls the middle", async ({
 	listedExtensionPerTest,
 	skip,
 }) => {
