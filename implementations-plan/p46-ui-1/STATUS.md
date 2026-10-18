@@ -1,0 +1,4 @@
+- 2026-10-18 phase 0.4: recon done (one Sonnet sweep); recon.md written
+- 2026-10-18 phase 1: plan drafted (light, one arc); sent to Codex and Opus
+- 2026-10-18 Codex audit: conditional approve (3 Medium) → amended → approve on resume
+- 2026-10-18 Opus audit: conditional approve → amended; Codex final (resume 3): approve. Gate passed; plan committed
