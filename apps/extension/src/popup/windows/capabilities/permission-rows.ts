@@ -84,8 +84,8 @@ export function plainText(segments: readonly SubSegment[] | undefined): string {
 
 const LISTING_SUB: SubSegment[] = [{ text: "It always knows the account you connect with." }]
 
-/** `canGet` controls listing only: an app learns the account it connects with from every answer
- *  that runs as that account, so the line says so. */
+/** `canGet` controls listing only: a session with a simulation grant learns its account from any
+ *  simulation's results. */
 export function accountAddressRow(): PermissionRowEntry {
 	return {
 		key: "account-address",

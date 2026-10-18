@@ -161,8 +161,9 @@ dApp reads the contracts, calls, classes and flags it holds from its own
 `requestCapabilities` answer, which is the stored grant, and asks again with a
 wider manifest. The answer lists the session's accounts only when the grant
 sets `canGet`, and `getAccounts` needs it too. `canGet` controls listing, not
-which account a session acts as: every answer to a call made as an account
-carries that account, so a dApp always knows the account it connects with.
+which account a session acts as: a call's `from` must name a session account,
+and a session with a simulation grant learns the account it ran as from any
+simulation's results.
 
 The same envelope answers a call whose selector does not run the function its
 name claims. That check runs at execution, so this refusal can come after the
