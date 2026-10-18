@@ -8,6 +8,42 @@ import { shotSend } from "./fixtures/send-page"
 import { downloadEncryptedBackup, openEncryptedBackup } from "./helpers/backup-export"
 import { FULL_BACKUP_V2_TAG } from "@/utils/full-backup-helpers"
 
+/** Windows' classic scrollbar; headless browsers draw none, so the probe takes its width out itself. */
+const CLASSIC_SCROLLBAR_PX = 17
+
+/**
+ * At the popup's 360 px, with a classic scrollbar taking its width from the page, puts the longest
+ * BIP39 word (eight letters) in every cell and returns each cell it runs past. The word role is
+ * monospace, so every eight-letter word is the list's widest; the probe refuses to answer if it is not.
+ */
+async function widestWordOverruns(page: Page, scrollbarPx: number): Promise<string[]> {
+	return page.evaluate((scrollbar: number) => {
+		const words = [...document.querySelectorAll<HTMLElement>('[data-testid="reveal-content-word"]')]
+		const shown = words.map((word) => word.textContent)
+		const width = (word: HTMLElement, text: string) => {
+			word.textContent = text
+			return word.getBoundingClientRect().width
+		}
+		if (Math.abs(width(words[0], "iiiiiiii") - width(words[0], "wwwwwwww")) > 0.1) return ["the word role is not monospace"]
+		let scroller = words[0].parentElement
+		while (scroller && getComputedStyle(scroller).scrollbarGutter !== "stable") scroller = scroller.parentElement
+		if (!scroller) return ["no scroller reserves a scrollbar gutter"]
+		const drawn = scroller.offsetWidth - scroller.clientWidth
+		const padding = scroller.style.paddingRight
+		scroller.style.paddingRight = `calc(${getComputedStyle(scroller).paddingRight} + ${Math.max(0, scrollbar - drawn)}px)`
+		const overruns = words.flatMap((word, i) => {
+			word.textContent = "abstract"
+			const past = word.getBoundingClientRect().right - (word.parentElement as HTMLElement).getBoundingClientRect().right
+			return past > 0.5 ? [`cell ${i + 1} by ${past.toFixed(1)} px`] : []
+		})
+		scroller.style.paddingRight = padding
+		words.forEach((word, i) => {
+			word.textContent = shown[i]
+		})
+		return overruns
+	}, scrollbarPx)
+}
+
 const PASSWORD = TEST_PASSWORD
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -31,17 +67,7 @@ test("Home's reminders clear as they are done: How Aztec works opens its page, a
 	const tokens = await revealSeedPhrase(page, PASSWORD)
 	expect(tokens.length).toBe(24)
 	for (const token of tokens) expect(token).toMatch(/^[a-z]+$/)
-	// At the popup's fixed 360 px every cell holds the widest BIP39 word, eight letters, beside its number.
-	const overruns = await page.evaluate(() =>
-		[...document.querySelectorAll<HTMLElement>('[data-testid="reveal-content-word"]')].flatMap((word, i) => {
-			const shown = word.textContent
-			word.textContent = "abstract"
-			const past = word.getBoundingClientRect().right - (word.parentElement as HTMLElement).getBoundingClientRect().right
-			word.textContent = shown
-			return past > 0.5 ? [`cell ${i + 1} by ${past.toFixed(1)} px`] : []
-		}),
-	)
-	expect(overruns).toEqual([])
+	expect(await widestWordOverruns(page, CLASSIC_SCROLLBAR_PX)).toEqual([])
 
 	await navigateByHash(page, "#/popup/general")
 	await page.waitForSelector(sel("get-started"), { visible: true, timeout: 30_000 })

@@ -37,11 +37,12 @@ const props = defineProps<{
 	border: 1px solid var(--nulo-border);
 }
 
-/* At 360 px a column must still hold the widest BIP39 word (eight letters) beside its number. */
+/* At 360 px, with a classic 17 px scrollbar, a column must still hold the widest BIP39 word (eight
+ * letters) beside its number. */
 .three {
 	grid-template-columns: repeat(3, 1fr);
-	column-gap: 8px;
-	padding-inline: 12px;
+	column-gap: 6px;
+	padding-inline: 8px;
 }
 
 .three .cell {
