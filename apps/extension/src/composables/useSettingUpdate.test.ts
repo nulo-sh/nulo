@@ -25,8 +25,7 @@ function harness(rows: Rows, apply?: (key: ConfigKey, value: unknown) => unknown
 				rows[key].model.value = value
 			}),
 	)
-	const { updateSetting } = useSettingUpdate({ setValue } as never, rows, applySetting)
-	return { setValue, applySetting, updateSetting, writes }
+	return { setValue, applySetting, writes, ...useSettingUpdate({ setValue } as never, rows, applySetting) }
 }
 
 /** Settles each write as it arrives, a re-entered one included, in the order they were asked. */
@@ -137,5 +136,59 @@ describe("useSettingUpdate", () => {
 			["indicateFailures", false],
 		])
 		expect(rows.indicateFailures.model.value).toBe(false)
+	})
+
+	test("a read lands each stored value in its row and applies nothing", () => {
+		const rows: Rows = { showFiatValues: { model: ref(true) }, privacyMode: { model: ref(false) } }
+		const h = harness(rows)
+		h.landSettings(
+			[
+				{ key: "showFiatValues", value: false },
+				{ key: "privacyMode", value: true },
+			],
+			() => false,
+		)
+		expect(rows.showFiatValues.model.value).toBe(false)
+		expect(rows.privacyMode.model.value).toBe(true)
+		expect(h.applySetting).not.toHaveBeenCalled()
+	})
+
+	test("a read keeps the value of a key an update set since the read began", () => {
+		const rows: Rows = { showFiatValues: { model: ref(false) }, privacyMode: { model: ref(false) } }
+		const h = harness(rows)
+		h.landSettings(
+			[
+				{ key: "showFiatValues", value: true },
+				{ key: "privacyMode", value: true },
+			],
+			(key) => key === "showFiatValues",
+		)
+		expect(rows.showFiatValues.model.value).toBe(false)
+		expect(rows.privacyMode.model.value).toBe(true)
+	})
+
+	test("a read skips a stored key the page has no row for", () => {
+		const rows: Rows = { theme: { model: ref("dark") } }
+		const h = harness(rows)
+		h.landSettings(
+			[
+				{ key: "privacyMode", value: true },
+				{ key: "theme", value: "light" },
+			],
+			() => false,
+		)
+		expect(Object.keys(rows)).toEqual(["theme"])
+		expect(rows.theme.model.value).toBe("light")
+	})
+
+	test("a worker update applies a value its row does not show, and an unchanged one applies nothing", () => {
+		const rows: Rows = { theme: { model: ref("dark") } }
+		const h = harness(rows)
+		h.onSettingUpdate({ key: "theme", value: "dark" })
+		h.onSettingUpdate({ key: "privacyMode", value: true })
+		expect(h.applySetting).not.toHaveBeenCalled()
+		h.onSettingUpdate({ key: "theme", value: "light" })
+		expect(h.applySetting).toHaveBeenCalledExactlyOnceWith("theme", "light")
+		expect(rows.theme.model.value).toBe("light")
 	})
 })

@@ -10,6 +10,7 @@
 <script setup>
 /** Components */
 import { Dropdown } from "@/components/ui/Dropdown"
+import SettingControlRow from "@/components/ui/Settings/SettingControlRow.vue"
 
 /** Utils */
 import { settingsRow } from "@/utils/settings-search"
@@ -19,14 +20,12 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useConfigRead } from "@/composables/useConfigRead"
-import { useSettingUpdate } from "@/composables/useSettingUpdate"
+import { SETTING_UPDATE_FAILED, useSettingUpdate } from "@/composables/useSettingUpdate"
 import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
 const { openToast } = useToast()
 const { vSettingsRow } = useSettingsRowHighlight()
 
 const configService = new ConfigServiceClient()
-configService.onUpdate.add(onSettingUpdate)
-const displayRead = useConfigRead(configService, () => configService.getProps(), landDisplayConfig)
 
 const isLoading = ref(true)
 const defaultConfig = makeDefaultConfig()
@@ -71,11 +70,13 @@ async function updateDustThreshold(event) {
 		// A failed write stores nothing, but the field still holds the typed text, which an unchanged
 		// ref never re-renders: put the stored value back, unless the field already holds a newer edit.
 		if (el.value.trim() === raw) el.value = dustThreshold.value
-		openToast({ kind: "error", label: "Failed to update setting" })
+		openToast({ kind: "error", label: SETTING_UPDATE_FAILED })
 	}
 }
 
-const { updateSetting } = useSettingUpdate(configService, settings, applySetting)
+const { updateSetting, onSettingUpdate, landSettings } = useSettingUpdate(configService, settings, applySetting)
+configService.onUpdate.add(onDisplayUpdate)
+const displayRead = useConfigRead(configService, () => configService.getProps(), landDisplayConfig)
 
 async function applySetting(key, value) {
 	settings[key].model.value = value
@@ -97,31 +98,16 @@ async function applySetting(key, value) {
 	}
 }
 
-function onSettingUpdate(setting) {
-	if (setting.key === "incomingDustUsdThreshold") {
-		dustThreshold.value = String(setting.value)
-		return
-	}
-	if (settings[setting.key]) {
-		if (settings[setting.key].model.value !== setting.value) {
-			applySetting(setting.key, setting.value)
-		}
-	}
+function onDisplayUpdate(setting) {
+	if (setting.key === "incomingDustUsdThreshold") dustThreshold.value = String(setting.value)
+	else onSettingUpdate(setting)
 }
 
-// Copies the values only: `applySetting` would open the side panel and close the window on a reread.
-function landDisplayConfig(_settings, updatedSince) {
-	_settings.forEach((s) => {
-		if (updatedSince(s.key)) return
-		if (s.key === "incomingDustUsdThreshold") {
-			dustThreshold.value = String(s.value)
-			return
-		}
-		if (settings[s.key]) {
-			settings[s.key].model.value = s.value
-		}
-	})
-
+function landDisplayConfig(stored, updatedSince) {
+	for (const s of stored) {
+		if (s.key === "incomingDustUsdThreshold" && !updatedSince(s.key)) dustThreshold.value = String(s.value)
+	}
+	landSettings(stored, updatedSince)
 	isLoading.value = false
 }
 
@@ -140,12 +126,12 @@ onBeforeUnmount(() => {
 		<SubPageHeader title="Display" :backTo="'/popup/settings'" />
 
 		<Flex v-if="!isLoading" direction="column" gap="24" :class="$style.content">
-			<Flex justify="between" :data-testid="settings.theme.testid" v-settings-row="settings.theme.id">
-				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ settings.theme.title }} </Text>
-					<Text variant="caption" color="tertiary"> {{ settings.theme.description }} </Text>
-				</Flex>
-
+			<SettingControlRow
+				:title="settings.theme.title"
+				:description="settings.theme.description"
+				:data-testid="settings.theme.testid"
+				v-settings-row="settings.theme.id"
+			>
 				<Dropdown>
 					<template #trigger>
 						<DropdownTrigger data-testid="theme-trigger">
@@ -185,41 +171,45 @@ onBeforeUnmount(() => {
 						</DropdownItem>
 					</template>
 				</Dropdown>
-			</Flex>
+			</SettingControlRow>
 
-			<Flex v-for="sk in Object.keys(settings).filter(sk => sk !== 'theme' && sk !== 'incomingTransfersVisible')" justify="between" :data-testid="settings[sk].testid" v-settings-row="settings[sk].id">
-				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ settings[sk].title }} </Text>
-					<Text variant="caption" color="tertiary"> {{ settings[sk].description }} </Text>
-				</Flex>
-
+			<SettingControlRow
+				v-for="sk in Object.keys(settings).filter(sk => sk !== 'theme' && sk !== 'incomingTransfersVisible')"
+				:title="settings[sk].title"
+				:description="settings[sk].description"
+				:data-testid="settings[sk].testid"
+				v-settings-row="settings[sk].id"
+			>
 				<Toggle
 					@update:modelValue="updateSetting(sk, $event)"
 					:modelValue="settings[sk].model.value"
 					:data-testid="TOGGLE_TESTIDS[sk] || null"
 				/>
-			</Flex>
+			</SettingControlRow>
 
 			<SectionLabel label="Lists" />
 
-			<Flex justify="between" :data-testid="settings.incomingTransfersVisible.testid" v-settings-row="settings.incomingTransfersVisible.id">
-				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ settings.incomingTransfersVisible.title }} </Text>
-					<Text variant="caption" color="tertiary"> {{ settings.incomingTransfersVisible.description }} </Text>
-				</Flex>
-
+			<SettingControlRow
+				:title="settings.incomingTransfersVisible.title"
+				:description="settings.incomingTransfersVisible.description"
+				:data-testid="settings.incomingTransfersVisible.testid"
+				v-settings-row="settings.incomingTransfersVisible.id"
+			>
 				<Toggle
 					@update:modelValue="updateSetting('incomingTransfersVisible', $event)"
 					:modelValue="settings.incomingTransfersVisible.model.value"
 				/>
-			</Flex>
+			</SettingControlRow>
 
 			<!-- One dust threshold for the wallet: the activity feed's receipts AND the Holdings fold. -->
-			<Flex justify="between" align="center" gap="12" :data-testid="dustRow.testid" v-settings-row="dustRow.id">
-				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ dustRow.title }} </Text>
-					<Text variant="caption" color="tertiary">{{ dustRow.description }}</Text>
-				</Flex>
+			<SettingControlRow
+				:title="dustRow.title"
+				:description="dustRow.description"
+				align="center"
+				gap="12"
+				:data-testid="dustRow.testid"
+				v-settings-row="dustRow.id"
+			>
 
 				<!-- type="text" (not number) so there are no spinner arrows widening the field; the $ prefix
 				     lives in the wrapper. -->
@@ -234,7 +224,7 @@ onBeforeUnmount(() => {
 						@change="updateDustThreshold($event)"
 					/>
 				</label>
-			</Flex>
+			</SettingControlRow>
 		</Flex>
 
 	</Flex>
@@ -247,34 +237,6 @@ onBeforeUnmount(() => {
 
 .content {
 	composes: content from "../../../components/composite/settings-page.module.css";
-}
-
-.item {
-	border-radius: 0;
-	border: 1px solid var(--nulo-border);
-	cursor: pointer;
-
-	padding: 12px;
-
-	transition: all 0.2s var(--bezier);
-
-	&:hover {
-		background: var(--nulo-surface-low);
-
-		& .item_icon {
-			transform: rotate(-90deg) translateY(3px);
-		}
-	}
-
-	&:active {
-		background: var(--nulo-surface-high);
-	}
-}
-
-.item_icon {
-	transform: rotate(-90deg);
-
-	transition: transform 0.2s var(--bezier);
 }
 
 .dust_field {
@@ -315,10 +277,6 @@ onBeforeUnmount(() => {
 	&:focus {
 		outline: none;
 	}
-}
-
-.title_size {
-	font-size: 13px;
 }
 
 .unselected {

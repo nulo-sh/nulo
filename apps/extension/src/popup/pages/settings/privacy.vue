@@ -10,6 +10,7 @@
 <script setup>
 /** Components */
 import { Dropdown } from "@/components/ui/Dropdown"
+import SettingControlRow from "@/components/ui/Settings/SettingControlRow.vue"
 
 /** Utils */
 import { settingsRow } from "@/utils/settings-search"
@@ -26,8 +27,6 @@ const { openToast } = useToast()
 const { vSettingsRow } = useSettingsRowHighlight()
 
 const configService = new ConfigServiceClient()
-configService.onUpdate.add(onSettingUpdate)
-const privacyRead = useConfigRead(configService, () => configService.getProps(), landPrivacyConfig)
 
 const isLoading = ref(true)
 const defaultConfig = makeDefaultConfig()
@@ -46,7 +45,9 @@ const selectedExplorerName = computed(() => {
 	return explorer?.name || "None"
 })
 
-const { updateSetting } = useSettingUpdate(configService, settings, applySetting)
+const { updateSetting, onSettingUpdate, landSettings } = useSettingUpdate(configService, settings, applySetting)
+configService.onUpdate.add(onSettingUpdate)
+const privacyRead = useConfigRead(configService, () => configService.getProps(), landPrivacyConfig)
 
 async function applySetting(key, value) {
 	settings[key].model.value = value
@@ -61,22 +62,8 @@ async function applySetting(key, value) {
 	}
 }
 
-function onSettingUpdate(setting) {
-	if (settings[setting.key]) {
-		if (settings[setting.key].model.value !== setting.value) {
-			applySetting(setting.key, setting.value)
-		}
-	}
-}
-
-// Copies the values only: `applySetting` would toast on a reread.
-function landPrivacyConfig(_settings, updatedSince) {
-	_settings.forEach((s) => {
-		if (settings[s.key] && !updatedSince(s.key)) {
-			settings[s.key].model.value = s.value
-		}
-	})
-
+function landPrivacyConfig(stored, updatedSince) {
+	landSettings(stored, updatedSince)
 	isLoading.value = false
 }
 
@@ -95,24 +82,30 @@ onBeforeUnmount(() => {
 		<LoadingState v-if="isLoading" label="FETCHING SETTINGS" />
 
 		<template v-if="!isLoading">
-			<Flex justify="between" align="center" :data-testid="settings.showFiatValues.testid" v-settings-row="settings.showFiatValues.id">
-				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings.showFiatValues.title }}</Text>
-					<Text variant="caption" color="tertiary" data-testid="fiat-values-description">{{ settings.showFiatValues.description }}</Text>
-				</Flex>
-
+			<SettingControlRow
+				:title="settings.showFiatValues.title"
+				:description="settings.showFiatValues.description"
+				descriptionTestid="fiat-values-description"
+				align="center"
+				:data-testid="settings.showFiatValues.testid"
+				v-settings-row="settings.showFiatValues.id"
+			>
 				<Toggle
 					@update:modelValue="updateSetting('showFiatValues', $event)"
 					:modelValue="settings.showFiatValues.model.value"
 					data-testid="fiat-values-toggle"
 				/>
-			</Flex>
+			</SettingControlRow>
 
-			<Flex justify="between" align="center" :data-testid="settings.defaultExplorer.testid" v-settings-row="settings.defaultExplorer.id">
-				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary" data-testid="explorer-title">{{ settings.defaultExplorer.title }}</Text>
-					<Text variant="caption" color="tertiary" data-testid="explorer-description">{{ settings.defaultExplorer.description }}</Text>
-				</Flex>
+			<SettingControlRow
+				:title="settings.defaultExplorer.title"
+				:description="settings.defaultExplorer.description"
+				titleTestid="explorer-title"
+				descriptionTestid="explorer-description"
+				align="center"
+				:data-testid="settings.defaultExplorer.testid"
+				v-settings-row="settings.defaultExplorer.id"
+			>
 
 				<Dropdown>
 					<template #trigger>
@@ -148,20 +141,22 @@ onBeforeUnmount(() => {
 						</DropdownItem>
 					</template>
 				</Dropdown>
-			</Flex>
+			</SettingControlRow>
 
-			<Flex justify="between" align="center" :data-testid="settings.privacyMode.testid" v-settings-row="settings.privacyMode.id">
-				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary" data-testid="privacy-mode-title">{{ settings.privacyMode.title }}</Text>
-					<Text variant="caption" color="tertiary">{{ settings.privacyMode.description }}</Text>
-				</Flex>
-
+			<SettingControlRow
+				:title="settings.privacyMode.title"
+				:description="settings.privacyMode.description"
+				titleTestid="privacy-mode-title"
+				align="center"
+				:data-testid="settings.privacyMode.testid"
+				v-settings-row="settings.privacyMode.id"
+			>
 				<Toggle
 					@update:modelValue="updateSetting('privacyMode', $event)"
 					:modelValue="settings.privacyMode.model.value"
 					data-testid="privacy-mode-toggle"
 				/>
-			</Flex>
+			</SettingControlRow>
 		</template>
 	</SettingsPageShell>
 </template>
@@ -171,10 +166,6 @@ onBeforeUnmount(() => {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-}
-
-.title_size {
-	font-size: 13px;
 }
 
 .unselected {
