@@ -104,7 +104,8 @@ export async function snapshotChain(page: Page, chainId: number, networkId: stri
  * Rewrites the Testnet row the way an update meets it. `network-reset` moves the row and every
  * row of its chain to an older chainId; `address-change` moves every derived (Nulo_v1) address on
  * it and hides the account at `hideIndex`; `both` does the two. Run it locked: an unlocked worker
- * would act on half the writes.
+ * would act on half the writes. A moved imported key no longer opens, since its seal binds its
+ * chainId, so after `network-reset` or `both` every imported account reads unmovable.
  */
 export async function seedStaleNetwork(
 	page: Page,

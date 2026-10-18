@@ -1,7 +1,8 @@
 /**
  * The logs window's editor under `style-src` without `'unsafe-inline'`: its styles reach it in its
  * shadow root, new lines are followed, and a selection or focus inside the root holds the view where
- * it rests while lines arrive, a line that trims the log included. The launch's CSP recorder fails the
+ * it rests while lines arrive, a line that trims the log included; the toolbar's more menu opens, and
+ * its Clear empties the log, which keeps taking lines. The launch's CSP recorder fails the
  * file on a blocked style. The wallet logs its own lines into the window at any time, so a test waits
  * for its own lines by a nonce, and reads a hold off where a shown line lands and off the viewer's
  * scroll-to-end button.
@@ -11,8 +12,10 @@ import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { extensionUrl, gotoExtensionPage, newPage, prepareClick } from "./fixtures/browser"
 import { readEditorStyles } from "./fixtures/code-editor"
-import { type ExtensionContext, test } from "./fixtures/extension"
+import { clickByTestId, type ExtensionContext, test } from "./fixtures/extension"
+import { openDropdown } from "./fixtures/helpers"
 import { pollUntil } from "./fixtures/poll"
+import { shotSend } from "./fixtures/send-page"
 
 const HOST = "logs-editor"
 /** Under one line's height: the follow's scroll to the end, give or take CodeMirror's margin. */
@@ -405,3 +408,44 @@ test("a selection at the end holds the view through the line that trims the log,
 	await expectHeld(page, line)
 	await page.close()
 }, 120_000)
+
+async function waitForShownLine(page: Page, text: string, shown: boolean): Promise<void> {
+	await pollUntil(
+		() =>
+			page.evaluate(
+				(id, t) =>
+					[...(document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelectorAll(".cm-line") ?? [])].some((line) =>
+						(line.textContent ?? "").includes(t),
+					),
+				HOST,
+				text,
+			),
+		(has) => has === shown,
+		{ label: `the logs editor ${shown ? "showing" : "no longer showing"} ${text}`, timeoutMs: 10_000, intervalMs: 50 },
+	)
+}
+
+test("the more menu offers the CSV export and Clear logs, which empties the log and keeps it live", async ({
+	registeredExtension: ctx,
+}) => {
+	const page = await openLogs(ctx)
+	// Past the 100-line bound below, which a trim never crosses: it leaves 1,000 lines.
+	await logLines(page, 120)
+	const marker = `viewer clear ${randomUUID().slice(0, 8)}`
+	await page.evaluate((m) => console.info(m), marker)
+	await waitForShownLine(page, marker, true)
+	const line = await lineHeight(page)
+
+	await openDropdown(page, "logs-more-trigger")
+	await page.waitForSelector('[data-testid="logs-export-csv"]', { visible: true, timeout: 5_000 })
+	await page.waitForSelector('[data-testid="logs-clear"]', { visible: true, timeout: 5_000 })
+	await shotSend(page, "logs-more-menu", "logs-more-trigger")
+
+	await clickByTestId(page, "logs-clear")
+	// Later lines alone can push the marker out of the rendered range. A cleared log floors at the
+	// window's height, under 100 lines.
+	await settle(page, 0, 100 * line)
+	await waitForShownLine(page, marker, false)
+	await logLines(page, 1)
+	await page.close()
+})

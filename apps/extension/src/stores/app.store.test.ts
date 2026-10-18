@@ -5,6 +5,8 @@ import type { Network } from "@/wallet/services/network/client"
 import type { Tx } from "@/wallet/services/transaction/spec"
 import { TxStatus } from "@/wallet/services/transaction/spec"
 
+import { managers as coreManagers } from "@/utils/core"
+import { NodeStatus } from "@/wallet/services/network/client"
 import { useAppStore } from "./app.store"
 
 // `managers` is auto-imported from `@/utils/core` by the PRODUCTION vite config
@@ -377,5 +379,54 @@ describe("app.store — account-switch containment (Layer A)", () => {
 describe("app.store — explorer choice", () => {
 	test("is null until the shell applies the stored one, so a failed settings read draws no explorer link", () => {
 		expect(useAppStore().defaultExplorer).toBeNull()
+	})
+})
+
+describe("app.store — the network status dot", () => {
+	const statusRead = (read: () => Promise<NodeStatus>) => {
+		;(coreManagers as { network?: unknown }).network = { getNodeStatus: vi.fn(read) }
+	}
+
+	test("a status read the popup loses reads inactive, not sync; one that answers keeps its answer (control)", async () => {
+		const store = useAppStore()
+		store.network = asNetwork(1)
+		statusRead(() => Promise.reject(new Error("RPC timeout")))
+		await store.syncNetworkStatus()
+		expect(store.networkStatus).toBe("Inactive")
+		statusRead(() => Promise.resolve(NodeStatus.Active))
+		await store.syncNetworkStatus()
+		expect(store.networkStatus).toBe("Active")
+	})
+
+	test("a superseded read writes nothing: one for a network the popup left, or an older one of the same", async () => {
+		const store = useAppStore()
+		store.network = asNetwork(1)
+		let answer!: (status: NodeStatus) => void
+		statusRead(() => new Promise((resolve) => (answer = resolve)))
+		const pending = store.syncNetworkStatus()
+		store.network = asNetwork(2)
+		store.networkStatus = "Active"
+		answer(NodeStatus.Inactive)
+		await pending
+		expect(store.networkStatus).toBe("Active")
+
+		let lose!: (error: Error) => void
+		const reads = [new Promise<NodeStatus>((_resolve, reject) => (lose = reject)), Promise.resolve(NodeStatus.Active)]
+		statusRead(() => reads.shift() as Promise<NodeStatus>)
+		const older = store.syncNetworkStatus()
+		await store.syncNetworkStatus()
+		lose(new Error("RPC timeout"))
+		await older
+		expect(store.networkStatus).toBe("Active")
+	})
+
+	test("a failed read marks only the network it was made for", () => {
+		const store = useAppStore()
+		store.network = asNetwork(1)
+		store.networkStatus = "sync"
+		store.markNetworkInactive("net-2")
+		expect(store.networkStatus).toBe("sync")
+		store.markNetworkInactive("net-1")
+		expect(store.networkStatus).toBe("Inactive")
 	})
 })
