@@ -240,11 +240,11 @@ function hasActionsContent() {
 	white-space: nowrap;
 }
 
-/* Equal and opposite margins cancel on one line; wrapped, the group starts its separator's box and gap
- * left of the clip, the chip under the title. The box is the glyph's own width at 14 px Space Grotesk
- * 700, so a row that fits lays out as without it, and no font metric moves the wrapped chip. */
+/* Equal and opposite margins cancel on one line, so a row that fits lays out as without them; wrapped,
+ * the group starts 8.78 px (the separator's 2.78 px glyph at 14 px Space Grotesk 700, plus its 6 px gap)
+ * left of the clip, the chip under the title. A fixed box would move every fitting chip a sub-pixel. */
 .title_row_wrap {
-	--sep-room: calc(2.78px + 6px);
+	--sep-room: 8.78px;
 	flex-wrap: wrap;
 	gap: 4px 6px;
 	overflow-x: clip;
@@ -261,10 +261,6 @@ function hasActionsContent() {
 	margin-left: calc(-1 * var(--sep-room));
 }
 
-.trailing > :first-child {
-	flex: none;
-	width: 2.78px;
-}
 
 .secondary_row {
 	min-height: 14px;
