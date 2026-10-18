@@ -70,7 +70,7 @@ describe("finalizeGasLimits clamp properties (seeded)", () => {
 			const inadmissible = measured[0] > eff.da || measured[1] > eff.l2
 			const r = req()
 
-			const run = finalizeGasLimits(node, r, sim(measured, teardown), padding, undefined, undefined, undefined, cap)
+			const run = finalizeGasLimits(node, r, sim(measured, teardown), { gasPadding: padding, txsLimits: cap })
 			if (inadmissible) {
 				await expect(run, `iter ${i}: measured ${measured} vs cap ${eff.da}/${eff.l2}`).rejects.toThrow(/cannot be included/)
 				continue
@@ -103,7 +103,11 @@ describe("finalizeGasLimits clamp properties (seeded)", () => {
 			const overCap = custom.daGas > eff.da || custom.l2Gas > eff.l2
 			const r = req()
 
-			const run = finalizeGasLimits(node, r, sim(measured, [0, 0]), 1.05, undefined, { gasLimits: custom } as never, undefined, cap)
+			const run = finalizeGasLimits(node, r, sim(measured, [0, 0]), {
+				gasPadding: 1.05,
+				customLimits: { gasLimits: custom } as never,
+				txsLimits: cap,
+			})
 			if (overCap) {
 				await expect(run, `iter ${i}: custom ${custom.daGas}/${custom.l2Gas} vs cap ${eff.da}/${eff.l2}`).rejects.toThrow(
 					/Requested gasLimits/,
@@ -122,7 +126,7 @@ describe("finalizeGasLimits clamp properties (seeded)", () => {
 			const measured: [number, number] = [Math.floor(rng() * 100_000), Math.floor(rng() * 3_000_000)]
 			const padding = 1 + rng()
 			const r = req()
-			await finalizeGasLimits(node, r, sim(measured, [0, 0]), padding)
+			await finalizeGasLimits(node, r, sim(measured, [0, 0]), { gasPadding: padding })
 			const g = gs(r)
 			const expected = new Gas(measured[0], measured[1]).mul(padding)
 			expect([g.gasLimits.daGas, g.gasLimits.l2Gas], `iter ${i} historical`).toEqual([expected.daGas, expected.l2Gas])
