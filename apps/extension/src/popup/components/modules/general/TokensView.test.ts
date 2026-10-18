@@ -1033,7 +1033,7 @@ describe("TokensView — the token-import rows' events and reads", () => {
 		expect(importRows().map((op) => op.id)).toEqual(["b", "c"])
 	})
 
-	test("(PRE-EXISTING PIN) an add for a listed import lists it again, and its end reaches only the first copy", async () => {
+	test("(BUG PIN) an add for a listed import lists it again, and its end reaches only the first copy", async () => {
 		// A read can answer with a record whose add the worker has not delivered yet.
 		H.getOperations.mockResolvedValue([imp("a")])
 		wrapper = mount(TokensView, { shallow: true })

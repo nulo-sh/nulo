@@ -1414,7 +1414,7 @@ describe("RecentActivityView — a queued send that asks again", () => {
 })
 
 describe("RecentActivityView — the journal list's own rules", () => {
-	test("(PRE-EXISTING PIN) an update re-filing a listed record to another account keeps it until the next read", async () => {
+	test("an update re-filing a listed record to another account keeps it until the next read", async () => {
 		H.getOperations.mockResolvedValue([inFlightTransferOp(ACCT_A)])
 		const w = mountView()
 		await flushPromises()
@@ -1424,6 +1424,11 @@ describe("RecentActivityView — the journal list's own rules", () => {
 		expect(vmOf(w).journalOps).toEqual([inFlightTransferOp(ACCT_A)])
 		H.journalUpdated.emit({ ...inFlightTransferOp(ACCT_A), progress: { stage: "pending" } })
 		expect(vmOf(w).journalOps).toEqual([{ ...inFlightTransferOp(ACCT_A), progress: { stage: "pending" } }])
+
+		H.getOperations.mockResolvedValue([])
+		H.journalConnected.emit()
+		await flushPromises()
+		expect(vmOf(w).journalOps).toEqual([])
 		w.unmount()
 	})
 })

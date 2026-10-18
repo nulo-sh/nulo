@@ -594,6 +594,14 @@ journalService.onOperationAdded.add(journal.onOperationAdded)
 journalService.onOperationUpdated.add(journal.onOperationUpdated)
 journalService.onOperationDeleted.add(journal.onOperationDeleted)
 
+async function readJournalSnapshot() {
+	const captured = appStore.account?.address
+	const ops = await journalService.getOperations({ accountAddress: captured })
+	if (captured !== appStore.account?.address) return undefined
+	// The read filters by account and profile, not network.
+	return ops.filter(journalRecordInActiveScope).sort((a, b) => b.createdAt - a.createdAt)
+}
+
 /**
  * SW-restart safety: re-snapshot the full journal list on every port
  * reconnect. Without this, a record that became terminal (succeeded /
@@ -604,13 +612,6 @@ journalService.onOperationDeleted.add(journal.onOperationDeleted)
  * `subscribeWithSnapshot`). The durable-job reaper is what generates those
  * terminal transitions during SW down windows.
  */
-async function readJournalSnapshot() {
-	const captured = appStore.account?.address
-	const ops = await journalService.getOperations({ accountAddress: captured })
-	if (captured !== appStore.account?.address) return undefined
-	// The read filters by account and profile, not network.
-	return ops.filter(journalRecordInActiveScope).sort((a, b) => b.createdAt - a.createdAt)
-}
 async function resnapshotJournal(isCurrent = journal.begin()) {
 	try {
 		// Generation guard (not captured-equality): equality re-validates on
