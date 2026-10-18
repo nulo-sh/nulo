@@ -25,3 +25,7 @@
 
 - A scratch spec (kept outside the repo) wraps `chrome.runtime.connect` in the popup before the app loads, so a `token-balance` port can hold, refuse or drop a read; a drop is a counted reconnect without killing the worker (which would lock the wallet under strict mode).
 - Two artefacts of the harness, not of the code: a refusal left armed swallowed the 2 s retry, so a refusal answers one read only; and Home's late balance read consumed that one refusal, so the spec leaves Holdings through Settings, which reads no balances. A refused first read on base is superseded by its own every-connect read, so it has no stable picture.
+
+## Final gates (2026-10-18)
+
+- Head `1f185f10` (code `fc230fd6`), `dev` at `9470d4e9` with nothing newer: lint, typecheck:all, test:all (extension 13875 passed), check:plans. Whole smoke suite at retry 0 on armed builds: Chrome 57 files passed, 6 skipped (standing env gates), 1952 s; Firefox 60 passed, 3 skipped, 2702 s. Network Chrome `send-picker` 1/1 in 211 s. No e2e scenario added.

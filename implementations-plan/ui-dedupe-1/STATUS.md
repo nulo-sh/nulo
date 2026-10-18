@@ -42,3 +42,7 @@
 - 2026-10-18 12:42Z A7 unit phase gate on b5cde16a: test:all exit 0 (extension 13872 passed, 5 skipped, 7 todo; every package green). Review round 1 started (Codex, Opus).
 - 2026-10-18 13:10Z A7 review round 1: Opus findings (1 P1 held as D704, 1 P2, 2 P3), Codex findings 2 (D705, D706); fixes in 02600066; lint 0, typecheck:all 0, 8 suites 361/361, 16 mutations each red.
 - 2026-10-18 13:37Z A7 review rounds 2-3: Codex R2 findings 1 (D708, fc230fd6), R3 clean; loop converged after 3 rounds. Pictures: before (dev build) and after (63f086e7 build), both themes at 360 px, in screenshots/a7.
+- 2026-10-18 13:43Z A7 final unit gates on 1f185f10 (code fc230fd6; dev 9470d4e9, nothing newer): lint 0, typecheck:all 0, test:all 0 (extension 13875 passed, 5 skipped, 7 todo).
+- 2026-10-18 14:16Z A7 smoke Chrome, whole suite, armed build at 1f185f10, retry 0: 57 files passed, 6 skipped (standing env gates), 260 tests passed, 14 skipped, in 1952 s.
+- 2026-10-18 15:02Z A7 smoke Firefox, whole suite, armed build at 1f185f10, retry 0: 60 files passed, 3 skipped (standing env gates), 260 tests passed, 14 skipped, in 2702 s.
+- 2026-10-18 15:11Z A7 network Chrome send-picker 1/1 in 211 s (prover on, retry 0; a first start over load1 150 was stopped after 6 s and rerun). A7 ✓.

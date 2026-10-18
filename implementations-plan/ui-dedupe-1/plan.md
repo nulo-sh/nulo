@@ -311,7 +311,7 @@ A pass is exit 0, with every named test green and none skipped that ran on base.
   - The phase gate.
   - Smoke on Chrome: `rows`, `navigation`.
   - Network on Chrome: `cancel-mid-prove`, `in-flight-send-guard`.
-- **A7** ✗ (unit gates ✓ on fc230fd6; pictures ✓; e2e pending).
+- **A7** ✓ (on 1f185f10, code fc230fd6, dev 9470d4e9: lint, typecheck:all, test:all, check:plans; whole smoke suite at retry 0, Chrome 57 files passed and 6 skipped in 1952 s, Firefox 60 passed and 3 skipped in 2702 s; network Chrome `send-picker` 1/1 in 211 s; Codex clean in round 3).
   - G-fast.
   - The suites of the hook, `holdings`, `SelectTokenPopup`, `send`, `send.integration`, `BalanceView`, `TokensView` and `popup-stack.pins`; each new page case red on the base page, each replaced one red on the new page.
   - The phase gate.
