@@ -17,7 +17,7 @@ const hasConfig = aztecConfig !== undefined
  * origin tears down the secure-channel transport but keeps the DappSession
  * record in storage. On reconnect (from any tab on the playground origin), the
  * canonical flow (`handleDiscovery`'s returning-session auto-approve in
- * `background.ts`) auto-approves discover and re-pops verify, as every reconnect does.
+ * `wallet-sdk/discovery-flow.ts`) auto-approves discover and re-pops verify, as every reconnect does.
  *
  * Same-origin SPA hash navigations do NOT terminate (per the upstream comment block
  * in `background.ts`); only true cross-origin navs do.
