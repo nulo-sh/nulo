@@ -408,6 +408,15 @@ async function expectPageClean(page: Page, label: string, states: readonly SiteS
 	if (states.length === 0) expect(await readHexOutsideMono(page), `${label}: hex outside a mono role`).toEqual([])
 }
 
+async function readTokenFiat(page: Page): Promise<{ text: string; lines: number }> {
+	return page.$eval(sel("token-fiat"), (el) => {
+		const range = document.createRange()
+		range.selectNodeContents(el)
+		const tops = [...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => Math.round(rect.top))
+		return { text: el.textContent?.trim() ?? "", lines: new Set(tops).size }
+	})
+}
+
 /** Holdings' offer to add a pasted address no row holds: the address in `meta`, inside the button's box. */
 async function expectAddTokenOffer(page: Page): Promise<void> {
 	await replaceInputValue(page, sel("holdings-search"), RECIPIENT)
@@ -701,6 +710,7 @@ async function expectAuthwits(page: Page, scope: ActivityScope): Promise<void> {
 		[AUTHWITS, "a backup restored with a message_hash authwit record"],
 	])
 	expect(await page.$$(sel("record-caller"))).toHaveLength(1)
+	expect(await page.$$(sel("authwit-pending-chip"))).toHaveLength(1)
 	await seedAuthwits(page, scope, ["encoded_call"])
 	await navigateByHash(page, "#/popup/general", 10_000)
 	await page.waitForSelector(sel("tokens-menu-trigger"), VISIBLE)
@@ -731,6 +741,12 @@ test("a seeded wallet's Home, Holdings, Activity, its tx, receipt and send detai
 		await waitForFittedHero(page)
 		await expectHero(page, false)
 		await expectPageClean(page, "Home", [["overlay:Header", ""]])
+		// Past $1T the figure outgrows a 160px cap onto a third line; its own cap keeps it on two. The
+		// row reads its quote apart from the hero, so the figure can land after the sweep.
+		await page.waitForSelector(sel("token-fiat"), VISIBLE)
+		const fiat = await readTokenFiat(page)
+		expect(fiat.text).toMatch(/^≈ \$123,456,789,012,345\./)
+		expect.soft(fiat.lines, `the token row's dollar figure: ${JSON.stringify(fiat)}`).toBeLessThanOrEqual(2)
 		await expectRoleAt(page, "holdings-section-label", "label-section")
 		await expectButtons(page, "tokens-menu-trigger")
 

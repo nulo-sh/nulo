@@ -117,7 +117,7 @@ const mountOpen = async (props: Record<string, unknown> = {}) => {
 }
 
 describe("OperationCard — long dApp strings break inside the card", () => {
-	test("a grant's function name breaks in the payload column; its whole values break in their rows, names kept on one line", () => {
+	test("a grant's function name breaks in the payload column; its whole values break under their names, across the row", () => {
 		const w = mountCard(grant, { decodedGrants: grantDecoded })
 		expect(w.find(`.${CARD.payload}`).text()).toMatch(HUMANIZED)
 		const values = w.findAll('[data-testid="execute-grant-decoded-param-value"]')
@@ -129,7 +129,8 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 		}
 		expect(w.find('[data-testid="execute-grant-decoded-args"]').classes()).toContain(ARGS.full)
 		expect(declarationsOf(".row", undefined, ARGS_STYLE)).toMatchObject({ gap: "12px" })
-		expect(declarationsOf(".full .row > :first-child", undefined, ARGS_STYLE)).toEqual({ "flex-shrink": "0", "max-width": "50%" })
+		expect(declarationsOf(".full .row", undefined, ARGS_STYLE)).toEqual({ "flex-direction": "column", gap: "2px" })
+		expect(declarationsOf(".full .row", "> :last-child", ARGS_STYLE)).toEqual({ "text-align": "left" })
 	})
 
 	test("a call's 64-character name and its address sit in the call row, whose children may break", async () => {

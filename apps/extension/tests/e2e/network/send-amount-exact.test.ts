@@ -51,6 +51,24 @@ async function waitForAmount(page: Page, expected: string): Promise<void> {
 	}
 }
 
+async function readTokenLine(page: Page): Promise<{ text: string; lines: number; below: boolean; inside: boolean }> {
+	return page.evaluate(() => {
+		const box = (testid: string) => document.querySelector(`[data-testid="${testid}"]`)?.getBoundingClientRect()
+		const label = document.querySelector('[data-testid="send-amount-fiat-label"]')
+		const range = document.createRange()
+		if (label) range.selectNodeContents(label)
+		const rects = [...range.getClientRects()].filter((rect) => rect.width > 0)
+		const [fiat, balance, max, row] = ["send-amount-fiat-label", "send-amount-balance", "send-amount-max", "send-amount-row"].map(box)
+		const parts = [fiat, balance, max]
+		return {
+			text: label?.textContent?.trim() ?? "",
+			lines: new Set(rects.map((rect) => Math.round(rect.top))).size,
+			below: !!(fiat && balance && max) && balance.top >= fiat.bottom && max.top >= fiat.bottom,
+			inside: !!row && parts.every((rect) => !!rect && rect.left >= row.left && rect.right <= row.right),
+		}
+	})
+}
+
 /** `hidden` is how far the field's text can scroll, in px: 0 when the whole amount is in view. */
 async function readField(page: Page): Promise<{ value: string; hidden: number; fontSize: number; metaTop: number }> {
 	return page.$eval(AMOUNT, (el) => {
@@ -222,6 +240,13 @@ test.skipIf(!hasConfig)(
 		await page.$eval(AMOUNT, (el) => (el as HTMLInputElement).blur())
 		await waitForEstimateAndConfirm(page)
 		expect(await page.$eval('[data-testid="send-amount-balance"]', (el) => el.textContent?.trim())).toBe("1,235,567.12345678 TST")
+		// Beside this balance the dollar line has no room: "≈" stays with its figure, and the balance
+		// and Max wrap under it, within the amount's width.
+		const meta = await readTokenLine(page)
+		expect(meta.text).toMatch(/^≈ \$1,235,567\./)
+		expect.soft(meta.lines, `the dollar line breaks: ${JSON.stringify(meta)}`).toBe(1)
+		expect.soft(meta.below, `the balance and Max share the dollar line: ${JSON.stringify(meta)}`).toBe(true)
+		expect.soft(meta.inside, `the line passes the amount's width: ${JSON.stringify(meta)}`).toBe(true)
 
 		await openReviewFromStrip(page)
 		await shotSend(page, "sheet-send-review", "send-review-submit")

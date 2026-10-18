@@ -195,6 +195,8 @@ type Request = {
 	approve?: true
 	/** Light and dark shots of the window, focused on this testid, when `NULO_E2E_SHOT_DIR` is set. */
 	shot?: { name: string; focus: string }
+	/** The grant's arguments, printed whole, each under its name: each name and its value's length in glyphs. */
+	fullArguments?: Readonly<Record<string, number>>
 }
 
 function requests({ tokenAddress, minterAddress }: AztecTestConfig, accountAddress: string): Request[] {
@@ -240,6 +242,7 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig, accountAddre
 			states: ["a grantPublicAuthwit request (network)"],
 			contained: true,
 			shot: { name: "grant", focus: "execute-grant-args" },
+			fullArguments: { from: 66, to: 66, amount: 1, _nonce: 66 },
 		},
 		{
 			method: "registerToken",
@@ -271,6 +274,7 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig, accountAddre
 			inputs: { tokenAddress, authwitOwner: accountAddress, authwitCaller: minterAddress, authwitAmount: "1", authwitNonce: "7" },
 			ready: sel("execute-grant-transfer-to"),
 			states: ["a grant on a registered token (network)"],
+			shot: { name: "grant-registered", focus: "execute-grant-args" },
 		},
 	]
 }
@@ -324,6 +328,38 @@ async function stretchPayload(win: Page): Promise<void> {
 		set('[data-testid="execute-grant-decoded-param"] > :first-child', `${"W".repeat(32)}:`)
 	})
 }
+async function grantArguments(
+	win: Page,
+): Promise<{ param: string | null; glyphs: number; below: boolean; indent: number | null; lines: number }[]> {
+	return win.evaluate(() =>
+		[...document.querySelectorAll<HTMLElement>('[data-testid="execute-grant-decoded-param"]')].map((row) => {
+			const name = row.querySelector('[data-testid="execute-grant-decoded-param-name"]')
+			const value = row.querySelector('[data-testid="execute-grant-decoded-param-value"]')
+			const range = document.createRange()
+			if (value) range.selectNodeContents(value)
+			const rects = [...range.getClientRects()].filter((rect) => rect.width > 0)
+			return {
+				param: row.getAttribute("data-param"),
+				glyphs: value?.textContent?.trim().length ?? 0,
+				below: !!name && !!value && value.getBoundingClientRect().top >= name.getBoundingClientRect().bottom,
+				indent: rects[0] ? Math.round(rects[0].left - row.getBoundingClientRect().left) : null,
+				lines: new Set(rects.map((rect) => Math.round(rect.top))).size,
+			}
+		}),
+	)
+}
+
+async function expectFullArguments(win: Page, expected: Readonly<Record<string, number>>): Promise<void> {
+	const args = await grantArguments(win)
+	expect(args.map(({ param, glyphs }) => [param, glyphs])).toEqual(Object.entries(expected))
+	for (const arg of args) {
+		const at = JSON.stringify(arg)
+		expect.soft(arg.below, `${arg.param} sits under its name: ${at}`).toBe(true)
+		expect.soft(arg.indent, `${arg.param} starts at the row's left edge: ${at}`).toBe(0)
+		expect.soft(arg.lines, `${arg.param} lines: ${at}`).toBeLessThanOrEqual(2)
+	}
+}
+
 async function openExecute(ctx: Connected, { button, inputs, ready, details }: Request): Promise<Page> {
 	for (const [name, value] of Object.entries(inputs)) await setPgInput(ctx.playgroundPage, name, value)
 	const opened = waitForPopup(ctx, "execute", { timeout: 60_000 })
@@ -352,6 +388,7 @@ async function runRequest(ctx: Connected, request: Request, shown: Set<string>):
 	try {
 		const observations = await sweepWindow(win, "windows-execute", request.states)
 		if (request.shot) await shotSend(win, request.shot.name, request.shot.focus)
+		if (request.fullArguments) await expectFullArguments(win, request.fullArguments)
 		if (request.contained) {
 			expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
 			await stretchPayload(win)

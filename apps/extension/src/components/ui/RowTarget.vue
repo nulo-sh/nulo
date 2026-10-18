@@ -10,7 +10,7 @@ import { RouterLink } from "vue-router"
 
 defineProps({
 	to: { type: String, default: undefined },
-	/** The id of the element that names the row. */
+	/** The ids, space-separated, of the elements that name the row. */
 	labelledby: { type: String, required: true },
 })
 

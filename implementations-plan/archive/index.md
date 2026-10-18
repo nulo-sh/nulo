@@ -213,6 +213,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [onboarding-width-unification](onboarding-width-unification/plan.md) — completed — one onboarding page width through a single layout component
 - [origin-guard-truth](origin-guard-truth/plan.md) — completed — whether the cross-origin session guard is live, settled and pinned by a test
 - [owned-client-teardown](owned-client-teardown/plan.md) — completed — documents share one logger client instead of a private logger per service client
+- [p46-ui-1](p46-ui-1/plan.md) — completed — the four page-46 picks: a Pending chip on an unproven grant, the header chips at 11 px, three 13 px wraps made room for (#698 #651 #652 #653)
 - [package-extraction](package-extraction/plan.md) — completed — the extension monolith cut into workspace packages in dependency order
 - [parallel-e2e-isolation](parallel-e2e-isolation/plan.md) — completed — parallel network e2e runs from sibling worktrees own their ports, processes and state
 - [passkey-display-name](passkey-display-name/plan.md) — completed — new passkeys register with a readable, unique display name
