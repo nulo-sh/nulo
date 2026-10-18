@@ -477,7 +477,8 @@ const handleFiatBalanceAction = (divisor) => {
 				}}</span>
 			</span>
 
-			<Flex align="center" justify="between" gap="8">
+			<!-- Fiat mode's span has a zero basis, so its line wraps only when the balance and Max alone overflow it. -->
+			<Flex align="center" justify="between" gap="8" wrap="wrap">
 				<span ref="conversionEl" :class="[$style.conversion, fiatMode && $style.conversion_fit]" data-testid="send-amount-meta">
 					<template v-if="fiatMode">
 						<template v-if="!derivedOwnRow">
@@ -490,7 +491,7 @@ const handleFiatBalanceAction = (divisor) => {
 						<span v-if="derivedTokenLabel" aria-hidden="true" :class="$style.ruler"><span ref="derivedRuler" :class="$style.derived_type">{{ derivedTokenLabel }}</span></span>
 					</template>
 					<template v-else>
-						<span v-if="tokenModeFiatLabel" :title="conversionTitle" data-testid="send-amount-fiat-label">{{
+						<span v-if="tokenModeFiatLabel" :title="conversionTitle" data-testid="send-amount-fiat-label" :class="$style.fiat_label">{{
 							tokenModeFiatLabel
 						}}</span>
 					</template>
@@ -614,6 +615,11 @@ const handleFiatBalanceAction = (divisor) => {
 .conversion {
 	composes: type--meta from global;
 	color: var(--nulo-secondary);
+}
+
+/* "≈" stays with its figure: the balance and Max wrap under it instead. */
+.fiat_label {
+	white-space: nowrap;
 }
 
 /* The derived line's room is all the row leaves beside the balance and Max, drawn there or not. */

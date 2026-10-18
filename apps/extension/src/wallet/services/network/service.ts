@@ -915,6 +915,14 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		return created
 	}
 
+	/** The proposed tip of the node the network's PXE syncs from (its primary endpoint), read past the
+	 *  PXE's chain guard, which would wait behind a proof, through a node that dials once and logs
+	 *  nothing. Background-only: not an RPC method. */
+	public async readChainTip(networkId: string): Promise<number> {
+		const node = await this.getSingleAttemptNodeForUrl(networkInfoFrom(await this.getNetwork(networkId)).rpcUrl)
+		return Number(await node.getBlockNumber())
+	}
+
 	public reportEndpointFailure(url: string): void {
 		const entry = this.transientNodes.get(url)
 		if (!entry) return

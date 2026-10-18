@@ -26,7 +26,9 @@ import {
 	withTimeoutMessage,
 } from "../fixtures/extension"
 import { getAccountAddress, navigateByHash, waitForToast } from "../fixtures/helpers"
-import { accountChainId, exportBackupContent, sealPlainBackup } from "../helpers/backup-export"
+import { pollUntil } from "../fixtures/poll"
+import { accountChainId, exportBackupContent } from "../helpers/backup-export"
+import { sealPlainBackup } from "../helpers/backup-seal"
 import { readStage } from "../helpers/crash-truth"
 import {
 	gotoPopupImport,
@@ -67,15 +69,14 @@ async function backupWithSender(ctx: ExtensionContext, sender: string): Promise<
 async function sendersList(page: Page, sender: string): Promise<boolean> {
 	await navigateByHash(page, SENDERS_HASH)
 	await page.waitForSelector('[data-testid="senders-add-btn"]', { visible: true, timeout: 10_000 })
-	const deadline = Date.now() + 120_000
-	for (;;) {
+	let failedBefore = false
+	const readOk = async () => {
+		if (failedBefore) await clickByTestId(page, "async-list-retry")
 		await page.waitForFunction(() => !document.querySelector('[data-testid="loading-state"]'), { timeout: 60_000, polling: 100 })
-		const failed = await page.$('[data-testid="async-list-retry"]')
-		if (!failed) break
-		if (Date.now() > deadline) throw new Error("the Senders page never read successfully")
-		await new Promise((resolve) => setTimeout(resolve, 2_000))
-		await clickByTestId(page, "async-list-retry")
+		failedBefore = (await page.$('[data-testid="async-list-retry"]')) !== null
+		return !failedBefore
 	}
+	await pollUntil(readOk, (ok) => ok, { label: "the Senders page read successfully", timeoutMs: 120_000, intervalMs: 2_000 })
 	const listed = await page.evaluate(
 		(address: string) => !!document.querySelector(`[data-testid="sender-row"][data-sender-address="${address}"]`),
 		sender,

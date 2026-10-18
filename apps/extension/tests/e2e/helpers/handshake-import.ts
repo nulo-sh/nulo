@@ -26,7 +26,6 @@ import {
 	clickSelector,
 	type ExtensionContext,
 	openPopup,
-	pickFileByTestId,
 	registerProfile,
 	replaceInputValue,
 	waitForHash,
@@ -49,16 +48,16 @@ import {
 } from "../fixtures/helpers"
 import { type PasskeyAuthSetup, registerPasskeyProfile, setupPasskeyVirtualAuth } from "../fixtures/passkey"
 import { holdAccountRegistration, isAccountRegistrationHeld, releaseAccountRegistration } from "../fixtures/projection-gate"
+import { pollUntil } from "../fixtures/poll"
 import {
 	accountChainId,
 	downloadEncryptedBackup,
 	downloadPlainPasskeyBackup,
 	keepChainAccountState,
 	openEncryptedBackup,
-	type PlainBackup,
-	sealPlainBackup,
 } from "./backup-export"
-import { importFullBackup, POPUP_IMPORT_SHELL } from "./import-drivers"
+import { passkeyBackupVerifies, type PlainBackup, sealPasskeyBackup, sealPlainBackup } from "./backup-seal"
+import { importFullBackup, POPUP_IMPORT_SHELL, readPasskeyPrf, submitPasskeyFullBackup } from "./import-drivers"
 
 const AMOUNT = 25n * 10n ** 18n
 const OTHER_PASSWORD = "OtherProfilePw123!"
@@ -184,22 +183,31 @@ async function unlock(page: Page, credential: Credential, profileId: string): Pr
 	await waitForHash(page, "#/popup/general", 60_000)
 }
 
-/** The unlocked profile's full backup, kept to the sandbox chain so the import dials no public RPC. */
+/**
+ * The unlocked profile's full backup, kept to the sandbox chain so the import dials no public RPC.
+ * A passkey backup is checked as the wallet made it, then re-sealed under the same passkey, read on
+ * `page`, whose virtual authenticator holds it.
+ */
 export async function exportBackup(page: Page, credential: Credential, account: string, token: string, dir: string): Promise<string> {
 	await navigateByHash(page, "#/popup/settings/security/export/full")
 	await clickByTestId(page, "agree-continue-btn")
+	const file = join(dir, "backup.json")
 	if (credential === "password") {
 		await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 10_000 })
 		await replaceInputValue(page, '[data-testid="unlock-password-input"]', TEST_PASSWORD)
 		await clickByTestId(page, "unlock-submit-btn")
+		const backup = await openEncryptedBackup(await downloadEncryptedBackup(page, clickByTestId, 180_000))
+		keepChainAccountState(backup.data, accountChainId(backup, account), token)
+		writeFileSync(file, sealPlainBackup(backup))
+	} else {
+		const backup = JSON.parse(await downloadPlainPasskeyBackup(page)) as PlainBackup
+		const id = backup["master-key"]
+		if (typeof id !== "string") throw new Error("the passkey backup names no credential in its master-key")
+		const passkey = { id, prf: await readPasskeyPrf(page, id) }
+		expect(await passkeyBackupVerifies(backup, passkey), "the wallet's passkey backup fails its own checksum or MAC").toBe(true)
+		keepChainAccountState(backup.data, accountChainId(backup, account), token)
+		writeFileSync(file, await sealPasskeyBackup(backup, passkey))
 	}
-	const backup =
-		credential === "password"
-			? await openEncryptedBackup(await downloadEncryptedBackup(page, clickByTestId, 180_000))
-			: (JSON.parse(await downloadPlainPasskeyBackup(page)) as PlainBackup)
-	keepChainAccountState(backup.data, accountChainId(backup, account), token)
-	const file = join(dir, "backup.json")
-	writeFileSync(file, sealPlainBackup(backup))
 	await navigateByHash(page, "#/popup/general")
 	return file
 }
@@ -219,31 +227,24 @@ export async function deleteProfile(page: Page, from: DeleteFrom): Promise<void>
 async function importPasskeyFullBackup(page: Page, file: string): Promise<void> {
 	await page.waitForSelector('[data-testid="import-option-full-backup"]', { visible: true, timeout: 15_000 })
 	await clickByTestId(page, "import-option-full-backup")
-	await page.waitForSelector('[data-testid="import-full-backup-pick-file"]', { visible: true, timeout: 10_000 })
-	await pickFileByTestId(page, "import-full-backup-pick-file", file)
-	await page.waitForFunction(
-		() => {
-			const button = document.querySelector<HTMLButtonElement>('[data-testid="import-full-backup-submit-btn"]')
-			return !!button && !button.disabled
-		},
-		{ timeout: 15_000 },
-	)
-	await clickByTestId(page, "import-full-backup-submit-btn")
-	await waitForHash(page, "#/popup/general", 300_000)
+	await submitPasskeyFullBackup(page, file, 300_000)
 }
 
 /** The gate's acknowledgement: from here on the token is registered and the receiver is not. */
 export async function waitForHeldProjection(page: Page): Promise<void> {
-	const deadline = Date.now() + 180_000
-	while (!(await isAccountRegistrationHeld(page))) {
-		if (Date.now() > deadline) throw new Error("no projection of the receiver parked on the gate; is the build proverless-armed?")
-		await new Promise((resolve) => setTimeout(resolve, 500))
-	}
+	await pollUntil(
+		() => isAccountRegistrationHeld(page),
+		(held) => held,
+		{
+			label: "a projection of the receiver parked on the gate (is the build proverless-armed?)",
+			timeoutMs: 180_000,
+			intervalMs: 500,
+		},
+	)
 }
 
 /** The incoming-transfer scan's committed record of the note, read from storage: the card has no per-hash testid. */
 async function waitForIncomingRecord(page: Page, account: string, txHash: string): Promise<void> {
-	const deadline = Date.now() + DISCOVERY_TIMEOUT_MS
 	const found = () =>
 		page.evaluate(
 			async (want: { account: string; txHash: string }) => {
@@ -256,9 +257,9 @@ async function waitForIncomingRecord(page: Page, account: string, txHash: string
 			},
 			{ account, txHash },
 		)
-	while (!(await found())) {
-		if (Date.now() > deadline)
-			throw new Error("the incoming-transfer scan never discovered the receiver's note while its projections were held")
-		await new Promise((resolve) => setTimeout(resolve, 1_000))
-	}
+	await pollUntil(found, (seen) => seen, {
+		label: "the incoming-transfer scan discovering the receiver's note while its projections are held",
+		timeoutMs: DISCOVERY_TIMEOUT_MS,
+		intervalMs: 1_000,
+	})
 }

@@ -69,6 +69,7 @@ declare global {
   const REVIEW_ARM_MS: typeof import('../composables/useSendReview').REVIEW_ARM_MS
   const SEED_STATUS_RETRY_MS: typeof import('../composables/useSeedStatus').SEED_STATUS_RETRY_MS
   const SETTINGS_ROWS: typeof import('../utils/settings-search').SETTINGS_ROWS
+  const SETTING_UPDATE_FAILED: typeof import('../composables/useSettingUpdate').SETTING_UPDATE_FAILED
   const SNACK_GAP: typeof import('../composables/snackInset').SNACK_GAP
   const STALE_NETWORK_KEY: typeof import('../composables/useStaleNetwork').STALE_NETWORK_KEY
   const STALLED_MIN_DISPLAY_MS: typeof import('../composables/useIncomingSyncHealth').STALLED_MIN_DISPLAY_MS
@@ -156,6 +157,7 @@ declare global {
   const displaySymbol: typeof import('../utils/tx-amount').displaySymbol
   const downloadFile: typeof import('../utils/files').downloadFile
   const effectScope: typeof import('vue').effectScope
+  const endsSelection: typeof import('../utils/selection').endsSelection
   const errorLogWriters: typeof import('../composables/useFullBackupImport').errorLogWriters
   const estimateWhenClear: typeof import('../utils/estimate-when-clear').estimateWhenClear
   const feeDisplay: typeof import('../utils/fee-estimation').feeDisplay
@@ -457,6 +459,7 @@ declare global {
   const useFullBackupExport: typeof import('../composables/useFullBackupExport').useFullBackupExport
   const useFullBackupImport: typeof import('../composables/useFullBackupImport').useFullBackupImport
   const useGetStarted: typeof import('../composables/useGetStarted').useGetStarted
+  const useHeroVisible: typeof import('../composables/useHeroVisible').useHeroVisible
   const useId: typeof import('vue').useId
   const useImportErrorState: typeof import('../composables/useProfileImportFlow').useImportErrorState
   const useIncomingSyncHealth: typeof import('../composables/useIncomingSyncHealth').useIncomingSyncHealth
@@ -844,6 +847,7 @@ declare module 'vue' {
     readonly REVIEW_ARM_MS: UnwrapRef<typeof import('../composables/useSendReview')['REVIEW_ARM_MS']>
     readonly SEED_STATUS_RETRY_MS: UnwrapRef<typeof import('../composables/useSeedStatus')['SEED_STATUS_RETRY_MS']>
     readonly SETTINGS_ROWS: UnwrapRef<typeof import('../utils/settings-search')['SETTINGS_ROWS']>
+    readonly SETTING_UPDATE_FAILED: UnwrapRef<typeof import('../composables/useSettingUpdate')['SETTING_UPDATE_FAILED']>
     readonly SNACK_GAP: UnwrapRef<typeof import('../composables/snackInset')['SNACK_GAP']>
     readonly STALE_NETWORK_KEY: UnwrapRef<typeof import('../composables/useStaleNetwork')['STALE_NETWORK_KEY']>
     readonly STALLED_MIN_DISPLAY_MS: UnwrapRef<typeof import('../composables/useIncomingSyncHealth')['STALLED_MIN_DISPLAY_MS']>
@@ -931,6 +935,7 @@ declare module 'vue' {
     readonly displaySymbol: UnwrapRef<typeof import('../utils/tx-amount')['displaySymbol']>
     readonly downloadFile: UnwrapRef<typeof import('../utils/files')['downloadFile']>
     readonly effectScope: UnwrapRef<typeof import('vue')['effectScope']>
+    readonly endsSelection: UnwrapRef<typeof import('../utils/selection')['endsSelection']>
     readonly errorLogWriters: UnwrapRef<typeof import('../composables/useFullBackupImport')['errorLogWriters']>
     readonly estimateWhenClear: UnwrapRef<typeof import('../utils/estimate-when-clear')['estimateWhenClear']>
     readonly feeDisplay: UnwrapRef<typeof import('../utils/fee-estimation')['feeDisplay']>
@@ -1232,6 +1237,7 @@ declare module 'vue' {
     readonly useFullBackupExport: UnwrapRef<typeof import('../composables/useFullBackupExport')['useFullBackupExport']>
     readonly useFullBackupImport: UnwrapRef<typeof import('../composables/useFullBackupImport')['useFullBackupImport']>
     readonly useGetStarted: UnwrapRef<typeof import('../composables/useGetStarted')['useGetStarted']>
+    readonly useHeroVisible: UnwrapRef<typeof import('../composables/useHeroVisible')['useHeroVisible']>
     readonly useId: UnwrapRef<typeof import('vue')['useId']>
     readonly useImportErrorState: UnwrapRef<typeof import('../composables/useProfileImportFlow')['useImportErrorState']>
     readonly useIncomingSyncHealth: UnwrapRef<typeof import('../composables/useIncomingSyncHealth')['useIncomingSyncHealth']>

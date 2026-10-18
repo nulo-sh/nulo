@@ -32,14 +32,10 @@ const APP = "apps/extension/src/popup/app.vue"
 const BRUTALIST = "packages/design/src/ui/BrutalistTitle.vue"
 const BALANCE = "apps/extension/src/popup/components/modules/general/BalanceView.vue"
 const BUTTON = "packages/design/src/ui/Button.vue"
-const HEADER = "apps/extension/src/components/Header.vue"
-const HEADER_CHIPS = ".actions .network_chip, .network_chip .network_label, .lock_chip .lock_label"
-const HEADER_CHIP_SCOPE = '[data-testid="network-button"], [data-testid="network-name"], [data-testid="header-lock"] > span'
 const TX_CARD = "apps/extension/src/popup/components/modules/activity/TransactionCard.vue"
 const TWO_CHIPS = ".chips > .chip, .app_slot > .app_chip"
 const TWO_CHIP_SCOPE =
 	'[data-testid="activity-direction-chip"]:has(+ span > [data-testid="activity-app-chip"]), [data-testid="activity-direction-chip"] + span > [data-testid="activity-app-chip"]'
-const ACCOUNTS = "apps/extension/src/popup/pages/settings/accounts/index.vue"
 const PUBLISH_STRIP = "apps/extension/src/components/composite/send/PublishStrip.vue"
 const PUBLISH_FACTS = '[data-testid="send-publish-strip"] [data-cell]'
 const ROLELESS = ".wrapper:is(.secondary, .ghost, .text)"
@@ -221,42 +217,6 @@ export const OVERRIDES: Override[] = [
 		value: "0.08em",
 		role: "label-section",
 		why: "a publish fact keeps the names' tracking",
-	},
-	{
-		file: HEADER,
-		selector: HEADER_CHIPS,
-		scope: HEADER_CHIP_SCOPE,
-		property: "font-size",
-		value: "10px",
-		role: "label-section",
-		why: "the header's row fits its chips' words only at 10px",
-	},
-	{
-		file: HEADER,
-		selector: HEADER_CHIPS,
-		scope: HEADER_CHIP_SCOPE,
-		property: "font-weight",
-		value: "600",
-		role: "label-section",
-		why: "the header's chips pair semibold with their 10px",
-	},
-	{
-		file: HEADER,
-		selector: HEADER_CHIPS,
-		scope: HEADER_CHIP_SCOPE,
-		property: "letter-spacing",
-		value: "0.08em",
-		role: "label-section",
-		why: "the header's chips pair 0.08em with their 10px",
-	},
-	{
-		file: ACCOUNTS,
-		selector: ".desc_line:has(.addr_head)",
-		scope: '[data-testid="manage-accounts-address"]',
-		property: "font-size",
-		value: "11px",
-		role: "meta",
-		why: "an account row's marker and address tail fit its line only at 11px",
 	},
 	{
 		file: TX_CARD,

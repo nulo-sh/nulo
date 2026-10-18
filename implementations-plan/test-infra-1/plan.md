@@ -1,7 +1,7 @@
 ---
 plan: test-infra-1
 tier: mid
-status: arc 1 implemented (Phases 1-3 ✓); Codex loop converged (round 2 approve); PR open
+status: arc 1 merged (#706); arc 2 implemented, in review (Phases 4-6 ✓)
 issues: "#550 (arc 1 Closes), #561 (arc 3 Closes), #536 (arc 3 Closes), #540 (arc 4 Closes)"
 driver: claude-code
 claude_model: opus
@@ -96,7 +96,7 @@ Four test-infrastructure refactors the owner picked on decision page 37 (option 
 
 ## Arc 2: waits for causes and shared builders, free sites (one PR, refs #536 #540)
 
-### Phase 4 — the awaited bus and the unit waits
+### Phase 4 — the awaited bus and the unit waits ✓
 1. Add `awaitedBus` to `apps/extension/tests/helpers/held-read.ts`. Add `"tests/helpers/**/*.test.ts"` to `apps/extension/vitest.config.ts` `include` and `"tests/helpers/**/*.ts"` to `apps/extension/tsconfig.json` `include`, so the new helper tests run and are type-checked.
 2. `token-balance/service.test.ts` `:831, :895, :957, :1089, :1455`: replace each counted flush with `await bus.dispatch(…)`. Where a spy parks a write to stage a race (`:821-825`, `:881-895`, `:1069-1075`), give it a `deferred` reached and release pair and have it call through to the real write after release. Keep each test's own order: start the dispatch that parks, await its reached signal, start the other, release, then await both (`:840-895`: the deletion starts only after the creation reached its write, else the creation fails its liveness check and never reaches it).
 3. `network/client.test.ts:8-10` and `composables/importChainSync.test.ts:207,324`: await the cause each drain stands for (the connect message; the code's own reaction to the late promise, `importChainSync.ts:122`). A site with no reachable cause keeps its drain, with the reason in the PR body.
@@ -104,13 +104,13 @@ Four test-infrastructure refactors the owner picked on decision page 37 (option 
 - **Tests:** `tests/helpers/held-read.test.ts` covers: `dispatch` resolves only after an async handler settles (control: `invoke` alone does not wait); a synchronous throw rejects `dispatch` while its sibling still runs; an async rejection rejects it; a repeated `add` runs once; `remove` of the original callback stops it; two overlapping dispatches settle independently. Each "has not happened" assertion it touches keeps or gains a success control in the same test.
 - **Validation gate:** `bun run lint && bun run typecheck:all && bun run test`. Pass: exit 0; none of the five token-balance sites, `network/client.test.ts` or `importChainSync.test.ts:207,324` counts turns. The delays inside the mocks (`:824`, `:1074`) stay: they widen the race those tests pin, they are not waits.
 
-### Phase 5 — storage stubs and the balance builder
+### Phase 5 — storage stubs and the balance builder ✓
 1. Add `{ persist: false }` to `installChromeStorage`. Move the 19 discard-write stubs in files no lane edits (recon § Test collaborators lists 24; five wait for arc 3). Each test must see the same `chrome` members it saw before, added or removed (`settings/tokens/index.test.ts:30-43` stubs a `chrome` with no `runtime`); a file where that cannot hold keeps its stub, with the reason in the PR body.
 2. Make `startWorld` the token-balance file's one `world(opts)` builder; move the 13 inline builds and `boot()`.
 - **Tests:** `tests/helpers/chrome-storage-mock.test.ts` covers: `persist: false` records `set` and `remove` and keeps nothing; the default mode still persists. Each moved suite keeps its test count.
 - **Validation gate:** Phase 4's commands plus `bun run test:all`. Pass: exit 0; test counts unchanged per moved file, logged.
 
-### Phase 6 — one e2e poll
+### Phase 6 — one e2e poll ✓
 1. Add `apps/extension/tests/e2e/fixtures/poll.ts`, with `scripts/e2e/poll.test.ts`.
 2. Write the per-loop inventory first (predicate, terminal failures, timeout result, deadline owner), into the PR body. Then move the deadline loops in fixture files no lane edits: `session.ts`, `tokens.ts`, `journal.ts` (the accepted predicates stay byte-identical), `send-burst.ts`, `aztec.ts`, `token-list.ts`, `incoming-poll-gate.ts`, `mining-hold.ts`, `popups.ts`, `browser/firefox.ts`, `browser/webdriver-classic.ts` (its `done` accepts the driver exiting, as the loop does today), `boot-guard.ts`, `extension.ts`. Then move the in-spec loops in specs no lane edits. At the arc's start, re-check each file with `git diff --name-only origin/dev...worktree-<lane>` for every running lane; a file in any lane's diff waits for arc 3.
 3. `passkey-backup.test.ts`: parameterise `armProgressObserver` by its predicate, arm it for Encrypting (the card text only, as the poll checks today) before the second Protect click, and delete the 100 ms poll.
@@ -233,6 +233,22 @@ It reproduced F9's three differences independently and found none in the other 8
 **Arc 1 Opus diff review** (opus, beside round 1): `approve with fixes`. Taken: R1-1 (found independently); the parse cost against vitest's 5 s default, cut by parsing without JSDoc nodes and, in the masker, without parent links, never by a raised timeout (`lessons/phase-2.md`: the slowest guard test from 2-4 s to under 2 s). Not taken: a `PACKAGE_SRC_ROOTS` entry whose `src` holds no file a policy reads throws "holds no file". It needs a package that does not exist, and it fails loud and names the root in the PR that adds one, which is the throw's purpose.
 
 **Arc 1 Codex fix loop, round 2** (resumed, verification of 2cca9bdb): `approve`. No material finding. It replayed all 14 walker policies against the 0fe841be walkers, directory and file-name skips included, and got identical lists. Across 1,858 files the masking was byte-for-byte unchanged under the new parse options, and 187,284 calls matched in callee, argument kind and text, offset and line. JSDoc tags, comment delimiters inside JSDoc types, template literal types, CRLF and Vue expressions all read as before. The loop converged in two rounds.
+
+**Arc 2 implementation: deviations from the plan** (each recorded in `lessons/phase-N.md`):
+- Phase 4: FAN-OUT and CREATE-BALANCE (single-turn guesses before a "not called" in the same file) moved too. The helper tests live in `scripts/test-helpers/` and `vitest.config.ts`, `tsconfig.json` and `FeeSettingsCard.test.ts` stay unchanged: a recheck before the e2e moves found the first in authwit-intent-1's diff and the last in fees-display-1's, so they wait for arc 3 (O10 lands with them).
+- Phase 6: `pollUntil` gained `between`, the work that moves the state on, run after a refused read while budget remains (Codex round 1 below). `boot-guard` and `waitForTarget` keep the exact failure text their readers key on. Five files in older lanes' diffs moved after a trial merge showed those lanes' changes already on dev.
+
+**Arc 2 Codex fix loop, round 1** (gpt-6.1-sol, high, the diff against 138e0ded at 764de664): `approve with fixes (restore deadline checks around side-effectful probes)`. All taken in 9cf6bd6f, each demonstrated by an in-memory old/new reproduction:
+- A2R1-1 (Medium) `waitForL1ToL2Message` phase 2 read and forced a block after phase 1 had spent the shared budget, where the old loop warned at once: phase 2 is skipped when no budget remains, and `forceBlock` runs in `between`.
+- A2R1-2 (Medium) `finalizeThrough` mined once more on the read that ended its budget: mining runs in `between`.
+- A2R1-3 (Medium) `waitForRowOf` refreshed balances once more after its deadline: the refresh runs in `between`. `holdEnterThroughAllow`'s Enter, the same shape, moved too.
+It found `awaitedBus`, the storage moves, `world(opts)`, the L and B catches and the Encrypting observer sound.
+
+**Arc 2 Opus diff review** (opus, beside round 1, read at 9cf6bd6f): `approve with fixes`. Taken in f68a6e98: `waitForTarget` throws its old text again (two triage rows in the e2e-testing skill key on it); a test for a handler that dispatches re-entrantly (it fails when the outer collector is not restored). Not taken: the CREATE-BALANCE test parks in allocation, before the write its title names, so no test pins the post-write switch fence (a mutant without it passes 154 tests). The park point predates this arc and the queue's own gates probably drop the event: a closed known limit, #742. It re-ran the token-balance mutations on scratch copies (M1-M4 fail; FAN-OUT and CREATE-BALANCE turn red with all their redundant fences removed) and found every other moved loop's interval, deadline, contract and diagnostics kept.
+
+**Arc 2 Codex fix loop, round 2** (resumed, verification of 9cf6bd6f and f68a6e98): `approve`. Its three reproductions now show no forced block, mine or refresh past the deadline; `between` runs after the deadline check and before the pause; `waitForL1ToL2Message`'s success, warning and error branches hold; the restored `waitForTarget` text keeps its inventory; the re-entrant dispatch keeps the outer collection. No new material defect. The loop converged in two rounds.
+
+**Arc 2 Codex fix loop, round 3** (resumed, the `origin/dev` merge fd52d5be only; it touched two files the arc's storage-stub moves edit, `useFullBackupExport.test.ts` and `export/full-passkey.pins.test.ts`): `approve`. Dev's added tests use in-memory state and mocked export material, with no storage write read back, so the discard-write stub holds; each file keeps one helper import and one discard-write setup; no arc change was lost or doubled. Both files pass (55 tests) with titles equal to `origin/dev`'s.
 
 ## Seeds
 

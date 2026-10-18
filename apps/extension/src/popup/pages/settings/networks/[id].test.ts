@@ -1,6 +1,7 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 import SettingsPageShell from "@/components/composite/SettingsPageShell.vue"
@@ -43,19 +44,10 @@ beforeEach(() => {
 	networkReset.getPendingReset.mockReset().mockResolvedValue(null)
 	networkReset.getStaleNetwork.mockReset().mockResolvedValue(null)
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: {
-				get: vi.fn((_k: unknown, cb?: (r: Record<string, unknown>) => void) => {
-					cb?.({})
-					return Promise.resolve({})
-				}),
-				set: vi.fn(async () => undefined),
-				remove: vi.fn(async () => undefined),
-			},
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
 	})
+	installChromeStorage({}, { persist: false })
 })
 afterEach(() => vi.unstubAllGlobals())
 

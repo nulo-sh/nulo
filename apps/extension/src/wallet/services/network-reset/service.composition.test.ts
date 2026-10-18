@@ -82,6 +82,7 @@ const reader: PublicEventReader = {
 	}),
 	getTokenClassStatus: async () => "standard",
 	getLatestBlockNumber: async () => 1,
+	getChainTipOnce: async () => 1,
 }
 
 type Hold = { at: RestoreGateHoldPoint; reached: Promise<void>; hit: () => void; released: Promise<void>; release: () => void }
@@ -210,7 +211,7 @@ async function seedChain(h: H, networkId: string, chainId: number, l1ChainId: nu
 	await h.api.storage.local.set(Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, JSON.stringify(v)])))
 	const viaServices = await keysAddedBy(h, async () => {
 		await h.journal.createOperation({ kind: "transfer", origin: "popup", profileId: "p1", networkId })
-		await h.sessions.addDappSession({ url: `https://dapp${n}.example` }, [], [address], AccessLevel.Transactions, String(chainId))
+		await h.sessions.addDappSession({ url: `https://dapp${n}.example` }, [], [address], AccessLevel.Transactions, String(chainId), "p1")
 		const repo = new IncomingTransferRepository(h.api)
 		await repo.setTrust("p1", networkId, CONTRACT, "pending")
 		await repo.upsertRecord({

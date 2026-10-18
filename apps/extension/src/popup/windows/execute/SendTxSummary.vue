@@ -13,6 +13,8 @@ const props = defineProps<{
 	checkingAuthwits?: boolean
 	chainId?: number
 	tokens?: readonly TokenInfo[]
+	/** The call whose notice carries the window's closing advice. */
+	adviceAt?: number
 }>()
 
 const callRows = computed(() =>
@@ -79,7 +81,7 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 						Reading arguments…
 					</Text>
 					<Flex v-else-if="row.surface.kind === 'raw'" data-testid="execute-op-summary-unverified-args" :data-reason="row.surface.reason" direction="column" gap="4">
-						<UnreadableArgsNotice :reason="row.surface.reason" prefix="execute-op-summary" />
+						<UnreadableArgsNotice :reason="row.surface.reason" prefix="execute-op-summary" :advice="j === adviceAt" />
 					</Flex>
 				</Flex>
 			</li>

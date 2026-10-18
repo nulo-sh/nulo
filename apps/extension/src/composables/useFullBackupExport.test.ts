@@ -6,6 +6,7 @@ import { createTestingPinia } from "@pinia/testing"
 import { flushPromises } from "@vue/test-utils"
 import { setActivePinia } from "pinia"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { installChromeStorage } from "../../tests/helpers/chrome-storage-mock"
 import { useAppStore } from "@/stores/app.store"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import { type UseFullBackupExportOptions, useFullBackupExport } from "./useFullBackupExport"
@@ -243,11 +244,7 @@ async function expectNothingPublished(api: Api, opts: ReturnType<typeof setup>["
 }
 
 beforeEach(() => {
-	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
-	if (c) {
-		c.storage.local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }
-		c.storage.onChanged = { addListener: vi.fn(), removeListener: vi.fn() }
-	}
+	installChromeStorage({}, { persist: false })
 	vi.clearAllMocks()
 	h.state.built.length = 0
 	h.state.contactSlice = undefined

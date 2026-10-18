@@ -27,6 +27,7 @@ import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-me
 
 /** Composables */
 import { ARRIVALS_KEY } from "@/composables/useArrivals"
+import { useHeroVisible } from "@/composables/useHeroVisible"
 import { useIncomingTransfers } from "@/composables/useIncomingTransfers"
 import { useJournalMirror } from "@/composables/useJournalMirror"
 import { useScopedTokens } from "@/composables/useScopedTokens"
@@ -140,8 +141,7 @@ const titleRef = useTemplateRef("titleRef")
 
 /** Hero visibility → compact sticky title fade */
 const heroRef = useTemplateRef("heroRef")
-const heroVisible = ref(true)
-let heroObserver = null
+const heroVisible = useHeroVisible(heroRef)
 
 /** The chip leaves with the focused control, so focus moves to the title rather than the page. */
 async function clearTokenFilter() {
@@ -158,16 +158,6 @@ watch([filterId, tokensLoaded, filterToken], ([id, loaded, token]) => {
 
 /** Lifecycle hooks */
 onMounted(async () => {
-	if (heroRef.value) {
-		// One delivery batches every change since the last, oldest first: only the newest is current.
-		heroObserver = new IntersectionObserver(
-			(entries) => {
-				heroVisible.value = entries.at(-1).isIntersecting
-			},
-			{ threshold: 0 },
-		)
-		heroObserver.observe(heroRef.value)
-	}
 	// Never behind the journal read: a rejected one would leave every row without its token.
 	void scopedTokens.reload()
 	await loadTerminalJournalOps()
@@ -192,7 +182,6 @@ onBeforeUnmount(() => {
 	disposeTerminalOps()
 	disposeIncomingTransfers()
 	scopedTokens.dispose()
-	heroObserver?.disconnect()
 })
 </script>
 

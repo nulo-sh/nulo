@@ -202,9 +202,10 @@ describe("runImportChainSync", () => {
 		})
 		await run(runImportChainSync(deps))
 		expect(harness.records).toEqual([[{ networkId: "n1", senders: [], contracts: [], restoreError: ACCOUNT_STATE_SKIP_DEADLINE }]])
-		// The abandoned SW-side call resolving late must not re-append.
+		// The abandoned SW-side call resolving late must not re-append. `runAllTimersAsync` yields a
+		// real task, so every reaction to the late answer, however deeply chained, has run.
 		resolveLate([{ networkId: "n1", senders: [], contracts: [] }])
-		for (let i = 0; i < 5; i++) await Promise.resolve()
+		await vi.runAllTimersAsync()
 		expect(harness.records).toHaveLength(1)
 	})
 
@@ -321,7 +322,7 @@ describe("runImportChainSync", () => {
 		expect(settledAt - startedAt).toBeLessThanOrEqual(IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS)
 		expect(harness.records).toEqual([[skippedNetworkRecord("n1", ACCOUNT_STATE_SKIP_DEADLINE)]])
 		resolveLate([{ networkId: "n1", senders: [], contracts: [] }])
-		for (let i = 0; i < 5; i++) await Promise.resolve()
+		await vi.runAllTimersAsync()
 		expect(harness.records).toHaveLength(1)
 	})
 

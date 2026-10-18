@@ -31,6 +31,7 @@ import { CHAIN_IDS } from "@/utils/chain-ids"
 import { TOKEN_LIST_REFRESH_ALARM_NAME } from "@/wallet/services/token-list/spec"
 import { REPO_ROOT } from "../lockfile"
 import { listenClaimed } from "./egress-guard"
+import { pollUntil } from "./poll"
 
 const LIST_PATH = "/v1/list.json"
 const PUBLISHED_PATH = path.join(REPO_ROOT, "infra/token-list/public/v1/list.json")
@@ -162,17 +163,17 @@ export async function waitForStoredList(
 	done: (state: StoredListState) => boolean,
 	timeoutMs = 15_000,
 ): Promise<StoredListState> {
-	const deadline = Date.now() + timeoutMs
-	let state: StoredListState = { failures: 0 }
-	while (Date.now() < deadline) {
-		state = await page.evaluate(async (key: string) => {
+	const read = () =>
+		page.evaluate(async (key: string) => {
 			const raw = (await chrome.storage.local.get(key))[key]
 			return typeof raw === "string" ? (JSON.parse(raw) as StoredListState) : { failures: 0 }
 		}, STORAGE_KEY)
-		if (done(state)) return state
-		await new Promise((resolve) => setTimeout(resolve, 250))
-	}
-	throw new Error(`the stored token list never reached the expected state within ${timeoutMs / 1000}s: failures ${state.failures}`)
+	return pollUntil(read, done, {
+		label: "the stored token list in the expected state",
+		timeoutMs,
+		intervalMs: 250,
+		show: (state) => `failures ${state.failures}`,
+	})
 }
 
 const isArtifactRun = (): boolean => inject("liveLeg") === true

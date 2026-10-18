@@ -3,6 +3,7 @@ import { Flex } from "@nulo/design"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import { nextTick, ref } from "vue"
 
 const fakes = vi.hoisted(() => ({ importContacts: vi.fn() }))
@@ -32,11 +33,7 @@ import { useAppStore } from "@/stores/app.store"
 import ContactsPage from "./index.vue"
 
 beforeEach(() => {
-	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
-	if (c) {
-		c.storage.local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }
-		c.storage.onChanged = { addListener: vi.fn(), removeListener: vi.fn() }
-	}
+	installChromeStorage({}, { persist: false })
 })
 
 async function mountContacts() {

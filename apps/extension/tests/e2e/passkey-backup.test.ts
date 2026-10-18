@@ -27,10 +27,12 @@ import { confirmProfileReset } from "./fixtures/helpers"
 import { registerPasskeyProfile, setupPasskeyVirtualAuth, stallNextPasskeyCeremony } from "./fixtures/passkey"
 import { shotSend } from "./fixtures/send-page"
 import { downloadPlainPasskeyBackup } from "./helpers/backup-export"
+import { type PlainBackup, passkeyBackupVerifies } from "./helpers/backup-seal"
 import { armDownloadCapture } from "./helpers/download-capture"
 import {
 	buildSyntheticPasskeyBackup,
 	readActiveAccount,
+	readPasskeyPrf,
 	readRegisteredPasskey,
 	submitPasskeyFullBackup,
 	writeBackupToTemp,
@@ -60,30 +62,40 @@ async function importPasskeyFullBackup(page: Page, filePath: string): Promise<vo
 	await submitPasskeyFullBackup(page, filePath)
 }
 
+/** The progress card a run shows: its text, and whether the Download CTA must read a disabled
+ *  "Creating Backup" beside it. */
+interface ProgressCard {
+	text: string
+	creatingCta: boolean
+}
+
+const CREATING: ProgressCard = { text: "Creating your backup", creatingCta: true }
+const ENCRYPTING: ProgressCard = { text: "Encrypting your backup", creatingCta: false }
+
 /**
  * A poll can miss the progress card between two ticks. Each callback reads the live DOM, so a card
  * inserted and removed within one batch leaves the flag unset: the observer can miss, never pass
- * falsely. The export awaits worker calls between the two, so they never share a batch.
+ * falsely. The export awaits worker calls and the encryption awaits WebCrypto between the two, so
+ * they never share a batch. Arm it before the click that starts the run.
  */
-async function armProgressObserver(page: Page): Promise<void> {
-	await page.evaluate(() => {
+async function armProgressObserver(page: Page, expected: ProgressCard): Promise<void> {
+	await page.evaluate((want: ProgressCard) => {
 		const w = window as unknown as { __backupProgressSeen?: boolean }
 		w.__backupProgressSeen = false
 		const observer = new MutationObserver(() => {
 			const card = document.querySelector('[data-testid="backup-status-card"]')
 			const download = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
-			if (
-				(card?.textContent ?? "").includes("Creating your backup") &&
-				download?.disabled === true &&
-				/Creating Backup/i.test(download.textContent ?? "")
-			) {
+			const ctaHolds = !want.creatingCta || (download?.disabled === true && /Creating Backup/i.test(download.textContent ?? ""))
+			if ((card?.textContent ?? "").includes(want.text) && ctaHolds) {
 				w.__backupProgressSeen = true
 				observer.disconnect()
 			}
 		})
 		observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true })
-	})
+	}, expected)
 }
+
+const progressSeen = (page: Page) => page.evaluate(() => (window as unknown as { __backupProgressSeen?: boolean }).__backupProgressSeen)
 
 test("passkey full-backup export: modal appears + status card + CTAs become available", { timeout: 240_000 }, async ({
 	freshExtensionPerTest,
@@ -106,7 +118,7 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 		await page.waitForSelector('[data-testid="agree-continue-btn"]', { visible: true, timeout: 5_000 })
 		// Without the progress state, the CTA-enabled wait below would pass on a body left blank
 		// during the export.
-		await armProgressObserver(page)
+		await armProgressObserver(page, CREATING)
 		await clickByTestId(page, "agree-continue-btn")
 
 		// The card unmounts and both CTAs enable once the status reads "finished"; 180 s leaves a
@@ -119,10 +131,7 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 			},
 			{ timeout: 180_000, polling: 250 },
 		)
-		expect(
-			await page.evaluate(() => (window as unknown as { __backupProgressSeen?: boolean }).__backupProgressSeen),
-			"the export never showed its in-progress card with a disabled Creating Backup CTA",
-		).toBe(true)
+		expect(await progressSeen(page), "the export never showed its in-progress card with a disabled Creating Backup CTA").toBe(true)
 		await shotSend(page, "export-full-ready-passkey", "backup-ready-banner")
 
 		// An unencrypted download asks first: Cancel writes nothing, Download anyway writes the
@@ -141,9 +150,12 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 			]),
 		)
 		expect(afterCancel).toBe("nothing")
-		const plain = JSON.parse(await downloadPlainPasskeyBackup(page)) as Record<string, unknown>
-		expect(plain["master-key"]).toBe((await readRegisteredPasskey(page)).credentialId)
+		const plain = JSON.parse(await downloadPlainPasskeyBackup(page)) as PlainBackup
+		const { credentialId } = await readRegisteredPasskey(page)
+		expect(plain["master-key"]).toBe(credentialId)
 		expect("entropy" in plain).toBe(false)
+		const passkey = { id: credentialId, prf: await readPasskeyPrf(page, credentialId) }
+		expect(await passkeyBackupVerifies(plain, passkey), "the export's checksum and MAC under its own passkey").toBe(true)
 
 		// Drive the encryption path so the second status card variant
 		// ("Encrypting your backup") is exercised too. For passkey profiles
@@ -170,17 +182,9 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 			setVal('[data-testid="backup-encrypt-password-input"]', pwd)
 			setVal('[data-testid="backup-encrypt-password-confirm-input"]', pwd)
 		}, ENCRYPT_PASSWORD)
+		// The Encrypting card mounts only for the PBKDF2 + AES-GCM run.
+		await armProgressObserver(page, ENCRYPTING)
 		await clickByTestId(page, "protect-password-btn")
-
-		// Encrypting card mounts briefly (~1s PBKDF2 + AES-GCM). Same race-
-		// tolerant pattern: poll for the card with its expected copy.
-		await page.waitForFunction(
-			() => {
-				const card = document.querySelector('[data-testid="backup-status-card"]')
-				return card !== null && (card.textContent ?? "").includes("Encrypting your backup")
-			},
-			{ timeout: 10_000, polling: 100 },
-		)
 
 		// Then the "encrypted" banner appears and Download Backup is enabled.
 		await page.waitForFunction(
@@ -191,6 +195,7 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 			},
 			{ timeout: 15_000, polling: 250 },
 		)
+		expect(await progressSeen(page), "the encryption never showed its Encrypting card").toBe(true)
 
 		// Filter the benign "Client disconnected" cascade that can fire when
 		// the export's loop disconnects each backup service client.
@@ -323,14 +328,5 @@ test("passkey full-backup: in-session round-trip (register → reset → import 
 	}
 }, 120_000)
 
-// NOTE: a REAL passkey export → reset → import round-trip runs on Firefox,
-// started from the toolbar panel: `passkey-toolbar-panel.test.ts`. Here (capturing
-// the actual EXPORT file, mirroring the encrypted/password real-export tests) it was
-// prototyped but NOT landed: it depends on the passkey EXPORT ceremony, which
-// does not resolve on this machine's virtual authenticator — the SAME
-// pre-existing limitation that already CI-skips + locally-fails the
-// "status card" export test above (verified failing at the branch base). The
-// passkey IMPORT path is fully covered by the synthetic round-trip above, and
-// the export FILE format is covered by the password (network round-trip) and
-// encrypted (`backup-roundtrip.test.ts`) real-export tests. Revisit if the
-// export-ceremony virtual-auth issue is fixed.
+// A real passkey export → reset → import round trip: the passkey row of
+// `network/import-handshake-note-matrix.test.ts`, and `passkey-toolbar-panel.test.ts` on Firefox.

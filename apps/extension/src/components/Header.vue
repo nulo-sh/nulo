@@ -12,7 +12,7 @@ import { useLockWallet } from "@/composables/useLockWallet"
 /** Utils */
 import { managers } from "@/utils/core"
 import { copyAddressToClipboard } from "./header-copy-address"
-import { selectedWithin } from "@/utils/selection"
+import { endsSelection } from "@/utils/selection"
 import { accountStateOf } from "./header-account"
 
 /** Store */
@@ -129,10 +129,8 @@ const handleOpenPopup = (target) => {
 }
 
 const { openToast } = useToast()
-/** A pointer click that ends a drag selecting the address copies nothing; Enter and Space reach a
- *  native button as a click with `detail` 0 and copy even over a selection. */
 const handleCopyAddress = (e) => {
-	if (e.detail > 0 && selectedWithin(e.currentTarget)) return
+	if (endsSelection(e)) return
 	copyAddressToClipboard(appStore.account?.address, openToast)
 }
 
@@ -400,7 +398,8 @@ onBeforeUnmount(() => {
 	min-width: 0;
 	min-height: calc(1lh + 14px);
 
-	padding: 6px 10px;
+	/* At the popup's width, 5px sides hold "TESTNET" whole with 2px to spare; 6px cut it by a fraction of a pixel. */
+	padding: 6px 5px;
 	background: transparent;
 	border: 1px solid var(--nulo-border);
 	cursor: pointer;
@@ -421,14 +420,15 @@ onBeforeUnmount(() => {
 	color: var(--nulo-secondary);
 }
 
-/* Drawn as the network chip beside it: same border, type and hover. */
+/* Drawn as the network chip beside it; the two change together. */
 .lock_chip {
+	composes: type--label-section from global;
 	display: inline-flex;
 	align-items: center;
 	gap: 5px;
 	flex-shrink: 0;
 
-	height: 26px;
+	min-height: calc(1lh + 14px);
 	padding: 0 9px 0 7px;
 
 	background: transparent;
@@ -454,16 +454,6 @@ onBeforeUnmount(() => {
 .lock_label {
 	composes: type--label-section from global;
 	color: var(--nulo-secondary);
-}
-
-/* The chips keep their 10px semibold: the row has no width to spare, and at 11px the network chip
- * shrinks until its ellipsis cuts "TESTNET". The chip's own size sets its `1lh`, so it goes too. */
-.actions .network_chip,
-.network_chip .network_label,
-.lock_chip .lock_label {
-	font-size: 10px;
-	font-weight: 600;
-	letter-spacing: 0.08em;
 }
 
 .status_dot {

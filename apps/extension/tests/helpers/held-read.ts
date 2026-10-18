@@ -29,3 +29,67 @@ export function liveBus<T>(): EventHandler<T> & { add: Mock<EventHandler<T>["add
 	)
 	return Object.assign(bus, { add: vi.fn(bus.add.bind(bus)), remove: vi.fn(bus.remove.bind(bus)) })
 }
+
+type Subscriber<T> = (payload: T) => void
+
+/**
+ * A real `EventHandler` whose `dispatch` settles once every handler that call reached has settled,
+ * rejecting with the first failure, sync or async. `invoke` drops a handler's promise, so awaiting it
+ * waits for nothing; `dispatch` runs the same `invoke`, so isolation and ordering stay production's.
+ * Dispatches started before either is awaited interleave as un-awaited `invoke`s do.
+ */
+class AwaitedBus<T> extends EventHandler<T> {
+	readonly #wrappers = new Map<Subscriber<T>, Subscriber<T>>()
+	#collecting: unknown[] | undefined
+
+	public constructor() {
+		super("awaitedBus")
+	}
+
+	public override add(callback: Subscriber<T>) {
+		let wrapper = this.#wrappers.get(callback)
+		if (!wrapper) {
+			wrapper = (payload) => this.#run(callback, payload)
+			this.#wrappers.set(callback, wrapper)
+		}
+		super.add(wrapper)
+	}
+
+	public override remove(callback: Subscriber<T>) {
+		const wrapper = this.#wrappers.get(callback)
+		if (!wrapper) return
+		this.#wrappers.delete(callback)
+		super.remove(wrapper)
+	}
+
+	public async dispatch(payload: T): Promise<void> {
+		// `invoke` runs every handler synchronously, so the collector belongs to this call alone; the
+		// outer one is restored for a handler that dispatches re-entrantly.
+		const outer = this.#collecting
+		const collected: unknown[] = []
+		this.#collecting = collected
+		try {
+			this.invoke(payload)
+		} finally {
+			this.#collecting = outer
+		}
+		const failed = (await Promise.allSettled(collected)).find((r) => r.status === "rejected")
+		if (failed) throw failed.reason
+	}
+
+	#run(callback: Subscriber<T>, payload: T) {
+		let result: unknown
+		try {
+			result = callback(payload)
+		} catch (error) {
+			this.#collecting?.push(Promise.reject(error))
+			throw error
+		}
+		this.#collecting?.push(result)
+	}
+}
+
+/** A service's peer event a test fires with `await bus.dispatch(payload)`; see {@link AwaitedBus}. */
+export function awaitedBus<T>(): AwaitedBus<T> {
+	return new AwaitedBus<T>()
+}

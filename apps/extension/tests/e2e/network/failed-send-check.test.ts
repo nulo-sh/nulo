@@ -39,6 +39,7 @@ import { openPopup, test, waitForHash } from "../fixtures/extension"
 import { fillSendForm, navigateByHash, refreshBalances, setActiveSendType, unlockAfterBackgroundDeath } from "../fixtures/helpers"
 import { waitForSendRecord } from "../fixtures/journal"
 import { LEGAL_ACCEPTANCE_KEY } from "../fixtures/legal"
+import { pollUntil } from "../fixtures/poll"
 import { PROOF_GATE_HOLD_MS, holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
 import { openSend, shotSend, submitSend } from "../fixtures/send-page"
 import { readLegalRecord } from "../helpers/legal-drivers"
@@ -79,13 +80,12 @@ async function waitForRecord(
 	what: string,
 	timeoutMs: number,
 ): Promise<OperationRecord> {
-	const deadline = Date.now() + timeoutMs
-	for (;;) {
-		const record = await readRecord(page, id)
-		if (record && done(record)) return record
-		if (Date.now() > deadline) throw new Error(`[${SPEC}] record ${id} ${what} within ${timeoutMs} ms: ${JSON.stringify(record)}`)
-		await sleep(250)
-	}
+	const record = await pollUntil(
+		() => readRecord(page, id),
+		(record) => record !== undefined && done(record),
+		{ label: `[${SPEC}] record ${id} ${what}`, timeoutMs, intervalMs: 250 },
+	)
+	return record as OperationRecord
 }
 
 /** Rewrites the stored row's `terminalAt`, keeping the row's stored form. */
@@ -122,13 +122,12 @@ async function readTx(page: Page, hash: string): Promise<Tx | undefined> {
 }
 
 async function waitForTx(page: Page, hash: string, done: (tx: Tx) => boolean, what: string, timeoutMs: number): Promise<Tx> {
-	const deadline = Date.now() + timeoutMs
-	for (;;) {
-		const tx = await readTx(page, hash)
-		if (tx && done(tx)) return tx
-		if (Date.now() > deadline) throw new Error(`[${SPEC}] activity row ${what} within ${timeoutMs} ms: ${JSON.stringify(tx)}`)
-		await sleep(1_000)
-	}
+	const tx = await pollUntil(
+		() => readTx(page, hash),
+		(tx) => tx !== undefined && done(tx),
+		{ label: `[${SPEC}] activity row ${what}`, timeoutMs, intervalMs: 1_000 },
+	)
+	return tx as Tx
 }
 
 async function waitForCardStatus(page: Page, hash: string, status: string): Promise<void> {

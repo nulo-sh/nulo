@@ -25,6 +25,11 @@ export const BLOCK_EXPLORERS: BlockExplorer[] = [
 	},
 ]
 
+/** The explorer's name for a link's label: "explorer" when the id names none, None included. */
+export function explorerDisplayName(explorerId: BlockExplorerType | null | undefined): string {
+	return BLOCK_EXPLORERS.find((e) => e.id === explorerId)?.name ?? "explorer"
+}
+
 /**
  * Base URLs for each explorer by chain ID.
  * To add a new explorer: add its ID to BlockExplorerType,
