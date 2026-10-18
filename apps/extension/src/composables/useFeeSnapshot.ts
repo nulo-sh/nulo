@@ -12,16 +12,17 @@ import { type BalanceScope, EnsureSuperseded, type SubscribeCaps, type useBalanc
 
 type BalancesStore = Pick<ReturnType<typeof useBalancesStore>, "subscribe" | "ensure" | "entry">
 
-/** The snapshot's hooks into the card's rule book. `L` is whatever a read hands the commit. */
+/** The snapshot's hooks into the card's rule book, always for a whole identity. `L` is whatever a
+ *  read hands the commit. */
 export interface SnapshotSelection<L> {
 	/** Whether a mount reads past the store's TTL. */
 	forceRefresh(): boolean
 	/** The saved selection, read before the lease; null once `isCurrent()` is false after the read. */
-	load(scope: FeeScope, isCurrent: () => boolean): Promise<L | null>
+	load(scope: BalanceScope, isCurrent: () => boolean): Promise<L | null>
 	/** The recovery's read, for the committed identity. */
-	reload(scope: FeeScope): Promise<L>
+	reload(scope: BalanceScope): Promise<L>
 	/** Runs inside the commit, after the snapshot's refs are written and before the gate opens. */
-	reconcile(load: L, scope: FeeScope): void
+	reconcile(load: L, scope: BalanceScope): void
 }
 
 export type FeeSnapshotFailure = "degraded" | "init" | null
@@ -34,7 +35,7 @@ interface SnapshotCtx<L> {
 	isInitComplete: Ref<boolean>
 	gasBalances: Ref<GasBalances | undefined>
 	registeredFpcs: Ref<RegisteredFpc[]>
-	committedScope: Ref<FeeScope | null>
+	committedScope: Ref<BalanceScope | null>
 	readingKey: Ref<string | null>
 	isLoading: Ref<boolean>
 	failure: Ref<FeeSnapshotFailure>
@@ -58,9 +59,6 @@ const CONTEXT = Symbol("fee-snapshot")
  *  could resolve on the pre-refresh figure. Turning it on needs a wake on the newer run's commit. */
 const CARD_CAPS: SubscribeCaps = { legs: ["gas", "fpc"], retry: true, txRefresh: false, peek: false }
 
-/** A run commits only for a whole identity (`runSnapshot` returns before any store call otherwise). */
-const asBalanceScope = (scope: FeeScope) => scope as BalanceScope
-
 const scopeIsLiveIdentity = (props: LiveFeeIdentity, scope: FeeScope | null) => Boolean(scope) && isLiveFeeScope(props, scope as FeeScope)
 
 /** Unmounting counts: either way the run no longer owns the card. */
@@ -73,10 +71,10 @@ const identityDrifted = <L>(ctx: SnapshotCtx<L>, scope: FeeScope) => !ctx.isMoun
  *  identity's still-joinable flights (the A→B→A flap would re-issue its RPC).
  *  The store resets backoff attempts on the new key's 0→1 retry-capable
  *  transition, reproducing today's fresh-identity-fresh-backoff rule. */
-function subscribeTo<L>(ctx: SnapshotCtx<L>, scope: FeeScope, reqKey: string) {
+function subscribeTo<L>(ctx: SnapshotCtx<L>, scope: BalanceScope, reqKey: string) {
 	if (ctx.subscribedKey === reqKey) return
 	const previous = ctx.subscription
-	ctx.subscription = ctx.store.subscribe(asBalanceScope(scope), CARD_CAPS)
+	ctx.subscription = ctx.store.subscribe(scope, CARD_CAPS)
 	ctx.subscribedKey = reqKey
 	previous?.release()
 }
@@ -95,8 +93,8 @@ function releaseSubscription<L>(ctx: SnapshotCtx<L>) {
  * resolves against undefined balances), and the gate opens after — degraded
  * included (holding it closed on failure was the frozen-Confirm bug).
  */
-function commitFromEntry<L>(ctx: SnapshotCtx<L>, scope: FeeScope, reqKey: string, load: L) {
-	const entry = ctx.store.entry(asBalanceScope(scope))
+function commitFromEntry<L>(ctx: SnapshotCtx<L>, scope: BalanceScope, reqKey: string, load: L) {
+	const entry = ctx.store.entry(scope)
 	if (!entry) return
 
 	// UNKNOWN (undefined) on any failed balance read, never a fabricated zero
@@ -128,9 +126,9 @@ function commitFromEntry<L>(ctx: SnapshotCtx<L>, scope: FeeScope, reqKey: string
  *  False means a superseded ensure — a profile switch fenced the run out and
  *  the new identity's own init covers it: no degraded state, no notice (the
  *  caller's drift guard cannot observe a rejection). Other failures propagate. */
-async function ensureLegsSettled<L>(ctx: SnapshotCtx<L>, scope: FeeScope) {
+async function ensureLegsSettled<L>(ctx: SnapshotCtx<L>, scope: BalanceScope) {
 	try {
-		await ctx.store.ensure(asBalanceScope(scope), { legs: ["gas", "fpc"], forceRefresh: ctx.selection().forceRefresh() })
+		await ctx.store.ensure(scope, { legs: ["gas", "fpc"], forceRefresh: ctx.selection().forceRefresh() })
 		return true
 	} catch (e) {
 		if (e instanceof EnsureSuperseded) return false
@@ -155,7 +153,8 @@ function beginRun<L>(ctx: SnapshotCtx<L>, myRun: number) {
 	// chainId is part of the STORE key, so it must be part of this card's
 	// identity too — else a chainId change under a stable networkId keeps
 	// the old key's lease while ensure populates the new one.
-	const scope = liveFeeScope(props)
+	// The identity checks above make every field of the scope present.
+	const scope = liveFeeScope(props) as BalanceScope
 	const reqKey = feeScopeKey(scope)
 
 	// Close the derivation gate only when no snapshot is committed for THIS
@@ -213,7 +212,7 @@ async function runSnapshot<L>(ctx: SnapshotCtx<L>): Promise<void> {
 	}
 }
 
-const recommitStillValid = <L>(ctx: SnapshotCtx<L>, scope: FeeScope) => {
+const recommitStillValid = <L>(ctx: SnapshotCtx<L>, scope: BalanceScope) => {
 	if (!ctx.props.network || !ctx.props.account) return false
 	return isLiveFeeScope(ctx.props, scope)
 }
@@ -256,7 +255,7 @@ export function useFeeSnapshot<L>(
 		gasBalances: ref<GasBalances | undefined>(undefined),
 		registeredFpcs: ref<RegisteredFpc[]>([]),
 		/** Structured scope of the committed snapshot — the recovery watch's target. */
-		committedScope: ref<FeeScope | null>(null),
+		committedScope: ref<BalanceScope | null>(null),
 		/** The identity a run is reading for right now, owned by `readingRun`. Rows load only for it:
 		 *  an identity no read is coming for, after an init that threw, say, gives today's answers. */
 		readingKey: ref<string | null>(null),
@@ -320,7 +319,7 @@ export function watchFeeSnapshot<L>(snapshot: FeeSnapshot<L>): void {
 		() => {
 			const scope = ctx.committedScope.value
 			if (!scope) return null
-			const entry = ctx.store.entry(asBalanceScope(scope))
+			const entry = ctx.store.entry(scope)
 			return entry ? `${entry.gas.retryVersion}|${entry.fpc.retryVersion}` : null
 		},
 		(next, prev) => {
@@ -335,7 +334,7 @@ export function watchFeeSnapshot<L>(snapshot: FeeSnapshot<L>): void {
 		() => {
 			const scope = ctx.committedScope.value
 			if (!scope || identityDrifted(ctx, scope)) return false
-			return ctx.store.entry(asBalanceScope(scope))?.gas.accountUnusable === true
+			return ctx.store.entry(scope)?.gas.accountUnusable === true
 		},
 		(unusable) => {
 			if (unusable) ctx.accountUnusable.value = true

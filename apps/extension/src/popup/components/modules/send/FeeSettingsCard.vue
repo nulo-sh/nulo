@@ -13,9 +13,6 @@ import { sameFieldAddress } from "@nulo/wallet-bridge"
 
 /** Utils */
 import { managers } from "@/utils/core"
-import { storageLocalGet } from "@/utils/storage"
-import { readAppPicks, readSendSlots } from "@/utils/fee-picks"
-import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 
 /** Services */
 import { FpcServiceClient } from "@/wallet/services/fpc/client"
@@ -24,30 +21,26 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 /** Helpers */
 import {
 	buildFeeMethods,
-	defaultSponsor,
 	FEE_JUICE_BRIDGE_URL,
 	feePayerOf,
 	formatGasBalance,
 	liveFeeScope,
-	resolveSavedSelection,
-	savedSelectionOf,
 	settingsForMethod,
 	shortfallFigures,
 } from "./fee-helpers"
 import { feeDisplay, feeText } from "@/utils/fee-estimation"
-import { applyFpcEdits, previewForPick, recordOf, resolveSendSelection } from "./fee-privacy"
+import { applyFpcEdits } from "./fee-privacy"
 import { usePrices } from "@/composables/usePrices"
 import { useSponsorVerdicts, watchSponsorVerdicts } from "@/composables/useSponsorVerdicts"
 import { useFeeSnapshot, watchFeeSnapshot } from "@/composables/useFeeSnapshot"
+import { useAppFeeSelection, useSendFeeSelection } from "@/composables/useFeeSelection"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
 const { openToast } = useToast()
 
 /** Stores */
-import { useCacheStore } from "@/stores/cache.store"
 import { useBalancesStore } from "@/stores/balances.store"
-const cacheStore = useCacheStore()
 const balancesStore = useBalancesStore()
 
 const props = defineProps({
@@ -69,8 +62,6 @@ const props = defineProps({
 	/** "private" | "public" — the side the transfer spends from. Non-null only on the Send page, where
 	 *  the fee source follows it; null keeps the one-pick-per-account behaviour of the dApp windows. */
 	originPrivacy: { type: String, default: null },
-	/** "private" | "public" — the side the transfer lands on. */
-	destinationPrivacy: { type: String, default: null },
 	/** The page's reading of what this send's fee publishes — the selector's tag is drawn from it,
 	 *  never from this card's own selection, so the tag can only ever agree with the footer. */
 	payerNoticeShape: { type: String, default: null },
@@ -83,9 +74,6 @@ const props = defineProps({
 	/** `{ basis, cap }` in base units while the page offers to queue the send against a cap. */
 	queuedCap: { type: Object, default: null },
 })
-
-const readStored = async (key) => (await storageLocalGet(key))[key]
-const readSavedFeeMethods = async (profileId) => readAppPicks(await readStored(feePicksKey(profileId)))
 
 const settings = defineModel()
 
@@ -111,9 +99,11 @@ const accountUnusableOut = defineModel("accountUnusable", { type: Boolean, defau
 
 const methodId = getRandomHex(6)
 
-const snapshot = useFeeSnapshot(props, { store: balancesStore, selection: () => selection, accountUnusable: accountUnusableOut })
-const { isInitComplete, gasBalances, registeredFpcs, committedScope, snapshotCommitted, snapshotPending, isLoading, failure } = snapshot
-const { scopeIsLiveIdentity } = snapshot
+const snapshot = useFeeSnapshot(props, { store: balancesStore, selection: () => rules, accountUnusable: accountUnusableOut })
+const { isInitComplete, gasBalances, registeredFpcs, snapshotCommitted, snapshotPending, isLoading, failure } = snapshot
+
+const verdicts = useSponsorVerdicts({ isEstimating: () => props.isEstimating })
+const { shortSponsorIds, setAsideSponsorIds, lastVerdict, verifyingSponsorId } = verdicts
 
 /** This card's own FPC events, by id (`null` = deleted), applied over every store snapshot. The
  *  store's FPC list never hears those events and is re-copied on each commit, so a patch to
@@ -121,9 +111,6 @@ const { scopeIsLiveIdentity } = snapshot
  *  and back to is served the store's retained list, and an id only ever names its own row. */
 const fpcEdits = reactive(new Map())
 const knownFpcs = computed(() => applyFpcEdits(registeredFpcs.value, fpcEdits))
-
-const verdicts = useSponsorVerdicts({ isEstimating: () => props.isEstimating })
-const { shortSponsorIds, setAsideSponsorIds, lastVerdict, droppedForVerdictId, verifyingSponsorId } = verdicts
 
 /** The FPC list the store has read for the live identity. That read is never forced, so it usually
  *  lands well before the forced balance read lets the snapshot commit: the sponsor rows answer early. */
@@ -159,9 +146,23 @@ const menuMethods = computed(() => {
 	})
 })
 
-const selectedMethod = ref()
 const selectedPriority = ref("normal")
 const isMethodsDropdownOpen = ref(false)
+
+const selectionInput = {
+	props,
+	snapshot,
+	verdicts,
+	knownFpcs,
+	methods,
+	saveFeePick: (profileId, update) => managers.profile.saveFeePick(profileId, update),
+}
+/** Chosen once: Send always passes an origin, the app windows never do. */
+const rules =
+	props.originPrivacy !== null
+		? useSendFeeSelection({ ...selectionInput, origin: () => props.originPrivacy })
+		: useAppFeeSelection({ ...selectionInput, lockedMethod: () => props.lockedMethod, fallsBack: () => props.fallsBack })
+const { effectiveMethod, previewMethod, held, sponsorShort, feeJuiceMissing } = rules
 
 const feeJuiceBalanceFormatted = computed(() =>
 	gasBalances.value && gasBalances.value.publicFeeJuice !== null ? formatGasBalance(gasBalances.value.publicFeeJuice) : null,
@@ -185,44 +186,6 @@ const queuedCapDisplay = computed(() => {
 	return { about: feeDisplay(props.queuedCap.basis, usd), cap: feeDisplay(props.queuedCap.cap, usd) }
 })
 
-/** Send's picks, `{ [slot]: { private?, public? } }`, one slot per profile and address: storage keeps
- *  each profile's picks apart, so an account held by two profiles has two picks. */
-const sendPicks = reactive({})
-const pickSlot = (profileId, address) => `${profileId}\n${address}`
-const livePicks = () => sendPicks[pickSlot(props.profile?.id, props.account?.address)]
-
-/**
- * Send's selection is DERIVED, never assigned: a pure function of the live origin, the live
- * account's pick and the committed snapshot. An origin flip cannot be missed and a late init cannot
- * overwrite a pick, because there is no assignment to race. It resolves only while the committed
- * snapshot belongs to the live identity — account A's balances never meet account B's pick.
- */
-const sendSelection = computed(() => {
-	if (props.originPrivacy === null) return null
-	const pick = livePicks()?.[props.originPrivacy]
-	if (!isInitComplete.value || !scopeIsLiveIdentity(committedScope.value)) {
-		return { kind: "pending", preview: previewForPick(pick, methods.value) }
-	}
-	const know = { fpcs: knownFpcs.value, balances: gasBalances.value }
-	return resolveSendSelection(props.originPrivacy, { ...know, shortSponsorIds, setAsideSponsorIds }, pick)
-})
-
-/** A short verdict set aside the sponsor that would have paid: on Send, the one the selection names
- *  without the verdicts; elsewhere, the one it dropped. */
-const sponsorShort = computed(() => {
-	if (props.originPrivacy === null) return droppedForVerdictId.value !== null
-	if (shortSponsorIds.size === 0 || !isInitComplete.value || !scopeIsLiveIdentity(committedScope.value)) return false
-	const pick = livePicks()?.[props.originPrivacy]
-	const know = { fpcs: knownFpcs.value, balances: gasBalances.value }
-	const unset = resolveSendSelection(props.originPrivacy, know, pick)
-	return unset.kind === "selected" && unset.method.type === "fpc" && shortSponsorIds.has(unset.method.fpc?.id)
-})
-
-/** The method that pays. A `pending` preview is deliberately not one. */
-const effectiveMethod = computed(() => {
-	if (props.originPrivacy === null) return selectedMethod.value
-	return sendSelection.value.kind === "selected" ? sendSelection.value.method : undefined
-})
 const nudgeCopy = computed(() =>
 	props.originPrivacy === "private"
 		? {
@@ -234,7 +197,7 @@ const nudgeCopy = computed(() =>
 )
 
 /** What the dropdown trigger shows: the paying method, or the saved pick's row while loading. */
-const displayMethod = computed(() => effectiveMethod.value ?? sendSelection.value?.preview)
+const displayMethod = computed(() => effectiveMethod.value ?? previewMethod.value)
 
 /** Who pays the estimate the readout shows; the readout draws only while a method is chosen. */
 const feePayer = computed(() => {
@@ -267,9 +230,6 @@ const sponsorFunding = computed(() => {
 	return verdict?.funded && effectiveMethod.value?.fpc?.id === verdict.fpcId ? "funded" : undefined
 })
 
-/** The dApp-locked method's fresh row from `methods` (balance-aware), never a saved record. */
-const lockedOption = () => methods.value.find((m) => m.type === props.lockedMethod)
-
 /** `undefined` until init commits a whole snapshot, so the parent never estimates against a partial one. */
 const derivedSettings = computed(() => {
 	if (!isInitComplete.value) return undefined
@@ -278,38 +238,6 @@ const derivedSettings = computed(() => {
 	return settingsForMethod(m, selectedPriority.value, gasBalances.value)
 })
 
-/** True when the selected fee-juice method (public or private) can't pay because
- *  its balance is zero — the trigger for the get-fee-juice nudge (banner + CTA). */
-const feeJuiceMissing = computed(() => {
-	// Send: only confirmed exhaustion — every applicable payer read, none can pay — whatever is selected.
-	if (sendSelection.value) return sendSelection.value.kind === "none"
-	return selectedMethodHasNoGas() || noPayerCanPay()
-})
-/** Send's public-side walk, with this card's pick standing in for Send's saved one: a hand-added
- *  sponsor counts only once picked, and an unread balance never counts as empty. */
-const noPayerCanPay = () => {
-	if (props.lockedMethod || !snapshotCommitted.value) return false
-	const know = { fpcs: knownFpcs.value, balances: gasBalances.value, shortSponsorIds, setAsideSponsorIds }
-	const pick = selectedMethod.value ? recordOf(selectedMethod.value) : undefined
-	return resolveSendSelection("public", know, pick).kind === "none"
-}
-const selectedMethodHasNoGas = () => {
-	if (!isInitComplete.value) return false
-	// Unknown balances (failed/timed-out read, silent retry pending) never
-	// trigger the nudge — only a confirmed zero does.
-	const balances = gasBalances.value
-	if (!balances) return false
-	const m = selectedMethod.value
-	if (!m) return false
-	if (m.type === "private_fpc") {
-		// Only a CONFIRMED zero triggers the bridge nudge. `null` means the PrivateFPC
-		// read failed or isn't registered — an unknown state, not a confirmed empty
-		// balance — so we don't tell a possibly-funded user to go bridge.
-		return balances.privateFeeJuice === "0"
-	}
-	if (m.type === "fj") return balances.publicFeeJuice === "0"
-	return false
-}
 watch(
 	feeJuiceMissing,
 	(v) => {
@@ -346,51 +274,11 @@ watch(
 	{ immediate: true },
 )
 
-/**
- * Persist the user's explicit selection. Idempotent: re-saving the same
- * selection is safe. Called only from user-action handlers
- * (`handleMethodPicked`) — never from data-refresh paths like
- * `onBalanceUpdated`.
- */
-const persistSelection = async (method) => {
-	const update = { kind: "app", address: props.account.address, pick: savedSelectionOf(method) }
-	await managers.profile.saveFeePick(props.profile.id, update)
-
-	if (method.type === "fpc" || method.type === "private_fpc") {
-		const idx = cacheStore.feePaymentMethods.findIndex((m) => m.id === methodId)
-		const entry = { id: methodId, fpc: method.fpc }
-		if (idx === -1) cacheStore.feePaymentMethods.push(entry)
-		else cacheStore.feePaymentMethods[idx] = entry
-	}
-}
-
-/** Profile, address and origin are captured before any await: the pick belongs to the account and
- *  side it was made on. */
-const pickForSend = (m) => {
-	const profileId = props.profile.id
-	const address = props.account.address
-	const origin = props.originPrivacy
-	const record = recordOf(m)
-	const slot = pickSlot(profileId, address)
-	sendPicks[slot] = { ...sendPicks[slot], [origin]: record }
-	const update = { kind: "send", address, side: origin, pick: record }
-	managers.profile.saveFeePick(profileId, update).catch((e) => console.error("Failed to save the send fee selection", { error: e }))
-}
-
-/** The selection is the card's own default, not a saved or live pick. */
-let chosenUnasked = false
-/** Counts explicit picks: a re-pick of the selected row leaves the reference unchanged. */
-let pickSeq = 0
-
 const handleMethodPicked = (m) => {
 	// A loading row is inert in the menu; this keeps it so for any other path a pick arrives on.
 	if (m.checking) return
 	verdicts.picked(m)
-	if (props.originPrivacy !== null) return pickForSend(m)
-	selectedMethod.value = m
-	pickSeq++
-	chosenUnasked = false
-	persistSelection(m).catch((error) => console.error("Failed to save the fee method", { error }))
+	rules.pick(m)
 }
 
 const onFpcUpdated = (fpc) => {
@@ -398,22 +286,14 @@ const onFpcUpdated = (fpc) => {
 	fpcEdits.set(fpc.id, fpc)
 	// An address edit keeps the id, and the verdict was on the old contract.
 	if (!sameFieldAddress(before, fpc.address ?? "")) verdicts.addressEdited(fpc.id)
-	if (props.originPrivacy !== null) return
-	// Replace the full snapshot so address-edit changes propagate to the
-	// dropdown trigger and any persisted-fee-method round-trips below.
-	// Object replacement (not deep mutation) keeps the derived computed
-	// reactive. A default holds only while its row is the protocol's: an edited address makes the
-	// row custom, and a custom FPC pays only once picked.
-	if (selectedMethod.value?.fpc?.id === fpc.id) {
-		selectedMethod.value = chosenUnasked && !fpc.isProtocol ? undefined : { ...selectedMethod.value, fpc }
-	}
+	rules.fpcUpdated(fpc)
 }
 const onFpcDeleted = (fpc) => {
 	const wasSelected = effectiveMethod.value?.fpc?.id === fpc.id
 	// The store's FPC list never hears of a deletion, and the menu offers what that list holds.
 	fpcEdits.set(fpc.id, null)
 	if (!wasSelected) return
-	if (props.originPrivacy === null) selectedMethod.value = undefined
+	rules.fpcDeleted()
 	openToast({ kind: "success", label: "Selected FPC was deleted" })
 }
 
@@ -440,114 +320,8 @@ const PRIVATE_GAS_UNCHECKED = "Couldn't check your private gas. Pick a fee sourc
 const statusNotice = computed(() => {
 	if (failure.value) return failure.value === "init" ? FEE_INIT_FAILED : FEE_DATA_UNAVAILABLE
 	if (sponsorShort.value) return ""
-	return sendSelection.value?.kind === "hold" && props.originPrivacy === "private" ? PRIVATE_GAS_UNCHECKED : ""
+	return held.value && props.originPrivacy === "private" ? PRIVATE_GAS_UNCHECKED : ""
 })
-
-/** The selection a settled init lands on when the user picked nothing meanwhile: the saved one,
- *  resolved against fresh `methods` by semantic key (never the stored `fpc.name`), else the
- *  default: Nulo's sponsor, else nothing. A dangling saved record (a deleted FPC) simply re-resolves
- *  to nothing every time — it is deliberately NOT pruned here, since a whole-map write would race
- *  `persistSelection` / another mounted card and could clobber a newer selection. */
-const settledSelection = (savedRecord) => {
-	const resolved = resolveSavedSelection(savedRecord, methods.value)
-	if (resolved) return resolved
-	const preferred = defaultSponsor(methods.value)
-	return preferred ? { ...preferred } : undefined
-}
-
-/** A selection taken as `baseline` has since been picked, or replaced by an FPC edit or deletion. */
-const touchedSince = (baseline) => selectedMethod.value !== baseline.method || pickSeq !== baseline.pick
-
-/** A pick made during init stands, read again from the snapshot's rows: their sponsor metadata is
- *  current, and a sponsor the snapshot no longer lists is dropped rather than paid through. */
-const snapshotRowFor = (m) => (m ? methods.value.find((x) => x.type === m.type && x.fpc?.id === m.fpc?.id) : undefined)
-
-const reconcileSelection = (savedRecord, baseline) => {
-	if (props.lockedMethod) {
-		selectedMethod.value = lockedOption()
-		chosenUnasked = false
-	} else if (touchedSince(baseline)) {
-		selectedMethod.value = snapshotRowFor(selectedMethod.value)
-	} else {
-		selectedMethod.value = settledSelection(savedRecord)
-		chosenUnasked = !resolveSavedSelection(savedRecord, methods.value)
-	}
-}
-
-/** The saved selections this card reconciles against. Send reads its own key into `sendPicks`, for
- *  the address it read for and under any pick already made in this mount (which is newer), and
- *  reconciles nothing — so it hands back an empty legacy map. */
-const readSavedSelections = async ({ profileId, accountAddress: address }) => {
-	if (props.originPrivacy === null) return readSavedFeeMethods(profileId)
-	const slots = readSendSlots(await readStored(sendFeePicksKey(profileId)), address)
-	const slot = pickSlot(profileId, address)
-	sendPicks[slot] = { ...slots, ...sendPicks[slot] }
-	return {}
-}
-
-/** Shows the last-used method while the fetch is in flight. Send previews through `sendSelection` instead. */
-const prefillSelection = (saved) => {
-	if (props.originPrivacy !== null) return
-	if (props.lockedMethod) selectedMethod.value = lockedOption()
-	else if (saved[props.account.address]) selectedMethod.value = saved[props.account.address]
-	else return
-	chosenUnasked = false
-}
-
-/** Pre-fills from storage BEFORE the slow fetch, so the trigger shows the last-used method while it
- *  runs (the `isInitComplete` gate keeps the pre-fill out of settings derivation). Returns the saved
- *  map and the reconcile baseline, which a later pick moves off. A pick made during the read (an
- *  early sponsor row) is newer than anything saved, so nothing is pre-filled over it and the
- *  baseline stays the one from before the read. Null when a newer run owns the card: re-applying
- *  the pre-fill would clobber that run's reconcile. */
-const readAndPrefill = async (scope, isCurrent) => {
-	const beforeRead = { method: selectedMethod.value, pick: pickSeq }
-	const saved = await readSavedSelections(scope)
-	if (!isCurrent()) return null
-	if (touchedSince(beforeRead)) return { saved, baseline: beforeRead }
-	prefillSelection(saved)
-	return { saved, baseline: { method: selectedMethod.value, pick: pickSeq } }
-}
-
-/** The snapshot's view of this card's selection, until each mode has its own rule book. */
-const selection = {
-	// A dApp locks the method precisely when the balance just moved (a claim made for this
-	// account): a snapshot inside the reader's TTL would show the old figure and hold Confirm
-	// off, so a locked mount reads fresh.
-	// A private send defaults to the account's own Fee Juice only on a private balance read as zero,
-	// and a zero from the reader's TTL may predate a receipt. The origin can flip to private without
-	// another read, so every Send mount reads fresh, whatever its origin is at the time.
-	forceRefresh: () => Boolean(props.lockedMethod) || props.originPrivacy !== null,
-	load: readAndPrefill,
-	reload: async (scope) => {
-		// Baseline BEFORE the await (same rule as the run): a user pick landing
-		// while the storage read is pending moves the selection off this
-		// baseline, so the reconcile keeps the pick instead of re-applying a
-		// stale storage snapshot over it.
-		const baseline = { method: selectedMethod.value, pick: pickSeq }
-		const saved = await readSavedFeeMethods(scope.profileId)
-		return { saved, baseline }
-	},
-	// Send derives its selection (`sendSelection`); only the one-pick-per-account cards reconcile here.
-	reconcile: ({ saved, baseline }, scope) => {
-		if (props.originPrivacy === null) reconcileSelection(saved[scope.accountAddress], baseline)
-	},
-}
-
-/** The payer Send's public-side walk lands on with this card's verdicts applied, or none. */
-const publicFallback = () => {
-	const know = { fpcs: knownFpcs.value, balances: gasBalances.value, shortSponsorIds, setAsideSponsorIds }
-	const next = resolveSendSelection("public", know, undefined)
-	return next.kind === "selected" ? next.method : undefined
-}
-
-/** Outside Send, a pick of a contract that cannot pay is dropped too; its saved record stays. */
-const onShort = (fpcId) => {
-	if (props.originPrivacy !== null || selectedMethod.value?.fpc?.id !== fpcId) return false
-	selectedMethod.value = props.fallsBack ? publicFallback() : undefined
-	chosenUnasked = true
-	return true
-}
 
 watchFeeSnapshot(snapshot)
 watchSponsorVerdicts(verdicts, {
@@ -557,7 +331,7 @@ watchSponsorVerdicts(verdicts, {
 	isEstimating: () => props.isEstimating,
 	rows: methods,
 	payer: effectiveMethod,
-	onShort,
+	onShort: rules.onShort,
 })
 watch(
 	() => [props.profile, props.network, props.account],
@@ -585,7 +359,6 @@ onBeforeUnmount(() => {
 	fpcService.disconnect()
 	prices.dispose()
 	priceService.disconnect()
-	cacheStore.feePaymentMethods = cacheStore.feePaymentMethods.filter((m) => m.id !== methodId)
 })
 </script>
 
