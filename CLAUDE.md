@@ -438,8 +438,10 @@ Each request replaces the whole previous one; never write into `cacheStore.confi
 
 ```js
 const { openToast } = useToast()
-openToast({ label: "Message", icon: "copy" }, 2_000)
+openToast({ kind: "success", label: "Address is copied" })
 ```
+
+A success closes itself after 2 s, or 6 s when it carries an `action`; an info or an error stays until closed. A call passes one options object and no duration (`utils/toast-call-sites.test.ts`).
 
 **Auto-imports** (vite config) — no explicit imports needed for: Vue APIs (`ref`, `computed`, `watch`, lifecycle hooks), Vue Router (`useRoute`, `useRouter`), composables in `src/composables/`, stores in `src/stores/`, components in `src/components/`.
 
