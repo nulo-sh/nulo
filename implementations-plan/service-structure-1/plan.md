@@ -1,7 +1,7 @@
 ---
 plan: service-structure-1
 tier: mid
-status: arc 1 merged (#703); arc 2 implementing; arcs 3 and 4 wait for release
+status: arc 1 merged (#703); arc 2 merged (#741); arc 3 implementing; arc 4 waits for release
 issues: "#521 (arc 1); #545 (arc 2); #547 (arc 3); #549 #560 (arc 4)"
 driver: claude-code
 claude_model: opus
@@ -181,10 +181,10 @@ The arc gate adds `bun run test:all`, then one e2e invocation, started only when
 
 ### Arc 3, phase 3: #547
 
-- [ ] Re-read `incoming-transfer/service.ts` and its scenario suite at the arc's base.
-- [ ] Add `balance-outbox.ts`, and rewire the service.
-- [ ] Keep every outbox case in `service.scenarios.test.ts`; the `drain(service)` helper and the one `markBalanceDirty` cast point at `service.outbox`. No assertion changes.
-- [ ] Add `balance-outbox.test.ts` over an in-memory repository fake and stubs, for what the service fixture cannot reach: a `withLock` whose ticket goes stale between the re-read and the write makes the anchor write skip (#443), and its control writes the anchor.
+- [x] Re-read `incoming-transfer/service.ts` and its scenario suite at the arc's base (77aad1e5; shifts in D11).
+- [x] Add `balance-outbox.ts`, and rewire the service.
+- [x] Keep every outbox case in `service.scenarios.test.ts`; the `drain(service)` helper and the one `markBalanceDirty` cast point at `service.outbox`. No assertion changes.
+- [x] Add `balance-outbox.test.ts` over an in-memory repository fake and stubs, for what the service fixture cannot reach: a `withLock` whose ticket goes stale between the re-read and the write makes the anchor write skip (#443), and its control writes the anchor.
 - [ ] File the decomposition-map `enhancement` issue (the five sections; `## Record` names this plan).
 - **Gate:** the common gate on `src/wallet/services/incoming-transfer`, then `bun run test:all`, then `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/incoming-public-transfers.test.ts tests/e2e/network/incoming-transfers.test.ts`.
 
@@ -237,6 +237,11 @@ The steps are `implementations-plan/README.md` § Post-implementation standard, 
 | D8 | `handleWalletMessage` deps builder | per-message deps fine | inline: one caller | **Inline literal.** `discoveryDeps` exists for two callers; this has one. |
 | D9 | Arc 2: the tree already had `dedupeKeyOf` (dapp-boundary-2) | — | — | **Keep `dedupeKeyOf`**, moved with its callers; `isOriginKey` joins it. The plan's `discoveryKey` would rename a live helper for no gain. |
 | D10 | Arc 2: `isLegalCurrent` moves, so `discovery-flow.ts` calls `assertCurrent()` | — | — | **Edit the pin deliberately**, as CLAUDE.md § Terms acceptance asks: `legal/call-sites.test.ts` names the file, CLAUDE.md's line about the pin says so. `useLogFilters.scan.test.ts` gains the new file's `OWNED` row so the moved log lines stay pinned to `wallet-sdk`. `createSdkHandlerState` is exported for the allowlist test. |
+| D11 | Arc 3: the cited lines at its base (77aad1e5) | — | — | **Shifted, same content.** The outbox block is `:2582-2721` (plan `:2586-2720`), `anchoredRowAction` `:156-162` with its doc, the two fields' wiring `:384-385`; call sites `:1702,1807,2393,2541` are `:1703,1808,2394,2542` (`:457,1169,1453` unchanged). |
+| D12 | Arc 3: constructor shape | deps object "appropriately narrow" | matches the plan | **One `BalanceRefreshOutboxDeps` object**, not `ScanEpisodeStore`'s positional parameters: six dependencies, named at the one call site. |
+| D13 | Arc 3: the plan's `activeProfileId` dep | r1, medium, demonstrated: its async adapter adds a microtask before `listOutbox`, which a receipt writer's lock release can observe | low, same | **`activeProfile`, wired as a synchronous closure over `getActiveProfile()`**, so `drain` keeps its one await and `!profile` check. The moved body then differs from the original only in that call. |
+| D14 | Arc 3: moved log lines still say `drainBalanceOutbox:` | — | strings and arguments unchanged: clean | **Kept verbatim.** A log line is behaviour a filter or a report may match; renaming it is not part of a move. |
+| D15 | Arc 3: the decomposition map's "which split pays next" | the public arm next, after a shared commit collaborator; defensible, moderate confidence | rethink: the suite already runs on an in-memory repository and a fake reader, so a split saves no test cost; a collaborator first has one caller; the arm's churn is two PRs | **Stop at the map; the public arm, as one PR, when its next substantial change is scheduled.** Opus's points are verified in the tree; Codex's ranking survives as "which split" once one pays. The issue records both. |
 
 ## Audit verdicts
 
@@ -246,6 +251,7 @@ The steps are `implementations-plan/README.md` § Post-implementation standard, 
 - **Arc 1, Codex round 1** (session 01a14b03): findings, minor. Accepted: the import comment's "the listener has given up" overstated (a slow live bootstrap); two narrating test comments deleted. **Opus review**: findings, minor. Accepted: the entry clear checks `isCurrent()` itself, pinned by a test; same comment fix. Accepted gap: `app.vue`'s `readFailure` wiring has no test (a shell mount; `setFailure` is equally unpinned). **Round 2**: clean.
 - **Arc 1 known limit**: #700, I1's full-backup case, filed and closed as not planned.
 - **Arc 2, Codex round 1** (session 01a14c56): one low finding, demonstrated: the PriceService exposure pin read only `background.ts`; it now reads `discovery-flow.ts` too, each case with an entry-point control. **Opus review**: findings, low. Accepted: two e2e headers and a moved comment named the wrong file, and the decrypt lane's comment stated history, not its invariant. Its stale store citation was already fixed (found by `test:all`). Kept: the allowlist test imports the real `background.ts` graph (about 24 s cold), since a mock would fence another object. **Round 2**: clean ("no regression found").
+- **Arc 3, Codex round 1** (session 01a14cbb): findings. Medium, demonstrated: the `activeProfileId` adapter added a microtask before `listOutbox` (D13). Low: the class suite's header overclaimed. **Opus review**: findings, low and nit: the same two, and the class doc omitted the delete on a gone balance pair. All fixed in a036c0d1. **Round 2**: clean ("both fixes are verified; no new findings").
 
 ## Seeds
 
