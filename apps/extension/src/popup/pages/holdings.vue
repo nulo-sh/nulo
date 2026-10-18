@@ -101,7 +101,8 @@ const aggregate = computed(() => aggregateFiat(rows.value, fiatOf))
 /** Home's unavailable state, from the first price answer on: before it no quote has had a chance. */
 const unavailable = computed(() => showFiatValues.value && prices.settled.value && pricesUnavailable(rows.value, fiatOf, prices))
 const totalDisplay = computed(() => (unavailable.value ? "—" : prices.formatUsdMicro(aggregate.value.micro)))
-const awaitingPrices = computed(() => showFiatValues.value && awaitingFirstPriceAnswer(rows.value, prices))
+/** An unread list has no total yet, so the skeleton stands from the start, not from the first rows. */
+const awaitingPrices = computed(() => showFiatValues.value && (isLoading.value || awaitingFirstPriceAnswer(rows.value, prices)))
 
 const openAddToken = (address: string) => {
 	cacheStore.preselectedTokenAddressToAdd = address
@@ -111,11 +112,12 @@ const openAddToken = (address: string) => {
 const summary = useTemplateRef<ComponentPublicInstance>("summary")
 const totalRuler = useTemplateRef<HTMLElement>("totalRuler")
 const metaRuler = useTemplateRef<HTMLElement>("metaRuler")
-const summaryMeta = computed(() =>
-	unavailable.value
-		? "Prices unavailable"
-		: `${rows.value.length} tokens${showFiatValues.value && aggregate.value.partial && !awaitingPrices.value ? " · priced assets only" : ""}`,
-)
+/** No count until the list answers: an unread list is not an empty one. */
+const summaryMeta = computed(() => {
+	if (isLoading.value) return ""
+	if (unavailable.value) return "Prices unavailable"
+	return `${rows.value.length} tokens${showFiatValues.value && aggregate.value.partial && !awaitingPrices.value ? " · priced assets only" : ""}`
+})
 /** The total's type as a fraction of its 26 px: full size while it fits beside the meta line
  *  wrapped to its narrowest, then the largest that does, with no floor, so no digit is ever hidden. */
 const totalScale = ref(1)
@@ -279,6 +281,8 @@ onBeforeUnmount(() => {
 
 .summary_meta {
 	composes: type--meta from global;
+	/* Empty while the list loads, and the list below must not move when the count arrives. */
+	min-height: 1lh;
 	color: var(--nulo-secondary);
 }
 

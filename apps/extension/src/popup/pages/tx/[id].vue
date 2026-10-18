@@ -26,18 +26,18 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 /** Utils */
 import { DETAIL_TIME_FORMAT } from "../detail-page"
 import { balanceFormatted } from "@/utils/amount.js"
-import { displaySymbol, settledReading, txAmount } from "@/utils/tx-amount"
+import { displaySymbol, txAmount } from "@/utils/tx-amount"
 import { copyWithToast } from "@/utils/clipboard"
 import { endsSelection } from "@/utils/selection"
 import { trimAddress } from "@/utils/string"
 import {
-	callTitle,
 	getTxCategory,
 	getTxTitle,
 	getOriginLabel,
 	getPrimaryCall,
 	formatTransferType,
 	FEE_METHODS,
+	settledCallTitle,
 } from "@/utils/tx-enrichment"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { explorerDisplayName, getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl } from "@/wallet/constants/explorers"
@@ -145,7 +145,7 @@ const userCalls = computed(() => {
 	const filtered = tx.value.calls.filter((c) => !FEE_METHODS.has(c.method))
 	return filtered.length ? filtered : tx.value.calls
 })
-const callRowTitle = (c) => callTitle(c.method, c.contract, settledReading(c, tokens.value) !== null)
+const callRowTitle = (c) => settledCallTitle(c, tokens.value)
 
 onMounted(async () => {
 	tokens.value = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)

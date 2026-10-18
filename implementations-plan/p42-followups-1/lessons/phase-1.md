@@ -1,0 +1,8 @@
+# Arc A1: implementation log
+
+- 2026-10-18: before shots must come from the base source: `agent.sh` builds `dist/<browser>` from the working tree, so network before shots ran before any edit, and the Firefox before run of `tx-sendTx-default` checked the base `apps/extension/src` out into the working tree for that one run (restored from HEAD after). Smoke before and after dists were built aside (`vite build --outDir` under the lane's scratch dir) and loaded through `EXTENSION_PATH`.
+- 2026-10-18: Holdings' list-loading moment lasts a few frames; the capture held it by wrapping `chrome.runtime.connect` in the popup so the `token-balance` port's messages queue until released (scratch spec only).
+- 2026-10-18: a smoke run failed nine tests on `ENOENT`: the shot directory did not exist yet. `shotSend` writes into `NULO_E2E_SHOT_DIR` without creating it; create the directory first. Rerun green.
+- 2026-10-18: `audit:vue`'s first run failed lint on the scratch capture spec left in `tests/e2e/`; removed, rerun green. Its build regenerated `src/types/auto-imports.d.ts` and `.eslintrc-auto-import.json` (new exports `settledCallTitle`, `RestoredAccounts`): committed.
+- 2026-10-18: a signed commit hung in `ssh-keygen -Y sign` on the agent; killed it and reran with `env -u SSH_AUTH_SOCK`: signed `G`.
+- 2026-10-18: Codex fix loop round 1 (gpt-6.1-sol, high, session `01a1505c`): **approve**, no findings (21 focused files, 451 tests run). Opus 5.5 diff review beside it: **approve** with three local points, folded in `0719cffb` (an unreachable `unplaced` branch in `settleHeldAccounts` removed; the two `TransferType` tables merged; a test no longer asserts the "1 tokens" plural). Codex round 2, resumed: **approve**, no findings.

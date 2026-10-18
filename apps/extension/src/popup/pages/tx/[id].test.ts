@@ -185,7 +185,14 @@ describe("the transaction page's words for a call", () => {
 		const unread = await mountPage(dappTransfer(OTHER), Promise.resolve([listed]), { SubPageHeader: header })
 		expect(words(unread)).toEqual(["Transfer In Private", "Transfer In Private"])
 		const read = await mountPage(dappTransfer(TOKEN), Promise.resolve([listed]), { SubPageHeader: header })
-		expect(words(read)).toEqual(["Transfer", "Transfer (private)"])
+		expect(words(read)).toEqual(["Transfer (private)", "Transfer (private)"])
+	})
+
+	test("the wallet's own send reads its type's label in the header and the Calls box", async () => {
+		expect(words(await mountPage(sentTransfer, Promise.resolve([listed]), { SubPageHeader: header }))).toEqual([
+			"Transfer (private)",
+			"Transfer (private)",
+		])
 	})
 
 	test('a dApp\'s `claim` off the Fee Juice contract reads "Claim" in the header and the Calls box', async () => {
