@@ -23,7 +23,7 @@ post_implementation_hardening: not scheduled
 - **Owner asks:** OA-1 = A (P42-08), OA-2 = A (P42-09), OA-3 to OA-5 as planned (P42-10); OA-5's addendum and OA-7 shipped in arc 3 for sign-off in its PR; OA-6 is #803.
 - **Known limits:** #794.
 - **Open items:** #803 (the failed-preview warning's second sentence), #804 (a restored token whose read failed is never read again).
-- **Dropped:** none. Deviations from the plan are D10 to D16.
+- **Dropped:** none. Deviations from the plan are D10 to D17.
 - **Lessons:** none promoted: `lessons.md` is at its 8 KiB budget, and arc 3's gotchas (the type-roles inventory's keys, Storybook's chunk-cycle guard) stay in [lessons/phase-4.md](lessons/phase-4.md).
 - **Seeds retired:** the `/goal` and `/loop` seeds below.
 
@@ -179,7 +179,7 @@ Fast layers in every phase gate: `bun run lint`, `bun run typecheck:all`, `bun r
 - Change map: `components/composite/send/publish-facts.ts` (+ test), `popup/pages/send.vue`, `popup/pages/send.integration.test.ts`, `token/service.ts` (`restoreRow`).
 - Tests: `isValidatedTokenClass`: the bundled id, and the same id upper-cased, are in; another id and an absent one are out. Page: a token of another class shows `send-token-caveat` with the sentence; a validated token shows none (control); a blocked transfer shows none. `restore()` stores no `classId`; a failed and a late refresh leave none (the caveat shows; `txAmount` gives no mint amount), and a successful refresh writes the chain's (control).
 - Gate: the fast layers.
-- **Done** (5c142d61): gate green, STATUS.md.
+- **Done** (5c142d61): gate green, STATUS.md. The check moved to `utils/token-class.ts` after the PR's Storybook build (D17).
 
 ### Arc 3, phase 7: the label mark
 - Change map: `popup/windows/execute/call-surface.ts` (+ `call-surface.test.ts`), `CallArguments.vue`, `UnreadableArgsNotice.vue` → `ArgsNotice.vue`, `SendTxSummary.vue`, their tests.
@@ -227,6 +227,7 @@ Outline B (not committed) proposed a worker snapshot by id with a 120 s life, cl
 | D14 | Arc 2: compare before the title | | | **The compare runs before the title backfill**, so a refused add's import row shows the address and the message, never the read nobody approved. The cleaning tests live in `token/service.test.ts`. |
 | D15 | Arc 3: the fee row's words (tree deviation) | | | **"About" replaces "Fee could be up to" in the one sentence P47-02 C set** (#793, merged after this plan): "About {amount}; payment method set by {app}." The priority clause is unchanged. OA-7 carries both forms for sign-off in the PR. |
 | D16 | Arc 3: the mark's name arm (review) | | the name at its arity lets a token dodge the mark with one more parameter | **The decoded name at any arity**, beside the selector. Both bundled token artifacts give every vocabulary-named function a vocabulary arity and fitting names, so no honest call of theirs is marked; the mark's words hold for any call it lands on. |
+| D17 | Arc 3: where the class check lives (CI) | | `publish-facts.ts` is imported by five modules Storybook reaches; its new `@nulo/wallet-bridge` import put the bridge's chunk and the service clients' on a static import cycle, which the Storybook build's chunk guard refuses | **`isValidatedTokenClass` lives in `utils/token-class.ts`** (+ test), imported by `send.vue` alone; `publish-facts.ts` gains `TOKEN_CAVEAT` and no import. |
 
 ## Plan review record
 

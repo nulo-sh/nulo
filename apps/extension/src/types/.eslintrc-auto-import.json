@@ -458,6 +458,7 @@
     "isValidAztecAddress": true,
     "isValidDecimals": true,
     "isValidHex": true,
+    "isValidatedTokenClass": true,
     "journalAdded": true,
     "journalCardIcon": true,
     "journalCardOriginLabel": true,

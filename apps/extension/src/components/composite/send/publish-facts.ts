@@ -1,6 +1,3 @@
-import { BUNDLED_TOKEN_CLASS_IDS } from "@nulo/token-list"
-import { sameFieldAddress } from "@nulo/wallet-bridge"
-
 export type TransferSide = "private" | "public"
 
 /** `exposed` = public against a private origin; `unknown` = the wallet cannot vouch for the answer. */
@@ -74,15 +71,6 @@ export const UNVOUCHED_FEE_SENTENCE = "Nulo can't tell what this fee contract ch
 
 /** Under the strip for a token whose class Nulo has not validated: the strip's words assume its code. */
 export const TOKEN_CAVEAT = "Nulo can't check this token's contract. What a send publishes depends on its code."
-
-/**
- * Whether the token's class is one whose artifact the wallet bundles and whose sends it checks. A
- * row with no class (added before classes were recorded, or restored and not yet read from the
- * chain) is outside.
- */
-export function isValidatedTokenClass(classId?: string): boolean {
-	return classId !== undefined && BUNDLED_TOKEN_CLASS_IDS.some((id) => sameFieldAddress(id, classId))
-}
 
 /** The fee row while an earlier send holds the transfer's chain state. */
 export const QUEUED_FEE_COPY = "Queued behind your previous send"
