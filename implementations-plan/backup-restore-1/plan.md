@@ -1,7 +1,7 @@
 ---
 plan: backup-restore-1
 tier: mid
-status: planned, awaiting orchestrator approval
+status: completed (#720, #739 and the arc 3 PR), awaiting merge
 issues: "#671 (arc 1 Closes), #663 (arc 2 Closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 2c0df3b9
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18
+- **Status:** completed. Three PRs against `dev`: #720 (arc 1) and #739 (arc 2) merged; the arc 3 PR carries the export warning and this close-out, and merging it is the orchestrator's call.
+- **Shipped:** #720: the paused-reset screen and the Delete chain confirmation name the imported accounts a delete removes (P38-05 C), endpoint edits refuse while a paused reset holds the network (P38-09 A), the migration barrier names what the phrase does not recover (P38-10 B), and a deeply nested backup ends in the integrity refusal (#671). #739: a restore keeps an imported account whose network the new profile lacks, with its key, and the restore warning names it (P38-04 B, #663). Arc 3: the export page warns when the file's imported accounts sit on networks a restore does not re-create (P38-04 A).
+- **Owner asks:** OA-1 to OA-7 shipped in their "what ships now" form; open in #746.
+- **Dropped:** P38-05's export-first button, which waits for the export of a paused reset's imported accounts (#710). Not changed: an unopened key still counts in the export warning (ledger, arc 3 review loop).
+- **Known limits:** #744 (K1), #745 (K2).
+- **Open items:** #710, #746.
+- **Lessons:** none promoted: `lessons.md` is at 8188 of 8192 bytes; this plan's notes stay in [lessons/phase-0.md](lessons/phase-0.md), [phase-1](lessons/phase-1.md), [phase-4](lessons/phase-4.md) and [phase-6](lessons/phase-6.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # backup-restore-1: what a person is told around restore, a paused reset and the migration barrier
 
@@ -148,7 +160,7 @@ Light and dark screenshots of each surface go in its PR body, with the pick quot
 
 ## Arc 3 — the export warning (P38-04 A; starts after PR #705 merges)
 
-### Phase 6
+### Phase 6 ✓
 - `network/seeds.ts`: `isSeedChain`; `network/service.ts:641` reuses it. #705's export run object: the count (D9). The page: the C7 banner.
 - Tests: C7 shows for one imported-key row on chain 1337, and not for rows on Testnet or Local. With the keys-lost banner shown, C7 does not show.
 - **Gate:** `bun run lint && bun run typecheck:all && bun run test:all && bun run build`. Smoke e2e: `cd apps/extension && bun run test:e2e -- tests/e2e/backup-roundtrip.test.ts tests/e2e/backup-imported-account.test.ts tests/e2e/passkey-backup.test.ts --retry=0`. Pass: all green.
@@ -199,6 +211,16 @@ Round 1, Codex (gpt-6.1-sol high, session `01a14b4c`): **conditional approve** (
 - C6: past three chains the chain IDs take the same cap as the names (OA-4's addendum); lists join with `joinNames`, so "“C”, and 2 more", with the comma C6's draft omitted.
 
 **Arc 2 review loop.** Round 1, Codex (gpt-6.1-sol high, session `01a14c46`): **2 minor, 0 material**, both accepted: the key filter shifted the error log's key ordinals (results now go back to their slice positions), and two comments narrated. Opus diff review: **0 material**; folded: the restart test's no-op network write and its title, one L1-mismatch row in the service test, the D2a deviation line. Round 2, resumed: fixes verified, **clean**. The loop converged in two rounds.
+
+**Arc 3 deviations from the plan (implementation).**
+- D9: the count takes the key rows whose imported account row the file also carries, matched by `accountScopeKey`; a key without its account is dropped by a restore (D2c), so adding its network brings nothing back. A key that did not open still counts: both key exports report only how many did not open, not which, and the unopened-keys banner names that loss; telling them apart changes the exports' RPC shape.
+- C7: the plural forms inflect the drafted singular: "2 imported accounts are on a network you added. … add that network again to restore them.", and "on networks you added … add those networks again" when the accounts span several chains.
+- The banner follows the unopened-keys banner, before the chain-state and protect banners, so the imported-account warnings sit together; the common page is as drawn.
+- `runBackup`'s warning writes moved into `showFileWarnings`: with the new one it reached cognitive complexity 16 of 15.
+
+**Arc 3 review loop.** Round 1, Codex (gpt-6.1-sol high, session `01a14c86`): **2 minor, 0 material**, both accepted: a key whose account row the file lacks was counted though a restore drops it; the state comment overclaimed. Opus diff review: **1 material, 2 minor**. Its orphan-key half is the Codex fix; the passkey-branch test, the sentinel and OA-7 (C7's plural forms) folded. Its other half, panel-decided as a disposition (Codex agreed, minor): a key that does not open is counted, though a restore drops its account, so C7's advice cannot work for it. The unopened-keys banner on the same page counts that loss, and excluding the row would carry per-row results across both key exports and the passkey probe. Round 2, resumed: fixes verified, **clean**. Converged in two rounds.
+
+**Cross-arc pass.** A fresh Codex session (gpt-6.1-sol high, `01a14c8d`) over #720, #739 and arc 3: **0 material, 1 minor**, accepted: the held-row split in `full-backup-restore.ts` relied unstated on the service refusing derived rows with no network (one sentence added), and a comment in `copy.ts` restated its function. Resumed: **clean**.
 
 Final fresh Codex pass (gpt-6.1-sol high, session `01a14b63`): **conditional approve** (condition: an owner ask for D2c's orphan-key warning, with a "what ships now" form). Applied: D2c moved into OA-5, and the arc ships today's outcome. Round-1 dispositions and rejected alternatives held; arc 1 depends on no open ask. Resumed on the change: **approve**.
 
