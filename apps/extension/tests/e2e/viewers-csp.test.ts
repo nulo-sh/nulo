@@ -429,12 +429,11 @@ test("the more menu offers the CSV export and Clear logs, which empties the log 
 	registeredExtension: ctx,
 }) => {
 	const page = await openLogs(ctx)
-	// Enough lines that 50 fewer still stand above the height the scroller floors at.
+	// Past the 100-line bound below, which a trim never crosses: it leaves 1,000 lines.
 	await logLines(page, 120)
 	const marker = `viewer clear ${randomUUID().slice(0, 8)}`
 	await page.evaluate((m) => console.info(m), marker)
 	await waitForShownLine(page, marker, true)
-	const filled = (await scroller(page)).height
 	const line = await lineHeight(page)
 
 	await openDropdown(page, "logs-more-trigger")
@@ -443,9 +442,9 @@ test("the more menu offers the CSV export and Clear logs, which empties the log 
 	await shotSend(page, "logs-more-menu", "logs-more-trigger")
 
 	await clickByTestId(page, "logs-clear")
-	// Lines arriving later can push the marker out of the rendered range too; only a clear also drops
-	// the lines before it.
-	await settle(page, 0, filled - 50 * line)
+	// Later lines alone can push the marker out of the rendered range. A cleared log floors at the
+	// window's height, under 100 lines.
+	await settle(page, 0, 100 * line)
 	await waitForShownLine(page, marker, false)
 	await logLines(page, 1)
 	await page.close()
