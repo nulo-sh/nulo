@@ -1,6 +1,6 @@
 # Owner asks: owner-feedback-1
 
-Four asks. OA-1 and OA-2 hold arc 2 (the landing, #767): it opens only once both are answered. OA-3 (#762) and OA-4 (#760) ride arc 1, which ships their "what ships now" forms if they are still open. Every other change in this lane quotes the owner's words from its issue (#760, #761, #762, #765).
+Six asks, all resolved (§ Resolution, at the end). Every other change in this lane quotes the owner's words from its issue (#760, #761, #762, #765).
 
 ## OA-1. #767: the landing notice's sentence
 
@@ -84,3 +84,14 @@ Four asks. OA-1 and OA-2 hold arc 2 (the landing, #767): it opens only once both
 **Recommendation: A.** No new words; it is the line you saw on page 47 as the shipped form.
 
 **What ships now: A.**
+
+## Resolution
+
+| Ask | Answer | Where it shipped |
+|---|---|---|
+| OA-1 | P47-03, option B: "and tell us what you find." The pick covered the pronoun too: "in their early days". | #791 |
+| OA-2 | A, follow the tag: footer `early days`, screen-reader name "Early days notice". The orchestrator's reading of the owner's "it's not a PREVIEW", named as such in the PR for the owner's veto; it merged without one. | #791 |
+| OA-3 | B, the owner's words read literally: the transfers-disabled warning stays fixed with the balance. The plan's "what ships now", approved with the plan by the orchestrator; no owner pick. | #788 |
+| OA-4 | A, "Sponsored". The plan's "what ships now", approved with the plan; no owner pick. | #788 |
+| OA-5 | A, leave it: no change. Raised in arc 1's review and shipped as is; no owner pick. | #788 |
+| OA-6 | P52-04, option A: "'Fee payment method set by {app}' (ships now)." | #793 |

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { OriginType } from "@/wallet/services/transaction/client"
-import { formatGas } from "@/utils/fee-estimation"
+import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { buildGasBreakdown, computeFeeSavings, describeFeePaymentMethod } from "./tx-detail-helpers"
 
 describe("tx-detail-helpers/buildGasBreakdown", () => {
@@ -20,7 +20,7 @@ describe("tx-detail-helpers/buildGasBreakdown", () => {
 			teardownL2GasLimit: 300,
 			teardownDaGasLimit: 100,
 		})
-		expect(result).toEqual({ l2Gas: formatGas(1_000), daGas: formatGas(500), l2Cost: 10n ** 15n, daCost: 10n ** 15n })
+		expect(result).toEqual({ l2Cost: 10n ** 15n, daCost: 10n ** 15n })
 	})
 })
 
@@ -104,13 +104,31 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 		).toBe("Set by the app")
 	})
 
-	test("External fallback → 'External FPC'", () => {
+	/** A popup Send as `recordTransfer` writes it: its transfer call alone, and the FPC it paid through
+	 *  unless that is Nulo's sponsor. */
+	const popupSend = (feeSpender?: string) => ({
+		feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
+		calls: [{ method: "transfer_private_to_private" }],
+		origin: { type: OriginType.UI },
+		feeSpender,
+	})
+
+	test("a popup Send names the method it was paid with: Private Fee Juice, Nulo's sponsor, a sponsor added by hand", () => {
+		expect(describeFeePaymentMethod(popupSend(PRIVATE_FPC_ADDRESS))).toBe("Private Fee Juice")
+		expect(describeFeePaymentMethod(popupSend())).toBe("Sponsored")
+		expect(describeFeePaymentMethod(popupSend("0x0f"))).toBe("Sponsored")
+	})
+
+	test("a recorded fee call outranks the spender: the auth registry's own send, which keeps its pay_fee call", () => {
 		expect(
-			describeFeePaymentMethod({
-				feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
-				calls: [],
-				origin: { type: OriginType.UI },
-			}),
-		).toBe("External FPC")
+			describeFeePaymentMethod({ ...popupSend(), calls: [{ method: "transfer_private_to_private" }, { method: "pay_fee" }] }),
+		).toBe("Private Fee Juice")
+	})
+
+	test("an app's send stays 'Set by …' and a row of no known origin stays 'External FPC', whatever its spender", () => {
+		expect(describeFeePaymentMethod({ ...popupSend(PRIVATE_FPC_ADDRESS), origin: { type: OriginType.DAPP, name: "Foo" } })).toBe(
+			"Set by Foo",
+		)
+		expect(describeFeePaymentMethod({ ...popupSend(PRIVATE_FPC_ADDRESS), origin: undefined })).toBe("External FPC")
 	})
 })
