@@ -8,19 +8,20 @@ import { type ListedToken, type SettledCall, settledReading } from "./tx-amount"
 
 export { FEE_METHODS, pickPrimaryMethod }
 
-const MINT_LABELS: Record<string, string> = {
-	mint_to_public: "Mint (public)",
-	mint_to_private: "Mint (private)",
-}
+/** Keyed by a dApp-chosen function name, so a `Map`: a plain object answers `constructor`. */
+const MINT_LABELS: ReadonlyMap<string, string> = new Map([
+	["mint_to_public", "Mint (public)"],
+	["mint_to_private", "Mint (private)"],
+])
 
 /** The other curated labels; transfer labels come from the descriptor-derived vocabulary. */
-const METHOD_LABELS: Record<string, string> = {
-	shield: "Shield",
-	unshield: "Unshield",
-	redeem_shield: "Redeem shield",
-	claim_and_end_setup: "Claim Fee Juice",
-	claim: "Claim Fee Juice",
-}
+const METHOD_LABELS: ReadonlyMap<string, string> = new Map([
+	["shield", "Shield"],
+	["unshield", "Unshield"],
+	["redeem_shield", "Redeem shield"],
+	["claim_and_end_setup", "Claim Fee Juice"],
+	["claim", "Claim Fee Juice"],
+])
 
 /** The L2 Fee Juice contract (a protocol constant). Labels below are meaningful ONLY on it. */
 const FEE_JUICE_L2_ADDRESS = AztecAddress.fromNumberUnsafe(FEE_JUICE_ADDRESS).toString().toLowerCase()
@@ -31,9 +32,9 @@ const FEE_JUICE_L2_ADDRESS = AztecAddress.fromNumberUnsafe(FEE_JUICE_ADDRESS).to
 const FEE_JUICE_ONLY_LABELS = new Set(["claim", "claim_and_end_setup"])
 
 /** The wallet's label for a name that claims a token transfer or mint, the six a reading must earn. */
-export const tokenMovementLabel = (method: string): string | null => transferLabel(method) ?? MINT_LABELS[method] ?? null
+export const tokenMovementLabel = (method: string): string | null => transferLabel(method) ?? MINT_LABELS.get(method) ?? null
 
-const curatedLabel = (method: string): string | null => tokenMovementLabel(method) ?? METHOD_LABELS[method] ?? null
+const curatedLabel = (method: string): string | null => tokenMovementLabel(method) ?? METHOD_LABELS.get(method) ?? null
 
 /**
  * Look up the wallet-curated friendly label for `method`. Returns `null` for anything not in the allowlist —
@@ -142,5 +143,6 @@ const TRANSFER_TYPE_LABELS: Record<number | string, string> = {
  * Returns a human-readable transfer type label.
  */
 export function formatTransferType(type: number | string): string {
-	return TRANSFER_TYPE_LABELS[type] ?? String(type)
+	// A stored row's `type`, so own keys only; `0` and `"0"` share a key, which a `Map` would split.
+	return Object.hasOwn(TRANSFER_TYPE_LABELS, type) ? TRANSFER_TYPE_LABELS[type] : String(type)
 }
