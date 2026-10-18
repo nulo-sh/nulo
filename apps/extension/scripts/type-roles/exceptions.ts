@@ -37,7 +37,6 @@ const TX_CARD = "apps/extension/src/popup/components/modules/activity/Transactio
 const TWO_CHIPS = ".chips > .chip, .app_slot > .app_chip"
 const TWO_CHIP_SCOPE =
 	'[data-testid="activity-direction-chip"]:has(+ span > [data-testid="activity-app-chip"]), [data-testid="activity-direction-chip"] + span > [data-testid="activity-app-chip"]'
-const ACCOUNTS = "apps/extension/src/popup/pages/settings/accounts/index.vue"
 const PUBLISH_STRIP = "apps/extension/src/components/composite/send/PublishStrip.vue"
 const PUBLISH_FACTS = '[data-testid="send-publish-strip"] [data-cell]'
 const ROLELESS = ".wrapper:is(.secondary, .ghost, .text)"
@@ -231,15 +230,6 @@ export const OVERRIDES: Override[] = [
 		value: "0.08em",
 		role: "label-section",
 		why: "a publish fact keeps the names' tracking",
-	},
-	{
-		file: ACCOUNTS,
-		selector: ".desc_line:has(.addr_head)",
-		scope: '[data-testid="manage-accounts-address"]',
-		property: "font-size",
-		value: "11px",
-		role: "meta",
-		why: "an account row's marker and address tail fit its line only at 11px",
 	},
 	{
 		file: TX_CARD,
