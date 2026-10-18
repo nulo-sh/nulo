@@ -170,6 +170,7 @@ const SENTINELS = {
 	dekReplaced: true,
 	chainStateOmitted: false,
 	unopenedImportedKeys: 0,
+	importsOnAddedNetworks: { accounts: 1, networks: 1 },
 	password: "sentinel",
 	repeatedPassword: "sentinel",
 } as const

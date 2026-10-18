@@ -59,6 +59,12 @@ export const DEFAULT_SEEDS: DefaultSeed[] = [
 	},
 ]
 
+/** Whether this build seeds a network on `chainId`: the only networks a new profile, and so a
+ *  restore, starts with. */
+export function isSeedChain(chainId: number): boolean {
+	return DEFAULT_SEEDS.some((seed) => seed.chainId === chainId)
+}
+
 /** The one seed marked `isPrimaryActive` (Testnet). Single source
  *  for the primary/default network — consumed by `getOrInitNetworks` (fresh seed) AND
  *  `getPrimaryNetwork` (the import/bootstrap fallback), so the two can't disagree. */

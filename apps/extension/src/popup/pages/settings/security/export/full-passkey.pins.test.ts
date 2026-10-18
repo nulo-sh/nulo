@@ -389,6 +389,18 @@ describe("export/full.vue — imported accounts that will not restore", () => {
 		expect(wrapper.text()).not.toContain(UNOPENED)
 	})
 
+	it.each([
+		["password", passwordExport],
+		["passkey", passkeyExport],
+	] as const)("a %s export counts an imported account on chain 1337, not one on the local network", async (_kind, run) => {
+		const row = (chainId: number) => ({ profileId: "p1", chainId, address: `0x${chainId}`, encryptedSigningKey: "sealed" })
+		const account = (chainId: number) => ({ profileId: "p1", chainId, address: `0x${chainId}`, type: 1, name: "Imp" })
+		const wrapper = await run({ importedKeyRows: [row(1337), row(0)], accounts: [account(1337), account(0)] })
+		expect(wrapper.get("[data-testid='backup-imported-network-banner']").text()).toContain(
+			"1 imported account is on a network you added.",
+		)
+	})
+
 	it("a passkey file carries the account and key rows the count was made over", async () => {
 		const rows = [{ profileId: "p1", chainId: 0, address: "0xaa", encryptedSigningKey: "sealed-row" }]
 		const accounts = [{ profileId: "p1", chainId: 0, address: "0xaa", name: "Imp" }]

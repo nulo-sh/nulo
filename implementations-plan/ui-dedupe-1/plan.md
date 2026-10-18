@@ -171,7 +171,7 @@ Every arc is one PR against `dev`, not stacked (orchestrator rule D-orch-1). A1 
 
 - **The rule for every difference**. Each view keeps every behaviour a person can observe and every behaviour a test pins. A difference that only a sequence the services cannot produce would show converges onto the family rule, with its trace in the ledger.
 - **`useTokenBalanceSnapshot` becomes the family's one mirror**. Its rules are Home's: dedupe on Added, ignore an unseen Updated, unfiltered Deleted, refetch after the first reconnect, dirty refetch, a 2 s retry after a refused read, no loading state on a refresh. The parent still subscribes the handlers it takes (F9).
-- **Always**:
+- **Always** (the shipped option shapes are D507–D509; Send's Added did not converge):
   - `replaceOnAdded` (Holdings; the decision's deliberate difference);
   - `reset()`, which clears the fence, the retry and `connectsSeen` for a popup that is mounted once and shown many times;
   - `usePrices.fiatOfRow(row)`, which replaces the four pricing lambdas (Holdings' `?? 0n` is dead behind `safeFiatOf`).
@@ -277,7 +277,7 @@ A pass is exit 0, with every named test green and none skipped that ran on base.
   - `SecretCountdownClose.test.ts`; the phase gate (the design package included).
   - The pixel proof: every hash equal, every control unequal.
   - Smoke on Chrome and Firefox: `security-backup`, `keyboard-guards`.
-- **A5** ✗.
+- **A5** ✓ (on the merged head 88da43e8, dev e8da7b59: lint, typecheck:all, test, test:all, check:plans; smoke retry 0 Chrome `rows`, `navigation`, `token-list` 19/19 in 116 s, Firefox `token-list` 2/2 in 38 s; network Chrome `send-picker` 1/1 in 268 s; Codex clean in round 2).
   - G-fast.
   - The suites of the hook, `holdings`, `SelectTokenPopup`, `send`, `send.integration`, `BalanceView` and `TokensView`.
   - The phase gate.
@@ -321,6 +321,12 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
 | D504 | Send keeps its read and failure card; it uses only the hook's handlers | Send calls `fetchTokenBalances()` (it would show 0 instead of Retry) | Codex C2, Opus O2 |
 | D505 | observable differences are options until OA-1; only unreachable sequences converge | converge by "race window" | Codex C5 and C10, Opus O11 adopted |
 | D506 | `accept` dropped: Select token's hidden gate is unreachable, since `close()` disconnects (`packages/extension-messaging/src/background/client.ts:96-115`) | keep it | Opus O8 |
+| D507 | at release (dev `46df7df9`): #678 and #707 changed no mirror rule, so recon's table holds. A finer read found two observable rules the plan converged: Holdings and Select token land a read over events that came meanwhile (`refetchWhenDirty: false`), and Send appends every add for its account (`added: "append"`), since token and balance ids are reused (`token/service.ts:462`, `token-balance/service.ts:266-274`). Both stay options and join OA-1 | converge them (plan § A5) | Codex consult `01a14c71`: D-a agree, D-g reject with two id-reuse paths, verified |
+| D508 | the option shapes: `added: "keep" \| "replace" \| "append"` replaces `replaceOnAdded`; one `loadingOnRefresh` carries both Holdings rows (loading on each read, the error over a loaded list); `onReconnect` carries Select token's blanking reload; `state` is optional for Send; Holdings and Select token gate a known-id update by scope in the parent (D503's wrapper) | a boolean per rule; a hook-side gate | Codex consult agree; implementer |
+| D509 | Select token's load without a whole scope calls `invalidate()` (fence and retry), not `reset()`, which would zero the connect count and skip a later reload; `dispose()` is `invalidate()` plus the listener; its `props.show` gates converge, since `close()` clears before the render (extends D506) | a new fetch-policy option; `reset()` | Codex consult agree |
+| D510 | converged by trace: Holdings' no-account read settles in the same task instead of a microtask later (base draws the loading line and removes it within one task, so nothing paints between); Holdings reads the chain id when a read starts, not after its await (a chain change between fires the scope watcher, which supersedes the read in the same task); Holdings' new-array writes and Select token's `splice` on delete become in-place writes and `filter` (no sequence lists an id twice there, and the consumers are computeds, which track both) | keep them | Codex consult; Opus round 1 |
+| D511 | A5 review round 1 (Codex `findings` 1, Opus `findings` 2 + nits, neither found a behaviour difference): the hook's comments say which rule is the default and the page comments that restated their options go (Codex F1); page cases now pin each parent's choice, so dropping any option from a view turns its suite red: Holdings' and Select token's no-retry and no-dirty-refetch, Select token's blanking reload, Send's `append` against both `keep` and `replace` (Opus F1, F2); the `mapRow` doc, a vacuous hook assertion and a test title naming a caller (Opus nits) | correct only the lessons' claim | Codex F1, Opus F1, F2, nits |
+| D512 | A5 review round 2 (Codex, resumed): `clean`; the fixes verified, production code unchanged since round 1 (both composables transpile identically). Loop converged after 2 rounds | — | Codex |
 | D601 | the mirror exposes `begin`/`resnapshot`/`invalidate`; `onRecord` only on accepted events; `onSnapshot` separate | a lifecycle owned only by `dispose()` | Codex C7, Opus O7 |
 | G | gate fixes: smoke armed build, exact specs and runners, `origin/dev...HEAD` plus `HEAD` | — | Codex C4, Opus O10; final pass F2 |
 | D602 | a known Updated stays in place for every caller; `place` decides only where a new row goes | move a known row to the front (reorders Home's imports) | final pass F1 |
