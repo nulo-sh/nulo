@@ -1,9 +1,9 @@
 import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
-import { OriginType } from "@/wallet/services/transaction/spec"
+import { OriginType, TransferType } from "@/wallet/services/transaction/spec"
 import type { TxOrigin } from "@/wallet/services/transaction/spec"
 import { FEE_METHODS, pickPrimaryIndex, pickPrimaryMethod } from "./primary-method"
-import { transferLabel } from "./token-transfer-vocabulary"
+import { TRANSFER_LABELS, type TransferKind, transferLabel } from "./token-transfer-vocabulary"
 import { type ListedToken, type SettledCall, settledReading } from "./tx-amount"
 
 export { FEE_METHODS, pickPrimaryMethod }
@@ -107,13 +107,33 @@ export function getTxCategory(calls: SettledCall[], tokens: readonly ListedToken
 	return call === undefined ? "tx" : (settledReading(call, tokens) ?? "tx")
 }
 
-/** A transaction's title: "Transfer" for a transfer the wallet read, else its primary call's title. */
+/** The token function each of the wallet's own transfer types runs, by the enum's number and by its
+ *  name: a stored row may carry either, and `0` and `"0"` share an own key. */
+const OWN_TRANSFER_KINDS: Readonly<Record<number | string, TransferKind>> = {
+	[TransferType.Private]: "transferPrivate",
+	[TransferType.PrivateToPublic]: "transferPrivateToPublic",
+	[TransferType.Public]: "transferPublic",
+	[TransferType.PublicToPrivate]: "transferPublicToPrivate",
+	Private: "transferPrivate",
+	PrivateToPublic: "transferPrivateToPublic",
+	Public: "transferPublic",
+	PublicToPrivate: "transferPublicToPrivate",
+}
+
+/** A settled call's title: a transfer the wallet sent itself by its recorded type, whatever its
+ *  function is named; any other call by `callTitle` with the wallet's reading of it. */
+export function settledCallTitle(call: SettledCall, tokens: readonly ListedToken[]): string {
+	const type: unknown = call.transfers?.[0]?.type
+	if ((typeof type === "number" || typeof type === "string") && Object.hasOwn(OWN_TRANSFER_KINDS, type)) {
+		return TRANSFER_LABELS[OWN_TRANSFER_KINDS[type]]
+	}
+	return callTitle(call.method, call.contract, settledReading(call, tokens) !== null)
+}
+
+/** A transaction's title: its primary call's. */
 export function getTxTitle(calls: SettledCall[], tokens: readonly ListedToken[]): string {
 	const primary = getPrimaryCall(calls)
-	if (!primary) return "Transaction"
-	const reading = settledReading(primary, tokens)
-	if (reading === "transfer") return "Transfer"
-	return callTitle(primary.method, primary.contract, reading === "mint")
+	return primary ? settledCallTitle(primary, tokens) : "Transaction"
 }
 
 /** The label of a dApp that names itself nothing. */
