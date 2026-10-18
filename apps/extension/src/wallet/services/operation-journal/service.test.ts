@@ -7,6 +7,8 @@
  * itself is covered in `@nulo/wallet-core/jobs/fsm.test.ts`).
  */
 
+import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { ValidationError } from "@nulo/extension-messaging/errors"
 import { IllegalTransitionError, type JobProgress, type SendExpiry } from "@nulo/wallet-core/jobs"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
@@ -98,6 +100,7 @@ describe("OperationJournalService", () => {
 			// truthy gate regresses the persistence layer loudly instead of
 			// silently dropping the field on Private→Private records.
 			transferType: 0,
+			call: { contract: `0x${"0a".repeat(32)}`, argCount: 4, classId: `0x${"0b".repeat(32)}` },
 		} satisfies Required<JournalMetadata>
 		const rec = await service.createOperation({ ...VALID_INPUT, ...metadata, profileEpoch: 3, initialStage: { stage: "pending" } })
 
@@ -992,30 +995,98 @@ describe("a refusal's title rides the write that fails the record", () => {
 
 	test("a failing transition writes the title with the stage", async () => {
 		const id = await claimedSend()
-		await service.transitionOperation(id, { stage: "failed" }, REFUSED, "transfer_public_to_public")
+		await service.transitionOperation(id, { stage: "failed" }, REFUSED, { title: "transfer_public_to_public" })
 		const rec = await service.getOperation(id)
 		expect({ stage: rec?.progress.stage, title: rec?.title }).toEqual({ stage: "failed", title: "transfer_public_to_public" })
 	})
 
+	test("a retitle replaces the call with its own, so the title and the call describe one call", async () => {
+		const feeJuice = AztecAddress.fromNumberUnsafe(FEE_JUICE_ADDRESS).toString()
+		const other = `0x${"0c".repeat(32)}`
+		const built = { contract: feeJuice, argCount: 1, classId: `0x${"0e".repeat(32)}` }
+		const created = () =>
+			service.createOperation({
+				kind: "dapp_execute",
+				origin: "dapp",
+				profileId: "profile-a",
+				title: "balance_of_public",
+				call: built,
+			})
+		const { id } = await created()
+		await service.transitionOperation(id, { stage: "failed" }, REFUSED, { title: "claim", call: { contract: other, argCount: 2 } })
+		expect((await service.getOperation(id))?.call).toEqual({ contract: other, argCount: 2 })
+
+		const unnamed = (await created()).id
+		expect((await service.getOperation(unnamed))?.call).toEqual(built)
+		await service.transitionOperation(unnamed, { stage: "failed" }, REFUSED, { title: "Transaction" })
+		expect((await service.getOperation(unnamed))?.call).toBeUndefined()
+	})
+
 	test("a title on any other transition is refused and writes nothing", async () => {
 		const id = await claimedSend()
-		await expect(service.transitionOperation(id, { stage: "simulating" }, null, "transfer_public_to_public")).rejects.toBeInstanceOf(
-			ValidationError,
-		)
+		await expect(
+			service.transitionOperation(id, { stage: "simulating" }, null, { title: "transfer_public_to_public" }),
+		).rejects.toBeInstanceOf(ValidationError)
 		const rec = await service.getOperation(id)
 		expect({ stage: rec?.progress.stage, title: rec?.title }).toEqual({ stage: "pending", title: "balance_of_public" })
 	})
 
 	test("a conditional transition that does not land writes no title (never-happens), one that lands does (control)", async () => {
 		const failedId = await claimedSend()
-		await service.transitionOperation(failedId, { stage: "failed" }, REFUSED, "transfer_public_to_public")
-		const noop = await service.transitionIfStage(failedId, ["pending"], { stage: "failed" }, REFUSED, { failedTitle: "Transaction" })
+		await service.transitionOperation(failedId, { stage: "failed" }, REFUSED, { title: "transfer_public_to_public" })
+		const noop = await service.transitionIfStage(failedId, ["pending"], { stage: "failed" }, REFUSED, {
+			retitle: { title: "Transaction" },
+		})
 		expect(noop.outcome).toBe("stage")
 		expect((await service.getOperation(failedId))?.title).toBe("transfer_public_to_public")
 
 		const liveId = await claimedSend()
-		const landed = await service.transitionIfStage(liveId, ["pending"], { stage: "failed" }, REFUSED, { failedTitle: "Transaction" })
+		const landed = await service.transitionIfStage(liveId, ["pending"], { stage: "failed" }, REFUSED, {
+			retitle: { title: "Transaction" },
+		})
 		expect(landed.outcome).toBe("transitioned")
 		expect((await service.getOperation(liveId))?.title).toBe("Transaction")
+	})
+})
+
+describe("a dApp record's call: one schema at every writer and the reader", () => {
+	const TOKEN = `0x${"0d".repeat(32)}`
+	const CLASS = `0x${"0e".repeat(32)}`
+	let api: FakeBrowserApi
+	let service: OperationJournalService
+
+	beforeEach(async () => {
+		;({ api, service } = await started())
+	})
+
+	const queued = (call?: unknown) =>
+		service.createOperation({
+			kind: "dapp_execute",
+			origin: "dapp",
+			profileId: "profile-a",
+			title: "transfer_in_public",
+			...(call !== undefined && { call: call as never }),
+		})
+
+	test("the build's call survives a reread from storage; a refused one leaves the record as it was", async () => {
+		const { id } = await queued({ contract: TOKEN, argCount: 4 })
+		await expect(service.setOperationMeta(id, { title: "other", call: { contract: "0xc", argCount: 4 } })).rejects.toBeInstanceOf(
+			ValidationError,
+		)
+		expect(await service.getOperation(id)).toMatchObject({ title: "transfer_in_public", call: { contract: TOKEN, argCount: 4 } })
+
+		await service.setOperationMeta(id, { title: "transfer_in_public", call: { contract: TOKEN, argCount: 4, classId: CLASS } })
+		const key = `nulo:journal@${id}`
+		expect(JSON.parse((await api.storage.local.get(key))[key] as string).call).toEqual({ contract: TOKEN, argCount: 4, classId: CLASS })
+		expect((await service.getOperation(id))?.call).toEqual({ contract: TOKEN, argCount: 4, classId: CLASS })
+	})
+
+	test.each([
+		["a contract that is no field", { contract: "0xc", argCount: 4 }],
+		["a count past the bound", { contract: TOKEN, argCount: 65_536 }],
+		["a class that is no field", { contract: TOKEN, argCount: 4, classId: "class" }],
+	])("a creation carrying %s is refused, never stored unreadable", async (_label, call) => {
+		await expect(queued(call)).rejects.toBeInstanceOf(ValidationError)
+		expect(await service.getOperations()).toEqual([])
 	})
 })

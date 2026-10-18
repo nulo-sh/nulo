@@ -716,7 +716,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 				["pending"],
 				{ stage: "failed" },
 				{ kind: "terms_refused", message: error.message, normalizedRaw: null },
-				{ failedTitle: "Transaction" },
+				{ retitle: { title: "Transaction" } },
 			)
 			.catch((err) => this.logDebug("could not settle a pending record after a terms refusal", err))
 	}
