@@ -49,7 +49,7 @@ function incomingCardProps(inc) {
 
 const tokensById = computed(() => new Map(props.tokens.map((t) => [t.id, t])))
 function terminalCardProps(op) {
-	return buildJournalTerminalCardProps(op, { tokenById: (id) => tokensById.value.get(id) })
+	return buildJournalTerminalCardProps(op, { tokenById: (id) => tokensById.value.get(id), tokens: props.tokens })
 }
 </script>
 

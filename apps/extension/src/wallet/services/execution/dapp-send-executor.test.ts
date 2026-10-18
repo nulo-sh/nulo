@@ -198,6 +198,7 @@ function makeHarness(
 			acquireSlot: vi.fn(async () => ({ release: releaseSlot, preController: undefined })),
 			claimOrCreateJournal: vi.fn(async () => ({ journalId: "j1", controller: new AbortController() })),
 			beginJournal: vi.fn(async () => "j1"),
+			recordBuiltCall: vi.fn(async () => {}),
 			markJournal: vi.fn(async () => {}),
 			commitJournal: vi.fn(async () => {}),
 			...clearLine(),
@@ -492,6 +493,7 @@ describe("DappSendExecutor.executeAztecSendTx (standard path)", () => {
 				acquireSlot: vi.fn(async () => ({ release: vi.fn(), preController: undefined })),
 				claimOrCreateJournal: vi.fn(async () => ({ journalId: "j1", controller: aborted })),
 				beginJournal: vi.fn(),
+				recordBuiltCall: vi.fn(async () => {}),
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
 				...clearLine(),
@@ -849,6 +851,7 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 					throw new Error("claim broke")
 				}),
 				beginJournal: vi.fn(),
+				recordBuiltCall: vi.fn(async () => {}),
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
 				...clearLine(),
@@ -890,6 +893,7 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 			}),
 			claimOrCreateJournal: vi.fn(async () => claimBehavior(map)),
 			beginJournal: vi.fn(),
+			recordBuiltCall: vi.fn(async () => {}),
 			markJournal: vi.fn(async () => {}),
 			...clearLine(),
 		}
@@ -1637,6 +1641,8 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			changed.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: "pv" }),
 		).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
 		expect(changed.proveAndSend).not.toHaveBeenCalled()
+		// The refused build still names its record: it ran, and its class is what the row reads.
+		expect(changed.deps.lane.recordBuiltCall).toHaveBeenCalledTimes(1)
 	})
 
 	test("a popup pairing one interaction's estimateId with another's previewId is refused before either id is consumed", async () => {
@@ -2429,13 +2435,21 @@ describe("DappSendExecutor: the journal title thunk and the offchain output", ()
 		["NO_FROM", true],
 	])("%s: the claimed title per call list", async (_label, noFrom) => {
 		collectOffchainEffectsMock.mockReturnValue([])
+		const token = `0x${"0d".repeat(32)}`
 		const cases: Array<[unknown, unknown]> = [
 			[undefined, undefined],
 			[[], undefined],
-			[[{ name: "claim_and_end_setup" }, { name: "claim_public" }], [{ method: "claim_public" }]],
-			[[{ name: "dapp_method" }], [{ method: "dapp_method" }]],
-			[[{ name: "transfer", method: "approve_all" }], [{ method: "transfer" }]],
-			[[{ name: `trans\u200bfer\u0007${"f".repeat(70)}` }], [{ method: `transfer${"f".repeat(56)}…` }]],
+			[[{ name: "claim_and_end_setup" }, { name: "claim_public" }], [{ method: "claim_public", call: undefined }]],
+			[[{ name: "dapp_method" }], [{ method: "dapp_method", call: undefined }]],
+			[[{ name: "transfer", method: "approve_all" }], [{ method: "transfer", call: undefined }]],
+			[[{ name: `trans\u200bfer\u0007${"f".repeat(70)}` }], [{ method: `transfer${"f".repeat(56)}…`, call: undefined }]],
+			[
+				[
+					{ name: "claim_and_end_setup", to: addr(`0x${"0f".repeat(32)}`), args: [] },
+					{ name: "transfer_in_public", to: addr(token), args: [1, 2, 3, 4] },
+				],
+				[{ method: "transfer_in_public", call: { contract: token, argCount: 4 } }],
+			],
 		]
 		for (const [calls, expected] of cases) {
 			const { executor, deps } = makeHarness()
@@ -2490,6 +2504,60 @@ describe("DappSendExecutor: the journal title thunk and the offchain output", ()
 		Object.assign(h.deps.coordinator, { proveAndSend })
 		await h.executor.executeAztecSendTx(noFrom ? NO_FROM() : makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
 		expect(extractOffchainOutputSpy.mock.calls).toStrictEqual([[effects, 5n]])
+	})
+})
+
+describe("DappSendExecutor: every build names its record before the send", () => {
+	const reusedCalls = [{ contract: "0xc", method: "reused_method", args: [] }]
+	const sendTransaction = {
+		kind: "send_transaction",
+		networkId: "net-1",
+		accountAddress: "0xacct",
+		feeSettings: { paymentMethod: { kind: "fj" } },
+		actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+	} as never
+	const paths: Array<[string, (executor: DappSendExecutor, deps: DappSendExecutorDeps) => Promise<unknown>, boolean]> = [
+		["send_transaction", (executor) => executor.executeSendTransaction(sendTransaction, ORIGIN, undefined, FENCE), false],
+		["a fresh standard build", (executor) => executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE), false],
+		[
+			"an estimate reuse",
+			(executor, deps) => {
+				deps.previewSnapshots.stash("est-1", { interactionId: "i-1", index: 0, fingerprint: null, discoveredHashes: [] })
+				return executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE, APPROVAL("est-1"))
+			},
+			true,
+		],
+		[
+			"a no-from build",
+			(executor) =>
+				executor.executeAztecSendTx(
+					makeAztecOp({ executionMode: "default_entrypoint", feeSettings: { paymentMethod: { kind: "embedded" } } }),
+					ORIGIN,
+					undefined,
+					undefined,
+					FENCE,
+				),
+			false,
+		],
+	]
+
+	test.each(paths)("%s", async (_label, send, reuse) => {
+		collectOffchainEffectsMock.mockReturnValue([])
+		const entry = {
+			txRequest: makeTxRequest(),
+			nonce: { toString: () => "77" },
+			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
+			txCalls: reusedCalls,
+			pendingPublicAuthwits: [],
+			discoveredHashes: [],
+		}
+		const { executor, deps, proveAndSend, built } = makeHarness(
+			reuse ? { operationEstimateReuse: { tryConsume: vi.fn(async () => entry), stash: vi.fn(), evict: vi.fn() } as never } : {},
+		)
+		await send(executor, deps)
+		const record = deps.lane.recordBuiltCall as ReturnType<typeof vi.fn>
+		expect(record.mock.calls).toEqual([["j1", reuse ? reusedCalls : built.txCalls]])
+		expect(record.mock.invocationCallOrder[0]).toBeLessThan(proveAndSend.mock.invocationCallOrder[0])
 	})
 })
 
