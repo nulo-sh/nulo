@@ -23,7 +23,7 @@ Measured by a throwaway probe spec that was never committed. Chrome and Firefox 
 
 ## Test
 
-`rows.test.ts`: "a default token's placeholder row, still working, stands as tall as a loaded token row". It uses a served list and a blackhole node, measures a working seed row, then seeds a token row and balance, restarts the background, and measures the loaded `tokens-card`. It also takes the before and after pictures through `shotSend`. It is red on base in Chrome: `expected 53 to be 50`.
+`rows.test.ts`: "a default token's placeholder row, still working, stands as tall as a loaded token row". It uses a served list and a blackhole node, measures a working seed row, then seeds a token row and balance, restarts the background, and measures the loaded `tokens-card`. It takes the after pictures through `shotSend`; the before ones came from the probe on the pre-change dist, of the same rows. It is red on base in Chrome: `expected 53 to be 50`.
 
 ## Gate
 
