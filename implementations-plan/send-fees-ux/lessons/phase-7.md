@@ -31,3 +31,10 @@ A throwaway smoke spec outside the repo, run on the armed Chrome build, captured
 
 - Round 1. Codex (gpt-6.1-sol, high; session `01a15066`): conditional approve, 5 findings. Opus (general-purpose): conditional approve, 5 findings. Agreed and fixed in ee4235cc: (a) after a failed read, a switch to another account keeps the old notice up, and `v-if="!statusNotice"` then dropped the Available bar from the new read's skeleton. The row now shows while any read is pending, and a failed-A to pending-B to committed-B test guards it (mutation-checked). (b) The readout's pending test passed with `!props.pending` removed; it now covers queued props without an estimate, and clearing `pending` shows the cap line (mutation-checked). (c) The Priority test checks every payer emitted while pending. (d) Both failure exits now check the bar was up first. (e) Comments: the payer line corrected, the geometry comment cut to one sentence, the narration dropped. Owner's call, not changed: the height change (OA-6), and Opus's proposal to hide the stale notice while pending, which changes a screen that predates the arc (OA-7). Unverified: how screen readers announce `aria-busy` on the trigger; it matches the menu rows' existing pattern.
 - Round 2. Codex resume: **approve**, no new finding; the loop converged.
+
+## Final gates (2026-10-18, on the head merged with `origin/dev` at 767789b7; clean, no dependency change)
+
+- `bun run test:all` green (extension 855 files); `lint` and `typecheck:all` 0.
+- Smoke, retry 0, armed builds: Chrome `send-fee-privacy` 1/1, `send-keyboard` 5/5; Firefox the same. The load gate (load1 < 150) held them about 15 minutes.
+- Network, retry 0, Chrome: `fee-methods` 8/8 (406 s of tests, 638 s wall).
+- No e2e scenario was added or changed.
