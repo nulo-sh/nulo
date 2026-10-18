@@ -1,7 +1,7 @@
 ---
 plan: service-structure-1
 tier: mid
-status: planned; final Codex pass approve; arc 1 implementing (auto-continue)
+status: arc 1 merged (#703); arc 2 implementing; arcs 3 and 4 wait for release
 issues: "#521 (arc 1); #545 (arc 2); #547 (arc 3); #549 #560 (arc 4)"
 driver: claude-code
 claude_model: opus
@@ -170,13 +170,13 @@ The arc gate adds `bun run test:all`, then one e2e invocation, started only when
 
 ### Arc 2, phase 2: #545
 
-- [ ] Re-read `background.ts` at the arc's base, and map the moved line ranges again.
-- [ ] Add `discovery-flow.ts` and `session-holders.ts`, and rewire `background.ts`. Every `background.*.test.ts` stays unchanged except the paths it imports.
-- [ ] Add `session-holders.test.ts`:
+- [x] Re-read `background.ts` at the arc's base, and map the moved line ranges again (138e0ded: `:280-292`, `:859-876`, `:899-1401`).
+- [x] Add `discovery-flow.ts` and `session-holders.ts`, and rewire `background.ts`. Every `background.*.test.ts` stays unchanged except the paths it imports.
+- [x] Add `session-holders.test.ts`:
   - Seed every holder for sessions a and b; for `decryptLocks`, one held operation and one waiter. `end(a)` clears a everywhere and leaves b (the control); `holds.end` gets `"wallet_refused"`.
   - Walk the instance's own fields and fail on one the test did not seed.
   - Walk `createSdkHandlerState()`'s keys against an allowlist of the non-session fields, each with its reason, so a holder added beside the registry fails too.
-- [ ] Add `discovery-flow.test.ts`: `isOriginKey` does not count `https://a.com.evil|1` for `https://a.com`; the control counts `https://a.com|1`.
+- [x] Add `discovery-flow.test.ts`: `isOriginKey` does not count `https://a.com.evil|1` for `https://a.com`; the control counts `https://a.com|1`.
 - **Gate:** the common gate on `src/wallet/services/wallet-sdk`, then `bun run test:all`, then `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/connect-dapp.test.ts tests/e2e/network/connect-one-window.test.ts tests/e2e/network/connect-locked-queue.test.ts tests/e2e/network/cold-wake-discovery.test.ts tests/e2e/network/session-tabClose.test.ts tests/e2e/network/session-explicitDisconnect.test.ts tests/e2e/network/session-profileSwitch.test.ts`.
 
 ### Arc 3, phase 3: #547
@@ -235,6 +235,8 @@ The steps are `implementations-plan/README.md` § Post-implementation standard, 
 | D6 | #560: `scratch` inside the input object? | separate | separate | **Separate.** It is the zeroing protocol's state, read in the caller's `finally`. |
 | D7 | e2e: one invocation per arc, which files | name them; restore inside the network run | add `passkey-backup` smoke | **One invocation, named files.** The passkey restore commit has unit coverage through `restore()`; a second, smoke invocation would break the once-per-arc host rule. |
 | D8 | `handleWalletMessage` deps builder | per-message deps fine | inline: one caller | **Inline literal.** `discoveryDeps` exists for two callers; this has one. |
+| D9 | Arc 2: the tree already had `dedupeKeyOf` (dapp-boundary-2) | — | — | **Keep `dedupeKeyOf`**, moved with its callers; `isOriginKey` joins it. The plan's `discoveryKey` would rename a live helper for no gain. |
+| D10 | Arc 2: `isLegalCurrent` moves, so `discovery-flow.ts` calls `assertCurrent()` | — | — | **Edit the pin deliberately**, as CLAUDE.md § Terms acceptance asks: `legal/call-sites.test.ts` names the file, CLAUDE.md's line about the pin says so. `useLogFilters.scan.test.ts` gains the new file's `OWNED` row so the moved log lines stay pinned to `wallet-sdk`. `createSdkHandlerState` is exported for the allowlist test. |
 
 ## Audit verdicts
 
@@ -243,6 +245,7 @@ The steps are `implementations-plan/README.md` § Post-implementation standard, 
 - **Final fresh Codex pass** (new session, gpt-6.1-sol, high): conditional approve. Accepted: full-backup import finalizes on its own port, so F4 is narrowed; the last arc waits for every other arc before its cross-arc pass and close-out. Resumed: the close-out condition holds; my claim that recovery always joins was wrong (the SW answers recovery's read only after the profile lock), so I1's full-backup case is plausible and becomes a closed `known-limit` issue, not unsupported conditions. Resumed again: **approve** ("no regression found in this revision").
 - **Arc 1, Codex round 1** (session 01a14b03): findings, minor. Accepted: the import comment's "the listener has given up" overstated (a slow live bootstrap); two narrating test comments deleted. **Opus review**: findings, minor. Accepted: the entry clear checks `isCurrent()` itself, pinned by a test; same comment fix. Accepted gap: `app.vue`'s `readFailure` wiring has no test (a shell mount; `setFailure` is equally unpinned). **Round 2**: clean.
 - **Arc 1 known limit**: #700, I1's full-backup case, filed and closed as not planned.
+- **Arc 2, Codex round 1** (session 01a14c56): one low finding, demonstrated: the PriceService exposure pin read only `background.ts`; it now reads `discovery-flow.ts` too, each case with an entry-point control. **Opus review**: findings, low. Accepted: two e2e headers and a moved comment named the wrong file, and the decrypt lane's comment stated history, not its invariant. Its stale store citation was already fixed (found by `test:all`). Kept: the allowlist test imports the real `background.ts` graph (about 24 s cold), since a mock would fence another object. **Round 2**: clean ("no regression found").
 
 ## Seeds
 

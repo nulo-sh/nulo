@@ -34,6 +34,7 @@ describe("the Terms wall", () => {
 			"wallet/services/execution/execution-coordinator.ts",
 			"wallet/services/execution/service.ts",
 			"wallet/services/wallet-sdk/background.ts",
+			"wallet/services/wallet-sdk/discovery-flow.ts",
 		])
 	})
 

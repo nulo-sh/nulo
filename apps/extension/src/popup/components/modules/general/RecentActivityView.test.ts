@@ -1314,6 +1314,7 @@ describe("RecentActivityView — a queued send that asks again", () => {
 		expect(card(w, "op-t")?.props()).toMatchObject({ subtitle: "Waiting for your earlier send", reaskLine: null })
 		expect(card(w, "op-d")?.props()).toMatchObject({ subtitle: "Queued...", reaskLine: null })
 		expect(sheet(w).exists()).toBe(false)
+		expect(w.get('[data-testid="activity-feed-root"]').attributes("data-fee-quote")).toBe("none")
 	})
 
 	test("a re-ask row reads its line, and its review opens the sheet with the new fee against the accepted one", async () => {
@@ -1327,6 +1328,7 @@ describe("RecentActivityView — a queued send that asks again", () => {
 		await flushPromises()
 		expect(card(w)?.props("reaskLine")).toBe("Fee went up. Review")
 		expect(sheet(w).exists()).toBe(false)
+		expect(w.get('[data-testid="activity-feed-root"]').attributes("data-fee-quote")).toBe("ready")
 
 		card(w)?.vm.$emit("review", "op-r")
 		await flushPromises()
@@ -1337,7 +1339,7 @@ describe("RecentActivityView — a queued send that asks again", () => {
 			recipientAddress: RECIPIENT,
 			canSend: true,
 			sending: false,
-			reask: { now: "0.88 FJ ($0.013)", nowAmount: "0.88", capAmount: "0.8" },
+			reask: { now: "~0.88 FJ ($0.013)", cap: "~0.8 FJ ($0.012)" },
 		})
 	})
 

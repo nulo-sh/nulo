@@ -45,6 +45,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [chain-endpoints](chain-endpoints/plan.md) — completed — a smoke suite that reaches no outside host (#171); hidden characters refused in node URLs, plain HTTP only to this computer and no inline styles in the extension CSP (#200, #101); a missing price reads as unavailable on Home (#116)
 - [chrome-store-launch](chrome-store-launch/plan.md) — completed — every Chrome and Firefox store-submission input built inside the repository
 - [ci-cd](ci-cd/plan.md) — completed — CI bring-up: two long-lived branches with change-detected gates
+- [ci-dedupe-1](ci-dedupe-1/plan.md) — completed — one reusable network lane workflow holds the partition and seeds (#537); a store dispatch smokes the published zips it ships (#527)
 - [ci-followups](ci-followups/plan.md) — completed — no Bun auto-install in jobs that install nothing, the move-approval label read live, the Docker Bun pins in the runbook
 - [ci-followups-2](ci-followups-2/plan.md) — completed — nightly's Firefox jobs and both send-chaos runs gate the nightly release (#220), two fixed chaos seeds gate every network PR, chaos jobs asserted like canaries
 - [ci-followups-3](ci-followups-3/plan.md) — completed — a draft release keeps its tag through every edit (#309), a malformed chaos seed is refused (#305), release's opt-in network run replays the PR chaos seeds (#306)
@@ -128,6 +129,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [fee-estimation-speedup](fee-estimation-speedup/plan.md) — completed — fewer full simulations behind every fee estimate
 - [fees-and-sponsors](fees-and-sponsors/plan.md) — completed — unknown speed levels refused at the popup RPCs, a timed-out estimate keeps its place; per-profile fee picks, sponsor checks, long authwit proofs, the fee-juice nudge, one fee-cap rule
 - [fees-and-sponsors-2](fees-and-sponsors-2/plan.md) — completed — an app's cap on every payer (#400), its priority fee committed and named on app-paid rows (#411), no Teardown line (#401)
+- [fees-display-1](fees-display-1/plan.md) — completed — one helper prints every fee as `~X FJ ($Y)` at 6 decimals, balances as today, precisions named once (#515)
 - [firefox-arc-closeout](firefox-arc-closeout/plan.md) — completed — the Firefox arc closed: fast answers to in-flight dApp calls, canaries on both browsers
 - [firefox-background-kill](firefox-background-kill/plan.md) — completed — the e2e suite ends the Firefox background page through the browser driver
 - [firefox-first-class-spike](firefox-first-class-spike/plan.md) — completed — Firefox gets the same smoke and network suites as Chrome

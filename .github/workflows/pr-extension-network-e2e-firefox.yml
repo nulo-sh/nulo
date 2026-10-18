@@ -83,6 +83,7 @@ jobs:
               - 'tsconfig.json'
               - 'patches/**'
               - '.github/workflows/_extension-network-e2e.yml'
+              - '.github/workflows/_extension-network-e2e-lane.yml'
               - '.github/workflows/pr-extension-network-e2e-firefox.yml'
               - 'scripts/ci-cd/e2e-decide.sh'
               - 'scripts/ci-cd/e2e-aggregate.sh'
@@ -106,105 +107,20 @@ jobs:
         run: bash scripts/ci-cd/e2e-decide.sh
 
   network-e2e:
-    name: Run / shard ${{ matrix.shard.id }}
+    name: Run
     needs: changes
     if: needs.changes.outputs.run == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        shard:
-          - { id: "1/5", label: "1-of-5" }
-          - { id: "2/5", label: "2-of-5" }
-          - { id: "3/5", label: "3-of-5" }
-          - { id: "4/5", label: "4-of-5" }
-          - { id: "5/5", label: "5-of-5" }
-    uses: ./.github/workflows/_extension-network-e2e.yml
+    uses: ./.github/workflows/_extension-network-e2e-lane.yml
     with:
       ref: ${{ github.event.pull_request.head.sha || github.ref }}
       browser: firefox
-      shard: ${{ matrix.shard.id }}
-      shard_label: ${{ matrix.shard.label }}
       retry: "0"
-      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
-      proverless: true
-
-  network-e2e-heavy:
-    name: Run / heavy / fee-methods + selfpay-phase
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
-    uses: ./.github/workflows/_extension-network-e2e.yml
-    with:
-      ref: ${{ github.event.pull_request.head.sha || github.ref }}
-      browser: firefox
-      shard_label: "heavy"
-      retry: "0"
-      test_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts"
-      proverless: true
-
-  network-e2e-heavy-concurrent:
-    name: Run / heavy / concurrent-confirm
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
-    uses: ./.github/workflows/_extension-network-e2e.yml
-    with:
-      ref: ${{ github.event.pull_request.head.sha || github.ref }}
-      browser: firefox
-      shard_label: "heavy-concurrent"
-      retry: "0"
-      test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
-      proverless: true
-
-  network-e2e-heavy-long:
-    name: Run / heavy / snack-placement + failed-send-check
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
-    uses: ./.github/workflows/_extension-network-e2e.yml
-    with:
-      ref: ${{ github.event.pull_request.head.sha || github.ref }}
-      browser: firefox
-      shard_label: "heavy-long"
-      retry: "0"
-      test_files: "tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
-      proverless: true
-
-  network-e2e-canary:
-    name: Run / canary / real-proving
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
-    uses: ./.github/workflows/_extension-network-e2e.yml
-    with:
-      ref: ${{ github.event.pull_request.head.sha || github.ref }}
-      browser: firefox
-      shard_label: "canary"
-      retry: "0"
-      test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
       disable_presto: ${{ github.event.inputs.disable_presto == 'true' || vars.NULO_E2E_DISABLE_PRESTO == '1' }}
-
-  network-e2e-chaos:
-    name: Run / chaos / seed ${{ matrix.seed }}
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        seed:
-          - "1095865833"
-          - "1960252198"
-    uses: ./.github/workflows/_extension-network-e2e.yml
-    with:
-      ref: ${{ github.event.pull_request.head.sha || github.ref }}
-      browser: firefox
-      shard_label: chaos-${{ matrix.seed }}
-      retry: "0"
-      test_files: "tests/e2e/network/send-chaos.test.ts"
-      proverless: true
-      chaos: true
-      chaos_seed: ${{ matrix.seed }}
 
   status:
     name: extension-network-e2e-firefox-status
     if: always()
-    needs: [changes, network-e2e, network-e2e-heavy, network-e2e-heavy-concurrent, network-e2e-heavy-long, network-e2e-canary, network-e2e-chaos]
+    needs: [changes, network-e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

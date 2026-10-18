@@ -1,6 +1,6 @@
 <script setup>
 import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY, UNVOUCHED_FEE_SENTENCE } from "@/components/composite/send/publish-facts"
-import { feeInWords } from "./fee-helpers"
+import FeeAmount from "@/components/composite/FeeAmount.vue"
 
 const props = defineProps({
 	estimate: { type: Object, default: null },
@@ -37,11 +37,9 @@ const sponsoredSentence = computed(() => {
 	>
 		<span :class="$style.fee_label">You pay</span>
 		<span :class="$style.fee_value">
-			About {{ queuedCap.about.amount }} FJ<template v-if="queuedCap.about.usd">
-				<span :class="$style.fee_usd" title="At today's AZTEC price" data-testid="fee-estimate-usd"> ({{ queuedCap.about.usd }})</span>
-			</template>
+			About <FeeAmount :display="queuedCap.about" :usdClass="$style.fee_usd" usdTestid="fee-estimate-usd" />
 		</span>
-		<span :class="$style.queued" data-testid="fee-estimate-queued-cap-line">Goes out after your earlier send, for at most {{ feeInWords(queuedCap.cap) }}.</span>
+		<span :class="$style.queued" data-testid="fee-estimate-queued-cap-line">Goes out after your earlier send, for at most <FeeAmount :display="queuedCap.cap" :class="$style.fee_figure" />.</span>
 	</Flex>
 	<Flex
 		v-else-if="isEstimating && isQueued && !estimate && payer === 'sponsor'"
@@ -66,7 +64,7 @@ const sponsoredSentence = computed(() => {
 		<span :class="$style.fee_label" :aria-hidden="payer === 'sponsor' ? 'true' : undefined">You pay</span>
 		<span v-if="payer === 'sponsor'" :class="$style.fee_value">
 			<span aria-hidden="true">
-				<span>Nothing</span> <s :class="$style.fee_usd">~{{ estimate.amount }} FJ<span v-if="estimate.usd" title="At today's AZTEC price" data-testid="fee-estimate-usd"> ({{ estimate.usd }})</span></s>
+				<span>Nothing</span> <s :class="$style.fee_usd"><FeeAmount :display="estimate" usdTestid="fee-estimate-usd" /></s>
 			</span>
 			<span :class="$style.visually_hidden">{{ sponsoredSentence }}</span>
 		</span>
@@ -74,11 +72,7 @@ const sponsoredSentence = computed(() => {
 			<span aria-hidden="true">—</span>
 			<span :class="$style.visually_hidden">{{ UNVOUCHED_FEE_SENTENCE }}</span>
 		</span>
-		<span v-else :class="$style.fee_value">
-			~{{ estimate.amount }} FJ<template v-if="estimate.usd">
-				<span :class="$style.fee_usd" title="At today's AZTEC price" data-testid="fee-estimate-usd"> ({{ estimate.usd }})</span>
-			</template>
-		</span>
+		<FeeAmount v-else :class="$style.fee_value" :display="estimate" :usdClass="$style.fee_usd" usdTestid="fee-estimate-usd" />
 	</Flex>
 	<Flex v-else align="center" gap="4" :class="$style.detail_row">
 		<Icon name="info" size="12" color="tertiary" />
@@ -93,6 +87,10 @@ const sponsoredSentence = computed(() => {
 
 .fee_label {
 	composes: fee_label from "./fee-shared.module.css";
+}
+
+.fee_figure {
+	composes: fee_figure from "./fee-shared.module.css";
 }
 
 .fee_value {

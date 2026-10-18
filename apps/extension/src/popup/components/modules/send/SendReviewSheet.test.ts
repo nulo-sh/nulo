@@ -64,7 +64,7 @@ type SheetProps = {
 	ready: boolean
 	queuedCapText?: string
 	queuedSponsored?: boolean
-	reask?: { now: string; nowAmount: string; capAmount: string }
+	reask?: { now: string; cap: string }
 }
 const BASE: SheetProps = {
 	show: true,
@@ -271,11 +271,13 @@ describe("modules/send/SendReviewSheet", () => {
 	})
 
 	test("a re-ask: the fee line sets the new fee against the accepted one, and the button sends at it", async () => {
-		w = mountSheet({ queuedCapText: "0.8 FJ", reask: { now: "0.88 FJ ($0.013)", nowAmount: "0.88", capAmount: "0.8" } })
+		w = mountSheet({ queuedCapText: "0.8 FJ", reask: { now: "~0.88 FJ ($0.013)", cap: "~0.8 FJ ($0.012)" } })
 		const fee = w.get('[data-testid="send-review-fee"]')
-		expect(fee.get('[data-testid="send-review-fee-reask"]').text()).toBe("Fee is now 0.88 FJ ($0.013), above the 0.8 FJ you accepted.")
+		expect(fee.get('[data-testid="send-review-fee-reask"]').text()).toBe(
+			"Fee is now ~0.88 FJ ($0.013), above the ~0.8 FJ ($0.012) you accepted.",
+		)
 		expect(fee.find('[data-testid="send-review-fee-cap"]').exists()).toBe(false)
-		expect(submit(w).text()).toBe("Send for 0.88 FJ")
+		expect(submit(w).text()).toBe("Send for ~0.88 FJ ($0.013)")
 		await submit(w).trigger("click")
 		expect(w.emitted("send")).toEqual([[]])
 	})
