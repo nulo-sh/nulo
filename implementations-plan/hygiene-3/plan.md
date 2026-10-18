@@ -128,6 +128,8 @@ The lane brief's no-ask record is "UI impact: none". Settings › Developer, the
 
 **Arc 1 post-implementation** (diff `c8aa0374..hygiene-3-a1`). Codex (gpt-6.1-sol, high, session `01a15107`) round 1: `findings: 1`, Low: both builders' doc comments named their callers → removed. Opus 5.5 diff review beside it: `changes requested`, no behaviour difference; one Low, the Developer case's second half could not fail (`updateSetting`'s own unchanged-value check absorbs a page regression) → removed; two nits → the passkey name (D6) and a dependent row's write named in `useSettingUpdate`'s TSDoc. Codex round 2 (resumed): `clean`.
 
+**Arc 2 post-implementation** (diff `93e6eebc..hygiene-3-a2`). Codex (gpt-6.1-sol, high, session `01a15161`) round 1: `clean`. Opus 5.5 diff review beside it: `approve`, three nits applied in `060e379b` (the composite's doc block back above its import; `key()`'s doc names the field's or the row link's listener as the first; the clock comment says the pin bites a raw dispatch, not `trigger`), one declined (arc 1's `STATUS.md` stamps, a file the close-out deletes). Codex round 2 (resumed, verification of `060e379b`): `clean`. Round 1's prompt paraphrased the standard's two review rules, so round 3 (resumed) re-read the diff with them verbatim and the adversarial ask: `findings: 1`, a nit, the composite's pre-existing one-line summary narrates its template; declined, as the TSDoc summary line CLAUDE.md asks for and outside this diff's change. Converged.
+
 ## Delivery
 
 - Arc 1: `refactor(ui): one pair of profile-flow notices; developer rows take the shared plumbing` (87 characters). `Closes #735`.
