@@ -55,6 +55,11 @@ export const GLOSSARY = {
 		definition: "A private name for this account visible only to this app.",
 		where: "Permission window",
 	},
+	interface: {
+		term: "Interface",
+		definition: "A contract's interface names a call's arguments; without it Nulo shows the raw values.",
+		where: "Approval window",
+	},
 	proving: {
 		term: "Proving",
 		definition:
@@ -68,6 +73,6 @@ export type GlossaryKey = keyof typeof GLOSSARY
 export const GLOSSARY_SECTIONS = [
 	{ title: "Balances", keys: ["private-balance", "public-balance"] },
 	{ title: "Fees", keys: ["fee-juice", "public-fee-juice", "private-fee-juice", "sponsored", "priority-fee"] },
-	{ title: "Apps", keys: ["authorization", "name-for-this-app"] },
+	{ title: "Apps", keys: ["authorization", "name-for-this-app", "interface"] },
 	{ title: "Transactions", keys: ["proving"] },
 ] as const satisfies ReadonlyArray<{ title: string; keys: ReadonlyArray<GlossaryKey> }>

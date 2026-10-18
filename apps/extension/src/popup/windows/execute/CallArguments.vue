@@ -22,6 +22,8 @@ const props = defineProps<{
 	/** Every value prints whole, an address as its own text with no name in its place; the
 	 *  `this account` sender, which only a surface read with caller context carries, is not covered. */
 	full?: boolean
+	/** Carries the window's closing advice; `OperationCard` picks the one notice. */
+	advice?: boolean
 }>()
 
 const rawOpen = ref(false)
@@ -130,7 +132,7 @@ const nonce = computed(() =>
 		gap="4"
 		:class="[$style.block, full && $style.full]"
 	>
-		<UnreadableArgsNotice :reason="surface.reason" :prefix="prefix" />
+		<UnreadableArgsNotice :reason="surface.reason" :prefix="prefix" :advice="advice" />
 		<DetailsToggle
 			v-if="surface.rows.length"
 			:data-testid="`${prefix}-raw-toggle`"

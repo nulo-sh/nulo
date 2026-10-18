@@ -508,8 +508,9 @@ async function persistAndApprove(
 			rejectThrottled(discovery, deps, "its chain lost its network while the connect window was open")
 			return
 		}
-		// The Allow was given under `profileId`; a switch during the admission wait must not bind
-		// that approval to a session row written under another profile.
+		// The Allow was given under `profileId`. A switch during the admission wait is refused here,
+		// before any write; one landing between this read and `addDappSession`'s fence capture is
+		// refused there, which writes the row under `profileId` or not at all.
 		const active = await deps.profileService.getActiveProfile()
 		if (active?.id !== profileId) {
 			rejectThrottled(discovery, deps, "profile changed while waiting for a verify-window slot")
@@ -529,6 +530,7 @@ async function persistAndApprove(
 			[], // empty accounts — populated via requestCapabilities() (or the dApp falls back when getAccounts() throws CAPABILITY_NOT_GRANTED)
 			AccessLevel.Transactions,
 			chainId,
+			profileId,
 		)
 
 		// Initialize with empty capability grants so enforceCapability()
