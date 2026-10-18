@@ -406,11 +406,11 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 				<Icon name="square-check" size="14" color="green" />
 				<Flex direction="column" :class="$style.fee_lines">
 					<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate">
-						<Text variant="name" color="primary" :class="$style.name_size">{{ appName }}</Text>
+						<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
 					</AppFeeLine>
 					<Text v-else variant="body" color="secondary" height="150" data-testid="execute-op-app-legend">
 						Fee payment method set by
-						<Text variant="name" color="primary" :class="$style.name_size">{{ appName }}</Text>
+						<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
 					</Text>
 				</Flex>
 			</Flex>

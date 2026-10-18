@@ -72,6 +72,21 @@ async function watchShortNotice(page: Page): Promise<() => Promise<boolean>> {
 	return () => page.evaluate(() => (window as unknown as { sawSponsorShort?: boolean }).sawSponsorShort === true)
 }
 
+/** The app-set fee sentence's leading, its line count, and whether any of it leaves the fee block. */
+function readSentenceLayout(page: Page) {
+	return page.$eval('[data-testid="execute-op-app-fee"]', (el) => {
+		const style = getComputedStyle(el)
+		const own = el.getBoundingClientRect()
+		const block = (el.closest('[data-testid="execute-op-fee-set-badge"]') as HTMLElement).getBoundingClientRect()
+		return {
+			leading: Number.parseFloat(style.lineHeight) / Number.parseFloat(style.fontSize),
+			lines: Math.round(own.height / Number.parseFloat(style.lineHeight)),
+			inside: own.left >= block.left && own.right <= block.right + 0.5,
+			overflow: el.scrollWidth - el.clientWidth,
+		}
+	})
+}
+
 const triggerText = (page: Page) =>
 	page.evaluate(() => document.querySelector('[data-testid="send-fee-method-trigger"]')?.textContent?.trim() ?? "")
 
@@ -290,21 +305,18 @@ test.skipIf(!hasConfig)(
 			)
 			expect(lines, "the line prints both figures at the pinned quote").toContain(line)
 			// Its wrapped lines read at 1.5 leading, and none leaves the block.
-			const layout = await popup.$eval('[data-testid="execute-op-app-fee"]', (el) => {
-				const style = getComputedStyle(el)
-				const own = el.getBoundingClientRect()
-				const block = (el.closest('[data-testid="execute-op-fee-set-badge"]') as HTMLElement).getBoundingClientRect()
-				return {
-					leading: Number.parseFloat(style.lineHeight) / Number.parseFloat(style.fontSize),
-					lines: Math.round(own.height / Number.parseFloat(style.lineHeight)),
-					inside: own.left >= block.left && own.right <= block.right + 0.5,
-					overflow: el.scrollWidth - el.clientWidth,
-				}
-			})
+			const layout = await readSentenceLayout(popup)
 			console.log(`[fee-sponsor-funding] the sentence's layout ${JSON.stringify(layout)}`)
 			expect(layout.leading).toBeCloseTo(1.5, 2)
 			expect(layout.lines).toBeGreaterThan(1)
 			expect({ inside: layout.inside, overflow: layout.overflow }).toEqual({ inside: true, overflow: 0 })
+			// The wire allows a dApp a 64-character name with no break in it: the sentence still holds it.
+			await popup.$eval('[data-testid="execute-op-app-name"]', (el) => {
+				el.textContent = "W".repeat(64)
+			})
+			const unbroken = await readSentenceLayout(popup)
+			console.log(`[fee-sponsor-funding] an unbroken 64-character name ${JSON.stringify(unbroken)}`)
+			expect({ inside: unbroken.inside, overflow: unbroken.overflow }).toEqual({ inside: true, overflow: 0 })
 			expect(await prices.refused.failures(), "price interception failures").toEqual([])
 			await shotSend(popup, "execute-app-fee-priority", "execute-op-fee-set-badge")
 

@@ -240,10 +240,8 @@ function hasActionsContent() {
 	white-space: nowrap;
 }
 
-/* On one line the title's margin and the trailing group's negative one cancel, so the row lays out as
- * without the wrap. On its own line the group starts left of the clip by that margin, which is the
- * separator's 2.78 px (14 px Space Grotesk 700) and its 6 px gap: the separator is cut away and the
- * chip starts under the title. */
+/* Equal and opposite margins cancel on one line; wrapped, the group starts 8.78 px (the separator's
+ * 2.78 px glyph at 14 px Space Grotesk 700, plus its 6 px gap) left of the clip, the chip under the title. */
 .title_row_wrap {
 	--sep-room: 8.78px;
 	flex-wrap: wrap;
