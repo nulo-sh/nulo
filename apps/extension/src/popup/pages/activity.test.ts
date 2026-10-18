@@ -260,23 +260,38 @@ describe("pages/activity — the cancelled and failed list's events and reads", 
 			.props("rows")
 			.map((row: { key: string }) => row.key)
 
-	test("an update it refuses drops its row and a later terminal one lists it again; a refused add changes nothing", async () => {
+	test("a new or re-added row leads, an update keeps a listed row in place, and a refused add changes nothing", async () => {
+		// One end time for every row: the list's stable sort then shows the mirror's own order.
 		H.getOperations.mockResolvedValue([op("x")])
 		const w = mountActivity()
 		await flushPromises()
 		H.journal.added.emit(op("running", { terminalAt: null, progress: { stage: "proving" } }))
-		H.journal.added.emit(op("late", { terminalAt: 3000 }))
+		H.journal.added.emit(op("late"))
 		await flushPromises()
 		expect(keys(w)).toEqual(["journal:late", "journal:x"])
 
-		// A non-terminal update delivered after the read that saw the record end.
-		H.journal.updated.emit(op("x", { terminalAt: null, progress: { stage: "proving" } }))
+		H.journal.added.emit(op("x"))
+		H.journal.updated.emit(op("late", { progress: { stage: "failed" } }))
+		H.journal.updated.emit(op("unseen"))
 		await flushPromises()
-		expect(keys(w)).toEqual(["journal:late"])
-		H.journal.updated.emit(op("x"))
-		H.journal.deleted.emit(op("late"))
+		expect(keys(w)).toEqual(["journal:unseen", "journal:x", "journal:late"])
+		w.unmount()
+	})
+
+	test("an update it refuses drops its row and a later terminal one lists it again at the front", async () => {
+		H.getOperations.mockResolvedValue([op("x"), op("y")])
+		const w = mountActivity()
+		await flushPromises()
+		expect(keys(w)).toEqual(["journal:x", "journal:y"])
+
+		// A non-terminal update delivered after the read that saw the record end.
+		H.journal.updated.emit(op("y", { terminalAt: null, progress: { stage: "proving" } }))
 		await flushPromises()
 		expect(keys(w)).toEqual(["journal:x"])
+		H.journal.updated.emit(op("y"))
+		H.journal.deleted.emit(op("x"))
+		await flushPromises()
+		expect(keys(w)).toEqual(["journal:y"])
 		w.unmount()
 	})
 

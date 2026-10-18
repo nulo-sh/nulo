@@ -281,16 +281,19 @@ describe("late reads", () => {
 })
 
 describe("events and reconnects", () => {
-	test("an add for a listed send replaces it rather than counting it twice; a delete drops it and opens the guard", async () => {
+	test("an add for a listed send replaces it, an unseen one is listed once, and a delete drops it", async () => {
 		const store = await viewing([send("popup")])
 		expect(store.approvedSendsInFlight).toBe(1)
-		emit("added", send("popup"))
-		expect(store.approvedSendsInFlight).toBe(1)
-		emit("added", { ...send("popup"), id: "second-send" })
-		expect(store.approvedSendsInFlight).toBe(2)
+		emit("added", send("popup", "succeeded"))
+		expect(store.approvedSendsInFlight).toBe(0)
+		expect(store.hasInFlightSend).toBe(false)
 
-		emit("deleted", send("popup"))
-		emit("deleted", { ...send("popup"), id: "second-send" })
+		const second = { ...send("popup"), id: "second-send" }
+		emit("added", second)
+		emit("added", second)
+		expect(store.approvedSendsInFlight).toBe(1)
+		expect(store.hasInFlightSend).toBe(true)
+		emit("deleted", second)
 		expect(store.approvedSendsInFlight).toBe(0)
 		expect(store.hasInFlightSend).toBe(false)
 	})

@@ -1,8 +1,8 @@
 /**
  * How an operation-journal event lands in a list that mirrors part of the journal. Pure: each
- * returns a new array. A listed row keeps its position on an update; `place` decides only where a
- * row the list has not seen goes. Which events a list accepts is its own choice, made before these
- * run.
+ * returns a new array. An update keeps a listed row where it is; `place` decides where a row the
+ * list has not seen goes, and what an add does to a listed one. Which events a list accepts is its
+ * own choice, made before these run.
  */
 
 export type JournalRow = { id: string }

@@ -26,10 +26,11 @@ describe("useJournalMirror — snapshots", () => {
 
 	test("a read answering undefined lands nothing and runs no onSnapshot", async () => {
 		const { m, read, onSnapshot } = mirror()
+		read.mockResolvedValueOnce([op("a")])
 		await m.resnapshot()
 		read.mockResolvedValueOnce(undefined)
 		await m.resnapshot()
-		expect(m.rows.value).toEqual([])
+		expect(ids(m.rows.value)).toEqual(["a"])
 		expect(onSnapshot).toHaveBeenCalledTimes(1)
 	})
 
