@@ -1,3 +1,4 @@
+import { Button as ButtonBase } from "@nulo/design"
 import { describe, expect, test } from "vitest"
 import { mount } from "@vue/test-utils"
 import SecretCountdownClose from "./SecretCountdownClose.vue"
@@ -74,5 +75,14 @@ describe("composite/SecretCountdownClose", () => {
 		expect(ghost).toBeTruthy()
 		await ghost!.trigger("click")
 		expect(w.emitted("disableAutoClose")).toHaveLength(1)
+	})
+
+	test("the Close is the design Button's outline CTA, its overrides on the same <button>", () => {
+		const w = factory({ countdownLabel: "1:30" })
+		const close = w.getComponent(ButtonBase)
+		expect(close.props("variant")).toBe("cta_outline")
+		expect(close.element).toBe(w.get('[data-testid="close-btn"]').element)
+		expect(close.element.tagName).toBe("BUTTON")
+		expect(close.classes().some((c) => c.includes("countdown_cta"))).toBe(true)
 	})
 })
