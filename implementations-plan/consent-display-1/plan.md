@@ -210,6 +210,7 @@ Outline B (not committed) proposed a worker snapshot by id with a 120 s life, cl
 | D13 | Arc 2: the window's guard (tree deviation) | | | **One computed, `tokenMetadataUnread`, is loading or a failed preview**, read by `approve()` and `confirm-disabled`. `approve()` was at the cognitive budget (15), and a second operand made it 16; extracting the delta builder did not help, since Biome scores the closure apart. |
 | D14 | Arc 2: compare before the title | | | **The compare runs before the title backfill**, so a refused add's import row shows the address and the message, never the read nobody approved. The cleaning tests live in `token/service.test.ts`. |
 | D15 | Arc 3: the fee row's words (tree deviation) | | | **"About" replaces "Fee could be up to" in the one sentence P47-02 C set** (#793, merged after this plan): "About {amount}; payment method set by {app}." The priority clause is unchanged. OA-7 carries both forms for sign-off in the PR. |
+| D16 | Arc 3: the mark's name arm (review) | | the name at its arity lets a token dodge the mark with one more parameter | **The decoded name at any arity**, beside the selector. Both bundled token artifacts give every vocabulary-named function a vocabulary arity and fitting names, so no honest call of theirs is marked; the mark's words hold for any call it lands on. |
 
 ## Plan review record
 
@@ -229,6 +230,11 @@ Outline B (not committed) proposed a worker snapshot by id with a 120 s life, cl
 - **Codex round 1** (gpt-6.1-sol, high, session 01a15024) on ce8cc3d7: approve. Taken: the pin comment claimed an upgrade is refused, but a PXE-held instance reports its original class (`hydratePreimage`), so it now says an interface of another class refuses; the window's doc block cut to its invariant, the computed's restating comment removed. Not taken: rewording the failed preview's "Verify the contract address before approving." (copy; OA-1 A keeps the warning): OA-6.
 - **Opus review** of ce8cc3d7 and 13eb2fa3: approve. Taken: the window's guard keys on a card with no details, which covers a read in flight and a failed one; the pin test's stub refuses only a pinned parse of another class; the hidden characters in the cleaning cases written as escapes; `packages/wallet-bridge/README.md` states the commit's contract. Not taken: a released add whose read matched can title its import record with that read and then succeed against another add's same-contract row; it needs a five-minute storage stall, and a succeeded `token_import` record renders nowhere (Home drops it, the activity feed excludes the kind). Known limit #794.
 - **Codex round 2** (resumed) on 473a2867: **approve**, no new material issue; it verified the guard, the pin test, the comments, the escapes and the README, and held the copy and the known limit settled. The loop converged in two rounds.
+
+### Arc 3 implementation review
+
+- **Codex round 1** (gpt-6.1-sol, high, session 01a1509a) on ef37a3a7: reject. Taken, all three: a restored token with no class also reads its past app transfers and mints as plain calls, title and icon, beyond OA-5's two effects (→ OA-5's addendum, the UI impact line, a test of the unclassed reading; the class stays dropped); `classId`'s doc comments still called a restored class unauthenticated; the notice's comments restated its template.
+- **Opus review** of ef37a3a7 and 2ce6d068: approve with fixes. Taken: the restore refresh runs once inside the import's 45 s budget and nothing retries it, so a failed one leaves the token unclassed until re-added (→ OA-5's addendum; a later read is a background step, a plan change, not taken); the restore stage's comment still said a token keeps the backup's values; the fee comment's 10 % holds only when the person's balance pays (→ comment, OA-7); a token could dodge the mark with a vocabulary name at another arity (→ D16).
 
 ## Seeds
 

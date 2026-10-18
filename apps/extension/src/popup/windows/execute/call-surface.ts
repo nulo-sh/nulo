@@ -14,6 +14,8 @@ import {
 	abiNameFitsRole,
 	findMintSignature,
 	findTransferSignature,
+	MINT_SIGNATURES,
+	TRANSFER_SIGNATURES,
 	VOCABULARY_SELECTORS,
 	vocabularySelector,
 } from "@/utils/token-transfer-vocabulary"
@@ -121,11 +123,12 @@ const corroborates = (decoded: Extract<DecodedCall, { kind: "decoded" }>, select
 
 const VOCABULARY_SELECTOR_SET: ReadonlySet<string> = new Set(VOCABULARY_SELECTORS.values())
 
-/** A call that claims a vocabulary signature, by its decoded name at its arity or by the selector it
+/** A call that claims a vocabulary signature, by its decoded name at any arity or by the selector it
  *  runs. On a registered token one that fails `corroborates` shows the contract's parameter names,
  *  which its class does not fix, so they are marked as the contract's. */
 const claimsVocabulary = (decoded: Extract<DecodedCall, { kind: "decoded" }>, selector: unknown): boolean =>
-	vocabularyRoles(decoded.fn, decoded.params.length) !== undefined ||
+	TRANSFER_SIGNATURES.has(decoded.fn) ||
+	MINT_SIGNATURES.has(decoded.fn) ||
 	(typeof selector === "string" && VOCABULARY_SELECTOR_SET.has(selector))
 
 /** `decoded` is `undefined` while the wallet is still decoding. The vocabulary applies only on a

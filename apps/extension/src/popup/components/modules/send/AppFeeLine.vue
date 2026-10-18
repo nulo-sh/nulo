@@ -2,8 +2,8 @@
 /**
  * The fee sentence of an operation whose app pays its own fee; the default slot is the app's name. The
  * parent mounts it only while an estimate runs or has landed, so an operation the wallet never
- * estimates reads no price. "About", never "up to": the send may cost up to 10 % more without asking
- * again (`feeRiseAsks`).
+ * estimates reads no price. "About", never "up to": the figure caps nothing. Paid from the person's
+ * balance the fee may rise 10 % without asking again (`feeRiseAsks`), and an app's fee contract any amount.
  */
 /** Vendor */
 import type { PropType } from "vue"

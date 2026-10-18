@@ -129,6 +129,7 @@ describe("callSurface", () => {
 		expect(marked("transfer_private_to_private", reversed, p2p)).toMatchObject({ kind: "decoded", labels: "unchecked" })
 		expect(marked("claim_x", reversed, p2p)).toMatchObject({ kind: "decoded", fn: "claim_x", labels: "unchecked" })
 		expect(marked("transfer_private_to_private", reversed, "0x11223344")).toMatchObject({ kind: "decoded", labels: "unchecked" })
+		expect(marked("transfer_private_to_public", ["to", "amount", "memo"], "0x11223344")).toMatchObject({ labels: "unchecked" })
 		expect(marked("transfer_private_to_private", ["from", "to", "amount", "_nonce"], p2p)).toMatchObject({ kind: "transfer" })
 		expect(marked("transfer_private_to_private", reversed, p2p, false)).not.toHaveProperty("labels")
 		expect(marked("claim_x", reversed, "0x11223344")).toEqual({

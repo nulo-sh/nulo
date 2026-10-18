@@ -71,7 +71,7 @@ Arc 1 (discovery admits secure origins only) depends on none of these: none conc
 
 **What ships now: A,** in arc 3, named in its PR for sign-off.
 
-**Also, found in arc 3's review (P42-10 signed A on the two effects above).** Until the read succeeds, a restored token's past app transfers and mints also read as plain calls on Activity and the transaction page: "Transfer Private To Private" or "Mint To Public" with the generic icon, in place of "Transfer" or "Mint (public)" with the send or mint icon. The wallet's own sends keep their titles, since they record what they moved. Shipped with A, shown in arc 3's PR for sign-off.
+**Also, found in arc 3's review (P42-10 signed A on the two effects above).** Until the read succeeds, a restored token's past app transfers and mints also read as plain calls on Activity and the transaction page: "Transfer Private To Private" or "Mint To Public" with the generic icon, in place of "Transfer" or "Mint (public)" with the send or mint icon. The wallet's own sends keep their titles, since they record what they moved. And the read is tried once, inside the import's 45 s budget it shares with the account sync: when it fails or is late (a restore offline, a slow node), nothing reads it again, so the token stays without a class, its caveat and plain titles included, until it is deleted and added again. Shipped with A, shown in arc 3's PR for sign-off. Reading it again later (on the next unlock, say) would add a background step: a plan change, not in this arc.
 
 
 ## OA-6: the failed-preview warning's second sentence (the execute window)
@@ -94,8 +94,8 @@ Arc 1 (discovery admits secure origins only) depends on none of these: none conc
 | Option | What it looks like |
 |---|---|
 | A. "About" in the one sentence | "About ~0.016 FJ (<$0.001); payment method set by Swap." While the estimate runs: "About ▭; payment method set by Swap." The priority clause after it is unchanged. |
-| B. Keep P47-02 C as merged | "Fee could be up to ~0.016 FJ (<$0.001); payment method set by Swap." The send may still cost up to 10 % more without asking. |
+| B. Keep P47-02 C as merged | "Fee could be up to ~0.016 FJ (<$0.001); payment method set by Swap." |
 
-**Recommendation: A.** The figure is an estimate the send may exceed by 10 % unasked, which "up to" denies; "About ~X" is how Send's queued readout already reads.
+**Recommendation: A.** The figure caps nothing: paid from the person's balance the fee may rise 10 % without asking, and paid by the app's fee contract by any amount, which "up to" denies. "About ~X" is how Send's queued readout already reads.
 
 **What ships now: A,** in arc 3, with light and dark pictures in its PR for sign-off.

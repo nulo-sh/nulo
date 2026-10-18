@@ -684,7 +684,7 @@ export async function restoreTokensStage(
 /**
  * Reads the restored tokens from their chains on the tail's deadline, after `finalizeRestore` opened
  * the session the reads need. Best effort: a token the chain does not answer in time keeps the
- * backup's values, and the import never fails on it.
+ * backup's name, symbol and decimals and holds no class, and the import never fails on it.
  */
 export async function refreshRestoredTokensStage(fence: RunFence, deadlineAt: number): Promise<void> {
 	const remaining = deadlineAt - Date.now()
