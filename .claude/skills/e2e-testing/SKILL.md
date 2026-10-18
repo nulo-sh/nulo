@@ -555,7 +555,10 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   not answer), then lands above the token list and moves everything under it; with the middle
   scrolled, scroll anchoring moves `scrollTop` instead. A spec that measures or scrolls Home's
   middle calls `waitForHomeReminders(page)` (`fixtures/tokens.ts`) first, which waits on
-  `home-scroller[data-reminders-settled="true"]`. A funded password wallet shows the urgent banner
+  `home-scroller[data-reminders-settled="true"]`. Its rows also push the activity list below the
+  fold, so a Tab walk there scrolls, and that scroll's event arrives a frame later: a spec that
+  counts scroll events lets two frames pass before it arms (`rows.test.ts`'s `armNavigationProbe`).
+  A funded password wallet shows the urgent banner
   above the hero until its phrase is revealed; a spec that frames Home without either (store
   captures) reveals the phrase and taps Hide through the UI.
 - **A storage seed over a row the wallet is still writing is lost.** Adding a token trusts it, then
@@ -627,6 +630,9 @@ the pattern.
   `CdpTarget.asPage`'s fallback with a `null` viewport (puppeteer-core 25.8.0, `cdp/Target.js:54-70`;
   a target whose page already exists returns that page instead), so it renders at the window's
   native size; `browser.newPage()` pages get the 800×600 default.
+- **Under mobile emulation, `innerWidth` grows to the content** (Puppeteer 25.8): a width check
+  compares `scrollWidth` with the width the spec set
+  (`implementations-plan/archive/landing-store-buttons/plan.md#mobile-emulation-width`).
 - **`protocolTimeout` is set in two places**, Chrome's launch (`fixtures/browser/chrome.ts:59`) and
   Firefox's `puppeteer.connect` (`fixtures/browser/bidi-attach.ts:30`), both 300 s. Change them
   together: Firefox once ran on Puppeteer's 180 s default and cut `sendTransfer`'s 300 s wait short.

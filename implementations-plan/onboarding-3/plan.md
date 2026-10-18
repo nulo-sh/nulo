@@ -1,7 +1,7 @@
 ---
 plan: onboarding-3
 tier: mid
-status: implementing (arc 1)
+status: completed (2026-10-18): one draft PR carries the arc and this close-out, held for the owner's build test; OA-1 to OA-13 wait on the owner
 issues: "#588 #585 #581 #636 (one arc closes all four)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,39 @@ base: origin/dev at 1b93cbfa
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18
+- **Status:** completed. One draft PR against `dev` carries the arc and this close-out, held for the owner's build test (P33-01's note); merging it is the owner's call.
+- **Shipped:**
+  - #588, #585 (P30-01 A, P30-02 A, P30-03 B, P30-07 B, P28 B, P29 A):
+    - the tab is Welcome, Terms, Create or Import, Ready;
+    - Learn, Fees and Presto are gone;
+    - Passkey comes first;
+    - four step cells on every path.
+  - P33-02 C and its Copy note: a password wallet's "Your recovery phrase" step before Ready. Settings' phrase screen gets the same numbered grid with Copy (`RecoveryPhraseGrid`, which replaces `SecretRevealCard`).
+  - P33-01 D: Home's Get started card, and the urgent banner for a funded password wallet whose phrase is unsaved. Its flags are per-profile UI keys, never proof of a backup.
+  - P33-03 A: How Aztec works opens `https://nulo.sh/#see` (OA-5); the page itself is #722.
+  - #581, #636 (P35-02 B): the done tip is the one sentence.
+  - Review: three Codex rounds (gpt-6.1-sol, high) and one Opus review. Fixed in review:
+    - a locked bootstrap shows no words;
+    - no length hint while creating;
+    - the Presto flag re-reads on reconnect;
+    - Home settles only after the gas read;
+    - Settings' three columns fit an eight-letter word (D16, found by the PR screenshots).
+- **Dropped:** none. OA-1 to OA-13 ship their "what ships now". O8 (`Pick<GasSlice>`) was declined, with its reason under Audit verdicts.
+- **Known limits:** #726 (clipboard scrub), #727 (bootstrap after Back), #728 (Full Backup's flag on a popup close), #729 (the phrase step after a lock).
+- **Open items:**
+  - #722: the landing's How Aztec works page;
+  - #730: Presto's onboarding-only leftovers;
+  - OA-1 to OA-13: the owner's answers, in [OWNER-ASKS.md](OWNER-ASKS.md).
+- **Lessons:** one promoted. On Firefox, a page's `storage.local` read from its own `onChanged` listener can return the old value ([lessons/phase-4.md](lessons/phase-4.md)).
+  - It was merged into the browser-quirks entry.
+  - Puppeteer's mobile-emulation entry moved to the e2e-testing skill to make room.
+  - The late-card scroll anchoring went to the e2e-testing skill, under Product couplings.
+- **Size:** over the mid target of 350 lines: the verdict tables of the plan audits and the three implementation rounds are evidence and stay.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # onboarding-3: the fast-lane onboarding, the recovery phrase step and Home's Get started card
 
