@@ -134,14 +134,14 @@ Light and dark screenshots of each surface go in its PR body, with the pick quot
 
 ## Arc 2 — keep held imported accounts and name them (Closes #663)
 
-### Phase 4: hold imported rows; keys follow the restore's accounts (#663 code)
+### Phase 4: hold imported rows; keys follow the restore's accounts (#663 code) ✓
 - `account/service.ts` `restore`: D1, with `getNetworksRaw` for absence. `composables/full-backup-restore.ts`: D2 a-c and `settleHeldAccounts` (D4). `useFullBackupImport.ts`: pass the seeded networks, call the helper, expose `heldAccounts`. Test stubs that provide only `getL1ChainIdStored` gain `getNetworksRaw` (`account/service.test.ts`, `composite-key.test.ts`, `full-backup-keys.test.ts`).
 - Tests (`account/service.test.ts`, one restore): an imported row with no network is written with no error; a derived row with no network is refused with today's message; a tampered seeded network row still refuses its accounts.
 - Stage tests: a refused account's key never reaches `restoreImportedKeys`; a held account's key does; a key row missing `address` still reaches it and is recorded; a well-formed key matching no account is not written; a held account's authwit and balance rows are not restored; of two same-name held accounts on one chain, one keyless, only the keyed one stays in `heldAccounts`; held log rows carry no name and respect the cap.
 - Restart test (`account/full-backup-keys.test.ts`): export with an imported account on chain 1337, restore with Testnet and Local only, then boot a second service collection over the same store. The account row is unchanged, and its key row unseals to the original signing key. The same steps on the base SHA leave no key row (the red proof, logged).
 - **Gate:** `bun run lint && bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/wallet/services/account src/wallet/services/network src/composables`. Pass: exit 0. Layers: lint, typecheck, unit.
 
-### Phase 5: the restore warning (P38-04 B)
+### Phase 5: the restore warning (P38-04 B) ✓
 - `restore-warning.ts`: `restoreWarningText(networkNames, hasOtherErrors, held)` words C6. `ImportFullBackupForm.vue`: a `heldAccounts` prop. `popup/pages/import.vue` and `onboarding/pages/import.vue`: one binding each.
 - Tests: `restore-warning.test.ts`, exact strings for one held account, two on one chain, two on two chains, four (the cap), and held beside network-retry names. `ImportFullBackupForm.test.ts`: a held-only log shows the warning with C6.
 - **Gate:** `bun run lint && bun run typecheck:all && bun run test:all && bun run build`. Smoke e2e: `cd apps/extension && bun run test:e2e -- tests/e2e/restore-outcome.test.ts tests/e2e/import-errors-scroll.test.ts tests/e2e/backup-imported-account.test.ts --retry=0`. Network e2e: `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/backup-restore-integrity.test.ts tests/e2e/network/backup-edited-local-network.test.ts tests/e2e/network/restore-again.test.ts --retry=0`. Pass: all green. No e2e scenario is added: the restart test proves the key survives, which a browser cannot show better.
