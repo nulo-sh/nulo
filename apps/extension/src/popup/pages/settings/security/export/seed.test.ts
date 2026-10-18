@@ -65,6 +65,7 @@ describe("recovery phrase — Enter does what the focused control says", () => {
 
 	test("Enter on Retrieve retrieves once", async () => {
 		const w = await mountAgreedWithPassword()
+		expect(retrieve(w).textContent?.trim()).toBe("Reveal Recovery Phrase")
 		pressOn(retrieve(w), "Enter")
 		await flushPromises()
 		expect(exportMnemonic).toHaveBeenCalledTimes(1)

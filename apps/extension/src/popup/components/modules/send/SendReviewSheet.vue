@@ -63,7 +63,8 @@ const toLine = computed(() => {
 const paid = computed(() => paidBy(props.payerKind, props.payerType))
 const sendable = computed(() => props.show && props.canSend && props.ready && !props.sending)
 const submitLabel = computed(() => {
-	if (props.reask) return `Send for ${props.reask.now}`
+	// The re-asked figure stays on the fee line above: in the label it clips at 360 px.
+	if (props.reask) return "Send"
 	return props.queuedCapText || props.queuedSponsored ? "Queue send" : "Send now"
 })
 

@@ -270,14 +270,14 @@ describe("modules/send/SendReviewSheet", () => {
 		expect(w.emitted("send")).toEqual([[]])
 	})
 
-	test("a re-ask: the fee line sets the new fee against the accepted one, and the button sends at it", async () => {
+	test("a re-ask: the fee line sets the new fee against the accepted one, and the button reads Send", async () => {
 		w = mountSheet({ queuedCapText: "0.8 FJ", reask: { now: "~0.88 FJ ($0.013)", cap: "~0.8 FJ ($0.012)" } })
 		const fee = w.get('[data-testid="send-review-fee"]')
 		expect(fee.get('[data-testid="send-review-fee-reask"]').text()).toBe(
 			"Fee is now ~0.88 FJ ($0.013), above the ~0.8 FJ ($0.012) you accepted.",
 		)
 		expect(fee.find('[data-testid="send-review-fee-cap"]').exists()).toBe(false)
-		expect(submit(w).text()).toBe("Send for ~0.88 FJ ($0.013)")
+		expect(submit(w).text()).toBe("Send")
 		await submit(w).trigger("click")
 		expect(w.emitted("send")).toEqual([[]])
 	})
