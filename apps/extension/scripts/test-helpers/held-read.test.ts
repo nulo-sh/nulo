@@ -1,6 +1,6 @@
 import { deferred } from "@nulo/wallet-core/utils"
 import { describe, expect, test, vi } from "vitest"
-import { awaitedBus } from "./held-read"
+import { awaitedBus } from "../../tests/helpers/held-read"
 
 describe("awaitedBus", () => {
 	test("dispatch settles only after an async handler settles; invoke alone does not wait", async () => {

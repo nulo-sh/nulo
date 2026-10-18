@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { installChromeStorage } from "./chrome-storage-mock"
+import { installChromeStorage } from "../../tests/helpers/chrome-storage-mock"
 
 describe("installChromeStorage", () => {
 	test("persist: false records set and remove and keeps nothing", async () => {
