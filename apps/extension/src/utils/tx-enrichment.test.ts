@@ -100,6 +100,23 @@ describe("tokenMovementLabel and plainMethodName", () => {
 	})
 })
 
+describe("a dApp's function named like an Object.prototype member gets no wallet label", () => {
+	const PROTOTYPE_NAMES = ["constructor", "toString", "__proto__", "hasOwnProperty"]
+
+	test.each(PROTOTYPE_NAMES)("%s reads as its contract spells it", (name) => {
+		expect(getMethodLabel(name)).toBeNull()
+		expect(tokenMovementLabel(name)).toBeNull()
+		expect(humanizeMethodName(name)).toBe(plainMethodName(name))
+		expect(formatTransferType(name)).toBe(name)
+	})
+
+	test("constructor is title-cased; a curated name keeps its label", () => {
+		expect(humanizeMethodName("constructor")).toBe("Constructor")
+		expect(humanizeMethodName("shield")).toBe("Shield")
+		expect(humanizeMethodName("mint_to_public")).toBe("Mint (public)")
+	})
+})
+
 describe("getPrimaryCall — TxCall wrapper around pickPrimaryMethod", () => {
 	test("duplicate-name primary returns the APP call's object, not the fee claim's (index-based)", () => {
 		const calls = [

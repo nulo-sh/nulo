@@ -15,6 +15,7 @@ import { usePopupStore } from "@/stores/popup.store.ts"
 
 /** Utils */
 import { copyWithToast } from "@/utils/clipboard"
+import { endsSelection } from "@/utils/selection"
 const appStore = useAppStore()
 const popupStore = usePopupStore()
 const { order, depth } = usePopupStack("receive")
@@ -26,7 +27,8 @@ const props = defineProps({
 
 const account = computed(() => appStore.account)
 
-const handleCopyAddress = () => {
+const handleCopyAddress = (e) => {
+	if (endsSelection(e)) return
 	void copyWithToast(appStore.account.address, openToast, "Address is copied")
 }
 

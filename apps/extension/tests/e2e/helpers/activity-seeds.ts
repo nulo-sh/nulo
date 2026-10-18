@@ -239,17 +239,6 @@ export async function seedPublicReceipt(page: Page, scope: ActivityScope, seed: 
 	return id
 }
 
-/**
- * Stores the scope's arrival row, which a wallet writes the first time a feed reads the chain tip,
- * with the seeded receipts' block already seen, so none of them plays as an arrival. Without one,
- * each feed read asks the node for the tip before it shows its incoming rows, and an unreachable
- * node holds them through the node client's retries.
- */
-export async function seedArrivalRow(page: Page, scope: ActivityScope): Promise<void> {
-	const key = `nulo:core:incoming-arrivals@${scope.profileId}|${scope.networkId}|${scope.account}`
-	await storeRow(page, key, { sinceBlock: RECEIPT_BLOCK, played: [] })
-}
-
 type JournalSeedBase = {
 	/** 16 hex characters, as the journal mints them. */
 	id: string
