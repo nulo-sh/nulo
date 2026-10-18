@@ -8,3 +8,4 @@
 - 2026-10-18: orchestrator approved at ed41c27b; arc 1 on `wallet-bugs-2-a1` off origin/dev 9470d4e9, plan cherry-picked.
 - 2026-10-18: Phase 1 gate pass: tx-enrichment + execute vitest (333 pass; 5 new cases red on base), lint 0, typecheck:all 0.
 - 2026-10-18: Phase 2 gate pass: lint 0, typecheck:all 0, rows.test.ts Chrome 9/9 and Firefox 9/9 (Method check red before D5: gap 0, nameless 170 px over).
+- 2026-10-18: Phase 3 gate pass: JsonViewer unit 90/90; viewers-csp.test.ts Chrome 5/5, Firefox 5/5 (hold cases red on base; D3b applied after Firefox's trim case was red with D3a alone; filed #773).
