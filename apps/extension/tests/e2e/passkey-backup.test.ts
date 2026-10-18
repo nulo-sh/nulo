@@ -328,14 +328,5 @@ test("passkey full-backup: in-session round-trip (register → reset → import 
 	}
 }, 120_000)
 
-// NOTE: a REAL passkey export → reset → import round-trip runs on Firefox,
-// started from the toolbar panel: `passkey-toolbar-panel.test.ts`. Here (capturing
-// the actual EXPORT file, mirroring the encrypted/password real-export tests) it was
-// prototyped but NOT landed: it depends on the passkey EXPORT ceremony, which
-// does not resolve on this machine's virtual authenticator — the SAME
-// pre-existing limitation that already CI-skips + locally-fails the
-// "status card" export test above (verified failing at the branch base). The
-// passkey IMPORT path is fully covered by the synthetic round-trip above, and
-// the export FILE format is covered by the password (network round-trip) and
-// encrypted (`backup-roundtrip.test.ts`) real-export tests. Revisit if the
-// export-ceremony virtual-auth issue is fixed.
+// A real passkey export → reset → import round trip: the passkey row of
+// `network/import-handshake-note-matrix.test.ts`, and `passkey-toolbar-panel.test.ts` on Firefox.

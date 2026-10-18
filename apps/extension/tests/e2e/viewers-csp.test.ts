@@ -91,7 +91,7 @@ async function logLines(page: Page, count: number): Promise<void> {
 /**
  * Arms the follow check before the step that should stop the follow, so a wallet line landing after
  * that step is seen too. Latched: CodeMirror's stick to the end scrolls the view back, which hides
- * the button again. A scroll away from the end before the first show is recorded, not counted.
+ * the button again. A scroll away from the end before the first show is recorded and refused.
  */
 async function armFollowCheck(page: Page): Promise<void> {
 	const shownAlready = await page.evaluate(
@@ -124,7 +124,7 @@ async function armFollowCheck(page: Page): Promise<void> {
 		HOST,
 		SCROLLED_AWAY,
 	)
-	expect(shownAlready).toBe(false)
+	expect(shownAlready, "the button showed before the stop step").toBe(false)
 }
 
 /** Logs one line and reports whether the viewer followed every line since `armFollowCheck`. */
@@ -136,7 +136,7 @@ async function followedSinceArmed(page: Page): Promise<boolean> {
 		latch.stop()
 		return { shown: latch.shown, scrolledAway: latch.scrolledAway }
 	})
-	expect(scrolledAway).toBe(false)
+	expect(scrolledAway, "the view scrolled away from its end before the button showed").toBe(false)
 	return !shown
 }
 

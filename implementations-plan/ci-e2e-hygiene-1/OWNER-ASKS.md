@@ -1,6 +1,6 @@
 # Owner asks: ci-e2e-hygiene-1
 
-Three asks. Each has a "what ships now" line, which the arc builds without waiting for the answer. Neither changes a screen.
+Three asks. Each has a "what ships now" line, which the arc builds without waiting for the answer. No "what ships now" line changes a screen.
 
 ## OA-1. #630 and #553: a reset started from Home waits for FPC discovery while the node is down
 
