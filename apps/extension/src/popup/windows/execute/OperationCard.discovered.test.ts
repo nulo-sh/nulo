@@ -26,7 +26,6 @@ const authwit = (tag: string) => ({
 })
 const estimate = (discoveredAuthwits?: unknown[]) => ({
 	maxFee: "1",
-	maxFeeFormatted: "0.000001",
 	gasDetails: { l2GasLimit: 0, daGasLimit: 0, teardownL2GasLimit: 0, teardownDaGasLimit: 0, feePerL2Gas: "1", feePerDaGas: "1" },
 	...(discoveredAuthwits ? { discoveredAuthwits } : {}),
 })
@@ -70,10 +69,17 @@ describe("OperationCard — discovered authorizations", () => {
 		expect(details.text()).toContain("Reading arguments…")
 		expect(details.find("[title]").attributes("title")).toBe(INNER)
 		expect(details.text()).not.toContain(INNER)
+		const panelIds = rows.map((row) => row.get('[data-testid="execute-discovered-authwit-details"]').attributes("id"))
+		expect(new Set(panelIds).size).toBe(2)
+		expect(rows.map((row) => row.get('[data-testid="execute-discovered-authwit-toggle"]').attributes("aria-controls"))).toEqual(
+			panelIds,
+		)
 		const toggle = rows[0]!.find('[data-testid="execute-discovered-authwit-toggle"]')
 		expect(toggle.attributes("aria-expanded")).toBe("true")
 		await toggle.trigger("click")
 		expect(rows[0]!.find('[data-testid="execute-discovered-authwit-details"]').exists()).toBe(false)
+		expect(toggle.attributes("aria-controls")).toBeUndefined()
+		expect(rows[1]!.get('[data-testid="execute-discovered-authwit-toggle"]').attributes("aria-controls")).toBe(panelIds[1])
 		expect(rows[0]!.html()).not.toContain(INNER)
 		expect(rows[1]!.find('[data-testid="execute-discovered-authwit-details"]').exists()).toBe(true)
 	})

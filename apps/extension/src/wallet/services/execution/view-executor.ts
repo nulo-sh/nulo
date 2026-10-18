@@ -38,7 +38,7 @@ import { type NetworkService, networkInfoFrom } from "@/wallet/services/network/
 import type { ProfileService } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
-import { toAppFacingSimulationResult } from "./app-facing-results"
+import { toAppFacingSimulationResult, toAppFacingUtilityResult } from "./app-facing-results"
 import { assertSelectorBinding, CALL_BINDING, type ContractResolver, findFunctionByName, findFunctionBySelector } from "./contract-resolver"
 import { rehydrateOptimizablePrefix, runFastPath } from "./fast-path"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
@@ -378,10 +378,11 @@ export class ViewExecutor {
 			op.call.args,
 			getFunctionReturnType(fn),
 		)
-		return pxe.executeUtility(boundCall, {
+		const result = await pxe.executeUtility(boundCall, {
 			authwits: await z.array(AuthWitness.schema).optional().parseAsync(op.opts.authWitnesses),
 			scopes: await z.array(AztecAddress.schema).parseAsync(op.opts.scopes),
 		})
+		return toAppFacingUtilityResult(result)
 	}
 
 	/** No profile mode runs without the account's real signature, so a dApp profile never runs. */

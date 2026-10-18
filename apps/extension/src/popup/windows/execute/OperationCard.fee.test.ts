@@ -1,7 +1,7 @@
 /**
  * What the execute window says a transaction's fee costs the account, against an `aztec_sendTx`
  * shaped as the wire carries it: full-length addresses and 32-byte hex fields. The real fee card
- * and its "You pay" readout are mounted; the service clients and the price feed are fakes.
+ * and its "You pay" readout are mounted over the real price composable; the service clients are fakes.
  */
 import { config, flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { createPinia } from "pinia"
@@ -9,6 +9,7 @@ import { Skeleton } from "@nulo/design"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
 import { GLOSSARY } from "@/utils/glossary"
+import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import OperationCard from "./OperationCard.vue"
 
 const mocks = vi.hoisted(() => ({
@@ -16,7 +17,6 @@ const mocks = vi.hoisted(() => ({
 	getFpcs: vi.fn(),
 	storageSet: vi.fn(async (_items: Record<string, unknown>) => {}),
 	saveFeePick: vi.fn(async () => true),
-	feeJuiceUsd: undefined as number | undefined,
 }))
 
 vi.mock("@/utils/core", () => ({ managers: { profile: { saveFeePick: mocks.saveFeePick } } }))
@@ -61,15 +61,7 @@ vi.mock("@/wallet/services/transaction/client", () => ({
 		}
 	}),
 }))
-vi.mock("@/composables/usePrices", async () => {
-	const { computed } = await import("vue")
-	return {
-		usePrices: () => ({
-			feeJuiceQuote: computed(() => (mocks.feeJuiceUsd === undefined ? undefined : { usd: mocks.feeJuiceUsd })),
-			dispose: vi.fn(),
-		}),
-	}
-})
+vi.mock("@/wallet/services/price/client", async () => (await import("../../../../tests/helpers/price-client-fake")).priceClientModule())
 // The real store's setup opens chrome.storage; the card reads only these.
 vi.mock("@/stores/app.store", () => ({ useAppStore: () => ({ accounts: [], profile: undefined }) }))
 
@@ -81,10 +73,10 @@ const RECIPIENT = field(0x0c3d5e7f91a2b4c6d8e0f2a4b6c8d0e2f4a6b8c0d2e4f6a8b0c2d4
 const NULO_SPONSOR = { id: "s1", type: 1, name: "Sponsored", isProtocol: true }
 const HAND_ADDED = { id: "s2", type: 1, name: "Dev sponsor", isProtocol: false }
 
-/** 3.577824 FJ; at $0.06 per FJ, $0.215. */
+/** As the worker sends it: base units only. 3.5778235… FJ prints 3.577824, half up; at $0.06 per
+ *  FJ, $0.215. */
 const ESTIMATE = {
-	maxFee: "3577824000000000000",
-	maxFeeFormatted: "3.577824",
+	maxFee: "3577823500000000001",
 	gasDetails: { l2GasLimit: 1, daGasLimit: 1, teardownL2GasLimit: 0, teardownDaGasLimit: 0, feePerL2Gas: "1", feePerDaGas: "1" },
 }
 
@@ -169,7 +161,7 @@ beforeEach(() => {
 	mocks.storageSet.mockClear()
 	mocks.getGasBalances.mockReset().mockResolvedValue({ publicFeeJuice: "5000000000000000000", privateFeeJuice: null })
 	mocks.getFpcs.mockReset().mockResolvedValue([NULO_SPONSOR])
-	mocks.feeJuiceUsd = 0.06
+	priceFake.reset(0.06)
 })
 
 afterEach(() => {
@@ -342,14 +334,14 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 	test("the estimate lands: the legend stays above the fee limit, the row no longer busy, and no priority part when the app set none", async () => {
 		const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered })
 		expect(legend(w)).toBe("Fee payment method set by Swap")
-		expect(figure(w).text()).toBe("Fee up to 3.577824 FJ")
+		expect(figure(w).text()).toBe("Fee up to ~3.577824 FJ ($0.215)")
 		expect(waiting(w).exists()).toBe(false)
 		expect(row(w).attributes("aria-busy")).toBeUndefined()
 		expect(region(w).text()).toBe("")
 		expect(w.findAllComponents(DottedTerm)).toHaveLength(0)
 	})
 
-	test("a failed estimate, and an operation the wallet never estimates while its preview runs: the legend alone", async () => {
+	test("after a failed estimate, and while an operation the wallet never estimates runs its preview: the legend alone, and no price read", async () => {
 		const failed = await mountWith(undefined)
 		expect(row(failed).text()).toBe("Fee payment method set by Swap")
 		expect(waiting(failed).exists()).toBe(false)
@@ -361,6 +353,11 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		expect(row(previewing).text()).toBe("Fee payment method set by Swap")
 		expect(waiting(previewing).exists()).toBe(false)
 		expect(row(previewing).attributes("aria-busy")).toBeUndefined()
+		expect(priceFake.refreshes()).toBe(0)
+
+		previewing.unmount()
+		await mountWith(undefined, { isEstimating: true })
+		expect(priceFake.refreshes()).toBe(1)
 	})
 
 	// An approval window carries one operation and nothing else on it is dotted, so the card's
@@ -369,13 +366,13 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		const w = await mountWith({
 			...ESTIMATE,
 			maxFee: "16000000000000000",
-			maxFeeFormatted: "0.016",
 			priorityFee: "4000000000000000",
-			priorityFeeFormatted: "0.004",
 			appPayerFunding: covered,
 		})
 		expect(legend(w)).toBe("Fee payment method set by Swap")
-		expect(shownText(figure(w).element)).toBe("Fee up to 0.016 FJ, includes a 0.004 FJ priority fee the app asked for")
+		expect(shownText(figure(w).element)).toBe(
+			"Fee up to ~0.016 FJ (<$0.001), includes a ~0.004 FJ (<$0.001) priority fee the app asked for",
+		)
 		expect(w.findAllComponents(DottedTerm).map((t) => t.props("term"))).toEqual(["priority-fee"])
 		const term = w.get('[data-testid="execute-op-priority-term"]')
 		expect(term.text()).toBe("priority fee")
@@ -389,7 +386,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		"the app's fee contract reads short (proven: %s): the figure stays and the hedged notice shows under the row",
 		async (provenShort) => {
 			const w = await mountWith({ ...ESTIMATE, appPayerFunding: { address: APP_FPC, funded: false, provenShort } })
-			expect(figure(w).text()).toBe("Fee up to 3.577824 FJ")
+			expect(figure(w).text()).toBe("Fee up to ~3.577824 FJ ($0.215)")
 			expect(region(w).text()).toBe("This app's fee contract may not cover this fee right now.")
 		},
 	)

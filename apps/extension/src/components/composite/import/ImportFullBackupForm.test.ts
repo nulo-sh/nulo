@@ -165,6 +165,21 @@ describe("ImportFullBackupForm", () => {
 		)
 	})
 
+	it("names the imported accounts a restore held when they are the only errors", () => {
+		const wrapper = mount(ImportFullBackupForm, {
+			props: baseProps({
+				restoreStatus: "finished",
+				isRestoreHasErrors: true,
+				hasOtherErrors: true,
+				heldAccounts: [{ name: "Savings", chainId: 1337 }],
+			}),
+			global: { stubs },
+		})
+		expect(wrapper.get("[data-testid=import-full-backup-warning]").text()).toContain(
+			"Profile import completed with some errors. The imported account “Savings” was not restored. Add the network with chain ID 1337 to restore it. You can review the details or continue.",
+		)
+	})
+
 	it("scrolls the warning into view once, as it appears, and marks it an alert", async () => {
 		const scroll = vi.spyOn(Element.prototype, "scrollIntoView")
 		try {

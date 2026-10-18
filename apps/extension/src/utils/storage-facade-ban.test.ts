@@ -1,6 +1,7 @@
-import { readdirSync, readFileSync, statSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { join, relative } from "node:path"
 import { describe, expect, test } from "vitest"
+import { REPO_ROOT, sourceFiles } from "../../scripts/type-roles/source-scan"
 
 /**
  * Static ban: UI code must touch `chrome.storage.local` ONLY through the
@@ -12,7 +13,7 @@ import { describe, expect, test } from "vitest"
  * it fails the unit gate — and CI — listing every offending file:line.
  */
 
-const SRC_ROOT = join(__dirname, "..")
+const SRC_ROOT = "apps/extension/src"
 
 /** Contexts allowed to touch `chrome.storage.local` raw, and why. */
 const ALLOWLIST: RegExp[] = [
@@ -48,17 +49,6 @@ const ALLOWLIST: RegExp[] = [
  *  making its writes unrecoverable on failure). */
 const DENYLIST: RegExp[] = [/^wallet\/services\/[^/]+\/client/, /^wallet\/storage\/migrations\//]
 
-const SCANNED_EXT = /\.(ts|js|vue)$/
-
-function walk(dir: string, out: string[] = []): string[] {
-	for (const name of readdirSync(dir)) {
-		const full = join(dir, name)
-		if (statSync(full).isDirectory()) walk(full, out)
-		else if (SCANNED_EXT.test(name)) out.push(full)
-	}
-	return out
-}
-
 /** Returns `file:line` for every raw `chrome.storage.local` outside the allowlist. */
 function findRawStorageAccess(files: Array<{ path: string; content: string }>): string[] {
 	const offenders: string[] = []
@@ -76,9 +66,9 @@ function findRawStorageAccess(files: Array<{ path: string; content: string }>): 
 
 describe("storage-facade ban (static)", () => {
 	test("no raw chrome.storage.local outside the facade/allowlist", () => {
-		const files = walk(SRC_ROOT).map((full) => ({
-			path: relative(SRC_ROOT, full),
-			content: readFileSync(full, "utf8"),
+		const files = sourceFiles({ roots: [SRC_ROOT], exts: ["ts", "js", "vue"] }).map((file) => ({
+			path: relative(SRC_ROOT, file),
+			content: readFileSync(join(REPO_ROOT, file), "utf8"),
 		}))
 		const offenders = findRawStorageAccess(files)
 		expect(offenders, `Raw chrome.storage.local access found — route through @/utils/storage:\n${offenders.join("\n")}`).toEqual([])

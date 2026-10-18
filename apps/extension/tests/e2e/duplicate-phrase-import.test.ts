@@ -20,6 +20,7 @@ import {
 	waitForServiceReady,
 } from "./fixtures/extension"
 import { acceptConfirmPopup, closeStuckPopup, navigateByHash, revealSeedPhrase } from "./fixtures/helpers"
+import { shotSend } from "./fixtures/send-page"
 
 /** Read the revealed recovery phrase out of the reveal card. */
 async function readRevealedPhrase(page: Page): Promise<string> {
@@ -71,6 +72,7 @@ test("importing an EXISTING recovery phrase warns, and confirming creates the du
 	await page.waitForSelector('[data-testid="confirm-submit"]', { visible: true, timeout: 30_000 })
 	const dialogText = await page.evaluate(() => document.body.textContent ?? "")
 	expect(dialogText).toMatch(/recovery phrase/i)
+	await shotSend(page, "sheet-duplicate-confirm", "confirm-submit")
 
 	// Confirm → the retry carries the override → the duplicate profile is created + activated.
 	await acceptConfirmPopup(page)

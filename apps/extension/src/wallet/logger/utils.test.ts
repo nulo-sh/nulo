@@ -1,3 +1,9 @@
+import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { NoteSelector } from "@aztec-labs/stdlib/abi"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { AppTaggingSecret } from "@aztec-labs/stdlib/logs"
+import { Note } from "@aztec-labs/stdlib/note"
+import { NoteAndSlot } from "@aztec-labs/stdlib/tx"
 import { describe, expect, test } from "vitest"
 import { scrubHex32, trim } from "./utils"
 
@@ -67,6 +73,34 @@ describe("trim — secret key names", () => {
 	test("still blanks the original five proof-material keys", () => {
 		const out = trim({ acir: SECRET, authWitnesses: SECRET, partialWitness: SECRET, publicInputs: SECRET, vk: SECRET })
 		expect(JSON.stringify(out)).not.toContain(SECRET)
+	})
+
+	// `LoggerStore` trims a call's argument list, so each value sits one level below the list.
+	const executionMaterial: Array<[string, unknown, string]> = [
+		[
+			"newNotes",
+			[new NoteAndSlot(new Note([new Fr(1n)]), new Fr(2n), new Fr(918_273_645_011n), NoteSelector.fromField(new Fr(3n)))],
+			"918273645011",
+		],
+		[
+			"taggingIndexRanges",
+			[
+				{
+					extendedSecret: new AppTaggingSecret(new Fr(918_273_645_012n), AztecAddress.fromBigIntUnsafe(4n)),
+					lowestIndex: 0,
+					highestIndex: 1,
+				},
+			],
+			"918273645012",
+		],
+		["witness", [[0, `0x${"0".repeat(52)}918273645013`]], "918273645013"],
+	]
+
+	test.each(executionMaterial)("blanks %s inside a log call's argument list", (key, value, sentinel) => {
+		const out = trim([{ [key]: value, keepMe: "visible" }]) as Array<Record<string, unknown>>
+		expect(JSON.stringify(out, (_, v) => (typeof v === "bigint" ? v.toString() : v))).not.toContain(sentinel)
+		expect(out[0][key]).toBe(`[${key}]`)
+		expect(out[0].keepMe).toBe("visible")
 	})
 
 	test("blanks a nested secret, not just a top-level one", () => {

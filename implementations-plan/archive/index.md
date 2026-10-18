@@ -38,6 +38,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [bun-1.4-adoption](bun-1.4-adoption/plan.md) — completed — the Bun 1.4 adoption split into four plans: the bump, the isolated linker, vitest on Bun, native tooling
 - [bun-1.4-bump](bun-1.4-bump/plan.md) — completed — an exact Bun 1.4 pin with only the wins that need no runtime or topology change
 - [bundle-fpc-nft](bundle-fpc-nft/plan.md) — completed in part — the PrivateFPC note schema bundled with the wallet; the Wonderland NFT half did not ship
+- [call-vocabulary-1](call-vocabulary-1/plan.md) — completed — one name for a call: Activity and the detail pages take the approval window's words (#514), the grant card labels only what it read (#575), `DetailsToggle` accessibility (#516)
 - [capabilities-popup-quality](capabilities-popup-quality/plan.md) — completed — the capabilities popup and connected-apps page say only what the protocol does
 - [capture-await-write-sweep](capture-await-write-sweep/plan.md) — completed — a hunt for the capture, await, stale-write race shape, with each hit fenced
 - [chain-endpoints](chain-endpoints/plan.md) — completed — a smoke suite that reaches no outside host (#171); hidden characters refused in node URLs, plain HTTP only to this computer and no inline styles in the extension CSP (#200, #101); a missing price reads as unavailable on Home (#116)
@@ -66,6 +67,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [copy-polish](copy-polish/plan.md) — completed — four small user-visible copy changes, including the clause-dash ban
 - [dapp-boundary-1](dapp-boundary-1/plan.md) — completed — an app-facing simulateTx result for dApps, and no dApp profileTx (OA-1 is #699)
 - [dapp-boundary-2](dapp-boundary-2/plan.md) — completed — a contract's key registers only its own account, one chain check per dApp call, no row for a connect that reaches no page
+- [dapp-results-1](dapp-results-1/plan.md) — completed — an app-facing `executeUtility` answer, and the log redactor denies `witness`, `newNotes` and `taggingIndexRanges`; the simulate side shipped in #701
 - [dapp-dispatch-hold](dapp-dispatch-hold/plan.md) — completed — hold an app's calls until They match: a per-session hold opened at establishment, released by the session's own hash, dropped on every session end; a lock ends unconfirmed sessions; 32 held calls then -32005
 - [dapp-grants](dapp-grants/plan.md) — completed — a refused dApp request tells no one more than it must
 - [dapp-ingress-grants](dapp-ingress-grants/plan.md) — completed — stored grants validated at every deciding reader, other profiles' handshakes kept, refused app sends named and titled by their call, the app's network in the connect window, the app contract ratified (class widening, address checks, strict `chainInfo`, -32005)
@@ -125,6 +127,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [fee-estimation-speedup](fee-estimation-speedup/plan.md) — completed — fewer full simulations behind every fee estimate
 - [fees-and-sponsors](fees-and-sponsors/plan.md) — completed — unknown speed levels refused at the popup RPCs, a timed-out estimate keeps its place; per-profile fee picks, sponsor checks, long authwit proofs, the fee-juice nudge, one fee-cap rule
 - [fees-and-sponsors-2](fees-and-sponsors-2/plan.md) — completed — an app's cap on every payer (#400), its priority fee committed and named on app-paid rows (#411), no Teardown line (#401)
+- [fees-display-1](fees-display-1/plan.md) — completed — one helper prints every fee as `~X FJ ($Y)` at 6 decimals, balances as today, precisions named once (#515)
 - [firefox-arc-closeout](firefox-arc-closeout/plan.md) — completed — the Firefox arc closed: fast answers to in-flight dApp calls, canaries on both browsers
 - [firefox-background-kill](firefox-background-kill/plan.md) — completed — the e2e suite ends the Firefox background page through the browser driver
 - [firefox-first-class-spike](firefox-first-class-spike/plan.md) — completed — Firefox gets the same smoke and network suites as Chrome
@@ -272,6 +275,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [service-fences](service-fences/plan.md) — completed — capture-then-assert fences for three durable writes made after an await
 - [settings-by-task](settings-by-task/plan.md) — completed — Settings grouped by task: profile card, Safety, Preferences, Danger zone, Lock and Privacy pages
 - [settings-search-1](settings-search-1/plan.md) — completed — a search field at the top of Settings finds a row by title, description or synonym, and the opened page outlines it
+- [sheet-1](sheet-1/plan.md) — completed — the flat bottom sheet at content height, the light scrim (the dApp overlay's too), the double-click guard, the Full-height setting retired (#590 P33-07 E, P33-08 A, P33-09 A; page 39 P39-01 to P39-04; #656)
 - [shell-identity-fences](shell-identity-fences/plan.md) — completed — identity-safe popup shell continuations, and two retired pieces removed
 - [simulate-fast-path](simulate-fast-path/plan.md) — completed — a dApp simulateTx serves a public-static prefix directly on the node
 - [single-sim-estimates](single-sim-estimates/plan.md) — completed — fewer simulations per dApp sendTx estimate, after proving identical gas
@@ -299,6 +303,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [typecheck-cleanup](typecheck-cleanup/plan.md) — completed — the extension taken to zero type errors, with one root typecheck command
 - [ui-followups-p18](ui-followups-p18/plan.md) — completed — the last outline-grey text moved to secondary (#363), store art regenerated after the owner signed it (#364), the tx fee row's hover fade removed
 - [ui-leftovers-1](ui-leftovers-1/plan.md) — completed — decision page 35's six picks: a display-only token hero, a selectable header address, the in-flight dApp chip, Holdings' unavailable state, 6 s action toasts, a large dApp transfer's app chip under its direction
+- [ui-leftovers-2](ui-leftovers-2/plan.md) — completed — decision page 39's two picks: a nameless dApp keeps its chip when its call ends, and Holdings' total waits for the first price answer
 - [unserved-chain-connect](unserved-chain-connect/plan.md) — completed — a connection to a chain the profile has no network for is refused, and the wallet says so
 - [ux-cleanup-arc](ux-cleanup-arc/plan.md) — completed in part — five small fixes for user-facing rough edges
 - [ux-feedback](ux-feedback/plan.md) — completed — a user-testing proposal built as five batches on one stack
@@ -323,3 +328,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [wallet-sdk-implicit-account-grant](wallet-sdk-implicit-account-grant/plan.md) — completed — no implicit account grant: getAccounts before requestCapabilities throws
 - [wallet-ux-fixes](wallet-ux-fixes/plan.md) — completed — four wallet UX fixes in one change set
 - [zod-puppeteer](zod-puppeteer/plan.md) — completed — Zod 4 and Puppeteer 25 bumps as separate changes
+- [authwit-intent-1](authwit-intent-1/plan.md) — completed — a dApp's inner-hash authorization intent never names the account that signs it; the Fee Juice selector pin runs only where it can compute

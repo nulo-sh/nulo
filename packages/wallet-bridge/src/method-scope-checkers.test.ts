@@ -1,6 +1,6 @@
 import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { describe, expect, test } from "vitest"
-import { AuthRegistryRefusalError, ScopeViolationError } from "@nulo/extension-messaging/errors"
+import { AuthRegistryRefusalError, OwnAccountIntentRefusalError, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import type { GrantedCapabilityRecord } from "./capabilities"
 import type { MethodName } from "./method-descriptors"
 import { authorizationsEffective, coversAnyContract, effectiveGrants, isAnyContractScope, readConsent } from "./method-scope-checkers"
@@ -12,6 +12,8 @@ const B = "0x2222222222222222222222222222222222222222222222222222222222222222"
 const listed = (...contracts: string[]) => contracts.map((contract) => ({ contract, function: "transfer" }))
 const tx = (scope: unknown) => ({ type: "transaction", scope })
 const accounts = { type: "accounts", canGet: true, canCreateAuthWit: true }
+const grant = (capability: unknown) => ({ capability, grantedAt: 0 }) as GrantedCapabilityRecord
+const widest = [grant(accounts), grant(tx("*")), grant({ type: "simulation", transactions: { scope: "*" }, utilities: { scope: "*" } })]
 
 describe("isAnyContractScope", () => {
 	test.each([
@@ -106,7 +108,6 @@ describe("effectiveGrants", () => {
 })
 
 describe("no request value reaches a scope refusal", () => {
-	const grant = (capability: unknown) => ({ capability, grantedAt: 0 }) as GrantedCapabilityRecord
 	const contracts = (flags: Record<string, boolean>) => grant({ type: "contracts", contracts: [A], ...flags })
 	const listedSimulation = (sub: "transactions" | "utilities") => grant({ type: "simulation", [sub]: { scope: listed(A) } })
 	const noAddressBook = grant({ type: "data", addressBook: false })
@@ -317,8 +318,6 @@ describe("the authorization registry's grant functions are refused to every dApp
 	const SET_AUTHORIZED = "0xb839de91"
 	const SET_REJECT_ALL = "0x8955f5fc"
 	const SET_AUTHORIZED_PRIVATE = "0x79a3d418"
-	const grant = (capability: unknown) => ({ capability, grantedAt: 0 }) as GrantedCapabilityRecord
-	const widest = [grant(accounts), grant(tx("*")), grant({ type: "simulation", transactions: { scope: "*" }, utilities: { scope: "*" } })]
 	const call = (to: string, selector: string, name = "SENTINEL-NAME") => ({ to, selector, name, args: ["SENTINEL-ARG"] })
 	const send = (...calls: unknown[]) => [{ calls }, { from: A }]
 	const innerHash = (consumer: string) => ["SENTINEL-FROM", { consumer, innerHash: "SENTINEL-INNER-HASH" }]
@@ -372,5 +371,41 @@ describe("the authorization registry's grant functions are refused to every dApp
 		["createAuthWit, an inner hash another contract consumes", "createAuthWit", innerHash(B)],
 	] as [string, MethodName, unknown[]][])("%s passes", (_name, method, args) => {
 		expect(() => enforceScopeWithSession(method, args, widest, new Set([A]))).not.toThrow()
+	})
+})
+
+describe("an inner hash whose consumer is the signing account is refused to every dApp grant", () => {
+	const INNER_HASH = `0x${"01".repeat(32)}`
+	const authwit = (from: string, intent: unknown) => enforceScopeWithSession("createAuthWit", [from, intent], widest, new Set([A]))
+
+	test("the signer as consumer is refused with its own class and a message that echoes no argument", () => {
+		let refusal: Error | undefined
+		try {
+			authwit(A, { consumer: A, innerHash: INNER_HASH })
+		} catch (error) {
+			refusal = error as Error
+		}
+		const serialized = JSON.stringify({ ...refusal, message: refusal?.message, stack: refusal?.stack })
+		expect({
+			own: refusal instanceof OwnAccountIntentRefusalError,
+			message: refusal?.message,
+			echoes: serialized.includes(A.slice(2)) || serialized.includes(INNER_HASH.slice(2)),
+		}).toEqual({
+			own: true,
+			message: "Scope violation: createAuthWit inner hash names the signing account as its consumer",
+			echoes: false,
+		})
+	})
+
+	test.each([
+		["another contract as consumer", A, { consumer: B, innerHash: INNER_HASH }],
+		["the signer as consumer of another signer's intent", B, { consumer: A, innerHash: INNER_HASH }],
+		[
+			"a call intent that also carries the signer as consumer, read as the call intent it is",
+			A,
+			{ caller: B, call: { to: B, name: "transfer", selector: "0x00000001", args: [] }, consumer: A, innerHash: INNER_HASH },
+		],
+	])("%s passes", (_name, from, intent) => {
+		expect(() => authwit(from, intent)).not.toThrow()
 	})
 })

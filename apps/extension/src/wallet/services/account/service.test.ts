@@ -229,6 +229,52 @@ describe("AccountService restore writers — deletion fence", () => {
 	})
 })
 
+describe("AccountService.restore — a chain the profile has no network for", () => {
+	test("holds an imported row unchecked; refuses a derived row there and every row of a network that fails its validation", async () => {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const services = new ServiceCollection()
+		services.add(
+			svc(PROFILE_SERVICE_NAME, { onProfileDeleted: new EventHandler(), getDeletionState: () => new ProfileDeletionState() }),
+		)
+		services.add(
+			svc(NETWORK_SERVICE_NAME, {
+				registerChainPurgeSubscriber: () => {},
+				getNetworksRaw: async (profileId: string) => [1, 2].map((chainId) => ({ profileId, chainId })),
+				getL1ChainIdStored: async (_profileId: string, chainId: number) => {
+					if (chainId === 1) return 1
+					if (chainId === 2) throw new Error("Seeded network L1 identity mismatch: stored 9, expected 11155111")
+					throw new Error(`No network for chain ${chainId} in this profile`)
+				},
+			}),
+		)
+		const service = new AccountService(new LoggerStore(new ConfigStore()), api)
+		services.add(service)
+		await services.start()
+		const imported = (address: string, chainId: number) => mkAccount(address, { chainId, type: 1, l1ChainId: 5 })
+
+		const results = await service.restore([
+			imported("0xheld", 1337),
+			mkAccount("0xderived", { chainId: 1337 }),
+			imported("0xtampered", 2),
+			imported("0xwrongl1", 1),
+			mkAccount("0xok"),
+		])
+
+		expect(results.map((r) => r.restoreError)).toEqual([
+			undefined,
+			"No network for chain 1337 in this profile",
+			"Seeded network L1 identity mismatch: stored 9, expected 11155111",
+			"account/network chain identity mismatch: 5 vs 1",
+			undefined,
+		])
+		const stored = Object.keys(await api.storage.local.get(null)).filter((k) => k.startsWith("nulo:core:accounts@"))
+		expect(stored.sort()).toEqual(
+			[accountRowId("p1", 1337, "0xheld"), accountRowId("p1", 1, "0xok")].map((id) => `nulo:core:accounts@${id}`).sort(),
+		)
+	})
+})
+
 describe("AccountService.restore — validation + provenance", () => {
 	let accountService: AccountService
 	let api: FakeBrowserApi

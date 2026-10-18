@@ -1,17 +1,31 @@
 <script setup lang="ts">
 /**
  * The fee block of a send held because its fee came out above the figure the person approved:
- * read-only, it names the payer, what it holds, the approved and the new figure, and the speed.
+ * read-only, it names the payer, what it holds, the approved and the new figure, and the speed. It
+ * owns the window's quote, so a window still checking its session reads no price.
  */
+/** Vendor */
 import type { QueuedFeePayer } from "@nulo/wallet-core/jobs"
+
+/** Services */
 import type { PriorityLevel } from "@/wallet/services/execution/client"
+import { PriceServiceClient } from "@/wallet/services/price/client"
+
+/** Components */
+import FeeAmount from "@/components/composite/FeeAmount.vue"
 import FeeMethodRow from "./FeeMethodRow.vue"
+
+/** Composables */
+import { usePrices } from "@/composables/usePrices"
+
+/** Utils */
+import { feeDisplay } from "@/utils/fee-estimation"
 
 const props = defineProps<{
 	payer: QueuedFeePayer
-	/** The approved and the new fee, each as the fee readout prints it. */
-	was: string
-	now: string
+	/** The approved and the new fee, in base units. */
+	approved: string
+	fee: string
 	/** The payer's balance as the readout prints it; null when its read failed. */
 	available: string | null
 	availableLoading: boolean
@@ -20,7 +34,6 @@ const props = defineProps<{
 	/** The speed the wallet chose; absent when the app set the fee path. */
 	priority?: PriorityLevel
 }>()
-
 const PRIORITY_LABELS: Record<PriorityLevel, string> = { normal: "Normal", fast: "Fast", urgent: "Urgent" }
 
 const method = computed(() => ({
@@ -28,6 +41,16 @@ const method = computed(() => ({
 	fpc: props.payer.fpcId ? { id: props.payer.fpcId } : null,
 }))
 const methodTitle = computed(() => (props.payer.type === "private_fpc" ? "Private Fee Juice" : "Public Fee Juice"))
+
+const priceService = new PriceServiceClient()
+const prices = usePrices(priceService)
+const was = computed(() => feeDisplay(props.approved, prices.feeJuiceQuote.value?.usd))
+const now = computed(() => feeDisplay(props.fee, prices.feeJuiceQuote.value?.usd))
+
+onBeforeUnmount(() => {
+	priceService.disconnect()
+	prices.dispose()
+})
 </script>
 
 <template>
@@ -46,7 +69,7 @@ const methodTitle = computed(() => (props.payer.type === "private_fpc" ? "Privat
 		<Flex direction="column" gap="4" :class="$style.detail_row" data-testid="fee-raised">
 			<Text variant="value" color="primary">Fee went up</Text>
 			<Text variant="meta" color="secondary">
-				<span data-testid="fee-raised-was">Was {{ was }} FJ</span> · <Text variant="meta" color="primary" data-testid="fee-raised-now">Now {{ now }} FJ</Text>
+				<span :class="$style.figure" data-testid="fee-raised-was">Was <FeeAmount :display="was" /></span> · <Text variant="meta" color="primary" :class="$style.figure" data-testid="fee-raised-now">Now <FeeAmount :display="now" /></Text>
 			</Text>
 		</Flex>
 		<Flex v-if="priority" align="center" justify="between" :class="$style.detail_row" data-testid="fee-raised-priority">
@@ -63,6 +86,11 @@ const methodTitle = computed(() => (props.payer.type === "private_fpc" ? "Privat
 
 .method_size {
 	font-size: 13px;
+}
+
+/* The line breaks between the two figures, never inside one. */
+.figure {
+	white-space: nowrap;
 }
 
 .detail_row {

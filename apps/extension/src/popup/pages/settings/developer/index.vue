@@ -17,10 +17,9 @@ import { defaultConfig as makeDefaultConfig } from "@/wallet/config"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Composables */
-import { useToast } from "@/composables/toast"
 import { useConfigRead } from "@/composables/useConfigRead"
+import { useSettingUpdate } from "@/composables/useSettingUpdate"
 import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
-const { openToast } = useToast()
 const { vSettingsRow } = useSettingsRowHighlight()
 
 /** Store */
@@ -85,17 +84,7 @@ const settings = {
 const logsRow = settingsRow("developer-logs")
 const accountStateRow = settingsRow("developer-account-state")
 
-async function updateSetting(key, value) {
-	if (!settings[key]) return
-	if (settings[key].model.value === value) return
-
-	try {
-		await configService.setValue(key, value)
-		applySetting(key, value)
-	} catch (err) {
-		openToast({ kind: "error", label: "Failed to update setting" })
-	}
-}
+const { updateSetting } = useSettingUpdate(configService, settings, applySetting)
 
 async function applySetting(key, value) {
 	settings[key].model.value = value

@@ -223,7 +223,7 @@ function setIdentity(appStore: ReturnType<typeof useAppStore>) {
 }
 
 /** What a landed estimate answers when a test names none. */
-const LANDED = { maxFee: "1000", maxFeeFormatted: "0.000000000000001", gasDetails: {} }
+const LANDED = { maxFee: "1000", gasDetails: {} }
 
 /** The page debounces its estimate by 800 ms; this lets the current input's estimate land. */
 async function estimateLands() {

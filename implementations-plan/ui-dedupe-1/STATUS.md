@@ -11,3 +11,13 @@
 - 2026-10-17 18:26Z A1 review round 2: Codex clean (fixes verified, no regression); loop converged.
 - 2026-10-17 18:43Z A1 final gates on 3eff8665: lint 0, typecheck:all 0, test:all 0, check:plans 0; smoke Chrome (backup-roundtrip, security-backup, passkey-backup, own-window) 9/9 108s; smoke Firefox (passkey-backup, passkey-toolbar-panel) 9/9 192s. A1 ✓.
 - 2026-10-17 19:11Z dev merged again (b6ec5596, index.md conflict: both lines kept); lint 0, typecheck:all 0, test:all 0, check:plans 0. First CI run on d692fa0c: all 5 required checks green.
+- 2026-10-17 22:07Z A2.1 gate: premise holds. Network prover-on retry 0, opfs-storage + frozen-account-canary (stage 6): Chrome 3/3 238s, Firefox 3/3 346s; no pxe/ IndexedDB on either (pxe 6.0.0-rc.3). Pass.
+- 2026-10-17 22:30Z A2.2 unit gate: lint 0, typecheck:all 0, test:all 0 (aztec-runtime 409 passed), grep gate prints nothing. Network Chrome at 5e6018dd: opfs-storage + canary 3/3 402s; stale-network-reset 2/2 310s. Review round 1: Codex findings (1), Opus findings (3 + nits), all folded (27e360f8, f34e1935).
+- 2026-10-17 22:38Z Network Firefox at f34e1935: opfs-storage + canary (tightened stage 6) 3/3 457s. Review round 2: Codex clean (resumed); loop converged after 2 rounds.
+- 2026-10-17 22:45Z A2 final gates on 2bbf7340 (dev 4ad2a80d merged): lint 0, typecheck:all 0, test:all 0; network Chrome opfs-storage + canary 3/3 379s. A2 ✓.
+- 2026-10-17 23:28Z A3 start: branch ui-dedupe-1-a3 off dev 138e0ded (sheet-1's Display change merged as #707); bun install, no changes.
+- 2026-10-17 23:40Z A3 unit gate on b99bbff3: lint 0, typecheck:all 0, test:all 0; useSettingUpdate.test.ts 12/12 (6 mutations caught); display, privacy, developer suites green, and the new page cases green on the base pages.
+- 2026-10-17 23:45Z A3 review round 1: Codex clean. #735 filed (F-21's other items), #520 commented.
+- 2026-10-17 23:48Z A3 smoke Chrome on b99bbff3 (armed build, retry 0, load1 113): appearance, settings-routes, sw-resilience 20/20 (1 standing test.skip) in 108 s.
+- 2026-10-17 23:52Z A3 review round 1: Opus findings (1: the composable's cascade cases ran a copy of the page's), fixed in 2c674859; pre-existing double apply filed as closed known limit #736. Round 2: Codex clean; loop converged.
+- 2026-10-18 00:00Z A3 final gates on 2c674859 (dev 138e0ded, nothing newer): lint 0, typecheck:all 0, test:all 0, check:plans 0; smoke Chrome (rebuilt armed bundle, retry 0, load1 65) appearance, settings-routes, sw-resilience 20/20 in 88 s. A3 ✓.

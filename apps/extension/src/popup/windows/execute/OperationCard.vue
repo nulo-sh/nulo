@@ -21,6 +21,7 @@
  * the parent can drive `op.feeSettings` and trigger the keyed fee
  * estimator.
  */
+import AppFeeLine from "@/popup/components/modules/send/AppFeeLine.vue"
 import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue"
 import { isSelfPay } from "@nulo/wallet-bridge"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
@@ -156,6 +157,18 @@ const grantRows = computed(() =>
 	}),
 )
 
+/** Per action, whether the window read its grant as a movement. Only an `add_public_authwit` takes a
+ *  grant row, in `grantContentsOf`'s order. */
+const actionReads = computed(() => {
+	if (props.op.kind !== "send_transaction") return []
+	let k = 0
+	return (props.op.actions ?? []).map((action) => {
+		if (action.kind !== "add_public_authwit") return false
+		const kind = grantRows.value[k++]?.surface.kind
+		return kind === "transfer" || kind === "mint"
+	})
+})
+
 /** What an `aztec_createAuthWit` asks the wallet to sign: a call it can show, or a hash it cannot. */
 type CreateAuthwitSurface =
 	| { kind: "call"; caller: string; to: string; call: WireCall; args: CallSurface }
@@ -209,6 +222,7 @@ const summaryAuthwits = computed(() =>
 )
 
 const detailsOpen = ref(false)
+const detailsId = useId()
 
 /** Which discovered authorizations the person closed: once the rows are open, an authorization's
  *  values are open too, so a raw one stays within two presses of the card at rest. */
@@ -252,7 +266,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				<Flex :class="$style.prop">
 					<Text variant="label-section" color="secondary">Payload:</Text>
 					<Flex direction="column" gap="4" :class="$style.payload">
-						<OperationActionRow v-for="(action, j) in op.actions" :key="`${index}:${j}`" :action="action" hide-args />
+						<OperationActionRow v-for="(action, j) in op.actions" :key="`${index}:${j}`" :action="action" :read="actionReads[j]" hide-args />
 					</Flex>
 				</Flex>
 				<Flex
@@ -279,11 +293,12 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 					<DetailsToggle
 						data-testid="execute-op-details-toggle"
 						:open="detailsOpen"
+						:controls="detailsId"
 						:label="detailsOpen ? 'Hide all details' : 'Show all details'"
 						@click="detailsOpen = !detailsOpen"
 					/>
 				</Flex>
-				<Flex v-if="detailsOpen" data-testid="execute-op-details" direction="column" wide>
+				<Flex v-if="detailsOpen" :id="detailsId" data-testid="execute-op-details" direction="column" wide>
 					<Flex :class="$style.group"><Text variant="label-section" color="secondary">Payload</Text></Flex>
 					<Flex v-for="({ call, surface }, j) in sendTxRows" :key="`${index}:${j}`" :data-call-index="j" direction="column" gap="4" :class="$style.call">
 						<Flex
@@ -333,10 +348,11 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 							<DetailsToggle
 								data-testid="execute-discovered-authwit-toggle"
 								:open="isAuthwitOpen(a)"
+								:controls="`${detailsId}-${k}`"
 								:label="isAuthwitOpen(a) ? 'Hide details' : 'Show details'"
 								@click="toggleAuthwit(a)"
 							/>
-							<Flex v-if="isAuthwitOpen(a)" data-testid="execute-discovered-authwit-details" direction="column" gap="2">
+							<Flex v-if="isAuthwitOpen(a)" :id="`${detailsId}-${k}`" data-testid="execute-discovered-authwit-details" direction="column" gap="2">
 								<CallArguments :surface="authwitArgs(a)" :contract="a.consumer" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-discovered-authwit" />
 								<Flex justify="between" :class="$style.row">
 									<Text variant="label-section" color="secondary">Inner hash:</Text>
@@ -368,14 +384,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 						Fee payment method set by
 						<Text variant="name" color="primary" :class="$style.name_size">{{ safeWire(dapp?.name, 64) || 'the app' }}</Text>
 					</Text>
-					<Text v-if="feeEstimate" variant="body" color="secondary" data-testid="execute-op-app-fee">
-						Fee up to
-						<Text variant="name" color="primary" :class="$style.name_size">{{ feeEstimate.maxFeeFormatted }} FJ</Text><template v-if="feeEstimate.priorityFeeFormatted">, includes a {{ feeEstimate.priorityFeeFormatted }} FJ <DottedTerm term="priority-fee" testid="execute-op-priority-term">priority fee</DottedTerm> the app asked for</template>
-					</Text>
-					<Flex v-else-if="isEstimating" align="center" gap="4" data-testid="execute-op-app-fee-estimating">
-						<Text variant="body" color="secondary">Fee up to</Text>
-						<Skeleton />
-					</Flex>
+					<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate" />
 				</Flex>
 			</Flex>
 			<!-- Mounted with the row: a region created with its text in place may go unannounced. -->

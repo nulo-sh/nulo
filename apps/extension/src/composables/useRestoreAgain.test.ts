@@ -244,6 +244,26 @@ describe("useRestoreAgain: refusals change nothing", () => {
 		expect(store.get(KEY)).toEqual(before)
 	})
 
+	test("a body nested past the engine's stack shows the integrity message", async () => {
+		let deep: unknown[] = []
+		for (let i = 0; i < 1_000_000; i++) deep = [deep]
+		const { page, opts, original } = await open()
+		const before = structuredClone(store.get(KEY))
+		page.selectedBackup.value = {
+			name: "b.json",
+			backup: { ...original, data: { ...original.data, deep } },
+			kind: "plain",
+			profileType: "password",
+		}
+
+		await page.restoreBackup()
+
+		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Backup Integrity Check Failed", expect.any(String))
+		expect(page.restoreStatus.value).toBe("failed")
+		expect(accountStateClient.restore).not.toHaveBeenCalled()
+		expect(store.get(KEY)).toEqual(before)
+	})
+
 	test("a wrong decryption password shows the import's error and never restores", async () => {
 		const { page, opts, original } = await open()
 		const before = structuredClone(store.get(KEY))

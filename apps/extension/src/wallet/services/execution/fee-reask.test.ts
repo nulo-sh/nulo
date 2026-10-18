@@ -1,6 +1,6 @@
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { describe, expect, test } from "vitest"
-import { formatFeeJuice } from "@/utils/fee-estimation"
+import { feeDisplay } from "@/utils/fee-estimation"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { FpcType } from "@/wallet/services/fpc/spec"
@@ -12,7 +12,7 @@ describe("feeRiseAsks", () => {
 	test("asks for a rise above the tolerance, and the two figures print apart", () => {
 		const now = 21_000_000_000_000_000n
 		expect(feeRiseAsks(now.toString(), APPROVED.toString())).toBe(true)
-		expect(formatFeeJuice(now)).not.toBe(formatFeeJuice(APPROVED))
+		expect(feeDisplay(now, undefined).amount).not.toBe(feeDisplay(APPROVED, undefined).amount)
 	})
 
 	test.each([

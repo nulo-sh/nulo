@@ -1,9 +1,11 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: the fixtures below are code SAMPLES fed to the scanner as plain strings — the `${...}` in them is the very thing under test, not an unintended interpolation.
 
-import { readdirSync, readFileSync, statSync } from "node:fs"
-import { join, relative } from "node:path"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { describe, expect, test } from "vitest"
 import { REDACTED_KEYS, SECRET_KEY_SUFFIX, URL_KEYS } from "@/wallet/logger/utils"
+import { codeLines } from "../../scripts/type-roles/source-code"
+import { PACKAGE_SRC_ROOTS, REPO_ROOT, type SourcePolicy, sourceFiles } from "../../scripts/type-roles/source-scan"
 
 /**
  * Static ban: a log call must not flatten a sensitive value into its message.
@@ -25,8 +27,6 @@ import { REDACTED_KEYS, SECRET_KEY_SUFFIX, URL_KEYS } from "@/wallet/logger/util
  * It catches the direct mistake, which is the one people actually make.
  */
 
-const REPO_ROOT = join(__dirname, "..", "..", "..", "..")
-
 /**
  * Everything that compiles into the extension, not just the app.
  *
@@ -36,22 +36,11 @@ const REPO_ROOT = join(__dirname, "..", "..", "..", "..")
  * `apps/extension/src` would leave the guard blind to exactly the code the branches below it spent
  * the most effort on.
  */
-const SCAN_ROOTS = [
-	"apps/extension/src",
-	// Enumerated, not listed: a new workspace package is covered the day it exists, with nothing
-	// to remember. A hardcoded list had already fallen behind by three packages.
-	...readdirSync(join(REPO_ROOT, "packages"))
-		.map((name) => `packages/${name}/src`)
-		.filter((rel) => {
-			try {
-				return statSync(join(REPO_ROOT, rel)).isDirectory()
-			} catch {
-				return false
-			}
-		}),
-]
-
-const SCANNED_EXT = /\.(ts|js|vue)$/
+const POLICY: SourcePolicy = {
+	roots: ["apps/extension/src", ...PACKAGE_SRC_ROOTS],
+	exts: ["ts", "js", "vue"],
+	skip: [/\/(node_modules|dist)\//],
+}
 
 /**
  * Names extra to the runtime denylist: values `trim()` reduces by SHAPE rather than by key, so
@@ -111,200 +100,6 @@ const ALLOWLIST: RegExp[] = [
 	/^apps\/extension\/src\/types\//,
 ]
 
-function walk(dir: string, out: string[] = []): string[] {
-	for (const name of readdirSync(dir)) {
-		if (name === "node_modules" || name === "dist") continue
-		const full = join(dir, name)
-		if (statSync(full).isDirectory()) walk(full, out)
-		else if (SCANNED_EXT.test(name)) out.push(full)
-	}
-	return out
-}
-
-/**
- * The scannable text of a file, as lines, with line numbers preserved.
- *
- * A `.vue` file's `<template>` is markup, not code: scanning it produced neither findings nor
- * meaning, only the chance of a false positive on prose. Only `<script>` bodies are code, so
- * everything outside them is blanked rather than dropped — blanking keeps every subsequent line
- * number equal to its number in the real file, which is what makes an offender report navigable.
- */
-function scannableLines(path: string, content: string): string[] {
-	const lines = content.split("\n")
-	if (!path.endsWith(".vue")) return lines
-	const out = lines.map(() => "")
-	let inScript = false
-	lines.forEach((line, i) => {
-		if (/<script[\s>]/.test(line)) {
-			inScript = true
-			return
-		}
-		if (/<\/script>/.test(line)) {
-			inScript = false
-			return
-		}
-		if (inScript) out[i] = line
-	})
-	return out
-}
-
-/**
- * Lexer state that outlives a line: a template literal and a block comment both span them, and a
- * scanner that reset at every newline would read a continued template's `)` as real code — which
- * is precisely the early-window-close this stripping exists to prevent.
- */
-type Interpolation = { depth: number; outerQuote: string }
-type LexState = { inBlockComment: boolean; quote: string | null; interp: Interpolation[] }
-
-const FRESH_LEX: LexState = { inBlockComment: false, quote: null, interp: [] }
-
-const KEPT_DELIMITERS = /[()[\]{}]/g
-
-/**
- * The line with string contents and comments blanked, so parens inside them cannot be counted.
- *
- * `${…}` bodies survive: inside a template literal they are CODE, and they are the single most
- * important thing this scanner reads. Everything else between quotes becomes spaces — same length,
- * so column positions still line up. `braceDepth` is a stack, not a counter: a `${…}` body can
- * contain its own object literals and nested templates, and treating the first `}` as the end of
- * the interpolation would silently blank the rest of the expression.
- */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 41 — a lexer state machine: comment, quote, regex and template-interpolation precedence must stay together
-function stripNoise(line: string, state: LexState): { code: string; state: LexState } {
-	let out = ""
-	let inBlock = state.inBlockComment
-	let quote = state.quote
-	const interp = state.interp.map((f) => ({ ...f }))
-	for (let i = 0; i < line.length; i++) {
-		const ch = line[i]
-		const next = line[i + 1]
-		if (inBlock) {
-			if (ch === "*" && next === "/") {
-				inBlock = false
-				out += "  "
-				i++
-			} else out += " "
-			continue
-		}
-		if (quote) {
-			// Inside a template literal, `${` opens a code region that must be kept verbatim — and
-			// the enclosing quote goes on the stack, because the body is no longer inside it.
-			if (quote === "`" && ch === "$" && next === "{") {
-				interp.push({ depth: 0, outerQuote: quote })
-				quote = null
-				out += "${"
-				i++
-				continue
-			}
-			if (ch === "\\") {
-				// A nested string inside an interpolation is kept, so bracket keys stay readable, but
-				// its delimiters are text: counted, they end a window early or fake an object around
-				// an argument. Their mask is not whitespace, so key text cannot become an arity read.
-				// A plain string is blanked.
-				out += interp.length > 0 ? line.slice(i, i + 2).replace(KEPT_DELIMITERS, "\0") : "  "
-				i++
-				continue
-			}
-			if (ch === quote) {
-				quote = null
-				out += ch
-				continue
-			}
-			out += interp.length > 0 ? ch.replace(KEPT_DELIMITERS, "\0") : " "
-			continue
-		}
-		// Comments and regex literals are code-context constructs, so they must be recognised the
-		// same way inside a `${…}` body as outside it — an unbalanced `)` in either would otherwise
-		// close the scan window early and hide the payload behind it.
-		if (ch === "/" && next === "/") {
-			out += " ".repeat(line.length - i)
-			break
-		}
-		if (ch === "/" && next === "*") {
-			inBlock = true
-			out += "  "
-			i++
-			continue
-		}
-		if (ch === "/" && startsRegex(out)) {
-			const end = skipRegex(line, i)
-			out += " ".repeat(end - i)
-			i = end - 1
-			continue
-		}
-		if (interp.length > 0) {
-			const frame = interp[interp.length - 1]
-			if (ch === '"' || ch === "'" || ch === "`") {
-				quote = ch
-				out += ch
-				continue
-			}
-			if (ch === "{") frame.depth++
-			else if (ch === "}") {
-				if (frame.depth === 0) {
-					// Closes the interpolation: back inside the template literal it came from.
-					interp.pop()
-					quote = frame.outerQuote
-				} else frame.depth--
-			}
-			out += ch
-			continue
-		}
-		if (ch === '"' || ch === "'" || ch === "`") {
-			quote = ch
-			out += ch
-			continue
-		}
-		out += ch
-	}
-	return { code: out, state: { inBlockComment: inBlock, quote, interp } }
-}
-
-/** Keywords after which a `/` can only begin a regex literal, never divide. */
-const REGEX_PRECEDING_KEYWORDS = /\b(?:return|throw|typeof|instanceof|in|of|case|do|else|yield|await|new|delete|void)$/
-
-/**
- * A trailing `!` that is TypeScript's postfix non-null assertion rather than logical NOT.
- *
- * `value! / total` divides; `!/re/.test(x)` does not. What separates them is whether the `!`
- * follows a value.
- */
-const POSTFIX_NON_NULL = /[\w$)\]"'`]!$/
-
-/**
- * Whether a `/` at the end of `preceding` opens a regex literal rather than dividing.
- *
- * Neither misjudgement is harmless, because this same stripped text drives BOTH the paren count
- * and the hazard scan: reading a regex as division lets its `)` close the window early, and
- * reading a division as a regex blanks the span up to the next `/`, which can erase the payload.
- * So both halves are modelled — the operator/punctuation set, the keywords that can only precede a
- * regex, and the postfix `++`/`--` that can only precede a division.
- */
-function startsRegex(preceding: string): boolean {
-	const trimmed = preceding.replace(/\s+$/, "")
-	if (trimmed === "") return true
-	if (trimmed.endsWith("++") || trimmed.endsWith("--")) return false
-	if (POSTFIX_NON_NULL.test(trimmed)) return false
-	if (REGEX_PRECEDING_KEYWORDS.test(trimmed)) return true
-	return "(,=:[!&|?{};+-*%~^<>".includes(trimmed.slice(-1))
-}
-
-/** Index just past the closing `/` of the regex literal starting at `start`. */
-function skipRegex(line: string, start: number): number {
-	let inClass = false
-	for (let i = start + 1; i < line.length; i++) {
-		const ch = line[i]
-		if (ch === "\\") {
-			i++
-			continue
-		}
-		if (ch === "[") inClass = true
-		else if (ch === "]") inClass = false
-		else if (ch === "/" && !inClass) return i + 1
-	}
-	return line.length
-}
-
 /**
  * Lines belonging to the log call opened at `start`, up to the END of the line holding its balanced
  * closing paren.
@@ -313,8 +108,7 @@ function skipRegex(line: string, start: number): number {
  * opener without a `${…}` and the argument without a call, so it reports nothing.
  *
  * Ending at the line's end, not at the paren, is deliberate: code after a call is over-scanned,
- * which fails safe, while a cut at the paren would turn any regex/division misreading of the lexer
- * on that line into a miss. There is likewise NO line cap: a cap large enough to look safe still
+ * which fails safe. There is likewise NO line cap: a cap large enough to look safe still
  * truncates a Biome-formatted call with a long metadata object, silently dropping every argument
  * past it. Running to EOF on unbalanced input is the acceptable opposite: it over-scans loudly, and
  * unbalanced source fails typecheck and lint long before it reaches here.
@@ -434,18 +228,6 @@ function hazards(window: string): Array<{ name: string; index: number }> {
 	return occurrences(cleaned).filter(({ name, index }) => !isObjectKey(cleaned, index, name) && !isArityRead(cleaned, index, name))
 }
 
-/** The file's scannable lines, noise-stripped with the lexer state carried from line to line. */
-function lexedLines(path: string, content: string): string[] {
-	const code: string[] = []
-	let state = FRESH_LEX
-	for (const line of scannableLines(path, content)) {
-		const stripped = stripNoise(line, state)
-		state = stripped.state
-		code.push(stripped.code)
-	}
-	return code
-}
-
 /** Every log call in `code`: its window's text and the index of the line its opener sits on. */
 function callWindows(code: string[]): Array<{ start: number; text: string }> {
 	const windows: Array<{ start: number; text: string }> = []
@@ -474,7 +256,7 @@ function findLoggedSecrets(files: Array<{ path: string; content: string }>): str
 	const offenders = new Set<string>()
 	for (const { path, content } of files) {
 		if (ALLOWLIST.some((re) => re.test(path))) continue
-		for (const { start, text } of callWindows(lexedLines(path, content))) {
+		for (const { start, text } of callWindows(codeLines(path, content))) {
 			for (const { name, index } of hazards(text)) {
 				offenders.add(flattened(`${path}:${start + text.slice(0, index).split("\n").length}`, name))
 			}
@@ -485,12 +267,7 @@ function findLoggedSecrets(files: Array<{ path: string; content: string }>): str
 
 describe("log-payload ban (static)", () => {
 	test("no sensitive identifier is flattened into a log message", () => {
-		const files = SCAN_ROOTS.flatMap((root) =>
-			walk(join(REPO_ROOT, root)).map((full) => ({
-				path: relative(REPO_ROOT, full),
-				content: readFileSync(full, "utf8"),
-			})),
-		)
+		const files = sourceFiles(POLICY).map((path) => ({ path, content: readFileSync(join(REPO_ROOT, path), "utf8") }))
 		expect(files.length).toBeGreaterThan(500)
 		const offenders = findLoggedSecrets(files)
 		expect(
