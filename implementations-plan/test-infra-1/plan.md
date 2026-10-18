@@ -1,7 +1,7 @@
 ---
 plan: test-infra-1
 tier: mid
-status: arcs 1 (#706) and 2 (#757) merged; arc 3 (Phase 7) implemented, review converged, PR open; arc 4 (Phases 8-10) waits for its lanes
+status: arcs 1 (#706) and 2 (#757) merged; arc 3 (Phase 7) in review, PR #830; arc 4 (Phases 8-10) waits for its lanes
 issues: "#550 (arc 1 Closes), #561 (arc 3 Closes), #536 (arc 4 Closes), #540 (arc 4 Closes)"
 driver: claude-code
 claude_model: opus
