@@ -43,13 +43,24 @@ describe("FeeRaisedCard", () => {
 		expect(text(w, "fee-raised-priority")).toContain("Normal")
 	})
 
-	test("both figures price at the card's own quote", async () => {
+	test("both figures price at the card's own quote, each on its own row with nothing between them", async () => {
 		priceFake.reset(2)
 		const w = factory()
 		await flushPromises()
 		expect(text(w, "fee-raised-was")).toBe("Was ~0.016 FJ ($0.032)")
 		expect(text(w, "fee-raised-now")).toBe("Now ~0.021 FJ ($0.042)")
+		const rows = w.get('[data-testid="fee-raised"]').element.children
+		expect([...rows].map((row) => row.getAttribute("data-testid"))).toEqual([null, "fee-raised-was", "fee-raised-now"])
+		expect(text(w, "fee-raised")).not.toContain("·")
 		expect(priceFake.refreshes()).toBe(1)
+	})
+
+	test("hands the new fee up as it prices it: the figure at once, its dollars once the quote lands", async () => {
+		priceFake.reset(2)
+		const w = factory()
+		expect(w.emitted("update:now")).toEqual([[{ amount: "0.021", usd: null }]])
+		await flushPromises()
+		expect(w.emitted("update:now")?.at(-1)).toEqual([{ amount: "0.021", usd: "$0.042" }])
 	})
 
 	test("unmounting closes the price client and drops the quote listener it added", () => {
