@@ -1,7 +1,7 @@
 ---
 plan: ci-dedupe-1
 tier: mid
-status: plan approved by the final Codex pass; arc 1 implementing (auto-continue)
+status: completed; delivered by PR #732
 issues: "#537 #527 (arc 1 closes both)"
 driver: claude-code
 claude_model: opus
@@ -15,6 +15,20 @@ trunk: dev
 standard: implementations-plan/README.md § Post-implementation standard, read at 093fa10d
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18. **Status:** completed; delivered by PR #732 to `dev`, which closes #537 and #527.
+- **Shipped:**
+  - #537 = A: `_extension-network-e2e-lane.yml` holds the network partition and seeds, and both PR lanes, nightly (both browsers) and `release.yml`'s opt-in run each call it as one job. Every check-run and required-check name is unchanged.
+  - #527 = A: a `release.yml` dispatch for a published release has `select-assets` verify the release's zips, smokes their unpacked trees, and ships them only after `attach-assets` checks them against the release again. The push path is unchanged.
+  - Implementation deviations:
+    - A1 found that `unzip -d` does not create the trees' parent; fixed at `82d490f3`, approved in Codex round 3.
+    - A1's evidence is split over two runs: the lane in 39078345380, the selector path in 39079737475 with network off ([lessons/phase-4.md](lessons/phase-4.md)).
+- **Known limits:** #740 (D8: a published-source dispatch runs no build guard on the bytes it ships).
+- **Open items:** #555 (open, commented): binding the release handoffs by artifact id and digest now covers the three `published-*` handoffs too. I3 (a failed inner job's re-run granularity) stays unverified; it is an observation, not a guarantee anything relies on.
+- **Lessons:** none promoted. `lessons.md` sits at 8,188 of 8,192 B and nothing in it is superseded. The Info-ZIP `-d` gotcha and the split proof live in [lessons/phase-4.md](lessons/phase-4.md); CI.md documents the three-level check-run names.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # ci-dedupe-1: one network partition, and a store dispatch that smokes what it ships
 
@@ -169,20 +183,20 @@ lint, unit, notes, smokes → attach-assets (zips from the build, or select's zi
 
 ## Phases
 
-### Phase 1 — the lane, uncalled, and the proof it reproduces today's calls (#537)
+### Phase 1 — the lane, uncalled, and the proof it reproduces today's calls (#537) ✓
 1. Add `_extension-network-e2e-lane.yml` as specified; copy every literal from today's callers byte for byte.
 2. Add `suiteCalls()`, the Callers constant and the migration pin to `behavior-gating.test.ts`.
 
 **Validation gate**: `bun run lint:actions && bun run lint && bun run typecheck:all && bun run test:ci-gating`. Pass: all exit 0; the migration pin passes for all five callers; `git diff --stat 093fa10d -- .github` lists only the new file. Record the commit SHA and the pin's output in `lessons/phase-1.md`.
 
-### Phase 2 — callers call the lane; pins and docs follow (#537)
+### Phase 2 — callers call the lane; pins and docs follow (#537) ✓
 1. Replace the suite jobs in the four caller files with the lane calls; shrink the PR `status` needs and nightly's lists; add the lane file to both PR filters.
 2. Rewrite the pins as listed; delete the migration pin and the four retired tests. Add two mutation cases to the lane-shape pin: a canary job given an `if`, a matrix without `fail-fast: false`.
 3. Docs: CI.md (the lane; seed rotation edits the lane's chaos matrix), WORKFLOWS.md (a lane row; callers), e2e README § CI sharding and the e2e-testing skill.
 
 **Validation gate**: phase 1's commands plus `bun run test:release && bun run test && bun run test:all`. Pass: all exit 0; `git grep -n 'send-chaos.test.ts' -- .github/workflows` lists only the lane; `git grep -n 1095865833 -- .github scripts/ci-cd/verify-cert-run.sh` lists only the lane and the certification list.
 
-### Phase 3 — the store dispatch smokes the published bytes (#527)
+### Phase 3 — the store dispatch smokes the published bytes (#527) ✓
 1. `attach-assets-run.ts`: `checkAsset`, `select`, `source`, `verify-published`, usage line and header.
 2. `release.yml`: `select-assets`; builds, smokes, `attach-assets`, `status`, header, `dry_run` text.
 3. Tests. `attach-assets-run.test.ts`: `select` writes `build` with no download for an absent and for a draft release; writes `published` after three downloads with no release edit; refuses, one case each, an ambiguous release, a published release missing an asset, an unattested digest, a download off its digest, a failed attestation, a SHASUMS mismatch. `verify-published` on a dispatch edits the notes when every local digest and attestation checks out, and refuses with no edit and no download, one case each, a digest that differs and an attestation that fails; on a push its existing tests stay as they are (the warning test included). `plan` refuses `publish` on `source=published`, and refuses `SOURCE` set to the empty string or an unknown value. `aggregators.test.ts`: a published-source store dispatch (builds skipped) passes; a push world with `select-assets` skipped passes; `source` empty or unknown on a dispatch chain reds; a build skipped on `source=build` reds; the exact clause sets: builds = today's + S1 + the build-source clause; smokes and `attach-assets` = today's with each build clause replaced by its source-bound form, + S1 + S2 (so an empty dispatch source blocks `attach-assets`, not only `status`). `release-integrity.test.ts`: `select-assets` permissions exactly `{contents: read, attestations: read}`, its `VERSION`/`TAG`/`SHA` bound from `needs.resolve.outputs`, in `NO_INSTALL`, no checkout `ref`, no third-party action, `cache: "false"`; the zip step guarded `build`, the `published-assets` download guarded `published`; `SOURCE` never defaults on a dispatch; each smoke's `artifact_name`; mutation cases for a smoke fixed to the rebuild and an unguarded zip step.
@@ -190,7 +204,7 @@ lint, unit, notes, smokes → attach-assets (zips from the build, or select's zi
 
 **Validation gate**: `bun run lint:actions && bun run lint && bun run typecheck:all && bun run test:release && bun run test:ci-gating && bun run test && bun run test:all`. Pass: all exit 0.
 
-### Phase 4 — proof runs (after the Codex loop converges, before the PR)
+### Phase 4 — proof runs (after the Codex loop converges, before the PR) ✓
 1. Push the branch. With no release run queued or in progress, run A1. Pass: `select-assets` writes `published`; both builds skipped; both smokes green on `published-*`; `attach-assets` green with plan `use-published`; the 11 executed network jobs green with exactly the names `verify-cert-run.sh` lists; the only skipped lane job is the seeded chaos branch (record its exact spelling); `status` green.
 2. Open the PR (Delivery). Pass: both network lanes green at retry 0; per lane, the executed (non-skipped) network job names from `gh api …/runs/<id>/jobs` equal `verify-cert-run.sh`'s eleven exactly, and the only skipped lane job is the seeded chaos branch; `scripts/ci-cd/verify-cert-run.sh --pr <n>` is run and its result reported as is: a violation is never waived, and a rerun is never first-attempt evidence.
 3. Record run ids, job names and wall-clocks in `lessons/phase-4.md` and the PR body.
@@ -234,3 +248,5 @@ Recommended: `/goal` (completion is visible in the transcript).
 **Round 1, Opus** (`general-purpose`, opus, beside Codex): **conditional approve**, four findings, all accepted: the lane's inputs pinned whole (a moved `browser` or `retry` default would reroute every caller, with mutation); the prover-ON job alone forwards the kill switch (with mutation); the two comments (= Codex 3); the release skill's store-submission paragraph and missing-asset row. It traced every `status` world and the push path's reduction to the old clauses; the lane call's result with one skipped branch and the three-level names stay for phase 4 (I1).
 
 **Round 2, Codex** (resume of `01a14c0f`, over `e7418526..bbfc14ff`): **approve**. It accepted the disposition of its finding 1: replacing a tree can bypass the fresh smoke but not the dispatch-time recheck of the held zips against the release's digests and attestation, so no path ships non-release or unattested bytes, and the exposure is narrower than the build path's own by-name handoff, which #555 owns (recon § collisions). Disposition: the three `published-*` handoffs are recorded on #555, whose id-and-digest binding closes both paths at once. Fixes verified; no regression. The loop converged in two rounds.
+
+**Round 3, Codex** (resume of `01a14c0f`, over `82d490f3`, the one round a proof-forced fix gets): **approve**. A1's first run found the unpack step's missing parent directory. The fix is sound, and `handoffFindings`' exact command list catches its removal. Its one condition: record that A1's evidence is split over two runs, and that run 1's `status` accepted `network-e2e=success` before it refused `select-assets`. Both are recorded in [lessons/phase-4.md](lessons/phase-4.md).
