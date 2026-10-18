@@ -1,0 +1,160 @@
+name: _Extension network e2e lane (reusable)
+
+# One browser's whole network suite: the proverless shard pool plus every dedicated job, each a
+# call of _extension-network-e2e.yml. This file is the suite's one partition: the PR lanes, nightly
+# and release call it, and scripts/ci-cd/behavior-gating.test.ts pins what it expands to. A caller
+# names its job `Run` (`Firefox / Run` on nightly's Firefox leg), so each check-run reads
+# `Run / <job name> / network suite…`, the names scripts/ci-cd/verify-cert-run.sh matches.
+#
+# The caller reads this lane as one result, so a job here that skips hides from its aggregator: no
+# job takes an `if` or `needs` but the complementary chaos pair below, which the pins hold to that.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to check out.
+        required: true
+        type: string
+      browser:
+        description: chrome | firefox.
+        required: false
+        type: string
+        default: chrome
+      retry:
+        description: vitest retry count for every job; empty leaves the config default.
+        required: false
+        type: string
+        default: ""
+      disable_presto:
+        description: The Presto kill switch, passed to the prover-ON canary only (proverless jobs never start Presto).
+        required: false
+        type: boolean
+        default: false
+      chaos_seed:
+        description: Empty replays the two fixed send-chaos seeds; a value runs that one seed instead (nightly's).
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  network-e2e:
+    name: shard ${{ matrix.shard.id }}
+    strategy:
+      # A red shard never cancels the others: the per-shard picture tells one bad file from a broken suite.
+      fail-fast: false
+      matrix:
+        # N=5, not 4: vitest's SHA-1-of-path sharder puts the two slow files multi-account-from and
+        # tx-sendTx-multicall on one shard at N=4. `label` is `id` without the `/` that
+        # actions/upload-artifact refuses in a name.
+        shard:
+          - { id: "1/5", label: "1-of-5" }
+          - { id: "2/5", label: "2-of-5" }
+          - { id: "3/5", label: "3-of-5" }
+          - { id: "4/5", label: "4-of-5" }
+          - { id: "5/5", label: "5-of-5" }
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ inputs.ref }}
+      browser: ${{ inputs.browser }}
+      shard: ${{ matrix.shard.id }}
+      shard_label: ${{ matrix.shard.label }}
+      retry: ${{ inputs.retry }}
+      # Exactly the files the jobs below run: an excluded file would still take a slot in the
+      # SHA-1 distribution, and one left in would run twice.
+      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
+      proverless: true
+
+  # fee-methods (four real fee-juice flows, about 6 minutes) queued enough proving to push the next
+  # file on its shard past its waitForPgResult budgets. selfpay-phase (about ten dApp sends across
+  # two accounts and three fee routes) shares the runner so the L1 dev-key bridges stay serialized.
+  network-e2e-heavy:
+    name: heavy / fee-methods + selfpay-phase
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ inputs.ref }}
+      browser: ${{ inputs.browser }}
+      shard_label: "heavy"
+      retry: ${{ inputs.retry }}
+      test_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts"
+      proverless: true
+
+  # concurrent-sendtx-confirm holds T1 at `proving` through the ProofGate, away from fee-methods'
+  # prover queue. same-token-concurrent-sends holds the node's block production, which every file
+  # of a shard shares, so it never runs in the pool.
+  network-e2e-heavy-concurrent:
+    name: heavy / concurrent-confirm
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ inputs.ref }}
+      browser: ${{ inputs.browser }}
+      shard_label: "heavy-concurrent"
+      retry: ${{ inputs.retry }}
+      test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+      proverless: true
+
+  # About 8 and 4.5 minutes on Firefox. The sharder weighs no runtime, and the shard that drew both
+  # reached its 30-minute limit with every test green.
+  network-e2e-heavy-long:
+    name: heavy / snack-placement + failed-send-check
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ inputs.ref }}
+      browser: ${{ inputs.browser }}
+      shard_label: "heavy-long"
+      retry: ${{ inputs.retry }}
+      test_files: "tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
+      proverless: true
+
+  # The only prover-ON job: real proving for the wallet send (transfers), the dApp send the node
+  # validates (tx-sendTx-default), the address-freeze and passkey execution canaries, and deleting
+  # a profile while bb.js holds its CRS store open (delete-after-prove). A fake proof would green a
+  # frozen artifact the prover can no longer prove (CLAUDE.md "Account-address freeze"); a red canary
+  # on either browser holds an Aztec bump.
+  network-e2e-canary:
+    name: canary / real-proving
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ inputs.ref }}
+      browser: ${{ inputs.browser }}
+      shard_label: "canary"
+      retry: ${{ inputs.retry }}
+      test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
+      disable_presto: ${{ inputs.disable_presto }}
+
+  # The PR lanes and release replay two fixed seeds, each from the nightly run beside it; the
+  # red-seed and rotation rules are in CI.md, § pr-extension-network-e2e.yml.
+  network-e2e-chaos:
+    name: chaos / seed ${{ matrix.seed }}
+    if: inputs.chaos_seed == ''
+    strategy:
+      fail-fast: false
+      matrix:
+        seed:
+          - "1095865833" # nightly run 37607270016 (2026-10-07), its Firefox chaos job
+          - "1960252198" # nightly run 37765624647 (2026-10-08), its Chrome chaos job
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ inputs.ref }}
+      browser: ${{ inputs.browser }}
+      shard_label: chaos-${{ matrix.seed }}
+      retry: ${{ inputs.retry }}
+      test_files: "tests/e2e/network/send-chaos.test.ts"
+      proverless: true
+      chaos: true
+      chaos_seed: ${{ matrix.seed }}
+
+  # Nightly hunts with a new seed each night instead of replaying the fixed pair.
+  network-e2e-chaos-seeded:
+    name: chaos / sends
+    if: inputs.chaos_seed != ''
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ inputs.ref }}
+      browser: ${{ inputs.browser }}
+      shard_label: "chaos"
+      retry: ${{ inputs.retry }}
+      test_files: "tests/e2e/network/send-chaos.test.ts"
+      proverless: true
+      chaos: true
+      chaos_seed: ${{ inputs.chaos_seed }}
