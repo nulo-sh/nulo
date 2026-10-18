@@ -1,0 +1,6 @@
+- 2026-10-18 21:05Z planning started; worktree fast-forwarded to dev 7eada4c6; registered.
+- 2026-10-18 21:40Z recon done (one Sonnet Explore for #735; #797 and #517 traced by the driver); #797 cause demonstrated by measurement.
+- 2026-10-18 22:05Z Codex r1 conditional approve; 4 findings accepted and applied.
+- 2026-10-18 22:25Z Opus conditional approve; 6 findings accepted and applied; resuming Codex for the verdict.
+- 2026-10-18 22:40Z Codex r2 conditional approve (clip 4px); applied; resuming for the final verdict.
+- 2026-10-18 22:45Z Codex r3 approve (final); plan committed; auto-continue into arc 1.
