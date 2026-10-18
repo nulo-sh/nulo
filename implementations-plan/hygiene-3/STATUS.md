@@ -4,3 +4,6 @@
 - 2026-10-18 22:25Z Opus conditional approve; 6 findings accepted and applied; resuming Codex for the verdict.
 - 2026-10-18 22:40Z Codex r2 conditional approve (clip 4px); applied; resuming for the final verdict.
 - 2026-10-18 22:45Z Codex r3 approve (final); plan committed; auto-continue into arc 1.
+- 2026-10-18 23:05Z arc 1 phase 1 gate (fast: lint 0, typecheck:all 0, test 14002 passed; phase suites 140/140; copy identical to base): pass.
+- 2026-10-18 23:15Z arc 1 phase 2 gate (fast: lint 0, typecheck:all 0, test 14003 passed; new case red with the subscription removed): pass.
+- 2026-10-18 23:20Z arc 1 test identity: pass (suites gain 4 titles, 0 lines removed).

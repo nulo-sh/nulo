@@ -59,10 +59,10 @@ The split follows the lane brief: OA-1 concerns arc 2's surface, so arc 1 runs a
 
 ## Arc 1 (#735)
 
-### Phase 1: the profile-flow notices
+### Phase 1: the profile-flow notices ✓
 Files: `utils/profile-flow-notices{,.test}.ts`, `onboarding/pages/{create,import}.vue`, `popup/pages/profile/new.vue`, `popup/pages/import.vue`. Tests: 3 cases, each payload `toStrictEqual` to the literal copied from the base (`onConfirm: expect.any(Function)`): password create, passkey create, import.
 
-### Phase 2: Developer's plumbing and titles
+### Phase 2: Developer's plumbing and titles ✓
 Files: `popup/pages/settings/developer/index{.vue,.test.ts}`. Tests: 1 case, a worker update turning Developer Mode off shows it and writes both dependents, and the same update again writes nothing (the subscription is wired after the reorder).
 
 ### Arc 1 validation gate
