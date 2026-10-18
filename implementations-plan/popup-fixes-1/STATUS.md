@@ -6,3 +6,5 @@
 - 2026-10-18: final fresh Codex pass approve; OA-1 B heights corrected; plan committed; arc 1 auto-continues.
 - 2026-10-18: arc 1 phases 1-4 green on Chrome and Firefox; Codex fix loop converged (round 3 approve); #593 closed as a known limit (comment, `known-limit`, not planned).
 - 2026-10-18: origin/dev merged; final gates green on both browsers; pictures committed.
+- 2026-10-18: arc 2 branched off origin/dev 97ffa088 on OA-1 A and OA-2 A (the lane's recommendations; owner answer pending). Before pictures taken on the base build.
+- 2026-10-18: phase 6 gate green: general unit 400 passed; S rows + home-links Chrome 11/11, Firefox 11/11; ghost row 41 → 53 px, bar gap 0 → 2 px.
