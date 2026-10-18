@@ -9,7 +9,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: 24c68cb4
 trunk: dev
-status: approved by the panel (Codex approve, plan 3); arc 1 implementing
+status: approved by the panel (Codex approve, plan 3); arc 1 in review
 post_implementation_hardening: not scheduled
 ---
 
@@ -100,7 +100,7 @@ Steps: D2-D5, D7's window half, the README paragraph; T4, T5.
 ## Phase 3: e2e and pictures
 
 Steps: the e2e change; the after pictures (step 3).
-**Gate** (load1 < 150, one `e2e:agent` at a time): `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/scope-refusal.test.ts tests/e2e/network/authwit-lifecycle.test.ts`, then the same with `NULO_E2E_BROWSER=firefox` (the footer is a window change); smoke `cd apps/extension && bun run test:e2e -- --retry=0`, then with `NULO_E2E_BROWSER=firefox`. Pass: exit 0 on both browsers; a Firefox "Popup closed early" in test 2 is a D1 defect, never a rerun. Layers: smoke and network e2e.
+**Gate** (load1 < 150, one `e2e:agent` at a time): `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/scope-refusal.test.ts tests/e2e/network/authwit-lifecycle.test.ts`, then the same with `NULO_E2E_BROWSER=firefox` (the footer is a window change); smoke on an armed build (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:<browser>`, then `env -u EXTENSION_PATH NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- --retry=0`), Chrome then `NULO_E2E_BROWSER=firefox`: `agent.sh` leaves a network build in `dist/`. Pass: exit 0 on both browsers; a Firefox "Popup closed early" in test 2 is a D1 defect, never a rerun. Layers: smoke and network e2e.
 
 ## Pictures
 
@@ -135,6 +135,9 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | plan 1 | Opus 5.5 (Plan) | conditional approve | the same raw-read failure and title placement; the Reject race; Fact 2 adds the authorization's binding; I1 restated; the README paragraph; the private bit (Security, OA-1 C); `spec.ts` in the table; the T4 stub; focus left alone (D3); the 120 s wait; `git diff --stat` before commits | writing a raw error in queued records (D6: a change to every refusal before a claim); merging only after OA-1's answer (D10); awaiting the RPC before closing (D1) |
 | plan 2 | Codex, resumed | conditional approve | none new on D1-D7: the substitution, the approval guard and D6 verified, no regression | a live-session condition on the substitution (D1, Security: an unattended lock ends as the window's own reject; OA-1 C is the control) |
 | plan 3 | Codex, resumed | **approve** | the lock-time end stated as accepted policy in D1 and Security | none |
+| arc 1 | Opus 5.5 (general-purpose) | conditional approve | the vacuous T1 sub-assertion; every attempt answers the first recorded refusal (`refusalBound`); the comment cap | its conditions are the Phase 3 gates and D10, already in the plan |
+| arc 1 | Codex, gpt-6.1-sol (session 01a150a0) | **approve** | T2 and T3 base-red runs recorded (`lessons/phase-3.md`) | none |
+| arc 1, after the merge of `dev` | Codex, resumed | **approve** | none new: `confirmHidden` drops #805's two-line Confirm whole; the `fee` slot contract is unchanged | none |
 
 ## Seeds
 
