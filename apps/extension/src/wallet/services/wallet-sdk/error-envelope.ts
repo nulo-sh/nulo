@@ -242,8 +242,9 @@ export const AUTH_REGISTRY_REFUSAL_ENVELOPE = Object.freeze({
 	data: Object.freeze({ walletErrorCode: ScopeViolationError.CODE }),
 })
 
-/** A `createAuthWit` inner hash whose consumer is the signing account: the scope refusal's code with
- *  its own text, which no wider grant changes. */
+/** A `createAuthWit` inner hash whose consumer is the signing account: the scope refusal's code
+ *  with its own text, a public contract like `SCOPE_VIOLATION_MESSAGE`; no wider grant admits the
+ *  request. */
 export const OWN_ACCOUNT_INTENT_REFUSAL_MESSAGE =
 	"An authorization's consumer cannot be the account that signs it. Name the contract that consumes it."
 

@@ -2,8 +2,9 @@
 /**
  * `aztec_createAuthWit` through the real facade arm on a bare prototype: the hash is bound to the live
  * node's checked chain identity, and a call intent to the selector's real function, before anything
- * is signed. Node environment because the outer hash is the real poseidon2 (jsdom takes the sync
- * Barretenberg branch, which fails under vitest).
+ * is signed; an inner hash the signing account consumes is refused by the scope check. Node
+ * environment because the outer hash is the real poseidon2 (jsdom takes the sync Barretenberg
+ * branch, which fails under vitest).
  */
 import { computeAuthWitMessageHash } from "@aztec-labs/aztec.js/authorization"
 import { AccountFeePaymentMethodOptions, DefaultAccountEntrypoint } from "@aztec-labs/entrypoints/account"
@@ -153,8 +154,7 @@ describe("aztec_createAuthWit: the selector binding of a call intent", () => {
 })
 
 describe("aztec_createAuthWit: an inner hash the signing account consumes", () => {
-	test("signs the account entrypoint's own authorization of a payload, so the scope check refuses it; another consumer's does not", async () => {
-		// `op()` signs for CALLER.
+	test("hashes as the account entrypoint's payload and is refused at the scope check; another consumer's is signed", async () => {
 		const account = CALLER
 		const grants = [
 			{ capability: { type: "accounts", canGet: true, canCreateAuthWit: true }, grantedAt: 0 },
@@ -188,6 +188,7 @@ describe("aztec_createAuthWit: an inner hash the signing account consumes", () =
 		const signedFor = async (consumer: string) => {
 			const { facade, createAuthWit } = makeFacade()
 			await facade.executeAztecCreateAuthWit(op({ consumer, innerHash }), FENCE)
+			expect(createAuthWit).toHaveBeenCalledTimes(1)
 			return createAuthWit.mock.calls[0]?.[0]?.toString()
 		}
 
@@ -197,7 +198,12 @@ describe("aztec_createAuthWit: an inner hash the signing account consumes", () =
 			OwnAccountIntentRefusalError,
 		)
 
-		expect(await signedFor(CONSUMER)).not.toBe(entrypointSigned[0]?.toString())
+		const thirdParty = await computeAuthWitMessageHash(
+			{ consumer: AztecAddress.fromStringUnsafe(CONSUMER), innerHash: Fr.fromString(innerHash) },
+			CHAIN_INFO,
+		)
+		expect(await signedFor(CONSUMER)).toBe(thirdParty.toString())
+		expect(thirdParty.toString()).not.toBe(entrypointSigned[0]?.toString())
 		expect(() => enforceScope("createAuthWit", [account, { consumer: CONSUMER, innerHash }], grants)).not.toThrow()
 	})
 })

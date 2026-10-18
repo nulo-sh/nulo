@@ -68,6 +68,7 @@ The dApp `createAuthWit` path refuses an `IntentInnerHash` whose consumer is the
 - D4. A sibling subclass with its own text, the shape #716 gave the registry refusals; `AuthRegistryRefusalError` would show the registry's text, a plain scope refusal tells the developer to widen a grant that cannot help. Both legs agree.
 - D5. The regression test is a new `describe` in `apps/extension/src/wallet/services/execution/service.authwit-binding.test.ts` (node environment). It compares upstream `DefaultAccountEntrypoint`'s hash with the hash the wallet's own signing arm produces (`makeFacade`), then calls the exported `enforceScope`. Opus argued for it: the wallet's real arm instead of re-deriving F4, no new devDependency, no exclude line, no new `aztec-update` pin site, and it runs in `bun run test`. Codex had judged a bridge-local test proportionate with "no clear advantage" for this one; the concrete savings above decide it.
 - D6. The fee-payer pin file is excluded from the jsdom runner, like `auth-registry.pins.test.ts`, so it runs once in wallet-bridge's node runner under `test:all`.
+- D7 (implementation). The pin checks the claim upstream `FeeJuicePaymentMethodWithClaim` emits, round-tripped to its wire shape, instead of hashing a typed copy of the signature: a changed upstream signature now fails it (Opus diff review).
 
 ## Adversarial considerations
 
@@ -123,6 +124,8 @@ The contract is this plan plus `implementations-plan/README.md` § Post-implemen
 
 - **Codex round 1** (`gpt-6.1-sol`, high): conditional approve. Accepted all six: the key-uniqueness overclaim (recon now argues from F3 and F5), F10's qualification, F9's checked boundaries, F2 narrowed to the signer's branch, I1 as repository evidence, the template heading renamed.
 - **Codex round 2** (resumed): **approve**, nothing new and material. Two wording fixes applied: recon's reuse rows for the rebuild and the test's dependency, and Outcome 2's call-intent routing.
+- **Implementation, Codex round 1** (`gpt-6.1-sol`, high): 2 points, both accepted. The binding test's third-party control could pass on an unsigned `undefined` (now: one signing call asserted, and the exact third-party hash); two comments restated code (one deleted, one compressed).
+- **Implementation, Opus diff review:** 4 points, all accepted. The pin checked a typed signature, not what upstream emits (D7); one constant name meant two texts (the internal one renamed); the envelope comment and the binding file's header; `SECURITY.md`'s "nothing is refused on scope" now reads "nothing else". Its note on the binding test's name was taken: the name states what the test asserts.
 - **Opus leg:** conditional approve. Accepted: the rebuild line and `errors.test.ts` row (F7), the test moved to the extension (D5), the signer's precedence plus a mixed-intent control, the comment at the guard, the wording pass. Rejected: "`lessons/` is empty" (`lessons/phase-0.md` exists).
 
 ## Seeds
