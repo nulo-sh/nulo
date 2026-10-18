@@ -86,13 +86,6 @@ vi.mock("@/composables/useDappInteractionPayload", () => ({
 	})),
 }))
 
-vi.mock("@/composables/useDappHostname", () => ({
-	useDappHostname: vi.fn(() => ({
-		hostname: ref("example.com"),
-		isSuspicious: ref(false),
-	})),
-}))
-
 // Vitest 4 requires `function` expressions (not arrow functions) for mocks
 // instantiated with `new`. Arrow factories error: "Reflect.construct requires
 // the first argument be a constructor". Matches NewTokenPopup.test.ts pattern.
@@ -192,7 +185,7 @@ const STUBS = {
 	},
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" :data-action="actionLabel" />',
-		props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel", "hostnameTestId", "nameTestId"],
+		props: ["dapp", "actionLabel", "hostnameTestId", "nameTestId"],
 	},
 	DappCancelledOverlay: {
 		props: ["message"],

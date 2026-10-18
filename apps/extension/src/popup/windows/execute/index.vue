@@ -52,7 +52,6 @@ import type { DappMetadata } from "@/wallet/services/dapp-session/client"
 
 /** Composables */
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
-import { useDappHostname } from "@/composables/useDappHostname"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 import { useFeeEstimationMap } from "@/composables/useFeeEstimationMap"
 import { useToast } from "@/composables/toast"
@@ -147,8 +146,6 @@ const {
 	getRequestId: () => router.currentRoute.value.query.requestId?.toString(),
 	dappOf: (p) => p.session.dappMetadata as UIDappMetadata,
 })
-
-const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHostname(dapp)
 
 const {
 	results: feeEstimates,
@@ -559,8 +556,6 @@ onUnmounted(() => {
 		<Flex direction="column" :class="$style.scroll_area">
 			<DappIdentityBlock
 				:dapp="dapp ?? undefined"
-				:hostname="dappHostname"
-				:hostnameSuspicious="hostnameHasNonAscii"
 				hostnameTestId="execute-hostname"
 				actionLabel="wants to execute the following"
 			/>

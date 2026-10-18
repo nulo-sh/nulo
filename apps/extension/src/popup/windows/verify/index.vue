@@ -10,7 +10,7 @@ import { hashToEmoji } from "@aztec-labs/wallet-sdk/crypto"
 /** Composables */
 import { vSnackFooter } from "@/composables/snackInset"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
-import { HOSTNAME_WARNING, useDappHostname } from "@/composables/useDappHostname"
+import { HOSTNAME_WARNING, useDappOrigin } from "@/composables/useDappOrigin"
 import { untilSessionChecked } from "@/composables/useDappApprovalWindow"
 
 /** Services */
@@ -70,7 +70,7 @@ const header = computed(() =>
 		: undefined,
 )
 
-const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHostname(dapp)
+const { isSuspicious: hostnameHasNonAscii } = useDappOrigin(dapp)
 
 const dappSessionService = new DappSessionServiceClient()
 
@@ -211,8 +211,6 @@ onUnmounted(() => {
 		<Flex direction="column" :class="$style.scroll_area">
 			<DappIdentityBlock
 				:dapp="dapp"
-				:hostname="dappHostname"
-				:hostnameSuspicious="hostnameHasNonAscii"
 				:actionLabel="isReconnect ? 'Reconnected' : 'Connection established'"
 			/>
 			<Flex v-if="emojis" direction="column" gap="12" :class="$style.verification">

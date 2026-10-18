@@ -40,7 +40,7 @@ declare global {
   const GLOSSARY_SECTIONS: typeof import('../utils/glossary').GLOSSARY_SECTIONS
   const HERO_MIN_SCALE: typeof import('../utils/hero-fit').HERO_MIN_SCALE
   const HOME_TOKEN_ROWS: typeof import('../utils/token-order').HOME_TOKEN_ROWS
-  const HOSTNAME_WARNING: typeof import('../composables/useDappHostname').HOSTNAME_WARNING
+  const HOSTNAME_WARNING: typeof import('../composables/useDappOrigin').HOSTNAME_WARNING
   const IMPORT_ACTIVATION_TIMEOUT_MS: typeof import('../composables/completeImportWithRecovery').IMPORT_ACTIVATION_TIMEOUT_MS
   const IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS: typeof import('../composables/importChainSync').IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS
   const IMPORT_LOCK_HOLD_MS: typeof import('../stores/contact-import-guard').IMPORT_LOCK_HOLD_MS
@@ -433,8 +433,8 @@ declare global {
   const useCssModule: typeof import('vue').useCssModule
   const useCssVars: typeof import('vue').useCssVars
   const useDappApprovalWindow: typeof import('../composables/useDappApprovalWindow').useDappApprovalWindow
-  const useDappHostname: typeof import('../composables/useDappHostname').useDappHostname
   const useDappInteractionPayload: typeof import('../composables/useDappInteractionPayload').useDappInteractionPayload
+  const useDappOrigin: typeof import('../composables/useDappOrigin').useDappOrigin
   const useEntityCrud: typeof import('../composables/useEntityCrud').useEntityCrud
   const useEvent: typeof import('../composables/outside.js').useEvent
   const useFeeEstimation: typeof import('../composables/useFeeEstimation').useFeeEstimation
@@ -799,7 +799,7 @@ declare module 'vue' {
     readonly GLOSSARY_SECTIONS: UnwrapRef<typeof import('../utils/glossary')['GLOSSARY_SECTIONS']>
     readonly HERO_MIN_SCALE: UnwrapRef<typeof import('../utils/hero-fit')['HERO_MIN_SCALE']>
     readonly HOME_TOKEN_ROWS: UnwrapRef<typeof import('../utils/token-order')['HOME_TOKEN_ROWS']>
-    readonly HOSTNAME_WARNING: UnwrapRef<typeof import('../composables/useDappHostname')['HOSTNAME_WARNING']>
+    readonly HOSTNAME_WARNING: UnwrapRef<typeof import('../composables/useDappOrigin')['HOSTNAME_WARNING']>
     readonly IMPORT_ACTIVATION_TIMEOUT_MS: UnwrapRef<typeof import('../composables/completeImportWithRecovery')['IMPORT_ACTIVATION_TIMEOUT_MS']>
     readonly IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS: UnwrapRef<typeof import('../composables/importChainSync')['IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS']>
     readonly IMPORT_LOCK_HOLD_MS: UnwrapRef<typeof import('../stores/contact-import-guard')['IMPORT_LOCK_HOLD_MS']>
@@ -1192,8 +1192,8 @@ declare module 'vue' {
     readonly useCssModule: UnwrapRef<typeof import('vue')['useCssModule']>
     readonly useCssVars: UnwrapRef<typeof import('vue')['useCssVars']>
     readonly useDappApprovalWindow: UnwrapRef<typeof import('../composables/useDappApprovalWindow')['useDappApprovalWindow']>
-    readonly useDappHostname: UnwrapRef<typeof import('../composables/useDappHostname')['useDappHostname']>
     readonly useDappInteractionPayload: UnwrapRef<typeof import('../composables/useDappInteractionPayload')['useDappInteractionPayload']>
+    readonly useDappOrigin: UnwrapRef<typeof import('../composables/useDappOrigin')['useDappOrigin']>
     readonly useEntityCrud: UnwrapRef<typeof import('../composables/useEntityCrud')['useEntityCrud']>
     readonly useEvent: UnwrapRef<typeof import('../composables/outside.js')['useEvent']>
     readonly useFeeEstimation: UnwrapRef<typeof import('../composables/useFeeEstimation')['useFeeEstimation']>

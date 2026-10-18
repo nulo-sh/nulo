@@ -154,7 +154,7 @@
 		},
 		{
 			"file": "apps/extension/src/components/composite/DappIdentityBlock.vue",
-			"expression": "hostname",
+			"expression": "origin",
 			"branch": "",
 			"ordinal": 0,
 			"role": "data-lead",

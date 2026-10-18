@@ -77,9 +77,6 @@ vi.mock("@/composables/useDappInteractionPayload", () => ({
 		reject: rejectMock,
 	})),
 }))
-vi.mock("@/composables/useDappHostname", () => ({
-	useDappHostname: vi.fn(() => ({ hostname: ref("swap.example.org"), isSuspicious: ref(false) })),
-}))
 vi.mock("@/wallet/services/profile/client", () => ({
 	ProfileServiceClient: vi.fn(function () {
 		return {
@@ -160,7 +157,7 @@ const STUBS = {
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" />',
-		props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel"],
+		props: ["dapp", "actionLabel"],
 	},
 	DappCancelledOverlay: { props: ["message"], template: `<div data-testid="dapp-cancelled-overlay" :data-message="message" />` },
 }
