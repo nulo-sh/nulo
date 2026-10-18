@@ -1,7 +1,7 @@
 ---
 plan: icons-2
 tier: light
-status: panel approve 2026-10-18 (Codex round 2); arc 1 implemented, in review
+status: completed 2026-10-18; delivered in #812, awaiting merge
 issues: "#787 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 767789b7
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** completed. #812 (arc 1) closes #787; its merge into `dev` closes the plan.
+- **Shipped:** the private balance mark is Tabler's filled shield and the public one its globe, through the generator's rows, at every size they drew (P52-02 J); the glossary's two sentences say so; the test titles and comments that named the squares speak of the marks; `Icon.test.ts` refuses a mark equal to the network glyph. Before and after pictures in `screenshots/`.
+- **Dropped:** a picture of Settings with both globes: no screen draws both (D4); the Edit network popup and the Glossary page stand in.
+- **Owner asks:** none.
+- **Known limits:** none.
+- **Open items:** none. Outside this plan: landing-explainer-1's clip 01 picture text still names the squares (its `OWNER-ASKS.md`), left to that lane.
+- **Lessons:** none promoted (`lessons.md` is at its budget); the run's two capture gotchas are in [lessons/phase-1.md](lessons/phase-1.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # icons-2: the private and public marks become Tabler's shield and globe
 
