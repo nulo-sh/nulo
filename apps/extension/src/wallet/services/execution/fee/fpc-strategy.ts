@@ -59,10 +59,10 @@
  *
  * ## Finalization fidelity (both paths)
  *
- * `finalizeGasLimits(node, txRequest, sim, padding, baseFees)` — the
- * multiplier is pre-baked into `baseFees`, and there is deliberately NO
- * `customLimits`/`feeMultiplier` argument (fjwc's arg list would double-apply
- * the multiplier and newly honor `op.fee.gasLimits`).
+ * `finalizeGasLimits` gets `gasPadding`, `maxFeesPerGas: baseFees` and
+ * `txsLimits` — the multiplier is pre-baked into `baseFees`, and there is
+ * deliberately NO `customLimits`/`feeMultiplier` option (fjwc's options would
+ * double-apply the multiplier and newly honor `op.fee.gasLimits`).
  *
  * ## Action array mutation (CAUTION)
  *
@@ -202,16 +202,11 @@ export class FpcStrategy implements FeeStrategy {
 				...originalActions,
 				...discovered,
 			)
-			await finalizeGasLimits(
-				built.node,
-				built.txRequest,
-				simulatedTx,
-				ctx.gasPadding,
-				baseFees,
-				undefined,
-				undefined,
-				built.txsLimits,
-			)
+			await finalizeGasLimits(built.node, built.txRequest, simulatedTx, {
+				gasPadding: ctx.gasPadding,
+				maxFeesPerGas: baseFees,
+				txsLimits: built.txsLimits,
+			})
 			task.complete()
 			return {
 				...built,
@@ -307,16 +302,11 @@ export class FpcStrategy implements FeeStrategy {
 				...originalActions,
 				...discovered,
 			)
-			await finalizeGasLimits(
-				built.node,
-				built.txRequest,
-				simulatedTx,
-				ctx.gasPadding,
-				baseFees,
-				undefined,
-				undefined,
-				built.txsLimits,
-			)
+			await finalizeGasLimits(built.node, built.txRequest, simulatedTx, {
+				gasPadding: ctx.gasPadding,
+				maxFeesPerGas: baseFees,
+				txsLimits: built.txsLimits,
+			})
 			task.complete()
 			return {
 				...built,

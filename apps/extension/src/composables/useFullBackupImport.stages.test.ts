@@ -137,6 +137,7 @@ vi.mock("@/wallet/services/account/spec", () => ({
 	IMPORTED_KEYS_STORAGE_ROOT: "nulo:core:imported-account-keys",
 	accountRowId: (profileId: string, chainId: number, address: string) => JSON.stringify(["account", profileId, chainId, address]),
 	accountScopeKey: (chainId: number, address: string) => `${chainId}:${address}`,
+	DEFAULT_IMPORTED_ACCOUNT_NAME: "Imported account",
 }))
 vi.mock("@/wallet/services/account-state/spec", () => ({ ACCOUNT_STATE_SERVICE_NAME: "account-state" }))
 vi.mock("@/utils/background-liveness", () => ({

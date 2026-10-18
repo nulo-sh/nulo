@@ -38,6 +38,7 @@ import {
 } from "./egress-guard"
 import { holdNodeStub } from "./node-stub"
 import { heldListStorage } from "./token-list"
+import { PollTimeoutError, pollUntil } from "./poll"
 
 // Specs reach the page primitives and the popup openers through this hub; they live in leaves so
 // the modules the hub imports can use them without importing the hub back.
@@ -201,8 +202,17 @@ async function fireCanary(browser: Browser, extensionId: string, url: string, re
 		await page.evaluate((target: string) => {
 			fetch(target, { mode: "no-cors", cache: "no-store" }).catch(() => {})
 		}, url)
-		const deadline = Date.now() + budgetMs
-		while (!recorded() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100))
+		await pollUntil(
+			async () => recorded(),
+			(seen) => seen,
+			{
+				label: "the guard recording the canary",
+				timeoutMs: budgetMs,
+				intervalMs: 100,
+			},
+		).catch((error: unknown) => {
+			if (!(error instanceof PollTimeoutError)) throw error
+		})
 	} finally {
 		await page.close().catch(() => {})
 	}

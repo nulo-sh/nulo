@@ -3,10 +3,12 @@ import { computed, type ComputedRef, type Ref, ref } from "vue"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { managers } from "@/utils/core"
 import { ACCOUNT_SERVICE_NAME, AccountServiceClient, IMPORTED_KEYS_SERVICE_NAME } from "@/wallet/services/account/client"
+import { type Account, AccountType, accountScopeKey, type ImportedAccountKey } from "@/wallet/services/account/spec"
 import { ACCOUNT_STATE_SERVICE_NAME, AccountStateServiceClient } from "@/wallet/services/account-state/client"
 import { AUTH_REGISTRY_SERVICE_NAME, AuthRegistryServiceClient } from "@/wallet/services/auth-registry/client"
 import { CONFIG_SERVICE_NAME, ConfigServiceClient } from "@/wallet/services/config/client"
 import { CONTACT_SERVICE_NAME, ContactServiceClient } from "@/wallet/services/contact/client"
+import { isSeedChain } from "@/wallet/services/network/seeds"
 import { PROFILE_SERVICE_NAME, type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
 import type { RunFence as ProfileRunFence } from "@/wallet/services/profile/spec"
 import { TOKEN_SERVICE_NAME, TokenServiceClient } from "@/wallet/services/token/client"
@@ -27,6 +29,7 @@ type BackupStatus = "" | "progress" | "finished" | "encrypting" | "encrypted"
 type BackupClient = { backup(): Promise<unknown>; disconnect(): void }
 type NamedClient = { name: string; client: BackupClient }
 type HeldSlices = Record<string, unknown>
+type AddedNetworkImports = { accounts: number; networks: number }
 
 /** One create's currency and the clients it opened. Key material, the envelope and the passkey
  *  credential stay locals of the run, released when it settles; this record never holds them. */
@@ -42,6 +45,7 @@ type KeyMaterial = {
 	dekSealedB64?: string
 	dekReplaced: boolean
 	unopenedImportedKeys?: number
+	importsOnAddedNetworks: AddedNetworkImports
 	heldSlices: HeldSlices
 }
 
@@ -70,6 +74,9 @@ interface ExportState {
 	/** Imported-key rows that did not open, so travel as stored and will not restore. A replaced DEK
 	 *  has its own warning, which covers them. */
 	unopenedImportedKeys: Ref<number>
+	/** The file's imported accounts with a key in it, on chains a restore does not re-create; a key
+	 *  that did not open counts too. None when a replaced DEK has its own warning. */
+	importsOnAddedNetworks: Ref<AddedNetworkImports>
 }
 
 interface ExportCtx {
@@ -104,6 +111,16 @@ function disconnectAll(clients: NamedClient[]) {
 			console.error("[export/full] client disconnect failed:", err)
 		}
 	}
+}
+
+const noAddedNetworkImports = (): AddedNetworkImports => ({ accounts: 0, networks: 0 })
+
+function importsOnAddedNetworks(accounts: readonly Account[], rows: readonly ImportedAccountKey[]): AddedNetworkImports {
+	const imported = new Set(accounts.filter((a) => a.type === AccountType.Imported).map((a) => accountScopeKey(a.chainId, a.address)))
+	const chains = rows
+		.filter((row) => !isSeedChain(row.chainId) && imported.has(accountScopeKey(row.chainId, row.address)))
+		.map((row) => row.chainId)
+	return { accounts: chains.length, networks: new Set(chains).size }
 }
 
 // Slice keys are the services' OWN name constants — the import path's slice
@@ -188,6 +205,7 @@ async function exportKeyMaterial(
 				dekSealedB64: passkeyKeys.dekSealed,
 				dekReplaced: passkeyKeys.dekReplaced,
 				unopenedImportedKeys: passkeyKeys.unopenedImportedKeys,
+				importsOnAddedNetworks: importsOnAddedNetworks(passkeyKeys.accounts, passkeyKeys.importedKeyRows),
 				heldSlices: { [ACCOUNT_SERVICE_NAME]: passkeyKeys.accounts, [IMPORTED_KEYS_SERVICE_NAME]: passkeyKeys.importedKeyRows },
 			}
 		}
@@ -199,6 +217,7 @@ async function exportKeyMaterial(
 			dekB64: material.importedKeysKey,
 			dekReplaced: material.dekReplaced,
 			unopenedImportedKeys: material.unopenedImportedKeys,
+			importsOnAddedNetworks: importsOnAddedNetworks(material.accounts, material.importedKeyRows),
 			heldSlices: { [ACCOUNT_SERVICE_NAME]: material.accounts, [IMPORTED_KEYS_SERVICE_NAME]: material.importedKeyRows },
 		}
 	} catch (error) {
@@ -294,6 +313,14 @@ async function openRun(ctx: ExportCtx, isCurrent: () => boolean) {
 	return { fence, credentialData: acquired.credentialData }
 }
 
+function showFileWarnings(ctx: ExportCtx, material: KeyMaterial) {
+	const { state } = ctx
+	state.dekReplaced.value = !!material.dekReplaced
+	state.unopenedImportedKeys.value = material.dekReplaced ? 0 : (material.unopenedImportedKeys ?? 0)
+	state.importsOnAddedNetworks.value = material.dekReplaced ? noAddedNetworkImports() : material.importsOnAddedNetworks
+	state.chainStateOmitted.value = !!ctx.profile().recoveryMode
+}
+
 async function runBackup(ctx: ExportCtx) {
 	const { state } = ctx
 	// Re-entry latch: closes synchronously, before the first await, so a double click or Enter cannot
@@ -315,9 +342,7 @@ async function runBackup(ctx: ExportCtx) {
 		const { fence, credentialData } = opened
 		const material = await exportKeyMaterial(ctx, isCurrent, fence, credentialData, accountClient)
 		if (material === "handled" || !isCurrent()) return
-		state.dekReplaced.value = !!material.dekReplaced
-		state.unopenedImportedKeys.value = material.dekReplaced ? 0 : (material.unopenedImportedKeys ?? 0)
-		state.chainStateOmitted.value = !!ctx.profile().recoveryMode
+		showFileWarnings(ctx, material)
 		const envelope = buildBackupEnvelope(ctx, material)
 
 		const authenticate = credentialData ? passkeyBackupAuthenticator(credentialData) : undefined
@@ -463,6 +488,7 @@ function resetFlow(ctx: ExportCtx) {
 	state.isPasswordMismatch.value = false
 	state.dekReplaced.value = false
 	state.unopenedImportedKeys.value = 0
+	state.importsOnAddedNetworks.value = noAddedNetworkImports()
 	state.chainStateOmitted.value = false
 }
 
@@ -480,6 +506,7 @@ function createExportState(): ExportState {
 		dekReplaced: ref(false),
 		chainStateOmitted: ref(false),
 		unopenedImportedKeys: ref(0),
+		importsOnAddedNetworks: ref(noAddedNetworkImports()),
 	}
 }
 

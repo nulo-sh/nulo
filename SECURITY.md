@@ -270,15 +270,17 @@ must be one the app's accounts grant allows. When the app holds a
 transaction grant, or a simulation grant with a transaction scope, a
 `CallIntent` whose call is outside that scope is refused, and so is an
 `IntentInnerHash` whose `consumer` contract that scope does not grant at
-every function (a `*` function pattern); with no such grant, nothing is
-refused on scope. A `CallIntent`
+every function (a `*` function pattern); with no such grant, nothing else
+is refused on scope. A `CallIntent`
 inside the scope is signed without a window only while the app's consent to
 sign authorizations without asking is in effect
 (`packages/wallet-bridge/src/dispatcher.ts`). Every other admitted request
 opens a confirmation: for a `CallIntent` it shows the authorized caller, the
 target contract, the function and its arguments; for an `IntentInnerHash`,
 the consumer contract and the inner hash, with a warning that the wallet
-cannot show what the hash authorizes.
+cannot show what the hash authorizes. An `IntentInnerHash` whose consumer is
+the signing account itself is refused before any window, whatever the grant:
+only the wallet's own send authorizes that account's transactions.
 
 The authorization registry's grant functions answer only the wallet's own
 authorization action (`grantPublicAuthwit`), so a public authorization a dApp

@@ -45,13 +45,13 @@ function sim(total: [number, number], teardown: [number, number] = [0, 0]): TxSi
 describe("finalizeGasLimits admission clamp", () => {
 	test("measured usage over the cap throws — the tx can never be admitted", async () => {
 		await expect(
-			finalizeGasLimits(node, req(), sim([2_000, 500]), 1.05, undefined, undefined, undefined, new Gas(1_000, 1_000)),
+			finalizeGasLimits(node, req(), sim([2_000, 500]), { gasPadding: 1.05, txsLimits: new Gas(1_000, 1_000) }),
 		).rejects.toThrow(/cannot be included/)
 	})
 
 	test("auto-derived limits clamp to the cap; under-cap padding is untouched", async () => {
 		const r = req()
-		await finalizeGasLimits(node, r, sim([1_000, 900]), 1.5, undefined, undefined, undefined, new Gas(1_200, 10_000))
+		await finalizeGasLimits(node, r, sim([1_000, 900]), { gasPadding: 1.5, txsLimits: new Gas(1_200, 10_000) })
 		const gs = (r as { txContext: { gasSettings: GasSettings } }).txContext.gasSettings
 		// da: 1000×1.5=1500 > cap 1200 → clamped; l2: 900×1.5=1350 ≤ 10000 → padded.
 		expect([gs.gasLimits.daGas, gs.gasLimits.l2Gas]).toEqual([1_200, 1_350])
@@ -59,61 +59,46 @@ describe("finalizeGasLimits admission clamp", () => {
 
 	test("zero teardown stays zero under the clamp", async () => {
 		const r = req()
-		await finalizeGasLimits(node, r, sim([100, 100], [0, 0]), 1.05, undefined, undefined, undefined, new Gas(1_000, 1_000))
+		await finalizeGasLimits(node, r, sim([100, 100], [0, 0]), { gasPadding: 1.05, txsLimits: new Gas(1_000, 1_000) })
 		const gs = (r as { txContext: { gasSettings: GasSettings } }).txContext.gasSettings
 		expect([gs.teardownGasLimits.daGas, gs.teardownGasLimits.l2Gas]).toEqual([0, 0])
 	})
 
 	test("dApp custom gasLimits over the cap throw — never silently capped", async () => {
 		await expect(
-			finalizeGasLimits(
-				node,
-				req(),
-				sim([100, 100]),
-				1,
-				undefined,
-				{ gasLimits: { daGas: 5_000, l2Gas: 100 } } as never,
-				undefined,
-				new Gas(1_000, 1_000),
-			),
+			finalizeGasLimits(node, req(), sim([100, 100]), {
+				gasPadding: 1,
+				customLimits: { gasLimits: { daGas: 5_000, l2Gas: 100 } } as never,
+				txsLimits: new Gas(1_000, 1_000),
+			}),
 		).rejects.toThrow(/Requested gasLimits/)
 	})
 
 	test("dApp custom gasLimits within the cap ride through verbatim", async () => {
 		const r = req()
-		await finalizeGasLimits(
-			node,
-			r,
-			sim([100, 100]),
-			1,
-			undefined,
-			{ gasLimits: { daGas: 900, l2Gas: 800 } } as never,
-			undefined,
-			new Gas(1_000, 1_000),
-		)
+		await finalizeGasLimits(node, r, sim([100, 100]), {
+			gasPadding: 1,
+			customLimits: { gasLimits: { daGas: 900, l2Gas: 800 } } as never,
+			txsLimits: new Gas(1_000, 1_000),
+		})
 		const gs = (r as { txContext: { gasSettings: GasSettings } }).txContext.gasSettings
 		expect([gs.gasLimits.daGas, gs.gasLimits.l2Gas]).toEqual([900, 800])
 	})
 
 	test("dApp custom teardownGasLimits over the cap throw", async () => {
 		await expect(
-			finalizeGasLimits(
-				node,
-				req(),
-				sim([100, 100]),
-				1,
-				undefined,
-				{ teardownGasLimits: { daGas: 5_000, l2Gas: 100 } } as never,
-				undefined,
-				new Gas(1_000, 1_000),
-			),
+			finalizeGasLimits(node, req(), sim([100, 100]), {
+				gasPadding: 1,
+				customLimits: { teardownGasLimits: { daGas: 5_000, l2Gas: 100 } } as never,
+				txsLimits: new Gas(1_000, 1_000),
+			}),
 		).rejects.toThrow(/Requested teardownGasLimits/)
 	})
 
 	test("the DA axis is additionally bounded by the protocol MAX_TX_DA_GAS", async () => {
 		const r = req()
 		const hugeNodeCap = new Gas(MAX_TX_DA_GAS * 10, 10_000_000)
-		await finalizeGasLimits(node, r, sim([MAX_TX_DA_GAS - 1, 100]), 100, undefined, undefined, undefined, hugeNodeCap)
+		await finalizeGasLimits(node, r, sim([MAX_TX_DA_GAS - 1, 100]), { gasPadding: 100, txsLimits: hugeNodeCap })
 		const gs = (r as { txContext: { gasSettings: GasSettings } }).txContext.gasSettings
 		// padded da (huge) clamps to the PROTOCOL max, not the node's inflated cap.
 		expect(gs.gasLimits.daGas).toBe(MAX_TX_DA_GAS)
@@ -122,14 +107,14 @@ describe("finalizeGasLimits admission clamp", () => {
 	test("the L2 axis is additionally bounded by the protocol MAX_PROCESSABLE_L2_GAS", async () => {
 		const r = req()
 		const hugeNodeCap = new Gas(1_000_000, MAX_PROCESSABLE_L2_GAS * 10)
-		await finalizeGasLimits(node, r, sim([100, MAX_PROCESSABLE_L2_GAS - 1]), 100, undefined, undefined, undefined, hugeNodeCap)
+		await finalizeGasLimits(node, r, sim([100, MAX_PROCESSABLE_L2_GAS - 1]), { gasPadding: 100, txsLimits: hugeNodeCap })
 		const gs = (r as { txContext: { gasSettings: GasSettings } }).txContext.gasSettings
 		expect(gs.gasLimits.l2Gas).toBe(MAX_PROCESSABLE_L2_GAS)
 	})
 
 	test("absent txsLimits (defensive) keeps the historical uncapped behavior", async () => {
 		const r = req()
-		await finalizeGasLimits(node, r, sim([1_000, 1_000]), 2)
+		await finalizeGasLimits(node, r, sim([1_000, 1_000]), { gasPadding: 2 })
 		const gs = (r as { txContext: { gasSettings: GasSettings } }).txContext.gasSettings
 		expect([gs.gasLimits.daGas, gs.gasLimits.l2Gas]).toEqual([2_000, 2_000])
 	})

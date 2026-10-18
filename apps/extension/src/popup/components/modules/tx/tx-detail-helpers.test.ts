@@ -20,7 +20,7 @@ describe("tx-detail-helpers/buildGasBreakdown", () => {
 			teardownL2GasLimit: 300,
 			teardownDaGasLimit: 100,
 		})
-		expect(result).toEqual({ l2Gas: formatGas(1_000), daGas: formatGas(500), l2Cost: "0.001", daCost: "0.001" })
+		expect(result).toEqual({ l2Gas: formatGas(1_000), daGas: formatGas(500), l2Cost: 10n ** 15n, daCost: 10n ** 15n })
 	})
 })
 

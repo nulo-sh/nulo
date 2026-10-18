@@ -4,6 +4,7 @@ import { openAccountState, switchAccountByAddress } from "../fixtures/helpers"
 import { assertPgOk, formatPgMismatch, selectPgAccount, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, pickFeeAndSubmitAuthwitPopup, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { mintPublicTokensForAccount, waitForTxMined, type AztecTestConfig } from "../fixtures/aztec"
+import { pollUntil } from "../fixtures/poll"
 import { createAztecNodeClient } from "@aztec-labs/aztec.js/node"
 import { isAuthRegistryEnabled, isAuthwitConsumable } from "@/wallet/utils/auth-registry"
 
@@ -150,14 +151,8 @@ test.skipIf(!hasConfig)(
 
 		// Poll the on-chain registry until `predicate` holds. The settings flows wait for
 		// proven internally, but poll for robustness against submit→mine settling.
-		const waitForRegistry = async (predicate: () => Promise<boolean>, label: string, timeoutMs = 180_000) => {
-			const deadline = Date.now() + timeoutMs
-			for (;;) {
-				if (await predicate()) return
-				if (Date.now() > deadline) throw new Error(`waitForRegistry timeout: ${label}`)
-				await new Promise((r) => setTimeout(r, 2_000))
-			}
-		}
+		const waitForRegistry = (predicate: () => Promise<boolean>, label: string, timeoutMs = 180_000) =>
+			pollUntil(predicate, (holds) => holds, { label: `waitForRegistry: ${label}`, timeoutMs, intervalMs: 2_000 })
 
 		// ── Step 1: G1 grant → on-chain approved → consume OK (the mechanism works) ──
 		step("G1 grant")

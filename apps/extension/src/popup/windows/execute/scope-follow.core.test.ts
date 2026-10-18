@@ -3,6 +3,7 @@
  * Lock (jsdom has none). The window-level cases — when it fires, that it never fails an approval —
  * live in `scope-follow.test.ts`.
  */
+import { deferred } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { Account } from "@/wallet/services/account/client"
 import type { Network } from "@/wallet/services/network/client"
@@ -45,16 +46,6 @@ const installFakeLocks = (log: string[]) => {
 	})
 	Object.defineProperty(navigator, "locks", { value: { request }, configurable: true })
 	return request
-}
-
-const deferred = <T>() => {
-	let resolve!: (value: T) => void
-	let reject!: (error: unknown) => void
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
 }
 
 const TESTNET = { id: "net-testnet", name: "Testnet", chainId: 2 } as unknown as Network

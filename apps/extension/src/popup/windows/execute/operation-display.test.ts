@@ -6,7 +6,7 @@
 import { describe, expect, test, vi } from "vitest"
 import { ref } from "vue"
 import type { TokenInfo, TokenUpdated } from "@/wallet/services/token/client"
-import { followKnownTokens } from "./operation-display"
+import { followKnownTokens, resolveOperations } from "./operation-display"
 import type { DraftUIOperation } from "./types"
 
 const token = (symbol: string) => ({ id: 1, chainId: 1, contract: `0x${"0c".repeat(32)}`, name: symbol, symbol, decimals: 6 }) as TokenInfo
@@ -73,5 +73,41 @@ describe("followKnownTokens", () => {
 		expect(listeners.size).toBe(1)
 		follow.dispose()
 		expect(listeners.size).toBe(0)
+	})
+})
+
+describe("resolveOperations", () => {
+	const ADDRESS = `0x${"0a".repeat(32)}`
+	const HELD = `aztec:1:${ADDRESS}`
+	const ACCOUNT = { address: ADDRESS, chainId: 1 }
+
+	function services() {
+		const getAccount = vi.fn(async () => ACCOUNT)
+		const getNetworks = vi.fn(async () => [{ id: "net-1", chainId: 1 }])
+		return { accountService: { getAccount } as never, networkService: { getNetworks } as never, getAccount, getNetworks }
+	}
+
+	// The operation names a held account and a served chain, so falling through to either scope's
+	// lookups would resolve it.
+	test.each(["constructor", "__proto__", "toString"])("a %s kind resolves nothing and throws", async (kind) => {
+		const s = services()
+		const request = [{ kind, account: HELD, chain: "aztec:1" }] as never
+		await expect(resolveOperations(request, s.accountService, s.networkService, "p1")).rejects.toThrow("Invalid operation kind")
+		expect(s.getAccount).not.toHaveBeenCalled()
+		expect(s.getNetworks).not.toHaveBeenCalled()
+	})
+
+	test("account-scoped kinds resolve their account, and only a send carries the fee-settings key", async () => {
+		const s = services()
+		const request = [
+			{ kind: "register_token", account: HELD, address: ADDRESS },
+			{ kind: "send_transaction", account: HELD, actions: [] },
+		] as never
+		const { operations, accounts } = await resolveOperations(request, s.accountService, s.networkService, "p1")
+		expect(operations.map((op) => [op.kind, (op as { accountAddress?: string }).accountAddress, "feeSettings" in op])).toEqual([
+			["register_token", ADDRESS, false],
+			["send_transaction", ADDRESS, true],
+		])
+		expect(accounts).toEqual([ACCOUNT])
 	})
 })

@@ -27,15 +27,12 @@
  */
 
 import type { GasFees } from "@aztec-labs/stdlib/gas"
-import type { MinFeeNode } from "@nulo/aztec-runtime/fee-juice"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
-import type { Network } from "@/wallet/services/network/service"
 import { findPrimaryEndpoint } from "@/wallet/services/network/spec"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
-import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import {
-	type ChainIdentity,
 	chainIdentityDrift,
+	type EstimateReuseDeps,
 	ESTIMATE_REUSE_TTL_MS,
 	fpcIdentityDrift,
 	pendingHashesChanged,
@@ -65,24 +62,10 @@ export type OperationEstimateReuseEntry = ReuseEntryBase & {
 	readonly sequenceEpoch: number
 }
 
-export interface OperationEstimateReuseDeps {
-	getNetwork(networkId: string): Promise<Network>
-	getNode(chainId: number): Promise<MinFeeNode>
-	/** Live-chain re-assert for the reused request: runs the composite
-	 *  assertion (throws on drift vs the network row) AND returns the raw
-	 *  pair for exact comparison against the entry's snapshot. */
-	getLiveChainIdentity(network: Network): Promise<ChainIdentity>
-	/** Fresh resolved-FPC lookup for identity revalidation. */
-	getFpcInfo(fpcId: string): Promise<FpcInfo>
-	getPendingForAccount(account: string): { hash: string }[]
-	sequenceEpoch(chainId: number, account: string): number
-	logDebug(msg: string): void
-}
-
 export class OperationEstimateReuse {
 	private readonly cache = new SingleShotTtlCache<OperationEstimateReuseEntry>(ESTIMATE_REUSE_TTL_MS)
 
-	public constructor(private readonly deps: OperationEstimateReuseDeps) {}
+	public constructor(private readonly deps: EstimateReuseDeps) {}
 
 	public stash(estimateId: string, entry: OperationEstimateReuseEntry): void {
 		this.cache.stash(estimateId, entry)

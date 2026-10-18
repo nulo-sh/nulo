@@ -1,40 +1,9 @@
 import { FpcType } from "@/wallet/services/fpc/client"
-import { FEE_JUICE_DECIMALS, feeJuicePricingFromUsd, feeToUsd, formatFeeJuice, formatGasBalance } from "@/utils/fee-estimation"
+import { FEE_DECIMALS, FEE_JUICE_DECIMALS, FEE_READOUT_UNIT, type FeeDisplay, feeDisplay, formatGasBalance } from "@/utils/fee-estimation"
 import { formatBaseUnits } from "@/utils/amount"
 import type { AppPick } from "@/utils/fee-picks"
 
 export { formatGasBalance }
-
-export interface FeeDisplay {
-	amount: string
-	/** Null without a live Fee Juice quote. */
-	usd: string | null
-}
-
-export function feeDisplay(
-	estimate: { maxFee: string | bigint; maxFeeFormatted: string } | null | undefined,
-	usdPerFeeJuice: number | undefined,
-): FeeDisplay | null {
-	if (!estimate) return null
-	return {
-		amount: estimate.maxFeeFormatted,
-		usd: feeToUsd(BigInt(estimate.maxFee), feeJuicePricingFromUsd(usdPerFeeJuice)),
-	}
-}
-
-export function feeInWords(display: FeeDisplay): string {
-	return display.usd ? `${display.amount} FJ (${display.usd})` : `${display.amount} FJ`
-}
-
-/** The fee card's "You pay" value as one string, in the card's words. */
-export function feeLine(display: FeeDisplay | null): string | undefined {
-	return display ? `~${feeInWords(display)}` : undefined
-}
-
-/** A fee in base units as the card writes it. */
-export function feeAmountDisplay(raw: string, usdPerFeeJuice: number | undefined): FeeDisplay {
-	return feeDisplay({ maxFee: raw, maxFeeFormatted: formatFeeJuice(BigInt(raw)) }, usdPerFeeJuice) as FeeDisplay
-}
 
 export type FeePayer = "self" | "sponsor" | "unvouched"
 
@@ -76,15 +45,17 @@ export interface FeeMethodOption {
 export type { GasBalances } from "@/wallet/services/execution/models"
 import type { FeeJuiceShortfall, GasBalances } from "@/wallet/services/execution/models"
 
-const SHORTFALL_DECIMALS = 6
-
-/** The refusal for a balance short of the fee. The cost rounds up and the balance down at the same
- *  precision, so the two figures never read equal. */
-export function shortfallSentence({ maxFee, balance }: FeeJuiceShortfall): string {
-	const step = 10n ** BigInt(FEE_JUICE_DECIMALS - SHORTFALL_DECIMALS)
-	const cost = ((BigInt(maxFee) + step - 1n) / step) * step
-	const options = { maxDecimals: SHORTFALL_DECIMALS }
-	return `This send can cost up to ${formatBaseUnits(cost, FEE_JUICE_DECIMALS, options)} FJ. You have ${formatBaseUnits(BigInt(balance), FEE_JUICE_DECIMALS, options)} FJ.`
+/** The refusal's two figures for a balance short of the fee. The cost rounds up and the balance down,
+ *  both at the fee's precision, so the two never read equal. */
+export function shortfallFigures(
+	{ maxFee, balance }: FeeJuiceShortfall,
+	usdPerFeeJuice: number | undefined,
+): { cost: FeeDisplay; balance: string } {
+	const cost = ((BigInt(maxFee) + FEE_READOUT_UNIT - 1n) / FEE_READOUT_UNIT) * FEE_READOUT_UNIT
+	return {
+		cost: feeDisplay(cost, usdPerFeeJuice),
+		balance: formatBaseUnits(BigInt(balance), FEE_JUICE_DECIMALS, { maxDecimals: FEE_DECIMALS }),
+	}
 }
 
 export interface BuildSettingsInput {

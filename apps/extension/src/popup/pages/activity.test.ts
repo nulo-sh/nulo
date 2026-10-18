@@ -4,6 +4,7 @@
  * `isArriving`, and the incoming rows are presented after the render that showed them. Its received
  * rows resolve their token for the current profile and network, however the page was opened.
  */
+import { deferred } from "@nulo/wallet-core/utils"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { ref } from "vue"
@@ -14,12 +15,23 @@ import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/li
 
 const H = vi.hoisted(() => {
 	const event = () => ({ add: () => {}, remove: () => {} })
+	/** Emitting hands back what each handler returned, so a case can await a handler's promise. */
+	const bus = () => {
+		const handlers = new Set<(x?: unknown) => unknown>()
+		return {
+			add: (fn: (x?: unknown) => unknown) => handlers.add(fn),
+			remove: (fn: (x?: unknown) => unknown) => handlers.delete(fn),
+			emit: (x?: unknown) => [...handlers].map((fn) => fn(x)),
+			handlers,
+		}
+	}
 	const handlers = new Set<() => void>()
 	const tokenAddedHandlers = new Set<() => void>()
 	return {
 		tokenAddedHandlers,
 		event,
 		incomingConnected: { add: (fn: () => void) => handlers.add(fn), remove: (fn: () => void) => handlers.delete(fn), handlers },
+		journal: { connected: bus(), added: bus(), updated: bus(), deleted: bus() },
 		getIncomingTransfers: vi.fn(),
 		getOperations: vi.fn(),
 		getTokens: vi.fn(),
@@ -41,10 +53,10 @@ vi.mock("@/wallet/services/operation-journal/client", () => ({
 	OperationJournalServiceClient: vi.fn(function () {
 		return {
 			disconnect: vi.fn(),
-			onConnected: H.event(),
-			onOperationAdded: H.event(),
-			onOperationUpdated: H.event(),
-			onOperationDeleted: H.event(),
+			onConnected: H.journal.connected,
+			onOperationAdded: H.journal.added,
+			onOperationUpdated: H.journal.updated,
+			onOperationDeleted: H.journal.deleted,
 			getOperations: H.getOperations,
 		}
 	}),
@@ -132,6 +144,7 @@ beforeEach(async () => {
 	H.getOperations.mockReset().mockResolvedValue([])
 	H.getTokens.mockReset().mockResolvedValue([])
 	H.incomingConnected.handlers.clear()
+	for (const ev of Object.values(H.journal)) ev.handlers.clear()
 	H.quotes = {}
 	H.store.current = createAppStoreHarness()
 	vi.stubGlobal(
@@ -221,6 +234,88 @@ describe("pages/activity — cancelled and failed operations by network", () => 
 		H.store.current.network = { id: "net-2", chainId: 2 }
 		await flushPromises()
 		expect(keys()).toEqual(["journal:there"])
+	})
+})
+
+describe("pages/activity — the cancelled and failed list's events and reads", () => {
+	const op = (id: string, over: Record<string, unknown> = {}) => ({
+		id,
+		kind: "transfer",
+		origin: "popup",
+		profileId: "p1",
+		accountAddress: "0xacct",
+		networkId: "net-1",
+		progress: { stage: "cancelled" },
+		error: null,
+		terminalAt: 2000,
+		createdAt: 0,
+		updatedAt: 2000,
+		...over,
+	})
+	const mountActivity = () =>
+		mount(Activity, { shallow: true, global: { plugins: [router], stubs: { Flex: { template: "<div><slot /></div>" } } } })
+	const keys = (w: ReturnType<typeof mountActivity>) =>
+		w
+			.findComponent(TransactionsList)
+			.props("rows")
+			.map((row: { key: string }) => row.key)
+
+	test("a new or re-added row leads, an update keeps a listed row in place, and a refused add changes nothing", async () => {
+		// One end time for every row: the list's stable sort then shows the mirror's own order.
+		H.getOperations.mockResolvedValue([op("x")])
+		const w = mountActivity()
+		await flushPromises()
+		H.journal.added.emit(op("running", { terminalAt: null, progress: { stage: "proving" } }))
+		H.journal.added.emit(op("late"))
+		await flushPromises()
+		expect(keys(w)).toEqual(["journal:late", "journal:x"])
+
+		H.journal.added.emit(op("x"))
+		H.journal.updated.emit(op("late", { progress: { stage: "failed" } }))
+		H.journal.updated.emit(op("unseen"))
+		await flushPromises()
+		expect(keys(w)).toEqual(["journal:unseen", "journal:x", "journal:late"])
+		w.unmount()
+	})
+
+	test("an update it refuses drops its row and a later terminal one lists it again at the front", async () => {
+		H.getOperations.mockResolvedValue([op("x"), op("y")])
+		const w = mountActivity()
+		await flushPromises()
+		expect(keys(w)).toEqual(["journal:x", "journal:y"])
+
+		// A non-terminal update delivered after the read that saw the record end.
+		H.journal.updated.emit(op("y", { terminalAt: null, progress: { stage: "proving" } }))
+		await flushPromises()
+		expect(keys(w)).toEqual(["journal:x"])
+		H.journal.updated.emit(op("y"))
+		H.journal.deleted.emit(op("x"))
+		await flushPromises()
+		expect(keys(w)).toEqual(["journal:y"])
+		w.unmount()
+	})
+
+	test("a reconnect reads again, and its refused read keeps what the mount's read listed", async () => {
+		const mountRead = deferred<unknown[]>()
+		const reconnectRead = deferred<unknown[]>()
+		H.getOperations.mockReturnValueOnce(mountRead.promise).mockReturnValueOnce(reconnectRead.promise)
+		const w = mountActivity()
+		await flushPromises()
+		const [reconnect] = H.journal.connected.emit()
+		mountRead.resolve([op("x")])
+		await flushPromises()
+		expect(keys(w)).toEqual(["journal:x"])
+
+		reconnectRead.reject(new Error("port closed"))
+		await expect(reconnect).rejects.toThrow("port closed")
+		await flushPromises()
+		expect(keys(w)).toEqual(["journal:x"])
+
+		H.getOperations.mockResolvedValueOnce([op("x"), op("y", { terminalAt: 1000 })])
+		await H.journal.connected.emit()[0]
+		await flushPromises()
+		expect(keys(w)).toEqual(["journal:x", "journal:y"])
+		w.unmount()
 	})
 })
 

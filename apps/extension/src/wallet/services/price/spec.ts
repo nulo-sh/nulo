@@ -28,6 +28,9 @@ export const QUOTE_TTL_MS = 15 * 60_000
  *  would otherwise stay "fresh" forever AND win every monotonic merge. */
 export const MAX_CLOCK_SKEW_MS = 2 * 60_000
 
+/** A provider fetch is aborted after this long, so no fetch outlives it by more than its cache write. */
+export const PRICE_FETCH_TIMEOUT_MS = 10_000
+
 /**
  * The single staleness rule (spec-level so UI, service, and executors can
  * never drift apart). A quote is usable iff its effective timestamp is

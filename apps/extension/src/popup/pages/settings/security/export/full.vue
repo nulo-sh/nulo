@@ -49,6 +49,7 @@ const {
 	dekReplaced,
 	chainStateOmitted,
 	unopenedImportedKeys,
+	importsOnAddedNetworks,
 	isPasskeyProfile,
 	canDownload,
 	handleBackup,
@@ -58,6 +59,13 @@ const {
 	reset,
 	dispose,
 } = useFullBackupExport({ runCeremony, leaveAfterPasskeyFailure })
+
+const addedNetworksText = computed(() => {
+	const { accounts, networks } = importsOnAddedNetworks.value
+	const count = accounts === 1 ? "1 imported account is" : `${accounts} imported accounts are`
+	const one = networks === 1
+	return `${count} on ${one ? "a network" : "networks"} you added. A restore re-creates only the default networks, so add ${one ? "that network" : "those networks"} again to restore ${accounts === 1 ? "it" : "them"}.`
+})
 
 /** A reset in progress: its journal holds accounts a backup made now would miss. */
 const pendingReset = ref(null)
@@ -256,6 +264,17 @@ onBeforeUnmount(() => {
 								could not be opened, so {{ unopenedImportedKeys === 1 ? "it" : "they" }} will not be restored. Import
 								their keys again after the restore.
 							</Text>
+						</template>
+					</Banner>
+					<Banner
+						v-if="importsOnAddedNetworks.accounts > 0"
+						variant="warning"
+						direction="vertical"
+						data-testid="backup-imported-network-banner"
+					>
+						<template #title> Some imported accounts need their network </template>
+						<template #description>
+							<Text color="secondary" height="140">{{ addedNetworksText }}</Text>
 						</template>
 					</Banner>
 					<Banner v-if="chainStateOmitted" variant="warning" direction="vertical" data-testid="backup-chain-state-omitted-banner">

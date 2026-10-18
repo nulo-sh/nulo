@@ -12,13 +12,8 @@ import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import { TransferType } from "@/wallet/services/transaction/spec"
 import type { Network } from "@/wallet/services/network/service"
 import type { FeeSettings } from "./spec"
-import { ESTIMATE_REUSE_TTL_MS } from "./estimate-reuse-shared"
-import {
-	TransferEstimateReuse,
-	type TransferEstimateReuseDeps,
-	type TransferEstimateReuseEntry,
-	fingerprintFeeSettings,
-} from "./transfer-estimate-reuse"
+import { ESTIMATE_REUSE_TTL_MS, type EstimateReuseDeps } from "./estimate-reuse-shared"
+import { TransferEstimateReuse, type TransferEstimateReuseEntry, fingerprintFeeSettings } from "./transfer-estimate-reuse"
 
 const FEE_SETTINGS: FeeSettings = { paymentMethod: { kind: "fj" } }
 const FENCE = { profileId: "profile-1", epoch: 0, session: 1 }
@@ -95,7 +90,7 @@ function makeReuse(
 	const entry = makeEntry(overrides.entry)
 	const logDebug = vi.fn()
 	const getFpcInfo = vi.fn(overrides.fpcRow ?? (async () => ({ ...SPONSOR_ROW })))
-	const deps: TransferEstimateReuseDeps = {
+	const deps: EstimateReuseDeps = {
 		sequenceEpoch: () => overrides.epoch ?? 0,
 		getNetwork: async () =>
 			(overrides.network ?? {

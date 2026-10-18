@@ -26,7 +26,6 @@ const authwit = (tag: string) => ({
 })
 const estimate = (discoveredAuthwits?: unknown[]) => ({
 	maxFee: "1",
-	maxFeeFormatted: "0.000001",
 	gasDetails: { l2GasLimit: 0, daGasLimit: 0, teardownL2GasLimit: 0, teardownDaGasLimit: 0, feePerL2Gas: "1", feePerDaGas: "1" },
 	...(discoveredAuthwits ? { discoveredAuthwits } : {}),
 })

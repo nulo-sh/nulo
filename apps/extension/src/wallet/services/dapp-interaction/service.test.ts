@@ -714,9 +714,16 @@ describe("DappInteractionService — the session gate refuses what the session d
 		expect(h.executeOperations).not.toHaveBeenCalled()
 	}
 
-	test("an operation kind no case names is refused", async () => {
+	test("an operation kind the trait table does not name is refused", async () => {
 		const unknownKind = { kind: "aztec_unknownKind", account: ACCOUNT } as unknown as OperationRequest
 		await expectRefused(await windowHarness(), unknownKind, "Unsupported operation kind")
+	})
+
+	// The operation names a held account and a granted chain, so falling through to either scope's
+	// checks would pass them.
+	test.each(["constructor", "__proto__", "toString"])("an operation kind named %s is refused", async (kind) => {
+		const prototypeKind = { kind, account: ACCOUNT, chain: "aztec:1" } as unknown as OperationRequest
+		await expectRefused(await windowHarness(), prototypeKind, "Unsupported operation kind")
 	})
 
 	test("private events for an address outside the session's accounts are refused", async () => {

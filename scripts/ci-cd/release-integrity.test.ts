@@ -249,6 +249,7 @@ const NO_INSTALL = [
 	"release.yml#auto-unstick",
 	"release.yml#publish-chrome-store",
 	"release.yml#publish-firefox-amo",
+	"release.yml#select-assets",
 	"release.yml#sync-main-to-dev",
 	"source-rebuild.yml#rebuild-arm64",
 	"source-rebuild.yml#rebuild-x64",
@@ -443,6 +444,100 @@ function storeBytesFindings(tree: Tree): string[] {
 		findings.push("attach-assets: a published release can skip verify-published")
 	if (paths.length !== 3 || !paths.every((p) => p.startsWith(SHIPPED)))
 		findings.push("attach-assets: the store artifact is not the checked bytes")
+	return findings
+}
+
+const SELECT = "release.yml#select-assets"
+const SELECT_ENV = {
+	VERSION: "${{ needs.resolve.outputs.version }}",
+	TAG: "${{ needs.resolve.outputs.tag }}",
+	SHA: "${{ needs.resolve.outputs.sha }}",
+}
+const SOURCE = "${{ github.event_name == 'push' && 'build' || needs.select-assets.outputs.source }}"
+const BY_SOURCE: Record<string, string> = { build: "env.SOURCE == 'build'", published: "env.SOURCE == 'published'" }
+const SMOKES = { "smoke-against-artifact": "chrome", "smoke-firefox-against-artifact": "firefox" }
+const PUBLISHED_ONLY = "steps.select.outputs.source == 'published'"
+/** A step's shell commands, one per line, comments and blank lines dropped. */
+const commandsOf = (step: Step | undefined): string[] =>
+	(step?.run ?? "")
+		.split("\n")
+		.map((line) => line.trim())
+		.filter((line) => line && !line.startsWith("#"))
+
+function selectStepFindings(step: Step): string[] {
+	const findings: string[] = []
+	if (step.uses?.startsWith("actions/checkout@") && (step.with?.ref !== undefined || step.with?.["persist-credentials"] !== false))
+		findings.push(`${SELECT}: a checkout of another revision, or one that keeps its token`)
+	if (step.uses === SETUP_BUN && (step.with?.cache !== "false" || step.with?.install !== "false"))
+		findings.push(`${SELECT}: Bun's setup restores a cache or installs`)
+	return findings
+}
+
+/** select-assets reads the release with the narrowest token, from this workflow's revision, installing nothing. */
+function selectJobFindings(tree: Tree): string[] {
+	const job = tree.workflows["release.yml"].jobs["select-assets"]
+	if (!job) return [`${SELECT}: missing`]
+	const findings = (job.steps ?? []).flatMap(selectStepFindings)
+	if (!Bun.deepEquals(job.permissions, { contents: "read", attestations: "read" })) findings.push(`${SELECT}: permissions`)
+	if (!Bun.deepEquals(job.env, SELECT_ENV)) findings.push(`${SELECT}: VERSION, TAG and SHA are not resolve's`)
+	const others = thirdParty(expanded(tree, job))
+	if (others.join() !== "oven-sh/setup-bun") findings.push(`${SELECT}: runs ${others.join(", ")}`)
+	if (!(job.steps ?? []).some((step) => step.run === `${RUNNER} select`)) findings.push(`${SELECT}: does not run select`)
+	return [...findings, ...handoffFindings(job.steps ?? [])]
+}
+
+const PUBLISHED_ZIPS = ["chrome", "firefox"].map((browser) => `dist/release/nulo-${browser}-\${VERSION}.zip`)
+const PUBLISHED_ASSETS = [
+	"dist/release/nulo-chrome-${{ env.VERSION }}.zip",
+	"dist/release/nulo-firefox-${{ env.VERSION }}.zip",
+	"dist/release/SHASUMS256.txt",
+]
+
+/** Each published tree is its own browser's checked zip, unpacked, and the assets artifact is the three checked files. */
+function handoffFindings(steps: Step[]): string[] {
+	const findings: string[] = []
+	const unpacked = commandsOf(steps.find((s) => s.run?.includes("unzip")))
+	const want = [
+		"mkdir -p dist/published",
+		...["chrome", "firefox"].map((browser, i) => `unzip -q "${PUBLISHED_ZIPS[i]}" -d dist/published/${browser}`),
+	]
+	if (!Bun.deepEquals(unpacked, want)) findings.push(`${SELECT}: a tree is not its own browser's zip`)
+	for (const browser of ["chrome", "firefox"]) {
+		const upload = steps.find((s) => s.with?.name === `published-${browser}`)
+		if (upload?.with?.path !== `dist/published/${browser}` || upload.if !== PUBLISHED_ONLY)
+			findings.push(`${SELECT}: published-${browser} is not the unpacked ${browser} zip`)
+	}
+	const assets = steps.find((s) => s.with?.name === "published-assets")
+	const paths = String(assets?.with?.path ?? "")
+		.trim()
+		.split("\n")
+		.map((p) => p.trim())
+	if (!Bun.deepEquals(paths, PUBLISHED_ASSETS) || assets?.if !== PUBLISHED_ONLY)
+		findings.push(`${SELECT}: published-assets is not the three checked files`)
+	return findings
+}
+
+/** On a dispatch, the bytes attach-assets ships are the ones the smokes ran: the rebuild only on `build`. */
+function sourceFindings(tree: Tree): string[] {
+	const { jobs: all } = tree.workflows["release.yml"]
+	const attach = all["attach-assets"]
+	const findings = selectJobFindings(tree)
+	if (attach.env?.SOURCE !== SOURCE) findings.push("attach-assets: SOURCE may default on a dispatch")
+	const steps = attach.steps ?? []
+	const guard = (find: (s: Step) => boolean) => steps.find(find)?.if
+	if (guard((s) => s.run?.includes("zip-reproducible.ts") === true) !== BY_SOURCE.build)
+		findings.push("attach-assets: the zip step runs on a published source")
+	for (const browser of ["chrome", "firefox"])
+		if (guard((s) => s.with?.name === `extension-${browser}`) !== BY_SOURCE.build)
+			findings.push(`attach-assets: the ${browser} build is downloaded on a published source`)
+	const published = steps.find((s) => s.with?.name === "published-assets")
+	if (published?.if !== BY_SOURCE.published || published.with?.path !== "dist/release")
+		findings.push("attach-assets: the published assets are not what a published source ships")
+	for (const [smoke, browser] of Object.entries(SMOKES)) {
+		const want = `\${{ needs.select-assets.outputs.source == 'published' && 'published-${browser}' || 'extension-${browser}' }}`
+		const job = all[smoke] as Job & { with?: Record<string, unknown> }
+		if (job.with?.artifact_name !== want) findings.push(`${smoke}: smokes other bytes than its source's`)
+	}
 	return findings
 }
 
@@ -833,6 +928,7 @@ describe("jobs that install nothing", () => {
 				"publish-token-list.yml#sign",
 				"release.yml#attach-assets",
 				"release.yml#auto-unstick",
+				"release.yml#select-assets",
 				"release.yml#sync-main-to-dev",
 				"verify-store-copies.yml#compare",
 			].map((where) => `${where}: runs Bun after changing directory`),
@@ -1024,6 +1120,35 @@ describe("attestations", () => {
 		],
 	])("finds %s", (_, edit) => {
 		expect(storeBytesFindings(mutated(edit)).length).toBeGreaterThan(0)
+	})
+	test("a store dispatch ships the bytes its smokes ran, read by a job that holds no write", () => {
+		expect(sourceFindings(TREE)).toEqual([])
+	})
+	const releaseJob = (t: Tree, name: string) => t.workflows["release.yml"].jobs[name] as Job & { with?: Record<string, unknown> }
+	test.each([
+		[
+			"a smoke fixed to the rebuild",
+			(t: Tree) => Object.assign(releaseJob(t, "smoke-against-artifact").with ?? {}, { artifact_name: "extension-chrome" }),
+			["smoke-against-artifact: smokes other bytes than its source's"],
+		],
+		[
+			"a tree unpacked from the other browser's zip",
+			(t: Tree) => {
+				const unpack = releaseJob(t, "select-assets").steps?.find((s) => s.run?.includes("unzip"))
+				if (unpack) unpack.run = unpack.run?.replace("nulo-firefox-", "nulo-chrome-")
+			},
+			["release.yml#select-assets: a tree is not its own browser's zip"],
+		],
+		[
+			"an unguarded zip step",
+			(t: Tree) => {
+				const zip = releaseJob(t, "attach-assets").steps?.find((s) => s.run?.includes("zip-reproducible.ts"))
+				if (zip) zip.if = undefined
+			},
+			["attach-assets: the zip step runs on a published source"],
+		],
+	] as [string, (t: Tree) => void, string[]][])("finds %s", (_, edit, expected) => {
+		expect(sourceFindings(mutated(edit))).toEqual(expected)
 	})
 	test("finds a release written with gh", () => {
 		const edit = (t: Tree) =>

@@ -5,6 +5,7 @@ import {
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
 	ContractNotRegisteredError,
+	OwnAccountIntentRefusalError,
 	InvalidWalletArgumentsError,
 	JobCancelledError,
 	PxeStaleAnchorError,
@@ -2786,6 +2787,17 @@ describe("dispatcher — createAuthWit asks unless the authorizations consent is
 
 		await expect(h.authwit(intent(TOKEN))).resolves.toBe("0xsigned")
 		expect(h.counts).toEqual({ signed: 1, windows: 0 })
+	})
+
+	test("an inner hash whose consumer is the signing account is refused top-level and batched: nothing signs, no window opens", async () => {
+		const innerHash = `0x${"01".repeat(32)}`
+		const h = harness({ capabilityGrants: [accounts, anyContract], authorizationsWithoutAsking: { broad: true } })
+		await expect(h.authwit({ consumer: ACCOUNT, innerHash })).rejects.toBeInstanceOf(OwnAccountIntentRefusalError)
+		await expect(h.batch({ consumer: ACCOUNT, innerHash })).rejects.toBeInstanceOf(OwnAccountIntentRefusalError)
+		expect(h.counts).toEqual({ signed: 0, windows: 0 })
+
+		await expect(h.authwit({ consumer: TOKEN, innerHash })).resolves.toBe("0xconfirmed")
+		expect(h.counts).toEqual({ signed: 0, windows: 1 })
 	})
 })
 

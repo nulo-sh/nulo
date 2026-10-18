@@ -1,0 +1,8 @@
+# Phase 2
+
+- The fee window's Confirm names the new fee's figure alone, read from the question, so it needs no quote and reads the same before and after the card mounts; before the question loads it reads `Send for FJ`, as before. The plan's "Send for ~X FJ ($Y)" overflowed the half-width footer button in the first screenshot (OA-3, ships the figure alone). Codex r1 had caught an earlier cut that dropped the figure until the card mounted.
+- The card's "Was …" and "Now …" each stay on one line (`white-space: nowrap`): with the dollars the line no longer fits, and it broke between "Now" and its figure.
+- The cards that own a price client are tested over the real `usePrices` with one fake client module, `tests/helpers/price-client-fake.ts`: a test counts `refreshIfStale` calls instead of mocking the composable, which is what proves a legend-only operation and a window behind its session gate read no price.
+- `FeeCostReadout.test.ts`'s `drawn()` joins text nodes with a space, so a figure followed by its full stop reads `… ($0.269) .` through it; the cap line is asserted through its own testid instead.
+- The worker's priority gate is `feeDisplay(priorityFee, undefined).amount !== "0"`, so the wire and the line agree on what prints as zero.
+- A figure inside a 12 px body sentence (the app-paid limit and its priority part, the queued cap line, the shortfall cost) takes `fee_figure` in `send/fee-shared.module.css`: `type--fiat` at 12 px. `type--meta` is 13 px, so it would have changed the sentence's size. The app-paid limit was the `name` role (weight 600); no mono role is 12 px at 600, so its weight becomes the mono role's 400. Filed as OA-2 (ships A, weight 400).

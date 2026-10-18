@@ -11,6 +11,7 @@ import { join } from "node:path"
 import type { Page, Target } from "puppeteer"
 import { waitForTarget } from "./browser"
 import { clickByTestId, clickSelector, patchPagePolling, waitForHash } from "./dom"
+import { pollUntil } from "./poll"
 import type { ExtensionContext } from "./extension"
 import { selectFeeMethod, type FeeMethodSubtitle } from "./transfers"
 import { recordPageErrors } from "./wallet-pages"
@@ -120,16 +121,15 @@ export async function waitForPopup(
 }
 
 export async function waitForMainFrame(page: Page, timeout = 5_000): Promise<void> {
-	const start = Date.now()
-	while (Date.now() - start < timeout) {
+	const ready = async () => {
 		try {
 			page.mainFrame()
-			return
+			return true
 		} catch {
-			await new Promise((r) => setTimeout(r, 50))
+			return false
 		}
 	}
-	throw new Error(`waitForMainFrame: page main frame not ready after ${timeout}ms`)
+	await pollUntil(ready, (ok) => ok, { label: "waitForMainFrame: the page's main frame ready", timeoutMs: timeout, intervalMs: 50 })
 }
 
 export type CreatedWindow = { id?: number; type?: string }
@@ -148,12 +148,15 @@ export async function recordCreatedWindows(control: Page): Promise<() => Promise
  *  opening a second popup of the same kind so waitForTarget doesn't match
  *  the still-closing first popup. */
 export async function waitForPopupClosed(page: Page, timeout = 5_000): Promise<void> {
-	const start = Date.now()
-	while (Date.now() - start < timeout) {
-		if (page.isClosed()) return
-		await new Promise((r) => setTimeout(r, 50))
-	}
-	throw new Error(`waitForPopupClosed: popup did not close within ${timeout}ms`)
+	await pollUntil(
+		async () => page.isClosed(),
+		(closed) => closed,
+		{
+			label: "waitForPopupClosed: the popup closed",
+			timeoutMs: timeout,
+			intervalMs: 50,
+		},
+	)
 }
 
 export async function approveDiscover(page: Page): Promise<void> {

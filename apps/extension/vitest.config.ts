@@ -79,6 +79,8 @@ export default defineConfig({
 			"../../packages/aztec-runtime/src/pxe/public-events-warn.pins.test.ts",
 			// Same bb.js WASM limitation (the selector's poseidon2). Runs in wallet-bridge's own suite.
 			"../../packages/wallet-bridge/src/auth-registry.pins.test.ts",
+			// Same bb.js WASM limitation (the claim selector's poseidon2). Runs in wallet-bridge's own suite.
+			"../../packages/wallet-bridge/src/fee-payer.pins.test.ts",
 		],
 		// Inline workspace @nulo/* packages so vite processes their TS
 		// source entry points instead of externalizing them (default
