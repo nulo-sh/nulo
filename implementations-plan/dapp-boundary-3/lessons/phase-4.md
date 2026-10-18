@@ -29,3 +29,4 @@
 
 - `cap-window` re-pinned, no product change: the fit test pins S2's overflow at exactly 12 px and checks both ends (the hostname in view at rest; Details whole at the end of the scroll; the Confirm row below the area and inside the window; the page never scrolls; the note taller than the overflow, so S1 fits); both Tab-order tests expect Firefox's scroll-area stop first.
 - After merging `origin/dev` (18d29f23), retry 0: Chrome 5 of 5 (file 78.9 s), Firefox 4 of the 4 it runs (file 92.5 s).
+- Codex (arc session, resumed on the re-pin): `conditional approve`. Accepted: both edges of every box against the area's visible part, the area inside the window, the scroll offset compared to the subpixel, the window measured once its swapped-in fonts load, OA-7's record of where the stop sits, and a suite comment cut to the constraint it keeps. Retry 0 after: Chrome 5 of 5 (file 61.7 s), Firefox 4 of the 4 it runs (file 78.4 s).

@@ -22,10 +22,8 @@ const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 /**
- * The permission window in a browser: what jsdom cannot show. Keys press native buttons, the Tab
- * order runs as drawn, the busiest window scrolls by a pinned amount at the drawings' 400×800, and
- * a widening to any contract turns the authorizations switch Off again. Every flow connects on its
- * own launch, so no flow's grant turns another's first request into a re-request.
+ * The permission window in a browser: what jsdom cannot show. Every flow connects on its own launch,
+ * so no flow's grant turns another's first request into a re-request.
  */
 
 type Connected = ExtensionContext & { playgroundPage: Page }
@@ -42,6 +40,8 @@ async function openWindow(ctx: Connected, bundle: PgBundle): Promise<{ popup: Pa
 	const popup = await popupP
 	await popup.setViewport({ width: 400, height: 800 })
 	await waitCapabilitiesReady(popup)
+	// The fonts swap in (`font-display: swap`), so the layout and the Tab order settle only once they load.
+	await popup.evaluate(() => document.fonts.ready.then(() => undefined))
 	return { popup, seq }
 }
 
@@ -255,7 +255,7 @@ test.skipIf(!hasConfig)(
 				overflowY: getComputedStyle(area).overflowY,
 				overflow: area.scrollHeight - area.clientHeight,
 				scrolled,
-				view: { top: view.top, bottom: view.top + area.clientHeight },
+				view: { top: view.top, bottom: view.top + area.clientHeight, height: area.clientHeight },
 				first,
 				last,
 				confirm: box("cap-approve-btn"),
@@ -267,11 +267,13 @@ test.skipIf(!hasConfig)(
 		expect(fit.overflowY, "the scroll area is the window's scroll container").toMatch(/^(auto|scroll)$/)
 		expect(fit.overflow, "S2 overflows by its pinned amount (scrollHeight - clientHeight)").toBe(S2_OVERFLOW_PX)
 		expect(fit.documentHeight, "only the scroll area scrolls, never the page").toBeLessThanOrEqual(fit.viewportHeight)
-		expect(fit.first.top, "the top of the window is in view at rest").toBeGreaterThanOrEqual(fit.view.top - 0.5)
-		expect(fit.scrolled, "the area scrolls exactly its overflow").toBe(S2_OVERFLOW_PX)
-		expect(fit.last.bottom, "scrolled to its end, Details is whole").toBeLessThanOrEqual(fit.view.bottom + 0.5)
-		expect(fit.confirm.top, "the Confirm row sits below the area").toBeGreaterThanOrEqual(fit.view.bottom - 0.5)
-		expect(fit.confirm.bottom, "and inside the window").toBeLessThanOrEqual(fit.viewportHeight + 0.5)
+		expect(fit.scrolled, "the area scrolls its overflow").toBeCloseTo(S2_OVERFLOW_PX, 0)
+		const whole = (box: { top: number; bottom: number; height: number }, top: number, bottom: number) =>
+			box.height > 0 && box.top >= top - 0.5 && box.bottom <= bottom + 0.5
+		expect(whole(fit.view, 0, fit.viewportHeight), "the scroll area lies inside the window").toBe(true)
+		expect(whole(fit.first, fit.view.top, fit.view.bottom), "at rest, the hostname is whole in the area").toBe(true)
+		expect(whole(fit.last, fit.view.top, fit.view.bottom), "scrolled to its end, Details is whole in the area").toBe(true)
+		expect(whole(fit.confirm, fit.view.bottom, fit.viewportHeight), "the Confirm row is whole below the area").toBe(true)
 		expect(fit.note, "S1, this window without the note, fits").toBeGreaterThan(S2_OVERFLOW_PX)
 
 		// An empty inline-block sits on its line's baseline: one goes at the end of the term, one just
