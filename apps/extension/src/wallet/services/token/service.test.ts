@@ -22,7 +22,7 @@ import { OperationJournalService } from "@/wallet/services/operation-journal/ser
 import { ProfileService } from "@/wallet/services/profile/service"
 import { TaskService } from "@/wallet/services/task/service"
 import { recordWrites } from "@/wallet/services/storage-write-log"
-import { TokenService } from "./service"
+import { TOKEN_DETAILS_CHANGED, TokenService } from "./service"
 import type { TokenInterface } from "./spec"
 
 const NETWORK = { id: "net1", chainId: 1, primaryEndpointId: "ep1", endpoints: [{ id: "ep1", rpcUrl: "http://fake" }] }
@@ -90,6 +90,55 @@ async function makeHarness() {
 	;(tokenService as any).fetchTokenMetadata = fetchStub
 	return { tokenService, journal, fetchStub, api, deletionState, networkLive, fenceLive }
 }
+
+type Harness = Awaited<ReturnType<typeof makeHarness>>
+
+/** A dApp's add as its approved window commits it, naming the details that window showed. */
+const SHOWN = { name: "Fetched Name", symbol: "FTCH", decimals: 9 }
+const addShown = (h: Harness, contract: string, expected = SHOWN) =>
+	h.tokenService.addTokenAuthorized(
+		{ profileId: "p1", epoch: h.deletionState.capture("p1"), session: 1 } as never,
+		"p1",
+		NETWORK.id,
+		"0xacc",
+		ti(contract),
+		{ origin: "dapp", dappOrigin: "https://app.example" },
+		expected,
+	)
+
+describe("TokenService.addTokenAuthorized — the add stores what its window showed", () => {
+	test("a read equal to the shown details is stored (control)", async () => {
+		const h = await makeHarness()
+
+		await addShown(h, "0xc0ffee")
+
+		expect((await h.tokenService.getTokensRaw("p1"))[0]).toMatchObject(SHOWN)
+		expect(h.journal.transitionOperation).toHaveBeenLastCalledWith("op-1", { stage: "succeeded" })
+	})
+
+	test.each([
+		["name", { ...SHOWN, name: "Fetched Nane" }],
+		["symbol", { ...SHOWN, symbol: "FTCH\u200b" }],
+		["decimals", { ...SHOWN, decimals: 18 }],
+	])("a read whose %s differs fails the import with no row and no title", async (_field, expected) => {
+		const h = await makeHarness()
+		const added: unknown[] = []
+		h.tokenService.onTokenAdded.add((t) => {
+			added.push(t)
+		})
+
+		await expect(addShown(h, "0xc0ffee", expected)).rejects.toThrow(TOKEN_DETAILS_CHANGED)
+
+		expect(await h.tokenService.getTokensRaw("p1")).toEqual([])
+		expect(added).toEqual([])
+		expect(h.journal.setOperationMeta).not.toHaveBeenCalled()
+		expect(h.journal.transitionOperation).toHaveBeenLastCalledWith(
+			"op-1",
+			{ stage: "failed" },
+			expect.objectContaining({ message: TOKEN_DETAILS_CHANGED }),
+		)
+	})
+})
 
 describe("TokenService.addToken — journal/lock machinery (characterization)", () => {
 	test("journals the import (dapp origin + subtitle), backfills the title with the fetched symbol, succeeds", async () => {
@@ -189,6 +238,39 @@ describe("TokenService.addToken — journal/lock machinery (characterization)", 
 		expect((await tokenService.getTokens("p1"))[0].classId).toBe(classId)
 	})
 
+	test("a read name and symbol carrying bidi, format and control characters are stored and titled clean", async () => {
+		const { tokenService, journal, fetchStub } = await makeHarness()
+		fetchStub.mockResolvedValueOnce(["Tether\u202e USD", "USD\u202eC\u200d\u0007", 6])
+
+		const info = await tokenService.addToken("p1", NETWORK.id, "0xacc", ti("0xd1d1"), { origin: "popup" })
+		await tokenService.addSeededToken({
+			profileId: "p1",
+			networkId: NETWORK.id,
+			accountAddress: "0xacc",
+			tokenInterface: ti("0x5eed"),
+			name: "Seeded",
+			symbol: "SE\u2066ED",
+			decimals: 18,
+		})
+
+		expect(info).toMatchObject({ name: "Tether USD", symbol: "USDC" })
+		expect((await tokenService.getTokensRaw("p1")).map(({ name, symbol }) => [name, symbol])).toEqual([
+			["Tether USD", "USDC"],
+			["Seeded", "SEED"],
+		])
+		expect(journal.setOperationMeta).toHaveBeenCalledWith("op-1", { title: "USDC" })
+		expect(journal.createOperation).toHaveBeenLastCalledWith(expect.objectContaining({ origin: "seed", title: "SEED" }))
+	})
+
+	test("a plain name and symbol are stored as read (control)", async () => {
+		const { tokenService, fetchStub } = await makeHarness()
+		fetchStub.mockResolvedValueOnce(["Café Ünïcode · Token", "€URC", 2])
+
+		await tokenService.addToken("p1", NETWORK.id, "0xacc", ti("0xd1d1"), { origin: "popup" })
+
+		expect((await tokenService.getTokensRaw("p1"))[0]).toMatchObject({ name: "Café Ünïcode · Token", symbol: "€URC" })
+	})
+
 	test("seeded persistence never backfills a title (no setOperationMeta)", async () => {
 		const { tokenService, journal } = await makeHarness()
 
@@ -236,6 +318,24 @@ describe("TokenService.restore — per-row allocation", () => {
 		const raw = await api.storage.local.get(null)
 		expect(raw[`nulo:core:tokens@${max}`]).toBe(junk)
 		expect(restored[0].id).not.toBe(restored[1].id)
+	})
+
+	test("a backup row's name and symbol are stored clean", async () => {
+		const { tokenService } = await makeHarness()
+		const row = {
+			id: 0,
+			profileId: "p1",
+			chainId: 1,
+			contract: "0xaaa",
+			name: "Tether\u202e USD",
+			symbol: "USD\u202eC\u200d\u0007",
+			decimals: 6,
+		}
+
+		const [restored] = await tokenService.restore([row])
+
+		expect(restored.restoreError).toBeUndefined()
+		expect((await tokenService.getTokensRaw("p1"))[0]).toMatchObject({ name: "Tether USD", symbol: "USDC" })
 	})
 })
 
@@ -738,7 +838,6 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 	const WATCHDOG_MS = 5 * 60_000 + 1
 	const mk = (contract: string, profileId = "p1") => ({ id: 0, profileId, chainId: 1, contract, name: "T", symbol: "T", decimals: 9 })
 
-	type Harness = Awaited<ReturnType<typeof makeHarness>>
 	type Networks = {
 		isNetworkLive: (id: string) => Promise<boolean>
 		isChainLive: (profileId: string, chainId: number) => Promise<boolean>
@@ -833,6 +932,59 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		expect(await first).toEqual(second)
 		expect(Object.values(await rows(h))).toEqual(["0xa11"])
 		expect(h.added).toEqual(["0xa11"])
+		expect(stagesOf(h, "op-1")).toEqual(["simulating", "succeeded"])
+	})
+
+	test("with the shown details, released in the fetch and in the resumed pre-set check, it reads once and writes once", async () => {
+		const h = await setup()
+		const fetch = deferred<[string, string, number]>()
+		h.fetchStub.mockReturnValueOnce(fetch.promise)
+		const check = holdNetworkCheck(h, 2)
+		const run = addShown(h, "0xa11")
+		await settle()
+		await release()
+		fetch.resolve([SHOWN.name, SHOWN.symbol, SHOWN.decimals])
+		await settle()
+		await release()
+		check.release(true)
+		await run
+
+		expect(Object.values(await rows(h))).toEqual(["0xa11"])
+		expect(h.added).toEqual(["0xa11"])
+		expect(h.fetchStub).toHaveBeenCalledTimes(1)
+	})
+
+	test("with the shown details, released in the fetch, a read that differs writes nothing", async () => {
+		const h = await setup()
+		const fetch = deferred<[string, string, number]>()
+		h.fetchStub.mockReturnValueOnce(fetch.promise)
+		const run = addShown(h, "0xa11")
+		const failed = expect(run).rejects.toThrow(TOKEN_DETAILS_CHANGED)
+		await settle()
+		await release()
+		fetch.resolve([SHOWN.name, SHOWN.symbol, 18])
+		await failed
+
+		expect(await rows(h)).toEqual({})
+		expect(h.added).toEqual([])
+		expect(stagesOf(h, "op-1")).toEqual(["simulating", "failed"])
+	})
+
+	test("with the shown details, released in the fetch, a same-contract row another add wrote is returned unchanged", async () => {
+		const h = await setup()
+		h.journal.createOperation.mockResolvedValueOnce({ id: "op-1" }).mockResolvedValueOnce({ id: "op-2" })
+		const fetch = deferred<[string, string, number]>()
+		h.fetchStub.mockReturnValueOnce(fetch.promise).mockResolvedValueOnce(["Other", "OTH", 2])
+		const first = addShown(h, "0xa11")
+		await settle()
+		await release()
+
+		const second = await add(h, "0xa11")
+		fetch.resolve([SHOWN.name, SHOWN.symbol, SHOWN.decimals])
+
+		expect(await first).toEqual(second)
+		expect(second).toMatchObject({ name: "Other", symbol: "OTH", decimals: 2 })
+		expect(Object.values(await rows(h))).toEqual(["0xa11"])
 		expect(stagesOf(h, "op-1")).toEqual(["simulating", "succeeded"])
 	})
 
