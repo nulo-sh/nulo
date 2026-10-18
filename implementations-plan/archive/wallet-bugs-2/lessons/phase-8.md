@@ -37,3 +37,19 @@ Close-out filed:
 - #786: OA-2, the ghost rows, open for the owner.
 
 No lessons are promoted, because `lessons.md` is at its 8 KiB budget.
+
+## Second `dev` merge (a1661600)
+
+The PR opened conflicting: #783 (ci-e2e-hygiene-1) had rewritten `viewers-csp.test.ts` for the wallet's own lines, which land in the window at any time. It brought three things:
+- `logLines` tags its lines with a nonce and waits for its own last line to render.
+- `gapToEnd` reads after two frames with no line change.
+- The follow check is armed before the step that should stop the follow.
+
+Resolution:
+- Dev's helpers and its follow case.
+- This arc's hold and trim cases.
+- The trim case keeps its exact cap, because it must trim on the first line after the selection to prove the end-band re-arm. It now fails with its own message if a wallet line trims during the fill, and a trim's landing tolerates three wallet lines.
+
+Against the base `LogsViewer.vue` (Chrome), the three hold cases are red: the view moved 38, 36 and 19.75 px.
+
+#783's OA-3 (ci-e2e-hygiene-1) is #616 itself, and this PR ships its option A.
