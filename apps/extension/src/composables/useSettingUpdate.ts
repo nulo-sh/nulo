@@ -3,7 +3,10 @@ import { useToast } from "@/composables/toast"
 import type { Config, ConfigKey, ConfigProp } from "@/wallet/config"
 import type { ConfigServiceClient } from "@/wallet/services/config/client"
 
-/** The toast of a refused settings write. Each call site keeps its own literal `openToast` object. */
+/**
+ * A refused settings write's toast label. Each site keeps its literal `openToast` object, whose kind
+ * `utils/toast-call-sites.test.ts` reads there.
+ */
 export const SETTING_UPDATE_FAILED = "Failed to update setting"
 
 /**

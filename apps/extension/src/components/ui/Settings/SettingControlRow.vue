@@ -1,8 +1,7 @@
 <script setup>
 /**
- * A settings row that holds its own control: title and caption on the left, the default slot (a
- * toggle, a dropdown, a field) on the right. Its layout (`align`, `gap`), its testid and
- * `v-settings-row` are set where it is used and land on the root.
+ * A settings row holding its own control. Its single root takes the page's `align`, `gap`, testid
+ * and `v-settings-row`.
  */
 defineProps({
 	title: { type: String, required: true },

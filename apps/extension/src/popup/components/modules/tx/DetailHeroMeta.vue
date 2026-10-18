@@ -1,8 +1,7 @@
 <script setup>
 /**
- * A detail page's hero line: the time, then the transaction's explorer page, or a copy of its hash
- * when the page has no explorer URL (explorer None, or no explorer covers the chain). The page owns
- * the copy, so each page keeps its own confirmation. Without `hash` there is no copy fallback.
+ * A detail page's hero line. Without an explorer URL it offers `hash` as a copy, which the page
+ * performs so each keeps its own confirmation; without `hash` either, it offers neither.
  */
 defineProps({
 	time: { type: String, default: null },

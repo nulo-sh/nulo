@@ -15,8 +15,7 @@ export function useHeroVisible(el: Readonly<Ref<Element | null>>): Readonly<Ref<
 		observer = new IntersectionObserver(
 			(entries) => {
 				// One delivery batches every change since the last, oldest first: only the newest is current.
-				const newest = entries.at(-1)
-				if (newest) visible.value = newest.isIntersecting
+				visible.value = entries[entries.length - 1].isIntersecting
 			},
 			{ threshold: 0 },
 		)

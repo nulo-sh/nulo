@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { defineComponent, h, type Ref, ref } from "vue"
 import { useHeroVisible } from "./useHeroVisible"
 
-/** An observer that delivers only what a test hands it, and nothing once disconnected, as the platform's. */
+/** An observer that delivers only what a test hands it. */
 class FakeObserver {
 	static made: FakeObserver[] = []
 	observed: Element[] = []
@@ -26,7 +26,6 @@ class FakeObserver {
 
 	/** One delivery carrying an entry per value, oldest first. */
 	deliver(...intersecting: boolean[]) {
-		if (this.disconnected) return
 		this.callback(
 			intersecting.map((isIntersecting) => ({ isIntersecting }) as IntersectionObserverEntry),
 			this as unknown as IntersectionObserver,
@@ -107,20 +106,21 @@ describe("useHeroVisible", () => {
 		expect(observer.disconnected).toBe(true)
 	})
 
-	test("reports nothing after the page unmounts", () => {
-		const { wrapper, visible } = mountPage()
-		const [observer] = FakeObserver.made
-		observer.deliver(false)
-		wrapper.unmount()
-		observer.deliver(true)
-		expect(visible.value).toBe(false)
+	test("two pages mounted at once each report their own hero", () => {
+		const first = mountPage()
+		const second = mountPage()
+		expect(FakeObserver.made).toHaveLength(2)
+		FakeObserver.made[0].deliver(false)
+		expect(first.visible.value).toBe(false)
+		expect(second.visible.value).toBe(true)
 	})
 
-	test("each mount makes one observer and disconnects only its own", () => {
+	test("unmounting one page disconnects only its observer, and the other keeps reporting", () => {
 		const first = mountPage()
+		const second = mountPage()
 		first.wrapper.unmount()
-		mountPage()
-		expect(FakeObserver.made).toHaveLength(2)
 		expect(FakeObserver.made.map((o) => o.disconnected)).toEqual([true, false])
+		FakeObserver.made[1].deliver(false)
+		expect(second.visible.value).toBe(false)
 	})
 })

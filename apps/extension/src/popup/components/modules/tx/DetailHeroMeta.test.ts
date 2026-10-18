@@ -26,6 +26,7 @@ describe("DetailHeroMeta", () => {
 
 	test("a time and an explorer URL show the time, a separator and the explorer link", () => {
 		const w = mountHero({ time: TIME, explorerUrl: EXPLORER_URL, hash: HASH })
+		expect(w.text()).toContain(TIME)
 		expect(separator(w)).toHaveLength(1)
 		const link = w.get("a")
 		expect(link.attributes("href")).toBe(EXPLORER_URL)
@@ -42,7 +43,7 @@ describe("DetailHeroMeta", () => {
 		expect(w.emitted("copy")).toEqual([[HASH]])
 	})
 
-	test("with no hash and no explorer EXPLORER_URL, neither the link nor the copy shows", () => {
+	test("with no hash and no explorer URL, neither the link nor the copy shows", () => {
 		const w = mountHero({ time: null })
 		expect(w.find("a").exists()).toBe(false)
 		expect(w.text()).toBe("")
@@ -56,6 +57,7 @@ describe("DetailHeroMeta", () => {
 			mountHero({ hash: HASH, copyTestid: "tx-detail-pending-copy-hash" }).find('[data-testid="tx-detail-pending-copy-hash"]').text(),
 		).toBe("Copy hash")
 		expect(mountHero({ time: TIME, explorerUrl: EXPLORER_URL }).find("[data-testid]").exists()).toBe(false)
+		expect(mountHero({ time: TIME, hash: HASH }).find("[data-testid]").exists()).toBe(false)
 	})
 
 	test("the explorer link opens a new tab with no opener and no referrer", () => {
