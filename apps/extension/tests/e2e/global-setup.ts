@@ -219,7 +219,7 @@ export async function setup(project: TestProject) {
 	}
 	project.provide("extensionPath", EXTENSION_PATH)
 	// Every network launch is guarded, as every smoke launch is: the sandbox, the playground and
-	// Presto are loopback, so a request for any other host is one CI must never send.
+	// Presto are loopback and bb.js's CRS hosts go direct, so the guard refuses every other host.
 	project.provide("egressGuard", true)
 
 	console.log(

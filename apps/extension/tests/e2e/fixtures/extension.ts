@@ -31,6 +31,7 @@ import {
 	type EgressCanary,
 	type EgressGuard,
 	type HeldNode,
+	CRS_HOSTS,
 	LIVE_LIST_HOST,
 	LIVE_NODE_HOST,
 	guardArmed,
@@ -120,8 +121,8 @@ export async function launchExtension(
 	if (opts.live && inject("liveLeg") !== true) {
 		throw new Error("a live launch reaches the live Testnet node and list host, which only an artifact run's live spec may do")
 	}
-	const liveHosts = opts.live ? [LIVE_NODE_HOST, LIVE_LIST_HOST] : undefined
-	if (guardArmed(inject("egressGuard"))) return launchBehindEgressGuard(launch, settle, liveHosts)
+	const directHosts = [...CRS_HOSTS, ...(opts.live ? [LIVE_NODE_HOST, LIVE_LIST_HOST] : [])]
+	if (guardArmed(inject("egressGuard"))) return launchBehindEgressGuard(launch, settle, directHosts)
 
 	const { browser, close: closeBrowser } = await launch()
 	try {
@@ -160,12 +161,12 @@ function cspLatch(
 async function launchBehindEgressGuard(
 	launch: (egress: { guardPort: number; liveHosts?: readonly string[] }) => Promise<LaunchedBrowser>,
 	settle: (browser: Browser) => Promise<string>,
-	liveHosts: readonly string[] | undefined,
+	directHosts: readonly string[],
 ): Promise<ExtensionContext> {
 	const guarded = await ownGuardedLaunch({
 		label: launchLabel(),
 		traffic: browserTraffic,
-		liveHosts,
+		liveHosts: directHosts,
 		launch: async (egress) => {
 			const launched = await launch(egress)
 			return { value: launched.browser, close: launched.close }
@@ -173,7 +174,9 @@ async function launchBehindEgressGuard(
 		settle,
 		probeCanary: fireCanary,
 		wrapClose: (closeBrowser, browser, extensionId) => cspLatch(browser, extensionId, closeBrowser),
-		holdNode: liveHosts === undefined ? (browser, extensionId) => holdNodeStub(browser, extensionId, TESTNET_RPC_URL) : undefined,
+		holdNode: directHosts.includes(LIVE_NODE_HOST)
+			? undefined
+			: (browser, extensionId) => holdNodeStub(browser, extensionId, TESTNET_RPC_URL),
 	})
 	const { value: browser, settled: extensionId, wrapped, guard, canary, node } = guarded
 	return {

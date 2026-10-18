@@ -61,6 +61,13 @@ export const LIVE_NODE_HOST = new URL(TESTNET_RPC_URL).hostname
 /** The published token list's host, which the live launch also sends direct. */
 export const LIVE_LIST_HOST = new URL(TOKEN_LIST_URL).hostname
 
+/**
+ * bb.js's CRS hosts, which every guarded launch sends direct: an in-browser proof downloads its
+ * points from the first, or from the second when that fails, and a launch's fresh profile holds
+ * none, so a refused download fails the proof. The guard recording either fails the close.
+ */
+export const CRS_HOSTS: readonly string[] = ["crs.aztec-cdn.foundation", "crs.aztec-labs.com"]
+
 /** Wallet and spec hosts an e2e build tries and the guard refuses, each with why it is tried. */
 export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
 	[
