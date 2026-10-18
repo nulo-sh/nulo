@@ -220,8 +220,8 @@ test("a drag selects the text around a control and none of the control's own but
 	// it first): the plain click starts from none.
 	await page.evaluate(() => window.getSelection()?.removeAllRanges())
 	await page.mouse.click(middle.x, middle.y)
-	expect(await copies()).toEqual([await getAccountAddress(page)])
 	await waitForToast(page, "Address is copied")
+	expect(await copies()).toEqual([await getAccountAddress(page)])
 
 	await navigateToSettings(page, "privacy")
 	await page.waitForSelector('[data-testid="explorer-trigger"]', { visible: true, timeout: 10_000 })
