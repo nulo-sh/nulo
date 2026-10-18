@@ -513,17 +513,20 @@ function createNetworkActions(refs: {
 	networks: Ref<Network[]>
 }) {
 	const { network, networkStatus, networks } = refs
+	let statusReads = 0
 	const syncNetworkStatus = async () => {
 		if (!network.value) return
 		networkStatus.value = "sync"
 		const oldNetworkId = network.value.id
-		// A read lost to the popup's RPC deadline is a node that did not answer, as the service's own
-		// failed probe is; left unanswered, the dot would read "sync" for good.
+		const read = ++statusReads
+		// Any rejected read shows Inactive, as the service's own failed probe does; otherwise the dot
+		// stays "sync".
 		const status = await requireNetwork()
 			.getNodeStatus(oldNetworkId)
 			.catch(() => NodeStatus.Inactive)
 
-		if (oldNetworkId !== network.value?.id) return
+		// A silent node's read rejects only at the popup's deadline, after any newer read has landed.
+		if (read !== statusReads || oldNetworkId !== network.value?.id) return
 
 		networkStatus.value = NodeStatus[status]
 	}

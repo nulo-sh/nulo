@@ -37,6 +37,7 @@ vi.mock("vue-router", () => ({
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 
 import { Icon } from "@nulo/design"
+import { useAppStore } from "@/stores/app.store"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import AccountExport from "./account.vue"
 
@@ -154,6 +155,24 @@ describe("account file export", () => {
 		])
 		expect(exportAccount).not.toHaveBeenCalled()
 		expect(networkReset.getStaleNetwork).toHaveBeenCalledWith("tn")
+	})
+
+	test("a profile switch drops the previous profile's held rows and its flow, and reads the new profile's", async () => {
+		route.query = {}
+		networkReset.getPendingReset.mockResolvedValueOnce({ networkId: "tn", running: false })
+		networkReset.getStaleNetwork.mockResolvedValueOnce({ reset: { heldImported: [{ name: "Savings", address: HELD }] } })
+		const w = mountPage()
+		await flushPromises()
+		await w.findAll('[data-testid="export-account-row"]')[1]!.trigger("click")
+		expect(w.find('[data-testid="agree-continue-btn"]').exists()).toBe(true)
+
+		const app = useAppStore()
+		app.profile = { id: "p2", name: "Other", type: "password" } as never
+		app.accounts = []
+		await flushPromises()
+		expect(w.findAll('[data-testid="export-account-row"]')).toHaveLength(0)
+		expect(w.find('[data-testid="agree-continue-btn"]').exists()).toBe(false)
+		expect(networkReset.getPendingReset).toHaveBeenCalledTimes(2)
 	})
 
 	test("a passkey profile is sent back to the export choices", async () => {

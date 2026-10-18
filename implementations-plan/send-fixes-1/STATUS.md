@@ -5,3 +5,5 @@
 - 2026-10-18 Codex r1 reject (7 findings, all verified and folded); signed P38-05 D drawing found, OA-2..OA-5 withdrawn; waiting on the Opus leg
 - 2026-10-18 Opus leg conditional approve (folded); Codex r2 conditional approve (one condition, adopted); r3 next
 - 2026-10-18 Codex r3 approve; plan committed; auto-continue into arc 1 (OA-1 is on surfaces arc 1 does not touch)
+- 2026-10-18 phase 1 ✓ (F, same-token-concurrent-sends network 16/16); phase 2 ✓ (F, new smoke Chrome+Firefox, endpoint-refused-recovery); phase 3 ✓ (F, stale-network smoke 4/4, captures)
+- 2026-10-18 phase 4: audit:vue, test:all, check:plans exit 0; whole smoke Chrome running; Codex r1 + Opus review running

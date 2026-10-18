@@ -454,7 +454,9 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			if (opts?.unattended) throw new Error(`${ERR_UNATTENDED_LIVE_CHECK}: network ${chainId} needs a live L1 identity check`)
 			const primary = findPrimaryEndpoint(network) ?? network.endpoints[0]
 			if (!primary) throw new Error("Network has no endpoint to verify its L1 identity against")
-			const probed = await this.probeIdentityOnce(primary.rpcUrl, kind, IDENTITY_PROBE_MS).catch(() => {
+			const probed = await this.probeIdentityOnce(primary.rpcUrl, kind, IDENTITY_PROBE_MS).catch((error: unknown) => {
+				// A node that answered chain 0 answered: only a read that got no answer is tolerable.
+				if (error instanceof Error && error.message.startsWith(ERR_ENDPOINT_CHAIN_MISMATCH)) throw error
 				this.logDebug("custom network's node did not answer its identity read")
 				throw new NodeUnreachableError()
 			})

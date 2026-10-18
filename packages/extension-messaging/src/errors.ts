@@ -582,8 +582,7 @@ export class RecoveryModeError extends WalletError {
 /**
  * A node the wallet needs for an identity check did not answer within its budget, or its URL is
  * refused by the transport rule. Distinct from an identity mismatch, which stays a plain error and
- * keeps refusing, so a caller can tolerate only an absent node. Keeps the probe's message, which
- * the endpoint forms already word.
+ * keeps refusing, so a caller can tolerate only an absent node.
  */
 export class NodeUnreachableError extends WalletError {
 	public static readonly CODE = "NODE_UNREACHABLE"

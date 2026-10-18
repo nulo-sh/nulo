@@ -39,8 +39,8 @@ if (appStore.profile?.type === "passkey") {
 	router.replace("/popup/settings/security/export")
 }
 
-/** The imported accounts a paused network reset holds only in its journal, on whichever network:
- *  their rows are gone until the reset finishes, so their file comes from the journal. */
+/** The imported accounts a paused network reset holds in its journal, on whichever network: no
+ *  picker lists their rows while the chain is quarantined or after the purge. */
 const heldAccounts = ref([])
 const readHeldAccounts = async () => {
 	const pending = await managers.networkReset.getPendingReset()
@@ -48,10 +48,17 @@ const readHeldAccounts = async () => {
 	const view = await managers.networkReset.getStaleNetwork(pending.networkId)
 	return (view?.reset?.heldImported ?? []).map((a) => ({ ...a, type: AccountType.Imported, held: true }))
 }
+/** Another profile's held rows never show: a switch drops them at once, and a read it outlived is dropped. */
+const loadHeldAccounts = async () => {
+	heldAccounts.value = []
+	const profileId = appStore.profile?.id
+	const held = await readHeldAccounts().catch(() => [])
+	if (appStore.profile?.id === profileId) heldAccounts.value = held
+}
 
-/** The picker (and the preselect validation) only ever offers CURRENT-chain rows: during a
- *  network switch `appStore.accounts` can transiently hold the previous chain's rows, and an
- *  export must never bind an address to the wrong chainId. */
+/** Live rows (and the preselect validation) are only ever CURRENT-chain rows: during a network
+ *  switch `appStore.accounts` can transiently hold the previous chain's rows, and an export must
+ *  never bind an address to the wrong chainId. A held row has no chain: the journal is read by address. */
 const accounts = computed(() => {
 	const live = (appStore.accounts ?? []).filter((a) => a.chainId === appStore.network?.chainId)
 	return [...live, ...heldAccounts.value.filter((h) => !live.some((a) => a.address === h.address))]
@@ -85,8 +92,8 @@ const resetFlow = () => {
 	payload.value = ""
 }
 
-/** Preselect via the Manage Accounts deep-link (`?address=`); the picker is skipped when the
- *  address belongs to this profile's CURRENT chain. Watched, not read once: a query-only
+/** Preselect via the Manage Accounts deep-link (`?address=`); the picker is skipped when it
+ *  lists the address. Watched, not read once: a query-only
  *  navigation reuses this component instance, so entering with a different (or no) address must
  *  scrub the previous flow's stage and payload rather than inherit them. */
 const applyQueryPreselect = () => {
@@ -113,6 +120,15 @@ watch(accounts, () => {
 	if (selectedAddress.value) return
 	applyQueryPreselect()
 })
+// A profile switched from another window leaves this page mounted: its flow, payload included,
+// belongs to the previous profile.
+watch(
+	() => appStore.profile?.id,
+	() => {
+		resetFlow()
+		loadHeldAccounts()
+	},
+)
 
 const selectedAccount = computed(() => accounts.value.find((a) => a.address === selectedAddress.value))
 
@@ -129,7 +145,6 @@ const handleAgree = () => {
 	isAgreed.value = true
 }
 
-/** A held account's file comes from the reset's journal; every other one from its row. */
 const exportSelected = (encrypt) =>
 	selectedAccount.value?.held
 		? managers.account.exportResetHeldAccount(appStore.profile.id, selectedAddress.value, password.value, encrypt)
@@ -213,9 +228,9 @@ const onKeydown = (e) => {
 	if (!isAgreed.value) handleAgree()
 	else handleCreate()
 }
-onMounted(async () => {
+onMounted(() => {
 	document.addEventListener("keydown", onKeydown)
-	heldAccounts.value = await readHeldAccounts().catch(() => [])
+	loadHeldAccounts()
 })
 
 onBeforeUnmount(() => {

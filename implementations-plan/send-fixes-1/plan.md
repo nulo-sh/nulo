@@ -62,6 +62,7 @@ For a person whose custom node is down, whose reset is stuck, or who is asked ag
 
 - **K1** A paused account whose key derives another address under a later build is refused (D3). Reopens when an address-regime rotation off Mainnet is planned.
 - **K2** A passkey profile cannot export a paused reset's imported accounts: it has no password, as Settings' own account export (`account.vue:36-39`). Reopens on a user report or a passkey-gated account export.
+- **K3** A reset that paused before its purge can name, in the notice and Delete chain's sentence, an imported account whose key did not open; "Export them first." then covers an account nothing can export. Fixing it is a copy change. Reopens on a user report.
 
 ## Security & Adversarial Considerations
 
@@ -97,6 +98,8 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test` (each exi
 Steps 2-5 of [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `24c68cb4`: reviewer `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus review (`general-purpose`) beside round 1; one loop over the arc's diff from `dev` after phase 4; hard stop at three rounds. The orchestrator merges. Teardown: `agent-worktree done send-fixes-1 --merged` once `implementations-plan/archive/send-fixes-1/plan.md` is on `dev`.
 
 ## Audit verdicts
+
+**Implementation round 1 (2026-10-18).** Codex (gpt-6.1-sol, high): `conditional approve (with conditions: fix the held-account picker's profile scoping)`. Opus review (`general-purpose`): `approve`, three low findings and four comment nits. Adopted: the export page drops another profile's held rows and its flow on a profile switch (C1); a chain-0 answer stays a refusal, not "unreachable" (O1); only the latest status read writes the dot (O2); the comments C2, C3, O4-O7. Accepted as known limit K3 (O3): its fix is a copy change.
 
 **Round 3 (Codex resume, 2026-10-18).** `approve`: the condition is met, no regression, nothing adds persistence, a timer, a protocol or a lifecycle.
 

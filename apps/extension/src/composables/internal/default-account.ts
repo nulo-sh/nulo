@@ -1,9 +1,6 @@
 /**
- * Creating a chain's default account reads a custom chain's node once. Start and a network switch
- * never stop on a node that does not answer: the account waits for it and `onUnreachable` runs.
- * A node that answers another L1 still refuses.
- *
- * Not auto-importable (the auto-import `dirs` scan is non-recursive).
+ * Tolerates only `NodeUnreachableError`: no account is created and `onUnreachable` runs; any other
+ * error, an identity mismatch included, rethrows. Not auto-importable (the `dirs` scan is non-recursive).
  */
 import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
 import { AccountType, DEFAULT_ACCOUNT_NAME } from "@/wallet/services/account/client"

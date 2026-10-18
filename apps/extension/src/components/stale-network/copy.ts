@@ -66,7 +66,6 @@ export const paused = (name: string) => ({
 	primary: "TRY AGAIN",
 })
 
-/** `exportable`: the person can export them first (`exportsHeld`). */
 export const pausedImported = (name: string, imported: readonly string[], exportable: boolean) =>
 	imported.length === 1
 		? `${quoted(imported)} is an imported account. Deleting ${name} deletes it.${exportable ? " Export it first." : ""}`

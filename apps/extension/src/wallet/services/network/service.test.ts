@@ -32,7 +32,14 @@ import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { ProfileService } from "@/wallet/services/profile/service"
 import { type ChainResetHooks, type ChainResetRequest, LOCAL_NETWORK_RPC_URL, NetworkService } from "./service"
 import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
-import { ERR_RPC_URL_IPV6_LOOPBACK, ERR_UNATTENDED_LIVE_CHECK, findPrimaryEndpoint, IDENTITY_PROBE_MS, NodeStatus } from "./spec"
+import {
+	ERR_ENDPOINT_CHAIN_MISMATCH,
+	ERR_RPC_URL_IPV6_LOOPBACK,
+	ERR_UNATTENDED_LIVE_CHECK,
+	findPrimaryEndpoint,
+	IDENTITY_PROBE_MS,
+	NodeStatus,
+} from "./spec"
 import type { Network, NetworkEndpoint } from "./spec"
 import { seedForKind } from "./seeds"
 
@@ -1684,6 +1691,10 @@ describe("NetworkService — resolveVerifiedL1ChainId's live check", () => {
 		expect(mismatch).toBeInstanceOf(Error)
 		expect(mismatch).not.toBeInstanceOf(NodeUnreachableError)
 		expect((mismatch as Error).message).toMatch(/L1 identity mismatch/)
+		getNodeInfo.mockResolvedValue({ l1ChainId: 5, rollupVersion: 5 })
+		const chainZero = await service.resolveVerifiedL1ChainId("p1", 123).catch((error: unknown) => error)
+		expect(chainZero).not.toBeInstanceOf(NodeUnreachableError)
+		expect((chainZero as Error).message).toMatch(new RegExp(`^${ERR_ENDPOINT_CHAIN_MISMATCH}`))
 	})
 })
 

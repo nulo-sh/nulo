@@ -398,7 +398,7 @@ describe("app.store — the network status dot", () => {
 		expect(store.networkStatus).toBe("Active")
 	})
 
-	test("a read for a network the popup left writes nothing", async () => {
+	test("a superseded read writes nothing: one for a network the popup left, or an older one of the same", async () => {
 		const store = useAppStore()
 		store.network = asNetwork(1)
 		let answer!: (status: NodeStatus) => void
@@ -408,6 +408,15 @@ describe("app.store — the network status dot", () => {
 		store.networkStatus = "Active"
 		answer(NodeStatus.Inactive)
 		await pending
+		expect(store.networkStatus).toBe("Active")
+
+		let lose!: (error: Error) => void
+		const reads = [new Promise<NodeStatus>((_resolve, reject) => (lose = reject)), Promise.resolve(NodeStatus.Active)]
+		statusRead(() => reads.shift() as Promise<NodeStatus>)
+		const older = store.syncNetworkStatus()
+		await store.syncNetworkStatus()
+		lose(new Error("RPC timeout"))
+		await older
 		expect(store.networkStatus).toBe("Active")
 	})
 

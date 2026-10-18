@@ -97,7 +97,6 @@ async function unsealImportedScalar(dek: ImportedKeysDek, chainId: number, addre
 	}
 }
 
-/** The account file for `signingKey`; `encrypt` seals it under `password`. */
 function accountFileBody(signingKey: GrumpkinScalar, l1ChainId: number, address: string, password: string, encrypt: boolean) {
 	const envelope = buildAccountExport(signingKey, l1ChainId, address)
 	return encrypt ? encryptAccountExport(envelope, password) : serializeAccountExport(envelope)
@@ -678,10 +677,10 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/**
-	 * Export an imported account that a paused reset holds only in its journal, whose old row and
-	 * key the reset already removed, as {@link exportAccount} does for a live one. The password opens
-	 * the DEK through a full unseal, the service-side check; the key must derive the journal's
-	 * address under this build, so the file names the address the person picked. Reads only.
+	 * Export an imported account a reset holds in its journal, whose row no picker lists while the
+	 * chain is quarantined or after the purge, as {@link exportAccount} does for a live one. The
+	 * password opens the DEK through a full unseal, the service-side check; the key must derive the
+	 * journal's address under this build, so the file names the address the person picked. Reads only.
 	 */
 	public async exportResetHeldAccount(profileId: string, address: string, password: string, encrypt: boolean): Promise<string> {
 		await this.ensureInitialized()
