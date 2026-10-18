@@ -24,9 +24,7 @@ Arc 1 ships each answered ask in the form recorded under it.
 
 ## OA-3: P38-08, the connect window's see-your-address toggle
 
-**Open:** re-asked on decision page 41; arc 2 stays held.
-
-- Re-asked on the next decision page. Both forms are costed in [plan.md](plan.md) § Arc 2. Nothing is built until the pick.
+**Answered 2026-10-18 (owner, P41-01 = B):** "Listing-only, said plainly: the row reads Let this app list all your accounts, with a line under it, It always knows the account you connect with; the app page's line follows the grant." Built in arc 2 (plan.md D20-D22); one case is OA-6.
 
 ## OA-4: the execute window when its fee estimate meets a refused request
 
@@ -45,3 +43,25 @@ Arc 1 ships each answered ask in the form recorded under it.
 - **Ships now (option a):** unchanged. The person can approve the row; the wallet refuses every grant call it would cover.
 - **Option b:** the window marks the row as never honoured, or leaves it out.
 - **Recommendation:** a until a dApp is seen asking for it; b needs new copy.
+
+## OA-6: the connect window for an accounts request that does not ask to list
+
+**Answered 2026-10-18 (owner, P45-02 = A):** "No address row for a request that does not ask to list (ships now)." Owner's note: "To be honest, I just want the best and more honest UX here." Ships as built (D20).
+
+- **Surface:** the connect window when a dApp asks for accounts without `canGet` (to act as an account without listing the others). No dApp the wallet is tested against asks this way; the playground always asks `canGet: true`.
+- **Ships now (option a):** no address row, as before the arc. The row in the owner's words, "Let this app list all your accounts", would be false here: without `canGet` the app cannot list.
+- **Option b:** the row shows with a switch, Off when the app did not ask and On when it did; "It always knows the account you connect with." stays under it in both states, and the person decides whether the app may list. Needs the switch's accessible name and the decision to carry `canGet` from the switch.
+- **Option c:** a row with the line alone, "It always knows the account you connect with.", and no listing title.
+- **Recommendation:** a until a dApp asks this way; b if the owner wants the person, not the app, to decide listing.
+
+## OA-7: the busiest first connect window no longer fits 400 × 800
+
+**Answered 2026-10-18 (owner, P45-01 = B):** "Keep 20 px; the busiest window scrolls 12 px and Firefox's Tab order gains the scroll area; the two tests are re-pinned." Owner's note: "I think B here makes more sense, so it's still easy to read." Built as D23; the 16 px gap of option a is not built.
+
+- **Surface:** the connect window on a first request for transactions on listed contracts the wallet does not recognize: the account to share, "Always asks you first", "If you allow, it can", "Without asking, it can" with three rows, the unrecognized-contracts note and Details. The window opens at 400 × 800 in both browsers.
+- **What moved:** the line P41-01 puts under the address row, "It always knows the account you connect with.", adds 12 px. That window's rows were pinned to fit 400 × 800 with Details closed; they now scroll by 12 px (699 px of content in 687 px). On Firefox a scrolling area is a Tab stop, so Tab gains a stop ahead of the account target. The `cap-window` smoke e2e fails on both browsers until this is answered (Chrome: 1 of 5 tests; Firefox: 3 of the 4 it runs).
+- **Ships now (until the answer):** nothing; the arc waited.
+- **Option a:** the window's sections sit 16 px apart instead of 20 px, on every connect window. Measured at retry 0: `cap-window` passes on Chrome and Firefox with no test edit.
+- **Option b:** keep 20 px; the busiest window scrolls 12 px at 400 × 800, Firefox's Tab order gains the scroll area, and the two tests are re-pinned to say so.
+- **Option c:** the line shows on the app page only, not under the connect window's row. Departs from P41-01's words.
+- **Recommendation:** a: every row and its words stay, and the window fits as before.

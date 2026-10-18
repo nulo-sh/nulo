@@ -24,9 +24,9 @@ defineProps<{
 		<template v-if="capability.type === 'accounts'">
 			<Text variant="label-section" color="secondary">Permissions:</Text>
 			<Flex direction="column" gap="4" :class="$style.detail_list">
-				<Flex v-if="capability.canGet !== false" align="center" gap="6">
+				<Flex v-if="capability.canGet === true" align="center" gap="6">
 					<Text variant="body" color="tertiary" :class="$style.bullet">&#x2022;</Text>
-					<Text variant="body" color="secondary">Read your account addresses</Text>
+					<Text variant="body" color="secondary">List all your accounts</Text>
 				</Flex>
 				<Flex v-if="capability.canCreateAuthWit" align="center" gap="6">
 					<Text variant="body" color="tertiary" :class="$style.bullet">&#x2022;</Text>

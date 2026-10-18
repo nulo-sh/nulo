@@ -1,8 +1,8 @@
 ---
 plan: dapp-boundary-3
 tier: mid
-status: approved 2026-10-17 (orchestrator); arc 1 in review
-issues: none (P38-06 carries no public issue; P38-08 waits on the owner)
+status: completed 2026-10-18; arc 1 merged (#716), arc 2's PR carries the close-out
+issues: none (P38-06 and P38-08 carry no public issue)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,20 @@ base: origin/dev at 2c0df3b9
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18
+- **Status:** completed. Arc 1 merged as #716; arc 2's PR carries this close-out, and merging it is the orchestrator's call.
+- **Shipped:**
+  - #716 (P38-06 = A): a dApp request that names the authorization registry's grant functions is refused at its three routes: a `sendTx` call by grant selector, a `createAuthWit` intent naming the registry, and an inner authorization request at the decode loop. The refusal is `AuthRegistryRefusalError`, under the scope-refusal code, with its own dApp text and History kind (D1-D11).
+  - Arc 2 (P41-01 = B, P45-01 = B, P45-02 = A): the connect window's address row reads "Let this app list all your accounts" / "It always knows the account you connect with." wherever the grant lets the app list. The app page's line follows `canGet === true`, and the account-naming plumbing is gone. The busiest first window scrolls 12 px, which `cap-window` pins along with Firefox's scroll-area Tab stop (D20-D23).
+- **Owner asks:** OA-1 b, OA-2 a, OA-4 a and OA-5 a (orchestrator, 2026-10-17); OA-3 (P41-01 = B), OA-6 (P45-02 = A) and OA-7 (P45-01 = B) (owner, 2026-10-18), each verbatim in [OWNER-ASKS.md](OWNER-ASKS.md).
+- **Dropped:** Outline B; refusing `simulateTx` and `profileTx` (D7); Form A for P38-08; the 16 px section gap (OA-7 a). D9 stands: a nested relay that brings its own witness is not refused, since it obtains nothing from this wallet; reopening condition: a dApp report.
+- **Known limits:** none.
+- **Open items:** #758 (OA-4 b: the execute window settles a refused request itself); one point from the planning review, tracked privately.
+- **Lessons:** none promoted. `lessons.md` is at 8188 of 8192 bytes; Firefox's scroll-area Tab stop is recorded where it belongs, in `apps/extension/tests/e2e/FIREFOX.md`.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # dapp-boundary-3: the authorization registry's grant functions answer only the wallet's own action
 
@@ -34,7 +48,7 @@ The owner's pick, quoted: **P38-06 = A**, "Deny: dApp transactions may not call 
 ## Assumptions
 
 **Facts** (verified at `2c0df3b9`; F6, F7, F10 corrected in review):
-- F1 `checkTransactionCalls` and `checkSimulationTransactions` match each call's `to` and `name` against the grant and return early when no grant of their type exists or the call list is empty (`packages/wallet-bridge/src/method-scope-checkers.ts:101-117, 136-160`). No registry rule exists.
+- F1 `checkTransactionCalls` and `checkSimulationTransactions` match each call's `to` and `name` against the grant and return early when no grant of their type exists or the call list is empty (`packages/wallet-bridge/src/method-scope-checkers.ts:101-117, 136-160`).
 - F2 `checkCreateAuthWit` checks a `CallIntent`'s call against the transaction or simulation scope and an `IntentInnerHash`'s consumer at any function (`:259-313`). A covered `CallIntent` signs with no window while the app's authorizations consent holds (`dispatcher.ts:551-575`); every other intent opens a confirmation.
 - F3 Dispatch order: capability, schema parse, scope check, network, routing (`dispatcher.ts:231-240`). The schema parse refuses an address not in its canonical spelling (`wallet-schema-args.ts:62-72`) but admits any hex spelling of a selector (`hexSchemaFor`, `@aztec-labs/foundation` `dest/schemas/utils.js:44-47`).
 - F4 A `ScopeViolationError` reaches the dApp as the frozen `SCOPE_VIOLATION_ENVELOPE` (`apps/extension/src/wallet/services/wallet-sdk/error-envelope.ts:124-127, 222-231`); a dApp send refused by it is journaled `scope_refused` (`execution/mark-failed-unless-cancelled.ts:34`, `wallet-sdk/queued-journal.ts:287`) and reads "Not allowed" (`apps/extension/src/utils/journal-state.ts:251-252`).
@@ -92,7 +106,7 @@ export function isAuthRegistryGrantCall(call: { to: unknown; selector: unknown }
 | `packages/wallet-bridge/README.md`, `SECURITY.md` | one paragraph each, stating the rule (in `SECURITY.md`, a new paragraph after the `createAuthWit` one, which the docs lane rewrites) |
 
 **Trade-offs and alternatives** (the panel's record is the decision ledger):
-- **Outline B (competing, as first drafted): refuse by pinned grant selectors in `sendTx`/`simulateTx` only.** The literal reading of the pick. Both legs rejected it: it leaves the intent and inner routes open, so the stated invariant fails.
+- **Outline B (competing, as first drafted): refuse by pinned grant selectors in `sendTx`/`simulateTx` only.** The literal reading of the pick. Both legs rejected it: the outcome needs all three routes refused, and it covers one.
 - **Address versus function in `sendTx`.** The first draft refused every registry function by address. Codex showed that this blocks reading the rejection switch (F6) beyond the owner's words; refusing the three grant functions by selector matches the pick. The selector is what the entrypoint runs; a mismatched name is refused later by the selector binding (`contract-resolver.ts:114-127`). Cost: three pins that move only if a signature changes, caught by the pin test.
 - **Address in `createAuthWit` and the decode loop.** Precise there: only `set_authorized_private` verifies a witness (I3, F6), so no selector is needed.
 - **Typed reason.** A subclass of `ScopeViolationError` keeps the code, the log level and the expected-refusal handling; the envelope and the History row read the subclass for their own text (OA-1 = b, D10).
@@ -115,6 +129,8 @@ export function isAuthRegistryGrantCall(call: { to: unknown; selector: unknown }
 
 - **Signed (orchestrator's record):** "the reason a refused dApp call shows, on the existing refusal surface; no new screen."
 - **After arc 1:** a refused dApp send leaves a History row "Not allowed" with its own context line (OA-1, D10); a refused intent shows nothing in the wallet, as any scope refusal today; an inner request keeps a standard send's Confirm off with the existing toast "Couldn't estimate fee. Try again.", the path the call-binding refusal takes today; in a NO_FROM send the preview shows its existing failure toast, and Confirm ends in the typed refusal and "Not allowed". No copy, row or layout changes.
+- **Arc 2, signed (P41-01 = B, 2026-10-18):** "Listing-only, said plainly: the row reads Let this app list all your accounts, with a line under it, It always knows the account you connect with; the app page's line follows the grant." The connect window's address row, new or held, reads those two texts and no longer names the selected account; the app page's accounts panel shows its line only when the grant lets the app list accounts, reading "List all your accounts"; the unrendered accounts description in the capability table says the same. An accounts request that does not ask to list keeps no address row (OA-6, P45-02 = A: "No address row for a request that does not ask to list (ships now).").
+- **Arc 2's layout, signed (P45-01 = B, 2026-10-18):** "Keep 20 px; the busiest window scrolls 12 px and Firefox's Tab order gains the scroll area; the two tests are re-pinned." Every connect window keeps its 20 px section gaps; the busiest first-request window scrolls 12 px at 400 × 800, and on Firefox its scrolling area is a Tab stop ahead of the account target (OA-7, D23).
 - **Answered (orchestrator, D-orch, 2026-10-17; reason: "the planner's recommendation, no UI change beyond the lane brief's budget"):** OA-1 = b: a registry refusal keeps the scope-refusal code and gets its own dApp text and History context line (D10), both quoted in the PR body as a "what ships now" the owner can flip. OA-2 = a. OA-4: the existing estimate-failure toast ships; a self-settling window is its own later plan. OA-5 = a: the connect window keeps listing registry scope rows.
 
 ## Phases (arc 1)
@@ -163,9 +179,9 @@ export function isAuthRegistryGrantCall(call: { to: unknown; selector: unknown }
 - Pass: every command exits 0; both e2e files green.
 - Layers: all unit layers; network e2e (Chrome). No e2e scenario is added: the refusals are proven at the checker, dispatcher, decode and executor seams; the two files prove the wallet's own grant and the refusal surface unchanged. No fixture, focus, window or activation change, so no Firefox twin.
 
-## Arc 2 (held until the owner picks P38-08)
+## Arc 2: Form B (P41-01 = B)
 
-Build nothing now. Both forms, costed (recon.md § The address-visibility toggle):
+Built as Form B below (D20-D22); Form A was not built. Both forms as costed before the pick (recon.md § The address-visibility toggle):
 - **Form B, listing-only (recommended on the page).** Show the address row for any accounts grant and reword it to say it controls listing: `popup/windows/capabilities/build-items.ts:125,196`, `permission-rows.ts:87-91`, `components/composite/capabilities/CapabilityDetailPanel.vue:27-30` (also aligns its `!== false` with `=== true`), `dapp-session/capability-meta.ts:39`, `packages/wallet-bridge/README.md:163,187-196`. About 30-60 lines and 8 test edits (`build-items.test.ts`, `permission-rows.test.ts`, `CapabilityDetailPanel.test.ts`, `index.test.ts:841`, `cap-window.test.ts:226` row order). New copy needs the owner's sign-off on the exact words before the arc starts. Gate: lint, typecheck, `bun run test`, smoke `cap-window` on Chrome and Firefox.
 - **Form A, binding.** Without `canGet`: refuse a NO_FROM `simulateTx` (or project its result); refuse an explicit `from` with one answer for member and non-member across `simulateTx`, `sendTx`, `createAuthWit`, `registerToken`, `grantPublicAuthwit`; move `profileTx`'s refusal ahead of account resolution. About 150-300 lines in `dispatcher.ts`, `account-resolution.ts`, `method-scope-checkers.ts`, `scope-enforcement.ts`, 20-30 test edits, and playground bundles without `canGet`. Against: refusing a NO_FROM simulation removes most of what a simulation grant is for; projecting the result fights the shape aztec.js parses.
 - Either form is its own PR against `dev`, with its own Codex loop, and carries this plan's close-out.
@@ -187,17 +203,24 @@ Ids D1-D19 belong to arc 1, D20 and up to arc 2.
 | D9 | Relaying another account's approval through `set_authorized_private` is refused as a top-level call or a discovered request; a nested relay with a witness the dApp already holds is not | refuse only when the approver is the person's account; refuse nested relays too | the pick names the grant functions; trusting a call argument adds a second rule (Opus); a nested relay obtains nothing from this wallet (final Codex pass); reopening condition: a dApp report |
 | D10 | OA-1 = b: a refusal subclass of `ScopeViolationError` (same code, same `walletErrorCode`) with its own dApp text and its own journal kind and History context line | a new code; a field on the envelope | every `instanceof ScopeViolationError` site (log level, expected-refusal list, journal) keeps working; only the envelope and the History label read the subclass |
 | D11 | `AuthRegistryRefusalError` lives beside `ScopeViolationError` in `@nulo/extension-messaging/errors`, and `walletErrorFromPayload` rebuilds it from its exact message under the scope code | keep it in wallet-bridge and match the message in the envelope; a code of its own | an executor refusal crosses the operation-result channel as `{ code, message }`, and the rebuild there is the one place every hop reads (arc review round 1, both legs); the bridge cannot be imported below it |
+| D20 | Form B in the owner's words: the address row reads "Let this app list all your accounts" / "It always knows the account you connect with." wherever the grant lets the app list (`canGet === true`), new or held; the app page's panel line shows under the same condition | show the row for every accounts grant (P38-08 B's wording) | the owner's title says the app may list, which is false for a grant without `canGet`; that case is OA-6, and the arc ships without it |
+| D21 | Remove the account naming (`heldAccounts`, from the dispatcher's `heldAccountsOf` to the window's per-selection row) | keep it unused | the owner's title names no account, so nothing reads it |
+| D22 | The panel's line follows `canGet === true`, as the dispatcher does | keep `!== false` | a grant that omits `canGet` cannot list, and the line said it could |
+| D23 | OA-7 = B (P45-01): keep the 20 px section gaps; `cap-window` pins S2's 12 px overflow exactly (nothing clipped at either end, the Confirm row below the area and in the window, S1 fitting because the note is taller than the overflow) and Firefox's scroll-area Tab stop ahead of the account target | sections 16 px apart (option a, measured green); the line on the app page only (option c) | the owner's pick, "so it's still easy to read"; an exact pin keeps any later growth visible |
 
 ## Review verdicts
 
 - **Round 1, Codex (gpt-6.1-sol high): `reject`.** (1) One point outside this arc: tracked privately. (2) The inner refusal cannot settle as "Not allowed" from an estimate: accepted; Outcome and UI impact restated, OA-4 (D8). (3) The address-wide `sendTx` and `simulateTx` rule goes beyond "grant functions": accepted, D1 and D7. Also: OA-1 should confirm the generic text answers "with a reason": accepted into OA-1. Fine per Codex: F1-F3, I2, I3, I4, the decode loop as chokepoint, the upstream leaf.
-- **Round 1, Opus Plan leg: `conditional approve`.** (1) Same estimate-path point as Codex: accepted, with tests at the estimate and preview seams. (2) Drop the simulation leg: accepted (D7). (3) I1 unsafe (relay use): accepted as D9. (4) The decode text outside the closed union: accepted. (5) Test gaps (selector spelling, no partial set, an inner-hash dispatcher row): accepted. (6) The connect window still offers a registry scope: OA-5. Facts F6, F7, F10, I4 corrected. Rejected: none.
+- **Round 1, Opus Plan leg: `conditional approve`.** (1) Same estimate-path point as Codex: accepted, with tests at the estimate and preview seams. (2) Drop the simulation leg: accepted (D7). (3) I1 restated to cover relay use: accepted as D9. (4) The decode text outside the closed union: accepted. (5) Test gaps (selector spelling, no partial set, an inner-hash dispatcher row): accepted. (6) The connect window still offers a registry scope: OA-5. Facts F6, F7, F10, I4 corrected. Rejected: none.
 - **Final fresh Codex pass (new session): `conditional approve`.** Conditions, all accepted as text and test corrections: (1) a simulation signs its entrypoint payload, so the guarantees say "no discovered authorization witness" (F8, Outcome); (2) NO_FROM previews differ from standard estimates: Confirm stays on and ends in the typed refusal; the preview control signs nothing (F12, UI impact, Phase 2 tests); (3) refusal tests cover all three selectors, a spelling, a misleading name, a later leg, and a real effect through the real decoder on both discovery paths; (4) D9 narrowed to direct and discovered relays.
 - **Resumed final pass, round 2: `conditional approve`.** Remaining wording: four places still said "signs nothing" or "any signature", and a gate asked success controls to turn red. All corrected.
 - **Resumed final pass, round 3: `approve`.** "Signing claims, relay scope, and refusal-test/control expectations are consistent … No regressions or remaining issues within this verification scope."
-- **Arc 1 review, round 1, Codex (gpt-6.1-sol high, on the arc diff): `conditional approve`.** (1) The registry refusal lost its class across the operation-result channel, so a NO_FROM Confirm's dApp read the generic text (demonstrated): accepted, D11, with a classify → unwrap → envelope assertion. (2) The selector-pin test passed without checking when hashing failed: accepted, the pins moved to `auth-registry.pins.test.ts`, node-only, with no catch.
-- **Arc 1 review, Opus (general-purpose, same diff): `conditional approve`.** (1) and (2) as Codex. (3) Three "nothing signed" assertions in the estimate and preview tests could not fail in the harness: dropped; the standalone test keeps the validated build, where discovered witnesses are signed. (4) Comment wording in the envelope, the scope checkers and the job-kind list: tightened. Rejected: none.
-- **Arc 1 review, round 2, Codex (resumed on the fix diff): `approve`.** "All three registry messages preserve the subclass and literal name through RPC serialization and `classify → unwrap → envelope` … Other messages under `SCOPE_VIOLATION` reconstruct as the parent … The pin test has no suppressed hashing failures." No findings.
+- **Arc 1 review, round 1, Codex (gpt-6.1-sol high, on the arc diff): `conditional approve`.** (1) The registry refusal keeps its class across the operation-result channel, so a NO_FROM Confirm's dApp reads the registry text: accepted, D11, with a classify → unwrap → envelope assertion. (2) The selector-pin test fails when hashing fails: accepted, the pins moved to `auth-registry.pins.test.ts`, node-only, with no catch.
+- **Arc 1 review, Opus (general-purpose, same diff): `conditional approve`.** (1) and (2) as Codex. (3) Three "nothing signed" assertions in the estimate and preview tests read the harness's mock build: dropped; the standalone test keeps the validated build, where discovered witnesses are signed. (4) Comment wording in the envelope, the scope checkers and the job-kind list: tightened. Rejected: none.
+- **Arc 1 review, round 2, Codex (resumed on the fix diff): `approve`.** "All three registry messages preserve the subclass and literal name through RPC serialization and `classify → unwrap → envelope` … Other messages under `SCOPE_VIOLATION` reconstruct as the parent … The pin test has no suppressed hashing failures." Nothing raised.
+- **Arc 2 review, round 1, Codex (gpt-6.1-sol high, on the arc diff): `approve`.** One low item: the bridge README and the row's comment said every account-bound answer carries the account, while `registerToken` returns nothing and `grantPublicAuthwit` a hash: accepted, both now name simulation results. Fine per Codex: OA-6, the `heldAccounts` removal, the listing gates, the re-pin.
+- **Arc 2 review, Opus (general-purpose, same diff): `conditional approve`.** (1) Say a session with a simulation grant: accepted with Codex's item. (2) Run `cap-window` on both browsers: run, and the busiest first window no longer fits 400 × 800 (OA-7). (3) Screenshots for the PR body: taken. Rejected: none.
+- **Cross-arc pass, fresh Codex session over both arcs: `conditional approve`.** The arcs compose: removing the account naming touches neither the registry refusals nor their serialization and History, and every surface lists only for `canGet === true`. Condition: plan wording that stated the pre-change state instead of what the arcs established: accepted. Resume 1: `conditional approve`, one recon line overclaimed the base: corrected. Resume 2: `approve`.
 
 ## Delivery
 

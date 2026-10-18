@@ -36,7 +36,7 @@ export const CAPABILITY_LABELS: Record<string, CapabilityInfo> = {
 	accounts: {
 		label: "Account access",
 		shortLabel: "Accounts",
-		description: "Read your account addresses and register tokens. May also request auth witnesses for shared accounts.",
+		description: "Register tokens, and list all your accounts if allowed. May also request auth witnesses for shared accounts.",
 		risk: "medium",
 	},
 	contracts: {

@@ -28,7 +28,7 @@ import { copyWithToast } from "@/utils/clipboard"
 import { buildCapabilityItems, buildGrant, type CapabilityWindowParams, currentLine, type WindowRow } from "./build-items"
 import { resolveDappChain } from "./chain-mismatch"
 import { buildDetailsTable } from "./details-table"
-import { accountAddressRow, GROUP_LABELS, GROUP_ORDER, type PermissionRowEntry } from "./permission-rows"
+import { GROUP_LABELS, GROUP_ORDER } from "./permission-rows"
 
 /** Services */
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
@@ -191,13 +191,8 @@ const windowParams = (params: CapabilityPayload["params"]): CapabilityWindowPara
 		accountsMembershipOnly: params.accountsMembershipOnly === true,
 		consent: params.authorizationsWithoutAsking,
 		networkName: chainName.value,
-		heldAccounts: params.heldAccounts ?? [],
 	}
 }
-
-/** A new address row names the selection, not the session: it follows each click. */
-const shownEntry = (row: WindowRow): PermissionRowEntry =>
-	row.isNew && row.entry.key === "account-address" ? accountAddressRow(selectedAccounts.value) : row.entry
 
 const groupsOf = (list: WindowRow[]) =>
 	GROUP_ORDER.map((group) => ({
@@ -205,7 +200,7 @@ const groupsOf = (list: WindowRow[]) =>
 		rows: list
 			.filter((row) => row.entry.group === group)
 			.map((row) => ({
-				entry: shownEntry(row),
+				entry: row.entry,
 				capId: row.capId,
 				line: currentLine(row),
 				badge: row.reRequested ? "previously denied" : undefined,
