@@ -175,9 +175,13 @@ const nonce = computed(() =>
 	}
 }
 
-/* A whole value runs long; its row name keeps one line beside it, and breaks only past half the row. */
-.full .row > :first-child {
-	flex-shrink: 0;
-	max-width: 50%;
+/* A whole value takes the full width under its name, so a 66-glyph field breaks into two even lines. */
+.full .row {
+	flex-direction: column;
+	gap: 2px;
+
+	> :last-child {
+		text-align: left;
+	}
 }
 </style>

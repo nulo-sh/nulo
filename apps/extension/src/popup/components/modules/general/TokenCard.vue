@@ -186,10 +186,12 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	text-overflow: ellipsis;
 }
 
-/* A priced figure wraps rather than hide digits: the row grows only when it does not fit. */
+/* A priced figure wraps rather than hide digits: the row grows only when it does not fit. Its cap is
+ * wider than a name's, and `anywhere` keeps that cap from raising the column's minimum width. */
 .fiat_figure {
+	max-width: 190px;
 	white-space: normal;
-	overflow-wrap: break-word;
+	overflow-wrap: anywhere;
 }
 
 /* --txt-danger passes AA in both themes; --red does not on the light one. */
