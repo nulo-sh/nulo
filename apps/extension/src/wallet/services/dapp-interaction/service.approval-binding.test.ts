@@ -174,6 +174,34 @@ describe("approveInteraction — the popup cannot substitute what executes", () 
 		expect((executedArgs(internals)[4] as Array<{ feeCeiling?: string }>)[0]?.feeCeiling).toBe("16000000000000000")
 	})
 
+	const SHOWN = { name: "Test USDC", symbol: "USDC", decimals: 6, classId: `0x${"c1".repeat(32)}` }
+	test("the token details the window showed reach the envelope", async () => {
+		const { svc, internals } = makeService()
+		store(internals, "i-1", execPayload([{ kind: "register_token", account: `aztec:1:${OWNER}`, address: "0xt" }]))
+		await svc.approveInteraction("i-1", [{ tokenMetadata: SHOWN }])
+		await flush()
+		expect((executedArgs(internals)[4] as Array<{ tokenMetadata?: unknown }>)[0]?.tokenMetadata).toEqual(SHOWN)
+	})
+
+	test.each([
+		["not an object", "USDC"],
+		["a name that is not a string", { ...SHOWN, name: 1 }],
+		["a name past 256 units", { ...SHOWN, name: "n".repeat(257) }],
+		["a symbol that is not a string", { ...SHOWN, symbol: null }],
+		["a symbol past 256 units", { ...SHOWN, symbol: "s".repeat(257) }],
+		["decimals that are not an integer", { ...SHOWN, decimals: 1.5 }],
+		["negative decimals", { ...SHOWN, decimals: -1 }],
+		["decimals past the safe range", { ...SHOWN, decimals: 2 ** 53 }],
+		["a class id that is not a lower-case field", { ...SHOWN, classId: `0x${"C1".repeat(32)}` }],
+		["no class id", { name: "Test USDC", symbol: "USDC", decimals: 6 }],
+	])("token details with %s are refused before the claim", async (_label, tokenMetadata) => {
+		const { svc, internals } = makeService()
+		store(internals, "i-1", execPayload([{ kind: "register_token", account: `aztec:1:${OWNER}`, address: "0xt" }]))
+		await expect(svc.approveInteraction("i-1", [{ tokenMetadata: tokenMetadata as never }])).rejects.toThrow("Invalid token details")
+		expect(internals.storage.has("i-1")).toBe(true)
+		expect(internals.executionService.executeOperations).not.toHaveBeenCalled()
+	})
+
 	test("a capability- or discovery-shaped id is refused BEFORE the claim; the record survives for resolveInteraction", async () => {
 		const { svc, internals } = makeService()
 		store(internals, "cap", { params: { capabilities: {} }, session: SESSION })

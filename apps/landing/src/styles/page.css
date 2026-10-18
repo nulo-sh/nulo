@@ -224,8 +224,14 @@ footer {
 	color: var(--txt-body);
 }
 
-.bar nav a:not(.btn):hover {
+.bar nav a:not(.btn):hover,
+.bar nav a[aria-current="page"] {
 	color: var(--txt-primary);
+}
+
+.bar nav a[aria-current="page"] {
+	text-decoration: underline;
+	text-underline-offset: 6px;
 }
 
 .bar .btn {
@@ -396,6 +402,13 @@ section.s {
 	padding: 72px 0;
 }
 
+.h1 {
+	font-size: 54px;
+	line-height: 1;
+	font-weight: 700;
+	margin-bottom: 16px;
+}
+
 .h2 {
 	font-size: 38px;
 	line-height: 1.05;
@@ -404,6 +417,7 @@ section.s {
 	margin-bottom: 12px;
 }
 
+.h1,
 .h2,
 .lead,
 .cap {
@@ -531,6 +545,7 @@ section.s {
 	margin-top: 36px;
 }
 
+.three h2,
 .three h3 {
 	font-size: 24px;
 	line-height: 1.15;
@@ -540,6 +555,15 @@ section.s {
 .three p {
 	color: var(--txt-body);
 	font-size: 15.5px;
+}
+
+.topic-n {
+	font-family: var(--font-mono);
+	font-size: 13px;
+	font-weight: 500;
+	letter-spacing: 0.08em;
+	color: var(--nulo-secondary);
+	margin-right: 5px;
 }
 
 .log {
@@ -681,7 +705,8 @@ footer .wrap a:hover {
 		display: none;
 	}
 
-	.hero h1 {
+	.hero h1,
+	.h1 {
 		font-size: 40px;
 	}
 

@@ -18,6 +18,10 @@
 	pointer-events: auto;
 }
 
+.page_title_bar_instant {
+	transition: none;
+}
+
 .page_title_label {
 	composes: type--title-page from global;
 	display: block;

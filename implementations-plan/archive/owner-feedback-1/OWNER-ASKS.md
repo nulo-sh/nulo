@@ -1,6 +1,6 @@
 # Owner asks: owner-feedback-1
 
-Four asks. OA-1 and OA-2 hold arc 2 (the landing, #767): it opens only once both are answered. OA-3 (#762) and OA-4 (#760) ride arc 1, which ships their "what ships now" forms if they are still open. Every other change in this lane quotes the owner's words from its issue (#760, #761, #762, #765).
+Six asks, all resolved (§ Resolution, at the end). Every other change in this lane quotes the owner's words from its issue (#760, #761, #762, #765).
 
 ## OA-1. #767: the landing notice's sentence
 
@@ -57,3 +57,41 @@ Four asks. OA-1 and OA-2 hold arc 2 (the landing, #767): it opens only once both
 **Recommendation: A.** It names the method, as the row's label says.
 
 **What ships now: A.**
+
+## OA-5. #762: a flagged token whose transfers are disabled, on the fixed token page
+
+**Surface:** the token page of a token the signed list flags **and** whose contract allows neither transfer: the flagged banner, the balance, its actions and the "Private and public transfers disabled" warning all stay fixed (OA-3 B).
+
+**What it looks like** (estimated from the flagged-token picture at 360 × 600; not measured with both banners): the fixed part ends about 520 px down and the nav starts at 537 px, so the recent activity shows its heading and little else until scrolled. A plain token keeps about 170 px of activity; a token with only one of the two banners keeps about 100 px.
+
+| Option | What changes |
+|---|---|
+| **A. Leave it** | as above; the combination is rare (a scam-flagged contract with no transfer function) |
+| **B. The warning scrolls** | OA-3's option A: the warning moves into the scrolling activity, for every token |
+
+**Recommendation: A** until a person meets it.
+
+**What ships now: A** (arc 1 ships OA-3 B unchanged).
+## OA-6. #766: the app-set fee block with no amount to state
+
+**Surface:** the execute window's fee block when the app sets the fee payment method and no estimate runs or has landed: a failed estimate, or an operation the wallet never estimates. The signed sentence (P47-02 C) names an amount, so it cannot read here.
+
+| Option | The block reads |
+|---|---|
+| **A. The shipped legend** | "Fee payment method set by {app}" |
+| **B. The sentence's second half** | "Payment method set by {app}." |
+
+**Recommendation: A.** No new words; it is the line you saw on page 47 as the shipped form.
+
+**What ships now: A.**
+
+## Resolution
+
+| Ask | Answer | Where it shipped |
+|---|---|---|
+| OA-1 | P47-03, option B: "and tell us what you find." The pick covered the pronoun too: "in their early days". | #791 |
+| OA-2 | A, follow the tag: footer `early days`, screen-reader name "Early days notice". The orchestrator's reading of the owner's "it's not a PREVIEW", named as such in the PR for the owner's veto; it merged without one. | #791 |
+| OA-3 | B, the owner's words read literally: the transfers-disabled warning stays fixed with the balance. The plan's "what ships now", approved with the plan by the orchestrator; no owner pick. | #788 |
+| OA-4 | A, "Sponsored". The plan's "what ships now", approved with the plan; no owner pick. | #788 |
+| OA-5 | A, leave it: no change. Raised in arc 1's review and shipped as is; no owner pick. | #788 |
+| OA-6 | P52-04, option A: "'Fee payment method set by {app}' (ships now)." | #793 |

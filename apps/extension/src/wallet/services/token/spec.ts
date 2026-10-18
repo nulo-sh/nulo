@@ -220,9 +220,9 @@ export type Methods = {
 	 * adding the token to storage. Used by the dApp `register_token` popup so
 	 * the user can see what they're about to add before clicking Allow.
 	 *
-	 * Also returns the parsed `TokenInterface` for display. It is never handed
-	 * back to the executor: what `executeRegisterToken` persists is always its
-	 * own `parseTokenInterface` result.
+	 * Also returns the parsed `TokenInterface` for display. Only its class id
+	 * goes back to the executor, as the commit's pin: what `executeRegisterToken`
+	 * persists is always its own `parseTokenInterface` result.
 	 *
 	 * Returns `{ name: "<name>", symbol: "<symbol>", decimals: 0 }` placeholder
 	 * strings when the contract's interface is incomplete. Callers must NOT
