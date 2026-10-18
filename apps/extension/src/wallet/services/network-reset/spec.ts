@@ -14,9 +14,6 @@ export const NETWORK_RESET_SERVICE_NAME = "network-reset"
 /** How long a dApp request or discovery waits for a running reset before it is admitted anyway. */
 export const RESET_INGRESS_WAIT_MS = 60_000
 
-/** The A6 probe's budget: one request, aborted with it. */
-export const RESET_NODE_PROBE_MS = 5_000
-
 /** What the popup confirmed on A3; the first run starts only while a fresh view still says it. */
 export type ResetConfirmation = {
 	networkReset: boolean

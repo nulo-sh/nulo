@@ -13,6 +13,7 @@ import { type Account, AccountService, AccountType } from "@/wallet/services/acc
 import { DEFAULT_IMPORTED_ACCOUNT_NAME } from "@/wallet/services/account/spec"
 import { DappSessionService } from "@/wallet/services/dapp-session/service"
 import { seedForKind, type DefaultSeed } from "@/wallet/services/network/seeds"
+import { IDENTITY_PROBE_MS } from "@/wallet/services/network/spec"
 import { findPrimaryEndpoint, isSeedEndpointUrl, type Network, NetworkService } from "@/wallet/services/network/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { ProfileService } from "@/wallet/services/profile/service"
@@ -40,7 +41,6 @@ import {
 	NetworkResetMethodSchemas,
 	type PendingReset,
 	RESET_INGRESS_WAIT_MS,
-	RESET_NODE_PROBE_MS,
 	type ResetConfirmation,
 	type ResetRunGate,
 	type StaleNetworkChanged,
@@ -411,7 +411,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 		const key = JSON.stringify([row.id, primary.id, primary.rpcUrl, seed.chainId])
 		let switchToSeedNode = this.probeCache.get(key)
 		if (switchToSeedNode === undefined) {
-			switchToSeedNode = await this.networks.probeIdentityOnce(primary.rpcUrl, row.kind, RESET_NODE_PROBE_MS).then(
+			switchToSeedNode = await this.networks.probeIdentityOnce(primary.rpcUrl, row.kind, IDENTITY_PROBE_MS).then(
 				(probed) => probed.chainId !== seed.chainId || probed.l1ChainId !== seed.l1ChainId,
 				() => true,
 			)

@@ -94,6 +94,7 @@ export const useAppStore = defineStore("app", () => {
 		network,
 		networkStatus,
 		syncNetworkStatus: networkActions.syncNetworkStatus,
+		markNetworkInactive: networkActions.markNetworkInactive,
 		networks,
 		staleNetwork: stale.staleNetwork,
 		syncStaleNetwork: stale.syncStaleNetwork,
@@ -515,12 +516,20 @@ function createNetworkActions(refs: {
 	const syncNetworkStatus = async () => {
 		if (!network.value) return
 		networkStatus.value = "sync"
-		const oldNetworkId = network.value?.id
-		const status = await requireNetwork().getNodeStatus(network.value.id)
+		const oldNetworkId = network.value.id
+		// A read lost to the popup's RPC deadline is a node that did not answer, as the service's own
+		// failed probe is; left unanswered, the dot would read "sync" for good.
+		const status = await requireNetwork()
+			.getNodeStatus(oldNetworkId)
+			.catch(() => NodeStatus.Inactive)
 
 		if (oldNetworkId !== network.value?.id) return
 
 		networkStatus.value = NodeStatus[status]
+	}
+	/** A caller's own read of `networkId`'s node just failed; a later status read still overwrites it. */
+	const markNetworkInactive = (networkId: string) => {
+		if (network.value?.id === networkId) networkStatus.value = NodeStatus[NodeStatus.Inactive]
 	}
 	const renameNetwork = async (id: string, name: string) => {
 		await requireNetwork().renameNetwork(id, name)
@@ -530,7 +539,7 @@ function createNetworkActions(refs: {
 		await requireNetwork().deleteNetwork(target.id)
 		networks.value = networks.value.filter((n) => n.id !== target.id)
 	}
-	return { syncNetworkStatus, renameNetwork, removeNetwork }
+	return { syncNetworkStatus, markNetworkInactive, renameNetwork, removeNetwork }
 }
 
 // ---------------------------------------------------------------------------------------------

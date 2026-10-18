@@ -580,6 +580,21 @@ export class RecoveryModeError extends WalletError {
 }
 
 /**
+ * A node the wallet needs for an identity check did not answer within its budget, or its URL is
+ * refused by the transport rule. Distinct from an identity mismatch, which stays a plain error and
+ * keeps refusing, so a caller can tolerate only an absent node. Keeps the probe's message, which
+ * the endpoint forms already word.
+ */
+export class NodeUnreachableError extends WalletError {
+	public static readonly CODE = "NODE_UNREACHABLE"
+	public static readonly MESSAGE = "Failed to fetch node info"
+
+	public constructor(message: string = NodeUnreachableError.MESSAGE, details?: unknown) {
+		super(NodeUnreachableError.CODE, message, details, "NodeUnreachableError")
+	}
+}
+
+/**
  * Every class a wire `code` rebuilds as. `RpcConnectError` is absent on purpose: it never crosses
  * the wire.
  */
@@ -611,6 +626,7 @@ const REBUILT_AS = [
 	TermsAcceptanceRequiredError,
 	OperationNotRecordedError,
 	ImportedAccountUnusableError,
+	NodeUnreachableError,
 ] as const
 
 /** A `Map`, not an object, so a code such as `"constructor"` resolves to nothing. */
