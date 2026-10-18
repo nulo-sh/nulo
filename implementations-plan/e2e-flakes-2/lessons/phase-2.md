@@ -23,3 +23,16 @@
   leave. The spec's foot points sit in it; Firefox's slower drags put them near +2.0 s.
 
 ## Implementation
+
+- The wait and its comment landed in `232d3581`. Base, unfixed spec, one run per browser at retry
+  0 (`taskset -c 0,1`, armed builds): Firefox file 51.0 s, drag test 5.6 s; Chrome 34.7 s, 3.4 s;
+  both 8 passed.
+- Control A (unfixed spec; the popup adopts `[data-testid="snackbar"] { transition-duration: 4s
+  !important; transition-timing-function: step-start !important }`, so a leaving card holds its
+  swept-down place for 4 s; a wait for a card's leave class before About's scroll): red, `Error:
+  legal-about-group's first character is off screen or covered` at the original `:253`, #816's
+  message.
+- Control B (the fixed spec under the same stylesheet, no other edit): green, 1 passed. The wait
+  held until the card was removed, about 4 s past its usual end.
+- Both run alone with `-t "a drag selects"`, so the test's time includes the browser's launch.
+  The spec was restored from the committed fix after each; `git status` clean.

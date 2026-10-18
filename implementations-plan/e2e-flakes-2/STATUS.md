@@ -11,3 +11,4 @@
 - 2026-10-18: Chrome 5/5 green; review round 2 (Codex resume): approve, loop converged; comments fixed in 78b82faa.
 - 2026-10-18: merged origin/dev (7eada4c6); final head: lint, typecheck:all, test:all, check:plans exit 0; spec green once per browser (Firefox 64.0 s, Chrome 38.5 s). PR opened.
 - 2026-10-18: arc 2 (#816) started on `e2e-flakes-2-a2` off origin/dev a4edec20. CI logs read (two red runs, eight green); probe run once per browser: the header copy's snack sweeps the band under its resting place (y 588-608) on enter and leave, where About's foot points sit (y 590.5-593); Firefox's note hit test met the leaving card. The sub-page header (y 64-120) is not the cover.
+- 2026-10-18: arc 2 fix committed (232d3581); base runs green (Firefox 51.0 s file / 5.6 s test, Chrome 34.7 / 3.4 s); control A red at the original :253 with #816's message, control B green; lint and typecheck:all exit 0.
