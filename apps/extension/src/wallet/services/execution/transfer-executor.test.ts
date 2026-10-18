@@ -35,6 +35,7 @@ import { TransferEstimateReuse } from "./transfer-estimate-reuse"
 import { TransferExecutor, type TransferExecutorDeps } from "./transfer-executor"
 import { getEstimatedFee } from "./tx-fee-details"
 import { FpcType } from "@/wallet/services/fpc/spec"
+import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 
 // The balance slot's poseidon2 runs Barretenberg WASM, which crashes under jsdom; the slot itself is
 // pinned in fee-juice-balance.test.ts.
@@ -1455,6 +1456,15 @@ describe("TransferExecutor: the fee contract a send is ordered against", () => {
 		await sponsor.executor.execute(FPC_REQ, undefined, FENCE)
 		expect(recordedTx(sponsor.deps).feeSpender).toBeUndefined()
 		expect(buildFpc(sponsor.deps)?.infoData).toMatchObject({ isProtocol: true, address: "0xsponsor" })
+	})
+
+	test("a Private Fee Juice send records the PrivateFPC as its spender beside its transfer alone: the record's only trace of its method", async () => {
+		const privateFpc = { infoData: { id: "f", type: FpcType.PrivateFpc, chainId: 7, address: PRIVATE_FPC_ADDRESS } }
+		const { executor, deps } = makeHarness({ getFpcImpl: vi.fn(async () => privateFpc as never) })
+		await executor.execute(FPC_REQ, undefined, FENCE)
+		const recorded = recordedTx(deps)
+		expect(recorded.feeSpender).toBe(PRIVATE_FPC_ADDRESS)
+		expect((recorded.calls as { method: string }[]).map((c) => c.method)).toEqual(["transfer_private"])
 	})
 
 	test("a row forged during the wait is refused at the re-check: the slot goes back and nothing builds; a clean re-check keeps it", async () => {
