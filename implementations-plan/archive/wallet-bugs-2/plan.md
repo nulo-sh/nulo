@@ -193,6 +193,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | impl 1 | Codex, gpt-6.1-sol | approve | the height case selects a working seed row by its status, not `aria-busy` | none |
 | impl 1 | Opus 5.5 review | conditional approve | the store sentence cites where a flag reaches every token and the surfaces it marks; the burst comment made conditional; the height case compares to a tenth of a pixel | the tip read's missing recovery-mode refusal (KL-2: no encrypted state, nil consequence); the trim case's exact heights (a false red at worst, green every run); the follow left off after a shrink with no scroll (the UI-impact behaviour) |
 | impl 2 | Codex, resumed | approve | no new material finding | none |
+| impl 3 | Codex, resumed | approve | no new material finding in the `viewers-csp` merge resolution or the drag's selection wait | none |
 
 Round 2's blocking finding replaced D6: each page's `IncomingTransferServiceClient` fires its own `onConnected`, so a coordinator full read can start after the feed's stored read with no refresh behind it, and `settledAfter` holds the feed again. The new D6 leaves the coordinator alone and removes the slow transport instead, reusing the execution service's one-attempt tip read; round 1's KL-1 and KL-2 no longer arise.
 

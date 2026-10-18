@@ -59,3 +59,5 @@ After that merge, Firefox's selection-hold case failed once out of three runs: t
 `selectAcross` now waits for a `selectionchange` that shows the selection. The viewer's listener is registered first, so it has run by then. With the fix, Firefox passed 4/4 and Chrome 1/1.
 
 PR CI on 0a582c4f, before this fix, was green across all five required checks.
+
+Codex round 3 (resumed, the last): **approve**. No new material finding in the resolved `viewers-csp.test.ts` or the selection wait.
