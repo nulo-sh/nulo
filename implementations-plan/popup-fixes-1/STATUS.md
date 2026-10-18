@@ -8,3 +8,4 @@
 - 2026-10-18: origin/dev merged; final gates green on both browsers; pictures committed.
 - 2026-10-18: arc 2 branched off origin/dev 97ffa088 on OA-1 A and OA-2 A (the lane's recommendations; owner answer pending). Before pictures taken on the base build.
 - 2026-10-18: phase 6 gate green: general unit 400 passed; S rows + home-links Chrome 11/11, Firefox 11/11; ghost row 41 → 53 px, bar gap 0 → 2 px.
+- 2026-10-18: phase 7 gate green: ActionButtonsView unit red on base, green after; lint, typecheck:all; S nine files Chrome 52/52 (1 pre-existing skip); Firefox home-links red once (Tab walk left the document), walk anchored, rerun green on both browsers, the other eight files green.

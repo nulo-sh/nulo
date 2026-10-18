@@ -39,11 +39,11 @@ const handleReceive = () => {
 
 <template>
 	<Flex wide align="center" gap="16">
-		<Flex @click="handleSend" wide align="center" justify="center" :class="[$style.button, $style.primary]" data-testid="actions-send">
+		<Flex tag="button" type="button" @click="handleSend" wide align="center" justify="center" :class="[$style.button, $style.primary]" data-testid="actions-send">
 			<span :class="$style.label">SEND</span>
 		</Flex>
 
-		<Flex @click="handleReceive" wide align="center" justify="center" :class="[$style.button, $style.secondary]" data-testid="actions-receive">
+		<Flex tag="button" type="button" @click="handleReceive" wide align="center" justify="center" :class="[$style.button, $style.secondary]" data-testid="actions-receive">
 			<span :class="$style.label">RECEIVE</span>
 		</Flex>
 	</Flex>
@@ -53,7 +53,9 @@ const handleReceive = () => {
 .button {
 	user-select: none;
 	height: 52px;
+	margin: 0;
 
+	font: inherit;
 	cursor: pointer;
 	border-radius: 0;
 
@@ -61,6 +63,11 @@ const handleReceive = () => {
 
 	&:active {
 		transform: scale(0.97);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
 	}
 }
 
