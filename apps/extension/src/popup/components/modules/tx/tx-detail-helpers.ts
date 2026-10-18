@@ -38,7 +38,7 @@ export function computeFeeSavings(fee: string | bigint | undefined, estimatedFee
 
 export interface FeePaymentLabelInput {
 	feePaymentMethod?: number
-	calls?: { method?: string }[]
+	calls?: { contract?: string; method?: string }[]
 	origin?: { type: number; name?: string }
 	feeSpender?: string
 }
@@ -53,12 +53,12 @@ export function describeFeePaymentMethod(tx: FeePaymentLabelInput | undefined | 
 }
 
 function describeExternalFee(tx: FeePaymentLabelInput): string {
-	const fpcMethod = tx.calls?.find((c) => c.method && FEE_METHODS.has(c.method))?.method
-	if (fpcMethod === "sponsor_unconditionally") return "Sponsored"
-	if (fpcMethod === "fee_entrypoint_private") return "Private Fee Juice"
-	if (fpcMethod === "pay_fee") return "Private Fee Juice"
+	const feeCall = tx.calls?.find((c) => c.method && FEE_METHODS.has(c.method))
+	if (feeCall?.method === "sponsor_unconditionally") return "Sponsored"
+	// A dApp can name its own fee function `pay_fee`: only the PrivateFPC's charges Private Fee Juice.
+	if (feeCall?.method === "pay_fee" && isPrivateFpc(feeCall.contract)) return "Private Fee Juice"
 	// A popup Send records only its transfer, so the FPC it paid through is its only fee trace.
-	if (!fpcMethod && tx.origin?.type === OriginType.UI) return isPrivateFpc(tx.feeSpender) ? "Private Fee Juice" : "Sponsored"
+	if (!feeCall && tx.origin?.type === OriginType.UI) return isPrivateFpc(tx.feeSpender) ? "Private Fee Juice" : "Sponsored"
 	if (tx.origin?.type === OriginType.DAPP) return `Set by ${tx.origin.name ?? "the app"}`
 	return "External FPC"
 }
