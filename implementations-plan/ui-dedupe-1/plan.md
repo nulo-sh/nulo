@@ -271,7 +271,7 @@ A pass is exit 0, with every named test green and none skipped that ran on base.
   - Network on Chrome and Firefox: `opfs-storage`, `frozen-account-canary`.
   - Network on Chrome: `stale-network-reset` (the chain purge).
   - `git grep -nE "LEGACY_SWEEP|VERIFIED_ERASE|deleteDb|isLegacyPxeDb|chainDataDirPrefix" -- ':!implementations-plan'` prints nothing.
-- **A3** ✗. G-fast; the three page suites and `useSettingUpdate.test.ts`; the phase gate; smoke on Chrome: `appearance`, `settings-routes`, `sw-resilience`.
+- **A3** ✓ (on 2c674859, dev 138e0ded: lint, typecheck:all, test:all, check:plans; smoke Chrome 20/20 in 88 s, one standing `test.skip`; Codex clean in round 2). G-fast; the three page suites and `useSettingUpdate.test.ts`; the phase gate; smoke on Chrome: `appearance`, `settings-routes`, `sw-resilience`.
 - **A4** ✗.
   - G-fast.
   - `SecretCountdownClose.test.ts`; the phase gate (the design package included).
@@ -313,6 +313,7 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
 | D301 | `updateSetting` only; the F-21 items are filed as a new issue | take F-21 | both agree |
 | D302 | at implementation: the composable's catch has no binding (Biome warns on an unused `catch (err)` in a `.ts` file); Developer drops its now-unused `useToast`; the F-21 items are #735, re-verified at `138e0ded` | a byte-identical `catch (err)` with a lint warning | implementer |
 | D303 | A3's PR title backticks the identifier and lower-cases the page names: commitlint's `subject-case` refuses the planned title | the planned title | implementer |
+| D304 | A3 review round 1 (Codex `clean`, Opus `findings` 1, no behaviour difference found by either): Developer's page case pins its whole cascade, and the composable's hand copy goes, keeping one re-entry case; the pre-existing double apply is closed known limit #736. Round 2: Codex `clean` | a composable copy of the page's cascade (stays green when the page drifts) | Opus F1 |
 | D401 | the design `Button` with its slot and local overrides by specificity | a new global CTA class; an overlay slot | both agree; Opus O9 and Codex C8 adopted |
 | D501 | one mirror per family | one generic mirror (outline B) | both agree |
 | D502 | the store uses the reducers, `back` | the full composable | both agree; Opus O7 adopted |
