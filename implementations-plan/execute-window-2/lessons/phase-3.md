@@ -10,6 +10,8 @@
 | smoke Chrome, armed build | `132a3171` | 57 files, 262 passed | 1816 s |
 | network Chrome + after pictures | merge `f466e3be` | 4 passed | 382 s |
 | network Firefox | merge `f466e3be` | 3 passed | 590 s |
+| smoke Chrome, armed build | merge `f466e3be` | 57 files, 263 passed | 1894 s |
+| smoke Firefox, armed build | merge `f466e3be` | 60 files, 263 passed | 2697 s |
 
 scope-refusal test 2 against test 1 on the same run, locally: Chrome 20.4 s / 20.4 s, then 24.4 s / 23.8 s; Firefox 25.0 s / 25.6 s, then 23.0 s / 21.7 s. On `dev` before the arc (CI): Chrome 11.2 s / 11.0 s, Firefox 21.4 s / 20.1 s. Test 2 now refuses in the window instead of at execution; its time stays level with test 1's.
 
