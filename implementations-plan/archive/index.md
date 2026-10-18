@@ -127,6 +127,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [fee-estimation-speedup](fee-estimation-speedup/plan.md) — completed — fewer full simulations behind every fee estimate
 - [fees-and-sponsors](fees-and-sponsors/plan.md) — completed — unknown speed levels refused at the popup RPCs, a timed-out estimate keeps its place; per-profile fee picks, sponsor checks, long authwit proofs, the fee-juice nudge, one fee-cap rule
 - [fees-and-sponsors-2](fees-and-sponsors-2/plan.md) — completed — an app's cap on every payer (#400), its priority fee committed and named on app-paid rows (#411), no Teardown line (#401)
+- [fees-display-1](fees-display-1/plan.md) — completed — one helper prints every fee as `~X FJ ($Y)` at 6 decimals, balances as today, precisions named once (#515)
 - [firefox-arc-closeout](firefox-arc-closeout/plan.md) — completed — the Firefox arc closed: fast answers to in-flight dApp calls, canaries on both browsers
 - [firefox-background-kill](firefox-background-kill/plan.md) — completed — the e2e suite ends the Firefox background page through the browser driver
 - [firefox-first-class-spike](firefox-first-class-spike/plan.md) — completed — Firefox gets the same smoke and network suites as Chrome

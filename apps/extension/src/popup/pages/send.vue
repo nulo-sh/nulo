@@ -34,7 +34,8 @@ import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { contactListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
-import { FEE_JUICE_BRIDGE_URL, feeLine, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
+import { FEE_JUICE_BRIDGE_URL, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
+import { feeText } from "@/utils/fee-estimation"
 import { validateSendAmount } from "@/popup/pages/send-amount"
 import { applyBalanceAdd, applyBalanceUpdate } from "@/popup/pages/send-balance-events"
 import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
@@ -344,7 +345,7 @@ const openReview = () => {
 const closeReview = () => popupStore.close(REVIEW_KEY)
 
 const amountText = computed(() => (amountTerm.value ? String(amountTerm.value) : undefined))
-const feeText = computed(() => feeLine(feeDisplay.value))
+const reviewFeeText = computed(() => (feeDisplay.value ? feeText(feeDisplay.value) : undefined))
 
 const transferType = computed(() => {
 	if (selectedSendType.value === "private" && selectedReceiverType.value === "private") return TransferType.Private
@@ -875,7 +876,7 @@ onBeforeUnmount(() => {
 			:symbol="activeToken?.symbol"
 			:recipientName="selectedContact?.name"
 			:recipientAddress="searchTerm"
-			:feeText="feeText"
+			:feeText="reviewFeeText"
 			:payerKind="payerKind"
 			:payerType="payer?.type"
 			:canSend="isAllowedToSend"

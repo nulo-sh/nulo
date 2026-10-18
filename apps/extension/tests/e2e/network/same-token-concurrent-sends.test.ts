@@ -38,6 +38,7 @@ import {
 	registerProfile,
 	waitForHash,
 } from "../fixtures/extension"
+import { pinnedFeeText, refusePrices, seedFeeJuiceQuote } from "../fixtures/fee-quote"
 import {
 	createAndActivateProfile,
 	getAccountAddress,
@@ -679,12 +680,15 @@ test.skipIf(!hasConfig)(
 	{ timeout: 600_000, retry: 0 },
 	async ({ burst }) => {
 		const { nodeUrl } = aztecConfig as AztecTestConfig
+		const prices = await refusePrices(burst.ctx)
 		// B's basis is the older Urgent send, never A at Fast: seeded at 4/5 of A's fee, its cap is about
 		// A's fee, below B at Urgent, whose multiplier is 5/3 of Fast's in every build.
 		const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "9", destination: to(), fee: "public", speed: "fast" }
 		const b: BurstSend = { ...a, amount: "10", speed: "urgent" }
 		const basis = await seedUrgentSend(burst, await fireIntoHeldWindow(burst, a))
 		const { page } = burst
+		// Before Home remounts for the first re-ask, which is when its price client reads.
+		await seedFeeJuiceQuote(burst.ctx, prices)
 
 		await startSend(page, b)
 		await expectEstimateQueued(page, 3_000)
@@ -714,17 +718,24 @@ test.skipIf(!hasConfig)(
 			console.log(`[same-token] re-ask ${asks} over a ${basis} basis: ${JSON.stringify(asking.reask)}`)
 			expect(BigInt(asking.reask.fee) > BigInt(asking.reask.cap), "a re-ask names a fee above its cap").toBe(true)
 			expect(await pendingTxCount(nodeUrl), "the node holds no tx of B before the accept").toBe(0)
-			if (asks === 1) await reopen(burst)
+			if (asks === 1) {
+				await reopen(burst)
+				// The sheet keeps the quote the feed holds when it opens; the feed's read starts as Home mounts.
+				await burst.page.waitForSelector('[data-testid="activity-feed-root"][data-fee-quote="ready"]', { timeout: 30_000 })
+			}
 			expect((await waitForAwaitingCard(burst.page, "queued")).subtitle).toBe("Fee went up. Review")
 			if (asks === 1) await shotSend(burst.page, "4-home-reask-row", "tx-awaiting-card")
 			await pointerClick(burst.page, "tx-awaiting-card")
 			const sheet = await readReaskSheet(burst.page)
-			expect(sheet.line).toMatch(/^Fee is now [\d.]+ FJ( \(.+\))?, above the [\d.]+ FJ you accepted\.$/)
-			expect(sheet.button).toMatch(/^Send for [\d.]+ FJ$/)
+			const [now, cap] = [pinnedFeeText(asking.reask.fee), pinnedFeeText(asking.reask.cap)]
+			expect(sheet.line).toBe(`Fee is now ${now}, above the ${cap} you accepted.`)
+			expect(sheet.button).toBe(`Send for ${now}`)
 			if (asks === 1) await shotSend(burst.page, "4-reask-sheet", "send-review-fee")
 			await pointerClick(burst.page, "send-review-submit")
 			accepted = asking.reask.fee
 		}
+		expect(await prices.refused.failures(), "price interception failures").toEqual([])
+		await prices.refused.stop()
 
 		expect(caps[0], "the first re-ask holds B to the like send's cap").toBe(queuedFeeCap(basis))
 		await expectBothSucceed(burst, a, b)

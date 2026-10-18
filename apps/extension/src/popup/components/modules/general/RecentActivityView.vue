@@ -242,6 +242,8 @@ const incomingTransferService = new IncomingTransferServiceClient()
 const configService = new ConfigServiceClient()
 const incomingPriceService = new PriceServiceClient()
 const incomingPrices = usePrices(incomingPriceService)
+/** Whether a re-ask opened now prices its figures: the sheet keeps the quote it opens with. */
+const feeQuoteState = computed(() => (incomingPrices.feeJuiceQuote.value ? "ready" : "none"))
 const arrivals = inject(ARRIVALS_KEY, undefined)
 const { incomingTransfers, dispose: disposeIncomingTransfers } = useIncomingTransfers({
 	incomingTransferService,
@@ -843,6 +845,7 @@ onBeforeUnmount(() => {
 		gap="16"
 		data-testid="activity-feed-root"
 		:data-active-account="appStore.account?.address"
+		:data-fee-quote="feeQuoteState"
 	>
 		<Flex align="end" justify="between">
 			<SectionLabel label="Recent activity" />
