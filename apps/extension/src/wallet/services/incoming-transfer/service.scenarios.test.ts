@@ -34,6 +34,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 // shared runner, which timed out the first `bootService()` when the import was
 // dynamic. vi.mock("./repository") is hoisted above this, so the mock still applies.
 import { IncomingTransferService } from "./service"
+import type { BalanceRefreshOutbox } from "./balance-outbox"
 import { PublicScanCursorSchema, noteRecordId } from "./spec"
 import type { IncomingNoteRecord, IncomingPublicEventRecord, IncomingTransferRecord, IncomingTrustRecord, IncomingTrustState } from "./spec"
 import { TaskStatus } from "@/wallet/services/task/spec"
@@ -3450,7 +3451,7 @@ describe("IncomingTransferService — public-arm lifecycle", () => {
 // ── Balance-refresh outbox drain (causal task-anchored ack) ─────────────────
 
 async function drain(service: unknown): Promise<void> {
-	await (service as { drainBalanceOutbox: () => Promise<void> }).drainBalanceOutbox()
+	await (service as { outbox: BalanceRefreshOutbox }).outbox.drain()
 }
 
 describe("IncomingTransferService — balance-refresh outbox (write-side)", () => {
@@ -3574,13 +3575,8 @@ describe("IncomingTransferService — balance-refresh drain (causal ack)", () =>
 		await drain(service)
 		expect(outboxFor()?.pendingTaskId).toBe("T1")
 
-		// markBalanceDirty (via a fresh receipt) overwrites the whole row.
-		await (service as unknown as { markBalanceDirty: (p: string, n: string, a: string, t: number) => Promise<void> }).markBalanceDirty(
-			"p1",
-			"n1",
-			"0xa",
-			1,
-		)
+		// markDirty (via a fresh receipt) overwrites the whole row.
+		await (service as unknown as { outbox: BalanceRefreshOutbox }).outbox.markDirty("p1", "n1", "0xa", 1)
 		expect(outboxFor()?.pendingTaskId).toBeUndefined()
 		expect(outboxFor()?.dirtyAt).toBeGreaterThan(100)
 	})
