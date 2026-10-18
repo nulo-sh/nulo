@@ -1,7 +1,7 @@
 ---
 plan: ci-e2e-hygiene-1
 tier: light
-status: planned, awaiting approval (Codex approve, round 3)
+status: approved at 654f7298; arc 1 implemented, in review
 issues: "#749 #630 #612 #643 (arc 1 Closes); #620 #555 (arc 2 Closes)"
 driver: claude-code
 claude_model: opus
