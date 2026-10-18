@@ -79,6 +79,7 @@ vi.mock("@/wallet/services/token-balance/client", () => ({
 		return {
 			connect: vi.fn(),
 			disconnect: vi.fn(),
+			onConnected: new EventHandler(),
 			onTokenBalanceAdded: new EventHandler(),
 			onTokenBalanceUpdated: new EventHandler(),
 			onTokenBalanceDeleted: new EventHandler(),
