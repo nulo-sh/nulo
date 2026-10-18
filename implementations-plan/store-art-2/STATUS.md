@@ -9,3 +9,4 @@
 - 2026-10-18: phase 1 gate PASS: capture exit 0 first attempt (344 s; fits 58 / 46 px); store-art.ts exit 0; tile byte-identical; 10 PNGs modified; sizes and chunks correct.
 - 2026-10-18: phase 2: four frames pass; screenshot 3 pending owner (OA-1: the footer cuts the new last row's description; what ships now is the frame as produced). Image commit `7081a393`.
 - 2026-10-18: phase 2 gate PASS: `bun run lint` 0, `bun run typecheck:all` 0, `bun run test:all` 0 (extension 855 files passed), `check:plans` below.
+- 2026-10-18: review loop: Codex r1 approve; Opus review conditional approve, six record fixes accepted: frame 1 pending owner (OA-2), OA-1 option C recommended.

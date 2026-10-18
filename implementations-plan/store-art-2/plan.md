@@ -61,7 +61,7 @@ F5 and F6 hold at the plan base; phase 1 step 2 checks them again when `B` moves
 - I2. The tile renders byte-identical again (F5). If not, D2 applies.
 - I3. Home's fit may differ from 31 px; the spec computes it. Nothing in the fit keeps the Holdings row clear of the fixed hero, so phase 2 checks it.
 
-**Asks:** none at planning beyond the set's signature, which the orchestrator's decision page carries. Phase 2 raised OA-1 (screenshot 3's cut row, D4 (b)); the set ships as produced ([OWNER-ASKS.md](OWNER-ASKS.md)).
+**Asks:** none at planning beyond the set's signature, which the orchestrator's decision page carries. Phase 2 and its review raised OA-1 (screenshot 3's cut row) and OA-2 (screenshot 1's top row under the hero's fade), both D4 (b); the set ships as produced ([OWNER-ASKS.md](OWNER-ASKS.md)).
 
 ## UI impact
 
@@ -101,7 +101,7 @@ Result: pass on the first run at `B` = `b53e1d4a` (344 s; fits 58 and 46 px; the
 - `bun run lint`, `bun run typecheck:all`, `bun run test:all` and `bun run check:plans` (after staging) exit 0, each started with load1 under 150.
 - `git diff --name-only B...HEAD` lists only the phase 1 PNGs, `implementations-plan/` files, and `store-captures.test.ts` if D4 fixed it.
 Layers: lint, typecheck, unit, the plans gate.
-Result: pass. Four frames pass; frame 3 is pending owner (OA-1). `I` = `7081a393`. [lessons/phase-2.md](lessons/phase-2.md).
+Result: pass. Three frames pass; frames 1 and 3 are pending owner (OA-2, OA-1). `I` = `7081a393`. [lessons/phase-2.md](lessons/phase-2.md).
 
 ## Decision ledger
 
@@ -134,6 +134,8 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `b53e
 **Round 1, Codex** (gpt-6.1-sol, high, session 01a15077): conditional approve; all seven accepted. #1 `--no-install` (Security); #2 a changed tile is looked at, never dropped silently (D2); #3 F5 and F6 checked again on a new `B` (step 2); #4 "pending owner" apart from "pass", D4's bounds and the diff allowlist; #5 the signature bound to bytes (D3, Delivery, step 4); #6 a rerun needs a named environmental cause (D5); #7 `NULO_E2E_BROWSER=chrome`.
 **Round 1, Opus Plan:** conditional approve; 15 of 16 accepted. #1-#2 the pairs from `I`, the orchestrator's after-signature step; #3 the Send check names the amount line and the strip in the footer (`send.vue:851-852`); #4 Home's Holdings row checked against the hero (I3); #5-#6 D4's third case and D2 flipped to commit a changed tile (Codex #2 asked only that it not be dropped silently, so both hold); #7 `exit=` logged; #8 a red run restores the tree; #9 the status gate scoped to the store; #10 the load bound; #11 the per-frame checklist; #12 Home's state is OA-16's; #13 the range log; #14 the upload line; #15 the address and chunk rules; #16 one lessons file per phase, title 71. Rejected: #5's both-browser runs for a fixture fix, since D4 keeps fixtures out of scope.
 **Round 2, Codex** (resume): approve, no new material finding; agrees with D2's flip (a changed tile is shown as the eleventh pair).
+**Arc 1, Codex** (gpt-6.1-sol, high, session 01a150a2; [lessons/phase-3.md](lessons/phase-3.md)): r1 approve, no new material finding (hashes, sizes, chunks, the log and OA-1's container verified).
+**Arc 1, Opus review** (viewed every pair): conditional approve; six accepted, all records. #1 Home's top row sits in the hero's 12 px fade, so frame 1 is pending owner (OA-2); #2 the spec redraws the window at 360×600, it opens at 400×800; #3 OA-1 gains option C, an 11 px fit, now recommended; #4 #759's wording named; #5-#6 small changes and the SANDBOX label recorded.
 
 ## Seeds
 

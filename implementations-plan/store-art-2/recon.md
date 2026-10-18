@@ -31,6 +31,6 @@ From the 76 commits above `78b4b754` that touch `src/` or `packages/design` (com
 | Send | Fee text `~X FJ ($Y)` (#733); the privacy marks (#655) |
 | History | An incoming chip that does not fit drops under the title (#793); the type scale on row amounts (#649) |
 | Security (the Lock page) | One shared settings control row (#779); settings rows without their leading glyph (#641) |
-| Approve | Header chips at 11 px (#782); the grant card's wording changes (#611, #594, #778, #721, inferred) |
+| Approve | Header chips at 11 px (#782); the address row reads "Let this app list all your accounts" (#759, found in review); the grant card's wording changes (#611, #594, #778, #721, inferred) |
 
 #788's token-page hero (#762) is on no captured screen: the spec frames home, send, history, the Lock page and the permission window (`tests/e2e/network/store-captures.test.ts:347-358`). Home at HEAD has no Get started card: PR #743 (onboarding-3) is open and holds it.
