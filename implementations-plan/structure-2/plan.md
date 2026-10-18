@@ -193,6 +193,7 @@ The lane brief's no-ask record says "none"; nothing here goes beyond it.
 | D8 | #680: required `expectedProfileId`, `SessionEndedError` before allocation, the check kept, the error propagates | a passed fence; dropping the check; a new try/catch | both prefer A; keeping the check follows from Opus F1 |
 | D9 | Identity: titles, unchanged bodies, normalised DOM and pixels | titles alone; DOM snapshots committed | both asked for more than titles |
 | D10 | #735's enhancement gate goes to the owner (OA-1) | the lane launch as the record | both flagged it |
+| D11 | Arc 1 deviation: `a11y-css.test.ts`'s per-file anchor table follows the hero link into `DetailHeroMeta` (one row added, three counts down by one; title and check unchanged) | leaving the pin unchanged (impossible once the link moves) | implementer, [lessons/phase-2.md](lessons/phase-2.md) |
 
 ## Audit verdicts
 
