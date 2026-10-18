@@ -31,8 +31,8 @@ export async function sealPasskeyBackup(backup: PlainBackup, passkey: PasskeyAns
 	return (await assembleFullBackup(envelope, slices, undefined, authenticate)).compact
 }
 
-/** Whether `backup` passes the import's checks before its restore writes anything: the checksum
- *  over the body without it and its MAC, then the MAC over that checksum under `passkey`. */
+/** Whether `backup` passes the import's integrity checks: the checksum over the body without it
+ *  and its MAC, then the MAC over that checksum under `passkey`. */
 export async function passkeyBackupVerifies(backup: PlainBackup, passkey: PasskeyAnswer): Promise<boolean> {
 	const { checksum, [BACKUP_MAC_FIELD]: mac, ...body } = backup
 	if (typeof checksum !== "string" || typeof mac !== "string") return false

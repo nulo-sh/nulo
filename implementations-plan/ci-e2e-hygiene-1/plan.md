@@ -195,6 +195,11 @@ Assumes F8.
 
 **Round 3** (Codex resume): approve, no new material finding.
 
+**Arc 1, post-implementation round 1** (Codex gpt-6.1-sol, high, session `01a14f71`, over `5b962416..ba49b48a`): conditional approve, 3 findings, each checked against the tree.
+- Accepted: `armFollowCheck`'s scroll listener ran after the viewer's own, whose button insertion could stop the latch mid-dispatch, so a scroll-shown button counted as a line's; it now listens in the capture phase.
+- Accepted: `passkeyBackupVerifies`' doc claimed every pre-write check; it checks the integrity pair only.
+- Rejected: a text-change tracker beside the latch, for a stop step that shows the button with no line and no scroll. `LogsViewer.vue` sets `showScrollBtn` in two places only, a line while not following and a scroll at `SCROLL_DISABLE_THRESHOLD` or more from the end, and the capture-phase guard mirrors the second exactly.
+
 ## Delivery
 
 - **Arc 1**, branch `ci-e2e-hygiene-1-a1` off `origin/dev` with the plan commit cherry-picked (the orchestrator's call), phases 1-4. Title: `test(e2e): fix four e2e reds at their cause; run the passkey import row in ci`. Body: `Closes #749`, `Closes #630`, `Closes #612`, `Closes #643`.

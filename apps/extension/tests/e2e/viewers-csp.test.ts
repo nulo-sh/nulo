@@ -113,9 +113,10 @@ async function armFollowCheck(page: Page): Promise<void> {
 			})
 			latch.stop = () => {
 				observer.disconnect()
-				el.removeEventListener("scroll", onScroll)
+				el.removeEventListener("scroll", onScroll, { capture: true })
 			}
-			el.addEventListener("scroll", onScroll)
+			// Capture runs before the viewer's own listener, whose button can stop the latch mid-dispatch.
+			el.addEventListener("scroll", onScroll, { capture: true })
 			observer.observe(document.body, { childList: true, subtree: true })
 			;(window as unknown as { __followCheck?: typeof latch }).__followCheck = latch
 			return document.querySelector(button) !== null

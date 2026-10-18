@@ -9,3 +9,4 @@
 - 2026-10-18: phase 2 gate: lint 0, typecheck:all 0, security-reset 5/5 per browser at retry 0 with the trail overlay (purge ≤ 2.3 s, a PXE retry in flight at submit in every run), committed test 1/1 per browser (lessons/phase-2.md).
 - 2026-10-18: phase 3 gate: lint 0, typecheck:all 0, network/sim-methods proverless retry 0 green on Chrome (57 s) and Firefox (86 s) (lessons/phase-3.md).
 - 2026-10-18: phase 4 gate: lint 0, typecheck:all 0, test 0; smoke passkey files green on both browsers; network matrix (both rows) and import-handshake-note proverless green on both browsers, passkey row 65 s Chrome / 44 s Firefox (lessons/phase-4.md).
+- 2026-10-18: arc 1 gate: test:all 0 (every workspace), check:plans 0; the phase e2e files green at retry 0 per phase. Codex round 1 conditional approve (3 findings: 2 accepted, 1 rejected); Opus diff review running.
