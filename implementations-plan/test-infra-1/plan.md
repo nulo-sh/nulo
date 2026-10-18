@@ -234,6 +234,20 @@ It reproduced F9's three differences independently and found none in the other 8
 
 **Arc 1 Codex fix loop, round 2** (resumed, verification of 2cca9bdb): `approve`. No material finding. It replayed all 14 walker policies against the 0fe841be walkers, directory and file-name skips included, and got identical lists. Across 1,858 files the masking was byte-for-byte unchanged under the new parse options, and 187,284 calls matched in callee, argument kind and text, offset and line. JSDoc tags, comment delimiters inside JSDoc types, template literal types, CRLF and Vue expressions all read as before. The loop converged in two rounds.
 
+**Arc 2 implementation: deviations from the plan** (each recorded in `lessons/phase-N.md`):
+- Phase 4: FAN-OUT and CREATE-BALANCE (single-turn guesses before a "not called" in the same file) moved too. The helper tests live in `scripts/test-helpers/` and `vitest.config.ts`, `tsconfig.json` and `FeeSettingsCard.test.ts` stay unchanged: a recheck before the e2e moves found the first in authwit-intent-1's diff and the last in fees-display-1's, so they wait for arc 3 (O10 lands with them).
+- Phase 6: `pollUntil` gained `between`, the work that moves the state on, run after a refused read while budget remains (Codex round 1 below). `boot-guard` and `waitForTarget` keep the exact failure text their readers key on. Five files in older lanes' diffs moved after a trial merge showed those lanes' changes already on dev.
+
+**Arc 2 Codex fix loop, round 1** (gpt-6.1-sol, high, the diff against 138e0ded at 764de664): `approve with fixes (restore deadline checks around side-effectful probes)`. All taken in 9cf6bd6f, each demonstrated by an in-memory old/new reproduction:
+- A2R1-1 (Medium) `waitForL1ToL2Message` phase 2 read and forced a block after phase 1 had spent the shared budget, where the old loop warned at once: phase 2 is skipped when no budget remains, and `forceBlock` runs in `between`.
+- A2R1-2 (Medium) `finalizeThrough` mined once more on the read that ended its budget: mining runs in `between`.
+- A2R1-3 (Medium) `waitForRowOf` refreshed balances once more after its deadline: the refresh runs in `between`. `holdEnterThroughAllow`'s Enter, the same shape, moved too.
+It found `awaitedBus`, the storage moves, `world(opts)`, the L and B catches and the Encrypting observer sound.
+
+**Arc 2 Opus diff review** (opus, beside round 1, read at 9cf6bd6f): `approve with fixes`. Taken in f68a6e98: `waitForTarget` throws its old text again (two triage rows in the e2e-testing skill key on it); a test for a handler that dispatches re-entrantly (it fails when the outer collector is not restored). Not taken: the CREATE-BALANCE test parks in allocation, before the write its title names, so no test pins the post-write switch fence (a mutant without it passes 154 tests). The park point predates this arc and the queue's own gates probably drop the event: a closed known limit, #742. It re-ran the token-balance mutations on scratch copies (M1-M4 fail; FAN-OUT and CREATE-BALANCE turn red with all their redundant fences removed) and found every other moved loop's interval, deadline, contract and diagnostics kept.
+
+**Arc 2 Codex fix loop, round 2** (resumed, verification of 9cf6bd6f and f68a6e98): `approve`. Its three reproductions now show no forced block, mine or refresh past the deadline; `between` runs after the deadline check and before the pause; `waitForL1ToL2Message`'s success, warning and error branches hold; the restored `waitForTarget` text keeps its inventory; the re-entrant dispatch keeps the outer collection. No new material defect. The loop converged in two rounds.
+
 ## Seeds
 
 ```
