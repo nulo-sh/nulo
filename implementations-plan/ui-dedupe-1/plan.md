@@ -11,16 +11,28 @@ base: dev @ 0fe841be
 standard: implementations-plan/README.md § Post-implementation standard, read at 0fe841be
 ---
 
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** closed by the merge into `dev` of the close-out PR (`ui-dedupe-1-close`). A1 (#705), A2 (#731), A3 (#737), A5 (#748), A6 (#752) and A7 (#781) merged; A4 was delivered by hygiene-3's arc 2 (#833).
+- **Shipped:** the full-backup export as one run object, its supersede table pinned by an await count (#541), and config restore through `restoreRows` (#518), A1; the pre-OPFS IndexedDB layer retired, the frozen-account canary refusing, on both browsers, any IndexedDB database but bb.js's CRS cache (#519), A2; one `updateSetting` for Display, Privacy and Developer (#520), A3; one token-balance mirror (A5) and one journal mirror (A6), each view's differences kept as options (#548); the balance lists on Home's rules for six of the seven rows the owner picked, the seventh held with OA-3 (A7). #517, the countdown Close on the design `Button`, pixel-identical, shipped in #833.
+- **Owner asks:** OA-1 answered (P44-02 = B, built as A7 for six rows; the seventh waits on OA-3). OA-2, the export's open-run hop, open as #840: A ships (D803). OA-3, the five rows P44-02 did not show, open as #839: A ships; row 5's pictures are in `screenshots/oa3/`, and the issue says why the other rows have none (D802).
+- **Known limits:** #736 (a successful settings write applies twice, A3).
+- **Open items:** #839 (OA-3, `owner-decision`), #840 (OA-2, `owner-decision`).
+- **Dropped:** A4 here: nothing built, its PR never opened; #833 delivered it with three overrides, whose fate is hygiene-3's #831 (D402). #520's other F-21 items went to #735, closed by hygiene-3.
+- **Lessons:** none promoted. The one candidate, that WebCrypto settles outside the microtask queue so `flushPromises()` returns before code past it ([lessons/phase-1.md](lessons/phase-1.md)), supersedes no line, and `lessons.md` is at its budget.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+
 # ui-dedupe-1: six dedupe refactors from decision page 37
 
-Six owner picks (page 37, 2026-10-17), all option A, all with no screen change; each Decision block is on its issue. Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Gate log: `STATUS.md`. The plan runs past the 350-line `mid` target because it carries six arcs, two of them composite designs; the trade-offs live once, in the ledger.
+Six owner picks (page 37, 2026-10-17), all option A, all with no screen change; each Decision block is on its issue. Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). The plan runs past the 350-line `mid` target because it carries six arcs, two of them composite designs; the trade-offs live once, in the ledger.
 
 | Arc | Issues | PR line | Released when |
 |---|---|---|---|
 | A1 | #541 export run, #518 config restore | `Closes #541 #518` | now |
 | A2 | #519 the pre-OPFS IndexedDB layer | `Closes #519` | now (no file in common with a running lane) |
 | A3 | #520 `updateSetting` | `Closes #520` | sheet-1 merges (it edits `settings/display.vue`) |
-| A4 | #517 the countdown Close | `Closes #517` | onboarding-3's recovery-phrase change merges (`seed.vue` is the sole consumer) |
+| A4 | #517 the countdown Close | none: delivered by #833 (D402) | — |
 | A5 | #548 token-balance family | `Refs #548` | PR #678 and sheet-1 merge; OA-1 answered or not |
 | A6 | #548 journal family | `Closes #548` | A5 merges |
 | A7 | #548 OA-1 answered B: the token-balance lists take Home's rules | `Refs #548` | A6 merged (#752); OA-1 answered 2026-10-18 |
@@ -152,6 +164,8 @@ Every arc is one PR against `dev`, not stacked (orchestrator rule D-orch-1). A1 
 
 ### A4 (#517): the countdown Close on the design `Button`
 
+Not built here: hygiene-3's arc 2 (#833) shipped it as below, with the three overrides (D402). The design is kept as the record.
+
 - **First**: if onboarding-3 removed the last consumer of `SecretCountdownClose`, comment on #517 and close it as superseded. A4 ends there.
 - Otherwise `SecretCountdownClose.vue` renders `<Button variant="cta_outline" :class="$style.countdown_cta" data-testid="close-btn" @click="emit('close')">`, with the label and the progress bar in the default slot. The local `.cta`/`.cta_outline` copy goes, and the ghost link is unchanged.
 - **Local overrides** keep today's drifts (owner: "the two drifts stay as overrides"), plus whatever else the pixel proof finds (I2):
@@ -264,7 +278,7 @@ Every arc is one PR against `dev`, not stacked (orchestrator rule D-orch-1). A1 
 ## UI impact
 
 - A1, A2, A3, A5, A6: none. The lane brief: "UI impact: none … behaviour-identical by construction". A5's convergences ship only on OA-1's answer.
-- A4, the countdown Close on Settings, Backup, Recovery Phrase: none, proven pixel-identical. The PR body carries before and after screenshots in both themes. A pixel difference is an `OWNER-ASKS.md` entry, not a shipped change.
+- A4, the countdown Close on Settings, Backup, Recovery Phrase: none, proven pixel-identical (delivered by #833). The PR body carries before and after screenshots in both themes. A pixel difference is an `OWNER-ASKS.md` entry, not a shipped change.
 - A7, signed by P44-02 = B (OA-1): Holdings keeps its list through a re-read and a refused one, and retries a refused read after 2 s. Select token retries a refused read after 2 s and re-reads in place on a reconnect. Send's amount is re-read after a worker restart, and a deleted balance row drops it. Before: Holdings shows LOADING HOLDINGS on every re-read and Couldn't load holdings over its list after a refused one, until a reconnect; Select token shows Couldn't load tokens until reopened. The PR body carries before and after pictures of Holdings during a re-read and after a refused one, and of Select token after a refused read, both themes at 360 px.
 
 ## Phases and validation gates
@@ -294,11 +308,7 @@ A pass is exit 0, with every named test green and none skipped that ran on base.
   - Network on Chrome: `stale-network-reset` (the chain purge).
   - `git grep -nE "LEGACY_SWEEP|VERIFIED_ERASE|deleteDb|isLegacyPxeDb|chainDataDirPrefix" -- ':!implementations-plan'` prints nothing.
 - **A3** ✓ (on 2c674859, dev 138e0ded: lint, typecheck:all, test:all, check:plans; smoke Chrome 20/20 in 88 s, one standing `test.skip`; Codex clean in round 2). G-fast; the three page suites and `useSettingUpdate.test.ts`; the phase gate; smoke on Chrome: `appearance`, `settings-routes`, `sw-resilience`.
-- **A4** ✗.
-  - G-fast.
-  - `SecretCountdownClose.test.ts`; the phase gate (the design package included).
-  - The pixel proof: every hash equal, every control unequal.
-  - Smoke on Chrome and Firefox: `security-backup`, `keyboard-guards`.
+- **A4**: none run here; #833's pixel proof passed 14/14 per browser, both themes (D402).
 - **A5** ✓ (on the merged head 88da43e8, dev e8da7b59: lint, typecheck:all, test, test:all, check:plans; smoke retry 0 Chrome `rows`, `navigation`, `token-list` 19/19 in 116 s, Firefox `token-list` 2/2 in 38 s; network Chrome `send-picker` 1/1 in 268 s; Codex clean in round 2).
   - G-fast.
   - The suites of the hook, `holdings`, `SelectTokenPopup`, `send`, `send.integration`, `BalanceView` and `TokensView`.
@@ -343,6 +353,7 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
 | D303 | A3's PR title backticks the identifier and lower-cases the page names: commitlint's `subject-case` refuses the planned title | the planned title | implementer |
 | D304 | A3 review round 1 (Codex `clean`, Opus `findings` 1, no behaviour difference found by either): Developer's page case pins its whole cascade, and the composable's hand copy goes, keeping one re-entry case; the pre-existing double apply is closed known limit #736. Round 2: Codex `clean` | a composable copy of the page's cascade (stays green when the page drifts) | Opus F1 |
 | D401 | the design `Button` with its slot and local overrides by specificity | a new global CTA class; an overlay slot | both agree; Opus O9 and Codex C8 adopted |
+| D402 | at close-out (dev `4ae32919`): A4 is delivered by hygiene-3's arc 2 (#833), on this design: `SecretCountdownClose` renders the design `Button` `cta_outline`, the dotted ring, filled press and eased fade kept as one doubled-class override, pixel-identical 14/14 per browser in both themes; #517 is closed. Whether the overrides stay is #831. Nothing is built here | rebuild A4 here | orchestrator |
 | D501 | one mirror per family | one generic mirror (outline B) | both agree |
 | D502 | the store uses the reducers, `back` | the full composable | both agree; Opus O7 adopted |
 | D503 | Select token's gate is a parent wrapper; both pins kept | converge (I3) | Opus O1, Codex C6 |
@@ -374,6 +385,10 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
 | D707 | A7 review round 1: the Select token port-drop case follows the client's order (`client.ts`: a drop rejects pending requests at once; `onConnected` waits for the next Ready, in a task): the error line shows and stays until the re-read lands, Home's rule, now pinned; the two read-over-add cases assert the add listed before the land | keep the case's impossible order | Opus P2, P3 |
 | D708 | A7 review round 2 (Codex, resumed): `findings` 1. Under D705 a refused re-read that began after an identity fetch discarded the fetch's only good balance (amount 0, no Retry). The fetch now lands its read unless the hook has landed one since it began (Send passes the hook a `state` ref, set to `loading` at the fetch's start), and calls `invalidate()` at its start; D705's sequence goes | D705's start order (a refused newer read wins); D702 alone (Codex F1) | Codex R2 P1, verified |
 | D709 | A7 review round 3 (Codex, resumed): `clean`; D704's reasoning holds and no other converged row depends on a kept rule. Loop converged after 3 rounds | — | Codex |
+| D801 | the close-out ships as its own docs-only PR off `origin/dev` (`ui-dedupe-1-close`): A7 merged while A4 waited, and #833 then delivered A4 | the last arc's PR (the plan's Delivery) | orchestrator |
+| D802 | OA-3 goes to the owner as #839 with pictures of row 5 only. Rows 1, 3 and 4 are not producible by the e2e harness without staging the order: row 1 needs the balance service to post an event before the answer to a read that missed its write, and it answers in its read's task; rows 3 and 4 need the worker's profile lock queued in a precise order around storage writes. Row 2 shows nothing: Send shows only the selected token's first row and, since #781, drops deleted rows and reads again after a restart. Row 5 is pictured on Home's import rows from real events only: a token add (the `addToken` RPC) held at the node, the journal port closed with its reopening delayed while the node refuses and the add fails, and the reconnect read sent 62 s late, past the client's 60 s timeout; Home still shows "Adding token…" while a page opened then lists nothing. Rows 1 and 2 may have no visible effect at all, stated in the issue as a code reading | port-level reordering or a fabricated refusal (staged pictures) | driver; Codex close-out rounds 1 and 2 (row 5's timeout path and the RPC import, the six-of-seven count, conditional wording for rows 1 and 2) |
+| D803 | OA-2 had no home: filed as #840 (`owner-decision`), A ships | a closed known limit (the owner's #541 rule makes it an ask) | driver |
+| D804 | close-out review: Codex rounds 1 to 3 `findings` (3, 3, 1), every finding accepted (lessons/phase-4.md); the loop stopped at its three-round limit with the last fix applied as worded | — | Codex |
 
 ## Delivery
 
@@ -388,11 +403,11 @@ Ids are per arc (D1xx is A1, and so on), so parallel arcs never collide. Round 1
   - A1 ``refactor(backup): one run object for the full-backup export; config restore via `restoreRows` `` (D109)
   - A2 `refactor(pxe): retire the pre-OPFS IndexedDB cleanup, guard that no pxe store opens one`
   - A3 ``refactor(settings): one `updateSetting` for display, privacy and developer`` (D303)
-  - A4 `refactor(ui): the countdown Close renders the design Button, pixel-identical`
+  - A4 `refactor(ui): the countdown Close renders the design Button, pixel-identical` (not opened; #833)
   - A5 `refactor(tokens): one balance mirror for Home, Holdings, Select token and Send`
   - A6 `refactor(activity): one journal mirror for Activity, Home and the token list`
   - A7 `refactor(ui): holdings, select token and send take home's balance-list rules`
-- **Close-out**: it ships as the final commits of the last arc's PR (A6, or the last that merges if one is dropped). Until then each arc PR updates this plan's marks and ledger, and `index.md`'s status line.
+- **Close-out**: it ships as the final commits of the last arc's PR (A6, or the last that merges if one is dropped). Until then each arc PR updates this plan's marks and ledger, and `index.md`'s status line. As built: its own docs-only PR from `ui-dedupe-1-close`, since A7 merged while A4 waited and #833 then delivered A4 (D801).
 - **Parallelism**: A1 and A2 share no file. They run in sequence because one e2e host budget serves both. Lanes are not recommended.
 
 ## Post-implementation
