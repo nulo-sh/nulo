@@ -1,7 +1,7 @@
 ---
 plan: send-fees-3
 tier: light
-status: planned, final Codex approve; arc 1 in progress
+status: delivered (#855); archived
 issues: "#799 (arc 1 closes: OA-5, OA-6, OA-7)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,19 @@ base: origin/dev at 993b3efc
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** delivered as one ready PR against `dev`, #855, which carries this close-out; its merge closes the plan and #799.
+- **Shipped:** the three signed picks and nothing else a person sees. P54-02 = B (OA-5): `failureKind` keeps `too_many_pending`, so a Send-made send the waiting-sends cap refused reads "Refused before sending" and "Too many sends were already waiting. Nothing was sent." P54-03 = B (OA-6): while the fee read runs, You pay reads "Fee estimated after simulation" until an amount is typed, then a bar. P54-04 = B (OA-7): a failed read's line hides while a read for an uncommitted identity runs, and returns if that read fails.
+- **Review loop:** the plan took a Codex audit and its resume, an Opus Plan leg, and a fresh final Codex pass with its resume: approve. The arc: Codex approve and an Opus diff review approve (3 of 4 findings taken), then a Codex resume approve.
+- **Gates at the head:** at d8bcccf5 (`dev` at ce48691e merged in), `bun run lint`, `typecheck:all`, `check:plans` and `test:all` exit 0 (the first `test:all` there timed out 7 tests in 5 untouched files at load 260; the rerun under the load cap passed). The three `send-*` smoke files on armed builds at retry 0: Chrome 8/8 (50.8, 21.2, 29.7 s), Firefox 8/8 (121.6, 43.3, 33.1 s). `audit:vue` exit 0 on 3208b92c.
+- **Deviations:** D2 ships as the letter, `Boolean(amountTerm)`, not the wider estimate-eligibility reading the panel split on. The "amount typed" picture is not taken: the smoke wallet holds no balance, so the amount field is disabled; `FeeCostReadout.test.ts` and `send.test.ts` prove that state.
+- **Known limits:** none.
+- **Open items:** #856 (an amount the balance makes valid after it was typed schedules no estimate; out of the signed scope).
+- **Lessons:** none promoted (`lessons.md` is at its 8 KiB budget, and holding a node read in a smoke spec is already in the `e2e-testing` skill). The capture traps are in [lessons/phase-5.md](lessons/phase-5.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # send-fees-3: the owner's three picks for Send's fee card (#799)
 
