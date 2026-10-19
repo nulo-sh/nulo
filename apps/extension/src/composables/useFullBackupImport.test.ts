@@ -208,7 +208,13 @@ import {
 	settleHeldAccounts,
 } from "./full-backup-restore"
 import { deferred } from "@nulo/wallet-core/utils"
-import { DECRYPTION_FAILED, errorLogWriters, useFullBackupImport, validateAndMigrateBackup } from "./useFullBackupImport"
+import {
+	DECRYPTION_FAILED,
+	errorLogWriters,
+	PASSKEY_BACKUP_UNCHECKED,
+	useFullBackupImport,
+	validateAndMigrateBackup,
+} from "./useFullBackupImport"
 import { showsDecryptCta } from "@/utils/full-backup-ctas"
 import { collectRestoreErrors, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
@@ -2390,8 +2396,82 @@ describe("useFullBackupImport — passkey backup", () => {
 	it.each([
 		["no MAC", undefined],
 		["a MAC that is not a string", 42],
-	])("a passkey body with %s is an incompatible backup, refused before any prompt", async (_label, mac) => {
+	])("a passkey body with %s is refused before any prompt, with the way back", async (_label, mac) => {
 		const { c, opts, runCeremony } = mountPasskeyImport({ ...(await buildPasskeyBackup()), "backup-mac": mac })
+		await c.restoreBackup()
+		expect(opts.fillError).toHaveBeenCalledWith("full_backup", PASSKEY_BACKUP_UNCHECKED.title, PASSKEY_BACKUP_UNCHECKED.message)
+		expect(runCeremony).not.toHaveBeenCalled()
+		expectNothingWritten()
+	})
+
+	/** A passkey profile's file as the exporter writes it: its field order, pretty-printed, a Testnet
+	 *  account and a contact, and the check beside the checksum only when `withCheck`. */
+	async function exportedPasskeyFile(withCheck: boolean): Promise<File> {
+		const profileId = "9f2c4e1ab37d4f60"
+		const body = {
+			"wallet-version": "0.31.0",
+			"aztec-version": "6.0.0-rc.3",
+			"compat-epoch": 5,
+			"backup-schema-version": 1,
+			"master-key": PASSKEY_CRED_ID,
+			"imported-keys-dek-sealed": Buffer.from(new Uint8Array(76).fill(9)).toString("base64"),
+			"active-chain-id": 3415328944,
+			data: {
+				profile: { id: profileId, name: "Daily", type: "passkey" },
+				account: [
+					{
+						address: WIRE_ADDRESS,
+						profileId,
+						chainId: 3415328944,
+						l1ChainId: 11155111,
+						name: "Account 1",
+						index: 0,
+						type: 0,
+						visible: true,
+					},
+				],
+				token: [],
+				contact: [{ id: "c-7d1e", profileId, name: "Savings", address: `0x${"2e".repeat(32)}` }],
+				config: [{ key: "stealthMode", value: false }],
+			},
+		}
+		const checksum = await EncryptionKey.getHashHex(JSON.stringify(body))
+		const file = { ...body, checksum, ...(withCheck ? { "backup-mac": await macOf(checksum) } : {}) }
+		return new File([JSON.stringify(file, null, 2)], "_Daily_1760000000.json", { type: "application/json" })
+	}
+	const WIRE_ADDRESS = `0x${"1f".repeat(32)}`
+
+	it.each([
+		["with no check, as 0.31.0 wrote every one, is refused before any prompt with the way back", false],
+		["with its check reaches the passkey prompt (control)", true],
+	])("a passkey file picked from disk %s", async (_label, withCheck) => {
+		const { c, opts, runCeremony } = mountPasskeyImport(null)
+		accountClient.restore.mockResolvedValue([{ address: WIRE_ADDRESS }])
+		opts.pickFile.mockResolvedValue(await exportedPasskeyFile(withCheck))
+		await c.pickBackupFile()
+		expect(c.selectedBackup.value).toMatchObject({ kind: "plain", profileType: "passkey" })
+		await c.restoreBackup()
+		if (withCheck) {
+			expect(runCeremony).toHaveBeenCalledOnce()
+			expect(opts.fillError).not.toHaveBeenCalled()
+			return
+		}
+		expect(opts.fillError).toHaveBeenCalledWith(
+			"full_backup",
+			"Backup cannot be restored",
+			"This passkey backup is from an older version or was changed, so it cannot be restored. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
+		)
+		expect(runCeremony).not.toHaveBeenCalled()
+		expectNothingWritten()
+	})
+
+	it("a passkey body of a retired generation keeps the incompatible-version words, check or not", async () => {
+		const { checksum: _stale, "backup-mac": _mac, ...body } = await buildPasskeyBackup()
+		const retired = { ...body, "compat-epoch": 4 }
+		const { c, opts, runCeremony } = mountPasskeyImport({
+			...retired,
+			checksum: await EncryptionKey.getHashHex(JSON.stringify(retired)),
+		})
 		await c.restoreBackup()
 		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Incompatible backup", expect.stringMatching(/Re-export a backup/))
 		expect(runCeremony).not.toHaveBeenCalled()
@@ -2415,7 +2495,7 @@ describe("useFullBackupImport — passkey backup", () => {
 			expect(profileClient.restore).toHaveBeenCalledOnce()
 			return
 		}
-		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Incompatible backup", expect.any(String))
+		expect(opts.fillError).toHaveBeenCalledWith("full_backup", PASSKEY_BACKUP_UNCHECKED.title, PASSKEY_BACKUP_UNCHECKED.message)
 		expect(runCeremony).not.toHaveBeenCalled()
 		expectNothingWritten()
 	})

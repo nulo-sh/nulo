@@ -81,6 +81,7 @@ vi.mock("@/composables/useProfileImportFlow", async (importOriginal) => {
 })
 
 import { BrutalistTitle, Flex, Input, Text } from "@nulo/design"
+import { EncryptionKey } from "@nulo/wallet-crypto"
 import { useToast } from "@/composables/toast"
 import { enterOn, nativeInput } from "../../../tests/helpers/credential-pins"
 import type { BackupSelection } from "@/utils/full-backup-helpers"
@@ -249,6 +250,54 @@ describe("onboarding import", () => {
 
 		expect(bootstrap.bootstrapActiveProfile).toHaveBeenCalledWith({ id: "p9", name: "Imported", type: "password" })
 		expect(router.push).toHaveBeenCalledWith("/onboarding/learn")
+	})
+
+	test.each([
+		["with no check shows the way back under the file, and asks for no passkey", false],
+		["with its check goes on to the passkey prompt (control)", true],
+	])("a passkey backup %s", async (_label, withCheck) => {
+		const w = await mountImport()
+		importFlow.api!.selectedImportOption.value = "full_backup"
+		const profileId = "9f2c4e1ab37d4f60"
+		const body = {
+			"wallet-version": "0.31.0",
+			"aztec-version": "6.0.0-rc.3",
+			"compat-epoch": 5,
+			"backup-schema-version": 1,
+			"master-key": Buffer.from("cred-PK123").toString("base64"),
+			"imported-keys-dek-sealed": Buffer.from(new Uint8Array(76).fill(9)).toString("base64"),
+			data: {
+				profile: { id: profileId, name: "Daily", type: "passkey" },
+				account: [],
+				token: [],
+				contact: [],
+			},
+		}
+		backupImport.api!.selectedBackup.value = {
+			name: "_Daily_1760000000.json",
+			kind: "plain",
+			profileType: "passkey",
+			backup: {
+				...body,
+				checksum: await EncryptionKey.getHashHex(JSON.stringify(body)),
+				...(withCheck ? { "backup-mac": "bWFjLW92ZXItdGhlLWNoZWNrc3Vt" } : {}),
+			},
+		}
+		await flushPromises()
+
+		await w.get('[data-testid="onboarding-submit-import"]').trigger("click")
+		const ceremony = backupImport.opts!.runCeremony as ReturnType<typeof vi.fn>
+		if (withCheck) {
+			await vi.waitFor(() => expect(ceremony).toHaveBeenCalledOnce())
+			expect(ceremony).toHaveBeenCalledWith(expect.objectContaining({ mode: "get", credentialId: body["master-key"] }))
+			return
+		}
+		await vi.waitFor(() => expect(w.find('[data-testid="import-full-backup-error"]').exists()).toBe(true))
+
+		expect(w.get('[data-testid="import-full-backup-error"]').text()).toBe(
+			"ErrorBackup cannot be restoredThis passkey backup is from an older version or was changed, so it cannot be restored. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
+		)
+		expect(ceremony).not.toHaveBeenCalled()
 	})
 })
 

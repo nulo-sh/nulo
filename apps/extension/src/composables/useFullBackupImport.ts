@@ -110,6 +110,14 @@ const INCOMPATIBLE_BACKUP = {
 		"This backup was created by an incompatible wallet version and cannot be imported. Re-export a backup from a current version of the wallet.",
 } as const
 
+/** A passkey body with no passkey check: an export from before the check and one stripped of it
+ *  read the same, so the copy names both and the way back, never the file's age alone. */
+export const PASSKEY_BACKUP_UNCHECKED = {
+	title: "Backup cannot be restored",
+	message:
+		"This passkey backup is from an older version or was changed, so it cannot be restored. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
+} as const
+
 /** The restore reads `type` and `name` as the wallet wrote them; `id` is replaced by the service
  *  whenever the wallet would not have generated it. */
 function isBackupProfile(profile: unknown): profile is BackupProfile {
@@ -188,8 +196,8 @@ export async function validateAndMigrateBackup(fullBackup: FullBackupEnvelope): 
 
 	const data = migrationResult.data as RestoreData
 	if (!isBackupProfile(data.profile)) return INTEGRITY_REFUSAL
-	// A passkey body exported before it carried a check is refused before any passkey prompt.
-	if (data.profile.type === "passkey" && typeof mac !== "string") return INCOMPATIBLE_BACKUP
+	// A passkey body with no check is refused before any passkey prompt.
+	if (data.profile.type === "passkey" && typeof mac !== "string") return { kind: "rejected", ...PASSKEY_BACKUP_UNCHECKED }
 	return {
 		kind: "ok",
 		data: data as ValidatedBackup["data"],
