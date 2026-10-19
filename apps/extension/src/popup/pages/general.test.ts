@@ -4,6 +4,7 @@
  */
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
+import { activityScopeKey } from "@nulo/wallet-core/activity"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { defineComponent, h, reactive } from "vue"
@@ -40,7 +41,7 @@ vi.mock("@/wallet/services/config/client", () => ({
 		}
 	}),
 }))
-/** The selected scope's gas slice at mount; a test moves other scopes through `gasByScope`. */
+/** The selected scope's gas slice at mount; later changes go through `gasByScope`. */
 let gas: unknown
 vi.mock("@/stores/balances.store", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/stores/balances.store")>()),
@@ -85,9 +86,8 @@ const HOME_SCOPE: BalanceScope = { profileId: "p1", networkId: "n1", chainId: 1,
 
 /** Reactive as the store's entries are, so a mounted Home sees a slice change. */
 const gasByScope = reactive(new Map<string, unknown>())
-const scopeKey = (scope: BalanceScope) => [scope.profileId, scope.networkId, scope.chainId, scope.accountAddress].join("|")
 function gasEntry(scope: BalanceScope) {
-	const slice = gasByScope.get(scopeKey(scope))
+	const slice = gasByScope.get(activityScopeKey(scope))
 	return slice === undefined ? undefined : { gas: slice }
 }
 const AZTEC_KEY = "nulo:ui:getStartedAztecOpened@p1"
@@ -103,7 +103,7 @@ async function mountHome(type: "password" | "passkey" = "password", stored: Reco
 	appStore.profile = { id: "p1", type } as never
 	appStore.network = { id: "n1", chainId: 1 } as never
 	appStore.account = { address: "0xacct" } as never
-	if (gas !== undefined) gasByScope.set(scopeKey(HOME_SCOPE), gas)
+	if (gas !== undefined) gasByScope.set(activityScopeKey(HOME_SCOPE), gas)
 	const wrapper = mount(General, { global: { plugins: [pinia], stubs: STUBS, provide: {} } })
 	wrappers.push(wrapper)
 	await flushPromises()
@@ -184,11 +184,11 @@ describe("Home — Get Fee Juice follows the selected account's Fee Juice", () =
 		const w = await mountHome("passkey")
 		const all = ["get-started-backup", "get-started-aztec", "get-started-feeJuice", "get-started-presto"]
 		expect(rows(w)).toEqual(all)
-		gasByScope.set(scopeKey(HOME_SCOPE), FUNDED)
+		gasByScope.set(activityScopeKey(HOME_SCOPE), FUNDED)
 		await flushPromises()
 		expect(rows(w)).toEqual(["get-started-backup", "get-started-aztec", "get-started-presto"])
 		expect(has(w, "backup-reminder-banner")).toBe(false)
-		gasByScope.set(scopeKey(HOME_SCOPE), ZERO)
+		gasByScope.set(activityScopeKey(HOME_SCOPE), ZERO)
 		await flushPromises()
 		expect(rows(w)).toEqual(all)
 	})
@@ -199,7 +199,7 @@ describe("Home — Get Fee Juice follows the selected account's Fee Juice", () =
 		const app = useAppStore()
 		expect(rows(w)).toEqual(["get-started-backup", "get-started-feeJuice", "get-started-presto"])
 		const savings = { ...HOME_SCOPE, accountAddress: "0xsavings" }
-		gasByScope.set(scopeKey(savings), FUNDED)
+		gasByScope.set(activityScopeKey(savings), FUNDED)
 		app.account = { address: savings.accountAddress } as never
 		await flushPromises()
 		expect(rows(w)).toEqual(["get-started-backup", "get-started-presto"])
@@ -207,7 +207,7 @@ describe("Home — Get Fee Juice follows the selected account's Fee Juice", () =
 		app.network = { id: "n1", chainId: 2 } as never
 		await flushPromises()
 		expect(has(w, "get-started")).toBe(false)
-		gasByScope.set(scopeKey({ ...savings, chainId: 2 }), ZERO)
+		gasByScope.set(activityScopeKey({ ...savings, chainId: 2 }), ZERO)
 		await flushPromises()
 		expect(rows(w)).toEqual(["get-started-backup", "get-started-feeJuice", "get-started-presto"])
 	})

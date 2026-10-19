@@ -8,7 +8,7 @@
  *
  * S1a  network reset: A1, a Switch network round trip, one reset from a double click, A4, then
  *      A5 only once the account is loaded; the row is back on the seed's chainId and the accounts
- *      keep their addresses, names and indexes; Local is untouched; Home's card keeps its Hide.
+ *      keep their addresses, names and indexes; Local is untouched; Home's card stays hidden.
  * S1b  address change (A2) with a hidden account and an imported one: the derived accounts come
  *      back at their true addresses, the hidden one hidden, the imported one at its address with
  *      a key that opens.
@@ -91,7 +91,7 @@ describe("stale network", () => {
 		await ensureUnlocked(page)
 		expect(await takeoverScreen(page)).toBe("network-reset")
 		expect(await page.$('[data-testid="account-address-copy"]')).toBeNull()
-		expect(await page.$('[data-testid="get-started"]')).toBeNull()
+		expect(await page.$('[data-testid="home-scroller"]')).toBeNull()
 
 		// Networks is reachable and shows no account; Back returns to the takeover.
 		await clickByTestId(page, "stale-network-switch")

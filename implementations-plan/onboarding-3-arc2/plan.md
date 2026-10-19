@@ -60,26 +60,26 @@ Rows: **P** "Save your recovery phrase", **B** "Back up this wallet", **A** "How
 
 | # | Case | Password | Passkey | Evidence |
 |---|---|---|---|---|
-| M1 | The install's first profile, created (tab or popup) | P A F R, Hide | B A F R, Hide | `utils/get-started.test.ts:110,114`; `popup/pages/general.test.ts:180`; e2e `security-backup:55`, `onboarding-tab:133` |
-| M2 | A profile created beside another | P alone | ∅ | `get-started.test.ts:175,180`; `general.test.ts:191,197`; `service.integration.test.ts:1452`; e2e `security-backup:83` |
-| M3 | Imported from a phrase, a passkey or a full backup | ∅, never ! | ∅ | `get-started.test.ts:168`; `general.test.ts:164,172`; `service.integration.test.ts:1432` (each import's call site); e2e `passkey-paths:165` (both browsers), network `hero-prices-unavailable:46` |
-| M4 | Imported, then a profile created (the owner's case) | P alone | ∅ | **new** `service.integration.test.ts`: a create beside an imported profile is `notFirst` |
-| M5 | First profile after every other was deleted | as M1 | as M1 | `service.integration.test.ts:1484` |
-| M6 | An account added by Settings › Accounts › Import | the profile's rows; F follows the selected account | same | **new** `general.test.ts`: F follows the selected scope |
-| M7 | Empty account | F shows | F shows | `general.test.ts:135` |
-| M8 | Fee Juice held, or arriving after creation | F leaves at the read that sees it (I2); ! replaces P | F leaves | **new** `general.test.ts` (arrival while mounted); **new** network e2e step `fee-methods` (rule 2 on a real node) |
-| M9 | Fee Juice already there at import | as M3 | as M3 | network `hero-prices-unavailable:46` |
-| M10 | Fee Juice spent back to zero | F returns; with no tokens, P returns in place of ! | F returns | **new** `general.test.ts` (M8's case, reversed) → **OA-18** |
-| M11 | Tokens only | ! replaces P; F shows | rows unchanged | `general.test.ts:121,152` |
-| M12 | A failed first Fee Juice read (a failed refresh keeps the last value) | F shows | F shows | `general.test.ts:113` (arc 1's D3: a failed read claims nothing) |
+| M1 | The install's first profile, created (tab or popup) | P A F R, Hide | B A F R, Hide | `utils/get-started.test.ts:110,114`; `popup/pages/general.test.ts:235`; e2e `security-backup:55`, `onboarding-tab:133` |
+| M2 | A profile created beside another | P alone | ∅ | `get-started.test.ts:175,180`; `general.test.ts:246,252`; `service.integration.test.ts:1450`; e2e `security-backup:83` |
+| M3 | Imported from a phrase, a passkey or a full backup | ∅, never ! | ∅ | `get-started.test.ts:168`; `general.test.ts:219,227`; `service.integration.test.ts:1423` (each import's call site); e2e `passkey-paths:166` (both browsers), network `hero-prices-unavailable:47` |
+| M4 | Imported, then a profile created (the owner's case) | P alone | ∅ | **new** `service.integration.test.ts:1470` |
+| M5 | First profile after every other was deleted | as M1 | as M1 | `service.integration.test.ts:1501` |
+| M6 | An account added by Settings › Accounts › Import | the profile's rows; F follows the selected account | same | **new** `general.test.ts:196` |
+| M7 | Empty account | F shows | F shows | `general.test.ts:155` |
+| M8 | Fee Juice held, or arriving after creation | F leaves at the read that sees it (I2); ! replaces P | F leaves | **new** `general.test.ts:148` (password), `:182` (arrival while mounted); **new** network e2e step `fee-methods:354` (rule 2 on a real node) |
+| M9 | Fee Juice already there at import | as M3 | as M3 | network `hero-prices-unavailable:47` |
+| M10 | Fee Juice spent back to zero | F returns; with no tokens, P returns in place of ! | F returns | **new** `general.test.ts:182` (passkey); `get-started.test.ts:110,118` (password) → **OA-18** |
+| M11 | Tokens only | ! replaces P; F shows | rows unchanged | `general.test.ts:140,172` |
+| M12 | A failed first Fee Juice read (a failed refresh keeps the last value) | F shows | F shows | `general.test.ts:132` (arc 1's D3: a failed read claims nothing) |
 | M13 | Deployed or not | no input | no input | `GetStartedInput` has no such field (typecheck) |
-| M14 | Another network or account selected | flags kept; F follows it | same | **new** `general.test.ts` (as M6) → **OA-18** |
-| M15 | After a Testnet reset (takeover) | flags kept; F follows the new chain, which holds none (I3) | same | flags: **new** e2e step `stale-network` S1a (Hide survives); F: the M14 case (a new chain id is a new scope) → **OA-19** |
-| M16 | A quarantined chain, or the takeover up | no Home, so no card | same | **new** e2e step `stale-network` S1a (no card under the takeover) |
-| M17 | Hide used | P alone (! once funded) | ∅ | `get-started.test.ts:159,164`; `general.test.ts:244` |
+| M14 | Another network or account selected | flags kept; F follows it | same | **new** `general.test.ts:196` → **OA-18** |
+| M15 | After a Testnet reset (takeover) | flags kept; F follows the new chain, which holds none (I3) | same | flags: **new** e2e step `stale-network` S1a (Hide survives); F: `general.test.ts:196` (a new chain id is a new scope) → **OA-19** |
+| M16 | A quarantined chain, or the takeover up | no Home, so no card | same | **new** e2e step `stale-network` S1a (no Home scroller under the takeover) |
+| M17 | Hide used | P alone (! once funded) | ∅ | `get-started.test.ts:159,164`; `general.test.ts:299` |
 | M18 | Phrase saved (tab or Settings) | P and ! leave | — | `get-started.test.ts:140`; e2e `onboarding-tab:113,133`, `security-backup:75` |
 | M19 | How Aztec works opened | A leaves | A leaves | `get-started.test.ts:152`; e2e `security-backup:65` |
-| M20 | Presto reached (global) | R leaves | R leaves | `general.test.ts:267` |
+| M20 | Presto reached (global) | R leaves | R leaves | `general.test.ts:322` |
 | M21 | Full Backup saved | — | B leaves | `get-started.test.ts:148`; `settings/security/export/full.test.ts` |
 | M22 | Imported, nothing held | ∅ | ∅ | as M3 → **OA-20** |
 
@@ -118,7 +118,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
   - `src/wallet/services/profile/service.integration.test.ts` (M4): import from a phrase, then create a password profile. Expect `notFirst` on the created profile, and `imported` alone on the imported one.
   - `tests/e2e/stale-network.test.ts` S1a (M15, M16):
     - After `createAccount("Savings")` (which leaves the page on Accounts), go to Home, `waitForHomeReminders`, press `get-started-hide`, and wait for the rows to be P alone. Then lock.
-    - Under the takeover, expect no `get-started`.
+    - Under the takeover, expect no Home scroller (so no card).
     - After the reset toast, `waitForHomeReminders`. Expect the rows to be exactly `["get-started-phrase"]`.
     - Failure mode: the reset purge touches per-profile UI keys. Only the real purge over real storage shows this. Estimated +2 s.
   - `tests/e2e/network/fee-methods.test.ts` "public gas only…" (rule 2 on a real node), in its second block:

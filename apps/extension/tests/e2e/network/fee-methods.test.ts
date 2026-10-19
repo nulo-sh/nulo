@@ -351,7 +351,7 @@ test.skipIf(!hasConfig)(
 		{
 			const page = await openPopup(feeJuiceReadyExtension)
 			await waitForHash(page, "#/popup/general")
-			// The account holds Fee Juice, so Home's card offers none; the minted tokens raise the banner.
+			// The fixture's minted tokens raise the banner, which takes the phrase row's place.
 			await waitForHomeReminders(page)
 			expect(await getStartedRows(page)).toEqual(["get-started-aztec", "get-started-presto"])
 			await refreshBalances(page)

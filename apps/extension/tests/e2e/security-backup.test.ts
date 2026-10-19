@@ -89,6 +89,7 @@ test("a later password profile's Home asks only for its own phrase", async ({ re
 	await createAndActivateProfile(page, "Later", PASSWORD)
 	await waitForHomeReminders(page)
 	expect(await getStartedRows(page)).toEqual(["get-started-phrase"])
+	expect(await page.$(sel("get-started-hide"))).toBeNull()
 
 	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
 	expect(registeredExtensionPerTest.pageErrors).toEqual([])
