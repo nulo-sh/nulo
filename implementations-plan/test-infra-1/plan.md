@@ -1,8 +1,8 @@
 ---
 plan: test-infra-1
 tier: mid
-status: arc 1 merged (#706); arc 2 implemented, in review (Phases 4-6 ✓)
-issues: "#550 (arc 1 Closes), #561 (arc 3 Closes), #536 (arc 3 Closes), #540 (arc 4 Closes)"
+status: arcs 1 (#706) and 2 (#757) merged; arc 3 (Phase 7) in review, PR #830; arc 4 (Phases 8-10) waits for its lanes
+issues: "#550 (arc 1 Closes), #561 (arc 3 Closes), #536 (arc 4 Closes), #540 (arc 4 Closes)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -17,7 +17,7 @@ post_implementation_hardening: not scheduled
 
 # test-infra-1: one walker, one tokenizer, one window harness, one wait per layer, shared builders
 
-Four test-infrastructure refactors the owner picked on decision page 37 (option A each). Test code and test helpers only; no production file changes and nothing a user sees. Arc 1 and arc 2 take every site no running lane edits; arcs 3 and 4 take the rest once the colliding lanes merge. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none).
+Four test-infrastructure refactors the owner picked on decision page 37 (option A each). Test code and test helpers only; no production file changes and nothing a user sees. Arc 1 and arc 2 take every site no running lane edits; arcs 3 and 4 take the rest once the colliding lanes merge (arc 3 ships only Phase 7; Phases 8 and 9 move to arc 4, D13). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none).
 
 **Issue claims that did not hold** (at 0fe841be): every line number has moved. #536: 22 of its 25 `deferred` copies went in #595; `tests/e2e/fixtures/helpers.ts` is a barrel, its loops now live in `session.ts`, `profiles.ts` and `tokens.ts`; the token-balance comment (`service.test.ts:1084-1086`) calls the un-awaited dispatch the property under test, not a stand-in; the passkey observer covers only the Creating phase. #550: the capabilities header says the suite grades a planned extraction, not that one is pending (the extraction landed); `execute/index.test.ts:1-23,602-606` is stale too. #540: `dispatcher.test.ts` has 44 constructions over about 11 builders, not four; the fake's `clearProfile` also keeps the cursors and outbox the real one deletes, its `clearChain` matches values where the real one matches key prefixes, and its `commitAcceptance` is two writes, not one batch. #561: four more walkers (`icon-names`, `useConfirm`, `a11y-css`, `identifier-sites`) and two more hand call readers (`service.fence-entry`, `amount.callers`).
 
@@ -54,7 +54,7 @@ Four test-infrastructure refactors the owner picked on decision page 37 (option 
 **Tokenizer (D4).** A sibling module, `scripts/type-roles/source-code.ts`, over the TypeScript parser:
 - `codeLines(file, text): string[]`: the file's lines with noise blanked and every offset kept. The rules are `stripNoise`'s: comments, a shebang, regex bodies (flags stay), and the text of strings and template parts become spaces, delimiters and newlines kept; `${}` bodies stay code; a string or template text with at least one enclosing `${}` stays as text with `()[]{}` replaced by `\0`, so a bracket key (`${row["master-key"]}`) stays readable and its brackets are not counted. Literal spans come from the parser; comments are the `//` and `/*` runs outside every literal span, which finds a comment before a bare `)` or `,` too. A `.vue` file contributes its script blocks at their real lines (from `parseSource`); every other line is blank.
 - `callsTo(file, text, callee: RegExp): Call[]`, with `Call = { line: number; callee: string; args: readonly ts.Expression[] }`. It reads every `CallExpression` and `NewExpression` whose callee text the pattern matches (so suffix rules like `this._logger.log` keep working); a guard reads an argument's shape from its node (`toast-call-sites` tells `{…}` from `{…} || x` that way) and its text with `getText()`. It looks in script blocks and, for `.vue`, in interpolations, directive values and dynamic directive arguments, each at its real line.
-`log-payload-ban` keeps `LOG_CALL`, `callWindow` and `hazards` and reads `codeLines`. `stripNoise`, `startsRegex`, `skipRegex`, `LexState` and the per-line `<script>` regex go, with their manifest record. `useLogFilters.scan` and `toast-call-sites` read `callsTo`. In arc 3, `service.fence-entry` and `amount.callers` do too.
+`log-payload-ban` keeps `LOG_CALL`, `callWindow` and `hazards` and reads `codeLines`. `stripNoise`, `startsRegex`, `skipRegex`, `LexState` and the per-line `<script>` regex go, with their manifest record. `useLogFilters.scan`, `toast-call-sites`, `service.fence-entry` and `amount.callers` read `callsTo`.
 
 **Window harness (D5).** `tests/helpers/approval-window-harness.ts` exports the shared state (`callLog`, the request, dApp, payload and cancel refs, the init resolvers), the mock-module objects (`payloadModule`, `hostnameModule`, `profileClientModule`, `interactionClientModule`, `appStoreModule`, `routerModule`), `installWindowSpies()` (listener and `chrome.windows.remove` spies onto `callLog`), `resetWindowHarness()` and `completeInit()`. Each window suite keeps one line per mock, `vi.mock(path, async () => (await import("<literal path>")).<module>)` (a literal: a top-level constant is still in its temporal dead zone when the hoisted factory runs), plus its own extra mocks; the per-window differences stay in the window's file (`resolveInteraction` against `approveInteraction`, execute's `runtime.getURL` and fee-map reset, capabilities' `networks: []`, `vue-router` through `importOriginal`). A re-pin of the shell (A2, A3, A4, A6 `closeWindow`, A7) is deleted only when the shell suite pins the same assertion and a kept test in the same file asserts the window's own part of it. A4 (the window's init awaits its payload load before the listener) and A2 (the profile fetch sits inside init) have no such kept test today, so they are expected to stay; A3, A6 `closeWindow` and A7 are expected to go. A1, A5, C12, the A6 overlay dismiss, the init-throw case and every per-window test stay. The stale headers are rewritten to say what the file proves.
 
@@ -64,7 +64,7 @@ Four test-infrastructure refactors the owner picked on decision page 37 (option 
 
 **One poll (D8).** `tests/e2e/fixtures/poll.ts`: `pollUntil<T>(probe: () => Promise<T>, done: (value: T) => boolean, opts: { label: string; timeoutMs: number; intervalMs: number; show?: (value: T) => string }): Promise<T>`. It resolves with the first value `done` accepts. At the deadline it throws `PollTimeoutError` (with `label`, `timeoutMs` and `last`), and its message names all three. A probe's throw propagates, so a terminal failure (a dropped transaction, `send-burst.ts:219-220`) still fails fast. That is the one contract. Phases that share one deadline (`aztec.ts:464-486`, `journal.ts:352-377`) pass the remaining budget, `deadline - Date.now()`, never a fresh one. A loop whose documented contract returns the last state or proceeds best-effort (`send-burst.ts` `waitForEstimate`, `journal.ts:368-377`, `aztec.ts` `waitForL1ToL2Message` phase 2, `extension.ts` `fireCanary`, whose caller diagnoses the fall-through) catches `PollTimeoutError` at its own call site and does what its doc says. Not waits, and they stay: the hold-for-a-window assertions and `owned-processes.ts` `sweepPhase` (a stateful kill sweep).
 
-**Builders (D9, D10).** `installChromeStorage(initial?, { persist: false })`: `set` and `remove` record their calls and keep nothing, and `get` answers `initial` or `{}`. That is the shape of the 24 hand stubs. The token-balance suite's `startWorld` becomes the file's one `world(opts)` builder, with options for the profile, accounts, tokens, task stub, deletion state and captured handlers. The 13 inline builds use it, and construction stays before `start()`. Arc 3 adds `useFullBackupImport.harness.ts` (the `seeder.harness.ts` shape: `buildBackup`, the mock-state objects, `makeOpts`; the storage roots import the real constants where the mocked spec module allows) and one options-based `makeDispatcher(...)` in `dispatcher.test.ts`. Arc 4 moves the scenario suite onto the real `IncomingTransferRepository` over the suite's own `FakeBrowserApi`.
+**Builders (D9, D10).** `installChromeStorage(initial?, { persist: false })`: `set` and `remove` record their calls and keep nothing, and `get` answers `initial` or `{}`. That is the shape of the 24 hand stubs. The token-balance suite's `startWorld` becomes the file's one `world(opts)` builder, with options for the profile, accounts, tokens, task stub, deletion state and captured handlers. The 13 inline builds use it, and construction stays before `start()`. Arc 4 adds `useFullBackupImport.harness.ts` (the `seeder.harness.ts` shape: `buildBackup`, the mock-state objects, `makeOpts`; the storage roots import the real constants where the mocked spec module allows) and one options-based `makeDispatcher(...)` in `dispatcher.test.ts`, then moves the scenario suite onto the real `IncomingTransferRepository` over the suite's own `FakeBrowserApi`.
 
 **Trade-offs.** See the decision ledger. In short: an AST masker over a raw `ts.createScanner` (the scanner cannot tell a regex from a division or a template's `}` without the parser); exact per-guard coverage over normalised skip rules (normalising changes gate strictness, out of scope); deleting re-pins over a cross-window `describe.each` (one file would carry all three windows' mocks); one throwing poll with explicit call-site catches over a poll with three modes.
 
@@ -105,14 +105,14 @@ Four test-infrastructure refactors the owner picked on decision page 37 (option 
 - **Validation gate:** `bun run lint && bun run typecheck:all && bun run test`. Pass: exit 0; none of the five token-balance sites, `network/client.test.ts` or `importChainSync.test.ts:207,324` counts turns. The delays inside the mocks (`:824`, `:1074`) stay: they widen the race those tests pin, they are not waits.
 
 ### Phase 5 — storage stubs and the balance builder ✓
-1. Add `{ persist: false }` to `installChromeStorage`. Move the 19 discard-write stubs in files no lane edits (recon § Test collaborators lists 24; five wait for arc 3). Each test must see the same `chrome` members it saw before, added or removed (`settings/tokens/index.test.ts:30-43` stubs a `chrome` with no `runtime`); a file where that cannot hold keeps its stub, with the reason in the PR body.
+1. Add `{ persist: false }` to `installChromeStorage`. Move the 19 discard-write stubs in files no lane edits (recon § Test collaborators lists 24; five wait for arc 4). Each test must see the same `chrome` members it saw before, added or removed (`settings/tokens/index.test.ts:30-43` stubs a `chrome` with no `runtime`); a file where that cannot hold keeps its stub, with the reason in the PR body.
 2. Make `startWorld` the token-balance file's one `world(opts)` builder; move the 13 inline builds and `boot()`.
 - **Tests:** `tests/helpers/chrome-storage-mock.test.ts` covers: `persist: false` records `set` and `remove` and keeps nothing; the default mode still persists. Each moved suite keeps its test count.
 - **Validation gate:** Phase 4's commands plus `bun run test:all`. Pass: exit 0; test counts unchanged per moved file, logged.
 
 ### Phase 6 — one e2e poll ✓
 1. Add `apps/extension/tests/e2e/fixtures/poll.ts`, with `scripts/e2e/poll.test.ts`.
-2. Write the per-loop inventory first (predicate, terminal failures, timeout result, deadline owner), into the PR body. Then move the deadline loops in fixture files no lane edits: `session.ts`, `tokens.ts`, `journal.ts` (the accepted predicates stay byte-identical), `send-burst.ts`, `aztec.ts`, `token-list.ts`, `incoming-poll-gate.ts`, `mining-hold.ts`, `popups.ts`, `browser/firefox.ts`, `browser/webdriver-classic.ts` (its `done` accepts the driver exiting, as the loop does today), `boot-guard.ts`, `extension.ts`. Then move the in-spec loops in specs no lane edits. At the arc's start, re-check each file with `git diff --name-only origin/dev...worktree-<lane>` for every running lane; a file in any lane's diff waits for arc 3.
+2. Write the per-loop inventory first (predicate, terminal failures, timeout result, deadline owner), into the PR body. Then move the deadline loops in fixture files no lane edits: `session.ts`, `tokens.ts`, `journal.ts` (the accepted predicates stay byte-identical), `send-burst.ts`, `aztec.ts`, `token-list.ts`, `incoming-poll-gate.ts`, `mining-hold.ts`, `popups.ts`, `browser/firefox.ts`, `browser/webdriver-classic.ts` (its `done` accepts the driver exiting, as the loop does today), `boot-guard.ts`, `extension.ts`. Then move the in-spec loops in specs no lane edits. At the arc's start, re-check each file with `git diff --name-only origin/dev...worktree-<lane>` for every running lane; a file in any lane's diff waits for arc 4.
 3. `passkey-backup.test.ts`: parameterise `armProgressObserver` by its predicate, arm it for Encrypting (the card text only, as the poll checks today) before the second Protect click, and delete the 100 ms poll.
 4. `account-switch-isolation.test.ts:371-393`: call the file's own `driveScanUntilHeld` and `pollIncomingRecordByHash`.
 - **Tests:** `scripts/e2e/poll.test.ts`, on fake timers, covers: resolves with the first accepted value; throws `PollTimeoutError` with label, budget and last value; a probe's throw propagates at once; two phases sharing one deadline time out at the shared deadline. Each moved loop keeps its interval, its deadline and its terminal failures.
@@ -121,9 +121,13 @@ Four test-infrastructure refactors the owner picked on decision page 37 (option 
   - Network, per browser, from the root: `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent` (plus `NULO_E2E_BROWSER=firefox`). The prover-on canaries run in CI's canary jobs.
   Pass: every suite green, the run log showing retry 0. One rerun only for a flake already filed. The PR body compares each suite's CI wall-clock on the PR with dev's last green run (same CI hosts); the local runs are the gate, not the measure.
 
-## Arc 3: the colliding sites (one PR, `Closes #561 #536`, refs #540; the orchestrator releases it when the lanes below have merged)
+## Arc 3: the colliding guards (one PR, `Closes #561`, refs #536 #540)
 
-- **Phase 7 (#561)**, after execution-integrity-1 and ui-leftovers-1: `service.fence-entry.test.ts` and `amount.callers.test.ts` move to `sourceFiles` and `callsTo`. Their own `callArguments`, `callArgs` and `topLevelArgs` go. Gate: Phase 2's gate with the equal-lists proof for both.
+### Phase 7 — the last two hand call readers ✓
+`service.fence-entry.test.ts` and `amount.callers.test.ts` walk with `sourceFiles` and read with `callsTo`; their `callArguments`, `callArgs` and `topLevelArgs` go. Gate: Phase 2's, with the equal-lists proof for both (`lessons/phase-7.md`).
+
+## Arc 4: the remaining waits and builders, and the scenario suite on the real repository (one PR, `Closes #536 #540`; the orchestrator releases each phase when its lanes have merged)
+
 - **Phase 8 (#536)**, after dapp-boundary-2, service-structure-1 (#545), storage-privacy-1, execution-integrity-1, onboarding-3, sheet-1 and type-roles-coverage:
   1. Move the `wallet-sdk/background.*` drains to the awaited callback or the reached signal they stand for.
   2. Do the same for `useArrivals.test.ts`'s `settle` and `dapp-send-executor.test.ts:2172-2174`.
@@ -131,18 +135,15 @@ Four test-infrastructure refactors the owner picked on decision page 37 (option 
   4. Move the remaining e2e loops (`profiles.ts` and specs held back in Phase 6).
   5. Add a `pollUntil` line to `tests/e2e/README.md` and the `e2e-testing` skill.
   Gate: Phase 4's and Phase 6's gates.
-- **Phase 9 (#540)**, after ui-dedupe-1 (#541), dapp-boundary-1/2, onboarding-3 and sheet-1: `useFullBackupImport.harness.ts` for the pair (the stages copy's drift is resolved toward the original's mocks), `makeDispatcher(...)` for the 44 constructions, and the five remaining storage stubs. Gate: Phase 5's gate; `dispatcher.test.ts` count unchanged.
-- If one lane lags, the orchestrator may ship the released phases as the arc and move the rest to arc 4.
-
-## Arc 4: the scenario suite on the real repository (one PR, `Closes #540`; after storage-privacy-1 and service-structure-1 #547 merge)
-
-Phase 10 opens with a plan revision that the orchestrator approves before any code. It re-counts the suite at its new base and lists, for each of the five maps, the repository call or seeding builder that replaces it. Direction, already decided:
-- the suite's existing `FakeBrowserApi` backs a real `IncomingTransferRepository`;
-- seeds and reads go through the repository's own methods and key functions;
-- parking uses `vi.spyOn(repo, "getTrust")`;
-- `updatedAt` comes from `vi.setSystemTime`;
-- the fake, its `readTrustForWrite` and its `clearChain` record go.
-Each changed assertion is listed in the PR body with its reason (the fake's rule against the real one). Gate: `bun run lint && bun run typecheck:all && bun run test && bun run test:all`, then `bun scripts/complexity-baseline/check.ts`; `repository.test.ts` and `service.composition.test.ts` unchanged and green.
+- **Phase 9 (#540)**, after ui-dedupe-1's A4 (#541), dapp-boundary-1/2, onboarding-3 and sheet-1: `useFullBackupImport.harness.ts` for the pair (the stages copy's drift is resolved toward the original's mocks), `makeDispatcher(...)` for the 44 constructions, and the five remaining storage stubs. Gate: Phase 5's gate; `dispatcher.test.ts` count unchanged.
+- **Phase 10 (#540)**, after storage-privacy-1 and service-structure-1 (#547). It opens with a plan revision that the orchestrator approves before any code. It re-counts the suite at its new base and lists, for each of the five maps, the repository call or seeding builder that replaces it. Direction, already decided:
+  - the suite's existing `FakeBrowserApi` backs a real `IncomingTransferRepository`;
+  - seeds and reads go through the repository's own methods and key functions;
+  - parking uses `vi.spyOn(repo, "getTrust")`;
+  - `updatedAt` comes from `vi.setSystemTime`;
+  - the fake, its `readTrustForWrite` and its `clearChain` record go.
+  Each changed assertion is listed in the PR body with its reason (the fake's rule against the real one). Gate: `bun run lint && bun run typecheck:all && bun run test && bun run test:all`, then `bun scripts/complexity-baseline/check.ts`; `repository.test.ts` and `service.composition.test.ts` unchanged and green.
+- If one lane lags, the orchestrator may ship the released phases as the arc and move the rest to a later arc.
 
 ## Security & Adversarial Considerations
 
@@ -161,9 +162,9 @@ None. No production file changes in any arc; arc 4's revision stops if the real 
 - Titles (each 93 characters or fewer):
   - arc 1: `test: one source walker and ts tokenizer for the guards; one approval-window harness` (84);
   - arc 2: `test: await causes not turn counts; one e2e poll helper; shared storage and balance builders` (91);
-  - arc 3: `test: move the remaining guards, waits and builders onto the shared helpers` (75);
-  - arc 4: `test(incoming): run the scenario suite on the real repository over the fake browser` (85).
-- Body: what changed and why, the deletion table (arc 1), the equal-lists proofs, gates with outcomes, the e2e wall-clock before and after (arcs 2 and 3), and `Closes #n` per the arc list.
+  - arc 3: `test: read the fence-entry and amount-callers guards through the shared walker and parser` (89);
+  - arc 4: `test: remaining waits and builders on shared helpers; incoming scenarios on the real repo` (89).
+- Body: what changed and why, the deletion table (arc 1), the equal-lists proofs, gates with outcomes, the e2e wall-clock before and after (arcs 2 and 4), and `Closes #n` per the arc list.
 - `apps/extension/**` trips both e2e path filters; add no label.
 - **Parallelism:** arcs 1 and 2 touch disjoint files, but one worktree runs them in sequence; lanes would save less than 30 % and are not proposed.
 
@@ -192,6 +193,7 @@ Per `implementations-plan/README.md` § Post-implementation standard at 0fe841be
 - **D10 — the scenario suite waits for its own revision.** Its shape moves under storage-privacy-1 (row keys) and #547 (the outbox). A design drawn now would be redrawn.
 - **D11 — out of scope:** client-mock builders (#540's fifth increment names no copy and traces no failure: a closed `known-limit` issue at close-out); guessed turns outside #536's list; `theme-vars.ts` (a package helper cannot import from an app); `owned-processes.ts` `sweepPhase` (a kill sweep, not a wait). Each gets a disposition line in the Outcome and a comment on its issue.
 - **D12 — the e2e wall-clock is measured on CI**, the PR's run against dev's last green run. Not taken: a local base run (it doubles the heaviest gate on a host near load 200, and local and CI hosts differ anyway).
+- **D13 — arc 3 ships Phase 7 only** (the orchestrator, 2026-10-18, under the plan's lagging-lane rule): its lanes, execution-integrity-1 and ui-leftovers-1, are archived on dev; Phases 8 and 9 still wait on onboarding-3 (#743, held for the owner's build test) and ui-dedupe-1's A4 (every other lane they name is archived on dev), so they move to arc 4, which now closes #536 and #540.
 
 **Codex audit, round 1** (gpt-6.1-sol, high): `reject (with blocking findings: D4 erases sensitive bracket keys; callsTo excludes constructor sites already guarded)`. All taken:
 - C1 (High) the masker must keep a string inside `${}` as text with masked brackets (fixtures `log-payload-ban.test.ts:741,941`): D4 restated; the prototype already did this (F9).
@@ -249,6 +251,21 @@ It found `awaitedBus`, the storage moves, `world(opts)`, the L and B catches and
 **Arc 2 Codex fix loop, round 2** (resumed, verification of 9cf6bd6f and f68a6e98): `approve`. Its three reproductions now show no forced block, mine or refresh past the deadline; `between` runs after the deadline check and before the pause; `waitForL1ToL2Message`'s success, warning and error branches hold; the restored `waitForTarget` text keeps its inventory; the re-entrant dispatch keeps the outer collection. No new material defect. The loop converged in two rounds.
 
 **Arc 2 Codex fix loop, round 3** (resumed, the `origin/dev` merge fd52d5be only; it touched two files the arc's storage-stub moves edit, `useFullBackupExport.test.ts` and `export/full-passkey.pins.test.ts`): `approve`. Dev's added tests use in-memory state and mocked export material, with no storage write read back, so the discard-write stub holds; each file keeps one helper import and one discard-write setup; no arc change was lost or doubled. Both files pass (55 tests) with titles equal to `origin/dev`'s.
+
+**Arc 3 implementation: deviations from the plan** (`lessons/phase-7.md`):
+- Phase 7: `amount.callers`' comment fixture held a bare ` * balanceFormatted(x)` line, a JSDoc continuation with no opener, which the parser reads as code; it is now a real `/** */` block (the old reader also gives `[0, 0]` on it). A fixture of a `)` in a string and in a comment inside a call pins the caveat the header dropped (the old reader gave `[0, 1]`, the new `[1, 0]`). `service.fence-entry` keeps `mayBeAbsent` (the plan names only the call readers) over the whole file text up to the call, through `Call.offset`, the callee name's file offset (`ScriptBlock.startOffset` carries a script block's place); a site is named by line, not offset. `facadeCalls(path, text)` reads one file, so a fixture pins the lookup. Test counts: fence-entry 20 to 21, amount.callers 5 to 6.
+
+**Arc 3 Codex fix loop, round 1** (gpt-6.1-sol, high, the diff against 0c340d37 at 15554ea0): `reject (blocking: fence-presence guard can now accept an optional fence)`. All taken:
+- A3R1-1 (High, demonstrated) the declaration lookup had moved from the call's `(` to the fence argument's start, so a `fence` declared inside an earlier argument hid an optional `fence?:` parameter (old red, new green): the lookup cuts at the call again, and a fixture pins it.
+- A3R1-2 (Medium, demonstrated) it read only the parsed fragment, so a `.vue` caller whose fence is declared in the other script block failed falsely: the lookup reads the whole file, through `Call.offset`; the fixture's second half pins it.
+- A3R1-3 (Low) three scope lines still sent Phase 8 and 9 work to arc 3: they say arc 4.
+
+**Arc 3 Opus diff review** (opus, beside round 1, read at 15554ea0): `approve with fixes`. Taken: A3R1-1, found independently; a `(path, text)` reader with fixtures (the guard had no failing fixture); the new `)` fixture split into its own test, whose title says what it proves; `shipped` → `ships` and D13's and Phase 9's lane wording. Not taken: rewriting Phase 8's lane list, which records its gate; D13 names the two still open.
+
+**Arc 3 Codex fix loop, round 2** (resumed, verification of 488b5df8): `reject (blocking: encoded Vue directives can still bypass the fence-presence guard)`. Both round 1 fixes hold. Taken:
+- A3R2-1 (High, demonstrated; needs a template-level facade call, which the background-only facade does not allow) the template parser decodes a character reference (`&quot;`) in an expression's code but not in its `loc`, so a call after one got an offset inside the encoded text, and a `fence?:` parameter declared before the call in the same handler was missed (old red, new green). Mapping decoded positions back needs Vue's decoder (the `entities` package, which the extension does not declare). Instead `Call.offset` is undefined in a template expression whose code is not its source verbatim, and the fence guard counts a call it cannot place as absent: it fails closed there, where the old reader read the raw text. A `callsTo` test pins the undefined offset beside a placed control, and the fence fixture pins the closed failure.
+
+**Arc 3 Codex fix loop, round 3** (resumed, verification of cb23cbc1): `approve`. The round 2 reproducer reads absent; an encoded interpolation or directive fails closed with the reference before or after the call; verbatim dynamic arguments, directives and interpolations keep exact offsets; the other `callsTo` consumers read only the fields they read before; its own full-tree sweep found no unplaced call and no offset mismatch. The loop converged in three rounds.
 
 ## Seeds
 
