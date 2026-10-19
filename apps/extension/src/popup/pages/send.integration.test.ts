@@ -5,7 +5,7 @@
  */
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { nextTick, reactive } from "vue"
 
@@ -219,15 +219,6 @@ const FUNDING = {
 		storage: { [SEND_PICKS]: HAND_ADDED_PICKED },
 	},
 } satisfies Record<string, Funding>
-
-type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void }
-function deferred<T>(): Deferred<T> {
-	let resolve!: (v: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
-}
 
 /** What a landed estimate answers when a test names none. */
 const LANDED = { maxFee: "1000", gasDetails: {} }

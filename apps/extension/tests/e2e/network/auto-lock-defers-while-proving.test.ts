@@ -24,6 +24,7 @@ import type { AztecTestConfig } from "../fixtures/aztec"
 import { openPopup, test, waitForHash } from "../fixtures/extension"
 import { peekSession, readSessionRow, refreshBalances, sendTransfer, setSessionTtlMs, waitForLockScreen } from "../fixtures/helpers"
 import { type SendRecordView, waitForSendRecord } from "../fixtures/journal"
+import { pollUntil } from "../fixtures/poll"
 import { PROOF_GATE_HOLD_MS, holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -76,11 +77,11 @@ test.skipIf(!hasConfig)(
 
 		await sending
 		await waitForSendRecord(page, (r) => r.id === send.id && r.stage === "succeeded", 60_000)
-		const sendDoneAt = Date.now()
-		while ((await peekSession(page)) !== undefined) {
-			expect(Date.now() - sendDoneAt, "the wallet must lock after the send").toBeLessThan(LOCK_AFTER_SEND_MS)
-			await sleep(2_000)
-		}
+		await pollUntil(
+			() => peekSession(page),
+			(session) => session === undefined,
+			{ label: "the wallet must lock after the send", timeoutMs: LOCK_AFTER_SEND_MS, intervalMs: 2_000 },
+		)
 		await waitForLockScreen(page, LOCK_AFTER_SEND_MS)
 	},
 )
