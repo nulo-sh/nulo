@@ -6,7 +6,7 @@ import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
-import { defineComponent, h } from "vue"
+import { defineComponent, h, reactive } from "vue"
 
 const router = vi.hoisted(() => ({ push: vi.fn() }))
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({}) }))
@@ -40,13 +40,15 @@ vi.mock("@/wallet/services/config/client", () => ({
 		}
 	}),
 }))
+/** The selected scope's gas slice at mount; a test moves other scopes through `gasByScope`. */
 let gas: unknown
 vi.mock("@/stores/balances.store", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/stores/balances.store")>()),
-	useBalancesStore: () => ({ entry: () => (gas === undefined ? undefined : { gas }) }),
+	useBalancesStore: () => ({ entry: gasEntry }),
 }))
 
 import { useAppStore } from "@/stores/app.store"
+import type { BalanceScope } from "@/stores/balances.store"
 import { HOW_AZTEC_WORKS_URL } from "@/utils/get-started"
 import { type ChromeStorageMock, installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 import General from "./general.vue"
@@ -78,6 +80,16 @@ const STUBS = {
 }
 
 const ZERO = { status: "ready", display: { publicFeeJuice: "0", privateFeeJuice: null }, version: 1 }
+const FUNDED = { status: "ready", display: { publicFeeJuice: "5", privateFeeJuice: null }, version: 1 }
+const HOME_SCOPE: BalanceScope = { profileId: "p1", networkId: "n1", chainId: 1, accountAddress: "0xacct" }
+
+/** Reactive as the store's entries are, so a mounted Home sees a slice change. */
+const gasByScope = reactive(new Map<string, unknown>())
+const scopeKey = (scope: BalanceScope) => [scope.profileId, scope.networkId, scope.chainId, scope.accountAddress].join("|")
+function gasEntry(scope: BalanceScope) {
+	const slice = gasByScope.get(scopeKey(scope))
+	return slice === undefined ? undefined : { gas: slice }
+}
 const AZTEC_KEY = "nulo:ui:getStartedAztecOpened@p1"
 
 const wrappers: VueWrapper[] = []
@@ -91,6 +103,7 @@ async function mountHome(type: "password" | "passkey" = "password", stored: Reco
 	appStore.profile = { id: "p1", type } as never
 	appStore.network = { id: "n1", chainId: 1 } as never
 	appStore.account = { address: "0xacct" } as never
+	if (gas !== undefined) gasByScope.set(scopeKey(HOME_SCOPE), gas)
 	const wrapper = mount(General, { global: { plugins: [pinia], stubs: STUBS, provide: {} } })
 	wrappers.push(wrapper)
 	await flushPromises()
@@ -98,11 +111,17 @@ async function mountHome(type: "password" | "passkey" = "password", stored: Reco
 }
 
 const has = (w: VueWrapper, testId: string) => w.find(`[data-testid="${testId}"]`).exists()
+const rows = (w: VueWrapper) =>
+	w
+		.findAll('[data-testid^="get-started-"]')
+		.map((el) => el.attributes("data-testid"))
+		.filter((id) => id !== "get-started-hide")
 
 afterEach(() => {
 	for (const w of wrappers.splice(0)) w.unmount()
 	tokenHoldings = "none"
 	gas = undefined
+	gasByScope.clear()
 	prestoReached = false
 	prestoReadFailures = 0
 	vi.restoreAllMocks()
@@ -126,10 +145,11 @@ describe("Home — the backup reminder's sources", () => {
 		expect(w.get('[data-testid="home-scroller"]').attributes("data-reminders-settled")).toBe("false")
 	})
 
-	test("Fee Juice alone is funds: a positive read raises the banner with no token", async () => {
-		gas = { status: "ready", display: { publicFeeJuice: "5", privateFeeJuice: null }, version: 1 }
+	test("Fee Juice alone is funds: a positive read raises the banner with no token, and the card offers no Fee Juice", async () => {
+		gas = FUNDED
 		const w = await mountHome()
 		expect(has(w, "backup-reminder-banner")).toBe(true)
+		expect(rows(w)).toEqual(["get-started-aztec", "get-started-presto"])
 	})
 
 	test("an empty wallet keeps the calm phrase row and offers Fee Juice (control)", async () => {
@@ -155,6 +175,41 @@ describe("Home — the backup reminder's sources", () => {
 		const w = await mountHome("passkey")
 		expect(has(w, "backup-reminder-banner")).toBe(false)
 		expect(has(w, "get-started-backup")).toBe(true)
+	})
+})
+
+describe("Home — Get Fee Juice follows the selected account's Fee Juice", () => {
+	test("Fee Juice arriving while Home is open removes the row, and spending it back to zero returns it", async () => {
+		gas = ZERO
+		const w = await mountHome("passkey")
+		const all = ["get-started-backup", "get-started-aztec", "get-started-feeJuice", "get-started-presto"]
+		expect(rows(w)).toEqual(all)
+		gasByScope.set(scopeKey(HOME_SCOPE), FUNDED)
+		await flushPromises()
+		expect(rows(w)).toEqual(["get-started-backup", "get-started-aztec", "get-started-presto"])
+		expect(has(w, "backup-reminder-banner")).toBe(false)
+		gasByScope.set(scopeKey(HOME_SCOPE), ZERO)
+		await flushPromises()
+		expect(rows(w)).toEqual(all)
+	})
+
+	test("the row follows the selected account and chain, while the profile's flags stay", async () => {
+		gas = ZERO
+		const w = await mountHome("passkey", { "nulo:ui:getStartedAztecOpened@p1": true })
+		const app = useAppStore()
+		expect(rows(w)).toEqual(["get-started-backup", "get-started-feeJuice", "get-started-presto"])
+		const savings = { ...HOME_SCOPE, accountAddress: "0xsavings" }
+		gasByScope.set(scopeKey(savings), FUNDED)
+		app.account = { address: savings.accountAddress } as never
+		await flushPromises()
+		expect(rows(w)).toEqual(["get-started-backup", "get-started-presto"])
+		// A network whose chain id moved, as after a Testnet reset, is a scope with no read yet.
+		app.network = { id: "n1", chainId: 2 } as never
+		await flushPromises()
+		expect(has(w, "get-started")).toBe(false)
+		gasByScope.set(scopeKey({ ...savings, chainId: 2 }), ZERO)
+		await flushPromises()
+		expect(rows(w)).toEqual(["get-started-backup", "get-started-feeJuice", "get-started-presto"])
 	})
 })
 

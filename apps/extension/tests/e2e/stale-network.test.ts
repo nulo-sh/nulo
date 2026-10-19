@@ -8,7 +8,7 @@
  *
  * S1a  network reset: A1, a Switch network round trip, one reset from a double click, A4, then
  *      A5 only once the account is loaded; the row is back on the seed's chainId and the accounts
- *      keep their addresses, names and indexes; Local is untouched.
+ *      keep their addresses, names and indexes; Local is untouched; Home's card keeps its Hide.
  * S1b  address change (A2) with a hidden account and an imported one: the derived accounts come
  *      back at their true addresses, the hidden one hidden, the imported one at its address with
  *      a key that opens.
@@ -44,6 +44,7 @@ import {
 	snapshotChain,
 	traceTakeover,
 } from "./helpers/stale-network"
+import { getStartedRows, waitForHomeReminders } from "./fixtures/tokens"
 
 const identity = ({ address, name, index, type, visible }: StoredAccount) => ({ address, name, index, type, visible })
 
@@ -71,6 +72,12 @@ describe("stale network", () => {
 		await waitForHash(page, "#/popup/general", 30_000)
 		await createAccount(page, "Savings")
 		await closeStuckPopup(page)
+		// The reset must keep the profile's reminder flags: after Hide, the card is the phrase row alone.
+		await navigateByHash(page, "#/popup/general", 15_000)
+		await waitForHomeReminders(page)
+		await clickByTestId(page, "get-started-hide")
+		await page.waitForSelector('[data-testid="get-started-aztec"]', { hidden: true, timeout: 10_000 })
+		expect(await getStartedRows(page)).toEqual(["get-started-phrase"])
 		const before = await readAccounts(page, CHAIN_IDS.TESTNET)
 		expect(before.map((a) => [a.name, a.index])).toEqual([
 			[FIRST_ACCOUNT_NAME, 0],
@@ -84,6 +91,7 @@ describe("stale network", () => {
 		await ensureUnlocked(page)
 		expect(await takeoverScreen(page)).toBe("network-reset")
 		expect(await page.$('[data-testid="account-address-copy"]')).toBeNull()
+		expect(await page.$('[data-testid="get-started"]')).toBeNull()
 
 		// Networks is reachable and shows no account; Back returns to the takeover.
 		await clickByTestId(page, "stale-network-switch")
@@ -112,6 +120,8 @@ describe("stale network", () => {
 		expect((await readAccounts(page, CHAIN_IDS.TESTNET)).map(identity)).toEqual(before.map(identity))
 		expect(await readAccounts(page, PREVIOUS_TESTNET_CHAIN_ID)).toEqual([])
 		expect(await snapshotChain(page, local.chainId, local.id)).toEqual(localBefore)
+		await waitForHomeReminders(page)
+		expect(await getStartedRows(page)).toEqual(["get-started-phrase"])
 	})
 
 	test("S1b address change: A2; derived accounts return at their true addresses, the hidden one hidden, the imported one with its key", {

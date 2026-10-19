@@ -1463,6 +1463,24 @@ describe("ProfileService integration", () => {
 			30_000,
 		)
 
+		test.each<[string, (built: Built) => Promise<{ id: string }>]>([
+			["a password create", ({ service }) => service.createProfile("B", "pass1234")],
+			["a passkey create", ({ service }) => service.createPasskeyProfile("PK", fakeCredentialData("cred-new-3", "uh-new-3"))],
+		])(
+			"%s beside an imported profile is not first, and the imported one stays imported alone",
+			async (_label, run) => {
+				const built = await makeService()
+				const { api } = built
+				const first = await built.service.importMnemonic("M", await wordsForFill(0x55), "pass1234")
+				const { id } = await run(built)
+				expect(await notFirst(api, id)).toBe(true)
+				expect(await imported(api, id)).toBeUndefined()
+				expect(await imported(api, first.id)).toBe(true)
+				expect(await notFirst(api, first.id)).toBeUndefined()
+			},
+			30_000,
+		)
+
 		test("an import beside another profile is marked imported, not not-first", async () => {
 			const { api, service } = await makeService()
 			await service.createProfile("A", "pass1234")

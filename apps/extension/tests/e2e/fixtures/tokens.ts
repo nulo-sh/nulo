@@ -118,6 +118,13 @@ export async function waitForHomeReminders(page: Page): Promise<void> {
 	await page.waitForSelector('[data-testid="home-scroller"][data-reminders-settled="true"]', { timeout: 30_000 })
 }
 
+/** The Get started card's rows in order, its Hide link aside. */
+export async function getStartedRows(page: Page): Promise<(string | null)[]> {
+	return await page.$$eval('[data-testid^="get-started-"]:not([data-testid="get-started-hide"])', (els) =>
+		els.map((el) => el.getAttribute("data-testid")),
+	)
+}
+
 /** Import a token from Home and wait for its projected balance row to carry `expectedPublicRaw`
  *  and a fresher timestamp than before the import — the discipline every multi-token spec needs so
  *  its assertions never race the balance projector. */

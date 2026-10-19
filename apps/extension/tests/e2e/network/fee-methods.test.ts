@@ -2,10 +2,12 @@ import { inject, expect } from "vitest"
 import { test, openPopup, waitForHash, replaceInputValue, clickByTestId } from "../fixtures/extension"
 import {
 	fillSendForm,
+	getStartedRows,
 	refreshBalances,
 	sendTransfer,
 	selectFeeMethod,
 	setActiveSendType,
+	waitForHomeReminders,
 	waitForToast,
 	waitForTxConfirmation,
 } from "../fixtures/helpers"
@@ -349,6 +351,9 @@ test.skipIf(!hasConfig)(
 		{
 			const page = await openPopup(feeJuiceReadyExtension)
 			await waitForHash(page, "#/popup/general")
+			// The account holds Fee Juice, so Home's card offers none; the minted tokens raise the banner.
+			await waitForHomeReminders(page)
+			expect(await getStartedRows(page)).toEqual(["get-started-aztec", "get-started-presto"])
 			await refreshBalances(page)
 			await openSend(page)
 			await setActiveSendType(page, "send-from-type", "private")
