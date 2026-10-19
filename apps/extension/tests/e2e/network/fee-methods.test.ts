@@ -356,7 +356,7 @@ test.skipIf(!hasConfig)(
 			// The fixture's minted tokens raise the banner, which takes the phrase row's place.
 			await waitForHomeReminders(page)
 			expect(await getStartedRows(page)).toEqual(["get-started-aztec", "get-started-presto"])
-			// Home records the held Fee Juice for the profile, so neither a spend nor a reset brings the row back.
+			// Home records the held Fee Juice for the profile.
 			const profileId = (await readSessionRow(page))?.profile
 			if (!profileId) throw new Error("no unlocked profile")
 			await page.waitForFunction(

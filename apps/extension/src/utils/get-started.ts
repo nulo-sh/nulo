@@ -105,7 +105,6 @@ export function combineHoldings(a: Holdings, b: Holdings): Holdings {
 const phraseShown = (i: Ready) => i.type === "password" && !i.flags.phraseSaved
 const backupShown = (i: Ready) => i.type === "passkey" && !i.flags.backupSaved && !i.flags.hidden
 const aztecShown = (i: Ready) => !i.flags.aztecOpened && !i.flags.hidden
-/** Once any read finds the profile holding Fee Juice the row is done, whatever later reads say. */
 const feeJuiceShown = (i: Ready) => i.feeJuice === "none" && !i.flags.feeJuiceHeld && !i.flags.hidden
 const prestoShown = (i: Ready) => !i.prestoReached && !i.flags.hidden
 

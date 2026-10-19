@@ -180,11 +180,14 @@ describe("Home — the backup reminder's sources", () => {
 })
 
 describe("Home — Get Fee Juice leaves for good once the profile holds Fee Juice", () => {
-	test("Fee Juice arriving while Home is open writes the profile's flag, and a spend back to zero keeps the row away", async () => {
-		gas = ZERO
+	test("Fee Juice arriving while Home is open writes the profile's flag once, and a spend back to zero keeps the row away", async () => {
+		gas = { status: "fetching", version: 0 }
 		const w = await mountHome("passkey")
+		expect(storage.set).not.toHaveBeenCalled()
+		gasByScope.set(activityScopeKey(HOME_SCOPE), ZERO)
+		await flushPromises()
 		expect(rows(w)).toEqual(["get-started-backup", "get-started-aztec", "get-started-feeJuice", "get-started-presto"])
-		expect(storage.data[FEE_JUICE_KEY]).toBeUndefined()
+		expect(storage.set).not.toHaveBeenCalled()
 		gasByScope.set(activityScopeKey(HOME_SCOPE), FUNDED)
 		await flushPromises()
 		expect(storage.set).toHaveBeenCalledWith({ [FEE_JUICE_KEY]: true })
@@ -192,6 +195,8 @@ describe("Home — Get Fee Juice leaves for good once the profile holds Fee Juic
 		gasByScope.set(activityScopeKey(HOME_SCOPE), ZERO)
 		await flushPromises()
 		expect(rows(w)).toEqual(["get-started-backup", "get-started-aztec", "get-started-presto"])
+		gasByScope.set(activityScopeKey(HOME_SCOPE), FUNDED)
+		await flushPromises()
 		expect(storage.set).toHaveBeenCalledTimes(1)
 	})
 

@@ -134,7 +134,6 @@ watch(
 	(held) => {
 		if (held) void getStarted.mark("feeJuiceHeld")
 	},
-	{ immediate: true },
 )
 onBeforeMount(() => void prestoRead.read())
 onMounted(() => void seed.refresh())

@@ -193,6 +193,7 @@ declare global {
   const getPrimaryCall: typeof import('../utils/tx-enrichment').getPrimaryCall
   const getStartedAztecOpenedKey: typeof import('../utils/profile-ui-keys').getStartedAztecOpenedKey
   const getStartedBackupSavedKey: typeof import('../utils/profile-ui-keys').getStartedBackupSavedKey
+  const getStartedFeeJuiceHeldKey: typeof import('../utils/profile-ui-keys').getStartedFeeJuiceHeldKey
   const getStartedHiddenKey: typeof import('../utils/profile-ui-keys').getStartedHiddenKey
   const getStartedKeys: typeof import('../utils/get-started').getStartedKeys
   const getStartedPhraseSavedKey: typeof import('../utils/profile-ui-keys').getStartedPhraseSavedKey
@@ -977,6 +978,7 @@ declare module 'vue' {
     readonly getPrimaryCall: UnwrapRef<typeof import('../utils/tx-enrichment')['getPrimaryCall']>
     readonly getStartedAztecOpenedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedAztecOpenedKey']>
     readonly getStartedBackupSavedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedBackupSavedKey']>
+    readonly getStartedFeeJuiceHeldKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedFeeJuiceHeldKey']>
     readonly getStartedHiddenKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedHiddenKey']>
     readonly getStartedKeys: UnwrapRef<typeof import('../utils/get-started')['getStartedKeys']>
     readonly getStartedPhraseSavedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedPhraseSavedKey']>

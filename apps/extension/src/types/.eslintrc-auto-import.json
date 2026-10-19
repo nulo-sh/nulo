@@ -423,6 +423,7 @@
     "getPrimaryCall": true,
     "getStartedAztecOpenedKey": true,
     "getStartedBackupSavedKey": true,
+    "getStartedFeeJuiceHeldKey": true,
     "getStartedHiddenKey": true,
     "getStartedKeys": true,
     "getStartedPhraseSavedKey": true,
