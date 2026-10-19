@@ -124,6 +124,10 @@ describe("pendingTermsVersions", () => {
 		expect(pendingTermsVersions(record("0.9"), manifest).map((entry) => entry.version)).toEqual(["1.0", "1.1"])
 	})
 
+	test("a record at an earlier material version pends only the later ones", () => {
+		expect(pendingTermsVersions(record("1.0"), manifest).map((entry) => entry.version)).toEqual(["1.1"])
+	})
+
 	test("is empty when current and complete when there is no record", () => {
 		expect(pendingTermsVersions(record("1.1"), manifest)).toEqual([])
 		expect(pendingTermsVersions(undefined, manifest).map((entry) => entry.version)).toEqual(["1.0", "1.1"])
