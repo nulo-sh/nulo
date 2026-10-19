@@ -11,7 +11,7 @@ One Explore sweep (Sonnet) at `24399338`, every row checked by the driver.
 | An AA warning text shade | `--txt-warning`, `base.css:163` (#7f6200, light), `:94` (`var(--yellow)`, dark) | reuse as is |
 | A contrast gate on a log line's tint | the ERROR pair, `packages/design/src/theme-contrast.test.ts:239-243`, both themes | adapt: the same loop covers WARN |
 | The base.css pin | `packages/design/src/base.css.test.ts:24` (sha256) and its comment of deliberate choices | adapt: new hash, one clause |
-| A browser reading and the pictures | the scratch spec of the a11y-errors-1 lane (`readLogContrast`, `shoot`), recorded in [its plan](../archive/a11y-errors-1/plan.md) | adapt: WARN spans, a nonce, local only |
+| A browser reading and the pictures | the scratch spec of the a11y-errors-1 lane (`readLogContrast`, `shoot`), recorded in [its plan](../a11y-errors-1/plan.md) | adapt: WARN spans, a nonce, local only |
 
 No `build new`.
 
