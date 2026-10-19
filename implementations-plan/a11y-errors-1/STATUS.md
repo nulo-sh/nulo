@@ -14,3 +14,4 @@
 | 10 | window footer `--nulo-surface` | 6.54 | 5.82 | token gate (pair added) |
 | hero "Delete" (stays `--red`) | page | 3.56 (large text, 3:1) | 5.13 | Chrome |
 - 2026-10-19 20:38Z phase 4 green: audit:vue 0, test:all 0 (every workspace), tests/e2e clean; 12 pictures committed.
+- 2026-10-19 20:46Z review round 1: Codex findings 2, Opus findings 4, all taken; lint 0, typecheck 0, guard 34/34, theme-contrast 97/97.

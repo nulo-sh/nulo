@@ -113,6 +113,12 @@ The lane's whole visible budget, the orchestrator's record on #874: every error 
 
 **Round 2** (Codex, resumed, verification): `approve`, no new finding; it recomputed the footer pair (6.54:1, 5.82:1).
 
+**Post-implementation** (diff `origin/dev...a11y-errors-1-a1`). Round 1: Codex (gpt-6.1-sol, high, session `01a155e3`) `findings: 2`; Opus 5.5 diff review beside it `findings: 4`. All taken:
+- Codex 1 / Opus 1: a conditional or mixed inline colour (`{ color: bad ? 'var(--red)' : 'inherit' }`, `color-mix(…var(--red)…)`) passed the guard → the style check reads each top-level part's whole `color` value; self-tests for both, and controls for a static `border-color` and a fill beside another colour.
+- Opus 2: a bound `color` comparing a tone (`tone === 'red' ? 'txt-danger' : 'body'`) was flagged → a literal beside `===` or `!==` is not a colour; control added.
+- Opus 3: the README said `txt-danger` reads 4.5:1 everywhere; it does not on `--nulo-surface-highest` (3.89:1 dark) → it names the gated surfaces and the exception.
+- Codex 2 / Opus 4: comments: two helper docs restated their code (deleted); `REVIEWED`'s and the footer pair's comments corrected.
+
 ## Delivery
 
 - PR title: ``fix(ui): error and refusal text in `--txt-danger`, aa on the light theme`` (73 characters). Opened ready, no label; add `e2e:extension-smoke` only if the path filter skipped smoke.

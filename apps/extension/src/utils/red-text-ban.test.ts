@@ -14,6 +14,7 @@ import {
 	type SourcePolicy,
 	STORY_FILE,
 	sourceFiles,
+	splitTopLevel,
 	TEST_FILE,
 	type TemplateNode,
 	walkElements,
@@ -40,22 +41,23 @@ const POLICY: SourcePolicy = {
 /** Components whose `color` paints a glyph only; `ProcessingErrorNote.test.ts` pins its text `secondary`. */
 const GLYPH_COLOR: ReadonlySet<string> = new Set(["Icon", "ProcessingErrorNote"])
 
-const RED_LITERAL = /(["'`])red\1/
+/** A quoted `red` the expression can yield; one compared with `===` or `!==` is a tone, not a colour. */
+const RED_LITERAL = /(?<![=!]=\s*)(["'`])red\1(?!\s*[=!]=)/
 const RED_CLASS = /(?<![\w-])color--red(?![\w-])/
 const RED_VAR = /var\(\s*--red(?![\w-])/
-/** A `color` key or property, not `border-color` or `borderColor`, naming `var(--red)`. */
-const RED_STYLE = /(?<![\w-])color["']?\s*:\s*["'`]?\s*var\(\s*--red(?![\w-])/
+/** A `color` entry, not `border-color` or `borderColor`, naming `var(--red)`; read per top-level part. */
+const RED_STYLE = /(?<![\w-])["']?color["']?\s*:.*var\(\s*--red(?![\w-])/s
 
 const RED_ATTR = new Map<string, (value: string, bound: boolean) => boolean>([
 	["color", (value, bound) => (bound ? RED_LITERAL.test(value) : value === "red")],
 	["class", (value) => RED_CLASS.test(value)],
-	["style", (value) => RED_STYLE.test(value)],
+	["style", (value) => splitTopLevel(value, /[,;]/).some((part) => RED_STYLE.test(part))],
 ])
 
 type Finding = { file: string; line: number; text: string }
 type Reviewed = { file: string; text: string; why: string }
 
-/** Red text that is no error text and reads AA, or that waits on a decision, one entry per finding. */
+/** Red that is a glyph, large text, or waits on a decision; one entry per finding. */
 const REVIEWED: Reviewed[] = [
 	{
 		file: "apps/extension/src/components/composite/CollapsingHeroLayout.vue",
@@ -97,7 +99,6 @@ function scanElement(file: string, node: TemplateNode, out: Finding[]): void {
 	}
 }
 
-/** Every attribute and stylesheet declaration in `source` that paints text `--red`. */
 function scan(file: string, source: string): Finding[] {
 	const out: Finding[] = []
 	const { template, styles } = parseSource(file, source)
@@ -125,7 +126,6 @@ function scanTree(): Finding[] {
 
 const keyOf = ({ file, text }: { file: string; text: string }): string => `${file}\n${text}`
 
-/** Findings no reviewed entry covers, and entries no finding consumed. */
 function review(findings: Finding[], reviewed: readonly Reviewed[] = REVIEWED): { open: Finding[]; stale: Reviewed[] } {
 	const pending = new Map<string, Reviewed[]>()
 	for (const entry of reviewed) pending.set(keyOf(entry), [...(pending.get(keyOf(entry)) ?? []), entry])
@@ -154,6 +154,18 @@ describe("red text ban (static)", () => {
 		["a wrapper that forwards its colour", "x.vue", `<template><AddressDisplay color="red" /></template>`, 1],
 		["the utility class", "x.vue", `<template><span class="row color--red">No</span></template>`, 1],
 		["a bound style colour", "x.vue", `<template><span :style="{ color: 'var(--red)' }">No</span></template>`, 1],
+		[
+			"a conditional style colour",
+			"x.vue",
+			`<template><span :style="{ color: bad ? 'var(--red)' : 'inherit' }">No</span></template>`,
+			1,
+		],
+		[
+			"a mixed style colour",
+			"x.vue",
+			`<template><span style="color: color-mix(in srgb, var(--red) 80%, black)">No</span></template>`,
+			1,
+		],
 		["a flat rule", "x.vue", "<template><span /></template><style module>.e { color: var(--red); }</style>", 1],
 		[
 			"a nested hover rule",
@@ -169,6 +181,19 @@ describe("red text ban (static)", () => {
 		["a red fill", "x.module.css", ".e { background: var(--red); }", 0],
 		["a red border", "x.module.css", ".e { border-color: var(--red); }", 0],
 		["a bound red border", "x.vue", `<template><span :style="{ borderColor: 'var(--red)' }">No</span></template>`, 0],
+		["a static red border", "x.vue", `<template><span style="border-color: var(--red)">No</span></template>`, 0],
+		[
+			"a red fill beside another colour",
+			"x.vue",
+			`<template><span :style="{ color: 'white', background: 'var(--red)' }">No</span></template>`,
+			0,
+		],
+		[
+			"a colour picked by comparing a tone",
+			"x.vue",
+			`<template><Text :color="tone === 'red' ? 'txt-danger' : 'body'">No</Text></template>`,
+			0,
+		],
 	])("%s", (_case, file, source, findings) => {
 		expect(scan(file, source)).toHaveLength(findings)
 	})

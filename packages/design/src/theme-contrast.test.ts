@@ -230,7 +230,7 @@ describe("theme contrast — status text (required)", () => {
 			expect(contrast("--txt-danger", bg, "dark")).toBeGreaterThanOrEqual(AA_TEXT)
 		})
 	}
-	// Error text also sits on a popup card and a window's footer.
+	// Error text also sits on a window's footer, which `--nulo-surface` paints, as it does a popup card.
 	for (const theme of ["light", "dark"] as const) {
 		test(`${theme}: --txt-danger on --nulo-surface >= ${AA_TEXT}:1`, () => {
 			expect(contrast("--txt-danger", "--nulo-surface", theme)).toBeGreaterThanOrEqual(AA_TEXT)
