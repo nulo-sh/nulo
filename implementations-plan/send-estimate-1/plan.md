@@ -47,7 +47,7 @@ One issue (#856), one arc, one PR against `dev` (D-orch-1). Recon and the probe 
 - **Flow**: balance event → `balanceRaw` → `amountValidation` → the getter's boolean; unchanged or turned false: nothing; turned true: `requestEstimate()` asks with the typed amount, or cancels on a gate that still fails.
 - **Not taken**: the issue's getter in the deep watch (F2, P2); `balanceRaw` as a source (re-asks on every sendable balance change); a `sendableAmount` computed in a second watch (Codex's B″: also fires on each valid keystroke, two schedules per key); one value-stable source in the deep watch (design A: changes P5, OA-1); a computed that remembers the last sendable value (an edit while unsendable cancels, and the rise back to the same value fires nothing: #856 again); dropping `deep: true` or replacing `amountTerm` (change when other inputs re-ask; outside #856).
 
-## Phase 1: becoming sendable asks (#856)
+## Phase 1: becoming sendable asks (#856) ✓
 
 1. In `send.test.ts`, move `lastClient` and `balanceUpdated` from the "token card while the tokens load" describe to file scope.
 2. Add a describe `send page — the estimate follows the amount the balance covers` to `send.test.ts`:
@@ -90,6 +90,7 @@ One issue (#856), one arc, one PR against `dev` (D-orch-1). Recon and the probe 
 - Codex (gpt-6.1-sol, high), round 1: conditional approve. Accepted: ship P5 as today (D3); state the Vue rule precisely (F2); queue mode in the fee invariant and a qualified load claim (Security); pin the shipped P5 with an edit-then-recover tail (T3); the smoke gate builds armed first. No finding rejected.
 - Opus 5.5 (Plan), round 1: conditional approve. Accepted: the boolean watch outside `deep` (D3); criterion 4 reworded; balance witnesses and `estimateLands()` in T2/T3; T3 unconditional; T4 on the real card (D5); asserted amounts; `audit:vue` in the gate; the dangling lessons reference dropped. No finding rejected.
 - Codex, final pass (same session, resumed): conditional approve, conditions: qualify the load claim (applied: Security § Load, with Codex's pruned-credit path); F5 narrowed to a source in the deep watch (applied). It found no path the boolean watch misses against B″ and traced the account switch: both watches may schedule in one flush, before any RPC starts, which is harmless. Re-read after the fixes: **approve**.
+- Fix loop, round 1 (Codex gpt-6.1-sol, high, fresh session `01a154be`, over `origin/dev...HEAD`): clean, no material findings. Opus 5.5 diff review beside it: clean; its one optional nit (the new comment's last clause nearly restates `if (valid)`) not taken: Codex judged the comment worth its space, and T3 pins the unsendable side. The loop converged in one round.
 
 ## Delivery
 
