@@ -91,7 +91,7 @@ One arc, one draft PR against `dev`: #870 (P64-02 B), #863 (P64-01 B), #746 (P61
 
 **Gate**: `cd apps/extension && bun --bun vitest run src/components/composite/import src/utils/copy-dash-ban.test.ts`. Pass: exit 0; step 1 red on base. Layers: unit, component.
 
-### Phase 4: pictures and the arc gate (after the review loop, on the final head)
+### Phase 4: pictures and the arc gate (after the review loop, on the final head) ✓
 
 Warning: load1 must be under 150 before every build and e2e run; poll for it inside one tool call. Never commit a scratch spec; never run two e2e runs in this worktree at once; retry 0; reruns per D9.
 
