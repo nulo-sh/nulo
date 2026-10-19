@@ -27,28 +27,44 @@ const networkFee = scene({ fee: ["fee", 0] }, (g, at) => {
 	}
 })
 
-const feeJuice = scene({ juice: ["juice", 0], bring: ["bring", 0], ethereum: ["ethereum", 0], only: ["only", 0] }, (g, at) => {
-	const eth = plate(g, 24, 140, 200, 136)
-	text(eth, 20, 36, "ETHEREUM")
-	const aztec = plate(g, 416, 140, 200, 136)
-	text(aztec, 20, 36, "AZTEC")
-	glyph(aztec, "fee", 20, 84, 28)
-	const meter = bar(aztec, 60, 96, 120, 14)
-	const bridge = stroke(g, "M 224 208 H 416")
-	const chip = group(g)
-	node(chip, "rect", { class: "c-chip", width: 172, height: 44 })
-	text(chip, 14, 29, "FEE JUICE", "c-eb c-ink-fill")
-	return (t, local) => {
-		show(eth, seg(local, 0, 0.4))
-		show(aztec, seg(local, 0.2, 0.6))
-		bridge(seg(t, at.bring - 0.2, at.bring + 0.6))
-		const cross = seg(t, at.bring + 0.3, at.ethereum + 0.8)
-		const drop = seg(t, at.only - 0.2, at.only + 0.6)
-		place(chip, lerp(38, 430, cross), lerp(196, 226, drop))
-		show(chip, seg(t, at.juice, at.juice + 0.4) * (1 - drop))
-		meter(drop)
-	}
-})
+const feeJuice = scene(
+	{
+		bring: ["bring", 0],
+		token: ["aztec", 1],
+		over: ["over", 0],
+		becomes: ["becomes", 0],
+		transferred: ["transferred", 0],
+		only: ["only", 0],
+	},
+	(g, at) => {
+		const eth = plate(g, 24, 140, 200, 136)
+		text(eth, 20, 36, "ETHEREUM")
+		const aztec = plate(g, 416, 140, 200, 136)
+		text(aztec, 20, 36, "AZTEC")
+		glyph(aztec, "fee", 20, 84, 28)
+		const meter = bar(aztec, 60, 96, 120, 14)
+		const bridge = stroke(g, "M 224 208 H 416")
+		const locked = text(g, 430, 120, "NO TRANSFERS")
+		const chip = group(g)
+		node(chip, "rect", { class: "c-chip", width: 172, height: 44 })
+		const token = text(chip, 14, 29, "$AZTEC", "c-eb c-ink-fill")
+		const juice = text(chip, 14, 29, "FEE JUICE", "c-eb c-ink-fill")
+		return (t, local) => {
+			show(eth, seg(local, 0, 0.4))
+			show(aztec, seg(local, 0.2, 0.6))
+			bridge(seg(t, at.bring - 0.2, at.bring + 0.6))
+			const cross = seg(t, at.over, at.becomes)
+			const converted = seg(t, at.becomes, at.becomes + 0.4)
+			const drop = seg(t, at.only - 0.2, at.only + 0.6)
+			place(chip, lerp(38, 430, cross), lerp(196, 226, drop))
+			show(chip, seg(t, at.token, at.token + 0.4) * (1 - drop))
+			show(token, 1 - converted)
+			show(juice, converted)
+			show(locked, seg(t, at.transferred, at.transferred + 0.4))
+			meter(drop)
+		}
+	},
+)
 
 const price = scene({ publishing: ["publishing", 0], running: ["running", 0], shows: ["shows", 0], send: ["send", 0] }, (g, at) => {
 	text(g, 40, 112, "DATA")
