@@ -533,6 +533,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt) =>
 				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt),
 			addTransaction: (...args) => this.transactionService.addTransaction(...args),
+			protocolSponsorAddress: async (chainId) => (await this.fpcService.getOrComputeProtocolAddresses(chainId)).sponsored,
 			recordPendingAuthwits: (...args) => this.authRegistryService.recordPendingAuthwits(...args),
 			noteSent: (chainId, account, txHash, calls) =>
 				this.sendSequencer.externalSent({ chainId, account }, txHash, recordedTxKeys({ account, calls })),

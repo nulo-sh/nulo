@@ -19,6 +19,7 @@ import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import {
+	type FeeChoice,
 	type Tx,
 	type TxGasDetails,
 	TRANSACTION_SERVICE_NAME,
@@ -74,6 +75,8 @@ export type AddTransactionInput = {
 	feeSpender?: string
 	/** See {@link Tx.priorityLevel}. */
 	priorityLevel?: PriorityLevel
+	/** See {@link Tx.feeChoice}. */
+	feeChoice?: FeeChoice
 	fence?: ExecutionFence
 	/** Owning network row id. Together with the fence's profile this is the
 	 *  row's activity scope — without it, two profiles holding the same
@@ -192,6 +195,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			gasDetails,
 			feeSpender,
 			priorityLevel,
+			feeChoice,
 			fence,
 			networkId,
 		} = input
@@ -239,6 +243,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 				gasDetails,
 				...(feeSpender ? { feeSpender } : {}),
 				...(priorityLevel ? { priorityLevel } : {}),
+				...(feeChoice ? { feeChoice } : {}),
 				submittedEndpointUrl,
 			}
 			await this.txs.set(tx.hash, tx)

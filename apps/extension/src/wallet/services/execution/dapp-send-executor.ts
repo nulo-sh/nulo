@@ -48,7 +48,7 @@ import { findPrimaryEndpoint, primaryEndpointUrl } from "@/wallet/services/netwo
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { WrappedTask } from "@/wallet/services/task/service"
 import type { AddTransactionInput, LocalTxOrigin, TransactionService, Tx } from "@/wallet/services/transaction/service"
-import { OriginType } from "@/wallet/services/transaction/spec"
+import { type FeeChoice, OriginType } from "@/wallet/services/transaction/spec"
 import type { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import type { Network } from "@/wallet/services/network/service"
 import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
@@ -88,6 +88,7 @@ import type { TxRequestBuilder } from "./tx-request-builder"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import { getEstimatedFee, getGasDetails, priorityFeeOf } from "./tx-fee-details"
 import { detectEmbeddedFeePayment } from "./utils/fee-detection"
+import { type FeeChooser, feeChoiceOf, feeChooserOf } from "./fee-choice"
 
 /** The primary call of an `Action[]` (a discriminated union with non-call variants like
  *  `AddCapsuleAction`), as the journal records it. Inlined here rather than in `primary-method.ts`
@@ -171,6 +172,7 @@ interface SentTx {
 	fence: ExecutionFence
 	networkId: AddTransactionInput["networkId"]
 	pendingPublicAuthwits: Parameters<DappSendExecutorDeps["recordPendingAuthwits"]>[1]
+	feeChosenBy: FeeChooser
 }
 
 export interface DappSendExecutorDeps {
@@ -213,6 +215,9 @@ export interface DappSendExecutorDeps {
 	/** Mirrors `TransactionService.addTransaction` — indexed type keeps the
 	 *  seam in sync with the source signature. */
 	addTransaction: TransactionService["addTransaction"]
+	/** The canonical SponsoredFPC's address on `chainId`, derived by the wallet, never read from a
+	 *  row; `undefined` when there is none to compare against. */
+	protocolSponsorAddress(chainId: number): Promise<string | undefined>
 	/** Mirrors `AuthRegistryService.recordPendingAuthwits` — records the build's
 	 *  public authwits at the post-send tail as pending, tx-linked rows. */
 	recordPendingAuthwits: AuthRegistryService["recordPendingAuthwits"]
@@ -758,6 +763,7 @@ export class DappSendExecutor {
 	 *  ordering is explicit. Recording here (not at build) is what keeps estimate/reject from leaking a
 	 *  grant; the rows land `pending` and are reconciled by the tx's on-chain outcome. */
 	private sentTxRecorder(sent: SentTx): (hash: string) => Promise<void> {
+		const feeChoice = this.feeChoiceFor(sent.feeChosenBy, sent.network.chainId, sent.txCalls)
 		return async (hash) => {
 			const account = sent.account.address.toString()
 			await this.deps.addTransaction({
@@ -773,6 +779,7 @@ export class DappSendExecutor {
 				gasDetails: getGasDetails(sent.txRequest),
 				fence: sent.fence,
 				networkId: sent.networkId,
+				feeChoice: await feeChoice,
 			})
 			if (sent.pendingPublicAuthwits.length > 0) {
 				// Scoped to the SENDING tx's (profileId, chainId, account); the profile is the fence's.
@@ -783,6 +790,22 @@ export class DappSendExecutor {
 				)
 			}
 		}
+	}
+
+	/**
+	 * Who chose the fee, for the row a send writes. Called before the prove, so the row's write never
+	 * waits on a first derivation. Never rejects: an address the wallet cannot derive leaves the app's
+	 * plain pick, which is never wrong.
+	 */
+	private async feeChoiceFor(by: FeeChooser, chainId: number, calls: SentTx["txCalls"]): Promise<FeeChoice> {
+		if (by === "wallet") return "wallet"
+		let sponsor: string | undefined
+		try {
+			sponsor = await this.deps.protocolSponsorAddress(chainId)
+		} catch (error) {
+			this.deps.logDebug("fee chooser: the protocol sponsor's address is unavailable", { error })
+		}
+		return feeChoiceOf(by, calls, sponsor)
 	}
 
 	public async executeSendTransaction(
@@ -889,6 +912,7 @@ export class DappSendExecutor {
 				fence,
 				networkId: op.networkId,
 				pendingPublicAuthwits,
+				feeChosenBy: feeChooserOf(op.feeSettings),
 			}),
 		})
 		return txHash.toString()
@@ -1098,6 +1122,7 @@ export class DappSendExecutor {
 				fence,
 				networkId: op.networkId,
 				pendingPublicAuthwits,
+				feeChosenBy: feeChooserOf(op.feeSettings),
 			}),
 		})
 
@@ -1245,6 +1270,8 @@ export class DappSendExecutor {
 				)
 				await finalizeGasLimits(node, txRequest, simulatedTx, { gasPadding: 1, customLimits: feeOpts, feeMultiplier: 1, txsLimits })
 				const submittedEndpointUrl = primaryEndpointUrl(network)
+				// The request carries its own fee payment, so the choice is always the app's.
+				const feeChoice = this.feeChoiceFor("app", network.chainId, txCalls)
 				leaveLine()
 
 				// Prove with account in scope
@@ -1262,7 +1289,7 @@ export class DappSendExecutor {
 					submittedEndpointUrl,
 					onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
 					wantOffchainOutput: offchainOutputOf,
-					recordTransaction: (hash) =>
+					recordTransaction: async (hash) =>
 						this.deps.addTransaction({
 							origin,
 							chainId: network.chainId,
@@ -1276,6 +1303,7 @@ export class DappSendExecutor {
 							gasDetails: getGasDetails(txRequest),
 							fence,
 							networkId: op.networkId,
+							feeChoice: await feeChoice,
 						}),
 				})
 
