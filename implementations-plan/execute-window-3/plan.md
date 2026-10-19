@@ -89,7 +89,7 @@ Warning: take the before pictures (Pictures, step 1) before you change code.
 Steps: D1-D6 in the files above; T1-T5.
 **Gate**: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/popup/windows/execute`; then `bun run audit:vue`; `bun run test:all`. Pass: exit 0; T1-T5 red on the base copies. Layers: lint, typecheck, unit, component, build.
 
-## Phase 2: e2e and pictures
+## Phase 2: e2e and pictures ✓
 
 Warning: load1 below 150 before each build or run; one `e2e:agent` at a time; `agent.sh` leaves a network build in `dist/`, so rebuild armed before smoke.
 1. Smoke, Chrome then Firefox: `cd apps/extension && VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:<browser>`, then `env -u EXTENSION_PATH NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 [NULO_E2E_BROWSER=firefox] bun run test:e2e -- --retry=0`.
@@ -130,6 +130,9 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | plan 1 | Codex, gpt-6.1-sol (session 01a153c0) | conditional approve | Fact 5 scoped to the bridge's single-operation builders; citations; I2 no longer rests on the grant remark (A1); T4 moves one mount from unrefused to refused; T5 declares the stub's prop; a red is read before any rerun; agreed: no coordinator for multi-operation requests | none |
 | plan 1 | Opus 5.5 (Plan) | conditional approve | Fact 3 citations; E's boundary (the proven-short app payer is no refusal, D4); UI impact names the fee-raised window and the advice that leaves when a refusal lands; the #832 picture made reachable by a scratch decode failure; T2 and T3 success checks on the same mount | I1 as an owner ask: P58-05's page described the details-only advice and the owner kept it by picking B |
 | plan 2 | Codex, resumed | **approve** | none new: the round-1 fixes verified; I1 settled by P58-05's record; A1 an orchestrator-level scope question that arc 1 does not depend on | none |
+| arc 1 | Codex, gpt-6.1-sol (session 01a153e0) | **approve** | the `adviceSite` doc trimmed to its constraints; two test comments that narrated their assertions removed | none |
+| arc 1 | Opus 5.5 (general-purpose) | approve | the same comments; `afterTheCalls` names what broke | none |
+| arc 1 r2 | Codex, resumed | **approve** | none new | none |
 
 ## Seeds
 
