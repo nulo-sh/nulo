@@ -1,7 +1,7 @@
 ---
 plan: egress-flake-1
 tier: light
-status: planned, final Codex approve; arc 1 in progress
+status: completed (delivered as #876)
 issues: "#857 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,20 @@ base: origin/dev at 691e69eb (dev at 2a5960da when planned; #860 touches no fixt
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** delivered as one ready PR against `dev`, #876, which carries this close-out; its merge closes the plan.
+- **Shipped:** `failUnlessGone` logs Chrome's `Invalid InterceptionId` as gone; three unit cases feed the probed answers and pin each reply's method, id and target; the `FIREFOX.md` phrase; flake-ledger row 60 in `.claude/skills/e2e-testing/SKILL.md`.
+- **Review loop:** the plan took Codex conditional approve (4) and Opus conditional approve (7), then a Codex approve; the arc's diff took Codex approve with 2 comment findings and Opus conditional approve with 3, all fixed, then a Codex approve with none.
+- **Gates at the head:** after merging `origin/dev` at `2f591ddd`: lint, `typecheck:all`, `test:all` exit 0. Smoke on `b238a08b`, both browsers, retry 0: green after one rerun each of three files that failed during host-load spikes ([lessons/phase-1.md](lessons/phase-1.md)).
+- **Deviations:** base `691e69eb` moved to `25f2c63e` before the arc; D7, no local network suite.
+- **Dropped:** a reply-scoped classifier (D1), a kill-aware one (D2), releasing the spec's interception through a kill (D3), an e2e scenario (D5).
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted (D6); the ledger row in the owning skill carries the rule.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # egress-flake-1: a reply to a request its worker's stop cancelled is no interception failure
 
