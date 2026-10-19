@@ -45,3 +45,13 @@ Resumes are counted on the viewer's trace: a scroll judged `movedDown` that enab
 
 - The first before runs read `origin/dev` after other lanes had moved it. #868 had added keyboard tests that my build predated, so the toolbar cases red against it on both browsers, and the runs were discarded. `origin/dev` was merged again (#868 changed `LogsToolbar.vue` and this file, not the viewer). The before file is now pinned to the merged dev commit and runs on the merged head's build.
 - The discarded Firefox run also redded case A, "a selection at the end holds the view", with the old test on the base viewer: #849's red, at retry 0.
+
+## Gate (merged head `f1b6014e`, retry 0, each run started at load1 under 150)
+
+- `bun run lint`, `bun run typecheck:all`, `bun run test:all`: green. An earlier `test:all`, started at load1 145, redded on six 5 s timeouts in source scans, the reconcile-lock processes and the type-roles inventory. None of those files is this arc's; the rerun is green.
+- `viewers-csp.test.ts`: Firefox 10/10 green, Chrome 5/5 green, 8 of 8 tests each.
+- Full smoke suite: Firefox 2/2 green and Chrome 1/1 green, each 268 passed and 14 skipped.
+- The file's wall-clock, before (the dev file, one run) and after:
+  - Firefox: 46.0 s before, 42.2 s after (median of 10, range 35.2-47.8).
+  - Chrome: 31.9 s before, 25.0 s after (median of 5, range 24.0-34.0).
+  - The spread is the host's load. The change adds two frames per selection case.

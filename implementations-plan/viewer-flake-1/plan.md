@@ -1,7 +1,7 @@
 ---
 plan: viewer-flake-1
 tier: light
-status: approved (orchestrator, 2026-10-19, two arcs); arc 1 in progress; arc 2 waits for owner ask A1
+status: approved (orchestrator, 2026-10-19, two arcs); arc 1 delivered; arc 2 waits for owner ask A1
 issues: "#849 (arc 1 refs, arc 2 closes)"
 driver: claude-code
 claude_model: opus
@@ -77,7 +77,7 @@ Arc 1 is Phase 1, the test half; arc 2 is Phase 2, P1, once A1 is signed (the or
 - Chrome: the same without `NULO_E2E_BROWSER`, five times for the file and once for the full suite.
 - Record the file's wall-clock for each run, plus one base run per browser. No pass bound on them.
 
-### Phase 1 (arc 1) — the e2e reads what the viewer judges
+### Phase 1 (arc 1) — the e2e reads what the viewer judges ✓
 
 1. Apply the e2e changes.
 2. Controls, with the probe copied in from `~/.cache/nulo-backlog/viewer-flake-1/` and never committed. Record each in `lessons/phase-1.md` with the build it ran on.

@@ -7,4 +7,4 @@ Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 - [e2e-flakes-2](e2e-flakes-2/plan.md) — arc 2 in review — arc 1 (#813) made the balance-row reconciliation spec's gap with the worker stopped (#774); arc 2 waits for the header copy's snack to leave before the drag-select test presses About's foot (#816)
 - [tx-record-1](tx-record-1/plan.md) — arc 1 in review — a failed estimate keeps its class (#820, arc 1); a rejected dApp send reads Cancelled and who chose a transaction's fee (#828 after OA-2, #821, arc 2)
 - [harden-security-fixes-3](harden-security-fixes-3/plan.md) — arc 1 merged (#869), arc 2 in review — a bound on dApp-added tagging sources, six owner picks, the token-list signer-code caveat in SECURITY.md (#661)
-- [viewer-flake-1](viewer-flake-1/plan.md) — arc 1 in progress, arc 2 waits for owner ask A1 — the logs viewer holds through a follow still due; viewers-csp reads what the viewer judges (#849)
+- [viewer-flake-1](viewer-flake-1/plan.md) — arc 1 in review, arc 2 waits for owner ask A1 — the logs viewer holds through a follow still due; viewers-csp reads what the viewer judges (#849)
