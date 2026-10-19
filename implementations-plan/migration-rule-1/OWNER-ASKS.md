@@ -11,18 +11,15 @@ A1 and A3 depend on none of these. A2 ships OA-1's A until the owner answers. A4
   - **A (ships now):** title "Backup cannot be restored"; message "This passkey backup is from an older version or was changed, so it cannot be restored. Choose Passkey to restore your wallet, then add your contacts and imported accounts again."
   - **B:** title "Incompatible backup" (unchanged); message as A.
   - **C:** title as A; message "This passkey backup is from an older version or was changed, so it cannot be restored. Choose Passkey to restore your wallet, then add back your contacts, imported accounts, networks and tokens."
-- **Picture.** A2 attaches screenshots of the box at 400×600 in both themes here and in its PR. Layout, unchanged in every option:
-
-  ```
-  ┌ Error ───────────────────────────────────────┐
-  │ Backup cannot be restored                     │
-  │ This passkey backup is from an older version  │
-  │ or was changed, so it cannot be restored.     │
-  │ Choose Passkey to restore your wallet, then   │
-  │ add your contacts and imported accounts again.│
-  └───────────────────────────────────────────────┘
-  ```
-- **Recommendation.** A: the title says what happened, the message names the choice on the same page ("Passkey") and the two things P62-05 names. C if the owner wants the fuller list.
+  - **D:** title as A; message "This passkey backup is too old or was changed. Choose Passkey to restore your wallet, then add your contacts and imported accounts again."
+- **The box shows three lines of the message.** `ImportFullBackupForm.vue` clamps the message at three lines and ends it with "…"; the whole text reaches only the clipboard, by tapping the box. At 400 px, A and C are cut after "then add your" and "then add back", so the person never reads what to add again. D fits in three lines. Lifting the clamp shows A whole (one more line), a layout change every refusal in that box would share.
+- **Pictures** (popup Import page, 400×600, Chrome; A is what ships, the others are mockups of the same box):
+  - A: [light](screenshots/oa1-A-light-chrome.png), [dark](screenshots/oa1-A-dark-chrome.png)
+  - C: [light](screenshots/oa1-C-light-chrome.png), [dark](screenshots/oa1-C-dark-chrome.png)
+  - D: [light](screenshots/oa1-D-light-chrome.png), [dark](screenshots/oa1-D-dark-chrome.png)
+  - A with the clamp lifted: [light](screenshots/oa1-A-unclamped-light-chrome.png), [dark](screenshots/oa1-A-unclamped-dark-chrome.png)
+- **Restore again.** The same words show on the restore-again page, which has no Passkey choice: there they point at the import page's.
+- **Recommendation.** D: the only words that show the whole way back without changing the box, and they name the choice on the import page ("Passkey") and the two things P62-05 names. A with the clamp lifted if the owner wants A's fuller first sentence.
 
 ## OA-2: the update-failed screen once real migrations exist
 

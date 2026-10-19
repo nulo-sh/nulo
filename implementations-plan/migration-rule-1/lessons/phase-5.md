@@ -1,0 +1,5 @@
+# Phase 5 (A2): the unchecked passkey backup's refusal
+
+- **Shots (2026-10-19).** A scratch capture outside the repo (a vitest config whose `dir` points at it, reusing the smoke fixtures) drove the popup's Import page on the armed Chrome build with a MAC-less passkey file, then wrote each option's words into the same box and shot it at 400×600 in both themes. The refusal showed with no ceremony dialog. The box clamps its message at three lines: A and C measured clamped, D and A with the clamp lifted did not. OA-1 records it.
+- **Mutation check.** With the branch reverted to `INCOMPATIBLE_BACKUP`, the four composable refusal rows (no MAC, non-string MAC, the exported file without its check, the encrypted file stripped before the seal) and the onboarding page row fail; restored, all pass.
+- **Generated files.** Exporting `PASSKEY_BACKUP_UNCHECKED` from a composable adds it to `src/types/auto-imports.d.ts` and `.eslintrc-auto-import.json`, as its siblings `UNRECOGNIZED_BACKUP` and `DECRYPTION_FAILED` are.
