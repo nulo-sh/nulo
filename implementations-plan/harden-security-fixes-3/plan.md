@@ -143,6 +143,7 @@ Each phase builds its ask's option A only on that pick, with the tests and pictu
 | HS3-D6 | The bound is 128 (A1), provisional | the orchestrator's call, 2026-10-19; revisit when a legitimate dApp reaches it or a profile's own sources come near it | a measured figure (none exists) |
 | HS3-D7 | The refusal's text lives in the extension handler as a `ScopeViolationError`, not in `wallet-bridge/scope-violation.ts` | `scopeViolation()` is internal to wallet-bridge; the dApp reads the constant scope envelope whatever the text; register operations reach no window and write no Activity row (traced) | exporting `scopeViolation` for one caller |
 | HS3-D8 | A keyed `registerContract` checks the key derives the instance's public keys as well as its address | with the account registered first, the PXE's own preimage check comes after the account is written; the key check makes that check implied, so a mismatch still writes nothing | duplicating the preimage derivation in the handler |
+| HS3-D9 | The count stays over distinct addresses; the PXE comment states that an address held as both a sender and an account counts once and costs two secrets | the orchestrator's instruction (count distinct addresses) and the approved invariant; the cost stays bounded at twice the figure | counting both lists' lengths (Opus arc 2 review): a change of the approved count, left to the orchestrator |
 
 ## Review verdicts
 
@@ -153,6 +154,7 @@ Each phase builds its ask's option A only on that pick, with the tests and pictu
 | Codex final | conditional approve; approve on the second resume | `sent` flag set before the original `onSent`; Phase 2 moved behind OA-6 (its order change is visible); distinct-address count and both duplicate directions tested; the error registered in the reconstruction table; A1 stated as provisional; OA-3, OA-4, OA-5 wording; committed text states behaviour only | counting keystore entries through an upstream private field (ledger D3) |
 | Arc 1 Codex R1, Opus | conditional approve (both) | the runbook and `CI.md` stop saying the summary shows every signing-relevant change; #860 recorded as merged; F2 and F6 re-read at 2a5960da | the signer's comments (HS3-D5) |
 | Arc 1 Codex R2 | approve | wording consistent across the three docs; citations resolve; HS3-D5 accepted | none |
+| Arc 2 Codex R1, Opus | conditional approve (gates pending); approve | the displaced `tokenContractKey` doc restored; the refusal literal unexported; the handler test's transport claim narrowed; the own-path test moved to `AccountStateService.addSender`, the path the person's senders take; the README says no wider manifest fixes it; the PXE comment states the distinct-count invariant | a non-distinct count (HS3-D9); a README pin to the constant; bounding the unproduced `register_sender` kind |
 
 ## Delivery
 
