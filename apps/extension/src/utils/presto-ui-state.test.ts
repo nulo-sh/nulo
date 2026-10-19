@@ -104,7 +104,12 @@ describe("copyFor", () => {
 	})
 
 	test("available → Presto connected, Re-test, go tone", () => {
-		expect(copyFor(uiStateFromStatus(available))).toMatchObject({ tone: "go", title: "Presto connected", retry: "Re-test" })
+		expect(copyFor(uiStateFromStatus(available))).toEqual({
+			tone: "go",
+			title: "Presto connected",
+			detail: "Proving natively",
+			retry: "Re-test",
+		})
 	})
 
 	test("the settings surface leaves the versions to the Details rows", () => {

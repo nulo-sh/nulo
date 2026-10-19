@@ -154,7 +154,7 @@ export function copyFor(state: PrestoUiState, last?: LastProveOutcome | null): P
 					retry: "Re-test",
 				}
 			}
-			// The settings page lists the versions and the connection in its Details rows.
+			// The versions and the connection belong in the Details rows.
 			return { tone: "go", title: STRINGS.available.title, detail: "Proving natively", retry: "Re-test" }
 		case "downloading":
 			return {
