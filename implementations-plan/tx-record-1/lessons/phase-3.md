@@ -10,3 +10,9 @@
 - 2026-10-19 Codex A2 r2 (resumed `01a1553c`): withdrew r1's P1 (P58-01 governs a refused request). New P1: the wrong-profile notice's OK closed the window first and left the end to unload, so the close could still win and read "You rejected". Fixed: the OK runs the Reject's handshake with the switch or the lock; the window's X keeps the unload mapping (D14, D14-lock).
 - 2026-10-19 Codex A2 r3 (resumed `01a1553c`): **clean**. Fix loop converged in three rounds.
 - 2026-10-19 Codex A2 r4 (resumed `01a1553c`, cross-arc pass on the merged head): **findings**, three P3 comment fixes, no functional or security defect at the arc 1 and arc 2 seams. The fee-choice comment claimed the row never waits (it overlaps, it can still wait); the window header claimed the close waits for the wallet (it is bounded); the sponsor proof was said twice. All three reworded or cut.
+- 2026-10-19 Codex A2 r5 (resumed `01a1553c`): **clean**, the three comment fixes land as asked and add nothing. Loop converged.
+- 2026-10-19 Phase 6 gate. Load ran 150–3600 through the window, with every start gated at load1 < 150.
+  - After the second `origin/dev` merge (`f3b1b7bd`, #873): `lint`, `typecheck:all`, `test:all` and `audit:vue` 0; smoke Firefox 268/268.
+  - Smoke Chrome ran at `ff614d4b`: 267/268, `contacts-import`'s export toast missing. Its first rerun passed that test but lost Chrome's CDP connection in another at load 880; the second rerun was 7/7.
+  - Network set, proverless: Firefox 32/32. Chrome 31/32: `connect-unserved-chain`'s notice window drew no content in 15 s after a network delete. The window's load is untouched here; only its dismiss changed. 2/2 on its rerun.
+  - Readings, head against base: the four window ends and the eleven fee-method lines match the signed copy, and the switch reads as a lock (#872).
