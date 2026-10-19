@@ -4,8 +4,7 @@
  * it is answered, and an answered one stays answered when the popup opens again.
  *
  * `NETWORK_ARRIVAL_CAPTURES=1` instead writes the arrival over Home, dark and light, into
- * `tests/e2e/.captures/` (Chrome only): the shipped copy, and the alternative under review swapped
- * into the same screen.
+ * `tests/e2e/.captures/` (Chrome only).
  */
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
@@ -62,36 +61,15 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 	}, 180_000)
 })
 
-/** The alternative copy under review, swapped into the shipped screen text for text. */
-const ALTERNATIVE: Record<string, string> = {
-	"NEW NETWORK": "NETWORK ADDED",
-	"Mainnet is in your wallet": "Mainnet is now one of your networks",
-	"This version of Nulo adds Mainnet to your networks. You are still on Testnet.":
-		"Nulo added it in this update. Nothing has changed. You are still on Testnet.",
-	"SWITCHING TO MAINNET": "IF YOU SWITCH",
-	"Sends nothing and costs nothing. It only changes the network you see.": "No transaction is sent, and nothing is paid.",
-	"Shows your Mainnet account, at its own address.": "Your Mainnet account is already there, at its own address.",
-	"Keeps Testnet as it is. You can switch back at any time.": "Testnet keeps everything it holds. Switch back whenever you like.",
-}
-
 describe.skipIf(!CAPTURES || isFirefox)("network arrival captures", () => {
-	test("the arrival over Home, both copies, dark and light", { timeout: 300_000, retry: 0 }, async ({ registeredExtension: ctx }) => {
+	test("the arrival over Home, dark and light", { timeout: 300_000, retry: 0 }, async ({ registeredExtension: ctx }) => {
 		const page = await openPopup(ctx)
 		await page.setViewport(CAPTURE_VIEWPORT)
 		await waitForHash(page, "#/popup/general", 30_000)
 		await seedNetworkArrival(page)
 		await reloadWithLegalState(page, "current")
 		await page.waitForSelector(ARRIVAL, { visible: true, timeout: 30_000 })
-		await capture(page, "arrival-a")
-
-		await page.evaluate((swap: Record<string, string>) => {
-			const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
-			for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-				const text = node.textContent?.trim() ?? ""
-				if (swap[text]) node.textContent = swap[text]
-			}
-		}, ALTERNATIVE)
-		await capture(page, "arrival-b")
+		await capture(page, "arrival")
 		await clickByTestId(page, "network-arrival-stay")
 		await page.waitForSelector(HOME, { visible: true, timeout: 15_000 })
 	})

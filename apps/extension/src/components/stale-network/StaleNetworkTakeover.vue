@@ -9,7 +9,6 @@ import StaleNetworkConfirm from "./StaleNetworkConfirm.vue"
 /** Composables */
 import { useLockWallet } from "@/composables/useLockWallet"
 import { useNetworkActivation } from "@/composables/useNetworkActivation"
-import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { exportsHeld, neverOpened, STALE_NETWORK_KEY } from "@/composables/useStaleNetwork"
 
 /** Utils */

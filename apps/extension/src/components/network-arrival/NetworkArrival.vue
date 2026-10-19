@@ -20,7 +20,6 @@ import * as copy from "./copy"
 import { usePopupStore } from "@/stores/popup.store"
 
 const props = defineProps({
-	/** The network that arrived. */
 	network: { type: Object as PropType<Network>, required: true },
 	/** The active network's name. */
 	current: { type: String, required: true },

@@ -213,13 +213,17 @@ const arrived = computed(() =>
 		route: { name: route.name, path: route.path },
 		networkId: appStore.network?.id,
 		arrived: networkArrival.arrived.value,
+		networkIds: appStore.networks.map((n) => n.id),
 		takeover: takeover.value !== null,
 		legalSheet: legalSheetShown.value,
 	}),
 )
 // The bootstrap's pass has written the record before the session reads as open; a switch to the
-// arrived network answers it.
-watch([() => appStore.isLogined && appStore.profile?.id, () => appStore.network?.id], () => void networkArrival.refresh())
+// arrived network answers it, and a rename or a deletion changes what it names.
+watch(
+	[() => appStore.isLogined && appStore.profile?.id, () => appStore.network?.id, () => appStore.networks],
+	() => void networkArrival.refresh(),
+)
 watch(
 	() => appStore.isLogined && appStore.profile?.id,
 	(active) => {

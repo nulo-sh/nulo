@@ -108,11 +108,17 @@ describe("LegalAcceptanceSheet", () => {
 		expect(sheet(accepting).exists()).toBe(false)
 
 		const declining = await mountSheet()
+		let emittedBeforeLeaving: unknown[][] | undefined
+		push.mockImplementationOnce(async () => {
+			emittedBeforeLeaving = [...(declining.emitted("visibility") ?? [])]
+		})
 		await declining.get('[data-testid="legal-sheet-not-now"]').trigger("click")
 		await flushPromises()
 		expect(session.get("nulo:legal:dismissed")).toBe(TERMS)
 		expect(push).toHaveBeenCalledWith("/popup/legal/declined")
 		expect(sheet(declining).exists()).toBe(false)
+		// Still over Home until the route moves, so nothing waiting on it there sees it gone.
+		expect(emittedBeforeLeaving?.at(-1)).toEqual([true])
 	})
 
 	test.each([

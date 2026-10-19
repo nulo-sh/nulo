@@ -59,10 +59,11 @@ const handleAccept = async () => {
 	}
 }
 
+// Leaves the route first: dismissed while still over Home, the sheet would report itself gone there.
 const handleNotNow = async () => {
+	await router.push(LEGAL_DECLINED_PATH)
 	dismissedVersion.value = termsVersion
 	await chrome.storage.session.set({ [LEGAL_DISMISSED_KEY]: termsVersion })
-	await router.push(LEGAL_DECLINED_PATH)
 }
 
 /** The declined screen and the Send banner reopen the sheet by clearing the dismissal. */

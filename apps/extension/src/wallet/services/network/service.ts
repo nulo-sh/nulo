@@ -780,7 +780,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 				try {
 					await this.answerArrivalLocked(network, fence, deletion)
 				} catch (error) {
-					this.logError("Failed to answer a network arrival", error)
+					this.logError("Failed to answer a network arrival", { error })
 				}
 			}
 			const primaryEndpoint = findPrimaryEndpoint(network)

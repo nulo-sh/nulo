@@ -15,7 +15,6 @@ export interface UseNetworkArrivalOptions {
 export interface NetworkArrivalState {
 	/** The network whose arrival is unanswered, as of the last read. */
 	arrived: Ref<Network | null>
-	/** An answer is being written. */
 	answering: Ref<boolean>
 	refresh: () => Promise<void>
 	/** Answers the arrival without switching to the network. */

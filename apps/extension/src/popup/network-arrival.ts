@@ -11,9 +11,10 @@ export interface NetworkArrivalInput {
 	route: TakeoverRoute
 	/** The active network's id. */
 	networkId: string | undefined
-	/** The network whose arrival is unanswered. */
+	/** The network whose arrival is unanswered, as last read. */
 	arrived: Network | null
-	/** The stale-network takeover shows. */
+	/** The profile's networks as the shell lists them: a read can predate a deletion. */
+	networkIds: readonly string[]
 	takeover: boolean
 	/** The Terms sheet's verdict, undefined until it has read the acceptance status: the arrival
 	 *  waits for it, so the two never mount together. */
@@ -24,7 +25,7 @@ export interface NetworkArrivalInput {
  *  migration and integrity barriers cover the whole popup above it, so they need no gate here. */
 export function networkArrivalView(input: NetworkArrivalInput): Network | null {
 	const { arrived, route } = input
-	if (!input.logined || !arrived || isUncovered(route)) return null
+	if (!input.logined || !arrived || !input.networkIds.includes(arrived.id) || isUncovered(route)) return null
 	if (input.takeover || input.legalSheet !== false || arrived.id === input.networkId) return null
 	return yieldsTo(route) ? null : arrived
 }

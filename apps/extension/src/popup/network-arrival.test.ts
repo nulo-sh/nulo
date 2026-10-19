@@ -9,6 +9,7 @@ const input = (over: Partial<NetworkArrivalInput> = {}): NetworkArrivalInput => 
 	route: { name: "popup-general", path: "/popup/general" },
 	networkId: "tn",
 	arrived: MAINNET,
+	networkIds: ["tn", "mn"],
 	takeover: false,
 	legalSheet: false,
 	...over,
@@ -40,8 +41,9 @@ describe("networkArrivalView", () => {
 		}
 	})
 
-	test("shows nothing with no arrival, or when its network is already the active one", () => {
+	test("shows nothing with no arrival, when its network is already the active one, or once it is deleted", () => {
 		expect(networkArrivalView(input({ arrived: null }))).toBeNull()
 		expect(networkArrivalView(input({ networkId: "mn" }))).toBeNull()
+		expect(networkArrivalView(input({ networkIds: ["tn"] }))).toBeNull()
 	})
 })

@@ -19,7 +19,7 @@ const props = defineProps({
 	/** While true, the primary and every guarded action are disabled. */
 	busy: { type: Boolean, default: false },
 	density: { type: String as PropType<TakeoverDensity>, default: undefined },
-	/** Every testid is `<prefix>-<part>`. */
+	/** The layout's own testids are `<prefix>-<part>`; the content's carry theirs. */
 	testidPrefix: { type: String, required: true },
 })
 
