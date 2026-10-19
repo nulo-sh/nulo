@@ -114,7 +114,7 @@ The viewer reads only its own state and the scroller's geometry. It adds no inpu
 - D2 `scrollToBottom` pins `lastScrollTop` to the largest offset. The stops do not touch it (rounds 1-2).
 - D3 The line already due at a stop is followed, as on base: no button question.
 - D4 Keep `scrolledAway`, read after the viewer, with corrected wording (Opus #5).
-- D5 The hold is measured from two frames after the viewer's stop. What moves the view before that is base behaviour: the drag's setup, Firefox's lag, the follow already due. The window would also absorb a one-line break of the hold inside it (Opus, arc 1). P1 stays caught there, and so does any break that repeats: a resumed follow moves the view at the next line.
+- D5 The hold is measured from two frames after the viewer's stop. What moves the view before that is base behaviour: the drag's setup, Firefox's lag, the follow already due. The window would also absorb a one-line break of the hold inside it (Opus, arc 1), and a follow a drag's synchronous measure (`readMeasured`) lands inside it (Codex, arc 1 round 2). P1 stays caught whenever its resumed follow lands after the read, and so does any break that repeats; arc 2's unit case pins P1 directly.
 - D6 No new e2e scenario, no fixture change, the search case untouched.
 - KL-1 (closed `known-limit` issue at close-out): lines that land between a drag's first `select.pointer` and Firefox's `selectionchange` are followed, with no bound on how many. Visible, pre-existing. Reopen on a user report.
 - KL-2 (owner ask A1; a closed `known-limit` issue at close-out if accepted): a reader who scrolls down to the new end inside the one frame between a stop and the pending follow's scroll event stays held. That scroll ends where the follow's does, so geometry cannot tell them apart; base resumes both, which is P1. A scroll down at the end moves nothing and fires no event, so the next line lands below the view with the button shown; a scroll down, the button or the 30 s timer then resumes. Tracking wheel and key input would add state and event-order duties for a sub-frame window. Reopen on a user report.
@@ -189,10 +189,12 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `ce48
 **Final pass, resume 3:** approve, no new material finding.
 
 **Arc 1, Codex round 1** (fresh session): conditional approve. T1 is confirmed on both engines.
-- #1, a baseline that absorbs a broken hold: rebutted on frame order (lessons/phase-1.md), and the comments qualified.
+- #1, a baseline that absorbs a broken hold: the comments are qualified. The frame-order rebuttal was withdrawn in round 2.
 - #2, two frames drain only the pending follow: the comment is restricted to that.
 
 **Arc 1, Opus diff review:** approve. Folded: the D5 clause, the timeout's message, and the returned line narrowed. `scrolledAway` is kept (D4).
+
+**Arc 1, Codex round 2** (resume): conditional approve. #1: a drag's synchronous measure can land a resumed follow before the read. Verified and accepted into D5, with no code change.
 
 ## Seeds
 
