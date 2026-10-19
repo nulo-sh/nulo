@@ -1,8 +1,8 @@
 /**
  * Every key family the wallet keeps in `chrome.storage.local`, what is written under it, and how it
  * is read back. `stored-shapes.scan.test.ts` refuses a `nulo:` key that is not here, and
- * `stored-shapes/snapshot.test.ts` refuses a change to an entry that ships neither a migration nor
- * a reviewed additive mark.
+ * `stored-shapes/snapshot.test.ts` refuses a change to an entry the snapshot has not recorded:
+ * once the baseline is frozen, one that ships neither a migration nor a reviewed additive mark.
  *
  * Read by tests and the baseline generator only: the wallet builds its stores from `./stores.ts`.
  */
