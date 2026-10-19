@@ -9,3 +9,4 @@
 - 2026-10-19 A1 phase 1 green: stores built from `wallet/storage/stores.ts`, every key family in `stored-shapes.ts`, decoders exported, the scan (negative demo logged). A3 step 1 run: a relaunch reports `install` on both browsers, an in-session reinstall `update` (D21).
 - 2026-10-19 A1 phase 2: emitter, baseline harness, generator (`bun run baseline:storage`), R1-R4, writer round trips; goldens being authored.
 - 2026-10-19 A1 phase 2 green: 82 goldens, generator idempotent, every scratch-edit demo red where the plan says (lessons/phase-2.md). Gates and the review loop next.
+- 2026-10-19 A1 review loop closed: Opus conditional approve, Codex r1 reject → r2 reject → r3 approve, every finding fixed (D22, D23); all gates green; draft PR next.

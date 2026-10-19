@@ -21,3 +21,4 @@
   - an outer `.describe()` cleared the flag of an undescribed node it wraps (zod copies the wrapped node's output into the wrapper before its override runs); my first per-node fix keyed flags by `WeakMap.size`, which is undefined, and a test caught it;
   - the scan let a template extend a registered root without `@`.
 - **Codex r2: reject, one P2, fixed.** A pipe inherits its input side's emitted output (zod's ref flattening), so recording `x-pipe-out` as one value let the outer pipe of a chain overwrite the inner one's: `.pipe(min(1))` and `.pipe(min(10))` before a `.pipe(max(100))` emitted the same. It is now a list, earliest first. Codex verified every r1 fix, and that reading `stored` before `readStored` keeps the reset notice (taken on read) as a sample.
+- **Codex r3: approve, no new findings.** Verified the pipe list across wrappers, described clones and nested output pipes.
