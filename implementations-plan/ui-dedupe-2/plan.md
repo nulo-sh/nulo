@@ -11,6 +11,20 @@ base: dev @ ced2c51c
 standard: implementations-plan/README.md § Post-implementation standard, read at ced2c51c
 ---
 
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** delivered as one ready PR against `dev`, #848, which carries this close-out; its merge closes the plan.
+- **Shipped:** #840: a full-backup export run dropped in the open-run hop stops before it builds clients or requests its keys, and the pinned test flipped to prove the stop. #839: Holdings, Select token and Send take Home's balance-list rules (an update for an unseen id waits for the next read; a read overtaken by an in-scope event reads again; only Holdings keeps `added: "replace"`); History and Home's import rows take Home's journal-list rules (one `place`; a refused read retried every 2 s on its own run). The mirror options that lost their last callers are gone: `insertUnseenUpdated`, `refetchWhenDirty`, `added: "append"`, `supersede`, `JournalAddRules`. Closes #839 and #840.
+- **Review loop:** the plan took Codex conditional approve then approve, and an Opus conditional approve; the arc's diff took Codex findings 1 then clean, and Opus findings 3, all taken.
+- **Gates at the head:** `bun run lint`, `typecheck:all`, `test:all`, `audit:vue` and `check:plans`, all exit 0; smoke at retry 0 on Chrome (30 passed, 1 Firefox-only skip, 241 s) and Firefox (31 passed, 433 s). No e2e scenario added or changed.
+- **Deviations:** the build also regenerated `.eslintrc-auto-import.json`, committed; D8 limits the retry to a refused `read()`; Send's restart control is green on both trees by design (F8); one armed build started at load1 167 ([lessons/phase-4.md](lessons/phase-4.md)).
+- **Dropped:** none.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted (`lessons.md` is at its 8 KiB budget, and the run's traps were agent-shell ones, logged in [lessons/phase-4.md](lessons/phase-4.md)).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+
 # ui-dedupe-2: the two ui-dedupe-1 leftovers the owner signed
 
 Decision page 59 (2026-10-19), both option B. Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md).
