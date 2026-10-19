@@ -53,6 +53,7 @@ import {
 	NodeStatus,
 	primaryEndpointUrl,
 	ACTIVE_NETWORK_STORAGE_ROOT,
+	decodeActiveNetworkId,
 } from "./spec"
 
 export * from "./spec"
@@ -1239,8 +1240,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	private async _readActive(profileId: string): Promise<string | undefined> {
 		const r = await this.browserApi.storage.local.get(activeKey(profileId))
-		const raw = r[activeKey(profileId)]
-		return typeof raw === "string" ? raw : undefined
+		return decodeActiveNetworkId(r[activeKey(profileId)])
 	}
 
 	private async _writeActive(profileId: string, networkId: string): Promise<void> {

@@ -43,6 +43,35 @@ const MAX_PRICE_RESPONSE_BYTES = 16 * 1024
 
 type FetchLike = (input: string, init?: { signal?: AbortSignal; headers?: Record<string, string> }) => Promise<Response>
 
+export function isValidQuote(id: string, quote: unknown, now: number): quote is PriceQuote {
+	if (!quote || typeof quote !== "object") return false
+	const q = quote as Partial<PriceQuote>
+	if (q.coingeckoId !== id) return false
+	if (typeof q.usd !== "number" || !Number.isFinite(q.usd) || q.usd <= 0) return false
+	if (typeof q.fetchedAt !== "number" || !Number.isFinite(q.fetchedAt)) return false
+	// Future-dated entries are rejected as INVALID (not merely stale):
+	// they would out-"fresh" every legitimate quote forever and win every
+	// monotonic merge, so an attacker-planted cache row could never be
+	// repaired by refreshes.
+	if (q.fetchedAt > now + MAX_CLOCK_SKEW_MS) return false
+	if (q.providerUpdatedAt !== null && (typeof q.providerUpdatedAt !== "number" || !Number.isFinite(q.providerUpdatedAt))) return false
+	const band = getSanityBand(id)
+	if (!band) return false
+	return q.usd >= band.min && q.usd <= band.max
+}
+
+/** The quotes of a stored cache that validate and are fresh at `now`; anything else reads as absent. */
+export function usableQuotes(stored: unknown, now: number): PriceState {
+	if (!stored || typeof stored !== "object") return {}
+	const usable: PriceState = {}
+	for (const [id, quote] of Object.entries(stored)) {
+		if (!isValidQuote(id, quote, now)) continue
+		if (!isQuoteFresh(quote, now)) continue
+		usable[id] = quote
+	}
+	return usable
+}
+
 /**
  * Background price feed. ONE batched CoinGecko request per refresh, always
  * for the full static id set (`price-map.ts`) — the query never varies with
@@ -291,32 +320,11 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		} catch {
 			return {}
 		}
-		if (!stored || typeof stored !== "object") return {}
-		const now = this.now()
-		const usable: PriceState = {}
-		for (const [id, quote] of Object.entries(stored)) {
-			if (!this.isValidQuote(id, quote)) continue
-			if (!isQuoteFresh(quote, now)) continue
-			usable[id] = quote
-		}
-		return usable
+		return usableQuotes(stored, this.now())
 	}
 
 	private isValidQuote(id: string, quote: unknown): quote is PriceQuote {
-		if (!quote || typeof quote !== "object") return false
-		const q = quote as Partial<PriceQuote>
-		if (q.coingeckoId !== id) return false
-		if (typeof q.usd !== "number" || !Number.isFinite(q.usd) || q.usd <= 0) return false
-		if (typeof q.fetchedAt !== "number" || !Number.isFinite(q.fetchedAt)) return false
-		// Future-dated entries are rejected as INVALID (not merely stale):
-		// they would out-"fresh" every legitimate quote forever and win every
-		// monotonic merge, so an attacker-planted cache row could never be
-		// repaired by refreshes.
-		if (q.fetchedAt > this.now() + MAX_CLOCK_SKEW_MS) return false
-		if (q.providerUpdatedAt !== null && (typeof q.providerUpdatedAt !== "number" || !Number.isFinite(q.providerUpdatedAt))) return false
-		const band = getSanityBand(id)
-		if (!band) return false
-		return q.usd >= band.min && q.usd <= band.max
+		return isValidQuote(id, quote, this.now())
 	}
 
 	/** Serialized refresh: concurrent callers share one in-flight request.

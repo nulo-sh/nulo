@@ -58,7 +58,7 @@ export type SeedMarkerEntry = {
 	verifiedPins?: string
 }
 
-type SeedMarkerState = Record<string, SeedMarkerEntry>
+export type SeedMarkerState = Record<string, SeedMarkerEntry>
 
 /** One seeding pass's captured context: the profile/network it was resolved
  *  against and the lifecycle guard bound to that capture. */
@@ -138,6 +138,17 @@ function parseMarkerEntry(raw: unknown, now: number): SeedMarkerEntry | undefine
 	// and not clamped, since a clamp relative to each read never comes due.
 	entry.nextAttemptAt = e.nextAttemptAt <= now + MAX_CONTINUATION_DELAY_MS ? e.nextAttemptAt : 0
 	return entry
+}
+
+/** A stored marker blob → its clean entries: a non-object blob reads as empty, a corrupt entry is dropped. */
+export function decodeSeedMarkers(stored: unknown, now: number): SeedMarkerState {
+	if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {}
+	const state: SeedMarkerState = {}
+	for (const [key, raw] of Object.entries(stored)) {
+		const entry = parseMarkerEntry(raw, now)
+		if (entry) state[key] = entry
+	}
+	return state
 }
 
 export type SeedPreview = { name: string; symbol: string; decimals: number; interface: TokenInterface }
@@ -764,14 +775,7 @@ export class TokenSeeder {
 		} catch {
 			return {}
 		}
-		if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {}
-		const state: SeedMarkerState = {}
-		const now = Date.now()
-		for (const [key, raw] of Object.entries(stored)) {
-			const entry = parseMarkerEntry(raw, now)
-			if (entry) state[key] = entry
-		}
-		return state
+		return decodeSeedMarkers(stored, Date.now())
 	}
 
 	private log(level: LogLevel, ...args: unknown[]): void {

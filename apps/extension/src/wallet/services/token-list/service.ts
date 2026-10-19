@@ -28,7 +28,22 @@ const FAILED: ReadonlySet<RefreshOutcome> = new Set(["older-sequence", "refused"
 /** A served list the wallet refused is worth a line in a bug report; a dead network is not. */
 const SUSPECT: ReadonlySet<RefreshOutcome> = new Set(["older-sequence", "refused", "oversize"])
 
-type StoredState = { envelope?: string; lastSuccessAt?: number; nextAttemptAt?: number; failures: number }
+export type TokenListStoredState = { envelope?: string; lastSuccessAt?: number; nextAttemptAt?: number; failures: number }
+type StoredState = TokenListStoredState
+
+/** Storage is writable by every extension page: a malformed field reads as absent, and a deadline
+ *  past the longest one this service writes reads as due, so a planted value cannot stop refreshes. */
+export function decodeTokenListState(raw: unknown, now: number): TokenListStoredState {
+	if (!raw || typeof raw !== "object") return { failures: 0 }
+	const { envelope, lastSuccessAt, nextAttemptAt: due, failures } = raw as Record<string, unknown>
+	const latest = now + DAY_MS + JITTER_MS
+	return {
+		envelope: typeof envelope === "string" ? envelope : undefined,
+		lastSuccessAt: Number.isFinite(lastSuccessAt) ? (lastSuccessAt as number) : undefined,
+		nextAttemptAt: Number.isFinite(due) && (due as number) <= latest ? (due as number) : undefined,
+		failures: Number.isSafeInteger(failures) && (failures as number) >= 0 ? (failures as number) : 0,
+	}
+}
 
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>
 
@@ -209,8 +224,6 @@ export class TokenListService implements IService {
 		}
 	}
 
-	/** Storage is writable by every extension page: a malformed field reads as absent, and a deadline
-	 *  past the longest one this service writes reads as due, so a planted value cannot stop refreshes. */
 	private async readState(): Promise<StoredState> {
 		let raw: unknown
 		try {
@@ -218,15 +231,7 @@ export class TokenListService implements IService {
 		} catch {
 			return { failures: 0 }
 		}
-		if (!raw || typeof raw !== "object") return { failures: 0 }
-		const { envelope, lastSuccessAt, nextAttemptAt: due, failures } = raw as Record<string, unknown>
-		const latest = this.now() + DAY_MS + JITTER_MS
-		return {
-			envelope: typeof envelope === "string" ? envelope : undefined,
-			lastSuccessAt: Number.isFinite(lastSuccessAt) ? (lastSuccessAt as number) : undefined,
-			nextAttemptAt: Number.isFinite(due) && (due as number) <= latest ? (due as number) : undefined,
-			failures: Number.isSafeInteger(failures) && (failures as number) >= 0 ? (failures as number) : 0,
-		}
+		return decodeTokenListState(raw, this.now())
 	}
 
 	private log(level: LogLevel, message: string, data: Record<string, unknown>): void {
