@@ -187,6 +187,7 @@ const STUBS = {
 			"isEstimating",
 			"originPrivacy",
 			"payerNoticeShape",
+			"amountTyped",
 			"modelValue",
 			"needsFeeJuice",
 			"payer",
@@ -276,6 +277,8 @@ const strip = (w: W) => w.find('[data-testid="send-publish-strip"]')
 const sheetOpen = (w: W) => w.get('[data-testid="send-review-sheet"]').attributes("data-open") === "true"
 const sendNow = (w: W) => w.get('[data-testid="send-review-submit"]')
 const awaitingIds = (store: ReturnType<typeof useAppStore>) => store.awaitingTransactions.map((row) => row.id)
+const lastClient = <T>(ctor: unknown) => (ctor as { mock: { results: { value: T }[] } }).mock.results.at(-1)?.value as T
+const balanceUpdated = () => lastClient<{ onTokenBalanceUpdated: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceUpdated
 
 /** A transfer the test settles by hand. */
 function pendingTransfer() {
@@ -624,6 +627,17 @@ describe("send page — the footer", () => {
 		w.unmount()
 	})
 
+	test("the card hears whether the amount field holds an amount, with no recipient needed", async () => {
+		const { w } = await mountSend()
+		const typed = () => w.findComponent({ name: "FeeSettingsCard" }).props("amountTyped")
+		expect(typed()).toBe(false)
+		await w.get('[data-testid="stub-amount"]').setValue("1.5")
+		expect(typed()).toBe(true)
+		await w.get('[data-testid="stub-amount"]').setValue("")
+		expect(typed()).toBe(false)
+		w.unmount()
+	})
+
 	test("the card is handed the tag's shape exactly while the send is gated", async () => {
 		const { w } = await mountSend()
 		const shape = () => w.findComponent({ name: "FeeSettingsCard" }).props("payerNoticeShape")
@@ -636,6 +650,70 @@ describe("send page — the footer", () => {
 		await feeCard(w, FJ)
 		await w.get('[data-testid="send-from-type"]').trigger("click")
 		expect(shape()).toBeNull()
+		w.unmount()
+	})
+})
+
+describe("send page — the estimate follows the amount the balance covers", () => {
+	const fee = (w: W) => w.findComponent({ name: "FeeSettingsCard" }).props("feeEstimate")
+	const balanceShown = (w: W) => w.get('[data-testid="stub-amount"]').attributes("data-balance")
+
+	test("public side: an amount over the balance asks nothing; the balance rising to cover it asks for that amount", async () => {
+		const { w } = await mountSend()
+		await w.get('[data-testid="send-from-type"]').trigger("click")
+		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		await w.get('[data-testid="stub-amount"]').setValue("4")
+		await feeCard(w, SPONSOR)
+		await estimateLands()
+		expect(mocks.estimateTransferFee).not.toHaveBeenCalled()
+		expect(submit(w).attributes("disabled")).toBeDefined()
+
+		balanceUpdated().invoke({ ...BALANCE, publicBalance: "6000000", updatedAt: 2 })
+		await flushPromises()
+		await estimateLands()
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
+		expect(mocks.estimateTransferFee.mock.calls[0]?.[6]).toBe(4_000_000n)
+		expect(submit(w).attributes("disabled")).toBeUndefined()
+		w.unmount()
+	})
+
+	test("a balance change that leaves the amount covered keeps the landed fee and asks nothing", async () => {
+		const { w } = await mountSend()
+		await fillForm(w)
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
+
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "8000000", updatedAt: 2 })
+		await flushPromises()
+		expect(balanceShown(w)).toBe("8")
+		expect(fee(w)).toEqual(LANDED)
+		await estimateLands()
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
+		expect(submit(w).attributes("disabled")).toBeUndefined()
+		w.unmount()
+	})
+
+	test("a balance falling below a landed amount leaves the fee; an edit clears it, and covering it again asks anew", async () => {
+		const { w } = await mountSend()
+		await fillForm(w)
+
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "1000000", updatedAt: 2 })
+		await flushPromises()
+		await estimateLands()
+		expect(balanceShown(w)).toBe("1")
+		expect(mocks.cancelEstimate).not.toHaveBeenCalled()
+		expect(fee(w)).toEqual(LANDED)
+		expect(submit(w).attributes("disabled")).toBeDefined()
+
+		await w.get('[data-testid="stub-amount"]').setValue("1.50")
+		await estimateLands()
+		expect(fee(w)).toBeNull()
+
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "5000000", updatedAt: 3 })
+		await flushPromises()
+		await estimateLands()
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(2)
+		expect(mocks.estimateTransferFee.mock.calls[1]?.[6]).toBe(1_500_000n)
+		expect(submit(w).attributes("disabled")).toBeUndefined()
 		w.unmount()
 	})
 })
@@ -903,14 +981,11 @@ describe("send page — the token card while the tokens load", () => {
 	const FOREIGN = { ...TOKEN, chainId: 999, contract: `0x${"f".repeat(64)}`, symbol: "FRN" }
 
 	const holdTokenReads = () => holdReads<unknown[]>(mocks.getTokens)
-	const lastClient = <T>(ctor: unknown) => (ctor as { mock: { results: { value: T }[] } }).mock.results.at(-1)?.value as T
 	const tokenAdded = () => lastClient<{ onTokenAdded: EventHandler<unknown> }>(TokenServiceClient).onTokenAdded
 	const balanceAdded = () => lastClient<{ onTokenBalanceAdded: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceAdded
 	const balanceDeleted = () =>
 		lastClient<{ onTokenBalanceDeleted: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceDeleted
 	const balanceConnected = () => lastClient<{ onConnected: EventHandler<void> }>(TokenBalanceServiceClient).onConnected
-	const balanceUpdated = () =>
-		lastClient<{ onTokenBalanceUpdated: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceUpdated
 	const card = (w: W) => {
 		const el = w.get('[data-testid="stub-token-card"]')
 		return { loading: el.attributes("data-loading"), symbol: el.attributes("data-symbol") }

@@ -32,7 +32,9 @@ function heldAccountsText(held: readonly HeldAccount[]): string {
 			? `the network with chain ID ${chains[0]}`
 			: `the networks with chain IDs ${listed(chains, (count) => `${count} more`)}`
 	const one = held.length === 1
-	return `${subject} ${one ? "was" : "were"} not restored. Add ${network} to restore ${one ? "it" : "them"}.`
+	const it = one ? "it" : "them"
+	const file = one ? "its account file" : "their account files"
+	return `${subject} ${one ? "was" : "were"} not restored. Add ${network} to restore ${it}, or import ${it} again from ${file}.`
 }
 
 /** Home's reminder of the networks a restore left behind. */

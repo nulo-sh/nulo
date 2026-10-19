@@ -27,7 +27,7 @@ const emit = defineEmits(["close", "disableAutoClose"])
 
 <template>
 	<Flex direction="column" gap="8">
-		<Button variant="cta_outline" :class="$style.countdown_cta" data-testid="close-btn" @click="emit('close')">
+		<Button variant="cta_outline" data-testid="close-btn" @click="emit('close')">
 			<span :class="$style.close_label">
 				Close<span v-if="!autoCloseDisabled && countdownLabel"> · {{ countdownLabel }}</span>
 			</span>
@@ -50,21 +50,6 @@ const emit = defineEmits(["close", "disableAutoClose"])
 </template>
 
 <style module>
-/* Doubled to outrank Button's base rules in any sheet order; its hover still wins over :active. */
-.countdown_cta.countdown_cta {
-	transition-timing-function: var(--bezier);
-
-	&:focus-visible {
-		outline-style: dotted;
-	}
-
-	&:active {
-		background: var(--txt-primary);
-		color: var(--app-bg);
-		transition: none;
-	}
-}
-
 .close_label {
 	position: relative;
 	z-index: 1;

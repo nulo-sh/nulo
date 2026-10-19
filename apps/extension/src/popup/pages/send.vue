@@ -575,6 +575,37 @@ watch(
 	{ deep: true },
 )
 
+function requestEstimate() {
+	// An estimate simulates against the node: no work for a send the wall would refuse.
+	if (!legal.isCurrent.value) {
+		cancelFeeEstimate()
+		return
+	}
+	// NB: transferType can be 0 (TransferType.Private enum) which is falsy — check against undefined explicitly
+	// or Private → Private is silently dropped here before estimation.
+	if (!isValidAddress.value || transferType.value === undefined || !feeSettings.value) {
+		cancelFeeEstimate()
+		return
+	}
+	if (!amountValidation.value.valid) {
+		cancelFeeEstimate()
+		return
+	}
+
+	// New input asks a new question: it is queued only once the wallet says so again.
+	clearQueued()
+	scheduleFeeEstimate({
+		networkId: appStore.network.id,
+		accountAddress: appStore.account.address,
+		tokenId: activeToken.value.id,
+		tokenContract: activeToken.value.contract,
+		transferType: transferType.value,
+		destination: searchTerm.value,
+		amount: amountValidation.value.integerized,
+		settings: feeSettings.value,
+	})
+}
+
 // Every input the estimate is asked with is a source here, so a landed estimate is always the
 // current input's: each change re-asks (clearing the result) or cancels.
 watch(
@@ -590,37 +621,18 @@ watch(
 		() => appStore.network?.id,
 		() => appStore.account?.address,
 	],
-	() => {
-		// An estimate simulates against the node: no work for a send the wall would refuse.
-		if (!legal.isCurrent.value) {
-			cancelFeeEstimate()
-			return
-		}
-		// NB: transferType can be 0 (TransferType.Private enum) which is falsy — check against undefined explicitly
-		// or Private → Private is silently dropped here before estimation.
-		if (!isValidAddress.value || transferType.value === undefined || !feeSettings.value) {
-			cancelFeeEstimate()
-			return
-		}
-		if (!amountValidation.value.valid) {
-			cancelFeeEstimate()
-			return
-		}
-
-		// New input asks a new question: it is queued only once the wallet says so again.
-		clearQueued()
-		scheduleFeeEstimate({
-			networkId: appStore.network.id,
-			accountAddress: appStore.account.address,
-			tokenId: activeToken.value.id,
-			tokenContract: activeToken.value.contract,
-			transferType: transferType.value,
-			destination: searchTerm.value,
-			amount: amountValidation.value.integerized,
-			settings: feeSettings.value,
-		})
-	},
+	requestEstimate,
 	{ deep: true },
+)
+
+// A balance update can make the typed amount sendable while no source above changes. Kept out of
+// the deep watch, where reading `amountValidation` (a new object per recompute) would re-ask
+// whenever the balance moves; here only a flip to sendable asks.
+watch(
+	() => amountValidation.value.valid,
+	(valid) => {
+		if (valid) requestEstimate()
+	},
 )
 
 // The contact travels in the URL so a row opened in a new tab preselects it too. Applied after each
@@ -836,6 +848,7 @@ onBeforeUnmount(() => {
 						:isEstimating="isEstimating"
 						:isQueued="feeQueued"
 						:queuedCap="queueCap"
+						:amountTyped="Boolean(amountTerm)"
 						:originPrivacy="selectedSendType"
 						:payerNoticeShape="facts.noticeShape"
 						:txShape="feeTxShape"

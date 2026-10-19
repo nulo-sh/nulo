@@ -145,6 +145,7 @@ import { INIT_RETRY_BACKOFF_MS } from "@/stores/balances.store"
 import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
 import { PriceServiceClient } from "@/wallet/services/price/client"
+import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 import Send from "./send.vue"
 
@@ -889,6 +890,26 @@ describe("send page — Confirm waits for the current input's estimate", () => {
 		await w.get('[data-testid="stub-amount"]').setValue("2")
 		await estimateLands()
 		expect(w.find('[data-testid="fee-juice-shortfall"]').exists()).toBe(false)
+		expect(sendDisabled(w)).toBe(false)
+		w.unmount()
+	})
+
+	test("an amount over the balance asks nothing; the balance rising to cover it asks for that amount and turns it on", async () => {
+		const { w } = await mountSend(FUNDING["no gas, a sponsor"])
+		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		await w.get('[data-testid="stub-amount"]').setValue("6")
+		await estimateLands()
+		expect(mocks.estimateTransferFee).not.toHaveBeenCalled()
+		expect(sendDisabled(w)).toBe(true)
+
+		const balances = vi.mocked(TokenBalanceServiceClient).mock.results.at(-1)?.value as unknown as {
+			onTokenBalanceUpdated: EventHandler<unknown>
+		}
+		balances.onTokenBalanceUpdated.invoke({ ...BALANCE, privateBalance: "10000000", updatedAt: 2 })
+		await flushPromises()
+		await estimateLands()
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
+		expect(mocks.estimateTransferFee.mock.calls[0]?.[6]).toBe(6_000_000n)
 		expect(sendDisabled(w)).toBe(false)
 		w.unmount()
 	})

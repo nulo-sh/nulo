@@ -2,7 +2,17 @@
 /** Only the wallet's own reading of a transfer or mint states an amount or a party; nothing here closes. */
 import type { DiscoveredAuthwit } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
-import { type CallSurface, type WireCall, amountLabel, authwitLine, authwitTitle, RAW_LINE, RAW_TITLE, rowTitle } from "./call-surface"
+import {
+	type CallSurface,
+	type WireCall,
+	amountLabel,
+	authwitLine,
+	authwitTitle,
+	RAW_ADVICE,
+	RAW_LINE,
+	RAW_TITLE,
+	rowTitle,
+} from "./call-surface"
 import ArgsNotice from "./ArgsNotice.vue"
 
 const props = defineProps<{
@@ -13,8 +23,8 @@ const props = defineProps<{
 	checkingAuthwits?: boolean
 	chainId?: number
 	tokens?: readonly TokenInfo[]
-	/** The call whose notice carries the window's closing advice. */
-	adviceAt?: number
+	/** The window's closing advice follows the list of calls. */
+	advice?: boolean
 }>()
 
 const callRows = computed(() =>
@@ -31,6 +41,7 @@ const authwitRows = computed(() =>
 		const line = authwitLine(surface, authwitTitle(authwit.selector, authwit.consumer, surface))
 		return {
 			authwit,
+			surface,
 			line,
 			amount: line.kind === "move" ? amountOf(authwit.consumer, line.amount) : undefined,
 		}
@@ -81,11 +92,12 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 						Reading arguments…
 					</Text>
 					<Flex v-else-if="row.surface.kind === 'raw'" data-testid="execute-op-summary-unverified-args" :data-reason="row.surface.reason" direction="column" gap="4">
-						<ArgsNotice :title="RAW_TITLE" :body="RAW_LINE[row.surface.reason]" prefix="execute-op-summary" kind="unverified" :advice="j === adviceAt" />
+						<ArgsNotice :title="RAW_TITLE" :body="RAW_LINE[row.surface.reason]" prefix="execute-op-summary" kind="unverified" />
 					</Flex>
 				</Flex>
 			</li>
 		</ol>
+		<Text v-if="advice" data-testid="execute-op-summary-unverified-advice" variant="body" color="tertiary">{{ RAW_ADVICE }}</Text>
 	</Flex>
 
 	<Flex v-if="authwitRows.length" data-testid="execute-op-summary-authwits-section" direction="column" gap="8" :class="$style.section">
@@ -93,7 +105,7 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 		<ul data-testid="execute-op-summary-authwits" :class="$style.items">
 			<!-- The hash in the key remounts a re-estimated row: AddressDisplay reads its address once, at mount. -->
 			<li
-				v-for="({ authwit: a, line, amount }, k) in authwitRows"
+				v-for="({ authwit: a, surface, line, amount }, k) in authwitRows"
 				:key="`${k}:${a.messageHash}`"
 				data-testid="execute-op-summary-authwit"
 				:data-message-hash="a.messageHash"
@@ -101,13 +113,18 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 				:class="$style.item"
 			>
 				<Text variant="body" color="secondary" aria-hidden="true" :class="$style.marker">•</Text>
-				<Text data-testid="execute-discovered-authwit-line" variant="body" color="primary" height="130" :class="$style.item_body">
-					Lets <AddressDisplay :address="a.caller" data-testid="execute-discovered-line-caller" />
-					<template v-if="line.kind === 'move' && amount"> move <Text variant="meta" data-testid="execute-discovered-line-amount">{{ amount.text }}</Text></template>
-					<template v-if="line.kind === 'move' && amount?.baseUnits"> base units</template>
-					<template v-if="line.kind === 'move'"> from <AddressDisplay :address="line.from" data-testid="execute-discovered-line-from" /> to <AddressDisplay :address="line.to" data-testid="execute-discovered-line-to" /></template>
-					<template v-else> call <Text variant="meta" data-testid="execute-discovered-line-function">{{ line.fn }}</Text> on <AddressDisplay :address="a.consumer" data-testid="execute-discovered-line-consumer" /></template>
-				</Text>
+				<Flex direction="column" gap="4" :class="$style.item_body">
+					<Text data-testid="execute-discovered-authwit-line" variant="body" color="primary" height="130">
+						Lets <AddressDisplay :address="a.caller" data-testid="execute-discovered-line-caller" />
+						<template v-if="line.kind === 'move' && amount"> move <Text variant="meta" data-testid="execute-discovered-line-amount">{{ amount.text }}</Text></template>
+						<template v-if="line.kind === 'move' && amount?.baseUnits"> base units</template>
+						<template v-if="line.kind === 'move'"> from <AddressDisplay :address="line.from" data-testid="execute-discovered-line-from" /> to <AddressDisplay :address="line.to" data-testid="execute-discovered-line-to" /></template>
+						<template v-else> call <Text variant="meta" data-testid="execute-discovered-line-function">{{ line.fn }}</Text> on <AddressDisplay :address="a.consumer" data-testid="execute-discovered-line-consumer" /></template>
+					</Text>
+					<Flex v-if="surface.kind === 'raw'" data-testid="execute-op-summary-authwit-unverified-args" :data-reason="surface.reason" direction="column" gap="4">
+						<ArgsNotice :title="RAW_TITLE" :body="RAW_LINE[surface.reason]" prefix="execute-op-summary-authwit" kind="unverified" />
+					</Flex>
+				</Flex>
 			</li>
 		</ul>
 	</Flex>

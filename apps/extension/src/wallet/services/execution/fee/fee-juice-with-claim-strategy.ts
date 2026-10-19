@@ -11,7 +11,7 @@
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { getFeeJuiceClaimPayload } from "@/wallet/utils/fee-juice"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee-strategy"
-import { appPriorityOf, finalizeGasLimits, startEstimateTask, suggestGasLimits, validatedSimOpts } from "./fee-strategy"
+import { buildFor, finalizeGasLimits, startEstimateTask, suggestGasLimits, validatedSimOpts } from "./fee-strategy"
 
 export class FeeJuiceWithClaimStrategy implements FeeStrategy {
 	public readonly kind = "fjwc" as const
@@ -26,13 +26,7 @@ export class FeeJuiceWithClaimStrategy implements FeeStrategy {
 		const task = startEstimateTask(this.deps.tasks, ctx.parentTask)
 		try {
 			ctx.op.actions.unshift(...getFeeJuiceClaimPayload(ctx.op.accountAddress, claimAmount, claimSecret, messageLeafIndex))
-			const built = await this.deps.txBuilder.buildStandard(
-				ctx.op,
-				ctx.fence,
-				AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM,
-				task,
-				appPriorityOf(ctx.op.fee),
-			)
+			const built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM, task)
 			const { txRequest, node, pxe, account } = built
 			suggestGasLimits(txRequest, ctx.op.fee)
 			const simulatedTx = await this.deps.simulateTxTask(pxe, txRequest, validatedSimOpts(account.address), task)

@@ -4,6 +4,7 @@ import {
 	DuplicateInitializationError,
 	ScopeViolationError,
 	SessionEndedError,
+	TooManyPendingError,
 } from "@nulo/extension-messaging/errors"
 import type { JournalRetitle } from "@/wallet/services/operation-journal/spec"
 import { refusalOf } from "./contract-resolver"
@@ -51,5 +52,6 @@ function scopeRefusalKind(error: ScopeViolationError): JobErrorKind {
 export function failureKind(error: unknown, fallback: JobErrorKind): JobErrorKind {
 	if (error instanceof DuplicateInitializationError) return "duplicate_initialization"
 	if (error instanceof SessionEndedError) return "session_ended"
+	if (error instanceof TooManyPendingError) return "too_many_pending"
 	return fallback
 }
