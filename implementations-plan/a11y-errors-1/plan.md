@@ -119,6 +119,8 @@ The lane's whole visible budget, the orchestrator's record on #874: every error 
 - Opus 3: the README said `txt-danger` reads 4.5:1 everywhere; it does not on `--nulo-surface-highest` (3.89:1 dark) → it names the gated surfaces and the exception.
 - Codex 2 / Opus 4: comments: two helper docs restated their code (deleted); `REVIEWED`'s and the footer pair's comments corrected.
 
+Round 2 (Codex, resumed): `findings: 1`, Medium, demonstrated: the per-part match flagged a fill or border beside a white `color` inside a style array or parentheses → each `color` value is now cut at the first `,`, `;` or closing bracket at its own depth; an array's red colour hits, an array's red fill and a parenthesised red border do not.
+
 ## Delivery
 
 - PR title: ``fix(ui): error and refusal text in `--txt-danger`, aa on the light theme`` (73 characters). Opened ready, no label; add `e2e:extension-smoke` only if the path filter skipped smoke.

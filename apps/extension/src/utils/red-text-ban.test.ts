@@ -14,7 +14,6 @@ import {
 	type SourcePolicy,
 	STORY_FILE,
 	sourceFiles,
-	splitTopLevel,
 	TEST_FILE,
 	type TemplateNode,
 	walkElements,
@@ -45,13 +44,29 @@ const GLYPH_COLOR: ReadonlySet<string> = new Set(["Icon", "ProcessingErrorNote"]
 const RED_LITERAL = /(?<![=!]=\s*)(["'`])red\1(?!\s*[=!]=)/
 const RED_CLASS = /(?<![\w-])color--red(?![\w-])/
 const RED_VAR = /var\(\s*--red(?![\w-])/
-/** A `color` entry, not `border-color` or `borderColor`, naming `var(--red)`; read per top-level part. */
-const RED_STYLE = /(?<![\w-])["']?color["']?\s*:.*var\(\s*--red(?![\w-])/s
+/** A `color` key or declaration, not `border-color` or `borderColor`. */
+const COLOR_KEY = /(?<![\w-])["']?color["']?\s*:/g
+
+/** Each value a `color` key takes in a style, cut at the first `,`, `;` or closing bracket at its own depth. */
+function colorValues(style: string): string[] {
+	return [...style.matchAll(COLOR_KEY)].map((key) => {
+		const start = key.index + key[0].length
+		let depth = 0
+		let end = start
+		for (; end < style.length; end++) {
+			const char = style[end]
+			if ("([{".includes(char)) depth++
+			else if (")]}".includes(char) && depth-- === 0) break
+			else if (depth === 0 && (char === "," || char === ";")) break
+		}
+		return style.slice(start, end)
+	})
+}
 
 const RED_ATTR = new Map<string, (value: string, bound: boolean) => boolean>([
 	["color", (value, bound) => (bound ? RED_LITERAL.test(value) : value === "red")],
 	["class", (value) => RED_CLASS.test(value)],
-	["style", (value) => splitTopLevel(value, /[,;]/).some((part) => RED_STYLE.test(part))],
+	["style", (value) => colorValues(value).some((color) => RED_VAR.test(color))],
 ])
 
 type Finding = { file: string; line: number; text: string }
@@ -166,6 +181,7 @@ describe("red text ban (static)", () => {
 			`<template><span style="color: color-mix(in srgb, var(--red) 80%, black)">No</span></template>`,
 			1,
 		],
+		["a style array's colour", "x.vue", `<template><span :style="[base, { color: 'var(--red)' }]">No</span></template>`, 1],
 		["a flat rule", "x.vue", "<template><span /></template><style module>.e { color: var(--red); }</style>", 1],
 		[
 			"a nested hover rule",
@@ -186,6 +202,18 @@ describe("red text ban (static)", () => {
 			"a red fill beside another colour",
 			"x.vue",
 			`<template><span :style="{ color: 'white', background: 'var(--red)' }">No</span></template>`,
+			0,
+		],
+		[
+			"a red fill in a style array",
+			"x.vue",
+			`<template><span :style="[{ color: 'white', background: 'var(--red)' }]">No</span></template>`,
+			0,
+		],
+		[
+			"a red border in parentheses",
+			"x.vue",
+			`<template><span :style="({ color: 'white', borderColor: 'var(--red)' })">No</span></template>`,
 			0,
 		],
 		[
