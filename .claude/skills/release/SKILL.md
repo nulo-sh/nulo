@@ -55,23 +55,20 @@ Per-release procedure for shipping a stable release. Total time: ~20 min, of whi
 2. **Wait for the Release PR.** The push to `main` triggers `release.yml`. release-please opens a Release PR titled `chore(main): release X.Y.Z` (version chosen automatically from Conventional Commits since the last tag — `feat:` → minor, `fix:` → patch). **While in `0.x`, `bump-minor-pre-major: true` caps a `BREAKING CHANGE:` to a *minor* bump (`0.Y.Z` → `0.(Y+1).0`, never auto-`1.0.0`)** — a `1.0.0` cut is a deliberate manual `Release-As: 1.0.0` footer. Review the auto-generated `CHANGELOG.md` diff in the PR.
 3. **Merge the Release PR via the UI** (merge commit).
 4. **Wait for the post-merge `release.yml` run.** It will run release-please-action again. **Expected (with `AUTO_UNSTICK_ENABLED` off): it aborts with `⚠ There are untagged, merged release PRs outstanding - aborting` and the downstream gates + publish jobs all skip.** This is the v4 bug.
-5. **Manual unstick** (~45 seconds — paste into terminal). Open the break-glass first and close it after (§ Tag rulesets and immutable releases): the tag-creation ruleset refuses a tag from anyone but the release App.
+5. **Manual unstick** (~45 seconds — paste into terminal, from a clone whose checkout carries `scripts/release/tag-by-hand-run.ts`). The tag-creation ruleset refuses a tag from anyone but the release App, so the tag goes through that helper, which opens the ruleset to you for that one push and always closes it (§ Tag rulesets and immutable releases). From 1.0.0 on, a blank left in the Terms or the Privacy Policy refuses the tag, as `auto-unstick` does: it tags only when both files exist and `git grep` finds no blank (exit 1), and `git grep` also exits 1 on a missing path.
    ```bash
    PR_NUM=<the Release PR number>
    VERSION=<the Release PR's X.Y.Z>
    MERGE_COMMIT=$(gh pr view "$PR_NUM" --json mergeCommit -q '.mergeCommit.oid')
    git fetch origin main
-   # From 1.0.0 on, a blank left in the Terms or the Privacy Policy refuses the tag, as auto-unstick does.
-   # It tags only when both files exist and git grep finds no blank (exit 1); git grep also exits 1 on a missing path.
    CHECK=1; TERMS="${MERGE_COMMIT}:legal/terms.md" PRIVACY="${MERGE_COMMIT}:legal/privacy.md"
    case "$VERSION" in (0.*) ;; (*) CHECK=0; git cat-file -e "$TERMS" && git cat-file -e "$PRIVACY" && git grep -n "«FILL" "$MERGE_COMMIT" -- legal/terms.md legal/privacy.md || CHECK=$? ;; esac
    if [ "$CHECK" -eq 1 ]; then
-     git tag -a "v$VERSION" "$MERGE_COMMIT" -m "Release $VERSION" &&
-     git push origin "v$VERSION" &&
+     bun scripts/release/tag-by-hand-run.ts "$VERSION" "$MERGE_COMMIT" &&
      gh pr edit "$PR_NUM" --add-label "autorelease: tagged" --remove-label "autorelease: pending"
    else echo "refused: blanks remain (listed above) or the check failed (exit $CHECK)"; fi
    ```
-   A refusal is the troubleshooting row "`auto-unstick` red: would launch with blanks". A tag pushed any other way skips this check and `auto-unstick`'s; the tag-creation ruleset leaves that to whoever opens the break-glass.
+   A refusal is the troubleshooting row "`auto-unstick` red: would launch with blanks". A tag pushed any other way skips this check and `auto-unstick`'s; the tag-creation ruleset leaves that to whoever opens it.
    **Never create the GitHub Release by hand.** `attach-assets` creates it as a draft and publishes it only once its assets check out; a release published by hand without them can never gain them once immutable releases is on.
 6. **Trigger the publish chain via `workflow_dispatch`, from the tag:**
    ```bash
@@ -99,14 +96,13 @@ Per-rc procedure. Same v4 bug as stable; same ~45 second unstick. Network-e2e is
    - Second cut, same minor: `vX.Y.0-rc.1`. Third: `vX.Y.0-rc.2`. Counter auto-increments per release-please's prerelease versioning strategy.
 3. **Review + merge the Prerelease PR via the UI** (squash, per `dev`'s ruleset).
 4. **Nothing runs on the merge.** `release-prerelease.yml` is dispatch-only and has no publish chain, and until the rc is tagged its next dispatch aborts on the same v4 bug — so the unstick + publish steps below are manual.
-5. **Manual unstick** (~45 seconds — paste into terminal, mind the `--prerelease` flag). Open the break-glass first and close it after (§ Tag rulesets and immutable releases): nothing tags an rc for you, and the tag-creation ruleset refuses a tag from anyone but the release App.
+5. **Manual unstick** (~45 seconds — paste into terminal, from a clone whose checkout carries `scripts/release/tag-by-hand-run.ts`). Nothing tags an rc for you, and the tag-creation ruleset refuses a tag from anyone but the release App, so the tag goes through that helper (§ Tag rulesets and immutable releases); the relabel runs only once it pushed the tag.
    ```bash
    PR_NUM=<the Prerelease PR number>
    VERSION=<the Prerelease PR's version, e.g. X.Y.0-rc.0 or X.Y.0-rc.1>
    MERGE_COMMIT=$(gh pr view "$PR_NUM" --json mergeCommit -q '.mergeCommit.oid')
    git fetch origin dev
-   git tag -a "v$VERSION" "$MERGE_COMMIT" -m "Release $VERSION"
-   git push origin "v$VERSION"
+   bun scripts/release/tag-by-hand-run.ts "$VERSION" "$MERGE_COMMIT" &&
    gh pr edit "$PR_NUM" --add-label "autorelease: tagged" --remove-label "autorelease: pending"
    ```
    No `gh release create`: `attach-assets` creates the release, as a prerelease (the `-` in the version), so it never shows as Latest.
@@ -163,16 +159,8 @@ Both workflows now run release-please with `skip-github-release: true`, so it ne
 - **Applied: `release tags: no deletion or update`** — a tag ruleset on `refs/tags/v*` with the rules `deletion`, `non_fast_forward` and `update` and no bypass actor, id `24737631`. Nothing in the workflows moves a `v*` tag, and only `nightly.yml`'s `prune-nightlies` deletes one: a nightly tag, which the exclusion below leaves out of the ruleset. To repair one bad tag: `gh api -X PUT repos/nulo-sh/nulo/rulesets/24737631 -f enforcement=disabled`, fix that one tag, run the same call with `enforcement=active`, then read it back with `gh api repos/nulo-sh/nulo/rulesets/24737631 --jq '{enforcement, rules: [.rules[].type]}'`. While it is disabled every `v*` tag is unprotected, so keep the repair to that one sequence. Undo: `gh api -X DELETE repos/nulo-sh/nulo/rulesets/24737631`.
 - **Applied by the owner on 2026-10-13: nightly tags out of `24737631`.** `prune-nightlies` keeps the newest fourteen nightly tags and releases and deletes the older ones, each release before its tag, so `refs/tags/v*-nightly.*` is excluded: `gh api -X PUT repos/nulo-sh/nulo/rulesets/24737631 --input - <<<'{"conditions":{"ref_name":{"include":["refs/tags/v*"],"exclude":["refs/tags/v*-nightly.*"]}}}'`, read back with `gh api repos/nulo-sh/nulo/rulesets/24737631 --jq '.conditions.ref_name'`. Stable and rc tags never match the exclusion. A nightly tag is now movable as well as deletable by any `contents: write` token. Removing the exclusion makes the next prune past fourteen delete the oldest release, be refused its tag, and red each published night until it is restored.
 - **Applied on 2026-10-19, the owner's call: `release tags: creation by the release app only`** — a tag ruleset on `refs/tags/v*`, nightly tags excluded (`refs/tags/v*-nightly.*`), with the rule `creation` and one bypass actor, the release App (`5179103`, `Integration`, `always`), id `25437716`. Only `auto-unstick`'s App token creates a stable tag; nothing creates an rc tag, and the owner holds no standing bypass. Read back with `gh api repos/nulo-sh/nulo/rulesets/25437716 --jq '{enforcement, include: .conditions.ref_name.include, exclude: .conditions.ref_name.exclude, rules: [.rules[].type], bypass_actors}'`. Undo: `gh api -X DELETE repos/nulo-sh/nulo/rulesets/25437716`.
-  **Break-glass, for a tag pushed by hand** (either manual unstick, or a repaired commit): add yourself as a bypass actor, push that one tag, put the App back alone and read it back. The window admits you alone; keep it to that one push.
-  ```bash
-  RS=repos/nulo-sh/nulo/rulesets/25437716
-  APP='{"actor_id":5179103,"actor_type":"Integration","bypass_mode":"always"}'
-  ME="{\"actor_id\":$(gh api user --jq .id),\"actor_type\":\"User\",\"bypass_mode\":\"always\"}"
-  gh api -X PUT "$RS" --input - <<<"{\"bypass_actors\":[$APP,$ME]}" --jq '.bypass_actors'
-  # the step's git tag and git push here
-  gh api -X PUT "$RS" --input - <<<"{\"bypass_actors\":[$APP]}" --jq '.bypass_actors'   # the App alone
-  ```
-  The next stable release is the first `auto-unstick` run under the rule. If it reds on a refused tag, tag through the break-glass and file the run.
+  **A tag by hand** (either manual unstick, or a repaired commit) goes through `bun scripts/release/tag-by-hand-run.ts <X.Y.Z or X.Y.Z-rc.N> <40-hex commit>`. It refuses before changing anything (exit 1) unless the version is stable or rc, the commit is in your clone, origin lacks the tag and the ruleset reads back exactly as applied. It then adds you as a second bypass actor, runs `git tag -a` and `git push`, and on every path, a refused push or a Ctrl-C included, puts the App back alone and reads it back: exit 0 pushed, 2 not pushed. Exit 3 means the ruleset did not read back closed; it prints `gh api -X PUT repos/nulo-sh/nulo/rulesets/25437716 --input - <<<'{"bypass_actors":[{"actor_id":5179103,"actor_type":"Integration","bypass_mode":"always"}]}'`, which closes it. Run that, then the readback above.
+  The next stable release is the first `auto-unstick` run under the rule. If it reds on a refused tag, tag by hand and file the run.
 - **Not yet applied: immutable releases.** They wait for one green prune that deleted a nightly, so no nightly becomes permanent, and for a moment with no release or nightly run in flight. Turning them off later leaves every release published meanwhile immutable. The exact call and readback are in [the archived supply-chain-release plan](../../../implementations-plan/archive/supply-chain-release/plan.md#repository-settings).
 
 ## Troubleshooting — when X fails
