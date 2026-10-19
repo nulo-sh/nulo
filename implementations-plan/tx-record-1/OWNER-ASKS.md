@@ -1,6 +1,6 @@
 # tx-record-1: owner asks
 
-A1 (#820) depends on neither. A2 (#828, #821) waits for OA-2 and ships OA-1's A.
+Both answered. OA-1 = B (orchestrator, [issue comment 6266043274](https://github.com/nulo-sh/nulo/issues/821#issuecomment-6266043274)); OA-2 = B (owner, P60-02). A2 ships both.
 
 ## OA-1: an app that pays its fee through your own Fee Juice
 
@@ -10,7 +10,7 @@ A1 (#820) depends on neither. A2 (#828, #821) waits for OA-2 and ships OA-1's A.
   - **A (ships now): "Set by {app}" for both**, the table as written. The claim's row changes; `mint_and_pay_fee`'s stays.
   - **B: name the method, set by the app**: "Public Fee Juice (with claim), set by {app}" and "Private Fee Juice, set by {app}". The wallet's own entrypoint makes the claim, and the PrivateFPC's address proves the second, the proofs the table asks for.
 - **Recommendation.** B: in both cases your own Fee Juice pays, and the wallet or the PrivateFPC's address proves it.
-- **What ships now.** A, in A2. B is two lines in the label and two test rows.
+- **Answer.** B: the orchestrator's call, the owner having left P56-02 to it.
 
 ## OA-2: a dApp send ended by the window, not by its Reject button
 
@@ -24,4 +24,4 @@ A1 (#820) depends on neither. A2 (#828, #821) waits for OA-2 and ships OA-1's A.
   - **B: Reject and the X read "You rejected"; a lock reads "Stopped when the wallet locked" (the label a lock already has); a profile switch keeps "Popup closed early".** The window must name how it ended and the wallet must hold that reason before the window closes, or the close wins the race and the row falls back. That is a new field on an internal call, the window waiting for the wallet to take it, and tests forcing both settlement orders. Taking the Reject also settles the app's request, so the Reject button would answer the app 4001 "User rejected" every time, where today it sometimes answers the generic error.
   - **C: only the Reject button reads "You rejected"; the X, a lock and a switch keep "Popup closed early".** Same new field and the same wait as B, for the button only, with the same change to the button's answer to the app.
 - **Recommendation.** A: it is the only option the race cannot split, and it needs no new handshake. It leaves the app's answer as it is today; making that answer the same for every ending would change what the wallet promises dApps, a separate decision.
-- **What ships now.** Nothing: #828 waits in A2 for this answer. A1 ships #820 alone.
+- **Answer.** P60-02 = B, "Reject and the X read 'You rejected'; a lock reads 'Stopped when the wallet locked', the label a lock already has; a profile switch keeps 'Popup closed early'. Needs a new field on an internal call and the window waiting for the wallet to take it, with tests forcing both orders." Owner's note: *Feels like the most "complete" solution.*

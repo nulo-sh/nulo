@@ -11,3 +11,4 @@
 - 2026-10-19 A1 fix loop: Codex r2 clean. Phase 2 next (waiting on load).
 - 2026-10-19 A1 Phase 2 gate: pass. `audit:vue` and `test:all` exit 0; smoke Chrome 263/266 and Firefox 265/266 at retry 0, the four load-flaked files green on one rerun; network Chrome `failed-send-check` (proverless) 2/2, `tx-sendTx-default`, `tx-sendTx-feePayer`, `tx-sendTx-sponsoredFpc`, `tx-sendTx-delegated-authwit`, `authwit-lifecycle`, `fee-methods` 13/13; after picture reads "Transfer (public)" on Home, History and the journal page.
 - 2026-10-19 PR #860 opened ready (`Closes #820`); CI green after one rerun of three runs cancelled GitHub-side: all five required checks pass. Not merged.
+- 2026-10-19 A2 started on `tx-record-1-a2` off `2a5960da`: OA-2 = B (P60-02), OA-1 = B; plan's A2 rewritten for both.
