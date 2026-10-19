@@ -30,7 +30,7 @@ Three causes, each traced: one in the product, two in the test.
 3. Before that scroll's event is handled, a selection or the search field stops the follow (`disableAutoScroll`, `:92-98`, called at `:262-271`).
 4. The event then arrives. `scrollTop` exceeds `lastScrollTop`, which the handler last set before the line (`:101-113`), and the gap is 0, so the handler reads the reader scrolling back down and resumes the follow.
 
-The stop can land before CodeMirror's measure or after it. The cause is that the viewer compares its own scroll against a reference taken before that scroll: harmless while it follows, wrong once a stop lands first. Invariant broken: #616's rule, hold while a selection or the search panel is open. Consequence: later lines carry the selection or the match away. That is the case-A red: 72 px is four 18.2 px lines. Evidence (base build): R1b (selection stop) resumed 8/8 on Firefox and on Chrome; R3 (search-field stop) resumed 7/8 on both.
+The stop can land before CodeMirror's measure or after it. The cause is that the viewer compares its own scroll against a reference taken before that scroll: harmless while it follows, wrong once a stop lands first. Invariant broken: #616's rule, hold while a selection or the search panel is open. Consequence: later lines carry the selection or the match away. That is the case-A red: 72 px is four 18.2 px lines. Evidence (base build): R1b (selection stop) resumed 8/8 on Firefox and on Chrome; R3 (search-field stop) resumed 7/8 on both. On Chrome the resume rarely shows: Chrome's `selectionchange` from CodeMirror's next selection rewrite re-stops the follow before its scroll lands (lessons/phase-1.md).
 
 **T1, the follow check reads before the viewer judges (demonstrated).** `armFollowCheck` reads the gap in a capture-phase `scroll` listener (`viewers-csp.test.ts:109-125`). That runs before CodeMirror's own listener, which measures in the event and applies a follow still due, and before the viewer's (recon § CodeMirror mechanics). A wallet burst landing between CodeMirror's follow scroll and its event makes the latch read 36-55 px while the viewer reads 0 and never stops. Consequence: `scrolledAway` reds the follow case (case B) on a view that followed every line. Evidence: R2, latch 54-55 vs viewer 0 (Firefox) or 1 (Chrome), no button; a natural near-miss in a green run (latch 18, viewer 0).
 
@@ -116,6 +116,8 @@ The viewer reads only its own state and the scroller's geometry. It adds no inpu
 - D4 Keep `scrolledAway`, read after the viewer, with corrected wording (Opus #5).
 - D5 The hold is measured from two frames after the viewer's stop. What moves the view before that is base behaviour: the drag's setup, Firefox's lag, the follow already due. The window would also absorb a one-line break of the hold inside it (Opus, arc 1), and a follow a drag's synchronous measure (`readMeasured`) lands inside it (Codex, arc 1 round 2). P1 stays caught whenever its resumed follow lands after the read, and so does any break that repeats; arc 2's unit case pins P1 directly.
 - D6 No new e2e scenario, no fixture change, the search case untouched.
+- D7 (arc 1) Every run goes through `test:e2e --retry=0`, since `agent.sh` runs only the network config.
+- D8 (arc 1) During the arc, dev's #868 added keyboard tests to this file. The gate's pass becomes every test in the file (8 at the merged head), not `6 passed`. The controls ran on the pre-merge head; `LogsViewer.vue` is identical at the merged head.
 - KL-1 (closed `known-limit` issue at close-out): lines that land between a drag's first `select.pointer` and Firefox's `selectionchange` are followed, with no bound on how many. Visible, pre-existing. Reopen on a user report.
 - KL-2 (owner ask A1; a closed `known-limit` issue at close-out if accepted): a reader who scrolls down to the new end inside the one frame between a stop and the pending follow's scroll event stays held. That scroll ends where the follow's does, so geometry cannot tell them apart; base resumes both, which is P1. A scroll down at the end moves nothing and fires no event, so the next line lands below the view with the button shown; a scroll down, the button or the 30 s timer then resumes. Tracking wheel and key input would add state and event-order duties for a sub-frame window. Reopen on a user report.
 - Out of scope, an issue at close-out each, deduplicated first:
@@ -195,6 +197,8 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `ce48
 **Arc 1, Opus diff review:** approve. Folded: the D5 clause, the timeout's message, and the returned line narrowed. `scrolledAway` is kept (D4).
 
 **Arc 1, Codex round 2** (resume): conditional approve. #1: a drag's synchronous measure can land a resumed follow before the read. Verified and accepted into D5, with no code change.
+
+**Arc 1, Codex round 3** (resume): approve. The loop has converged.
 
 ## Seeds
 
