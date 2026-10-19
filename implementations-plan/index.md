@@ -8,3 +8,4 @@ Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 - [harden-security-fixes-3](harden-security-fixes-3/plan.md) — arc 1 merged (#869), arc 2 in review — a bound on dApp-added tagging sources, six owner picks, the token-list signer-code caveat in SECURITY.md (#661)
 - [launch-prep-1](launch-prep-1/plan.md) — planned, Codex approve, A1 in review — the 1.0.0 checklist boxes the stores meet and the Mainnet line (A1); four known-limit dispositions; Terms 1.1 and the README banner after the owner signs (A2) (#864)
 - [mainnet-arrival-1](mainnet-arrival-1/plan.md) — A1 in review; A2 waits on OA-1 and migration-rule-1 — a default network a later build adds reaches every existing profile: the offer record and pass (A1), the arrival flow after OA-1 and the real update e2e (A2) (#875)
+- [capture-hang-1](capture-hang-1/plan.md) — planned, Codex approve — capture mode shows the wallet tab before its shot and refuses a hidden page (#885)
