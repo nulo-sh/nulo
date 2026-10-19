@@ -117,6 +117,7 @@ The Mainnet seed itself lands only on a build whose Aztec 6.0.0 execution canari
 | D12 | Final pass r2 (Codex, resumed) | **approve**: "All three conditions are addressed … A1 can start." | approve | — |
 | D10 | Red-on-base proof | success controls red on the base; never-happens checks red under named mutations (was: every test red on the base) | — | base cannot red them |
 | D14 | A1 review r1 | compensation restores the record a deletion overtook (was: removes it); restore-into-existing and new-profile concurrency tests; two comments trimmed | low (comments), fixed | 3 low, fixed |
+| D15 | A1 review r2, r3 (Codex, resumed) | r2: the compensation comment claimed "never to none", false with no prior record; reworded. The write-back cannot outlive a completed deletion: the purge takes the same lock. r3: **clean** | r2 low, fixed; r3 clean | — |
 
 ## Security & Adversarial Considerations
 
@@ -136,7 +137,7 @@ The Mainnet seed itself lands only on a build whose Aztec 6.0.0 execution canari
 
 Every gate also runs `bun run lint` and `bun run typecheck:all` (exit 0), and `bun run check:plans` after staging plan files. Host rule: build and e2e only at load1 < 150.
 
-### Phase 1 (A1) · the record, the pass, `servesChain`, the purge
+### Phase 1 (A1) · the record, the pass, `servesChain`, the purge — done (#882)
 - Steps: (1) `seed-offers.ts` with `seedsToOffer` and its tests; (2) `offerDefaultsLocked` and both entry points; (3) `servesChain`; (4) the purge; (5) a comment on #80 (Phase 4).
 - Tests, the smallest set; each never-happens check is paired with a success control.
   - `S/network/seed-offers.test.ts` (pure): (1) an empty profile gets every seed whatever the record says; (2) rows and no record: the baseline kinds are not added, a new kind is; (3) a row of the kind on another chainId (a moved Testnet) is recorded, not added; (4) a custom row on the new seed's chainId is recorded, not added; (5) a recorded kind with no row (deleted) is not added; (6) an unreadable record adds and records nothing; (7) pins: `KINDS_SEEDED_BEFORE_RECORD` equals `["local", "testnet"]`, and `DEFAULT_SEEDS` kinds and chainIds are unique.

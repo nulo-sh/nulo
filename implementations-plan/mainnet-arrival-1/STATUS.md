@@ -10,3 +10,4 @@
 - 2026-10-19 A1 `test` and `test:all` exit 0. Review r1: Codex 1 low, Opus 3 low, all fixed (D14); network tests pass; resuming Codex.
 - 2026-10-19 A1 Codex r2 1 low (comment) fixed; r3 clean. Loop converged; e2e gates next.
 - 2026-10-19 A1 phase 1 gate: smoke e2e (4 files, 21 tests, retry 0, 128 s) and network e2e (2 files, 6 tests, retry 0, 121 s), Chrome, pass; `bun run test` and `typecheck:all` on head exit 0. PR next.
+- 2026-10-19 `test:all` on head exit 0; Codex r2/r3 recorded (D15); phase 1 ticked.
