@@ -2,3 +2,4 @@
 - 2026-10-19 19:47Z recon: inventory 19 error-text sites (7 Text, 12 stylesheet); issue's count of 23 does not hold; recon.md written.
 - 2026-10-19 20:01Z plan round 1: Codex conditional approve (3 findings), Opus conditional approve (7); all accepted; guard moved before the change (D11).
 - 2026-10-19 20:02Z plan round 2: Codex approve, no new finding. Plan gate passed.
+- 2026-10-19 20:07Z arc1 phase 1 green (no drift at 2f591ddd); phase 2 green: guard red on the untouched tree with exactly the 19 rows, self-tests and ProcessingErrorNote green, lint 0, typecheck 0.

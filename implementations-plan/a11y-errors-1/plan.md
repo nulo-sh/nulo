@@ -51,7 +51,7 @@ Values only: each site's `red` becomes `txt-danger`; a source guard keeps it so.
 - Recon rows 1-19 move; the two kept texts and every icon, fill and border stay (recon). At the arc base, re-run `git grep -n 'color="red"' -- 'apps/extension/src/*.vue'` and `git grep -n -- '--red' -- apps/extension/src packages/design/src`. Fold any new text site into Phase 3; if #870's line has merged, it is one (D10).
 - **Gate**: the counts equal recon's (25 attributes; the stylesheet list), or the delta is added to recon and Phase 3.
 
-### Phase 2: The guard
+### Phase 2: The guard ✓
 
 - New `apps/extension/src/utils/red-text-ban.test.ts` (D3, D4), with its own `POLICY`: roots `SCAN_ROOTS`, extensions `vue css scss`, skipping `TEST_FILE`, `STORY_FILE`, `DECLARATION` and `EXEMPT` (the generated `utilities.css` holds `.color--red` itself). A finding is `{ file, text }`, whitespace collapsed:
   - Template, on an element whose `componentName(tag)` is not `Icon` or `ProcessingErrorNote` (their `color` paints a glyph only): `color="red"`, or a bound `color` whose expression holds the string literal `red`; a static `class` or a bound `class` expression naming `color--red`; a static `style` or a bound `style` expression with a `color` key (not `-color`, not `…Color`) naming `var(--red`. Text: the attribute as written, prefixed by its tag, e.g. `<Text :color="tone ? 'red' : 'body'">`.
