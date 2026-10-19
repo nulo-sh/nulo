@@ -74,7 +74,6 @@ const balances = useTokenBalanceSnapshot({
 	live: appStore,
 	rows,
 	state: balancesState,
-	refetchWhenDirty: false,
 	// A reconnect reads without `load()`: one begun without a whole scope lands nothing.
 	scopeFence: () => {
 		const whole = activeScope() !== undefined
