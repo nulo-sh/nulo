@@ -17,3 +17,7 @@
 - 2026-10-18 arc 1 gate: test identity pass; test:all, audit:vue, check:plans pass; smoke chrome 60/62 and firefox 56/62 pass (retry 0); rendered identity chrome 64/64, firefox 64/64; Codex r1 conditional approve (fixed), r2 approve.
 - 2026-10-18 arc 1 final head: lint, typecheck:all, test:all, check:plans pass; smoke chrome 60/62 (411 s) and firefox 56/62 (553 s) at retry 0; network incoming-arrival chrome 7/7 (471 s).
 - 2026-10-18 arc 1 merged head (dev with #772): lint, typecheck:all, test:all, check:plans pass; smoke chrome 59/62 + 1 detached-element flake in home-links, rerun pass; smoke firefox 56/62 (452 s); network incoming-arrival 7/7.
+- 2026-10-19 arc 3 started on `structure-2-a3` off #743's head `bcee404d` (stacked); #817 had shipped phases 6 and 7 and closed #735 (D15): phase 8 only.
+- 2026-10-19 phase 8 gate (fast: lint, typecheck:all, test 14129 passed, phase files): pass; test identity pass (5 deleted titles, 2 retitled, D16).
+- 2026-10-19 arc 3 gate: test:all, test:release (323 pass), test:ci-gating (594 pass) pass; armed smoke at retry 0, 7 files: Chrome 48 passed + 1 Firefox-only skip (349 s), Firefox 44 passed + 5 Chrome-only skips (495 s), CSP recorder armed, no violation. Rendered identity of Developer and the notices: not rerun (the arc touches neither; #817 ran it).
+- 2026-10-19 arc 3 post-implementation: Codex r1 conditional approve (2 Low comments, fixed), Opus approve (1 Low test pin, fixed), Codex r2 clean.
