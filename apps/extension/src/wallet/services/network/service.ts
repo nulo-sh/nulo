@@ -614,14 +614,25 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	 * a SW restart kills both the flag and any stale creator closure that
 	 * captured the network, so cross-restart staleness cannot occur. A read
 	 * that a reservation overlapped answers false: its cascade may already have
-	 * swept what the caller is about to treat as live.
+	 * swept what the caller is about to treat as live. With `since`, a mark from
+	 * {@link captureLiveness}, a reservation begun after the mark answers false too.
 	 */
-	public async isNetworkLive(networkId: string): Promise<boolean> {
+	public async isNetworkLive(networkId: string, since?: number): Promise<boolean> {
 		await this.ensureInitialized()
-		const countBefore = this.reservations.get(networkId) ?? 0
+		const countBefore = since ?? this.reservations.get(networkId) ?? 0
 		if (this.deletingNetworks.has(networkId)) return false
 		const row = await this.storage.get(networkId)
 		return row !== undefined && !this.reservedSince(networkId, countBefore)
+	}
+
+	/**
+	 * A mark for {@link isNetworkLive}, for work that spans awaits before its write: undefined
+	 * unless the network is live now. Never taken while a reservation is open, since one that
+	 * closes before the write would leave the count the mark holds.
+	 */
+	public async captureLiveness(networkId: string): Promise<number | undefined> {
+		const mark = this.reservations.get(networkId) ?? 0
+		return (await this.isNetworkLive(networkId, mark)) ? mark : undefined
 	}
 
 	/** Chain-keyed variant of {@link isNetworkLive} for writers that carry only

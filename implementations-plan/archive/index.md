@@ -151,6 +151,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [followups-6](followups-6/plan.md) — completed — every smoke run behind the egress guard with one declared live spec for the shipped token list (#317); a fixed log category for an unparseable PXE stamp (#315)
 - [followups-p15](followups-p15/plan.md) — completed — decision page 15: dead log rows, sponsor and import name checks, the PXE stamp row, two refusals, Unconfirmed to Sent, unknown-decimals figure and order, the move label
 - [forms-and-contacts](forms-and-contacts/plan.md) — completed — a contacts import a lock cannot break, counted on one snack, one at a time; one message at a name cap, a darker red, shared detail links, motion stops, trimmed names, the logger gate
+- [fpc-discovery-1](fpc-discovery-1/plan.md) — completed — protocol FPC discovery registers outside the FPC lock, so a reset never waits on it; a liveness mark fences chain purges (#553)
 - [frontend-ux-fixes](frontend-ux-fixes/plan.md) — completed — six reported UX fixes in one batch, ordered by risk
 - [furthering-non-network-e2e](furthering-non-network-e2e/plan.md) — completed — the fast non-network e2e suite grown in seven mergeable steps
 - [fuzz-runner](fuzz-runner/plan.md) — completed — the balances-store fuzz test refactored instead of accepting its suppressions
