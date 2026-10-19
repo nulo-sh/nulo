@@ -7,3 +7,5 @@
 - 2026-10-19 arc 1 phase 1: gate pass (manifest.test.ts 16/16, lint, typecheck:all, Firefox build carries sidebar_action); origin/dev merged first (3 commits, no overlap).
 - 2026-10-19 arc 1 phase 2: gate pass (spec 3/3 on Firefox 11.9–13.3 s, skipped on Chrome; panel specs 7/7; seam and driver unit 102/102; negative control fails at the window check as required).
 - 2026-10-19 arc 1 phase 3: gate pass (five whole-window pictures; default_icon added, D7).
+- 2026-10-19 arc 1 phase 4: audit:vue, test:all, check:plans pass at 6c41b0ab; Codex loop converged (r1 approve, Opus request changes folded, r2 approve); smoke both browsers ran (load-timeout failures pass on rerun); Firefox network suite running.
+- 2026-10-19 arc 1 phase 4: gate pass at 364ef898 (origin/dev merged): smoke reruns green on both browsers, lint, typecheck:all, test:all, check:plans, full Firefox network suite 129/129 files green.
