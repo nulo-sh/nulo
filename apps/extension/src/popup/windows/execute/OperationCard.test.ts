@@ -141,7 +141,7 @@ describe("windows/execute/OperationCard — a token add", () => {
 				index: 0,
 				tokenMetadataError: "read failed",
 			},
-			global: { stubs, mocks: { trimAddress } },
+			global: { stubs },
 		})
 		const lines = w.get("[data-testid='register-token-meta-error']").element.parentElement?.children ?? []
 		expect([...lines].map((line) => line.textContent?.trim())).toEqual([

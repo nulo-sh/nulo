@@ -220,13 +220,17 @@ describe("OperationCard — a warning has no label, so it stays out of the right
 	})
 
 	test("only a prop row's direct last child aligns right; the full-width block sets no alignment", () => {
-		const prop = CARD_STYLE.nodes.find(isRule(".prop"))
-		const aligned = (prop?.nodes ?? []).filter(
-			(node): node is Rule => node.type === "rule" && node.nodes.some((decl) => decl.type === "decl" && decl.prop === "text-align"),
-		)
-		expect(aligned.map((rule) => rule.selector)).toEqual(["> :last-child"])
+		const aligned: string[] = []
+		CARD_STYLE.walkDecls("text-align", (decl) => {
+			const chain: string[] = []
+			for (let node = decl.parent; node?.type === "rule"; node = node.parent) chain.unshift((node as Rule).selector)
+			if (chain[0]?.startsWith(".prop")) aligned.push(chain.join(" "))
+		})
+		expect(aligned).toEqual([".prop > :last-child"])
 		expect(declarationsOf(".prop", "> :last-child")).toMatchObject({ "text-align": "right" })
-		expect(declarationsOf(".group")).not.toHaveProperty("text-align")
+		const group = declarationsOf(".group")
+		expect(group).toMatchObject({ width: "100%" })
+		expect(group).not.toHaveProperty("text-align")
 	})
 })
 

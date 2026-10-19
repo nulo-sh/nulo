@@ -680,7 +680,7 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 	overflow-wrap: anywhere;
 }
 
-/* A full-width block outside the right-aligned value column: a label above a stack, or a warning. */
+/* A full-width block with no value column: nothing in it aligns right. */
 .group {
 	width: 100%;
 	padding-top: 12px;
@@ -736,8 +736,7 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 	font-size: 12px;
 }
 
-/* A label and its value. A block with no label, a warning, is a `.group`: the value column would
- * set its lines against the right edge. */
+/* A label and its value: the last child is the value column, aligned right. */
 .prop {
 	width: 100%;
 	justify-content: space-between;
