@@ -113,8 +113,14 @@ describe("emitSchema", () => {
 			.transform((v) => v.trim())
 			.describe("trimmed")
 		const piped = z.object({ m: message.pipe(z.string().max(100)).describe("trimmed, then at most 100") })
-		expect(emitSchema("s", piped)).toMatchObject({ properties: { m: { "x-pipe-out": { type: "string", maxLength: 100 } } } })
+		expect(emitSchema("s", piped)).toMatchObject({ properties: { m: { "x-pipe-out": [{ type: "string", maxLength: 100 }] } } })
 		expect(JSON.stringify(emitSchema("s", z.object({ m: message })))).not.toContain("x-pipe-out")
+	})
+
+	test("each validating side of a pipe chain is part of the shape, not only the last", () => {
+		const chain = (min: number) =>
+			z.string().pipe(z.string().min(min)).describe("at least min").pipe(z.string().max(100)).describe("then at most 100")
+		expect(JSON.stringify(emitSchema("s", chain(1)))).not.toBe(JSON.stringify(emitSchema("s", chain(10))))
 	})
 
 	test("a plain schema needs no description", () => {

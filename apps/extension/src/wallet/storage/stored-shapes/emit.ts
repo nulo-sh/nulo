@@ -22,6 +22,7 @@ type ZodInternals = {
 }
 
 const isTransform = (node: ZodInternals) => node._zod.traits.has("$ZodTransform")
+const PIPE_OUT = "x-pipe-out"
 
 /** The side of a pipe input mode leaves out, when it validates: a `.pipe(schema)` after a transform
  *  refuses rows no input-side schema shows. A `.transform()` or a preprocess leaves out only a body. */
@@ -81,8 +82,10 @@ export function emitSchema(shape: string, schema: z.ZodType): Json {
 	function label(node: ZodInternals, target: Record<string, unknown>): void {
 		const out = unemittedSide(node)
 		if (out) {
+			// A pipe inherits its input side's output, earlier pipes of a chain included: keep theirs.
 			const { $schema: _, ...json } = toJson(out as unknown as z.ZodType)
-			target["x-pipe-out"] = json
+			const earlier = Array.isArray(target[PIPE_OUT]) ? target[PIPE_OUT] : []
+			target[PIPE_OUT] = [...earlier, json]
 		}
 		const markers = markersOf(node)
 		if (!node.description) {
