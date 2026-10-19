@@ -123,9 +123,9 @@ const filteredKeys = (kind, filters, search) => {
 					</Flex>
 				</DropdownItem>
 				<DropdownItem @click="emit('clearLogs')" :class="$style.filter_content_item" data-testid="logs-clear">
-					<Flex align="center" gap="6">
-						<Icon name="close" size="14" style="padding-right: 4px" />
-						Clear logs
+					<Flex align="center" gap="8">
+						<Icon name="close" size="12" />
+						<Text variant="body">Clear logs</Text>
 					</Flex>
 				</DropdownItem>
 			</template>

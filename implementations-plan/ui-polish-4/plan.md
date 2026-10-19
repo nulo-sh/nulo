@@ -7,7 +7,7 @@ codex_model: sol
 code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
-base: dev @ 993b3efc
+base: dev @ 948670ca
 standard: implementations-plan/README.md § Post-implementation standard, read at 993b3efc
 ---
 
@@ -51,7 +51,7 @@ The picks, quoted by id in the PR body:
 
 Template and CSS edits in three SFCs, one computed branch in `holdings.vue`, and an Escape focus return in `Popover.vue`; no new module, prop, persisted state or dependency.
 
-### Phase 1: #810, the menu's two items
+### Phase 1: #810, the menu's two items ✓
 
 - `apps/extension/src/components/JsonViewer/LogsToolbar.vue`: Clear logs takes Export's shape: `<Flex align="center" gap="8"><Icon name="close" size="12" /><Text variant="body">Clear logs</Text></Flex>`; the inline style goes.
 - Test (`LogsToolbar.test.ts`): both open items carry an icon of size 12, a `gap--8` row and a `body` text, and no inline style.
@@ -80,7 +80,7 @@ Template and CSS edits in three SFCs, one computed branch in `holdings.vue`, and
 ### Phase 5: pictures and the full gate
 
 - Check `cat /proc/loadavg` reads a 1-minute load under 150 before each build or e2e run.
-- Pictures, by the house method (recon): a scratch spec under `~/.cache/nulo-backlog/ui-polish-4/`, copied into `apps/extension/tests/e2e/` for the run only and removed before lint and commit; armed Chrome builds of `993b3efc` (before) and the arc head (after); 400x600 at DPR 1; light and dark. Surfaces: the logs toolbar at rest, on hover, and after a pointer open and close of the more menu, each trigger also clipped to its own border box with the hover transition settled (clip before equals clip after by sha256, and each trigger's viewport `x`, `y`, `width` and `height` equal, I1; log lines show between the triggers, so full frames differ by run); the more menu open (#810); the toolbar with each trigger keyboard-focused (after) and the same keys pressed (before: no ring); the revealed recovery phrase's Close focus-visible and under a held Space, clipped to its box plus 4 px, the page clock pinned as hygiene-3 did; Holdings with the token-balance port refused in the scratch spec, fiat on and off, recording the summary's box height. PNGs go to `implementations-plan/ui-polish-4/screenshots/`; the PR links them at the commit SHA.
+- Pictures, by the house method (recon): a scratch spec under `~/.cache/nulo-backlog/ui-polish-4/`, copied into `apps/extension/tests/e2e/` for the run only and removed before lint and commit; armed Chrome builds of the base, `948670ca` (before) and the arc head (after); 400x600 at DPR 1; light and dark. Surfaces: the logs toolbar at rest, on hover, and after a pointer open and close of the more menu, each trigger also clipped to its own border box with the hover transition settled (clip before equals clip after by sha256, and each trigger's viewport `x`, `y`, `width` and `height` equal, I1; log lines show between the triggers, so full frames differ by run); the more menu open (#810); the toolbar with each trigger keyboard-focused (after) and the same keys pressed (before: no ring); the revealed recovery phrase's Close focus-visible and under a held Space, clipped to its box plus 4 px, the page clock pinned as hygiene-3 did; Holdings with the token-balance port refused in the scratch spec, fiat on and off, recording the summary's box height. PNGs go to `implementations-plan/ui-polish-4/screenshots/`; the PR links them at the commit SHA.
 - A trigger pair that differs fails the gate. Compare the two builds' computed styles and boxes, then set locally on `.filter_button` only the property shown to differ (`text-rendering: inherit` is the likely one); never relax the comparison.
 - **Gate**: `bun run audit:vue`; `bun run test:all`; both armed builds of the final head (Phase 2's command); smoke on Chrome and Firefox (Phase 2's run command) for `viewers-csp`, `keyboard-guards`, `legal-acceptance`, `import-paths`, `holdings-add-token`, `token-list`; `bun run check:plans` after staging. Pass: exit 0 each; the trigger clips and boxes equal; Holdings' summary height equal on both builds, fiat on and fiat off; a red re-run once only for a named known flake.
 

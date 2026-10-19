@@ -74,6 +74,18 @@ describe("LogsToolbar — the more menu", () => {
 		expect(shownItem("logs-clear").textContent).toContain("Clear logs")
 	})
 
+	test("both items set their words in the body role beside a 12 px icon, 8 px apart", async () => {
+		const w = mountToolbar()
+		await openMenu(w)
+		for (const testid of ["logs-export-csv", "logs-clear"]) {
+			const row = shownItem(testid).firstElementChild as HTMLElement
+			expect(row.classList.contains("gap--8")).toBe(true)
+			expect(row.querySelector("[name]")?.getAttribute("size")).toBe("12")
+			expect(row.querySelector("[variant]")?.getAttribute("variant")).toBe("body")
+			expect(row.querySelector("[style]")).toBeNull()
+		}
+	})
+
 	test("each item emits its own event once", async () => {
 		const w = mountToolbar()
 		await openMenu(w)
