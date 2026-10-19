@@ -1,0 +1,6 @@
+# Phase 5: after pictures, gates and review
+
+- Gates on 3208b92c: audit:vue exit 0; armed builds; smoke at retry 0, Chrome 8/8 (send-keyboard 53.6 s, send-outcome-rows 16.3 s, send-fee-privacy 26.5 s) and Firefox 8/8 (91.2, 35.9, 32.1 s). No scenario added or changed.
+- Capture: History's route swaps Home's card for its own, so a selector found right after the hash change can be Home's, gone a frame later; the spec waits for History's subtitle text instead.
+- Round 1. Codex (gpt-6.1-sol, high, session 01a15402): approve, one note: the `statusNotice` comment too long. Opus diff review (general-purpose): approve, 4 findings. Accepted (8a2841f1): the readout's template comment still said every pending row stacks label over value; the added comment sentence cut to one line (Codex and Opus); the two new card tests that end on a degraded identity unmount in `finally`, since the store arms a retry timer for a degraded key that could reach a later test's shared mock. Not taken: Opus #4 (an ensure superseded on an unchanged identity would bring the old line back): it needs a profile switch, which starts a newer run that keeps the reading key; no path.
+- Round 2, Codex resume: approve, no new finding. The loop converged.
