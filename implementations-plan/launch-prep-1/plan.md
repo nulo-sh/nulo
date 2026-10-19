@@ -13,6 +13,21 @@ issues: "#864 (A1 and A2 Refs; it closes at the release); #372 #385 #684 #775 (c
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** A1 merged as #888. A2 is a draft PR against `dev` carrying this close-out; it merges right before the 1.0.0 promote, after the owner's last look at the sheet's line and the banner, and that merge closes the plan.
+- **Shipped:** A1: the `BEFORE-LAUNCH.md` boxes the re-fetched evidence meets, the owner's page-62 store calls, two checks made passable, `legal/README.md`'s Mainnet line. A2: Terms 1.1, material, with one `changes` line (P68-01 B); 1.0 archived byte-exact and listed as never in effect (P68-02 A); the README banner (P68-03 A plus the preview-build bullet); § 4's live-Testnet box moved to a § 3 step before the promote (P68-04 B); the legal README's decline line; the how-aztec-works footer.
+- **Review loop:** the plan took Codex reject, Opus conditional approve, Codex conditional approve, then Codex approve. A1 took Codex clean, Opus three P3 (fixed), Codex clean. A2 took Codex one P2 (half accepted), Opus four P3 (fixed), Codex one P3 (fixed), then Codex clean.
+- **Gates at the head:** see [lessons/phase-2.md](lessons/phase-2.md).
+- **Deviations:** A2's commit type is `feat(legal)` (D9); no A3, both asks being signed together (D1); the how-aztec-works footer came from A2's review.
+- **Dispositions:** #372, #385, #684 and #775 stay closed known limits with corrected conditions (§ Dispositions), posted by the orchestrator; the owner accepted #385's window by name (P68-05 A).
+- **Dropped:** owner dispositions for #372, #684 and #775 (D2); trimming #385's row (A2 Codex r1).
+- **Known limits:** none filed.
+- **Open items:** `BEFORE-LAUNCH.md` § 3: the owner's send from the 1.0.0 candidate on the new Testnet; Terms 1.1's effective date in three places; Chrome Public before the store dispatch; AMO's experimental flag. #864 closes at the release.
+- **Lessons:** none promoted; the checklist-wording lesson stays in [lessons/phase-1.md](lessons/phase-1.md).
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
+
 # launch-prep-1: the 1.0.0 checklist's agent items that do not wait for Aztec 6.0.0
 
 Two arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1). **A1** corrects `BEFORE-LAUNCH.md` (the boxes the evidence meets, the owner's two page-62 store calls, two checks that cannot pass as written) and `legal/README.md`'s Mainnet line, and records the four known-limit dispositions; it opens ready. **A2** prepares Terms 1.1 (P62-06 A) and the README banner, with the close-out; the owner signed OA-1 to OA-4 on decision page 68; a draft until the owner's last look at the sheet's line and the banner, merged right before the 1.0.0 promote. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
@@ -127,6 +142,9 @@ No `Closes`: #864 closes at the release (lane brief); the four known limits stay
 - **A1 Codex r1** (gpt-6.1-sol, high, session `01a1560f`): **clean** (corrected #497's merge time to 21:02Z).
 - **A1 Opus review**: **findings**, three P3 (§ 2's AMO box read backwards once ticked; § 3's Chrome step unordered against a staged submission; the Mainnet line omitted the Local Network). All fixed.
 - **A1 Codex r2** (resumed `01a1560f`): **clean**.
+- **A2 Codex r1** (gpt-6.1-sol, high, session `01a15635`; also the cross-arc pass): **findings**, one P2: the #385 condition kept in the plan records, and D5's "no other file names it" false. Accepted the false sentence (D5 and the asks reworded). Rejected the removal: #385 is a public, closed known-limit issue, not an advisory, and its disposition is posted from the row.
+- **A2 Opus review**: **findings**, four P3: `legal/README.md`'s decline line omitted the token-list gate; `nulo.sh/how-aztec-works`'s footer still read "preview build"; the banner tick cited a signature the new bullet lacks; D5. All fixed.
+- **A2 Codex r2** (resumed `01a15635`): one P3, "is posted on #385" while unposted; fixed. **r3**: **clean**.
 
 ## Seeds
 
