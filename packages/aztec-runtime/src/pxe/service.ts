@@ -68,8 +68,9 @@ const TaggingSourceBoundSchema = z.number().int().positive().optional()
 
 /**
  * Upstream derives one tagging secret per registered sender and per keystore account on every
- * tagged-log sync, so the bound is over the distinct addresses of both sets. Runs inside the chain's
- * write guard: the read and the caller's write are one step, and an address already counted is free.
+ * tagged-log sync. The bound counts the distinct addresses of both sets, so an address held in both
+ * counts once and costs two secrets. Runs inside the chain's write guard: the read and the caller's
+ * write are one step, and an address already counted is free.
  */
 async function assertTaggingSourceRoom(pxe: PXE, address: AztecAddress, bound: number): Promise<void> {
 	const senders = (await pxe.getTaggingSecretSources({ kind: "address-derived" })).map((s) => s.sender)

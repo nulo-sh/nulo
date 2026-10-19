@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
- * `aztec_registerContract`'s secret key against REAL key derivation: an account instance with its own
- * key registers both, and with any other account's key, or under other public keys, nothing. Node environment for the same reason
+ * `aztec_registerContract`'s secret key against REAL key derivation: an account instance with its
+ * own key registers both, and with any other account's key, or under other public keys, nothing. Node environment for the same reason
  * as `authwit-discoverer.real.test.ts` (foundation's poseidon fails under jsdom).
  */
 

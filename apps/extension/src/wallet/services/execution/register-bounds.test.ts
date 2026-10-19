@@ -1,8 +1,9 @@
 // @vitest-environment node
 /**
- * A dApp's registrations through the real PXE service, its arguments and errors crossing the worker
- * hop as the RPC carries them: the bound the handlers pass, the refusal as the dApp reads it, and the
- * person's own registration, which passes none. Node environment for the real key derivation.
+ * A dApp's registrations through the real PXE service, with arguments crossing as JSON and errors
+ * rebuilt from their payload, the two things the worker hop changes: the bound the handlers pass, the
+ * refusal as the dApp reads it, and a sender the person adds, which passes none. The client's own
+ * retry paths are not in play. Node environment for the real key derivation.
  */
 
 import { describe, expect, test } from "vitest"
@@ -17,6 +18,7 @@ import { ChainRuntime, PxeService } from "@nulo/aztec-runtime/pxe"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
+import { AccountStateService } from "@/wallet/services/account-state/service"
 import { toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
 import { DAPP_TAGGING_SOURCES_BOUND, ExecutionService } from "./service"
 
@@ -40,7 +42,7 @@ async function keyedInstance(seed: bigint) {
 	}
 }
 
-/** Each PXE call as the client makes it: JSON arguments, a `WalletError` rebuilt from its payload. */
+/** What the worker hop changes: JSON arguments, a `WalletError` rebuilt from its payload. */
 function overTheWire<A extends unknown[], R>(call: (...args: A) => Promise<R>): (...args: A) => Promise<R> {
 	return async (...args) => {
 		try {
@@ -87,7 +89,6 @@ function makeService(senders: AztecAddress[], accounts: AztecAddress[]) {
 		pxeService: unknown
 		executeAztecRegisterSender(op: unknown): Promise<unknown>
 		executeAztecRegisterContract(op: unknown): Promise<unknown>
-		executeRegisterSender(op: unknown): Promise<unknown>
 	}
 	internals.networkService = { getNetwork: async () => NETWORK }
 	internals.pxeService = {
@@ -96,6 +97,8 @@ function makeService(senders: AztecAddress[], accounts: AztecAddress[]) {
 		registerContract: overTheWire(pxeService.registerContract.bind(pxeService)),
 		getContractArtifact: async () => FrozenSchnorrAccountArtifact,
 	}
+	const accountState = new AccountStateService(new LoggerStore(new ConfigStore()))
+	Object.assign(accountState, { initialized: true, networkService: internals.networkService, pxeService: internals.pxeService })
 	const dappSender = (address: AztecAddress) =>
 		internals.executeAztecRegisterSender({ kind: "aztec_registerSender", networkId: NETWORK.id, address: address.toString() })
 	const dappContract = (keyed: Awaited<ReturnType<typeof keyedInstance>>, withKey = true) => {
@@ -107,8 +110,7 @@ function makeService(senders: AztecAddress[], accounts: AztecAddress[]) {
 			secretKey: withKey ? keyed.secretKey : undefined,
 		})
 	}
-	const ownSender = (address: AztecAddress) =>
-		internals.executeRegisterSender({ kind: "register_sender", networkId: NETWORK.id, address: address.toString() })
+	const ownSender = (address: AztecAddress) => accountState.addSender(NETWORK.id, address.toString())
 	return { writes, dappSender, dappContract, ownSender }
 }
 
@@ -147,7 +149,7 @@ describe(`a dApp grows a chain's senders and accounts to at most ${DAPP_TAGGING_
 		expect(writes).toEqual(["registerContract"])
 	})
 
-	test("the person's own sender is admitted at 128", async () => {
+	test("a sender the person adds is admitted at 128", async () => {
 		const { writes, ownSender } = makeService(distinct(0, 100), distinct(100, 28))
 		await ownSender(addressAt(500))
 		expect(writes).toEqual(["registerSender"])

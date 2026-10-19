@@ -169,7 +169,6 @@ const FENCED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set([
 	"aztec_createAuthWit",
 ])
 
-/** `tokenContract` as a transfer request carries it, or the refusal of `method`'s arguments. */
 /**
  * The most distinct senders and accounts a dApp may grow one chain's PXE to: every one is a tagging
  * secret on each sync. The person's own count toward it and are never refused by it. A policy figure,
@@ -177,7 +176,7 @@ const FENCED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set([
  */
 export const DAPP_TAGGING_SOURCES_BOUND = 128
 
-export const TAGGING_SOURCES_FULL_REFUSAL = "Scope violation: registration past the network's tagging-source bound"
+const TAGGING_SOURCES_FULL_REFUSAL = "Scope violation: registration past the network's tagging-source bound"
 
 /** A dApp reads a full chain as a scope refusal, the constant envelope that names nothing. */
 async function refuseFullTaggingSources<T>(register: () => Promise<T>): Promise<T> {
@@ -189,6 +188,7 @@ async function refuseFullTaggingSources<T>(register: () => Promise<T>): Promise<
 	}
 }
 
+/** `tokenContract` as a transfer request carries it, or the refusal of `method`'s arguments. */
 function tokenContractKey(method: string, tokenContract: unknown): string {
 	const key = typeof tokenContract === "string" ? fieldAddressKey(tokenContract) : undefined
 	if (key === undefined) throw InvalidWalletArgumentsError.forMethod(method)
