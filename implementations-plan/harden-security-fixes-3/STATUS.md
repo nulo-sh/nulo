@@ -1,0 +1,7 @@
+- 2026-10-19 16:0x recon: 3 explorers + lead reads; plan drafted.
+- 2026-10-19 16:1x review R1: Codex reject, Opus conditional approve; plan revised.
+- 2026-10-19 16:4x final Codex pass: approve (second resume). Plan committed; arc 1 next.
+- 2026-10-19 16:4x arc 1 phase 1: `SECURITY.md` caveat; lint, check:plans, test:ci-gating green.
+- 2026-10-19 16:4x arc 1 Codex R1 + Opus: conditional approve (both); docs aligned, plan re-anchored at 2a5960da.
+- 2026-10-19 16:5x arc 1 Codex R2: approve; loop converged.
+- 2026-10-19 17:1x arc 1 final head: lint, typecheck:all, test:all, test:ci-gating (626/0), check:plans green; no e2e (docs only).
