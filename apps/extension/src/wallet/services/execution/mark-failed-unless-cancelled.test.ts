@@ -15,6 +15,7 @@ import {
 	DuplicateInitializationError,
 	ScopeViolationError,
 	SessionEndedError,
+	TooManyPendingError,
 } from "@nulo/extension-messaging/errors"
 import type { FunctionAbi } from "@aztec-labs/stdlib/abi"
 import type { JournalRetitle } from "@/wallet/services/operation-journal/spec"
@@ -126,6 +127,11 @@ describe("markFailedUnlessCancelled", () => {
 		expect(failureKind(new ScopeViolationError("Scope violation: call name does not match selector's function"), "transfer")).toBe(
 			"transfer",
 		)
+	})
+
+	test("the waiting-sends cap keeps its own kind on a first-party Send, as on a dApp's", () => {
+		expect(failureKind(new TooManyPendingError(), "transfer")).toBe("too_many_pending")
+		expect(failureKind(new Error("boom"), "transfer")).toBe("transfer")
 	})
 
 	test("any other error keeps the dapp_execute kind", async () => {

@@ -199,6 +199,41 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 	})
 })
 
+describe("OperationCard — a warning has no label, so it stays out of the right-aligned value column", () => {
+	const inValueRow = (el: Element) => el.closest(`.${CARD.prop}`) !== null
+
+	test("a token whose details cannot be read: both lines sit in a full-width block; the address stays a value", () => {
+		const w = mountCard({ ...base, kind: "register_token", address: TOKEN }, { tokenMetadataError: "read failed" })
+		const block = w.get('[data-testid="register-token-meta-error"]').element.parentElement
+		expect(block?.classList.contains(CARD.group)).toBe(true)
+		expect(block?.children).toHaveLength(2)
+		for (const line of block?.children ?? []) expect(inValueRow(line)).toBe(false)
+		expect(inValueRow(w.get('[data-testid="register-token-address"]').element)).toBe(true)
+	})
+
+	test("an opaque authorization's warning sits in a full-width block; its inner hash stays a value", () => {
+		const w = mountCard({ ...base, kind: "aztec_createAuthWit", messageHashOrIntent: { consumer: TOKEN, innerHash: FIELD } })
+		const warning = w.get('[data-testid="execute-authwit-opaque-warning"]').element
+		expect(warning.parentElement?.classList.contains(CARD.group)).toBe(true)
+		expect(inValueRow(warning)).toBe(false)
+		expect(inValueRow(w.get('[data-testid="execute-authwit-inner-hash-value"]').element)).toBe(true)
+	})
+
+	test("only a prop row's direct last child aligns right; the full-width block sets no alignment", () => {
+		const aligned: string[] = []
+		CARD_STYLE.walkDecls("text-align", (decl) => {
+			const chain: string[] = []
+			for (let node = decl.parent; node?.type === "rule"; node = node.parent) chain.unshift((node as Rule).selector)
+			if (chain[0]?.startsWith(".prop")) aligned.push(chain.join(" "))
+		})
+		expect(aligned).toEqual([".prop > :last-child"])
+		expect(declarationsOf(".prop", "> :last-child")).toMatchObject({ "text-align": "right" })
+		const group = declarationsOf(".group")
+		expect(group).toMatchObject({ width: "100%" })
+		expect(group).not.toHaveProperty("text-align")
+	})
+})
+
 describe("CallArguments — long values wrap", () => {
 	const mountArgs = (surface: unknown) =>
 		mount(CallArguments, { props: { surface: surface as never, contract: TOKEN, prefix: "t" }, global: { stubs } })
