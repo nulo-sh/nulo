@@ -5,8 +5,8 @@
  * stops that Enter and Space open and Escape closes, focus back on each; the more menu opens, and
  * its Clear empties the log, which keeps taking lines. The launch's CSP recorder fails the
  * file on a blocked style. The wallet logs its own lines into the window at any time, so a test waits
- * for its own lines by a nonce. A hold is read off where a shown line lands, measured from where the
- * viewer stopped its follow, and off the viewer's scroll-to-end button.
+ * for its own lines by a nonce. A hold is read off where a shown line lands, measured once the follow
+ * pending at the viewer's stop has landed, and off the viewer's scroll-to-end button.
  */
 import { randomUUID } from "node:crypto"
 import type { KeyInput, Page } from "puppeteer"
@@ -111,8 +111,8 @@ async function armFollowCheck(page: Page): Promise<void> {
 			const onScroll = () => {
 				if (el.scrollHeight - el.scrollTop - el.clientHeight >= away) latch.scrolledAway = true
 			}
-			// Never stops the latch: Vue renders the button between the scroll's listeners, and a stop
-			// there would drop this one's before it reads.
+			// Never stops the latch: Vue renders the button between the scroll's listeners, and removing
+			// the latch's listener there skips it in that same dispatch.
 			const observer = new MutationObserver((records) => {
 				latch.shown ||= records.some(({ addedNodes }) =>
 					[...addedNodes].some((node) => node instanceof Element && (node.matches(button) || node.querySelector(button))),
@@ -231,7 +231,7 @@ function lineTop(page: Page, text: string): Promise<number | null> {
 }
 
 /** The view held: `line` sits where it was, within a pixel, and the scroll-to-end button shows. */
-async function expectHeld(page: Page, line: ShownLine): Promise<void> {
+async function expectHeld(page: Page, line: Pick<ShownLine, "text" | "top">): Promise<void> {
 	const top = await lineTop(page, line.text)
 	expect(top, line.text).not.toBeNull()
 	expect(Math.abs((top ?? Number.NaN) - line.top), line.text).toBeLessThanOrEqual(1)
@@ -239,14 +239,14 @@ async function expectHeld(page: Page, line: ShownLine): Promise<void> {
 }
 
 /**
- * Drags across part of `line`, leaving it selected, and returns it where it rests once the viewer has
- * stopped its follow: the hold is measured from there.
+ * Drags across part of `line`, leaving it selected, and returns it where it rests once the follow
+ * pending at the viewer's stop has landed: the hold is measured from there.
  */
-async function selectAcross(page: Page, line: ShownLine): Promise<ShownLine> {
+async function selectAcross(page: Page, line: ShownLine): Promise<Pick<ShownLine, "text" | "top">> {
 	// The viewer stops its follow on `selectionchange`, which Firefox dispatches in a later task: the
 	// drag is done once a change that shows the selection has run its listeners, the viewer's first.
-	// A follow due at the stop lands in CodeMirror's next measure, and its scroll is judged the frame
-	// after, so the line is read two frames on.
+	// A follow pending at that change lands in CodeMirror's next measure, and its scroll is judged
+	// the frame after, so the line is read two frames on.
 	await page.evaluate(
 		(id, text) => {
 			const root = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot as
@@ -254,9 +254,11 @@ async function selectAcross(page: Page, line: ShownLine): Promise<ShownLine> {
 				| null
 				| undefined
 			;(window as unknown as { __selectionSeen?: Promise<number | null> }).__selectionSeen = new Promise((resolve, reject) => {
+				let seen = false
 				const onChange = () => {
 					const selection = root?.getSelection ? root.getSelection() : document.getSelection()
 					if (!selection || selection.isCollapsed) return
+					seen = true
 					document.removeEventListener("selectionchange", onChange)
 					requestAnimationFrame(() =>
 						requestAnimationFrame(() => {
@@ -267,7 +269,10 @@ async function selectAcross(page: Page, line: ShownLine): Promise<ShownLine> {
 					)
 				}
 				document.addEventListener("selectionchange", onChange)
-				setTimeout(() => reject(new Error("no selectionchange showed the drag's selection")), 10_000)
+				setTimeout(() => {
+					const why = seen ? "no two frames ran after the drag's selection" : "no selectionchange showed the drag's selection"
+					reject(new Error(why))
+				}, 10_000)
 			})
 		},
 		HOST,
@@ -288,7 +293,7 @@ async function selectAcross(page: Page, line: ShownLine): Promise<ShownLine> {
 	}, HOST)
 	expect(selected.length).toBeGreaterThan(0)
 	expect(top, `${line.text} once the selection stopped the follow`).not.toBeNull()
-	return { ...line, top: top ?? Number.NaN }
+	return { text: line.text, top: top ?? Number.NaN }
 }
 
 async function openLogs(ctx: ExtensionContext): Promise<Page> {
