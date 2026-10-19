@@ -1,7 +1,7 @@
 ---
 plan: test-infra-1
 tier: mid
-status: arcs 1 (#706), 2 (#757) and 3 (#830) merged; arc 4 (Phases 8-10) implemented on test-infra-1-a4, stacked on #743
+status: closed (Outcome below); arcs 1 (#706), 2 (#757) and 3 (#830) merged, arc 4 (Phases 8-10) on test-infra-1-a4, stacked on #743
 issues: "#550 (arc 1 Closes), #561 (arc 3 Closes), #536 (arc 4 Closes), #540 (arc 4 Closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 0fe841be
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** closed by the merge into `dev` of arc 4's PR (branch `test-infra-1-a4`, stacked on #743 and opened once #743 merges). Arcs 1 (#706), 2 (#757) and 3 (#830) merged.
+- **Shipped:** one source walker and one TypeScript tokenizer and call reader for the source guards, one approval-window harness and keyboard contract (#550, arc 1); `awaitedBus`, a discard-write `installChromeStorage`, the token-balance `world()` and one e2e `pollUntil` (arc 2); the last two hand call readers (#561, arc 3); the held-back e2e deadline loops on `pollUntil` (the hold-for-a-window checks and `stopBackground`'s stop protocol stay loops), each unit drain on the cause it stands for or kept with the line saying what it guards, the `deferred` copies gone (#536, arc 4); the backup-import harness, one options `makeDispatcher`, the last discard-write storage stubs and the incoming-transfer scenario suite on the real repository (#540, arc 4).
+- **Owner asks:** none ([OWNER-ASKS.md](OWNER-ASKS.md)).
+- **Known limits:** #858 (client-mock builders, D11).
+- **Open items:** none.
+- **Dropped:** guessed turns outside #536's list, `theme-vars.ts` and `owned-processes.ts` `sweepPhase` (D11, recorded on #536); 184 drains stay before a "not yet", a "never", an exact count or an exact list that no completion covers ([lessons/phase-8.md](lessons/phase-8.md)).
+- **Lessons:** none promoted. The candidates (a loop that checked its deadline before reading keeps that check in its `pollUntil` probe; a discovery's run covers its own decision, not what it queued, and a promise that settles at a decision covers no effect deferred past it, so a "never" or exact-list read after it keeps its drain; a whole-tree generator takes the exclusive lock in a shared worktree) are in [lessons/phase-8.md](lessons/phase-8.md); `lessons.md` is at its budget and none supersedes a line.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # test-infra-1: one walker, one tokenizer, one window harness, one wait per layer, shared builders
 
@@ -319,6 +331,8 @@ It found `awaitedBus`, the storage moves, `world(opts)`, the L and B catches and
 **Arc 4 Codex fix loop, round 3** (resumed, verification of e378fef9): `approve`. Twelve in-memory checks: both phases keep the old timeout text and census, refuse a late success and accept a ready card exactly at the bound; the duplicate-card and wrong-stage errors keep their text and a reader failure propagates as the same error. The round 1 and 2 ledger entries match their commits. The loop converged in three rounds.
 
 **Cross-arc review** (fresh session, gpt-6.1-sol, high, the lane's net diff from 0fe841be: arcs 1-3's squashes and arc 4's commits). Round 1 `approve with fixes (restore the refused-send drain)`: in connect-window's termination-throws cases a later send is refused at once and its handling settles with the refusal, so a forbidden effect deferred past it escaped the "nothing ran" reads (demonstrated in memory: four reactions); its claim that the handling is `undefined` there was wrong (an instrumented copy found every send's handling defined), the path holds anyway. Taken in 164ad353, with the same shape at the confirmed session's next call. Round 2 `approve with fixes (retain observation after two more early-refusal paths)`: the same escape after "They don't match" (connect-window) and the insecure-origin refusal (origin-admission), each demonstrated in memory with a ten-reaction deferral, eight analogous sites plausible. Taken in full in 90b40dbc rather than site by site: every moved drain followed by a negative read got its drain back (49 sites, the boundary kept for the positive reads). The round-3 prompt also said the five drains deleted before an action were restored; they were not, and stay deleted (no read follows them before the next action, where a deferral past them lands in that read's drain or fails the action). Round 3 `approve with fixes (missed negatives and exact-list observation windows)`, the loop's hard stop: origin-admission's insecure-origin "never" reads still followed the run alone (round 2's demonstration applies), two negatives inside a ternary and behind a comment escaped the scan, and an exact list read after a boundary also says nothing else ran. Taken in c2ac6d83: 26 drains back, after every boundary an exact list or a negative follows (connect-window 13, admission 8, reset-wait 2, unserved-chain 1, verify-reservation.pins' `freshWithDuplicate` 1, origin-admission 1), with each helper's line naming the exact-list read; connect-window's last "dropped" read, absent from its list, came back with them. No round verified c2ac6d83; the six suites pass (102 tests).
+
+**Arc 4 e2e** (local, retry 0, on a host shared at load 140-290; the network lanes proverless). Smoke on armed builds of the head's sources: Chrome 259 passed and 2 failed, both in the launch's 30 s service-worker liveness wait before any test body (`contacts-import`, `passkey-backup`), and both pass alone at 960386f6 (10 tests); Firefox 261 passed, none failed. The full network suites (129 files) were stopped after 14 Chrome and 4 Firefox files, hours from done at that load. In them `same-token-concurrent-sends` failed 6 of 16 on Firefox, its error text lost to the interrupt, and `type-roles-windows` (2) and `frozen-account-canary` (1) failed on Chrome. Alone at 960386f6: on Chrome `same-token-concurrent-sends` (16), `auto-lock-defers-while-proving` (1), `type-roles-windows` (5) and `frozen-account-canary` (2) pass; on Firefox `same-token-concurrent-sends` passes twice (16 each) and `auto-lock-defers-while-proving` once. The rest of the network suites, and the per-browser wall-clock, are CI's (D12).
 
 ## Seeds
 
