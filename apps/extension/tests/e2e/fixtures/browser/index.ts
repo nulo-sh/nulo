@@ -51,6 +51,12 @@ export interface ArmedInterception {
 	stop: () => Promise<void>
 }
 
+export interface HeldInterception extends ArmedInterception {
+	/** Whether the launch's own interception is armed now: false while a kill or a spec's interception
+	 *  has the origin, while it re-arms, after a failed re-arm and after `stop()`. */
+	holding: () => boolean
+}
+
 /**
  * The documents hosting the PXE — Chrome's offscreen document, Firefox's background-page frame —
  * and each one's own `visibilityState`. Visibility is what keeps a document's timers unthrottled.
@@ -168,6 +174,13 @@ export interface BrowserDriver {
 	 */
 	pxeHostState(page: Page): Promise<PxeHostState>
 	/**
+	 * From an open extension page, close the document hosting the PXE where it outlives the
+	 * background: Chrome's offscreen document, whose clients reconnect to a stopped worker and so wake
+	 * it within a second. Firefox's frame is the background page's own and ends with it. Rejects on
+	 * Chrome when no offscreen document is open.
+	 */
+	closePxeHost(page: Page): Promise<void>
+	/**
 	 * End the extension's background — Chrome's service worker, Firefox's event page — and resolve
 	 * once THAT instance is gone; every other extension page and `storage.session` stay. Chrome starts
 	 * a successor within milliseconds, Firefox only on the add-on's next event, so a caller that needs
@@ -257,7 +270,7 @@ export const holdRpcInterception = (
 	extensionId: string,
 	fromOrigin: string,
 	mode: RpcInterception,
-): Promise<ArmedInterception> => standing.hold(browser, extensionId, fromOrigin, mode)
+): Promise<HeldInterception> => standing.hold(browser, extensionId, fromOrigin, mode)
 export const openScratchPage = (browser: Browser, extensionId: string): Promise<Page> => driver.openScratchPage(browser, extensionId)
 export const prepareClick = (page: Page): Promise<void> => driver.prepareClick(page)
 export const prepareKeys = (page: Page): Promise<void> => driver.prepareKeys(page)
@@ -267,6 +280,7 @@ export const virtualAuthenticator = (browser: Browser, anchorPage: Page): Promis
 	driver.virtualAuthenticator(browser, anchorPage)
 export const holdNextCredentialGet = (page: Page): Promise<void> => driver.holdNextCredentialGet(page)
 export const pxeHostState = (page: Page): Promise<PxeHostState> => driver.pxeHostState(page)
+export const closePxeHost = (page: Page): Promise<void> => driver.closePxeHost(page)
 export const stopBackground = (owner: BackgroundOwner): Promise<void> =>
 	standing.whileReleased(owner.browser, () => driver.stopBackground(owner.browser, owner.extensionId))
 export const backgroundAlive = (owner: BackgroundOwner): Promise<boolean> => driver.backgroundAlive(owner.browser, owner.extensionId)

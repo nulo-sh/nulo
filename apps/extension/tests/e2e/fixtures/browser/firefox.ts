@@ -866,6 +866,7 @@ export const firefoxDriver: BrowserDriver = {
 	virtualAuthenticator: sessionAuthenticator,
 	holdNextCredentialGet,
 	pxeHostState: (page) => evaluateInBackgroundPage<PxeHostState>(page.browser(), PXE_HOST_STATE),
+	closePxeHost: async () => {},
 	stopBackground,
 	backgroundAlive: async (browser) => (await backgroundTimeOrigin(browser)) !== undefined,
 	evaluateInBackground: (browser, _extensionId, body) => evaluateInBackgroundPage(browser, inPageRealm(body)),

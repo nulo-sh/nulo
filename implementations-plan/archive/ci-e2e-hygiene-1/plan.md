@@ -1,7 +1,7 @@
 ---
 plan: ci-e2e-hygiene-1
 tier: light
-status: approved at 654f7298; arc 1 implemented, in review
+status: completed (arc 2 carries this close-out)
 issues: "#749 #630 #612 #643 (arc 1 Closes); #620 #555 (arc 2 Closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,28 @@ base: origin/dev at 18d29f23
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** closed. Arc 1 (#783) closed #749 #630 #612 #643. Arc 2 carries this close-out, and the merge that lands it closes the plan and #620 #555.
+- **Shipped:**
+  - Four e2e reds fixed at their cause in test code: the logs probe waits for its own last line, the refused-node reset seeds both protocol FPC rows, the no-popup dApp call dumps on timeout, and the passkey matrix row verifies the wallet's MAC and re-seals (it runs in CI).
+  - The network suite launches behind the egress guard, with its control spec in the network selection. bb.js's CRS hosts go direct (`CRS_HOSTS`). Chrome's autofill server is off at the source. Chrome's node interception attaches no page. `cold-wake-discovery` closes Chrome's offscreen document before its kill (`BrowserDriver.closePxeHost`). The stalled-network import spec resets its stub's hung connections before its Retry.
+  - Every smoke and publisher artifact is taken by its producer's upload id, behind a checked id, and `artifact-handoffs.test.ts` pins each chain.
+  - jscpd is an exact root devDependency, so `bun.lock` and the age gate hold it.
+- **Owner asks:**
+  - OA-1 shipped A. The owner's answer, B, is on #630 ([comment 6253546116](https://github.com/nulo-sh/nulo/issues/630#issuecomment-6253546116)): "Orchestrator's call, on that note: **option B**. The test is narrowed to what it meant to measure (a reset against a refused node), so the gate is honest and green, and #553 is reopened so the product behaviour it exposed (a reset that waits 9 s on FPC discovery) gets its own fix in a later lane". Applied: #553 reopened.
+  - OA-2 shipped B. The owner's answer is pending on #643's Decision section.
+  - OA-3: #789 shipped #616's option A. Its replacement test ran 10/10 green on Firefox at retry 0, so no race issue was filed.
+- **Known limits:** #837 (a detached Chrome page session clears WebAuthn virtual authenticators: `doubleClick`, and the filter's attach-time type).
+- **Open items:**
+  - #553 (reopened: the product fix OA-1's B defers).
+  - #835 (the e2e-testing skill's and `FIREFOX.md`'s guard wording, held by another lane).
+  - #836 (a Testnet-node request the interception misses passes the close).
+- **Dropped:** none. The ledger records each alternative not taken.
+- **Lessons:** none promoted. `lessons.md` is at its budget, and the WebAuthn-detach gotcha is stated in `chrome-rpc-intercept.ts`, README § Egress guard and #837. The detail is in `lessons/phase-5.md`.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # ci-e2e-hygiene-1: four e2e reds and two CI bindings
 
@@ -116,7 +138,7 @@ Assumes F5.
 
 ## Arc 2: two CI bindings (closes #620 #555)
 
-### Phase 5. #620: the network suite launches behind the egress guard
+### Phase 5. #620: the network suite launches behind the egress guard ✓
 Assumes F6, I3.
 - `ext/tests/e2e/global-setup.ts` provides `egressGuard: true` and declares it. `global-setup-smoke.ts`'s comment and `tests/e2e/README.md:79` stop calling network runs unguarded.
 - `vitest.e2e.network.config.ts` includes `tests/e2e/egress-guard.test.ts`, whose skip becomes a failing assertion that the guard is armed. The network lane then proves, with a refused background request, that its own launches are guarded. Budget: about 5 s per lane; a unit test cannot launch a browser.
@@ -131,7 +153,7 @@ Assumes F6, I3.
 
 **Gate:** lint, typecheck, `bun run test`; every inventory run green, with each run's recorded hosts in `lessons/phase-5.md`; the smoke `egress-guard.test.ts` green on both browsers.
 
-### Phase 6. #555: smoke and publishers take each artifact by the producer's id
+### Phase 6. #555: smoke and publishers take each artifact by the producer's id ✓
 Assumes F7.
 - **`_build-extension.yml`:** outputs `chrome_artifact_id` and `firefox_artifact_id` from the existing upload step ids.
 - **`_extension-smoke-e2e.yml`:**
@@ -152,7 +174,7 @@ Assumes F7.
 
 **Gate:** `bun run lint:actions`, `bun run test:ci-gating`, `bun run test:release`, lint, typecheck. `behavior-gating` and `aggregators` stay green with no name change.
 
-### Phase 7. #555: `dup-trend` runs jscpd from the lockfile
+### Phase 7. #555: `dup-trend` runs jscpd from the lockfile ✓
 Assumes F8.
 - `jscpd` `5.0.16` becomes an exact root devDependency, and `bun.lock` is regenerated.
 - `scripts/dup-trend/report.ts` runs the installed binary, with no `bunx`, and loses `JSCPD_VERSION`; `dup-trend-report.test.ts` pins the exact version in `package.json` instead. The `complexity-budgets` skill's line follows.
@@ -183,6 +205,11 @@ Assumes F8.
 | D9 | two independent arcs, one PR each | one PR; a stack | the lane groups them so; D-orch-1 |
 | D10 | #749: arm the follow check before the stop step; refuse a scroll that leaves the view `SCROLL_DISABLE_THRESHOLD` from its end before the first show | arm after it; count `.cm-line` insertions | a wallet line between the stop and the check used up the stop (measured); re-renders add `.cm-line` nodes too |
 | D11 | #749: leave #616's search-panel race visible | filter the viewer to the probe's source; settle the panel, then re-focus it | the filter needs testids in a product file; settling first hides a defect people hit (#616) |
+| D12 | #620: Chrome's autofill server queries stop at the source (`--disable-features=AutofillServerCommunication`) | `CHROME_OWN_HOSTS`; stop as a plan change | a browser's own host is neither a wallet nor a spec host; README § Egress guard says a flag first, and a flag adds no state |
+| D13 | #620: `CRS_HOSTS` go direct on every guarded launch; the stand-in stays | a loopback CRS mirror; drop the stand-in with any direct host | Phase 5 pre-describes it, the WASM inventory recorded both hosts (I3); a mirror is a new server (D6); F6 |
+| D14 | #620: Chrome's node interception auto-attaches what Chrome's default filter does, minus pages | allow only `service_worker` and `background_page` (Codex); release only the worker for the kill; attach pages and detach them at once | detaching any session from a page clears its WebAuthn virtual authenticators, which red the passkey canary; a new offscreen document attaches as `other`, so the allow-list let it dial the Testnet node at the guard (24 refused attempts in one canary file, measured), a leak the declared refusal hid; releasing only the worker changes the release protocol |
+| D15 | #620: `cold-wake-discovery` closes Chrome's offscreen document before its kill (`BrowserDriver.closePxeHost`) | make the guard's re-arm faster; check before the re-arm | the offscreen document wakes every killed worker 50-350 ms later, guard or not, so the spec's dead-at-click premise held only on timing; a faster re-arm keeps the race |
+| D16 | #620: the stalled-network spec's stub resets its hung connections before the Retry (`dropUnanswered`) | loosen the Retry's row to either skip; hold calls in the interception instead of the stub | the Retry asserts the deadline path, so its identity probe must be sent; a held interception is a new driver mode on both browsers, while the stub's HTTP/1.1 hang is what starves Chrome's six connections per host |
 
 ## Audit verdicts
 
@@ -204,10 +231,27 @@ Assumes F8.
 
 **Arc 1, post-implementation round 2** (Codex resume, over `ba49b48a..b761f0dc`): approve, no new material finding. The loop converged.
 
+**Arc 2, post-implementation round 1** (Codex gpt-6.1-sol, high, session `01a14fe3`, over `38182660..6a0d84aa`): conditional approve, 2 findings, both accepted. The handoff test collapsed a producer to its artifact name: a same-name upload from another job, wired through `_build-extension.yml`'s output, passed. It now pins each producer by job and upload step, requires the producer in the consumer's `needs`, and the replacement is one of its mutations. A comment that restated its assertion went. Codex held Phase 5's approval on the inventory; the CRS fetch it called plausible was then measured (D13).
+
+**Arc 2, Opus diff review** (alongside round 1): 3 Low findings accepted. The check step's whole shape and a consumer job's `continue-on-error` are pinned. The CI.md and WORKFLOWS.md lines are scoped to the smokes and publishers. The node-stub wording follows the guard's new reach. Rejected: one composite action for the check and its download, because the store jobs check out the tag's revision, so an older tag would lack the action.
+
+**Arc 2, D14 consult** (Codex resume, and an Opus Plan lens): both judged the interception fix local, not a plan change. Codex advised an allow-list of `service_worker` and `background_page`; Opus advised Chrome's default filter with `page` excluded, because `background_page` is a temporary type for offscreen documents. The allow-list went in first and leaked, as measured (D14), so Opus's form shipped.
+
+**Arc 2, round 2** (Codex resume, over `6a0d84aa..d22f9021`): conditional approve, 2 Low findings.
+- Accepted: a check and download sharing `always() && …` let the download run past a failed check, and the test passed. A status function in a download's condition is now refused.
+- Disposed: the attach-time filter cannot see a target that attached as non-page and later became a page. Over 135 guarded launches, one `other` target attached per launch (the new offscreen document), and no page. That is a closed known limit, together with `doubleClick`'s page session.
+- Codex also judged the silent missed redirect a follow-up, not this arc's: an open issue.
+
+**Arc 2, round 3** (Codex resume, over `a6374911 f5c27522 8eb9518b`): conditional approve. No new material finding in the cold-wake fix: the driver is the right home, the spec's purpose holds, and a recreated offscreen document fails loud. One Low, demonstrated: `success() || true` and an upper-case `ALWAYS()` slipped the status-function ban. Fixed (8dbbd12f): all four functions, case-blind, with both mutations; under the old regex both mutations pass. Round 3 was the plan's hard stop, so no Codex pass verified that last fix.
+
+**After the PR opened:** CI's Chrome network shard 5/5 went red on `backup-import-stalled-network` (D16), which the local inventory had passed once per browser. Its fix (23fc1028) came after the loop's three rounds, so no Codex pass reviewed it.
+
+Deviation: the round prompts did not carry the Post-implementation standard's two rules verbatim. Each asked for adversarial review, small fixes, and comments that narrate or cite a plan.
+
 ## Delivery
 
 - **Arc 1**, branch `ci-e2e-hygiene-1-a1` off `origin/dev` with the plan commit cherry-picked (the orchestrator's call), phases 1-4. Title: `test(e2e): fix four e2e reds at their cause; run the passkey import row in ci`. Body: `Closes #749`, `Closes #630`, `Closes #612`, `Closes #643`.
-- **Arc 2**, branch `worktree-ci-e2e-hygiene-1-arc2` off `origin/dev`, phases 5-7. If arc 1 is still open, cherry-pick the plan commit. Title: `ci: guard network e2e egress; take artifacts by id; jscpd from the lockfile`. Body: `Closes #620`, `Closes #555`. Its close-out commits come after arc 1 merges.
+- **Arc 2**, branch `ci-e2e-hygiene-1-a2` off `origin/dev` (the orchestrator's name), phases 5-7. If arc 1 is still open, cherry-pick the plan commit. Title: `ci: guard network e2e egress; take artifacts by id; jscpd from the lockfile`. Body: `Closes #620`, `Closes #555`. Its close-out commits come after arc 1 merges.
 - **Labels:** `code_review: off` for both arcs. Open each PR without labels. Add `e2e:extension-network` or `e2e:extension-smoke` only if a path filter skips a suite the PR needs.
 - **Collisions:** #743 also changes `bun.lock`, `fixtures/egress-guard.ts`, `fixtures/extension.ts` and `helpers/import-drivers.ts`, in other hunks. Whichever lands second merges `dev` and reruns `bun install --frozen-lockfile --force`.
 - **Parallelism:** the arcs share no file. The critical path is arc 2's inventory.

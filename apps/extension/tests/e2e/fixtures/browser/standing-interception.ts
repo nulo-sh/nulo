@@ -1,4 +1,4 @@
-import type { ArmedInterception, RpcInterception } from "./index"
+import type { ArmedInterception, HeldInterception, RpcInterception } from "./index"
 
 type Arm<B> = (
 	browser: B,
@@ -86,7 +86,7 @@ export function standingInterceptions<B extends object>(arm: Arm<B>) {
 			}
 		},
 
-		async hold(browser: B, extensionId: string, fromOrigin: string, mode: RpcInterception): Promise<ArmedInterception> {
+		async hold(browser: B, extensionId: string, fromOrigin: string, mode: RpcInterception): Promise<HeldInterception> {
 			const origin = new URL(fromOrigin).origin
 			const byOrigin = held.get(browser) ?? new Map<string, Standing>()
 			if (byOrigin.has(origin)) throw new Error(`rpc-intercept: the launch already holds ${origin}`)
@@ -95,6 +95,7 @@ export function standingInterceptions<B extends object>(arm: Arm<B>) {
 			byOrigin.set(origin, standing)
 			held.set(browser, byOrigin)
 			return {
+				holding: () => standing.current !== undefined,
 				hits: async () => standing.hits + ((await standing.current?.hits()) ?? 0),
 				failures: async () => [
 					...standing.failures,
