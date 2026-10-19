@@ -528,15 +528,17 @@ function sourceFindings(tree: Tree): string[] {
 	if (guard((s) => s.run?.includes("zip-reproducible.ts") === true) !== BY_SOURCE.build)
 		findings.push("attach-assets: the zip step runs on a published source")
 	for (const browser of ["chrome", "firefox"])
-		if (guard((s) => s.with?.name === `extension-${browser}`) !== BY_SOURCE.build)
+		if (guard((s) => s.with?.["artifact-ids"] === `\${{ needs.build-${browser}.outputs.${browser}_artifact_id }}`) !== BY_SOURCE.build)
 			findings.push(`attach-assets: the ${browser} build is downloaded on a published source`)
-	const published = steps.find((s) => s.with?.name === "published-assets")
+	const published = steps.find((s) => s.with?.["artifact-ids"] === "${{ needs.select-assets.outputs.published_assets_artifact_id }}")
 	if (published?.if !== BY_SOURCE.published || published.with?.path !== "dist/release")
 		findings.push("attach-assets: the published assets are not what a published source ships")
 	for (const [smoke, browser] of Object.entries(SMOKES)) {
 		const want = `\${{ needs.select-assets.outputs.source == 'published' && 'published-${browser}' || 'extension-${browser}' }}`
+		const wantId = `\${{ needs.select-assets.outputs.source == 'published' && needs.select-assets.outputs.published_${browser}_artifact_id || needs.build-${browser}.outputs.${browser}_artifact_id }}`
 		const job = all[smoke] as Job & { with?: Record<string, unknown> }
-		if (job.with?.artifact_name !== want) findings.push(`${smoke}: smokes other bytes than its source's`)
+		if (job.with?.artifact_name !== want || job.with?.artifact_id !== wantId)
+			findings.push(`${smoke}: smokes other bytes than its source's`)
 	}
 	return findings
 }
@@ -1130,6 +1132,24 @@ describe("attestations", () => {
 			"a smoke fixed to the rebuild",
 			(t: Tree) => Object.assign(releaseJob(t, "smoke-against-artifact").with ?? {}, { artifact_name: "extension-chrome" }),
 			["smoke-against-artifact: smokes other bytes than its source's"],
+		],
+		[
+			"a smoke's id fixed to the rebuild",
+			(t: Tree) =>
+				Object.assign(releaseJob(t, "smoke-firefox-against-artifact").with ?? {}, {
+					artifact_id: "${{ needs.build-firefox.outputs.firefox_artifact_id }}",
+				}),
+			["smoke-firefox-against-artifact: smokes other bytes than its source's"],
+		],
+		[
+			"a build downloaded on any source",
+			(t: Tree) => {
+				const download = releaseJob(t, "attach-assets").steps?.find(
+					(s) => s.with?.["artifact-ids"] === "${{ needs.build-chrome.outputs.chrome_artifact_id }}",
+				)
+				if (download) download.if = undefined
+			},
+			["attach-assets: the chrome build is downloaded on a published source"],
 		],
 		[
 			"a tree unpacked from the other browser's zip",
