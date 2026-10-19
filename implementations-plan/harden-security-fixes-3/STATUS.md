@@ -5,3 +5,6 @@
 - 2026-10-19 16:4x arc 1 Codex R1 + Opus: conditional approve (both); docs aligned, plan re-anchored at 2a5960da.
 - 2026-10-19 16:5x arc 1 Codex R2: approve; loop converged.
 - 2026-10-19 17:1x arc 1 final head: lint, typecheck:all, test:all, test:ci-gating (626/0), check:plans green; no e2e (docs only).
+- 2026-10-19 17:3x arc 2: A1 answered (128, the orchestrator's call, provisional); branch off origin/dev 0820b08a.
+- 2026-10-19 17:5x arc 2 Phase 3 committed: PXE-level and handler-level tests green, each red under its mutation; lint, typecheck:all, audit:vue green.
+- 2026-10-19 18:1x arc 2 test:all: red twice on load-induced timeouts in files this arc does not touch (load1 575, then 2900); rerun in a calm window pending.
