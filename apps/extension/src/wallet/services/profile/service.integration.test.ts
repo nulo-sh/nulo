@@ -3128,6 +3128,27 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("session remove failed"))
 			await expect(service.lockActiveProfile()).rejects.toThrow(/did not persist/)
 		}, 30_000)
+
+		test("a read-back that cannot read the record makes lockActiveProfile throw", async () => {
+			const { api, service } = await makeService()
+			await service.createProfile("P", "pass1234")
+
+			vi.spyOn(api.storage.session, "get").mockRejectedValue(new Error("session get failed"))
+			await expect(service.lockActiveProfile()).rejects.toThrow(/did not persist/)
+		}, 30_000)
+
+		test("a restarted worker whose lock cannot be confirmed still announces the lock", async () => {
+			const { api, service } = await makeService()
+			await service.createPasskeyProfile("PK")
+			const { service: rebooted } = await makeServiceFromExistingApi(api)
+			expect(await rebooted.getActiveProfile()).toBeUndefined()
+			const events: unknown[] = []
+			rebooted.onActiveProfileChanged.add((p) => events.push(p))
+
+			vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("session remove failed"))
+			await expect(rebooted.lockActiveProfile()).rejects.toThrow(/did not persist/)
+			expect(events).toEqual([undefined])
+		}, 30_000)
 	})
 
 	// Integration criteria for the imported-keys DEK.
