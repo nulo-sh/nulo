@@ -1,0 +1,9 @@
+# Phase 2: network e2e on both browsers, and the pictures
+
+- **Chrome**, `register-token.test.ts` + `type-roles-windows.test.ts`, retry 0: 6 of 6 passed; agent.sh run 342 s (vitest: type-roles-windows 146.8 s, register-token 23.1 s).
+- **Firefox**, the same two files: 6 of 6 passed; run 359 s (type-roles-windows 196.0 s, register-token 22.4 s).
+- No e2e scenario was added or changed, so neither suite's wall-clock moves by this arc.
+- **Pictures** (scratch spec and read hold, Chrome, 400×600 at scale 2): 1 of 1 passed, run 141 s; the scratch gate (`git diff --quiet b6208221 -- …/index.vue` and no file left under `tests/e2e/network`) passed after the cleanup. One `[aztec-node] Address already in use` line in the sandbox's start; the run went on and passed.
+- **Geometry** (CSS px, card top at 170): rows at y 222, 246, 270, each 24 tall; the address row at 294; the card 162 tall; identical in the loading and loaded captures. The bars sit at the signed mockup's boxes exactly (311,234 40×12; 267,258 84×12; 331,282 20×12). The details region read `aria-busy="true"`, `role="status"` while loading and no `aria-busy` once loaded.
+- **Long values** (31 `W` symbol, 64 `W` name, forced by the scratch hold): the symbol row grows to 36, the name row to 60, the card to 210; the card's and the page's `scrollWidth` equal their `clientWidth`. The name's value fills its row and meets its "NAME:" label with no space: `.prop` has no gap, so every row of the card does the same with a value that fills it (a 64-character function name, for one). Not changed here: a gap would change every row of the card, a UI change outside the pick; filed at close-out as a known limit.
+- **Deviation:** the two long-value pictures are committed too, beside the four after and four before pictures, since they show the wrapped-value behaviour the UI impact line names.
