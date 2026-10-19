@@ -86,10 +86,9 @@ const props = defineProps<{
 	/** The wallet's registered tokens, so an amount can carry its symbol and decimals. */
 	tokens?: readonly TokenInfo[]
 	/**
-	 * Pre-fetched token metadata for `register_token` operations. Resolved by
-	 * the parent before the card renders so the user can see name / symbol /
-	 * decimals BEFORE pressing Allow. `undefined` while the parent is still
-	 * fetching OR if the contract returned incomplete metadata.
+	 * A `register_token` operation's metadata, read by the parent while
+	 * `tokenMetadataLoading` holds; Confirm stays off until every token is read.
+	 * `undefined` until its read lands, and after a failed one.
 	 *
 	 * SECURITY: the strings here are attacker-controllable (a malicious token
 	 * contract can return any value for getName / getSymbol). The template

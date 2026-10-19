@@ -160,7 +160,7 @@ describe("windows/execute/OperationCard — a token add", () => {
 		expect(details.attributes("role")).toBe("status")
 		expect(details.attributes("aria-busy")).toBe("true")
 		const rows = ROWS.map((id) => w.get(`[data-testid='${id}']`))
-		for (const row of rows) expect(row.element.parentElement).toBe(details.element)
+		expect([...details.element.children].map((row) => row.getAttribute("data-testid"))).toEqual(ROWS)
 		expect(rows.map((row) => row.element.firstElementChild?.textContent)).toEqual(["Symbol:", "Name:", "Decimals:"])
 		const bars = rows.map((row) => row.get("[data-testid='stub-skeleton']"))
 		expect(bars.map((bar) => [bar.attributes("data-width"), bar.attributes("data-height")])).toEqual([
