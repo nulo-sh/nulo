@@ -180,7 +180,9 @@ The steps are `implementations-plan/README.md` § Post-implementation standard a
 
 **Cross-arc pass, Codex** (fresh session over the net diff from the plan's base): **approve**, 2 low findings, both accepted: the architecture and security lines' "no new TypeScript" and "no new script" scoped to arc 1; `kit.ts`'s export inventory removed. Seams verified: one bundled entry imports `main` once, clips stay off the home page, the store pin and the dist check cover both pages.
 
-**Retake, Codex** (gpt-6.1-sol, high, read-only, session 01a153b1): round 1 **approve**, no findings; it checked timings against text, cue order, both-way rendering, the overrun test (red on the old width) and the Fees claim against the docs.
+**Retake, Codex** (gpt-6.1-sol, high, read-only, session 01a153b1): round 1 **approve**, no findings; it checked timings against text, cue order, both-way rendering, the overrun test (red on the old width) and the Fees claim against the docs. Round 2 (resume, over the two picture fixes and the Opus fixes): **approve**, no findings.
+
+**Retake, Opus diff review:** approve, 4 notes, 2 fixed. At 1.15x proofs scene 6 began dropping the batch proof while it was 14% faded in (the drop now waits for the fold); the position bars' static `max` named the old lengths (now pinned to each clip's length by a test). Not changed: the overrun test catches labels past a border, not near one (by design, D18; the near ones are OA-10), and the drawn "1.50" beside the spoken "1.5" (OA-11). It also rates "$AZTEC becomes Fee Juice" as true for mainnet but unverified for Testnet's L1 fee asset; the rc.3 docs say Fee Juice is "bridged Aztec tokens from Ethereum", and the words are the owner's.
 
 **Arc 2 deviations:** the base moved to `origin/dev` when #723 merged mid-review (one README conflict, dev's wording kept); dev's #790 restyled the wallet's glyphs, so the clips' glyph rules followed and one check glyph moved clear of the packet. Gates and QA reran on the rebased branch.
 
