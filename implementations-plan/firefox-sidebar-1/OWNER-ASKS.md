@@ -10,7 +10,7 @@ The draft PR ships without an answer to any of these, and each entry says what s
 
 ## OA-2: the sidebar's width
 
-- **Ships now (in the draft)**: the popup's 360 px layout. Firefox opens the sidebar narrower than that: 240–252 px for its default (old) sidebar, 340 px for the revamped one. In the old sidebar the page scrolls sideways and the Settings tab sits outside the view until the person widens the sidebar or scrolls. In the revamped one every tab fits and the page scrolls 20 px. Pictures are in the PR.
+- **Ships now (in the draft)**: the popup's 360 px layout. Firefox opens the sidebar narrower than that: 240–252 px for its default (old) sidebar, 340 px for the revamped one. In the old sidebar about a third of the page is cut until the person widens the sidebar or scrolls: the network badge and Lock, half of Receive, the end of the balance and the Settings tab (`screenshots/sidebar-home-opening-width.png`). In the revamped one every tab fits and the page scrolls 20 px. Pictures are in the PR.
 - **Gates leaving draft**: the answer is either a layout change, which is a new plan change with pictures, or an accepted limit, filed as a closed `known-limit` issue.
 - **The question**: should the shell fit a narrower sidebar? The options are a fluid width on the Firefox sidebar only, a fluid width on every surface, or Firefox's own resizing as today.
 - **Cost if yes**: a layout change across every popup page, reviewed with pictures.

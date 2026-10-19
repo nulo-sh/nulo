@@ -80,7 +80,7 @@ Two rules make this hold, and the driver states both:
 2. On Firefox, a passkey step runs in its own window only when it starts in a `popup` view (`utils/browser-surface.ts`). A sidebar is a `sidebar` view (spike), so the step runs in place with no product change.
 3. Firefox 153 behaviour around the manifest key (`ext-sidebarAction.js`, `browser-sidebar.js`, `schemas/sidebar_action.json`):
    - it titles a sidebar `default_title`, else the add-on's name ("Nulo V6", which the toolbar button already shows);
-   - it uses the add-on's icons when there is no `default_icon`;
+   - without a `default_icon` it draws the generic puzzle piece, not the add-on's icons (`ExtensionParent.sys.mjs` `IconDetails`; corrected in arc 1, D7);
    - `sidebarAction.open()` requires user input;
    - an ordinary restart reopens a sidebar that was open;
    - the extension shows its sidebar at install, or after its own update or a startup-cache reset, only when `open_at_install` is true.
@@ -105,9 +105,9 @@ Two rules make this hold, and the driver states both:
 
 ## Architecture & Implementation
 
-**Product**: one manifest key. `manifest/manifest.firefox.config.ts` adds `sidebar_action: { default_panel: ManifestConfig.side_panel.default_path, open_at_install: false }`.
+**Product**: one manifest key. `manifest/manifest.firefox.config.ts` adds `sidebar_action: { default_panel: ManifestConfig.side_panel.default_path, default_icon: ManifestConfig.icons, open_at_install: false }` (`default_icon` added in arc 1, D7).
 - The sidebar loads exactly the page Chrome's side panel loads.
-- Firefox supplies the add-on's name and icon, so there is no new copy (Fact 3).
+- Firefox titles it with the add-on's name, so there is no new copy; the icon is the add-on's own (Fact 3, D7).
 - The comment on the stripped `sidePanel` names the sidebar as its Firefox counterpart.
 
 Nothing else changes: the predicate already runs the step in place (Fact 2), and the Display row stays Chrome-only (OA-1).
@@ -165,6 +165,7 @@ Nothing else changes: the predicate already runs the step in place (Fact 2), and
 - **D4, the evidence.** This plan and its lessons carry it. The `FIREFOX.md` row is live documentation of a surface the suite now drives. No `lessons.md` line (Fact 6).
 - **D5, the issues.** The PR says `Closes #596`. When the PR opens, #593 gets a comment: the sidebar runs the step in place; the panel's window stays as the owner decided; #593 stays closed.
 - **D6, no `closeSidebar`** (arc 1, a deviation). No spec closes the sidebar, since the launch is torn down with it, so the module exports `openSidebar`, `evaluateInSidebar` and `clickInSidebar` only.
+- **D7, `default_icon`** (arc 1, a correction). The first pictures showed Firefox's generic puzzle piece for Nulo in the revamped launcher: with no `default_icon`, `IconDetails` falls back to its default icon, not the manifest's `icons`, so Fact 3 was wrong. The key now names the add-on's own icons, which is what § UI impact promised ("its name and icon"). The pin covers it.
 
 ## Security & Adversarial Considerations
 
@@ -184,9 +185,9 @@ Nothing else changes: the predicate already runs the step in place (Fact 2), and
 - **Firefox sidebar (new surface)**. The lane brief's record: "the plan's `UI impact` line names the new Firefox surface with pictures, and quotes P28-08's condition as met by the spike. Because the surface is new, the PR opens as a draft with the pictures for the owner's look."
   - Nulo appears in Firefox's sidebar list as "Nulo V6" (the add-on's name, which the toolbar button already shows) with the add-on's icon. Opening it shows the shell Chrome's side panel shows: the lock screen and every popup page.
   - A passkey step started there runs in place.
-  - **At the width Firefox opens it, the shell is clipped.** The page keeps its 360 px width and scrolls sideways. In the old sidebar (240–252 px) the Settings tab sits at 273–327 px, outside the view, until the person widens the sidebar or scrolls. In the revamped sidebar (340 px) every tab fits, and the page still scrolls 20 px. This is named here for the owner's look (OA-2), and the arc does not change the layout.
+  - **At the width Firefox opens it, the shell is clipped.** The page keeps its 360 px width and scrolls sideways. In the old sidebar (240–252 px) about a third of the page is cut until the person widens the sidebar or scrolls: the network badge and Lock, half of Receive, the end of the balance, and the Settings tab (`screenshots/sidebar-home-opening-width.png`). In the revamped sidebar (340 px) every control shows, and the page still scrolls 20 px. This is named here for the owner's look (OA-2), and the arc does not change the layout.
   - P28-08's condition, "be sure that the "side-panel" option can be really tested", is met by the spike (§ Phase 0).
-  - Pictures, taken headful: the lock screen and Home in the old sidebar at its opening width (the clipping visible); Home in the revamped sidebar at 340 px, with Nulo's icon in its launcher; Home at 420 px.
+  - Pictures, taken headful, in [`screenshots/`](screenshots/): the lock screen and Home in the old sidebar at its opening width, with the clipping visible (`sidebar-lock-opening-width.png`, `sidebar-home-opening-width.png`); Home in the revamped sidebar at 340 px, with Nulo's icon in its launcher (`revamped-sidebar-home.png`); Home at 420 px, light and dark (`sidebar-home-420.png`, `sidebar-home-420-dark.png`).
 - **At install** no sidebar opens, but Firefox lists Nulo in View → Sidebar and in the sidebar's switcher. With the revamped sidebar, it also adds Nulo's icon to the launcher's tools until the person removes it (`browser-sidebar.js` `registerExtension`). This is pictured.
 - **Unchanged**: the toolbar popup and its passkey window, Settings → Display (no row on Firefox), and the Chrome side panel.
 
