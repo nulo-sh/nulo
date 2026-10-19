@@ -5,3 +5,4 @@
 - 2026-10-19: Codex round 2 (resumed): approve, no new material finding. Plan approved for auto-continue; arc 1 next.
 - 2026-10-19: arc 1 phase 1 gate green (`vitest run src/components/composite/import`, 56/56; the seven strings red on base first).
 - 2026-10-19: arc 1 phase 2 gate green (`vitest run src/popup/windows/execute` 308/308, `lint` and `typecheck:all` exit 0; the four pins red on base first).
+- 2026-10-19: before pictures and readings taken (Chrome); review loop converged (Codex impl r1 approve, r2 approve with changes, r3 approve; Opus approve with changes, taken); audit:vue red twice on a left-in scratch spec and a load timeout, rerun pending.

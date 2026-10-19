@@ -128,6 +128,10 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | 1 | Codex, gpt-6.1-sol | approve with changes | Fact 3 (the nested `.row` rule), Fact 6 (a backup carries an imported account on), Phase 3's 400×600 viewport set and asserted, I1 checked in the browser, wire-shaped fixtures | owner asks for I2's plural and the opaque warning (D7); `Refs #746` (D6: the spawn brief's instruction stands, conflict flagged) |
 | 1 | Opus 5.5 lens | approve with changes | I1's trace; Fact 7 (`type-roles-windows` opens the opaque window); the layout pins in `long-strings` beside its postcss helpers; the restore picture re-seals the key for chain 1337; wire-shaped fixtures | `Refs #746` (D6, as above) |
 | 2 | Codex, resumed | approve | D6 followed with the conflict flagged; the opaque warning and I2's plural withdrawn as owner asks (inside the brief); round 1's fixes verified | none |
+| impl 1 | Codex, gpt-6.1-sol | approve | no finding | none |
+| impl 1 | Opus 5.5 review | approve with changes | the CSS comments made exact; the postcss pin walks every `text-align` under `.prop` and gets a `.group` success control; a dead mock dropped | none |
+| impl 2 | Codex, resumed | approve with changes | the `.group` comment no longer claims nothing in it aligns right (its nested `.row`s do); the narrating `.prop` comment removed | none |
+| impl 3 | Codex, resumed | approve | no finding | none |
 
 ## Seeds
 
