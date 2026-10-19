@@ -490,6 +490,11 @@ const reject = async (end: WindowEnd) => {
 	await endAndClose(() => rejectViaInteractionService("User rejected", end))
 }
 
+// The notice's OK ends another profile's request as the lock or switch that made it, with the same
+// wait as Reject, so the window's close cannot reach the request first.
+const dismissWrongProfile = () =>
+	requestId.value && !isInteractionCancelled.value ? reject(profile.value ? "switch" : "lock") : closeWindow()
+
 const signerAccounts = computed(() => uniqueSignerAccounts(operations.value))
 const signerNetworks = computed(() => uniqueSignerNetworks(operations.value))
 
@@ -677,7 +682,7 @@ onUnmounted(() => {
 		<DappCancelledOverlay
 			v-if="isWrongProfile"
 			message="You are signed in to a different profile. Please switch profiles and resend your request."
-			@dismiss="closeWindow()"
+			@dismiss="dismissWrongProfile"
 		/>
 		<DappCancelledOverlay
 			v-else-if="isInteractionCancelled"

@@ -354,32 +354,20 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		expect(net.disconnect).toHaveBeenCalledTimes(1)
 	})
 
-	test("D14: wrong-profile rejection is delivered on dismiss → unload, not inline", async () => {
+	test("D14: the wrong-profile notice's OK ends the request as the switch, and closes once the wallet has it", async () => {
 		approval.payloadToLoad = wrongProfilePayload()
 		w = factory()
 		await completeInit({ id: "p1" })
 		// No rejection has happened yet — the overlay is just showing.
 		expect(rejectViaInteractionServiceMock).not.toHaveBeenCalled()
 		callLog.length = 0
-		// OK on the overlay → closeWindow() with NO arg → listener stays attached.
 		await w.find('[data-testid="dapp-cancelled-overlay"]').trigger("click")
-		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
-		expect(beforeunloadRemoves()).toBe(0)
-		// The real window would now unload; the still-attached handler delivers
-		// the rejection (requestId was set by load() before the profile check).
-		window.dispatchEvent(new Event("beforeunload"))
 		await flushPromises()
-		// The request is another profile's: its end is the switch, not the person's close.
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledWith("User rejected", "switch")
-		expect(callLog).toEqual([
-			"windows.remove",
-			"removeEventListener:beforeunload",
-			"composableReject:User rejected:switch",
-			"windows.remove",
-		])
+		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected", "switch")
+		expect(callLog).toEqual(["removeEventListener:beforeunload", "composableReject:User rejected:switch", "windows.remove"])
 	})
 
-	test("D14-lock: another profile's request, with no profile active, ends as the lock", async () => {
+	test("D14-lock: closing another profile's request, with no profile active, ends it as the lock", async () => {
 		approval.payloadToLoad = wrongProfilePayload()
 		w = factory()
 		await flushPromises()
@@ -387,7 +375,7 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		await flushPromises()
 		approval.resolveLoad?.()
 		await flushPromises()
-		await w.find('[data-testid="dapp-cancelled-overlay"]').trigger("click")
+		// The window's X: the still-attached unload handler names the lock, not the person's close.
 		window.dispatchEvent(new Event("beforeunload"))
 		await flushPromises()
 		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected", "lock")
