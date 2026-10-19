@@ -42,6 +42,7 @@ import {
 	asBase64SecretPrf,
 	asHexUserHandle,
 	asImportedKeysDek,
+	asMasterSecretBytes,
 	EncryptionKey,
 	IMPORTED_DEK_AAD,
 	PasswordSecretBox,
@@ -64,7 +65,8 @@ import { flushPromises } from "@vue/test-utils"
 import { ProfileService } from "./service"
 import type { ProfileInfo } from "./spec"
 import { RESTORE_PENDING_ROOT, RestorePendingRepository } from "./restore-pending-repository"
-import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME } from "./session-manager"
+import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME, type SessionManager } from "./session-manager"
+import type { ProfileRepository } from "./repository"
 import { feePicksKey, pinnedTokensKey, profileUiKeys, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { recordWrites } from "../storage-write-log"
 import { PROFILE_TOMBSTONE_ROOT, type Tombstone } from "./tombstone-repository"
@@ -850,6 +852,27 @@ describe("ProfileService integration", () => {
 			await rebooted.lockActiveProfile()
 			expect(events).toEqual([undefined])
 			expect(SESSION_STORAGE_ROOT in (await api.storage.session.get(SESSION_STORAGE_ROOT))).toBe(false)
+		}, 30_000)
+
+		test("a lock whose close returns with a successor's session published does not announce over it", async () => {
+			const { service } = await makeService()
+			const created = await service.createProfile("P", "pass1234")
+			await service.lockActiveProfile()
+			const internals = service as unknown as { repo: ProfileRepository; sessionManager: SessionManager }
+			const profile = await internals.repo.get(created.id)
+			if (!profile) throw new Error("setup: no profile row")
+			const close = internals.sessionManager.close.bind(internals.sessionManager)
+			vi.spyOn(internals.sessionManager, "close").mockImplementationOnce(async (...args) => {
+				const emitted = await close(...args)
+				await internals.sessionManager.open(profile, asMasterSecretBytes(new Uint8Array(32).fill(1)))
+				return emitted
+			})
+			const events: unknown[] = []
+			service.onActiveProfileChanged.add((p) => events.push(p))
+
+			await service.lockActiveProfile().catch(() => undefined)
+
+			expect(events).toEqual([expect.objectContaining({ id: created.id })])
 		}, 30_000)
 
 		test("after a restart that already dropped the record (strict password): the lock is still announced", async () => {

@@ -954,8 +954,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// A restarted worker holds no in-memory session, so `close()` emits
 			// nothing. Memory is locked either way, and the popups that route on this
 			// event would stay rendered as authenticated, so it fires before the
-			// read-back below can throw.
-			if (!emitted) this.emit("onActiveProfileChanged", undefined)
+			// read-back below can throw, unless a successor's session is published by now.
+			if (!emitted && this.sessionHandle() === undefined) this.emit("onActiveProfileChanged", undefined)
 			// Post-close read-back: `close()` is memory-first and swallows a
 			// storage-delete failure (so clearLockAlarm always runs), but an
 			// explicit lock that leaves the persisted bearer alive would silently

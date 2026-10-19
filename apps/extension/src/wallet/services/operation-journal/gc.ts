@@ -19,15 +19,16 @@
  * on-chain transactions; their history is re-derivable from PXE + the tx
  * hash. A request the wallet refused before sending it (a refusal kind on a
  * record `wasNeverSent` holds for) records only that refusal, and an app
- * files them at its own pace. Every other failed or cancelled record has NO on-chain truth
- * elsewhere, so it is never evicted, and neither is any record that carries
- * a transaction hash without having succeeded.
+ * files them at its own pace. Every other failed or cancelled record has NO
+ * on-chain truth elsewhere, so it is never evicted, and neither is any record
+ * that carries a transaction hash without having succeeded.
  *
  * `accountAddress`-less terminal records (a failed token-import before the
  * account scope was set, for instance) cluster under a synthetic
  * `(profileId, null)` bucket with the same cap.
  */
 
+import type { KnownJobErrorKind } from "@nulo/wallet-core/jobs"
 import type { AlarmsPort } from "@nulo/wallet-core/ports"
 import { AlarmDispatcher } from "@nulo/wallet-core/utils"
 import { LogLevel } from "@nulo/wallet-core/logger"
@@ -59,7 +60,7 @@ const REFUSED_BEFORE_SENDING: ReadonlySet<string> = new Set([
 	"terms_refused",
 	"wallet_refused",
 	"too_many_pending",
-])
+] satisfies readonly KnownJobErrorKind[])
 
 type TerminalRecord = Awaited<ReturnType<OperationJournalService["getOperations"]>>[number]
 
@@ -139,9 +140,9 @@ export class JournalGC {
 		}
 
 		let evicted = 0
-		for (const [key, bucket] of groups) {
-			evicted += await this.evictBeyondCap(key, bucket.filter(isSucceeded))
-			evicted += await this.evictBeyondCap(key, bucket.filter(isRefusedBeforeSending))
+		for (const bucket of groups.values()) {
+			evicted += await this.evictBeyondCap(bucket.filter(isSucceeded))
+			evicted += await this.evictBeyondCap(bucket.filter(isRefusedBeforeSending))
 		}
 
 		if (evicted > 0) {
@@ -150,7 +151,7 @@ export class JournalGC {
 	}
 
 	/** Deletes the oldest of `evictable` by `terminalAt` past the cap; returns how many went. */
-	private async evictBeyondCap(key: string, evictable: TerminalRecord[]): Promise<number> {
+	private async evictBeyondCap(evictable: TerminalRecord[]): Promise<number> {
 		if (evictable.length <= this.capPerScope) return 0
 		evictable.sort((a, b) => (b.terminalAt ?? 0) - (a.terminalAt ?? 0))
 		let evicted = 0
@@ -158,8 +159,8 @@ export class JournalGC {
 			try {
 				await this.journal.deleteOperation(victim.id)
 				evicted++
-			} catch (err) {
-				this.logger.log(LOG_SOURCE, LogLevel.Debug, `evict skipped ${victim.id} (group=${key})`, err)
+			} catch (error) {
+				this.logger.log(LOG_SOURCE, LogLevel.Debug, "evict skipped", { id: victim.id, error })
 			}
 		}
 		return evicted
