@@ -933,7 +933,8 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			h.confirm(hashOf("r1"))
 			await Promise.all([a, s, b])
 			expect(dispatched()).toEqual(["r1:getChainInfo", "r1:sendTx", "r1:getAccounts"])
-			await h.send("r1", "getAddressBook", "c")
+			h.send("r1", "getAddressBook", "c")
+			await settle()
 			expect(dispatched()).toEqual(["r1:getChainInfo", "r1:sendTx", "r1:getAccounts", "r1:getAddressBook"])
 			expect(terminated()).toEqual([])
 		},
@@ -1134,7 +1135,8 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			expect(sessions.has("r1")).toBe(true)
 			expect(row(h)?.kind).toBe("wallet_refused")
 			h.confirm(held)
-			await h.send("r1", "sendTx", "s2")
+			h.send("r1", "sendTx", "s2")
+			await settle()
 			expect(dispatched()).toEqual([])
 			expect([...h.journal.ops.keys()]).toEqual(["queued-1"])
 		},
