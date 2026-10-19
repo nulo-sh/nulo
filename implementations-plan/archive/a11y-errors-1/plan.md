@@ -17,14 +17,14 @@ standard: implementations-plan/README.md § Post-implementation standard, read a
 
 - **Date:** 2026-10-19.
 - **Status:** delivered as one ready PR against `dev`, #878, which carries this close-out; its merge closes the plan.
-- **Shipped:** 19 error and refusal texts in 14 files from `--red` to `--txt-danger` (7 `Text` props, 12 stylesheet rules); `apps/extension/src/utils/red-text-ban.test.ts`, red with exactly those 19 on the untouched tree and five reviewed entries; `ProcessingErrorNote`'s text colour pinned; `--txt-danger` on `--nulo-surface` gated in both themes; the rule in `CLAUDE.md` and `packages/design/README.md`; 12 before/after pictures under `screenshots/`.
-- **Review loop:** the plan took Codex conditional approve (3) and Opus conditional approve (7), then a Codex approve; the arc's diff took Codex findings 2 and Opus findings 4, all fixed, then Codex findings 1, fixed, then Codex clean.
-- **Gates at the head:** after merging `origin/dev` at `b6208221`: lint, `typecheck:all`, `test:all` exit 0; `audit:vue` 0 before the merge. Chrome readings 6.00:1 light, 6.24:1 dark for every reachable error text (3.56 and 5.13 before).
+- **Shipped:** 19 error and refusal texts in 14 files from `--red` to `--txt-danger` (7 `Text` props, 12 stylesheet rules); `apps/extension/src/utils/red-text-ban.test.ts`, red with exactly those 19 on the untouched tree and five reviewed entries; `ProcessingErrorNote`'s text colour pinned; `--txt-danger` on `--nulo-surface` gated in both themes; the rule in `CLAUDE.md` and `packages/design/README.md`. On the orchestrator's calls on #874 (D12): the token page's "Remove token" label in `--txt-danger` while hovered, its reviewed entry deleted (#879), and the log viewer's ERROR lines, `--log-error-color: var(--txt-danger)`, gated on their tint in both themes (#880). 20 before/after pictures under `screenshots/`.
+- **Review loop:** the plan took Codex conditional approve (3) and Opus conditional approve (7), then a Codex approve; the arc's diff took Codex findings 2 and Opus findings 4, all fixed, then Codex findings 1, fixed, then Codex clean; the fold-in took one Codex round (below).
+- **Gates at the head:** after merging `origin/dev` at `b6208221`: lint, `typecheck:all`, `test:all` exit 0; `audit:vue` 0 before the merge. Chrome readings 6.00:1 light, 6.24:1 dark for every reachable error text (3.56 and 5.13 before); the hovered label 5.68:1 and 5.39:1 on the menu (3.37 and 4.43); the log ERROR lines 5.72:1 and 4.73:1 on their tint (3.70 and 3.22).
 - **Deviations:** base `60fde7e7` moved to `2f591ddd` before the arc; the guard landed before the change (D11); the issue's count of 23 text sites did not hold (F2).
 - **Dropped:** a rule in `type-role-ban.test.ts`, a `Text` prop validator, a narrowed `color` type (D3); an e2e scenario (the pictures came from a scratch spec).
 - **Merge order:** #877 adds a red `Text` and needs `color="txt-danger"` and a `dev` merge if it merges after #878 (D10).
 - **Known limits:** none.
-- **Open items:** #879 (OA-1, the "Remove token" hover label), #880 (OA-2, the log viewer's error lines).
+- **Open items:** #887 (the log viewer's WARN lines, 2.91:1 on the light theme), found while measuring #880. #879 and #880 close with #878.
 - **Lessons:** none promoted; the rule lives in `CLAUDE.md` and the guard.
 - **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
@@ -103,6 +103,8 @@ No trust boundary moves: no dApp input, storage, message, permission, log line o
 
 The lane's whole visible budget, the orchestrator's record on #874: every error and refusal text changes colour, darker on the light theme (#f03c3c → #b3261e) and slightly lighter on dark (→ #ff534b): recon rows 1-19. Nothing else changes. Disclosed: the import forms' "Error" chip keeps its `--red` border around the darker label, as the warning chip beside it already pairs `--txt-warning` with `--yellow` (F7).
 
+Folded in after the close-out, the orchestrator's calls on #874 (comment 6276147753) under the owner's delegation: OA-1 (a), the "Remove token" label turns `--txt-danger` while hovered and its icon stays `--red`; OA-2 (a), the log viewer's ERROR lines take the `--txt-danger` values, which pass on their tint in both themes unadjusted. Nothing else changes.
+
 ## Decision ledger
 
 | Id | Decision | Rejected | Why |
@@ -118,6 +120,7 @@ The lane's whole visible budget, the orchestrator's record on #874: every error 
 | D9 | The hero stays `--red` | move it | large text; 3.56:1 ≥ 3:1 (F6) |
 | D10 | Red text on open PRs: listed in this PR's body and the report, for the orchestrator's merge order | trusting the guard to fail the other branch | `dev` does not require an up-to-date branch, so an already green PR merged after this one turns `dev` red (Opus) |
 | D11 | The guard lands before the change | the brief's order (change, then guard) | its red run is then the untouched tree; restoring base copies over uncommitted edits could lose work (Codex) |
+| D12 | `--log-error-color` is `var(--txt-danger)` in both themes | the two hex values copied | one source: a later `--txt-danger` change reaches the log lines, and the gate pins the pair on the tint, red on the old values |
 
 ## Audit verdicts
 
@@ -139,6 +142,8 @@ The lane's whole visible budget, the orchestrator's record on #874: every error 
 Round 2 (Codex, resumed): `findings: 1`, Medium, demonstrated: the per-part match flagged a fill or border beside a white `color` inside a style array or parentheses → each `color` value is now cut at the first `,`, `;` or closing bracket at its own depth; an array's red colour hits, an array's red fill and a parenthesised red border do not.
 
 Round 3 (Codex, resumed): `clean`. Converged.
+
+Fold-in (Codex, gpt-6.1-sol, high, session `01a15618`, the diff after the close-out): `clean`; it recomputed both log pairs and found `--log-error-color` read only by the CodeMirror ERROR mark.
 
 ## Delivery
 
