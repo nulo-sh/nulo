@@ -71,7 +71,7 @@ Reuse per recon: the standing interception already knows when the launch holds t
 
 ## Phases
 
-### Phase 1: the close fails on a node request the stand-in held (#836)
+### Phase 1: the close fails on a node request the stand-in held (#836) ✓
 
 1. Make the changes in Architecture & Implementation, with comments that state the rule, not its history.
 2. In `apps/extension/scripts/e2e/egress-guard.test.ts`, add: (a) on the real guard, an attempt at a watched host counts in `held` only while its predicate holds, and an unwatched host never does; (b) through `rig()`, a node attempt while the stand-in holds fails the close, naming `lb.drpc.live:443` and its count, while one sent by the browser's close does not (D8); (c) a held node attempt and an undeclared host in one launch are both named; (d) success control: node attempts before the hold and while it is released close cleanly. Give the fake guard a `watch`.
