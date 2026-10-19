@@ -9,9 +9,22 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: 24c68cb4
 trunk: dev
-status: approved by the panel (Codex approve, plan 3); arc 1 in review
+status: completed
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-19
+- **Status:** completed. One PR against `dev`, #832, carrying this close-out; merging it is the orchestrator's call.
+- **Shipped:** #832: an estimate or preview that meets a scope refusal records it on the request; every later attempt and approval answers it; Reject, unload or closing the window answers the dApp with it (4100), while a cancel and the timeout keep their own end; the queued History row is retitled through `refusalOf`; the execute window shows `Nulo won't send this` and the reason in the fee's place, no toast, and only Reject (`confirmHidden`). Closes #758.
+- **Not changed:** #777 (pictures on the issue, OA-2; nothing ships, D9); #104 and #106 (the owner's C, defer; commented, open); #575 closed as shipped by #721 before this lane reached it.
+- **Owner asks:** OA-1 open as #834, A ships (D10); OA-2 open on #777.
+- **Known limits:** none.
+- **Open items:** #834 (OA-1); #777 (OA-2); #104 and #106 stay open under the owner's deferral.
+- **Lessons:** none promoted: `lessons.md` is at 8192 of 8192 bytes, and the smoke-build note is already the `e2e-testing` skill's; the notes stay in [lessons/phase-1-2.md](lessons/phase-1-2.md) and [lessons/phase-3.md](lessons/phase-3.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+- **Size:** 164 lines against the light tier's 150: the record keeps the arc's review verdicts across two merges of `dev`, and this block.
 
 # execute-window-2: the execute window states a refused request; Reject ends it as that refusal
 
@@ -24,7 +37,7 @@ One arc, one PR against `dev`, `Closes #758`. Recon: [`recon.md`](recon.md); pla
 | #758 | arc 1 | Built as P42-15 C describes (D1-D6). Two claims in the issue do not hold: Confirm goes off only when the person pays (with Sponsored it stays on, `fee-figure.ts:32-38`), and after Reject History reads "Popup closed early", not "You rejected" (`queued-journal.ts:285-294`). Both cases end as "Not allowed" after this arc. |
 | #777 | no code | `owner-decision`. Pictures of its options over the real window (OA-2); nothing ships (D9). |
 | #104, #106 | no arc | The owner's pick on each Decision section is **C, "Defer: leave open until a real dApp shows the gap"** (page 19), so the lane brief's "build what they say" builds nothing. Both gaps still hold at HEAD (recon). #106's `Where` does not hold: `runFastArm` reads no mint. Close-out comments the reason; both stay open. |
-| #575 | out of scope | p42-followups-1 maps P42-19 to #514 and #719 and the `createAuthWit`, simulation and utility cards; #575's `send_transaction` card is not named. It stays open; close-out comments that. |
+| #575 | out of scope | p42-followups-1 maps P42-19 to #514 and #719 and the `createAuthWit`, simulation and utility cards; #575's `send_transaction` card is not named. Closed as shipped by #721 on 2026-10-18, before close-out. |
 
 ## Outcome & Quality Bar
 
