@@ -84,7 +84,7 @@ One arc, one draft PR against `dev`: #870 (P64-02 B), #863 (P64-01 B), #746 (P61
 
 **Gate**: `cd apps/extension && bun --bun vitest run src/popup/pages/send.test.ts src/popup/pages/send.integration.test.ts src/composables/useFeeEstimation.test.ts`; root `bun run lint`, `bun run typecheck:all`. Pass: exit 0; the flipped and new tests red on base (the success controls green); `:680` and `send.integration.test.ts:897` green unchanged (I1). Layers: lint, typecheck, unit, component.
 
-### Phase 3: #746, the restore sentence
+### Phase 3: #746, the restore sentence ✓
 
 1. Update the six held rows in `restore-warning.test.ts` and `ImportFullBackupForm.test.ts:178-180` to the exact new strings; run them red on base.
 2. Apply D7.
