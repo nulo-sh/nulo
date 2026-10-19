@@ -1,7 +1,14 @@
 import { computed, shallowRef, watch } from "vue"
 import { changedGetStarted, type GetStartedFlags, type MarkableGetStartedFlag, markGetStarted, readGetStarted } from "@/utils/get-started"
 
-const NOTHING_DONE: GetStartedFlags = { phraseSaved: false, backupSaved: false, aztecOpened: false, hidden: false, imported: false }
+const NOTHING_DONE: GetStartedFlags = {
+	phraseSaved: false,
+	backupSaved: false,
+	aztecOpened: false,
+	hidden: false,
+	imported: false,
+	notFirst: false,
+}
 
 /**
  * The active profile's Get started flags, kept current across pages: another page (Settings'

@@ -65,7 +65,14 @@ import { ProfileService } from "./service"
 import type { ProfileInfo } from "./spec"
 import { RESTORE_PENDING_ROOT, RestorePendingRepository } from "./restore-pending-repository"
 import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME } from "./session-manager"
-import { feePicksKey, pinnedTokensKey, profileImportedKey, profileUiKeys, sendFeePicksKey } from "@/utils/profile-ui-keys"
+import {
+	feePicksKey,
+	pinnedTokensKey,
+	profileImportedKey,
+	profileNotFirstKey,
+	profileUiKeys,
+	sendFeePicksKey,
+} from "@/utils/profile-ui-keys"
 import { recordWrites } from "../storage-write-log"
 import { PROFILE_TOMBSTONE_ROOT, type Tombstone } from "./tombstone-repository"
 import { WalletLockedError } from "./wallet-locked-error"
@@ -253,6 +260,15 @@ async function makeService(ttlOrInit: number | { sessionTtl?: number; strict?: b
 	service.setDeletionDelegate({ snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }), runFor: async () => {} })
 	return { api, config, logger, service, passkeys }
 }
+
+/** The coordinator's purge, as far as the UI keys go: it removes the profile's. */
+const purgingDelegate = (api: FakeBrowserApi, gate?: Promise<void>) => ({
+	snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }),
+	runFor: async (id: string) => {
+		await gate
+		await api.storage.local.remove(profileUiKeys(id))
+	},
+})
 
 /** Constructs a fresh `ProfileService` bound to a pre-existing
  *  `FakeBrowserApi` — simulates an MV3 SW restart that observes the
@@ -1373,10 +1389,11 @@ describe("ProfileService integration", () => {
 		}, 30_000)
 	})
 
-	describe("an import records its profile as imported; a create does not", () => {
+	describe("an import records its profile as imported; a create beside another profile, as not first", () => {
 		type Built = Awaited<ReturnType<typeof makeService>>
-		const imported = async (api: FakeBrowserApi, id: string) =>
-			(await api.storage.local.get(profileImportedKey(id)))[profileImportedKey(id)]
+		const flag = async (api: FakeBrowserApi, key: string) => (await api.storage.local.get(key))[key]
+		const imported = (api: FakeBrowserApi, id: string) => flag(api, profileImportedKey(id))
+		const notFirst = (api: FakeBrowserApi, id: string) => flag(api, profileNotFirstKey(id))
 
 		async function restorePasskey({ service }: Built) {
 			const original = await service.createPasskeyProfile("PK")
@@ -1416,14 +1433,79 @@ describe("ProfileService integration", () => {
 			["a password create", ({ service }) => service.createProfile("P", "pass1234")],
 			["a passkey create", ({ service }) => service.createPasskeyProfile("PK", fakeCredentialData("cred-new-1", "uh-new-1"))],
 		])(
-			"%s leaves it unmarked (control)",
+			"%s of the install's first profile marks neither (control)",
 			async (_label, run) => {
 				const built = await makeService()
 				const { id } = await run(built)
 				expect(await imported(built.api, id)).toBeUndefined()
+				expect(await notFirst(built.api, id)).toBeUndefined()
 			},
 			30_000,
 		)
+
+		test.each<[string, (built: Built) => Promise<{ id: string }>]>([
+			["a password create", ({ service }) => service.createProfile("B", "pass1234")],
+			["a passkey create", ({ service }) => service.createPasskeyProfile("PK", fakeCredentialData("cred-new-2", "uh-new-2"))],
+		])(
+			"%s beside another profile marks it not first after its row and before the session switches to it",
+			async (_label, run) => {
+				const built = await makeService()
+				await built.service.createProfile("A", "pass1234")
+				const writes = recordWrites(built.api.storage.local, "nulo:")
+				built.service.onActiveProfileChanged.add(() => writes.log.push("active"))
+				const { id } = await run(built)
+				writes.restore()
+				const row = `set:nulo:core:profiles@${id}`
+				const mark = `set:${profileNotFirstKey(id)}`
+				expect(writes.log.filter((entry) => entry === row || entry === mark || entry === "active")).toEqual([row, mark, "active"])
+				expect(await imported(built.api, id)).toBeUndefined()
+			},
+			30_000,
+		)
+
+		test("an import beside another profile is marked imported, not not-first", async () => {
+			const { api, service } = await makeService()
+			await service.createProfile("A", "pass1234")
+			const { id } = await service.importMnemonic("M", await wordsForFill(0x54), "pass1234")
+			expect(await imported(api, id)).toBe(true)
+			expect(await notFirst(api, id)).toBeUndefined()
+		}, 30_000)
+
+		test("a profile whose deletion has begun is no other profile", async () => {
+			const { api, service } = await makeService()
+			const a = await service.createProfile("A", "pass1234")
+			service.getDeletionState().beginDeletion(a.id)
+			const b = await service.createProfile("B", "pass1234")
+			expect((await service.getActiveProfile())?.id).toBe(b.id)
+			expect(await notFirst(api, b.id)).toBeUndefined()
+		}, 30_000)
+
+		test("a later profile stays not first when the first is deleted; with none left, the next is first", async () => {
+			const { api, service } = await makeService()
+			service.setDeletionDelegate(purgingDelegate(api))
+			const a = await service.createProfile("A", "pass1234")
+			const b = await service.createProfile("B", "pass1234")
+			await service.deleteProfile(a.id)
+			expect(await notFirst(api, b.id)).toBe(true)
+			await service.deleteProfile(b.id)
+			expect(await notFirst(api, b.id)).toBeUndefined()
+			const c = await service.createProfile("C", "pass1234")
+			expect((await service.getActiveProfile())?.id).toBe(c.id)
+			expect(await notFirst(api, c.id)).toBeUndefined()
+		}, 60_000)
+
+		test("a refused not-first write still completes the create", async () => {
+			const { api, service } = await makeService()
+			await service.createProfile("A", "pass1234")
+			const set = api.storage.local.set.bind(api.storage.local)
+			api.storage.local.set = async (items) => {
+				if (Object.keys(items).some((key) => key.startsWith("nulo:ui:profileNotFirst@"))) throw new Error("storage refused")
+				await set(items)
+			}
+			const profile = await service.createProfile("B", "pass1234")
+			expect((await service.getActiveProfile())?.id).toBe(profile.id)
+			expect(await notFirst(api, profile.id)).toBeUndefined()
+		}, 30_000)
 
 		test("a refused flag write still completes the import", async () => {
 			const { api, service } = await makeService()
@@ -2294,15 +2376,6 @@ describe("fee picks: one writer per profile", () => {
 	const FJ = { type: "fj", title: "Public Fee Juice", subtitle: "public" } as const
 	const appPick = (address: string) => ({ kind: "app", address, pick: FJ }) as const
 	const read = async (api: FakeBrowserApi, key: string) => (await api.storage.local.get(key))[key]
-
-	/** The coordinator's purge, as far as the picks go: it removes the profile's UI keys. */
-	const purgingDelegate = (api: FakeBrowserApi, gate?: Promise<void>) => ({
-		snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }),
-		runFor: async (id: string) => {
-			await gate
-			await api.storage.local.remove(profileUiKeys(id))
-		},
-	})
 
 	test("a pick is the profile's own: another profile holding the same address keeps its own", async () => {
 		const { api, service } = await makeService()

@@ -324,6 +324,7 @@ declare global {
   const pricesUnavailable: typeof import('../utils/token-aggregate').pricesUnavailable
   const profileFileNameSegment: typeof import('../utils/files').profileFileNameSegment
   const profileImportedKey: typeof import('../utils/profile-ui-keys').profileImportedKey
+  const profileNotFirstKey: typeof import('../utils/profile-ui-keys').profileNotFirstKey
   const profileTypeLabel: typeof import('../utils/settings-labels').profileTypeLabel
   const profileUiKeys: typeof import('../utils/profile-ui-keys').profileUiKeys
   const projectArgument: typeof import('../utils/transfer-intent').projectArgument
@@ -1107,6 +1108,7 @@ declare module 'vue' {
     readonly pricesUnavailable: UnwrapRef<typeof import('../utils/token-aggregate')['pricesUnavailable']>
     readonly profileFileNameSegment: UnwrapRef<typeof import('../utils/files')['profileFileNameSegment']>
     readonly profileImportedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileImportedKey']>
+    readonly profileNotFirstKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileNotFirstKey']>
     readonly profileTypeLabel: UnwrapRef<typeof import('../utils/settings-labels')['profileTypeLabel']>
     readonly profileUiKeys: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileUiKeys']>
     readonly projectArgument: UnwrapRef<typeof import('../utils/transfer-intent')['projectArgument']>

@@ -330,6 +330,11 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 				await refuseInWindow(auth),
 			)
 			expect((await readProfileNames(control)).sort()).toEqual(["Main", "Profile 2"])
+			// The service marks the profile made beside another, whichever window ran its passkey step.
+			const marked = await control.evaluate(async () =>
+				Object.entries(await chrome.storage.local.get(null)).filter(([key]) => key.startsWith("nulo:ui:profileNotFirst@")),
+			)
+			expect(marked).toEqual([[`nulo:ui:profileNotFirst@${created.profile}`, true]])
 
 			// The popup comes back by itself once the window is done.
 			await panelOn(browser, "#/popup/general")

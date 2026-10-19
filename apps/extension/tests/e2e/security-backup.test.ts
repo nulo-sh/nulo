@@ -4,7 +4,9 @@ import { TEST_PASSWORD } from "./fixtures/constants"
 import { waitForNewTab } from "./fixtures/browser"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
 import { navigateByHash, revealSeedPhrase } from "./fixtures/helpers"
+import { createAndActivateProfile } from "./fixtures/profiles"
 import { shotSend } from "./fixtures/send-page"
+import { waitForHomeReminders } from "./fixtures/tokens"
 import { downloadEncryptedBackup, openEncryptedBackup } from "./helpers/backup-export"
 import { FULL_BACKUP_V2_TAG } from "@/utils/full-backup-helpers"
 
@@ -77,6 +79,21 @@ test("Home's reminders clear as they are done: How Aztec works opens its page, a
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 30_000)
+
+test("a later password profile's Home asks only for its own phrase", async ({ registeredExtensionPerTest }) => {
+	const page = await openPopup(registeredExtensionPerTest)
+	await waitForHash(page, "#/popup/general")
+	await waitForHomeReminders(page)
+	expect(await page.$(sel("get-started-aztec"))).not.toBeNull()
+
+	await createAndActivateProfile(page, "Later", PASSWORD)
+	await waitForHomeReminders(page)
+	const rows = await page.$$eval('[data-testid^="get-started-"]', (els) => els.map((el) => el.getAttribute("data-testid")))
+	expect(rows).toEqual(["get-started-phrase"])
+
+	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
+	expect(registeredExtensionPerTest.pageErrors).toEqual([])
+}, 60_000)
 
 test("a password profile's full backup downloads only once it is encrypted", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)

@@ -3,7 +3,7 @@ import { getErrorMessage } from "@nulo/wallet-core/utils"
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { toRestoreError } from "@/utils/restore-error"
 import type { BrowserApi, StorageArea } from "@nulo/wallet-core/ports"
-import { feePicksKey, profileImportedKey, profileUiKeys, sendFeePicksKey } from "@/utils/profile-ui-keys"
+import { feePicksKey, profileImportedKey, profileNotFirstKey, profileUiKeys, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { applyFeePickUpdate, type FeePickUpdate, parseFeePickUpdate } from "@/utils/fee-picks"
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import type { IConfig } from "@/wallet/config"
@@ -636,7 +636,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				const id = await this.nextUnreservedId()
 				// Inside the lock, after allocation: the MAC binds the final id. PBKDF2 stays outside.
 				const profile = await newPasswordRow({ id, name, slots: encrypted, dekSealed, walletFingerprint }, secret, dek)
-				await this.persistNewProfileHoldingLock(profile)
+				await this.persistCreatedProfileHoldingLock(profile)
 
 				await this.openSessionVerified(profile, secret, passhash, dek)
 
@@ -776,7 +776,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 					const walletFingerprint = await this.assertNotDuplicateWallet(recovery.secret, false)
 
 					const profile = newPasskeyRow({ id, name, dekSealed, walletFingerprint, credentialId: recovery.credentialId })
-					await this.persistNewProfileHoldingLock(profile)
+					await this.persistCreatedProfileHoldingLock(profile)
 
 					await this.openSessionVerified(profile, recovery.secret, undefined, dek)
 
@@ -1446,6 +1446,15 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		this.emit("onProfileAdded", this.getProfileInfo(profile))
 	}
 
+	/** A create's commit. A profile made while another exists is marked, so Home asks it at most for
+	 *  its phrase; a tombstoned or undecodable row is no profile here, as in `getProfiles`. Caller
+	 *  MUST hold the facade lock. */
+	private async persistCreatedProfileHoldingLock(profile: Profile): Promise<void> {
+		const notFirst = (await this.repo.getAll()).some((p) => !this.deletionState.isReserved(p.id))
+		await this.persistNewProfileHoldingLock(profile)
+		if (notFirst) await this.markProfileFlagHoldingLock(profileNotFirstKey(profile.id))
+	}
+
 	/** A restore that keeps its backup's id and a passkey import that takes its `userHandle` adopt
 	 *  an id used before; a key written under it since its purge belongs to no profile yet. A
 	 *  rejected removal fails the commit before anything is written. */
@@ -1453,15 +1462,15 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.local.remove(profileUiKeys(id))
 	}
 
-	/** After an import's row: the person brought this wallet in, so Home shows it no Get started
-	 *  card. Here rather than in the page, because a passkey window or a closed popup can end the
-	 *  page first. A lost write only leaves Home's reminders up, so it never fails the import. Caller
-	 *  MUST hold the facade lock, so a deletion cannot fall between the row and this write. */
-	private async markImportedHoldingLock(id: string): Promise<void> {
+	/** After a row: one of Home's Get started flags only the service sets. Here rather than in the
+	 *  page, because a passkey window or a closed popup can end the page first. A lost write only
+	 *  leaves Home's reminders up, so it never fails the commit. Caller MUST hold the facade lock, so
+	 *  a deletion cannot fall between the row and this write. */
+	private async markProfileFlagHoldingLock(key: string): Promise<void> {
 		try {
-			await this.local.set({ [profileImportedKey(id)]: true })
+			await this.local.set({ [key]: true })
 		} catch (error) {
-			this.logDebug("imported-profile flag write failed", { error })
+			this.logDebug("profile flag write failed", { error })
 		}
 	}
 
@@ -2149,7 +2158,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				const dekSealed = await this.sealDekWithPasshash(passhash, dek)
 				const profile = await newPasswordRow({ id, name, slots: encrypted, dekSealed, walletFingerprint }, secret, dek)
 				await this.persistNewProfileHoldingLock(profile)
-				await this.markImportedHoldingLock(id)
+				await this.markProfileFlagHoldingLock(profileImportedKey(id))
 				await this.openSessionVerified(profile, secret, passhash, dek)
 				return this.getProfileInfo(profile)
 			})
@@ -2197,7 +2206,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 				const profile = newPasskeyRow({ id: userHandle, name, dekSealed, walletFingerprint, credentialId })
 				await this.persistNewProfileHoldingLock(profile)
-				await this.markImportedHoldingLock(userHandle)
+				await this.markProfileFlagHoldingLock(profileImportedKey(userHandle))
 				await this.openSessionVerified(profile, secret, undefined, dek)
 				return this.getProfileInfo(profile)
 			})
@@ -2373,7 +2382,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			)
 
 			await this.writeMarkerThenRowHoldingLock(id, newProfile)
-			await this.markImportedHoldingLock(id)
+			await this.markProfileFlagHoldingLock(profileImportedKey(id))
 
 			this.emit("onProfileAdded", this.getProfileInfo(newProfile))
 
@@ -2529,7 +2538,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		// Same marker-before-row bracket as the password branch (a torn passkey
 		// import must not escape detection).
 		await this.writeMarkerThenRowHoldingLock(id, newProfile)
-		await this.markImportedHoldingLock(id)
+		await this.markProfileFlagHoldingLock(profileImportedKey(id))
 
 		this.emit("onProfileAdded", this.getProfileInfo(newProfile))
 
