@@ -52,7 +52,7 @@ Values only: one token value, one gate loop, one re-pinned hash. No new token, c
 - `packages/design/src/theme-contrast.test.ts` § status text: the ERROR loop iterates a literal two-row table of `[level, colour token, tint token]`, the ERROR row and the WARN row, so a `grep log-warn` still finds the gate. Each theme gates both pairs. Keep the ERROR test names as they are (`a log viewer's ERROR line on its tint`); the WARN twins read `a log viewer's WARN line on its tint` (D2).
 - **Gate**: `bun run --cwd packages/design test -- src/theme-contrast.test.ts`. Pass: exactly one failure, `light: a log viewer's WARN line on its tint >= 4.5:1` (2.91); the dark WARN test and both ERROR tests pass. Record the run in `lessons/phase-1.md`. Layers: unit.
 
-### Phase 2: Pictures and readings before the change
+### Phase 2: Pictures and readings before the change ✓
 
 - Write the scratch spec `zz-log-warn-contrast-1.test.ts` under `~/.cache/nulo-backlog/log-warn-contrast-1/`. Copy it into `apps/extension/tests/e2e/` for each run only, and delete it after the run. Adapt the a11y-errors-1 spec (recon § Reuse map):
   - Use the `registeredExtension` fixture and the suite's own timeout, as `viewers-csp.test.ts` does. Open `#/windows/logger` at 900x700.
@@ -65,7 +65,7 @@ Values only: one token value, one gate loop, one re-pinned hash. No new token, c
 - Run the spec with `WARN_PHASE=before`: `cd apps/extension && WARN_PHASE=before NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/zz-log-warn-contrast-1.test.ts --retry=0`.
 - **Gate**: exit 0. Pass: light reads 2.91:1 and dark 5.05:1 (± 0.01) on every WARN span, none unmeasured; `git status --porcelain apps/extension/tests/e2e` is empty; two PNGs in `implementations-plan/log-warn-contrast-1/screenshots/` (`logs-warn-lines-before-{light,dark}.png`); the readings in `STATUS.md`. A reading off F1 stops the arc: record it, then re-plan the gate. Layers: e2e (scratch).
 
-### Phase 3: The change
+### Phase 3: The change ✓
 
 - `packages/design/src/base.css:187`, the `[theme="light"]` block: `--log-warn-color: #c38700;` becomes `--log-warn-color: var(--txt-warning);`. The dark block (`:203`) stays.
 - `packages/design/src/base.css.test.ts`: append to the comment's ERROR clause, "and the light `--log-warn-color` is `--txt-warning`, AA on its tint". Then set the new hash from a run of the test.
