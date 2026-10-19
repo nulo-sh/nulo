@@ -57,3 +57,9 @@ The owner's second note (P60-01): "On Aztec" with Nulo handling it, "three fifty
 - **Closings outside the page.** Each option is drawn into the built page's stage during a scratch render, with styles set through the CSSOM, because a presentation attribute loses to the class rule (`c-head`'s font size). Nothing is in the repo until the owner picks (OA-13).
 - **Claims a viewer hears.** Codex caught two overstatements: "each token has two balances" (Nulo also holds public-only tokens) and a picture of switching fee methods (an app can fix the method). Each was checked against the wallet before it changed; the first cost a 178-character take.
 - **Host rule.** One Firefox probe started at load 168, above the 150 limit; every later build and browser run waited for the window inside its own call.
+
+## Final pass (2026-10-19, decision page 63)
+
+- **The picked closing as a scene.** The recap is each clip's last scene, so seek, captions, the track and reduced motion needed no new code. Its cover hides the grain the player draws under every scene, and it redraws the corner marks over it, now a shared `CORNERS` constant.
+- **The beat before it.** Appending at the clip's own last pause (0.3 to 0.4 s once sped up) ran the recap straight on from the last line. The review videos the owner picked from had about 0.6 s (measured with `silencedetect` at -60 dB), so the recaps get 0.6 s.
+- **No new narration.** Every recap take came from pass 3's review.

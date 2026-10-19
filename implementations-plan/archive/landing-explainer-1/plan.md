@@ -18,15 +18,15 @@ post_implementation_hardening: not scheduled
 ## Outcome
 
 - **Date:** 2026-10-18.
-- **Status:** closed. Arc 1 merged as #723; arc 2's PR carries this close-out, a draft until the owner approves the clips (OA-8), and its merge closes the plan.
-- **Shipped:** the page `nulo.sh/how-aztec-works` with three narrated clips over their text versions.
+- **Status:** closed. Arc 1 merged as #723; arc 2's PR carries this close-out, and its merge closes the plan. The owner approved the clips on decision page 63 (2026-10-19): P63-01 A, P63-02 A, P63-03 D.
+- **Shipped:** the page `nulo.sh/how-aztec-works` with three narrated clips over their text versions: Private balances 59.1 s in 6 scenes, Proofs 49.4 s in 8, Fees 50.0 s in 7, each ending on its recap (D21).
   - Each clip is an SVG stage drawn from the narration's word timings, with a captions line, a WebVTT track and a transcript (D10 to D15).
-  - Media is self-hosted and hashed under `/assets/`, fetched only on a press, 2.4 MB in all; the CSP is unchanged.
-  - Narration: 2,179 of the 15,000-character cap, one take per clip; the owner's retake note (2026-10-19) re-narrated two scenes, 455 characters, and set the pace to 1.15x (D16, D17); a second pass re-narrated clip 01's scene 4 again, 237 characters (OA-11); the owner's second note re-narrated clip 01's scenes 2 and 4, added clip 03's scene 6 and narrated five closing options, 1,222 characters (D19, D20).
+  - Media is self-hosted and hashed under `/assets/`, fetched only on a press, 2.5 MB in all; the CSP is unchanged.
+  - Narration: 2,179 of the 15,000-character cap, one take per clip; the owner's retake note (2026-10-19) re-narrated two scenes, 455 characters, and set the pace to 1.15x (D16, D17); a second pass re-narrated clip 01's scene 4 again, 237 characters (OA-11); the owner's second note re-narrated clip 01's scenes 2 and 4, added clip 03's scene 6 and narrated five closing options, 1,222 characters (D19, D20); the picked recaps ship from those takes, and the final pass narrated nothing.
   - CI fails a landing build that drops the page (D4).
 - **Known limits:** none.
 - **Open items:**
-  - OA-8 (approve the clips) and OA-9 (chapters; A, none, ships if unanswered) are answered on the PR before it leaves draft. The retake's OA-10 (tight labels) and OA-11 (clip 01's figures) shipped fixed (orchestrator, 2026-10-19). The second note's OA-12 (clip 03's last line; A ships) and OA-13 (how each clip closes; none ships until picked) are open.
+  - None of the owner's asks is open. OA-8, OA-12 and OA-13 were answered on P63 (A, A, D); OA-9 ships its default, A (no chapters); OA-10 and OA-11 shipped fixed (orchestrator, 2026-10-19).
   - #722 stays open: the wallet's `HOW_AZTEC_WORKS_URL` repoint ships with onboarding-3, which has not landed.
   - Before ready, on the OA-6 preview: the MP3s answer range requests (206) and the tracks are served as `text/vtt`; `vite preview` cannot show either.
 - **Dropped:** chapters (D13, OA-9 A). **Lessons:** none promoted. Each gotcha is stated at the code it guards (`vite.config.ts`'s inline limit, the player's `networkState` read, the card's `min-width: 0`), and `lessons.md` is at its budget (8188 of 8192 bytes). Detail: `lessons/phase-3.md`.
@@ -79,6 +79,7 @@ For a new Nulo user who taps "How Aztec works" on Home and lands in a tab, and f
 | D18 | Each box widened at its call site until its labels keep 14 units on both sides (USDC first, then OA-10's four); the scene test measures every mono label at any depth | A note that sizes itself to its label: the coin's card, the record beside it and the hand line still needed their own moves |
 | D19 | A spoken amount is sent as words ("three fifty") and shown as its figure (3.50) in the captions, the track and the transcript: the splice merges each spoken run into one word written as its figure | Figures in the narration text: the voice reads "3.50" digit by digit. Words on screen: the drawn notes and the wallet write 3.50 |
 | D20 | Closing options are drawn over the built page during a scratch render only, nothing in the repo; an appended scene follows the pause the voice took between the clip's last two scenes | A closing scene per option in the clips: the owner picks first (OA-13), and every unpicked option would ship or need removing |
+| D21 | Each clip closes on a recap scene (`kit.ts`'s `recap`): a cover clears the grain, then a plate of the reviewed rows appears, each on its word, after a 0.6 s beat | A closing drawn outside the scene list: the player draws one scene at a time, and as a scene the recap gets seek, captions and reduced motion with no new code |
 
 ## Phase 1 (arc 1): the page ✓
 
@@ -126,6 +127,8 @@ Done: narration outside the repo (D6), 2,179 characters in one take per clip (Pr
 **Retake pass 2 (orchestrator, 2026-10-19, same class as the owner's note):** OA-11 B, clip 01's two "3.50"s spoken "three point five" (scene 4 narrated again, 237 characters, same splice and pace; 51.6 to 50.9 s); OA-10 B, every label 14 units from both sides of its box (four boxes grew). QA, the inset probe and Codex round 3 passed.
 
 **Retake pass 3 (the owner's second note, P60-01, quoted in OWNER-ASKS under OA-8):** clip 01's scene 2 opens "On Aztec, a token can have two balances. Nulo handles both for you."; scene 4 is read as money, "three fifty", and shown as figures (D19); the two scene 2 wires run down the marks' centre line and end on their drawn edges, 0.00 units off in Chrome and Firefox; clip 03 gains scene 6, "Nulo always tells you how the fee is paid, and you are always in control.", over a fee-method card that marks the method in use and ends on Send (OA-12 holds the owner's sentence as the alternative); five closing options per clip rendered outside the page (D20, OA-13). 1,222 characters of a 3,000 cap. Lengths: clip 01 50.9 to 52.7 s, clip 03 40.3 to 45.2 s.
+
+**Final pass (decision page 63, 2026-10-19):** P63-01 A approves the clips, P63-02 A keeps clip 03's scene 6 line, and P63-03 D ships the recap closing in all three (D21). The recap takes from pass 3 were appended at a 0.6 s beat, so no characters were spent. Lengths: 52.7 to 59.1 s, 44.1 to 49.4 s, 45.2 to 50.0 s. The recaps were checked in Chrome and Firefox: each plays from a press, its captions line equals the active WebVTT cue, and with reduced motion it shows its finished frame.
 
 ## Security & Adversarial Considerations
 

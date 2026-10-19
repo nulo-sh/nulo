@@ -1,6 +1,6 @@
 # Owner asks: landing-explainer-1
 
-**Answered by the owner (2026-10-17/18):** P42-01, P42-02, P42-03 = A (the scripts and card texts as written) and P42-04 = A (the `explainer` skill, narrated with the voice in the owner's ElevenLabs file). Arc 2 made the clips; OA-8 and OA-9 below are what is still open. OA-10 and OA-11, from the 2026-10-19 retake, shipped fixed the same day. OA-12 (clip 03's last line) and OA-13 (how each clip closes), from the second retake note, are open.
+**Answered by the owner (2026-10-17/18):** P42-01, P42-02, P42-03 = A (the scripts and card texts as written) and P42-04 = A (the `explainer` skill, narrated with the voice in the owner's ElevenLabs file). Arc 2 made the clips. OA-10 and OA-11, from the 2026-10-19 retake, shipped fixed the same day. **Decision page 63 (signed 2026-10-19):** P63-01 = A closes OA-8, P63-02 = A closes OA-12, P63-03 = D closes OA-13. OA-9 was not on the page and ships its default, A.
 
 **Settled by the orchestrator (D-orch, 2026-10-17 22:0xZ), on the plan's approval:** OA-5 = A, the page ships unlinked from the home page. OA-6 = A, the owner runs the preview command by hand; nothing enables branch builds. OA-7 = A ships now, quoted in the PR body for the owner to flip. OA-1 to OA-4 stay the owner's: the three scripts and their text versions go on the owner's next decision page verbatim from this file, and the page ships the text versions until the owner picks.
 
@@ -128,7 +128,7 @@ The clips follow your approved scripts as your two retake notes changed them (be
 | **A. Approve as they are** | The arc 2 PR leaves draft. |
 | **B. Approve with changes** | A note per clip. A changed picture costs nothing; a changed line means narrating its scene again, about 150 to 250 characters, spliced into the clip. |
 
-**Recommendation: A.** **What ships now:** the arc 2 PR, as a draft.
+**Recommendation: A.** **Answered: P63-01 = A** (2026-10-19): "Approve all three; #800 leaves draft and lands on dev, with your picks below applied." The PR stays a draft until the orchestrator marks it ready.
 
 ### Owner's retake note, 2026-10-19 (P53-04 = B)
 
@@ -219,6 +219,8 @@ What each item became:
 
 **Recommendation: A** (moderate confidence). "Which is which" points back two scenes, across the sponsored one, to the public and private pair. Against: yours matches clip 01's last line, so the two clips end alike. Both keep "you are always in control"; Codex read it as more than the wallet does when an app sets the fee method, and offered "Nulo shows how the fee is paid. You decide whether to approve." (not narrated).
 
+**Answered: P63-02 = A** (2026-10-19): "'Nulo always tells you how the fee is paid, and you are always in control.' Ships now." Codex's alternative is not narrated and does not ship.
+
 ## OA-13. How each clip closes
 
 **Surface:** the end of each clip, after its last line. Today the picture stops on the last scene.
@@ -234,7 +236,9 @@ What each item became:
 
 Each is in `closings/<option>/<clip>.mp4` (the clip's last scene, then the closing), with `sheet.png`. Every spoken one is narrated already, so picking any costs no more characters. Options can differ per clip (for example, 1 for clips 01 and 02 and 3 for clip 03).
 
-**Recommendation: 1 for all three** (moderate confidence). It ends each clip on a beat and the brand. The voice's last line stays the clip's point, and three clips on one page do not repeat a slogan. Against: a silent card after a narrated clip can feel like dead air, and 3 gives clip 03 a call to act. **What ships now:** none; the pick is applied after your answer.
+**Recommendation: 1 for all three** (moderate confidence). It ends each clip on a beat and the brand. The voice's last line stays the clip's point, and three clips on one page do not repeat a slogan. Against: a silent card after a narrated clip can feel like dead air, and 3 gives clip 03 a call to act.
+
+**Answered: P63-03 = D** (2026-10-19): "4, a recap: one spoken line per clip." Shipped: each clip ends on its recap, the take narrated for this review, as its last scene. The stage clears, a plate of its rows appears, each row on its word, after the 0.6 s beat the review videos had. Its captions line and WebVTT cues come from the same timings. Options 1, 2, 3 and 5 are not in the landing or its build.
 
 ## OA-9. Chapters under each clip
 
