@@ -504,8 +504,8 @@ function buildHandlerCallbacks(
 			// needs a round trip and a decrypt to arrive, so the hold exists before any message does.
 			const hold = state.sessions.holds.open(session.sessionId, session.verificationHash)
 			// The connect window stays until this establishment's check window exists or it fails.
-			state.bridge.pin(session.sessionId)
-			const endBridge = () => state.bridge.end(session.sessionId)
+			const bridged = state.bridge.pin(session.sessionId)
+			const endBridge = () => bridged && state.bridge.end(bridged)
 			// Liveness and termination read this session object, not its id: an establishment paused
 			// across its own end and a same-id re-key must neither proceed on nor end the successor.
 			const live = bindLiveSession(handler, session)

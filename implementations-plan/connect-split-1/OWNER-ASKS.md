@@ -44,8 +44,8 @@ The owner's decision on #859 (2026-10-19) covers the split itself: Allow answers
 
 **What the lane asks.** "A page cannot open more than one check window at a time", and "a remembered reconnection must stay as it is". Today an app may hold two check windows at once, so one page can show two: one per chain, or a new connection plus a second discovery that the saved connection turns into a reconnection.
 
-**What ships now.** A per-tab limit of one check window at a time; the per-app limit of two stays, so several tabs of one app reconnecting at once, one each, behave as today. A second check from the same tab waits until the first is answered, within its discovery's minute. Side effect: while that second check waits first in the app's queue, a check another tab of the same app asked for after it also waits, even when there is room, until the first fits or its minute ends; a check asked for once there is room still opens at once, as today.
+**What ships now (B).** No per-tab limit: admission is as today, two check windows per app and eight in all, one per Allow. The arc first shipped A, a per-tab limit of one. Review showed A breaks the second ask on exactly the page #859 is about: an Allow the page never uses holds its tab's slot for about a minute, so when a wallet picker lists wallets again, the saved connection's answer waits behind it, and Nulo is missing from the picker or appears up to a minute late. The two asks conflict on that page, and B keeps the reconnection as it is. That one page can hold two checks (and frames of several allowed apps share a tab) is filed as a known limit.
 
-**Options.** A (recommended): as above; it holds the lane's rule with one counter in the existing admission gate. B: no per-tab limit; one check per Allow and two per app stay, recorded as a known limit.
+**Options.** B (recommended): as above. A: the per-tab limit of one, with the cost above. A': a per-tab limit that lets a newer discovery replace an unused Allow (not recommended: the wallet cannot tell which of a page's discoveries it will connect on, so it can end the one in use).
 
-**Pictures.** None: a person sees a second check from the same tab later, not at once.
+**Pictures.** None: no screen changes.

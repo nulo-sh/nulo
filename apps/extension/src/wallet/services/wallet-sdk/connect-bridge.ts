@@ -9,26 +9,33 @@ import type { ClockPort, TimerHandle } from "@nulo/wallet-core/ports"
 
 export const BRIDGE_MS = 1_500
 
-type Held = { tabId: number; windowId: number; removed: boolean; pinned: boolean; timer?: TimerHandle }
+/** One Allow's connect window. Every call names the hold it acts on: a page can reuse a request
+ *  id, and a caller still holding an earlier attempt's hold must never reach its successor's. */
+export type BridgeHold = { readonly id: string; readonly tabId: number; readonly windowId: number }
+
+type Entry = BridgeHold & { removed: boolean; pinned: boolean; timer?: TimerHandle }
 
 export class ConnectBridge {
-	private readonly held = new Map<string, Held>()
+	private readonly held = new Map<string, Entry>()
 
 	public constructor(
 		private readonly clock: Pick<ClockPort, "setTimeout" | "clearTimeout">,
 		private readonly closeWindow: (windowId: number) => void,
 	) {}
 
-	/** Take the window an Allow handed over. A page-chosen id already held is ended first, so no
+	/** Take the window an Allow handed over. A hold already under the id is ended first, so no
 	 *  window is ever left without an owner. */
-	public hold(id: string, tabId: number, windowId: number): void {
-		this.end(id)
-		this.held.set(id, { tabId, windowId, removed: false, pinned: false })
+	public hold(id: string, tabId: number, windowId: number): BridgeHold {
+		const previous = this.held.get(id)
+		if (previous) this.end(previous)
+		const entry: Entry = { id, tabId, windowId, removed: false, pinned: false }
+		this.held.set(id, entry)
+		return entry
 	}
 
-	/** Held, and its window not closed by the person. */
-	public isOpen(id: string): boolean {
-		const entry = this.held.get(id)
+	/** Still held, and its window not closed by the person. */
+	public isOpen(hold: BridgeHold): boolean {
+		const entry = this.current(hold)
 		return entry !== undefined && !entry.removed
 	}
 
@@ -37,34 +44,41 @@ export class ConnectBridge {
 	}
 
 	/** The wallet approved the discovery: the page has `BRIDGE_MS` to reach establishment. */
-	public arm(id: string): void {
-		const entry = this.held.get(id)
+	public arm(hold: BridgeHold): void {
+		const entry = this.current(hold)
 		if (!entry || entry.pinned) return
 		this.clearTimer(entry)
-		entry.timer = this.clock.setTimeout(() => this.end(id), BRIDGE_MS)
+		entry.timer = this.clock.setTimeout(() => this.end(entry), BRIDGE_MS)
 	}
 
-	/** Establishment reached the worker: the bridge stays until `end`, once the check window exists. */
-	public pin(id: string): void {
+	/** Establishment reached the worker: the id's hold stays until `end`, once the check window
+	 *  exists. Returns that hold, so the establishment ends it and never a later one. */
+	public pin(id: string): BridgeHold | undefined {
 		const entry = this.held.get(id)
-		if (!entry) return
+		if (!entry) return undefined
 		entry.pinned = true
 		this.clearTimer(entry)
+		return entry
 	}
 
-	public end(id: string): void {
-		const entry = this.held.get(id)
+	public end(hold: BridgeHold): void {
+		const entry = this.current(hold)
 		if (!entry) return
-		this.held.delete(id)
+		this.held.delete(entry.id)
 		this.clearTimer(entry)
 		if (!entry.removed) this.closeWindow(entry.windowId)
 	}
 
 	public endForTab(tabId: number): void {
-		for (const [id, entry] of [...this.held]) if (entry.tabId === tabId) this.end(id)
+		for (const entry of [...this.held.values()]) if (entry.tabId === tabId) this.end(entry)
 	}
 
-	private clearTimer(entry: Held): void {
+	private current(hold: BridgeHold): Entry | undefined {
+		const entry = this.held.get(hold.id)
+		return entry === hold ? entry : undefined
+	}
+
+	private clearTimer(entry: Entry): void {
 		if (entry.timer === undefined) return
 		this.clock.clearTimeout(entry.timer)
 		entry.timer = undefined

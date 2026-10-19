@@ -16,7 +16,7 @@ import { describeExternalId, DISCOVERY_STALE_MS, type DiscoveryQueue, isDiscover
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import { deferred } from "@nulo/wallet-core/utils"
 import { admitAsync, type VerifyAdmissionGate, type WindowReservation } from "./verify-admission"
-import type { ConnectBridge } from "./connect-bridge"
+import type { BridgeHold, ConnectBridge } from "./connect-bridge"
 import { approveOrRollbackDiscoverySession, rollBackDiscoverySession } from "./discovery-approval"
 import { isSecureDappOrigin } from "./dapp-origin"
 import type { PendingVerificationEntry } from "./pending-verification"
@@ -257,7 +257,6 @@ function admitVerifyWindow(discovery: PendingDiscovery, deps: DiscoveryDeps) {
 	return admitAsync(deps.admission, {
 		id: discovery.requestId,
 		origin: discovery.origin,
-		tabId: discovery.tabId,
 		deadline: discoveryDeadline(discovery),
 		consumesToken: false,
 	})
@@ -281,7 +280,6 @@ function autoApproveExistingSession(discovery: PendingDiscovery, chainId: string
 		{
 			id: discovery.requestId,
 			origin: discovery.origin,
-			tabId: discovery.tabId,
 			deadline: discoveryDeadline(discovery),
 			consumesToken: true,
 		},
@@ -383,6 +381,7 @@ async function runDiscoveryPopup(
 	// discoveries can await it.
 	const { promise: popupPromise, resolve: resolvePopup } = deferred()
 	pendingDiscoveryPromises.set(dedupeKey, { kind: "connect", profileId, settled: popupPromise })
+	let hold: BridgeHold | undefined
 	let approved = false
 
 	try {
@@ -392,9 +391,9 @@ async function runDiscoveryPopup(
 			logger.log("wallet-sdk", LogLevel.Info, `Discovery denied: request ${describeExternalId(discovery.requestId)}`)
 			return
 		}
-		const { windowId } = result
-		if (windowId !== undefined) deps.bridge.hold(discovery.requestId, discovery.tabId, windowId)
-		const windowOpen = () => windowId === undefined || deps.bridge.isOpen(discovery.requestId)
+		if (result.windowId !== undefined) hold = deps.bridge.hold(discovery.requestId, discovery.tabId, result.windowId)
+		const held = hold
+		const windowOpen = () => held === undefined || deps.bridge.isOpen(held)
 
 		// The user may have taken longer than the dApp's 60s window to
 		// click Allow. Reject BEFORE the durable DappSession write so we never
@@ -413,8 +412,8 @@ async function runDiscoveryPopup(
 		}
 		approved = await persistAndApprove(discovery, chainId, params, profileId, admitted, windowOpen, deps)
 	} finally {
-		if (approved) deps.bridge.arm(discovery.requestId)
-		else deps.bridge.end(discovery.requestId)
+		if (hold && approved) deps.bridge.arm(hold)
+		else if (hold) deps.bridge.end(hold)
 		resolvePopup()
 		pendingDiscoveryPromises.delete(dedupeKey)
 	}

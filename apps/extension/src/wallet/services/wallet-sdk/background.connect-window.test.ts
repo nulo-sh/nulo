@@ -1,6 +1,6 @@
 /**
- * The connect window through the SDK handler's callbacks: an Allow hands its window to the
- * connection, which shows the emoji check in it, and every exit before the check closes it. Tab
+ * The connect window through the SDK handler's callbacks: an Allow hands its window to a bridge,
+ * which closes it once the emoji check opens in a window of its own, or when no check follows. Tab
  * lifecycle runs for real over a `chrome.tabs` stub that captures its listeners. The handler keeps
  * one `ActiveSession` object per live session id, as upstream does: a re-key replaces it.
  */
@@ -135,6 +135,8 @@ function fakeWindows() {
 	let nextId = 100
 	/** Delays the next creation until it settles, once; a rejection fails that creation. */
 	let nextCreation: Promise<void> | undefined
+	/** Delays the next anchor read until it settles, once. */
+	let nextAnchor: Promise<undefined> | undefined
 	const fire = (id: number) => {
 		void Promise.resolve().then(() => {
 			for (const l of listeners) l(id)
@@ -162,7 +164,11 @@ function fakeWindows() {
 			fire(id)
 		},
 		update: async () => {},
-		getLastFocused: async () => undefined,
+		getLastFocused: async () => {
+			const held = nextAnchor
+			nextAnchor = undefined
+			return held
+		},
 	}
 	const closeByUser = (id: number) => {
 		if (open.delete(id)) fire(id)
@@ -170,7 +176,10 @@ function fakeWindows() {
 	const holdNextCreation = (outcome: Promise<void>) => {
 		nextCreation = outcome
 	}
-	return { port, open, removed, created, events, closeByUser, holdNextCreation }
+	const holdNextAnchor = (outcome: Promise<undefined>) => {
+		nextAnchor = outcome
+	}
+	return { port, open, removed, created, events, closeByUser, holdNextCreation, holdNextAnchor }
 }
 
 const chain = (n: number) => ({ chainInfo: { chainId: String(n), version: "0" } })
@@ -616,6 +625,18 @@ describe("an approved connection whose key exchange does not follow at once", ()
 		expect(h.windows.removed).toEqual([41])
 	})
 
+	test("a page that lists wallets again after an Allow it never used is answered at once from the saved row", async () => {
+		const h = boot()
+		await approvedIn(h, "f1", 41)
+		await vi.advanceTimersByTimeAsync(BRIDGE_MS)
+		expect(h.windows.removed).toEqual([41])
+
+		h.discover("again")
+		await flush()
+		expect(approved()).toEqual(["f1", "again"])
+		expect(gate().windowsHeld(ORIGIN)).toBe(2)
+	})
+
 	test("an exchange after BRIDGE_MS but within the Allow's validity opens the check in its own window", async () => {
 		const h = boot()
 		await approvedIn(h, "f1", 41)
@@ -741,28 +762,46 @@ describe("establishment opens the check in a window of its own", () => {
 		expect(terminated()).toEqual([])
 	})
 
-	test("a twin from another tab connects as a reconnection in its own window; one from the same tab waits for the first check to close", async () => {
+	test("the twin of a pending popup connects as a reconnection in a window of its own", async () => {
 		const h = boot()
 		h.discover("f1")
 		await flush()
-		h.discover("other", { tabId: 8 })
-		h.discover("same")
+		h.discover("twin")
 		await flush()
 		h.allow("f1", 41)
 		await flush()
-		expect(approved()).toEqual(["f1", "other"])
+		expect(approved()).toEqual(["f1", "twin"])
 
 		await h.establish("f1")
-		await h.establish("other")
+		await h.establish("twin")
 		await flush()
-		expect(h.windows.created).toHaveLength(2)
-		expect(h.windows.created[1].url).toContain(`verificationHash=${hashOf("other")}&isReconnect=true`)
-		expect(approved()).toEqual(["f1", "other"])
-
-		h.windows.closeByUser(100)
-		await flush()
-		expect(approved()).toEqual(["f1", "other", "same"])
+		expect(h.windows.events).toEqual(["create:100", "remove:41", "create:101"])
+		expect(h.windows.created[1].url).toContain(`verificationHash=${hashOf("twin")}&isReconnect=true`)
 		expect(terminated()).toEqual([])
+	})
+
+	test("an establishment that ended while it read the anchor never closes the window of an Allow that reused its id", async () => {
+		const h = boot()
+		await approvedIn(h, "f1", 41)
+		const anchor = deferred<undefined>()
+		h.windows.holdNextAnchor(anchor.promise)
+		const establishing = h.establish("f1")
+		await flush()
+		h.handler.terminateSession("f1")
+		await flush()
+		// The page's next discovery, for another chain, reuses the id and is allowed in window 42.
+		await approvedIn(h, "f1", 42, chain(2))
+		expect(approved()).toEqual(["f1", "f1"])
+		expect(h.windows.removed).toEqual([41])
+
+		anchor.resolve(undefined)
+		await establishing
+		await flush()
+		expect(h.windows.removed).toEqual([41])
+		expect(h.windows.created).toEqual([])
+		// Control: the later Allow's own bridge is live, and closes its window on its own timer.
+		await vi.advanceTimersByTimeAsync(BRIDGE_MS)
+		expect(h.windows.removed).toEqual([41, 42])
 	})
 
 	test("two exchanges on one id that overlap open no window: the session ends and the connect window closes", async () => {
@@ -877,10 +916,9 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		h.rows.set(`${ORIGIN}|${CHAIN}`, row)
 		return row
 	}
-	/** A reconnect of the remembered app on `requestId` from `tabId`, which shows its own check. A tab
-	 *  holds one check at a time, so a second check open beside the first comes from another tab. */
-	async function reconnect(h: ReturnType<typeof boot>, requestId: string, tabId = 7) {
-		h.discover(requestId, { tabId })
+	/** A reconnect of the remembered app on `requestId`, which shows its own check. */
+	async function reconnect(h: ReturnType<typeof boot>, requestId: string) {
+		h.discover(requestId)
 		await flush()
 		await h.establish(requestId)
 		await settle()
@@ -968,7 +1006,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		remember(h)
 		await reconnect(h, "c1")
 		h.confirm(hashOf("c1"))
-		await reconnect(h, "h1", 8)
+		await reconnect(h, "h1")
 		h.send("h1", "sendTx", "s")
 		await settle()
 
@@ -1002,7 +1040,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		const h = boot()
 		remember(h)
 		await reconnect(h, "h1")
-		await reconnect(h, "h2", 8)
+		await reconnect(h, "h2")
 		h.send("h1", "sendTx", "s1")
 		h.send("h2", "sendTx", "s2")
 		await settle()
@@ -1032,7 +1070,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		const h = boot()
 		remember(h)
 		await reconnect(h, "r1")
-		await reconnect(h, "r2", 8)
+		await reconnect(h, "r2")
 		h.send("r1", "getChainInfo", "a1")
 		h.send("r2", "getChainInfo", "a2")
 		await settle()
@@ -1285,8 +1323,8 @@ describe("an app's calls wait for the person to confirm the check", () => {
 				requestId,
 				encrypted,
 			)
-		async function confirmedSession(h: ReturnType<typeof boot>, requestId: string, tabId = 7) {
-			await reconnect(h, requestId, tabId)
+		async function confirmedSession(h: ReturnType<typeof boot>, requestId: string) {
+			await reconnect(h, requestId)
 			h.confirm(hashOf(requestId))
 			await settle()
 		}
@@ -1303,7 +1341,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			const h = boot()
 			remember(h)
 			await confirmedSession(h, "r1")
-			await confirmedSession(h, "r2", 8)
+			await confirmedSession(h, "r2")
 			const head = deferred<unknown>()
 			dispatch.mockImplementationOnce(() => head.promise as never)
 			h.send("r1", "getChainInfo", "head")

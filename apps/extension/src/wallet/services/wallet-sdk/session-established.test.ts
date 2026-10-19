@@ -46,7 +46,7 @@ function reserved(
 	const gate = new VerifyAdmissionGate(clock, { released: (rid) => cancelPendingVerification(markers, rid) })
 	let reservation: WindowReservation | undefined
 	gate.admit(
-		{ id, origin: ORIGIN, tabId: 7, deadline: Date.now() + 55_000, consumesToken: false },
+		{ id, origin: ORIGIN, deadline: Date.now() + 55_000, consumesToken: false },
 		(r) => {
 			reservation = r
 		},
@@ -181,12 +181,12 @@ describe("handleSessionEstablished — verify-window reservation", () => {
 		// A second handshake for the origin takes the last slot; a third must wait.
 		let third: WindowReservation | undefined
 		gate.admit(
-			{ id: "sess-2", origin: ORIGIN, tabId: 8, deadline: Date.now() + 55_000, consumesToken: false },
+			{ id: "sess-2", origin: ORIGIN, deadline: Date.now() + 55_000, consumesToken: false },
 			() => {},
 			() => {},
 		)
 		gate.admit(
-			{ id: "sess-3", origin: ORIGIN, tabId: 9, deadline: Date.now() + 55_000, consumesToken: false },
+			{ id: "sess-3", origin: ORIGIN, deadline: Date.now() + 55_000, consumesToken: false },
 			(r) => {
 				third = r
 			},
@@ -392,7 +392,7 @@ describe("handleSessionEstablished — profile binding", () => {
 function admitReplacement(gate: VerifyAdmissionGate, markers: Map<string, PendingVerificationEntry>) {
 	let slot: WindowReservation | undefined
 	gate.admit(
-		{ id: "sess-1", origin: ORIGIN, tabId: 7, deadline: Date.now() + 55_000, consumesToken: false },
+		{ id: "sess-1", origin: ORIGIN, deadline: Date.now() + 55_000, consumesToken: false },
 		(r) => {
 			slot = r
 		},
@@ -480,6 +480,22 @@ describe("handleSessionEstablished — the approval ends while establishment wai
 })
 
 describe("handleSessionEstablished — a new connection's failed check", () => {
+	test("a stamped channel whose check cannot open still ends after a discovery reused its id", async () => {
+		const h = makeDeps({ pendingVerification: new Map([["sess-1", marker("prof-A")]]) })
+		const anchor = deferred<WindowBounds | undefined>()
+		h.getLastFocused.mockReturnValueOnce(anchor.promise)
+		const establishing = handleSessionEstablished(makeSession(), h.deps)
+		await vi.waitFor(() => expect(h.getLastFocused).toHaveBeenCalledTimes(1))
+		expect(h.stamp).toHaveBeenCalledWith("sess-1", "prof-A")
+		// The slot is given back while the anchor is read, and the page's next discovery reuses the id.
+		h.reservation.releaseIfUnstarted()
+		admitReplacement(h.gate, h.pendingVerification)
+		anchor.resolve(ANCHOR)
+		expect(await establishing).toBe(false)
+		expect(h.create).not.toHaveBeenCalled()
+		expect(h.terminate).toHaveBeenCalledWith("sess-1")
+	})
+
 	test("a failed establishment frees its slot and leaves a tombstone, so the replay of its restored discovery terminates", async () => {
 		const { deps, gate, terminate, stamp, create, pendingVerification } = makeDeps({
 			pendingVerification: new Map([["sess-1", marker()]]),

@@ -23,9 +23,6 @@ const clock = {
 	clearTimeout: (h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>),
 }
 
-/** Each request comes from its own tab unless a test names one, so only the origin's caps bind. */
-let nextTab = 1
-
 /** `releaseOnServe` gives each served slot back unopened, which refunds no token, so only the rate
  *  is under test. */
 function harness({ releaseOnServe = false } = {}) {
@@ -36,7 +33,7 @@ function harness({ releaseOnServe = false } = {}) {
 	const reservations = new Map<string, WindowReservation>()
 	const admit = (id: string, over: Partial<AdmissionRequest> = {}) =>
 		gate.admit(
-			{ id, origin: ORIGIN, tabId: nextTab++, deadline: Date.now() + 55_000, consumesToken: true, ...over },
+			{ id, origin: ORIGIN, deadline: Date.now() + 55_000, consumesToken: true, ...over },
 			(r) => {
 				served.push(id)
 				reservations.set(id, r)
@@ -166,7 +163,7 @@ describe("VerifyAdmissionGate — verify-window capacity", () => {
 		const { gate } = harness()
 		const at = (origin: string, id: string) =>
 			gate.admit(
-				{ id, origin, tabId: nextTab++, deadline: Date.now() + 55_000, consumesToken: false },
+				{ id, origin, deadline: Date.now() + 55_000, consumesToken: false },
 				() => {},
 				() => {},
 			)
@@ -243,80 +240,6 @@ describe("VerifyAdmissionGate — verify-window capacity", () => {
 		expect(served).toEqual(["w1", "w2"])
 		gate.windowRemoved(11)
 		expect(served).toEqual(["w1", "w2", "w3"])
-	})
-})
-
-describe("VerifyAdmissionGate — one check per tab", () => {
-	const noToken = { consumesToken: false }
-	const TAB = 7
-
-	/** w1 opened in tab 7; nothing else held. */
-	const tabHoldsCheck = () => {
-		const h = harness()
-		h.admit("w1", { ...noToken, tabId: TAB })
-		const w1 = h.reservations.get("w1")!
-		w1.markInFlight()
-		w1.adopt(11)
-		return { ...h, w1 }
-	}
-
-	test("a second check from the tab waits while its first is open and runs once that window closes", () => {
-		const { gate, admit, served } = tabHoldsCheck()
-		expect(admit("w2", { ...noToken, tabId: TAB })).toBe("queued")
-		expect(gate.windowsHeld(ORIGIN)).toBe(1)
-		gate.windowRemoved(11)
-		expect(served).toEqual(["w1", "w2"])
-	})
-
-	test("another tab of the same origin is admitted at once (control)", () => {
-		const { admit, served } = tabHoldsCheck()
-		expect(admit("w2", { ...noToken, tabId: TAB + 1 })).toBe("now")
-		expect(served).toEqual(["w1", "w2"])
-	})
-
-	test("a blocked head holds a queued other-tab request until the head's deadline; a fresh other-tab arrival is admitted", () => {
-		const { gate, admit, served, expired, reservations } = tabHoldsCheck()
-		admit("other", { ...noToken, tabId: TAB + 1 })
-		expect(admit("head", { ...noToken, tabId: TAB, deadline: Date.now() + 5_000 })).toBe("queued")
-		expect(admit("behind", { ...noToken, tabId: TAB + 2, deadline: Date.now() + 60_000 })).toBe("queued")
-		// Room for one comes back, but the FIFO's head is its tab's second check.
-		reservations.get("other")!.releaseIfUnstarted()
-		expect(served).toEqual(["w1", "other"])
-		expect(gate.queued(ORIGIN)).toBe(2)
-		expect(admit("fresh", { ...noToken, tabId: TAB + 3 })).toBe("now")
-		reservations.get("fresh")!.releaseIfUnstarted()
-		vi.advanceTimersByTime(5_001)
-		expect(expired).toEqual(["head"])
-		expect(served).toEqual(["w1", "other", "fresh", "behind"])
-	})
-
-	test("a cancelled creation keeps the tab's slot until its window is removed", () => {
-		const { gate, admit, served, reservations } = harness()
-		admit("w1", { ...noToken, tabId: TAB })
-		const w1 = reservations.get("w1")!
-		w1.markInFlight()
-		gate.onSessionGone("w1")
-		admit("w2", { ...noToken, tabId: TAB })
-		expect(w1.adopt(11)).toBe("abort")
-		expect(served).toEqual(["w1"])
-		gate.windowRemoved(11)
-		expect(served).toEqual(["w1", "w2"])
-	})
-
-	test("repeated releases never free the tab twice, and a request that expires in the queue never touched it", () => {
-		const { gate, admit, served, expired, reservations } = harness()
-		admit("w1", { ...noToken, tabId: TAB })
-		admit("short", { ...noToken, tabId: TAB, deadline: Date.now() + 1_000 })
-		vi.advanceTimersByTime(1_001)
-		expect(expired).toEqual(["short"])
-		const w1 = reservations.get("w1")!
-		w1.releaseIfUnstarted()
-		w1.releaseIfUnstarted()
-		w1.cancel()
-		gate.windowRemoved(11)
-		expect(admit("w2", { ...noToken, tabId: TAB })).toBe("now")
-		expect(admit("w3", { ...noToken, tabId: TAB })).toBe("queued")
-		expect(served).toEqual(["w1", "w2"])
 	})
 })
 

@@ -4,10 +4,10 @@
  *
  * Two budgets, both keyed on the page origin: a token bucket bounds how fast a remembered origin
  * is re-approved (a reload loop is slowed, not blocked), and a window budget bounds how many verify
- * windows an origin can have open or reserved at once, and a tab one at a time. A handshake that
- * fits runs at once; one that does not waits in a bounded FIFO and is served when a token refills
- * or a window closes, or is rejected once its discovery deadline passes. Admission happens BEFORE
- * the approval so a session is never live with its verification merely queued.
+ * windows an origin can have open or reserved at once. A handshake that fits runs at once; one that
+ * does not waits in a bounded FIFO and is served when a token refills or a window closes, or is
+ * rejected once its discovery deadline passes. Admission happens BEFORE the approval so a session
+ * is never live with its verification merely queued.
  *
  * A window slot is reserved at admission and released only when the window it produced is gone:
  * releasing on session termination alone would let an origin connect, keep the window, close the
@@ -20,7 +20,6 @@ import type { ClockPort, TimerHandle } from "@nulo/wallet-core/ports"
 export const RECONNECT_TOKENS = 3
 export const RECONNECT_REFILL_MS = 20_000
 export const VERIFY_WINDOWS_PER_ORIGIN = 2
-export const VERIFY_WINDOWS_PER_TAB = 1
 export const VERIFY_WINDOWS_GLOBAL = 8
 export const ADMISSION_QUEUE_PER_ORIGIN = 4
 /** Key exchange runs after the approval and can straddle the discovery deadline by a few seconds;
@@ -32,8 +31,6 @@ export interface AdmissionRequest {
 	/** The discovery request id — the SDK reuses it verbatim as the session id. */
 	readonly id: string
 	readonly origin: string
-	/** The tab whose page sent the discovery. */
-	readonly tabId: number
 	/** Epoch ms after which the dApp no longer listens for the approval. */
 	readonly deadline: number
 	/** Whether this handshake counts against the origin's reconnect rate (a user-approved
@@ -63,7 +60,6 @@ export class WindowReservation {
 	public constructor(
 		public readonly id: string,
 		public readonly origin: string,
-		public readonly tabId: number,
 		/** When an unestablished reservation is reclaimed. */
 		public readonly expiresAt: number,
 		private readonly release: (r: WindowReservation) => void,
@@ -164,11 +160,9 @@ export class VerifyAdmissionGate {
 	 *  that is already live must not acquire a second slot (it would overwrite the first, which then
 	 *  can never decrement the counters). */
 	private readonly liveWindowIds = new Set<string>()
-	/** Window ids removed before a reservation knew them, awaiting `adopt` or `attach` (bounded). */
+	/** Window ids removed before a reservation knew them, awaiting `adopt` (bounded). */
 	private readonly recentRemovals = new Set<number>()
 	private globalWindows = 0
-	/** Reserved or open verify windows per dApp tab, so one page shows one check at a time. */
-	private readonly tabWindows = new Map<number, number>()
 	private timer: TimerHandle | undefined
 
 	public constructor(
@@ -251,7 +245,6 @@ export class VerifyAdmissionGate {
 
 	private fits(origin: OriginState, req: AdmissionRequest): boolean {
 		if (req.consumesToken && origin.tokens < 1) return false
-		if ((this.tabWindows.get(req.tabId) ?? 0) >= VERIFY_WINDOWS_PER_TAB) return false
 		return origin.windows < VERIFY_WINDOWS_PER_ORIGIN && this.globalWindows < VERIFY_WINDOWS_GLOBAL
 	}
 
@@ -259,12 +252,10 @@ export class VerifyAdmissionGate {
 		if (req.consumesToken) origin.tokens -= 1
 		origin.windows += 1
 		this.globalWindows += 1
-		this.tabWindows.set(req.tabId, (this.tabWindows.get(req.tabId) ?? 0) + 1)
 		this.liveWindowIds.add(req.id)
 		const reservation = new WindowReservation(
 			req.id,
 			req.origin,
-			req.tabId,
 			req.deadline + RESERVATION_GRACE_MS,
 			(r) => this.released(r),
 			(windowId) => this.recentRemovals.delete(windowId),
@@ -281,9 +272,6 @@ export class VerifyAdmissionGate {
 		const origin = this.originState(r.origin)
 		origin.windows -= 1
 		this.globalWindows -= 1
-		const tabHeld = (this.tabWindows.get(r.tabId) ?? 1) - 1
-		if (tabHeld > 0) this.tabWindows.set(r.tabId, tabHeld)
-		else this.tabWindows.delete(r.tabId)
 		this.hooks.released(r.id)
 		this.serve()
 	}
