@@ -15,7 +15,7 @@ import ManifestConfig from "./manifest.config.ts"
 //   below, which needs no permission.
 const FIREFOX_INCOMPATIBLE_PERMISSIONS = new Set(["background", "offscreen", "sidePanel"])
 
-const { side_panel } = ManifestConfig as { side_panel: { default_path: string } }
+const { side_panel, icons } = ManifestConfig as { side_panel: { default_path: string }; icons: Record<string, string> }
 
 // @ts-expect-error ManifestConfig provides all required fields
 export default defineManifest((_env) => ({
@@ -42,9 +42,11 @@ export default defineManifest((_env) => ({
 	},
 	// The page Chrome's side panel loads. A step run there is not in a `popup` view, so a passkey
 	// ceremony runs in place, where the toolbar panel hands it to a window of its own. Firefox
-	// names and draws the sidebar with the add-on's name and icons, and opens it only when asked.
+	// titles the sidebar with the add-on's name, but draws a generic puzzle piece unless given an
+	// icon, and opens it only when asked.
 	sidebar_action: {
 		default_panel: side_panel.default_path,
+		default_icon: icons,
 		open_at_install: false,
 	},
 	background: {

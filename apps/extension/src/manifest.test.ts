@@ -22,7 +22,7 @@ const m = manifest as unknown as {
 
 type FirefoxManifest = {
 	permissions: string[]
-	sidebar_action?: { default_panel: string; open_at_install: boolean }
+	sidebar_action?: { default_panel: string; default_icon: Record<string, string>; open_at_install: boolean }
 	host_permissions: string[]
 	optional_host_permissions?: unknown
 	optional_permissions?: unknown
@@ -207,10 +207,15 @@ describe("firefox manifest", () => {
 		expect(permissions).toContain("storage")
 	})
 
-	// The sidebar is Chrome's side panel on Firefox: the same page, and nothing opened at install.
+	// The sidebar is Chrome's side panel on Firefox: the same page and the add-on's own icon, and
+	// nothing opened at install.
 	test("declares a sidebar on the side panel's page, closed at install, on Firefox only", () => {
 		const chrome = chromeFor({ command: "build", mode: "production" })
-		expect(buildFirefox().sidebar_action).toEqual({ default_panel: chrome.side_panel.default_path, open_at_install: false })
+		expect(buildFirefox().sidebar_action).toEqual({
+			default_panel: chrome.side_panel.default_path,
+			default_icon: (manifest as unknown as { icons: Record<string, string> }).icons,
+			open_at_install: false,
+		})
 		expect(chrome).not.toHaveProperty("sidebar_action")
 	})
 
