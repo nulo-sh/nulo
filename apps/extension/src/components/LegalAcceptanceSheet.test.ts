@@ -151,12 +151,14 @@ describe("LegalAcceptanceSheet", () => {
 		expect((toastRoot.firstElementChild as HTMLElement).style.bottom).toBe("52px")
 	})
 
-	test("tells the shell when it shows and when it goes", async () => {
+	test("tells the shell when it shows and when it goes, and that it has no verdict before its read and after it unmounts", async () => {
 		const w = await mountSheet()
-		expect(w.emitted("visibility")).toEqual([[true]])
+		expect(w.emitted("visibility")).toEqual([[undefined], [true]])
 		await w.get('[data-testid="stub-consent"]').trigger("click")
 		await flushPromises()
-		expect(w.emitted("visibility")).toEqual([[true], [false]])
+		expect(w.emitted("visibility")).toEqual([[undefined], [true], [false]])
+		w.unmount()
+		expect(w.emitted("visibility")?.at(-1)).toEqual([undefined])
 	})
 
 	test("a refused accept opens the error snack and the sheet stays", async () => {

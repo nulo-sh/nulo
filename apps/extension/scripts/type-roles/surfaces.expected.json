@@ -950,6 +950,15 @@
 			"suite": "smoke"
 		},
 		{
+			"id": "overlay:NetworkArrival",
+			"name": "New network arrival",
+			"kind": "overlay",
+			"source": "apps/extension/src/components/network-arrival/NetworkArrival.vue",
+			"reach": "an announced network planted by seedNetworkArrival (tests/e2e/network-arrival.test.ts)",
+			"states": ["default"],
+			"suite": "smoke"
+		},
+		{
 			"id": "overlay:LegalAcceptanceSheet",
 			"name": "Legal sheet",
 			"kind": "overlay",

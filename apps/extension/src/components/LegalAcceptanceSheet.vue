@@ -12,7 +12,8 @@ import { openLegalDocument } from "@/utils/legal-links"
 import { LEGAL_DECLINED_PATH, LEGAL_DISMISSED_KEY, shouldShowLegalSheet } from "@/utils/legal-sheet"
 import { useLegalAcceptance } from "@/composables/useLegalAcceptance"
 
-const emit = defineEmits<{ visibility: [shown: boolean] }>()
+/** `undefined` until the first status read lands, and once the sheet unmounts: no verdict. */
+const emit = defineEmits<{ visibility: [shown: boolean | undefined] }>()
 
 const { openToast } = useToast()
 
@@ -69,7 +70,12 @@ const onSessionChanged = (changed: Record<string, chrome.storage.StorageChange>,
 	if (area === "session" && LEGAL_DISMISSED_KEY in changed) dismissedVersion.value = changed[LEGAL_DISMISSED_KEY]?.newValue
 }
 
-watch(visible, (shown) => emit("visibility", shown))
+// Synchronous, so the shell never renders a frame with a verdict this sheet has already changed.
+watch(
+	() => (legal.status.value === "loading" ? undefined : visible.value),
+	(shown) => emit("visibility", shown),
+	{ immediate: true, flush: "sync" },
+)
 
 onBeforeMount(async () => {
 	chrome.storage.onChanged.addListener(onSessionChanged)
@@ -79,6 +85,7 @@ onBeforeMount(async () => {
 })
 
 onBeforeUnmount(() => {
+	emit("visibility", undefined)
 	legal.dispose()
 	chrome.storage.onChanged.removeListener(onSessionChanged)
 })

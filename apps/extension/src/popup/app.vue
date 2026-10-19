@@ -4,6 +4,7 @@
 import PopupManager from "./components/popups/PopupManager.vue"
 import Navigation from "./components/Navigation.vue"
 import StaleNetworkTakeover from "@/components/stale-network/StaleNetworkTakeover.vue"
+import NetworkArrival from "@/components/network-arrival/NetworkArrival.vue"
 
 /** Utils */
 import { managers, isServiceReady } from "@/utils/core"
@@ -26,6 +27,7 @@ import { createLockedState, watchLockStart } from "@/popup/locked-state"
 import { createBootTriggers } from "@/popup/boot-triggers"
 import { START_GRACE_KEY } from "@/popup/start-grace"
 import { isDappWindow, takeoverView } from "@/popup/stale-takeover"
+import { networkArrivalView } from "@/popup/network-arrival"
 import { readyToast } from "@/components/stale-network/copy"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { IncomingTransferServiceClient } from "@/wallet/services/incoming-transfer/client"
@@ -36,6 +38,7 @@ import { TokenServiceClient } from "@/wallet/services/token/client"
 import { supersedeProfileActivations, useProfileBootstrap } from "@/composables/useProfileBootstrap"
 import { ARRIVALS_KEY, useArrivals } from "@/composables/useArrivals"
 import { runUnattended, STALE_NETWORK_KEY, useStaleNetwork } from "@/composables/useStaleNetwork"
+import { NETWORK_ARRIVAL_KEY, useNetworkArrival } from "@/composables/useNetworkArrival"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -103,7 +106,8 @@ const { seeded: arrivalsSeeded } = arrivals
 provide(ARRIVALS_KEY, arrivals)
 
 const intervalId = ref(null)
-const legalSheetShown = ref(false)
+/** The Terms sheet's verdict; undefined while it has none. */
+const legalSheetShown = ref(undefined)
 
 const settingHandlers = {
 	theme(value) {
@@ -196,6 +200,26 @@ watch(
 	() => appStore.networks,
 	() => void stale.refresh(),
 )
+
+const networkArrival = useNetworkArrival({
+	client: () => managers.network,
+	profileId: () => (appStore.isLogined ? appStore.profile?.id : undefined),
+	onAnswerFailed: () => openToast({ kind: "error", label: "Something went wrong" }),
+})
+provide(NETWORK_ARRIVAL_KEY, networkArrival)
+const arrived = computed(() =>
+	networkArrivalView({
+		logined: appStore.isLogined,
+		route: { name: route.name, path: route.path },
+		networkId: appStore.network?.id,
+		arrived: networkArrival.arrived.value,
+		takeover: takeover.value !== null,
+		legalSheet: legalSheetShown.value,
+	}),
+)
+// The bootstrap's pass has written the record before the session reads as open; a switch to the
+// arrived network answers it.
+watch([() => appStore.isLogined && appStore.profile?.id, () => appStore.network?.id], () => void networkArrival.refresh())
 watch(
 	() => appStore.isLogined && appStore.profile?.id,
 	(active) => {
@@ -524,6 +548,7 @@ onBeforeUnmount(() => {
 	arrivalsPrices.disconnect()
 	arrivals.dispose()
 	stale.dispose()
+	networkArrival.dispose()
 })
 </script>
 
@@ -555,6 +580,7 @@ onBeforeUnmount(() => {
 		<StartBar :boot-outcome="bootOutcome" />
 
 		<StaleNetworkTakeover v-if="takeover" :view="takeover" />
+		<NetworkArrival v-else-if="arrived" :network="arrived" :current="appStore.network?.name ?? ''" />
 		<Header v-else />
 
 		<Banner v-if="bootOutcome || bootRetrying" variant="warning" direction="vertical" data-testid="boot-outcome-banner">
@@ -570,7 +596,7 @@ onBeforeUnmount(() => {
 			<button type="button" :class="$style.retry" class="type--button-md" data-testid="boot-retry" :disabled="bootRetrying" @click="bootTriggers.retry()">RETRY</button>
 		</Banner>
 
-		<template v-if="!takeover">
+		<template v-if="!takeover && !arrived">
 			<RouterView v-slot="{ Component }">
 				<component :is="Component"></component>
 			</RouterView>

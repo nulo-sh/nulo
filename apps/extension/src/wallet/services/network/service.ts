@@ -29,7 +29,7 @@ import { quarantinedBy, StaleNetworkRepository } from "@/wallet/services/stale-n
 import { ERR_NOT_RESETTABLE, ERR_RESET_PENDING, ERR_STALE_CHANGED, type ProbedEndpoint } from "@/wallet/services/stale-network/types"
 import type { RawRowState } from "@/wallet/utils/raw-row"
 import { DEFAULT_SEEDS, type DefaultSeed, isSeedChain, LOCAL_NETWORK_RPC_URL, PRIMARY_SEED, SEED_L1_BY_KIND, seedForKind } from "./seeds"
-import { readSeedOffers, type SeedOffers, seedOffersKey, seedsToOffer, writeSeedOffers } from "./seed-offers"
+import { readSeedOffers, type SeedOffers, sameSeedOffers, seedOffersKey, seedsToOffer, writeSeedOffers } from "./seed-offers"
 import {
 	type ChainKind,
 	ERR_ACTIVE_NETWORK,
@@ -201,6 +201,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		"deleteNetwork",
 		"setActiveNetwork",
 		"getActiveNetwork",
+		"getNetworkArrival",
+		"answerNetworkArrival",
 		"getPrimaryNetwork",
 		"setActiveForProfile",
 		"addEndpoint",
@@ -316,7 +318,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		// The per-seed catch above (soft-fail is right for one bad seed) also swallows the deletion
 		// compensate's throw: without this re-assert a deleted profile would read as seeded.
 		deletion.assertCurrent(fence.profileId, fence.epoch)
-		await this.recordOffersLocked(profileId, record, [...offered].sort(), fence, deletion)
+		const next = { offered: [...offered], announce: offer.announce.filter((kind) => offered.has(kind)) }
+		await this.recordOffersLocked(profileId, record, next, fence, deletion)
 		return { rows: [...rows, ...added], added, primaryId }
 	}
 
@@ -325,14 +328,14 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	private async recordOffersLocked(
 		profileId: string,
 		record: RawRowState<SeedOffers>,
-		offered: ChainKind[],
+		next: SeedOffers,
 		fence: { profileId: string; epoch: number },
 		deletion: ReturnType<ProfileService["getDeletionState"]>,
 	): Promise<void> {
-		if (record.kind === "valid" && [...new Set(record.value.offered)].sort().join() === offered.join()) return
-		await writeSeedOffers(this.browserApi.storage.local, profileId, offered)
+		if (record.kind === "valid" && sameSeedOffers(record.value, next)) return
+		await writeSeedOffers(this.browserApi.storage.local, profileId, next)
 		if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
-			if (record.kind === "valid") await writeSeedOffers(this.browserApi.storage.local, profileId, record.value.offered)
+			if (record.kind === "valid") await writeSeedOffers(this.browserApi.storage.local, profileId, record.value)
 			else await this.browserApi.storage.local.remove(seedOffersKey(profileId))
 			throw profileDeletedError(fence.profileId)
 		}
@@ -700,6 +703,48 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		return seedsToOffer(DEFAULT_SEEDS, record, rows)?.add.some((seed) => seed.chainId === chainId) ?? false
 	}
 
+	/**
+	 * The network the active profile's arrival names: the first announced kind, in kind order, that a
+	 * row of the profile holds. Null while nothing is announced or the record does not read. Lock-free.
+	 */
+	public async getNetworkArrival(): Promise<Network | null> {
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		const record = await readSeedOffers(this.browserApi.storage.local, profile.id)
+		if (record.kind !== "valid" || !record.value.announce?.length) return null
+		const rows = (await this.storage.getValues()).filter((n) => n.profileId === profile.id)
+		for (const kind of [...record.value.announce].sort()) {
+			const row = rows.find((n) => n.kind === kind)
+			if (row) return row
+		}
+		return null
+	}
+
+	/** Answers the arrival of `networkId` without switching to it. */
+	public async answerNetworkArrival(networkId: string): Promise<void> {
+		validateParams(NetworkMethodSchemas.answerNetworkArrival.params, [networkId], "answerNetworkArrival")
+		await this.ensureInitialized()
+		const fence = await this.profileService.captureExecutionFence()
+		const deletion = this.profileService.getDeletionState()
+		await this.lock.withLock(async () => {
+			const network = requireOwnedRow(await this.storage.get(networkId), fence.profileId)
+			await this.answerArrivalLocked(network, fence, deletion)
+		})
+	}
+
+	/** Drops the network's kind from the announced ones, fenced and compensated as the pass writes
+	 *  the record. Caller holds the network lock. */
+	private async answerArrivalLocked(
+		network: Network,
+		fence: { profileId: string; epoch: number },
+		deletion: ReturnType<ProfileService["getDeletionState"]>,
+	): Promise<void> {
+		const record = await readSeedOffers(this.browserApi.storage.local, network.profileId)
+		if (record.kind !== "valid" || network.kind === undefined || !record.value.announce?.includes(network.kind)) return
+		const announce = record.value.announce.filter((kind) => kind !== network.kind)
+		await this.recordOffersLocked(network.profileId, record, { offered: record.value.offered, announce }, fence, deletion)
+	}
+
 	/** {@link servesChain} for a chain the dApp may also use now: a quarantined chain keeps its row
 	 *  (so its sessions are not dropped) but serves no new connection. */
 	public async servesLiveChain(profileId: string, chainId: number): Promise<boolean> {
@@ -722,9 +767,22 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		validateParams(NetworkMethodSchemas.setActiveNetwork.params, [id], "setActiveNetwork")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
+		const deletion = this.profileService.getDeletionState()
+		const fence = { profileId: profile.id, epoch: deletion.capture(profile.id) }
 		return await this.lock.withLock(async () => {
 			const network = requireOwnedRow(await this.storage.get(id), profile.id)
+			const previousId = await this._readActive(profile.id)
+			const previous = previousId === undefined || previousId === id ? undefined : await this.storage.get(previousId)
 			await this._writeActive(profile.id, id)
+			// A switch from another live network answers the arrival of the one it switches to, whichever
+			// screen made it. Re-asserting the pointer, or falling back from a missing one, is no answer.
+			if (previous?.profileId === profile.id) {
+				try {
+					await this.answerArrivalLocked(network, fence, deletion)
+				} catch (error) {
+					this.logError("Failed to answer a network arrival", error)
+				}
+			}
 			const primaryEndpoint = findPrimaryEndpoint(network)
 			// A stored URL the transport rule refuses must fail where an unreachable node fails, at the
 			// first read: thrown here, it would stop popup start before Settings could fix it.
