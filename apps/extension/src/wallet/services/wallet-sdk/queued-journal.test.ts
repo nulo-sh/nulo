@@ -18,7 +18,14 @@ import {
 	UserRejectedError,
 } from "@nulo/extension-messaging/errors"
 import { NoUsableAccountError } from "@nulo/wallet-bridge"
+import type { FunctionAbi } from "@aztec-labs/stdlib/abi"
 import { LogLevel } from "@/wallet/logger"
+import {
+	AUTHWIT_CALL_BINDING,
+	CALL_BINDING,
+	assertSelectorBinding,
+	type SelectorBindingPolicy,
+} from "@/wallet/services/execution/contract-resolver"
 import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
 import {
 	MAX_QUEUED_GLOBAL,
@@ -226,6 +233,29 @@ describe("tryCreateQueuedJournal", () => {
 		expect((await journal.getOperation(long as string))?.title).toBe(`transfer${"f".repeat(56)}…`)
 	})
 
+	test("the primary call's contract and argument count ride the record; a hostile `to` or `args` leaves out the call alone", async () => {
+		const { deps, journal } = makeDeps()
+		const token = `0x${"0d".repeat(32)}`
+		const message = (calls: unknown) => ({ messageId: "m", type: "sendTx", args: [{ calls }, {}] }) as unknown as WalletMessage
+		const read = async (calls: unknown) =>
+			journal.getOperation((await tryCreateQueuedJournal(message(calls), makeSession(), deps)) as string)
+		const fee = { name: "sponsor_unconditionally", to: `0x${"0f".repeat(32)}`, args: [] }
+		expect(await read([fee, { name: "transfer_in_public", to: token, args: ["1", "2", "3", "4"] }])).toMatchObject({
+			title: "transfer_in_public",
+			call: { contract: token, argCount: 4 },
+		})
+		for (const hostile of [
+			{ to: { toString: token }, args: [] },
+			{ to: `0x${"a".repeat(998)}`, args: [] },
+			{ to: token, args: "1,2,3,4" },
+			{ to: token, args: new Array(70_000).fill("0") },
+		]) {
+			const rec = await read([{ name: "transfer_in_public", ...hostile }])
+			expect(rec).toMatchObject({ title: "transfer_in_public", progress: { stage: "queued" } })
+			expect(rec?.call).toBeUndefined()
+		}
+	})
+
 	test("falls back to 'Transaction' title when calls have no method names", async () => {
 		const { deps, journal } = makeDeps()
 		const message = {
@@ -350,6 +380,16 @@ describe("tryCreateQueuedJournal — record account", () => {
 	})
 })
 
+/** The refusal a call whose selector resolves to `transfer_public_to_public` but claims another name meets. */
+function bindingRefusal(policy: SelectorBindingPolicy): Error {
+	try {
+		assertSelectorBinding({ name: "transfer_public_to_public" } as FunctionAbi, { name: "balance_of_public" }, policy)
+	} catch (error) {
+		return error as Error
+	}
+	throw new Error("the binding held")
+}
+
 describe("failQueuedForError — CAS against a concurrent claim", () => {
 	const refusal = new ScopeViolationError("Scope violation: sendTx call not permitted by granted transaction scope")
 
@@ -381,6 +421,8 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 			new AuthRegistryRefusalError("Scope violation: sendTx call targets an authorization registry grant function"),
 			"Transaction",
 		],
+		["a call-binding refusal", "scope_refused", bindingRefusal(CALL_BINDING), "transfer_public_to_public"],
+		["an authorization's call-binding refusal", "scope_refused", bindingRefusal(AUTHWIT_CALL_BINDING), "Transaction"],
 		["a missing grant", "scope_refused", new CapabilityNotGrantedError("transaction"), "Transaction"],
 		["a schema refusal", "malformed_request", InvalidWalletArgumentsError.forMethod("sendTx"), "Transaction"],
 		["an ended session", "session_ended", new SessionEndedError(), "Transaction"],
@@ -418,7 +460,7 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 			id,
 			{ stage: "failed" },
 			{ kind: "scope_refused", message: "x", normalizedRaw: null },
-			"transfer_in_public",
+			{ title: "transfer_in_public" },
 		)
 		// The rebuilt error then reaches the ingress, which finds the record already terminal.
 		await failQueuedForError(journal, id, new Error("Scope violation"), deps.logger)

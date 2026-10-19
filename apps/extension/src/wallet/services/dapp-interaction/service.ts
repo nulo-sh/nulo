@@ -20,11 +20,16 @@ import {
 	type OperationKind,
 } from "@/wallet/services/execution/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
-import { JobCancelledError, TermsAcceptanceRequiredError, UserRejectedError } from "@nulo/extension-messaging/errors"
+import {
+	JobCancelledError,
+	type ScopeViolationError,
+	TermsAcceptanceRequiredError,
+	UserRejectedError,
+} from "@nulo/extension-messaging/errors"
 import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/service"
 import { randomIdNotIn } from "@/wallet/services/id-allocators"
 import { Lock } from "@/wallet/utils"
-import type { WindowManager } from "@/wallet/services/window-manager/window-manager"
+import { WINDOW_CLOSED_BY_USER, type WindowManager } from "@/wallet/services/window-manager/window-manager"
 import { parseCaipAccount, parseCaipChain, resolveNetworkByChainId } from "@/wallet/utils/caip"
 import { isFeeAmount } from "@nulo/wallet-core/jobs"
 import { EventHandler } from "@nulo/wallet-core/utils"
@@ -250,6 +255,8 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		if (interaction.cancelledAt !== undefined) {
 			throw new JobCancelledError(CANCELLED_BEFORE_APPROVAL)
 		}
+		// Unclaimed: the window shows the refusal, and its Reject ends the request as it.
+		if (interaction.refusal) throw interaction.refusal
 		this.storage.delete(id)
 		// Detach before handing off to executeAndResolve: the approval popup
 		// closes immediately after the user approves, and the onRemoved event
@@ -299,6 +306,16 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 			return
 		}
 		this.windowManager.settle<DiscoveryOutcome>(handleId, { approved: false })
+	}
+
+	/** Keeps the first refusal an estimate or preview of a still-pending request met. */
+	public recordRefusal(id: string, refusal: ScopeViolationError): void {
+		const interaction = this.storage.get(id)
+		if (interaction && !interaction.refusal) interaction.refusal = refusal
+	}
+
+	public refusalOf(id: string): ScopeViolationError | undefined {
+		return this.storage.get(id)?.refusal
 	}
 
 	public async rejectInteraction(id: string, reason: string): Promise<void> {
@@ -613,9 +630,16 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 
 			this.storage.set(id, interaction)
 
-			pending = handle.promise.finally(() => {
-				this.storage.delete(id)
-			})
+			pending = handle.promise
+				.catch((error: unknown) => {
+					// The window's close can reach the worker before its Reject does; both end a refused request
+					// as its refusal. A cancel and the timeout keep their own end.
+					const endedByWindow = error instanceof UserRejectedError || error === WINDOW_CLOSED_BY_USER
+					throw endedByWindow && interaction.refusal ? interaction.refusal : error
+				})
+				.finally(() => {
+					this.storage.delete(id)
+				})
 		})
 		if (hooks?.queuedJournalId) void this.reconcileCancelledJournal(hooks.queuedJournalId)
 		return pending
@@ -716,7 +740,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 				["pending"],
 				{ stage: "failed" },
 				{ kind: "terms_refused", message: error.message, normalizedRaw: null },
-				{ failedTitle: "Transaction" },
+				{ retitle: { title: "Transaction" } },
 			)
 			.catch((err) => this.logDebug("could not settle a pending record after a terms refusal", err))
 	}

@@ -16,7 +16,7 @@ export type Token = {
 
 	chainId: number
 	contract: string
-	/** Absent on a row added before classes were recorded. */
+	/** Absent on a row added before classes were recorded, and on a restored row until its refresh reads one. */
 	classId?: string
 
 	name: string
@@ -67,8 +67,8 @@ export type TokenInfo = {
 	/** Token contract address. */
 	contract: string
 	/**
-	 * The class the wallet resolved when the token was added: trust on first use, unauthenticated
-	 * when restored, so a reader compares it only as a field element.
+	 * The class the wallet resolved from the chain, when the token was added or a restored row was
+	 * refreshed: trust on first use, so a reader compares it only as a field element.
 	 */
 	classId?: string
 	/** Token name. */
@@ -267,7 +267,7 @@ export type Methods = {
 	 * After a full-backup restore, reads each token of `fence`'s profile from its chain and keeps
 	 * the chain's class, interface, name, symbol and decimals where the row differs. It updates and
 	 * never adds, so no trust follows. A token whose read fails or ends after `deadlineAt` (epoch
-	 * ms) keeps the backup's values.
+	 * ms) keeps the backup's name, symbol and decimals, with no class.
 	 */
 	refreshRestoredTokens(fence: RunFence, deadlineAt: number): void
 }

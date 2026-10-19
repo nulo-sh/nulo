@@ -17,13 +17,14 @@ import {
 	SessionEndedError,
 } from "@nulo/extension-messaging/errors"
 import type { FunctionAbi } from "@aztec-labs/stdlib/abi"
+import type { JournalRetitle } from "@/wallet/services/operation-journal/spec"
 import { assertSelectorBinding, AUTHWIT_CALL_BINDING, CALL_BINDING } from "./contract-resolver"
 import { failureKind, markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
 
 function fakeLane() {
 	return {
 		markJournal: vi.fn(
-			async (_journalId: string | undefined, _progress: JobProgress, _error?: JobError | null, _failedTitle?: string) => {},
+			async (_journalId: string | undefined, _progress: JobProgress, _error?: JobError | null, _retitle?: JournalRetitle) => {},
 		),
 	}
 }
@@ -117,7 +118,7 @@ describe("markFailedUnlessCancelled", () => {
 		for (const [label, error, title] of cases) {
 			const lane = fakeLane()
 			await markFailedUnlessCancelled(error, "j1", lane)
-			expect({ label, title: lane.markJournal.mock.calls[0]?.[3] }).toEqual({ label, title })
+			expect({ label, title: lane.markJournal.mock.calls[0]?.[3]?.title }).toEqual({ label, title })
 		}
 	})
 

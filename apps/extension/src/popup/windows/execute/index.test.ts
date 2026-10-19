@@ -10,7 +10,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { JobCancelledError } from "@nulo/extension-messaging/errors"
+import { JobCancelledError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
 import { CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { flushPromises, mount } from "@vue/test-utils"
 import { ref, type Ref } from "vue"
@@ -124,7 +124,6 @@ vi.mock(
 	"@/composables/useDappInteractionPayload",
 	async () => (await import("../../../../tests/helpers/approval-window-harness")).payloadModule,
 )
-vi.mock("@/composables/useDappHostname", async () => (await import("../../../../tests/helpers/approval-window-harness")).hostnameModule)
 vi.mock(
 	"@/wallet/services/profile/client",
 	async () => (await import("../../../../tests/helpers/approval-window-harness")).profileClientModule,
@@ -176,11 +175,11 @@ const STUBS = {
 		`,
 	},
 	SectionLabel: { template: "<div />" },
-	OperationCard: { template: "<div />" },
+	OperationCard: { template: '<div><slot name="fee" /></div>' },
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" />',
-		props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel"],
+		props: ["dapp", "actionLabel"],
 	},
 	DappCancelledOverlay: {
 		props: ["message"],
@@ -1143,5 +1142,100 @@ describe("execute window — a public grant", () => {
 		expect(confirm().attributes("disabled")).toBeDefined()
 		await vm.approve()
 		expect(approveInteractionMock).not.toHaveBeenCalled()
+	})
+})
+
+describe("execute window — a request the wallet refused", () => {
+	const NETWORK = { id: "n1", chainId: 1, name: "TestNet" }
+	const OWNER = `0x${"0a".repeat(32)}`
+	const send = { kind: "aztec_sendTx", account: `aztec:1:${OWNER}`, exec: { calls: [] }, opts: { from: OWNER } }
+	// As the worker's refusal crosses the RPC hop.
+	const REGISTRY = walletErrorFromPayload({
+		code: "SCOPE_VIOLATION",
+		message: "Scope violation: a transaction's authorization request targets the authorization registry",
+	})
+	const BINDING = walletErrorFromPayload({
+		code: "SCOPE_VIOLATION",
+		message: "Scope violation: call name does not match selector's function",
+	})
+	const REASON = {
+		registry:
+			"This transaction asks your account to change its public authorizations from inside another contract. Apps are never allowed to, so it can't be sent. Reject tells the app.",
+		call: "A call in this transaction does not run the function it names. Nulo never sends such a call, so it can't be sent. Reject tells the app.",
+	}
+
+	async function opened(op: object = send) {
+		accountServiceCtorMock.mockImplementationOnce(function () {
+			return {
+				getAccount: vi.fn(async (_p: string, _c: number, address: string) => ({ address, chainId: 1, name: "Main" })),
+				connect: vi.fn(),
+				disconnect: vi.fn(),
+			}
+		})
+		networkServiceCtorMock.mockImplementationOnce(function () {
+			return { getNetworks: vi.fn(async () => [NETWORK]), connect: vi.fn(), disconnect: vi.fn() }
+		} as never)
+		approval.payloadToLoad = {
+			session: { profileId: "p1", dappMetadata: { name: "Test DApp", url: "https://example.com" } },
+			params: { operations: [op] },
+		}
+		w = factory()
+		await completeInit()
+		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
+		vm.handleFeeUpdate(0, { paymentMethod: { kind: "sponsored_fpc" } })
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
+		await flushPromises()
+		toastMocks.openToast.mockClear()
+		return {
+			vm,
+			notice: () => w!.find('[data-testid="execute-op-refusal"]'),
+			confirm: () => w!.find('[data-testid="execute-confirm-btn"]'),
+		}
+	}
+
+	async function expectRefused(kind: "registry" | "call", { vm, notice, confirm }: Awaited<ReturnType<typeof opened>>) {
+		await flushPromises()
+		expect(notice().attributes()).toMatchObject({ "data-kind": kind, role: "alert" })
+		expect(w!.find('[data-testid="execute-op-refusal-title"]').text()).toBe("Nulo won't send this")
+		expect(w!.find('[data-testid="execute-op-refusal-reason"]').text()).toBe(REASON[kind])
+		expect(toastMocks.openToast).not.toHaveBeenCalled()
+		expect(w!.find('[data-testid="error-text"]').exists()).toBe(false)
+		expect(confirm().exists()).toBe(false)
+		approveInteractionMock.mockClear()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+		await w!.find('[data-testid="execute-reject-btn"]').trigger("click")
+		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected")
+	}
+
+	test.each([
+		["registry", REGISTRY],
+		["call", BINDING],
+	] as const)("an estimate refused by the %s check: the notice in the fee's place, no toast, only Reject", async (kind, error) => {
+		const window = await opened()
+		feeMapInstances[0]!.opts.onError?.(0, error)
+		await expectRefused(kind, window)
+	})
+
+	test("a preview refused: the same notice", async () => {
+		const window = await opened({ ...send, executionMode: "default_entrypoint" })
+		feeMapInstances[1]!.opts.onError?.(0, REGISTRY)
+		await expectRefused("registry", window)
+	})
+
+	test("an approval the worker refuses: the same notice, never an error row", async () => {
+		const window = await opened()
+		approveInteractionMock.mockRejectedValueOnce(BINDING as never)
+		await window.vm.approve()
+		await expectRefused("call", window)
+	})
+
+	test("any other estimate failure keeps today's toast and Confirm", async () => {
+		const { notice, confirm } = await opened()
+		feeMapInstances[0]!.opts.onError?.(0, new Error("node down"))
+		await flushPromises()
+		expect(toastMocks.openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		expect(notice().exists()).toBe(false)
+		expect(confirm().attributes("disabled")).toBeUndefined()
 	})
 })

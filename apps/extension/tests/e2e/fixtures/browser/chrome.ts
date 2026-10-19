@@ -65,6 +65,9 @@ async function launch({ extensionPath, userDataDir, headless, fixedWindowSize = 
 			"--disable-renderer-backgrounding",
 			"--disable-backgrounding-occluded-windows",
 			"--disable-features=CalculateNativeWinOcclusion",
+			// Chrome asks its autofill server about every form a page shows (the playground's among
+			// them), an outside host no test needs.
+			"--disable-features=AutofillServerCommunication",
 			...(egress ? egressGuardArgs(egress.guardPort, egress.liveHosts) : []),
 		],
 		ignoreDefaultArgs: ["--disable-extensions"],
@@ -277,6 +280,7 @@ export const chromeDriver: BrowserDriver = {
 	virtualAuthenticator: cdpVirtualAuthenticator,
 	holdNextCredentialGet: async () => {},
 	pxeHostState,
+	closePxeHost: (page) => page.evaluate(() => chrome.offscreen.closeDocument()),
 	stopBackground,
 	backgroundAlive,
 	evaluateInBackground,

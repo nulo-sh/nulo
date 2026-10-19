@@ -33,15 +33,17 @@ import {
 import type { KnownJobErrorKind } from "@nulo/wallet-core/jobs"
 import { getErrorMessage, Lock } from "@nulo/wallet-core/utils"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { type JournalCallCarrier, type JournalRetitle, journalCallOf } from "@/wallet/services/operation-journal/spec"
 import type { ProfileService } from "@/wallet/services/profile/service"
 import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
+import { refusalOf } from "@/wallet/services/execution/contract-resolver"
 import type { DappSessionService } from "@/wallet/services/dapp-session/service"
 import type { NetworkService } from "@/wallet/services/network/service"
 import type { AccountService } from "@/wallet/services/account/service"
 import { NoUsableAccountError, projectStoredGrants, requestedSenderOf, resolveAuthorizedSessionAccount } from "@nulo/wallet-bridge"
 import { parseCaipAccount } from "@/wallet/utils/caip"
 import type { CaipAccount } from "@/wallet/services/dapp-interaction/spec"
-import { pickPrimaryWireMethod } from "@/utils/primary-method"
+import { pickPrimaryWireCall } from "@/utils/primary-method"
 import { chainInfoToChainId } from "./session-established"
 
 /** Per-session queued-record cap. Bounds the activity feed under burst flood. */
@@ -171,7 +173,7 @@ export async function tryCreateQueuedJournal(
 				return undefined
 			}
 
-			const primaryMethod = extractPrimaryMethodFromSendTx(message)
+			const primary = extractPrimaryCallFromSendTx(message)
 			// Chip label: prefer the dApp's display name from its stored
 			// session metadata (DappSession.dappMetadata.name, set at
 			// discover/verify time). Falls back to "Unknown dapp" to match
@@ -193,8 +195,9 @@ export async function tryCreateQueuedJournal(
 				sessionId: session.sessionId,
 				accountAddress,
 				networkId: network.id,
-				title: primaryMethod ?? "Transaction",
+				title: primary?.method ?? "Transaction",
 				subtitle: dappName,
+				call: primary?.call,
 				initialStage: { stage: "queued" },
 			})
 			return record.id
@@ -218,17 +221,17 @@ function holdsTransactionGrant(records: readonly unknown[] | undefined, logger: 
 }
 
 /**
- * Best-effort primary-method extraction from a sendTx wallet message.
- * Mirrors what `executeAztecSendTx` does to compute the title at journal
- * creation time, so the title is consistent between the queued surface
- * and the post-claim in-flight surface.
+ * Best-effort primary-call extraction from a sendTx wallet message, unparsed: a `to` or `args` the
+ * journal would refuse leaves the call out, never the record. Mirrors what `executeAztecSendTx`
+ * records at journal creation, so the queued and post-claim in-flight surfaces read the same.
  */
-export function extractPrimaryMethodFromSendTx(message: WalletMessage): string | undefined {
+export function extractPrimaryCallFromSendTx(message: WalletMessage): JournalCallCarrier | undefined {
 	if (message.type !== "sendTx") return undefined
 	const args = message.args as unknown[] | undefined
 	if (!Array.isArray(args)) return undefined
 	const exec = args[0] as { calls?: unknown } | undefined
-	return pickPrimaryWireMethod(exec?.calls)
+	const primary = pickPrimaryWireCall(exec?.calls)
+	return primary && { method: primary.name, call: journalCallOf(primary.call.to, primary.call.args) }
 }
 
 /**
@@ -240,10 +243,10 @@ export function extractPrimaryMethodFromSendTx(message: WalletMessage): string |
  * transition legally turned a mid-flight `queued → pending` claim into
  * `pending → failed`, failing an op the user had just approved.
  *
- * A classified refusal is retitled "Transaction" in that same write: nothing has resolved its
- * selector yet, so the name the dApp claimed is the only other title, and it is unverified. A
- * `popup_bound` row (an approval the person rejected or closed, or an unclassified failure) keeps
- * its title.
+ * A classified refusal is retitled in that same write: with `retitle`, to the function a call-binding
+ * refusal resolved its selector to and the refused call, else "Transaction", since the name the dApp
+ * claimed is unverified. A `popup_bound` row (an approval the person rejected or closed, or an unclassified
+ * failure) keeps its title.
  */
 export async function failQueuedIfUnclaimed(
 	operationJournal: OperationJournalService,
@@ -251,6 +254,7 @@ export async function failQueuedIfUnclaimed(
 	message: string,
 	logger: ILogger,
 	kind: QueuedFailureKind = "popup_bound",
+	retitle?: JournalRetitle,
 ): Promise<void> {
 	try {
 		await operationJournal.transitionIfStage(
@@ -258,7 +262,7 @@ export async function failQueuedIfUnclaimed(
 			["queued"],
 			{ stage: "failed" },
 			{ kind, message, normalizedRaw: null },
-			kind === "popup_bound" ? undefined : { failedTitle: "Transaction" },
+			kind === "popup_bound" ? undefined : { retitle: retitle ?? { title: "Transaction" } },
 		)
 	} catch (transitionError) {
 		logger.log("wallet-sdk", LogLevel.Warn, `Failed to mark queued record ${journalId} as failed`, transitionError)
@@ -280,7 +284,7 @@ export async function failQueuedForError(
 	error: unknown,
 	logger: ILogger,
 ): Promise<void> {
-	await failQueuedIfUnclaimed(operationJournal, journalId, getErrorMessage(error), logger, queuedFailureKind(error))
+	await failQueuedIfUnclaimed(operationJournal, journalId, getErrorMessage(error), logger, queuedFailureKind(error), refusalOf(error))
 }
 
 function queuedFailureKind(error: unknown): QueuedFailureKind {

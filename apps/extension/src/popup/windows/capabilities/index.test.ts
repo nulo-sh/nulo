@@ -37,7 +37,6 @@ vi.mock(
 	"@/composables/useDappInteractionPayload",
 	async () => (await import("../../../../tests/helpers/approval-window-harness")).payloadModule,
 )
-vi.mock("@/composables/useDappHostname", async () => (await import("../../../../tests/helpers/approval-window-harness")).hostnameModule)
 vi.mock(
 	"@/wallet/services/profile/client",
 	async () => (await import("../../../../tests/helpers/approval-window-harness")).profileClientModule,
@@ -94,7 +93,7 @@ const STUBS = {
 	DappStatusStrip: { template: '<div data-testid="status-strip" />', props: ["accountName", "networkName", "status"] },
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" />',
-		props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel"],
+		props: ["dapp", "actionLabel"],
 	},
 	DappCancelledOverlay: {
 		props: ["message"],
@@ -373,7 +372,7 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 					Flex: { inheritAttrs: false, template: "<div v-bind='$attrs'><slot /></div>" },
 					SectionLabel: { props: ["label", "count"], template: "<h2 :data-count='count'>{{ label }}</h2>" },
 					DappIdentityBlock: {
-						props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel"],
+						props: ["dapp", "actionLabel"],
 						template: '<div data-testid="identity-block" :data-action-label="actionLabel" />',
 					},
 					PermissionRow: false,

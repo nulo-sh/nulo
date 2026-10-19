@@ -218,6 +218,9 @@ export async function setup(project: TestProject) {
 		throw new Error(`No ${BROWSER} extension at ${EXTENSION_PATH}\nRun "bun run build" or "bun run dev" first.`)
 	}
 	project.provide("extensionPath", EXTENSION_PATH)
+	// Every network launch is guarded, as every smoke launch is: the sandbox, the playground and
+	// Presto are loopback and bb.js's CRS hosts go direct, so the guard refuses every other host.
+	project.provide("egressGuard", true)
 
 	console.log(
 		`[e2e-setup] ports: anvil=:${ANVIL_PORT} aztec=:${AZTEC_PORT} (admin :${AZTEC_ADMIN_PORT}, p2p :${AZTEC_P2P_PORT}) playground=:${PLAYGROUND_PORT}`,
@@ -889,6 +892,8 @@ process.on("exit", onExit)
 declare module "vitest" {
 	export interface ProvidedContext {
 		extensionPath: string
+		/** Both e2e setups provide `true`. */
+		egressGuard?: boolean
 		aztecTestConfig?: AztecTestConfig
 		playgroundUrl: string
 	}

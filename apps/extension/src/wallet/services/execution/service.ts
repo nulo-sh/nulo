@@ -131,6 +131,9 @@ export interface InteractionOperationSource {
 	askFeeAgain(question: FeeQuestion): Promise<boolean>
 	materializeStoredDraft(interactionId: string, index: number): Promise<DraftOperation>
 	materializeQuestionDraft(interactionId: string): Promise<DraftOperation>
+	/** Keeps a refusal an estimate or preview of the request met; a request no longer stored keeps nothing. */
+	recordRefusal(interactionId: string, refusal: ScopeViolationError): void
+	refusalOf(interactionId: string): ScopeViolationError | undefined
 }
 
 /** Default PXE-client factory: the real RPC-backed client. Exported so the
@@ -513,7 +516,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 					this.lane.claimOrCreateJournal(networkId, accountAddress, origin, calls, hooks, reuseController, fence),
 				beginJournal: (networkId, accountAddress, origin, calls, fence) =>
 					this.lane.beginJournal(networkId, accountAddress, origin, calls, fence),
-				markJournal: (journalId, progress, error, failedTitle) => this.lane.markJournal(journalId, progress, error, failedTitle),
+				recordBuiltCall: (journalId, txCalls) => this.lane.recordBuiltCall(journalId, txCalls),
+				markJournal: (journalId, progress, error, retitle) => this.lane.markJournal(journalId, progress, error, retitle),
 				commitJournal: (journalId, progress) => this.lane.commitJournal(journalId, progress),
 				parkSlot: (release, networkId, queuedJournalId, fence, preController, originKey, wait) =>
 					this.lane.parkSlot(release, networkId, queuedJournalId, fence, preController, originKey, wait),
@@ -768,10 +772,12 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		flowKey?: string,
 	): Promise<TransferFeeEstimate> {
 		await this.ensureInitialized()
-		const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
-		return this.withEstimateAdmission(estimateToken, flowKey ?? "op", (signal) =>
-			this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index }),
-		)
+		return this.refusalBound(interactionId, async () => {
+			const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
+			return this.withEstimateAdmission(estimateToken, flowKey ?? "op", (signal) =>
+				this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index }),
+			)
+		})
 	}
 
 	public async previewOperationAuthwits(
@@ -781,10 +787,28 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		flowKey?: string,
 	): Promise<OperationAuthwitPreview> {
 		await this.ensureInitialized()
-		const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index)
-		return this.withEstimateAdmission(estimateToken, flowKey ?? "op", (signal) =>
-			this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal),
-		)
+		return this.refusalBound(interactionId, async () => {
+			const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index)
+			return this.withEstimateAdmission(estimateToken, flowKey ?? "op", (signal) =>
+				this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal),
+			)
+		})
+	}
+
+	/** A refusal is the request's, not one attempt's: the attempt that met it may be one the window
+	 *  already dropped as superseded, so every attempt answers the first one recorded, the window
+	 *  and the dApp's answer agreeing on it. */
+	private async refusalBound<T>(interactionId: string, run: () => Promise<T>): Promise<T> {
+		const source = this.interactionOperations()
+		const recorded = source.refusalOf(interactionId)
+		if (recorded) throw recorded
+		try {
+			return await run()
+		} catch (error) {
+			if (!(error instanceof ScopeViolationError)) throw error
+			source.recordRefusal(interactionId, error)
+			throw source.refusalOf(interactionId) ?? error
+		}
 	}
 
 	/** The window's answer reaches the send as exactly the figure it asked; any other end, a window
