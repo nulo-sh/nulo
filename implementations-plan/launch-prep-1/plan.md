@@ -122,6 +122,9 @@ No `Closes`: #864 closes at the release (lane brief); the four known limits stay
 - **Opus 5.5 r1** (Plan): **conditional approve**. Accepted: OA-1 a's § 7.5 line is false for 0.31.0 acceptors (reworded, dated); declining also stops the token-list download (Consent, cross-lane); the armed build and the landing build in the gates; three places for the date, and the A2/A3 split if OA-2 is late; the nightly residue; corrected cites and UI lines; 0.28.0 and 0.30.0 named; I2 replaced by the restore mechanism; #385 wording; the intro's grep scope; the README banner bullet; § 20's consequence in OA-1 b. Not taken: listing `terms/v1.1/index.html` in `pr-quick.yml` (the landing build already throws on a missing archive copy).
 - **Codex r2** (resumed `01a155f3`): **conditional approve** (a nightly can record 1.1 before `/terms/v1.1/` is live; OA-1 b's B contradicts the byte-exact archive and the two-banner gate; restore keeps an imported off-seed account as held). Accepted all three: D8 and the store ordering; B's amendment written into OA-1; the restore sentence corrected. Confirmed the component-plus-status tests and D2.
 - **Codex r3** (resumed `01a155f3`): **approve**, no new material finding.
+- **A1 Codex r1** (gpt-6.1-sol, high, session `01a1560f`): **clean** (corrected #497's merge time to 21:02Z).
+- **A1 Opus review**: **findings**, three P3 (§ 2's AMO box read backwards once ticked; § 3's Chrome step unordered against a staged submission; the Mainnet line omitted the Local Network). All fixed.
+- **A1 Codex r2** (resumed `01a1560f`): **clean**.
 
 ## Seeds
 

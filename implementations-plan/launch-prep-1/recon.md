@@ -12,7 +12,7 @@ fetch below was made that day. Paths are repo-relative.
 | § 3 Both listing URLs in `legal/terms.md` § 1 open the live listings | Chrome URL as above → 200; `addons.mozilla.org/firefox/addon/3077967/` → 200 | met today |
 | § 4 privacy 1.1.1: `nulo.sh/privacy` has no DRAFT banner, AMO's field carries 1.1.1 | `nulo.sh/privacy` → 200, "Version 1.2.1 — effective 15 October 2026", no `legal-banner`, no `noindex`. AMO `…/3077967/eula_policy/` begins "Version 1.2.1 — effective 15 October 2026" and carries the 1.1.1 security-reporting text and history row. | met |
 | § 4 privacy 1.2.1: AMO's field carries the new text | the same fetch; § 5.3 reads "Settings → Privacy" | met |
-| § 4 rc.3 (a): the stale-network reset is on `dev` | #485, #486, #487 (2026-10-15), close-out #494 (18:04Z), promote #497 (19:10Z), all before the 0.31.0 store upload (22:08Z) | met |
+| § 4 rc.3 (a): the stale-network reset is on `dev` | #485, #486, #487 (2026-10-15), close-out #494 (18:56Z), promote #497 (21:02Z), all before the 0.31.0 release (22:08Z) and its store jobs (22:49Z) | met |
 | § 4 rc.3 (b): the owner sends from that build on the live Testnet | no record in issues, PRs or plans (`git grep -i "live testnet"` finds only `implementations-plan/archive/aztec-rc3/plan.md` D9's intent) | unknown: OA-3 |
 | `nulo.sh/terms` | `noindex` meta and `data-legal-banner="draft"`; `legal/terms.md:3,578` carry `«FILL: effective date»` | not met (arc 2, then the promote) |
 

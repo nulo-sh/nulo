@@ -75,7 +75,8 @@ Owned elsewhere, tracked here so nothing falls between worktrees:
   minimum version is Firefox 153. Both are pinned by `apps/extension/src/manifest.test.ts`.
 - **The README banner** reads "DEMO / PREVIEW BUILD — NOT A PRODUCTION WALLET", which needs
   rewriting at the 1.0 cut. It must not promise a network the build does not seed: 1.0.0 seeds the
-  Aztec Testnet and no Mainnet, which arrives in a later 1.x (#80, #875).
+  Aztec Testnet (and the developers' Local Network) and no Mainnet, which arrives in a later 1.x
+  (#80, #875).
 
 ## Identity and jurisdiction — the decision, and what it costs
 

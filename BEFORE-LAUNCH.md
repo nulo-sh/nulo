@@ -40,13 +40,13 @@ The store launch left two owner steps in the dashboards
 - [x] Chrome: publish the staged V6 submission from the dashboard once Google approves it, before
       the approval lapses (30 days). On 2026-10-19 the listing serves "Nulo V6" 0.31.0, updated
       18 October 2026; the store page shows only a published revision, not its visibility.
-- [ ] AMO: the listing still carries the "This add-on is experimental" flag (`is_experimental` is
-      `true` in AMO's API on 2026-10-19). Mozilla may review the live version later, the
-      modified-library rule being the open risk.
+- AMO: the listing still carries the "This add-on is experimental" flag (`is_experimental` is
+  `true` in AMO's API on 2026-10-19); removing it is a § 3 step. Mozilla may review the live
+  version later, the modified-library rule being the open risk.
 
 The owner decided both listings' launch state (2026-10-19, decision page 62, #864): Chrome goes
-Public once the security work in flight has landed, and AMO drops the experimental flag, both at
-1.0.0 (§ 3).
+Public at 1.0.0, "once the security work in flight has landed", and AMO drops the experimental flag
+at 1.0.0 (§ 3).
 
 Also at this point, not a placeholder but the same deadline: the **Chrome trader disclosure**
 ([`legal/README.md`](./legal/README.md), blocker 5) is declared non-trader; it must be re-declared
@@ -98,8 +98,10 @@ Then:
 - [ ] After the deploy and before the Release PR merges, `nulo.sh/terms` shows **no DRAFT banner**
       and no `noindex` meta, and the current version's permalink (`nulo.sh/terms/v<version>/`)
       shows no DRAFT banner. A permalink always carries `noindex`: it duplicates the canonical page
-- [ ] Chrome: set the listing to Public, once the security work in flight has landed (owner)
-- [ ] AMO: remove the "This add-on is experimental" flag, which ticks § 2's AMO box (owner)
+- [ ] Chrome (owner): set the listing to Public before the 1.0.0 store dispatch; an approved staged
+      submission locks every dashboard field ([`release` skill](./.claude/skills/release/SKILL.md),
+      troubleshooting)
+- [ ] AMO (owner): remove the "This add-on is experimental" flag
 - [ ] The README's "DEMO / PREVIEW BUILD — NOT A PRODUCTION WALLET" banner is rewritten
 
 ## 4. Every later `release: promote dev → main`

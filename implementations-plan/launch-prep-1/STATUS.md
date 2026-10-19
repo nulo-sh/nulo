@@ -6,3 +6,4 @@
 - 2026-10-19 Codex r2 conditional approve (3 findings, applied); r3 approve. Phase 0 pictures next.
 - 2026-10-19 Phase 0 gate: pass (armed Chrome build; scratch spec 2/2 green; four shots; manifest reverted, tree clean).
 - 2026-10-19 A1 Phase 1 gate: pass (fetches re-matched at 21:18Z; lint, typecheck:all, test:all, test:ci-gating exit 0; no "seeded default" left in legal/).
+- 2026-10-19 A1 fix loop: Codex r1 clean, Opus three P3 (fixed), Codex r2 clean.
