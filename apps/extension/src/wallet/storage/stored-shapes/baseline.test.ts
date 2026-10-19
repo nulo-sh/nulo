@@ -3,8 +3,20 @@ import { describe, expect, test } from "vitest"
 import { z } from "zod"
 import { CONTACT_STORAGE_ROOT } from "@/wallet/services/contact/spec"
 import { DAPP_SESSION_STORAGE_ROOT } from "@/wallet/services/dapp-session/spec"
-import { type Golden, justify, preservationProblems, propose, type ShapeRecord, type Stamp, currentShapes, zodVersion } from "./baseline"
-import { canonical, emitSchema, type Json } from "./emit"
+import { defineRowMapMigration } from "@/wallet/services/backup/row-map-migration"
+import {
+	committedBaseline,
+	type Golden,
+	decodeGoldens,
+	justify,
+	preservationProblems,
+	propose,
+	type ShapeRecord,
+	type Stamp,
+	currentShapes,
+	zodVersion,
+} from "./baseline"
+import { canonical, canonicalText, emitSchema, type Json } from "./emit"
 
 const contactGolden: Golden = {
 	id: "contacts.full",
@@ -49,6 +61,23 @@ describe("emitSchema", () => {
 		expect(() => emitSchema("s", z.object({ e: z.coerce.number() }))).toThrow("x-transform")
 	})
 
+	test("a wrapper's description labels the wrapper, never an undescribed node inside it", () => {
+		const custom = z.custom<string>(() => true)
+		expect(() => emitSchema("s", z.object({ a: custom.catch("x").describe("else x") }))).toThrow("x-custom")
+		expect(() =>
+			emitSchema(
+				"s",
+				z.object({
+					a: z
+						.string()
+						.refine(() => true)
+						.catch("x")
+						.describe("else x"),
+				}),
+			),
+		).toThrow("x-refine")
+	})
+
 	test("a described copy of a node does not label the bare node used beside it", () => {
 		const fee = z.custom<object>(() => true)
 		expect(() => emitSchema("s", z.object({ a: fee, b: fee.describe("x") }))).toThrow("/properties/a")
@@ -78,6 +107,16 @@ describe("emitSchema", () => {
 		expect(one).toMatchObject({ required: ["a", "b"] })
 	})
 
+	test("a pipe's validating output side is part of the shape", () => {
+		const message = z
+			.string()
+			.transform((v) => v.trim())
+			.describe("trimmed")
+		const piped = z.object({ m: message.pipe(z.string().max(100)).describe("trimmed, then at most 100") })
+		expect(emitSchema("s", piped)).toMatchObject({ properties: { m: { "x-pipe-out": { type: "string", maxLength: 100 } } } })
+		expect(JSON.stringify(emitSchema("s", z.object({ m: message })))).not.toContain("x-pipe-out")
+	})
+
 	test("a plain schema needs no description", () => {
 		expect(() => emitSchema("s", z.object({ a: z.string().optional(), b: z.array(z.number()) }))).not.toThrow()
 	})
@@ -89,6 +128,10 @@ describe("canonical", () => {
 		expect(() => canonical({ a: 1n })).toThrow("/a")
 		expect(() => canonical({ a: new Map() })).toThrow("Map")
 		expect(() => canonical([Number.NaN])).toThrow("/0")
+	})
+
+	test("keeps an own `__proto__` key as data, so it changes what a pin hashes", () => {
+		expect(canonicalText(JSON.parse('{"a":{"__proto__":"x"}}'))).toBe('{"a":{"__proto__":"x"}}')
 	})
 })
 
@@ -174,6 +217,19 @@ describe("preservationProblems", () => {
 	test("a row the step's migration covers may change", () => {
 		const migrated = stampOf(currentShapes(), { version: 2, migration: 2, expected: { "contacts.full": { id: "c1" } } })
 		expect(preservationProblems(prev, migrated, [contactGolden], [migrationOver(2, CONTACT_STORAGE_ROOT)])).toEqual([])
+	})
+})
+
+describe("decodeGoldens", () => {
+	test("a migration reading a backup slice decodes every golden, though one store holds only some of them", async () => {
+		const reads = defineRowMapMigration({
+			version: 2,
+			description: "test",
+			rowMaps: { [CONTACT_STORAGE_ROOT]: { addDefault: { tag: "t" } } },
+		})
+		const { goldens } = committedBaseline()
+		const decoding = await decodeGoldens(goldens, [{ version: 1 }], [reads])
+		expect(Object.keys(decoding.backup).length).toBeGreaterThan(0)
 	})
 })
 

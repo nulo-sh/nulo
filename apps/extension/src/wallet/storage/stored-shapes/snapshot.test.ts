@@ -1,21 +1,17 @@
-import { readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
 import { beforeAll, describe, expect, test } from "vitest"
 import { realMigrations } from "../migrations"
 import { STORED_SHAPES, type StoredShape, type StoredShapeName } from "../stored-shapes"
 import {
 	changedShapes,
+	committedBaseline,
 	currentShapes,
 	type Decoding,
 	decodeGoldens,
 	type Golden,
-	type GoldensFile,
 	isBackupSliced,
 	justify,
 	pinOf,
 	preservationProblems,
-	type Snapshot,
 	schemaVersionOf,
 	zodVersion,
 } from "./baseline"
@@ -29,9 +25,7 @@ import { PINNED_STAMPS } from "./pins"
  * stamp pinned (R3).
  */
 
-const here = dirname(fileURLToPath(import.meta.url))
-const snapshot = JSON.parse(readFileSync(join(here, "snapshot.json"), "utf8")) as Snapshot
-const goldens = (JSON.parse(readFileSync(join(here, "goldens.json"), "utf8")) as GoldensFile).goldens
+const { snapshot, goldens } = committedBaseline()
 const last = snapshot.stamps.at(-1)
 const REGENERATE = "run `bun run baseline:storage` (CLAUDE.md § Persisted-storage shape changes)"
 
@@ -122,14 +116,14 @@ describe("the goldens", () => {
 		}
 	})
 
-	test("an object shape's full golden holds every property, and its minimal one only the required ones", () => {
-		const shapes = currentShapes()
+	test("an object shape's full golden holds every property its stamp had, and its minimal one only the required ones", () => {
 		for (const golden of goldens.filter(({ id }) => id.endsWith(".full") || id.endsWith(".minimal"))) {
-			const schema = shapes[golden.shape]?.schema as { properties?: Record<string, unknown>; required?: string[] } | undefined
+			const record = snapshot.stamps[golden.stamp]?.shapes[golden.shape]
+			const schema = record?.schema as { properties?: Record<string, unknown>; required?: string[] } | undefined
 			if (!schema?.properties || typeof golden.value !== "object" || golden.value === null || Array.isArray(golden.value)) continue
 			const keys = Object.keys(golden.value).sort()
 			// The MAC check refuses a row with no `mac`, which the codec alone would accept.
-			const required = [...(schema.required ?? []), ...(shapeOf(golden).authenticated ? ["mac"] : [])]
+			const required = [...(schema.required ?? []), ...(record?.authenticated ? ["mac"] : [])]
 			const expected = golden.id.endsWith(".full") ? Object.keys(schema.properties) : required
 			expect(keys, golden.id).toEqual([...new Set(expected)].sort())
 		}

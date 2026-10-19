@@ -3,6 +3,9 @@
  * rules a new stamp must satisfy. Shared by `snapshot.test.ts` and the generator
  * (`apps/extension/scripts/storage-baseline/generate.ts`), so both judge a change the same way.
  */
+import { readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { type Migration, Migrator, SCHEMA_RESERVED_PREFIX, SCHEMA_VERSION_KEY, type StorageRef } from "@nulo/wallet-core/migration"
 import type { StorageArea } from "@nulo/wallet-core/ports"
 import { MemoryStorageArea, type MinimalStorageArea } from "@nulo/wallet-core/storage"
@@ -66,6 +69,12 @@ export type Snapshot = { stamps: Stamp[] }
 /** The SHA-256 of a pinned stamp and of the goldens it introduced, both over canonical JSON. */
 export type Pin = { stamp: string; goldens: string }
 
+/** The committed `snapshot.json` and `goldens.json`, read fresh. */
+export function committedBaseline(): { snapshot: Snapshot; goldens: Golden[] } {
+	const read = (file: string) => JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), file), "utf8"))
+	return { snapshot: read("snapshot.json") as Snapshot, goldens: (read("goldens.json") as GoldensFile).goldens }
+}
+
 /** The clock every clock-dependent decoder reads goldens at. */
 export const GOLDEN_NOW = Date.UTC(2026, 9, 1)
 
@@ -108,6 +117,8 @@ function idOf(shape: StoredShape, key: string): string {
 }
 
 const wire = (shape: StoredShape, value: Json): unknown => (shape.encoding === "json" ? JSON.stringify(value) : value)
+const unwire = (shape: StoredShape, stored: unknown): Json =>
+	stored === undefined ? null : canonical(shape.encoding === "json" && typeof stored === "string" ? JSON.parse(stored) : stored)
 
 async function macStorage(area: MinimalStorageArea): Promise<DappSessionMacStorage> {
 	const key = await goldenMacKey()
@@ -197,7 +208,7 @@ async function decodeLive(
 	goldens: readonly Golden[],
 	version: number,
 	migrations: Migration[],
-): Promise<{ decoded: Decoded; keys: string[] }> {
+): Promise<{ decoded: Decoded; keys: string[]; stored: Decoded }> {
 	const area = new MemoryStorageArea().seed({ [SCHEMA_VERSION_KEY]: version })
 	for (const golden of goldens) area.seed({ [golden.key]: wire(STORED_SHAPES[golden.shape], golden.value) })
 	const run = async () => {
@@ -211,9 +222,11 @@ async function decodeLive(
 	await run()
 	if (contents(area) !== once) throw new Error(`a second run of the migrations from v${version} changed the goldens: not idempotent`)
 	const keys = [...area.data.keys()].filter((key) => !key.startsWith(SCHEMA_RESERVED_PREFIX)).sort()
+	const stored: Decoded = {}
+	for (const golden of goldens) stored[golden.id] = unwire(STORED_SHAPES[golden.shape], area.data.get(golden.key))
 	const decoded: Decoded = {}
 	for (const golden of goldens) decoded[golden.id] = decodedOf(await readStored(golden.shape, area, golden.key, GOLDEN_NOW))
-	return { decoded, keys }
+	return { decoded, keys, stored }
 }
 
 /** The backup slice service whose root (or value key) holds `shape`, if a full backup carries it. */
@@ -227,9 +240,18 @@ function sliceOf(shape: StoredShape): string | undefined {
 
 export const isBackupSliced = (golden: Golden): boolean => sliceOf(STORED_SHAPES[golden.shape]) !== undefined
 
+/** A full backup carries every required slice, so one a store holds no golden of is carried empty,
+ *  as a migration reading it requires. */
+const emptyBackup = (): Record<string, unknown[]> =>
+	Object.fromEntries(
+		Object.entries(BACKUP_SLICE_REGISTRY)
+			.filter(([, slice]) => (slice.kind === "root" && !slice.optional) || slice.kind === "value-projection")
+			.map(([service]) => [service, []]),
+	)
+
 /** The goldens as the slices of a full backup's `data`. */
 function backupData(goldens: readonly Golden[]): Record<string, unknown[]> {
-	const data: Record<string, unknown[]> = {}
+	const data = emptyBackup()
 	for (const golden of goldens) {
 		const service = sliceOf(STORED_SHAPES[golden.shape])
 		const slice = service ? BACKUP_SLICE_REGISTRY[service] : undefined
@@ -259,7 +281,8 @@ async function decodeBackup(goldens: readonly Golden[], version: number, migrati
 	return decoded
 }
 
-export type Decoding = { live: Decoded; backup: Decoded; keys: Record<number, string[]> }
+/** `stored`: each golden's row as the migrations leave it in storage, a current-shape sample. */
+export type Decoding = { live: Decoded; backup: Decoded; keys: Record<number, string[]>; stored: Decoded }
 
 /** Every golden decoded after the given migrations, each stamp's rows seeded at that stamp's version. */
 export async function decodeGoldens(
@@ -267,11 +290,12 @@ export async function decodeGoldens(
 	stamps: readonly Pick<Stamp, "version">[],
 	migrations: Migration[],
 ): Promise<Decoding> {
-	const out: Decoding = { live: {}, backup: {}, keys: {} }
+	const out: Decoding = { live: {}, backup: {}, keys: {}, stored: {} }
 	for (const [index, stamp] of stamps.entries()) {
 		for (const round of rounds(goldens.filter((golden) => golden.stamp === index))) {
 			const live = await decodeLive(round, stamp.version, migrations)
 			Object.assign(out.live, live.decoded)
+			Object.assign(out.stored, live.stored)
 			out.keys[index] = [...new Set([...(out.keys[index] ?? []), ...live.keys])].sort()
 			Object.assign(out.backup, await decodeBackup(round, stamp.version, migrations))
 		}

@@ -13,8 +13,22 @@ const MARKED_TYPES: Record<string, string> = {
 const UNREPRESENTABLE = new Set(["bigint", "date", "map", "set", "symbol", "undefined", "void", "never", "nan", "function", "promise"])
 
 type ZodInternals = {
-	_zod: { def: { type: string; coerce?: boolean; checks?: Array<{ _zod: { def: { check: string } } }> } }
+	_zod: {
+		def: { type: string; coerce?: boolean; checks?: Array<{ _zod: { def: { check: string } } }>; in?: ZodInternals; out?: ZodInternals }
+		parent?: ZodInternals
+		traits: Set<string>
+	}
 	description?: string
+}
+
+const isTransform = (node: ZodInternals) => node._zod.traits.has("$ZodTransform")
+
+/** The side of a pipe input mode leaves out, when it validates: a `.pipe(schema)` after a transform
+ *  refuses rows no input-side schema shows. A `.transform()` or a preprocess leaves out only a body. */
+function unemittedSide(node: ZodInternals): ZodInternals | undefined {
+	const { type, in: input, out } = node._zod.def
+	if (type !== "pipe" || !input || !out || isTransform(input) || isTransform(out)) return undefined
+	return out
 }
 
 /** `.trim()`, `.toLowerCase()`, `.overwrite()` and `z.coerce` rewrite the parsed value with no trace in
@@ -31,12 +45,14 @@ function markersOf(node: ZodInternals): string[] {
 	return [...new Set(markers)]
 }
 
-const UNLABELLED = "x-unlabelled"
+/** A flag per undescribed marked node, keyed by the node, so clearing one never clears another's. */
+const UNLABELLED = "x-unlabelled:"
 
-/** The first node still carrying {@link UNLABELLED}, as its path and markers. */
+/** The first node still carrying an {@link UNLABELLED} flag, as its path and markers. */
 function findUnlabelled(node: unknown, path = ""): { path: string; markers: unknown } | undefined {
 	if (typeof node !== "object" || node === null) return undefined
-	if (UNLABELLED in node) return { path: path || "/", markers: (node as Record<string, unknown>)[UNLABELLED] }
+	const flag = Object.keys(node).find((key) => key.startsWith(UNLABELLED))
+	if (flag) return { path: path || "/", markers: (node as Record<string, unknown>)[flag] }
 	for (const [key, child] of Object.entries(node)) {
 		const found = findUnlabelled(child, `${path}/${key}`)
 		if (found) return found
@@ -51,23 +67,34 @@ function findUnlabelled(node: unknown, path = ""): { path: string; markers: unkn
  * records under its marker; an undescribed one throws, naming the shape and the path.
  */
 export function emitSchema(shape: string, schema: z.ZodType): Json {
-	const emitted = z.toJSONSchema(schema, {
-		io: "input",
-		unrepresentable: "any",
-		override: ({ zodSchema, jsonSchema }) => {
-			const node = zodSchema as unknown as ZodInternals
-			const target = jsonSchema as Record<string, unknown>
-			const markers = markersOf(node)
-			// `.describe()` clones its schema and the clone inherits the original's output first, so the
-			// flag a bare original leaves survives only where the bare original itself is emitted.
-			if (!node.description) {
-				if (markers.length > 0) target[UNLABELLED] = markers.join(" and ")
-				return
-			}
-			delete target[UNLABELLED]
-			for (const marker of markers) target[marker] = node.description
-		},
-	})
+	const ids = new Map<ZodInternals, number>()
+	const flagOf = (node: ZodInternals) => {
+		if (!ids.has(node)) ids.set(node, ids.size)
+		return `${UNLABELLED}${ids.get(node)}`
+	}
+	const toJson = (node: z.ZodType) =>
+		z.toJSONSchema(node, {
+			io: "input",
+			unrepresentable: "any",
+			override: ({ zodSchema, jsonSchema }) => label(zodSchema as unknown as ZodInternals, jsonSchema as Record<string, unknown>),
+		}) as Record<string, unknown>
+	function label(node: ZodInternals, target: Record<string, unknown>): void {
+		const out = unemittedSide(node)
+		if (out) {
+			const { $schema: _, ...json } = toJson(out as unknown as z.ZodType)
+			target["x-pipe-out"] = json
+		}
+		const markers = markersOf(node)
+		if (!node.description) {
+			if (markers.length > 0) target[flagOf(node)] = markers.join(" and ")
+			return
+		}
+		// `.describe()` clones its schema and the clone inherits its original's output, wrapped nodes'
+		// flags included: only the originals' flags are this description's to clear.
+		for (let original = node._zod.parent; original; original = original._zod.parent) delete target[flagOf(original)]
+		for (const marker of markers) target[marker] = node.description
+	}
+	const emitted = toJson(schema)
 	const unlabelled = findUnlabelled(emitted)
 	if (unlabelled) {
 		throw new Error(`${shape}: the ${unlabelled.markers} node at ${unlabelled.path} needs a .describe() saying what it accepts`)
@@ -78,13 +105,16 @@ export function emitSchema(shape: string, schema: z.ZodType): Json {
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && [Object.prototype, null].includes(Object.getPrototypeOf(value))
 
+/** Each key is defined, never assigned: an own `__proto__` key (JSON.parse makes one) is data that
+ *  assignment would hand to the inherited setter and drop from every hash. */
 function canonicalObject(value: Record<string, unknown>, options: { schema?: boolean }, path: string): Json {
 	const out: { [key: string]: Json } = {}
 	for (const key of Object.keys(value).sort()) {
 		const item = value[key]
 		if (item === undefined) continue
 		const sorted = options.schema && key === "required" && Array.isArray(item) ? [...item].sort() : item
-		out[key] = canonical(sorted, options, `${path}/${key}`)
+		const json = canonical(sorted, options, `${path}/${key}`)
+		Object.defineProperty(out, key, { value: json, enumerable: true, writable: true, configurable: true })
 	}
 	return out
 }

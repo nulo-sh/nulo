@@ -11,7 +11,6 @@ export const NETWORK_STORAGE_ROOT = "nulo:core:networks"
 /** Per-profile key root of the active network id, stored as a bare string (`${root}@${profileId}`). */
 export const ACTIVE_NETWORK_STORAGE_ROOT = "nulo:core:active-network"
 
-/** The stored active network id; anything but a string reads as no choice. */
 export const decodeActiveNetworkId = (raw: unknown): string | undefined => (typeof raw === "string" ? raw : undefined)
 
 export enum NodeStatus {

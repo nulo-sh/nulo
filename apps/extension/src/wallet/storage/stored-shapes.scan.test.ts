@@ -115,11 +115,13 @@ type Source = { file: string; source: string }
 /** `extended`: a template piece a substitution follows, so the key is longer than `text`. */
 type Literal = { file: string; line: number; text: string; extended: boolean }
 
-/** The shape a stored key or key prefix belongs to: a value key exactly, or a root, alone or followed by `@`. */
+/** The shape a stored key or key prefix belongs to: a value key exactly, or a root, alone or followed
+ *  by `@`. A template piece a substitution extends is a longer key: it claims only a root's `@` rows. */
 function claimingShape(text: string, extended = false): StoredShape | undefined {
-	return SHAPES.find(({ ref }) =>
-		ref.kind === "value" ? !extended && text === ref.key : text === ref.root || text.startsWith(`${ref.root}@`),
-	)
+	return SHAPES.find(({ ref }) => {
+		if (ref.kind === "value") return !extended && text === ref.key
+		return (!extended && text === ref.root) || text.startsWith(`${ref.root}@`)
+	})
 }
 
 const ownedBy = (files: readonly string[] | undefined, file: string) =>
@@ -353,6 +355,7 @@ describe("the scan's own rules", () => {
 		expect(unregisteredLiterals(fixture("apps/extension/src/composables/syncedRef.js", head))).toEqual([])
 		expect(unregisteredLiterals(fixture("apps/extension/src/x.ts", "const k = `nulo:journal:gc${n}`"))).toHaveLength(1)
 		expect(unregisteredLiterals(fixture("apps/extension/src/x.ts", "const k = `nulo:ui:activeAccount${n}`"))).toHaveLength(1)
+		expect(unregisteredLiterals(fixture("apps/extension/src/x.ts", "const k = `nulo:core:accounts${suffix}`"))).toHaveLength(1)
 	})
 
 	test("every entry a template can extend names its owning files, and each file exists", () => {

@@ -14,15 +14,14 @@
  * 3. NON-FORGEABLE BRAND — `backupSafe` membership is factory-private and the
  *    branded migration is deep-frozen; brand-then-mutate is impossible.
  */
-import { describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test } from "vitest"
 import { defineMigration, type Migration, Migrator, SCHEMA_VERSION_KEY } from "@nulo/wallet-core/migration"
 import { MemoryStorageArea } from "@nulo/wallet-core/storage"
 import { backupMigrationFixture } from "@/e2e/backup-migration-fixture"
 import { backupMigrations, migrations, realMigrations } from "@/wallet/storage/migrations"
 import { CONTACT_STORAGE_ROOT, ContactSchema } from "@/wallet/services/contact/spec"
 import { STORED_SHAPES, type StoredShape } from "@/wallet/storage/stored-shapes"
-import type { GoldensFile } from "@/wallet/storage/stored-shapes/baseline"
-import goldensFile from "@/wallet/storage/stored-shapes/goldens.json"
+import { committedBaseline, decodeGoldens } from "@/wallet/storage/stored-shapes/baseline"
 import type { z } from "zod"
 import { BACKUP_BLOCKED_ROOTS, BACKUP_SLICE_REGISTRY } from "./backup-migration-registry"
 import { applyRowTransform, defineRowMapMigration, isBackupSafeMigration, rowMapDefOf, type RowMapTransform } from "./row-map-migration"
@@ -156,17 +155,27 @@ describe("metamorphic guardrail: per-row output invariant under subset × permut
 	// old shape — see template.ts step 7), but a `drop`/`retype` of a required
 	// field breaks a CURRENT-shape row too, which we CAN catch: apply each
 	// migration to a schema-valid current row and assert it stays valid. Every
-	// codec root of the stored-shape registry supplies its `full` golden, so a
-	// migration of any root has a sample.
-	const SCHEMA_SAMPLES: Record<string, { schema: z.ZodType<unknown>; valid: Record<string, unknown> }> = Object.fromEntries(
-		(goldensFile as GoldensFile).goldens
-			.filter((golden) => golden.id === `${golden.shape}.full`)
-			.flatMap((golden) => {
-				const shape: StoredShape = STORED_SHAPES[golden.shape]
-				if (shape.read !== "codec" || shape.ref.kind !== "root") return []
-				return [[shape.ref.root, { schema: shape.schema as z.ZodType<unknown>, valid: golden.value as Record<string, unknown> }]]
-			}),
-	)
+	// codec root of the stored-shape registry supplies its `full` golden as the
+	// migrations leave it, so a migration of any root has a current-shape sample.
+	let SCHEMA_SAMPLES: Record<string, { schema: z.ZodType<unknown>; valid: Record<string, unknown> }> = {}
+	beforeAll(async () => {
+		const { snapshot, goldens } = committedBaseline()
+		const { stored } = await decodeGoldens(goldens, snapshot.stamps, realMigrations)
+		SCHEMA_SAMPLES = Object.fromEntries(
+			goldens
+				.filter((golden) => golden.id === `${golden.shape}.full`)
+				.flatMap((golden) => {
+					const shape: StoredShape = STORED_SHAPES[golden.shape]
+					if (shape.read !== "codec" || shape.ref.kind !== "root") return []
+					return [
+						[
+							shape.ref.root,
+							{ schema: shape.schema as z.ZodType<unknown>, valid: stored[golden.id] as Record<string, unknown> },
+						],
+					]
+				}),
+		)
+	})
 
 	test("every codec root of the stored-shape registry has a schema sample", () => {
 		const roots = Object.values(STORED_SHAPES as Record<string, StoredShape>).flatMap((shape) =>
