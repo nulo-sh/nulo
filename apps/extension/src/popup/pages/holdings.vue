@@ -51,8 +51,6 @@ const balances = useTokenBalanceSnapshot({
 	rows,
 	state: balancesState,
 	added: "replace",
-	insertUnseenUpdated: true,
-	refetchWhenDirty: false,
 })
 tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
 tokenBalanceService.onTokenBalanceUpdated.add((tb) => balances.inActiveScope(tb) && balances.onBalanceUpdated(tb))
@@ -100,9 +98,13 @@ void pins.refresh()
 const aggregate = computed(() => aggregateFiat(rows.value, fiatOf))
 /** Home's unavailable state, from the first price answer on: before it no quote has had a chance. */
 const unavailable = computed(() => showFiatValues.value && prices.settled.value && pricesUnavailable(rows.value, fiatOf, prices))
-const totalDisplay = computed(() => (unavailable.value ? "—" : prices.formatUsdMicro(aggregate.value.micro)))
+/** A list that failed to read has no total, whatever rows live events stored since. */
+const totalUnknown = computed(() => error.value || unavailable.value)
+const totalDisplay = computed(() => (totalUnknown.value ? "—" : prices.formatUsdMicro(aggregate.value.micro)))
 /** An unread list has no total yet, so the skeleton stands from the start, not from the first rows. */
-const awaitingPrices = computed(() => showFiatValues.value && (isLoading.value || awaitingFirstPriceAnswer(rows.value, prices)))
+const awaitingPrices = computed(
+	() => showFiatValues.value && !error.value && (isLoading.value || awaitingFirstPriceAnswer(rows.value, prices)),
+)
 
 const openAddToken = (address: string) => {
 	cacheStore.preselectedTokenAddressToAdd = address
@@ -114,7 +116,7 @@ const totalRuler = useTemplateRef<HTMLElement>("totalRuler")
 const metaRuler = useTemplateRef<HTMLElement>("metaRuler")
 /** No count until the list answers: an unread list is not an empty one. */
 const summaryMeta = computed(() => {
-	if (isLoading.value) return ""
+	if (isLoading.value || error.value) return ""
 	if (unavailable.value) return "Prices unavailable"
 	return `${rows.value.length} tokens${showFiatValues.value && aggregate.value.partial && !awaitingPrices.value ? " · priced assets only" : ""}`
 })
@@ -194,7 +196,7 @@ onBeforeUnmount(() => {
 					:class="[$style.summary_amount, { [$style.summary_amount_shrunk]: totalScale < 1 }]"
 				>
 					<Skeleton v-if="awaitingPrices" :width="96" :height="26" data-testid="holdings-total-loading" :class="$style.total_skeleton" />
-					<span v-else :class="$style.summary_fit" :style="{ '--hero-scale': totalScale }" :aria-hidden="unavailable || undefined">{{ totalDisplay }}</span>
+					<span v-else :class="$style.summary_fit" :style="{ '--hero-scale': totalScale }" :aria-hidden="totalUnknown || undefined">{{ totalDisplay }}</span>
 				</span>
 				<span data-testid="holdings-meta" :class="$style.summary_meta">{{ summaryMeta }}</span>
 				<!-- The fit's ruler: the total in the line's classes at full size and the meta line at its

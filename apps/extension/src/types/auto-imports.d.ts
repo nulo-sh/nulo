@@ -735,7 +735,7 @@ declare global {
   export type { InFlightScope } from '../utils/in-flight-send'
   import('../utils/in-flight-send')
   // @ts-ignore
-  export type { JournalRow, JournalPlace, JournalAddRules } from '../utils/journal-mirror'
+  export type { JournalRow, JournalPlace } from '../utils/journal-mirror'
   import('../utils/journal-mirror')
   // @ts-ignore
   export type { JournalTerminalVisualState, JournalTerminalDisplay, SendOutcome, CategoricalFailureLabel, TokenForCardProps, JournalTerminalCardCtx, JournalTerminalCardProps } from '../utils/journal-state'

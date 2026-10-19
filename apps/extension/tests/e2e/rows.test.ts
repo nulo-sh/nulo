@@ -26,13 +26,11 @@ import { waitForPopup } from "./fixtures/popups"
 import { e2eSigner, serveTokenList, signTestList, skipUnlessListPrices } from "./fixtures/token-list"
 import { readActivityScope, seedJournalRecord, seedReceipt, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
 import { createProfileAcceptingTerms, pointerClick } from "./helpers/legal-drivers"
-import { coveredAt, pressEscape, tabAround, waitForFocus } from "./helpers/pointer-probes"
+import { coveredAt, pressEscape, SPACE, tabAround, waitForFocus } from "./helpers/pointer-probes"
 import { startStub } from "./helpers/rpc-stub"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const TX_HASH = `0x${"5e".repeat(32)}`
-/** Puppeteer's BiDi keyboard (Firefox) knows the space bar only by its key value, not as "Space". */
-const SPACE = " "
 
 type Probe = {
 	__pushes?: number

@@ -409,7 +409,7 @@ describe("SelectTokenPopup", () => {
 		}
 	})
 
-	test("a read in flight lands over an add that came meanwhile", async () => {
+	test("a read in flight reads again over an add that came meanwhile, which stays", async () => {
 		const wrapper = await mountOpen([row(1, "A")])
 		let release: (rows: ReturnType<typeof row>[]) => void = () => {}
 		H.getTokenBalances
@@ -428,8 +428,8 @@ describe("SelectTokenPopup", () => {
 		expect(rowSymbols(wrapper)).toEqual(["MINE"])
 		release([row(1, "A")])
 		await flushPromises()
-		expect(rowSymbols(wrapper)).toEqual(["A"])
-		expect(H.getTokenBalances).toHaveBeenCalledTimes(2)
+		expect(rowSymbols(wrapper)).toEqual(["A", "MINE"])
+		expect(H.getTokenBalances).toHaveBeenCalledTimes(3)
 	})
 
 	test("hiding clears the list and query and disconnects the balance client; unmount tears down prices", async () => {

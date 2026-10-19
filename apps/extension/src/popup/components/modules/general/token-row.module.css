@@ -1,0 +1,5 @@
+/* A token row's balance column while it waits: the loaded column's box, an `amount-row` line,
+   the 2px gap and a `meta` line, so the row keeps its height when the figures land. */
+.loading_block {
+	min-height: 37px;
+}

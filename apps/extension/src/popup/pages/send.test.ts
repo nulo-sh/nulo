@@ -187,6 +187,7 @@ const STUBS = {
 			"isEstimating",
 			"originPrivacy",
 			"payerNoticeShape",
+			"amountTyped",
 			"modelValue",
 			"needsFeeJuice",
 			"payer",
@@ -624,6 +625,17 @@ describe("send page — the footer", () => {
 		w.unmount()
 	})
 
+	test("the card hears whether the amount field holds an amount, with no recipient needed", async () => {
+		const { w } = await mountSend()
+		const typed = () => w.findComponent({ name: "FeeSettingsCard" }).props("amountTyped")
+		expect(typed()).toBe(false)
+		await w.get('[data-testid="stub-amount"]').setValue("1.5")
+		expect(typed()).toBe(true)
+		await w.get('[data-testid="stub-amount"]').setValue("")
+		expect(typed()).toBe(false)
+		w.unmount()
+	})
+
 	test("the card is handed the tag's shape exactly while the send is gated", async () => {
 		const { w } = await mountSend()
 		const shape = () => w.findComponent({ name: "FeeSettingsCard" }).props("payerNoticeShape")
@@ -909,6 +921,8 @@ describe("send page — the token card while the tokens load", () => {
 	const balanceDeleted = () =>
 		lastClient<{ onTokenBalanceDeleted: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceDeleted
 	const balanceConnected = () => lastClient<{ onConnected: EventHandler<void> }>(TokenBalanceServiceClient).onConnected
+	const balanceUpdated = () =>
+		lastClient<{ onTokenBalanceUpdated: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceUpdated
 	const card = (w: W) => {
 		const el = w.get('[data-testid="stub-token-card"]')
 		return { loading: el.attributes("data-loading"), symbol: el.attributes("data-symbol") }
@@ -990,16 +1004,38 @@ describe("send page — the token card while the tokens load", () => {
 		w.unmount()
 	})
 
-	test("an add for a listed row id lands again: a worker restart can give a deleted row's id to another token's row", async () => {
+	// A restarted worker can give a listed row's id to another token's row, and that row's add can
+	// reach the port before the reconnect's read lands. It is created at zero, and its first update
+	// replaces the listed row by id, so each token shows its own amount at every step.
+	test("a restart that gives a listed row's id to another token shows each token's own amount at every step", async () => {
 		const NEW = { ...TOKEN, id: 9, contract: `0x${"9".repeat(64)}`, symbol: "NEW" }
 		mocks.getTokens.mockResolvedValue([TOKEN, NEW])
 		const { w, cacheStore } = await mountSend()
-		balanceAdded().invoke({ ...BALANCE, token: NEW, privateBalance: "4000000" })
+		const shown = async (tokenId: number) => {
+			cacheStore.activeTokenIdx = tokenId
+			await flushPromises()
+			return amount(w).attributes("data-balance")
+		}
+		const created = { ...BALANCE, token: NEW, privateBalance: "0", publicBalance: "0", updatedAt: 0 }
+		const projected = { ...created, privateBalance: "4000000", updatedAt: 2 }
+		balanceConnected().invoke()
+		const reads = holdReads<unknown[]>(mocks.getTokenBalances)
+		balanceConnected().invoke()
 		await flushPromises()
-		expect(amount(w).attributes("data-balance")).toBe("5")
-		cacheStore.activeTokenIdx = NEW.id
+
+		balanceAdded().invoke(created)
 		await flushPromises()
-		expect(amount(w).attributes("data-balance")).toBe("4")
+		expect([await shown(TOKEN.id), await shown(NEW.id)]).toEqual(["5", "0"])
+		balanceUpdated().invoke(projected)
+		await flushPromises()
+		expect([await shown(TOKEN.id), await shown(NEW.id)]).toEqual(["0", "4"])
+
+		reads[0]?.resolve([created])
+		await flushPromises()
+		reads[1]?.resolve([projected])
+		await flushPromises()
+		expect(reads).toHaveLength(2)
+		expect([await shown(TOKEN.id), await shown(NEW.id)]).toEqual(["0", "4"])
 		w.unmount()
 	})
 

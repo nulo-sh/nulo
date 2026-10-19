@@ -1,7 +1,7 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup lang="ts">
 /** Vendor */
-import { nextTick, reactive, ref, watch } from "vue"
+import { nextTick, onBeforeUnmount, reactive, ref, watch } from "vue"
 
 /** Composables */
 import { useOutside } from "../composables/outside"
@@ -48,19 +48,28 @@ const triggerEl = ref<HTMLElement>()
 const cardEl = ref<HTMLElement>()
 
 const popoverStyles = reactive<Record<string, string>>({})
+/** The trigger's control focused when the panel opened, read before the content mounts and takes focus. */
+let opener: HTMLElement | null = null
 
 const onClose = () => {
 	emit("onClose")
 }
 
 const onKeydown = (e: KeyboardEvent) => {
-	if (e.code === "Escape") onClose()
+	if (e.code !== "Escape") return
+	e.preventDefault()
+	// Only a key, and only from inside the panel, hands focus back: a pointer close from the
+	// autofocused content would carry the ring there.
+	if (cardEl.value?.contains(document.activeElement) && opener?.isConnected) opener.focus()
+	onClose()
 }
 
 watch(
 	() => props.open,
 	() => {
 		if (props.open) {
+			const focused = document.activeElement
+			opener = focused instanceof HTMLElement && triggerEl.value?.contains(focused) ? focused : null
 			const triggerRect = (triggerEl.value as HTMLElement).getBoundingClientRect()
 
 			popoverStyles.top = `${triggerRect.y + triggerRect.height + 8}px`
@@ -80,12 +89,20 @@ watch(
 				removeOutside = useOutside(cardEl.value, onClose)
 			})
 		} else {
+			opener = null
 			document.removeEventListener("scroll", onClose)
 			document.removeEventListener("keydown", onKeydown)
 			;(removeOutside as () => void)()
 		}
 	},
 )
+
+// A listener left behind would mark every later Escape handled.
+onBeforeUnmount(() => {
+	document.removeEventListener("scroll", onClose)
+	document.removeEventListener("keydown", onKeydown)
+	removeOutside?.()
+})
 </script>
 
 <template>
