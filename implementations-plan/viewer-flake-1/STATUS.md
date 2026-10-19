@@ -1,0 +1,13 @@
+- 2026-10-19 phase 0: root cause traced (P1 viewer, T1 and T2 test), reproducers R1b/R2/R3 on Firefox; trial fix 0/16 resumes
+- 2026-10-19 plan drafted; Codex audit next
+- 2026-10-19 plan r1: Codex reject, Opus conditional; redesigned to pin-only (no dispatch), trial 0/16
+- 2026-10-19 plan r2: Codex reject (stop-time pin blocks timer/band resumes); pin moved into scrollToBottom
+- 2026-10-19 plan r3: Codex reject (sub-frame reader scroll) -> KL-2; wording qualified; final fresh pass next
+- 2026-10-19 Chrome follow-pin trial: R1b 0/8, R3 0/8, R5 resumes
+- 2026-10-19 final fresh Codex pass: conditional approve; KL-2 -> owner ask A1; R5, T2 and layout-cost findings applied; session ends at the plan report
+- 2026-10-19 orchestrator approved, two arcs; final pass resumed: conditional (burst measure, two-arc plan), conditional (gate exception), approve
+- 2026-10-19 arc 1: T1+T2 committed; lint, typecheck green; Codex loop r1 conditional, r2 conditional, r3 approve; Opus approve
+- 2026-10-19 arc 1 controls: negative control red on Firefox 7/7 resumed iterations (Chrome masks the resume); P1 trial 0/16 per browser; R5 asserted; burst +1.8% FF, +1.7% Chrome; test:all red on 6 load timeouts (5 s, unrelated files), rerun queued
+- 2026-10-19 arc 1: origin/dev moved (#868 in viewers-csp); merged (f1b6014e); gate rerun on the merged head
+- 2026-10-19 arc 1 gate (f1b6014e): lint, typecheck, test:all green; viewers-csp Firefox 10/10, Chrome 5/5; full smoke Firefox 2/2, Chrome 1/1
+- 2026-10-19 arc 1 final head (1ef1ecbc, dev re-merged): lint, typecheck, test:all green; viewers-csp Firefox and Chrome 8/8; PR opened
