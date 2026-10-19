@@ -379,13 +379,18 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 		return (result ?? {}) as Record<string, Record<string, NoteSchema>>
 	}
 
-	public async registerAccount(network: NetworkInfo, secretKey: Fr, partialAddress: PartialAddress): Promise<CompleteAddress> {
-		const result = await this.request("registerAccount", network, secretKey, partialAddress)
+	public async registerAccount(
+		network: NetworkInfo,
+		secretKey: Fr,
+		partialAddress: PartialAddress,
+		maxTaggingSources?: number,
+	): Promise<CompleteAddress> {
+		const result = await this.request("registerAccount", network, secretKey, partialAddress, maxTaggingSources)
 		return await CompleteAddress.schema.parseAsync(result)
 	}
 
-	public async registerSender(network: NetworkInfo, address: AztecAddress): Promise<AztecAddress> {
-		const result = await this.request("registerSender", network, address)
+	public async registerSender(network: NetworkInfo, address: AztecAddress, maxTaggingSources?: number): Promise<AztecAddress> {
+		const result = await this.request("registerSender", network, address, maxTaggingSources)
 		return await AztecAddress.schema.parseAsync(result)
 	}
 

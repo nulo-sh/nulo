@@ -1,7 +1,7 @@
 ---
 plan: landing-explainer-1
 tier: light
-status: approved 2026-10-17; arc 1 open as draft; arc 2 (clips) held for the owner
+status: closed (arc 2's PR carries the close-out; the merge closes the plan); arc 1 merged as #723
 issues: "#588 (Refs only: onboarding-3 closes it; no arc here closes an issue)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,23 @@ base: origin/dev at 2c0df3b9
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** closed. Arc 1 merged as #723; arc 2's PR carries this close-out, and its merge closes the plan. The owner approved the clips on decision page 63 (2026-10-19): P63-01 A, P63-02 A, P63-03 D.
+- **Shipped:** the page `nulo.sh/how-aztec-works` with three narrated clips over their text versions: Private balances 59.1 s in 6 scenes, Proofs 49.4 s in 8, Fees 50.0 s in 7, each ending on its recap (D21).
+  - Each clip is an SVG stage drawn from the narration's word timings, with a captions line, a WebVTT track and a transcript (D10 to D15).
+  - Media is self-hosted and hashed under `/assets/`, fetched only on a press, 2.5 MB in all; the CSP is unchanged.
+  - Narration: 2,179 of the 15,000-character cap, one take per clip; the owner's retake note (2026-10-19) re-narrated two scenes, 455 characters, and set the pace to 1.15x (D16, D17); a second pass re-narrated clip 01's scene 4 again, 237 characters (OA-11); the owner's second note re-narrated clip 01's scenes 2 and 4, added clip 03's scene 6 and narrated five closing options, 1,222 characters (D19, D20); the picked recaps ship from those takes, and the final pass narrated nothing.
+  - CI fails a landing build that drops the page (D4).
+- **Known limits:** none.
+- **Open items:**
+  - None of the owner's asks is open. OA-8, OA-12 and OA-13 were answered on P63 (A, A, D); OA-9 ships its default, A (no chapters); OA-10 and OA-11 shipped fixed (orchestrator, 2026-10-19).
+  - #722 stays open: the wallet's `HOW_AZTEC_WORKS_URL` repoint ships with onboarding-3, which has not landed.
+  - Before ready, on the OA-6 preview: the MP3s answer range requests (206) and the tracks are served as `text/vtt`; `vite preview` cannot show either.
+- **Dropped:** chapters (D13, OA-9 A). **Lessons:** none promoted. Each gotcha is stated at the code it guards (`vite.config.ts`'s inline limit, the player's `networkState` read, the card's `min-width: 0`), and `lessons.md` is at its budget (8188 of 8192 bytes). Detail: `lessons/phase-3.md`.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # landing-explainer-1: the How Aztec works page on nulo.sh
 
@@ -32,7 +49,7 @@ For a new Nulo user who taps "How Aztec works" on Home and lands in a tab, and f
 
 ## Architecture & Implementation
 
-- **Shape.** A hand-written static entry `apps/landing/how-aztec-works.html`, a second Vite input that Cloudflare serves at `/how-aztec-works` as it serves `terms.html` at `/terms`. It loads `/src/main.ts` unchanged: `mountPage` draws the grain and `mountInstall` narrows "Get Nulo" (both page-agnostic, recon). No new TypeScript.
+- **Shape.** A hand-written static entry `apps/landing/how-aztec-works.html`, a second Vite input that Cloudflare serves at `/how-aztec-works` as it serves `terms.html` at `/terms`. It loads `/src/main.ts` unchanged: `mountPage` draws the grain and `mountInstall` narrows "Get Nulo" (both page-agnostic, recon). Arc 1 adds no TypeScript; arc 2 adds the player and scenes below.
 - **Markup, as the drawing `p33-aztec-a`.** Head per OA-7. Body: skip link; `pre.grain`; the bar (brand → `/`; "How it works" → `/#see`; "How Aztec works" with `aria-current="page"`; "Get Nulo" `data-install="nav"` → `/#get`); `main` holding one `section.s > .wrap` with an `h1` "How Aztec works.", the two sentences as `.lead` on the grain (as `index.html:164` does), and a `.three` row of three `article.plate` cards (`id` `private-balances`, `proofs`, `fees`), each a mono number 01 to 03, an `h2` title styled as the home's `.three h3`, and its text version; the home's footer.
 - **Styles.** A short block in `src/styles/page.css`: the page `h1` at the hero `h1`'s size (54 px, 40 px at 900 px and narrower) with the `.h2` halo; the card number; the current-page nav state. Existing tokens only.
 - **File map, arc 1.** New `how-aztec-works.html`. Changed: `vite.config.ts` (input), `public/sitemap.xml`, `src/styles/page.css`, `src/install.test.ts` (D3), `.github/workflows/pr-quick.yml` and `CI.md:33`, which describes its step (D4), `README.md` (file map, the page).
@@ -51,6 +68,18 @@ For a new Nulo user who taps "How Aztec works" on Home and lands in a tab, and f
 | D7 | Text versions start from the wallet's signed glossary, narrowed where it says more than the record hides | New wording: more to approve, and a second voice |
 | D8 | The drawing's "3 clips" eyebrow waits for arc 2 | Shipping it now: false until clips exist |
 | D9 | Reversed by the orchestrator (D-orch, 2026-10-17): arc 2 stays in this lane, held until the owner answers OA-1 to OA-4, and the close-out ships with arc 2, never with arc 1 | The planner's version (close out with arc 1 and file the clips as an issue): the lane brief makes the clips this lane's arc 2 |
+| D10 | Each clip is an SVG stage whose scenes are pure functions of time, cued to words of the narration's alignment, in a page-only entry `src/clips/index.ts` | Canvas: text the page's fonts cannot style and no DOM to test; one shared entry: the home page would load the clips |
+| D11 | Media under `src/clips/media/`, hashed into `/assets/` (Vite rewrites `audio` and `track` `src`), and `build.assetsInlineLimit: 0` | Vite inlined the 1 to 2 KB caption tracks as `data:` URLs, which the CSP refuses for media; `public/clips/` would lose the immutable cache. No other asset was small enough to inline, so the build output is otherwise unchanged |
+| D12 | Captions: one line under the stage from `captions(timings)`, and the same lines as a WebVTT `<track kind="captions" default>` on each `audio`, pinned equal by a test | Browsers draw no captions for audio, so the track alone shows nothing; the line alone leaves the audio without a captions file (Biome's `useMediaCaption`) |
+| D13 | The transcript under the card's text, collapsed; no chapters | Chapters need a title per scene, words the owner has not seen (OA-9). OA-4 A named both |
+| D14 | Narration as written: `eleven_v4`, the key file's voice, no emotion tags; the skill's script review and four-look board skipped | P42-01 to -03 A approved the words, and tags would change what is sent; P42-04 A picked the landing's look |
+| D15 | One clip speaks at a time; a hidden tab pauses; the big play square shows only before the start and after the end | A square on a paused clip would hide the picture being looked at |
+| D16 | Retake pace: ffmpeg `atempo=1.15` on the narration, every alignment time divided by 1.15 | Re-narrating at a faster voice speed: the skill's client sends no speed, its script may not be edited, and it would re-roll every take |
+| D17 | A changed scene is narrated alone and spliced in at the middle of the measured silence around it | Cutting at the alignment's scene edges: it stretches a scene's last word over the pause, so those cuts fell in speech (-13 dBFS) |
+| D18 | Each box widened at its call site until its labels keep 14 units on both sides (USDC first, then OA-10's four); the scene test measures every mono label at any depth | A note that sizes itself to its label: the coin's card, the record beside it and the hand line still needed their own moves |
+| D19 | A spoken amount is sent as words ("three fifty") and shown as its figure (3.50) in the captions, the track and the transcript: the splice merges each spoken run into one word written as its figure | Figures in the narration text: the voice reads "3.50" digit by digit. Words on screen: the drawn notes and the wallet write 3.50 |
+| D20 | Closing options are drawn over the built page during a scratch render only, nothing in the repo; an appended scene follows the pause the voice took between the clip's last two scenes | A closing scene per option in the clips: the owner picks first (OA-13), and every unpicked option would ship or need removing |
+| D21 | Each clip closes on a recap scene (`kit.ts`'s `recap`): a cover clears the grain, then a plate of the reviewed rows appears, each on its word, after a 0.6 s beat | A closing drawn outside the scene list: the player draws one scene at a time, and as a scene the recap gets seek, captions and reduced motion with no new code |
 
 ## Phase 1 (arc 1): the page ✓
 
@@ -87,16 +116,26 @@ Assumptions: F1 to F10, I1. Steps:
 4. When the owner has run OA-6 A's command on the PR's latest commit, load `/how-aztec-works` on that preview; expect the page's title. Put the link in the PR body.
 5. Mark the PR ready only when the orchestrator says so.
 
-## Phase 3 (arc 2): the clips
+## Phase 3 (arc 2): the clips ✓
 
-Precondition: OA-4 answered, and three finished clips the owner approved, made outside the repo (D6). Steps: copy the media in; put each clip at the top of its card, with its text version under it; add the "3 clips" eyebrow; update `README.md`. Gate: the Phase 1 gate, plus, in the browser check, each clip plays, seeks backward and forward, and shows captions, with no CSP violation and media from the site's own origin. Tests: for `<video>`, one test that every clip has a captions track and no `autoplay`. Before the PR: one fresh Codex session over the net diff from the plan's base, with the cross-arc ask.
+Owner picks (2026-10-17/18, quoted by id): P42-01, P42-02, P42-03 = A, "Approve the script and the card's text as written"; P42-04 = A, "The explainer skill: drawn scenes in the landing's look; your yes, your cap and voice or captions in the note", and in chat: "regarding voice: just use the voice we have set on our eleven labs file". Cap, set by the orchestrator under that yes: 15,000 ElevenLabs characters.
+
+Done: narration outside the repo (D6), 2,179 characters in one take per clip (Private balances 58.9 s, Proofs 50.7 s, Fees 40.6 s); the player and scenes (D10 to D15); each clip at the top of its card over the text version; the "3 clips" eyebrow; `README.md`. Media 2.4 MB in all. Tests: `timeline.test.ts` (cue lookup per scene, caption lines), `clips.test.ts` (one player per clip, every cue spoken, preload none and no autoplay, the track equals the captions, the transcript equals the narration, media within 20 MB) and `scenes.test.ts` (every scene swept forward and backward draws the same picture, with finite values, and moves); each was proved red by a mutation. The clips draw the wallet's glyphs as dev's #790 restyled them (Tabler outlines). Gate results: `lessons/phase-3.md`. The clips go to the owner as OA-8.
+
+**Retake (2026-10-19), the owner's note (P53-04 = B, quoted in OWNER-ASKS under OA-8):** all three clips at 1.15x (D16); clip 01's scene 4 and clip 03's scene 2 narrated again, 239 + 216 characters of a 5,000 cap, and spliced in (D17); the shield and globe marks from `dev` (#812), with the proof's cells fading under the shield, which covers less than the square did; the USDC note (D18); the fees scene 2 drawing $AZTEC becoming Fee Juice with no transfers, on taller plates so the chip clears the meter; the Fees card's new sentence. Lengths: 58.9 to 51.6 s, 50.7 to 44.1 s, 40.6 to 40.3 s. QA passed in Chrome and Firefox; detail in `lessons/phase-3.md`.
+
+**Retake pass 2 (orchestrator, 2026-10-19, same class as the owner's note):** OA-11 B, clip 01's two "3.50"s spoken "three point five" (scene 4 narrated again, 237 characters, same splice and pace; 51.6 to 50.9 s); OA-10 B, every label 14 units from both sides of its box (four boxes grew). QA, the inset probe and Codex round 3 passed.
+
+**Retake pass 3 (the owner's second note, P60-01, quoted in OWNER-ASKS under OA-8):** clip 01's scene 2 opens "On Aztec, a token can have two balances. Nulo handles both for you."; scene 4 is read as money, "three fifty", and shown as figures (D19); the two scene 2 wires run down the marks' centre line and end on their drawn edges, 0.00 units off in Chrome and Firefox; clip 03 gains scene 6, "Nulo always tells you how the fee is paid, and you are always in control.", over a fee-method card that marks the method in use and ends on Send (OA-12 holds the owner's sentence as the alternative); five closing options per clip rendered outside the page (D20, OA-13). 1,222 characters of a 3,000 cap. Lengths: clip 01 50.9 to 52.7 s, clip 03 40.3 to 45.2 s.
+
+**Final pass (decision page 63, 2026-10-19):** P63-01 A approves the clips, P63-02 A keeps clip 03's scene 6 line, and P63-03 D ships the recap closing in all three (D21). The recap takes from pass 3 were appended at a 0.6 s beat, so no characters were spent. Lengths: 52.7 to 59.1 s, 44.1 to 49.4 s, 45.2 to 50.0 s. The recaps were checked in Chrome and Firefox: each plays from a press, its captions line equals the active WebVTT cue, and with reduced motion it shows its finished frame.
 
 ## Security & Adversarial Considerations
 
-- **Surface.** A static page: no input, no form, no new script, no third-party request, CSP and `frame-ancestors 'none'` unchanged, Workers Logs off. The realistic harm is a false privacy claim on a public page. Each claim cites rc.3 docs or research, and no script says the record hides who was paid, the transaction's shape, or a public part (recon; audit round 1).
+- **Surface.** A static page: no input, no form, no third-party request, and from arc 2 only bundled same-origin modules, CSP and `frame-ancestors 'none'` unchanged, Workers Logs off. The realistic harm is a false privacy claim on a public page. Each claim cites rc.3 docs or research, and no script says the record hides who was paid, the transaction's shape, or a public part (recon; audit round 1).
 - **Supply chain.** No dependency change; frozen lockfile and the 7-day age gate stand.
 - **OA-6 B (branch builds).** A branch build runs that branch's own `deploy:preview` script with the Workers Builds token, which can deploy nulo.sh. Any pushed branch, an agent's included, would hold that power; whether fork PRs build is unverified. The plan recommends A (a manual preview); B is the owner's security call. The lane changes no Cloudflare setting.
-- **Arc 2.** What leaves is the script (ElevenLabs), or the script, shot prompts and any style picture (Higgsfield), in an owner-authorized session under a cap. The ElevenLabs key is read only by the `explainer` skill's client.
+- **Arc 2.** What left: the three approved scripts, 2,179 characters, to ElevenLabs, through the `explainer` skill's launcher, which alone reads the key. No Higgsfield job. The page fetches its audio and captions from its own origin only after a press; no new header, no new script source.
 
 ## Assumptions
 
@@ -117,12 +156,12 @@ Precondition: OA-4 answered, and three finished clips the owner approved, made o
 
 - **New page `nulo.sh/how-aztec-works`:** the signed drawing `p33-aztec-a` (P33-03 A), with each player replaced by its card's text version until arc 2 (the lane brief's no-ask record: "Until approved, each section carries its illustrated still or a short text version, never a placeholder box"), and the "3 clips" eyebrow held (D8). Search and share text per OA-7. Screenshots in the PR body.
 - **Home page:** unchanged (OA-5, what ships now A).
-- **Arc 2:** the clips in the cards (OA-4).
+- **Arc 2:** each card gains its player at the top (the stage, a captions line, play, position and time) and a collapsed transcript under its text; "3 clips" above the heading. Before and after at 1440 and 390 px in the PR. The clips themselves: OA-8.
 
 ## Delivery
 
 - **Arc 1:** branch `worktree-landing-explainer-1`, `gh pr create --draft --base dev` after Phase 1's gate and the Codex loop. Title: `feat(landing): the how aztec works page at nulo.sh/how-aztec-works` (66 characters). Body: what and why; the picks P33-03 = A and P39-11 = A with the owner's note verbatim; the final URL `https://nulo.sh/how-aztec-works`, stated once; the validation runs; dark screenshots at desktop and phone width; OA-6 A's command, with the note that the preview appears after the owner runs it; OA-7's head copy, quoted for the owner to flip; `Refs #588`; "Draft until the owner approves the explainers (OA-1 to OA-3)". No labels: no extension e2e lane applies. onboarding-3's landing issue, #722, asks for the page with its clips and the wallet repoint, so arc 1 says `Refs #722`. Ready after Phase 2.
-- **Arc 2:** branch `landing-explainer-1-clips` off `origin/dev` after arc 1 merges; `gh pr create --base dev`; title `feat(landing): the three how aztec works clips`; `Refs #588`; `Closes #722` once the wallet repoint has landed, `Refs #722` until then.
+- **Arc 2:** branch `landing-explainer-1-a2`, cut off `worktree-landing-explainer-1` while #723 was open and moved onto `origin/dev` once it merged (the orchestrator's 2026-10-18 rule), a draft PR against `dev`; title `feat(landing): the three how aztec works clips`; `Refs #588`; `Closes #722` once the wallet repoint has landed, `Refs #722` until then. A draft until the owner approves the clips (OA-8).
 - **Release order:** the wallet item points at this address, so arc 1 must reach `main` with or before the release that ships onboarding-3's item; until then the link shows the home page.
 - **Close-out** ships with arc 2 (D9 as reversed); arc 1's PR carries no archive move. No parallel lanes: one phase per arc.
 
@@ -143,6 +182,24 @@ The steps are `implementations-plan/README.md` § Post-implementation standard a
 **Arc 1 implementation, Codex** (gpt-6.1-sol, session 01a14be2): round 1 approve, 1 low finding, accepted: two head comments restated their tags (removed). Round 2 (resume, xhigh): **approve**, no findings; every fix below verified, including the headings' accessible names.
 
 **Arc 1 implementation, Opus diff review:** approve, 3 low findings, all accepted: the README named a wallet item that has not shipped (clause dropped; onboarding-3 adds it with its item); the README and the `STORES` TSDoc overstated which pages the store pin reads (now the two hand-written pages); each heading's text ran its number into its title, "01Private" for indexers and copy (a space inside the hidden number, its margin cut 14 px to 5 px; the title moved 0.16 px).
+
+**Arc 2 implementation, Codex** (gpt-6.1-sol, high, read-only): round 1 conditional approve, 3 findings, all accepted: no focus ring on the position slider (added to the shared `:focus-visible` rule); the drawing kit's header restated as one contract beside `Frame`; comments that restated their code removed. Round 2 (resume): **approve**, no findings.
+
+**Arc 2 implementation, Opus diff review:** conditional approve, 7 findings, 6 accepted. A source that fails to load left the clip "playing" (the player reads `networkState`, not `error`, which Firefox sets while it plays, and reloads on the next press); the focus ring; the captions line kept its last line after the end; the one-voice swap ran only from the click (now on `play`, so media keys count); `seg` returned `NaN` on an empty interval, and a test that could not fail (now `scenes.test.ts`); a comment and a stray `;` in the clause pattern. Rejected: re-announcing `aria-valuetext` on a focused slider during playback (unverified, the common players do the same, and freezing the thumb hides the position from sighted keyboard users).
+
+**Cross-arc pass, Codex** (fresh session over the net diff from the plan's base): **approve**, 2 low findings, both accepted: the architecture and security lines' "no new TypeScript" and "no new script" scoped to arc 1; `kit.ts`'s export inventory removed. Seams verified: one bundled entry imports `main` once, clips stay off the home page, the store pin and the dist check cover both pages.
+
+**Retake, Codex** (gpt-6.1-sol, high, read-only, session 01a153b1): round 1 **approve**, no findings; it checked timings against text, cue order, both-way rendering, the overrun test (red on the old width) and the Fees claim against the docs. Round 2 (resume, over the two picture fixes and the Opus fixes): **approve**, no findings.
+
+**Retake pass 2, Codex** (resume, round 3, over the 3.5 take and the insets): **approve**, no findings; it swept every scene for inset misses and failed each old width.
+
+**Retake pass 3, Codex** (resume, round 4, over the second note's diff): **conditional approve**, 3 findings, all fixed. "On Aztec, each token has two balances" claimed both for every token, and Nulo also holds public-only ones: now "a token can have two balances", narrated again. Scene 6's moving selection implied the user can always switch the fee method, which an app can fix: it now marks the method in use and ends on Send, keeping the owner's "you are always in control" (Codex's alternative wording is in OA-12). OA-8's summary still said the clips follow the scripts word for word: rewritten. It also passed the timing data, transcripts, VTT, seek maxes, the alternative line's cues, the wire coordinates and scene 6's insets, and found that no closing option ships. Follow-up (round 4b): **approve**, all three resolved, no new findings.
+
+**Final pass, Codex** (resume, round 5, over the recap closings): **approve**, no findings. It checked the timing data, cues, tracks, transcripts and seek maxes of all three clips, the recap under seek and reduced motion, its insets and cover, and that no other closing option is in the landing.
+
+**Retake, Opus diff review:** approve, 4 notes, 2 fixed. At 1.15x proofs scene 6 began dropping the batch proof while it was 14% faded in (the drop now waits for the fold); the position bars' static `max` named the old lengths (now pinned to each clip's length by a test). Not changed: the overrun test catches labels past a border, not near one (by design, D18; the near ones are OA-10), and the drawn "1.50" beside the spoken "1.5" (OA-11). It also rates "$AZTEC becomes Fee Juice" as true for mainnet but unverified for Testnet's L1 fee asset; the rc.3 docs say Fee Juice is "bridged Aztec tokens from Ethereum", and the words are the owner's.
+
+**Arc 2 deviations:** the base moved to `origin/dev` when #723 merged mid-review (one README conflict, dev's wording kept); dev's #790 restyled the wallet's glyphs, so the clips' glyph rules followed and one check glyph moved clear of the packet. Gates and QA reran on the rebased branch.
 
 ## Seeds
 
