@@ -59,9 +59,6 @@ vi.mock("@/composables/useDappInteractionPayload", () => ({
 		reject: rejectViaInteractionServiceMock,
 	})),
 }))
-vi.mock("@/composables/useDappHostname", () => ({
-	useDappHostname: vi.fn(() => ({ hostname: ref("example.com"), isSuspicious: ref(false) })),
-}))
 vi.mock("@/composables/useNetworkActivation", () => ({
 	useNetworkActivation: vi.fn(() => ({ activate: activateMock })),
 }))
@@ -121,7 +118,7 @@ const STUBS = {
 	DappStatusStrip: { template: "<div />", props: ["accountName", "networkName", "status"] },
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" :data-action-label="actionLabel" />',
-		props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel"],
+		props: ["dapp", "actionLabel"],
 	},
 	DappCancelledOverlay: { template: "<div />" },
 }

@@ -227,9 +227,8 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	margin-left: 6px;
 }
 
-/* The loaded column's box: an `amount-row` line, the 2px gap and a `meta` line. */
 .loading_block {
-	min-height: 37px;
+	composes: loading_block from "./token-row.module.css";
 }
 
 /* Last projection failed: keep the last-known amount visible, dimmed (the

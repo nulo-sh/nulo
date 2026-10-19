@@ -290,7 +290,7 @@ test.skipIf(!hasConfig)(
 				.catch(() => undefined)
 			const line = await read("execute-op-app-fee")
 			const sentence =
-				/^Fee could be up to ~([\d.]+) FJ \(.+\); payment method set by (\S.*)\. Includes a ~([\d.]+) FJ \(.+\) priority fee the app asked for\.$/.exec(
+				/^About ~([\d.]+) FJ \(.+\); payment method set by (\S.*)\. Includes a ~([\d.]+) FJ \(.+\) priority fee the app asked for\.$/.exec(
 					line,
 				)
 			expect(sentence, `the fee line reads "${line}"`).not.toBeNull()
@@ -299,7 +299,7 @@ test.skipIf(!hasConfig)(
 			expect(Number(priority)).toBeLessThan(Number(figure))
 			const lines = [...pinnedFeeTexts(figure)].flatMap((f) =>
 				[...pinnedFeeTexts(priority)].map(
-					(p) => `Fee could be up to ${f}; payment method set by ${app}. Includes a ${p} priority fee the app asked for.`,
+					(p) => `About ${f}; payment method set by ${app}. Includes a ${p} priority fee the app asked for.`,
 				),
 			)
 			expect(lines, "the line prints both figures at the pinned quote").toContain(line)

@@ -319,7 +319,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 	test("estimating: one sentence with the loading bar in the amount's place, and the row is busy", async () => {
 		const w = await mountWith(undefined, { isEstimating: true })
 		expect(legend(w).exists()).toBe(false)
-		expect(waiting(w).text()).toBe("Fee could be up to ; payment method set by Swap.")
+		expect(waiting(w).text()).toBe("About ; payment method set by Swap.")
 		expect(waiting(w).findComponent(Skeleton).exists()).toBe(true)
 		expect(figure(w).exists()).toBe(false)
 		expect(row(w).attributes("aria-busy")).toBe("true")
@@ -331,7 +331,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 	test("the estimate lands: the limit and the app's method in one sentence, the row no longer busy, and no priority part when the app set none", async () => {
 		const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered })
 		expect(legend(w).exists()).toBe(false)
-		expect(figure(w).text()).toBe("Fee could be up to ~3.577824 FJ ($0.215); payment method set by Swap.")
+		expect(figure(w).text()).toBe("About ~3.577824 FJ ($0.215); payment method set by Swap.")
 		expect(waiting(w).exists()).toBe(false)
 		expect(row(w).attributes("aria-busy")).toBeUndefined()
 		expect(region(w).text()).toBe("")
@@ -368,7 +368,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 			appPayerFunding: covered,
 		})
 		expect(shownText(figure(w).element)).toBe(
-			"Fee could be up to ~0.016 FJ (<$0.001); payment method set by Swap. Includes a ~0.004 FJ (<$0.001) priority fee the app asked for.",
+			"About ~0.016 FJ (<$0.001); payment method set by Swap. Includes a ~0.004 FJ (<$0.001) priority fee the app asked for.",
 		)
 		expect(w.findAllComponents(DottedTerm).map((t) => t.props("term"))).toEqual(["priority-fee"])
 		const term = w.get('[data-testid="execute-op-priority-term"]')
@@ -381,7 +381,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 
 	test("an app that names itself nothing is named the app, in the sentence and in the legend", async () => {
 		expect(figure(await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { dapp: {} })).text()).toBe(
-			"Fee could be up to ~3.577824 FJ ($0.215); payment method set by the app.",
+			"About ~3.577824 FJ ($0.215); payment method set by the app.",
 		)
 		mounted?.unmount()
 		expect(legend(await mountWith(undefined, { dapp: { name: "\u0000\u0007" } })).text()).toBe("Fee payment method set by the app")
@@ -391,7 +391,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		"the app's fee contract reads short (proven: %s): the figure stays and the hedged notice shows under the row",
 		async (provenShort) => {
 			const w = await mountWith({ ...ESTIMATE, appPayerFunding: { address: APP_FPC, funded: false, provenShort } })
-			expect(figure(w).text()).toBe("Fee could be up to ~3.577824 FJ ($0.215); payment method set by Swap.")
+			expect(figure(w).text()).toBe("About ~3.577824 FJ ($0.215); payment method set by Swap.")
 			expect(region(w).text()).toBe("This app's fee contract may not cover this fee right now.")
 		},
 	)

@@ -33,9 +33,10 @@ import {
 import type { KnownJobErrorKind } from "@nulo/wallet-core/jobs"
 import { getErrorMessage, Lock } from "@nulo/wallet-core/utils"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
-import { type JournalCallCarrier, journalCallOf } from "@/wallet/services/operation-journal/spec"
+import { type JournalCallCarrier, type JournalRetitle, journalCallOf } from "@/wallet/services/operation-journal/spec"
 import type { ProfileService } from "@/wallet/services/profile/service"
 import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
+import { refusalOf } from "@/wallet/services/execution/contract-resolver"
 import type { DappSessionService } from "@/wallet/services/dapp-session/service"
 import type { NetworkService } from "@/wallet/services/network/service"
 import type { AccountService } from "@/wallet/services/account/service"
@@ -242,10 +243,10 @@ export function extractPrimaryCallFromSendTx(message: WalletMessage): JournalCal
  * transition legally turned a mid-flight `queued → pending` claim into
  * `pending → failed`, failing an op the user had just approved.
  *
- * A classified refusal is retitled "Transaction" in that same write: nothing has resolved its
- * selector yet, so the name the dApp claimed is the only other title, and it is unverified. A
- * `popup_bound` row (an approval the person rejected or closed, or an unclassified failure) keeps
- * its title.
+ * A classified refusal is retitled in that same write: with `retitle`, to the function a call-binding
+ * refusal resolved its selector to and the refused call, else "Transaction", since the name the dApp
+ * claimed is unverified. A `popup_bound` row (an approval the person rejected or closed, or an unclassified
+ * failure) keeps its title.
  */
 export async function failQueuedIfUnclaimed(
 	operationJournal: OperationJournalService,
@@ -253,6 +254,7 @@ export async function failQueuedIfUnclaimed(
 	message: string,
 	logger: ILogger,
 	kind: QueuedFailureKind = "popup_bound",
+	retitle?: JournalRetitle,
 ): Promise<void> {
 	try {
 		await operationJournal.transitionIfStage(
@@ -260,7 +262,7 @@ export async function failQueuedIfUnclaimed(
 			["queued"],
 			{ stage: "failed" },
 			{ kind, message, normalizedRaw: null },
-			kind === "popup_bound" ? undefined : { retitle: { title: "Transaction" } },
+			kind === "popup_bound" ? undefined : { retitle: retitle ?? { title: "Transaction" } },
 		)
 	} catch (transitionError) {
 		logger.log("wallet-sdk", LogLevel.Warn, `Failed to mark queued record ${journalId} as failed`, transitionError)
@@ -282,7 +284,7 @@ export async function failQueuedForError(
 	error: unknown,
 	logger: ILogger,
 ): Promise<void> {
-	await failQueuedIfUnclaimed(operationJournal, journalId, getErrorMessage(error), logger, queuedFailureKind(error))
+	await failQueuedIfUnclaimed(operationJournal, journalId, getErrorMessage(error), logger, queuedFailureKind(error), refusalOf(error))
 }
 
 function queuedFailureKind(error: unknown): QueuedFailureKind {

@@ -24,7 +24,6 @@ const appStore = useAppStore()
 import { vSnackFooter } from "@/composables/snackInset"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
-import { useDappHostname } from "@/composables/useDappHostname"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 
 const router = useRouter()
@@ -44,8 +43,6 @@ const {
 	getRequestId: () => router.currentRoute.value.query.requestId?.toString(),
 	dappOf: (p) => p.params.dappMetadata,
 })
-
-const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHostname(dapp)
 
 // init/dismiss are referenced lazily (thunks): they are declared below and only run from
 // start()/dispose()/the guard at runtime.
@@ -117,8 +114,6 @@ onUnmounted(() => {
 		<Flex direction="column" :class="$style.scroll_area">
 			<DappIdentityBlock
 				:dapp="dapp"
-				:hostname="dappHostname"
-				:hostnameSuspicious="hostnameHasNonAscii"
 				actionLabel="wants to connect to your wallet"
 				hostnameTestId="network-unavailable-hostname"
 				nameTestId="network-unavailable-dapp-name"

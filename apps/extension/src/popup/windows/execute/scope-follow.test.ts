@@ -58,9 +58,6 @@ vi.mock("@/composables/useDappInteractionPayload", () => ({
 		reject: rejectViaInteractionServiceMock,
 	})),
 }))
-vi.mock("@/composables/useDappHostname", () => ({
-	useDappHostname: vi.fn(() => ({ hostname: ref("example.com"), isSuspicious: ref(false) })),
-}))
 vi.mock("@/composables/useFeeEstimationMap", () => ({
 	useFeeEstimationMap: vi.fn(() => ({
 		results: ref({}),
@@ -168,7 +165,7 @@ const STUBS = {
 	SectionLabel: { template: "<div />" },
 	OperationCard: { template: "<div />" },
 	SignerIdentityStrip: { template: "<div />", props: ["signerAccounts", "signerNetworks", "status"] },
-	DappIdentityBlock: { template: "<div />", props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel"] },
+	DappIdentityBlock: { template: "<div />", props: ["dapp", "actionLabel"] },
 	DappCancelledOverlay: { template: "<div />", props: ["message"] },
 }
 

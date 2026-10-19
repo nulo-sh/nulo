@@ -31,7 +31,6 @@ vi.mock(
 	"@/composables/useDappInteractionPayload",
 	async () => (await import("../../../../tests/helpers/approval-window-harness")).payloadModule,
 )
-vi.mock("@/composables/useDappHostname", async () => (await import("../../../../tests/helpers/approval-window-harness")).hostnameModule)
 vi.mock(
 	"@/wallet/services/profile/client",
 	async () => (await import("../../../../tests/helpers/approval-window-harness")).profileClientModule,
@@ -85,7 +84,7 @@ const STUBS = {
 	DappStatusStrip: { template: '<div data-testid="status-strip" />', props: ["accountName", "networkName", "status"] },
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" />',
-		props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel", "hostnameTestId", "nameTestId"],
+		props: ["dapp", "actionLabel", "hostnameTestId", "nameTestId"],
 	},
 	DappCancelledOverlay: {
 		props: ["message"],

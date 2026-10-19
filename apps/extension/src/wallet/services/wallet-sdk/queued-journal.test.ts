@@ -18,7 +18,14 @@ import {
 	UserRejectedError,
 } from "@nulo/extension-messaging/errors"
 import { NoUsableAccountError } from "@nulo/wallet-bridge"
+import type { FunctionAbi } from "@aztec-labs/stdlib/abi"
 import { LogLevel } from "@/wallet/logger"
+import {
+	AUTHWIT_CALL_BINDING,
+	CALL_BINDING,
+	assertSelectorBinding,
+	type SelectorBindingPolicy,
+} from "@/wallet/services/execution/contract-resolver"
 import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
 import {
 	MAX_QUEUED_GLOBAL,
@@ -373,6 +380,16 @@ describe("tryCreateQueuedJournal — record account", () => {
 	})
 })
 
+/** The refusal a call whose selector resolves to `transfer_public_to_public` but claims another name meets. */
+function bindingRefusal(policy: SelectorBindingPolicy): Error {
+	try {
+		assertSelectorBinding({ name: "transfer_public_to_public" } as FunctionAbi, { name: "balance_of_public" }, policy)
+	} catch (error) {
+		return error as Error
+	}
+	throw new Error("the binding held")
+}
+
 describe("failQueuedForError — CAS against a concurrent claim", () => {
 	const refusal = new ScopeViolationError("Scope violation: sendTx call not permitted by granted transaction scope")
 
@@ -404,6 +421,8 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 			new AuthRegistryRefusalError("Scope violation: sendTx call targets an authorization registry grant function"),
 			"Transaction",
 		],
+		["a call-binding refusal", "scope_refused", bindingRefusal(CALL_BINDING), "transfer_public_to_public"],
+		["an authorization's call-binding refusal", "scope_refused", bindingRefusal(AUTHWIT_CALL_BINDING), "Transaction"],
 		["a missing grant", "scope_refused", new CapabilityNotGrantedError("transaction"), "Transaction"],
 		["a schema refusal", "malformed_request", InvalidWalletArgumentsError.forMethod("sendTx"), "Transaction"],
 		["an ended session", "session_ended", new SessionEndedError(), "Transaction"],

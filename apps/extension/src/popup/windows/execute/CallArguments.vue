@@ -5,9 +5,20 @@
  */
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { safeWire } from "./humanize"
-import { type CallSurface, amountLabel, nonceValue, rawToggleLabel, valueText, valueTitle } from "./call-surface"
+import {
+	type CallSurface,
+	amountLabel,
+	LABELS_LINE,
+	LABELS_TITLE,
+	nonceValue,
+	RAW_LINE,
+	RAW_TITLE,
+	rawToggleLabel,
+	valueText,
+	valueTitle,
+} from "./call-surface"
+import ArgsNotice from "./ArgsNotice.vue"
 import DetailsToggle from "./DetailsToggle.vue"
-import UnreadableArgsNotice from "./UnreadableArgsNotice.vue"
 
 const props = defineProps<{
 	surface: CallSurface
@@ -97,6 +108,9 @@ const nonce = computed(() =>
 		gap="2"
 		:class="[$style.block, full && $style.full]"
 	>
+		<Flex v-if="surface.labels === 'unchecked'" direction="column" gap="4" :class="$style.notice">
+			<ArgsNotice :title="LABELS_TITLE" :body="LABELS_LINE" :prefix="prefix" kind="labels" />
+		</Flex>
 		<Flex
 			v-for="(p, m) in surface.params"
 			:key="m"
@@ -132,7 +146,7 @@ const nonce = computed(() =>
 		gap="4"
 		:class="[$style.block, full && $style.full]"
 	>
-		<UnreadableArgsNotice :reason="surface.reason" :prefix="prefix" :advice="advice" />
+		<ArgsNotice :title="RAW_TITLE" :body="RAW_LINE[surface.reason]" :prefix="prefix" kind="unverified" :advice="advice" />
 		<DetailsToggle
 			v-if="surface.rows.length"
 			:data-testid="`${prefix}-raw-toggle`"
@@ -160,6 +174,10 @@ const nonce = computed(() =>
 <style module>
 .block {
 	width: 100%;
+}
+
+.notice {
+	margin-bottom: 6px;
 }
 
 /* A dApp's artifact names each parameter and supplies its value; either may run long and unbroken. */

@@ -10,7 +10,15 @@ import type { DecodedCall, DecodedGrant, DecodedParam, DecodedValue, UndecodedRe
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { formatBaseUnits } from "@/utils/amount"
 import { trimAddress } from "@/utils/string"
-import { abiNameFitsRole, findMintSignature, findTransferSignature, vocabularySelector } from "@/utils/token-transfer-vocabulary"
+import {
+	abiNameFitsRole,
+	findMintSignature,
+	findTransferSignature,
+	MINT_SIGNATURES,
+	TRANSFER_SIGNATURES,
+	VOCABULARY_SELECTORS,
+	vocabularySelector,
+} from "@/utils/token-transfer-vocabulary"
 import { callTitle } from "@/utils/tx-enrichment"
 import { parseTransferIntent, projectArgument, smallFieldDecimal } from "@/utils/transfer-intent"
 import { safeWire } from "./humanize"
@@ -33,7 +41,7 @@ export type RawRows = { rows: RawRow[]; hidden: number }
 export type CallSurface =
 	| { kind: "transfer"; fn: string; to: string; amount: string; sender: TransferSender; nonce?: string }
 	| { kind: "mint"; fn: string; to: string; amount: string }
-	| { kind: "decoded"; fn: string; params: readonly DecodedParam[] }
+	| { kind: "decoded"; fn: string; params: readonly DecodedParam[]; labels?: "unchecked" }
 	| { kind: "pending" }
 	| ({ kind: "raw"; reason: UndecodedReason } & RawRows)
 
@@ -113,6 +121,16 @@ const corroborates = (decoded: Extract<DecodedCall, { kind: "decoded" }>, select
 	)
 }
 
+const VOCABULARY_SELECTOR_SET: ReadonlySet<string> = new Set(VOCABULARY_SELECTORS.values())
+
+/** A call that claims a vocabulary signature, by its decoded name at any arity or by the selector it
+ *  runs. On a registered token one that fails `corroborates` shows the contract's parameter names,
+ *  which its class does not fix, so they are marked as the contract's. */
+const claimsVocabulary = (decoded: Extract<DecodedCall, { kind: "decoded" }>, selector: unknown): boolean =>
+	TRANSFER_SIGNATURES.has(decoded.fn) ||
+	MINT_SIGNATURES.has(decoded.fn) ||
+	(typeof selector === "string" && VOCABULARY_SELECTOR_SET.has(selector))
+
 /** `decoded` is `undefined` while the wallet is still decoding. The vocabulary applies only on a
  *  registered token (`tokenKnown`) whose call corroborates the signature; every other call reads
  *  as the contract's own parameters, or as raw fields (`maxRows` of them) with the reason. */
@@ -125,8 +143,10 @@ export const callSurface = (
 ): CallSurface => {
 	if (decoded === undefined) return { kind: "pending" }
 	if (decoded.kind === "decoded") {
-		const known = tokenKnown && corroborates(decoded, call.selector) ? vocabularySurface(ctx, decoded.fn, call) : undefined
-		return known ?? { kind: "decoded", fn: decoded.fn, params: decoded.params }
+		const corroborated = tokenKnown && corroborates(decoded, call.selector)
+		const known = corroborated ? vocabularySurface(ctx, decoded.fn, call) : undefined
+		const unchecked = tokenKnown && !corroborated && claimsVocabulary(decoded, call.selector)
+		return known ?? { kind: "decoded", fn: decoded.fn, params: decoded.params, ...(unchecked ? { labels: "unchecked" } : {}) }
 	}
 	return { kind: "raw", reason: decoded.reason, ...rawRows(call.args, maxRows) }
 }
@@ -214,7 +234,9 @@ export const valueTitle = (v: DecodedValue): string | undefined => {
 }
 
 /** A sentence as the notice prints it: a `term` segment is the word the `interface` glossary entry defines. */
-type NoticeSegment = { text: string } | { term: string }
+export type NoticeSegment = { text: string } | { term: string }
+
+export const RAW_TITLE = "Can't read the arguments"
 
 export const RAW_LINE: Readonly<Record<UndecodedReason, readonly NoticeSegment[]>> = {
 	"unknown-contract": [{ text: "Nulo doesn't have this contract's " }, { term: "interface" }, { text: "." }],
@@ -225,6 +247,11 @@ export const RAW_LINE: Readonly<Record<UndecodedReason, readonly NoticeSegment[]
 
 /** Said once per window; `OperationCard` picks the one notice that carries it. */
 export const RAW_ADVICE = "Check what the app says this does before approving."
+
+export const LABELS_TITLE = "Labels from the contract"
+export const LABELS_LINE: readonly NoticeSegment[] = [
+	{ text: "These names come from the contract, not from Nulo. Check the addresses and amount before approving." },
+]
 
 /** The footer's refusal of a grant it cannot read. A tooltip cannot hold the dotted term the short
  *  line leans on, so each sentence says it whole; the advice is left out, as the window cannot be approved. */
@@ -257,9 +284,7 @@ export const readableGrants = (decoded: readonly DecodedGrant[], count: number):
 /** The footer's error row for the first grant the wallet cannot read: such a request is not approvable. */
 export function grantRefusalRow(grants: Iterable<DecodedGrant>): { title: string; tooltip: string; type: "error" } | undefined {
 	const unread = [...grants].find((grant) => grant.kind === "undecoded")
-	return unread?.kind === "undecoded"
-		? { title: "Can't read the arguments", tooltip: RAW_NOTICE[unread.reason], type: "error" }
-		: undefined
+	return unread?.kind === "undecoded" ? { title: RAW_TITLE, tooltip: RAW_NOTICE[unread.reason], type: "error" } : undefined
 }
 
 export const rawToggleLabel = (count: number, open: boolean): string =>
