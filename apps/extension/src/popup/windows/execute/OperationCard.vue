@@ -98,6 +98,8 @@ const props = defineProps<{
 	tokenMetadata?: { name: string; symbol: string; decimals: number }
 	tokenMetadataError?: string
 	tokenMetadataLoading?: boolean
+	/** The wallet refuses this request: nothing on the card advises approving it. */
+	refused?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -225,29 +227,26 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 	closedAuthwits.value = next
 }
 
-type AdviceSite = { on: "call" | "grant" | "authwit"; index: number }
-const lastRaw = (surfaces: readonly CallSurface[]): number => surfaces.findLastIndex((s) => s.kind === "raw")
-const site = (on: AdviceSite["on"], index: number): AdviceSite | undefined => (index < 0 ? undefined : { on, index })
+type AdviceSite = { on: "calls" } | { on: "authwit"; index: number }
 
-/** The one notice that says the closing advice: the last unreadable call at rest, else, when every
- *  call reads, the last unreadable discovered authorization whose details are open, so closing it
- *  hands the advice to one still shown. A window holds one operation, so once per card is once per window. */
+/** Where the closing advice reads: after the list of calls when one is unreadable (in the notice of an
+ *  `aztec_createAuthWit`'s one call), else in the last unreadable discovered authorization whose details
+ *  are open, so closing it hands the advice to one still shown. A refused request has none, and an
+ *  unreadable grant always refuses its request. The bridge builds one operation per window, so once per
+ *  card is once per window. */
 const adviceSite = computed((): AdviceSite | undefined => {
 	const op = props.op
-	if (op.kind === "send_transaction") return site("grant", lastRaw(grantRows.value.map((g) => g.surface)))
+	if (props.refused) return undefined
 	if (op.kind === "aztec_createAuthWit") {
 		const intent = createAuthwitSurface(op.messageHashOrIntent)
-		return site("call", intent.kind === "call" ? lastRaw([intent.args]) : -1)
+		return intent.kind === "call" && intent.args.kind === "raw" ? { on: "calls" } : undefined
 	}
 	if (op.kind !== "aztec_sendTx") return undefined
-	const call = lastRaw(sendTxRows.value.map((row) => row.surface))
-	if (call >= 0) return site("call", call)
-	return site(
-		"authwit",
-		summaryAuthwits.value?.findLastIndex(({ authwit, surface }) => isAuthwitOpen(authwit) && surface.kind === "raw") ?? -1,
-	)
+	if (sendTxRows.value.some((row) => row.surface.kind === "raw")) return { on: "calls" }
+	const index = summaryAuthwits.value?.findLastIndex(({ authwit, surface }) => isAuthwitOpen(authwit) && surface.kind === "raw") ?? -1
+	return index < 0 ? undefined : { on: "authwit", index }
 })
-const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.value?.on === on && adviceSite.value.index === index
+const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "authwit" && adviceSite.value.index === index
 </script>
 
 <template>
@@ -292,7 +291,7 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 					:class="$style.group"
 				>
 					<Text variant="label-section" color="secondary">Arguments</Text>
-					<CallArguments :surface="grant.surface" :contract="grant.contract" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-grant" json-view full :advice="adviceOn('grant', k)" />
+					<CallArguments :surface="grant.surface" :contract="grant.contract" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-grant" json-view full />
 				</Flex>
 			</template>
 			<template v-else-if="op.kind === 'aztec_sendTx'">
@@ -302,7 +301,7 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 					:checkingAuthwits="authwits.kind === 'pending'"
 					:chainId="op.network?.chainId"
 					:tokens="tokens"
-					:adviceAt="adviceSite?.on === 'call' ? adviceSite.index : undefined"
+					:advice="adviceSite?.on === 'calls'"
 				/>
 				<Flex :class="$style.group">
 					<DetailsToggle
@@ -368,7 +367,7 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 								@click="toggleAuthwit(a)"
 							/>
 							<Flex v-if="isAuthwitOpen(a)" :id="`${detailsId}-${k}`" data-testid="execute-discovered-authwit-details" direction="column" gap="2">
-								<CallArguments :surface="authwitArgs(a)" :contract="a.consumer" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-discovered-authwit" :advice="adviceOn('authwit', k)" />
+								<CallArguments :surface="authwitArgs(a)" :contract="a.consumer" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-discovered-authwit" :advice="adviceOnAuthwit(k)" />
 								<Flex justify="between" :class="$style.row">
 									<Text variant="label-section" color="secondary">Inner hash:</Text>
 									<Text variant="meta" color="primary" :title="safeWire(a.innerHash, 80)" data-testid="execute-discovered-inner-hash">{{ trimAddress(safeWire(a.innerHash, 80), 10, 6) }}</Text>
@@ -622,7 +621,7 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 					</Flex>
 					<Flex data-testid="execute-authwit-args" direction="column" gap="4" :class="$style.group">
 						<Text variant="label-section" color="secondary">Arguments</Text>
-						<CallArguments :surface="s.args" :contract="s.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-authwit" json-view :advice="adviceOn('call', 0)" />
+						<CallArguments :surface="s.args" :contract="s.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-authwit" json-view :advice="adviceSite?.on === 'calls'" />
 					</Flex>
 				</template>
 				<template v-else>

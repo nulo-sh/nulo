@@ -245,7 +245,7 @@ export const RAW_LINE: Readonly<Record<UndecodedReason, readonly NoticeSegment[]
 	unavailable: [{ text: "Nulo couldn't read the arguments right now." }],
 }
 
-/** Said once per window; `OperationCard` picks the one notice that carries it. */
+/** Said once per window, never on a request the wallet refuses; `OperationCard` picks its place. */
 export const RAW_ADVICE = "Check what the app says this does before approving."
 
 export const LABELS_TITLE = "Labels from the contract"

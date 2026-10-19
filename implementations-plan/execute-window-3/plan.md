@@ -83,7 +83,7 @@ Tests (wire-shaped fixtures from `execute.fixture.ts`; each red on the base copy
 - Display only: no data, trust boundary, permission, log line or dependency moves. Every string is a wallet constant; the reason comes from the wallet's own decode.
 - A hostile dApp can make the authorization unreadable (an unknown consumer, a failed batch); that now adds a warning at rest and never removes one. Removing the advice on a refused request removes no control: Confirm is already hidden or disabled there (Facts 3-4).
 
-## Phase 1: the advice, the refusal, the authorization notice
+## Phase 1: the advice, the refusal, the authorization notice ✓
 
 Warning: take the before pictures (Pictures, step 1) before you change code.
 Steps: D1-D6 in the files above; T1-T5.
