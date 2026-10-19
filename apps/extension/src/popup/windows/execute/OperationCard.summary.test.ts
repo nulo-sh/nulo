@@ -58,15 +58,15 @@ const mountFixture = async () => mountCard({ feeEstimate: feeEstimateWith(AUTHWI
 const read = (w: VueWrapper, testid: string): string[] => w.findAll(`[data-testid="${testid}"]`).map((el) => el.text().replace(/\s+/g, " "))
 const toggle = (w: VueWrapper) => w.get('[data-testid="execute-op-details-toggle"]')
 const advice = (w: VueWrapper) => w.findAll('[data-testid$="-unverified-advice"]')
-/** The one advice sits after the list of calls: in no call's row, right after the list. */
-const afterTheCalls = (w: VueWrapper): boolean => {
-	const [one, ...more] = advice(w)
-	return (
-		!more.length &&
-		one?.element.closest('[data-testid="execute-op-summary-call"]') === null &&
-		one.element.previousElementSibling?.getAttribute("data-testid") === "execute-op-summary-calls"
-	)
+const afterTheCalls = (w: VueWrapper) => {
+	const all = advice(w)
+	return {
+		count: all.length,
+		inRow: all.some((a) => a.element.closest('[data-testid="execute-op-summary-call"]') !== null),
+		after: all[0]?.element.previousElementSibling?.getAttribute("data-testid") === "execute-op-summary-calls",
+	}
 }
+const AFTER_THE_CALLS = { count: 1, inRow: false, after: true }
 const ADVICE = "Check what the app says this does before approving."
 const UNREAD = (reason: "unknown-contract" | "unknown-function"): DecodedCall => ({ kind: "undecoded", reason })
 
@@ -165,10 +165,10 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 			)
 		}
 		expect(advice(w).map((a) => a.text())).toEqual([ADVICE])
-		expect(afterTheCalls(w)).toBe(true)
+		expect(afterTheCalls(w)).toEqual(AFTER_THE_CALLS)
 
 		await toggle(w).trigger("click")
-		expect(afterTheCalls(w)).toBe(true)
+		expect(afterTheCalls(w)).toEqual(AFTER_THE_CALLS)
 		expect(w.findAll('[data-testid="execute-op-unverified-reason"]').map((r) => shownText(r.element))).toEqual([
 			"Nulo doesn't have this contract's interface.",
 			"Nulo doesn't have this contract's interface.",
@@ -180,7 +180,7 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		const w = await mountCard({ feeEstimate: feeEstimateWith(AUTHWITS), ...(await decodeFixture({ vaultDecoded: false })) })
 		await toggle(w).trigger("click")
 		expect(w.find('[data-testid="execute-discovered-authwit-unverified-reason"]').exists()).toBe(true)
-		expect(afterTheCalls(w)).toBe(true)
+		expect(afterTheCalls(w)).toEqual(AFTER_THE_CALLS)
 	})
 
 	test("an authorization Nulo cannot read says so under its line at rest, as a call's row does, with no advice there", async () => {

@@ -1199,7 +1199,6 @@ describe("execute window — a request the wallet refused", () => {
 	async function expectRefused(kind: "registry" | "call", { vm, refused, notice, confirm }: Awaited<ReturnType<typeof opened>>) {
 		await flushPromises()
 		expect(notice().attributes()).toMatchObject({ "data-kind": kind, role: "alert" })
-		// The card then advises nothing: there is nothing to approve.
 		expect(refused()).toBe(true)
 		expect(w!.find('[data-testid="execute-op-refusal-title"]').text()).toBe("Nulo won't send this")
 		expect(w!.find('[data-testid="execute-op-refusal-reason"]').text()).toBe(REASON[kind])

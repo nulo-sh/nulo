@@ -229,11 +229,9 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 
 type AdviceSite = { on: "calls" } | { on: "authwit"; index: number }
 
-/** Where the closing advice reads: after the list of calls when one is unreadable (in the notice of an
- *  `aztec_createAuthWit`'s one call), else in the last unreadable discovered authorization whose details
- *  are open, so closing it hands the advice to one still shown. A refused request has none, and an
- *  unreadable grant always refuses its request. The bridge builds one operation per window, so once per
- *  card is once per window. */
+/** An unreadable grant always refuses its request, so a grant never carries the advice. The fallback
+ *  takes an authorization whose details are open, so closing one hands the advice to one still shown.
+ *  The bridge builds one operation per window, so once per card is once per window. */
 const adviceSite = computed((): AdviceSite | undefined => {
 	const op = props.op
 	if (props.refused) return undefined
