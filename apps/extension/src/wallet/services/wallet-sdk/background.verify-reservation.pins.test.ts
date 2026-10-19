@@ -73,7 +73,7 @@ vi.mock("./discovery-flow", async (importOriginal) => {
 })
 
 import { initWalletSdkHandler } from "./background"
-import { handleDiscovery } from "./discovery-flow"
+import { discoveryRun } from "./discovery-run.harness"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN as ORIGIN, fakeSdkServices } from "./test-services"
 import { WindowReservation } from "./verify-admission"
@@ -92,11 +92,6 @@ function microtaskLadder(): () => number {
 /** Turns for the duplicate to park on its twin's popup, a wait no fake observes. */
 const flush = async () => {
 	for (let i = 0; i < 40; i++) await Promise.resolve()
-}
-/** The run of `requestId`'s latest discovery: it settles once that discovery is approved or refused. */
-const discoveryRun = (requestId: string) => {
-	const { calls, results } = vi.mocked(handleDiscovery).mock
-	return results[calls.findLastIndex(([discovery]) => discovery.requestId === requestId)].value as Promise<void>
 }
 
 const logs: string[] = []

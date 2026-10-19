@@ -48,6 +48,7 @@ vi.mock("./discovery-flow", async (importOriginal) => {
 
 import { initWalletSdkHandler } from "./background"
 import { handleDiscovery } from "./discovery-flow"
+import { discoveryRun } from "./discovery-run.harness"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN, fakeSdkServices } from "./test-services"
 
@@ -81,12 +82,6 @@ function boot(activeProfile?: () => Promise<{ id: string } | undefined>) {
 	return { discover, reads, rows: fake.rows, onActiveProfileChanged: fake.onActiveProfileChanged }
 }
 
-/** The run of `requestId`'s latest discovery: it settles once that discovery is refused, queued while
- *  locked, auto-approved or through its connect window. */
-const discoveryRun = (requestId: string) => {
-	const { calls, results } = vi.mocked(handleDiscovery).mock
-	return results[calls.findLastIndex(([discovery]) => discovery.requestId === requestId)].value as Promise<void>
-}
 const approved = () => handlerCalls.filter((c) => c.startsWith("approve:")).map((c) => c.slice(8))
 const rejected = () => handlerCalls.filter((c) => c.startsWith("reject:")).map((c) => c.slice(7))
 

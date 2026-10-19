@@ -57,6 +57,7 @@ vi.mock("./discovery-flow", async (importOriginal) => {
 
 import { dispatcherNetworks, initWalletSdkHandler } from "./background"
 import { handleDiscovery } from "./discovery-flow"
+import { discoveryRun } from "./discovery-run.harness"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN as ORIGIN, fakeSdkServices } from "./test-services"
 import { VerifyAdmissionGate } from "./verify-admission"
@@ -103,12 +104,6 @@ function boot(opts: Parameters<typeof fakeSdkServices>[0] = {}) {
 /** Turns for a read at a park point, where no awaited cause covers a "not yet". */
 const flush = async () => {
 	for (let i = 0; i < 30; i++) await Promise.resolve()
-}
-/** The run of `requestId`'s latest discovery. It settles once that discovery is refused, queued while
- *  locked, auto-approved, or through its connect window or notice. */
-const discoveryRun = (requestId: string) => {
-	const { calls, results } = vi.mocked(handleDiscovery).mock
-	return results[calls.findLastIndex(([discovery]) => discovery.requestId === requestId)].value as Promise<void>
 }
 /** Resolves when the handler is asked to reject `requestId`; armed before the step that rejects it. */
 const rejection = (requestId: string) => {

@@ -63,6 +63,7 @@ vi.mock("./discovery-flow", async (importOriginal) => {
 
 import { initWalletSdkHandler } from "./background"
 import { handleDiscovery } from "./discovery-flow"
+import { discoveryRun } from "./discovery-run.harness"
 import { RECONNECT_REFILL_MS } from "./verify-admission"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN as ORIGIN, fakeSdkServices } from "./test-services"
@@ -142,12 +143,6 @@ function boot(
 /** Turns for discoveries to reach a park point no fake observes; no awaited cause covers a "not yet" there. */
 const flush = async () => {
 	for (let i = 0; i < 20; i++) await Promise.resolve()
-}
-/** The run of `requestId`'s latest discovery. It settles once the connect window's path is done and an
- *  admitted auto-approval has landed; a queued auto-approval lands later, outside it. */
-const discoveryRun = (requestId: string) => {
-	const { calls, results } = vi.mocked(handleDiscovery).mock
-	return results[calls.findLastIndex(([discovery]) => discovery.requestId === requestId)].value as Promise<void>
 }
 /** Resolves when the handler is asked to approve `requestId`; armed before the step that approves it. */
 const approval = (requestId: string) => {

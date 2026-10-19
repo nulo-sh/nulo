@@ -50,6 +50,7 @@ import { NetworkResetService } from "@/wallet/services/network-reset/service"
 import { RESET_INGRESS_WAIT_MS, type ResetRunGate } from "@/wallet/services/network-reset/spec"
 import { handleWalletMessage, initWalletSdkHandler } from "./background"
 import { handleDiscovery } from "./discovery-flow"
+import { discoveryRun } from "./discovery-run.harness"
 import { bindLiveSession } from "./live-session"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN as ORIGIN, fakeSdkServices } from "./test-services"
@@ -66,12 +67,6 @@ function runningReset(): { gate: ResetRunGate; end: () => void } {
 /** Turns for a read at the reset wait, where nothing settles before the run ends to cover a "not yet". */
 const flush = async () => {
 	for (let i = 0; i < 30; i++) await Promise.resolve()
-}
-/** The run of `requestId`'s latest discovery: it settles once that discovery is past the reset wait and
- *  answered. */
-const discoveryRun = (requestId: string) => {
-	const { calls, results } = vi.mocked(handleDiscovery).mock
-	return results[calls.findLastIndex(([discovery]) => discovery.requestId === requestId)].value as Promise<void>
 }
 
 beforeEach(() => {
