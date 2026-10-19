@@ -836,6 +836,7 @@ onBeforeUnmount(() => {
 						:isEstimating="isEstimating"
 						:isQueued="feeQueued"
 						:queuedCap="queueCap"
+						:amountTyped="Boolean(amountTerm)"
 						:originPrivacy="selectedSendType"
 						:payerNoticeShape="facts.noticeShape"
 						:txShape="feeTxShape"
