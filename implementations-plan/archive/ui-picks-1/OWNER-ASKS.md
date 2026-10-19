@@ -1,6 +1,6 @@
 # Owner asks: ui-picks-1
 
-Five questions: four about #870's line, one about #746's sentence. Each ships in its "What ships now" form; the arc does not wait. The pictures in the PR show OA-1, OA-2 and OA-4.
+Five questions: four about #870's line, one about #746's sentence. OA-1 was decided after delivery (below); OA-2 to OA-5 ship in their "What ships now" form, and the arc did not wait. The pictures in the PR show OA-1, OA-2 and OA-4.
 
 ## OA-1: the line's colour
 
@@ -12,7 +12,7 @@ Five questions: four about #870's line, one about #746's sentence. Each ships in
 
 **Recommendation.** A for this line. If light-theme contrast matters, change every field error to B together, as its own change.
 
-**What ships now.** A.
+**Decided.** B for this line, by the orchestrator on 2026-10-19 under the owner's accessibility delegation, "for accessibility questions / rings, etc. decide yourself": `--txt-danger`, the token every error and refusal text moves to in #878. On the line's real background (the Send page's `--app-bg`): 6.00:1 light (#b3261e on #f5f5f7), 6.24:1 dark (#ff534b on #0a0908), in Chrome; 6.00:1 light in Firefox.
 
 ## OA-2: the line beside the decimals hint
 
