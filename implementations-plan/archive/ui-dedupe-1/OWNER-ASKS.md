@@ -41,6 +41,8 @@ The lane brief's no-ask records cover every arc ("UI impact: none"; #517 pixel-i
 
 ## OA-2 (arc A1, #541): close the open-run hop in the full-backup export
 
+**Status:** open with the owner as #840 (2026-10-19); A ships.
+
 - **What happens**: the export's first stage checks that the run is still current, then returns. The caller resumes one step later without checking again (`export/full.vue:317-342`).
   - If the page is left or the profile switched in that step, the dropped run still builds its service clients and asks the account service for the backup keys.
   - After a profile switch the service refuses the request (its run fence).
@@ -55,6 +57,8 @@ The lane brief's no-ask records cover every arc ("UI impact: none"; #517 pixel-i
 
 ## OA-3 (#548): the five rows P44-02 did not show
 
+**Status:** open with the owner as #839 (2026-10-19); A ships. Row 5's pictures are in `screenshots/oa3/`; the issue says why the other rows have none (plan D802).
+
 - **Surface**: Holdings, the Select token sheet over Send, Send's amount, History's cancelled and failed rows, Home's import rows.
 - **Background**: P44-02 showed seven rows. Five more were recorded in OA-1 while the question was out; A7 did not converge them, since nobody saw them:
   - Holdings and Select token: a read still out when a token is added or changes lands over it, so the token can drop out of the list until the next read. Home reads again and keeps the change.
@@ -67,6 +71,6 @@ The lane brief's no-ask records cover every arc ("UI impact: none"; #517 pixel-i
 - **Held from P44-02, because it depends on the first row above**: Holdings' row "a balance update for a row it never saw adds the row at once". On its own, Home's rule there ("waits for the next read") would leave Holdings worse than today: when a read lands over a token being added, today's next balance update puts the token back; with the rule alone it stays missing until the popup reconnects or Holdings reopens. Home never drops it, because Home reads again instead. So that row converges with Holdings' read-over-add row, or not at all.
 - **Recommendation**: B, for P44-02's reason: none was chosen, and B lets Holdings take both rows together. Against: Home's import rows and History change what they show in a rare order, so B needs its own pictures.
 
-## Conditional (no entry yet)
+## Conditional (no entry)
 
-- **A4 (#517)**: if the pixel proof finds any difference between the countdown Close today and on the design `Button`, in any state, theme or browser, the difference becomes an entry here with both captures, and A4 ships nothing visible.
+- **A4 (#517)**: delivered by hygiene-3's #833, whose pixel proof found no difference; the three overrides it keeps are its own ask, #831.
