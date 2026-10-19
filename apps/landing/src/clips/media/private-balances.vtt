@@ -42,44 +42,44 @@ The network keeps a fingerprint
 00:00:22.087 --> 00:00:23.003
 of each note,
 
-00:00:23.003 --> 00:00:25.887
+00:00:23.003 --> 00:00:25.870
 and a sealed copy only its owner can open.
 
-00:00:25.887 --> 00:00:28.948
-Say you pay 3.50 from a note worth 5.
+00:00:25.870 --> 00:00:28.583
+Say you pay 3.5 from a note worth 5.
 
-00:00:28.948 --> 00:00:32.078
+00:00:28.583 --> 00:00:31.713
 Nulo spends that note and makes new ones:
 
-00:00:32.078 --> 00:00:34.304
-3.50 for the person you pay,
+00:00:31.713 --> 00:00:33.765
+3.5 for the person you pay,
 
-00:00:34.304 --> 00:00:36.670
+00:00:33.765 --> 00:00:36.026
 and 1.5 change for you.
 
-00:00:36.670 --> 00:00:37.887
+00:00:36.026 --> 00:00:37.243
 In a private payment,
 
-00:00:37.887 --> 00:00:40.217
+00:00:37.243 --> 00:00:39.643
 the record shows that something was spent.
 
-00:00:40.217 --> 00:00:41.991
+00:00:39.643 --> 00:00:41.417
 It does not show which note,
 
-00:00:41.991 --> 00:00:43.278
+00:00:41.417 --> 00:00:42.670
 or how much.
 
-00:00:43.278 --> 00:00:44.600
+00:00:42.670 --> 00:00:43.991
 Moving money to your public
 
-00:00:44.600 --> 00:00:45.898
+00:00:43.991 --> 00:00:45.290
 balance is your choice,
 
-00:00:45.898 --> 00:00:48.078
+00:00:45.290 --> 00:00:47.470
 and the public side records the amount.
 
-00:00:48.078 --> 00:00:49.678
+00:00:47.470 --> 00:00:49.070
 Nulo labels each balance,
 
-00:00:49.678 --> 00:00:51.557
+00:00:49.070 --> 00:00:50.948
 so you always know which is which.
