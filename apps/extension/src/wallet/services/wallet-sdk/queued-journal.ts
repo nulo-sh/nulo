@@ -43,6 +43,8 @@ import type { AccountService } from "@/wallet/services/account/service"
 import { NoUsableAccountError, projectStoredGrants, requestedSenderOf, resolveAuthorizedSessionAccount } from "@nulo/wallet-bridge"
 import { parseCaipAccount } from "@/wallet/utils/caip"
 import type { CaipAccount } from "@/wallet/services/dapp-interaction/spec"
+import { type WindowEnd, WindowEndedError } from "@/wallet/services/dapp-interaction/window-end"
+import { WINDOW_CLOSED_BY_USER } from "@/wallet/services/window-manager/window-manager"
 import { pickPrimaryWireCall } from "@/utils/primary-method"
 import { chainInfoToChainId } from "./session-established"
 
@@ -245,8 +247,8 @@ export function extractPrimaryCallFromSendTx(message: WalletMessage): JournalCal
  *
  * A classified refusal is retitled in that same write: with `retitle`, to the function a call-binding
  * refusal resolved its selector to and the refused call, else "Transaction", since the name the dApp
- * claimed is unverified. A `popup_bound` row (an approval the person rejected or closed, or an unclassified
- * failure) keeps its title.
+ * claimed is unverified. A row its window ended without a refusal (`user_rejected`, or `popup_bound`
+ * for a profile switch or an unclassified failure) keeps the title it had while it waited.
  */
 export async function failQueuedIfUnclaimed(
 	operationJournal: OperationJournalService,
@@ -262,7 +264,7 @@ export async function failQueuedIfUnclaimed(
 			["queued"],
 			{ stage: "failed" },
 			{ kind, message, normalizedRaw: null },
-			kind === "popup_bound" ? undefined : { retitle: retitle ?? { title: "Transaction" } },
+			TITLE_KEEPING_KINDS.has(kind) ? undefined : { retitle: retitle ?? { title: "Transaction" } },
 		)
 	} catch (transitionError) {
 		logger.log("wallet-sdk", LogLevel.Warn, `Failed to mark queued record ${journalId} as failed`, transitionError)
@@ -272,12 +274,31 @@ export async function failQueuedIfUnclaimed(
 /** The kinds a row failed before any claim can carry. */
 export type QueuedFailureKind = Extract<
 	KnownJobErrorKind,
-	"popup_bound" | "scope_refused" | "registry_refused" | "malformed_request" | "terms_refused" | "session_ended" | "wallet_refused"
+	| "popup_bound"
+	| "user_rejected"
+	| "scope_refused"
+	| "registry_refused"
+	| "malformed_request"
+	| "terms_refused"
+	| "session_ended"
+	| "wallet_refused"
 >
+
+const TITLE_KEEPING_KINDS: ReadonlySet<QueuedFailureKind> = new Set(["popup_bound", "user_rejected"])
+
+/** A lock reads as the wallet's other lock refusals do; a profile switch is not the person refusing
+ *  this send, so it does not read as one. */
+const WINDOW_END_KINDS: Readonly<Record<WindowEnd, QueuedFailureKind>> = {
+	reject: "user_rejected",
+	close: "user_rejected",
+	lock: "session_ended",
+	switch: "popup_bound",
+}
 
 /** Fails a still-queued row with the error that ended its message before any claim, classified by
  *  the error's class, never its text: a Terms, grant, schema, session or lock refusal gets its own
- *  kind, a chain or account the wallet cannot serve `wallet_refused`, anything else `popup_bound`. */
+ *  kind, a chain or account the wallet cannot serve `wallet_refused`, the window's named end its own,
+ *  a close that reached the wallet before any end as the person's X, anything else `popup_bound`. */
 export async function failQueuedForError(
 	operationJournal: OperationJournalService,
 	journalId: string,
@@ -294,5 +315,7 @@ function queuedFailureKind(error: unknown): QueuedFailureKind {
 	if (error instanceof InvalidWalletArgumentsError) return "malformed_request"
 	if (error instanceof SessionEndedError || error instanceof WalletLockedError) return "session_ended"
 	if (error instanceof ChainNotSupportedError || error instanceof NoUsableAccountError) return "wallet_refused"
+	if (error instanceof WindowEndedError) return WINDOW_END_KINDS[error.end]
+	if (error === WINDOW_CLOSED_BY_USER) return "user_rejected"
 	return "popup_bound"
 }

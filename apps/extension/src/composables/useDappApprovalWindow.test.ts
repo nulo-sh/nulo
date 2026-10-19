@@ -5,7 +5,7 @@
  * prove the shell composes correctly inside each window; this suite pins the
  * shell's own contract in isolation — start/dispose ordering, the closeWindow
  * completion semantics, the listener identity pairing, the profile-change guard,
- * and the strip/error state.
+ * the named ends and the wait for the wallet to take one, and the strip/error state.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
@@ -36,7 +36,7 @@ vi.mock("vue-router", async (importOriginal) => {
 	return { ...actual, useRouter: () => routerMock }
 })
 
-import { useDappApprovalWindow } from "./useDappApprovalWindow"
+import { END_ACK_TIMEOUT_MS, useDappApprovalWindow } from "./useDappApprovalWindow"
 
 type WinListener = (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => void
 let nativeAdd: WinListener
@@ -165,13 +165,14 @@ describe("useDappApprovalWindow", () => {
 		expect(beforeunloadAdds()).toBe(1)
 	})
 
-	test("the registered listener delivers reject on a (simulated) unload", async () => {
+	test("the registered listener delivers reject, naming the close, on a (simulated) unload", async () => {
 		const { shell, resolveInit, reject } = makeShell()
 		void shell.start()
 		resolveInit()
 		await flushPromises()
 		window.dispatchEvent(new Event("beforeunload"))
 		expect(reject).toHaveBeenCalledTimes(1)
+		expect(reject).toHaveBeenCalledWith("close")
 	})
 
 	test("dispose() disconnects first, removes the listener LAST", async () => {
@@ -219,15 +220,56 @@ describe("useDappApprovalWindow", () => {
 		expect(reject).not.toHaveBeenCalled()
 	})
 
-	test("onActiveProfileChanged — undefined or different id rejects; same id is a no-op", () => {
+	test("onActiveProfileChanged — a different id rejects as a switch, undefined as a lock; same id is a no-op", () => {
 		const { shell, profile, reject } = makeShell()
 		profile.value = { id: "p1" } as ProfileInfo
 		shell.onActiveProfileChanged({ id: "p1" } as ProfileInfo)
 		expect(reject).not.toHaveBeenCalled()
 		shell.onActiveProfileChanged({ id: "other" } as ProfileInfo)
-		expect(reject).toHaveBeenCalledTimes(1)
+		expect(reject).toHaveBeenLastCalledWith("switch")
 		shell.onActiveProfileChanged(undefined)
+		expect(reject).toHaveBeenLastCalledWith("lock")
 		expect(reject).toHaveBeenCalledTimes(2)
+	})
+
+	test("endAndClose keeps the window open until the wallet takes the end, and no unload sends a second one", async () => {
+		const { shell, resolveInit, reject } = makeShell()
+		void shell.start()
+		resolveInit()
+		await flushPromises()
+		let taken!: () => void
+		const send = vi.fn(() => new Promise<void>((r) => (taken = r)))
+		const ended = shell.endAndClose(send)
+		expect(send).toHaveBeenCalledTimes(1)
+		expect(beforeunloadRemoves()).toBe(1)
+		window.dispatchEvent(new Event("beforeunload"))
+		await flushPromises()
+		expect(reject).not.toHaveBeenCalled()
+		expect(windowsRemoveMock).not.toHaveBeenCalled()
+		taken()
+		await ended
+		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("endAndClose still closes the window when the send fails", async () => {
+		const { shell } = makeShell()
+		await shell.endAndClose(() => Promise.reject(new Error("port closed")))
+		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("endAndClose closes the window at the bound when the wallet never answers", async () => {
+		vi.useFakeTimers()
+		try {
+			const { shell } = makeShell()
+			const ended = shell.endAndClose(() => new Promise<void>(() => {}))
+			await vi.advanceTimersByTimeAsync(END_ACK_TIMEOUT_MS - 1)
+			expect(windowsRemoveMock).not.toHaveBeenCalled()
+			await vi.advanceTimersByTimeAsync(1)
+			await ended
+			expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	test("stripStatus precedence — cancelled over loading over ready", () => {

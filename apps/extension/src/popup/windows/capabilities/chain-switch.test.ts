@@ -258,7 +258,7 @@ describe("capabilities window — chain mismatch banner and switch", () => {
 		await banner()?.find('[data-testid="cap-switch-network-btn"]').trigger("click")
 		const guard = onActiveProfileChangedAddMock.mock.calls[0]?.[0] as (p?: { id: string }) => void
 		guard({ id: "p2" })
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledWith("User rejected")
+		expect(rejectViaInteractionServiceMock).toHaveBeenCalledWith("User rejected", "switch")
 	})
 
 	test("approve during a running switch is refused", async () => {
