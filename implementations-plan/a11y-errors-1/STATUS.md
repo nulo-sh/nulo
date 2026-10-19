@@ -1,0 +1,4 @@
+- 2026-10-19 19:40Z phase 0: briefs read; worktree adopted at 60fde7e7 (origin/dev now e5b447c6, landing only); recon started.
+- 2026-10-19 19:47Z recon: inventory 19 error-text sites (7 Text, 12 stylesheet); issue's count of 23 does not hold; recon.md written.
+- 2026-10-19 20:01Z plan round 1: Codex conditional approve (3 findings), Opus conditional approve (7); all accepted; guard moved before the change (D11).
+- 2026-10-19 20:02Z plan round 2: Codex approve, no new finding. Plan gate passed.
