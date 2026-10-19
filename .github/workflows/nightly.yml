@@ -307,6 +307,7 @@ jobs:
     with:
       ref: ${{ needs.resolve.outputs.sha }}
       artifact_name: extension-chrome
+      artifact_id: ${{ needs.build-chrome.outputs.chrome_artifact_id }}
 
   # The same lane on `browser: firefox`, gating the publish like its Chrome twin: a nightly ships a
   # Firefox zip.
@@ -333,6 +334,7 @@ jobs:
     with:
       ref: ${{ needs.resolve.outputs.sha }}
       artifact_name: extension-firefox
+      artifact_id: ${{ needs.build-firefox.outputs.firefox_artifact_id }}
       browser: firefox
 
   # git-cliff runs here, in a job that holds no write token and signs nothing: its action downloads
@@ -342,6 +344,8 @@ jobs:
     if: always() && !cancelled() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
     env:
       TAG: ${{ needs.resolve.outputs.tag }}
       SHA: ${{ needs.resolve.outputs.sha }}
@@ -383,6 +387,7 @@ jobs:
           cat /tmp/body.md
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        id: upload
         with:
           name: nightly-notes
           path: /tmp/body.md
@@ -444,20 +449,35 @@ jobs:
           cache: "false"
           install: "false"
 
+      - name: Check the Chrome build's artifact id
+        env:
+          ARTIFACT_ID: ${{ needs.build-chrome.outputs.chrome_artifact_id }}
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] || { echo "::error::artifact id '$ARTIFACT_ID' is not a positive integer, and an empty one downloads every artifact of the run"; exit 1; }
       - name: Download Chrome build
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: extension-chrome
+          artifact-ids: ${{ needs.build-chrome.outputs.chrome_artifact_id }}
           path: dist/release/chrome
+      - name: Check the Firefox build's artifact id
+        env:
+          ARTIFACT_ID: ${{ needs.build-firefox.outputs.firefox_artifact_id }}
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] || { echo "::error::artifact id '$ARTIFACT_ID' is not a positive integer, and an empty one downloads every artifact of the run"; exit 1; }
       - name: Download Firefox build
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: extension-firefox
+          artifact-ids: ${{ needs.build-firefox.outputs.firefox_artifact_id }}
           path: dist/release/firefox
+      - name: Check the release notes' artifact id
+        env:
+          ARTIFACT_ID: ${{ needs.nightly-notes.outputs.artifact_id }}
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] || { echo "::error::artifact id '$ARTIFACT_ID' is not a positive integer, and an empty one downloads every artifact of the run"; exit 1; }
       - name: Download release notes
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: nightly-notes
+          artifact-ids: ${{ needs.nightly-notes.outputs.artifact_id }}
           path: dist/notes
 
       # Every entry is stamped with the built commit's own time and written in a fixed order, so a
