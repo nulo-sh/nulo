@@ -44,10 +44,11 @@ post_implementation_hardening: not scheduled
 - **Dropped:** none. OA-1 to OA-12 ship the owner's page 39 and 41 answers; P39-09 A, P39-10 A, P39-15 A and P39-17 A were already built. OA-13 ships its "what ships now". O8 (`Pick<GasSlice>`) was declined, with its reason under Audit verdicts.
 - **Known limits:** #726 (clipboard scrub), #727 (bootstrap after Back), #728 (Full Backup's flag on a popup close), #729 (the phrase step after a lock).
 - **Open items:**
-  - #769: the card's steps for a second profile, drawn for a decision page and not built; #770: the phrase page's "Retrieve Recovery Phrase", held for the owner's pick;
+  - #769: the card's steps for a second profile, drawn for a decision page and not built;
   - #722: the landing's How Aztec works page, built in #723;
   - #730: Presto's onboarding-only leftovers;
   - OA-14 (the popup's first-run line) and OA-15 (the warnings' full stops), in [OWNER-ASKS.md](OWNER-ASKS.md).
+- **Closed elsewhere:** #770, the phrase page's button verb. The owner picked "Reveal Recovery Phrase", which #811 shipped. This branch's test titles and `seed.vue`'s names (`isRevealing`, `revealFence`) follow it.
 - **Lessons:** one promoted. On Firefox, a page's `storage.local` read from its own `onChanged` listener can return the old value ([lessons/phase-4.md](lessons/phase-4.md)).
   - It was merged into the browser-quirks entry.
   - Puppeteer's mobile-emulation entry moved to the e2e-testing skill to make room.

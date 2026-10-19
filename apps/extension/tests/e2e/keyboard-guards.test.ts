@@ -1,6 +1,6 @@
 /**
- * A held Enter acts once. On the recovery phrase's Retrieve the button ignores the repeat, so the
- * held key makes one retrieval; in onboarding's confirm field the browser's implicit submission
+ * A held Enter acts once. On the recovery phrase's Reveal the button ignores the repeat, so the
+ * held key makes one reveal; in onboarding's confirm field the browser's implicit submission
  * activates Create once, and the repeat that reaches the phrase step presses nothing there. The
  * page records each Enter keydown, click and submit, so a driver that sends no repeat, or a repeat
  * that lands anywhere but the control, fails on the record.
@@ -82,21 +82,21 @@ function expectHeldEnterOn(record: KeyRecord[], testid: string): void {
 	])
 }
 
-test("a held Enter on Retrieve retrieves once", { timeout: 120_000 }, async ({ registeredExtension }) => {
+test("a held Enter on Reveal reveals once", { timeout: 120_000 }, async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 	await navigateByHash(page, "#/popup/settings/security/export", 15_000)
 	await navigateByHash(page, "#/popup/settings/security/export/seed", 15_000)
 	await clickByTestId(page, "agree-continue-btn")
 
-	// A wrong password keeps Retrieve on the page after its retrieval, so the repeat lands on the button
-	// however fast that retrieval ends. On Firefox a right one reveals the phrase before the repeat.
+	// A wrong password keeps Reveal on the page after its attempt, so the repeat lands on the button
+	// however fast that attempt ends. On Firefox a right one reveals the phrase before the repeat.
 	await replaceInputValue(page, sel("unlock-password-input"), "not-the-password-1")
 	await holdEnterOn(page, "unlock-submit-btn")
 	await page.waitForSelector(sel("unlock-error-text"), { visible: true, timeout: 30_000 })
 	const record = await readRecord(page)
 	expectHeldEnterOn(record, "unlock-submit-btn")
-	expect(clicksOn(record, "unlock-submit-btn"), `Retrieve ran more than once: ${JSON.stringify(record)}`).toHaveLength(1)
+	expect(clicksOn(record, "unlock-submit-btn"), `Reveal ran more than once: ${JSON.stringify(record)}`).toHaveLength(1)
 
 	await replaceInputValue(page, sel("unlock-password-input"), TEST_PASSWORD)
 	await focusWhenEnabled(page, "unlock-submit-btn")
