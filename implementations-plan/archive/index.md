@@ -361,3 +361,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [send-estimate-1](send-estimate-1/plan.md) — completed — a balance that makes the typed amount sendable asks for its fee, on either side (#856); the fee row on a balance drop ships as today (#863)
 - [execute-window-3](execute-window-3/plan.md) — completed — the advice once after the calls and none on a refused request (#776, P52-01 F); an unreadable authorization flagged at rest (#777, P58-05 B); #854
 - [logs-keyboard-1](logs-keyboard-1/plan.md) — completed — the logs filter panels from the keyboard: native toggle rows with an inset ring, the popover's Tab order stitched after its trigger, a panel closed when focus leaves it (#851); known limit #866
+- [egress-flake-1](egress-flake-1/plan.md) — completed — a reply to a paused request its worker's stop cancelled (`Invalid InterceptionId`) is no interception failure (#857)
