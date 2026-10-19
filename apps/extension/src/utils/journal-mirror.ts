@@ -10,16 +10,9 @@ export type JournalRow = { id: string }
 /** `front` keeps the list newest first; `back` keeps the order rows arrived in. */
 export type JournalPlace = "front" | "back"
 
-export interface JournalAddRules {
-	place: JournalPlace
-	/** Every add is listed as it comes, an id already listed included. */
-	appendAdded?: boolean
-}
-
 /** At the `front`, a listed id moves to the front; at the `back`, it is replaced where it is. */
-export function journalAdded<T extends JournalRow>(rows: readonly T[], op: T, rules: JournalAddRules): T[] {
-	if (rules.appendAdded) return [...rows, op]
-	if (rules.place === "front") return [op, ...rows.filter((row) => row.id !== op.id)]
+export function journalAdded<T extends JournalRow>(rows: readonly T[], op: T, place: JournalPlace): T[] {
+	if (place === "front") return [op, ...rows.filter((row) => row.id !== op.id)]
 	return journalUpdated(rows, op, "back")
 }
 
