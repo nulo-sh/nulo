@@ -71,7 +71,6 @@ export class WindowReservation {
 		return this.state
 	}
 
-	/** Released: the attempt can no longer show its check. */
 	public get abandoned(): boolean {
 		return this.state === "released"
 	}

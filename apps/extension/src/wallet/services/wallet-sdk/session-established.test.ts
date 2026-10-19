@@ -487,7 +487,6 @@ describe("handleSessionEstablished — a new connection's failed check", () => {
 		const establishing = handleSessionEstablished(makeSession(), h.deps)
 		await vi.waitFor(() => expect(h.getLastFocused).toHaveBeenCalledTimes(1))
 		expect(h.stamp).toHaveBeenCalledWith("sess-1", "prof-A")
-		// The slot is given back while the anchor is read, and the page's next discovery reuses the id.
 		h.reservation.releaseIfUnstarted()
 		admitReplacement(h.gate, h.pendingVerification)
 		anchor.resolve(ANCHOR)

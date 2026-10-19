@@ -17,13 +17,6 @@ import {
 } from "../fixtures/popups"
 import { shotSend } from "../fixtures/send-page"
 
-/**
- * A new connection's Allow answers the dApp and its connect window closes; the emoji check opens in
- * a window of its own when the dApp starts its key exchange, at once or seconds later. Each run
- * logs, in milliseconds after Allow, what a person sees: the check window created, the connect
- * window removed, the check page's document start and its grid.
- */
-
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 
 const ALLOW = '[data-testid="discover-allow-btn"]'
@@ -53,7 +46,6 @@ async function recordMarks(control: Page): Promise<() => Promise<Mark[]>> {
 	return () => control.evaluate(() => (window as unknown as { __marks: Mark[] }).__marks)
 }
 
-/** The connect page posts its Allow and each line it shows under the app. */
 async function postConnectMarks(page: Page): Promise<void> {
 	await page.evaluate(
 		(channel: string, allow: string, action: string) => {
@@ -76,8 +68,7 @@ async function postConnectMarks(page: Page): Promise<void> {
 	)
 }
 
-/** When the check page's document started and showed its grid. The grid's time is polled from when
- *  the test reaches the page, so it bounds the real moment from above. */
+/** The check's document start, and when the test first saw its grid in the DOM (not a paint time). */
 function checkShown(check: Page): Promise<CheckShown> {
 	return check.evaluate(
 		(grid: string) =>
@@ -144,8 +135,6 @@ async function stallPage(page: Page, ms: number): Promise<void> {
 	}
 }
 
-/** A wallet tab on Local Network that records window changes and marks, and a playground whose
- *  Connect opened the connect window, with Allow enabled and its marks posted. */
 async function openConnect(ctx: ExtensionContext) {
 	const control = await openPopup(ctx)
 	await waitForHash(control, "#/popup/general", 30_000)
@@ -169,8 +158,8 @@ async function openConnect(ctx: ExtensionContext) {
 	return { control, dapp, page, connectWindow, changes, marks }
 }
 
-/** The connect page after Allow, in both themes, for the pictures (`NULO_E2E_SHOT_DIR`). The state
- *  lasts about `BRIDGE_MS`, so transitions are cut and nothing settles between the two shots. */
+/** The connect page after Allow in both themes (`NULO_E2E_SHOT_DIR`), taken before the bridge's
+ *  timer closes it; finished animations keep the two shots alike. */
 async function shotConnecting(page: Page): Promise<void> {
 	const dir = process.env.NULO_E2E_SHOT_DIR
 	if (!dir) return
@@ -249,7 +238,6 @@ test.skipIf(!aztecConfig)(
 		)
 		await shotSend(check, "connect-check", "verify-emoji-grid")
 
-		// An Enter, a held Enter and an Escape reach the check and answer nothing.
 		await check.evaluate(() => {
 			const w = window as unknown as { __keys: Array<{ key: string; repeat: boolean }> }
 			w.__keys = []
@@ -288,8 +276,8 @@ test.skipIf(!aztecConfig)(
 		const lines = (await marks()).filter((m) => m.mark.startsWith("line:")).map((m) => m.mark.slice(5))
 		const times = timeline(await marks(), await changes(), connectWindow, focus.window, shown)
 		console.log(`[connect-check-window] ${BROWSER} at once: ${JSON.stringify({ ...times, lines })}`)
-		// The page is never shown between the two windows: the check exists before the connect window
-		// goes, well inside the bridge.
+		// Window events order the check's creation before the connect window's removal; they cannot
+		// prove no frame painted between.
 		expect(times.checkCreated).not.toBeNull()
 		expect(times.connectRemoved).not.toBeNull()
 		expect(times.checkCreated as number).toBeLessThanOrEqual(times.connectRemoved as number)
@@ -312,7 +300,7 @@ test.skipIf(!aztecConfig)(
 		await shotConnecting(page)
 		await waitForPopupClosed(page, 10_000)
 
-		// The page is still stalled: no check was created, and no wallet window is left open.
+		// Before the late check, a gap with no wallet window open.
 		expect((await changes()).filter((c) => c.change === "created").map((c) => c.id)).toEqual([connectWindow])
 		expect(await popupsOpen(control)).toBe(0)
 

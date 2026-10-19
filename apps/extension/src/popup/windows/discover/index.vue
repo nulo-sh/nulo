@@ -107,8 +107,8 @@ const approve = async () => {
 		isLoading.value = true
 		await interactionService.resolveInteraction(requestId.value, { approved: true })
 		isApproved.value = true
-		// The worker closes this window, still loading: once the emoji check opens in a window of its
-		// own, or when no check follows. Its id comes only from the service's handle.
+		// After an Allow the worker owns this window, by the id the service's handle holds, and closes
+		// it; the page stays loading until then.
 		completeInteraction()
 	} catch (error) {
 		isLoading.value = false

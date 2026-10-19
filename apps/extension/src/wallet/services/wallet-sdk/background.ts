@@ -303,7 +303,6 @@ type SdkHandlerState = {
 	admission: VerifyAdmissionGate
 	/** Handshakes currently waiting on another popup for the same `(origin, chainId)`, bounded. */
 	dedupeWaiters: Map<string, number>
-	/** The connect windows Allows handed over, each kept until its check opens (see `connect-bridge.ts`). */
 	bridge: ConnectBridge
 	/**
 	 * Bound right after the handler is constructed, before `initialize()`
@@ -503,7 +502,8 @@ function buildHandlerCallbacks(
 			// Upstream calls this synchronously after posting the key-exchange response, and a message
 			// needs a round trip and a decrypt to arrive, so the hold exists before any message does.
 			const hold = state.sessions.holds.open(session.sessionId, session.verificationHash)
-			// The connect window stays until this establishment's check window exists or it fails.
+			// Pinned until this establishment's validation settles; the hold is captured now so a reused
+			// id cannot redirect its end.
 			const bridged = state.bridge.pin(session.sessionId)
 			const endBridge = () => bridged && state.bridge.end(bridged)
 			// Liveness and termination read this session object, not its id: an establishment paused

@@ -1,16 +1,14 @@
 /**
- * The connect window an Allow handed to the worker, kept only as a bridge to the emoji check: it
- * closes once the check's own window exists, so a page that exchanges keys at once never shows
- * between the two windows, and it never holds a verify-window slot. A page that has not started
- * its exchange `BRIDGE_MS` after the wallet approved its discovery loses the bridge; its check, if
- * it comes, opens in a window of its own.
+ * Keeps the connect window an Allow handed over until its establishment's check window exists, so
+ * the two overlap; it owns no verify-window slot. A page with no key exchange `BRIDGE_MS` after its
+ * approval loses the bridge, and its check, if it comes, opens alone.
  */
 import type { ClockPort, TimerHandle } from "@nulo/wallet-core/ports"
 
 export const BRIDGE_MS = 1_500
 
-/** One Allow's connect window. Every call names the hold it acts on: a page can reuse a request
- *  id, and a caller still holding an earlier attempt's hold must never reach its successor's. */
+/** Request ids are page-chosen and reusable: a caller that kept an earlier attempt's hold must
+ *  never act on its successor's window. */
 export type BridgeHold = { readonly id: string; readonly tabId: number; readonly windowId: number }
 
 type Entry = BridgeHold & { removed: boolean; pinned: boolean; timer?: TimerHandle }
@@ -33,7 +31,6 @@ export class ConnectBridge {
 		return entry
 	}
 
-	/** Still held, and its window not closed by the person. */
 	public isOpen(hold: BridgeHold): boolean {
 		const entry = this.current(hold)
 		return entry !== undefined && !entry.removed

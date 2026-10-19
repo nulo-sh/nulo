@@ -186,11 +186,9 @@ function readPopupWindows(page: Page): Promise<{ id: number | undefined; popups:
 }
 
 /**
- * Allow a new connection and wait for its emoji check, which opens in a window of its own while the
- * connect window closes: the popup windows open after are those open before, with the check in the
- * connect window's place. A window that opens and closes in between is not seen; the connect
- * journey records every change. Resolves with the check's page for `approveVerify`. `allow` is the
- * click, `approveDiscover` unless the caller drives the real pointer.
+ * Allow a new connection and resolve with its emoji check's page once the connect window has closed:
+ * the popup windows after are those before, with the check in the connect window's place. A window
+ * that opens and closes in between escapes this. `allow` defaults to `approveDiscover`.
  */
 export async function approveConnect(
 	ctx: ExtensionContext,

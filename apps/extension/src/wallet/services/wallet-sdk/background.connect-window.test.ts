@@ -123,9 +123,8 @@ function keyExchange(requestId: string, over: Record<string, unknown> = {}): Ses
 	return session
 }
 
-/** A browser that knows which windows are open: `remove` of a gone window rejects, and every removal
- *  reaches the listeners a turn later, as `chrome.windows.onRemoved` does. `events` is the order in
- *  which windows came into being and were removed. */
+/** Removing a missing window rejects, and removal listeners run a microtask later, never inline.
+ *  `events` records creations and removals in order. */
 function fakeWindows() {
 	const open = new Set<number>()
 	const removed: number[] = []
@@ -366,7 +365,6 @@ describe("the connect window before Allow", () => {
 	})
 })
 
-/** One approved connection for `requestId` from its tab, its connect window known as `windowId`. */
 async function approvedIn(h: ReturnType<typeof boot>, requestId: string, windowId: number, over: Record<string, unknown> = {}) {
 	h.discover(requestId, over)
 	await flush()
@@ -535,7 +533,6 @@ describe("the connect window after Allow", () => {
 })
 
 describe("an Allow while the origin's two verification slots are held", () => {
-	/** Approved connections from tabs 7 and 8 in windows 41 and 42, then a third Allow from tab 9 in 43. */
 	async function thirdAllowQueued(third: Record<string, unknown> = {}) {
 		const h = boot()
 		h.discover("f1", chain(1))
@@ -551,7 +548,7 @@ describe("an Allow while the origin's two verification slots are held", () => {
 		await flush()
 		return h
 	}
-	/** f1's check opens in the first created window and the person closes it, freeing its slot. */
+	/** f1's check opens in window 100, the first the fake creates, and the person closes it. */
 	async function freeASlot(h: ReturnType<typeof boot>) {
 		await h.establish("f1")
 		h.windows.closeByUser(100)
@@ -656,7 +653,6 @@ describe("an approved connection whose key exchange does not follow at once", ()
 		await vi.advanceTimersByTimeAsync(DISCOVERY_STALE_MS + RESERVATION_GRACE_MS + 1)
 		expect(markers().get("f1")?.cancelled).toBe(true)
 
-		// A new discovery from the origin is a reconnect, which shows its check in a window of its own.
 		h.discover("r2")
 		await flush()
 		await h.establish("r2")
@@ -789,7 +785,7 @@ describe("establishment opens the check in a window of its own", () => {
 		await flush()
 		h.handler.terminateSession("f1")
 		await flush()
-		// The page's next discovery, for another chain, reuses the id and is allowed in window 42.
+		// Another chain forces a fresh Allow despite the saved row; the page reuses the id.
 		await approvedIn(h, "f1", 42, chain(2))
 		expect(approved()).toEqual(["f1", "f1"])
 		expect(h.windows.removed).toEqual([41])
@@ -799,7 +795,7 @@ describe("establishment opens the check in a window of its own", () => {
 		await flush()
 		expect(h.windows.removed).toEqual([41])
 		expect(h.windows.created).toEqual([])
-		// Control: the later Allow's own bridge is live, and closes its window on its own timer.
+		// Control: the later Allow's bridge closes its own window.
 		await vi.advanceTimersByTimeAsync(BRIDGE_MS)
 		expect(h.windows.removed).toEqual([41, 42])
 	})
@@ -842,7 +838,6 @@ describe("establishment opens the check in a window of its own", () => {
 		expect(h.windows.created).toHaveLength(allowed ? 1 : 0)
 	})
 
-	/** A sendTx from `f1`, whose row could journal and dispatch it, arrives while its check window opens. */
 	async function sendTxWhileOpening(h: ReturnType<typeof boot>, settle: (creation: ReturnType<typeof deferred<void>>) => void) {
 		await approvedIn(h, "f1", 41)
 		Object.assign([...h.rows.values()][0], {

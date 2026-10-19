@@ -365,8 +365,7 @@ function checkDiscoveryPopupCaps(discovery: PendingDiscovery, deps: DiscoveryDep
 /** New dApp → show discovery popup (Allow/Deny), then persist + approve. The
  *  dedupe registration, the durable writes and the `finally` release are one
  *  unit: no await separates registering the popup promise from creating it.
- *  An Allow hands its connect window to the bridge, which keeps it until the check opens in a
- *  window of its own; the person closing it before the approval lands takes the Allow back. */
+ *  Closing the connect window before the approval lands cancels the Allow. */
 async function runDiscoveryPopup(
 	discovery: PendingDiscovery,
 	chainId: string,
@@ -484,8 +483,8 @@ async function dropStaleSession(session: DappSession, entryEpoch: number, deps: 
 	}
 }
 
-/** Write the approved session and approve the discovery; `true` once the approval landed. The
- *  window reservation is owned by the session only then; every other exit gives it back. */
+/** Write the approved session and approve the discovery. `true` hands the window reservation to
+ *  the session; every other exit releases it. */
 async function persistAndApprove(
 	discovery: PendingDiscovery,
 	chainId: string,
