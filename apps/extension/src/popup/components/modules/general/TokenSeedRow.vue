@@ -75,7 +75,7 @@ const reason = computed(() => (isFailed.value ? "Couldn't set up" : "Couldn't ve
 
 .reason {
 	composes: type--caption from global;
-	color: var(--red);
+	color: var(--txt-danger);
 }
 
 .loading_block {
