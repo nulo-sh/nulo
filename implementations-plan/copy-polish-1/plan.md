@@ -10,7 +10,7 @@ eli5_mode: skipped (orchestrator-owned)
 base: 993b3efc
 trunk: dev
 post_implementation_hardening: not scheduled
-status: arc 1 implemented and gated; PR next
+status: arc 1 delivered; PR open
 ---
 
 # copy-polish-1: the failed token preview's warning, the restore warning's clause
@@ -60,6 +60,7 @@ One arc, one PR against `dev`: #803 (P54-01 B, and the left alignment the owner 
 - D5 (#744). The closed known limit's reopening condition names a wording pick; this PR ships that wording, but the account still stays held. Comment on #744 with the PR at close-out; no reopen.
 - D6 (#746's close). The spawn brief says `Closes #746`, and the lane brief records OA-1 and OA-3 to OA-7 as shipped in their default form. Both legs object: #746's last comment keeps it open for OA-1 to OA-4, OA-6 and OA-7, so a close settles them without an owner pick. The orchestrator's explicit instruction stands; the PR adds a comment on #746 naming OA-2 as delivered and the rest as shipped in their default form per the lane brief, and the report flags the conflict so the orchestrator can switch to `Refs #746` before merging.
 - D7 (the budget). The opaque warning moves with the cause: the brief asks for the cause fixed and every warning sharing it checked, and checking it while leaving it on the rule would keep the cause. I2's plural is the pick's own form. Codex round 1 asked for an owner ask on both and withdrew both in round 2; the Opus leg read both as inside the brief. The pictures go in the PR for the owner.
+- D8 (deviations in arc 1). The review loop ran before Phase 3's e2e gates, while host load (load1 above 150) held the builds; the gates then ran on the reviewed head. After them `origin/dev` gained #848 (no file in common): the merged head reran `audit:vue`, `test:all` and `check:plans`, and its e2e run on the PR's CI. The scratch execute spec sets no viewport on Firefox, where it only records alignment.
 
 ## Security & Adversarial Considerations
 
