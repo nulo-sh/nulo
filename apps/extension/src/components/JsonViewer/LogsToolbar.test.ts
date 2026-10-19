@@ -118,3 +118,56 @@ describe("LogsToolbar — the more menu", () => {
 		expect(w.emitted("exportCsv")).toHaveLength(1)
 	})
 })
+
+describe("LogsToolbar — the filter rows", () => {
+	/** Renders each panel's rows in place; the shared mount's `Popover` stub renders no panel. */
+	const PopoverWithPanel = defineComponent({ template: '<div><slot /><slot name="content" /></div>' })
+
+	function mountRows(): VueWrapper {
+		wrapper = mount(LogsToolbar, {
+			props: {
+				popovers: { source: true, level: true },
+				filters: { source: { pxe: true, "pxe-client": false }, level: { DEBUG: true, ERROR: false } },
+				allOptionsSelected: { source: false, level: true },
+			},
+			attachTo: document.body,
+			global: { components: { ...REGISTERED, Popover: PopoverWithPanel } },
+		})
+		return wrapper
+	}
+
+	test("each row and Select All is a native toggle button pressed as its filter reads", () => {
+		const w = mountRows()
+		const pressed = (testid: string) => {
+			const row = w.get(`[data-testid="${testid}"]`)
+			expect(row.element.tagName).toBe("BUTTON")
+			expect(row.attributes("type")).toBe("button")
+			return row.attributes("aria-pressed")
+		}
+		expect(pressed("logs-filter-source-all")).toBe("false")
+		expect(pressed("logs-filter-source-item-pxe")).toBe("true")
+		expect(pressed("logs-filter-source-item-pxe-client")).toBe("false")
+		expect(pressed("logs-filter-level-all")).toBe("true")
+		expect(pressed("logs-filter-level-item-DEBUG")).toBe("true")
+		expect(pressed("logs-filter-level-item-ERROR")).toBe("false")
+	})
+
+	test("a click on a row or Select All emits its toggle", async () => {
+		const w = mountRows()
+		await w.get('[data-testid="logs-filter-level-item-ERROR"]').trigger("click")
+		await w.get('[data-testid="logs-filter-source-all"]').trigger("click")
+		expect(w.emitted("toggleFilter")).toEqual([["level", "ERROR"]])
+		expect(w.emitted("selectAll")).toEqual([["source"]])
+	})
+
+	test("a row refuses a held Enter's repeats and leaves a fresh Enter to the button", () => {
+		const w = mountRows()
+		const enter = (repeat: boolean) => {
+			const e = new KeyboardEvent("keydown", { key: "Enter", repeat, bubbles: true, cancelable: true })
+			w.get('[data-testid="logs-filter-level-all"]').element.dispatchEvent(e)
+			return e.defaultPrevented
+		}
+		expect(enter(true)).toBe(true)
+		expect(enter(false)).toBe(false)
+	})
+})

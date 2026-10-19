@@ -63,7 +63,7 @@ Three rules in `Popover`, for every consumer (D2): the panel sits in the Tab ord
   - With the real `Transition` (`stubs: { transition: false }`): right after a close the leaving card is still connected and `inert`; the open card is not (control).
 - **Gate**: `bun run lint`; `bun run typecheck:all`; `bun run --cwd packages/design test -- src/ui/Popover.test.ts`. Pass: exit 0 each; each new behaviour case reds on the base `Popover.vue`, and its paired control stays green there.
 
-### Phase 2: the rows as native toggle buttons
+### Phase 2: the rows as native toggle buttons ✓
 
 - `apps/extension/src/components/JsonViewer/LogsToolbar.vue`: "Select All" and each row become `Flex tag="button" type="button"` with `:aria-pressed` (`allOptionsSelected[kind]`, `filters[kind][k]`), `@keydown.enter="refuseRepeatEnter"` (D9, imported from `@/composables/usePopupEntity`) and testids `logs-filter-<kind>-all` and `logs-filter-<kind>-item-<key>` (D11). A new class `filter_toggle` beside `filter_content_item` (D10): `font: inherit; text-align: inherit;` and `&:focus-visible { outline: 2px solid var(--nulo-accent); outline-offset: -2px; }` (D8). Attributes, icons and texts stay as they are.
 - Tests (`LogsToolbar.test.ts`, a new `describe` whose own mount passes a `Popover` stub that renders both slots, so the triggers test still counts three buttons): each panel's rows are `button[type=button]` whose `aria-pressed` reads the filter, Select All's reads `allOptionsSelected`; a click emits `selectAll` or `toggleFilter` with its key (control); a repeat Enter on a row is prevented, a fresh Enter is not (control).

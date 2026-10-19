@@ -11,6 +11,7 @@
  * which renders the chip in the accent color).
  */
 import { Dropdown } from "@/components/ui/Dropdown"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { capitalize } from "@/utils"
 import { getDisplayName } from "./logs-format"
 
@@ -80,12 +81,17 @@ const filteredKeys = (kind, filters, search) => {
 					>
 						<Flex
 							v-if="!searchTerm"
+							tag="button"
+							type="button"
 							@click="emit('selectAll', kind)"
+							@keydown.enter="refuseRepeatEnter"
+							:aria-pressed="allOptionsSelected[kind]"
 							align="center"
 							justify="start"
 							gap="8"
 							wide
-							:class="$style.filter_content_item"
+							:class="[$style.filter_content_item, $style.filter_toggle]"
+							:data-testid="`logs-filter-${kind}-all`"
 						>
 							<Icon :name="allOptionsSelected[kind] ? 'square-check' : 'square'" size="12" />
 							<Text variant="body">Select All</Text>
@@ -95,11 +101,16 @@ const filteredKeys = (kind, filters, search) => {
 							<Flex
 								v-for="k in filteredKeys(kind, filters, searchTerm)"
 								:key="k"
+								tag="button"
+								type="button"
 								@click="emit('toggleFilter', kind, k)"
+								@keydown.enter="refuseRepeatEnter"
+								:aria-pressed="filters[kind][k]"
 								align="center"
 								gap="8"
 								wide
-								:class="[$style.filter_content_item, !filters[kind][k] && $style.inactive]"
+								:class="[$style.filter_content_item, $style.filter_toggle, !filters[kind][k] && $style.inactive]"
+								:data-testid="`logs-filter-${kind}-item-${k}`"
 							>
 								<Icon :name="filters[kind][k] ? 'square-check' : 'square'" size="12" />
 								<Text variant="body">{{ getDisplayName(kind, k) }}</Text>
@@ -219,6 +230,17 @@ const filteredKeys = (kind, filters, search) => {
 		* {
 			color: var(--txt-primary);
 		}
+	}
+}
+
+/* A button reset to the row's look; the ring is inset because the Source list's scroll box clips outside its rows. */
+.filter_toggle {
+	font: inherit;
+	text-align: inherit;
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: -2px;
 	}
 }
 
