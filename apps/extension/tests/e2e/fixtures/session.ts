@@ -1,7 +1,7 @@
 import { MessageType } from "@nulo/extension-messaging/messages"
 import { wrapParams } from "@nulo/extension-messaging/utils"
 import type { Page } from "puppeteer"
-import { type BackgroundOwner, backgroundOrigin } from "./browser"
+import { type BackgroundOwner, backgroundOrigin, evaluateInBackground } from "./browser"
 import { pollUntil } from "./poll"
 
 /** The persisted session row's public fields: the unlocked profile, the last refresh, and when auto-lock is due. */
@@ -165,4 +165,34 @@ export async function waitForExtensionRestart(owner: BackgroundOwner, openPage: 
 		(origin) => origin !== undefined && origin > before,
 		{ label: "a background newer than the restarted one", timeoutMs: Math.max(0, deadline - Date.now()), intervalMs: 250 },
 	)
+}
+
+/** Swaps the background's `chrome.storage.session.remove`, the object its storage adapter holds, for
+ *  one that refuses every removal naming the session record. A restart ends the swap with the
+ *  background that holds it. */
+const REFUSE_SESSION_DELETES = `
+	const area = chrome.storage.session;
+	const remove = area.remove;
+	Object.defineProperty(area, "remove", {
+		configurable: true,
+		writable: true,
+		value: function (keys, ...rest) {
+			if ([keys].flat().includes("nulo:core:session")) return Promise.reject(new Error("the e2e refused this delete"));
+			return remove.apply(this, [keys, ...rest]);
+		},
+	});
+	return true;`
+
+/** Every delete of the persisted session record fails as a refused storage write does, until the
+ *  background ends. */
+export async function refuseSessionDeletes(owner: BackgroundOwner): Promise<void> {
+	await evaluateInBackground(owner, REFUSE_SESSION_DELETES)
+}
+
+/** Press the header's lock control; resolves once the click is dispatched, not once it locks. */
+export async function pressHeaderLock(page: Page): Promise<void> {
+	await page.waitForSelector('[data-testid="header-lock"]', { visible: true, timeout: 15_000 })
+	await page.evaluate(() => {
+		;(document.querySelector('[data-testid="header-lock"]') as HTMLElement).click()
+	})
 }
