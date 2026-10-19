@@ -8,15 +8,15 @@ Already shipped in this round, signed: **P50-01 = B** (#769). A profile created 
 
 **Surface:** Home, the Get started card.
 
-**Today:** each row's text sits 21 px inside a bordered box. The section label, the Hide link, the Holdings rows and their balances all sit on the page's 24 px edges.
+**Today:** each row's text sits 21 px inside a bordered box. The card fills the popup below the balance, so each option has two frames: the top, and the content scrolled by 150 px to show the card's end and Holdings. The test wallet holds no token, so Holdings shows its empty box; its dashed border sits on the page's edges, as the token rows do. The section label, the Hide link, the Holdings rows and their balances all sit on the page's 24 px edges.
 
-| Option | Looks like | Light | Dark |
+| Option | Looks like | Light (top, then scrolled) | Dark (top, then scrolled) |
 |---|---|---|---|
-| O0. Today | the bordered box; the text 21 px inside it | _pending_ | _pending_ |
-| O1. No box, hairlines | no border and no inner padding; a hairline between the rows across the content width; the text on the page's edges, as the Holdings rows are | _pending_ | _pending_ |
-| O2. A full-width band | a line above and below the rows from one side of the popup to the other; no side borders; the text on the page's edges | _pending_ | _pending_ |
-| O3. A tinted band | O2 with a light tint behind the rows and no lines | _pending_ | _pending_ |
-| O4. The Holdings rhythm | no box and no hairlines; the rows as tight as the Holdings rows; the text on the page's edges | _pending_ | _pending_ |
+| O0. Today | the bordered box; the text 21 px inside it | ![today, light](screenshots/oa17-o0-today-light.png) ![today, light, scrolled](screenshots/oa17-o0-today-scrolled-light.png) | ![today, dark](screenshots/oa17-o0-today-dark.png) ![today, dark, scrolled](screenshots/oa17-o0-today-scrolled-dark.png) |
+| O1. No box, hairlines | no border and no inner padding; a hairline between the rows across the content width; the text on the page's edges, as the Holdings rows are | ![mockup, light](screenshots/oa17-o1-no-box-light.png) ![mockup, light, scrolled](screenshots/oa17-o1-no-box-scrolled-light.png) | ![mockup, dark](screenshots/oa17-o1-no-box-dark.png) ![mockup, dark, scrolled](screenshots/oa17-o1-no-box-scrolled-dark.png) |
+| O2. A full-width band | a line above and below the rows from one side of the popup to the other; no side borders; the text on the page's edges | ![mockup, light](screenshots/oa17-o2-band-light.png) ![mockup, light, scrolled](screenshots/oa17-o2-band-scrolled-light.png) | ![mockup, dark](screenshots/oa17-o2-band-dark.png) ![mockup, dark, scrolled](screenshots/oa17-o2-band-scrolled-dark.png) |
+| O3. A tinted band | O2 with a light tint behind the rows and no lines | ![mockup, light](screenshots/oa17-o3-tinted-band-light.png) ![mockup, light, scrolled](screenshots/oa17-o3-tinted-band-scrolled-light.png) | ![mockup, dark](screenshots/oa17-o3-tinted-band-dark.png) ![mockup, dark, scrolled](screenshots/oa17-o3-tinted-band-scrolled-dark.png) |
+| O4. The Holdings rhythm | no box and no hairlines; the rows as tight as the Holdings rows; the text on the page's edges | ![mockup, light](screenshots/oa17-o4-holdings-rhythm-light.png) ![mockup, light, scrolled](screenshots/oa17-o4-holdings-rhythm-scrolled-light.png) | ![mockup, dark](screenshots/oa17-o4-holdings-rhythm-dark.png) ![mockup, dark, scrolled](screenshots/oa17-o4-holdings-rhythm-scrolled-dark.png) |
 
 Two seeds were dropped. Moving the box outward leaves it 3 px from the popup's edge, and no other screen has a gap like that. A leading ring per row looks like a checkbox that never gets a check, because a row leaves when its step is done.
 
@@ -32,8 +32,8 @@ Two seeds were dropped. Moving the box outward leaves it 3 px from the popup's e
 
 | Option | What the card shows in those cases | Pictures |
 |---|---|---|
-| A. Today | the row comes back | _pending_ |
-| B. Once held, done | the row leaves for good the first time the profile's account holds Fee Juice, as "How Aztec works" leaves once opened | _pending_ |
+| A. Today | the row comes back | ![today, light](screenshots/m-today-all-rows-light.png) ![today, dark](screenshots/m-today-all-rows-dark.png) |
+| B. Once held, done | the row leaves for good the first time the profile's account holds Fee Juice, as "How Aztec works" leaves once opened | ![mockup, light](screenshots/m-fee-juice-done-light.png) ![mockup, dark](screenshots/m-fee-juice-done-dark.png) |
 
 B stores one more per-profile flag, so it is a decision about persisted state. The flag is per profile, but Fee Juice is per account and per network. So under B, a second account that holds none never shows the row either.
 
@@ -49,9 +49,9 @@ B stores one more per-profile flag, so it is a decision about persisted state. T
 
 | Option | After a reset | Pictures |
 |---|---|---|
-| A. Today | the card as before the reset, with "Get Fee Juice" back | _pending_ |
-| B. As OA-18 B | the card as before the reset; "Get Fee Juice" does not come back | _pending_ |
-| C. Only the backup row | the reset removes "How Aztec works", "Get Fee Juice" and "Make proofs faster"; the phrase or backup row stays while it is open (unlike Hide, which also removes a passkey wallet's backup row) | _pending_ |
+| A. Today | the card as before the reset, with "Get Fee Juice" back | as OA-18 A |
+| B. As OA-18 B | the card as before the reset; "Get Fee Juice" does not come back | as OA-18 B |
+| C. Only the backup row | the reset removes "How Aztec works", "Get Fee Juice" and "Make proofs faster"; the phrase or backup row stays while it is open (unlike Hide, which also removes a passkey wallet's backup row) | ![mockup, light](screenshots/m-reset-backup-row-only-light.png) ![mockup, dark](screenshots/m-reset-backup-row-only-dark.png) |
 | D. No card | the reset removes the card, the phrase row included | not recommended: an unsaved phrase is still the only backup |
 
 C and D store a per-profile mark written by the reset.
@@ -68,7 +68,7 @@ C and D store a per-profile mark written by the reset.
 
 | Option | Looks like | Pictures |
 |---|---|---|
-| A. Today | no card | _pending_ |
-| B. Fee Juice alone | a one-row card, "Get Fee Juice", while the imported account holds none; no Hide | _pending_ |
+| A. Today | no card | ![mockup of an imported profile, light](screenshots/m-import-no-card-light.png) ![mockup of an imported profile, dark](screenshots/m-import-no-card-dark.png) |
+| B. Fee Juice alone | a one-row card, "Get Fee Juice", while the imported account holds none; no Hide | ![mockup, light](screenshots/m-import-fee-juice-alone-light.png) ![mockup, dark](screenshots/m-import-fee-juice-alone-dark.png) |
 
 **Recommendation: A** (both reviewers, moderate confidence). It is the signed OA-16 rule. B would add a row with no Hide, which today only the backup reminder has. **What ships now: A.**

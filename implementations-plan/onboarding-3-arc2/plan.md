@@ -50,7 +50,7 @@ For a person who opens Home after making or bringing in a profile, on a fresh in
 **Inferences** (the gates check them):
 - I1 No production rule changes in this arc: the matrix finds no plain bug in the card (the phase 2 tests prove each cell).
 - I2 A Fee Juice arrival reaches the card at the first gas read that sees it: a Home mount after the cache went stale (a settled tx) or expired (5 minutes). That freshness policy belongs to the balance cache, not to the card, and Home's balance readout follows the same read.
-- I3 A lock or an unlock evicts the gas cache (`profile/service.ts:290,967` → `execution/service.ts:571`), so a reset found at unlock starts clean. A reset found inside a live session, with addresses kept and a warm cache, can show the old chain's Fee Juice. It lasts until a later gas read bypasses that cache: at once when the purge marked it stale (a PrivateFPC row), otherwise past the TTL. In that window F stays hidden; the backup reminder is unaffected. Plausible, unverified, outside the card: a closed `known-limit` issue (filed in phase 3).
+- I3 A lock or an unlock evicts the gas cache (`profile/service.ts:290,967` → `execution/service.ts:571`), so a reset found at unlock starts clean. A reset found inside a live session, with addresses kept and a warm cache, can show the old chain's Fee Juice. It lasts until a later gas read bypasses that cache: at once when the purge marked it stale (a PrivateFPC row), otherwise past the TTL. In that window F stays hidden; the backup reminder is unaffected. Plausible, unverified, outside the card: #867, a closed `known-limit` issue.
 
 **Asks**: none silent. OA-17 to OA-20 in [OWNER-ASKS.md](OWNER-ASKS.md). The arc ships today's form for each.
 
@@ -131,17 +131,17 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
   - make the service's "another profile" check skip imported rows: the new M4 case fails.
 - Gate: `F`. Smoke `stale-network` on Chrome and Firefox. Network `fee-methods` on Chrome (CI runs its Firefox twin). Pass: all green at retry 0.
 
-**3. The rules per cell.**
+**3. The rules per cell.** ✓ (2026-10-19; #867 filed and closed)
 - D25 records the verdicts above.
 - Add OA-18 to OA-20 to `OWNER-ASKS.md`, each with the cases, the options and the panel's recommendation. "What ships now" is today's rows.
 - File I3 as a closed `known-limit` issue (dedupe first).
 - Gate: the pictures exist (phase 4), and `bun run check:plans` passes after staging.
 
-**4. Pictures: the row padding (OA-17) and the matrix asks.**
+**4. Pictures: the row padding (OA-17) and the matrix asks.** ✓ (2026-10-19; 30 PNGs in `screenshots/`)
 - Write one capture spec, `tests/e2e/zz-capture-arc2.test.ts`. Run it once on the Chrome armed build. Delete it by its exact path, so it never reaches a commit.
-  - It uses `registeredExtension`: the first password profile, with the card P A F R.
+  - It uses `listedExtension`: the first password profile, with the card P A F R. Smoke holds no token, so Holdings shows its empty box.
   - It styles each option through a constructed stylesheet, scoped under `[data-testid="get-started"]`. A row's hairline is an `::after`, which `element.style` cannot reach. The card's box has no testid, so the sheet reaches it by structure under the card's testid. That breaks the e2e selector rule only in a spec that is never committed.
-  - It scrolls Home's scroller so the card and the Holdings rows under it show at 360×600. It writes light and dark through `shotSend` (`tests/e2e/fixtures/send-page.ts:222`, `NULO_E2E_SHOT_DIR`).
+  - At 360×600 the card fills the space under the pinned balance, so each padding option has two frames: the top, and the content scrolled 150 px (the card's end and Holdings). It sets the `theme` attribute for light and dark and waits with `settleThemeTransitions`.
 - Write the PNGs to `implementations-plan/onboarding-3-arc2/screenshots/`. Each caption reads "mockup", except O0 and the "today" pictures.
 - Padding options (D30):
   - O0: today, the bordered box with the text 21 px inside it.
@@ -151,9 +151,9 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
   - O4: the Holdings rhythm: no box and no hairlines; rows `8px 0`, as `TokenCard` rows are.
 - Matrix pictures (D31):
   - OA-18: today (F back) and B (F gone).
-  - OA-19: today, and C (the backup row alone). B is OA-18 B's picture.
+  - OA-19: C (the backup row alone). A and B are OA-18's pictures.
   - OA-20: A (no card) and B (F alone).
-- Gate: 10 padding PNGs and 12 matrix PNGs, light and dark, each 360×600. `git status` shows no capture spec.
+- Gate: 20 padding PNGs and 10 matrix PNGs (OA-19 A and B reuse OA-18's), light and dark, each 360×600. `git status` shows no capture spec.
 
 **5. Timing and delivery.**
 - Measure `security-backup` on Chrome and on Firefox at retry 0, each with load1 < 150 (D32):
