@@ -70,7 +70,7 @@ Values only: each site's `red` becomes `txt-danger`; a source guard keeps it so.
 - `packages/design/README.md` § Tokens, one paragraph: error and refusal text is `txt-danger`; `red` paints glyphs, fills and borders; `red-text-ban.test.ts` refuses red text. `CLAUDE.md` § UI changes, one bullet after the em-dash one: the same rule and the test.
 - **Gate**: `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run --cwd packages/design test -- src/theme-contrast.test.ts`. Pass: exit 0 each (the guard green); `git diff --stat` against Phase 2's commit touches only the 14 files of recon rows 1-19, the contrast test, the story, the README and `CLAUDE.md`.
 
-### Phase 4: Pictures, contrast in the browser, full gate
+### Phase 4: Pictures, contrast in the browser, full gate ✓
 
 - Scratch spec `zz-a11y-errors-1.test.ts`, kept under `~/.cache/nulo-backlog/a11y-errors-1/`, copied into `apps/extension/tests/e2e/` for each run only and deleted before lint and commit. Helpers as `shots-p61`'s (theme flip, settle); flows from the specs recon names.
 - Contrast (D5), light and dark, on the head build: for each site the smoke build shows (rows 1-6 and 9, 11's "Wrong password", 12, 13; 7 if its second step is reachable), read the error element's computed `color` and its background: ancestors' `background-color` blended until opaque. If an ancestor on that path has a `background-image` or an `opacity` under 1, mark the site unmeasured. The other rows (8, 10, 11's torn refusal, 14-19) need a failure or a network that smoke lacks: list each with the background token its sources set, and check that `theme-contrast.test.ts` gates `--txt-danger` on it. Read the hero too (≥ 3:1).
