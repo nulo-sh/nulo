@@ -39,6 +39,7 @@ describe("get started flags (storage)", () => {
 			"nulo:ui:getStartedAztecOpened@p1",
 			"nulo:ui:getStartedHidden@p1",
 			"nulo:ui:profileImported@p1",
+			"nulo:ui:profileNotFirst@p1",
 		])
 	})
 
@@ -49,6 +50,7 @@ describe("get started flags (storage)", () => {
 			aztecOpened: false,
 			hidden: false,
 			imported: false,
+			notFirst: false,
 		})
 		const reads = get.mock.calls.filter(([keys]) => Array.isArray(keys))
 		expect(reads).toEqual([[getStartedKeys("p1")]])
@@ -67,6 +69,7 @@ describe("get started flags (storage)", () => {
 			aztecOpened: true,
 			hidden: false,
 			imported: false,
+			notFirst: false,
 		})
 	})
 
@@ -99,7 +102,7 @@ describe("get started flags (storage)", () => {
 })
 
 describe("get started view (pure)", () => {
-	const NONE = { phraseSaved: false, backupSaved: false, aztecOpened: false, hidden: false, imported: false }
+	const NONE = { phraseSaved: false, backupSaved: false, aztecOpened: false, hidden: false, imported: false, notFirst: false }
 	const base = { type: "password" as const, flags: NONE, funds: "none" as const, feeJuice: "none" as const, prestoReached: false }
 	const view = (over: Partial<GetStartedInput> = {}, flags: Partial<GetStartedFlags> = {}) =>
 		getStartedView({ ...base, ...over, flags: { ...NONE, ...flags } })
@@ -167,6 +170,15 @@ describe("get started view (pure)", () => {
 		expect(view({}, { imported: true })).toEqual(nothing)
 		expect(view({ funds: "some" }, { imported: true })).toEqual(nothing)
 		expect(view({ type: "passkey" }, { imported: true })).toEqual(nothing)
+	})
+
+	test("a later password profile shows its phrase alone, with no Hide, and the banner once funded", () => {
+		expect(view({}, { notFirst: true })).toEqual({ banner: false, items: ["phrase"], canHide: false })
+		expect(view({ funds: "some" }, { notFirst: true })).toEqual({ banner: true, items: [], canHide: false })
+	})
+
+	test("a later passkey profile shows no card and no banner", () => {
+		expect(view({ type: "passkey" }, { notFirst: true })).toEqual({ banner: false, items: [], canHide: false })
 	})
 
 	test("no card once every item is done", () => {

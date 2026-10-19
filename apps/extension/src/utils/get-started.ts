@@ -9,16 +9,17 @@ import {
 	getStartedHiddenKey,
 	getStartedPhraseSavedKey,
 	profileImportedKey,
+	profileNotFirstKey,
 } from "@/utils/profile-ui-keys"
 import { storageLocalGet, storageLocalSet } from "@/utils/storage"
 
 /** The slice of a gas balance read the reminders need (`stores/balances.store.ts`' `GasSlice`). */
 type GasRead = { display?: { publicFeeJuice: string | null; privateFeeJuice: string | null }; status: string }
 
-export type GetStartedFlag = "phraseSaved" | "backupSaved" | "aztecOpened" | "hidden" | "imported"
+export type GetStartedFlag = "phraseSaved" | "backupSaved" | "aztecOpened" | "hidden" | "imported" | "notFirst"
 
-/** The flags a page may set; `imported` has one writer, the profile service, beside the row. */
-export type MarkableGetStartedFlag = Exclude<GetStartedFlag, "imported">
+/** The flags a page may set; `imported` and `notFirst` have one writer, the profile service, beside the row. */
+export type MarkableGetStartedFlag = Exclude<GetStartedFlag, "imported" | "notFirst">
 
 export type GetStartedFlags = Readonly<Record<GetStartedFlag, boolean>>
 
@@ -28,6 +29,7 @@ const KEYS: Readonly<Record<GetStartedFlag, (profileId: string) => string>> = {
 	aztecOpened: getStartedAztecOpenedKey,
 	hidden: getStartedHiddenKey,
 	imported: profileImportedKey,
+	notFirst: profileNotFirstKey,
 }
 
 const FLAGS = Object.keys(KEYS) as GetStartedFlag[]
@@ -104,6 +106,18 @@ const aztecShown = (i: Ready) => !i.flags.aztecOpened && !i.flags.hidden
 const feeJuiceShown = (i: Ready) => i.feeJuice === "none" && !i.flags.hidden
 const prestoShown = (i: Ready) => !i.prestoReached && !i.flags.hidden
 
+/** Every row but the phrase. A profile made beside another shows none: the person met the general
+ *  rows on the install's first profile, and a passkey is its own backup. */
+function firstProfileItems(i: Ready): GetStartedItem[] {
+	if (i.flags.notFirst) return []
+	const items: GetStartedItem[] = []
+	if (backupShown(i)) items.push("backup")
+	if (aztecShown(i)) items.push("aztec")
+	if (feeJuiceShown(i)) items.push("feeJuice")
+	if (prestoShown(i)) items.push("presto")
+	return items
+}
+
 type Ready = GetStartedInput & { type: "password" | "passkey"; flags: GetStartedFlags; prestoReached: boolean }
 
 /**
@@ -120,10 +134,7 @@ export function getStartedView(input: GetStartedInput): GetStartedView | null {
 	const banner = phrase && funds === "some"
 	const items: GetStartedItem[] = []
 	if (phrase && !banner) items.push("phrase")
-	if (backupShown(ready)) items.push("backup")
-	if (aztecShown(ready)) items.push("aztec")
-	if (feeJuiceShown(ready)) items.push("feeJuice")
-	if (prestoShown(ready)) items.push("presto")
+	items.push(...firstProfileItems(ready))
 	return { banner, items, canHide: items.some((item) => item !== "phrase") }
 }
 

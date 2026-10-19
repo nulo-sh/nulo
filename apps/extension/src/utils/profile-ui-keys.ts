@@ -14,6 +14,7 @@ const GET_STARTED_BACKUP_SAVED_PREFIX = "nulo:ui:getStartedBackupSaved@"
 const GET_STARTED_AZTEC_OPENED_PREFIX = "nulo:ui:getStartedAztecOpened@"
 const GET_STARTED_HIDDEN_PREFIX = "nulo:ui:getStartedHidden@"
 const PROFILE_IMPORTED_PREFIX = "nulo:ui:profileImported@"
+const PROFILE_NOT_FIRST_PREFIX = "nulo:ui:profileNotFirst@"
 
 /** Each prefix ends in `@`, so a key is its prefix followed by one whole profile id. */
 export const PROFILE_UI_KEY_PREFIXES: readonly string[] = [
@@ -26,6 +27,7 @@ export const PROFILE_UI_KEY_PREFIXES: readonly string[] = [
 	GET_STARTED_AZTEC_OPENED_PREFIX,
 	GET_STARTED_HIDDEN_PREFIX,
 	PROFILE_IMPORTED_PREFIX,
+	PROFILE_NOT_FIRST_PREFIX,
 ]
 
 /** Per-profile map of chain id → pinned token contracts; a UI preference, never backed up. */
@@ -48,6 +50,9 @@ export const getStartedHiddenKey = (profileId: string) => `${GET_STARTED_HIDDEN_
 
 /** Set by the profile service when a phrase, passkey or backup import commits the row; never on a create. */
 export const profileImportedKey = (profileId: string) => `${PROFILE_IMPORTED_PREFIX}${profileId}`
+
+/** Set by the profile service when a create commits while another profile exists; never on an import. */
+export const profileNotFirstKey = (profileId: string) => `${PROFILE_NOT_FIRST_PREFIX}${profileId}`
 
 /** The exact keys `profileId` can hold: `p1`'s never include `p10`'s. */
 export const profileUiKeys = (profileId: string): string[] => PROFILE_UI_KEY_PREFIXES.map((prefix) => `${prefix}${profileId}`)

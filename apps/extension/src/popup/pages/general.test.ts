@@ -185,6 +185,23 @@ describe("Home — an imported profile", () => {
 	})
 })
 
+describe("Home — a later profile", () => {
+	const NOT_FIRST = { "nulo:ui:profileNotFirst@p1": true }
+
+	test("a later password profile shows its phrase row alone, with no Hide", async () => {
+		gas = ZERO
+		const w = await mountHome("password", NOT_FIRST)
+		expect(w.findAll('[data-testid^="get-started-"]').map((row) => row.attributes("data-testid"))).toEqual(["get-started-phrase"])
+	})
+
+	test("a later passkey profile shows no card, and Home still settles", async () => {
+		gas = ZERO
+		const w = await mountHome("passkey", NOT_FIRST)
+		expect(has(w, "get-started")).toBe(false)
+		expect(w.get('[data-testid="home-scroller"]').attributes("data-reminders-settled")).toBe("true")
+	})
+})
+
 describe("Home — what the reminders do", () => {
 	test("How Aztec works writes its flag before the tab opens", async () => {
 		gas = ZERO

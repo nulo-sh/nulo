@@ -57,7 +57,7 @@ One issue, one arc, one PR against `dev`, stacked on #743 (D-orch-1: no `gh stac
 
 ## Arc 1 (#769)
 
-### Phase 1: the flag, its write and the rule
+### Phase 1: the flag, its write and the rule ✓ (2026-10-19, [lessons/phase-1.md](lessons/phase-1.md))
 Files: `src/utils/profile-ui-keys.ts`, `src/utils/get-started{,.test}.ts`, `src/composables/useGetStarted{,.test}.ts`, `src/wallet/services/profile/service{.ts,.integration.test.ts}`, `src/popup/pages/general.test.ts`, the regenerated `src/types/auto-imports.d.ts`.
 Tests:
 - `service.integration.test.ts`, in "an import records its profile as imported; a create does not" (renamed to cover both flags):
