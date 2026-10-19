@@ -34,6 +34,17 @@ export type ProtocolAddresses = { sponsored: string; private: string }
 /** Stored shape strips the in-memory `isProtocol` decoration. */
 type StoredFpc = Omit<FpcInfo, "isProtocol">
 
+/** What a row write is fenced against: the profile's deletion epoch, and the network's
+ *  reservations since the liveness mark `since`. */
+type WriteScope = {
+	fence: { profileId: string; epoch: number }
+	deletion: ReturnType<ProfileService["getDeletionState"]>
+	networkId: string
+	since: number
+}
+
+const hasRow = (rows: readonly StoredFpc[], type: FpcType, address: string) => rows.some((f) => f.type === type && f.address === address)
+
 export class FpcService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()("getFpcs", "getFpc", "addFpc", "updateFpc", "updateFpcAddress", "deleteFpc")
 	public static name = FPC_SERVICE_NAME
@@ -120,9 +131,8 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		// its writes need the same deletion fence as addFpc.
 		const fence = await this.profileService.captureExecutionFence()
 		const deletion = this.profileService.getDeletionState()
-		const profile = { id: fence.profileId }
 		const allFpcs = await this.storage.getValues()
-		let result = allFpcs.filter((fpc) => fpc.profileId === profile.id && (chainId === undefined || fpc.chainId === chainId))
+		const result = allFpcs.filter((fpc) => fpc.profileId === fence.profileId && (chainId === undefined || fpc.chainId === chainId))
 		this.logDebug(
 			`getFpcs: chainId=${chainId}, allFpcs=${allFpcs.length}, filtered=${result.length}, types=${result.map((f) => `${f.type}:${f.name}`).join(", ")}`,
 		)
@@ -134,49 +144,45 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		}
 
 		const protocols = await this.getOrComputeProtocolAddresses(chainId)
-
-		// Auto-discover missing protocol FPCs (SponsoredFPC, PrivateFPC)
-		const missingBeforeLock =
-			!result.some((f) => f.type === FpcType.DefaultSponsoredFpc && f.address === protocols.sponsored) ||
-			!result.some((f) => f.type === FpcType.PrivateFpc && f.address === protocols.private)
-		if (!missingBeforeLock) return result.map((f) => this.decorate(f, protocols))
+		const hasSponsoredFpc = hasRow(result, FpcType.DefaultSponsoredFpc, protocols.sponsored)
+		const hasPrivateFpc = hasRow(result, FpcType.PrivateFpc, protocols.private)
+		if (hasSponsoredFpc && hasPrivateFpc) return result.map((f) => this.decorate(f, protocols))
 
 		this.logInfo("Discovering missing protocol FPCs...")
-		// Sentinel shape: the concurrent-holder early return maps UNDER the lock
-		// (as today), while the tail mapping below stays after release. `undefined`
-		// is the no-early-return sentinel — the mapped value is always an array.
-		const early = await this.lock.withLock(async () => {
-			// Re-read storage now that we hold the lock. A prior holder in the
-			// queue may have just completed discovery — if so, skip the PXE
-			// work entirely. Without this, every queued caller independently
-			// re-runs the full registration chain against stale state, and
-			// one wedged PXE call pins ALL of them for up to Lock.MAX_HOLD_MS.
-			const freshAllFpcs = await this.storage.getValues()
-			result = freshAllFpcs.filter((fpc) => fpc.profileId === profile.id && fpc.chainId === chainId)
-			const hasSponsoredFpc = result.some((f) => f.type === FpcType.DefaultSponsoredFpc && f.address === protocols.sponsored)
-			const hasPrivateFpc = result.some((f) => f.type === FpcType.PrivateFpc && f.address === protocols.private)
-			this.logDebug(`getFpcs (under lock): hasSponsoredFpc=${hasSponsoredFpc}, hasPrivateFpc=${hasPrivateFpc}`)
-			if (hasSponsoredFpc && hasPrivateFpc) {
-				this.logDebug("Discovery skipped — already completed by concurrent holder")
-				return result.map((f) => this.decorate(f, protocols))
-			}
+		await this.discoverProtocolFpcs(chainId, hasSponsoredFpc, hasPrivateFpc, fence, deletion)
+		// Re-read: a purge may have swept a row stored here, or a concurrent discovery stored one.
+		return (await this.rowsOn(fence.profileId, chainId)).map((f) => this.decorate(f, protocols))
+	}
 
-			const network = await resolveNetworkByChainId(this.networkService, chainId)
-			const pxe = this.pxeService.getPXE(networkInfoFrom(network))
-			const toDiscover = await this.collectMissingProtocolInstances(hasSponsoredFpc, hasPrivateFpc)
-
-			for (const item of toDiscover) {
-				try {
-					result.push(await this.registerAndStoreProtocolFpc(item, pxe, chainId as number, network, fence, deletion))
-				} catch (err) {
-					this.logWarn(`getFpcs: Failed to discover FPC ${item.instance.address.toString()}:`, err)
-					this.logError(`Failed to discover FPC ${item.instance.address.toString()}`, err)
-				}
+	/** Registers with no lock held: a cold runtime's registration waits on the node, and the
+	 *  profile purge takes this service's lock before it stops the PXE's retries. Each row is
+	 *  stored right after its own registration, so a purge between items sweeps or refuses it. */
+	private async discoverProtocolFpcs(
+		chainId: number,
+		hasSponsoredFpc: boolean,
+		hasPrivateFpc: boolean,
+		fence: { profileId: string; epoch: number },
+		deletion: ReturnType<ProfileService["getDeletionState"]>,
+	): Promise<void> {
+		const network = await resolveNetworkByChainId(this.networkService, chainId)
+		const since = await this.networkService.captureLiveness(network.id)
+		if (since === undefined) return
+		const scope: WriteScope = { fence, deletion, networkId: network.id, since }
+		const pxe = this.pxeService.getPXE(networkInfoFrom(network))
+		for (const item of await this.collectMissingProtocolInstances(hasSponsoredFpc, hasPrivateFpc)) {
+			try {
+				const type = this.detectFpcType(item.artifact)
+				getFpcHandler(type).validateArtifact(item.artifact)
+				// A purge since the mark wipes the chain's PXE state: a registration now would serve no row.
+				if (!(await this.networkService.isNetworkLive(network.id, since))) return
+				await pxe.registerContract({ instance: item.instance, artifact: item.artifact })
+				this.logInfo(`Registered protocol FPC: ${item.instance.address.toString()}`)
+				await this.lock.withLock(() => this.storeProtocolFpc(item, type, chainId, scope))
+			} catch (err) {
+				this.logWarn(`getFpcs: Failed to discover FPC ${item.instance.address.toString()}:`, err)
+				this.logError(`Failed to discover FPC ${item.instance.address.toString()}`, err)
 			}
-			return undefined
-		})
-		if (early) return early
-		return result.map((f) => this.decorate(f, protocols))
+		}
 	}
 
 	/** Must derive through the same helpers as getOrComputeProtocolAddresses, or the
@@ -196,48 +202,42 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		return toDiscover
 	}
 
-	/** One protocol FPC's register + store, called only UNDER the discovery
-	 *  lock. Discovery is best-effort per item (the caller's catch keeps
-	 *  failures soft), but its WRITES carry the same obligations as addFpc:
-	 *  never land for a deleted profile or a mid-purge chain — the deletion
-	 *  fence sequence (assert → network-live check → write → re-check →
-	 *  compensating delete) is one contiguous span here. Throws propagate to
-	 *  the caller's per-item catch. */
-	private async registerAndStoreProtocolFpc(
-		item: ProtocolFpc,
-		pxe: ReturnType<PxeServiceClient["getPXE"]>,
-		chainId: number,
-		network: { id: string },
-		fence: { profileId: string; epoch: number },
-		deletion: ReturnType<ProfileService["getDeletionState"]>,
-	): Promise<StoredFpc> {
-		const { instance: contractInstance, artifact: contractArtifact } = item
-		await pxe.registerContract({ instance: contractInstance, artifact: contractArtifact })
-		this.logInfo(`Registered protocol FPC: ${contractInstance.address.toString()}`)
-
-		const type = this.detectFpcType(contractArtifact)
-		const fpcHandler = getFpcHandler(type)
-		fpcHandler.validateArtifact(contractArtifact)
-
-		const id = await nextRandomId(this.storage)
+	/** Caller holds the lock. Two discoveries can both register; the second finds the row here. */
+	private async storeProtocolFpc(item: ProtocolFpc, type: FpcType, chainId: number, scope: WriteScope): Promise<void> {
+		const address = item.instance.address.toString()
+		if (hasRow(await this.rowsOn(scope.fence.profileId, chainId), type, address)) {
+			this.logDebug("Discovery skipped — already completed by concurrent holder")
+			return
+		}
 		const fpc: StoredFpc = {
-			id,
-			profileId: fence.profileId,
+			id: await nextRandomId(this.storage),
+			profileId: scope.fence.profileId,
 			chainId,
 			type,
-			address: contractInstance.address.toString(),
+			address,
 			name: type === FpcType.PrivateFpc ? PRIVATE_FPC_DEFAULT_NAME : SPONSORED_FPC_DEFAULT_NAME,
 		}
+		await this.writeFencedRow(fpc, scope)
+	}
+
+	/** Caller holds the lock the sweeps take, so a row lands before a sweep or is refused: the
+	 *  epoch covers a profile deletion, the mark a network delete or reset since it was taken. */
+	private async writeFencedRow(fpc: StoredFpc, scope: WriteScope): Promise<void> {
+		const { fence, deletion } = scope
 		deletion.assertCurrent(fence.profileId, fence.epoch)
-		if (!(await this.networkService.isNetworkLive(network.id))) {
+		if (!(await this.networkService.isNetworkLive(scope.networkId, scope.since))) {
 			throw new Error("network deleted")
 		}
-		await this.storage.set(id, fpc)
+		await this.storage.set(fpc.id, fpc)
+		// The set awaits — compensate before the row becomes observable.
 		if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
-			await this.storage.delete(id)
+			await this.storage.delete(fpc.id)
 			throw profileDeletedError(fence.profileId)
 		}
-		return fpc
+	}
+
+	private async rowsOn(profileId: string, chainId: number): Promise<StoredFpc[]> {
+		return (await this.storage.getValues()).filter((fpc) => fpc.profileId === profileId && fpc.chainId === chainId)
 	}
 
 	public async getFpc(id: string): Promise<FpcInfo> {
@@ -262,6 +262,10 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		const fence = await this.profileService.captureExecutionFence()
 		const deletion = this.profileService.getDeletionState()
 		const network = await this.networkService.getNetwork(networkId)
+		const since = await this.networkService.captureLiveness(networkId)
+		if (since === undefined) {
+			throw new Error("network deleted")
+		}
 		const pxe = this.pxeService.getPXE(networkInfoFrom(network))
 
 		const fpcInstance = await pxe.getContractInstance(AztecAddress.fromStringUnsafe(address))
@@ -282,25 +286,15 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		const protocols = await this.getOrComputeProtocolAddresses(network.chainId)
 
 		return await this.lock.withLock(async () => {
-			const id = await nextRandomId(this.storage)
 			const fpc: StoredFpc = {
-				id,
+				id: await nextRandomId(this.storage),
 				profileId: fence.profileId,
 				chainId: network.chainId,
 				type,
 				address,
 				name,
 			}
-			deletion.assertCurrent(fence.profileId, fence.epoch)
-			if (!(await this.networkService.isNetworkLive(networkId))) {
-				throw new Error("network deleted")
-			}
-			await this.storage.set(id, fpc)
-			// The set awaits — compensate before the row becomes observable.
-			if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
-				await this.storage.delete(id)
-				throw profileDeletedError(fence.profileId)
-			}
+			await this.writeFencedRow(fpc, { fence, deletion, networkId, since })
 			const decorated = this.decorate(fpc, protocols)
 			this.emit("onFpcAdded", decorated)
 			return decorated

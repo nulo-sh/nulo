@@ -106,7 +106,7 @@ None. No copy, layout, row or format changes; `getFpcs` returns the same rows. T
 
 ## Phases
 
-### Phase 1: discovery registers outside the FPC lock ✗
+### Phase 1: discovery registers outside the FPC lock ✓
 
 Steps:
 1. Add `captureLiveness` and the `since` parameter to `NetworkService`, with the network test case.
@@ -165,7 +165,7 @@ Steps:
 ## Delivery
 
 - Branch `fpc-discovery-1-a1` off a fresh `origin/dev`, with this plan's commit cherry-picked. One PR, ready, no label at creation; `gh pr create --base dev`. Add a label afterwards only if a path filter would skip a suite the change needs.
-- Title: `fix(fpc): register protocol FPCs outside the FPC lock so a reset never waits` (76 characters).
+- Title: `fix(fpc): register protocol fpcs outside the fpc lock so a reset never waits` (76 characters; commitlint wants a lower-case subject).
 - Body: what changed and why; the Phase 1 and 2 gates with outcomes; the before and after purge times and the committed file's wall-clock per browser; `Closes #553`; the footer line.
 - `/code-review`: off. Parallel lanes: none (two serial phases, one PR).
 
