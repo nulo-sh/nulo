@@ -359,7 +359,7 @@ describe("a guarded launch", () => {
 		expect(stopped()).toEqual([true, true])
 	})
 
-	/** A stand-in node for `lb.drpc.live` whose failures and stop are logged beside the browser's close. */
+	/** A stand-in node whose failures and stop are logged beside the browser's close. */
 	function heldNode(failures: string[], order: string[], holding = () => true): HeldNode {
 		return {
 			host: "lb.drpc.live",

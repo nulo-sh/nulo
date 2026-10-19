@@ -28,7 +28,8 @@ export interface EgressGuard {
 	attempts(): readonly EgressAttempt[]
 	/** More distinct `host:port` pairs arrived than the record keeps. */
 	overflowed(): boolean
-	/** From now on, also counts in `held` each attempt at `host`, on any port, that arrives while `holding()` is true. */
+	/** From now on, also counts in `held` each attempt at `host`, on any port, that arrives while
+	 *  `holding()` is true. Replaces an earlier watch on the host. */
 	watch(host: string, holding: () => boolean): void
 	/** Idempotent. Classifies any unfinished request, then ends every socket within 2 s. */
 	stop(): Promise<void>
@@ -44,13 +45,12 @@ export interface EgressCanary {
 export interface HeldNode {
 	/** The node's host, as the guard records it. */
 	host: string
-	/** Whether the launch's interception holds the node's origin now: not while a kill or a spec's own
-	 *  interception has it, nor while it re-arms. */
+	/** The launch interception's `holding()`. */
 	holding(): boolean
 	requests(): number
 	/** Every arm or reply the interception failed, and a spec's interception left unstopped; read
-	 *  while the browser is open. A request it never saw reaches the guard, which holds it against the
-	 *  launch when it arrives while `holding()`. */
+	 *  while the browser is open. A request it never saw reaches the guard, and fails the close when it
+	 *  arrives while `holding()` and before the close begins. */
 	failures(): Promise<string[]>
 	/** Safe once the browser is closed. */
 	stop(): Promise<void>
@@ -82,8 +82,8 @@ export const CRS_HOSTS: readonly string[] = ["crs.aztec-cdn.foundation", "crs.az
 /** Wallet and spec hosts an e2e build tries and the guard refuses, each with why it is tried. */
 export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
 	[
-		"lb.drpc.live",
-		"the default Testnet node: the background reads its status at popup start, the offscreen PXE on Home. The launch's stand-in answers it once settled; a request from before that, from a background kill or while a spec's own interception has the origin is refused here, and one that arrives while the stand-in holds the origin fails the close",
+		LIVE_NODE_HOST,
+		"the default Testnet node: the background reads its status at popup start, the offscreen PXE on Home. The launch's stand-in answers it once settled; a request from before that, from a background kill or while a spec's own interception has the origin is refused here, and one that arrives while the stand-in holds the origin, before the close begins, fails the close",
 	],
 	["api.coingecko.com", "the price fetch on profile create, unlock, popup open with an incomplete cache, and every 3 min"],
 	[

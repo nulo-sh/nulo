@@ -42,10 +42,16 @@ All runs on this host at retry 0 (`NULO_E2E_RETRY=0`), load1 under 150 at each s
 
 ## What the trace says (I2, I4)
 
-- Over 363 watched launches and 84 kill or swap windows on both browsers, the guard saw two `lb.drpc.live` attempts beside the red run: the control case's own on Chrome (held, as asserted twice) and one inside a Firefox kill window (unheld). None at an arm's edge, none before a hold, none after a close began. I2 and I4 stay plausible and unreproduced; per D5 the close-out files them as one closed `known-limit` issue.
+- Over 365 watched launches and 86 kill or swap windows on both browsers, the guard saw two `lb.drpc.live` attempts beside the red run: the control case's own on Chrome (held, as asserted twice) and one inside a Firefox kill window (unheld). None at an arm's edge, none before a hold, none after a close began. I2 and I4 stay plausible and unreproduced; per D5 the close-out files them as one closed `known-limit` issue.
 - The trace was removed (`git status` clean but this log) before the review loop.
 
 ## Wall-clock
 
 - Smoke: Chrome 1858 s, Firefox 2288 s (ci-e2e-hygiene-1 measured 1635 s and 2345 s at be8ae1c5, under other load; the gap is load, not this change). Network subset: Chrome 1718 s, Firefox 1788 s.
 - The one added e2e case: 3.9 s (Chrome smoke), 4.0 s (Chrome network), 5.2 s (Firefox smoke), 6.5 s (Firefox network), against the 6-10 s estimate.
+
+## Review loop, round 1 (2026-10-19)
+
+- Codex (gpt-6.1-sol, high, session `01a152de`) over `19399c82..a1d5a008`: conditional approve, 3 findings, all accepted. #1 Medium, demonstrated in memory: the control case's regex matched a substring, so a held failure plus any other close failure passed; now anchored to the whole held-only message. #2 Low: three statements omitted the close cut-off; qualified. #3 Low: the edited `heldNode` comment narrated; restored to its original wording.
+- Opus diff review (alongside): conditional approve, 6 Low. #1 and #2 the same as Codex's, plus the cut-off in the `lb.drpc.live` reason. #3 the README remedy promised a timing read nothing records: rewritten (a caller missing from every arm's attach lines on Chrome; the spec's kill and interception calls on Firefox; a small count stays unresolved). #4 a second `watch` replaces the first (needs a spec calling `watch`, none does): stated in the doc. #5 `HeldNode.holding` doc trimmed, the pun reworded. #6 the reason is keyed by `LIVE_NODE_HOST`, as the list's is by `LIVE_LIST_HOST`.
+- After the fixes: lint and `typecheck:all` exit 0; the three unit files 51 passed; the control spec green on both browsers at retry 0 (Chrome 8 tests, the case 3.1 s; Firefox 8 tests, 6.9 s).

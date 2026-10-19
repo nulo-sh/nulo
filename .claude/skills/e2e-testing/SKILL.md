@@ -165,7 +165,7 @@ runtime env var can never arm a build-time flag.
   direct (`fixtures/egress-guard.ts`; README § Egress guard). `close` fails on any host no list
   declares, a canary connection, a direct host seen at the guard, a failure of the stand-in's
   interception, or a Testnet-node request that reached the guard while the stand-in held its
-  origin. A red naming a wallet or spec host means a new outside call: declare it in
+  origin, before the close began. A red naming a wallet or spec host means a new outside call: declare it in
   `DECLARED_REFUSALS` with why; a browser's own host goes, by exact name, in its driver's
   `ownHosts`. A held node request means a target the interception does not cover dialed the node:
   on Chrome rerun with `NULO_E2E_INTERCEPT_LOG=1` and find it; never declare the host or loosen the check.
