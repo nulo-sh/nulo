@@ -69,7 +69,7 @@ Three rules in `Popover`, for every consumer (D2): the panel sits in the Tab ord
 - Tests (`LogsToolbar.test.ts`, a new `describe` whose own mount passes a `Popover` stub that renders both slots, so the triggers test still counts three buttons): each panel's rows are `button[type=button]` whose `aria-pressed` reads the filter, Select All's reads `allOptionsSelected`; a click emits `selectAll` or `toggleFilter` with its key (control); a repeat Enter on a row is prevented, a fresh Enter is not (control).
 - **Gate**: lint; typecheck; `cd apps/extension && bun run test -- src/components/JsonViewer/LogsToolbar.test.ts`. Pass: exit 0 each.
 
-### Phase 3: the browser proofs, pictures and docs
+### Phase 3: the browser proofs, pictures and docs ✓
 
 - E2E (`apps/extension/tests/e2e/viewers-csp.test.ts`), one scenario after the toolbar's keyboard one. Failure mode: a row out of the Tab order, a key that does not toggle it, a clipped or missing ring, or a panel edge that does not close onto the right control; jsdom has no Tab order, no key activation and no computed outline, and only a browser runs its own Tab from the refocused trigger (F5). Steps: `tabTo` Level, Enter, `waitForFocus` on `logs-filter-level-all` and its ring `solid 2px -2px` in the accent; Space then Enter each flip its `aria-pressed`; Tab to `logs-filter-level-item-DEBUG`, Space flips its `aria-pressed`, Space again restores it; Tab to `logs-filter-level-item-ERROR`; Tab: the panel hidden, focus and ring on `logs-more-trigger`; Shift+Tab to Level, Enter, Shift+Tab: the panel hidden, focus on `logs-filter-level`; Shift+Tab to Source, Enter, type `pxe`, Tab twice to `logs-filter-source-item-pxe-client`, Tab: the panel hidden, focus on `logs-filter-level`; Shift+Tab, Enter: `logs-filter-source-all` shows (the search cleared), Escape. Then `pointerClick` Level: focus on `logs-filter-level-all` with `focusRing(...).ring` matching `/^none /`, which needs a clicked button to take focus, as Chrome and Firefox do on the harness's Linux (a comment says so); Escape. In the Firefox picture run, note whether Source's scroll box is a Tab stop between the field and Select All (it is never at an edge). Estimate 6 s per browser, measured in the PR.
 - Docs: one bullet in `CLAUDE.md` § Keyboard & focus order (a popover's panel sits after its trigger in the Tab order, and focus leaving closes it); in `packages/design/README.md`, `Popover`'s keyboard contract and its content rule (no hidden control, D7).
@@ -87,7 +87,7 @@ Three rules in `Popover`, for every consumer (D2): the panel sits in the Tab ord
 
 ## UI impact
 
-The lane's whole visible budget is focus rings. Logs window, Source and Level panels: each row and Select All shows the 2 px accent ring, inset, on keyboard focus only. Mouse path pixel-identical (Phase 3). Accessibility calls D1-D9 and D12 are stated in the PR body as made under the owner's 2026-10-19 delegation, with two consequences named: a pointer open now puts focus on the panel's first control (no ring), so a key pressed next acts there; and a held Enter that opens Level toggles nothing.
+The lane's whole visible budget is focus rings. Logs window, Source and Level panels: each row and Select All shows the 2 px accent ring, inset, on keyboard focus only. Mouse path pixel-identical (Phase 3). Accessibility calls D1-D9, D12 and D15 are stated in the PR body as made under the owner's 2026-10-19 delegation, with two consequences named: a pointer open now puts focus on the panel's first control (no ring), so a key pressed next acts there; and a held Enter that opens Level toggles nothing.
 
 ## Decision ledger
 
@@ -107,6 +107,7 @@ The lane's whole visible budget is focus rings. Logs window, Source and Level pa
 | D12 | No `aria-expanded` or panel role | adding them | as #852 decided for the triggers; not in #851 |
 | D13 | One arc, one PR | two PRs | one issue, about 80 lines |
 | D14 | A leaving panel is `inert` | leave it focusable for its leave (Opus: harmless) | Codex's trace: the card stays connected for its leave (a frame or two, `fastfade` has no CSS), and a held Tab or Shift+Tab can reach a closed panel's control, whose removal drops focus to the page. The consequence is small, the fix one attribute with no state: taken |
+| D15 | The Source list's scroll box is out of the Tab order (`tabindex="-1"`) | leave it | found by the Firefox capture: Tab from the search field stopped on the box, ringed in the UA's blue, before Select All; its rows take focus and scroll into view, and Chrome already skips a scroller with focusable content |
 
 ## Audit verdicts
 
@@ -127,10 +128,12 @@ The lane's whole visible budget is focus rings. Logs window, Source and Level pa
 
 **Round 2** (Codex, resumed, verification): `approve`, no finding.
 
+**Post-implementation** (diff `origin/dev...logs-keyboard-1-a1`). Round 1 ran while Phase 3's browser runs waited for load (a deviation from "after Phase 4": later changes went to the resumed round). Codex (gpt-6.1-sol, high, session `01a154b3`) round 1: `findings: 1`, Low: two helper comments restated their conditions and the CSS comment narrated its declarations → trimmed. Opus 5.5 diff review beside it: `findings: 5`, all Low, all taken: the existing Level Escape loop now waits for focus inside the panel, and its comment says each panel takes focus; one-line whys at `focusIn` (no modality test) and `onFocusin` (`focusin`, not `focusout`), which the archived plan would otherwise hold alone; the listener order before the pinned throw stated; the README's hidden-control wording; `INSET`'s comment deleted. Then the Firefox capture found its scroll box stop (D15). Codex round 2 (resumed, verifying through D15): `clean`. Converged.
+
 ## Delivery
 
 - PR title: `fix(logs): filter panels from the keyboard, closed when tab leaves them` (74 characters). Opened ready, no label; add `e2e:extension-smoke` only if the path filter skipped smoke.
-- Body: the call and its delegation, D1-D9 and D12 as accessibility calls, the two consequences, the pictures, the e2e wall-clock per browser before and after, the gates with outcomes, `Closes #851`.
+- Body: the call and its delegation, D1-D9, D12 and D15 as accessibility calls, the two consequences, the pictures, the e2e wall-clock per browser before and after, the gates with outcomes, `Closes #851`.
 - Lane viewer-flake-1 (#849) edits `viewers-csp.test.ts`: if it lands first, merge `origin/dev` and keep both.
 
 ## Post-implementation
