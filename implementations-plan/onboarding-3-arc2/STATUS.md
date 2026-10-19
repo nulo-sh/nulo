@@ -8,3 +8,9 @@
 - 2026-10-19 17:10Z: phase 2 Chrome smoke (head, retry 0): `stale-network` 4/4, `security-backup` 3/3.
 - 2026-10-19 17:15Z: phase 3: #867 filed and closed (`known-limit`).
 - 2026-10-19 17:25Z: phase 4: capture spec run three times on Chrome, deleted each time; 30 PNGs in `screenshots/`, linked from OWNER-ASKS.md.
+- 2026-10-19T17:26Z: fix loop converged: round 1 (Codex one Low, Opus seven Lows; all fixed, d2fa6663), round 2 clean.
+- 2026-10-19 18:20Z: phase 2 gate: Firefox smoke security-backup 3/3 and stale-network 4/4; network fee-methods 8/8 on Chrome (agent.sh, retry 0).
+- 2026-10-19 18:52Z: Firefox S1a re-timed, back to back at load 145 to 210: base 26.5 s and 20.4 s, head 25.7 s and 22.3 s.
+- 2026-10-19 19:38Z: phase 5 full Chrome smoke (head, retry 0): 260 passed, 4 failed, 14 skipped (64 files, 2714 s). The four were all `appearance` tests, each timing out at 60 s while load1 ran 400 to 975. The one rerun of that file at load 146 passed 4/4 in 12.6 s.
+- 2026-10-19 20:45Z: phase 5 full Firefox smoke (head, retry 0): 264 passed, 14 skipped (64 files, 2937 s).
+- 2026-10-19 20:55Z: phase 5 `bun run test:all` 0 (extension 14,221 passed). The temporary baseline worktree is removed.

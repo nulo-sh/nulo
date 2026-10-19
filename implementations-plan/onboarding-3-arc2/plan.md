@@ -109,7 +109,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
 - `git merge origin/onboarding-4-a1` (9c0d5c25, clean; 8 signed commits; its archived plan kept), then `origin/dev` (56361a49, clean, 6 commits), then `bun install --frozen-lockfile`.
 - Gate: `F` (pass; one source-walker test timed out at load 200 and passed on its rerun) and `bun run test:all` (pass).
 
-**2. The matrix, measured.**
+**2. The matrix, measured.** ✓ (2026-10-19; [lessons/phase-2.md](lessons/phase-2.md))
 - Change map:
   - `src/popup/pages/general.test.ts`: back the balances mock with a `reactive` map keyed by `activityScopeKey(scope)`, as the real store is (`stores/balances.store.ts:692-694`). Then a mounted Home sees an entry change. New cases:
     - (M6, M14) a second account, then a second network with another chain id: the rows follow each scope's entry, and the flags stay;
@@ -155,7 +155,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
   - OA-20: A (no card) and B (F alone).
 - Gate: 20 padding PNGs and 10 matrix PNGs (OA-19 A and B reuse OA-18's), light and dark, each 360×600. `git status` shows no capture spec.
 
-**5. Timing and delivery.**
+**5. Timing and delivery.** Local gates ✓ (2026-10-19; [lessons/phase-5.md](lessons/phase-5.md)); push and CI below.
 - Measure `security-backup` on Chrome and on Firefox at retry 0, each with load1 < 150 (D32):
   - before: 3f9f958c, built in a temporary detached worktree under the cache directory and removed afterwards;
   - after: the final head.
@@ -209,6 +209,18 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
 | I3's "up to 5 minutes": a TTL changes only what a later read returns; a warm peek is not dimmed | I3 reworded; the lock/unlock eviction narrows it to a reset found inside a live session |
 | M4 "already covered at `service.integration.test.ts:1466`" | not taken: that test is this arc's new case, already in the tree the pass read |
 | The edited files' runtimes are not measured | fixed in phase 5 |
+
+**Fix loop, round 1** (2026-10-19, Codex gpt-6.1-sol high, session `01a15527`, over `56361a49..HEAD`; one Opus 5.5 diff review beside it). Codex: one Low. Opus: seven Lows, no bug.
+
+| Finding | Leg | Disposition |
+|---|---|---|
+| `getStartedRows` leaves Hide out, so the later profile's no-Hide check was lost | both | fixed: `security-backup` asserts `get-started-hide` absent |
+| No card under the takeover cannot fail: on a quarantined chain the view is null even if Home mounted | Opus | fixed: assert Home's scroller absent |
+| Matrix citations stale; M10's password half uncited | Opus | fixed |
+| The mock's own key differs from the store's | Opus | fixed: `activityScopeKey` |
+| Comments: S1a header, the mock, the `fee-methods` step | both | fixed |
+
+**Fix loop, round 2** (resumed session `01a15527`, verify only): "Clean — high confidence from static inspection." The loop converged at round 2.
 
 ## Delivery
 
