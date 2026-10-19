@@ -1,6 +1,8 @@
 ---
 plan: a11y-errors-1
 tier: light
+status: completed (delivered as #878)
+issues: "#874 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -10,6 +12,21 @@ eli5_mode: skipped (orchestrator-owned)
 base: dev @ 2f591ddd
 standard: implementations-plan/README.md § Post-implementation standard, read at 2f591ddd
 ---
+
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** delivered as one ready PR against `dev`, #878, which carries this close-out; its merge closes the plan.
+- **Shipped:** 19 error and refusal texts in 14 files from `--red` to `--txt-danger` (7 `Text` props, 12 stylesheet rules); `apps/extension/src/utils/red-text-ban.test.ts`, red with exactly those 19 on the untouched tree and five reviewed entries; `ProcessingErrorNote`'s text colour pinned; `--txt-danger` on `--nulo-surface` gated in both themes; the rule in `CLAUDE.md` and `packages/design/README.md`; 12 before/after pictures under `screenshots/`.
+- **Review loop:** the plan took Codex conditional approve (3) and Opus conditional approve (7), then a Codex approve; the arc's diff took Codex findings 2 and Opus findings 4, all fixed, then Codex findings 1, fixed, then Codex clean.
+- **Gates at the head:** after merging `origin/dev` at `b6208221`: lint, `typecheck:all`, `test:all` exit 0; `audit:vue` 0 before the merge. Chrome readings 6.00:1 light, 6.24:1 dark for every reachable error text (3.56 and 5.13 before).
+- **Deviations:** base `60fde7e7` moved to `2f591ddd` before the arc; the guard landed before the change (D11); the issue's count of 23 text sites did not hold (F2).
+- **Dropped:** a rule in `type-role-ban.test.ts`, a `Text` prop validator, a narrowed `color` type (D3); an e2e scenario (the pictures came from a scratch spec).
+- **Merge order:** #877 adds a red `Text` and needs `color="txt-danger"` and a `dev` merge if it merges after #878 (D10).
+- **Known limits:** none.
+- **Open items:** #879 (OA-1, the "Remove token" hover label), #880 (OA-2, the log viewer's error lines).
+- **Lessons:** none promoted; the rule lives in `CLAUDE.md` and the guard.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # a11y-errors-1: error text in an AA red
 
