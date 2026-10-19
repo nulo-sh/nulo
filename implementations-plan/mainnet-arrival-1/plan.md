@@ -43,7 +43,7 @@ Two arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1). 
 
 ### Phase 1 (A1) · offer every default a profile never had
 
-- **Record** `S/network/seed-offers.ts` (new): key `nulo:core:network-seeded@<profileId>` (the token seeder's `nulo:core:token-seeded@` naming), value `{ offered: ChainKind[] }` through `ValueStorage` with the zod codec `z.object({ offered: z.array(ChainKindSchema) })`, JSON-string encoded like every `ValueStorage`. An object, not a bare array, so a later field is additive (D2). A read has three outcomes (D9): `absent` (no key); `read` (its kinds); `unreadable` (bad JSON or a failed codec), for which the pass adds nothing, writes nothing and keeps the bytes, and `servesChain` predicts nothing. A storage read that rejects propagates: the bootstrap fails and retries, as on any storage failure.
+- **Record** `S/network/seed-offers.ts` (new): key `nulo:core:network-seeded@<profileId>` (the token seeder's `nulo:core:token-seeded@` naming), value `{ offered: ChainKind[] }` as a JSON string, read through `decodeRow` with the zod codec `z.object({ offered: z.array(ChainKindSchema) })` (D13). An object, not a bare array, so a later field is additive (D2). A read has three outcomes (D9): `absent` (no key); `read` (its kinds); `unreadable` (bad JSON or a failed codec), for which the pass adds nothing, writes nothing and keeps the bytes, and `servesChain` predicts nothing. A storage read that rejects propagates: the bootstrap fails and retries, as on any storage failure.
 - **Seed identity is `kind`** (D3). The classifier, the reset and `SEED_L1_BY_KIND` already key a seed by kind; a Testnet reset moves the row's chainId in place (`:1039-1066`), so a chainId-keyed record would read the moved Testnet seed as new and add a second Testnet row. A test pins that `DEFAULT_SEEDS` kinds, and their chainIds, are unique.
 - **Policy**, a pure function in the same module:
 
@@ -70,7 +70,7 @@ Two arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1). 
 
 ### The record and #865
 
-The key is a new `chrome.storage.local` root. migration-rule-1's A1 (its registry `X/wallet/storage/stored-shapes.ts` and the scan over `nulo:` literals) is not on `dev`. Whichever lands second registers it: if A1 of this lane lands first, migration-rule-1's scan finds the literal and its registry takes the entry (`read: "codec"`, `encoding: "json"`, the schema exported from `seed-offers.ts`); their scan's constructor rule also refuses `new ValueStorage(` outside `X/wallet/storage/`, so the construction then moves to their factory (the orchestrator relays this; this lane cannot write in that worktree). If theirs lands first, A1 here adds the entry, builds the store from their `valueStorage` factory, adds a `full` and a `minimal` golden, and runs `bun run baseline:storage` (before the freeze: the one stamp is rewritten; after it: `-- --additive "new per-profile key; no earlier rows"`). A2's possible new field is an optional one: additive after the freeze. Nothing here bypasses the guard; the record is never migrated for pre-1.0.0 history (P62-02).
+The key is a new `chrome.storage.local` root. migration-rule-1's A1 (its registry `X/wallet/storage/stored-shapes.ts` and the scan over `nulo:` literals) is not on `dev`. Whichever lands second registers it: if A1 of this lane lands first, migration-rule-1's scan finds the literal and its registry takes the entry (`read: "codec"`, `encoding: "json"`, the schema exported from `seed-offers.ts`); the record is a raw repository on `decodeRow`, as their plan registers the others (D13). If theirs lands first, A1 here adds the entry, adds a `full` and a `minimal` golden, and runs `bun run baseline:storage` (before the freeze: the one stamp is rewritten; after it: `-- --additive "new per-profile key; no earlier rows"`). A2's possible new field is an optional one: additive after the freeze. Nothing here bypasses the guard; the record is never migrated for pre-1.0.0 history (P62-02).
 
 ### Phase 2 (A2) · the arrival flow, after the owner's pick (OA-1)
 
@@ -104,7 +104,7 @@ The Mainnet seed itself lands only on a build whose Aztec 6.0.0 execution canari
 | # | Question | Decision | Codex r1 | Opus r1 |
 |---|---|---|---|---|
 | D1 | Arcs | A1 = phase 1 now; A2 = phases 2 + 3 after the pick and migration-rule-1's A3 | right, harness absent | right |
-| D2 | Record form | per-profile `ValueStorage` object `{ offered }`, zod codec | fits | fits |
+| D2 | Record form | per-profile JSON object `{ offered }`, zod codec (store: D13) | fits | fits |
 | D3 | Seed identity | `kind` (stable across a reset), not chainId; kinds and chainIds pinned unique | survives reset | same; pin chainIds too |
 | D4 | Profiles with rows and no record | offered = `KINDS_SEEDED_BEFORE_RECORD`, pinned by a test; A1 before any added default | needs a release cutoff | I1 holds; pin the constant |
 | D5 | Unlock drain race | `servesChain` serves a seed chain `seedsToOffer` would add; record read before rows | real; fix read order | real; same read order |
@@ -113,6 +113,7 @@ The Mainnet seed itself lands only on a build whose Aztec 6.0.0 execution canari
 | D8 | Update test | A2, on the harness, `from` = pinned v1.0.0, `to` = the candidate build (version changed), extra seed armed there only | reuse the candidate builder | not in `agent.sh`; no plan-base `from` |
 | D9 | Unreadable record | adds nothing, keeps the bytes; a storage failure propagates (was: read as absent) | absent ≠ unreadable | — |
 | D11 | Final pass r1 (Codex conditional) | test 15 parks the reader between its reads; rename proven by mutation only; the interrupted-new-profile arrival disclosed in OA-1 | accepted | — |
+| D13 | Store (implementation) | raw `storage.local` read through `decodeRow` (`X/wallet/utils/raw-row.ts`), the fail-closed repositories' absent/corrupt/valid read, instead of `ValueStorage`, whose `get` throws alike on a storage failure and a bad value (D9 needs the two apart); migration-rule-1 registers such repositories as `read: "codec"`, and its `new ValueStorage(` rule does not apply | deviation, tree wins | — |
 | D12 | Final pass r2 (Codex, resumed) | **approve**: "All three conditions are addressed … A1 can start." | approve | — |
 | D10 | Red-on-base proof | success controls red on the base; never-happens checks red under named mutations (was: every test red on the base) | — | base cannot red them |
 
@@ -126,7 +127,7 @@ The Mainnet seed itself lands only on a build whose Aztec 6.0.0 execution canari
 
 ## Assumptions
 
-- **Facts.** Recon's table (file:line in [recon.md](recon.md)); `ValueStorage.get` throws on bad JSON and on a failed codec, never deletes (`packages/wallet-core/src/storage/value-storage.ts`); vitest isolates modules per file (no `isolate: false` in `vitest.base.mts` or the extension config), so a test file that appends a seed to `DEFAULT_SEEDS` cannot reach `service.test.ts`'s "Testnet and Local Network only" pin.
+- **Facts.** Recon's table (file:line in [recon.md](recon.md)); `decodeRow` reports a stored value that does not decode as `corrupt`, never `absent` (`X/wallet/utils/raw-row.ts`); vitest runs a file's tests in order, so a `describe` that appends a seed to `DEFAULT_SEEDS` and removes it in `afterEach` cannot reach the file's "Testnet and Local Network only" pin.
 - **Inferences.** (I1) Every pre-record build seeded Testnet and Local Network (checked at `v0.31.0` and `dev`; 1.0.0 is cut from `dev`). (I2) The 6.0.0 bump moves Testnet's chainId (migration-rule-1's I4), which D3 survives by design. (I3) migration-rule-1's A3 lands the harness with the `inPlaceUpdate` shape and the `NULO_E2E_UPDATE_FROM`/`_TO` opt-in its plan names; if it changes, A2 adapts to what lands.
 - **Asks** (working assumption in brackets): OA-1, the arrival flow, its precedence, its delivery, and a hand-added Mainnet [A1 ships no visible change; A2 waits for the pick].
 
