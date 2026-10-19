@@ -320,8 +320,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		return { rows: [...rows, ...added], added, primaryId }
 	}
 
-	/** A write a profile deletion overtook is undone to the record it replaced, never to none: no
-	 *  record reads as the earlier builds' seeds, which would re-offer a default the person deleted. */
+	/** A write a deletion overtook restores a valid prior record: removing it would re-offer a default
+	 *  the person deleted. */
 	private async recordOffersLocked(
 		profileId: string,
 		record: RawRowState<SeedOffers>,

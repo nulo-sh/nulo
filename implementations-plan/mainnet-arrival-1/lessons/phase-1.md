@@ -35,3 +35,7 @@ Script: the arc's two test files run against the base `service.ts` (keeping the 
   1. A deletion overtaking the record write removed a record that had been valid; if the tombstone write then fails the profile lives on with no record, read as the earlier builds' seeds, and a default the person deleted comes back. Compensation now writes the replaced record back; the deletion test covers both priors (M14).
   2. `seedDefaultsForProfile` keeping the pointer of a target with rows had no test (M15); its doc now says what a target with rows gets.
   3. The M13 proof line above was wrong for a new profile; corrected, with a new-profile half in the concurrency test (M16).
+
+## Review round 2, 2026-10-19
+
+- **Codex** (resumed): `findings`, one low: the compensation comment's "never to none" was false with no prior record. Reworded. Checked the write-back cannot outlive a completed deletion: both entry points hold the network lock through it, and the deletion's purge takes the same lock.
