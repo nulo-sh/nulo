@@ -92,7 +92,7 @@ const onFocusin = (e: FocusEvent) => {
 	if (target instanceof Node && !triggerEl.value?.contains(target) && !cardEl.value?.contains(target)) onClose()
 }
 
-/** A closed panel lingers in the DOM for its leave; inert keeps a held Tab or a click from reaching it. */
+/** A closed panel stays in the DOM for its leave; inert keeps a held Tab or a click off it. */
 const onBeforeLeave = (el: Element) => {
 	el.setAttribute("inert", "")
 }
