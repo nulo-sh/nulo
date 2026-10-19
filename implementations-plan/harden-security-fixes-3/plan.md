@@ -1,7 +1,7 @@
 ---
 plan: harden-security-fixes-3
 tier: mid
-status: arc 1 in review; arc 2 ready (its wait cleared), arc 3 on the owner's picks
+status: arc 1 merged (#869); arc 2 in review; arc 3 on the owner's picks
 issues: "#661 (closed known limit; its SECURITY.md caveat lands in arc 1)"
 driver: claude-code
 claude_model: opus
@@ -58,7 +58,7 @@ Three arcs, one PR each against `dev`, no stack (the orchestrator's D-orch-1). A
 - I2. No dApp the wallet is tested against adds more than a handful of senders or keyed contracts per chain (playground; e2e `data-registerSender`, `senders-advanced`, `contracts-register`).
 
 **Asks** (working assumption in brackets; the orchestrator may overrule):
-- A1. The bound's figure [128 distinct tagging sources per profile and chain, a provisional policy figure: twice the 64 senders a backup carries, `ACCOUNT_STATE_CAPS.maxSendersPerNetwork`, not a measured threshold]. It is a lifetime limit for keyed contracts (the PXE removes no account) and the person's own senders and accounts use part of it.
+- A1. The bound's figure [128 distinct tagging sources per profile and chain, a provisional policy figure: twice the 64 senders a backup carries, `ACCOUNT_STATE_CAPS.maxSendersPerNetwork`, not a measured threshold]. It is a lifetime limit for keyed contracts (the PXE removes no account) and the person's own senders and accounts use part of it. **Answered:** the orchestrator's call, 2026-10-19: 128, provisional (HS3-D6).
 - A2. Every change to a screen ships only on the owner's pick (OWNER-ASKS.md), Phase 2's included (OA-6).
 
 ## Architecture & Implementation
@@ -83,7 +83,7 @@ Three arcs, one PR each against `dev`, no stack (the orchestrator's D-orch-1). A
 |---|---|
 | 1 | `SECURITY.md` |
 | 2 | `execution/dapp-send-executor.ts`, `dapp-send-executor.test.ts` (its post-send record test moves); composition tests with the real coordinator in a new `execution/dapp-send-authwit-record.composition.test.ts` |
-| 3 | `packages/extension-messaging/src/errors.ts` (one class and its table entry), `packages/aztec-runtime/src/pxe/{service,client,spec}.ts`, `execution/service.ts`, `packages/wallet-bridge/src/scope-violation.ts` (literal); tests `packages/aztec-runtime/src/pxe/tagging-source-bound.test.ts`, `execution/register-bounds.test.ts` |
+| 3 | `packages/extension-messaging/src/errors.ts` (one class and its table entry), `packages/aztec-runtime/src/pxe/{service,client,spec}.ts`, `execution/service.ts`, `packages/wallet-bridge/README.md` (the dApp contract); tests `packages/aztec-runtime/src/pxe/tagging-source-bound.test.ts`, `execution/register-bounds.test.ts`, and the account-first order in `execution/register-contract-account.real.test.ts` and `service.class-id.test.ts` (HS3-D7, HS3-D8) |
 | 4-8 | per OWNER-ASKS.md |
 
 ## Security & Adversarial Considerations
@@ -112,7 +112,7 @@ Three arcs, one PR each against `dev`, no stack (the orchestrator's D-orch-1). A
   - controls: a successful send has exactly one row; a cancel during prove writes none.
 - **Validation gate.** `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all` exit 0; the first test is red with the record back in `sentTxRecorder`. Network e2e `authwit-lifecycle.test.ts` on Chrome, retry 0, through `e2e:agent`: passes.
 
-### Phase 3 — a bound on dApp-added tagging sources (arc 2)
+### Phase 3 — a bound on dApp-added tagging sources (arc 2) — done
 
 - Build Architecture's Phase 3.
 - **Tests** (unit; a count under a write guard needs no browser):
@@ -140,6 +140,10 @@ Each phase builds its ask's option A only on that pick, with the tests and pictu
 | HS3-D3 | One bound on distinct tagging sources, under the PXE write guard, dApp path only, counted from the PXE's public reads | the cost driver is one set (F5); atomic per chain (Codex R1 blocking, final: confirmed) | worker-side read-then-write; per-session counter; two figures; a private-field keystore count |
 | HS3-D4 | Six owner asks; each phase builds only on its pick | CLAUDE.md § UI changes; the legs split on three of them | deciding them in the panel |
 | HS3-D5 | Arc 1 aligns the approver's runbook and `CI.md` with the caveat; the comments in `publish-token-list.yml` and `summary.ts` stay | both files are on the summary's own path list, so a comment-only edit reads as a signer change at the next approval; the docs are what the approver reads | editing the signer's comments (both legs: optional) |
+| HS3-D6 | The bound is 128 (A1), provisional | the orchestrator's call, 2026-10-19; revisit when a legitimate dApp reaches it or a profile's own sources come near it | a measured figure (none exists) |
+| HS3-D7 | The refusal's text lives in the extension handler as a `ScopeViolationError`, not in `wallet-bridge/scope-violation.ts` | `scopeViolation()` is internal to wallet-bridge; the dApp reads the constant scope envelope whatever the text; register operations reach no window and write no Activity row (traced) | exporting `scopeViolation` for one caller |
+| HS3-D8 | A keyed `registerContract` checks the key derives the instance's public keys as well as its address | with the account registered first, the PXE's own preimage check comes after the account is written; the key check makes that check implied, so a mismatch still writes nothing | duplicating the preimage derivation in the handler |
+| HS3-D9 | The count stays over distinct addresses; the PXE comment states that an address held as both a sender and an account counts once and costs two secrets | the orchestrator's instruction (count distinct addresses) and the approved invariant; the cost stays bounded at twice the figure | counting both lists' lengths (Opus arc 2 review): a change of the approved count, left to the orchestrator |
 
 ## Review verdicts
 
@@ -150,6 +154,8 @@ Each phase builds its ask's option A only on that pick, with the tests and pictu
 | Codex final | conditional approve; approve on the second resume | `sent` flag set before the original `onSent`; Phase 2 moved behind OA-6 (its order change is visible); distinct-address count and both duplicate directions tested; the error registered in the reconstruction table; A1 stated as provisional; OA-3, OA-4, OA-5 wording; committed text states behaviour only | counting keystore entries through an upstream private field (ledger D3) |
 | Arc 1 Codex R1, Opus | conditional approve (both) | the runbook and `CI.md` stop saying the summary shows every signing-relevant change; #860 recorded as merged; F2 and F6 re-read at 2a5960da | the signer's comments (HS3-D5) |
 | Arc 1 Codex R2 | approve | wording consistent across the three docs; citations resolve; HS3-D5 accepted | none |
+| Arc 2 Codex R1, Opus | conditional approve (gates pending); approve | the displaced `tokenContractKey` doc restored; the refusal literal unexported; the handler test's transport claim narrowed; the own-path test moved to `AccountStateService.addSender`, the path the person's senders take; the README says no wider manifest fixes it; the PXE comment states the distinct-count invariant | a non-distinct count (HS3-D9); a README pin to the constant; bounding the unproduced `register_sender` kind |
+| Arc 2 Codex R2 | approve | every fix verified; no regression | none |
 
 ## Delivery
 
