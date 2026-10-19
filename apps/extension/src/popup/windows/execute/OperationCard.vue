@@ -466,46 +466,36 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'register_token'">
-			<template v-if="tokenMetadataLoading">
-				<Flex :class="$style.prop" align="center" gap="6">
-					<Spinner size="14" color="--txt-inverse" />
-					<Text variant="body" color="secondary">Loading token metadata…</Text>
-				</Flex>
-			</template>
-			<template v-else-if="tokenMetadata">
-				<!-- Resolved symbol + name + decimals on one row. The contract
-				     address renders below as a separate prop row so the user
-				     can verify against a trusted source — the symbol/name come
-				     straight from the on-chain contract and are
-				     attacker-controllable. Name is hidden when it duplicates
-				     the symbol (e.g. test USDC where both equal "USDC"). -->
-				<Flex :class="$style.prop">
-					<Flex justify="between" :class="[$style.row, $style.token_meta]">
-						<Text variant="row-title" color="primary" :class="[$style.title_size, $style.token_meta]" data-testid="register-token-symbol">
-							{{ safeWire(tokenMetadata.symbol, 32) }}
-						</Text>
-						<Text
-							v-if="tokenMetadata.name && tokenMetadata.name.toLowerCase() !== tokenMetadata.symbol.toLowerCase()"
-							variant="caption"
-							color="secondary"
-							data-testid="register-token-name"
-						>
-							· {{ safeWire(tokenMetadata.name, 64) }}
-						</Text>
-					</Flex>
-					<Text variant="meta" color="tertiary" data-testid="register-token-decimals">
-						{{ tokenMetadata.decimals }} decimals
+			<!-- A token's contract chooses its symbol and name, so the address row stays beside them. -->
+			<Flex v-if="tokenMetadataLoading || tokenMetadata" direction="column" wide role="status" :aria-busy="tokenMetadataLoading || undefined" data-testid="register-token-details">
+				<Flex :class="$style.prop" data-testid="register-token-symbol-row">
+					<Text variant="label-section" color="secondary">Symbol:</Text>
+					<Skeleton v-if="tokenMetadataLoading" :width="40" :height="12" />
+					<Text v-else-if="tokenMetadata" variant="name" color="primary" :class="$style.name_size" data-testid="register-token-symbol">
+						{{ safeWire(tokenMetadata.symbol, 32) }}
 					</Text>
 				</Flex>
-			</template>
-			<template v-else-if="tokenMetadataError">
-				<Flex :class="$style.group" direction="column" gap="2">
-					<Text variant="body" color="orange" data-testid="register-token-meta-error">
-						Couldn't resolve token metadata
+				<Flex :class="$style.prop" data-testid="register-token-name-row">
+					<Text variant="label-section" color="secondary">Name:</Text>
+					<Skeleton v-if="tokenMetadataLoading" :width="84" :height="12" />
+					<Text v-else-if="tokenMetadata" variant="name" color="primary" :class="$style.name_size" data-testid="register-token-name">
+						{{ safeWire(tokenMetadata.name, 64) }}
 					</Text>
-					<Text variant="body" color="tertiary">Reject this request and ask the app to add the token again.</Text>
 				</Flex>
-			</template>
+				<Flex :class="$style.prop" data-testid="register-token-decimals-row">
+					<Text variant="label-section" color="secondary">Decimals:</Text>
+					<Skeleton v-if="tokenMetadataLoading" :width="20" :height="12" />
+					<Text v-else-if="tokenMetadata" variant="name" color="primary" :class="$style.name_size" data-testid="register-token-decimals">
+						{{ tokenMetadata.decimals }}
+					</Text>
+				</Flex>
+			</Flex>
+			<Flex v-else-if="tokenMetadataError" :class="$style.group" direction="column" gap="2">
+				<Text variant="body" color="orange" data-testid="register-token-meta-error">
+					Couldn't resolve token metadata
+				</Text>
+				<Text variant="body" color="tertiary">Reject this request and ask the app to add the token again.</Text>
+			</Flex>
 
 			<Flex :class="$style.prop">
 				<Text variant="label-section" color="secondary">Contract address:</Text>
@@ -711,12 +701,6 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 }
 
 .payload {
-	min-width: 0;
-	overflow-wrap: anywhere;
-}
-
-/* A token's contract names its symbol and name; the row and its symbol break inside the card. */
-.token_meta {
 	min-width: 0;
 	overflow-wrap: anywhere;
 }

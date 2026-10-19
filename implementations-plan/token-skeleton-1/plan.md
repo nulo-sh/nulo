@@ -61,7 +61,7 @@ One arc, one PR against `dev`, no stack, `Closes #850`. Recon: [recon.md](recon.
 
 ## Phases
 
-### Phase 1: the rows and their tests (#850)
+### Phase 1: the rows and their tests (#850) ✓
 1. Write the tests first, run them on the base card, and record the red in `lessons/phase-1.md`. `OperationCard.test.ts`, "a token add": add a `Skeleton` stub (`props: ["width", "height"]`, `<span data-testid="stub-skeleton" :data-width="width" :data-height="height" />`). Cases:
    - transition: mount with `tokenMetadataLoading: true` and metadata `USDC`, `USDC`, 6 at a `0x` + 64-hex address. Assert the three rows in order, labels `Symbol:`, `Name:`, `Decimals:`, bars 40, 84, 20 by 12; the details region has `role="status"` and `aria-busy="true"`; no `register-token-symbol`, `-name`, `-decimals`; no "Loading"; the address row renders. Keep the three row elements, `setProps({ tokenMetadataLoading: false })`, then assert the same elements (`toBe`), values `USDC`, `USDC`, `6` with `variant="name"`, no bar, no `aria-busy`.
    - control: `TST`, `TestToken`, 18, not loading, shows `TestToken` with no `·` and `18` with no "decimals".
