@@ -6,3 +6,4 @@
 - 2026-10-19 final fresh Codex pass: conditional approve; OA-2 corrected, Phase 2 gains `fee-methods`, Phase 3 keeps the status-only check; resumed pass verifying.
 - 2026-10-19 final Codex pass resumed twice: r2 conditional (route map, OA-2 B/C consequence), fixed; r3 approve. Plan committed; arc A1 next.
 - 2026-10-19 A1 Phase 1 gate: pass (`vitest run src/wallet/services/execution` 70 files, 1404 tests; `lint`, `typecheck:all` exit 0); each new test red on the base source.
+- 2026-10-19 A1 fix loop r1: Codex findings (1 P3), Opus findings (1 P2, 3 P3); fixed; execution suite 70 files, 1403 tests green.

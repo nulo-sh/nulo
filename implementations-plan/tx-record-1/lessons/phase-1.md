@@ -1,0 +1,6 @@
+# Phase 1: #820, the build hook
+
+- 2026-10-19 Implemented `buildFor` in `fee/fee-strategy.ts` (all nine strategy builds) and the hook on the classic discovery build; threaded per call. Each new test was run against the base source and failed there (strategy, executor, composition), then passed.
+- 2026-10-19 `bunx --bun vue-tsc --noEmit` reports a `PermissionRow.stories.ts` error the repo's own `bun run typecheck` (vue-tsc on Node) does not: run the script, not `bunx --bun`.
+- 2026-10-19 Codex A1 r1 (gpt-6.1-sol, high, session `01a153f6`): **findings**, one P3: the classic discovery route's wiring (`service.ts` buildForDiscovery) had no test that fails without it. Fixed: the composition case runs both routes, the classic one forced by an attached private authwit; it fails with the wiring removed.
+- 2026-10-19 Opus A1 review: the same gap (P2); P3 the post-build `recordCall` repeated the last hook's write; P3 two redundant assertions/tests; P3 a send cancelled while its build runs now has its row renamed to the class label after the record reads Cancelled. Accepted: the hook is the one writer (the reuse arm calls it; the post-build writes are dropped), the redundant executor estimate test and a duplicate assertion removed. The cancel rename is B as signed ("save the class the moment the request is built"); no code change, stated in the PR body.

@@ -436,7 +436,7 @@ describe("the build hook", () => {
 		const boom = new Error("Assertion failed: balance too low")
 		h.simulateTxTask.mockRejectedValueOnce(boom)
 		expect(await rejectionOf(h.strategy.buildAndEstimate(h.ctx))).toBe(boom)
-		expect(onBuilt.mock.calls).toEqual([[h.builds[0]?.txCalls]])
+		expect(onBuilt).toHaveBeenCalledTimes(1)
 		expect(onBuilt.mock.calls[0]?.[0]).toBe(h.builds[0]?.txCalls)
 	})
 })

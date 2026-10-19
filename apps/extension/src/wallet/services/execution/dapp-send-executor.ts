@@ -847,7 +847,6 @@ export class DappSendExecutor {
 		ctx: SlotRun,
 	): Promise<{ built: FeeEstimate } | { over: OverCeiling }> {
 		const built = await this.deps.buildAndEstimateValidated(op, op.feeSettings, fence, parentTask, undefined, ctx.recordCall)
-		await ctx.recordCall(built.txCalls)
 		const reask = overCeiling(approval, ceiling, built)
 		return reask ? { over: { reask } } : { built }
 	}
@@ -1035,7 +1034,6 @@ export class DappSendExecutor {
 		const { op, identity, fence, parentTask, checkCancelled, preview, approval } = run
 		const before = await this.reuseSnapshot(op.networkId, op.accountAddress)
 		const built = await this.resolveStandardBuild(op, identity, reuseId, fence, parentTask, checkCancelled, run.recordCall)
-		await run.recordCall(built.txCalls)
 		if (preview) assertWithinPreview(preview, built.discoveredHashes)
 		checkCancelled()
 		const reask = overCeiling(approval, ceiling, built)
@@ -1141,6 +1139,8 @@ export class DappSendExecutor {
 			const account = await this.deps.getAccountContract(fence.profileId, network.chainId, op.accountAddress)
 			// The lookup reads whichever session is live: re-check the fence before its keys are used.
 			fenceChecks(this.deps, fence).assertLive()
+			// The estimate's build ran outside this send, so its calls name the record only now.
+			await onBuilt(reused.txCalls)
 			return {
 				txRequest: reused.txRequest,
 				node,

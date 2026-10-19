@@ -171,8 +171,14 @@ function makeHarness(
 	const authwit = overrides.authwit ?? {
 		discoverPrivateAuthwits: vi.fn(async () => ({ actions: [] as unknown[], discovered: [] as unknown[] })),
 	}
-	const buildAndEstimateValidated = overrides.buildAndEstimateValidated ?? vi.fn(async () => built as never)
-	const buildAndEstimateFolded = overrides.buildAndEstimateFolded ?? vi.fn(async () => built as never)
+	// As the real pipelines do, the last build hands its calls to the hook a send passes.
+	const handOver = (at: number) =>
+		vi.fn(async (...args: unknown[]) => {
+			await (args[at] as ((txCalls: unknown) => Promise<void>) | undefined)?.(built.txCalls)
+			return built as never
+		})
+	const buildAndEstimateValidated = overrides.buildAndEstimateValidated ?? handOver(5)
+	const buildAndEstimateFolded = overrides.buildAndEstimateFolded ?? handOver(6)
 	const estimateWithDiscovery = new DiscoveryAwareEstimator({
 		authwit: authwit as never,
 		buildAndEstimateValidated: buildAndEstimateValidated as never,
@@ -1545,6 +1551,7 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 				probe.collected.push({ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: `mh:ih:${tag}` } })
 				probe.discovered.push(record(tag))
 			}
+			await (args[6] as ((txCalls: unknown) => Promise<void>) | undefined)?.((built as { txCalls: unknown }).txCalls)
 			return built
 		})
 	const harnessDiscovering = (tags: string[], overrides: Parameters<typeof makeHarness>[0] = {}) => {
@@ -2624,24 +2631,6 @@ describe("DappSendExecutor: a send whose simulation fails keeps the call its bui
 		const failedAt = mark.mock.calls.findIndex(([, patch]) => (patch as { stage?: string }).stage === "failed")
 		expect(failedAt).toBeGreaterThanOrEqual(0)
 		expect(record.mock.invocationCallOrder[0]).toBeLessThan(mark.mock.invocationCallOrder[failedAt] ?? 0)
-	})
-})
-
-describe("DappSendExecutor: an estimate names no record", () => {
-	const embeddedPlanner = {
-		processAztecJsPayload: vi.fn(async () => ({ actions: [], feePaymentMethod: undefined, feeOptions: { embeddedFeePayment: "fpc" } })),
-	} as never
-
-	test.each([
-		["a folded estimate", "fj", 6],
-		["an embedded estimate", "embedded", 5],
-	] as const)("%s hands its pipeline no hook", async (_label, kind, at) => {
-		const h = makeHarness(kind === "embedded" ? { planner: embeddedPlanner } : {})
-		await h.executor.estimateOperationFee(makeAztecOp(), { paymentMethod: { kind } } as never).catch(() => undefined)
-		const pipeline = kind === "embedded" ? h.buildAndEstimateValidated : h.buildAndEstimateFolded
-		expect(pipeline).toHaveBeenCalledTimes(1)
-		expect(pipeline.mock.calls[0]?.[at]).toBeUndefined()
-		expect(h.deps.lane.recordBuiltCall).not.toHaveBeenCalled()
 	})
 })
 
