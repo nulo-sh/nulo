@@ -10,7 +10,7 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 budget: recon 3 explorers (sonnet); dual review (Codex gpt-6.1-sol high + Opus Plan); one fresh final Codex pass
-base: origin/dev at f214e5cb
+base: origin/dev at 2a5960da
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
@@ -24,7 +24,7 @@ Three arcs, one PR each against `dev`, no stack (the orchestrator's D-orch-1). A
 | Arc | Ships | Waits for |
 |---|---|---|
 | 1 | Phase 1: the token-list signer-code caveat in `SECURITY.md` | nothing |
-| 2 | Phase 3: a bound on the tagging sources a dApp adds to a chain's PXE. Phase 2 (OA-6) when picked by then | #860 (tx-record-1 arc 1) merged; Phase 2 also test-infra-1 arc 4 |
+| 2 | Phase 3: a bound on the tagging sources a dApp adds to a chain's PXE. Phase 2 (OA-6) when picked by then | nothing for Phase 3 (#860 merged at 2a5960da); Phase 2 test-infra-1 arc 4 |
 | 3 | Phases 4-8: OA-1 to OA-5, and Phase 2 if picked after arc 2; a pick of "keep" drops its phase | the picks; Phase 6 after #854, Phase 8 after test-infra-1 arc 4 |
 
 ## Outcome & Quality Bar
@@ -41,13 +41,13 @@ Three arcs, one PR each against `dev`, no stack (the orchestrator's D-orch-1). A
 
 ## Assumptions
 
-**Facts** (verified at f214e5cb):
+**Facts** (verified at f214e5cb; F2 and F6 re-read at 2a5960da, after #860):
 - F1. `ExecutionCoordinator.proveAndSend` runs `commitSubmitting` after prove, then `sendTxTask` (the legal check, then `assertLive` and `node.sendTx` with nothing awaited between), then `onSent` after `sendTx` returns, then `recordTransaction` (`execution/execution-coordinator.ts:277-358`).
-- F2. `DappSendExecutor` supplies `commitSubmitting` (`dapp-send-executor.ts:376`) and the two `recordTransaction` closures (`:881`, `:1091`; the estimate-reuse path feeds `:1087`). `sentTxRecorder` (`:755-785`) calls `addTransaction`, then `recordPendingAuthwits`. The no-sender site (`:1248`) carries no public authorization.
+- F2. `DappSendExecutor` supplies `commitSubmitting` (`dapp-send-executor.ts:377`) and the two `recordTransaction` closures (`:881`, `:1090`; the estimate-reuse path feeds `:1086`). `sentTxRecorder` (`:760-786`) calls `addTransaction`, then `recordPendingAuthwits`. The no-sender site (`:1265`) carries no public authorization.
 - F3. `recordPendingAuthwits` is idempotent per scope and hash; `reconcileAuthwits(scope, txHash, "dropped")` removes a tx's pending rows; a revoke of a pending row waits for its grant's block by tx hash (`auth-registry/service.ts:233-300`, `:557-600`).
 - F4. `submitting → cancelled` is not a journal transition (`packages/wallet-core/src/jobs/fsm.ts:34,52`); a cancel cannot land between the submitting commit and the send.
 - F5. Upstream PXE 6.0.0-rc.3 derives one tagging secret per registered sender and per keystore account, for every scoped recipient and contract, on each tagged-log sync (`@aztec-labs/pxe dest/logs/log_service.js:185-215`). The PXE runtime has no account removal (`pxe/service.ts:89-115`).
-- F6. The dApp paths are `executeAztecRegisterSender` (`execution/service.ts:1189`) and `executeAztecRegisterContract` (`:1198-1244`: derivation check, then `registerContract` at `:1241`, then `registerAccount` at `:1244`). The person's paths (Settings, contacts import, own accounts) call the same PXE methods without a bound.
+- F6. The dApp paths are `executeAztecRegisterSender` (`execution/service.ts:1190`) and `executeAztecRegisterContract` (`:1199-1245`: derivation check, then `registerContract` at `:1242`, then `registerAccount` at `:1245`). The person's paths (Settings, contacts import, own accounts) call the same PXE methods without a bound.
 - F7. A typed error crosses the offscreen hop only when its class is in `@nulo/extension-messaging`'s errors table, as `PxeScopeUnregisteredError` is (serialized by `packages/extension-messaging/src/core/error-response.ts:29`).
 - F8. Two callers give `getMethodLabel` no contract: `RecentActivityView.vue:191`, `journal-state.ts:467` (`utils/tx-enrichment.ts:47-53`).
 - F9. Journal GC groups by profile and account (`operation-journal/gc.ts:118-120`) and evicts only `succeeded` rows past 50.
@@ -139,6 +139,7 @@ Each phase builds its ask's option A only on that pick, with the tests and pictu
 | HS3-D2 | Record at `commitSubmitting`; remove unless the wrapped `onSent` set `sent`; ships on OA-6 | one write before the send; refused sends leave nothing; the order change is visible (Codex final) | send-check reconciliation (subscription + recovery policy); keep pending on refusal |
 | HS3-D3 | One bound on distinct tagging sources, under the PXE write guard, dApp path only, counted from the PXE's public reads | the cost driver is one set (F5); atomic per chain (Codex R1 blocking, final: confirmed) | worker-side read-then-write; per-session counter; two figures; a private-field keystore count |
 | HS3-D4 | Six owner asks; each phase builds only on its pick | CLAUDE.md § UI changes; the legs split on three of them | deciding them in the panel |
+| HS3-D5 | Arc 1 aligns the approver's runbook and `CI.md` with the caveat; the comments in `publish-token-list.yml` and `summary.ts` stay | both files are on the summary's own path list, so a comment-only edit reads as a signer change at the next approval; the docs are what the approver reads | editing the signer's comments (both legs: optional) |
 
 ## Review verdicts
 
@@ -147,6 +148,7 @@ Each phase builds its ask's option A only on that pick, with the tests and pictu
 | Codex R1 | reject | Phase 2 predicate restated (onSent, not "never broadcast"); Phase 3 bound moved under the PXE write guard; composition tests; OA-2 scope is profile and account, refused rows on their own cap; three items moved to owner asks | "keep pending on an ambiguous send" withdrawn (Opus R1) |
 | Opus R1 | conditional approve | unreachable cancel test replaced; one write site; estimate-reuse covered by the `:1087` site; account registered before the contract; the keyed figure's basis restated as one tagging-source figure; committed wording | send-check reconciliation (D2) |
 | Codex final | conditional approve; approve on the second resume | `sent` flag set before the original `onSent`; Phase 2 moved behind OA-6 (its order change is visible); distinct-address count and both duplicate directions tested; the error registered in the reconstruction table; A1 stated as provisional; OA-3, OA-4, OA-5 wording; committed text states behaviour only | counting keystore entries through an upstream private field (ledger D3) |
+| Arc 1 Codex R1, Opus | conditional approve (both) | the runbook and `CI.md` stop saying the summary shows every signing-relevant change; #860 recorded as merged; F2 and F6 re-read at 2a5960da | the signer's comments (HS3-D5) |
 
 ## Delivery
 
