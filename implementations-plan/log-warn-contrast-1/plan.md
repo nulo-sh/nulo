@@ -47,7 +47,7 @@ One issue, one arc, one PR against `dev` (D-orch-1, no stack). Recon: [recon.md]
 
 Values only: one token value, one gate loop, one re-pinned hash. No new token, colour name, component, dependency or e2e scenario. The light block's `--log-warn-color` refers to `--txt-warning`, so the AA warning shade has one source. That is the ERROR line's shape (#878, its D12). The gate lands first, so its red run reads the untouched tree.
 
-### Phase 1: The gate
+### Phase 1: The gate ✓
 
 - `packages/design/src/theme-contrast.test.ts` § status text: the ERROR loop iterates a literal two-row table of `[level, colour token, tint token]`, the ERROR row and the WARN row, so a `grep log-warn` still finds the gate. Each theme gates both pairs. Keep the ERROR test names as they are (`a log viewer's ERROR line on its tint`); the WARN twins read `a log viewer's WARN line on its tint` (D2).
 - **Gate**: `bun run --cwd packages/design test -- src/theme-contrast.test.ts`. Pass: exactly one failure, `light: a log viewer's WARN line on its tint >= 4.5:1` (2.91); the dark WARN test and both ERROR tests pass. Record the run in `lessons/phase-1.md`. Layers: unit.
