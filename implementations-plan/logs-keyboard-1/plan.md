@@ -11,6 +11,20 @@ base: dev @ d0551f7a
 standard: implementations-plan/README.md § Post-implementation standard, read at d0551f7a
 ---
 
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** delivered as one ready PR against `dev`, #868, which carries this close-out; its merge closes the plan.
+- **Shipped:** `Popover` keeps the Tab order its panel would have right after its trigger (focus in on an open from a focused trigger; Tab past the last control goes on from the trigger; Shift+Tab before the first closes back onto it; a focus outside closes it; a leaving panel is inert). The logs filter rows and Select All are native toggle buttons with `aria-pressed`, the inset 2 px accent ring on keyboard focus, and no repeat Enter; the Source list's scroll box is no Tab stop. Closes #851.
+- **Review loop:** the plan took Codex conditional approve, then approve, and an Opus conditional approve; the arc's diff took Codex findings 1 (comments), then clean, and Opus findings 5, all Low, all taken.
+- **Gates at the head:** after merging `origin/dev` at `f214e5cb`: `audit:vue`, `test:all`, both armed builds 0; smoke over `viewers-csp` and `keyboard-guards` at retry 0, Firefox 10/10, Chrome 10/10 on its one rerun (a load timeout); `test:ci-gating`'s two load timeouts green alone; `check:plans` 0. The close-out merged `origin/dev` again (`25f2c63e`, no file in common).
+- **Deviations:** the arc's base moved from `d0551f7a` to `1531e5f9` before Phase 1, then took `f214e5cb` and `25f2c63e`; the review loop's round 1 ran while Phase 3's browser runs waited for load; D15 came from the Firefox capture ([lessons/phase-3.md](lessons/phase-3.md)).
+- **Dropped:** none.
+- **Known limits:** #866.
+- **Open items:** none.
+- **Lessons:** none promoted (`lessons.md` is at its 8 KiB budget); the traps (the CSP guard refusing a capture's style tag, Firefox's scroll box stop, corner bleed in clipped captures) are in [lessons/phase-3.md](lessons/phase-3.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+
 # logs-keyboard-1: the logs filter panels from the keyboard
 
 One issue, one arc, one PR against `dev` (D-orch-1, no stack). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none).
