@@ -11,11 +11,10 @@
 - Vue unit tests (3.5.42, VTU 2.4.11): only `vue`/`vue-router` auto-import; stub `@nulo/design`'s recursing `Button`; a raw event in its mount's ms runs its 1st listener only; a 2nd `mount` strips the 1st's stubs. [Evidence](archive/ux-feedback/plan.md#vue-tests)
 - A check accepting a wrong state passes broken code: pair never-happens tests with a success control; match screenshot state exactly; stub only what production returns. [Evidence](archive/connect-window/plan.md#controls), [more](archive/harden-dedupe/plan.md#success-control)
 - CodeQL's ReDoS query fails a PR on any regex it reaches, a test's or a helper's too: never put a free-form group beside `\s*`; split on the delimiter. [Evidence](archive/forms-and-contacts/lessons/phase-3.md)
-- A change to when a window's Confirm enables reaches every e2e that presses it, refusals included (`authwit-lifecycle`, `scope-refusal`): run those before the PR. [Evidence](archive/harden-security-fixes-2/lessons/phase-6.md)
 
 ## Git & GitHub
 
-- A `pull_request` run takes workflows from the merge ref but builds `head.sha`, so a later `dev` fix is absent: merge `dev` first. [Evidence](archive/dedup-ledger/plan.md#merge-ref)
+- A `pull_request` run builds `head.sha` with the merge ref's workflows, so a later `dev` fix is absent; a PR conflicting with `dev` gets no run: merge `dev` first. [Evidence](archive/dedup-ledger/plan.md#merge-ref), [more](archive/connect-split-1/lessons/phase-3.md)
 - A job needing a skipped job is skipped unless its `if` calls a status function; `always()` also runs after a cancel: use `always() && !cancelled()`. [Evidence](archive/release-pipeline-hardening/plan.md#always)
 - `git diff -M`'s R100 is not byte identity (compare blob ids and modes), and a pathspec splits a move across it into a delete and an add. [Evidence](archive/plans-scaffolding/plan.md#renames)
 - `gh stack` runs the plans gate on each arc head (no forward links); after a squash merge, `dev` into the old head is add/add; parallel arcs need disjoint decision ids; their index lines auto-merge as two (`check:plans` after a `dev` merge). [Evidence](archive/ux-feedback/plan.md#stack-gate), [more](archive/harden-security-fixes-2/plan.md#decision-ledger), [more](archive/owner-feedback-1/lessons/phase-8.md)

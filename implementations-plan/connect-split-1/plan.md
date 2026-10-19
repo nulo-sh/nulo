@@ -11,9 +11,21 @@ base: dev @ f214e5cb
 standard: implementations-plan/README.md § Post-implementation standard, read at 175d8268
 ---
 
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** completed. #886 closes #859, a draft until the owner signs OA-1 to OA-3; its merge into `dev` closes the plan.
+- **Shipped:** Allow answers the discovery and its connect window closes; `ConnectBridge` keeps the window, by identity-guarded holds, until the check's own window exists or `BRIDGE_MS` after the approval; the check opens in its own window when the dApp starts its exchange, as a reconnection's does; the `standby` reservation, the expired page, the step bar and `WindowPort.navigate` are gone; admission is the base's (D8); a fresh-document approval-filter pin; two connect journeys measured on both browsers at retry 0.
+- **Owner asks:** OA-1, OA-2 and OA-3 ship as recommended (A), awaiting sign-off; OA-4 ships B (D8).
+- **Dropped:** D5's per-tab cap (superseded by D8); outline B and navigate-in-place (D3); `focused: false` (D4); a playground Discover button (D6); a navigation watcher (D7).
+- **Known limits:** #883 (D8, OA-4); navigation after the exchange stays #606's, commented (D7).
+- **Open items:** #884 (OA-2's note); #885 (a capture-mode hang that predates the plan); #849 took one Firefox occurrence.
+- **Lessons:** one promoted: a PR conflicting with `dev` gets no `pull_request` run, folded into the merge-ref line. To keep the budget, the Confirm-enables entry moved to the `e2e-testing` skill, which also took this plan's e2e gotchas.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+
 # connect-split-1: Allow closes the connect window; the emoji check opens its own
 
-One arc, one PR against `dev`, `Closes #859`. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md). Gate log: `STATUS.md`.
+One arc, one PR against `dev`, `Closes #859`. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md).
 
 The owner, 2026-10-19, on #859: "I think sadly, we need to go back to “splitting” the concerns between those two pop-ups; although the two-stepper looks awesome, it’s not really “compatible” with how it might work in the wild." Allow answers the discovery and its window closes; the check opens its own window when the page starts the key exchange, as a remembered app's reconnection already does (#631).
 
@@ -115,7 +127,7 @@ The protected boundary is the establishment callback, not the exchange's arrival
 
 Recon § 1. Gate for the implementer: the installed `@aztec-labs/wallet-sdk` `package.json` says `6.0.0-rc.3`; another version → re-read F1's sources before phase 2.
 
-## Phase 2: the wallet side
+## Phase 2: the wallet side ✓
 
 Before the first code commit, with load1 under 150, run the base's `connect-one-window.test.ts` and `session-tabClose.test.ts` on both browsers (phase 3's commands) for the before wall-clock. Then, each step followed by the fast layers for the touched package:
 1. `ConnectBridge` and its test (fake clock): an end before the timer closes once and the timer closes nothing later; the timer closes once; `pin` stops the timer and `end` still closes; `arm`, `pin`, `end` on an unheld id do nothing; `windowRemoved` makes `isOpen` false and `end` closes nothing; `endForTab` closes only that tab's; a second `hold` of an id closes the first window.
@@ -133,7 +145,7 @@ Before the first code commit, with load1 under 150, run the base's `connect-one-
 
 **Validation gate.** Commands: `bun run lint && bun run typecheck:all && bun run test && bun run test:all`. Pass: every command exits 0; `grep -rn "standby\|claimStandby\|expiredUrl\|ConnectStepBar\|connect-step-bar\|navigateWindow" apps/extension/src apps/extension/scripts packages` prints nothing. Layers: lint, typecheck, unit, composition, component.
 
-## Phase 3: the journeys, the measurements, the pictures
+## Phase 3: the journeys, the measurements, the pictures ✓
 
 1. `approveConnect` and `recordCreatedWindows` as in the change map; `approveConnect` starts recording and arms `waitForPopup(ctx, "verify")` before it presses Allow (the wait snapshots existing pages).
 2. `connect-check-window.test.ts`, two scenarios, each run at retry 0 on both browsers:
