@@ -1,6 +1,7 @@
 import { onScopeDispose, ref, type Ref } from "vue"
 import type { EventHandler } from "@nulo/wallet-core/utils"
 import type { DappMetadata } from "@/wallet/services/dapp-session/client"
+import type { WindowEnd } from "@/wallet/services/dapp-interaction/client"
 
 export type UIDappMetadata = DappMetadata & {
 	loadingLogo?: boolean
@@ -14,7 +15,7 @@ export type UIDappMetadata = DappMetadata & {
  */
 export interface DappInteractionLike {
 	getInteractionPayload(requestId: string): Promise<unknown>
-	rejectInteraction(requestId: string, reason: string): void
+	rejectInteraction(requestId: string, reason: string, end: WindowEnd): Promise<void>
 	resolveInteraction(requestId: string, result: unknown): Promise<void>
 	isInteractionCancelled(requestId: string): Promise<boolean>
 	onInteractionCancelled: EventHandler<string>
@@ -51,10 +52,11 @@ export interface UseDappInteractionPayloadResult<TPayload> {
 	 */
 	load: () => Promise<TPayload>
 	/**
-	 * Reject the interaction (no-op if already cancelled or no requestId).
-	 * Does NOT close the window — the parent decides what UI does next.
+	 * Reject the interaction, naming how the window ended it (no-op if already cancelled or no
+	 * requestId). Settles once the wallet has taken it; on a connected port the request is posted
+	 * before the first await, so an unloading page still sends it. Does NOT close the window.
 	 */
-	reject: (reason: string) => void
+	reject: (reason: string, end: WindowEnd) => Promise<void>
 	dispose: () => void
 }
 
@@ -118,9 +120,9 @@ export function useDappInteractionPayload<TPayload>(
 		}
 	}
 
-	const reject = (reason: string) => {
-		if (isCancelled.value || !requestId.value) return
-		interactionService.rejectInteraction(requestId.value, reason)
+	const reject = (reason: string, end: WindowEnd): Promise<void> => {
+		if (isCancelled.value || !requestId.value) return Promise.resolve()
+		return interactionService.rejectInteraction(requestId.value, reason, end)
 	}
 
 	const dispose = () => {

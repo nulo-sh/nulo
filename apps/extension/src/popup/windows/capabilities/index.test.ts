@@ -108,7 +108,7 @@ import Capabilities from "./index.vue"
 
 const factory = () => mount(Capabilities, { global: { stubs: STUBS } })
 
-type CapVm = { reject: () => Promise<void>; closeWindow: (interactionCompleted?: boolean) => void }
+type CapVm = { reject: (end: "reject") => Promise<void>; closeWindow: (interactionCompleted?: boolean) => void }
 
 describe("capabilities window — shell lifecycle frozen oracle", () => {
 	test("A1: onMounted eager-connects exactly profile → interaction, in order", async () => {
@@ -183,12 +183,12 @@ describe("capabilities window — shell lifecycle frozen oracle", () => {
 		expect(beforeunloadRemoves()).toBe(0)
 	})
 
-	test("B8: window-local reject() = composable reject THEN closeWindow(true) — order pinned", async () => {
+	test("B8: window-local reject() detaches the unload listener, sends its end, THEN closes — order pinned", async () => {
 		w = factory()
 		await completeInit()
 		callLog.length = 0
-		await (w.vm as unknown as CapVm).reject()
-		expect(callLog).toEqual(["composableReject:User rejected", "removeEventListener:beforeunload", "windows.remove"])
+		await (w.vm as unknown as CapVm).reject("reject")
+		expect(callLog).toEqual(["removeEventListener:beforeunload", "composableReject:User rejected:reject", "windows.remove"])
 	})
 
 	test("B9 (DIVERGENCE): reject() with NO requestId still closes + detaches the listener", async () => {
@@ -200,8 +200,8 @@ describe("capabilities window — shell lifecycle frozen oracle", () => {
 		w = factory()
 		await flushPromises()
 		expect(approval.requestId.value).toBeUndefined()
-		await (w.vm as unknown as CapVm).reject()
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledWith("User rejected")
+		await (w.vm as unknown as CapVm).reject("reject")
+		expect(rejectViaInteractionServiceMock).toHaveBeenCalledWith("User rejected", "reject")
 		expect(beforeunloadRemoves()).toBe(1)
 		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
 	})
@@ -218,9 +218,10 @@ describe("capabilities window — shell lifecycle frozen oracle", () => {
 		expect(windowsRemoveMock).not.toHaveBeenCalled()
 		handler({ id: "p-other" })
 		await flushPromises()
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledTimes(1)
+		expect(rejectViaInteractionServiceMock).toHaveBeenLastCalledWith("User rejected", "switch")
 		handler(undefined)
 		await flushPromises()
+		expect(rejectViaInteractionServiceMock).toHaveBeenLastCalledWith("User rejected", "lock")
 		expect(rejectViaInteractionServiceMock).toHaveBeenCalledTimes(2)
 	})
 

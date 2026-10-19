@@ -54,7 +54,7 @@ describe("ProcessingErrorNote — glyph colour and tooltip geometry", () => {
 			props: ["name", "size", "color"],
 			template: `<i data-testid="glyph" :data-name="name" :data-size="size" :data-color="color" />`,
 		},
-		Text: { template: "<span><slot /></span>" },
+		Text: { props: ["color"], template: `<span data-testid="text" :data-color="color"><slot /></span>` },
 		Flex: { template: "<div><slot /></div>" },
 	}
 	const mountNote = (props: Record<string, unknown>) =>
@@ -68,8 +68,11 @@ describe("ProcessingErrorNote — glyph colour and tooltip geometry", () => {
 		expect(glyph.attributes()).toMatchObject({ "data-name": "info", "data-size": "14", "data-color": "primary" })
 	})
 
-	test("color flips the glyph to red for the FPC popups", () => {
-		expect(mountNote({ color: "red" }).find("[data-testid='glyph']").attributes("data-color")).toBe("red")
+	// red-text-ban.test.ts exempts this component's `color` because only the glyph takes it.
+	test("color flips the glyph to red for the FPC popups, never the text", () => {
+		const w = mountNote({ color: "red", tooltip: "detail" })
+		expect(w.find("[data-testid='glyph']").attributes("data-color")).toBe("red")
+		expect(w.findAll("[data-testid='text']").map((text) => text.attributes("data-color"))).toEqual(["secondary", "secondary"])
 	})
 
 	test("the tooltip keeps its geometry: top, start, wide, -12px margin, disabled only without detail", () => {

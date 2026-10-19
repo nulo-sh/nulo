@@ -55,10 +55,13 @@ export async function cdpInterceptRpc(
 		log(`FAILURE ${msg}`)
 	}
 	// A target that went away while being armed (Chrome's transient about:blank pages do) issued
-	// no request, and one that went away with a request paused never sent it; only a live target
-	// that could not be armed, resumed or answered is a failure.
+	// no request, and one that went away with a request paused never sent it. Chrome answers a
+	// reply under the event's own id `Invalid InterceptionId` once that request is gone, cancelled
+	// by its target's stop or its caller's abort while the session stays attached. Only a live
+	// target that could not be armed or resumed, or a still-paused request that could not be
+	// answered, is a failure.
 	const failUnlessGone = (msg: string, e: unknown) => {
-		if (/target closed|session closed|detached/i.test(String(e))) log(`${msg}: ${e}`)
+		if (/target closed|session closed|detached|invalid interceptionid/i.test(String(e))) log(`${msg}: ${e}`)
 		else fail(`${msg}: ${e}`)
 	}
 

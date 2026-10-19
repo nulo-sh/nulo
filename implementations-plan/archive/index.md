@@ -2,6 +2,7 @@
 
 Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — one-line hook`. Each is a short record of what was decided and why, never a task list.
 
+- [a11y-errors-1](a11y-errors-1/plan.md) — completed — every error and refusal text from `--red` to `--txt-danger`, and a source guard that refuses red text
 - [accelerator-server-ci](accelerator-server-ci/plan.md) — completed — native `bb` proving in the network e2e CI through the vendor's headless prover server
 - [accessibility-1](accessibility-1/plan.md) — completed — Send by keyboard, Home's links, focus rings, titles read once, the emoji check announced, two contrast fixes
 - [account-artifact-freeze](account-artifact-freeze/plan.md) — completed — account addresses frozen per extension major: vendored artifact, frozen descriptor, execution canary
@@ -361,3 +362,5 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [send-estimate-1](send-estimate-1/plan.md) — completed — a balance that makes the typed amount sendable asks for its fee, on either side (#856); the fee row on a balance drop ships as today (#863)
 - [execute-window-3](execute-window-3/plan.md) — completed — the advice once after the calls and none on a refused request (#776, P52-01 F); an unreadable authorization flagged at rest (#777, P58-05 B); #854
 - [logs-keyboard-1](logs-keyboard-1/plan.md) — completed — the logs filter panels from the keyboard: native toggle rows with an inset ring, the popover's Tab order stitched after its trigger, a panel closed when focus leaves it (#851); known limit #866
+- [egress-flake-1](egress-flake-1/plan.md) — completed — a reply to a paused request its worker's stop cancelled (`Invalid InterceptionId`) is no interception failure (#857)
+- [tx-record-1](tx-record-1/plan.md) — completed — a dApp send's failed estimate keeps its class (#820); a send ended in its approval window reads how it ended, Reject and the X "You rejected", a lock as a lock (#828, P60-02 B); a transaction records who chose its fee and the Fee method row names it (#821); #871 #872 known limits

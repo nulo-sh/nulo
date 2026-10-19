@@ -28,7 +28,7 @@ import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { SessionSecretBox, type SessionWrappedSecret } from "@nulo/wallet-crypto"
 import type { ConfigProp, IConfig } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
-import { EventHandler, Lock } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler, Lock } from "@nulo/wallet-core/utils"
 import type { ActiveSession, Profile, ProfileInfo, Session } from "./spec"
 import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME, SessionManager } from "./session-manager"
 
@@ -191,20 +191,47 @@ describe("SessionManager", () => {
 			await expect(manager.getActive()).resolves.toBeDefined()
 		})
 
-		test("close(): a rejecting session.delete still clears the in-memory session", async () => {
-			const { api, manager } = setup()
-			const profile = passwordProfile()
+		test("close(): memory is locked before the delete settles, and a rejected delete is attempted once more", async () => {
+			const { api, emits, manager } = setup()
+			const profile = await passwordProfileFor("pid")
 			await manager.open(profile, secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
-			expect(manager.isActive("pid")).toBe(true)
-
-			vi.spyOn(api.storage.session, "remove").mockImplementationOnce(async () => {
+			const dek = (manager as unknown as { activeSession: ActiveSession }).activeSession.dek
+			if (!dek) throw new Error("setup: the opened session holds no DEK")
+			const gate = deferred()
+			const remove = vi.spyOn(api.storage.session, "remove").mockImplementationOnce(async () => {
+				await gate.promise
 				throw new Error("storage remove failed")
 			})
+
+			const closing = manager.close()
+			await new Promise((r) => setTimeout(r, 0))
+			expect(manager.isActive("pid")).toBe(false)
+			expect(emits.at(-1)).toBeUndefined()
+			expect(dek.every((b) => b === 0)).toBe(true)
+			gate.resolve()
+			await closing
+
+			expect(remove).toHaveBeenCalledTimes(2)
+			expect(SESSION_STORAGE_ROOT in (await api.storage.session.get(SESSION_STORAGE_ROOT))).toBe(false)
+			const { manager: restarted } = setupFromExistingApi(api)
+			await restarted.restore(async () => profile)
+			await expect(restarted.getActive()).resolves.toBeUndefined()
+		})
+
+		test("close(): a delete that keeps failing is attempted twice; memory stays locked and the lock alarm is cleared", async () => {
+			const { api, manager } = setup()
+			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			const { fakeBrowser } = await import("@webext-core/fake-browser")
+			expect(await fakeBrowser.alarms.get(SESSION_TTL_ALARM_NAME)).toBeDefined()
+			const remove = vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("storage remove failed"))
+
 			await manager.close()
 
-			// Contract: the secret must NOT stay live in memory after a lock request.
+			expect(remove).toHaveBeenCalledTimes(2)
 			expect(manager.isActive("pid")).toBe(false)
 			await expect(manager.getActive()).resolves.toBeUndefined()
+			expect(await fakeBrowser.alarms.get(SESSION_TTL_ALARM_NAME)).toBeUndefined()
+			expect(await manager.hasPersistedSession()).toBe(true)
 		})
 
 		test("open(): a failed persist of B must not leave A restorable after a SW restart", async () => {
