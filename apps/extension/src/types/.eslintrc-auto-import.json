@@ -126,7 +126,6 @@
     "IncomingSyncScope": true,
     "IncomingTransferServiceLike": true,
     "InjectionKey": true,
-    "JournalAddRules": true,
     "JournalPlace": true,
     "JournalRow": true,
     "JournalTerminalCardCtx": true,

@@ -85,17 +85,14 @@ const {
 	dispose: disposeTerminalOps,
 	...terminalOpEvents
 } = useJournalMirror({
-	read: () => journalService.getOperations({ profileId: appStore.profile.id, isTerminal: true }),
+	// The profile is checked here, not by the caller, so a retry checks it too.
+	read: async () =>
+		appStore.profile?.id ? journalService.getOperations({ profileId: appStore.profile.id, isTerminal: true }) : undefined,
 	accept: (op) => op.terminalAt !== null,
 	place: "front",
-	dropRefusedUpdate: true,
-	supersede: false,
 })
 
-async function loadTerminalJournalOps() {
-	if (!appStore.profile?.id) return
-	await resnapshotTerminalOps()
-}
+const loadTerminalJournalOps = () => resnapshotTerminalOps()
 
 journalService.onOperationAdded.add(terminalOpEvents.onOperationAdded)
 journalService.onOperationUpdated.add(terminalOpEvents.onOperationUpdated)
