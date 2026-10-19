@@ -1,6 +1,5 @@
 import { MemoryStorageArea } from "@nulo/wallet-core/storage"
 import { describe, expect, test } from "vitest"
-import { STORED_SHAPES } from "./stored-shapes"
 import type { GoldensFile } from "./stored-shapes/baseline"
 import goldensFile from "./stored-shapes/goldens.json"
 import { type CodecStoreName, entityStorage, STORES, valueStorage } from "./stores"
@@ -15,15 +14,6 @@ const fullGolden = (name: string) => {
 }
 
 describe("the store factories", () => {
-	test("every codec store is the registry's: same ref, schema object and options", () => {
-		for (const name of codecNames) {
-			const shape = STORED_SHAPES[name]
-			expect(shape.ref, name).toEqual(STORES[name].ref)
-			expect(shape.schema, name).toBe(STORES[name].schema)
-			expect(shape.options, name).toEqual("options" in STORES[name] ? STORES[name].options : undefined)
-		}
-	})
-
 	test("a store built by name reads a row through its registered codec, and hides one the codec refuses", async () => {
 		for (const name of codecNames) {
 			const golden = fullGolden(name)

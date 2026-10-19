@@ -69,6 +69,7 @@ Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1),
 - **Generator** `scripts/storage-baseline/generate.ts`: unfrozen ⇒ rewrite the one stamp and its expectations; frozen and unchanged ⇒ no-op; changed with migration `last+1` registered ⇒ append its stamp; changed with `-- --additive "<reason>"` ⇒ append a same-version stamp; otherwise refuse with both ways out. It never edits a pinned stamp; `-- --freeze` (A4) prints the first pin.
 - **Migration helpers.** `template.ts` steps 7 and 9 cite R3; `footprint-coverage.test.ts`'s `SCHEMA_SAMPLES` (contacts only) becomes the registry's schemas and goldens, so a row-map migration on any root is checked.
 - **Docs in A1:** CLAUDE.md § Persisted-storage shape changes gains the pre-flip step (a shape change runs `bun run baseline:storage` and keeps the goldens decoding), so the running lanes (tx-record-1's `feeChoice`) re-stamp through it.
+- **Result (A1).** The guard's limits, each named in the PR: a service-level row filter beyond its store (the account service's `rowMatchesKey`) is outside the snapshot; a stamp holds one migration, so a PR registering two needs a stamp each; R3's key check fixes each golden's key, so a migration that moves rows to a new key needs that check extended in its own PR; a pin is trusted as reviewed (D22).
 
 ### Phase 5 (A2) · the unchecked passkey backup's refusal
 
@@ -117,6 +118,7 @@ Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1),
 | D18 | PXE schema pin | a version-only Aztec bump that moves it is held; a reset purges the store | — | fine |
 | D20 | Final pass r2 (Codex conditional) | healthy imported keys reseal, not drop; read metadata in the snapshot, downgrades refused; candidates in the run-owned dir; purge proof cited per root | accepted | — |
 | D21 | Update mechanism (A3 step 1, run in A1) | swap P inside one session and reinstall (Firefox: driver install; Chrome: CDP `loadUnpacked`); a relaunch reports `install` on both | — | — |
+| D22 | A1 diff review (Opus, beside Codex r1: conditional approve) | applied: goldens judged at their own stamp; `.trim()`-style overwrites and `z.coerce` marked; a described copy no longer labels its bare original; no migration may write a restricted shape; key-equal type checks; prefix entries bound to their files; store classes held by value only in their holders; full/minimal goldens checked against `properties`/`required` | — | conditional approve |
 | D19 | Final pass r1 (Codex reject) | exact type equality + a real-writer round trip per described key; per-stamp expectations for every golden (migrated shapes included); reads through the real path (key identity, MAC wrapper); `authenticated` refused by R2; Testnet-chain population and the evidence gap; complete gate commands; the Firefox spike first | accepted | — |
 
 ## Security & Adversarial Considerations

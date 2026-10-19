@@ -3003,6 +3003,7 @@
 				},
 				"txs.full": {
 					"account": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"ambiguous": false,
 					"awaitingFinality": true,
 					"block": {
 						"hash": "0x099c9d518185c0ab773663034e0ded91c5d444b33d9ecbe36f9c1cb4392f694f",

@@ -3,7 +3,7 @@
  * rules a new stamp must satisfy. Shared by `snapshot.test.ts` and the generator
  * (`apps/extension/scripts/storage-baseline/generate.ts`), so both judge a change the same way.
  */
-import { type Migration, Migrator, SCHEMA_VERSION_KEY, type StorageRef } from "@nulo/wallet-core/migration"
+import { type Migration, Migrator, SCHEMA_RESERVED_PREFIX, SCHEMA_VERSION_KEY, type StorageRef } from "@nulo/wallet-core/migration"
 import type { StorageArea } from "@nulo/wallet-core/ports"
 import { MemoryStorageArea, type MinimalStorageArea } from "@nulo/wallet-core/storage"
 import { z } from "zod"
@@ -137,6 +137,17 @@ const RAW_REPOSITORY_READS: Partial<Record<StoredShapeName, (area: StorageArea, 
 	networkResetDone: async (area, id) => (await new StaleNetworkRepository(area).takeNotice(id)) ?? undefined,
 }
 
+/** The repositories take a full area; a decode reads and removes, and never clears or listens. */
+const repositoryArea = (area: MinimalStorageArea): StorageArea => ({
+	get: (keys) => area.get(keys ?? undefined),
+	set: (entries) => area.set(entries),
+	remove: (keys) => area.remove(keys),
+	clear: () => Promise.reject(new Error("a golden decode never clears its area")),
+	onChange: () => {
+		throw new Error("a golden decode never listens to its area")
+	},
+})
+
 /** The value the wallet reads from `key`, through the same store, codec, key-identity options, MAC
  *  check or decoder its service reads with. */
 export async function readStored(name: StoredShapeName, area: MinimalStorageArea, key: string, now: number): Promise<unknown> {
@@ -148,7 +159,7 @@ export async function readStored(name: StoredShapeName, area: MinimalStorageArea
 		if (store) return entityStorage(name as CodecStoreName, area).get(idOf(shape, key))
 		const reader = RAW_REPOSITORY_READS[name]
 		if (!reader) throw new Error(`${name} has a codec but neither a store nor a repository read`)
-		return reader(area, idOf(shape, key))
+		return reader(repositoryArea(area), idOf(shape, key))
 	}
 	let value: unknown
 	if (store?.kind === "entity") value = await entityStorage<unknown>(name as PlainEntityStoreName, area).get(idOf(shape, key))
@@ -177,7 +188,7 @@ type Decoded = Record<string, Json>
 const decodedOf = (value: unknown): Json => (value === undefined ? null : canonical(value))
 
 function contents(area: MemoryStorageArea): string {
-	return canonicalText(Object.fromEntries([...area.data].filter(([key]) => !key.startsWith("nulo:schema:"))))
+	return canonicalText(Object.fromEntries([...area.data].filter(([key]) => !key.startsWith(SCHEMA_RESERVED_PREFIX))))
 }
 
 /** One stamp's goldens, seeded at its version, migrated by the real engine, read back. Throws when
@@ -199,7 +210,7 @@ async function decodeLive(
 	await area.set({ [SCHEMA_VERSION_KEY]: version })
 	await run()
 	if (contents(area) !== once) throw new Error(`a second run of the migrations from v${version} changed the goldens: not idempotent`)
-	const keys = [...area.data.keys()].filter((key) => !key.startsWith("nulo:schema:")).sort()
+	const keys = [...area.data.keys()].filter((key) => !key.startsWith(SCHEMA_RESERVED_PREFIX)).sort()
 	const decoded: Decoded = {}
 	for (const golden of goldens) decoded[golden.id] = decodedOf(await readStored(golden.shape, area, golden.key, GOLDEN_NOW))
 	return { decoded, keys }
@@ -305,15 +316,25 @@ function migrationProblems(prev: Stamp, cur: Stamp, changed: readonly string[], 
 	const migration = migrations.find((m) => m.version === cur.version)
 	if (cur.migration !== cur.version || !migration) return [`v${cur.version} names no registered migration ${cur.version}`]
 	const footprint = [...migration.reads, ...migration.writes]
-	return changed.flatMap((name) => {
-		if (restricted(prev.shapes[name]) || restricted(cur.shapes[name])) {
-			return [`${name} is structured, engine or authenticated: no migration may change it`]
-		}
+	const restrictedNames = new Set(
+		[...Object.keys(prev.shapes), ...Object.keys(cur.shapes)].filter(
+			(name) => restricted(prev.shapes[name]) || restricted(cur.shapes[name]),
+		),
+	)
+	const written = [...restrictedNames].filter((name) => {
 		const { ref } = cur.shapes[name] ?? prev.shapes[name] ?? {}
-		return ref && footprint.some((covered) => sameRef(covered, ref))
-			? []
-			: [`${name} changed, but migration ${cur.version}'s footprint does not cover it`]
+		return ref && !changed.includes(name) && migration.writes.some((write) => sameRef(write, ref))
 	})
+	return [
+		...written.map((name) => `migration ${cur.version} writes ${name}, which is structured, engine or authenticated`),
+		...changed.flatMap((name) => {
+			if (restrictedNames.has(name)) return [`${name} is structured, engine or authenticated: no migration may change it`]
+			const { ref } = cur.shapes[name] ?? prev.shapes[name] ?? {}
+			return ref && footprint.some((covered) => sameRef(covered, ref))
+				? []
+				: [`${name} changed, but migration ${cur.version}'s footprint does not cover it`]
+		}),
+	]
 }
 
 function additiveProblems(cur: Stamp, changed: readonly string[]): string[] {
@@ -373,18 +394,20 @@ export async function pinOf(stamp: Stamp, goldens: readonly Golden[], index: num
 	return { stamp: await sha256(canonicalText(stamp)), goldens: await sha256(canonicalText(introducedBy(goldens, index))) }
 }
 
-/** The shapes a migration's footprint covers. */
-function coveredBy(migration: Migration | undefined): Set<string> {
+/** The shapes a migration's footprint covers; a structured, engine or authenticated one never is. */
+function coveredBy(migration: Migration | undefined, stamp: Stamp): Set<string> {
 	const refs = migration ? [...migration.reads, ...migration.writes] : []
 	return new Set(
-		(Object.keys(STORED_SHAPES) as StoredShapeName[]).filter((name) => refs.some((ref) => sameRef(ref, STORED_SHAPES[name].ref))),
+		(Object.keys(STORED_SHAPES) as StoredShapeName[]).filter(
+			(name) => !restricted(stamp.shapes[name]) && refs.some((ref) => sameRef(ref, STORED_SHAPES[name].ref)),
+		),
 	)
 }
 
 /** Every old golden outside the step's migration footprint keeps each value it decoded to (new
  *  paths may appear), so a stamp cannot change an old row's value unseen. */
 export function preservationProblems(prev: Stamp, cur: Stamp, goldens: readonly Golden[], migrations: readonly Migration[]): string[] {
-	const covered = coveredBy(cur.migration === undefined ? undefined : migrations.find((m) => m.version === cur.migration))
+	const covered = coveredBy(cur.migration === undefined ? undefined : migrations.find((m) => m.version === cur.migration), prev)
 	const shapeOf = new Map(goldens.map((golden) => [golden.id, golden.shape]))
 	return Object.entries(prev.expected).flatMap(([id, before]) => {
 		const shape = shapeOf.get(id)

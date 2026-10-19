@@ -122,18 +122,31 @@ describe("the goldens", () => {
 		}
 	})
 
+	test("an object shape's full golden holds every property, and its minimal one only the required ones", () => {
+		const shapes = currentShapes()
+		for (const golden of goldens.filter(({ id }) => id.endsWith(".full") || id.endsWith(".minimal"))) {
+			const schema = shapes[golden.shape]?.schema as { properties?: Record<string, unknown>; required?: string[] } | undefined
+			if (!schema?.properties || typeof golden.value !== "object" || golden.value === null || Array.isArray(golden.value)) continue
+			const keys = Object.keys(golden.value).sort()
+			// The MAC check refuses a row with no `mac`, which the codec alone would accept.
+			const required = [...(schema.required ?? []), ...(shapeOf(golden).authenticated ? ["mac"] : [])]
+			const expected = golden.id.endsWith(".full") ? Object.keys(schema.properties) : required
+			expect(keys, golden.id).toEqual([...new Set(expected)].sort())
+		}
+	})
+
 	test("ids are unique, each key belongs to its shape, and each stamp index exists", () => {
 		expect(new Set(goldens.map((golden) => golden.id)).size).toBe(goldens.length)
 		for (const golden of goldens) {
 			const { ref } = shapeOf(golden)
 			const belongs = ref.kind === "value" ? golden.key === ref.key : golden.key.startsWith(`${ref.root}@`)
 			expect(belongs, `${golden.id}: ${golden.key}`).toBe(true)
-			expect(golden.stamp, golden.id).toBeLessThan(snapshot.stamps.length)
+			expect(Number.isInteger(golden.stamp) && golden.stamp >= 0 && golden.stamp < snapshot.stamps.length, golden.id).toBe(true)
 		}
 	})
 
-	test("each one decodes to a value: a golden its read code drops proves nothing", () => {
-		const dropped = goldens.filter((golden) => lastStamp().expected[golden.id] === null).map((golden) => golden.id)
-		expect(dropped).toEqual([])
+	test("each one decodes to a value under the stamp that introduced it: a golden its read code drops proves nothing", () => {
+		const dropped = goldens.filter((golden) => (snapshot.stamps[golden.stamp]?.expected[golden.id] ?? null) === null)
+		expect(dropped.map((golden) => golden.id)).toEqual([])
 	})
 })

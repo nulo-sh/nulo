@@ -2,6 +2,7 @@ import { defineMigration, type Migration } from "@nulo/wallet-core/migration"
 import { describe, expect, test } from "vitest"
 import { z } from "zod"
 import { CONTACT_STORAGE_ROOT } from "@/wallet/services/contact/spec"
+import { DAPP_SESSION_STORAGE_ROOT } from "@/wallet/services/dapp-session/spec"
 import { type Golden, justify, preservationProblems, propose, type ShapeRecord, type Stamp, currentShapes, zodVersion } from "./baseline"
 import { canonical, emitSchema, type Json } from "./emit"
 
@@ -44,6 +45,15 @@ describe("emitSchema", () => {
 		expect(() => emitSchema("s", z.object({ a: z.custom<object>(() => true) }))).toThrow("s: the x-custom node at /properties/a")
 		expect(() => emitSchema("s", z.object({ b: z.string().refine(() => true) }))).toThrow("x-refine")
 		expect(() => emitSchema("s", z.object({ c: z.string().transform((v) => v) }))).toThrow("x-transform")
+		expect(() => emitSchema("s", z.object({ d: z.string().trim() }))).toThrow("s: the x-transform node at /properties/d")
+		expect(() => emitSchema("s", z.object({ e: z.coerce.number() }))).toThrow("x-transform")
+	})
+
+	test("a described copy of a node does not label the bare node used beside it", () => {
+		const fee = z.custom<object>(() => true)
+		expect(() => emitSchema("s", z.object({ a: fee, b: fee.describe("x") }))).toThrow("/properties/a")
+		expect(() => emitSchema("s", z.object({ b: fee.describe("x"), a: fee }))).toThrow("/properties/a")
+		expect(emitSchema("s", z.object({ b: fee.describe("x") }))).toMatchObject({ properties: { b: { "x-custom": "x" } } })
 	})
 
 	test("a described node is emitted under its marker, an inner one through its wrapper", () => {
@@ -121,6 +131,13 @@ describe("justify", () => {
 			const problems = justify(base, stampOf(shapes, { version: 2, migration: 2 }), [migrationOver(2, root)])
 			expect(problems, name).toContain(`${name} is structured, engine or authenticated: no migration may change it`)
 		}
+	})
+
+	test("no migration may write a structured, engine or authenticated shape, changed or not", () => {
+		const next = stampOf(currentShapes(), { version: 2, migration: 2 })
+		expect(justify(base, next, [migrationOver(2, DAPP_SESSION_STORAGE_ROOT)])).toEqual([
+			"migration 2 writes dappSessions, which is structured, engine or authenticated",
+		])
 	})
 
 	test("no step may weaken how a kept shape is read, even with a mark", () => {

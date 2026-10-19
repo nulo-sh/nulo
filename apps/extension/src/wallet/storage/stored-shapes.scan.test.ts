@@ -1,5 +1,5 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: the fixtures are code samples fed to the scanner as plain strings; their `${` is what it looks for.
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import ts from "typescript"
 import { describe, expect, test } from "vitest"
@@ -18,30 +18,62 @@ import { STORED_SHAPES, type StoredShape } from "./stored-shapes"
 
 type NotLocalKind = "session" | "local-storage" | "lock" | "alarm" | "message" | "label" | "file-tag" | "module" | "prefix" | "e2e"
 
-/** Every `nulo:` literal that is not a `chrome.storage.local` key. A trailing `*` matches a prefix. */
-const NOT_LOCAL_STORAGE: Record<string, { kind: NotLocalKind; reason: string }> = {
+/**
+ * Every `nulo:` literal that is not a `chrome.storage.local` key. A trailing `*` matches a prefix. An
+ * entry a template can extend (ending `:`, `@` or `*`) names the files that own it, so the same head
+ * elsewhere still needs registering; a path ending `/` names a directory.
+ */
+const NOT_LOCAL_STORAGE: Record<string, { kind: NotLocalKind; reason: string; files?: readonly string[] }> = {
 	"nulo:core:session": { kind: "session", reason: "the unlocked session, chrome.storage.session" },
 	"nulo:logs": { kind: "session", reason: "the log buffer, chrome.storage.session" },
 	"nulo:liveness": { kind: "session", reason: "the background heartbeat, chrome.storage.session" },
 	"nulo:incoming:scan-episodes": { kind: "session", reason: "receive-scan episodes, chrome.storage.session" },
 	"nulo:onboarding:tab-id": { kind: "session", reason: "the onboarding tab, chrome.storage.session" },
 	"nulo:legal:dismissed": { kind: "session", reason: "a dismissed acceptance sheet, chrome.storage.session" },
-	"nulo:own-window:": { kind: "session", reason: "prefix of the own-window ids, chrome.storage.session" },
+	"nulo:own-window:": {
+		kind: "session",
+		reason: "prefix of the own-window ids, chrome.storage.session",
+		files: ["apps/extension/src/utils/own-window.ts"],
+	},
 	"nulo:theme": { kind: "local-storage", reason: "the pre-paint theme hint, window.localStorage" },
 	"nulo:scope-follow": { kind: "lock", reason: "a Web Lock name" },
-	"nulo:restoreOutcome@": { kind: "lock", reason: "prefix of the restore-outcome Web Lock names" },
+	"nulo:restoreOutcome@": {
+		kind: "lock",
+		reason: "prefix of the restore-outcome Web Lock names",
+		files: ["apps/extension/src/utils/restore-outcome.ts"],
+	},
 	"nulo:core:session:ttl": { kind: "alarm", reason: "the session-expiry alarm" },
 	"nulo:journal:gc": { kind: "alarm", reason: "the journal sweep alarm" },
 	"nulo:journal:reap": { kind: "alarm", reason: "the journal reaper alarm" },
 	"nulo:price:refresh": { kind: "alarm", reason: "the price refresh alarm" },
 	"nulo:token-list:refresh": { kind: "alarm", reason: "the token-list refresh alarm" },
 	"nulo:open-toolbar-popup": { kind: "message", reason: "a runtime message type" },
-	"nulo:full-backup:": { kind: "file-tag", reason: "the full-backup file tag family" },
+	"nulo:full-backup:": {
+		kind: "file-tag",
+		reason: "the full-backup file tag family",
+		files: ["apps/extension/src/utils/full-backup-helpers.ts"],
+	},
 	"nulo:full-backup:v2": { kind: "file-tag", reason: "the full-backup file tag" },
-	"nulo:third-party-notices*": { kind: "module", reason: "the notices plugin's Rollup names" },
-	"nulo:ui:": { kind: "prefix", reason: "the prefix useSyncedRef builds its keys from; its keys are checked below" },
-	"nulo:schema:": { kind: "prefix", reason: "the engine's reserved prefix; its keys are registered" },
-	"nulo:e2e:*": { kind: "e2e", reason: "test gates and fixtures, compiled into armed e2e builds only" },
+	"nulo:third-party-notices*": {
+		kind: "module",
+		reason: "the notices plugin's Rollup names",
+		files: ["packages/third-party-notices/src/plugin.ts"],
+	},
+	"nulo:ui:": {
+		kind: "prefix",
+		reason: "the prefix useSyncedRef builds its keys from; its keys are checked below",
+		files: ["apps/extension/src/composables/syncedRef.js"],
+	},
+	"nulo:schema:": {
+		kind: "prefix",
+		reason: "the engine's reserved prefix; its keys are registered",
+		files: ["packages/wallet-core/src/migration/migrator.ts"],
+	},
+	"nulo:e2e:*": {
+		kind: "e2e",
+		reason: "test gates and fixtures, compiled into armed e2e builds only",
+		files: ["apps/extension/src/e2e/"],
+	},
 	"nulo:account-export:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:account-seed:v2": { kind: "label", reason: "a domain separator" },
 	"nulo:backup-mac:v1": { kind: "label", reason: "a domain separator" },
@@ -57,7 +89,7 @@ const NOT_LOCAL_STORAGE: Record<string, { kind: NotLocalKind; reason: string }> 
 	"nulo:profile-imported-dek:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:profile-master:v2": { kind: "label", reason: "a domain separator" },
 	"nulo:profile:v1": { kind: "label", reason: "a domain separator" },
-	"nulo:pxe-store-salt:": { kind: "label", reason: "a domain separator" },
+	"nulo:pxe-store-salt:": { kind: "label", reason: "a domain separator", files: ["packages/wallet-crypto/src/pxe-store-key.ts"] },
 	"nulo:pxe-store:v2": { kind: "label", reason: "a domain separator" },
 	"nulo:session-wrap:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:signing-root:v2": { kind: "label", reason: "a domain separator" },
@@ -66,19 +98,38 @@ const NOT_LOCAL_STORAGE: Record<string, { kind: NotLocalKind; reason: string }> 
 
 const SYNCED_REF_PREFIX = "nulo:ui:"
 const REGISTRY_FILE = "apps/extension/src/wallet/storage/stored-shapes.ts"
-const STORE_FACTORY_DIR = "apps/extension/src/wallet/storage/"
+const STORE_FACTORY = "apps/extension/src/wallet/storage/stores.ts"
+/** The only files that may hold the store classes as values: their definition, the barrel that
+ *  re-exports them, the factories, and the session store, which is over `storage.session`. */
+const STORE_CLASS_HOLDERS = [
+	"packages/wallet-core/src/storage/",
+	"apps/extension/src/wallet/storage/index.ts",
+	STORE_FACTORY,
+	"apps/extension/src/wallet/services/profile/session-manager.ts",
+]
+const STORE_CLASSES = new Set(["EntityStorage", "ValueStorage"])
+const STORE_CLASS_MODULES = new Set(["@nulo/wallet-core/storage", "@/wallet/storage"])
 const SHAPES: readonly StoredShape[] = Object.values(STORED_SHAPES)
 
 type Source = { file: string; source: string }
-type Literal = { file: string; line: number; text: string }
+/** `extended`: a template piece a substitution follows, so the key is longer than `text`. */
+type Literal = { file: string; line: number; text: string; extended: boolean }
 
 /** The shape a stored key or key prefix belongs to: a value key exactly, or a root, alone or followed by `@`. */
-function claimingShape(text: string): StoredShape | undefined {
-	return SHAPES.find(({ ref }) => (ref.kind === "value" ? text === ref.key : text === ref.root || text.startsWith(`${ref.root}@`)))
+function claimingShape(text: string, extended = false): StoredShape | undefined {
+	return SHAPES.find(({ ref }) =>
+		ref.kind === "value" ? !extended && text === ref.key : text === ref.root || text.startsWith(`${ref.root}@`),
+	)
 }
 
-function notLocal(text: string): boolean {
-	return Object.keys(NOT_LOCAL_STORAGE).some((key) => (key.endsWith("*") ? text.startsWith(key.slice(0, -1)) : text === key))
+const ownedBy = (files: readonly string[] | undefined, file: string) =>
+	!files || files.some((owner) => (owner.endsWith("/") ? file.startsWith(owner) : file === owner))
+
+function notLocal({ text, file, extended }: Literal): boolean {
+	return Object.entries(NOT_LOCAL_STORAGE).some(
+		([key, { files }]) =>
+			(key.endsWith("*") ? text.startsWith(key.slice(0, -1)) : text === key) && ownedBy(files, file) && (!extended || !!files),
+	)
 }
 
 /** Each script of a file, with the line its content starts on, so a hit is reported at its file line. */
@@ -104,8 +155,10 @@ function nuloLiterals(sources: readonly Source[]): Literal[] {
 	for (const src of sources) {
 		for (const { sf, startLine } of scriptsOf(src)) {
 			walk(sf, (node) => {
-				if (isLiteralText(node) && node.text.startsWith("nulo:"))
-					literals.push({ file: src.file, line: lineOf(node, startLine), text: node.text })
+				if (isLiteralText(node) && node.text.startsWith("nulo:")) {
+					const extended = ts.isTemplateHead(node) || ts.isTemplateMiddle(node)
+					literals.push({ file: src.file, line: lineOf(node, startLine), text: node.text, extended })
+				}
 			})
 		}
 	}
@@ -129,7 +182,7 @@ function syncedRefKeys(sources: readonly Source[]): Array<{ file: string; line: 
 
 function unregisteredLiterals(sources: readonly Source[]): string[] {
 	return nuloLiterals(sources)
-		.filter(({ text }) => !claimingShape(text) && !notLocal(text))
+		.filter((literal) => !claimingShape(literal.text, literal.extended) && !notLocal(literal))
 		.map(({ file, line, text }) => `${file}:${line} "${text}"`)
 }
 
@@ -139,17 +192,64 @@ function unregisteredSyncedRefs(sources: readonly Source[]): string[] {
 		.map(({ file, line, key }) => `${file}:${line} useSyncedRef(${key ?? "<not a string literal>"})`)
 }
 
-/** A `new EntityStorage(` / `new ValueStorage(` outside the store factories, unless over `storage.session`. */
+/** `<anything>.storage.session`, as written: a conditional or a variable could be the local area. */
+const isSessionArea = (node: ts.Node | undefined) =>
+	!!node &&
+	ts.isPropertyAccessExpression(node) &&
+	node.name.text === "session" &&
+	ts.isPropertyAccessExpression(node.expression) &&
+	node.expression.name.text === "storage"
+
+/** A `new EntityStorage(` / `new ValueStorage(` outside the store factories, unless its area is `storage.session`. */
 function strayConstructions(sources: readonly Source[]): string[] {
 	const stray: string[] = []
 	for (const src of sources) {
-		if (src.file.startsWith(STORE_FACTORY_DIR)) continue
+		if (src.file === STORE_FACTORY) continue
 		for (const { sf, startLine } of scriptsOf(src)) {
 			walk(sf, (node) => {
-				if (!ts.isNewExpression(node) || !ts.isIdentifier(node.expression)) return
-				if (node.expression.text !== "EntityStorage" && node.expression.text !== "ValueStorage") return
-				const overSession = (node.arguments ?? []).some((arg) => /\bstorage\.session\b/.test(arg.getText()))
-				if (!overSession) stray.push(`${src.file}:${lineOf(node, startLine)} new ${node.expression.text}(…)`)
+				if (!ts.isNewExpression(node) || !ts.isIdentifier(node.expression) || !STORE_CLASSES.has(node.expression.text)) return
+				if (!isSessionArea(node.arguments?.[1])) stray.push(`${src.file}:${lineOf(node, startLine)} new ${node.expression.text}(…)`)
+			})
+		}
+	}
+	return stray
+}
+
+const moduleOf = (specifier: ts.Expression | undefined) => (specifier && ts.isStringLiteral(specifier) ? specifier.text : "")
+const storeClassNames = (elements: readonly (ts.ImportSpecifier | ts.ExportSpecifier)[]) =>
+	elements
+		.filter((el) => !el.isTypeOnly && STORE_CLASSES.has((el.propertyName ?? el.name).text))
+		.map((el) => (el.propertyName ?? el.name).text)
+
+function importedStoreClasses(node: ts.ImportDeclaration): string[] {
+	const bindings = node.importClause?.namedBindings
+	if (node.importClause?.isTypeOnly || !bindings) return []
+	if (ts.isNamespaceImport(bindings)) return STORE_CLASS_MODULES.has(moduleOf(node.moduleSpecifier)) ? [`* as ${bindings.name.text}`] : []
+	return storeClassNames(bindings.elements)
+}
+
+function exportedStoreClasses(node: ts.ExportDeclaration): string[] {
+	if (node.isTypeOnly) return []
+	if (!node.exportClause) return STORE_CLASS_MODULES.has(moduleOf(node.moduleSpecifier)) ? ["*"] : []
+	return ts.isNamedExports(node.exportClause) ? storeClassNames(node.exportClause.elements) : []
+}
+
+/** The store classes a declaration brings in as values, aliased or not, or its module when whole. */
+function storeClassesOf(node: ts.Node): string[] {
+	if (ts.isImportDeclaration(node)) return importedStoreClasses(node)
+	if (ts.isExportDeclaration(node)) return exportedStoreClasses(node)
+	return []
+}
+
+/** A value import or re-export of the store classes outside {@link STORE_CLASS_HOLDERS}: a subclass or
+ *  an alias would build a store the constructor rule cannot see. */
+function strayStoreImports(sources: readonly Source[]): string[] {
+	const stray: string[] = []
+	for (const src of sources) {
+		if (STORE_CLASS_HOLDERS.some((holder) => (holder.endsWith("/") ? src.file.startsWith(holder) : src.file === holder))) continue
+		for (const { sf, startLine } of scriptsOf(src)) {
+			walk(sf, (node) => {
+				for (const name of storeClassesOf(node)) stray.push(`${src.file}:${lineOf(node, startLine)} ${name}`)
 			})
 		}
 	}
@@ -177,6 +277,7 @@ describe("every nulo: key is registered", () => {
 
 	test("every local EntityStorage and ValueStorage is built by the factories in wallet/storage/stores.ts", () => {
 		expect(strayConstructions(sources), "build it with entityStorage / valueStorage from @/wallet/storage/stores").toEqual([])
+		expect(strayStoreImports(sources), "import the store classes as types only; build stores with the factories").toEqual([])
 	})
 
 	test("every registry entry is named by the sources, so none is dead", () => {
@@ -228,6 +329,37 @@ describe("the scan's own rules", () => {
 			strayConstructions(fixture("apps/extension/src/wallet/services/x.ts", "new ValueStorage(KEY, browserApi.storage.session)")),
 		).toEqual([])
 		expect(strayConstructions(fixture("apps/extension/src/wallet/storage/stores.ts", local))).toEqual([])
+		const either = "new ValueStorage(KEY, c ? browserApi.storage.session : browserApi.storage.local)"
+		expect(strayConstructions(fixture("apps/extension/src/wallet/services/x.ts", either))).toHaveLength(1)
+		expect(strayConstructions(fixture("apps/extension/src/wallet/storage/other.ts", local))).toHaveLength(1)
+	})
+
+	test("a value import of a store class outside its holders fails, aliased, whole or re-exported; a type import passes", () => {
+		const at = (source: string) => strayStoreImports(fixture("apps/extension/src/wallet/services/x.ts", source))
+		expect(at('import { EntityStorage as Store } from "@nulo/wallet-core/storage"')).toEqual([
+			"apps/extension/src/wallet/services/x.ts:1 EntityStorage",
+		])
+		expect(at('import * as storage from "@/wallet/storage"')).toHaveLength(1)
+		expect(at('export { ValueStorage } from "@/wallet/storage"')).toHaveLength(1)
+		expect(at('import type { EntityStorage } from "@/wallet/storage"; import { type ValueStorage } from "@/wallet/storage"')).toEqual(
+			[],
+		)
+		expect(strayStoreImports(fixture(STORE_FACTORY, 'import { EntityStorage } from "@nulo/wallet-core/storage"'))).toEqual([])
+	})
+
+	test("a key head a template extends passes only in a file that owns it", () => {
+		const head = "const k = `nulo:ui:${name}`"
+		expect(unregisteredLiterals(fixture("apps/extension/src/x.ts", head))).toHaveLength(1)
+		expect(unregisteredLiterals(fixture("apps/extension/src/composables/syncedRef.js", head))).toEqual([])
+		expect(unregisteredLiterals(fixture("apps/extension/src/x.ts", "const k = `nulo:journal:gc${n}`"))).toHaveLength(1)
+		expect(unregisteredLiterals(fixture("apps/extension/src/x.ts", "const k = `nulo:ui:activeAccount${n}`"))).toHaveLength(1)
+	})
+
+	test("every entry a template can extend names its owning files, and each file exists", () => {
+		for (const [key, { files }] of Object.entries(NOT_LOCAL_STORAGE)) {
+			if (/[:@*]$/.test(key)) expect(files?.length, key).toBeGreaterThan(0)
+			for (const file of files ?? []) expect(existsSync(join(REPO_ROOT, file)), `${key}: ${file}`).toBe(true)
+		}
 	})
 
 	test("a literal in a Vue SFC script is read", () => {

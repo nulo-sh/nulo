@@ -70,7 +70,9 @@ vi.mock("./migrations", async (importOriginal) => ({
 	migrations: bootMigrations,
 }))
 
-type Equivalent<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+type Mutual<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+/** Mutual assignability, plus the same top-level keys: an optional key only one side has is assignable both ways. */
+type Equivalent<A, B> = Mutual<A, B> extends true ? Mutual<keyof A, keyof B> : false
 type Out<S extends z.ZodType> = z.output<S>
 type Registered<N extends StoredShapeName> = Out<(typeof STORED_SHAPES)[N]["schema"]>
 /** The legal record is a readonly view; `readonly` changes nothing that is stored. */
@@ -134,9 +136,9 @@ describe("described schemas match their writers' types", () => {
 			Equivalent<Registered<"uiLastActiveProfile">, string>,
 			Equivalent<Registered<"onboardingCompleted">, boolean>,
 		] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]
-		const control: Equivalent<{ a: string }, { a?: string }> = false
-		expect(checks.every(Boolean)).toBe(true)
-		expect(control).toBe(false)
+		const controls: [Equivalent<{ a: string }, { a?: string }>, Equivalent<{ a: string; b?: string }, { a: string }>] = [false, false]
+		// The check is the typecheck of these two assignments; the run only records that they compiled.
+		expect([checks.length, controls.length]).toEqual([17, 2])
 	})
 
 	// Entries built through `described()` or `engine()` are typed `StoredShape`, whose schema is any

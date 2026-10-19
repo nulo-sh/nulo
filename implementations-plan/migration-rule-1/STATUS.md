@@ -8,3 +8,4 @@
 - 2026-10-19 final pass r3: Codex approve. Plan committed; A1 next (branch `migration-rule-1-a1`), the Firefox mechanism spike first.
 - 2026-10-19 A1 phase 1 green: stores built from `wallet/storage/stores.ts`, every key family in `stored-shapes.ts`, decoders exported, the scan (negative demo logged). A3 step 1 run: a relaunch reports `install` on both browsers, an in-session reinstall `update` (D21).
 - 2026-10-19 A1 phase 2: emitter, baseline harness, generator (`bun run baseline:storage`), R1-R4, writer round trips; goldens being authored.
+- 2026-10-19 A1 phase 2 green: 82 goldens, generator idempotent, every scratch-edit demo red where the plan says (lessons/phase-2.md). Gates and the review loop next.

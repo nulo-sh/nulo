@@ -164,6 +164,8 @@ export const MigrationBlockedSchema = z.object({
 })
 export const MigrationDegradedSchema = z.object({ version: z.number(), error: z.string() })
 
+/** The engine's own keys, read by its decoders (`decodeBlockedStatus`, `isValidRetryRequest`), never
+ *  through `read`: they have no goldens, and no migration may write them. */
 const engine = (key: string, schema: z.ZodType): StoredShape => ({
 	ref: value(key),
 	encoding: "structured",
@@ -249,12 +251,3 @@ export const STORED_SHAPES = {
 } as const satisfies Record<string, StoredShape>
 
 export type StoredShapeName = keyof typeof STORED_SHAPES
-
-/** The registered name of a stored key, or `undefined` for a key no entry claims. */
-export function shapeOfKey(key: string): StoredShapeName | undefined {
-	for (const [name, shape] of Object.entries(STORED_SHAPES) as [StoredShapeName, StoredShape][]) {
-		const { ref } = shape
-		if (ref.kind === "value" ? key === ref.key : key.startsWith(`${ref.root}@`) && key.length > ref.root.length + 1) return name
-	}
-	return undefined
-}
