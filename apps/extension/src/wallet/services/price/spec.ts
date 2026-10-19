@@ -2,6 +2,9 @@ import type { PricedTokens } from "./price-map"
 
 export const PRICE_SERVICE_NAME = "price"
 
+/** ValueStorage key of the quote cache, a {@link PriceState}. */
+export const TOKEN_PRICES_STORAGE_KEY = "nulo:core:token-prices"
+
 /** A validated USD quote for one CoinGecko id. */
 export type PriceQuote = {
 	coingeckoId: string

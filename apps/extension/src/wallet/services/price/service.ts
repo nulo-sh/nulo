@@ -5,7 +5,8 @@ import type { ILogger } from "@/wallet/logger"
 import { ConfigService } from "@/wallet/services/config/service"
 import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
 import { TokenListService } from "@/wallet/services/token-list/service"
-import { ValueStorage } from "@/wallet/storage"
+import type { ValueStorage } from "@/wallet/storage"
+import { valueStorage } from "@/wallet/storage/stores"
 import { flaggedKeysOf } from "@/utils/token-flag"
 import { AlarmDispatcher, EventHandler, createSerialQueue, readBodyCapped } from "@nulo/wallet-core/utils"
 import { allCoingeckoIds, getSanityBand, pricedTokensOf } from "./price-map"
@@ -28,8 +29,6 @@ export const PRICE_REFRESH_ALARM_NAME = "nulo:price:refresh"
 
 /** Chrome's production floor is 1 min; 3 min keeps traffic minimal while unlocked. */
 export const PRICE_REFRESH_PERIOD_MINUTES = 3
-
-const CACHE_STORAGE_KEY = "nulo:core:token-prices"
 
 const API_BASE = "https://api.coingecko.com/api/v3"
 
@@ -106,7 +105,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 
 	public constructor(logger: ILogger, browserApi: BrowserApi, opts?: { fetchFn?: FetchLike; now?: () => number }) {
 		super(PRICE_SERVICE_NAME, logger)
-		this.cache = new ValueStorage<PriceState>(CACHE_STORAGE_KEY, browserApi.storage.local)
+		this.cache = valueStorage<PriceState>("tokenPrices", browserApi.storage.local)
 		this.dispatcher = new AlarmDispatcher(PRICE_REFRESH_ALARM_NAME, browserApi.alarms)
 		this.fetchFn = opts?.fetchFn ?? ((input, init) => fetch(input, init))
 		this.now = opts?.now ?? (() => Date.now())

@@ -1,5 +1,6 @@
 import type { MinimalStorageArea } from "@nulo/wallet-core/storage"
-import { ValueStorage } from "@/wallet/storage"
+import type { ValueStorage } from "@/wallet/storage"
+import { valueStorage } from "@/wallet/storage/stores"
 import { LogLevel } from "@nulo/wallet-core/logger"
 import { createSerialQueue } from "@nulo/wallet-core/utils"
 import type { ILogger } from "@/wallet/logger"
@@ -745,7 +746,7 @@ export class TokenSeeder {
 	}
 
 	private markerStorage(profileId: string): ValueStorage<SeedMarkerState> {
-		return new ValueStorage<SeedMarkerState>(`nulo:core:token-seeded@${profileId}`, this.storageArea)
+		return valueStorage<SeedMarkerState>("tokenSeeded", this.storageArea, profileId)
 	}
 
 	/**

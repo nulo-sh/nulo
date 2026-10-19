@@ -12,14 +12,15 @@ import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { nextRandomId } from "@/wallet/services/id-allocators"
 import { requireOwnedRow } from "@/wallet/services/require-owned-row"
 import { ensureRegistered } from "@/wallet/services/execution/contract-resolver"
-import { EntityStorage } from "@/wallet/storage"
+import type { EntityStorage } from "@/wallet/storage"
+import { entityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { resolveNetworkByChainId } from "@/wallet/utils/caip"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { Fpc } from "./fpc"
 import { getFpcHandler } from "./handlers"
-import { type Events, FPC_SERVICE_NAME, FPC_STORAGE_ROOT, type FpcInfo, FpcType, type Methods, StoredFpcSchema } from "./spec"
+import { type Events, FPC_SERVICE_NAME, type FpcInfo, FpcType, type Methods } from "./spec"
 import { derivePrivateFpc, deriveSponsoredFpc, type ProtocolFpc } from "./protocol-fpcs"
 
 export * from "./fpc"
@@ -67,7 +68,7 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 
 	public constructor(logger: ILogger, browserApi: BrowserApi) {
 		super(FPC_SERVICE_NAME, logger)
-		this.storage = new EntityStorage<StoredFpc>(FPC_STORAGE_ROOT, browserApi.storage.local, (raw) => StoredFpcSchema.parse(raw))
+		this.storage = entityStorage("fpcs", browserApi.storage.local)
 	}
 
 	protected async init(services: ServiceCollection) {

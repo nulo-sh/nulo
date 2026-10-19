@@ -8,6 +8,9 @@ export const NETWORK_SERVICE_NAME = "network"
  *  renaming detaches every existing row; the backup-migration registry pins it. */
 export const NETWORK_STORAGE_ROOT = "nulo:core:networks"
 
+/** Per-profile key root of the active network id, stored as a bare string (`${root}@${profileId}`). */
+export const ACTIVE_NETWORK_STORAGE_ROOT = "nulo:core:active-network"
+
 export enum NodeStatus {
 	Active,
 	Inactive,

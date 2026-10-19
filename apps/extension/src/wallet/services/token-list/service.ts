@@ -4,7 +4,8 @@ import { AlarmDispatcher, EventHandler, ResponseTooLargeError, readBodyCapped } 
 import type { IService, ServiceCollection } from "@/wallet/base"
 import { type ILogger, LogLevel } from "@/wallet/logger"
 import { LegalAcceptanceService, type LegalStatus } from "@/wallet/services/legal/service"
-import { ValueStorage } from "@/wallet/storage"
+import type { ValueStorage } from "@/wallet/storage"
+import { valueStorage } from "@/wallet/storage/stores"
 import {
 	type RefreshOutcome,
 	TOKEN_LIST_REFRESH_ALARM_NAME,
@@ -16,7 +17,6 @@ import {
 
 export * from "./spec"
 
-const STORAGE_KEY = "nulo:core:token-list"
 const HOUR_MS = 3_600_000
 const DAY_MS = 24 * HOUR_MS
 const JITTER_MS = 2 * HOUR_MS
@@ -86,7 +86,7 @@ export class TokenListService implements IService {
 		browserApi: BrowserApi,
 		options: TokenListServiceOptions = {},
 	) {
-		this.storage = new ValueStorage<StoredState>(STORAGE_KEY, browserApi.storage.local)
+		this.storage = valueStorage<StoredState>("tokenList", browserApi.storage.local)
 		this.dispatcher = new AlarmDispatcher(TOKEN_LIST_REFRESH_ALARM_NAME, browserApi.alarms)
 		this.getSource = options.getSource ?? (async () => ({ url: TOKEN_LIST_URL, keys: PINNED_KEYS }))
 		this.fetchFn = options.fetchFn ?? ((url, init) => fetch(url, init))

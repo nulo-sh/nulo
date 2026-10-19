@@ -26,6 +26,9 @@ import { TransferType } from "@/wallet/services/transaction/spec"
 
 export const OPERATION_JOURNAL_SERVICE_NAME = "operation-journal"
 
+/** EntityStorage root for operation records. Frozen: renaming detaches every journal row. */
+export const OPERATION_JOURNAL_STORAGE_ROOT = "nulo:journal"
+
 /** Coarse operation category.
  *
  * - `transfer` / `dapp_execute`: on-chain ops (full FSM with prove + submit).

@@ -1,20 +1,15 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
-import { ValueStorage } from "@/wallet/storage"
+import { valueStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { type Config, type ConfigKey, type ConfigProp, ConfigSchema, defaultConfig } from "./config"
 import type { IConfigStore } from "."
 
-/** ValueStorage key holding the whole serialized `Config` object. Frozen:
- *  renaming detaches every install's settings; the backup-migration registry
- *  pins it. */
-export const CONFIG_STORAGE_KEY = "nulo:config"
-
 export class ConfigStore implements IConfigStore {
 	public readonly onUpdate = new EventHandler<ConfigProp>()
 
 	private readonly lock = new Lock()
-	private readonly storage = new ValueStorage<Config>(CONFIG_STORAGE_KEY, chrome.storage.local)
+	private readonly storage = valueStorage<Config>("config", chrome.storage.local)
 	private config = defaultConfig()
 
 	public get props(): ConfigProp[] {
