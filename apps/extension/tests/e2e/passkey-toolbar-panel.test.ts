@@ -42,7 +42,6 @@ import {
 	waitForActiveAccount,
 	writeBackupToTemp,
 } from "./helpers/import-drivers"
-import { profileNotFirstKey } from "@/utils/profile-ui-keys"
 import { POPUP_RETURN_FOCUS_MS } from "@/wallet/utils/toolbar-popup"
 
 const EXPORT = "#/popup/settings/security/export/full"
@@ -331,9 +330,11 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 				await refuseInWindow(auth),
 			)
 			expect((await readProfileNames(control)).sort()).toEqual(["Main", "Profile 2"])
-			// The service marks a profile made beside another, whichever window ran its passkey step.
-			const notFirst = profileNotFirstKey(created.profile)
-			expect(await control.evaluate(async (key) => (await chrome.storage.local.get(key))[key], notFirst)).toBe(true)
+			// The service marks the profile made beside another, whichever window ran its passkey step.
+			const marked = await control.evaluate(async () =>
+				Object.keys(await chrome.storage.local.get(null)).filter((key) => key.startsWith("nulo:ui:profileNotFirst@")),
+			)
+			expect(marked).toEqual([`nulo:ui:profileNotFirst@${created.profile}`])
 
 			// The popup comes back by itself once the window is done.
 			await panelOn(browser, "#/popup/general")
