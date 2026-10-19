@@ -170,7 +170,17 @@ const STUBS = {
 	},
 	AmountCard: {
 		template: '<input data-testid="stub-amount" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
-		props: ["modelValue", "fiatMode", "fiatGuard", "token", "tokenBalanceByType", "balanceRawByType", "liveQuote", "proxyTicker"],
+		props: [
+			"modelValue",
+			"fiatMode",
+			"fiatGuard",
+			"token",
+			"tokenBalanceByType",
+			"balanceRawByType",
+			"liveQuote",
+			"proxyTicker",
+			"exceedsBalance",
+		],
 		emits: ["update:modelValue", "update:fiatMode", "update:fiatGuard"],
 		methods: { refreezeQuote() {} },
 	},
@@ -294,6 +304,13 @@ function settled(w: W) {
 	expect(action === "review").toBe(you === "exposed")
 	expect(tag(w).exists()).toBe(you === "exposed")
 	return { action, you, to: strip(w).attributes("data-to"), amount: strip(w).attributes("data-amount") }
+}
+
+function balanceUpdated() {
+	const client = vi.mocked(TokenBalanceServiceClient).mock.results.at(-1)?.value as unknown as {
+		onTokenBalanceUpdated: EventHandler<unknown>
+	}
+	return client.onTokenBalanceUpdated
 }
 
 const submittedFee = () => (mocks.executeTransfer.mock.calls[0]?.[7] as { paymentMethod: unknown } | undefined)?.paymentMethod
@@ -905,10 +922,7 @@ describe("send page — Confirm waits for the current input's estimate", () => {
 		expect(mocks.estimateTransferFee).not.toHaveBeenCalled()
 		expect(sendDisabled(w)).toBe(true)
 
-		const balances = vi.mocked(TokenBalanceServiceClient).mock.results.at(-1)?.value as unknown as {
-			onTokenBalanceUpdated: EventHandler<unknown>
-		}
-		balances.onTokenBalanceUpdated.invoke({ ...BALANCE, privateBalance: "10000000", updatedAt: 2 })
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "10000000", updatedAt: 2 })
 		await flushPromises()
 		await estimateLands()
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
@@ -929,10 +943,7 @@ describe("send page — Confirm waits for the current input's estimate", () => {
 		await estimateLands()
 		expect(row().find('[data-testid="fee-estimate"]').exists()).toBe(true)
 
-		const balances = vi.mocked(TokenBalanceServiceClient).mock.results.at(-1)?.value as unknown as {
-			onTokenBalanceUpdated: EventHandler<unknown>
-		}
-		balances.onTokenBalanceUpdated.invoke({ ...BALANCE, privateBalance: "1000000", updatedAt: 2 })
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "1000000", updatedAt: 2 })
 		await flushPromises()
 		expect(row().find('[data-testid="fee-estimate"]').exists()).toBe(false)
 		expect(row().text()).toBe("Fee estimated after simulation")

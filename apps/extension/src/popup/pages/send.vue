@@ -250,6 +250,10 @@ const amountValidation = computed(() =>
 	}),
 )
 
+/** The line under the amount names only a balance the wallet read: a row never synced holds a zero
+ *  placeholder, which the token card draws as loading. */
+const exceedsBalance = computed(() => amountValidation.value.reason === "exceedsBalance" && tokenBalance.value?.updatedAt !== 0)
+
 /** The estimate watch's source for validity, a boolean: `amountValidation` is a new object on every
  *  balance recompute, and a deep watch runs on any change it subscribes to, so only a flip re-asks. */
 const amountSendable = computed(() => amountValidation.value.valid)
@@ -822,7 +826,7 @@ onBeforeUnmount(() => {
 						:balanceRawByType="balanceRaw ?? null"
 						:liveQuote
 						:proxyTicker
-						:exceedsBalance="amountValidation.reason === 'exceedsBalance'"
+						:exceedsBalance
 					/>
 					<Flex v-if="fiatNeedsRequote" align="center" gap="6" :class="$style.requote_notice">
 						<Icon name="warning" size="12" color="tertiary" />

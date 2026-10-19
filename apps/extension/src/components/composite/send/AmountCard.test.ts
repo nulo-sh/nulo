@@ -1018,7 +1018,6 @@ describe("composite/AmountCard — the unit switch and Max by keyboard", () => {
 describe("composite/AmountCard — an amount over the balance", () => {
 	const TOKEN = { symbol: "TST", decimals: 6 }
 	const QUOTE = { usd: 1, fetchedAt: Date.now() }
-	// 500 TST, as the balance service carries it: base units in a digit string.
 	const mountOver = (props: Record<string, unknown> = {}) =>
 		mountCard({
 			token: TOKEN,

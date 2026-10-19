@@ -172,7 +172,17 @@ const STUBS = {
 		name: "AmountCard",
 		template:
 			'<input data-testid="stub-amount" :data-token="token?.symbol" :data-balance="tokenBalanceByType" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
-		props: ["modelValue", "fiatMode", "fiatGuard", "token", "tokenBalanceByType", "balanceRawByType", "liveQuote", "proxyTicker"],
+		props: [
+			"modelValue",
+			"fiatMode",
+			"fiatGuard",
+			"token",
+			"tokenBalanceByType",
+			"balanceRawByType",
+			"liveQuote",
+			"proxyTicker",
+			"exceedsBalance",
+		],
 		emits: ["update:modelValue", "update:fiatMode", "update:fiatGuard"],
 		methods: { refreezeQuote: mocks.refreezeQuote, focusAmount: mocks.focusAmount },
 	},
@@ -676,7 +686,7 @@ describe("send page — an amount over the balance says so", () => {
 	})
 
 	// Tokens are read per profile and chain, balances per account: a switch keeps the typed amount.
-	test("an account with no balance row yet keeps the amount and shows no line until its balance lands below it", async () => {
+	test("an account whose balance is not read yet keeps the amount, and only a synced balance below it shows the line", async () => {
 		const { w, appStore } = await mountSend({ realAmountCard: true })
 		await amountInput(w).setValue("1.5")
 		expect(line(w).exists()).toBe(false)
@@ -687,7 +697,13 @@ describe("send page — an amount over the balance says so", () => {
 		expect((amountInput(w).element as HTMLInputElement).value).toBe("1.5")
 		expect(line(w).exists()).toBe(false)
 
-		balanceAdded().invoke({ ...BALANCE, id: "b2", account: "0xbob", privateBalance: "1000000" })
+		// The row a new account gets before its first sync.
+		const bob = { ...BALANCE, id: "b2", account: "0xbob", privateBalance: "0", publicBalance: "0", updatedAt: 0 }
+		balanceAdded().invoke(bob)
+		await flushPromises()
+		expect(line(w).exists()).toBe(false)
+
+		balanceUpdated().invoke({ ...bob, privateBalance: "1000000", updatedAt: 2 })
 		await flushPromises()
 		expect(line(w).text()).toBe("More than your balance")
 		w.unmount()
