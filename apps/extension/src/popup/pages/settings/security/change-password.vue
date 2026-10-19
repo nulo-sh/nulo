@@ -200,7 +200,7 @@ onBeforeUnmount(() => {
 				<Text
 					variant="body"
 					height="120"
-					color="red"
+					color="txt-danger"
 					data-testid="error-text-unexpected"
 				>
 					{{ unexpectedErrorMessage }}
@@ -252,7 +252,7 @@ onBeforeUnmount(() => {
 
 .error_text {
 	composes: type--body from global;
-	color: var(--red);
+	color: var(--txt-danger);
 	margin-top: 4px;
 	display: block;
 }

@@ -186,7 +186,7 @@
 	--log-background: #f5f5f7;
 	--log-warn-color: #c38700;
 	--log-warn-background: #fff8e1;
-	--log-error-color: #e53935;
+	--log-error-color: var(--txt-danger);
 	--log-error-background: #ffebee;
 	--log-inactive-filter: 1.03;
 
@@ -202,7 +202,7 @@
 	--log-background: #1e1e1e;
 	--log-warn-color: #a99d5e;
 	--log-warn-background: #3a2a0f;
-	--log-error-color: #c34f38;
+	--log-error-color: var(--txt-danger);
 	--log-error-background: #3a1f1e;
 	--log-inactive-filter: 0.8;
 }
