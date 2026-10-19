@@ -11,8 +11,6 @@ import { type PrestoUiState, uiStateFromStatus } from "@/utils/presto-ui-state"
 
 export function usePrestoStatus(options?: { client?: PrestoStatusClient; autoDetect?: boolean }) {
 	const state = ref<PrestoUiState>({ kind: "idle" })
-	/** The raw status for `<presto-banner>`'s `status` property; null until a probe answered. */
-	const bannerStatus = ref<PrestoStatus | null>(null)
 	const client = options?.client ?? getPrestoClient()
 	const fence = createRunFence()
 	let disposed = false
@@ -29,7 +27,6 @@ export function usePrestoStatus(options?: { client?: PrestoStatusClient; autoDet
 			status = { available: false, reason: "error", protocol: "https" }
 		}
 		if (disposed || !isCurrent()) return
-		bannerStatus.value = status
 		state.value = uiStateFromStatus(status)
 	}
 
@@ -41,5 +38,5 @@ export function usePrestoStatus(options?: { client?: PrestoStatusClient; autoDet
 		onMounted(() => detect())
 	}
 
-	return { state, bannerStatus, detect, dispose }
+	return { state, detect, dispose }
 }

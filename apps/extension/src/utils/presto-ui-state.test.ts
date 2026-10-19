@@ -103,25 +103,12 @@ describe("copyFor", () => {
 		})
 	})
 
-	test.each([{ kind: "idle" }, { kind: "detecting" }, { kind: "offline", info: {} }] as const)(
-		"the settings surface rests and checks with the same words as onboarding ($kind)",
-		(state) => {
-			expect(copyFor(state, null, "settings")).toEqual(copyFor(state))
-		},
-	)
-
-	test("available → connected line built from the facts present, Re-test, go tone", () => {
-		expect(copyFor(uiStateFromStatus(available))).toEqual({
-			tone: "go",
-			title: "Presto connected",
-			detail: "Proving natively · Presto 1.1.1 · Aztec 5.2.0 · encrypted",
-			retry: "Re-test",
-		})
-		expect(copyFor({ kind: "available", info: {} }).detail).toBe("Proving natively")
+	test("available → Presto connected, Re-test, go tone", () => {
+		expect(copyFor(uiStateFromStatus(available))).toMatchObject({ tone: "go", title: "Presto connected", retry: "Re-test" })
 	})
 
 	test("the settings surface leaves the versions to the Details rows", () => {
-		expect(copyFor(uiStateFromStatus(available), null, "settings").detail).toBe("Proving natively")
+		expect(copyFor(uiStateFromStatus(available), null).detail).toBe("Proving natively")
 	})
 
 	test("available + a remembered denial → the declined-earlier overlay with the wait-and-resend step", () => {
@@ -141,15 +128,12 @@ describe("copyFor", () => {
 		expect(copyFor({ kind: "downloading", info: {} }).detail).toContain("one-time download")
 	})
 
-	test("permission-blocked → Presto's title and three steps on onboarding; Nulo's compact variant on settings", () => {
-		const onboarding = copyFor({ kind: "permission-blocked", info: {} })
-		expect(onboarding.title).toBe("Your browser blocked this site from reaching Presto")
-		expect(onboarding.steps).toHaveLength(3)
-		expect(onboarding.retry).toBe("Retry")
-		const settings = copyFor({ kind: "permission-blocked", info: {} }, null, "settings")
+	test("permission-blocked → Nulo's compact title and three steps, Retry", () => {
+		const settings = copyFor({ kind: "permission-blocked", info: {} }, null)
 		expect(settings.title).toBe("Browser blocked local access")
 		expect(settings.detail).toBe("Proofs run in your browser until it's allowed.")
 		expect(settings.steps).toHaveLength(3)
+		expect(settings.retry).toBe("Retry")
 	})
 
 	test("secure-connection-unavailable → steps per diagnosis; presto-reachable is the default", () => {
