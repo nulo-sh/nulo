@@ -112,9 +112,9 @@ export interface JournalMetadata {
  * a value a writer stores never makes the row unreadable.
  */
 export const JournalCallSchema = z.object({
-	contract: z.string().refine(isFieldAddress),
+	contract: z.string().refine(isFieldAddress).describe("0x-hex below the field modulus"),
 	argCount: z.number().int().nonnegative().max(65_535),
-	classId: z.string().refine(isFieldAddress).optional(),
+	classId: z.string().refine(isFieldAddress).describe("0x-hex below the field modulus").optional(),
 })
 
 export type JournalCall = z.infer<typeof JournalCallSchema>
@@ -209,7 +209,7 @@ export const OperationOriginSchema = z.enum(["popup", "dapp", "seed"])
 
 const SendExpirySchema = z.object({ timestamp: z.number(), nullifier: z.string() })
 
-const FeeAmountSchema = z.string().refine(isFeeAmount)
+const FeeAmountSchema = z.string().refine(isFeeAmount).describe("a positive decimal integer of at most 39 digits")
 
 const QueuedFeeReaskSchema = z.object({
 	fee: FeeAmountSchema,
