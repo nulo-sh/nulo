@@ -1,7 +1,7 @@
 ---
 plan: onboarding-3-arc2
 tier: mid
-status: approved by the panel (2026-10-19); implementing
+status: approved by the panel (2026-10-19); round 2 (the owner's answers on decision page 67) implementing
 issues: "#769 (folded from onboarding-4; this arc's PR is #743)"
 driver: claude-code
 claude_model: opus
@@ -29,7 +29,18 @@ The addendum to [the arc 1 plan](../archive/onboarding-3/plan.md). It is a separ
 
 Signed and folded in phase 1: **P50-01 = B** (#769): "Only what the new profile lacks: a second password profile shows the phrase row alone; a second passkey profile shows nothing." The owner tested 3f9f958c, which did not have this rule. At 3f9f958c the owner's first case showed the whole card. With the rule, it shows the phrase row alone.
 
-**UI impact.** Home's Get started card only. (1) The fold: a profile created beside another shows the phrase row alone (password) or no card (passkey), signed as P50-01 B above, pictures from onboarding-4. (2) Nothing else changes on screen: the two quoted rules already hold, and OA-17 to OA-20 ship today's form until the owner answers.
+**UI impact.** Home's Get started card only. (1) The fold: a profile created beside another shows the phrase row alone (password) or no card (passkey), signed as P50-01 B above, pictures from onboarding-4. (2) "Get Fee Juice" leaves for good the first time the profile is seen holding Fee Juice, signed as P67-02 B below; before, it came back whenever the selected account held none. (3) Nothing else changes on screen: the two quoted rules already hold, OA-19 and OA-20 keep today's form by the owner's answers, and the row layout keeps today's form until the owner picks from OA-21.
+
+## The owner's answers (2026-10-19, decision page 67 and chat)
+
+The owner's rule for every page: a note supersedes or adds to the option clicked.
+
+- **Usability:** "ok, then assume #743 it's approved on usability, we just now need to pick from the get started designs."
+- **P67-01 (OA-17), how the rows sit: open.** Page note: "I don't like any tbh... "A" ends up being the best. Because the other ones don't look like tasks to go through. They become even more confusing. Can we get some more ideas in the table?" In chat: "Regarding p67-01 don't ship it -- I am asking for more options because I liked none. My notes superseed the option chosen, or they add; not saying that A should be the one." The new options are OA-21 (#881). #743 does not merge before the pick is built.
+- **P67-02 (OA-18): B**, "It leaves for good the first time the profile holds Fee Juice." Phase 6 builds it.
+- **P67-03 (OA-19), a note in place of a pick:** "I think it should show no card. We should "migrate" the user in the sense: if the user did not finish everything, then we should migrate the state of the user. If he already knew how to get gas, then, we don't show gas. If he has already backed-up the phrase on the previous testnet, then we don't ask for it on the new testnet. Same for how aztec works. Understand my point? Like, it's the same user, he hasn't forgotten all those things, nor has he lost his phrase just because Testnet resetted." Read: a reset changes nothing on the card; done stays done, open stays open. Every flag is per profile and the reset never touches the UI keys (F4), and P67-02 B removes the one row that read the network, so no reset mark is built (D34).
+- **The scope of "done"**, in chat: "Ok, let's go with your take then." The take: the phrase row counts per profile; the learning rows (How Aztec works, Get Fee Juice, Make proofs faster) count per person, shown only on the install's first created profile (P50-01 B). An accepted gap: deleting the first profile before those rows are done hides them for good. That is today's behaviour, and nothing is built for it.
+- **P67-04 (OA-20): A**, no card for imports. Nothing changes.
 
 ## Outcome & Quality Bar
 
@@ -48,9 +59,9 @@ For a person who opens Home after making or bringing in a profile, on a fresh in
 - F8 `GetStartedCard` puts `SettingItem` rows (`padding: 16px 20px`, hairline inset 20 px) in an `ItemsContainer` box (1 px border). Both are shared by 32 and 27 Settings surfaces (`src/components/ui/Settings/`). Token rows have no horizontal padding (`TokenCard.vue:125-132`).
 
 **Inferences** (the gates check them):
-- I1 No production rule changes in this arc: the matrix finds no plain bug in the card (the phase 2 tests prove each cell).
+- I1 The matrix finds no plain bug in the card (the phase 2 tests prove each cell). The one production change is P67-02 B (phase 6).
 - I2 A Fee Juice arrival reaches the card at the first gas read that sees it: a Home mount after the cache went stale (a settled tx) or expired (5 minutes). That freshness policy belongs to the balance cache, not to the card, and Home's balance readout follows the same read.
-- I3 A lock or an unlock evicts the gas cache (`profile/service.ts:290,967` → `execution/service.ts:571`), so a reset found at unlock starts clean. A reset found inside a live session, with addresses kept and a warm cache, can show the old chain's Fee Juice. It lasts until a later gas read bypasses that cache: at once when the purge marked it stale (a PrivateFPC row), otherwise past the TTL. In that window F stays hidden; the backup reminder is unaffected. Plausible, unverified, outside the card: #867, a closed `known-limit` issue.
+- I3 A lock or an unlock evicts the gas cache (`profile/service.ts:290,967` → `execution/service.ts:571`), so a reset found at unlock starts clean. A reset found inside a live session, with addresses kept and a warm cache, can show the old chain's Fee Juice. It lasts until a later gas read bypasses that cache: at once when the purge marked it stale (a PrivateFPC row), otherwise past the TTL. In that window F stays hidden; the backup reminder is unaffected. Plausible, unverified, outside the card: #867, a closed `known-limit` issue. Under P67-02 B such a read writes the flag, which is what the owner asked for: the same profile did hold Fee Juice.
 
 **Asks**: none silent. OA-17 to OA-20 in [OWNER-ASKS.md](OWNER-ASKS.md). The arc ships today's form for each.
 
@@ -60,44 +71,46 @@ Rows: **P** "Save your recovery phrase", **B** "Back up this wallet", **A** "How
 
 | # | Case | Password | Passkey | Evidence |
 |---|---|---|---|---|
-| M1 | The install's first profile, created (tab or popup) | P A F R, Hide | B A F R, Hide | `utils/get-started.test.ts:110,114`; `popup/pages/general.test.ts:235`; e2e `security-backup:55`, `onboarding-tab:133` |
-| M2 | A profile created beside another | P alone | ∅ | `get-started.test.ts:175,180`; `general.test.ts:246,252`; `service.integration.test.ts:1450`; e2e `security-backup:83` |
-| M3 | Imported from a phrase, a passkey or a full backup | ∅, never ! | ∅ | `get-started.test.ts:168`; `general.test.ts:219,227`; `service.integration.test.ts:1423` (each import's call site); e2e `passkey-paths:166` (both browsers), network `hero-prices-unavailable:47` |
+| M1 | The install's first profile, created (tab or popup) | P A F R, Hide | B A F R, Hide | `utils/get-started.test.ts:121,125`; `popup/pages/general.test.ts:241`; e2e `security-backup:55`, `onboarding-tab:133` |
+| M2 | A profile created beside another | P alone | ∅ | `get-started.test.ts:191,196`; `general.test.ts:252,258`; `service.integration.test.ts:1450`; e2e `security-backup:83` |
+| M3 | Imported from a phrase, a passkey or a full backup | ∅, never ! | ∅ | `get-started.test.ts:184`; `general.test.ts:225,233`; `service.integration.test.ts:1423` (each import's call site); e2e `passkey-paths:166` (both browsers), network `hero-prices-unavailable:47` |
 | M4 | Imported, then a profile created (the owner's case) | P alone | ∅ | **new** `service.integration.test.ts:1470` |
 | M5 | First profile after every other was deleted | as M1 | as M1 | `service.integration.test.ts:1501` |
-| M6 | An account added by Settings › Accounts › Import | the profile's rows; F follows the selected account | same | **new** `general.test.ts:196` |
-| M7 | Empty account | F shows | F shows | `general.test.ts:155` |
-| M8 | Fee Juice held, or arriving after creation | F leaves at the read that sees it (I2); ! replaces P | F leaves | **new** `general.test.ts:148` (password), `:182` (arrival while mounted); **new** network e2e step `fee-methods:354` (rule 2 on a real node) |
+| M6 | An account added by Settings › Accounts › Import | the profile's rows; F follows the selected account | same | **new** `general.test.ts:198` |
+| M7 | Empty account | F shows | F shows | `general.test.ts:156` |
+| M8 | Fee Juice held, or arriving after creation | F leaves at the read that sees it (I2), and the profile's flag is written; ! replaces P | F leaves | **new** `general.test.ts:149` (password), `:183` (arrival while mounted, the flag written); **new** network e2e step `fee-methods:356` (rule 2 and the stored flag on a real node) |
 | M9 | Fee Juice already there at import | as M3 | as M3 | network `hero-prices-unavailable:47` |
-| M10 | Fee Juice spent back to zero | F returns; with no tokens, P returns in place of ! | F returns | **new** `general.test.ts:182` (passkey); `get-started.test.ts:110,118` (password) → **OA-18** |
-| M11 | Tokens only | ! replaces P; F shows | rows unchanged | `general.test.ts:140,172` |
-| M12 | A failed first Fee Juice read (a failed refresh keeps the last value) | F shows | F shows | `general.test.ts:132` (arc 1's D3: a failed read claims nothing) |
+| M10 | Fee Juice spent back to zero | F stays away (P67-02 B); with no tokens, P returns in place of ! | F stays away | **new** `general.test.ts:183` (passkey); `get-started.test.ts:170` (the flag); `:121,129` (P and !) |
+| M11 | Tokens only | ! replaces P; F shows | rows unchanged | `general.test.ts:141,173` |
+| M12 | A failed first Fee Juice read (a failed refresh keeps the last value) | F shows | F shows | `general.test.ts:133` (arc 1's D3: a failed read claims nothing) |
 | M13 | Deployed or not | no input | no input | `GetStartedInput` has no such field (typecheck) |
-| M14 | Another network or account selected | flags kept; F follows it | same | **new** `general.test.ts:196` → **OA-18** |
-| M15 | After a Testnet reset (takeover) | flags kept; F follows the new chain, which holds none (I3) | same | flags: **new** e2e step `stale-network` S1a (Hide survives); F: `general.test.ts:196` (a new chain id is a new scope) → **OA-19** |
+| M14 | Another network or account selected | flags kept; F stays away once any account of the profile held Fee Juice, else it follows the selected one | same | **new** `general.test.ts:198` |
+| M15 | After a Testnet reset (takeover) | nothing changes (P67-03): done stays done, open stays open; F stays away once held | same | **new** e2e step `stale-network` S1a (the Fee Juice flag survives the real purge; P stays); `general.test.ts:198` (a new chain id is a new scope, holding none) |
 | M16 | A quarantined chain, or the takeover up | no Home, so no card | same | **new** e2e step `stale-network` S1a (no Home scroller under the takeover) |
-| M17 | Hide used | P alone (! once funded) | ∅ | `get-started.test.ts:159,164`; `general.test.ts:299` |
-| M18 | Phrase saved (tab or Settings) | P and ! leave | — | `get-started.test.ts:140`; e2e `onboarding-tab:113,133`, `security-backup:75` |
-| M19 | How Aztec works opened | A leaves | A leaves | `get-started.test.ts:152`; e2e `security-backup:65` |
-| M20 | Presto reached (global) | R leaves | R leaves | `general.test.ts:322` |
-| M21 | Full Backup saved | — | B leaves | `get-started.test.ts:148`; `settings/security/export/full.test.ts` |
+| M17 | Hide used | P alone (! once funded) | ∅ | `get-started.test.ts:175,180`; `general.test.ts:305` |
+| M18 | Phrase saved (tab or Settings) | P and ! leave | — | `get-started.test.ts:151`; e2e `onboarding-tab:113,133`, `security-backup:75` |
+| M19 | How Aztec works opened | A leaves | A leaves | `get-started.test.ts:163`; e2e `security-backup:65` |
+| M20 | Presto reached (global) | R leaves | R leaves | `general.test.ts:328` |
+| M21 | Full Backup saved | — | B leaves | `get-started.test.ts:159`; `settings/security/export/full.test.ts` |
 | M22 | Imported, nothing held | ∅ | ∅ | as M3 → **OA-20** |
 
-**Verdict per cell.** M1 ships rule 1 (the owner: "First onboard, just create passkey / password: we show everything"). M8 ships rule 2 ("check if it has fee juice to remove hte "Get fee juice""). M2 and M4 are P50-01 B. M10, M14, M15 and M22 are asks (OA-18 to OA-20): the owner hedged on the reset and on an empty import, and the other two share the reset's mechanism. They ship as today. Every other cell follows a signed rule. No cell is a plain bug in the card (I1); I3 is outside it.
+**Verdict per cell.** M1 ships rule 1 (the owner: "First onboard, just create passkey / password: we show everything"). M8 ships rule 2 ("check if it has fee juice to remove hte "Get fee juice""). M2 and M4 are P50-01 B. M10 and M14 are P67-02 B, M15 is P67-03 and M22 is P67-04 A. Every other cell follows a signed rule. No cell is a plain bug in the card (I1); I3 is outside it.
 
 ## Architecture & Implementation
 
-No production rule or component changes. The arc changes four things: (a) a merge that brings P50-01 B into #743; (b) tests that pin the matrix; (c) pictures for the asks; (d) the PR body. The view rule stays the single source (`getStartedView`), so every cell's test is a one-line input to it, or one Home mount through the real storage facade.
+The arc changes five things: (a) a merge that brings P50-01 B into #743; (b) tests that pin the matrix; (c) pictures for the asks; (d) the PR body; (e) P67-02 B. The view rule stays the single source (`getStartedView`), so every cell's test is a one-line input to it, or one Home mount through the real storage facade.
+
+**P67-02 B.** One more per-profile UI key, `nulo:ui:getStartedFeeJuiceHeld@<id>`, in `src/utils/profile-ui-keys.ts` beside the other Get started flags, so a profile deletion or a row commit removes it and no backup carries it. `feeJuiceShown` also needs the flag unset. Home writes it (`general.vue`, a watcher) when the selected account's gas read is positive and the profile's flags are read and unset: the read the row already follows, on the one screen that shows the row. Pre-production, the new key needs no migration (CLAUDE.md § Persisted-storage shape changes). The stored-shape registry of lane migration-rule-1 is not on `dev` (b6208221), so there is nothing to register.
 
 **Alternatives not taken.**
-- *Ship a "Fee Juice once held" latch now* (a per-profile `feeJuiceSeen` flag that Home writes). The owner hedged on those cells, and it adds persisted state, so the decision is the owner's (OA-18).
+- *The worker writes the flag on any positive gas read.* A second writer of a UI key, in a service that knows nothing of the card; the row only shows on Home, whose read decides it.
 - *A property test over every combination of the view's inputs.* It restates the rule as a second implementation and names no cell. The matrix's targeted cases name the case each one proves (D26).
 - *A new e2e spec per cell.* Each cell that needs a browser gets one step in an existing spec that already reaches that state (D27).
 
 ## Security & Adversarial Considerations
 
-- **Threat model.** No new input, storage key, message or permission. The flags stay reminder preferences, never proof of a backup. A forged flag needs a writer of `chrome.storage.local`, which already holds more than the card.
-- **Wrong screen (the risk that matters).** For a created password profile whose phrase is unsaved, no flag but `phraseSaved` removes both the phrase row and the banner (`get-started.ts:103,132-135`). M15's step proves a Testnet reset keeps the flags. Signed behaviours, not changed here: a Settings reveal clears the reminder (`seed.vue:70`, arc 1); Hide removes a passkey profile's backup row (`get-started.ts:104`, P33-01 D); an unread input shows nothing until it lands (`:128`); a lost `imported` write shows the card, the safe side. The panel recommends no ask option that removes an open backup row. OA-19 D, which would remove it, is listed only because the owner said "nothing", and is marked not recommended.
+- **Threat model.** No new input, message or permission. One new per-profile storage key (P67-02 B), a reminder preference like the others. The flags stay reminder preferences, never proof of a backup. A forged flag needs a writer of `chrome.storage.local`, which already holds more than the card; a forged Fee Juice flag hides only the Fee Juice row, never a backup row.
+- **Wrong screen (the risk that matters).** For a created password profile whose phrase is unsaved, no flag but `phraseSaved` removes both the phrase row and the banner (`get-started.ts:105,135-138`). M15's step proves a Testnet reset keeps the flags. Signed behaviours, not changed here: a Settings reveal clears the reminder (`seed.vue:70`, arc 1); Hide removes a passkey profile's backup row (`get-started.ts:106`, P33-01 D); an unread input shows nothing until it lands (`:131`); a lost `imported` write shows the card, the safe side. The panel recommends no ask option that removes an open backup row. OA-19 D, which would remove it, is listed only because the owner said "nothing", and is marked not recommended.
 - **Capture spec.** It styles through `adoptedStyleSheets` or inline custom properties (an extension page's CSP refuses an injected `<style>`), never commits, and stubs `window.open`.
 - **Supply chain.** No dependency or manifest change.
 
@@ -168,6 +181,22 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
   - add the matrix summary, the asks with their pictures, the timings and a Validation entry.
 - Gate: `F`, `bun run test:all`, `bun run check:plans`. Then the full smoke suite on Chrome and on Firefox, because a smoke spec changed and the base moved. Then the Codex fix loop (below). Then push, and run `gh pr checks 743 --watch` once. Pass: the five required checks are green.
 
+**6. Round 2: the owner's answers (P67).**
+- OA-21 first (#881): six layouts drawn in the live popup by a scratch capture spec (deleted after each run; never committed), 36 PNGs `screenshots/oa21-*`, the ask in `OWNER-ASKS.md` (D35). ✓ (52651804)
+- P67-02 B, change map:
+  - `src/utils/profile-ui-keys.ts`: the key and its builder.
+  - `src/utils/get-started.ts`: the flag in `GetStartedFlag` and `KEYS`; `feeJuiceShown` needs it unset.
+  - `src/composables/useGetStarted.ts`: the flag in `NOTHING_DONE`.
+  - `src/popup/pages/general.vue`: the watcher that writes it.
+- Tests:
+  - `get-started.test.ts`: the key list, the read, and a case where the flag keeps F away on an empty read for both types.
+  - `general.test.ts` (M10, M14, M15): an arrival writes the flag once and a spend back to zero keeps F away; after one account held it, another account and a new chain id holding none show no F, and P stays.
+  - `stale-network` S1a (M15, P67-03): the Fee Juice flag stored before the lock; after the reset the rows are P, A and R. Smoke has no node, so the flag Home writes on a positive read is stored directly (D36).
+  - `fee-methods` "public gas only…": the stored flag is `true` once Home has seen the claimed Fee Juice.
+- Red proofs, each restored after: leaving the flag out of `feeJuiceShown` fails the pure case and both Home cases; dropping the watcher's write fails both Home cases.
+- Pictures: OA-18 B's mockup is now built (`m-fee-juice-done-*`, today's rows with F gone), so the changed cells reuse it.
+- Gate: `F`; smoke `stale-network` and `security-backup` on Chrome and Firefox; network `fee-methods` on Chrome; the fix loop; push; the five required checks.
+
 ## Decision ledger
 
 | # | Decision | Chosen | Rejected |
@@ -180,6 +209,10 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
 | D30 | Padding options | O1 to O4 above (Opus); recommend O1 (both legs) | moving the box 21 px out (leaves it 3 px from the popup's edge, which no screen has); a leading ring (a checkbox that never checks, since rows leave when done); a flat 12/16 px inset (Codex; keeps the inset the owner asked about) |
 | D31 | Recommendations | OA-18 A, OA-19 A, OA-20 A (both legs, moderate) | OA-18 B (per profile while Fee Juice is per account and network; adds stored state); OA-19 D (removes an open backup reminder) |
 | D32 | Timing | the brief's file, before and after per browser; the suite from CI shard durations | the full local suite at both commits per browser (Opus; about 2.5 h at this host's load, and noisier than CI's runners) |
+| D33 | P67-02 B's writer | Home, on the read the row follows | the worker on any gas read (a second writer of a UI key, in a service that knows nothing of the card) |
+| D34 | P67-03 | no reset mark: the flags are per profile and survive the purge (F4), and B removes the one row that read the network | a reset mark (OA-19 C and D, both declined by the owner's note) |
+| D35 | OA-21 options | Q1 to Q6 (`OWNER-ASKS.md`); recommend Q3, numbered steps that turn into checks | a ring per row whose row then leaves (it never gets its check); invented copy (each drawing uses only today's titles and values, plus the counts and "Next") |
+| D36 | S1a's reset step | the Fee Juice flag stored before the lock; the rows after the reset are P, A and R | Hide before the lock (it hides F itself, so it cannot show the flag at work); a gas stub in smoke (a node fixture for one flag) |
 
 ## Audit verdicts
 
@@ -232,9 +265,10 @@ No new PR. The arc pushes to `worktree-onboarding-3` with plain pushes and never
 - Step 1 is absent (`code_review: off`).
 - Step 2 is one loop over `git diff 56361a49..HEAD`, the arc's own commits after the two merges (their PRs reviewed the folded code). It runs `run-codex.sh` with gpt-6.1-sol at high, read-only. One Opus diff review runs beside round 1. Stop at three rounds.
 - Step 3 is the push and the watch above.
-- Step 4 (close-out) waits for the owner's answers to OA-17 to OA-20. An ask still open at close-out becomes an `owner-decision` issue.
+- Step 4 (close-out) waits for the owner's OA-21 pick (#881) and its build. An ask still open at close-out becomes an `owner-decision` issue.
+- Round 2 runs the same loop over this round's own commits (after 55a1304d).
 
 ## Seeds
 
-- `/goal`: "Arc 2 of onboarding-3 is done when #743 carries P50-01 B, the matrix tests and e2e steps pass at retry 0, OWNER-ASKS.md holds OA-17 to OA-20 with pictures, the five required checks are green, and #743 is still a draft."
+- `/goal`: "Arc 2 of onboarding-3 is done when #743 carries P50-01 B and P67-02 B, the matrix tests and e2e steps pass at retry 0, OWNER-ASKS.md holds OA-17 to OA-21 with pictures, the five required checks are green, and #743 is still a draft until the OA-21 pick is built."
 - `/loop`: "Read implementations-plan/onboarding-3-arc2/STATUS.md; run the next phase's gate as plan.md writes it; record the outcome; stop at a red gate after three tries."
