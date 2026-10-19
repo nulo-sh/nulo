@@ -39,11 +39,17 @@ vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 vi.mock("./content-message-relay", () => ({ attachContentListener: () => {} }))
 vi.mock("./tab-lifecycle", () => ({ wireTabLifecycle: () => {} }))
 vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
+vi.mock("./discovery-flow", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("./discovery-flow")>()
+	return { ...actual, handleDiscovery: vi.fn(actual.handleDiscovery) }
+})
 
 import { DISCOVERY_STALE_MS } from "@nulo/wallet-bridge"
+import { deferred } from "@nulo/wallet-core/utils"
 import { NetworkResetService } from "@/wallet/services/network-reset/service"
 import { RESET_INGRESS_WAIT_MS, type ResetRunGate } from "@/wallet/services/network-reset/spec"
 import { handleWalletMessage, initWalletSdkHandler } from "./background"
+import { handleDiscovery } from "./discovery-flow"
 import { bindLiveSession } from "./live-session"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN as ORIGIN, fakeSdkServices } from "./test-services"
@@ -52,22 +58,27 @@ const SESSION = { sessionId: "s1", origin: ORIGIN, chainInfo: { chainId: "1", ve
 
 /** The reset service's real wait over a run that ends when `end` is called. */
 function runningReset(): { gate: ResetRunGate; end: () => void } {
-	let end!: () => void
-	const ended = new Promise<void>((resolve) => {
-		end = resolve
-	})
-	const gate = { flight: { ended }, waitForRunEnd: NetworkResetService.prototype.waitForRunEnd }
-	return { gate: gate as unknown as ResetRunGate, end }
+	const ended = deferred()
+	const gate = { flight: { ended: ended.promise }, waitForRunEnd: NetworkResetService.prototype.waitForRunEnd }
+	return { gate: gate as unknown as ResetRunGate, end: () => ended.resolve() }
 }
 
+/** Turns for a read at the reset wait, where nothing settles before the run ends to cover a "not yet". */
 const flush = async () => {
 	for (let i = 0; i < 30; i++) await Promise.resolve()
+}
+/** The run of `requestId`'s latest discovery: it settles once that discovery is past the reset wait and
+ *  answered. */
+const discoveryRun = (requestId: string) => {
+	const { calls, results } = vi.mocked(handleDiscovery).mock
+	return results[calls.findLastIndex(([discovery]) => discovery.requestId === requestId)].value as Promise<void>
 }
 
 beforeEach(() => {
 	handlerCalls.length = 0
 	pending.clear()
 	captured = undefined
+	vi.mocked(handleDiscovery).mockClear()
 	// biome-ignore lint/suspicious/noExplicitAny: chrome stub
 	;(globalThis as any).chrome = {
 		runtime: { getURL: (p: string) => p },
@@ -151,7 +162,7 @@ describe("a running reset holds discoveries", () => {
 		await flush()
 		expect(handlerCalls).toEqual([])
 		run.end()
-		await flush()
+		await discoveryRun("d1")
 		expect(handlerCalls).toEqual(["approve:d1"])
 	})
 
@@ -161,7 +172,7 @@ describe("a running reset holds discoveries", () => {
 		await vi.advanceTimersByTimeAsync(RESET_INGRESS_WAIT_MS - 1)
 		expect(handlerCalls).toEqual([])
 		await vi.advanceTimersByTimeAsync(1)
-		await flush()
+		await discoveryRun("d1")
 		// The SDK gives a discovery 60 s and the wallet answers it within 55 s, so one held for the
 		// whole cap is already past its deadline.
 		expect(RESET_INGRESS_WAIT_MS).toBeGreaterThan(DISCOVERY_STALE_MS)

@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { DISCOVERY_STALE_MS, describeExternalId } from "@nulo/wallet-bridge"
-import { deferred } from "@nulo/wallet-core/utils"
+import { type Deferred, deferred } from "@nulo/wallet-core/utils"
 
 type Callbacks = { onPendingDiscovery: (d: unknown) => void }
 let captured: Callbacks | undefined
@@ -67,8 +67,13 @@ vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 vi.mock("./content-message-relay", () => ({ attachContentListener: () => {} }))
 vi.mock("./tab-lifecycle", () => ({ wireTabLifecycle: () => {} }))
 vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
+vi.mock("./discovery-flow", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("./discovery-flow")>()
+	return { ...actual, handleDiscovery: vi.fn(actual.handleDiscovery) }
+})
 
 import { initWalletSdkHandler } from "./background"
+import { handleDiscovery } from "./discovery-flow"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN as ORIGIN, fakeSdkServices } from "./test-services"
 import { WindowReservation } from "./verify-admission"
@@ -84,8 +89,14 @@ function microtaskLadder(): () => number {
 	return () => n
 }
 
+/** Turns for the duplicate to park on its twin's popup, a wait no fake observes. */
 const flush = async () => {
 	for (let i = 0; i < 40; i++) await Promise.resolve()
+}
+/** The run of `requestId`'s latest discovery: it settles once that discovery is approved or refused. */
+const discoveryRun = (requestId: string) => {
+	const { calls, results } = vi.mocked(handleDiscovery).mock
+	return results[calls.findLastIndex(([discovery]) => discovery.requestId === requestId)].value as Promise<void>
 }
 
 const logs: string[] = []
@@ -99,8 +110,10 @@ const logger = {
 /** Boots the handler; the connect popup answers when the test resolves it, with `windowId` if given. */
 function boot(windowId?: number) {
 	const popup = deferred<void>()
+	const asking = new Map<string, Deferred<void>>()
 	const { services, rows } = fakeSdkServices({
-		popup: async () => {
+		popup: async (_params, requestId) => {
+			asking.get(requestId)?.resolve()
 			await popup.promise
 			return { approved: true, ...(windowId === undefined ? {} : { windowId }) }
 		},
@@ -131,7 +144,8 @@ function boot(windowId?: number) {
 		},
 	} as never
 	initWalletSdkHandler(servicesWithLookup, logger, ports)
-	const discover = (requestId: string) =>
+	const discover = (requestId: string) => {
+		asking.set(requestId, deferred<void>())
 		captured?.onPendingDiscovery({
 			requestId,
 			origin: ORIGIN,
@@ -141,19 +155,22 @@ function boot(windowId?: number) {
 			timestamp: Date.now(),
 			tabId: 7,
 		})
-	return { discover, allow: () => popup.resolve(), rows }
+	}
+	/** Resolves once `requestId`'s discovery has asked for its connect window. */
+	const prompted = (requestId: string) => asking.get(requestId)!.promise
+	return { discover, prompted, allow: () => popup.resolve(), rows }
 }
 
 /** A fresh handshake plus a duplicate parked on its popup, then the Allow. */
 async function freshWithDuplicate(windowId?: number) {
 	const env = boot(windowId)
 	env.discover("fresh")
-	await flush()
+	await env.prompted("fresh")
 	env.discover("dup")
 	await flush()
 	effects.length = 0
 	env.allow()
-	await flush()
+	await Promise.all([discoveryRun("fresh"), discoveryRun("dup")])
 	return env
 }
 
