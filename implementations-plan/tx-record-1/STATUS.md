@@ -1,0 +1,7 @@
+# tx-record-1 status
+
+- 2026-10-19 homed in the lane worktree at `993b3efc`; recon done (3 Sonnet explorers).
+- 2026-10-19 plan A and outline B drafted; dual audit next.
+- 2026-10-19 round 1: Codex reject, Opus conditional approve; plan revised (A1 = #820, A2 = #828 + #821; OA-1, OA-2); final fresh Codex pass next.
+- 2026-10-19 final fresh Codex pass: conditional approve; OA-2 corrected, Phase 2 gains `fee-methods`, Phase 3 keeps the status-only check; resumed pass verifying.
+- 2026-10-19 final Codex pass resumed twice: r2 conditional (route map, OA-2 B/C consequence), fixed; r3 approve. Plan committed; arc A1 next.
