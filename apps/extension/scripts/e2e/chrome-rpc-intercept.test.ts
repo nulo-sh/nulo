@@ -6,8 +6,7 @@ import { cdpInterceptRpc } from "../../tests/e2e/fixtures/browser/chrome-rpc-int
 type Sent = { method: string; params?: Record<string, unknown> }
 
 /** A browser whose root session records each command and, as Chrome does, reports the existing
- *  extension worker before it answers the auto-attach that asked for it. The worker's session
- *  records its commands and rejects every reply to a paused request with `replyError`, if given. */
+ *  extension worker before it answers the auto-attach that asked for it. */
 function fakeBrowser(replyError?: Error) {
 	const sent: Sent[] = []
 	const replies: Sent[] = []
@@ -66,14 +65,14 @@ const NODE = "https://node.example"
 const STUB = "http://127.0.0.1:4100"
 const PAUSED = { requestId: "interception-job-7.0", url: `${NODE}/aztec-testnet/key?n=3` }
 const MODES = { redirect: { kind: "redirect", to: STUB }, refuse: { kind: "refuse" } } as const
-/** The one reply each mode owes `PAUSED`. A reply under a wrong id would now read as gone at run
- *  time and leave the request paused, so these pin the id at the source. */
+/** The one reply each mode owes `PAUSED`. A reply under a wrong id reads as gone at run time and
+ *  leaves the request paused, so these pin the id at the source. */
 const REPLIES = {
 	redirect: { method: "Fetch.continueRequest", params: { requestId: PAUSED.requestId, url: `${STUB}/aztec-testnet/key?n=3` } },
 	refuse: { method: "Fetch.failRequest", params: { requestId: PAUSED.requestId, errorReason: "ConnectionRefused" } },
 }
 
-/** Pauses `PAUSED` on the armed worker, the way a live run meets it, and has Chrome refuse the reply. */
+/** Pauses after the arm resolves: a failure recorded while arming throws from the arm instead. */
 async function replyRefused(mode: keyof typeof MODES, message: string) {
 	const { browser, replies, pause } = fakeBrowser(new ProtocolError(message))
 	const armed = await cdpInterceptRpc(browser as never, "chrome-extension://x/", NODE, MODES[mode])
@@ -84,8 +83,8 @@ async function replyRefused(mode: keyof typeof MODES, message: string) {
 	return { failures, replies }
 }
 
-// Chrome 152's answer, probed, to a reply sent after the worker was stopped with this session still
-// attached; a caller's abort of the paused fetch gets the same.
+// Chrome 152's answer, probed, to a reply sent after the worker was stopped with this session
+// still attached; a caller's abort of the paused fetch gets the same.
 test.each(["redirect", "refuse"] as const)("%s: a reply to a request Chrome no longer holds paused is no failure", async (mode) => {
 	const { method } = REPLIES[mode]
 	const { failures, replies } = await replyRefused(mode, `Protocol error (${method}): Invalid InterceptionId.`)
