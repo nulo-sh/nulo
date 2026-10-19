@@ -120,6 +120,10 @@ export type SimulateTxFn = (
 	parentTask?: WrappedTask,
 ) => Promise<TxSimulationResult>
 
+/** Receives a build's calls before that build is simulated, so a send whose simulation then fails
+ *  still names its call. */
+export type OnBuilt = (txCalls: BuiltStandardTx["txCalls"]) => Promise<void>
+
 /** Everything a strategy needs to do its job. Packed as a struct for
  *  forward-compat — new fields land without re-signing every impl. */
 export type FeeStrategyContext = {
@@ -152,6 +156,9 @@ export type FeeStrategyContext = {
 	/** The validated `fpc` row a caller ordered the send against: the build pays with it, never with a
 	 *  later read an edit may have moved. Absent, the strategy resolves the row itself. */
 	fpc?: Fpc
+	/** Called after every build. Set only by a dApp send's own pass, never by an estimate: the
+	 *  strategies serve the window's estimates too, and those name no record. */
+	onBuilt?: OnBuilt
 }
 
 /** Dependencies injected once at construction. */
@@ -213,6 +220,19 @@ export function isInitWrapped(built: { txRequest: TxExecutionRequest; account: {
  *  build's placeholder until a strategy sets it (`feeCapFor`). */
 export function appPriorityOf(fee?: FeeOptions): PartialGasSettingsRPC | undefined {
 	return fee?.maxPriorityFeesPerGas ? { maxPriorityFeesPerGas: fee.maxPriorityFeesPerGas } : undefined
+}
+
+/** Every strategy's build: under the context's fence, with the app's priority fee, handed to
+ *  `ctx.onBuilt` before anything simulates it. */
+export async function buildFor(
+	txBuilder: TxRequestBuilder,
+	ctx: FeeStrategyContext,
+	method: AccountFeePaymentMethodOptions,
+	task: WrappedTask,
+): Promise<BuiltStandardTx> {
+	const built = await txBuilder.buildStandard(ctx.op, ctx.fence, method, task, appPriorityOf(ctx.op.fee))
+	await ctx.onBuilt?.(built.txCalls)
+	return built
 }
 
 /** Override gas limits on a pre-built tx request from a pending FeeOptions

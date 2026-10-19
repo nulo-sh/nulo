@@ -196,6 +196,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [key-model-v2](key-model-v2/plan.md) — completed — the second-generation key model, one coordinated break before the first shipped build
 - [key-model-v2-hardening](key-model-v2-hardening/plan.md) — completed — four hardening deliverables on top of the second-generation key model
 - [keyboard-guards](keyboard-guards/plan.md) — completed — each page's Enter shortcut answers only its own fields and refuses repeats
+- [landing-explainer-1](landing-explainer-1/plan.md) — completed — the How Aztec works page at nulo.sh/how-aztec-works: three cards, each a narrated clip over its text version
 - [landing-store-buttons](landing-store-buttons/plan.md) — completed — install buttons go to the browser's store; the landing stops reading GitHub releases
 - [layout-polish](layout-polish/plan.md) — completed — the popup built to the drawings, with the remaining differences decided from pictures
 - [legal-terms](legal-terms/plan.md) — completed — Terms and Privacy Policy, an on-device acceptance record, and third-party notices
@@ -357,3 +358,6 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [ui-dedupe-2](ui-dedupe-2/plan.md) — completed — the five list rules on Home's, the held Holdings row with them (#839); a dropped backup export stops before its keys (#840)
 - [ui-polish-4](ui-polish-4/plan.md) — completed — the logs toolbar on native buttons with Escape handing focus back, its menu items in one role, the recovery Close on the design button's look, Holdings' error line without a false total (#810 #823 #831 #825)
 - [copy-polish-1](copy-polish-1/plan.md) — completed — the failed token preview's warning points at Reject and sits left-aligned, fixed at the card's layout rule with the opaque authorization warning (#803); the restore warning's account-file clause (#746 OA-2)
+- [send-estimate-1](send-estimate-1/plan.md) — completed — a balance that makes the typed amount sendable asks for its fee, on either side (#856); the fee row on a balance drop ships as today (#863)
+- [execute-window-3](execute-window-3/plan.md) — completed — the advice once after the calls and none on a refused request (#776, P52-01 F); an unreadable authorization flagged at rest (#777, P58-05 B); #854
+- [logs-keyboard-1](logs-keyboard-1/plan.md) — completed — the logs filter panels from the keyboard: native toggle rows with an inset ring, the popover's Tab order stitched after its trigger, a panel closed when focus leaves it (#851); known limit #866

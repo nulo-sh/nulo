@@ -130,7 +130,7 @@ declare these (the extension declares all of them in its `popup`/`onboarding` ap
 
 - **`Tooltip`** → teleports to the `teleportTo` prop (default `#tooltip`) and clamps its text to
   `calc(var(--base-width) - 40px)`, so the host must also define a `--base-width` CSS var.
-- **`Popover`** → teleports to `teleportTo` (default `#popover`).
+- **`Popover`** → teleports to `teleportTo` (default `#popover`). Its panel keeps the Tab order of a panel placed right after its trigger: opened from the focused trigger it takes focus, Tab past its last control goes on from the trigger, Shift+Tab before its first closes back onto it, and focus leaving both closes it. Its controls are found by a selector blind to visibility, so a panel holds no hidden control.
 - **`ToastManagerBase`** → teleports to `teleportTo` (default `#toast`).
 
 A missing root means the teleported content silently fails to mount (it is NOT a no-op fallback).

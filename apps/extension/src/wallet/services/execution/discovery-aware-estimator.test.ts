@@ -35,10 +35,10 @@ describe("DiscoveryAwareEstimator (inert extraction pins)", () => {
 		expect(discoveredActions).toEqual([])
 		expect(authwit.discoverPrivateAuthwits).toHaveBeenCalledTimes(1)
 		// The discoverer's build callback is the injected discovery build, run
-		// under the estimate's fence.
+		// under the estimate's fence, with no hook when the caller gave none.
 		const discoveryBuild = (authwit.discoverPrivateAuthwits.mock.calls[0] as unknown[])[1] as (op: unknown, method: unknown) => unknown
 		await discoveryBuild(OPERATION, "method")
-		expect(buildForDiscovery).toHaveBeenCalledWith(OPERATION, "method", FENCE)
+		expect(buildForDiscovery).toHaveBeenCalledWith(OPERATION, "method", FENCE, undefined)
 		// Cloned, never the caller's array.
 		const discoveredOp = (authwit.discoverPrivateAuthwits.mock.calls[0] as unknown[])[0] as { actions: Action[] }
 		expect(discoveredOp.actions).not.toBe(actions)
@@ -112,6 +112,16 @@ describe("DiscoveryAwareEstimator (inert extraction pins)", () => {
 		expect(call[3]).toBe(parentTask)
 		expect(call[4]).toBe(controller.signal)
 	})
+
+	test("the build hook reaches discovery's build and the validated build", async () => {
+		const { estimator, authwit, buildAndEstimateValidated, buildForDiscovery } = makeEstimator()
+		const onBuilt = vi.fn(async () => {})
+		await estimator.estimate(OPERATION, [CALL], undefined, FEE_SETTINGS, FENCE, undefined, undefined, onBuilt)
+		const discoveryBuild = (authwit.discoverPrivateAuthwits.mock.calls[0] as unknown[])[1] as (op: unknown, method: unknown) => unknown
+		await discoveryBuild(OPERATION, "method")
+		expect(buildForDiscovery).toHaveBeenCalledWith(OPERATION, "method", FENCE, onBuilt)
+		expect((buildAndEstimateValidated.mock.calls[0] as unknown[])[5]).toBe(onBuilt)
+	})
 })
 
 const FPC_SETTINGS = { paymentMethod: { kind: "fpc", fpcId: 7 } } as never
@@ -152,6 +162,13 @@ describe("DiscoveryAwareEstimator (fold routing)", () => {
 		const op = call[0] as { actions: Action[]; fee?: unknown }
 		expect(op.actions).toEqual([CALL])
 		expect("fee" in op).toBe(false)
+	})
+
+	test("the build hook reaches the folded pipeline", async () => {
+		const { estimator, buildAndEstimateFolded } = makeEstimator()
+		const onBuilt = vi.fn(async () => {})
+		await estimator.estimate(OPERATION, [CALL], undefined, FPC_SETTINGS, FENCE, undefined, undefined, onBuilt)
+		expect((buildAndEstimateFolded.mock.calls[0] as unknown[])[6]).toBe(onBuilt)
 	})
 
 	test("folded path surfaces the probe's collected actions as discoveredActions", async () => {

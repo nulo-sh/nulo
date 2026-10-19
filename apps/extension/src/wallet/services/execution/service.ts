@@ -48,6 +48,7 @@ import {
 	ContractNotRegisteredError,
 	InvalidWalletArgumentsError,
 	JobCancelledError,
+	PxeTaggingSourcesFullError,
 	ScopeViolationError,
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
@@ -112,7 +113,7 @@ import { type ArtifactLookup, decodeCallForDisplay, decodeGrantForDisplay } from
 import { getViewSimulationDeps } from "./helpers/get-view-simulation-deps"
 import { AuthwitDiscoverer } from "./authwit-discoverer"
 import { TxRequestBuilder } from "./tx-request-builder"
-import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee/fee-strategy"
+import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps, OnBuilt } from "./fee/fee-strategy"
 import { appPriorityOf } from "./fee/fee-strategy"
 import { buildFeeStrategies } from "./fee/build-fee-strategies"
 import { ExecutionCoordinator } from "./execution-coordinator"
@@ -167,6 +168,25 @@ const FENCED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set([
 	"register_token",
 	"aztec_createAuthWit",
 ])
+
+/**
+ * The most distinct senders and accounts a dApp may grow one chain's PXE to: every one is a tagging
+ * secret on each sync. The person's own count toward it and are never refused by it. A policy figure,
+ * twice the senders a backup carries per network, not a measured threshold.
+ */
+export const DAPP_TAGGING_SOURCES_BOUND = 128
+
+const TAGGING_SOURCES_FULL_REFUSAL = "Scope violation: registration past the network's tagging-source bound"
+
+/** A dApp reads a full chain as a scope refusal, the constant envelope that names nothing. */
+async function refuseFullTaggingSources<T>(register: () => Promise<T>): Promise<T> {
+	try {
+		return await register()
+	} catch (error) {
+		if (error instanceof PxeTaggingSourcesFullError) throw new ScopeViolationError(TAGGING_SOURCES_FULL_REFUSAL)
+		throw error
+	}
+}
 
 /** `tokenContract` as a transfer request carries it, or the refusal of `method`'s arguments. */
 function tokenContractKey(method: string, tokenContract: unknown): string {
@@ -472,20 +492,21 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	private wireDappSendAndViewExecutors(): void {
 		const estimateWithDiscovery = new DiscoveryAwareEstimator({
 			authwit: this.authwit,
-			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal),
-			buildAndEstimateFolded: (op, feeSettings, fence, probe, parentTask, signal) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, probe),
-			buildForDiscovery: async (op, method, fence) => {
+			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt),
+			buildAndEstimateFolded: (op, feeSettings, fence, probe, parentTask, signal, onBuilt) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, probe, undefined, onBuilt),
+			buildForDiscovery: async (op, method, fence, onBuilt) => {
 				const sendOp = op as SendTransactionOperation
 				// An app's private call may read its gas settings, so discovery simulates with its priority too.
-				const { txRequest, node, pxe, account, network } = await this.txBuilder.buildStandard(
+				const { txRequest, node, pxe, account, network, txCalls } = await this.txBuilder.buildStandard(
 					sendOp,
 					fence,
 					method,
 					undefined,
 					appPriorityOf(sendOp.fee),
 				)
+				await onBuilt?.(txCalls)
 				return { txRequest, node, pxe, account, network }
 			},
 		})
@@ -529,8 +550,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			},
 			sequencer: this.sendSequencer,
 			chainTip: this.chainTipGate,
-			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal),
+			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt),
 			addTransaction: (...args) => this.transactionService.addTransaction(...args),
 			recordPendingAuthwits: (...args) => this.authRegistryService.recordPendingAuthwits(...args),
 			noteSent: (chainId, account, txHash, calls) =>
@@ -1188,7 +1209,9 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 
 	private async executeAztecRegisterSender(op: AztecRegisterSenderOperation): Promise<AztecAddress> {
 		const network = await this.networkService.getNetwork(op.networkId)
-		return this.pxeService.registerSender(networkInfoFrom(network), op.address)
+		return refuseFullTaggingSources(() =>
+			this.pxeService.registerSender(networkInfoFrom(network), op.address, DAPP_TAGGING_SOURCES_BOUND),
+		)
 	}
 
 	// Resolves to void: the 5.0.1 wallet-sdk WalletSchema declares
@@ -1229,20 +1252,27 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		await assertArtifactClassId(artifact, instance.currentContractClassId)
 
 		// A secret key registers the instance's own account or nothing: one that derives another
-		// address would add an account the dApp's contract grant never named.
+		// address or other keys would add an account the dApp's contract grant never named, or one
+		// whose contract the PXE then refuses.
 		const account = op.secretKey
 			? await CompleteAddress.fromSecretKeyAndPartialAddress(
 					await Fr.schema.parseAsync(op.secretKey),
 					await computePartialAddress(instance),
 				)
 			: undefined
-		if (account && !account.address.equals(instance.address)) throw InvalidWalletArgumentsError.forMethod("registerContract")
+		if (account && !(account.address.equals(instance.address) && account.publicKeys.equals(instance.publicKeys))) {
+			throw InvalidWalletArgumentsError.forMethod("registerContract")
+		}
+
+		// The account first: a refusal at the tagging-source bound leaves the contract unregistered.
+		if (op.secretKey && account) {
+			const { secretKey } = op
+			await refuseFullTaggingSources(() =>
+				this.pxeService.registerAccount(networkInfoFrom(network), secretKey, account.partialAddress, DAPP_TAGGING_SOURCES_BOUND),
+			)
+		}
 
 		await this.pxeService.registerContract(networkInfoFrom(network), { instance, artifact })
-
-		if (op.secretKey && account) {
-			await this.pxeService.registerAccount(networkInfoFrom(network), op.secretKey, account.partialAddress)
-		}
 	}
 
 	public async executeAztecCreateAuthWit(op: AztecCreateAuthWitOperation, authorizedFence?: ExecutionFence): Promise<AuthWitness> {
@@ -1340,6 +1370,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		signal?: AbortSignal,
 		probe?: DiscoveryProbe,
 		fpc?: Fpc,
+		onBuilt?: OnBuilt,
 	): Promise<FeeEstimate> {
 		// Clone the op + its actions array. fjwc / fpc branches mutate
 		// `op.actions` (unshift / splice) to prepend fee payloads; leaking
@@ -1362,6 +1393,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			signal,
 			probe,
 			fpc,
+			onBuilt,
 		}
 		return strategy.buildAndEstimate(ctx)
 	}
