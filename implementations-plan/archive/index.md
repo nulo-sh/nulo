@@ -178,6 +178,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [home-refresh](home-refresh/plan.md) — completed — the locked home-screen spec implemented as a light, reversible change
 - [hygiene](hygiene/plan.md) — completed — technical follow-ups that change no screen
 - [icons-1](icons-1/plan.md) — completed — the wallet's 58 glyphs drawn from Tabler Icons 3.49.0, generated from a pinned devDependency and drift-tested (#764)
+- [icons-2](icons-2/plan.md) — completed — the private and public marks become Tabler's filled shield and globe, and the glossary says so (#787, P52-02 J)
 - [icons-d2-1](icons-d2-1/plan.md) — completed — Direction 2 glyphs everywhere, icons.json and the Material font retired, the private and public marks as squares (#602, #590)
 - [iface-line-1](iface-line-1/plan.md) — completed — the execute window's unreadable-call lines: one short reason, `interface` dotted, the advice once per window, the glossary entry (#516)
 - [import-stage-deadlines](import-stage-deadlines/plan.md) — completed — import stage timing and console-capture fixes in the e2e suite
@@ -215,6 +216,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [origin-guard-truth](origin-guard-truth/plan.md) — completed — whether the cross-origin session guard is live, settled and pinned by a test
 - [owned-client-teardown](owned-client-teardown/plan.md) — completed — documents share one logger client instead of a private logger per service client
 - [owner-feedback-1](owner-feedback-1/plan.md) — completed — the owner's 2026-10-18 feedback: a Send's fee method, the fee units dropped, the compact title at once on Back, a fixed token hero, the landing's early-days line, the incoming chip's wrap, the app-set fee sentence (#760 #761 #762 #765 #767 #763 #766)
+- [p42-followups-1](p42-followups-1/plan.md) — completed — six page-42 picks: the fee window's two-line Confirm, two restore rows, Holdings' skeleton, call words in Activity and the window (#805); a dApp call's journal record names its call, so it reads as it will settle (#734 #719)
 - [p46-ui-1](p46-ui-1/plan.md) — completed — the four page-46 picks: a Pending chip on an unproven grant, the header chips at 11 px, three 13 px wraps made room for (#698 #651 #652 #653)
 - [package-extraction](package-extraction/plan.md) — completed — the extension monolith cut into workspace packages in dependency order
 - [parallel-e2e-isolation](parallel-e2e-isolation/plan.md) — completed — parallel network e2e runs from sibling worktrees own their ports, processes and state
@@ -276,6 +278,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [send-amount-exact](send-amount-exact/plan.md) — completed — every amount path on the Send page made exact
 - [send-fee-privacy-notice](send-fee-privacy-notice/plan.md) — completed — the Send fee source follows the transfer's privacy and says so where it cannot
 - [send-fees-ux](send-fees-ux/plan.md) — completed — the sponsor forms' "Already added", "Refused before sending" for a capped app send, the app-set fee legend kept while estimating, a sponsored send queued behind an earlier one, and Send's fee card drawn as a skeleton while it reads balances
+- [send-fixes-1](send-fixes-1/plan.md) — completed — start finishes on a custom node that does not answer, a paused reset's imported accounts export as account files, the re-ask button reads Send (#498 #710; #112 held for the owner)
 - [send-followups-1](send-followups-1/plan.md) — completed — the queued cap from a like send (#412), a row for a long USD line (#408), the fee card without its dead override path (#406)
 - [send-publish-ledger](send-publish-ledger/plan.md) — completed — Send says what a send puts on the public chain
 - [send-queue-activity](send-queue-activity/plan.md) — completed — dApp sends ordered behind earlier sends, fee spender kept across restarts; send outcome states, feed surfaces; Send's amount card and keyboard reach; a queued send held to a fee cap, asked again above it
@@ -340,3 +343,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [authwit-intent-1](authwit-intent-1/plan.md) — completed — a dApp's inner-hash authorization intent never names the account that signs it; the Fee Juice selector pin runs only where it can compute
 - [fees-card-mode-1](fees-card-mode-1/plan.md) — completed — one fee card handed Send's or the app windows' rule book: verdicts, snapshot and two rule books as composables, template untouched (#513)
 - [service-structure-1](service-structure-1/plan.md) — completed — five page-37 refactors in four arcs: the import waiter, discovery and session holders out of `background.ts`, the balance outbox class, named fee and message parameters and one operation-trait table (#521 #545 #547 #549 #560)
+- [fee-call-match-1](fee-call-match-1/plan.md) — completed — the Fee method row reads "Private Fee Juice" only for the PrivateFPC's `pay_fee`, so an app's own fee contract reads "Set by {app}" (#796, in part; the sponsor half is OA-1)

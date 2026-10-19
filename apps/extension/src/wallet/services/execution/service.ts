@@ -513,7 +513,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 					this.lane.claimOrCreateJournal(networkId, accountAddress, origin, calls, hooks, reuseController, fence),
 				beginJournal: (networkId, accountAddress, origin, calls, fence) =>
 					this.lane.beginJournal(networkId, accountAddress, origin, calls, fence),
-				markJournal: (journalId, progress, error, failedTitle) => this.lane.markJournal(journalId, progress, error, failedTitle),
+				recordBuiltCall: (journalId, txCalls) => this.lane.recordBuiltCall(journalId, txCalls),
+				markJournal: (journalId, progress, error, retitle) => this.lane.markJournal(journalId, progress, error, retitle),
 				commitJournal: (journalId, progress) => this.lane.commitJournal(journalId, progress),
 				parkSlot: (release, networkId, queuedJournalId, fence, preController, originKey, wait) =>
 					this.lane.parkSlot(release, networkId, queuedJournalId, fence, preController, originKey, wait),

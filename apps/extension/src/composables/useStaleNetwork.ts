@@ -40,6 +40,11 @@ export function runsUnattended(view: StaleNetworkView): boolean {
 	return neverOpened(view) && !view.switchToSeedNode && !view.blocked && !view.reset && !view.heldBy && !view.otherPending
 }
 
+/** A paused reset's imported accounts can be exported before deleting the network: from a password
+ *  profile only, as Settings' account export, and only those whose key the journal holds. */
+export const exportsHeld = (view: StaleNetworkView | null | undefined, profileType: string | undefined): boolean =>
+	profileType === "password" && (view?.reset?.heldImported?.length ?? 0) > 0
+
 const errorCode = (error: unknown) => (error instanceof Error ? error.message.split(":")[0] : "")
 
 /**

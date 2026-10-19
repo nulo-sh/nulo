@@ -39,10 +39,30 @@ if (appStore.profile?.type === "passkey") {
 	router.replace("/popup/settings/security/export")
 }
 
-/** The picker (and the preselect validation) only ever offers CURRENT-chain rows: during a
- *  network switch `appStore.accounts` can transiently hold the previous chain's rows, and an
- *  export must never bind an address to the wrong chainId. */
-const accounts = computed(() => (appStore.accounts ?? []).filter((a) => a.chainId === appStore.network?.chainId))
+/** The imported accounts a paused network reset holds in its journal, on whichever network: no
+ *  picker lists their rows while the chain is quarantined or after the purge. */
+const heldAccounts = ref([])
+const readHeldAccounts = async () => {
+	const pending = await managers.networkReset.getPendingReset()
+	if (!pending || pending.running) return []
+	const view = await managers.networkReset.getStaleNetwork(pending.networkId)
+	return (view?.reset?.heldImported ?? []).map((a) => ({ ...a, type: AccountType.Imported, held: true }))
+}
+/** Another profile's held rows never show: a switch drops them at once, and a read it outlived is dropped. */
+const loadHeldAccounts = async () => {
+	heldAccounts.value = []
+	const profileId = appStore.profile?.id
+	const held = await readHeldAccounts().catch(() => [])
+	if (appStore.profile?.id === profileId) heldAccounts.value = held
+}
+
+/** Live rows (and the preselect validation) are only ever CURRENT-chain rows: during a network
+ *  switch `appStore.accounts` can transiently hold the previous chain's rows, and an export must
+ *  never bind an address to the wrong chainId. A held row has no chain: the journal is read by address. */
+const accounts = computed(() => {
+	const live = (appStore.accounts ?? []).filter((a) => a.chainId === appStore.network?.chainId)
+	return [...live, ...heldAccounts.value.filter((h) => !live.some((a) => a.address === h.address))]
+})
 
 const selectedAddress = ref("")
 const isAgreed = ref(false)
@@ -72,8 +92,8 @@ const resetFlow = () => {
 	payload.value = ""
 }
 
-/** Preselect via the Manage Accounts deep-link (`?address=`); the picker is skipped when the
- *  address belongs to this profile's CURRENT chain. Watched, not read once: a query-only
+/** Preselect via the Manage Accounts deep-link (`?address=`); the picker is skipped when it
+ *  lists the address. Watched, not read once: a query-only
  *  navigation reuses this component instance, so entering with a different (or no) address must
  *  scrub the previous flow's stage and payload rather than inherit them. */
 const applyQueryPreselect = () => {
@@ -100,6 +120,15 @@ watch(accounts, () => {
 	if (selectedAddress.value) return
 	applyQueryPreselect()
 })
+// A profile switched from another window leaves this page mounted: its flow, payload included,
+// belongs to the previous profile.
+watch(
+	() => appStore.profile?.id,
+	() => {
+		resetFlow()
+		loadHeldAccounts()
+	},
+)
 
 const selectedAccount = computed(() => accounts.value.find((a) => a.address === selectedAddress.value))
 
@@ -116,18 +145,17 @@ const handleAgree = () => {
 	isAgreed.value = true
 }
 
+const exportSelected = (encrypt) =>
+	selectedAccount.value?.held
+		? managers.account.exportResetHeldAccount(appStore.profile.id, selectedAddress.value, password.value, encrypt)
+		: managers.account.exportAccount(appStore.profile.id, appStore.network.chainId, selectedAddress.value, password.value, encrypt)
+
 const handleCreate = async () => {
 	if (!password.value || isBusy.value) return
 	isBusy.value = true
 	const isCurrent = runs.snapshot()
 	try {
-		const body = await managers.account.exportAccount(
-			appStore.profile.id,
-			appStore.network.chainId,
-			selectedAddress.value,
-			password.value,
-			false,
-		)
+		const body = await exportSelected(false)
 		if (!isCurrent()) return
 		payload.value = body
 		fileStatus.value = "ready"
@@ -152,13 +180,7 @@ const handleProtect = async () => {
 	isBusy.value = true
 	const isCurrent = runs.snapshot()
 	try {
-		const body = await managers.account.exportAccount(
-			appStore.profile.id,
-			appStore.network.chainId,
-			selectedAddress.value,
-			password.value,
-			true,
-		)
+		const body = await exportSelected(true)
 		if (!isCurrent()) return
 		payload.value = body
 		fileStatus.value = "protected"
@@ -206,7 +228,10 @@ const onKeydown = (e) => {
 	if (!isAgreed.value) handleAgree()
 	else handleCreate()
 }
-onMounted(() => document.addEventListener("keydown", onKeydown))
+onMounted(() => {
+	document.addEventListener("keydown", onKeydown)
+	loadHeldAccounts()
+})
 
 onBeforeUnmount(() => {
 	document.removeEventListener("keydown", onKeydown)

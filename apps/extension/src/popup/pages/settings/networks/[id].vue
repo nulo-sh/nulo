@@ -15,6 +15,7 @@ import * as staleCopy from "@/components/stale-network/copy"
 import { useToast } from "@/composables/toast"
 import { useConfirm } from "@/composables/useConfirm"
 import { useNetworkActivation } from "@/composables/useNetworkActivation"
+import { exportsHeld } from "@/composables/useStaleNetwork"
 const { openToast } = useToast()
 const { requestConfirm } = useConfirm()
 const { activate: activateNetwork } = useNetworkActivation({
@@ -46,7 +47,7 @@ async function readHeldReset(id) {
 	const pending = await managers.networkReset.getPendingReset()
 	if (pending?.networkId !== id) return null
 	const view = pending.running ? null : await managers.networkReset.getStaleNetwork(id)
-	return { imported: view?.reset?.imported ?? [] }
+	return { imported: view?.reset?.imported ?? [], exportable: exportsHeld(view, appStore.profile?.type) }
 }
 
 const heldReset = ref(null)
@@ -163,7 +164,7 @@ const handleDeleteNetwork = async () => {
 		title: `Delete ${name}?`,
 		description: [
 			"This wipes accounts, balances, tokens, and PXE state on this chain. This cannot be undone.",
-			held?.imported.length ? staleCopy.deleteChainImported(held.imported) : "",
+			held?.imported.length ? staleCopy.deleteChainImported(held.imported, held.exportable) : "",
 		]
 			.filter(Boolean)
 			.join(" "),

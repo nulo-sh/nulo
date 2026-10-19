@@ -31,7 +31,15 @@ import { isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { ProfileService } from "@/wallet/services/profile/service"
 import { type ChainResetHooks, type ChainResetRequest, LOCAL_NETWORK_RPC_URL, NetworkService } from "./service"
-import { ERR_RPC_URL_IPV6_LOOPBACK, ERR_UNATTENDED_LIVE_CHECK, findPrimaryEndpoint, NodeStatus } from "./spec"
+import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
+import {
+	ERR_ENDPOINT_CHAIN_MISMATCH,
+	ERR_RPC_URL_IPV6_LOOPBACK,
+	ERR_UNATTENDED_LIVE_CHECK,
+	findPrimaryEndpoint,
+	IDENTITY_PROBE_MS,
+	NodeStatus,
+} from "./spec"
 import type { Network, NetworkEndpoint } from "./spec"
 import { seedForKind } from "./seeds"
 
@@ -1617,7 +1625,7 @@ describe("NetworkService lock configuration", () => {
 	})
 })
 
-describe("NetworkService — resolveVerifiedL1ChainId unattended", () => {
+describe("NetworkService — resolveVerifiedL1ChainId's live check", () => {
 	function makeService(getNodeInfo: ReturnType<typeof vi.fn>) {
 		const factory = new FakeNodeFactory()
 		factory.setOverrides("https://rpc-a.example/", { getNodeInfo: getNodeInfo as unknown as AztecNode["getNodeInfo"] })
@@ -1626,7 +1634,7 @@ describe("NetworkService — resolveVerifiedL1ChainId unattended", () => {
 		const service = new NetworkService(new LoggerStore(new ConfigStore()), browserApi, factory)
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in (no full lifecycle needed)
 		;(service as any).initialized = true
-		return { service, browserApi }
+		return { service, browserApi, factory }
 	}
 	const row = (kind: string, l1ChainId: number) => ({
 		id: "n1",
@@ -1653,6 +1661,40 @@ describe("NetworkService — resolveVerifiedL1ChainId unattended", () => {
 		await browserApi.storage.local.set({ "nulo:core:networks@n1": JSON.stringify(row("local", LOCAL_L1_CHAIN_ID)) })
 		await expect(service.resolveVerifiedL1ChainId("p1", 123, { unattended: true })).resolves.toBe(LOCAL_L1_CHAIN_ID)
 		expect(getNodeInfo).not.toHaveBeenCalled()
+	})
+
+	test("a node that does not answer fails with NodeUnreachableError after one bounded, never-retried read", async () => {
+		const { service, browserApi, factory } = makeService(vi.fn().mockRejectedValue(new Error("fetch failed")))
+		await browserApi.storage.local.set({ "nulo:core:networks@n1": JSON.stringify(row("custom", 5)) })
+		const probe = vi.spyOn(service, "probeIdentityOnce")
+		await expect(service.resolveVerifiedL1ChainId("p1", 123)).rejects.toBeInstanceOf(NodeUnreachableError)
+		expect(probe.mock.calls).toEqual([["https://rpc-a.example/", "custom", IDENTITY_PROBE_MS]])
+		expect(factory.singleAttempt).toEqual(["https://rpc-a.example/"])
+	})
+
+	test("a URL the transport rule refuses at construction fails the same way", async () => {
+		const { service, browserApi, factory } = makeService(vi.fn())
+		await browserApi.storage.local.set({ "nulo:core:networks@n1": JSON.stringify(row("custom", 5)) })
+		vi.spyOn(factory, "createSingleAttemptNode").mockImplementation(() => {
+			throw new Error("AztecNodeFactoryAdapter refused to construct node client")
+		})
+		await expect(service.resolveVerifiedL1ChainId("p1", 123)).rejects.toBeInstanceOf(NodeUnreachableError)
+	})
+
+	test("a node that answers resolves on its matching L1 and refuses another one with a plain error", async () => {
+		const getNodeInfo = vi.fn().mockResolvedValue({ l1ChainId: 5, rollupVersion: 1 })
+		const { service, browserApi } = makeService(getNodeInfo)
+		await browserApi.storage.local.set({ "nulo:core:networks@n1": JSON.stringify(row("custom", 5)) })
+		await expect(service.resolveVerifiedL1ChainId("p1", 123)).resolves.toBe(5)
+		getNodeInfo.mockResolvedValue({ l1ChainId: 6, rollupVersion: 1 })
+		const mismatch = await service.resolveVerifiedL1ChainId("p1", 123).catch((error: unknown) => error)
+		expect(mismatch).toBeInstanceOf(Error)
+		expect(mismatch).not.toBeInstanceOf(NodeUnreachableError)
+		expect((mismatch as Error).message).toMatch(/L1 identity mismatch/)
+		getNodeInfo.mockResolvedValue({ l1ChainId: 5, rollupVersion: 5 })
+		const chainZero = await service.resolveVerifiedL1ChainId("p1", 123).catch((error: unknown) => error)
+		expect(chainZero).not.toBeInstanceOf(NodeUnreachableError)
+		expect((chainZero as Error).message).toMatch(new RegExp(`^${ERR_ENDPOINT_CHAIN_MISMATCH}`))
 	})
 })
 

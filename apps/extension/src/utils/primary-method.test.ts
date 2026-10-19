@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { FEE_METHODS, pickPrimaryMethod, pickPrimaryWireMethod, wireTitle } from "./primary-method"
+import { FEE_METHODS, pickPrimaryMethod, pickPrimaryWireCall, wireTitle } from "./primary-method"
 
 describe("FEE_METHODS — wallet-injected fee/entrypoint set", () => {
 	test("contains the documented seven entries", () => {
@@ -133,7 +133,15 @@ describe("pickPrimaryMethod — order invariant", () => {
 	})
 })
 
-describe("pickPrimaryWireMethod — a dApp call list's title", () => {
+describe("pickPrimaryWireCall — a dApp call list's primary call and title", () => {
+	const pickPrimaryWireMethod = (calls: unknown) => pickPrimaryWireCall(calls)?.name
+
+	test("the call returned is the one picked, never an earlier fee call of the same name", () => {
+		const fee = { name: "claim", to: "0xfee" }
+		const app = { name: "claim", to: "0xapp" }
+		expect(pickPrimaryWireCall([fee, { name: "mint_and_pay_fee" }, app])).toEqual({ name: "claim", call: app })
+	})
+
 	test("a call is titled by its name, never by a method key beside it", () => {
 		expect(pickPrimaryWireMethod([{ name: "transfer", method: "approve_all" }])).toBe("transfer")
 		expect(pickPrimaryWireMethod([{ method: "approve_all" }])).toBeUndefined()

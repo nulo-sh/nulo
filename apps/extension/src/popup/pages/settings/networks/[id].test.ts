@@ -148,6 +148,30 @@ describe("Settings › Network detail — a paused reset of this network", () =>
 		expect(await deleteConfirmText()).toBe(`${WIPES} It also deletes the imported account “Savings”.`)
 	})
 
+	test("for a password profile whose reset holds their keys, Delete chain's sentence ends asking to export them", async () => {
+		const heldAs = async (profileType: string, heldImported: Array<{ name: string; address: string }>) => {
+			networkReset.getPendingReset.mockResolvedValue({ networkId: "mine", running: false })
+			networkReset.getStaleNetwork.mockResolvedValue({
+				networkId: "mine",
+				reset: { running: false, purged: true, doneCount: 0, imported: ["Savings", "Trading"], heldImported },
+			})
+			const wrapper = mountDetail()
+			useAppStore().profile = { id: "p1", name: "Main", type: profileType } as never
+			await flushPromises()
+			await wrapper.get('[data-testid="network-delete-chain-btn"]').trigger("click")
+			await flushPromises()
+			return useCacheStore().confirm?.description
+		}
+		const held = [
+			{ name: "Savings", address: "0xs" },
+			{ name: "Trading", address: "0xt" },
+		]
+		const names = "It also deletes the imported accounts “Savings” and “Trading”."
+		expect(await heldAs("password", held)).toBe(`${WIPES} ${names} Export them first.`)
+		expect(await heldAs("passkey", held)).toBe(`${WIPES} ${names}`)
+		expect(await heldAs("password", [])).toBe(`${WIPES} ${names}`)
+	})
+
 	test("its endpoints are held: rows inert, no edit or delete, Add disabled, and the reason line", async () => {
 		holdMine(["Savings"])
 		const wrapper = mountDetail()

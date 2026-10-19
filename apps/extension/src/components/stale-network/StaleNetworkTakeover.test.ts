@@ -14,12 +14,20 @@ const H = vi.hoisted(() => ({
 	activate: vi.fn(async () => "activated"),
 	closeAll: vi.fn(),
 	networks: [] as Array<{ id: string; name: string }>,
+	profile: { type: "password" } as { type: string } | undefined,
 }))
 
 vi.mock("@/utils/core", () => ({ managers: { profile: {}, network: {} } }))
 vi.mock("@/composables/useLockWallet", () => ({ useLockWallet: () => ({ lock: H.lock, dispose: vi.fn() }) }))
 vi.mock("@/composables/useNetworkActivation", () => ({ useNetworkActivation: () => ({ activate: H.activate }) }))
-vi.mock("@/stores/app.store", () => ({ useAppStore: () => ({ networks: H.networks }) }))
+vi.mock("@/stores/app.store", () => ({
+	useAppStore: () => ({
+		networks: H.networks,
+		get profile() {
+			return H.profile
+		},
+	}),
+}))
 vi.mock("@/stores/popup.store", () => ({ usePopupStore: () => ({ closeAll: H.closeAll }) }))
 vi.mock("vue-router", async (importOriginal) => {
 	const mod = await importOriginal<typeof import("vue-router")>()
@@ -98,6 +106,7 @@ beforeEach(() => {
 	H.lock.mockClear()
 	H.activate.mockClear()
 	H.closeAll.mockClear()
+	H.profile = { type: "password" }
 	H.networks.splice(0, H.networks.length, { id: "tn", name: "Testnet" }, { id: "ln", name: "Local Network" })
 })
 
@@ -228,6 +237,57 @@ describe("StaleNetworkTakeover — copy and order", () => {
 		expect(one.wrapper.get('[data-testid="stale-network-notice"]').text()).toBe(
 			"“Savings” is an imported account. Deleting Testnet deletes it.",
 		)
+	})
+
+	const HELD = {
+		running: false,
+		purged: true,
+		doneCount: 1,
+		imported: ["Savings", "Trading"],
+		heldImported: [
+			{ name: "Savings", address: ADDRESS_1 },
+			{ name: "Trading", address: ADDRESS_2 },
+		],
+	}
+
+	test("R1 with held imported accounts: EXPORT leads, TRY AGAIN keeps its guard below it, SWITCH NETWORK last", async () => {
+		const { wrapper, stale } = mountTakeover(view({ reset: HELD }))
+		expect(wrapper.get('[data-testid="stale-network-notice"]').text()).toBe(
+			"“Savings” and “Trading” are imported accounts. Deleting Testnet deletes them. Export them first.",
+		)
+		expect(lines(wrapper.element).slice(-3)).toEqual(["EXPORT IMPORTED ACCOUNTS", "TRY AGAIN", "SWITCH NETWORK"])
+		await wrapper.get('[data-testid="stale-network-export"]').trigger("click")
+		expect(H.push).toHaveBeenCalledWith("/popup/settings/security/export/account")
+
+		const retry = wrapper.get('[data-testid="stale-network-retry"]')
+		await retry.trigger("click")
+		expect(stale.start).toHaveBeenCalledWith(expect.objectContaining({ networkId: "tn" }))
+		const repeat = new KeyboardEvent("keydown", { key: "Enter", repeat: true, cancelable: true, bubbles: true })
+		retry.element.dispatchEvent(repeat)
+		expect(repeat.defaultPrevented).toBe(true)
+		stale.starting.value = true
+		await flushPromises()
+		expect(retry.attributes("disabled")).toBeDefined()
+		expect(wrapper.get('[data-testid="stale-network-switch"]').attributes("disabled")).toBeUndefined()
+
+		const one = mountTakeover(view({ reset: { ...HELD, imported: ["Savings"], heldImported: HELD.heldImported.slice(0, 1) } }))
+		expect(one.wrapper.get('[data-testid="stale-network-notice"]').text()).toBe(
+			"“Savings” is an imported account. Deleting Testnet deletes it. Export it first.",
+		)
+	})
+
+	test("R1 keeps today's screen for a passkey profile, and when the journal holds no key", () => {
+		H.profile = { type: "passkey" }
+		const passkey = mountTakeover(view({ reset: HELD })).wrapper
+		H.profile = { type: "password" }
+		const keyless = mountTakeover(view({ reset: { ...HELD, heldImported: [] } })).wrapper
+		for (const wrapper of [passkey, keyless]) {
+			expect(wrapper.get('[data-testid="stale-network-notice"]').text()).toBe(
+				"“Savings” and “Trading” are imported accounts. Deleting Testnet deletes them.",
+			)
+			expect(wrapper.find('[data-testid="stale-network-export"]').exists()).toBe(false)
+			expect(lines(wrapper.element).slice(-2)).toEqual(["TRY AGAIN", "SWITCH NETWORK"])
+		}
 	})
 
 	test("R2: the new chain is already added", () => {
