@@ -502,11 +502,11 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 				</Flex>
 			</template>
 			<template v-else-if="tokenMetadataError">
-				<Flex :class="$style.prop" direction="column" gap="2">
+				<Flex :class="$style.group" direction="column" gap="2">
 					<Text variant="body" color="orange" data-testid="register-token-meta-error">
 						Couldn't resolve token metadata
 					</Text>
-					<Text variant="body" color="tertiary">Verify the contract address before approving.</Text>
+					<Text variant="body" color="tertiary">Reject this request and ask the app to add the token again.</Text>
 				</Flex>
 			</template>
 
@@ -634,7 +634,7 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 						<Text variant="label-section" color="secondary">Inner hash:</Text>
 						<Text variant="meta" color="primary" :title="s.innerHash" data-testid="execute-authwit-inner-hash-value">{{ trimAddress(s.innerHash, 10, 6) }}</Text>
 					</Flex>
-					<Flex :class="$style.prop">
+					<Flex :class="$style.group">
 						<Text variant="body" color="orange" data-testid="execute-authwit-opaque-warning">
 							Opaque authorization. The wallet cannot show what this hash authorizes
 						</Text>
@@ -680,7 +680,7 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 	overflow-wrap: anywhere;
 }
 
-/* A label on its own line above a full-width stack, so nothing hangs off the right-aligned value column. */
+/* A full-width block outside the right-aligned value column: a label above a stack, or a warning. */
 .group {
 	width: 100%;
 	padding-top: 12px;
@@ -736,19 +736,18 @@ const adviceOn = (on: AdviceSite["on"], index: number): boolean => adviceSite.va
 	font-size: 12px;
 }
 
+/* A label and its value. A block with no label, a warning, is a `.group`: the value column would
+ * set its lines against the right edge. */
 .prop {
 	width: 100%;
 	justify-content: space-between;
 	padding-top: 12px;
 
-	:last-child {
-		text-align: right;
-	}
-
 	/* A dApp names the function and the artifact a row shows; a long unbroken name breaks inside the card. */
 	> :last-child {
 		min-width: 0;
 		overflow-wrap: anywhere;
+		text-align: right;
 	}
 }
 </style>
