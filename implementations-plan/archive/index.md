@@ -357,3 +357,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [ui-dedupe-2](ui-dedupe-2/plan.md) — completed — the five list rules on Home's, the held Holdings row with them (#839); a dropped backup export stops before its keys (#840)
 - [ui-polish-4](ui-polish-4/plan.md) — completed — the logs toolbar on native buttons with Escape handing focus back, its menu items in one role, the recovery Close on the design button's look, Holdings' error line without a false total (#810 #823 #831 #825)
 - [copy-polish-1](copy-polish-1/plan.md) — completed — the failed token preview's warning points at Reject and sits left-aligned, fixed at the card's layout rule with the opaque authorization warning (#803); the restore warning's account-file clause (#746 OA-2)
+- [send-estimate-1](send-estimate-1/plan.md) — completed — a balance that makes the typed amount sendable asks for its fee, on either side (#856); the fee row on a balance drop ships as today (#863)
