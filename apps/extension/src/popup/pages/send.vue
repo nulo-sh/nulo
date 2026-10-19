@@ -39,7 +39,8 @@ import { feeText } from "@/utils/fee-estimation"
 import { validateSendAmount } from "@/popup/pages/send-amount"
 import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
 import { submitTransfer } from "@/popup/pages/send-submit"
-import { NO_FACTS, payerKindOf, publishFacts } from "@/components/composite/send/publish-facts"
+import { NO_FACTS, payerKindOf, publishFacts, TOKEN_CAVEAT } from "@/components/composite/send/publish-facts"
+import { isValidatedTokenClass } from "@/utils/token-class"
 import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
 import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 
@@ -331,6 +332,7 @@ const payerKind = computed(() => payerKindOf(feeSettings.value, payer.value))
 const facts = computed(() =>
 	isBlockedTransfer.value ? NO_FACTS : publishFacts(selectedSendType.value, selectedReceiverType.value, payerKind.value),
 )
+const showsTokenCaveat = computed(() => !isBlockedTransfer.value && !isValidatedTokenClass(activeToken.value?.classId))
 
 /** The review sheet lives on the popup stack under this key, so it stacks and closes like any other popup. */
 const REVIEW_KEY = "send_review"
@@ -850,6 +852,7 @@ onBeforeUnmount(() => {
 
 			<Flex v-snack-footer direction="column" gap="10" :class="$style.bottom" data-testid="send-footer">
 				<PublishStrip v-if="!isBlockedTransfer" :facts="facts" @open="openReview" />
+				<Text v-if="showsTokenCaveat" variant="body" color="secondary" data-testid="send-token-caveat">{{ TOKEN_CAVEAT }}</Text>
 				<Button
 					v-if="needsFeeJuice"
 					@click="openFeeJuiceBridge"

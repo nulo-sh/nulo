@@ -23,7 +23,6 @@ const appStore = useAppStore()
 
 /** Composables */
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
-import { useDappHostname } from "@/composables/useDappHostname"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 
 const router = useRouter()
@@ -57,8 +56,6 @@ const {
 	getRequestId: () => router.currentRoute.value.query.requestId?.toString(),
 	dappOf: (p) => p.params.dappMetadata,
 })
-
-const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHostname(dapp)
 
 // The app's chain, not the wallet's: the strip above names the wallet's network, and an approval
 // connects the app on the chain it asked for, whatever the wallet shows.
@@ -187,8 +184,6 @@ onUnmounted(() => {
 		<Flex direction="column" :class="$style.scroll_area">
 			<DappIdentityBlock
 				:dapp="dapp"
-				:hostname="dappHostname"
-				:hostnameSuspicious="hostnameHasNonAscii"
 				:actionLabel="actionLabel"
 				hostnameTestId="discover-hostname"
 				nameTestId="discover-dapp-name"

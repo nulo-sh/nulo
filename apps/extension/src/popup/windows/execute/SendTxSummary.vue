@@ -2,8 +2,8 @@
 /** Only the wallet's own reading of a transfer or mint states an amount or a party; nothing here closes. */
 import type { DiscoveredAuthwit } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
-import { type CallSurface, type WireCall, amountLabel, authwitLine, authwitTitle, rowTitle } from "./call-surface"
-import UnreadableArgsNotice from "./UnreadableArgsNotice.vue"
+import { type CallSurface, type WireCall, amountLabel, authwitLine, authwitTitle, RAW_LINE, RAW_TITLE, rowTitle } from "./call-surface"
+import ArgsNotice from "./ArgsNotice.vue"
 
 const props = defineProps<{
 	calls: readonly { call: WireCall; surface: CallSurface }[]
@@ -81,7 +81,7 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 						Reading arguments…
 					</Text>
 					<Flex v-else-if="row.surface.kind === 'raw'" data-testid="execute-op-summary-unverified-args" :data-reason="row.surface.reason" direction="column" gap="4">
-						<UnreadableArgsNotice :reason="row.surface.reason" prefix="execute-op-summary" :advice="j === adviceAt" />
+						<ArgsNotice :title="RAW_TITLE" :body="RAW_LINE[row.surface.reason]" prefix="execute-op-summary" kind="unverified" :advice="j === adviceAt" />
 					</Flex>
 				</Flex>
 			</li>

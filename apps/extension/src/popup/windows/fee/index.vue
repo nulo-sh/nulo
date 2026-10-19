@@ -36,7 +36,6 @@ import { DappInteractionServiceClient, type FeeQuestionPayload } from "@/wallet/
 
 /** Composables */
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
-import { useDappHostname } from "@/composables/useDappHostname"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 
 /** Store */
@@ -75,8 +74,6 @@ const {
 	getRequestId: () => router.currentRoute.value.query.requestId?.toString(),
 	dappOf: (p) => p.session.dappMetadata,
 })
-
-const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHostname(dapp)
 
 const {
 	start: startWindow,
@@ -241,8 +238,6 @@ onUnmounted(() => {
 		<Flex direction="column" :class="$style.scroll_area">
 			<DappIdentityBlock
 				:dapp="dapp ?? undefined"
-				:hostname="dappHostname"
-				:hostnameSuspicious="hostnameHasNonAscii"
 				hostnameTestId="fee-hostname"
 				actionLabel="wants to execute the following"
 			/>

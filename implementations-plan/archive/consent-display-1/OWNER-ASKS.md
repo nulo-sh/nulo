@@ -1,6 +1,6 @@
 # consent-display-1: owner asks
 
-Arc 1 (discovery admits secure origins only) depends on none of these: none concerns discovery. Each ask names what ships now; an arc builds that and waits for nothing, except arc 2, which waits for OA-1's answer so it builds the chosen option once (the orchestrator may release it on C).
+Arc 1 (discovery admits secure origins only) depends on none of these: none concerns discovery. Each ask names what ships now; an arc builds that and waits for nothing, except arc 2, which waited for OA-1's answer so it built the chosen option once. Answered: OA-1 = A (P42-08); OA-2 = A (P42-09); OA-3, OA-4 and OA-5 as planned (P42-10).
 
 ## OA-1: a dApp token add whose preview failed, and the message when the details changed (the execute window)
 
@@ -14,7 +14,7 @@ Arc 1 (discovery admits secure origins only) depends on none of these: none conc
 
 **Recommendation: A.** The card then never approves details nobody saw, and the person learns it before pressing anything. B fails after the click, with no wallet message.
 
-**What ships now: C.** Unchanged.
+**What ships now: C.** Unchanged. **Answered: A** (P42-08), shipped in arc 2.
 
 **The message, either way.** When a token's details change between the window and the commit, the add fails and its import row shows the error, as a failed read does today. Draft: "Token details changed after you approved them." It holds no token text. **What ships now:** the draft, shown in arc 2's PR for sign-off.
 
@@ -71,6 +71,8 @@ Arc 1 (discovery admits secure origins only) depends on none of these: none conc
 
 **What ships now: A,** in arc 3, named in its PR for sign-off.
 
+**Also, found in arc 3's review (P42-10 signed A on the two effects above).** Until the read succeeds, a restored token's past app transfers and mints also read as plain calls on Activity and the transaction page: "Transfer Private To Private" or "Mint To Public" with the generic icon, in place of "Transfer (private)" or "Mint (public)" with the send or mint icon. The wallet's own sends keep their titles, since they record what they moved. And the read is tried once, inside the import's 45 s budget it shares with the account sync: when it fails or is late (a restore offline, a slow node), nothing reads it again, so the token stays without a class, its caveat and plain titles included, until it is deleted and added again. Shipped with A, shown in arc 3's PR for sign-off. Reading it again later (on the next unlock, say) would add a background step: a plan change, not in this arc.
+
 
 ## OA-6: the failed-preview warning's second sentence (the execute window)
 
@@ -84,3 +86,16 @@ Arc 1 (discovery admits secure origins only) depends on none of these: none conc
 **Recommendation: B.** The sentence then names the one action the window allows.
 
 **What ships now: A.** OA-1 A reads "The warning stays", so arc 2 leaves the copy as it is.
+
+## OA-7: "About" in the app-set fee sentence (the execute window)
+
+**Surface.** The execute window's app-set fee row. P38-03 A replaces "Fee up to X" with "About X". After the plan, P47-02 C rewrote the row as one sentence: "Fee could be up to {amount}; payment method set by {app}." Both picks hold, so arc 3 applies P38-03 A's word to P47-02's sentence.
+
+| Option | What it looks like |
+|---|---|
+| A. "About" in the one sentence | "About ~0.016 FJ (<$0.001); payment method set by Swap." While the estimate runs: "About ▭; payment method set by Swap." The priority clause after it is unchanged. |
+| B. Keep P47-02 C as merged | "Fee could be up to ~0.016 FJ (<$0.001); payment method set by Swap." |
+
+**Recommendation: A.** The figure caps nothing: paid from the person's balance the fee may rise 10 % without asking, and paid by the app's fee contract by any amount, which "up to" denies. "About ~X" is how Send's queued readout already reads.
+
+**What ships now: A,** in arc 3, with light and dark pictures in its PR for sign-off.

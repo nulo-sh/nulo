@@ -935,7 +935,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		await Promise.all(rows.map((row) => this.refreshRestoredToken(fence, row, deadlineAt)))
 	}
 
-	/** The row's own class is the backup's claim, so the read takes no pin from it. */
+	/** Unpinned: a restored row holds no class, so its class comes from this read alone. */
 	private async refreshRestoredToken(fence: RunFence, row: Token, deadlineAt: number): Promise<void> {
 		const read = await settleBy(this.readChainToken(fence, row), deadlineAt)
 		if (read.kind !== "read") {
@@ -1013,8 +1013,9 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		// `chainId: "1:"` would otherwise "succeed", have a balance
 		// relinked to it, then be rejected by the read codec — leaving an
 		// orphaned balance. Parsing here records it as a restoreError instead.
-		const parsed = TokenSchema.parse({ ...token, id })
-		const row = { ...parsed, name: cleanName(parsed.name), symbol: cleanSymbol(parsed.symbol) }
+		// A backup's class is only its claim; the row holds none until the refresh reads one from the chain.
+		const { classId: _claimed, ...parsed } = TokenSchema.parse({ ...token, id })
+		const row: Token = { ...parsed, name: cleanName(parsed.name), symbol: cleanSymbol(parsed.symbol) }
 		assertRestoreEpoch(deletion, epochs, row.profileId)
 		// The chain sweep is LOCKLESS (see clearChainState), so a purge can
 		// interleave this batch despite the token lock — a row written after
