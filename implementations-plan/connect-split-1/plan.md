@@ -23,8 +23,8 @@ The owner, 2026-10-19, on #859: "I think sadly, we need to go back to “splitti
 - **Excellent**:
   1. After Allow no wallet window waits for an exchange that may never come: on a page that has not started its exchange, the connect window is gone `BRIDGE_MS` after the wallet approves the discovery.
   2. A page that exchanges at once never shows its own page between the two windows: once its establishment reaches the worker's callback within `BRIDGE_MS` of the approval, the check window is created before the connect window closes (D3). J1 measures that, focus, and the time until the grid shows, on both browsers.
-  3. The check window opens only for an Allow, from that Allow's tab and document origin, once per Allow and once per tab at a time, and answers no key the person was typing elsewhere.
-  4. A remembered reconnection behaves as at the base (one tab, one check), and the reservation code gets smaller: the `standby` state, its expired page and `WindowPort.navigate` go.
+  3. The check window opens only for an Allow, from that Allow's tab and document origin, once per Allow, within the origin's two and eight in all (D8), and answers no key the person was typing elsewhere.
+  4. A remembered reconnection behaves as at the base, and the reservation code gets smaller: the `standby` state, its expired page and `WindowPort.navigate` go.
 - **Good enough**: a page that exchanges after the Allow's validity gets its session ended with no window (#606's slow-pick path, now also for a first connection); the wallet says nothing (OA-2).
 
 ## Assumptions
@@ -60,21 +60,23 @@ The owner, 2026-10-19, on #859: "I think sadly, we need to go back to “splitti
 export const BRIDGE_MS = 1_500
 export class ConnectBridge {
   constructor(clock: Pick<ClockPort, "setTimeout" | "clearTimeout">, closeWindow: (windowId: number) => void)
-  hold(id: string, tabId: number, windowId: number): void // at Allow; a held id is ended first
-  isOpen(id: string): boolean        // held and its window not removed
+  // Every call names the hold it acts on: a page can reuse a request id, and a stale caller must
+  // never reach its successor's hold.
+  hold(id: string, tabId: number, windowId: number): BridgeHold // at Allow; a held id is ended first
+  isOpen(hold: BridgeHold): boolean  // still held and its window not removed
   windowRemoved(windowId: number): void // fed by the existing ports.windows.onRemoved
-  arm(id: string): void              // the approval call returned: end(id) after BRIDGE_MS
-  pin(id: string): void              // its establishment reached the callback: clear the timer
-  end(id: string): void              // close now; idempotent; no-op when not held
+  arm(hold: BridgeHold): void        // the approval call returned: end(hold) after BRIDGE_MS
+  pin(id: string): BridgeHold | undefined // its establishment reached the callback: clear the timer
+  end(hold: BridgeHold): void        // close now; idempotent; no-op when no longer held
   endForTab(tabId: number): void
 }
 ```
 
 **Control flow, new connection.**
 1. Allow → `settleDiscovery` → `handOver` → `{ approved: true, windowId }` (no `expiredUrl`).
-2. `runDiscoveryPopup`: `bridge.hold`; `admitVerifyWindow`; when a window was handed over and `!bridge.isOpen(id)`, refuse as today's failed `attach` does. `attemptOpen` becomes `!reservation.abandoned && (no window handed over || bridge.isOpen(id))`. `persistAndApprove` returns whether the approval landed: landed → `bridge.arm(id)`; every other exit → `bridge.end(id)` in `finally`.
-3. Exchange → `onSessionEstablished`: `bridge.pin(id)` synchronously, then `handleSessionEstablished` → `openVerifyWindow`; `validated.then(end, end)` (not `finally`: a rejected `validated` is already handled at `background.ts:530`).
-4. No establishment by `BRIDGE_MS` after the approval call: `end(id)`. The unstarted reservation expires 65 s after the discovery and tombstones the marker (unchanged).
+2. `runDiscoveryPopup`: `hold = bridge.hold(...)`; `admitVerifyWindow`; when a window was handed over and `!bridge.isOpen(hold)`, refuse as today's failed `attach` does. `attemptOpen` becomes `!reservation.abandoned && (no window handed over || bridge.isOpen(hold))`. `persistAndApprove` returns whether the approval landed: landed → `bridge.arm(hold)`; every other exit → `bridge.end(hold)` in `finally`.
+3. Exchange → `onSessionEstablished`: `pinned = bridge.pin(id)` synchronously, then `handleSessionEstablished` → `openVerifyWindow`; `validated.then(end, end)` on `pinned` (not `finally`: a rejected `validated` is already handled at `background.ts:530`).
+4. No establishment by `BRIDGE_MS` after the approval call: `end(hold)`. The unstarted reservation expires 65 s after the discovery and tombstones the marker (unchanged).
 
 The protected boundary is the establishment callback, not the exchange's arrival: the sdk derives keys before it calls back (`background_connection_handler.ts:306-346`), and pinning at arrival would need a settlement path for exchanges the sdk drops. A pinned bridge lives as long as establishment's own awaits; otherwise the bridge lasts the admission wait (≤ the 55 s cut-off) plus `BRIDGE_MS`.
 

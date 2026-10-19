@@ -318,17 +318,19 @@ test.skipIf(!aztecConfig)(
 
 		const check = await checkP
 		const shown = await checkShown(check)
-		const action = await check.evaluate(() => document.querySelector('[data-testid="verify-action"]')?.textContent?.trim() ?? null)
-		expect(action).toBe("Connection established")
+		const read = await check.evaluate(async () => ({
+			window: (await chrome.windows.getCurrent()).id,
+			action: document.querySelector('[data-testid="verify-action"]')?.textContent?.trim() ?? null,
+		}))
+		expect(read.action).toBe("Connection established")
 		await approveVerify(check)
 		await dapp.waitForSelector(CONNECTED, { timeout: 30_000 })
 
 		const lines = (await marks()).filter((m) => m.mark.startsWith("line:")).map((m) => m.mark.slice(5))
 		expect(lines).toEqual(["wants to connect on Local Network", "Connecting on Local Network"])
-		const checkWindow = await check.evaluate(async () => (await chrome.windows.getCurrent()).id)
-		expect((await changes()).filter((c) => c.change === "created").map((c) => c.id)).toEqual([connectWindow, checkWindow])
+		expect((await changes()).filter((c) => c.change === "created").map((c) => c.id)).toEqual([connectWindow, read.window])
 		console.log(
-			`[connect-check-window] ${BROWSER} late: ${JSON.stringify(timeline(await marks(), await changes(), connectWindow, checkWindow, shown))}`,
+			`[connect-check-window] ${BROWSER} late: ${JSON.stringify(timeline(await marks(), await changes(), connectWindow, read.window, shown))}`,
 		)
 		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
