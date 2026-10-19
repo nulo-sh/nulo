@@ -65,8 +65,6 @@ const {
 	read: () => journalService.getOperations({ kind: TOKENS_VIEW_KIND }),
 	accept: (op) => op.kind === TOKENS_VIEW_KIND,
 	place: "back",
-	appendAdded: true,
-	supersede: false,
 })
 // 5s tick is a generous fraction of the 30s retention window — the failed
 // row visibly disappears even if no new journal event fires.
@@ -240,7 +238,7 @@ async function fetchTokenImports() {
 	try {
 		await resnapshotImports()
 	} catch {
-		// Reconnect may race the port — next event or the next reconnect retries.
+		// The mirror reads again on this run.
 	}
 }
 

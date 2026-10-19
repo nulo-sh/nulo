@@ -89,7 +89,7 @@ Decision page 59 (2026-10-19), both option B. Recon: [`recon.md`](recon.md). Own
   - `send.test.ts:993` (F8) → a control: the reconnect's read is held; the new worker's zero Added for the listed id, then its Updated, then the read lands; Send's amount for both tokens is asserted after each step. Green over base and new (I3), so exempt from D6.
 - Gate: the four suites and `send.integration.test.ts` green; each new case red over base; each replaced base case red over the new code; mutations (D6) red; lint, typecheck.
 
-**Phase 3 — #839 rows 3, 4 and 5.** ✗
+**Phase 3 — #839 rows 3, 4 and 5.** ✓
 - Change: `journal-mirror.ts`, `useJournalMirror.ts`, `RecentActivityView.vue`, `TokensView.vue`, `activity.vue`, `app.store.ts`, and the regenerated `types/auto-imports.d.ts` (it re-exports `JournalAddRules`; CI fails a build that changes a committed generated file).
 - Tests:
   - `journal-mirror.test.ts`: the appending case goes; the others take the new signature.
