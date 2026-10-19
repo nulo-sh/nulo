@@ -235,6 +235,7 @@ export const FIREFOX_ONLY = {
 	windowRefocus: "refocuses an approval popup; headless Chrome moves focus only by creating a window",
 	toolbarPanel: "drives the toolbar popup itself, which no protocol opens on Chrome",
 	permissionRequest: "withholds and re-grants a required host permission, which Chrome's permissions.remove refuses",
+	sidebar: "drives the sidebar (sidebar_action), which only Firefox has",
 } as const
 
 /** The launch a background call is made against; every `ExtensionContext` is one. */

@@ -115,7 +115,7 @@ Nothing else changes: the predicate already runs the step in place (Fact 2), and
 **e2e driver** (Firefox only, beside `firefox-action-popup.ts`):
 - `fixtures/browser/webdriver-classic.ts` gains `WebDriverSession.chromeActions(actions)`. Like `chromeScript` it holds the session exclusively; it switches to chrome context and the first window, sends `POST /actions` and `DELETE /actions`, then returns to content context.
 - `fixtures/browser/firefox-sidebar.ts` (new):
-  - `openSidebar`, `evaluateInSidebar`, `clickInSidebar(testid)` (reads the rect first, refuses an element outside the sidebar's view, then sends one pointer payload) and `closeSidebar`, on a `LOCATE_SIDEBAR` locator like the panel's;
+  - `openSidebar`, `evaluateInSidebar` and `clickInSidebar(testid)` (reads the rect first, refuses an element outside the sidebar's view, then sends one pointer payload), on a `LOCATE_SIDEBAR` locator like the panel's (D6);
   - every one of them works in the window `chromeScript` and `chromeActions` run in, the session's first browser window. The locator searches only that window, so the sidebar opened, read and clicked is one document even when a second window carries its own sidebar;
   - its header states the two rules from the verdict;
   - it reuses `actionPopupContext` for the session and add-on id, and `evaluateViaFrameScript`.
@@ -164,6 +164,7 @@ Nothing else changes: the predicate already runs the step in place (Fact 2), and
 - **D3, `open_at_install: false`.** Nothing opens without the user, as with Chrome's side panel. The cost (Fact 3): a sidebar left open does not come back by itself after a Nulo update or a startup-cache reset. A plain restart does reopen it. The choice is the owner's (OA-3).
 - **D4, the evidence.** This plan and its lessons carry it. The `FIREFOX.md` row is live documentation of a surface the suite now drives. No `lessons.md` line (Fact 6).
 - **D5, the issues.** The PR says `Closes #596`. When the PR opens, #593 gets a comment: the sidebar runs the step in place; the panel's window stays as the owner decided; #593 stays closed.
+- **D6, no `closeSidebar`** (arc 1, a deviation). No spec closes the sidebar, since the launch is torn down with it, so the module exports `openSidebar`, `evaluateInSidebar` and `clickInSidebar` only.
 
 ## Security & Adversarial Considerations
 

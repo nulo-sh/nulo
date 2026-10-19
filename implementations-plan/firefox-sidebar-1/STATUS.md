@@ -5,3 +5,4 @@
 - 2026-10-19 phase 0, round 0b: no window switch between input and outcome; WebAuthn resolves, a passkey unlock runs in place, typing and clicks work; the width overflows below 360 px. Verdict: P28-08's condition met; plan redrafted for the sidebar.
 - 2026-10-19 phase 0: round 2 (Codex, Opus) conditional approve, applied; runs 4–6 cover the revamped sidebar and headful; final fresh Codex pass approve. Plan committed; arc 1 next.
 - 2026-10-19 arc 1 phase 1: gate pass (manifest.test.ts 16/16, lint, typecheck:all, Firefox build carries sidebar_action); origin/dev merged first (3 commits, no overlap).
+- 2026-10-19 arc 1 phase 2: gate pass (spec 3/3 on Firefox 11.9–13.3 s, skipped on Chrome; panel specs 7/7; seam and driver unit 102/102; negative control fails at the window check as required).
