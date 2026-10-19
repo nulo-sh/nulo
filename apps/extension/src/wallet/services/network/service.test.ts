@@ -1377,6 +1377,38 @@ describe("NetworkService liveness reads overlapped by a reservation", () => {
 		expect(await live).toBe(false)
 		expect(await read(service, network)).toBe(true)
 	})
+
+	test("a liveness mark answers false after a reservation begun since it, and none is taken while one is open", async () => {
+		const { service, network } = await deletableNetwork()
+		const before = await service.captureLiveness(network.id)
+		expect(before).toBeDefined()
+		await expect(service.deleteNetwork(network.id)).rejects.toThrow(/cascade down/)
+		expect(await service.isNetworkLive(network.id)).toBe(true)
+		expect(await service.isNetworkLive(network.id, before)).toBe(false)
+		const after = await service.captureLiveness(network.id)
+		expect(await service.isNetworkLive(network.id, after)).toBe(true)
+
+		let release!: () => void
+		const held = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		let entered!: () => void
+		const purging = new Promise<void>((resolve) => {
+			entered = resolve
+		})
+		service.registerChainPurgeSubscriber(async () => {
+			entered()
+			await held
+		})
+		const deleting = service.deleteNetwork(network.id)
+		try {
+			await purging
+			expect(await service.captureLiveness(network.id)).toBeUndefined()
+		} finally {
+			release()
+		}
+		await expect(deleting).rejects.toThrow(/cascade down/)
+	})
 })
 
 describe("NetworkService default seeding", () => {

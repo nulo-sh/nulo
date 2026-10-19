@@ -111,6 +111,7 @@ describe("slot-for-executeSendTransaction", () => {
 				acquireSlot: acquireSlot as never,
 				claimOrCreateJournal: claimOrCreateJournal as never,
 				beginJournal: beginJournal as never,
+				recordBuiltCall: vi.fn(async () => {}),
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
 				parkSlot: vi.fn() as never,

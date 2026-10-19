@@ -14,6 +14,7 @@ import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel, normalizeError } from "@nulo/wallet-core/jobs"
 import type { LocalTxOrigin } from "@/wallet/services/transaction/spec"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import type { JournalCallCarrier } from "@/wallet/services/operation-journal/spec"
 
 export interface ClaimHelperDeps {
 	operationJournal: OperationJournalService
@@ -29,7 +30,7 @@ export interface ClaimHelperDeps {
 		networkId: string,
 		accountAddress: string,
 		origin: LocalTxOrigin,
-		calls?: { method?: string }[],
+		calls?: JournalCallCarrier[],
 	) => Promise<string | undefined>
 	logger?: {
 		debug: (msg: string) => void
@@ -47,7 +48,7 @@ export interface ClaimHelperInput {
 	/** Serial of the session that authorized the execution; every registration carries it. */
 	session: number
 	origin: LocalTxOrigin
-	calls?: { method?: string }[]
+	calls?: JournalCallCarrier[]
 	queuedJournalId?: string
 	/** A controller pre-registered (under `queuedJournalId`) BEFORE the
 	 *  ExecutionMutex acquire, so a user-cancel can abort the acquire wait. On

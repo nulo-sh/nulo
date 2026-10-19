@@ -102,15 +102,18 @@ export function wireTitle(name: string | undefined): string | undefined {
 }
 
 /**
- * The title of a dApp's wire call list. A call is read by its `name`, the key the wallet checks, never
- * by a `method` it may also carry. Names are cleaned before {@link pickPrimaryMethod} picks, as a settled
- * transaction records them, so the queued and settled titles skip the same fee calls.
+ * The primary call of a dApp's wire call list, with its title. A call is read by its `name`, the key
+ * the wallet checks, never by a `method` it may also carry. Names are cleaned before
+ * {@link pickPrimaryIndex} picks, as a settled transaction records them, so the queued and settled
+ * titles skip the same fee calls.
  */
-export function pickPrimaryWireMethod(calls: unknown): string | undefined {
+export function pickPrimaryWireCall(calls: unknown): { name: string; call: { to?: unknown; args?: unknown } } | undefined {
 	if (!Array.isArray(calls)) return undefined
 	const named = calls.map((call: unknown) => {
 		const name = typeof call === "object" && call !== null ? (call as { name?: unknown }).name : undefined
 		return { name: typeof name === "string" ? wireTitle(name) : undefined }
 	})
-	return pickPrimaryMethod(named)
+	const idx = pickPrimaryIndex(named)
+	const name = idx === undefined ? undefined : named[idx].name
+	return idx === undefined || name === undefined ? undefined : { name, call: calls[idx] }
 }

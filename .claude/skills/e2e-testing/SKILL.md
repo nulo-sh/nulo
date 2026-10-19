@@ -158,19 +158,26 @@ runtime env var can never arm a build-time flag.
   `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1`.
   `migration.test.ts` skips without the declaration; `backup-migration.test.ts` throws with the
   remedy.
-- Smoke refuses every outside host. Each launch routes HTTP, HTTPS and WebSocket to a loopback
-  guard that answers 403 and records the host, proves the route with a canary only a direct path
-  reaches, and fails at `close` on any host no list declares (`fixtures/egress-guard.ts`; README §
-  Egress guard). A red "egress guard" naming a wallet or spec host means a new outside call: declare
-  it in `DECLARED_REFUSALS` with why; a browser's own host goes, by exact name, in its driver's
-  `ownHosts`. Setup refuses an unarmed dist outside artifact runs; artifact runs are guarded too.
+- Every e2e launch, smoke or network, refuses every outside host but the ones it sends direct
+  (both setups provide `egressGuard: true`; only an artifact smoke provides `liveLeg`). Each launch
+  routes HTTP, HTTPS and WebSocket to a loopback guard that answers 403 and records the host, proves
+  the route with a canary only a direct path reaches, and sends bb.js's CRS hosts (`CRS_HOSTS`)
+  direct (`fixtures/egress-guard.ts`; README § Egress guard). `close` fails on any host no list
+  declares, a canary connection, a direct host seen at the guard, a failure of the stand-in's
+  interception, or a Testnet-node request that reached the guard while the stand-in held its
+  origin, before the close began. A red naming a wallet or spec host means a new outside call: declare it in
+  `DECLARED_REFUSALS` with why; a browser's own host goes, by exact name, in its driver's
+  `ownHosts`. A held node request means a target the interception does not cover dialed the node:
+  on Chrome rerun with `NULO_E2E_INTERCEPT_LOG=1` and find it; never declare the host or loosen the check.
+  The smoke setup refuses an unarmed dist outside artifact runs; artifact runs are guarded too.
   The Testnet node is answered by a loopback stand-in with a terminal 400 (`fixtures/node-stub.ts`)
   in every launch but the artifact-only live spec's (`shipped-token-list.test.ts`: its
-  `launchExtension({ liveNode: true })` sends the node's host direct, refused unless setup provides
-  `liveLeg`); a smoke spec that needs a value only a node gives seeds it (`helpers/fpc-seeds.ts`)
-  and, where the wallet writes beside the seed, holds the node itself from before the profile
-  exists (`send-keyboard.test.ts`'s fee picker; ledger row 53). One that proves the
-  offline case arms its own `interceptRpc` refusal, which replaces the stand-in.
+  `launchExtension({ live: true })` sends the node's and the token list's hosts direct, and throws
+  unless setup provides `liveLeg`); a smoke spec that needs a value only a node gives seeds it
+  (`helpers/fpc-seeds.ts`) and, where the wallet writes beside the seed, holds the node itself from
+  before the profile exists (`send-keyboard.test.ts`'s fee picker; ledger row 53). One that proves
+  the offline case arms its own `interceptRpc` refusal, which replaces the stand-in; the held check
+  is off while it does, as it is during a `stopBackground`.
 - A file that depends on the PROVERLESS build carries the `@requires-proverless` marker (the only
   marker `agent.sh` scans) AND a `beforeAll` that greps the loaded bundle for the stamp
   (`account-switch-isolation.test.ts` is the idiom) — the belt for direct vitest invocations. Other
@@ -714,9 +721,12 @@ awaiting. `Runtime.terminateExecution` aborts running scripts and leaves the wor
 memory, session record and heartbeat intact — a test built on it exercises nothing.
 
 After the call, the OLD instance is gone. Whether a new one is running depends on the test: a page
-holding a port reconnects and wakes it at once; `cold-wake-discovery` closes the popup, clears the
-alarms, and opens the dApp page BEFORE the kill (a content script injects without messaging) so the
-click is provably the first wake event, then asserts `backgroundAlive(ext)` is false before clicking. Then
+holding a port reconnects and wakes it at once; BEFORE the kill `cold-wake-discovery` clears the
+alarms, opens the dApp page (a content script injects without messaging), closes the popup, then
+closes Chrome's offscreen document from a scratch page (`closePxeHost`; left open, its clients
+reconnected and woke a successor 50 to 350 ms after the kill, as measured) and closes the scratch
+page, so the click is provably the first wake event; it asserts `backgroundAlive(ext)` is false
+before clicking. Then
 gate on the strictly-newer heartbeat from an extension page (§2), and expect the popup's boot path
 (`popup/boot-session.ts`, `auth-guard.ts`): under strict security a restart drops the session, so
 `ensureUnlocked` with a budget sized to the bootstrap (120s on the prover-ON canary) is the

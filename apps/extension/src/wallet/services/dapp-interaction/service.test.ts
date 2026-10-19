@@ -29,7 +29,13 @@ import { ProfileService } from "@/wallet/services/profile/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { WindowManager } from "@/wallet/services/window-manager/window-manager"
 import { describe, expect, test, vi } from "vitest"
-import { JobCancelledError, TermsAcceptanceRequiredError, UserRejectedError } from "@nulo/extension-messaging/errors"
+import {
+	AuthRegistryRefusalError,
+	JobCancelledError,
+	ScopeViolationError,
+	TermsAcceptanceRequiredError,
+	UserRejectedError,
+} from "@nulo/extension-messaging/errors"
 import { FakeBrowserApi, MockClock } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { CHAIN_IDS } from "@/utils/chain-ids"
@@ -551,7 +557,7 @@ describe("DappInteractionService when the Terms acceptance lapses after the requ
 			["pending"],
 			{ stage: "failed" },
 			{ kind: "terms_refused", message: TermsAcceptanceRequiredError.MESSAGE, normalizedRaw: null },
-			{ failedTitle: "Transaction" },
+			{ retitle: { title: "Transaction" } },
 		)
 	})
 
@@ -696,6 +702,81 @@ describe("DappInteractionService — a confirmation window never falls back to s
 		await expect.poll(() => second.outcome.settled).toBe(true)
 		expect(second.outcome.err).toBeDefined()
 		expect(h.executeOperations).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("DappInteractionService — a request an estimate refused ends as that refusal", () => {
+	const registry = () =>
+		new AuthRegistryRefusalError("Scope violation: a transaction's authorization request targets the authorization registry")
+	const binding = () => new ScopeViolationError("Scope violation: call name does not match selector's function")
+
+	test("Reject and the window's close each end a refused request with the recorded refusal; an unrefused one stays a rejection", async () => {
+		const h = await windowHarness()
+		const rejected = await h.open()
+		const closed = await h.open()
+		const plain = await h.open()
+		const [registryRefusal, bindingRefusal] = [registry(), binding()]
+		h.dapp.recordRefusal(rejected.id, registryRefusal)
+		h.dapp.recordRefusal(closed.id, bindingRefusal)
+
+		await h.dapp.rejectInteraction(rejected.id, "User rejected")
+		h.closeByUser(closed.windowId)
+		await h.dapp.rejectInteraction(plain.id, "User rejected")
+		await expect.poll(() => [rejected, closed, plain].every((w) => w.outcome.settled)).toBe(true)
+
+		expect(rejected.outcome.err).toBe(registryRefusal)
+		expect(closed.outcome.err).toBe(bindingRefusal)
+		expect(plain.outcome.err).toBeInstanceOf(UserRejectedError)
+		expect(h.executeOperations).not.toHaveBeenCalled()
+	})
+
+	test("a refused request is not approvable: the row stays for the window's Reject", async () => {
+		const h = await windowHarness()
+		const window = await h.open()
+		const refusal = registry()
+		h.dapp.recordRefusal(window.id, refusal)
+
+		await expect(h.dapp.approveInteraction(window.id, [{}])).rejects.toBe(refusal)
+		await flush()
+		expect(h.executeOperations).not.toHaveBeenCalled()
+		expect(h.storage.has(window.id)).toBe(true)
+
+		await h.dapp.rejectInteraction(window.id, "User rejected")
+		await expect.poll(() => window.outcome.settled).toBe(true)
+		expect(window.outcome.err).toBe(refusal)
+	})
+
+	test("a cancel and the timeout keep their own end on a refused request", async () => {
+		const h = await windowHarness()
+		const cancelled = await h.open()
+		h.storage.get(cancelled.id)!.hooks = { queuedJournalId: "j-1" }
+		h.dapp.recordRefusal(cancelled.id, binding())
+		;(h.dapp as unknown as { cancelInteractionForJournal: (journalId: string) => void }).cancelInteractionForJournal("j-1")
+		await expect.poll(() => cancelled.outcome.settled).toBe(true)
+		expect(cancelled.outcome.err).toBeInstanceOf(JobCancelledError)
+
+		const timedOut = await h.open()
+		h.dapp.recordRefusal(timedOut.id, binding())
+		h.clock.advance(10 * 60 * 1000)
+		await expect.poll(() => timedOut.outcome.settled).toBe(true)
+		expect(timedOut.outcome.err).toBe("Timed out waiting for window")
+	})
+
+	test("only a stored request keeps a refusal, and it keeps the first", async () => {
+		const h = await windowHarness()
+		const window = await h.open()
+		const [first, second] = [binding(), registry()]
+		h.dapp.recordRefusal("no-such-id", first)
+		expect(h.dapp.refusalOf("no-such-id")).toBeUndefined()
+
+		h.dapp.recordRefusal(window.id, first)
+		h.dapp.recordRefusal(window.id, second)
+		expect(h.dapp.refusalOf(window.id)).toBe(first)
+
+		const approved = await h.open()
+		await h.dapp.approveInteraction(approved.id, [{}])
+		h.dapp.recordRefusal(approved.id, binding())
+		expect(h.dapp.refusalOf(approved.id)).toBeUndefined()
 	})
 })
 

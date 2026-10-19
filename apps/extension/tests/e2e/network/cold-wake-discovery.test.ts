@@ -1,5 +1,5 @@
 import { describe, expect, inject } from "vitest"
-import { backgroundAlive, stopBackground } from "../fixtures/browser"
+import { backgroundAlive, closePxeHost, openScratchPage, stopBackground } from "../fixtures/browser"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { openPopup, test, waitForHash } from "../fixtures/extension"
 import { ensureUnlocked, readLivenessBaseline, waitForWorkerLiveness } from "../fixtures/helpers"
@@ -19,7 +19,8 @@ const hasConfig = aztecConfig !== undefined
  * appears and the dApp times out at 60s.
  *
  * The dApp click must be the FIRST wake event after the kill — no popup is
- * opened, no extension page is touched between the kill and the click.
+ * opened, no extension page is touched between the kill and the click, and no
+ * PXE host outlives the kill to reconnect to the worker.
  */
 describe("cold-wake discovery", () => {
 	test.skipIf(!hasConfig)(
@@ -49,6 +50,11 @@ describe("cold-wake discovery", () => {
 			// later click is the first wake event.
 			const dappPage = await openPlayground(ext)
 			await popupPage.close()
+			// Chrome's offscreen document outlives the kill, and its clients reconnect and wake a
+			// successor within a second, so it is closed first.
+			const scratch = await openScratchPage(ext.browser, ext.extensionId)
+			await closePxeHost(scratch)
+			await scratch.close()
 
 			await stopBackground(ext)
 

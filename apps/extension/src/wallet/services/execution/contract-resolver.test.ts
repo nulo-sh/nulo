@@ -196,7 +196,7 @@ import {
 	findFunctionByName,
 	findFunctionBySelector,
 	NAMED_CALL_BINDING,
-	refusalTitleOf,
+	refusalOf,
 	type SelectorBindingPolicy,
 } from "./contract-resolver"
 import { normalizeError } from "@nulo/wallet-core/jobs"
@@ -374,9 +374,11 @@ describe("assertSelectorBinding: a refusal names the policy, never the call", ()
 describe("assertSelectorBinding: the title a refusal gives its record", () => {
 	const fn = fakeFn("transfer_public_to_public") as unknown as FunctionAbi
 
+	const TOKEN = `0x${"0d".repeat(32)}`
+
 	function thrown(resolved: FunctionAbi | undefined, policy: SelectorBindingPolicy): unknown {
 		try {
-			assertSelectorBinding(resolved, { name: "balance_of_public" }, policy)
+			assertSelectorBinding(resolved, { name: "balance_of_public", to: TOKEN, args: ["1", "2", "3", "4"] }, policy)
 		} catch (error) {
 			return error
 		}
@@ -386,19 +388,23 @@ describe("assertSelectorBinding: the title a refusal gives its record", () => {
 	test.each([
 		["a call", CALL_BINDING],
 		["a fast-path call", NAMED_CALL_BINDING],
-	])("%s: a mismatch is titled by the resolved function, an unresolved selector by Transaction", (_label, policy) => {
-		expect(refusalTitleOf(thrown(fn, policy))).toBe("transfer_public_to_public")
-		expect(refusalTitleOf(thrown(undefined, policy))).toBe("Transaction")
-	})
+	])(
+		"%s: a mismatch is titled by the resolved function, an unresolved selector by Transaction, each with the refused call",
+		(_label, policy) => {
+			const call = { contract: TOKEN, argCount: 4 }
+			expect(refusalOf(thrown(fn, policy))).toEqual({ title: "transfer_public_to_public", call })
+			expect(refusalOf(thrown(undefined, policy))).toEqual({ title: "Transaction", call })
+		},
+	)
 
 	test("an authwit's inner call never titles the record", () => {
-		expect(refusalTitleOf(thrown(fn, AUTHWIT_CALL_BINDING))).toBeUndefined()
-		expect(refusalTitleOf(thrown(undefined, AUTHWIT_CALL_BINDING))).toBeUndefined()
+		expect(refusalOf(thrown(fn, AUTHWIT_CALL_BINDING))).toBeUndefined()
+		expect(refusalOf(thrown(undefined, AUTHWIT_CALL_BINDING))).toBeUndefined()
 	})
 
 	test("the title never rides the error: not its payload, its keys, its serialization or its journal envelope", () => {
 		const refused = thrown(fn, CALL_BINDING) as ScopeViolationError
-		expect(refusalTitleOf(refused)).toBe("transfer_public_to_public")
+		expect(refusalOf(refused)?.title).toBe("transfer_public_to_public")
 		const carriers = [
 			JSON.stringify(refused.toPayload()),
 			JSON.stringify(Object.keys(refused)),

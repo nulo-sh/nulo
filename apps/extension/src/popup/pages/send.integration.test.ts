@@ -5,6 +5,7 @@
  */
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
+import { BUNDLED_TOKEN_CLASS_IDS } from "@nulo/token-list"
 import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { nextTick, reactive } from "vue"
@@ -376,6 +377,37 @@ describe("send page with the real fee card — nothing to send", () => {
 		expect(w.find('[data-testid="send-submit"]').exists()).toBe(false)
 		expect(w.get('[data-testid="send-get-fee-juice"]').text()).toBe("Get private gas")
 		expect(strip(w).attributes("data-you")).toBe("unknown")
+		w.unmount()
+	})
+})
+
+describe("send page — the caveat under the strip for a token outside the validated classes", () => {
+	const caveat = (w: W) => w.find('[data-testid="send-token-caveat"]')
+
+	test.each([
+		["another class", `0x${"1".repeat(64)}`],
+		["no class", undefined],
+	])("a token of %s carries the caveat under the strip", async (_case, classId) => {
+		mocks.getTokens.mockResolvedValue([{ ...TOKEN, classId }])
+		const { w } = await mountSend(FUNDING["public Fee Juice only"])
+		expect(w.find('[data-testid="send-publish-strip"]').exists()).toBe(true)
+		expect(caveat(w).text()).toBe("Nulo can't check this token's contract. What a send publishes depends on its code.")
+		w.unmount()
+	})
+
+	test("a token of a validated class carries none (control)", async () => {
+		mocks.getTokens.mockResolvedValue([{ ...TOKEN, classId: BUNDLED_TOKEN_CLASS_IDS[0] }])
+		const { w } = await mountSend(FUNDING["public Fee Juice only"])
+		expect(w.find('[data-testid="send-publish-strip"]').exists()).toBe(true)
+		expect(caveat(w).exists()).toBe(false)
+		w.unmount()
+	})
+
+	test("a token that cannot send has no strip and no caveat", async () => {
+		mocks.getTokens.mockResolvedValue([{ ...TOKEN, hasPrivateTransfers: false, hasPublicTransfers: false }])
+		const { w } = await mountSend(FUNDING["public Fee Juice only"])
+		expect(w.find('[data-testid="send-publish-strip"]').exists()).toBe(false)
+		expect(caveat(w).exists()).toBe(false)
 		w.unmount()
 	})
 })

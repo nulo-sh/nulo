@@ -40,7 +40,7 @@ async function mountAgreedWithPassword() {
 	return w
 }
 
-const retrieve = (w: VueWrapper) => w.get('[data-testid="unlock-submit-btn"]').element as HTMLElement
+const reveal = (w: VueWrapper) => w.get('[data-testid="unlock-submit-btn"]').element as HTMLElement
 
 beforeEach(() => {
 	vi.clearAllMocks()
@@ -55,7 +55,7 @@ const storageSet = () =>
 	(globalThis as unknown as { chrome: { storage: { local: { set: ReturnType<typeof vi.fn> } } } }).chrome.storage.local.set
 
 describe("recovery phrase — Enter does what the focused control says", () => {
-	test("Enter on the back arrow goes back and retrieves nothing", async () => {
+	test("Enter on the back arrow goes back and reveals nothing", async () => {
 		const w = await mountAgreedWithPassword()
 		// With no history behind the page, SubPageHeader pushes its backTo.
 		expect(window.history.length).toBe(1)
@@ -65,23 +65,23 @@ describe("recovery phrase — Enter does what the focused control says", () => {
 		expect(exportMnemonic).not.toHaveBeenCalled()
 	})
 
-	test("Enter on Retrieve retrieves once", async () => {
+	test("Enter on Reveal reveals once", async () => {
 		const w = await mountAgreedWithPassword()
-		expect(retrieve(w).textContent?.trim()).toBe("Reveal Recovery Phrase")
-		pressOn(retrieve(w), "Enter")
+		expect(reveal(w).textContent?.trim()).toBe("Reveal Recovery Phrase")
+		pressOn(reveal(w), "Enter")
 		await flushPromises()
 		expect(exportMnemonic).toHaveBeenCalledTimes(1)
 		expect(exportMnemonic).toHaveBeenCalledWith("p1", "password123")
 	})
 
-	test("a repeat Enter on Retrieve retrieves nothing", async () => {
+	test("a repeat Enter on Reveal reveals nothing", async () => {
 		const w = await mountAgreedWithPassword()
-		pressOn(retrieve(w), "Enter", { repeat: true })
+		pressOn(reveal(w), "Enter", { repeat: true })
 		await flushPromises()
 		expect(exportMnemonic).not.toHaveBeenCalled()
 	})
 
-	test("(preservation) Enter in the password field retrieves once", async () => {
+	test("(preservation) Enter in the password field reveals once", async () => {
 		const w = await mountAgreedWithPassword()
 		const field = w.get('[data-testid="unlock-password-input"] input').element
 		field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
@@ -90,26 +90,26 @@ describe("recovery phrase — Enter does what the focused control says", () => {
 	})
 })
 
-describe("recovery phrase — one retrieve per press, none after the page left", () => {
+describe("recovery phrase — one reveal per press, none after the page left", () => {
 	function deferMnemonic() {
 		let resolve: (words: string[]) => void = () => {}
 		exportMnemonic.mockImplementationOnce(() => new Promise<string[]>((r) => (resolve = r)))
 		return (words: string[]) => resolve(words)
 	}
 
-	test("two clicks on Retrieve decrypt the phrase once", async () => {
+	test("two clicks on Reveal decrypt the phrase once", async () => {
 		const w = await mountAgreedWithPassword()
 		deferMnemonic()
-		retrieve(w).click()
-		retrieve(w).click()
+		reveal(w).click()
+		reveal(w).click()
 		await flushPromises()
 		expect(exportMnemonic).toHaveBeenCalledTimes(1)
 	})
 
-	test("a retrieve settling after unmount marks nothing and arms no close timer", async () => {
+	test("a reveal settling after unmount marks nothing and arms no close timer", async () => {
 		const w = await mountAgreedWithPassword()
 		const settle = deferMnemonic()
-		retrieve(w).click()
+		reveal(w).click()
 		await flushPromises()
 		vi.useFakeTimers()
 		try {
@@ -126,10 +126,10 @@ describe("recovery phrase — one retrieve per press, none after the page left",
 		}
 	})
 
-	test("(control) a retrieve settling while mounted reveals the phrase and arms one countdown", async () => {
+	test("(control) a reveal settling while mounted shows the phrase and arms one countdown", async () => {
 		const w = await mountAgreedWithPassword()
 		const settle = deferMnemonic()
-		retrieve(w).click()
+		reveal(w).click()
 		await flushPromises()
 		vi.useFakeTimers()
 		try {
@@ -159,7 +159,7 @@ describe("recovery phrase — a reveal clears Home's reminder", () => {
 		const w = await mountAgreedWithPassword()
 		let settle: (words: string[]) => void = () => {}
 		exportMnemonic.mockImplementationOnce(() => new Promise<string[]>((r) => (settle = r)))
-		retrieve(w).click()
+		reveal(w).click()
 		await flushPromises()
 		useAppStore().profile = { id: "p2", name: "Other", type: "password" } as never
 		settle(["alpha", "bravo", "charlie"])
@@ -171,7 +171,7 @@ describe("recovery phrase — a reveal clears Home's reminder", () => {
 	test("a wrong password marks nothing", async () => {
 		const w = await mountAgreedWithPassword()
 		exportMnemonic.mockRejectedValueOnce(new Error("wrong password"))
-		retrieve(w).click()
+		reveal(w).click()
 		await flushPromises()
 		expect(w.find('[data-testid="unlock-error-text"]').exists()).toBe(true)
 		expect(storageSet()).not.toHaveBeenCalled()

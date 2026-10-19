@@ -39,7 +39,6 @@ import { type Capability, effectiveGrants } from "@nulo/wallet-bridge"
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
-import { useDappHostname } from "@/composables/useDappHostname"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 import { useNetworkActivation } from "@/composables/useNetworkActivation"
 
@@ -116,8 +115,6 @@ const {
 	getRequestId: () => router.currentRoute.value.query.requestId?.toString(),
 	dappOf: (p) => p.session.dappMetadata as UIDappMetadata,
 })
-
-const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHostname(dapp)
 
 // init/reject/services are referenced lazily (thunks): they are declared below
 // and only invoked by start()/dispose()/the guard at runtime.
@@ -376,8 +373,6 @@ onUnmounted(disposeWindow)
 		<Flex direction="column" data-testid="cap-scroll-area" :class="$style.scroll_area">
 			<DappIdentityBlock
 				:dapp="dapp"
-				:hostname="dappHostname"
-				:hostnameSuspicious="hostnameHasNonAscii"
 				hostnameTestId="capabilities-hostname"
 				:actionLabel="asksForMore ? `wants more permissions on ${chainName}` : `wants to connect on ${chainName}`"
 			/>
