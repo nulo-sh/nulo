@@ -68,7 +68,7 @@ Outsider builds older than the two fixes are AMO 0.28.0, 0.30.0, 0.30.1 and 0.30
 | D2 | #372, #684, #775 | known limits, conditions corrected; no owner ask: nothing a person sees changes and no product choice is open (Codex r1 asked for owner dispositions; rejected on the lane brief's rule) |
 | D3 | § 3's listing-URL box | open; today's fetches noted under it (Codex r1; reverses the draft's tick) |
 | D4 | rc.3 (b) | P68-04 = B: the box gives way to a § 3 step, the owner's send from the 1.0.0 candidate on the new Testnet, before the promote (A2) |
-| D5 | #385 | P68-05 = A, the window accepted by name; the corrected condition is posted on #385, and no launch document, `SECURITY.md`, README or release note repeats it (the owner: "Don't even mention it.") |
+| D5 | #385 | P68-05 = A, the window accepted by name; the corrected condition goes on #385 (the orchestrator posts it), and no launch document, `SECURITY.md`, README or release note repeats it (the owner: "Don't even mention it.") |
 | D6 | 1.0's history row and version-list entry | literal words (OA-1 b, with § 20's consequence); the archived page keeps both banners. Phases and gates implement OA-1 b's A; its B amends them first (OA-1) |
 | D7 | A2's tests | the unit, component and landing cases above; no new e2e |
 | D8 | Nightlies between A2 and the promote | accepted residue, stated in OA-1; A2 merges right before the promote; no runtime gate (Codex r2) |

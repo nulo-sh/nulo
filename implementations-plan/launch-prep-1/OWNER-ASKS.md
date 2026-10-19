@@ -13,7 +13,7 @@
   the new Testnet."
 - **OA-4, P68-05: A**, "Accept the window by name: #385 stays a known limit with its corrected
   condition." Note: "Don't even mention it." So no launch document, `SECURITY.md`, README or
-  release note names it; the condition is posted on #385.
+  release note names it; the condition goes on #385 (the orchestrator posts it).
 
 The asks as they were put:
 

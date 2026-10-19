@@ -20,3 +20,5 @@
   `index.html`, since #723 landed 46 minutes later from the old footer (now "early days", per #767);
   the banner tick cited a signature the bullet's words do not yet have (reworded to "the owner's
   picks"); D5 as above.
+- 2026-10-19 Codex r2 (resumed `01a15635`): one P3, "is posted on #385" while #385 has no comment
+  yet; now "goes on #385 (the orchestrator posts it)". Other fixes verified, no regression.
