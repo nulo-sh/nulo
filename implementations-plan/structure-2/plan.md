@@ -148,10 +148,10 @@ Tests: the reproducer, plus its success control (both answers p1: one row under 
 
 Phases 6 and 7 use arc 1's `.control_title` and widened composable. Recheck at the base: each #730 piece still has no reader; each notice pair is byte-identical. If a release gate lags far behind the others, the orchestrator re-scopes the arc at release; the plan adds no fourth PR.
 
-### Phase 6: profile-flow notices (#735)
+### Phase 6: profile-flow notices (#735) ✓ (shipped by #817, D15)
 Files: `utils/profile-flow-notices{,.test}.ts`, `onboarding/pages/{create,import}.vue`, `popup/pages/profile/new.vue`, `popup/pages/import.vue`. Tests: 3 cases pin each payload's exact copy (password create, passkey create, import).
 
-### Phase 7: Developer plumbing (#735)
+### Phase 7: Developer plumbing (#735) ✓ (shipped by #817, D15)
 Developer's `onSettingUpdate` and land use the composable, in the setup order above; V1-V3 titles compose `.control_title`; the markup stays. Files: `popup/pages/settings/developer/index.vue`. Tests: the page suite, unchanged.
 
 ### Phase 8: Presto's onboarding leftovers (#730)
@@ -197,6 +197,9 @@ The lane brief's no-ask record says "none"; nothing here goes beyond it.
 | D12 | Arc 1 deviation: the rendered-identity DOM comparison also renumbers Vue `useId` values by first appearance and replaces the run's random profile and network ids; captures wait for the header's health poll to sit still. A base-vs-base control is identical under the same rules | comparing raw ids (a base-vs-base run differs on them) | implementer, [lessons/phase-4.md](lessons/phase-4.md) |
 | D13 | Arc 1 deviations from the spawn: branch `structure-2-a1`, not `worktree-structure-2`; #750 closes with arc 1 (owner pick P47-05), where D7 kept it open | D7's open issue | owner (P47-05), orchestrator |
 | D14 | Arc 1 review: `useHeroVisible`'s "nothing after unmount" case, which only tested its fake, became two cases with two pages mounted at once | keeping a case that cannot fail alone | Codex and Opus round 1 |
+| D15 | Arc 3 base recheck: hygiene-3 arc 1 (#817) shipped phases 6 and 7 (`createFailedNotice`, `passkeyImportFailedNotice`; Developer on `onSettingUpdate`, `landSettings` and `.control_title`) and closed #735, so arc 3 builds phase 8 alone, on `structure-2-a3` stacked on #743's head (the spawn), and its PR closes #730 and refers to #735 | rebuilding what #817 shipped; branching off `dev` before #743 merges | implementer, orchestrator spawn |
+| D16 | Arc 3 test identity: the two mixed `copyFor` cases keep their surface-free assertions under titles that no longer name the deleted surface ("available → Presto connected, Re-test, go tone"; "permission-blocked → Nulo's compact title and three steps, Retry"); the onboarding assertions go | dropping the available case's tone and retry pins with its onboarding line; a title that names a deleted surface | implementer, [lessons/phase-8.md](lessons/phase-8.md) |
+| D17 | Arc 3: `store/listing.md`'s reviewer notes drop the banner element as an `innerHTML` source: the armed Chrome build's banners chunk carries no `innerHTML` and no custom element; Vue's runtime is the only source | keeping a reviewer note the bundle contradicts | the plan's recheck |
 
 ## Audit verdicts
 
