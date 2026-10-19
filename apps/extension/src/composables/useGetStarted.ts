@@ -5,6 +5,7 @@ const NOTHING_DONE: GetStartedFlags = {
 	phraseSaved: false,
 	backupSaved: false,
 	aztecOpened: false,
+	feeJuiceHeld: false,
 	hidden: false,
 	imported: false,
 	notFirst: false,

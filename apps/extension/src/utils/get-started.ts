@@ -6,6 +6,7 @@
 import {
 	getStartedAztecOpenedKey,
 	getStartedBackupSavedKey,
+	getStartedFeeJuiceHeldKey,
 	getStartedHiddenKey,
 	getStartedPhraseSavedKey,
 	profileImportedKey,
@@ -16,7 +17,7 @@ import { storageLocalGet, storageLocalSet } from "@/utils/storage"
 /** The slice of a gas balance read the reminders need (`stores/balances.store.ts`' `GasSlice`). */
 type GasRead = { display?: { publicFeeJuice: string | null; privateFeeJuice: string | null }; status: string }
 
-export type GetStartedFlag = "phraseSaved" | "backupSaved" | "aztecOpened" | "hidden" | "imported" | "notFirst"
+export type GetStartedFlag = "phraseSaved" | "backupSaved" | "aztecOpened" | "feeJuiceHeld" | "hidden" | "imported" | "notFirst"
 
 /** The flags a page may set; `imported` and `notFirst` have one writer, the profile service, beside the row. */
 export type MarkableGetStartedFlag = Exclude<GetStartedFlag, "imported" | "notFirst">
@@ -27,6 +28,7 @@ const KEYS: Readonly<Record<GetStartedFlag, (profileId: string) => string>> = {
 	phraseSaved: getStartedPhraseSavedKey,
 	backupSaved: getStartedBackupSavedKey,
 	aztecOpened: getStartedAztecOpenedKey,
+	feeJuiceHeld: getStartedFeeJuiceHeldKey,
 	hidden: getStartedHiddenKey,
 	imported: profileImportedKey,
 	notFirst: profileNotFirstKey,
@@ -103,7 +105,8 @@ export function combineHoldings(a: Holdings, b: Holdings): Holdings {
 const phraseShown = (i: Ready) => i.type === "password" && !i.flags.phraseSaved
 const backupShown = (i: Ready) => i.type === "passkey" && !i.flags.backupSaved && !i.flags.hidden
 const aztecShown = (i: Ready) => !i.flags.aztecOpened && !i.flags.hidden
-const feeJuiceShown = (i: Ready) => i.feeJuice === "none" && !i.flags.hidden
+/** Once any read finds the profile holding Fee Juice the row is done, whatever later reads say. */
+const feeJuiceShown = (i: Ready) => i.feeJuice === "none" && !i.flags.feeJuiceHeld && !i.flags.hidden
 const prestoShown = (i: Ready) => !i.prestoReached && !i.flags.hidden
 
 /** Every row but the phrase; a profile created while another existed shows none of them. */

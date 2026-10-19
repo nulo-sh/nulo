@@ -8,7 +8,8 @@
  *
  * S1a  network reset: A1, a Switch network round trip, one reset from a double click, A4, then
  *      A5 only once the account is loaded; the row is back on the seed's chainId and the accounts
- *      keep their addresses, names and indexes; Local is untouched; Home's card stays hidden.
+ *      keep their addresses, names and indexes; Local is untouched; Home's card keeps the Fee Juice
+ *      the profile held and its open phrase row.
  * S1b  address change (A2) with a hidden account and an imported one: the derived accounts come
  *      back at their true addresses, the hidden one hidden, the imported one at its address with
  *      a key that opens.
@@ -18,6 +19,7 @@
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { CHAIN_IDS, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { getStartedFeeJuiceHeldKey } from "@/utils/profile-ui-keys"
 import { clickByTestId, launchExtension, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
 import {
 	closeStuckPopup,
@@ -26,6 +28,7 @@ import {
 	ensureUnlocked,
 	lockWallet,
 	navigateByHash,
+	readSessionRow,
 	waitForToast,
 } from "./fixtures/helpers"
 import { confirmImport, exportAccountBody, exportImportedAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "./helpers/account-io"
@@ -72,12 +75,16 @@ describe("stale network", () => {
 		await waitForHash(page, "#/popup/general", 30_000)
 		await createAccount(page, "Savings")
 		await closeStuckPopup(page)
-		// The reset must keep the profile's reminder flags: after Hide, the card is the phrase row alone.
+		// Smoke has no node to hold Fee Juice, so the flag Home writes on its first positive read is
+		// stored directly. The reset's new chain holds none, and the row must stay away.
 		await navigateByHash(page, "#/popup/general", 15_000)
 		await waitForHomeReminders(page)
-		await clickByTestId(page, "get-started-hide")
-		await page.waitForSelector('[data-testid="get-started-aztec"]', { hidden: true, timeout: 10_000 })
-		expect(await getStartedRows(page)).toEqual(["get-started-phrase"])
+		const profileId = (await readSessionRow(page))?.profile
+		if (!profileId) throw new Error("no unlocked profile")
+		await page.evaluate((key: string) => chrome.storage.local.set({ [key]: true }), getStartedFeeJuiceHeldKey(profileId))
+		await page.waitForSelector('[data-testid="get-started-feeJuice"]', { hidden: true, timeout: 10_000 })
+		const card = ["get-started-phrase", "get-started-aztec", "get-started-presto"]
+		expect(await getStartedRows(page)).toEqual(card)
 		const before = await readAccounts(page, CHAIN_IDS.TESTNET)
 		expect(before.map((a) => [a.name, a.index])).toEqual([
 			[FIRST_ACCOUNT_NAME, 0],
@@ -121,7 +128,7 @@ describe("stale network", () => {
 		expect(await readAccounts(page, PREVIOUS_TESTNET_CHAIN_ID)).toEqual([])
 		expect(await snapshotChain(page, local.chainId, local.id)).toEqual(localBefore)
 		await waitForHomeReminders(page)
-		expect(await getStartedRows(page)).toEqual(["get-started-phrase"])
+		expect(await getStartedRows(page)).toEqual(card)
 	})
 
 	test("S1b address change: A2; derived accounts return at their true addresses, the hidden one hidden, the imported one with its key", {

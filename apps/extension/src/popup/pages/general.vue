@@ -127,6 +127,15 @@ watch(
 	() => [appStore.profile?.id, appStore.network?.chainId],
 	() => void seed.refresh(),
 )
+// The first read that finds Fee Juice ends the row for the profile: a spend, another account or a
+// new chain never brings it back.
+watch(
+	() => feeJuice.value === "some" && getStarted.flags.value?.feeJuiceHeld === false,
+	(held) => {
+		if (held) void getStarted.mark("feeJuiceHeld")
+	},
+	{ immediate: true },
+)
 onBeforeMount(() => void prestoRead.read())
 onMounted(() => void seed.refresh())
 onBeforeUnmount(() => {

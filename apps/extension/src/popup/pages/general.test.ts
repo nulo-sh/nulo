@@ -91,6 +91,7 @@ function gasEntry(scope: BalanceScope) {
 	return slice === undefined ? undefined : { gas: slice }
 }
 const AZTEC_KEY = "nulo:ui:getStartedAztecOpened@p1"
+const FEE_JUICE_KEY = "nulo:ui:getStartedFeeJuiceHeld@p1"
 
 const wrappers: VueWrapper[] = []
 let storage: ChromeStorageMock
@@ -178,38 +179,43 @@ describe("Home — the backup reminder's sources", () => {
 	})
 })
 
-describe("Home — Get Fee Juice follows the selected account's Fee Juice", () => {
-	test("Fee Juice arriving while Home is open removes the row, and spending it back to zero returns it", async () => {
+describe("Home — Get Fee Juice leaves for good once the profile holds Fee Juice", () => {
+	test("Fee Juice arriving while Home is open writes the profile's flag, and a spend back to zero keeps the row away", async () => {
 		gas = ZERO
 		const w = await mountHome("passkey")
-		const all = ["get-started-backup", "get-started-aztec", "get-started-feeJuice", "get-started-presto"]
-		expect(rows(w)).toEqual(all)
+		expect(rows(w)).toEqual(["get-started-backup", "get-started-aztec", "get-started-feeJuice", "get-started-presto"])
+		expect(storage.data[FEE_JUICE_KEY]).toBeUndefined()
 		gasByScope.set(activityScopeKey(HOME_SCOPE), FUNDED)
 		await flushPromises()
-		expect(rows(w)).toEqual(["get-started-backup", "get-started-aztec", "get-started-presto"])
-		expect(has(w, "backup-reminder-banner")).toBe(false)
+		expect(storage.set).toHaveBeenCalledWith({ [FEE_JUICE_KEY]: true })
+		storage.fire({ [FEE_JUICE_KEY]: { newValue: true } })
 		gasByScope.set(activityScopeKey(HOME_SCOPE), ZERO)
 		await flushPromises()
-		expect(rows(w)).toEqual(all)
+		expect(rows(w)).toEqual(["get-started-backup", "get-started-aztec", "get-started-presto"])
+		expect(storage.set).toHaveBeenCalledTimes(1)
 	})
 
-	test("the row follows the selected account and chain, while the profile's flags stay", async () => {
+	test("after one account held it, another account and a reset's new chain holding none show no row; the phrase row stays", async () => {
 		gas = ZERO
-		const w = await mountHome("passkey", { "nulo:ui:getStartedAztecOpened@p1": true })
+		const w = await mountHome("password", { [AZTEC_KEY]: true })
 		const app = useAppStore()
-		expect(rows(w)).toEqual(["get-started-backup", "get-started-feeJuice", "get-started-presto"])
+		expect(rows(w)).toEqual(["get-started-phrase", "get-started-feeJuice", "get-started-presto"])
 		const savings = { ...HOME_SCOPE, accountAddress: "0xsavings" }
 		gasByScope.set(activityScopeKey(savings), FUNDED)
 		app.account = { address: savings.accountAddress } as never
 		await flushPromises()
-		expect(rows(w)).toEqual(["get-started-backup", "get-started-presto"])
+		expect(storage.data[FEE_JUICE_KEY]).toBe(true)
+		storage.fire({ [FEE_JUICE_KEY]: { newValue: true } })
+		app.account = { address: HOME_SCOPE.accountAddress } as never
+		await flushPromises()
+		expect(rows(w)).toEqual(["get-started-phrase", "get-started-presto"])
 		// A network whose chain id moved, as after a Testnet reset, is a scope with no read yet.
 		app.network = { id: "n1", chainId: 2 } as never
 		await flushPromises()
 		expect(has(w, "get-started")).toBe(false)
-		gasByScope.set(activityScopeKey({ ...savings, chainId: 2 }), ZERO)
+		gasByScope.set(activityScopeKey({ ...HOME_SCOPE, chainId: 2 }), ZERO)
 		await flushPromises()
-		expect(rows(w)).toEqual(["get-started-backup", "get-started-feeJuice", "get-started-presto"])
+		expect(rows(w)).toEqual(["get-started-phrase", "get-started-presto"])
 	})
 })
 

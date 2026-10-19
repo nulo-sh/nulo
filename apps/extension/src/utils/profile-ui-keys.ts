@@ -13,6 +13,7 @@ const GET_STARTED_PHRASE_SAVED_PREFIX = "nulo:ui:getStartedPhraseSaved@"
 const GET_STARTED_BACKUP_SAVED_PREFIX = "nulo:ui:getStartedBackupSaved@"
 const GET_STARTED_AZTEC_OPENED_PREFIX = "nulo:ui:getStartedAztecOpened@"
 const GET_STARTED_HIDDEN_PREFIX = "nulo:ui:getStartedHidden@"
+const GET_STARTED_FEE_JUICE_HELD_PREFIX = "nulo:ui:getStartedFeeJuiceHeld@"
 const PROFILE_IMPORTED_PREFIX = "nulo:ui:profileImported@"
 const PROFILE_NOT_FIRST_PREFIX = "nulo:ui:profileNotFirst@"
 
@@ -26,6 +27,7 @@ export const PROFILE_UI_KEY_PREFIXES: readonly string[] = [
 	GET_STARTED_BACKUP_SAVED_PREFIX,
 	GET_STARTED_AZTEC_OPENED_PREFIX,
 	GET_STARTED_HIDDEN_PREFIX,
+	GET_STARTED_FEE_JUICE_HELD_PREFIX,
 	PROFILE_IMPORTED_PREFIX,
 	PROFILE_NOT_FIRST_PREFIX,
 ]
@@ -47,6 +49,7 @@ export const getStartedPhraseSavedKey = (profileId: string) => `${GET_STARTED_PH
 export const getStartedBackupSavedKey = (profileId: string) => `${GET_STARTED_BACKUP_SAVED_PREFIX}${profileId}`
 export const getStartedAztecOpenedKey = (profileId: string) => `${GET_STARTED_AZTEC_OPENED_PREFIX}${profileId}`
 export const getStartedHiddenKey = (profileId: string) => `${GET_STARTED_HIDDEN_PREFIX}${profileId}`
+export const getStartedFeeJuiceHeldKey = (profileId: string) => `${GET_STARTED_FEE_JUICE_HELD_PREFIX}${profileId}`
 
 /** Set by the profile service when a phrase, passkey or backup import commits the row; never on a create. */
 export const profileImportedKey = (profileId: string) => `${PROFILE_IMPORTED_PREFIX}${profileId}`

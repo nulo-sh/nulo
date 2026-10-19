@@ -37,6 +37,7 @@ describe("get started flags (storage)", () => {
 			"nulo:ui:getStartedPhraseSaved@p1",
 			"nulo:ui:getStartedBackupSaved@p1",
 			"nulo:ui:getStartedAztecOpened@p1",
+			"nulo:ui:getStartedFeeJuiceHeld@p1",
 			"nulo:ui:getStartedHidden@p1",
 			"nulo:ui:profileImported@p1",
 			"nulo:ui:profileNotFirst@p1",
@@ -48,6 +49,7 @@ describe("get started flags (storage)", () => {
 			phraseSaved: false,
 			backupSaved: false,
 			aztecOpened: false,
+			feeJuiceHeld: false,
 			hidden: false,
 			imported: false,
 			notFirst: false,
@@ -67,6 +69,7 @@ describe("get started flags (storage)", () => {
 			phraseSaved: false,
 			backupSaved: false,
 			aztecOpened: true,
+			feeJuiceHeld: false,
 			hidden: false,
 			imported: false,
 			notFirst: false,
@@ -102,7 +105,15 @@ describe("get started flags (storage)", () => {
 })
 
 describe("get started view (pure)", () => {
-	const NONE = { phraseSaved: false, backupSaved: false, aztecOpened: false, hidden: false, imported: false, notFirst: false }
+	const NONE = {
+		phraseSaved: false,
+		backupSaved: false,
+		aztecOpened: false,
+		feeJuiceHeld: false,
+		hidden: false,
+		imported: false,
+		notFirst: false,
+	}
 	const base = { type: "password" as const, flags: NONE, funds: "none" as const, feeJuice: "none" as const, prestoReached: false }
 	const view = (over: Partial<GetStartedInput> = {}, flags: Partial<GetStartedFlags> = {}) =>
 		getStartedView({ ...base, ...over, flags: { ...NONE, ...flags } })
@@ -154,6 +165,11 @@ describe("get started view (pure)", () => {
 		expect(view({ feeJuice: "some" })?.items).toEqual(["phrase", "aztec", "presto"])
 		expect(view({ feeJuice: "unknown" })?.items).toEqual(["phrase", "aztec", "presto"])
 		expect(view({ prestoReached: true })?.items).toEqual(["phrase", "aztec", "feeJuice"])
+	})
+
+	test("Fee Juice once held is done for good: a later empty read, as on a new chain, leaves the rest", () => {
+		expect(view({ feeJuice: "none" }, { feeJuiceHeld: true })?.items).toEqual(["phrase", "aztec", "presto"])
+		expect(view({ type: "passkey", feeJuice: "none" }, { feeJuiceHeld: true })?.items).toEqual(["backup", "aztec", "presto"])
 	})
 
 	test("a hidden password card keeps only the phrase row, which cannot be hidden", () => {
