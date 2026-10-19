@@ -307,13 +307,55 @@ describe("holdings page", () => {
 		w.unmount()
 	})
 
-	test("a failed fetch shows the error line, not an empty list", async () => {
+	test("a failed fetch shows the error line under the dash and no count, not an empty list", async () => {
 		installChromeStorage()
 		fetchError = new Error("port closed")
 		const w = await mountPage()
 
 		expect(w.find('[data-testid="holdings-error"]').exists()).toBe(true)
 		expect(w.find('[data-testid="holdings-search"]').exists()).toBe(false)
+		expect(w.find('[data-testid="holdings-total-loading"]').exists()).toBe(false)
+		const figure = w.get('[data-testid="holdings-total"] span[style]')
+		expect(figure.text()).toBe("—")
+		expect(figure.attributes("aria-hidden")).toBe("true")
+		expect(w.get('[data-testid="holdings-meta"]').text()).toBe("")
+		w.unmount()
+	})
+
+	test("a priced row a live event stores while the read stays failed brings no count, skeleton or figure", async () => {
+		installChromeStorage()
+		fetchError = new Error("port closed")
+		const held: Array<(snapshot: unknown) => void> = []
+		answerQuotes = () => new Promise((resolve) => held.push(resolve))
+		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+		const w = await mountPage()
+		const total = () => w.get('[data-testid="holdings-total"]')
+		const meta = () => w.get('[data-testid="holdings-meta"]').text()
+		balanceEvents.added.invoke(row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC))
+		await flushPromises()
+		expect(w.find('[data-testid="holdings-error"]').exists()).toBe(true)
+		expect(w.findAll('[data-testid="token-symbol"]')).toHaveLength(0)
+		expect(w.find('[data-testid="holdings-total-loading"]').exists()).toBe(false)
+		expect(total().text()).toBe("—")
+		expect(meta()).toBe("")
+
+		expect(held.length).toBeGreaterThan(0)
+		const snapshot = await ANSWER()
+		for (const resolve of held) resolve(snapshot)
+		await flushPromises()
+		expect(total().text()).toBe("—")
+		expect(meta()).toBe("")
+		w.unmount()
+	})
+
+	test("with fiat off, a failed fetch shows no total and no count", async () => {
+		installChromeStorage()
+		configValues = { showFiatValues: false, incomingDustUsdThreshold: 0 }
+		fetchError = new Error("port closed")
+		const w = await mountPage()
+		expect(w.find('[data-testid="holdings-error"]').exists()).toBe(true)
+		expect(w.find('[data-testid="holdings-total"]').exists()).toBe(false)
+		expect(w.get('[data-testid="holdings-meta"]').text()).toBe("")
 		w.unmount()
 	})
 })
