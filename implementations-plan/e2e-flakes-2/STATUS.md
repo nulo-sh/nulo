@@ -15,3 +15,5 @@
 - 2026-10-18: test:all exit 0 on 628141e3 (spec at 232d3581); 15-run batch started (Firefox 10, then Chrome 5, taskset 0,1).
 - 2026-10-18: batch on 232d3581: Firefox 10/10, Chrome 5/5, all 8 passed. Review round 1: Codex approve (seeds fixed), Opus approve (presence check, comment, cost wording) — fixes committed; batch reruns on the final head.
 - 2026-10-18: Codex r2 conditional approve (presence check moved before the storage read, 455f7b90); r3 approve, loop converged. Merged origin/dev (30821a65); rebuilt; lint, typecheck:all, test:all exit 0; Firefox 10/10 and Chrome 5/5 green on the merged head.
+- 2026-10-18: pushed e2e-flakes-2-a2 (c70221c6); PR #829 opened; watching checks.
+- 2026-10-19: PR #829 checks green at attempt 1 (all five required aggregators); smoke envelopes Firefox 17 min (before 18), Chrome 12 min (before 11). Not merged; close-out waits for #743.
