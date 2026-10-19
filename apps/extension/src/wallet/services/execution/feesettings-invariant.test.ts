@@ -66,6 +66,7 @@ function makeExecutor(): DappSendExecutor {
 		sequenceEpoch: unreachable as never,
 		buildAndEstimateValidated: unreachable as never,
 		addTransaction: unreachable as never,
+		protocolSponsorAddress: unreachable as never,
 		recordPendingAuthwits: unreachable as never,
 		noteSent: () => {},
 		logDebug: () => {},

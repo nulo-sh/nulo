@@ -19,13 +19,14 @@ post_implementation_hardening: not scheduled
 
 This plan carries the lane's code and document changes. Other items are settled outside it. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
-Three arcs, one PR each against `dev`, no stack (the orchestrator's D-orch-1). Arcs 2 and 3 are independent; the later one carries the close-out.
+Four arcs, one PR each against `dev`, no stack (the orchestrator's D-orch-1). Arcs 2 and 3 are independent; arc 4 carries the close-out.
 
 | Arc | Ships | Waits for |
 |---|---|---|
 | 1 | Phase 1: the token-list signer-code caveat in `SECURITY.md` | nothing |
 | 2 | Phase 3: a bound on the tagging sources a dApp adds to a chain's PXE. Phase 2 (OA-6) when picked by then | nothing for Phase 3 (#860 merged at 2a5960da); Phase 2 test-infra-1 arc 4 |
-| 3 | Phases 4-8: OA-1 to OA-5, and Phase 2 if picked after arc 2; a pick of "keep" drops its phase | the picks; Phase 6 after #854, Phase 8 after test-infra-1 arc 4 |
+| 3 | Phases 4-8: OA-1 to OA-5, and Phase 2 if picked after arc 2; a pick of "keep" drops its phase. Built: Phases 5, 7 (its invisible part) and 8 | the picks; Phase 6 after #854. Phase 8 waited on test-infra-1 arc 4; the orchestrator's arc-3 brief started it first, so its tests live in the composition file and it moves only three scenario pins |
+| 4 | OA-7's build, if picked, and the close-out | OA-7's pick |
 
 ## Outcome & Quality Bar
 
@@ -124,12 +125,18 @@ Three arcs, one PR each against `dev`, no stack (the orchestrator's D-orch-1). A
 
 Each phase builds its ask's option A only on that pick, with the tests and pictures OWNER-ASKS.md names. **Validation gate** for each: the fast layers exit 0, the named tests are red without the change, `bun run test:e2e` smoke passes, and the PR attaches before/after pictures.
 
+Picks (decision page 65, quoted in OWNER-ASKS.md): Phase 4 (OA-1), Phase 6 (OA-3) and Phase 2 (OA-6) are not built. Arc 3 builds:
+
+- **Phase 5 (OA-2)** — done. `operation-journal/gc.ts` caps two classes per (profile, account), each at 50: succeeded records, and records refused before sending (HS3-D12). Tests in `gc.test.ts`: 60 refused keep the newest 50; 60 refused beside 10 completed keep the 10; 60 failed after submitting are all kept; each refusal kind is capped; `popup_bound` and `session_ended` are not.
+- **Phase 7 (OA-4)** — the invisible part, done (HS3-D10): `SessionManager.close()` attempts the delete twice inside its artifact section; `lockActiveProfile` announces the lock before its read-back. Tests: the manager locks memory before the delete settles and attempts it once more; a delete that keeps failing is attempted twice and still clears the alarm; a first failure does not let the second attempt reach a successor's row (`session-manager.fence.test.ts`); a restarted worker's lock that cannot be confirmed still announces itself. The visible part is OA-7.
+- **Phase 8 (OA-5)** — done (HS3-D11). Composition tests in `incoming-transfer/service.composition.test.ts`: after Block neither arm reads the token, the allowed token reads on, and a delete and re-add resumes both; a rebuild that read the trust before Block schedules no read; Block deletes the hidden receipts and keeps the trust; an in-flight note scan stores nothing; a scan of a blocked token stores no receipt or balance mark; an Allow after Block is refused. Three scenario pins move to the signed behaviour.
+
 ## UI impact
 
 - Arc 1: none (a document).
 - Phase 2: OA-6 (when a transaction's authorizations appear on the Authorizations page). Ships only on the owner's pick.
 - Phase 3: none in the wallet; a dApp past the bound reads the existing refusal.
-- Phases 4-8: OA-1 to OA-5, each only on the owner's pick.
+- Phases 4-8: OA-1 to OA-5, each only on the owner's pick. Arc 3: OA-2 (refused requests leave Activity past 50, P65-02) and OA-5 (a blocked token's hidden receipts are deleted and its balance refreshes only when re-read, P65-05); no screen's layout or copy changes. OA-4's visible part is OA-7, open.
 
 ## Decision ledger
 
@@ -143,6 +150,9 @@ Each phase builds its ask's option A only on that pick, with the tests and pictu
 | HS3-D6 | The bound is 128 (A1), provisional | the orchestrator's call, 2026-10-19; revisit when a legitimate dApp reaches it or a profile's own sources come near it | a measured figure (none exists) |
 | HS3-D7 | The refusal's text lives in the extension handler as a `ScopeViolationError`, not in `wallet-bridge/scope-violation.ts` | `scopeViolation()` is internal to wallet-bridge; the dApp reads the constant scope envelope whatever the text; register operations reach no window and write no Activity row (traced) | exporting `scopeViolation` for one caller |
 | HS3-D8 | A keyed `registerContract` checks the key derives the instance's public keys as well as its address | with the account registered first, the PXE's own preimage check comes after the account is written; the key check makes that check implied, so a mismatch still writes nothing | duplicating the preimage derivation in the handler |
+| HS3-D10 | OA-4: `SessionManager.close()` attempts the delete twice, back to back, inside its artifact section; `lockActiveProfile` announces the lock before its read-back, and only while no session is published; restore is unchanged; what remains when both attempts fail is OA-7 | the retry sits beside the failing call and covers every close; inside the artifact section no attempt reaches a successor's row; no backoff, since a `storage.session` removal has no quota or throttling path; memory is locked either way, so the announcement does not wait on the read-back (Codex design consult) | Try again (repeats a save that failed twice); overwriting the row (the same failing call); an alarm retry (an independent lifecycle with durable intent: a plan change); a revocation marker read by restore (new persisted state) |
+| HS3-D11 | OA-5: Block runs in a deleter-locked section that bumps the epoch at entry, stops both arms, deletes the hidden records and keeps the shown ones and the outbox rows, then rebuilds whatever the section's outcome; rebuilds skip blocked contracts; a receipt section that reads `blocked` writes nothing; an Allow on a blocked row is refused, and an add that resolves after a Block keeps it; the reconciler's orphan sweep reads its fence after every await | the bump makes a scan past its reads, or a rebuild that read the old trust, stand down, as a token delete does; the in-lock trust read covers a lock handoff; the outbox rows carry balance refreshes of a token still registered; with the receipts deleted and the cursor kept, an Allow from blocked would resume with public history missing, so only a token delete leaves blocked, and a re-add re-reads from `startBlock` | the commit check alone (a stale rebuild re-installs the scans); deleting the cursor on Block |
+| HS3-D12 | OA-2: a record refused before sending is a refusal kind (`scope_refused`, `registry_refused`, `malformed_request`, `terms_refused`, `wallet_refused`, `too_many_pending`) on a record `wasNeverSent` holds for | the kinds Activity reads as "Nothing was sent"; `session_ended` and `popup_bound` can follow a claim and stay uncapped | `wasNeverSent` alone (it holds for simulation and proving failures, which read as failed sends) |
 | HS3-D9 | The count stays over distinct addresses; the PXE comment states that an address held as both a sender and an account counts once and costs two secrets | the orchestrator's instruction (count distinct addresses) and the approved invariant; the cost stays bounded at twice the figure | counting both lists' lengths (Opus arc 2 review): a change of the approved count, left to the orchestrator |
 
 ## Review verdicts
@@ -156,12 +166,15 @@ Each phase builds its ask's option A only on that pick, with the tests and pictu
 | Arc 1 Codex R2 | approve | wording consistent across the three docs; citations resolve; HS3-D5 accepted | none |
 | Arc 2 Codex R1, Opus | conditional approve (gates pending); approve | the displaced `tokenContractKey` doc restored; the refusal literal unexported; the handler test's transport claim narrowed; the own-path test moved to `AccountStateService.addSender`, the path the person's senders take; the README says no wider manifest fixes it; the PXE comment states the distinct-count invariant | a non-distinct count (HS3-D9); a README pin to the constant; bounding the unproduced `register_sender` kind |
 | Arc 2 Codex R2 | approve | every fix verified; no regression | none |
+| Arc 3 Codex R1, Opus | reject; conditional approve | an add delayed on its tip read wrote `trusted` over a Block; the lock announcement could follow a successor's session; a reconciler displaced by a handoff marked a balance after Block returned; a throw in Block's teardown skipped the rebuild; the bump moved to the section's entry; tests pin `wasNeverSent`, shown receipts and outbox rows kept, the stale rebuild resumed at Block's first await, the delete and re-add with the token really gone; stale docs (`ARCHITECTURE.md`, the trust-machine comment); OA-7's A conditional on its browser tests | the same teardown order in `onTokenDeleted` (older than this arc); a pin tying the refusal kinds to Activity's copy (the copy also says "Nothing was sent" for failures that are not refusals; the kinds are type-checked instead) |
+| Arc 3 Codex R2 | approve | every R1 fix verified at its cause, the bump at entry and the `finally` rebuild included; no regression | none |
 
 ## Delivery
 
 - Arc 1: `harden-security-fixes-3-a1` off `origin/dev`, carrying this plan and Phase 1. Title: `docs(security): the token-list summary is informational; the compare view is the review`.
 - Arc 2: `harden-security-fixes-3-a2` off `origin/dev` after its waits. Title: `fix(pxe): bound the tagging sources a dapp adds to a chain` (plus the Phase 2 words if OA-6 is picked by then).
-- Arc 3: `harden-security-fixes-3-a3` off `origin/dev` after the picks; title per the picks, at most 93 characters.
+- Arc 3: `harden-security-fixes-3-a3` off `origin/dev` after the picks. Title: `feat(wallet): cap refused requests, stop a blocked token's scans, save a lock twice`.
+- Arc 4, after OA-7's pick: its build if any, and the close-out.
 - Each PR: no label at creation; body with what changed and why, the gates with outcomes, e2e wall-clock unchanged (no scenario added). No `Closes` line: the lane closes no open issue. Commits signed, `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
 ## Post-implementation
@@ -171,11 +184,11 @@ Cite `implementations-plan/README.md` § Post-implementation standard at f214e5c
 - Step 1 is absent (`code_review: off`).
 - Step 2 per arc at its boundary: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed per round until no new material point, hard stop at three rounds. Each prompt carries the arc table above, the adversarial ask and the two verbatim rules. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) runs beside round 1. Record rounds under Review verdicts and in `lessons/phase-N.md`.
 - Step 3: `gh pr create` per arc; `gh pr checks <n> --watch`; one rerun for a known flake.
-- Step 4, in the later of arcs 2 and 3: merge `origin/dev` and read `index.md` and `lessons.md`; Outcome block; lessons promotion; `STATUS.md` deleted; `git mv` into `archive/` in its own commit; index line moved.
+- Step 4, in arc 4 (after OA-7's pick): merge `origin/dev` and read `index.md` and `lessons.md`; Outcome block; lessons promotion; `STATUS.md` deleted; `git mv` into `archive/` in its own commit; index line moved.
 - Step 5: after the close-out merges, `agent-worktree done harden-security-fixes-3 --merged`. The orchestrator notices the merge.
 - Three failures on one step end the arc as `ARC_FAILED`.
 
 ## Seeds
 
 - `/goal`: "Implement arc N of implementations-plan/harden-security-fixes-3/plan.md in its worktree: phases in order, each gate green before the next, then the Post-implementation loop and the arc's PR. Stop at a red gate three times."
-- `/loop`: "Check the arc's PR checks and its waits (#860, test-infra-1 arc 4, #854, the owner's picks on OA-1 to OA-6); start the next arc when its waits clear; stop when the close-out merges."
+- `/loop`: "Check the arc's PR checks and its waits (#860, test-infra-1 arc 4, #854, the owner's picks on OA-1 to OA-6, then OA-7); start the next arc when its waits clear; stop when the close-out merges."

@@ -239,6 +239,6 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 
 .failed_text {
 	composes: type--caption from global;
-	color: var(--red);
+	color: var(--txt-danger);
 }
 </style>
