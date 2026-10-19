@@ -1,8 +1,8 @@
 ---
 plan: viewer-flake-1
 tier: light
-status: planned; final Codex pass conditional approve; owner ask A1 open
-issues: "#849 (arc 1 closes)"
+status: approved (orchestrator, 2026-10-19, two arcs); arc 1 in progress; arc 2 waits for owner ask A1
+issues: "#849 (arc 1 refs, arc 2 closes)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -17,7 +17,7 @@ post_implementation_hardening: not scheduled
 
 # viewer-flake-1: the viewer's own follow no longer reads as the reader's scroll; the e2e reads what the viewer judges
 
-One arc, one PR against `dev`. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (A1: KL-2's behaviour). Probes and consults: [lessons/phase-0.md](lessons/phase-0.md). Over the light target (about 180 lines): three traced causes with their evidence, and four audit rounds that changed the design twice.
+Two arcs, one PR each against `dev` (§ Delivery). Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (A1: KL-2's behaviour). Probes and consults: [lessons/phase-0.md](lessons/phase-0.md). Over the light target (about 190 lines): three traced causes with their evidence, and four audit rounds that changed the design twice.
 
 ## Root cause (#849)
 
@@ -42,13 +42,13 @@ The stop can land before CodeMirror's measure or after it. The cause is that the
 
 For a person reading a busy log and for the maintainer reading a red smoke lane:
 
-- Once the viewer stops the follow, its own follow still in flight no longer resumes it; a scroll down by the reader, the button or the 30 s timer still does. The exceptions are KL-2 (owner ask A1) and the F3 geometry change (an issue). R1b and R3 resume 0/16 per browser, a unit case red on base proves it, and a success control keeps the reader's scroll down resuming.
-- The two #849 cases no longer red on the three traced causes. The follow check reads what the viewer reads, and the hold is measured once the follow due at the stop has settled. No assertion is loosened, no wait on time is added, and the 1 px bound stays; it now covers the hold from two frames after the stop, not from the drag's start (D5).
+- Arc 2. Once the viewer stops the follow, its own follow still in flight no longer resumes it; a scroll down by the reader, the button or the 30 s timer still does. The exceptions are KL-2 (owner ask A1) and the F3 geometry change (an issue). R1b and R3 resume 0/16 per browser, a unit case red on base proves it, and a success control keeps the reader's scroll down resuming.
+- Arc 1, then arc 2. The two #849 cases no longer red on the three traced causes. The follow check reads what the viewer reads, and the hold is measured once the follow due at the stop has settled. No assertion is loosened, no wait on time is added, and the 1 px bound stays; it now covers the hold from two frames after the stop, not from the drag's start (D5).
 - At retry 0 under the load class, all green: 10 Firefox runs of the file and 2 full Firefox smoke suites, 5 Chrome runs and 1 full Chrome suite.
 
 ## Architecture & Implementation
 
-- **Viewer** (`apps/extension/src/components/JsonViewer/LogsViewer.vue`). After `scrollToBottom` dispatches the follow, it sets `lastScrollTop` to the scroller's largest offset (`scrollHeight - clientHeight`). The follow lands at most there, so its own scroll never reads as a move down past the reference. The reader's scroll does: the handler resets the reference on every event. The stops, the scroll handler, `holdPlace`, the timer and the `logId` target are unchanged. Nothing is dispatched. One comment sentence states the invariant. The read forces a layout CodeMirror would otherwise leave to its measure, once per followed line: Phase 2 bounds its cost.
+- **Viewer** (`apps/extension/src/components/JsonViewer/LogsViewer.vue`). After `scrollToBottom` dispatches the follow, it sets `lastScrollTop` to the scroller's largest offset (`scrollHeight - clientHeight`). The follow lands at most there, so its own scroll never reads as a move down past the reference. The reader's scroll does: the handler resets the reference on every event. The stops, the scroll handler, `holdPlace`, the timer and the `logId` target are unchanged. Nothing is dispatched. One comment sentence states the invariant. The read forces a layout CodeMirror would otherwise leave to its measure, once per followed line: Phase 1's burst control bounds its cost.
 - **Unit** (`LogsViewer.test.ts`, no stub change).
   - New case, two rows (the follow's scroll before or after the stop): following at the end, a line grows `scrollHeight`, a selection stops the follow, and the follow's scroll to the new end fires its event. The next line is not followed. Both rows are red on base.
   - New success control, same setup: after that event the reader scrolls up past the band, then back into it, and the next line is followed.
@@ -68,29 +68,31 @@ For a person reading a busy log and for the maintainer reading a red smoke lane:
 
 ## Phases
 
-### Phase 1 — the viewer's follow pins its reference
+Arc 1 is Phase 1, the test half; arc 2 is Phase 2, P1, once A1 is signed (the orchestrator's order).
 
-1. Apply the viewer change; add the unit case and the control.
-2. Negative control, never committed: restore `LogsViewer.vue` from `ce48691e`, keep the tests, run the unit gate. Pass: only the new case's two rows red. Then restore the change.
+**E2E runs.** Warning: start every build and every run only once `until [ "$(cut -d. -f1 /proc/loadavg)" -lt 150 ]; do sleep 30; done` returns. Run one e2e at a time in this worktree. `agent.sh` runs only the network config, so this smoke file runs through `test:e2e`, which claims its own ports in `~/.agents/ports.md`.
 
-**Validation gate.** `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/components/JsonViewer`. Pass: each exits 0, and the control reds as stated. Layers: lint, typecheck, unit.
+- Build each browser armed: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:<browser>`.
+- Firefox, from `apps/extension`: `NULO_E2E_BROWSER=firefox NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 env -u EXTENSION_PATH bun run test:e2e --retry=0 tests/e2e/viewers-csp.test.ts`, ten times. Then the full suite twice: the same command without the file.
+- Chrome: the same without `NULO_E2E_BROWSER`, five times for the file and once for the full suite.
+- Record the file's wall-clock for each run, plus one base run per browser. No pass bound on them.
 
-### Phase 2 — the e2e reads what the viewer judges
+### Phase 1 (arc 1) — the e2e reads what the viewer judges
 
 1. Apply the e2e changes.
-2. Controls, with the probe copied in from `~/.cache/nulo-backlog/viewer-flake-1/` and never committed. Record the numbers in `lessons/phase-2.md`.
-   - Final build: R1b and R3 resume 0/16 per browser. R5 asserts, per browser, the follow resumed in the band, held after the stop, resumed at the end, and the next line followed.
-   - R2's latch, read after the viewer, sees no gap of 20 px or more.
-   - On the base viewer, R1b reds with the new baseline.
-   - Layout cost: 500 lines logged in one task while following, 5 runs per browser on base and on the fix; record both medians. If the fix adds more than 10% on either browser, stop for the orchestrator before the PR.
+2. Controls, with the probe copied in from `~/.cache/nulo-backlog/viewer-flake-1/` and never committed. Record each in `lessons/phase-1.md` with the build it ran on.
+   - Base viewer: R1b reds with the new baseline, so T2 keeps P1 caught. R2's latch, read after the viewer, sees no gap of 20 px or more.
+   - P1 trial (the `scrollToBottom` pin applied uncommitted; arc 2's evidence): R1b and R3 resume 0/16 per browser. R5 asserts, per browser, the follow resumed in the band, held after the stop, resumed at the end, and the next line followed.
+   - Burst cost, P1 trial against base. The logs window follows at its end with 60 lines at its default size; one task logs 500 `console.info` lines. A page-side `MutationObserver` and `requestAnimationFrame` time with `performance.now()`: from the first burst line's appearance in `.cm-content` to the first frame showing the last one with the view at its end. Each sample gets a fresh window; 5 samples per build per browser, alternating base and trial, with one build each chosen by `EXTENSION_PATH`. Record `(trial median / base median - 1) x 100`. Above 10 on either browser stops arc 2 for the orchestrator. This is a latency guard, not proof of zero layout cost.
 
-**Validation gate.** Warning: start every build and every run only once `until [ "$(cut -d. -f1 /proc/loadavg)" -lt 150 ]; do sleep 30; done` returns. Run one e2e at a time in this worktree.
+**Validation gate.** Run `bun run lint`, `bun run typecheck:all` and `bun run test:all`, then the E2E runs. Pass: each exits 0, and every e2e run is green with the file at `6 passed`. The base viewer still carries P1, so a red may be P1's, but no red is excused. Any red fails the gate and stops the arc for the orchestrator. Its attribution comes from a traced reproduction with the probe instrumentation, recorded in `lessons/phase-1.md`. A rerun is diagnostic only and never replaces the failed run.
 
-- Run `bun run lint`, `bun run typecheck:all` and `bun run test:all`. Pass: each exits 0.
-- Build each browser armed: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:<browser>`.
-- Firefox, from `apps/extension`: run `NULO_E2E_BROWSER=firefox NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 env -u EXTENSION_PATH bun run test:e2e --retry=0 tests/e2e/viewers-csp.test.ts` ten times. Then run the full suite twice: the same command without the file. Pass: every run is green, and the file shows `6 passed`.
-- Chrome: run the same without `NULO_E2E_BROWSER`, five times for the file and once for the full suite. Pass: as above.
-- Record the file's wall-clock for each run, plus one base run per browser. Set no pass bound on them. Smoke claims its own ports in `~/.agents/ports.md`.
+### Phase 2 (arc 2, once A1 is signed) — the viewer's follow pins its reference
+
+1. Apply the viewer change; add the unit case and the control.
+2. Negative control, never committed: restore `LogsViewer.vue` from the arc's base, keep the tests, run the unit gate. Pass: only the new case's two rows red. Then restore the change.
+
+**Validation gate.** `bun run lint`; `bun run typecheck:all`; `bun run test:all`; `cd apps/extension && bun --bun vitest run src/components/JsonViewer`; the E2E runs on the arc's build. Pass: each exits 0, the control reds as stated, and every e2e run is green.
 
 ## UI impact
 
@@ -122,23 +124,26 @@ The viewer reads only its own state and the scroller's geometry. It adds no inpu
 
 ## Delivery
 
-Branch `viewer-flake-1-a1` off `origin/dev`, with the plan commit on it.
+Two arcs, one PR each against `dev`, in the orchestrator's order (2026-10-19). Each PR opens ready, after its gate, its Codex loop, and `origin/dev` merged in. No label: smoke runs on `apps/extension/**`.
 
-- Open one PR against `dev` with `gh pr create`, ready. Open it only after Phase 2's gate passes, the Codex loop converges, and `origin/dev` is merged (ui-polish-4 may land `LogsToolbar.vue`).
-- Title: `fix(logs): the follow's own scroll no longer resumes a stop; e2e reads what it judges` (85 characters).
-- Body: the three causes and their evidence, the controls, the runs with the file's wall-clock per browser before and after, `UI impact`, the limits (KL-1, KL-2, the F3 path), `Closes #849`.
-- No label: smoke runs on `apps/extension/**`.
-- The close-out lands as the PR's final commits. No parallel lanes.
-- If A1 is open when the arc starts, it ships the test half alone, refs #849 (OWNER-ASKS.md, what ships now); the viewer half follows once A1 is answered, then closes #849.
+- **Arc 1**: branch `viewer-flake-1-a1` off `origin/dev`, with the plan commit. Merge `origin/dev` first: ui-polish-4 changed `LogsToolbar.vue`.
+  - Title: `test(e2e): viewers-csp reads the follow and the hold where the viewer judges` (76 characters).
+  - Body: T1, T2, the controls with their builds, the runs with the file's wall-clock per browser before and after, `UI impact: none`, `Refs #849`.
+  - No close-out and no archive.
+- **Arc 2**, once A1 is signed: branch `viewer-flake-1-a2`, stacked on arc 1 while it is open, else off `origin/dev`.
+  - Title: `fix(logs): the viewer's own follow scroll no longer resumes a stopped follow` (76 characters).
+  - Body: P1 with Phase 1's controls, the unit controls, the runs, `UI impact` with A1's sign-off quoted, the limits (KL-1, KL-2, the F3 path), `Closes #849`.
+  - The close-out lands as its final commits.
+- If A1 is answered B or C, the orchestrator replans arc 2, and the plan stays open until then.
 
 ## Post-implementation
 
-Follow `implementations-plan/README.md` § Post-implementation standard at `ce48691e`, once over the arc's diff. `code_review: off`.
+Follow `implementations-plan/README.md` § Post-implementation standard at `ce48691e`, once per arc over that arc's diff. `code_review: off`.
 
-- Codex loop: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. Prompts live under `~/.cache/nulo-backlog/viewer-flake-1/`. Stop at three rounds, and log the rounds in `lessons/phase-2.md`.
-- Run one Opus diff review beside round 1. A fix that grows the design stops for the orchestrator.
-- Close-out: the standard's step 4, plus a flake-ledger row in the `e2e-testing` skill (the next free number) and KL-1, KL-2 (if A1 accepts it) and the two issues filed, each deduplicated first.
-- Teardown after the merge: `agent-worktree done viewer-flake-1 --merged`.
+- Codex loop: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. Prompts live under `~/.cache/nulo-backlog/viewer-flake-1/`. Stop at three rounds, and log the rounds in `lessons/phase-N.md` and under Audit verdicts.
+- Run one Opus diff review beside each arc's round 1. A fix that grows the design stops for the orchestrator.
+- Close-out, arc 2 only: the standard's step 4, plus a flake-ledger row in the `e2e-testing` skill (the next free number), and KL-1, KL-2 (if A1 accepts it) and the two issues filed, each deduplicated first.
+- Teardown after arc 2 merges: `agent-worktree done viewer-flake-1 --merged`.
 
 ## Audit verdicts
 
@@ -154,7 +159,7 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `ce48
 - The lag (KL-1).
 - The search race: an issue.
 - The latch wording: accepted.
-- Phase 2 controls: accepted.
+- Controls for the e2e phase: accepted.
 - F1 and F2: corrected.
 
 **Round 2, Codex** (resume): reject.
@@ -168,14 +173,23 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `ce48
 - #2 "never" overpromises given the F3 path: accepted, all wording qualified.
 - Confirmed: the timer and band regressions are gone, both event orders are covered, Chrome's 1 px rest gap stays under the pin, and line wrapping is not installed.
 
-**Final fresh pass, Codex** (session 01a154cc): conditional approve. Not re-audited after.
+**Final fresh pass, Codex** (session 01a154cc): conditional approve.
 - #1 KL-2's consequence was understated (a scroll down at the end fires no event) and it is an owner call: accepted, reworded, now owner ask A1. KL-1's wording corrected.
-- #2 Firefox R5's summary contradicts its trace: accepted. The trace shows the resume, and R5 asserts its outcome in Phase 2.
+- #2 Firefox R5's summary contradicts its trace: accepted. The trace shows the resume, and R5 asserts its outcome in Phase 1.
 - #3 T2 changes temporal coverage: accepted, stated in Outcome, Architecture and D5; the negative controls stay planned.
-- #4 the new layout read per followed line: plausible, unverified. Phase 2 bounds it.
+- #4 the new layout read per followed line: plausible, unverified. Phase 1 bounds it.
+
+**Final pass, resume 1** (after the orchestrator's approval and two-arc order): conditional approve. #1-#3 resolved.
+- #4 the burst bound timed nothing defined (a producer loop ends before the viewer delivers): accepted, the measure is defined (Phase 1).
+- #5 Delivery, close-out and seeds still described one arc that closes and archives: accepted, rewritten for two arcs.
+
+**Final pass, resume 2:** conditional approve. #4 and #5 resolved.
+- #3 the gate's P1 exception (a screenshot attribution plus a rerun) is a retry-to-pass: accepted. The exception is gone; any red stops the arc, with a traced reproduction for attribution.
+
+**Final pass, resume 3:** approve, no new material finding.
 
 ## Seeds
 
-`/goal` (recommended): `/goal Phases 1 and 2 of implementations-plan/viewer-flake-1/plan.md are ✓, each backed by its gate passing in the transcript (the unit control red, R1b and R3 0/16 per browser, 10 Firefox and 5 Chrome file runs plus 2 Firefox and 1 Chrome full smoke suites at retry 0 started at load1 < 150; R5 asserted and the burst cost recorded); LESSONS_FILE=implementations-plan/viewer-flake-1/lessons/phase-N.md printed per phase; code_review is off and /code-review was not run; the Codex loop converged (a resumed pass with no new material finding, quoted); the PR closing #849 exists, opened after the loop.`
+`/goal` (recommended): `/goal Phase 1 (arc 1) of implementations-plan/viewer-flake-1/plan.md is ✓, backed by its gate passing in the transcript (lint, typecheck:all, test:all; 10 Firefox and 5 Chrome file runs plus 2 Firefox and 1 Chrome full smoke suites at retry 0 started at load1 < 150; the controls recorded with their builds: R1b red on base under the new baseline, R1b/R3 0/16 and R5 asserted on the P1 trial, the burst ratio per browser); LESSONS_FILE=implementations-plan/viewer-flake-1/lessons/phase-1.md printed; code_review is off and /code-review was not run; the Codex loop converged (a resumed pass with no new material finding, quoted); the arc 1 PR referring to #849 exists, opened after the loop. Phase 2 starts only once A1 is signed.`
 
-`/loop` (fallback): `/loop 15m Drive implementations-plan/viewer-flake-1 forward; never idle. Read plan.md and lessons/. If the plan directory is gone, git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/viewer-flake-1/plan.md: success means merged, so run agent-worktree done viewer-flake-1 --merged and stop; failure means delivered, so watch the PR's checks. Otherwise run the next phase's gate, then the Post-implementation section. Never merge. The same step failing 5 times: reassess with Codex.`
+`/loop` (fallback): `/loop 15m Drive implementations-plan/viewer-flake-1 forward; never idle. Read plan.md and lessons/. If the plan directory is gone, git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/viewer-flake-1/plan.md: success means merged, so run agent-worktree done viewer-flake-1 --merged and stop; failure means delivered, so watch the PR's checks. Otherwise run the next phase's gate, then the Post-implementation section; Phase 2 waits for A1's signature in OWNER-ASKS.md. Never merge. The same step failing 5 times: reassess with Codex.`

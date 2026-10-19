@@ -12,7 +12,7 @@
 - **B. Track the reader's input.** Wheel, keyboard and scrollbar input on the scroller would mark the next scroll as the reader's. That removes the case but adds state, its ordering against CodeMirror's measure on both browsers, and tests for each input kind, for a sub-frame window. It is a plan change of its own.
 - **C. Keep today's behaviour.** No viewer change: the follow keeps resuming at its own scroll after a stop, and the selection and search smoke cases keep that red.
 
-**What ships now.** The test half (the follow check read after the viewer, the hold measured from the viewer's stop) depends on nothing here and builds without waiting, as a PR that refs #849. The viewer half waits for A1. Until it lands, the selection and search cases keep the viewer's red at its base rate. Each red in that arc's gate is traced, and must show the follow resuming at the viewer's own scroll.
+**What ships now.** The test half (the follow check read after the viewer, the hold measured from the viewer's stop) depends on nothing here and builds without waiting, as a PR that refs #849. The viewer half waits for A1. Until it lands, the selection and search cases keep the viewer's red at its base rate. A red in that arc's gate stops the arc for the orchestrator, with a traced reproduction of its cause.
 
 ## Considered and not asked
 

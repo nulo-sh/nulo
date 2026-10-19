@@ -5,3 +5,4 @@
 - 2026-10-19 plan r3: Codex reject (sub-frame reader scroll) -> KL-2; wording qualified; final fresh pass next
 - 2026-10-19 Chrome follow-pin trial: R1b 0/8, R3 0/8, R5 resumes
 - 2026-10-19 final fresh Codex pass: conditional approve; KL-2 -> owner ask A1; R5, T2 and layout-cost findings applied; session ends at the plan report
+- 2026-10-19 orchestrator approved, two arcs; final pass resumed: conditional (burst measure, two-arc plan), conditional (gate exception), approve

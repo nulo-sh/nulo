@@ -37,3 +37,7 @@ All runs: armed smoke build (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TO
   - #3: T2 trades the hold's start for a settled baseline. Stated.
   - #4: the pin's geometry read forces a layout per followed line. Unverified; Phase 2 bounds it.
   - By the planner brief, a verdict other than approve ends the session at the plan report. The arc waits for the orchestrator.
+- **After the orchestrator's approval** (two arcs: the test half refs #849, P1 waits for A1), the final session was resumed on the conditions applied without a re-audit.
+  - Resume 1, conditional approve: #1-#3 resolved. #4: the burst bound timed nothing defined, since the producer loop ends before the viewer delivers. #5: the plan still described one closing arc. Both fixed.
+  - Resume 2, conditional approve: the new gate exception (a screenshot attribution plus a rerun) is a retry-to-pass. Removed.
+  - Resume 3: approve.
