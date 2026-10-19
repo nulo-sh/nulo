@@ -18,3 +18,5 @@
 - 2026-10-19 21:55Z: OA-21: six layouts drawn by a scratch capture spec, run twice on Chrome and deleted each time; 36 PNGs, pushed at 52651804 (`SHOTS_READY`).
 - 2026-10-19 22:00Z: P67-02 B built. Unit gate: 64/64 across the four touched files. Red proofs: leaving the flag out of `feeJuiceShown` fails three cases; dropping the watcher's write fails both Home cases. lint 0, typecheck:all 0.
 - 2026-10-19 22:07Z: smoke at retry 0, armed builds: Chrome `stale-network` 4/4 and `security-backup` 3/3 (S1a 12.4 s); Firefox the same (S1a 18.7 s).
+- 2026-10-19 22:16Z: network `fee-methods` 8/8 on Chrome (agent.sh, retry 0; "public gas only…" 77.7 s, the stored flag found).
+- 2026-10-19 22:33Z: round 2 fix loop: round 1 Codex clean, Opus one High (uncommitted auto-imports) and Lows, all fixed (ec37fb1c); round 2 Codex clean. lint 0, typecheck:all 0, check:plans 0, `bun run test:all` 0 (extension 14,282 passed).

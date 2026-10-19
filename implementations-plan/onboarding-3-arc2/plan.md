@@ -265,6 +265,8 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
 | M14's "any account held" (only what Home saw counts); M15's evidence for the other flags | Opus | fixed in the matrix |
 | A stale peek from before a reset writes the flag (I3); dust Fee Juice ends the row | both | accepted: the owner's "same user" reading; before this change dust already hid the row while held |
 
+**Round 2 fix loop, round 2** (resumed session `01a15638`, verify only): "Clean — high confidence from static inspection." The loop converged at round 2.
+
 ## Delivery
 
 No new PR. The arc pushes to `worktree-onboarding-3` with plain pushes and never forces. #743 stays a draft and never merges before the owner's next build test. Its title stays as it is (81 characters). Its body gains `Closes #769`. The three sibling branches built on 3f9f958c (`structure-2-a3`, `test-infra-1-a4`, `onboarding-4-a1`) are never pushed to.
