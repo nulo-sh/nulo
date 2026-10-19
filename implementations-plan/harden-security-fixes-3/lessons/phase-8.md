@@ -9,3 +9,4 @@
 | 20:5x | Chrome smoke, retry 0, on the build before round 1 | 268 passed, 14 skipped, 31.5 min |
 | 21:0x | Codex R2 (resumed in its own codex dir, gpt-6.1-sol high) | approve, no new material point: converged |
 | 21:2x | Network e2e, retry 0, proverless, `e2e:agent`: `incoming-arrival`, `incoming-transfers`, `token-add-auto-trust` on the round-1 head | Chrome 11/11 (9.8 min), Firefox 11/11 (9.6 min) |
+| 22:0x | Final head (origin/dev b6208221 merged): lint, `typecheck:all`, the pre-PR gate, `test:all`; Chrome smoke at retry 0 on a fresh armed build | all exit 0 (extension 14189 passed); smoke 268 passed, 14 skipped, 33.2 min |
