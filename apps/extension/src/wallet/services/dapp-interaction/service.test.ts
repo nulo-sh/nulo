@@ -27,7 +27,7 @@ import { NetworkService } from "@/wallet/services/network/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { TokenService } from "@/wallet/services/token/service"
-import { WindowManager } from "@/wallet/services/window-manager/window-manager"
+import { WINDOW_CLOSED_BY_USER, WindowManager } from "@/wallet/services/window-manager/window-manager"
 import { describe, expect, test, vi } from "vitest"
 import {
 	AuthRegistryRefusalError,
@@ -40,6 +40,7 @@ import { FakeBrowserApi, MockClock } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { DappInteractionService } from "./service"
+import { WINDOW_ENDS, WindowEndedError } from "./window-end"
 import type { CapabilityPayload, DappInteraction, DiscoveryResult, ExecutionHooks, OperationRequest } from "./spec"
 import { TEST_LIST_ENTRIES, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 import { seedsFromList } from "@/wallet/services/token/default-tokens"
@@ -641,7 +642,8 @@ async function windowHarness(session: typeof SESSION = SESSION) {
 		return { outcome, windowId, id }
 	}
 	const closeByUser = (windowId: number) => (api.windows as unknown as { closeByUser: (id: number) => void }).closeByUser(windowId)
-	return { dapp, clock, executeOperations, getActiveProfile, creates, storage, open, closeByUser }
+	const removes = vi.spyOn(api.windows, "remove")
+	return { dapp, clock, executeOperations, getActiveProfile, creates, removes, storage, open, closeByUser }
 }
 
 describe("DappInteractionService — a confirmation window never falls back to signing", () => {
@@ -705,6 +707,40 @@ describe("DappInteractionService — a confirmation window never falls back to s
 	})
 })
 
+describe("DappInteractionService — the window's named end", () => {
+	test.each(WINDOW_ENDS)("an end taken before the close (%s) ends the request with it and the wallet removes the window", async (end) => {
+		const h = await windowHarness()
+		const window = await h.open()
+		await h.dapp.rejectInteraction(window.id, "User rejected", end)
+		h.closeByUser(window.windowId)
+		await expect.poll(() => window.outcome.settled).toBe(true)
+		expect(window.outcome.err).toBeInstanceOf(WindowEndedError)
+		expect(window.outcome.err).toBeInstanceOf(UserRejectedError)
+		expect((window.outcome.err as WindowEndedError).end).toBe(end)
+		expect(h.removes).toHaveBeenCalledWith(window.windowId)
+	})
+
+	test("a close that reaches the wallet first ends the request as the close, and the late end changes nothing", async () => {
+		const h = await windowHarness()
+		const window = await h.open()
+		h.closeByUser(window.windowId)
+		await expect.poll(() => window.outcome.settled).toBe(true)
+		await h.dapp.rejectInteraction(window.id, "User rejected", "lock")
+		await flush()
+		expect(window.outcome.err).toBe(WINDOW_CLOSED_BY_USER)
+		expect(h.removes).not.toHaveBeenCalled()
+	})
+
+	test("an end the wallet does not know rejects as a Reject that names none", async () => {
+		const h = await windowHarness()
+		const window = await h.open()
+		await h.dapp.rejectInteraction(window.id, "User rejected", "approve")
+		await expect.poll(() => window.outcome.settled).toBe(true)
+		expect(window.outcome.err).toBeInstanceOf(UserRejectedError)
+		expect(window.outcome.err).not.toBeInstanceOf(WindowEndedError)
+	})
+})
+
 describe("DappInteractionService — a request an estimate refused ends as that refusal", () => {
 	const registry = () =>
 		new AuthRegistryRefusalError("Scope violation: a transaction's authorization request targets the authorization registry")
@@ -719,9 +755,10 @@ describe("DappInteractionService — a request an estimate refused ends as that 
 		h.dapp.recordRefusal(rejected.id, registryRefusal)
 		h.dapp.recordRefusal(closed.id, bindingRefusal)
 
-		await h.dapp.rejectInteraction(rejected.id, "User rejected")
+		// A named end never outranks the refusal: a lock reads as the refusal, like the Reject.
+		await h.dapp.rejectInteraction(rejected.id, "User rejected", "lock")
 		h.closeByUser(closed.windowId)
-		await h.dapp.rejectInteraction(plain.id, "User rejected")
+		await h.dapp.rejectInteraction(plain.id, "User rejected", "reject")
 		await expect.poll(() => [rejected, closed, plain].every((w) => w.outcome.settled)).toBe(true)
 
 		expect(rejected.outcome.err).toBe(registryRefusal)

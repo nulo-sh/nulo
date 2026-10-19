@@ -48,6 +48,7 @@ import {
 	type ExecutionPayload,
 	type OperationApprovalDelta,
 	type ShownTokenMetadata,
+	type WindowEnd,
 } from "@/wallet/services/dapp-interaction/client"
 import type { DappMetadata } from "@/wallet/services/dapp-session/client"
 
@@ -235,6 +236,7 @@ const {
 	start: startWindow,
 	dispose: disposeWindow,
 	closeWindow,
+	endAndClose,
 	onActiveProfileChanged,
 	stripStatus,
 	processingError,
@@ -256,7 +258,7 @@ const {
 		tokenService.disconnect()
 	},
 	init: () => init(),
-	reject: () => reject(),
+	reject: (end) => reject(end),
 })
 
 const init = async () => {
@@ -476,15 +478,14 @@ const showApprovalFailure = (error: unknown) => {
 	}
 }
 
-const reject = async () => {
+const reject = async (end: WindowEnd) => {
 	if (isInteractionCancelled.value || !requestId.value) return
 	// Reject-time eviction: abort in-flight estimates and drop any stashed
 	// signed requests NOW — window teardown alone isn't guaranteed to run
 	// dispose before the window dies.
 	cancelAllFeeEstimates()
 	cancelAllAuthwitPreviews()
-	rejectViaInteractionService("User rejected")
-	closeWindow(true)
+	await endAndClose(() => rejectViaInteractionService("User rejected", end))
 }
 
 const signerAccounts = computed(() => uniqueSignerAccounts(operations.value))
@@ -667,7 +668,7 @@ onUnmounted(() => {
 				grantRefusal !== undefined ||
 				isInteractionCancelled
 			"
-			@reject="reject"
+			@reject="reject('reject')"
 			@approve="approve"
 		/>
 

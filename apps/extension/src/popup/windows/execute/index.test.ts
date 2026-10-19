@@ -194,7 +194,7 @@ import Execute from "./index.vue"
 const factory = () => mount(Execute, { global: { stubs: STUBS } })
 
 type ExecVm = {
-	reject: () => Promise<void>
+	reject: (end: "reject" | "close" | "lock" | "switch") => Promise<void>
 	approve: () => Promise<void>
 	closeWindow: (interactionCompleted?: boolean) => void
 	isWrongProfile: boolean
@@ -277,12 +277,12 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		expect(executionServiceConnectMock).not.toHaveBeenCalled()
 	})
 
-	test("B8: window-local reject() = composable reject THEN closeWindow(true) — order pinned", async () => {
+	test("B8: window-local reject() detaches the unload listener, sends its end, THEN closes — order pinned", async () => {
 		w = factory()
 		await completeInit()
 		callLog.length = 0
-		await (w.vm as unknown as ExecVm).reject()
-		expect(callLog).toEqual(["composableReject:User rejected", "removeEventListener:beforeunload", "windows.remove"])
+		await (w.vm as unknown as ExecVm).reject("reject")
+		expect(callLog).toEqual(["removeEventListener:beforeunload", "composableReject:User rejected:reject", "windows.remove"])
 	})
 
 	test("B9-mirror: reject() with NO requestId is fully inert (the guard capabilities lacks)", async () => {
@@ -292,7 +292,7 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		w = factory()
 		await flushPromises()
 		expect(approval.requestId.value).toBeUndefined()
-		await (w.vm as unknown as ExecVm).reject()
+		await (w.vm as unknown as ExecVm).reject("reject")
 		expect(rejectViaInteractionServiceMock).not.toHaveBeenCalled()
 		expect(beforeunloadRemoves()).toBe(0)
 		expect(windowsRemoveMock).not.toHaveBeenCalled()
@@ -309,9 +309,10 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		expect(windowsRemoveMock).not.toHaveBeenCalled()
 		handler({ id: "p-other" })
 		await flushPromises()
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledTimes(1)
+		expect(rejectViaInteractionServiceMock).toHaveBeenLastCalledWith("User rejected", "switch")
 		handler(undefined)
 		await flushPromises()
+		expect(rejectViaInteractionServiceMock).toHaveBeenLastCalledWith("User rejected", "lock")
 		expect(rejectViaInteractionServiceMock).toHaveBeenCalledTimes(2)
 	})
 
@@ -367,8 +368,14 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		// The real window would now unload; the still-attached handler delivers
 		// the rejection (requestId was set by load() before the profile check).
 		window.dispatchEvent(new Event("beforeunload"))
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledWith("User rejected")
-		expect(callLog).toEqual(["windows.remove", "composableReject:User rejected", "removeEventListener:beforeunload", "windows.remove"])
+		await flushPromises()
+		expect(rejectViaInteractionServiceMock).toHaveBeenCalledWith("User rejected", "close")
+		expect(callLog).toEqual([
+			"windows.remove",
+			"removeEventListener:beforeunload",
+			"composableReject:User rejected:close",
+			"windows.remove",
+		])
 	})
 })
 
@@ -1205,7 +1212,7 @@ describe("execute window — a request the wallet refused", () => {
 		await vm.approve()
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 		await w!.find('[data-testid="execute-reject-btn"]').trigger("click")
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected")
+		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected", "reject")
 	}
 
 	test.each([
