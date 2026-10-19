@@ -362,3 +362,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [execute-window-3](execute-window-3/plan.md) — completed — the advice once after the calls and none on a refused request (#776, P52-01 F); an unreadable authorization flagged at rest (#777, P58-05 B); #854
 - [logs-keyboard-1](logs-keyboard-1/plan.md) — completed — the logs filter panels from the keyboard: native toggle rows with an inset ring, the popover's Tab order stitched after its trigger, a panel closed when focus leaves it (#851); known limit #866
 - [egress-flake-1](egress-flake-1/plan.md) — completed — a reply to a paused request its worker's stop cancelled (`Invalid InterceptionId`) is no interception failure (#857)
+- [connect-split-1](connect-split-1/plan.md) — completed — Allow closes the connect window and the emoji check opens its own when the dApp starts its exchange, bridged so a quick one shows no gap (#859); admission as today (known limit #883); picker rows #884
