@@ -359,7 +359,7 @@ onBeforeUnmount(() => {
 
 	&:hover {
 		svg { color: var(--red); }
-		span { color: var(--red); }
+		span { color: var(--txt-danger); }
 	}
 }
 </style>

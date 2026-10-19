@@ -56,7 +56,7 @@ const onClick = () => emit("clearError")
 <style module>
 .error_text {
 	composes: type--body from global;
-	color: var(--red);
+	color: var(--txt-danger);
 	margin-top: 4px;
 	display: block;
 }
