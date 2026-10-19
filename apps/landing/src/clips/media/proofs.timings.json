@@ -1,5 +1,5 @@
 {
-	"duration": 44.104,
+	"duration": 49.383,
 	"scenes": [
 		{
 			"id": "s1",
@@ -32,7 +32,13 @@
 			"text": "Anything a transaction does in public, the network runs in the open, for everyone to see."
 		},
 		{ "id": "s6", "start": 35.826, "end": 39.93, "text": "Later, one proof for a whole batch of blocks is checked on Ethereum." },
-		{ "id": "s7", "start": 39.93, "end": 44.104, "text": "Building a proof takes real work, so it is the slow step before sending." }
+		{ "id": "s7", "start": 39.93, "end": 44.513, "text": "Building a proof takes real work, so it is the slow step before sending." },
+		{
+			"id": "s8",
+			"start": 44.513,
+			"end": 49.383,
+			"text": "Your computer proves it, the network checks it, and your private data stays with you."
+		}
 	],
 	"words": [
 		{ "w": "When", "s": 0, "e": 0.183 },
@@ -177,6 +183,21 @@
 		{ "w": "slow", "s": 42.574, "e": 42.783 },
 		{ "w": "step", "s": 42.852, "e": 43.13 },
 		{ "w": "before", "s": 43.304, "e": 43.478 },
-		{ "w": "sending.", "s": 43.687, "e": 44.104 }
+		{ "w": "sending.", "s": 43.687, "e": 44.104 },
+		{ "w": "Your", "s": 44.513, "e": 44.652 },
+		{ "w": "computer", "s": 44.722, "e": 45.07 },
+		{ "w": "proves", "s": 45.139, "e": 45.417 },
+		{ "w": "it,", "s": 45.487, "e": 45.835 },
+		{ "w": "the", "s": 45.904, "e": 45.974 },
+		{ "w": "network", "s": 46.043, "e": 46.322 },
+		{ "w": "checks", "s": 46.391, "e": 46.6 },
+		{ "w": "it,", "s": 46.67, "e": 47.087 },
+		{ "w": "and", "s": 47.157, "e": 47.226 },
+		{ "w": "your", "s": 47.296, "e": 47.365 },
+		{ "w": "private", "s": 47.435, "e": 47.783 },
+		{ "w": "data", "s": 47.852, "e": 48.13 },
+		{ "w": "stays", "s": 48.339, "e": 48.617 },
+		{ "w": "with", "s": 48.722, "e": 48.826 },
+		{ "w": "you.", "s": 48.896, "e": 49.383 }
 	]
 }

@@ -1,7 +1,7 @@
 import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import { createField, renderFrame } from "../feed"
 import type { Clip } from "./clip"
-import { glyph, group, node } from "./draw"
+import { CORNERS, glyph, group, node } from "./draw"
 import { captionAt, captions, clamp, formatTime, sceneAt } from "./timeline"
 
 const GRAIN_COLS = 90
@@ -42,7 +42,7 @@ function grain(svg: SVGSVGElement, seed: number): (t: number) => void {
 
 function buildStage(svg: SVGSVGElement, clip: Clip): (t: number) => void {
 	const drawGrain = grain(svg, clip.seed)
-	node(svg, "path", { class: "c-corners", d: "M 14 38 V 14 H 38 M 602 14 H 626 V 38 M 626 322 V 346 H 602 M 38 346 H 14 V 322" })
+	node(svg, "path", { class: "c-corners", d: CORNERS })
 	const scenes = clip.timings.scenes.map((span) => {
 		const scene = clip.scenes[span.id]
 		if (!scene) throw new Error(`clip ${clip.id} has no scene ${span.id}`)

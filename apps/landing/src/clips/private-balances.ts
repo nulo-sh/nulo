@@ -1,6 +1,6 @@
 import { type Clip, scene } from "./clip"
 import { glyph, group, litLine, monoWidth, node, note, place, plate, record, show, stroke, text } from "./draw"
-import { balanceRow, entry } from "./kit"
+import { balanceRow, entry, recap } from "./kit"
 import timings from "./media/private-balances.timings.json"
 import { clamp, lerp, seg } from "./timeline"
 
@@ -185,9 +185,14 @@ const goingPublic = scene({ moving: ["moving", 0], balance: ["balance", 0], reco
 	}
 })
 
+const closing = recap(400, [
+	["private", "PRIVATE: ONLY YOU", ["private", 0]],
+	["public", "PUBLIC: ANYONE", ["public", 0]],
+])
+
 export const privateBalances: Clip = {
 	id: "private-balances",
 	seed: 0x70726976,
 	timings,
-	scenes: { s1: transparentChain, s2: twoBalances, s3: sealedNotes, s4: payment, s5: goingPublic },
+	scenes: { s1: transparentChain, s2: twoBalances, s3: sealedNotes, s4: payment, s5: goingPublic, s6: closing },
 }

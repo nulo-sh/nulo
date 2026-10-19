@@ -1,5 +1,6 @@
 import { type Clip, scene } from "./clip"
 import { bar, glyph, group, litLine, node, place, plate, record, show, stroke, text } from "./draw"
+import { recap } from "./kit"
 import timings from "./media/fees.timings.json"
 import { lerp, seg } from "./timeline"
 
@@ -185,9 +186,15 @@ const inControl = scene({ tells: ["tells", 0], control: ["control", 0] }, (g, at
 	}
 })
 
+const closing = recap(440, [
+	["fee", "PAID IN FEE JUICE", ["paid", 0]],
+	["public", "PUBLIC: NAMES YOU", ["how", 0]],
+	["private", "PRIVATE: A SHARED PAYER", ["record", 0]],
+])
+
 export const fees: Clip = {
 	id: "fees",
 	seed: 0x66656573,
 	timings,
-	scenes: { s1: networkFee, s2: feeJuice, s3: price, s4: whoPays, s5: sponsored, s6: inControl },
+	scenes: { s1: networkFee, s2: feeJuice, s3: price, s4: whoPays, s5: sponsored, s6: inControl, s7: closing },
 }

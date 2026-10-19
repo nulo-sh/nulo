@@ -1,5 +1,5 @@
 {
-	"duration": 52.652,
+	"duration": 59.052,
 	"scenes": [
 		{
 			"id": "s1",
@@ -28,9 +28,10 @@
 		{
 			"id": "s5",
 			"start": 44.374,
-			"end": 52.652,
+			"end": 53.07,
 			"text": "Moving money to your public balance is your choice, and the public side records the amount. Nulo labels each balance, so you always know which is which."
-		}
+		},
+		{ "id": "s6", "start": 53.07, "end": 59.052, "text": "Private: only you can see it. Public: anyone can. Nulo shows you both." }
 	],
 	"words": [
 		{ "w": "On", "s": 0, "e": 0.104 },
@@ -188,6 +189,19 @@
 		{ "w": "know", "s": 51.539, "e": 51.748 },
 		{ "w": "which", "s": 51.817, "e": 51.957 },
 		{ "w": "is", "s": 52.026, "e": 52.096 },
-		{ "w": "which.", "s": 52.165, "e": 52.652 }
+		{ "w": "which.", "s": 52.165, "e": 52.652 },
+		{ "w": "Private:", "s": 53.07, "e": 53.904 },
+		{ "w": "only", "s": 53.974, "e": 54.252 },
+		{ "w": "you", "s": 54.391, "e": 54.53 },
+		{ "w": "can", "s": 54.6, "e": 54.739 },
+		{ "w": "see", "s": 54.809, "e": 54.878 },
+		{ "w": "it.", "s": 54.948, "e": 55.4 },
+		{ "w": "Public:", "s": 55.643, "e": 56.409 },
+		{ "w": "anyone", "s": 56.513, "e": 56.757 },
+		{ "w": "can.", "s": 56.826, "e": 57.348 },
+		{ "w": "Nulo", "s": 57.591, "e": 58.009 },
+		{ "w": "shows", "s": 58.078, "e": 58.287 },
+		{ "w": "you", "s": 58.357, "e": 58.426 },
+		{ "w": "both.", "s": 58.496, "e": 59.052 }
 	]
 }

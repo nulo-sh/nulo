@@ -32,6 +32,9 @@ export function place(el: Element, x: number, y: number, scale = 1): void {
 /** Width of `chars` mono characters at `size`; layouts assume the page's mono face, whose advance is 0.6 em. */
 export const monoWidth = (chars: number, size: number): number => chars * size * MONO_ADVANCE
 
+/** The stage's corner marks; the player draws them under every scene, and the recap redraws them over its cover. */
+export const CORNERS = "M 14 38 V 14 H 38 M 602 14 H 626 V 38 M 626 322 V 346 H 602 M 38 346 H 14 V 322"
+
 export function plate(parent: Element, x: number, y: number, w: number, h: number): SVGGElement {
 	const g = group(parent)
 	place(g, x, y)

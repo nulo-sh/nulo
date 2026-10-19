@@ -1,6 +1,6 @@
 import { type Clip, scene } from "./clip"
 import { bar, glyph, group, node, note, place, plate, record, show, text } from "./draw"
-import { entry, laptop } from "./kit"
+import { entry, laptop, recap } from "./kit"
 import timings from "./media/proofs.timings.json"
 import { lerp, seg } from "./timeline"
 
@@ -165,9 +165,15 @@ const slowStep = scene({ building: ["building", 0], sending: ["sending", 0] }, (
 	}
 })
 
+const closing = recap(480, [
+	["private", "PROVED ON YOUR COMPUTER", ["proves", 0]],
+	["check", "CHECKED BY THE NETWORK", ["checks", 0]],
+	["lock", "PRIVATE DATA STAYS WITH YOU", ["private", 0]],
+])
+
 export const proofs: Clip = {
 	id: "proofs",
 	seed: 0x70726f66,
 	timings,
-	scenes: { s1: onDevice, s2: keysStay, s3: proving, s4: checked, s5: inPublic, s6: onEthereum, s7: slowStep },
+	scenes: { s1: onDevice, s2: keysStay, s3: proving, s4: checked, s5: inPublic, s6: onEthereum, s7: slowStep, s8: closing },
 }

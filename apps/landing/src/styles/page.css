@@ -708,6 +708,10 @@ section.s {
 	vector-effect: non-scaling-stroke;
 }
 
+.c-cover {
+	fill: var(--app-bg);
+}
+
 .c-plate {
 	fill: var(--app-bg);
 	stroke: var(--line);
