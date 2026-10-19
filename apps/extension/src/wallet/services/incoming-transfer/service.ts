@@ -175,9 +175,9 @@ function trustedRow(stored: IncomingTrustRecord, floor: { arrivalFloor: number |
  *   unknown → first note → pending (hidden, popup prompts)
  *   pending → all queued records stay hidden until user resolves
  *   Allow → trusted; queued records visible, emit Added for each
- *   Reject → blocked; queued records stay hidden silently
+ *   Reject → blocked; neither arm scans the contract, queued records are deleted
  *   trusted → subsequent records insert visible
- *   blocked → subsequent records insert hidden (silent)
+ *   blocked → left only by a token delete or a wipe
  *
  * Late-delete reconciliation: when `TransactionService.onTransactionAdded`
  * fires, any existing record whose txHash matches is deleted — closes the
@@ -788,19 +788,23 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		await this.ensureInitialized()
 		const trustFence = await this.captureTrustFence(profileId)
 		if (!trustFence) return false
-		const blocked = await this.withDeleterLock(async (isCurrent) => {
-			const network = await this.registeredTokenNetwork(profileId, networkId, contract)
-			if (!network) return false
-			if (!(await this._setTrustStateLocked(profileId, networkId, contract, "blocked", trustFence(isCurrent).live))) return false
-			// Bumped before the teardown's first await: a scan past its reads, or a rebuild that read the
-			// trust before this write, stands down instead of storing or scheduling for the contract.
-			this.bumpServiceEpoch()
-			await this.stopContractScansLocked(profileId, network, contract)
-			await this.deleteHiddenRecordsLocked(profileId, networkId, contract)
-			return true
-		})
-		if (blocked) await this.rebuildAfterDelete()
-		return blocked
+		try {
+			return await this.withDeleterLock(async (isCurrent) => {
+				// Bumped before the section's first await: a scan past its reads, or a rebuild that read the
+				// trust before this section, stands down instead of storing or scheduling for the contract.
+				this.bumpServiceEpoch()
+				const network = await this.registeredTokenNetwork(profileId, networkId, contract)
+				if (!network) return false
+				if (!(await this._setTrustStateLocked(profileId, networkId, contract, "blocked", trustFence(isCurrent).live))) return false
+				await this.stopContractScansLocked(profileId, network, contract)
+				await this.deleteHiddenRecordsLocked(profileId, networkId, contract)
+				return true
+			})
+		} finally {
+			// The bump orphaned every scheduler, so the set is rebuilt whether the section refused, threw or
+			// blocked.
+			await this.rebuildAfterDelete()
+		}
 	}
 
 	/** Deletes the contract's hidden records, with no balance refresh: each was counted when stored.
@@ -1340,6 +1344,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			// the watchdog lets in can finish at any await here: the registration read catches the first,
 			// and each write reads `isCurrent` after its last await, which catches the second.
 			if (!(await this.isTokenStillRegistered(profileId, network.id, token.contract))) return
+			// A Block answered after this token was stored is the later decision, and the add keeps it.
+			if (current?.state === "blocked") return
 			// A row already trusted takes no trust write, so its session is read here instead.
 			const trusted =
 				current?.state === "trusted"
@@ -2427,18 +2433,11 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const canonicalByHeight = new Map<number, string>()
 		for (const [height, hash] of seen) canonicalByHeight.set(height, hash)
 
-		await this.withDeleterLock(async () => {
-			if (this.serviceEpoch !== epochAtStart) return
-			const records = await this.repo.listByContract(profileId, networkId, contract)
-			for (const record of records) {
-				if (!orphanedByReconciliation(record, marker, canonicalByHeight)) continue
-				// Enqueue the balance refresh BEFORE deleting (delete-first would lose the refresh on MV3
-				// suspension), never driven by the recipient filter.
-				if (record.tokenId !== undefined) await this.outbox.markDirty(profileId, networkId, record.accountAddress, record.tokenId)
-				await this.repo.deleteRecord(record.id)
-				this.emit("onIncomingTransferDeleted", record)
-			}
-		})
+		const orphaned = (record: IncomingTransferRecord) => orphanedByReconciliation(record, marker, canonicalByHeight)
+		const swept = await this.withDeleterLock((isCurrent) =>
+			this.deleteOrphansLocked(profileId, networkId, contract, orphaned, () => this.serviceEpoch === epochAtStart && isCurrent()),
+		)
+		if (!swept) return false
 
 		// Clear the marker + advance the anchor to `upperBoundHash` so the next forward scan doesn't
 		// re-throw on a stale referenceBlock (which would loop reconciliation).
@@ -2463,6 +2462,29 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			},
 			epochAtStart,
 		)
+	}
+
+	/** Deletes the contract's orphaned receipts, each after its balance refresh is enqueued
+	 *  (delete-first would lose the refresh on MV3 suspension). `fenced` is read after every await: a
+	 *  Block or a wipe that a lock handoff lets in bumps the epoch, and the handoff alone ends the
+	 *  ticket. False once it refused, and the caller keeps its marker for the next tick. */
+	private async deleteOrphansLocked(
+		profileId: string,
+		networkId: string,
+		contract: string,
+		orphaned: (record: IncomingTransferRecord) => boolean,
+		fenced: () => boolean,
+	): Promise<boolean> {
+		if (!fenced()) return false
+		for (const record of await this.repo.listByContract(profileId, networkId, contract)) {
+			if (!orphaned(record)) continue
+			if (!fenced()) return false
+			if (record.tokenId !== undefined) await this.outbox.markDirty(profileId, networkId, record.accountAddress, record.tokenId)
+			if (!fenced()) return false
+			await this.repo.deleteRecord(record.id)
+			this.emit("onIncomingTransferDeleted", record)
+		}
+		return fenced()
 	}
 
 	/** False at the first `revoked` commit, and the caller keeps its page marker or reconciliation

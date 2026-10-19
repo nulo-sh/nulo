@@ -29,7 +29,7 @@ import type { RawNote } from "@/wallet/services/note/spec"
 import type { PublicEventReader } from "./public-event-indexer"
 import { IncomingTransferRepository } from "./repository"
 import { IncomingTransferService } from "./service"
-import { type IncomingNoteRecord, noteRecordId } from "./spec"
+import { type IncomingNoteRecord, type IncomingPublicEventRecord, noteRecordId, publicRecordId } from "./spec"
 
 const CONTRACT = `0x${"c3".repeat(32)}`
 const TOKEN = { id: 7, profileId: "p1", chainId: 1, contract: CONTRACT, symbol: "TKA", decimals: 18 }
@@ -310,8 +310,18 @@ describe("IncomingTransferService composition — Block stops the token's scans"
 		polling: Set<string>
 		publicPolling: Set<string>
 		accountService: { getAccounts: () => Promise<{ address: string }[]> }
+		networkService: { getNetwork: (id: string) => Promise<unknown> }
 		repo: IncomingTransferRepository
 		hydrateSchedulers: () => Promise<void>
+		finishReconciliation: (
+			p: string,
+			n: string,
+			c: string,
+			marker: { lowerBound: number; upperBound: number; upperBoundHash: string; progress: null; seen: [number, string][] },
+			seen: [number, string][],
+			reconciledThrough: null,
+			epoch: number,
+		) => Promise<boolean>
 		scanContract: (p: string, n: string, a: string, c: string, epoch: number) => Promise<boolean>
 		onTokenDeleted: (token: unknown) => Promise<void>
 		onTokenAdded: (token: unknown) => Promise<void>
@@ -360,7 +370,8 @@ describe("IncomingTransferService composition — Block stops the token's scans"
 	test("after Block neither arm reads the token, the allowed token reads on, and a delete and re-add resumes both", async () => {
 		const { api } = await fixture()
 		const { reads, notes, recorder } = recordingReads()
-		const { service } = await startService(api, notes, { tokens: [TOKEN, OTHER], accounts: [{ address: ACCOUNT }], reader: recorder })
+		const tokens = [TOKEN, OTHER]
+		const { service } = await startService(api, notes, { tokens, accounts: [{ address: ACCOUNT }], reader: recorder })
 		await vi.waitFor(() => expect(readsOf(reads, CONTRACT)).toEqual(BOTH_ARMS(CONTRACT)))
 		await vi.waitFor(() => expect(idle(service)).toBe(true))
 
@@ -370,9 +381,26 @@ describe("IncomingTransferService composition — Block stops the token's scans"
 		await vi.waitFor(() => expect(idle(service)).toBe(true))
 		expect(readsOf(reads, CONTRACT)).toEqual([])
 
+		tokens.splice(0, 1)
 		await internals(service).onTokenDeleted(TOKEN)
+		tokens.unshift(TOKEN)
 		await internals(service).onTokenAdded(TOKEN)
 		await vi.waitFor(() => expect(readsOf(reads, CONTRACT)).toEqual(BOTH_ARMS(CONTRACT)))
+	})
+
+	test("a Block whose teardown throws still rebuilds the scans, and the allowed token reads on", async () => {
+		const { api } = await fixture()
+		const { reads, notes, recorder } = recordingReads()
+		const { service } = await startService(api, notes, { tokens: [TOKEN, OTHER], accounts: [{ address: ACCOUNT }], reader: recorder })
+		await vi.waitFor(() => expect(readsOf(reads, CONTRACT)).toEqual(BOTH_ARMS(CONTRACT)))
+		await vi.waitFor(() => expect(idle(service)).toBe(true))
+		vi.spyOn(internals(service).repo, "listByContract").mockRejectedValueOnce(new Error("storage unavailable"))
+
+		reads.length = 0
+		await expect(service.setTrustReject("p1", "n1", CONTRACT)).rejects.toThrow("storage unavailable")
+		await vi.waitFor(() => expect(readsOf(reads, OTHER.contract)).toEqual(BOTH_ARMS(OTHER.contract)))
+		await vi.waitFor(() => expect(idle(service)).toBe(true))
+		expect(readsOf(reads, CONTRACT)).toEqual([])
 	})
 
 	test("a rebuild that read the trust before Block, and resumes during it, schedules no read of the token", async () => {
@@ -391,35 +419,117 @@ describe("IncomingTransferService composition — Block stops the token's scans"
 		})
 		const stale = s.hydrateSchedulers()
 		await parked.promise
-		const listByContract = s.repo.listByContract.bind(s.repo)
-		vi.spyOn(s.repo, "listByContract").mockImplementationOnce(async (...args) => {
+		const getNetwork = s.networkService.getNetwork.bind(s.networkService)
+		const firstAwait = vi.spyOn(s.networkService, "getNetwork").mockImplementationOnce(async (id) => {
 			resume.resolve()
 			await stale
-			return listByContract(...args)
+			return getNetwork(id)
 		})
 
 		reads.length = 0
 		expect(await service.setTrustReject("p1", "n1", CONTRACT)).toBe(true)
+		expect(firstAwait).toHaveBeenCalled()
+		await stale
 		await vi.waitFor(() => expect(readsOf(reads, OTHER.contract)).toEqual(BOTH_ARMS(OTHER.contract)))
 		await vi.waitFor(() => expect(idle(service)).toBe(true))
 		expect(readsOf(reads, CONTRACT)).toEqual([])
 	})
 
-	test("Block deletes the token's hidden receipts on every account and keeps its trust; another token's stay", async () => {
+	test("an add whose tip read outlasts a Block leaves the token blocked", async () => {
+		const { api, repo } = await fixture()
+		const tipRead = deferred()
+		const tip = deferred<number>()
+		let gated = false
+		const slowTip: PublicEventReader = {
+			...reader,
+			getLatestBlockNumber: async (network) => {
+				if (!gated) return reader.getLatestBlockNumber(network)
+				tipRead.resolve()
+				return tip.promise
+			},
+		}
+		const { service } = await startService(api, NO_NOTES, { reader: slowTip })
+		gated = true
+		const adding = internals(service).onTokenAdded(TOKEN)
+		await tipRead.promise
+
+		expect(await service.setTrustReject("p1", "n1", CONTRACT)).toBe(true)
+		tip.resolve(TIP)
+		await adding
+
+		expect(await repo.getTrust("p1", "n1", CONTRACT)).toMatchObject({ state: "blocked" })
+	})
+
+	test("a reconciliation the lock handed off to Block marks no balance and deletes nothing after it", async () => {
+		const { api, repo } = await fixture()
+		const orphan = {
+			kind: "public-event",
+			id: publicRecordId("p1", "n1", `0x${"0e".repeat(32)}`, 0),
+			profileId: "p1",
+			networkId: "n1",
+			accountAddress: "0xa",
+			contract: CONTRACT,
+			tokenId: TOKEN.id,
+			owner: "0xa",
+			from: "0xb",
+			amountRaw: "100",
+			txHash: `0x${"0e".repeat(32)}`,
+			blockHash: "0xold",
+			l2BlockNumber: 50,
+			txIndexInBlock: 0,
+			indexInTx: 0,
+			hidden: true,
+			discoveredAt: 0,
+		} as IncomingPublicEventRecord
+		await repo.upsertRecord(orphan)
+		const { service } = await startService(api)
+		await vi.waitFor(() => expect(idle(service)).toBe(true))
+		const s = internals(service)
+		const read = deferred()
+		const release = deferred()
+		const listByContract = s.repo.listByContract.bind(s.repo)
+		vi.spyOn(s.repo, "listByContract").mockImplementationOnce(async (...args) => {
+			const rows = await listByContract(...args)
+			read.resolve()
+			await release.promise
+			return rows
+		})
+		const deleted: string[] = []
+		service.onIncomingTransferDeleted.add((r) => deleted.push(r.id))
+		const seen: [number, string][] = [[50, "0xnew"]]
+		const marker = { lowerBound: 0, upperBound: 100, upperBoundHash: "0xup", progress: null, seen }
+
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		const finishing = s.finishReconciliation("p1", "n1", CONTRACT, marker, seen, null, s.serviceEpoch)
+		await read.promise
+		await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
+		vi.useRealTimers()
+		expect(await service.setTrustReject("p1", "n1", CONTRACT)).toBe(true)
+		release.resolve()
+
+		expect(await finishing).toBe(false)
+		expect(deleted).toEqual([orphan.id])
+		expect(await repo.listOutbox()).toEqual([])
+	})
+
+	test("Block deletes the token's hidden receipts on every account, keeps its trust, shown receipts and balance marks; another token's stay", async () => {
 		const { api, repo } = await fixture()
 		await repo.setTrust("p1", "n1", OTHER.contract, "pending")
 		const blockedReceipts = [hiddenReceipt(1, "0xa", 40), hiddenReceipt(2, "0xb", 41)]
 		const otherReceipt = { ...hiddenReceipt(3, "0xa", 42), contract: OTHER.contract, tokenId: OTHER.id }
-		for (const r of [...blockedReceipts, otherReceipt]) await repo.upsertRecord(r)
+		const shownReceipt = { ...hiddenReceipt(4, "0xa", 43), hidden: false }
+		for (const r of [...blockedReceipts, otherReceipt, shownReceipt]) await repo.upsertRecord(r)
+		await repo.setOutbox("p1", "n1", "0xa", TOKEN.id, { dirtyAt: 1 })
 		const { service } = await startService(api, NO_NOTES, { tokens: [TOKEN, OTHER] })
 		const deleted: string[] = []
 		service.onIncomingTransferDeleted.add((r) => deleted.push(r.id))
 
 		expect(await service.setTrustReject("p1", "n1", CONTRACT)).toBe(true)
 
-		expect(await repo.listByContract("p1", "n1", CONTRACT)).toEqual([])
+		expect(await repo.listByContract("p1", "n1", CONTRACT)).toEqual([shownReceipt])
 		expect(deleted.sort()).toEqual(blockedReceipts.map((r) => r.id).sort())
 		expect(await repo.getRecord(otherReceipt.id)).toEqual(otherReceipt)
+		expect(await repo.getOutbox("p1", "n1", "0xa", TOKEN.id)).toEqual({ dirtyAt: 1 })
 		expect(await repo.getTrust("p1", "n1", CONTRACT)).toMatchObject({ state: "blocked" })
 	})
 
