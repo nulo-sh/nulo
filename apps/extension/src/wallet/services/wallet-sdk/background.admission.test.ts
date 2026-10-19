@@ -227,7 +227,7 @@ describe("handleDiscovery — remembered origin (token + verify-window budget)",
 		await establish("r2")
 		captured?.onSessionTerminated("r1")
 		discover("r3")
-		await discoveryRun("r3")
+		await flush()
 		expect(approved()).toEqual(["r1", "r2"])
 		const r3Approved = approval("r3")
 		closeWindow(1)

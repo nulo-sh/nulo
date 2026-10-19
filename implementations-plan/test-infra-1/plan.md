@@ -188,7 +188,7 @@ None. No production file changes in any arc; arc 4's revision stops if the real 
 
 ## Delivery
 
-- One branch and one PR per arc against `dev`, no stack (D-orch-1). Arc 1 on `worktree-test-infra-1`. Each later arc branches from `dev` after the previous arc merges and merges `dev` before its PR. A PR opens only after its arc's gates and its Codex loop.
+- One branch and one PR per arc against `dev`, no stack (D-orch-1). Arc 1 on `worktree-test-infra-1`. Each later arc branches from `dev` after the previous arc merges and merges `dev` before its PR, except arc 4, which stacks on #743 (`worktree-onboarding-3`) at the orchestrator's call, merges that head instead of `dev`, and opens its PR once #743 merges. A PR opens only after its arc's gates and its Codex loop.
 - Titles (each 93 characters or fewer):
   - arc 1: `test: one source walker and ts tokenizer for the guards; one approval-window harness` (84);
   - arc 2: `test: await causes not turn counts; one e2e poll helper; shared storage and balance builders` (91);

@@ -3,8 +3,8 @@
 import { vi } from "vitest"
 import { handleDiscovery } from "./discovery-flow"
 
-/** The run of `requestId`'s latest discovery, as the spy returned it: it settles once that discovery
- *  is answered, and never while it is parked. It does not cover work the run starts and drops. */
+/** The latest `handleDiscovery` promise for `requestId`. It covers that discovery's own decision (an
+ *  admitted approval, a refusal, its window's path), not an admission it left queued for a slot. */
 export function discoveryRun(requestId: string): Promise<void> {
 	const { calls, results } = vi.mocked(handleDiscovery).mock
 	return results[calls.findLastIndex(([discovery]) => discovery.requestId === requestId)].value as Promise<void>

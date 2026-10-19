@@ -1,18 +1,8 @@
 /**
- * The scaffold the full-backup-import suites drive `useFullBackupImport` over: one shared spy
- * instance per backup-service client, the restore-outcome reminder, the background-liveness probe,
- * the spec and migration modules, and the backup and options builders. Test-only.
- *
- * A suite mocks each module in one line, with a literal specifier (a top-level constant is still
- * in its temporal dead zone when the hoisted factory runs):
- *
- * ```ts
- * vi.mock("@/wallet/services/profile/client", async () => (await import("./useFullBackupImport.harness")).profileClientModule)
- * ```
- *
- * A spec module's factory hands this file its `importOriginal`, so every storage root is the real
- * constant. A factory is what first loads this file, so it imports no module a suite mocks: that
- * import would wait on the factory loading it. `resetBackupImportHarness` runs in `beforeEach`.
+ * Test-only scaffold for the full-backup-import suites. Each suite keeps its own one-line `vi.mock`
+ * per module with a literal specifier: the hoisted factory runs before any top-level constant exists.
+ * A factory is what first loads this file, so it imports no module a suite mocks (that import would
+ * wait on the factory loading it).
  */
 import { setActivePinia } from "pinia"
 import { createTestingPinia } from "@pinia/testing"

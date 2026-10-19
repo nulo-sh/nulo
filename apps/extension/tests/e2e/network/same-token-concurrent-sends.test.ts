@@ -324,12 +324,16 @@ async function readAwaitingCards(page: Page): Promise<AwaitingCard[]> {
  * through, and a second card or any other stage fails at once.
  */
 async function waitForAwaitingCard(page: Page, stage: string): Promise<AwaitingCard> {
+	const appearBy = Date.now() + 30_000
+	let settleBy: number | undefined
 	let sampledAt = 0
 	const sample = async () => {
 		const cards = await readAwaitingCards(page)
 		sampledAt = Date.now()
 		const seen = JSON.stringify(cards)
 		if (cards.length > 1) throw new Error(`${cards.length} awaiting cards for one send: ${seen}`)
+		// The bound is the test's, so a sample taken past it fails even when it shows the card.
+		if (sampledAt > (settleBy ?? appearBy)) throw new Error(`no awaiting card reached ${stage} in time: ${seen}`)
 		const [card] = cards
 		if (card?.stage && !(card.stage === stage && card.cancel))
 			throw new Error(`the awaiting card is not at ${stage} with a cancel control: ${seen}`)
@@ -340,7 +344,8 @@ async function waitForAwaitingCard(page: Page, stage: string): Promise<AwaitingC
 	const first = await pollUntil(sample, (card) => card !== undefined, { label, timeoutMs: 30_000, intervalMs: 250 })
 	if (ready(first)) return first as AwaitingCard
 	// The stage-less card gets 10 s from its first sighting to reach `stage`.
-	return (await pollUntil(sample, ready, { label, timeoutMs: sampledAt + 10_000 - Date.now(), intervalMs: 250 })) as AwaitingCard
+	settleBy = sampledAt + 10_000
+	return (await pollUntil(sample, ready, { label, timeoutMs: settleBy - Date.now(), intervalMs: 250 })) as AwaitingCard
 }
 
 /**
