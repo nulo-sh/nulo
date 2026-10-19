@@ -273,6 +273,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | final | Codex, fresh session | conditional approve, then approve on resume | 1, the full Firefox network suite in Phase 4; 2, Phase 3's gate takes only whole-window pictures; 3, each browser's smoke wall-clock in the PR body | none |
 | arc 1, loop 1 | Codex, gpt-6.1-sol | approve | 1, a click mapped across different scales (the sidebar zoomed): `clickInSidebar` refuses it by name | 2, readiness markers are not testids: they are the suite's readiness convention (`fixtures/wallet-pages.ts`), not a selection |
 | arc 1, loop 1 | Opus 5.5, diff review | request changes | 1, the sidebar kind pinned and both driven (D8); 2, the lock picture retaken on a passkey profile, the password screen's button shown to be disabled, not missing; 3, folded into Codex 1; 4, `chromeActions` reports the actions' own error; 5, `openSidebar` reports a refused open and says what it waits for; 6, the context's doc, FIREFOX.md's exception wording, the manifest pin's comment | 7, the `get` counter counts calls, not successes: no retrying fallback exists, recorded as a limit of the check |
+| arc 1, loop 2 | Codex, resumed | approve | 2, `sidebarAction`'s internal `open()` returns nothing, so the rejection handler never ran: a plain try/catch now reports a throwing open | 1 needs no change: opening after `promiseInitialized` and one task follows the event loop's order, not a delay |
 
 ## Seeds
 

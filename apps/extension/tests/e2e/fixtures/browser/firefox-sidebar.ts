@@ -50,7 +50,12 @@ export async function openSidebar(browser: Browser, kind: SidebarKind): Promise<
 		};
 		const open = () => {
 			if (controller.sidebarRevampEnabled !== revamped) return done("the sidebar kind did not switch");
-			Promise.resolve(extension.apiManager.global.sidebarActionFor(extension).open(window)).then(poll, (err) => done("open failed: " + err));
+			try {
+				extension.apiManager.global.sidebarActionFor(extension).open(window);
+			} catch (err) {
+				return done("open failed: " + err);
+			}
+			poll();
 		};
 		// The pref's observer rebuilds the sidebar in a continuation queued behind the controller's
 		// initialisation, so the open waits for that and one task more, after which the rebuild is done.
