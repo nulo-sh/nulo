@@ -198,13 +198,15 @@ function stubChromeStorage() {
  * resolved values; tests that need to drive the timing precisely
  * override before mounting and resolve manually.
  */
-type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void }
+type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void }
 function deferred<T>(): Deferred<T> {
 	let resolve!: (v: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
+	let reject!: (e: unknown) => void
+	const promise = new Promise<T>((res, rej) => {
+		resolve = res
+		reject = rej
 	})
-	return { promise, resolve }
+	return { promise, resolve, reject }
 }
 
 beforeEach(() => {
@@ -2341,12 +2343,64 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 				await w.setProps({ account: accountB })
 				await flushPromises()
 				expect(pendingOf(w)).toEqual(["true", "true", "true"])
+				expect(degradedText(w)).toBeNull()
 
 				gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: HELD })
 				await flushPromises()
 				expect(pendingOf(w)).toEqual(["false", "false", "false"])
 				expect(degradedText(w)).toBeNull()
 				expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "p1" } })
+			} finally {
+				logged.mockRestore()
+			}
+		})
+
+		test("after a failed read, the next account's failed read brings its own line back", async () => {
+			const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+			try {
+				const gas = deferred<unknown>()
+				mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
+				mocks.getGasBalances.mockRejectedValueOnce(new Error("boom")).mockReturnValueOnce(gas.promise)
+				const w = mountSend()
+				await flushPromises()
+				expect(degradedText(w)).toBe("Couldn't load fee data. Retrying in the background.")
+
+				await w.setProps({ account: accountB })
+				await flushPromises()
+				expect(degradedText(w)).toBeNull()
+				gas.reject(new Error("boom again"))
+				await flushPromises()
+				expect(w.get('[data-testid="fee-method-selector"]').attributes("data-pending")).toBe("false")
+				expect(degradedText(w)).toBe("Couldn't load fee data. Retrying in the background.")
+
+				storageGate = deferred<void>()
+				await w.setProps({ account })
+				await flushPromises()
+				expect(degradedText(w)).toBeNull()
+				storageGate.reject(new Error("storage unavailable"))
+				await flushPromises()
+				expect(degradedText(w)).toBe("Couldn't load fee data. Close and reopen to try again.")
+			} finally {
+				logged.mockRestore()
+			}
+		})
+
+		test("a committed account's failed read keeps its line while the same account reads again", async () => {
+			const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+			try {
+				const gas = deferred<unknown>()
+				mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
+				mocks.getGasBalances.mockRejectedValueOnce(new Error("boom")).mockReturnValue(gas.promise)
+				const w = mountSend()
+				await flushPromises()
+				expect(degradedText(w)).toBe("Couldn't load fee data. Retrying in the background.")
+
+				await w.setProps({ account: { ...account } })
+				await flushPromises()
+				expect(mocks.getGasBalances).toHaveBeenCalledTimes(2)
+				expect(degradedText(w)).toBe("Couldn't load fee data. Retrying in the background.")
+				gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: HELD })
+				await flushPromises()
 			} finally {
 				logged.mockRestore()
 			}
