@@ -39,7 +39,7 @@ import {
 	waitForHash,
 } from "../fixtures/extension"
 import { pinnedFeeText, refusePrices, seedFeeJuiceQuote } from "../fixtures/fee-quote"
-import { pollUntil } from "../fixtures/poll"
+import { PollTimeoutError, pollUntil } from "../fixtures/poll"
 import {
 	createAndActivateProfile,
 	getAccountAddress,
@@ -327,13 +327,15 @@ async function waitForAwaitingCard(page: Page, stage: string): Promise<AwaitingC
 	const appearBy = Date.now() + 30_000
 	let settleBy: number | undefined
 	let sampledAt = 0
+	let seen = "[]"
+	const late = () => new Error(`no awaiting card reached ${stage} in time: ${seen}`)
 	const sample = async () => {
 		const cards = await readAwaitingCards(page)
 		sampledAt = Date.now()
-		const seen = JSON.stringify(cards)
+		seen = JSON.stringify(cards)
 		if (cards.length > 1) throw new Error(`${cards.length} awaiting cards for one send: ${seen}`)
 		// The bound is the test's, so a sample taken past it fails even when it shows the card.
-		if (sampledAt > (settleBy ?? appearBy)) throw new Error(`no awaiting card reached ${stage} in time: ${seen}`)
+		if (sampledAt > (settleBy ?? appearBy)) throw late()
 		const [card] = cards
 		if (card?.stage && !(card.stage === stage && card.cancel))
 			throw new Error(`the awaiting card is not at ${stage} with a cancel control: ${seen}`)
@@ -341,11 +343,16 @@ async function waitForAwaitingCard(page: Page, stage: string): Promise<AwaitingC
 	}
 	const ready = (card: AwaitingCard | undefined) => card?.stage === stage && card.cancel
 	const label = `an awaiting card at ${stage}`
-	const first = await pollUntil(sample, (card) => card !== undefined, { label, timeoutMs: 30_000, intervalMs: 250 })
+	const lateOnTimeout = (error: unknown): never => {
+		throw error instanceof PollTimeoutError ? late() : error
+	}
+	const first = await pollUntil(sample, (card) => card !== undefined, { label, timeoutMs: 30_000, intervalMs: 250 }).catch(lateOnTimeout)
 	if (ready(first)) return first as AwaitingCard
 	// The stage-less card gets 10 s from its first sighting to reach `stage`.
 	settleBy = sampledAt + 10_000
-	return (await pollUntil(sample, ready, { label, timeoutMs: settleBy - Date.now(), intervalMs: 250 })) as AwaitingCard
+	return (await pollUntil(sample, ready, { label, timeoutMs: settleBy - Date.now(), intervalMs: 250 }).catch(
+		lateOnTimeout,
+	)) as AwaitingCard
 }
 
 /**
