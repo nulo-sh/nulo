@@ -143,10 +143,10 @@ const whoPays = scene(
 
 const sponsored = scene({ sponsored: ["sponsored", 0], someone: ["someone", 0], pays: ["pays", 0] }, (g, at) => {
 	const { tag } = transaction(g, 40)
-	const sponsor = plate(g, 416, 96, 200, 112)
+	const sponsor = plate(g, 408, 96, 208, 112)
 	glyph(sponsor, "user", 20, 20, 36)
 	text(sponsor, 20, 92, "SOMEONE ELSE")
-	const hand = stroke(g, "M 516 208 V 302 H 402")
+	const hand = stroke(g, "M 512 208 V 302 H 402")
 	const paid = glyph(tag, "square-check", 96, 12, 24)
 	return (t) => {
 		show(sponsor, seg(t, at.sponsored, at.sponsored + 0.4))

@@ -51,7 +51,7 @@ const transparentChain = scene({ address: ["address", 0], balance: ["balance", 0
 const twoBalances = scene(
 	{ token: ["token", 0], priv: ["private", 0], only: ["only", 0], pub: ["public", 0], anyone: ["anyone", 0] },
 	(g, at) => {
-		const card = plate(g, 150, 30, 340, 300)
+		const card = plate(g, 144, 30, 352, 300)
 		text(card, 24, 56, "USDC", "c-head")
 		const toPrivate = stroke(card, "M 38 76 V 100")
 		const toPublic = stroke(card, "M 38 76 V 104 H 30 V 190")
@@ -161,17 +161,17 @@ const payment = scene(
 )
 
 const goingPublic = scene({ moving: ["moving", 0], balance: ["balance", 0], records: ["records", 0], labels: ["labels", 0] }, (g, at) => {
-	const card = plate(g, 24, 48, 296, 264)
+	const card = plate(g, 24, 48, 304, 264)
 	const priv = balanceRow(card, "private", "1,800.00", true)
 	place(priv.g, 20, 64)
 	const pub = balanceRow(card, "public", "650.00", true)
 	place(pub.g, 20, 178)
-	const coin = note(g, "40.00", 96)
-	const feed = record(g, 336, 24, 280, 312)
-	const line = entry(feed.g, 70, "PUBLIC", "40.00 USDC")
+	const coin = note(g, "40.00", 106)
+	const feed = record(g, 344, 24, 272, 312)
+	const line = entry(feed.g, 70, "PUBLIC", "40.00 USDC", 240)
 	return (t) => {
 		const move = seg(t, at.moving, at.balance + 0.4)
-		place(coin, 220, lerp(86, 200, move))
+		place(coin, 214, lerp(86, 200, move))
 		show(coin, seg(t, at.moving - 0.3, at.moving) * (1 - seg(t, at.balance + 0.4, at.balance + 0.8)))
 		const landed = t >= at.balance + 0.4
 		priv.amount.textContent = landed ? "1,760.00" : "1,800.00"

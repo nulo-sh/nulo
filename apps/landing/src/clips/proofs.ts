@@ -19,7 +19,7 @@ function setting(g: SVGGElement) {
 function secrets(screen: SVGGElement) {
 	const g = group(screen)
 	const key = glyph(g, "passkey", 20, 28, 56)
-	const notes = [note(g, "5.00", 116), note(g, "795.00", 116)]
+	const notes = [note(g, "5.00", 122), note(g, "795.00", 122)]
 	for (const [i, n] of notes.entries()) place(n, 100, 22 + i * 70)
 	return { g, key, notes }
 }
