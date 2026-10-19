@@ -111,6 +111,7 @@ async function expectKeyExchangeRefused(handler: BackgroundConnectionHandler, de
 	expect(handler.getSession(sessionId)).toBeUndefined()
 }
 
+/** The wrapper decides synchronously and leaves nothing to await; these turns let a forward or send gone async show. */
 const flush = async () => {
 	for (let i = 0; i < 20; i++) await Promise.resolve()
 }
@@ -198,9 +199,16 @@ describe("a session the sender's tab does not hold", () => {
 
 	test("a reply the tab can no longer receive is swallowed like any other reply", async () => {
 		const { deliver } = boot()
-		sendMessage.mockRejectedValueOnce(new Error(RECEIVER_GONE_MESSAGE))
+		// Settles when the wrapper sends the tab its disconnect reply, which then rejects.
+		const replied = new Promise<void>((resolve) => {
+			sendMessage.mockImplementationOnce(async (tab, message) => {
+				const { type, sessionId } = message as { type?: string; sessionId?: string }
+				if (tab === TAB && type === SESSION_DISCONNECTED && sessionId === "ghost") resolve()
+				throw new Error(RECEIVER_GONE_MESSAGE)
+			})
+		})
 		deliver(ping("ghost"))
-		await flush()
+		await replied
 		expect(sendMessage).toHaveBeenCalledWith(TAB, disconnect("ghost"))
 	})
 })
