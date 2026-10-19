@@ -553,6 +553,7 @@
     "pricesUnavailable": true,
     "profileFileNameSegment": true,
     "profileImportedKey": true,
+    "profileNotFirstKey": true,
     "profileTypeLabel": true,
     "profileUiKeys": true,
     "projectArgument": true,
