@@ -24,10 +24,11 @@ vi.mock("@aztec-labs/stdlib/contract", async (importOriginal) => {
 		getContractClassFromArtifact: stdlib.recompute,
 		computeContractAddressFromInstance: stdlib.computeAddress,
 		computePartialAddress: async () => ({ toString: () => "0xpartial" }),
-		// The C2 key derives the fake instance's own address, so the key binding passes.
+		// The C2 key derives the fake instance's own address and keys, so the key binding passes.
 		CompleteAddress: {
 			fromSecretKeyAndPartialAddress: async (_key: unknown, partialAddress: unknown) => ({
 				address: { equals: (other: { toString(): string }) => other.toString() === ADDRESS },
+				publicKeys: { equals: () => true },
 				partialAddress,
 			}),
 		},
