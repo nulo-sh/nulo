@@ -9,9 +9,20 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: 993b3efc
 trunk: dev
-status: approved (Codex plan 2), arc 1 in progress
+status: completed
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-19
+- **Status:** completed. One PR against `dev`, #854, carrying this close-out; merging it is the orchestrator's call.
+- **Shipped:** #854: the closing advice reads once after a send's list of calls (P52-01 F, C); no advice on a request Nulo refuses, an unreadable grant or a scope refusal held by the window, through `OperationCard`'s `refused` (E); an unreadable discovered authorization shows `ArgsNotice`'s warning and reason under its at-rest line (P58-05 B). Closes #776 and #777.
+- **Dispositions:** A1 (does C reach the one-call `aztec_createAuthWit` card?): the card ships untouched; moving its advice needs the owner's picture and pick. The details' fallback advice stays, on P58-05's record (I1).
+- **Known limits:** none.
+- **Open items:** none of this plan's. Found on the way and filed: #849 (a Firefox flake in `viewers-csp.test.ts`, unrelated to this diff).
+- **Lessons:** none promoted: `lessons.md` is at 8191 of 8192 bytes; the notes stay in [lessons/phase-1.md](lessons/phase-1.md) and [lessons/phase-2.md](lessons/phase-2.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # execute-window-3: the advice once after the calls, none on a refused request; an unreadable authorization flagged at rest
 
