@@ -78,9 +78,8 @@ const reason = computed(() => (isFailed.value ? "Couldn't set up" : "Couldn't ve
 	color: var(--red);
 }
 
-/* The landed row's balance column: an `amount-row` line, the 2px gap and a `meta` line. */
 .loading_block {
-	min-height: 37px;
+	composes: loading_block from "./token-row.module.css";
 }
 
 .retry {
