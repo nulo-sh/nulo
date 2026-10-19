@@ -70,7 +70,7 @@ One arc, one draft PR against `dev`: #870 (P64-02 B), #863 (P64-01 B), #746 (P61
 
 ## Arc 1
 
-### Phase 1: #870, the line under the amount
+### Phase 1: #870, the line under the amount ✓
 
 1. Write the tests first and run them red on base: `send-amount.test.ts` (flip `:121` and `:128`: a missing and a non-digit balance return `balanceUnknown`; `:114` stays `exceedsBalance`); `AmountCard.test.ts` (TST, 6 decimals, `balanceRawByType: "500000000"`, 600 typed: with `exceedsBalance` the line reads exactly `More than your balance`, has `role="alert"`, and the input has `aria-invalid="true"` and `aria-describedby` naming the line's id; the control, 400 typed without it, has no line, `aria-invalid="false"`, no `aria-describedby`; the USD input carries the same wiring; a clamped amount over the balance shows the hint, then the line); `send.test.ts` with `realAmountCard` (6 typed over private 5 shows the line, and private 10 removes it; Fact 2's account switch to an account with no balance row keeps the amount and shows no line, then that account's private 1 lands and the line shows).
 2. Apply D3, D2, D4 and D5.

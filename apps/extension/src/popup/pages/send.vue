@@ -826,6 +826,7 @@ onBeforeUnmount(() => {
 						:balanceRawByType="balanceRaw ?? null"
 						:liveQuote
 						:proxyTicker
+						:exceedsBalance="amountValidation.reason === 'exceedsBalance'"
 					/>
 					<Flex v-if="fiatNeedsRequote" align="center" gap="6" :class="$style.requote_notice">
 						<Icon name="warning" size="12" color="tertiary" />

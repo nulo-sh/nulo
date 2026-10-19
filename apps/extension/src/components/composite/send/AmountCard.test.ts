@@ -1014,3 +1014,55 @@ describe("composite/AmountCard — the unit switch and Max by keyboard", () => {
 		expect(focus.mock.contexts).toEqual([w.get("[data-testid='send-amount-fiat-input']").element])
 	})
 })
+
+describe("composite/AmountCard — an amount over the balance", () => {
+	const TOKEN = { symbol: "TST", decimals: 6 }
+	const QUOTE = { usd: 1, fetchedAt: Date.now() }
+	// 500 TST, as the balance service carries it: base units in a digit string.
+	const mountOver = (props: Record<string, unknown> = {}) =>
+		mountCard({
+			token: TOKEN,
+			tokenBalanceByType: 500,
+			balanceRawByType: "500000000",
+			modelValue: "600",
+			exceedsBalance: true,
+			...props,
+		})
+	const line = (w: ReturnType<typeof mountCard>) => w.find("[data-testid='send-amount-over-balance']")
+
+	test("says so under the amount, as an alert the field names", () => {
+		const w = mountOver()
+		expect(line(w).text()).toBe("More than your balance")
+		expect(line(w).attributes("role")).toBe("alert")
+		const input = w.get("[data-testid='send-amount-input']")
+		expect(input.attributes("aria-invalid")).toBe("true")
+		expect(line(w).attributes("id")).toBeTruthy()
+		expect(input.attributes("aria-describedby")).toBe(line(w).attributes("id"))
+	})
+
+	test("an amount the balance covers has no line, and the field is valid and names nothing", () => {
+		const w = mountOver({ modelValue: "400", exceedsBalance: false })
+		expect(line(w).exists()).toBe(false)
+		const input = w.get("[data-testid='send-amount-input']")
+		expect(input.attributes("aria-invalid")).toBe("false")
+		expect(input.attributes("aria-describedby")).toBeUndefined()
+	})
+
+	test("the USD field carries the same wiring", () => {
+		const w = mountOver({
+			liveQuote: QUOTE,
+			fiatMode: true,
+			fiatGuard: { frozenUsd: QUOTE.usd, frozenAt: Date.now(), converting: false },
+		})
+		const input = w.get("[data-testid='send-amount-fiat-input']")
+		expect(input.attributes("aria-invalid")).toBe("true")
+		expect(input.attributes("aria-describedby")).toBe(line(w).attributes("id"))
+	})
+
+	test("an amount cut to the token's decimals and over the balance shows the hint, then the line", async () => {
+		const w = mountOver({ modelValue: "" })
+		await w.get("[data-testid='send-amount-input']").setValue("600.1234567")
+		const hint = w.get("[data-testid='send-amount-clamp-hint']")
+		expect(hint.element.compareDocumentPosition(line(w).element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+	})
+})
