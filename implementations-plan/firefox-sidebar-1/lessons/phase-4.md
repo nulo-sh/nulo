@@ -14,6 +14,7 @@ The host is shared, and its load swung between 150 and 800 through the afternoon
 | `364ef898` | `lint`, `typecheck:all`, `check:plans` | Exit 0. |
 | `364ef898` | `test:all` at load ~800 | 106 of 13754 failed: 78 were 5 s test timeouts, the rest timing-sensitive component tests. |
 | `364ef898` | `test:all` again, load under 150 | Exit 0. |
+| `9e1fd019` (`origin/dev` merged again: the PR conflicted, so no PR workflow ran) | `lint`, `typecheck:all`, `check:plans`; `firefox-sidebar`, `passkey-toolbar-panel` and `action-popup-layout` on Firefox (9 of 9; sidebar scenarios 11.6 s and 12.8 s) | Exit 0. `test:all` failed one deadline-timing test in `account-state/service.test.ts`, which passes 3 of 3 alone; the one `test:all` rerun exits 0. |
 | `364ef898` | Full Firefox network suite, proverless (`NULO_E2E_PROVERLESS=1`, as CI's pool runs it) | Attempt 1 was refused by `agent.sh`, which requires the flag for proverless-gated files. Attempt 2 passed 50 of 129 files (166 tests, 0 failures) in 2 h before the harness stopped the background job at its time limit, leaving no process behind. Attempt 3 ran the other 79 files by name, detached from the harness: 78 passed, 1 skipped, exit 0 (59 min). All 129 files are green at `364ef898`. |
 
 ## Consults
