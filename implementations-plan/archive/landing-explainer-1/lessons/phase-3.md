@@ -39,3 +39,8 @@ The owner's note (P53-04 = B): 1.15x, "one point five", the new marks, USDC off 
 - **Fees scene 2 holds the chip longer.** The new line keeps FEE JUICE on the Aztec plate for a whole sentence, where v1's sat there about a second, so it covered the fee meter. The plates grew and the chip rides centred on the bridge.
 - **USDC.** The note was 168 wide for a 170-unit label. Widened to 184 at the call site; the measured right margin is 14.2 against the 14.0 left inset. A note that sizes itself would also have moved clip 01's coin, so it stays an ask (OA-10) with three other tight labels the browser measured.
 - **Gates:** landing tests 79/79 (the overrun test red on 168), lint, typecheck, build (media 2.18 MB), browser QA in Chrome and Firefox. Codex round 1 approved with no findings.
+
+## Retake pass 2 (2026-10-19)
+
+- **"3.50" → "3.5":** the take's figures shortened as "1.5" had ("3.5 from" 1.6 s against 2.0 s, "3.5 for" 0.96 s against 1.2 s), consistent with "three point five". Spliced into the v1 audio, not the v2 one, so the clip is still one tempo pass and one encode from the original. The seek bar's static `max` moved (52 to 51), and its pin caught it.
+- **Insets:** a browser probe measured every text element against its innermost plate, note or chip (the stage when none), at nine moments per scene. Exactly the four labels OA-10 named fell under 14; everything else already cleared it. The scene test now walks nested groups through their `place()` transforms after each scene's last frame; reverting each width, or moving the record entries' labels to x 6, turns it red.

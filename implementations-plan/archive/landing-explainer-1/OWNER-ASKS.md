@@ -1,6 +1,6 @@
 # Owner asks: landing-explainer-1
 
-**Answered by the owner (2026-10-17/18):** P42-01, P42-02, P42-03 = A (the scripts and card texts as written) and P42-04 = A (the `explainer` skill, narrated with the voice in the owner's ElevenLabs file). Arc 2 made the clips; OA-8 and OA-9 below are what is still open, with OA-10 and OA-11 from the 2026-10-19 retake.
+**Answered by the owner (2026-10-17/18):** P42-01, P42-02, P42-03 = A (the scripts and card texts as written) and P42-04 = A (the `explainer` skill, narrated with the voice in the owner's ElevenLabs file). Arc 2 made the clips; OA-8 and OA-9 below are what is still open. OA-10 and OA-11, from the 2026-10-19 retake, shipped fixed the same day.
 
 **Settled by the orchestrator (D-orch, 2026-10-17 22:0xZ), on the plan's approval:** OA-5 = A, the page ships unlinked from the home page. OA-6 = A, the owner runs the preview command by hand; nothing enables branch builds. OA-7 = A ships now, quoted in the PR body for the owner to flip. OA-1 to OA-4 stay the owner's: the three scripts and their text versions go on the owner's next decision page verbatim from this file, and the page ships the text versions until the owner picks.
 
@@ -167,7 +167,7 @@ What the retake changed, and nothing else:
 | **A. Leave them** | As they play now. |
 | **B. Give each the same inset** | The box widens or the label moves; a picture change, no characters. |
 
-**Recommendation: B.** It is the same thing you saw in the USDC note. **What ships now:** A.
+**Recommendation: B.** It is the same thing you saw in the USDC note. **Shipped: B** (orchestrator, 2026-10-19: same class as the owner's retake note). Every label in the three clips now keeps 14 units from both sides of its box, measured in the browser: the card, coin, plate and notes grew, no word changed.
 
 ## OA-11. The figures in clip 01
 
@@ -182,7 +182,7 @@ What the retake changed, and nothing else:
 | **B. Say "3.50" another way** | Your words, for example "three fifty"; scene 4 is narrated again, about 240 characters. |
 | **C. Draw the change as 1.5** | A picture change, no characters. |
 
-**Recommendation:** listen first; B if the voice says "three point five zero". **What ships now:** A.
+**Recommendation:** listen first; B if the voice says "three point five zero". **Shipped: B** (orchestrator, 2026-10-19: same class as the owner's retake note), the way "1.50" was done: both "3.50"s written "3.5", so the voice says "three point five"; scene 4 narrated again, 237 characters. The drawn notes still read 3.50 and 1.50 (C not taken).
 
 ## OA-9. Chapters under each clip
 
