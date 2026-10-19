@@ -140,8 +140,8 @@ function boot(
 	return { discover, prompted, establish, closeWindow, windowsCreated: () => created, rows }
 }
 
-/** Turns before a "not yet" or "never" read: a park point no fake observes, or a decision whose run
- *  settles with it, so an effect a regression defers past it lands inside them. */
+/** Turns before a "not yet", "never" or exact-list read: a park point no fake observes, or a decision
+ *  whose run settles with it, so an effect a regression defers past it lands inside them. */
 const flush = async () => {
 	for (let i = 0; i < 20; i++) await Promise.resolve()
 }
@@ -214,6 +214,7 @@ describe("handleDiscovery — remembered origin (token + verify-window budget)",
 		discover("r2")
 		discover("r3")
 		await Promise.all([discoveryRun("r2"), discoveryRun("r3")])
+		await flush()
 		// r1's approve was called and returned false, releasing its slot. Both windows are free, so
 		// r2 AND r3 each open one; a leaked r1 slot would leave only one free and queue r3.
 		expect(approved()).toEqual(["r1", "r2", "r3"])
@@ -233,6 +234,7 @@ describe("handleDiscovery — remembered origin (token + verify-window budget)",
 		const r3Approved = approval("r3")
 		closeWindow(1)
 		await r3Approved
+		await flush()
 		expect(approved()).toEqual(["r1", "r2", "r3"])
 	})
 })
@@ -277,6 +279,7 @@ describe("handleDiscovery — fresh connection and dedupe waiters", () => {
 		await establish("f3", chain(3))
 		closeWindow(2)
 		await discoveryRun("f3dup")
+		await flush()
 		expect(approved()).toEqual(["f1", "f2", "f3", "f3dup"])
 	})
 
@@ -288,6 +291,7 @@ describe("handleDiscovery — fresh connection and dedupe waiters", () => {
 		await prompted("f1")
 		popup.resolve({ approved: true })
 		await discoveryRun("f1")
+		await flush()
 		// The popup approved and the session was written, but approveDiscovery returned false — the
 		// reserved slot must come back, not linger until the worker dies.
 		expect(windowsCreated()).toBe(0)
@@ -295,6 +299,7 @@ describe("handleDiscovery — fresh connection and dedupe waiters", () => {
 		discover("f2", chain(5))
 		discover("f3", chain(6))
 		await Promise.all([discoveryRun("f2"), discoveryRun("f3")])
+		await flush()
 		// f1's approve was called and returned false, releasing its slot. Both verify-window slots
 		// are free, so f2 AND f3 each acquire one; a leaked f1 slot would leave only one free and
 		// queue f3 behind the cap.
@@ -316,6 +321,7 @@ describe("handleDiscovery — fresh connection and dedupe waiters", () => {
 		discover("f2", chain(5))
 		discover("f3", chain(6))
 		await Promise.all([discoveryRun("f2"), discoveryRun("f3")])
+		await flush()
 		expect(approved()).toEqual(["f2", "f3"])
 	})
 
@@ -359,6 +365,7 @@ describe("discovery with a chainInfo that does not decode", () => {
 
 		discover("closed-1")
 		await discoveryRun("closed-1")
+		await flush()
 
 		expect(rejected()).toEqual(["closed-1"])
 		const discoveryLines = log.mock.calls.filter(([, , text]) => String(text).startsWith("Discovery rejected"))
@@ -396,6 +403,7 @@ describe("discovery without a current Terms acceptance", () => {
 
 		discover("again-1")
 		await discoveryRun("again-1")
+		await flush()
 
 		expect(approved()).toEqual(["again-1"])
 	})

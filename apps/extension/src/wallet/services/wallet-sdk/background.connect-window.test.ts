@@ -346,9 +346,9 @@ function boot(
 /** The hash of `requestId`'s live session. */
 const hashOf = (requestId: string) => sessions.get(requestId)?.verificationHash ?? ""
 
-/** Turns before a "not yet" or "never" read that no awaited cause covers: a park point, a detached
- *  branch, or a decision whose run settles with it, so an effect a regression defers past it lands
- *  inside them. */
+/** Turns before a "not yet", "never" or exact-list read that no awaited cause covers: a park point, a
+ *  detached branch, or a decision whose run settles with it, so an effect a regression defers past it
+ *  lands inside them. */
 const flush = async () => {
 	for (let i = 0; i < 50; i++) await Promise.resolve()
 }
@@ -513,6 +513,7 @@ describe("the connect window after Allow", () => {
 		grants.resolve(undefined)
 		await discoveryRun("f1")
 		await discoveryRun("twin")
+		await flush()
 		expect(approved()).toEqual(["f1", "twin"])
 		expect(admit.mock.calls.map(([request]) => request.consumesToken)).toEqual([false, false])
 	})
@@ -529,6 +530,7 @@ describe("the connect window after Allow", () => {
 		})
 		h.discover("back")
 		await discoveryRun("back")
+		await flush()
 
 		expect(approved()).toEqual(["back"])
 		expect(admit.mock.calls.map(([request]) => request.consumesToken)).toEqual([true])
@@ -644,6 +646,7 @@ describe("an Allow while the origin's two verification slots are held", () => {
 		await h.windows.gone(43)
 		h.windows.closeByUser(41)
 		await discoveryRun("f3")
+		await flush()
 
 		expect(rejected()).toEqual(["f3"])
 		expect(approved()).toEqual(["f1", "f2"])
@@ -654,10 +657,12 @@ describe("an Allow while the origin's two verification slots are held", () => {
 		const h = await thirdAllowQueued({ tabId: 9 })
 		h.closeTab(9)
 		await h.windows.gone(43)
+		await flush()
 		expect(h.windows.removed).toEqual([43])
 
 		h.windows.closeByUser(41)
 		await discoveryRun("f3")
+		await flush()
 		expect(rejected()).toEqual(["f3"])
 		expect(approved()).toEqual(["f1", "f2"])
 	})
@@ -912,8 +917,9 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		await h.windows.gone(checkWindow)
 		await reconnect(h, requestId)
 	}
-	/** Turns for a "not yet" or "never" read that no awaited cause covers: calls parked at a hold, a
-	 *  lane or the FIFO, or a refusal decided at once that a regression could still deliver later. */
+	/** Turns before a "not yet", "never" or exact-list read that no awaited cause covers: calls parked at
+	 *  a hold, a lane or the FIFO, or a call settled at its decision, past which a regression could still
+	 *  deliver an effect. */
 	const settle = async () => {
 		for (let i = 0; i < 300; i++) await Promise.resolve()
 	}
@@ -1199,6 +1205,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			expect(dispatched()).toEqual([])
 			h.confirm(hashOf("r1"))
 			await a
+			await settle()
 			expect(dispatched()).toEqual(["r1:getChainInfo"])
 			expect(terminated()).toEqual(["r1"])
 		},
@@ -1250,6 +1257,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		const own = h.send("r1", "getAccounts", "own")
 		h.confirm(hashOf("r1"))
 		await own
+		await settle()
 		expect(dispatched()).toEqual(["r1:getChainInfo", "r1:getAccounts"])
 	})
 
@@ -1277,6 +1285,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		if (rekeyed) await rekey(h, "r1", FIRST_CHECK_WINDOW)
 		read.resolve()
 		await s
+		await settle()
 		expect(dispatched()).toEqual(rekeyed ? [] : ["r1:sendTx"])
 		expect(responses.map((r) => r.response.messageId)).toEqual(rekeyed ? [] : ["s"])
 		expect(row(h)?.kind).toBe(rekeyed ? "wallet_refused" : undefined)
@@ -1407,6 +1416,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 			h.send("r1", "getAccounts", "over")
 			await responded("over")
+			await settle()
 			expect(refusedIds()).toEqual(["over"])
 		})
 
@@ -1424,6 +1434,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			const posted = [post(h, "r1", "head"), ...queued.map((c) => post(h, "r1", c)), post(h, "r1", "over")]
 			head.resolve()
 			await Promise.all(posted)
+			await settle()
 			expect(decrypted).toEqual(["head", ...queued])
 
 			await post(h, "r1", "after")
@@ -1471,6 +1482,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			await Promise.all(posted)
 			// The refusals ride the lane in decrypt order, so the last one out is the last decrypted call's.
 			await responded(`q${MAX_PENDING_PER_SESSION - 1}`)
+			await settle()
 			expect(decrypted).toEqual(["d0", ...behind])
 			expect(refusedIds()).toEqual(["d0", ...behind])
 		})
@@ -1484,6 +1496,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			nextResponse = reply.promise
 			h.send("r1", "getChainInfo", "over")
 			await responded("over")
+			await settle()
 			expect(refusedIds()).toEqual(["over"])
 			const decrypted: unknown[] = []
 			decryptHook = async (_id, encrypted) => {
@@ -1496,6 +1509,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 			reply.reject(new Error("tab gone"))
 			await Promise.all(posted)
+			await settle()
 			expect(decrypted).toEqual(queued)
 		})
 

@@ -101,8 +101,8 @@ function boot(opts: Parameters<typeof fakeSdkServices>[0] = {}) {
 	return { discover, prompted, rows: fake.rows, onActiveProfileChanged: fake.onActiveProfileChanged }
 }
 
-/** Turns before a "not yet" or "never" read: a park point, or a decision whose run settles with it,
- *  so an effect a regression defers past it lands inside them. */
+/** Turns before a "not yet", "never" or exact-list read: a park point, or a decision whose run settles
+ *  with it, so an effect a regression defers past it lands inside them. */
 const flush = async () => {
 	for (let i = 0; i < 30; i++) await Promise.resolve()
 }
@@ -276,6 +276,7 @@ describe("discovery for a chain the profile has no network for", () => {
 		expect(rows.has(`${ORIGIN}|0`)).toBe(true)
 		discover("back2", 0)
 		await discoveryRun("back2")
+		await flush()
 
 		expect(approved()).toEqual(["back2"])
 		expect(admit.mock.calls.map(([request]) => request.consumesToken)).toEqual([true])

@@ -89,7 +89,8 @@ function microtaskLadder(): () => number {
 	return () => n
 }
 
-/** Turns for the duplicate to park on its twin's popup, a wait no fake observes. */
+/** Turns where no awaited cause covers an exact read: the duplicate parking on its twin's popup, and
+ *  both runs settling at their decisions. */
 const flush = async () => {
 	for (let i = 0; i < 40; i++) await Promise.resolve()
 }
@@ -166,6 +167,7 @@ async function freshWithDuplicate(windowId?: number) {
 	effects.length = 0
 	env.allow()
 	await Promise.all([discoveryRun("fresh"), discoveryRun("dup")])
+	await flush()
 	return env
 }
 

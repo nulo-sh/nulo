@@ -64,7 +64,8 @@ function runningReset(): { gate: ResetRunGate; end: () => void } {
 	return { gate: gate as unknown as ResetRunGate, end: () => ended.resolve() }
 }
 
-/** Turns for a read at the reset wait, where nothing settles before the run ends to cover a "not yet". */
+/** Turns before a "not yet" or exact-list read: the reset wait settles nothing before the run ends, and
+ *  a discovery's run settles with its decision. */
 const flush = async () => {
 	for (let i = 0; i < 30; i++) await Promise.resolve()
 }
@@ -158,6 +159,7 @@ describe("a running reset holds discoveries", () => {
 		expect(handlerCalls).toEqual([])
 		run.end()
 		await discoveryRun("d1")
+		await flush()
 		expect(handlerCalls).toEqual(["approve:d1"])
 	})
 
@@ -168,6 +170,7 @@ describe("a running reset holds discoveries", () => {
 		expect(handlerCalls).toEqual([])
 		await vi.advanceTimersByTimeAsync(1)
 		await discoveryRun("d1")
+		await flush()
 		// The SDK gives a discovery 60 s and the wallet answers it within 55 s, so one held for the
 		// whole cap is already past its deadline.
 		expect(RESET_INGRESS_WAIT_MS).toBeGreaterThan(DISCOVERY_STALE_MS)

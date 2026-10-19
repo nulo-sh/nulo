@@ -82,7 +82,7 @@ function boot(activeProfile?: () => Promise<{ id: string } | undefined>) {
 	return { discover, reads, rows: fake.rows, onActiveProfileChanged: fake.onActiveProfileChanged }
 }
 
-/** Turns after a refusal decided at once: an effect a regression defers past it lands inside them. */
+/** Turns after a decision settles: an effect a regression defers past it lands inside them. */
 const flush = async () => {
 	for (let i = 0; i < 30; i++) await Promise.resolve()
 }
@@ -113,6 +113,7 @@ describe("discovery admits secure origins only", () => {
 		discover("d1", PLAIN_HTTP_ORIGIN)
 		expect(rejected()).toEqual(["d1"])
 		await discoveryRun("d1")
+		await flush()
 
 		for (const read of Object.values(reads)) expect(read).not.toHaveBeenCalled()
 		expect(approved()).toEqual([])
