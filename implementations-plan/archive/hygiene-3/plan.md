@@ -11,9 +11,21 @@ base: dev @ 7eada4c6
 standard: implementations-plan/README.md § Post-implementation standard, read at 7eada4c6
 ---
 
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** closed by the merge into `dev` of arc 2's PR, which closes #797 and #517; arc 1 (#817) closed #735.
+- **Shipped:** one pair of profile-flow notice builders and Developer's rows on the shared settings plumbing and title (#735, arc 1); SettingsSearch's keys sent through `trigger` under a pinned clock, so the held-Escape case reads the root's work every run and a raw-dispatch helper reds every run (#797); the recovery-phrase Close on the design `Button`, its dotted ring, filled press and eased fade kept as three overrides, pixel-identical to the base on Chrome and Firefox in both themes (#517). OA-1's pictures: `screenshots/arc2/`.
+- **Owner asks:** OA-1 (#831) open: A ships; B deletes one CSS rule.
+- **Known limits:** none.
+- **Open items:** #831 (OA-1, `owner-decision`).
+- **Dropped:** none. Other plans: structure-2's arc 3 keeps #730 only (#735's notices and Developer shipped in #817); ui-dedupe-1's A4 (#517) is delivered here, so that arc has no work left.
+- **Lessons:** the Vue-tests line in `lessons.md` corrected in place, with no growth (the file is at its budget): a raw event in its listener's mount millisecond runs only the first Vue listener on its path, fake timers being one way to get there (F5, D4). `tests/helpers/press-key.ts`'s `pressOn` dispatches raw too; no flake traced to it (O6).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+
 # hygiene-3: the rest of #735, the countdown Close on Button, the held-Escape flake
 
-Three code-only issues in two arcs, each one PR against `dev`, not stacked (D-orch-1). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md). Gate log: `STATUS.md`.
+Three code-only issues in two arcs, each one PR against `dev`, not stacked (D-orch-1). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md).
 
 | Arc | Issues | Branch | PR line |
 |---|---|---|---|
@@ -75,10 +87,10 @@ Files: `popup/pages/settings/developer/index{.vue,.test.ts}`. Tests: 1 case, a w
 
 ## Arc 2 (#797, #517), after arc 1 merges
 
-### Phase 3: the held-Escape flake (#797)
+### Phase 3: the held-Escape flake (#797) ✓
 Files: `popup/components/modules/settings/SettingsSearch.test.ts`. Proof: the frozen-clock describe on the base helper is red; on the new helper, 30 runs of the file are green. Name both in the PR body with the measurement above.
 
-### Phase 4: the countdown Close on Button (#517)
+### Phase 4: the countdown Close on Button (#517) ✓
 Files: `components/composite/SecretCountdownClose{.vue,.test.ts}`. Tests: the 11 cases keep their titles and bodies and run through the real `Button`, with nothing registered for it in the test; 1 case proves the override class and Button's `cta_outline` land on the root `<button>`.
 
 ### Arc 2 validation gate
@@ -107,6 +119,7 @@ The lane brief's no-ask record is "UI impact: none". Settings › Developer, the
 | D4 | #797: `trigger` plus a clock pinned before mount, nonzero, over the `keys` cases | a fake clock per key; a manual `_vts` stamp (Vue's private field in the test); a `@keydown.capture` in the component (runs before Input's listener, breaks the `defaultPrevented` check); a wait for the clock | both agree |
 | D5 | #517 on `Button`'s default slot, imported explicitly, three overrides under one doubled class | an exported CTA class (a package export and a Button restyle for one caller); dropping the drifts (OA-1) | both agree |
 | D6 | Arc 1 deviation: the import builder is `passkeyImportFailedNotice`, not `importFailedNotice`: its copy names an authenticator and only the passkey import path calls it | a doc comment saying so | Opus arc 1 review |
+| D7 | Arc 2 deviations in the pixel proof: a seventh state, pressed by the mouse and held off the button, since Firefox's BiDi Space sets no `:active`; the clock pinned by `page.evaluate` on the open popup 60 s ahead (the reveal is a hash navigation, so an init script never runs, and listeners attached earlier must still pass Vue's guard); every capture at 400x600 | an init script plus a reload; a Chrome-only proof of the held press | driver, recorded in lessons/phase-3.md |
 
 ## Audit verdicts
 
@@ -126,6 +139,8 @@ The lane brief's no-ask record is "UI impact: none". Settings › Developer, the
 **Round 3** (Codex, resumed, verification): `approve`, no remaining findings.
 
 **Arc 1 post-implementation** (diff `c8aa0374..hygiene-3-a1`). Codex (gpt-6.1-sol, high, session `01a15107`) round 1: `findings: 1`, Low: both builders' doc comments named their callers → removed. Opus 5.5 diff review beside it: `changes requested`, no behaviour difference; one Low, the Developer case's second half could not fail (`updateSetting`'s own unchanged-value check absorbs a page regression) → removed; two nits → the passkey name (D6) and a dependent row's write named in `useSettingUpdate`'s TSDoc. Codex round 2 (resumed): `clean`.
+
+**Arc 2 post-implementation** (diff `93e6eebc..hygiene-3-a2`). Codex (gpt-6.1-sol, high, session `01a15161`) round 1: `clean`. Opus 5.5 diff review beside it: `approve`, three nits applied in `060e379b` (the composite's doc block back above its import; `key()`'s doc names the field's or the row link's listener as the first; the clock comment says the pin bites a raw dispatch, not `trigger`), one declined (arc 1's `STATUS.md` stamps, a file the close-out deletes). Codex round 2 (resumed, verification of `060e379b`): `clean`. Round 1's prompt paraphrased the standard's two review rules, so round 3 (resumed) re-read the diff with them verbatim and the adversarial ask: `findings: 1`, a nit, the composite's pre-existing one-line summary narrates its template; declined, as the TSDoc summary line CLAUDE.md asks for and outside this diff's change. Converged.
 
 ## Delivery
 

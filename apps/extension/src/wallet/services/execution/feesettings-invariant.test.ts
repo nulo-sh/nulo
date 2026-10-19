@@ -37,6 +37,7 @@ function makeExecutor(): DappSendExecutor {
 			},
 			claimOrCreateJournal: unreachable as never,
 			beginJournal: unreachable as never,
+			recordBuiltCall: unreachable as never,
 			markJournal: unreachable as never,
 			commitJournal: unreachable as never,
 			parkSlot: unreachable as never,
