@@ -116,8 +116,9 @@ function downloadFindings(tree: Tree, where: string, job: Job, steps: Step[], in
 	const check = steps[index - 1]
 	if (check?.env?.ARTIFACT_ID !== download.with?.["artifact-ids"] || check?.run?.trim() !== CHECK || check.if !== download.if)
 		findings.push(`${where} → ${path}: no id check of its own right before it`)
-	// A status function drops the implicit `success()`, so the download would run past a failed check.
-	if (/\b(always|failure|cancelled)\s*\(/.test(String(download.if ?? "")))
+	// Any status function, `success()` in `success() || true` too, replaces the implicit `success()`,
+	// so the download would run past a failed check; GitHub matches their names in any case.
+	if (/\b(success|always|failure|cancelled)\s*\(/i.test(String(download.if ?? "")))
 		findings.push(`${where} → ${path}: its download runs whether its check passed or not`)
 	// A shell or `continue-on-error` of its own would let the step pass whatever the id.
 	const extra = [...Object.keys(check ?? {}), ...Object.keys(download)].filter((key) => !STEP_KEYS.includes(key))
@@ -303,14 +304,17 @@ describe("artifact handoffs", () => {
 				})
 			},
 		],
-		[
-			"a check and download that run whether the check passed or not",
-			(t: Tree) => {
-				const steps = stepsOf(t, "_extension-smoke-e2e.yml#smoke")
-				const index = steps.indexOf(downloadInto(t, "_extension-smoke-e2e.yml#smoke", "_e2e-extension"))
-				for (const step of steps.slice(index - 1, index + 1)) step.if = `always() && ${step.if}`
-			},
-		],
+		...["always() && ", "ALWAYS() && ", "(success() || true) && "].map(
+			(prefix) =>
+				[
+					`a check and download under \`${prefix}…\`, which run whether the check passed or not`,
+					(t: Tree) => {
+						const steps = stepsOf(t, "_extension-smoke-e2e.yml#smoke")
+						const index = steps.indexOf(downloadInto(t, "_extension-smoke-e2e.yml#smoke", "_e2e-extension"))
+						for (const step of steps.slice(index - 1, index + 1)) step.if = `${prefix}${step.if}`
+					},
+				] as const,
+		),
 		[
 			"a publisher that continues on error",
 			(t: Tree) => Object.assign(t["nightly.yml"].jobs["publish-nightly"], { "continue-on-error": true }),
