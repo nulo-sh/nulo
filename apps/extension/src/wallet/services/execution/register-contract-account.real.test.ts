@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
  * `aztec_registerContract`'s secret key against REAL key derivation: an account instance with its own
- * key registers both, and with any other account's key nothing. Node environment for the same reason
+ * key registers both, and with any other account's key, or under other public keys, nothing. Node environment for the same reason
  * as `authwit-discoverer.real.test.ts` (foundation's poseidon fails under jsdom).
  */
 
@@ -57,14 +57,14 @@ function makeService() {
 }
 
 describe("aztec_registerContract binds its secret key to the instance", () => {
-	test("the instance's own key registers the contract, then its account under the instance's partial address", async () => {
+	test("the instance's own key registers its account under the instance's partial address, then the contract", async () => {
 		const own = await accountOf(2n)
 		const { register, writes } = makeService()
 
 		await register(own.instance, own.secretKey)
 
-		expect(writes.map((w) => w.method)).toEqual(["registerContract", "registerAccount"])
-		const [, secretKey, partialAddress] = writes[1].args
+		expect(writes.map((w) => w.method)).toEqual(["registerAccount", "registerContract"])
+		const [, secretKey, partialAddress] = writes[0].args
 		expect(secretKey).toBe(own.secretKey)
 		expect(String(partialAddress)).toBe(own.partialAddress)
 	})
@@ -75,6 +75,17 @@ describe("aztec_registerContract binds its secret key to the instance", () => {
 		const { register, writes } = makeService()
 
 		await expect(register(own.instance, other.secretKey)).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+		expect(writes).toEqual([])
+	})
+
+	test("the instance's own address under another account's public keys is refused and nothing is registered", async () => {
+		const own = await accountOf(2n)
+		const other = await accountOf(3n)
+		const { register, writes } = makeService()
+
+		await expect(register({ ...own.instance, publicKeys: other.instance.publicKeys }, own.secretKey)).rejects.toBeInstanceOf(
+			InvalidWalletArgumentsError,
+		)
 		expect(writes).toEqual([])
 	})
 })
