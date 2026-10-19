@@ -1489,28 +1489,51 @@ describe("NetworkService — a default network a later build adds", () => {
 		expect(await extraRows(h)).toEqual([])
 	})
 
-	test("two opens at once add one row", async () => {
+	test("two opens at once add one row of each default, on an existing profile and on a new one", async () => {
 		const h = setupServiceWithStorage({})
 		await seededByEarlierBuild(h)
-
 		await Promise.all([h.service.getOrInitNetworks(), h.service.getOrInitNetworks()])
-
 		expect(await extraRows(h)).toHaveLength(1)
+
+		const fresh = setupServiceWithStorage({})
+		await Promise.all([fresh.service.getOrInitNetworks(), fresh.service.getOrInitNetworks()])
+		expect((await fresh.service.getNetworksRaw("p1")).map((n) => n.kind).sort()).toEqual(["local", "mainnet", "testnet"])
 	})
 
-	test("a deletion landing while the offer is recorded rejects the open and leaves no record", async () => {
+	test("a deletion landing while the offer is recorded rejects the open and restores the record it replaced", async () => {
 		const h = setupServiceWithStorage({})
 		await seededByEarlierBuild(h)
-		const writes = recordWrites(h.local as unknown as BrowserApi["storage"]["local"], OFFERS_KEY, () => {
-			h.deletionState.beginDeletion("p1")
-			h.deletionState.release("p1")
-		})
+		const overtaken = () =>
+			recordWrites(h.local as unknown as BrowserApi["storage"]["local"], OFFERS_KEY, () => {
+				h.deletionState.beginDeletion("p1")
+				h.deletionState.release("p1")
+			})
 
+		const first = overtaken()
 		await expect(h.service.getOrInitNetworks()).rejects.toThrow(/^profile p1 deleted$/)
-		writes.restore()
-
-		expect(writes.log).toEqual([`set:${OFFERS_KEY}`, `remove:${OFFERS_KEY}`])
+		first.restore()
+		expect(first.log).toEqual([`set:${OFFERS_KEY}`, `remove:${OFFERS_KEY}`])
 		expect(h.local.store.has(OFFERS_KEY)).toBe(false)
+
+		const prior = JSON.stringify({ offered: ["local", "testnet"] })
+		h.local.store.set(OFFERS_KEY, prior)
+		const second = overtaken()
+		await expect(h.service.getOrInitNetworks()).rejects.toThrow(/^profile p1 deleted$/)
+		second.restore()
+		expect(h.local.store.get(OFFERS_KEY)).toBe(prior)
+	})
+
+	test("a restore into a profile with rows adds the new default and keeps its active network", async () => {
+		const h = setupServiceWithStorage({})
+		await seededByEarlierBuild(h)
+		const activeBefore = h.local.store.get("nulo:core:active-network@p1")
+		const internals = h.service as unknown as { profileService: { getProfiles: () => Promise<unknown[]> } }
+		internals.profileService.getProfiles = async () => [{ id: "p1", name: "p1", type: "password" }]
+
+		const rows = await h.service.seedDefaultsForProfile("p1")
+
+		expect(rows.filter((n) => n.kind === "mainnet")).toHaveLength(1)
+		expect(h.local.store.get("nulo:core:active-network@p1")).toBe(activeBefore)
 	})
 
 	test("a default whose chain a reset names waits, unrecorded, and is added once the reset is gone", async () => {

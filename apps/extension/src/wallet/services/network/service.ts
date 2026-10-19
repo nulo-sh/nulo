@@ -167,7 +167,6 @@ export type ChainResetHooks = {
 
 const notResettable = (why: string) => new Error(`${ERR_NOT_RESETTABLE}: ${why}`)
 
-/** One offer pass: the profile's rows after it, the rows it added, and the primary seed's row among them. */
 type DefaultsOffer = { rows: Network[]; added: Network[]; primaryId: string | undefined }
 
 function trimmedLabel(label: string | undefined): string | undefined {
@@ -321,7 +320,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		return { rows: [...rows, ...added], added, primaryId }
 	}
 
-	/** Writes the offered kinds when they differ from the stored ones, compensated like a row. */
+	/** A write a profile deletion overtook is undone to the record it replaced, never to none: no
+	 *  record reads as the earlier builds' seeds, which would re-offer a default the person deleted. */
 	private async recordOffersLocked(
 		profileId: string,
 		record: RawRowState<SeedOffers>,
@@ -332,7 +332,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		if (record.kind === "valid" && [...new Set(record.value.offered)].sort().join() === offered.join()) return
 		await writeSeedOffers(this.browserApi.storage.local, profileId, offered)
 		if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
-			await this.browserApi.storage.local.remove(seedOffersKey(profileId))
+			if (record.kind === "valid") await writeSeedOffers(this.browserApi.storage.local, profileId, record.value.offered)
+			else await this.browserApi.storage.local.remove(seedOffersKey(profileId))
 			throw profileDeletedError(fence.profileId)
 		}
 	}
@@ -345,7 +346,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	 * seeding above cannot serve it. Existence is checked through the profile list — a
 	 * deletion epoch alone would also admit an unknown or already-deleted id — and the fence
 	 * is re-asserted under the lock before every write. Only the target's own active pointer
-	 * is written: `this.nodes` is keyed by `chainId` alone and belongs to the active profile.
+	 * is written, and only when the target had no rows: `this.nodes` is keyed by `chainId` alone
+	 * and belongs to the active profile. A target with rows gets only the defaults it was never offered.
 	 */
 	public async seedDefaultsForProfile(profileId: string): Promise<Network[]> {
 		validateParams(NetworkMethodSchemas.seedDefaultsForProfile.params, [profileId], "seedDefaultsForProfile")

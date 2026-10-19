@@ -23,4 +23,15 @@ Script: the arc's two test files run against the base `service.ts` (keeping the 
 - **M10** quarantine not checked: the reset-names-the-chain test.
 - **M11** purge keeps the record: the purge test.
 - **M12** a failed storage read swallowed: the corrupt/failed-read test.
-- **M13** rows read outside the lock: no test fails, and none should: the record is read under the lock, so a second open still sees the first open's offer and adds no twin. The concurrency test's real mutation is dropping the lock around the open, which reds "two opens at once add one row".
+- **M13** no lock around the open: the concurrency test.
+- **M14** compensation erases a valid record: the deletion-during-record test.
+- **M15** a restore writes the active pointer of a profile with rows: the restore-into-existing test.
+- **M16** rows read outside the lock: the concurrency test's new-profile half. (A first proof claimed no test should fail here; wrong: on a new profile both opens see no rows and each seeds every default.)
+
+## Review round 1, 2026-10-19
+
+- **Codex** (`gpt-6.1-sol`, high, session `01a155e9`): `findings`, one low: two comments restating code. Fixed: the type's comment removed; `recordOffersLocked`'s now states only the compensation invariant.
+- **Opus** (diff review): `findings`, three low, all held on trace and fixed:
+  1. A deletion overtaking the record write removed a record that had been valid; if the tombstone write then fails the profile lives on with no record, read as the earlier builds' seeds, and a default the person deleted comes back. Compensation now writes the replaced record back; the deletion test covers both priors (M14).
+  2. `seedDefaultsForProfile` keeping the pointer of a target with rows had no test (M15); its doc now says what a target with rows gets.
+  3. The M13 proof line above was wrong for a new profile; corrected, with a new-profile half in the concurrency test (M16).

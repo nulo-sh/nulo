@@ -7,3 +7,4 @@
 - 2026-10-19 final Codex pass r2: approve. Plan committed; A1 next (auto-continue).
 - 2026-10-19 A1 started on `mainnet-arrival-1-a1` off origin/dev with the plan commit.
 - 2026-10-19 A1 phase 1: code and tests in; `vitest run src/wallet/services/network src/wallet/services/stale-network` pass; proofs recorded (lessons/phase-1.md); `lint`, `typecheck:all` exit 0; `test`, `test:all` running.
+- 2026-10-19 A1 `test` and `test:all` exit 0. Review r1: Codex 1 low, Opus 3 low, all fixed (D14); network tests pass; resuming Codex.

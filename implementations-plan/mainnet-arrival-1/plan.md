@@ -116,6 +116,7 @@ The Mainnet seed itself lands only on a build whose Aztec 6.0.0 execution canari
 | D13 | Store (implementation) | raw `storage.local` read through `decodeRow` (`X/wallet/utils/raw-row.ts`), the fail-closed repositories' absent/corrupt/valid read, instead of `ValueStorage`, whose `get` throws alike on a storage failure and a bad value (D9 needs the two apart); migration-rule-1 registers such repositories as `read: "codec"`, and its `new ValueStorage(` rule does not apply | deviation, tree wins | — |
 | D12 | Final pass r2 (Codex, resumed) | **approve**: "All three conditions are addressed … A1 can start." | approve | — |
 | D10 | Red-on-base proof | success controls red on the base; never-happens checks red under named mutations (was: every test red on the base) | — | base cannot red them |
+| D14 | A1 review r1 | compensation restores the record a deletion overtook (was: removes it); restore-into-existing and new-profile concurrency tests; two comments trimmed | low (comments), fixed | 3 low, fixed |
 
 ## Security & Adversarial Considerations
 
