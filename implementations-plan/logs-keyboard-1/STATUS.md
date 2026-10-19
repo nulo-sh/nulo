@@ -4,3 +4,4 @@
 - 2026-10-19 plan drafted (light); audit next.
 - 2026-10-19 audit round 1: Codex conditional approve, Opus conditional approve; findings folded.
 - 2026-10-19 audit round 2: Codex approve. Plan committed; arc 1 next (auto-continue).
+- 2026-10-19 phase 1 green: lint 0, typecheck:all 0, Popover 22/22; 7 new cases red on base, 4 controls green.

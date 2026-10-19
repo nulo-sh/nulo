@@ -46,7 +46,7 @@ The direction is the orchestrator's accessibility call on #851, made under the o
 
 Three rules in `Popover`, for every consumer (D2): the panel sits in the Tab order right after its trigger, and focus leaving both closes it, as an outside press does.
 
-### Phase 1: `Popover`'s keyboard rules
+### Phase 1: `Popover`'s keyboard rules ✓
 
 - `packages/design/src/ui/Popover.vue`:
   - A local `tabbables(root)`: `button, input, select, textarea, a[href], [tabindex]`, `tabIndex >= 0`, not `:disabled`, in DOM order (D7).
