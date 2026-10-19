@@ -11,6 +11,20 @@ base: dev @ 948670ca
 standard: implementations-plan/README.md § Post-implementation standard, read at 993b3efc
 ---
 
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** delivered as one ready PR against `dev`, #852, which carries this close-out; its merge closes the plan.
+- **Shipped:** #810: Clear logs takes Export's shape (body role, 12 px icon, 8 px gap). #823: Source, Level and the more trigger are native buttons, three Tab stops with the 2 px accent ring on keyboard focus, opened by Enter and Space; `Popover`'s Escape is handled and hands focus back to the trigger when it was in the panel, and the popover drops its document listeners on unmount. #831: the recovery Close is the design `cta_outline` button, its override rule deleted. #825: Holdings' summary shows the dash and no count while the list read has failed, whatever rows live events stored meanwhile. Closes #810, #823, #831 and #825.
+- **Review loop:** the plan took Codex conditional approve twice, then approve, and an Opus conditional approve; the arc's diff took Codex findings 1 (comments, taken) then clean, and an Opus approve with a latent listener leak (fixed, with a case).
+- **Gates at the head:** `bun run lint`, `typecheck:all`, `test:all` and `check:plans`, all exit 0 at the head, after merging `origin/dev` at `ce48691e`; smoke at retry 0 on the armed build: 29/29 on each browser over six files after the `fba0360e` merge, then 10/10 over `viewers-csp`, `holdings-add-token` and `token-list` after the `ce48691e` merge (Chrome 96 s, Firefox 106 s). `viewers-csp` wall-clock, base then head: Chrome 49.4 s, 38.4 s; Firefox 40.6 s, 45.0 s; the new scenario 1.9 s and 4.3 s.
+- **Deviations:** the arc's base moved to `948670ca` before Phase 1 (#827 merged first, no file in common), then took `origin/dev` twice (`fba0360e`, `ce48691e`, #848's Holdings mirror rules, a clean merge); the base builds started at load1 203 ([lessons/phase-2.md](lessons/phase-2.md)).
+- **Dropped:** none.
+- **Known limits:** none.
+- **Open items:** #851, the filter panels' rows stay mouse-only and an open panel stays open when Tab leaves its trigger (D2).
+- **Lessons:** none promoted (`lessons.md` is at its 8 KiB budget; the run's traps, a leaked test listener and load timeouts, are logged in [lessons/phase-5.md](lessons/phase-5.md)).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+
 # ui-polish-4: the logs menu and toolbar, the recovery Close, Holdings' error line
 
 Four signed picks, one arc, one PR against `dev` (D-orch-1, no stack). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none).
