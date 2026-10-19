@@ -10,8 +10,20 @@ eli5_mode: skipped (orchestrator-owned)
 base: 993b3efc
 trunk: dev
 post_implementation_hardening: not scheduled
-status: arc 1 delivered; PR open
+status: completed 2026-10-19; delivered in #853
 ---
+
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** completed. #853 closes #803 and #746; its merge into `dev` closes the plan.
+- **Shipped:** the failed token preview reads "Couldn't resolve token metadata" over "Reject this request and ask the app to add the token again." (P54-01 B), left-aligned; it and the opaque authorization warning left the card's label and value row for its full-width block, and the row aligns only its direct last child right (computed `start` on Chrome and Firefox; every other row unchanged). The restore warning offers "…, or import it again from its account file." (P55-05 B), in both numbers. Pictures in `screenshots/`.
+- **Owner asks:** none. `Closes #746` follows the lane's instruction, with the conflict flagged in #853 and on #746 (D6).
+- **Dropped:** none.
+- **Known limits:** none. #744 stays closed; its wording ships (D5).
+- **Open items:** #850 (the loading row, D4).
+- **Lessons:** none promoted; the host-load timeouts and the held-account picture method are in [lessons/phase-3.md](lessons/phase-3.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # copy-polish-1: the failed token preview's warning, the restore warning's clause
 
