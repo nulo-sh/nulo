@@ -1,7 +1,16 @@
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { clickByTestId, test, openPopup, waitForHash } from "./fixtures/extension"
-import { clickNavTab, getAccountAddress, navigateToSettings, openDropdown, openHoldings, seedUsdQuoteAndReload } from "./fixtures/helpers"
+import {
+	clickNavTab,
+	getAccountAddress,
+	navigateToSettings,
+	openDropdown,
+	openHoldings,
+	seedUsdQuoteAndReload,
+	waitForToast,
+	waitForToastGone,
+} from "./fixtures/helpers"
 import { readActivityScope, seedTransaction } from "./helpers/activity-seeds"
 import { tabAround } from "./helpers/pointer-probes"
 import { pollUntil } from "./fixtures/poll"
@@ -211,6 +220,7 @@ test("a drag selects the text around a control and none of the control's own but
 	// it first): the plain click starts from none.
 	await page.evaluate(() => window.getSelection()?.removeAllRanges())
 	await page.mouse.click(middle.x, middle.y)
+	await waitForToast(page, "Address is copied")
 	expect(await copies()).toEqual([await getAccountAddress(page)])
 
 	await navigateToSettings(page, "privacy")
@@ -245,6 +255,8 @@ test("a drag selects the text around a control and none of the control's own but
 	await waitForHash(page, "#/popup/settings")
 	await navigateToSettings(page, "about")
 	await page.waitForSelector('[data-testid="legal-about-accepted"]', { visible: true, timeout: 10_000 })
+	// The address copy's snack slides over the page's foot as it leaves, where the next two drags end.
+	await waitForToastGone(page, "Address is copied")
 
 	await page.$eval('[data-testid="legal-about-group"]', (group) => group.firstElementChild?.scrollIntoView({ block: "nearest" }))
 	const overLinks = await dragSelect(
