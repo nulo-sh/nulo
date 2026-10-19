@@ -4,6 +4,8 @@ These asks come from the owner's second build test of #743 (2026-10-19). Each on
 
 Already shipped in this round, signed: **P50-01 = B** (#769). A profile created beside another shows only what it lacks. A password profile shows the phrase row alone, and a passkey profile shows no card. That covers the owner's first case: passkeys imported first, then a password profile created.
 
+**The owner's answers (2026-10-19):** OA-17 is open, with new layouts asked for (OA-21). OA-18 is B. OA-19 is the owner's note: a reset changes nothing on the card. OA-20 is A.
+
 ## OA-17. The padding inside the Get started rows
 
 **Surface:** Home, the Get started card.
@@ -22,6 +24,8 @@ Two seeds were dropped. Moving the box outward leaves it 3 px from the popup's e
 
 **Recommendation: O1** (both reviewers, moderate confidence). It puts the row text on the same edges as the label, Hide and the Holdings rows. The hairlines keep the rows apart without a box. The change stays inside the card, so the Settings lists that share these rows are untouched. **What ships now: O0, today's form.**
 
+**Answered (P67-01): open.** "I don't like any tbh... "A" ends up being the best. Because the other ones don't look like tasks to go through. They become even more confusing. Can we get some more ideas in the table?" The new options are OA-21 (#881).
+
 ## OA-18. "Get Fee Juice" after the account held Fee Juice
 
 **Surface:** Home, the Get started card, for the install's first created profile only. A later or imported profile never shows the row.
@@ -38,6 +42,8 @@ Two seeds were dropped. Moving the box outward leaves it 3 px from the popup's e
 B stores one more per-profile flag, so it is a decision about persisted state. The flag is per profile, but Fee Juice is per account and per network. So under B, a second account that holds none never shows the row either.
 
 **Recommendation: A** (both reviewers, moderate confidence). The owner's words are in the present tense ("check if it has fee juice"), and the row then states a true fact about the account on screen. Hide already dismisses it for good. B is per profile while Fee Juice is per account and per network, and it stores one more flag. **What ships now: A.**
+
+**Answered (P67-02): B**, "It leaves for good the first time the profile holds Fee Juice." Built.
 
 ## OA-19. The card after a Testnet reset
 
@@ -58,6 +64,8 @@ C and D store a per-profile mark written by the reset.
 
 **Recommendation: A** (both reviewers, moderate confidence). A reset changes no backup and no step the person has done. The one row that comes back, "Get Fee Juice", is true: the new chain holds none. **What ships now: A.**
 
+**Answered (P67-03), the owner's note in place of a pick:** "I think it should show no card. We should "migrate" the user in the sense: if the user did not finish everything, then we should migrate the state of the user. If he already knew how to get gas, then, we don't show gas. If he has already backed-up the phrase on the previous testnet, then we don't ask for it on the new testnet. Same for how aztec works. Understand my point? Like, it's the same user, he hasn't forgotten all those things, nor has he lost his phrase just because Testnet resetted." A reset changes nothing on the card: done stays done, open stays open. With OA-18 B no row reads the network, so this is A with B, and no reset mark is built.
+
 ## OA-20. An imported wallet that holds nothing
 
 **Surface:** Home, for a profile imported from a phrase, a passkey or a full backup.
@@ -72,3 +80,31 @@ C and D store a per-profile mark written by the reset.
 | B. Fee Juice alone | a one-row card, "Get Fee Juice", while the imported account holds none; no Hide | ![mockup, light](screenshots/m-import-fee-juice-alone-light.png) ![mockup, dark](screenshots/m-import-fee-juice-alone-dark.png) |
 
 **Recommendation: A** (both reviewers, moderate confidence). It is the signed OA-16 rule. B would add a row with no Hide, which today only the backup reminder has. **What ships now: A.**
+
+**Answered (P67-04): A.** Nothing changes.
+
+## OA-21. Get started rows that read as tasks (#881)
+
+**Surface:** Home, the Get started card.
+
+**The owner's bar (P67-01):** rows that read as tasks to work through. A's bordered box is the best so far, and the other OA-17 options read worse.
+
+**How these are drawn:** each option is the live Home with the card rebuilt in the browser from the wallet's own colors and type roles. Nothing is built. Each one is shot for the install's first password profile with no Fee Juice, first with nothing done, then with two steps done: the phrase saved and How Aztec works opened. A frame marked "scrolled" shows the card's end when the card passes the fold. Today's card is OA-17's O0.
+
+**What every option with a count needs:**
+- *Which rows count:* the rows the profile started with. On the install's first profile those are the phrase row (the backup row on a passkey profile), How Aztec works, Get Fee Juice and Make proofs faster, so four. A later profile shows only its phrase row, and an imported one shows no card, so neither shows a count.
+- *Which flags say "done":* the phrase or backup flag, How Aztec works' flag, the Fee Juice flag from OA-18 B, and the Presto setting. The Presto setting is one setting for the whole install.
+- *Make proofs faster is optional.* The drawings count it. Under an option where done rows stay, a profile that never sets it up keeps a card of checked rows until Hide.
+
+| Option | What changes | Nothing done (light, dark) | Two done (light, dark) |
+|---|---|---|---|
+| Q1. A with a progress line | Today's box, with a thin bar and "n of 4 done" under the label. A done row still leaves. Needs the count's flags only. | ![](screenshots/oa21-q1-progress-line-none-done-light.png) ![](screenshots/oa21-q1-progress-line-none-done-dark.png) scrolled: ![](screenshots/oa21-q1-progress-line-none-done-scrolled-light.png) ![](screenshots/oa21-q1-progress-line-none-done-scrolled-dark.png) | ![](screenshots/oa21-q1-progress-line-two-done-light.png) ![](screenshots/oa21-q1-progress-line-two-done-dark.png) |
+| Q2. Checklist | A's box opens with "n of 4 done" and a bar. Each row has a square that fills with a check. A done row stays, struck through, with "Done", and the card leaves once all four are done. | ![](screenshots/oa21-q2-checklist-none-done-light.png) ![](screenshots/oa21-q2-checklist-none-done-dark.png) scrolled: ![](screenshots/oa21-q2-checklist-none-done-scrolled-light.png) ![](screenshots/oa21-q2-checklist-none-done-scrolled-dark.png) | ![](screenshots/oa21-q2-checklist-two-done-light.png) ![](screenshots/oa21-q2-checklist-two-done-dark.png) scrolled: ![](screenshots/oa21-q2-checklist-two-done-scrolled-light.png) ![](screenshots/oa21-q2-checklist-two-done-scrolled-dark.png) |
+| Q3. Numbered steps | A's box with a number before each row. The next step's number is filled. A done step's number turns into a check and the row stays, and the card leaves once all four are done. "n of 4 done" sits on the label's line. The numbers set an order, the one drawn. | ![](screenshots/oa21-q3-numbered-none-done-light.png) ![](screenshots/oa21-q3-numbered-none-done-dark.png) scrolled: ![](screenshots/oa21-q3-numbered-none-done-scrolled-light.png) ![](screenshots/oa21-q3-numbered-none-done-scrolled-dark.png) | ![](screenshots/oa21-q3-numbered-two-done-light.png) ![](screenshots/oa21-q3-numbered-two-done-dark.png) scrolled: ![](screenshots/oa21-q3-numbered-two-done-scrolled-light.png) ![](screenshots/oa21-q3-numbered-two-done-scrolled-dark.png) |
+| Q4. One step at a time | "Step 1 of 4" with four segments, the next step alone, and a foot with "Next: …" and an "All steps" link that opens the list. The card fits above the fold. Needs the count's flags, an order, and whether "All steps" is open. | ![](screenshots/oa21-q4-one-step-none-done-light.png) ![](screenshots/oa21-q4-one-step-none-done-dark.png) | ![](screenshots/oa21-q4-one-step-two-done-light.png) ![](screenshots/oa21-q4-one-step-two-done-dark.png) |
+| Q5. Tiles | The four steps in a 2×2 grid, each with its number and a square that fills. A done tile stays. The card fits above the fold. The grid needs four steps, so a later profile's single phrase row stays a row. | ![](screenshots/oa21-q5-tiles-none-done-light.png) ![](screenshots/oa21-q5-tiles-none-done-dark.png) | ![](screenshots/oa21-q5-tiles-two-done-light.png) ![](screenshots/oa21-q5-tiles-two-done-dark.png) |
+| Q6. Rail | A line joins the steps. The next step is open, with its description, on a tint, and the others are one line each. A done step's node fills with a check and the row stays. | ![](screenshots/oa21-q6-rail-none-done-light.png) ![](screenshots/oa21-q6-rail-none-done-dark.png) scrolled: ![](screenshots/oa21-q6-rail-none-done-scrolled-light.png) ![](screenshots/oa21-q6-rail-none-done-scrolled-dark.png) | ![](screenshots/oa21-q6-rail-two-done-light.png) ![](screenshots/oa21-q6-rail-two-done-dark.png) |
+
+The brief's ring before each row is drawn as a square (Q2, Q5) and a node (Q6), because the wallet has no round control. It appears only where a done row stays and gets its check.
+
+**Recommendation: Q3** (moderate confidence). It keeps A's box, which the owner rated best. Every row reads as a step, with the next one marked. Done steps stay checked, so progress shows. The count sits on the label's line, so the card gets no taller than it is today. **What ships now: today's form (OA-17's O0). #743 does not merge until this is picked and built.**
