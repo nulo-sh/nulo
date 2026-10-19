@@ -22,3 +22,6 @@
   picks"); D5 as above.
 - 2026-10-19 Codex r2 (resumed `01a15635`): one P3, "is posted on #385" while #385 has no comment
   yet; now "goes on #385 (the orchestrator posts it)". Other fixes verified, no regression.
+- 2026-10-19 Codex r3 (resumed `01a15635`): clean. `origin/dev` merged at `24399338`; lint,
+  `typecheck:all`, `test:all`, `test:ci-gating`, `check:plans` exit 0 (run once load1 fell
+  below 150).
