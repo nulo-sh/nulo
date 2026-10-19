@@ -1,5 +1,7 @@
 # Owner asks: send-estimate-1
 
+One question. OA-1 ships in its "What ships now" form; the product call lives in #863.
+
 ## OA-1: the fee row when the balance drops below the typed amount (P5)
 
 **Surface.** Send (`popup/pages/send.vue`), the fee row, after a fee has landed, when the balance of the side being sent from falls below the typed amount while the page is open (another send or an app spends from the same account).

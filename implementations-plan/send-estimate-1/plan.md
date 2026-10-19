@@ -11,6 +11,18 @@ base: dev @ 1531e5f9
 standard: implementations-plan/README.md § Post-implementation standard, read at 175d8268
 ---
 
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** completed. #861 closes #856; its merge into `dev` closes the plan.
+- **Shipped:** a non-deep watch on the amount's validity asks for the fee when a balance update makes the typed amount sendable, on either side; the deep watch's callback moved unchanged into `requestEstimate()`. Four tests (public and real-fee-card private reproducers, a covered-refresh control, the balance-drop pin with its recovery).
+- **Owner asks:** OA-1 (the fee row on a balance drop) ships as today (A); the product call is #863.
+- **Dropped:** the issue's proposed source inside the deep watch (F2, P2); design A until OA-1 (D3); Codex's B″ (D3).
+- **Known limits:** #862 (D4).
+- **Open items:** #863 (OA-1).
+- **Lessons:** none promoted. `lessons.md` is at 8191 of its 8192 B and no entry is superseded; the deep-watch rule sits at the code it guards (`send.vue`'s comment) and in F2.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+
 # send-estimate-1: a balance that makes the typed amount sendable asks for its fee
 
 One issue (#856), one arc, one PR against `dev` (D-orch-1). Recon and the probe table: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (OA-1, ships as today). Gate log: `STATUS.md`.
@@ -82,8 +94,9 @@ One issue (#856), one arc, one PR against `dev` (D-orch-1). Recon and the probe 
 - D1 The issue's getter is right but must sit outside the deep watch (F2, F3). Codex and Opus agree.
 - D2 `amountTerm` stays a source: typing re-asks exactly as today.
 - D3 What ships now for P5 is A, as today, through the one-way watch (both legs; the panel's record of a visible change beyond the budget). Codex proposed B″ on `sendableAmount`; Opus's boolean form was taken: no new computed, no second schedule per valid keystroke, and decimals already re-ask (F4). On OA-1 = B, one commit swaps to design A: delete the second watch, add `computed(() => amountValidation.value.valid)` as a deep-watch source, flip T3; the PR then quotes the owner's sign-off and attaches a screenshot.
-- D4 P3 and P8 (re-asks on an unchanged question) are a known limit: a redundant estimate and a brief skeleton, nothing sent, nothing stuck. Filed at close-out as a closed `known-limit` issue; reopens on a report of the fee row flickering after a blur or a token event.
+- D4 P3 and P8 (re-asks on an unchanged question) are a known limit: a redundant estimate and a brief skeleton, nothing sent, nothing stuck. Filed as #862 (closed, `known-limit`); reopens on a report of the fee row flickering after a blur or a token event.
 - D5 T4 sits in the integration file so the real card's sponsor re-check, armed by `feeTxShape`'s change on the flip, runs under it (Opus 5); T1's public twin stays in `send.test.ts`.
+- D6 Deviation at close-out: the deep-watch rule is not promoted to `lessons.md`, which is at its budget with no superseded entry (Outcome).
 
 ## Audit verdicts
 
@@ -94,7 +107,7 @@ One issue (#856), one arc, one PR against `dev` (D-orch-1). Recon and the probe 
 
 ## Delivery
 
-- One PR from `send-estimate-1-a1` (off `origin/dev`, this plan cherry-picked) against `dev`: `fix(send): a balance that covers the typed amount asks for its fee` (66 characters). Body: what changed and why, the probe table, the gate runs, both browsers' smoke wall-clock (no e2e scenario added), OA-1 shipped as today, `Closes #856`. Opened without labels, ready, after the Codex loop converges.
+- #861 from `send-estimate-1-a1` (off `origin/dev`, this plan cherry-picked) against `dev`: `fix(send): a balance that covers the typed amount asks for its fee` (66 characters). Body: what changed and why, the probe table, the gate runs, both browsers' smoke wall-clock (no e2e scenario added), OA-1 shipped as today, `Closes #856`. Opened without labels, ready, after the Codex loop converges.
 - The close-out lands as the PR's final commits.
 
 ## Post-implementation
