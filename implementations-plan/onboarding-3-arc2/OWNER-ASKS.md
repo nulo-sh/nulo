@@ -43,7 +43,7 @@ B stores one more per-profile flag, so it is a decision about persisted state. T
 
 **Recommendation: A** (both reviewers, moderate confidence). The owner's words are in the present tense ("check if it has fee juice"), and the row then states a true fact about the account on screen. Hide already dismisses it for good. B is per profile while Fee Juice is per account and per network, and it stores one more flag. **What ships now: A.**
 
-**Answered (P67-02): B**, "It leaves for good the first time the profile holds Fee Juice." Built.
+**Answered (P67-02): B**, "It leaves for good the first time the profile holds Fee Juice." Built: the real build, once the profile has held Fee Juice and now holds none (spent, another account, or a reset's new chain): ![built, light](screenshots/p67-02-fee-juice-held-light.png) ![built, dark](screenshots/p67-02-fee-juice-held-dark.png)
 
 ## OA-19. The card after a Testnet reset
 

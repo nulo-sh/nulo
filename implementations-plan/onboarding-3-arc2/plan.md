@@ -84,8 +84,8 @@ Rows: **P** "Save your recovery phrase", **B** "Back up this wallet", **A** "How
 | M11 | Tokens only | ! replaces P; F shows | rows unchanged | `general.test.ts:141,173` |
 | M12 | A failed first Fee Juice read (a failed refresh keeps the last value) | F shows | F shows | `general.test.ts:133` (arc 1's D3: a failed read claims nothing) |
 | M13 | Deployed or not | no input | no input | `GetStartedInput` has no such field (typecheck) |
-| M14 | Another network or account selected | flags kept; F stays away once any account of the profile held Fee Juice, else it follows the selected one | same | **new** `general.test.ts:198` |
-| M15 | After a Testnet reset (takeover) | nothing changes (P67-03): done stays done, open stays open; F stays away once held | same | **new** e2e step `stale-network` S1a (the Fee Juice flag survives the real purge; P stays); `general.test.ts:198` (a new chain id is a new scope, holding none) |
+| M14 | Another network or account selected | flags kept; F stays away once Home has seen any account of the profile holding Fee Juice, else it follows the selected one | same | **new** `general.test.ts:198` |
+| M15 | After a Testnet reset (takeover) | nothing changes (P67-03): done stays done, open stays open; F stays away once held | same | **new** e2e step `stale-network` S1a (the Fee Juice flag survives the real purge; P stays); the other flags by the purge's scope, the old chain's rows only (F4); `general.test.ts:198` (a new chain id is a new scope, holding none) |
 | M16 | A quarantined chain, or the takeover up | no Home, so no card | same | **new** e2e step `stale-network` S1a (no Home scroller under the takeover) |
 | M17 | Hide used | P alone (! once funded) | ∅ | `get-started.test.ts:175,180`; `general.test.ts:305` |
 | M18 | Phrase saved (tab or Settings) | P and ! leave | — | `get-started.test.ts:151`; e2e `onboarding-tab:113,133`, `security-backup:75` |
@@ -194,7 +194,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
   - `stale-network` S1a (M15, P67-03): the Fee Juice flag stored before the lock; after the reset the rows are P, A and R. Smoke has no node, so the flag Home writes on a positive read is stored directly (D36).
   - `fee-methods` "public gas only…": the stored flag is `true` once Home has seen the claimed Fee Juice.
 - Red proofs, each restored after: leaving the flag out of `feeJuiceShown` fails the pure case and both Home cases; dropping the watcher's write fails both Home cases.
-- Pictures: OA-18 B's mockup is now built (`m-fee-juice-done-*`, today's rows with F gone), so the changed cells reuse it.
+- Pictures: the built cell, a first password profile once it has held Fee Juice and holds none (`p67-02-fee-juice-held-*`, a scratch capture on the armed Chrome build, deleted after its run). M10, M14 and M15 all draw it.
 - Gate: `F`; smoke `stale-network` and `security-backup` on Chrome and Firefox; network `fee-methods` on Chrome; the fix loop; push; the five required checks.
 
 ## Decision ledger
@@ -254,6 +254,16 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
 | Comments: S1a header, the mock, the `fee-methods` step | both | fixed |
 
 **Fix loop, round 2** (resumed session `01a15527`, verify only): "Clean — high confidence from static inspection." The loop converged at round 2.
+
+**Round 2 fix loop, round 1** (2026-10-19, over `55a1304d..HEAD`: Codex gpt-6.1-sol high, session `01a15638`; an Opus 5.5 diff review beside it). Codex: "Clean — moderate confidence from static inspection." Opus: one High, the rest Low.
+
+| Finding | Leg | Disposition |
+|---|---|---|
+| The regenerated `src/types/auto-imports.d.ts` and `.eslintrc-auto-import.json` (the new key builder) were not committed; CI's build diffs `src/types/` and would fail | Opus, demonstrated | fixed: committed |
+| Nothing pins "no write while the gas read is unread" (`!== "none"` would end the row on every first mount), and `toHaveBeenCalledTimes(1)` could not catch a missing guard | Opus | fixed: the arrival case mounts on an unread read, asserts no write, and reads Fee Juice twice; each mutation now fails it |
+| Comments: the view's comment repeats Home's and says "any read"; `immediate` does nothing (the flags are always unread at setup); the `fee-methods` comment claims what the step does not test | Opus | fixed |
+| M14's "any account held" (only what Home saw counts); M15's evidence for the other flags | Opus | fixed in the matrix |
+| A stale peek from before a reset writes the flag (I3); dust Fee Juice ends the row | both | accepted: the owner's "same user" reading; before this change dust already hid the row while held |
 
 ## Delivery
 

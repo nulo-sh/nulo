@@ -14,3 +14,7 @@
 - 2026-10-19 19:38Z: phase 5 full Chrome smoke (head, retry 0): 260 passed, 4 failed, 14 skipped (64 files, 2714 s). The four were all `appearance` tests, each timing out at 60 s while load1 ran 400 to 975. The one rerun of that file at load 146 passed 4/4 in 12.6 s.
 - 2026-10-19 20:45Z: phase 5 full Firefox smoke (head, retry 0): 264 passed, 14 skipped (64 files, 2937 s).
 - 2026-10-19 20:55Z: phase 5 `bun run test:all` 0 (extension 14,221 passed). The temporary baseline worktree is removed.
+- 2026-10-19 21:38Z: round 2 (the owner's P67 answers) started.
+- 2026-10-19 21:55Z: OA-21: six layouts drawn by a scratch capture spec, run twice on Chrome and deleted each time; 36 PNGs, pushed at 52651804 (`SHOTS_READY`).
+- 2026-10-19 22:00Z: P67-02 B built. Unit gate: 64/64 across the four touched files. Red proofs: leaving the flag out of `feeJuiceShown` fails three cases; dropping the watcher's write fails both Home cases. lint 0, typecheck:all 0.
+- 2026-10-19 22:07Z: smoke at retry 0, armed builds: Chrome `stale-network` 4/4 and `security-backup` 3/3 (S1a 12.4 s); Firefox the same (S1a 18.7 s).
