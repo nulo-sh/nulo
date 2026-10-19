@@ -1,7 +1,7 @@
 ---
 plan: harden-security-fixes-3
 tier: mid
-status: arc 1 merged (#869); arc 2 in progress; arc 3 on the owner's picks
+status: arc 1 merged (#869); arc 2 in review; arc 3 on the owner's picks
 issues: "#661 (closed known limit; its SECURITY.md caveat lands in arc 1)"
 driver: claude-code
 claude_model: opus
@@ -112,7 +112,7 @@ Three arcs, one PR each against `dev`, no stack (the orchestrator's D-orch-1). A
   - controls: a successful send has exactly one row; a cancel during prove writes none.
 - **Validation gate.** `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all` exit 0; the first test is red with the record back in `sentTxRecorder`. Network e2e `authwit-lifecycle.test.ts` on Chrome, retry 0, through `e2e:agent`: passes.
 
-### Phase 3 — a bound on dApp-added tagging sources (arc 2)
+### Phase 3 — a bound on dApp-added tagging sources (arc 2) — done
 
 - Build Architecture's Phase 3.
 - **Tests** (unit; a count under a write guard needs no browser):
@@ -155,6 +155,7 @@ Each phase builds its ask's option A only on that pick, with the tests and pictu
 | Arc 1 Codex R1, Opus | conditional approve (both) | the runbook and `CI.md` stop saying the summary shows every signing-relevant change; #860 recorded as merged; F2 and F6 re-read at 2a5960da | the signer's comments (HS3-D5) |
 | Arc 1 Codex R2 | approve | wording consistent across the three docs; citations resolve; HS3-D5 accepted | none |
 | Arc 2 Codex R1, Opus | conditional approve (gates pending); approve | the displaced `tokenContractKey` doc restored; the refusal literal unexported; the handler test's transport claim narrowed; the own-path test moved to `AccountStateService.addSender`, the path the person's senders take; the README says no wider manifest fixes it; the PXE comment states the distinct-count invariant | a non-distinct count (HS3-D9); a README pin to the constant; bounding the unproduced `register_sender` kind |
+| Arc 2 Codex R2 | approve | every fix verified; no regression | none |
 
 ## Delivery
 
