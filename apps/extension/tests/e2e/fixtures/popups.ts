@@ -133,15 +133,26 @@ export async function waitForMainFrame(page: Page, timeout = 5_000): Promise<voi
 }
 
 export type CreatedWindow = { id?: number; type?: string }
+/** A window the browser created or removed, stamped with the extension page's `Date.now()`. */
+export type WindowChange = CreatedWindow & { change: "created" | "removed"; at: number }
+
+/** Every window the browser creates or removes from now on, as an extension page's listeners see it. */
+export async function recordWindowChanges(control: Page): Promise<() => Promise<WindowChange[]>> {
+	await control.evaluate(() => {
+		const w = window as unknown as { __windowChanges: WindowChange[] }
+		w.__windowChanges = []
+		chrome.windows.onCreated.addListener((win) =>
+			w.__windowChanges.push({ change: "created", id: win.id, type: win.type, at: Date.now() }),
+		)
+		chrome.windows.onRemoved.addListener((id) => w.__windowChanges.push({ change: "removed", id, at: Date.now() }))
+	})
+	return () => control.evaluate(() => (window as unknown as { __windowChanges: WindowChange[] }).__windowChanges)
+}
 
 /** Every window the browser creates from now on, as an extension page's listener sees it. */
 export async function recordCreatedWindows(control: Page): Promise<() => Promise<CreatedWindow[]>> {
-	await control.evaluate(() => {
-		const w = window as unknown as { __created: CreatedWindow[] }
-		w.__created = []
-		chrome.windows.onCreated.addListener((win) => w.__created.push({ id: win.id, type: win.type }))
-	})
-	return () => control.evaluate(() => (window as unknown as { __created: CreatedWindow[] }).__created)
+	const changes = await recordWindowChanges(control)
+	return async () => (await changes()).filter((c) => c.change === "created").map(({ id, type }) => ({ id, type }))
 }
 
 /** Wait for a popup page to be fully closed (target removed). Use before
@@ -163,42 +174,49 @@ export async function approveDiscover(page: Page): Promise<void> {
 	await clickByTestId(page, "discover-allow-btn")
 }
 
-type ConnectWindowRead = { id: number | undefined; popups: number }
-
 /** Read inside the page: BiDi has no window handles, so Puppeteer cannot name a window on Firefox. */
-function readConnectWindow(page: Page): Promise<ConnectWindowRead> {
+function readPopupWindows(page: Page): Promise<{ id: number | undefined; popups: number[] }> {
 	return page.evaluate(async () => ({
 		id: (await chrome.windows.getCurrent()).id,
-		popups: (await chrome.windows.getAll({ windowTypes: ["popup"] })).filter((w) => w.type === "popup").length,
+		popups: (await chrome.windows.getAll({ windowTypes: ["popup"] }))
+			.filter((w) => w.type === "popup")
+			.map((w) => w.id as number)
+			.sort((a, b) => a - b),
 	}))
 }
 
 /**
- * Allow a new connection and wait for its emoji check in the same window, with no popup window
- * opened or closed on the way. Resolves with that page, now the check, for `approveVerify`.
- * `allow` is the click, `approveDiscover` unless the caller drives the real pointer.
+ * Allow a new connection and wait for its emoji check, which opens in a window of its own while the
+ * connect window closes: the popup windows open after are those open before, with the check in the
+ * connect window's place. A window that opens and closes in between is not seen; the connect
+ * journey records every change. Resolves with the check's page for `approveVerify`. `allow` is the
+ * click, `approveDiscover` unless the caller drives the real pointer.
  */
 export async function approveConnect(
 	ctx: ExtensionContext,
 	discoverPage: Page,
 	allow: () => Promise<void> = () => approveDiscover(discoverPage),
 ): Promise<Page> {
-	const before = await readConnectWindow(discoverPage)
+	const before = await readPopupWindows(discoverPage)
+	// Armed before Allow: the wait ignores every check page already open when it starts.
+	const checkP = waitForPopup(ctx, "verify")
 	await allow()
-	await discoverPage
-		.waitForFunction(
-			() => location.hash.startsWith("#/windows/verify") && document.querySelector('[data-testid="verify-emoji-grid"]') !== null,
-			{ timeout: 30_000, polling: 200 },
-		)
-		.catch((err) => {
-			const where = discoverPage.isClosed() ? "the connect window closed" : "the connect window never showed the check"
-			throw new Error(`approveConnect: ${where} (verify windows open: ${countVerifyWindows(ctx)})`, { cause: err })
+	const check = await checkP.catch((err) => {
+		const where = discoverPage.isClosed() ? "the connect window closed" : "the connect window stayed open"
+		throw new Error(`approveConnect: no check window opened; ${where} (verify windows open: ${countVerifyWindows(ctx)})`, {
+			cause: err,
 		})
-	const after = await readConnectWindow(discoverPage)
-	if (after.id !== before.id || after.popups !== before.popups) {
-		throw new Error(`approveConnect: the check moved windows: ${JSON.stringify({ before, after })}`)
+	})
+	await check.waitForSelector('[data-testid="verify-emoji-grid"]', { visible: true, timeout: 30_000 })
+	await waitForPopupClosed(discoverPage, 10_000).catch((err) => {
+		throw new Error("approveConnect: the connect window stayed open beside the check", { cause: err })
+	})
+	const after = await readPopupWindows(check)
+	const expected = [...before.popups.filter((id) => id !== before.id), after.id].sort((a, b) => (a ?? 0) - (b ?? 0))
+	if (after.id === before.id || JSON.stringify(after.popups) !== JSON.stringify(expected)) {
+		throw new Error(`approveConnect: the check did not replace the connect window: ${JSON.stringify({ before, after })}`)
 	}
-	return discoverPage
+	return check
 }
 
 export async function denyDiscover(page: Page): Promise<void> {

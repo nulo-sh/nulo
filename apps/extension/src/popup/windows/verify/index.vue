@@ -210,6 +210,7 @@ onUnmounted(() => {
 			<DappIdentityBlock
 				:dapp="dapp"
 				:actionLabel="isReconnect ? 'Reconnected' : 'Connection established'"
+				actionTestId="verify-action"
 			/>
 			<Flex v-if="emojis" direction="column" gap="12" :class="$style.verification">
 				<SectionLabel :label="CHECK_LABEL" />

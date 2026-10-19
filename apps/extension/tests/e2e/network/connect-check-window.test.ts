@@ -1,209 +1,335 @@
 import { hashToEmoji } from "@aztec-labs/wallet-sdk/crypto"
-import type { Page } from "puppeteer"
+import type { ConsoleMessage, Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
+import { BRIDGE_MS } from "@/wallet/services/wallet-sdk/connect-bridge"
 import { BROWSER, prepareKeys } from "../fixtures/browser"
-import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
+import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
+import { switchToLocalNetwork } from "../fixtures/helpers"
 import { openPlayground, selectPgBundle, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
-import { pollUntil } from "../fixtures/poll"
 import {
 	approveVerify,
-	type CreatedWindow,
-	recordCreatedWindows,
+	recordWindowChanges,
 	rejectCapabilities,
 	waitForPopup,
 	waitForPopupClosed,
+	type WindowChange,
 } from "../fixtures/popups"
 import { shotSend } from "../fixtures/send-page"
-import { tokenColor } from "../helpers/pointer-probes"
 
 /**
- * A new connection's emoji check shows in the connect window itself: Allow keeps that window, the
- * check replaces the connect page, and no other window opens until the dApp asks for permissions.
- * The swap is announced in the wallet's own words, and a held Enter at Allow does not carry through
- * the check. The line under the app names the network the app asked for, before Allow and while it
- * connects.
+ * A new connection's Allow answers the dApp and its connect window closes; the emoji check opens in
+ * a window of its own when the dApp starts its key exchange, at once or seconds later. Each run
+ * logs, in milliseconds after Allow, what a person sees: the check window created, the connect
+ * window removed, the check page's document start and its grid.
  */
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 
 const ALLOW = '[data-testid="discover-allow-btn"]'
-const GRID = '[data-testid="verify-emoji-grid"]'
-const STEP_BAR = '[data-testid="connect-step-bar"]'
-const REPEATS_KEY = "e2e:enter-repeats"
 const ACTION = '[data-testid="discover-action"]'
-const ACTION_KEY = "e2e:action-lines"
+const GRID = '[data-testid="verify-emoji-grid"]'
+const CONNECTED = '[data-testid="pg-status"][data-status="connected"]'
+const MARKS = "e2e:connect-marks"
+const STALL_MARK = "e2e:playground-stalled"
+const STALL_MS = 10_000
 const ANNOUNCE = '[data-testid="verify-announce"][role="status"][aria-live="polite"]'
 const ANNOUNCEMENT =
 	"Connection check. Check that the app shows these same emojis in the same order. If they differ, the connection may not be safe. Choose They don't match."
 
+type Mark = { mark: string; at: number }
+type CheckShown = { docStart: number; gridBy: number }
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-/** Each Enter keydown's `repeat`, kept in `sessionStorage` so a reload between the pages loses none. */
-async function recordEnterRepeats(page: Page): Promise<void> {
-	await page.evaluate((key) => {
-		sessionStorage.setItem(key, "[]")
-		window.addEventListener(
-			"keydown",
-			(e) => {
-				if (e.key !== "Enter") return
-				const seen = JSON.parse(sessionStorage.getItem(key) ?? "[]") as boolean[]
-				sessionStorage.setItem(key, JSON.stringify([...seen, e.repeat]))
-			},
-			true,
-		)
-	}, REPEATS_KEY)
+/** What other extension pages post on `MARKS`, each stamped where it happened: the connect page's
+ *  marks outlive its window. */
+async function recordMarks(control: Page): Promise<() => Promise<Mark[]>> {
+	await control.evaluate((channel: string) => {
+		const w = window as unknown as { __marks: Mark[] }
+		w.__marks = []
+		new BroadcastChannel(channel).onmessage = (e) => w.__marks.push(e.data as Mark)
+	}, MARKS)
+	return () => control.evaluate(() => (window as unknown as { __marks: Mark[] }).__marks)
 }
 
-/** Each distinct text the line under the app shows from now on, kept like the Enter repeats: the
- *  line after Allow lasts only until the check replaces the page. */
-async function recordActionLines(page: Page): Promise<void> {
+/** The connect page posts its Allow and each line it shows under the app. */
+async function postConnectMarks(page: Page): Promise<void> {
 	await page.evaluate(
-		(key, sel) => {
-			const read = () => document.querySelector(sel)?.textContent?.trim() ?? ""
-			sessionStorage.setItem(key, JSON.stringify([read()]))
-			new MutationObserver(() => {
-				const text = read()
-				const seen = JSON.parse(sessionStorage.getItem(key) ?? "[]") as string[]
-				if (text && seen.at(-1) !== text) sessionStorage.setItem(key, JSON.stringify([...seen, text]))
-			}).observe(document.body, { subtree: true, childList: true, characterData: true })
+		(channel: string, allow: string, action: string) => {
+			const out = new BroadcastChannel(channel)
+			const post = (mark: string) => out.postMessage({ mark, at: Date.now() })
+			document.addEventListener("click", (e) => (e.target as Element | null)?.closest(allow) && post("allow"), true)
+			let last = ""
+			const read = () => {
+				const text = document.querySelector(action)?.textContent?.trim() ?? ""
+				if (!text || text === last) return
+				last = text
+				post(`line:${text}`)
+			}
+			read()
+			new MutationObserver(read).observe(document.documentElement, { subtree: true, childList: true, characterData: true })
 		},
-		ACTION_KEY,
+		MARKS,
+		ALLOW,
 		ACTION,
 	)
 }
 
-async function showsCheck(page: Page): Promise<boolean> {
-	return page
-		.evaluate((grid) => location.hash.startsWith("#/windows/verify") && document.querySelector(grid) !== null, GRID)
-		.catch((err) => {
-			if (page.isClosed()) throw err
-			return false
-		})
+/** When the check page's document started and showed its grid. The grid's time is polled from when
+ *  the test reaches the page, so it bounds the real moment from above. */
+function checkShown(check: Page): Promise<CheckShown> {
+	return check.evaluate(
+		(grid: string) =>
+			new Promise<CheckShown>((resolve, reject) => {
+				const done = () => resolve({ docStart: Math.round(performance.timeOrigin), gridBy: Date.now() })
+				if (document.querySelector(grid)) return done()
+				const timer = setTimeout(() => reject(new Error("the check never showed its grid")), 30_000)
+				const observer = new MutationObserver(() => {
+					if (!document.querySelector(grid)) return
+					observer.disconnect()
+					clearTimeout(timer)
+					done()
+				})
+				observer.observe(document.documentElement, { subtree: true, childList: true })
+			}),
+		GRID,
+	)
 }
 
-/** Hold Enter at the focused Allow until the page shows the check, and a few repeats into it. */
-async function holdEnterThroughAllow(page: Page, created: () => Promise<CreatedWindow[]>): Promise<void> {
-	try {
-		await page.keyboard.down("Enter")
-		await pollUntil(
-			() => showsCheck(page),
-			(shown) => shown,
-			{
-				label: "the connect window showing the check",
-				timeoutMs: 30_000,
-				intervalMs: 100,
-				between: () => page.keyboard.down("Enter"),
-			},
-		)
-		for (let i = 0; i < 3; i++) {
-			await page.keyboard.down("Enter")
-			await sleep(100)
-		}
-		await page.keyboard.up("Enter")
-	} catch (err) {
-		if (!page.isClosed()) throw err
-		// Long enough for a separate check window, if one follows, to reach the record.
-		await sleep(5_000)
-		throw new Error(`the connect window closed after Allow; windows created: ${JSON.stringify(await created())}`, { cause: err })
+/** Milliseconds after Allow, for the run's log line. */
+function timeline(marks: Mark[], changes: WindowChange[], connect: number | undefined, check: number | undefined, shown?: CheckShown) {
+	const allow = marks.find((m) => m.mark === "allow")?.at
+	const at = (change: WindowChange["change"], id: number | undefined) => changes.find((c) => c.change === change && c.id === id)?.at
+	const since = (t: number | null | undefined) => (allow === undefined || t == null ? null : t - allow)
+	return {
+		checkCreated: since(at("created", check)),
+		connectRemoved: since(at("removed", connect)),
+		checkDocStart: since(shown?.docStart),
+		gridBy: since(shown?.gridBy),
 	}
 }
 
+/** Blocks `page`'s main thread for `ms`, so its half of the wallet handshake cannot run. Resolves
+ *  once the page logs that the loop has begun: a wallet message sent afterwards waits behind it. */
+async function stallPage(page: Page, ms: number): Promise<void> {
+	let onConsole: ((message: ConsoleMessage) => void) | undefined
+	const started = new Promise<void>((resolve, reject) => {
+		const timer = setTimeout(() => reject(new Error("the playground never reported its stall")), 10_000)
+		onConsole = (message) => {
+			if (message.text() !== STALL_MARK) return
+			clearTimeout(timer)
+			resolve()
+		}
+		page.on("console", onConsole)
+	})
+	// Not awaited: the evaluation returns only when the loop ends, or rejects when the page closes.
+	void page
+		.evaluate(
+			(mark: string, stallMs: number) => {
+				console.debug(mark)
+				const until = Date.now() + stallMs
+				let spins = 0
+				while (Date.now() < until) spins++
+				return spins
+			},
+			STALL_MARK,
+			ms,
+		)
+		.catch(() => undefined)
+	try {
+		await started
+	} finally {
+		if (onConsole) page.off("console", onConsole)
+	}
+}
+
+/** A wallet tab on Local Network that records window changes and marks, and a playground whose
+ *  Connect opened the connect window, with Allow enabled and its marks posted. */
+async function openConnect(ctx: ExtensionContext) {
+	const control = await openPopup(ctx)
+	await waitForHash(control, "#/popup/general", 30_000)
+	await switchToLocalNetwork(control)
+	const dapp = await openPlayground(ctx)
+	const changes = await recordWindowChanges(control)
+	const marks = await recordMarks(control)
+	const discoverP = waitForPopup(ctx, "discover", { timeout: 30_000 })
+	await clickByTestId(dapp, "pg-btn-connect")
+	const page = await discoverP
+	await page.waitForFunction(
+		(sel: string) => {
+			const allow = document.querySelector<HTMLButtonElement>(sel)
+			return !!allow && !allow.disabled
+		},
+		{ timeout: 30_000, polling: 200 },
+		ALLOW,
+	)
+	const connectWindow = await page.evaluate(async () => (await chrome.windows.getCurrent()).id)
+	await postConnectMarks(page)
+	return { control, dapp, page, connectWindow, changes, marks }
+}
+
+/** The connect page after Allow, in both themes, for the pictures (`NULO_E2E_SHOT_DIR`). The state
+ *  lasts about `BRIDGE_MS`, so transitions are cut and nothing settles between the two shots. */
+async function shotConnecting(page: Page): Promise<void> {
+	const dir = process.env.NULO_E2E_SHOT_DIR
+	if (!dir) return
+	await page.waitForFunction(
+		(sel: string) => document.querySelector(sel)?.textContent?.trim().startsWith("Connecting on") ?? false,
+		{ timeout: 1_000, polling: 20 },
+		ACTION,
+	)
+	const theme = await page.evaluate(() => document.documentElement.getAttribute("theme"))
+	await page.screenshot({ path: `${dir}/connect-connecting.png` })
+	await page.evaluate((was: string | null) => {
+		document.documentElement.setAttribute("theme", was === "dark" ? "light" : "dark")
+		// The extension's CSP refuses an injected stylesheet, so the theme's transitions are run to
+		// their end instead; a looping animation has no end and is left as it is.
+		for (const animation of document.getAnimations()) {
+			try {
+				animation.finish()
+			} catch {}
+		}
+	}, theme)
+	await page.screenshot({ path: `${dir}/connect-connecting-${theme === "dark" ? "light" : "dark"}.png` })
+}
+
+const popupsOpen = (control: Page) =>
+	control.evaluate(async () => (await chrome.windows.getAll({ windowTypes: ["popup"] })).filter((w) => w.type === "popup").length)
+
 test.skipIf(!aztecConfig)(
-	"a new connection shows its emoji check in the connect window, and no other window opens",
+	"a dApp that connects at once: Allow closes the connect window once the check opens in its own, focused, answering no key until a press",
 	{ timeout: 180_000 },
 	async ({ localNetworkExtension: ctx }) => {
-		const control = await openPopup(ctx)
-		await waitForHash(control, "#/popup/general", 30_000)
-		const dapp = await openPlayground(ctx)
-		const created = await recordCreatedWindows(control)
+		const { dapp, page, connectWindow, changes, marks } = await openConnect(ctx)
+		await shotSend(page, "connect-discover", "discover-allow-btn")
 
-		const discoverP = waitForPopup(ctx, "discover", { timeout: 30_000 })
-		await clickByTestId(dapp, "pg-btn-connect")
-		const page = await discoverP
-		const connectWindow = await page.evaluate(async () => (await chrome.windows.getCurrent()).id)
-		await page.waitForFunction(
-			(sel) => {
-				const allow = document.querySelector<HTMLButtonElement>(sel)
-				return !!allow && !allow.disabled
-			},
-			{ timeout: 30_000, polling: 200 },
-			ALLOW,
-		)
-		await shotSend(page, "connect-step-bar", "connect-step-bar")
-		const emptyHalf = await page.$eval(`${STEP_BAR} [data-filled="false"]`, (el) => getComputedStyle(el).backgroundColor)
-		expect(emptyHalf, "step 1's empty half").toBe(await tokenColor(page, "--nulo-track"))
+		const checkP = waitForPopup(ctx, "verify", { timeout: 30_000 })
+		await clickByTestId(page, "discover-allow-btn")
+		const check = await checkP
+		const shown = await checkShown(check)
+		await waitForPopupClosed(page, 10_000)
 
-		await recordEnterRepeats(page)
-		await recordActionLines(page)
-		await page.evaluate(() => {
-			;(window as unknown as { __connectDocument?: boolean }).__connectDocument = true
+		const focus = await check.evaluate(async () => {
+			const [current, lastFocused] = await Promise.all([chrome.windows.getCurrent(), chrome.windows.getLastFocused()])
+			return {
+				window: current.id,
+				hasFocus: document.hasFocus(),
+				lastFocused: lastFocused.id === current.id,
+				activeElement: document.activeElement === document.body ? "body" : (document.activeElement?.outerHTML ?? null),
+			}
 		})
-		await prepareKeys(page)
-		await page.focus(ALLOW)
-		await holdEnterThroughAllow(page, created)
-
-		const repeats = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? "[]") as boolean[], REPEATS_KEY)
-		expect(repeats, "the driver sent no repeat, so the held Enter proved nothing").toContain(true)
-		const actionLines = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? "[]") as string[], ACTION_KEY)
-		expect(actionLines).toEqual(["wants to connect on Local Network", "Connecting on Local Network"])
-		const sameDocument = await page.evaluate(() => (window as unknown as { __connectDocument?: boolean }).__connectDocument === true)
-		console.log(`[connect-one-window] ${BROWSER}: the check loaded ${sameDocument ? "in the same document" : "by a reload"}`)
+		expect(focus).toEqual({ window: expect.any(Number), hasFocus: true, lastFocused: true, activeElement: "body" })
+		expect(focus.window).not.toBe(connectWindow)
 
 		const hash = await dapp.waitForFunction(
 			() => document.querySelector('[data-testid="pg-verification-hash"]')?.textContent || false,
 			{ timeout: 30_000, polling: 200 },
 		)
-		const shown = await page.evaluate(async (grid) => {
-			const [current, lastFocused] = await Promise.all([chrome.windows.getCurrent(), chrome.windows.getLastFocused()])
+		const read = await check.evaluate((grid: string) => {
 			const label = (testid: string) => document.querySelector(`[data-testid="${testid}"]`)?.textContent?.trim() ?? null
 			return {
-				window: current.id,
-				lastFocused: lastFocused.id,
 				grid: document.querySelector(grid)?.textContent?.replace(/\s/g, "") ?? "",
 				header: { account: label("identity-account"), network: label("identity-network") },
+				action: label("verify-action"),
 				error: document.querySelector('[data-testid="error-text"]')?.textContent ?? null,
 			}
 		}, GRID)
-		expect(shown).toEqual({
-			window: connectWindow,
-			lastFocused: connectWindow,
+		expect(read).toEqual({
 			grid: hashToEmoji((await hash.jsonValue()) as string),
 			header: { account: "No account shared", network: "Local Network" },
+			action: "Connection established",
 			error: null,
 		})
-		expect(ctx.consoleErrors).toEqual([])
-		expect(ctx.pageErrors).toEqual([])
-		await page.waitForFunction(
+		await check.waitForFunction(
 			(sel: string, want: string) => document.querySelector(sel)?.textContent === want,
 			{ timeout: 5_000, polling: 50 },
 			ANNOUNCE,
 			ANNOUNCEMENT,
 		)
+		await shotSend(check, "connect-check", "verify-emoji-grid")
 
-		await prepareKeys(page)
-		await page.keyboard.press("Enter")
-		await page.keyboard.press("Escape")
+		// An Enter, a held Enter and an Escape reach the check and answer nothing.
+		await check.evaluate(() => {
+			const w = window as unknown as { __keys: Array<{ key: string; repeat: boolean }> }
+			w.__keys = []
+			window.addEventListener("keydown", (e) => w.__keys.push({ key: e.key, repeat: e.repeat }), true)
+		})
+		await prepareKeys(check)
+		await check.keyboard.press("Enter")
+		for (let i = 0; i < 3; i++) await check.keyboard.down("Enter")
+		await check.keyboard.up("Enter")
+		await check.keyboard.press("Escape")
 		await sleep(1_000)
-		expect(page.isClosed(), "Enter or Escape closed the check").toBe(false)
-		expect(await showsCheck(page)).toBe(true)
-		await approveVerify(page)
-		expect(await created()).toEqual([{ id: connectWindow, type: "popup" }])
+		const keys = await check.evaluate(() => (window as unknown as { __keys: Array<{ key: string; repeat: boolean }> }).__keys)
+		expect(
+			keys.some((k) => k.key === "Enter" && k.repeat),
+			"the driver sent no repeat, so the held Enter proved nothing",
+		).toBe(true)
+		expect(keys.some((k) => k.key === "Escape")).toBe(true)
+		// Either answer closes the check, so a check still open on its grid was answered by no key.
+		expect(check.isClosed(), "a key answered the check").toBe(false)
+		expect(await check.$(GRID)).not.toBeNull()
 
-		await dapp.waitForSelector('[data-testid="pg-status"][data-status="connected"]', { timeout: 30_000 })
+		await approveVerify(check)
+		await dapp.waitForSelector(CONNECTED, { timeout: 30_000 })
 		await selectPgBundle(dapp, "accounts")
 		const seq = await snapshotResultSeq(dapp)
 		const capsP = waitForPopup(ctx, "capabilities", { timeout: 60_000 })
 		await clickByTestId(dapp, "pg-btn-requestCapabilities")
 		const caps = await capsP
 		const capsWindow = await caps.evaluate(async () => (await chrome.windows.getCurrent()).id)
-		expect(await created()).toEqual([
-			{ id: connectWindow, type: "popup" },
-			{ id: capsWindow, type: "popup" },
-		])
+		const created = (await changes()).filter((c) => c.change === "created").map((c) => c.id)
+		expect(created).toEqual([connectWindow, focus.window, capsWindow])
 		await rejectCapabilities(caps)
 		expect((await waitForPgResult(dapp, "requestCapabilities", seq, 30_000)).status).toBe("error")
 		await waitForPopupClosed(caps)
+
+		const lines = (await marks()).filter((m) => m.mark.startsWith("line:")).map((m) => m.mark.slice(5))
+		const times = timeline(await marks(), await changes(), connectWindow, focus.window, shown)
+		console.log(`[connect-check-window] ${BROWSER} at once: ${JSON.stringify({ ...times, lines })}`)
+		// The page is never shown between the two windows: the check exists before the connect window
+		// goes, well inside the bridge.
+		expect(times.checkCreated).not.toBeNull()
+		expect(times.connectRemoved).not.toBeNull()
+		expect(times.checkCreated as number).toBeLessThanOrEqual(times.connectRemoved as number)
+		expect(times.checkCreated as number).toBeLessThan(BRIDGE_MS / 3)
+		expect(ctx.consoleErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
+	},
+)
+
+test.skipIf(!aztecConfig)(
+	"a dApp that starts its check late: the connect window closes after Allow, and the check opens later in its own",
+	{ timeout: 150_000 },
+	// A wallet of its own: the other test's remembered connection would make this one a reconnection.
+	async ({ registeredExtensionPerTest: ctx }) => {
+		const { control, dapp, page, connectWindow, changes, marks } = await openConnect(ctx)
+
+		const checkP = waitForPopup(ctx, "verify", { timeout: 60_000 })
+		await stallPage(dapp, STALL_MS)
+		await clickByTestId(page, "discover-allow-btn")
+		await shotConnecting(page)
+		await waitForPopupClosed(page, 10_000)
+
+		// The page is still stalled: no check was created, and no wallet window is left open.
+		expect((await changes()).filter((c) => c.change === "created").map((c) => c.id)).toEqual([connectWindow])
+		expect(await popupsOpen(control)).toBe(0)
+
+		const check = await checkP
+		const shown = await checkShown(check)
+		const action = await check.evaluate(() => document.querySelector('[data-testid="verify-action"]')?.textContent?.trim() ?? null)
+		expect(action).toBe("Connection established")
+		await approveVerify(check)
+		await dapp.waitForSelector(CONNECTED, { timeout: 30_000 })
+
+		const lines = (await marks()).filter((m) => m.mark.startsWith("line:")).map((m) => m.mark.slice(5))
+		expect(lines).toEqual(["wants to connect on Local Network", "Connecting on Local Network"])
+		const checkWindow = await check.evaluate(async () => (await chrome.windows.getCurrent()).id)
+		expect((await changes()).filter((c) => c.change === "created").map((c) => c.id)).toEqual([connectWindow, checkWindow])
+		console.log(
+			`[connect-check-window] ${BROWSER} late: ${JSON.stringify(timeline(await marks(), await changes(), connectWindow, checkWindow, shown))}`,
+		)
 		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
 	},
