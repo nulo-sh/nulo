@@ -47,6 +47,10 @@ export function nodeInfoResult(l1ChainId: number, rollupVersion: number): Record
 export interface StubServer {
 	url: string
 	methods: string[]
+	/** Resets every connection that holds an unanswered request. Chrome sends at most six requests
+	 *  at once to one host over HTTP/1.1, and each blackholed one keeps its connection, so later
+	 *  calls to this stub queue unsent once six hang. */
+	dropUnanswered: () => void
 	close: () => Promise<void>
 }
 
@@ -85,6 +89,7 @@ export function startStub(answer: (method: string) => unknown | undefined): Prom
 	return new Promise((resolve) => {
 		const methods: string[] = []
 		const sockets = new Set<Socket>()
+		const unanswered = new Set<Socket>()
 		const server: Server = createServer((req, res) => {
 			let body = ""
 			req.on("data", (c) => {
@@ -92,20 +97,29 @@ export function startStub(answer: (method: string) => unknown | undefined): Prom
 			})
 			req.on("end", () => {
 				const plan = planBatchReplies(body, answer, methods)
-				if (plan.kind !== "replies") return
+				if (plan.kind !== "replies") {
+					unanswered.add(req.socket)
+					return
+				}
 				res.setHeader("content-type", "application/json")
 				res.end(JSON.stringify(plan.payload))
 			})
 		})
 		server.on("connection", (s) => {
 			sockets.add(s)
-			s.on("close", () => sockets.delete(s))
+			s.on("close", () => {
+				sockets.delete(s)
+				unanswered.delete(s)
+			})
 		})
 		server.listen(0, "127.0.0.1", () => {
 			const port = (server.address() as AddressInfo).port
 			resolve({
 				url: `http://127.0.0.1:${port}`,
 				methods,
+				dropUnanswered: () => {
+					for (const s of unanswered) s.destroy()
+				},
 				close: () =>
 					new Promise<void>((r) => {
 						for (const s of sockets) s.destroy()

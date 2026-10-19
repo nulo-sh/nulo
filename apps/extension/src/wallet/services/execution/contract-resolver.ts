@@ -28,6 +28,7 @@
 
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { type ContractArtifact, type FunctionAbi, FunctionSelector } from "@aztec-labs/stdlib/abi"
+import { type JournalRetitle, journalCallOf } from "@/wallet/services/operation-journal/spec"
 import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { type ILogger, LogLevel } from "@/wallet/logger"
@@ -90,18 +91,22 @@ export const NAMED_CALL_BINDING: SelectorBindingPolicy = { label: "call name", a
 
 /** Kept beside the error, never on it, so no payload, log projection or serialization can carry
  *  the resolved name out of the process. */
-const refusalTitles = new WeakMap<Error, string>()
+const refusals = new WeakMap<Error, JournalRetitle>()
 
-/** The title a binding refusal gives the record it fails: the function the selector resolved to,
- *  or "Transaction" when it resolved to none. `undefined` for any other error. */
-export function refusalTitleOf(error: unknown): string | undefined {
-	return error instanceof Error ? refusalTitles.get(error) : undefined
+/** What a binding refusal renames the record it fails to: the function the selector resolved to,
+ *  or "Transaction" when it resolved to none, with the refused call's contract and argument count,
+ *  which need not be the primary call's. `undefined` for any other error. */
+export function refusalOf(error: unknown): JournalRetitle | undefined {
+	return error instanceof Error ? refusals.get(error) : undefined
 }
 
-function titled<E extends Error>(error: E, policy: SelectorBindingPolicy, title: string): E {
-	if (policy.titlesRow) refusalTitles.set(error, title)
+function titled<E extends Error>(error: E, policy: SelectorBindingPolicy, title: string, claim: BindingClaim): E {
+	if (policy.titlesRow) refusals.set(error, { title, call: journalCallOf(claim.to?.toString(), claim.args) })
 	return error
 }
+
+/** The call a binding check judges, as each site holds it. */
+type BindingClaim = { readonly name?: string; readonly to?: { toString(): string }; readonly args?: readonly unknown[] }
 
 /** The refusal names the policy only: the claimed name, the resolved function and the target are
  *  request values, and the message reaches records and log lines that no redactor can scrub. */
@@ -111,17 +116,13 @@ function selectorBindingRefusal(policy: SelectorBindingPolicy): ScopeViolationEr
 
 /** Scope checks authorize a dApp call by its name, execution dispatches its selector: refuse
  *  unless the selector resolved (`fn`) to the function the name claims. */
-export function assertSelectorBinding(
-	fn: FunctionAbi | undefined,
-	claim: { readonly name?: string },
-	policy: SelectorBindingPolicy,
-): FunctionAbi {
+export function assertSelectorBinding(fn: FunctionAbi | undefined, claim: BindingClaim, policy: SelectorBindingPolicy): FunctionAbi {
 	if (!fn) {
-		throw titled(new Error("Method not found"), policy, "Transaction")
+		throw titled(new Error("Method not found"), policy, "Transaction", claim)
 	}
 	const absentAllowed = policy.absentName === "allowed" && claim.name === undefined
 	if (!absentAllowed && claim.name !== fn.name) {
-		throw titled(selectorBindingRefusal(policy), policy, fn.name)
+		throw titled(selectorBindingRefusal(policy), policy, fn.name, claim)
 	}
 	return fn
 }

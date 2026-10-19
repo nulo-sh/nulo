@@ -19,7 +19,7 @@ import OperationCard from "../execute/OperationCard.vue"
 import SignerIdentityStrip from "../execute/SignerIdentityStrip.vue"
 
 /** Utils */
-import { feeDisplay, feeFigure, formatGasBalance } from "@/utils/fee-estimation"
+import { type FeeDisplay, feeDisplay, feeFigure, formatGasBalance } from "@/utils/fee-estimation"
 import { authwitDisplayCall, grantContentsOf, undecodedAll } from "../execute/display-calls"
 import { grantRefusalRow, readableGrants } from "../execute/call-surface"
 import { decodeOperationArguments, followKnownTokens, resolveOperations } from "../execute/operation-display"
@@ -108,9 +108,11 @@ const {
 const question = computed(() => payload.value?.feeQuestion)
 const grantsPending = computed(() => !!operation.value && grantContentsOf(operation.value).length > 0 && !decodedGrants.value)
 const grantRefusal = computed(() => grantRefusalRow(decodedGrants.value ?? []))
-/** The figure alone: the footer's half-width button has no room for its dollars, which the card
- *  above shows. Read from the question, so it needs no quote and names the fee before the card mounts. */
+/** Read from the question, so it needs no quote and names the fee before the card mounts. */
 const confirmLabel = computed(() => (question.value ? `Send for ${feeFigure(feeDisplay(question.value.fee, undefined))}` : "Send for FJ"))
+/** The card's own quote of the new fee: the window reads no price, so its dollars are the card's. */
+const nowFee = ref<FeeDisplay | null>(null)
+const confirmDetail = computed(() => (nowFee.value?.usd ? `(${nowFee.value.usd})` : undefined))
 /** The app's own payment set the fee path: no speed was picked, and its claim, not the balance, pays. */
 const setByApp = computed(() => question.value?.feeSettings?.paymentMethod.kind === "embedded")
 const priority = computed(() => (setByApp.value ? undefined : (question.value?.feeSettings?.priorityLevel ?? "normal")))
@@ -278,6 +280,7 @@ onUnmounted(() => {
 							:availableLoading="availableLoading"
 							:hideAvailable="setByApp"
 							:priority="priority"
+							v-model:now="nowFee"
 						/>
 					</template>
 				</OperationCard>
@@ -291,6 +294,7 @@ onUnmounted(() => {
 			:reject-disabled="isLoading || !requestId"
 			confirm-testid="fee-confirm-btn"
 			:confirm-label="confirmLabel"
+			:confirm-detail="confirmDetail"
 			:confirm-loading="isLoading"
 			:confirm-disabled="
 				processingError?.type === 'error' || !operation || !question || grantsPending || grantRefusal !== undefined || isInteractionCancelled

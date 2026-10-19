@@ -69,7 +69,7 @@ export async function teardown() {
 declare module "vitest" {
 	export interface ProvidedContext {
 		extensionPath: string
-		/** Only the smoke setup provides it; elsewhere it is undefined and launches are unguarded. */
+		/** Both e2e setups provide `true`. */
 		egressGuard?: boolean
 		/** Only the smoke setup provides it: whether a launch may send the Testnet node direct. */
 		liveLeg?: boolean

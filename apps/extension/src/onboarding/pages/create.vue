@@ -16,6 +16,7 @@ import type { ProfileInfo } from "@/wallet/services/profile/spec"
 
 /** Utils */
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
+import { createFailedNotice } from "@/utils/profile-flow-notices"
 
 /** Stores */
 import { useNotificationStore } from "@/stores/notification.store"
@@ -59,20 +60,7 @@ const {
 		router.push("/onboarding/learn")
 	},
 	openToast,
-	notifyCreateFailed: (isPasskey) => {
-		notificationStore.create({
-			type: "warning",
-			payload: {
-				title: "Profile creation failed",
-				description: isPasskey
-					? "An error occurred while creating the profile. This authenticator may not be supported or encountered an issue. Try again or use another one."
-					: "An error occurred while creating the profile. Please try again.",
-				note: isPasskey ? "Windows Hello may not work correctly with some versions of Windows." : undefined,
-				confirmText: "OK",
-				onConfirm: () => {},
-			},
-		})
-	},
+	notifyCreateFailed: (isPasskey) => notificationStore.create(createFailedNotice(isPasskey)),
 })
 
 const submitLabel = computed(() => {

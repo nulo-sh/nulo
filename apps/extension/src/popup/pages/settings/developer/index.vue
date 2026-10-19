@@ -29,8 +29,6 @@ const appStore = useAppStore()
 const cacheStore = useCacheStore()
 
 const configService = new ConfigServiceClient()
-configService.onUpdate.add(onSettingUpdate)
-const developerRead = useConfigRead(configService, () => configService.getProps(), landDeveloperConfig)
 
 const openLogs = async () => {
 	if (appStore.loggerWindowId) {
@@ -84,7 +82,9 @@ const settings = {
 const logsRow = settingsRow("developer-logs")
 const accountStateRow = settingsRow("developer-account-state")
 
-const { updateSetting } = useSettingUpdate(configService, settings, applySetting)
+const { updateSetting, onSettingUpdate, landSettings } = useSettingUpdate(configService, settings, applySetting)
+configService.onUpdate.add(onSettingUpdate)
+const developerRead = useConfigRead(configService, () => configService.getProps(), landDeveloperConfig)
 
 async function applySetting(key, value) {
 	settings[key].model.value = value
@@ -102,22 +102,8 @@ async function applySetting(key, value) {
 	}
 }
 
-function onSettingUpdate(setting) {
-	if (settings[setting.key]) {
-		if (settings[setting.key].model.value !== setting.value) {
-			applySetting(setting.key, setting.value)
-		}
-	}
-}
-
-// Copies the values only: `applySetting` would write `indicateFailures` and `debugMode` on a reread.
-function landDeveloperConfig(_settings, updatedSince) {
-	_settings.forEach((s) => {
-		if (settings[s.key] && !updatedSince(s.key)) {
-			settings[s.key].model.value = s.value
-		}
-	})
-
+function landDeveloperConfig(stored, updatedSince) {
+	landSettings(stored, updatedSince)
 	isLoading.value = false
 }
 
@@ -139,7 +125,7 @@ onBeforeUnmount(() => {
 			<template v-for="sk in Object.keys(settings)" :key="sk">
 				<Flex v-if="settings[sk].visible.value" align="center" justify="between" :data-testid="settings[sk].testid" v-settings-row="settings[sk].id">
 					<Flex direction="column" justify="center" gap="6">
-						<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings[sk].title }}</Text>
+						<Text :class="$style.title" color="primary">{{ settings[sk].title }}</Text>
 						<Text variant="caption" color="tertiary">{{ settings[sk].description }}</Text>
 					</Flex>
 
@@ -158,7 +144,7 @@ onBeforeUnmount(() => {
 				<Flex justify="between" align="center">
 					<Flex direction="column" gap="6">
 						<Flex align="center" gap="8">
-							<Text :id="logsTitleId" variant="row-title" :class="$style.title_size" color="primary">{{ logsRow.title }}</Text>
+							<Text :id="logsTitleId" :class="$style.title" color="primary">{{ logsRow.title }}</Text>
 							<div
 								v-if="cacheStore.failureLog?.color"
 								:class="$style.failure_dot"
@@ -182,7 +168,7 @@ onBeforeUnmount(() => {
 			>
 				<Flex justify="between" align="center">
 					<Flex direction="column" gap="6">
-						<Text variant="row-title" :class="$style.title_size" color="primary">{{ accountStateRow.title }}</Text>
+						<Text :class="$style.title" color="primary">{{ accountStateRow.title }}</Text>
 						<Text variant="caption" color="tertiary">{{ accountStateRow.description }}</Text>
 					</Flex>
 					<Icon name="chevron" :size="18" color="secondary" />
@@ -230,7 +216,7 @@ onBeforeUnmount(() => {
 	flex-shrink: 0;
 }
 
-.title_size {
-	font-size: 13px;
+.title {
+	composes: control_title from "../../../../components/ui/Settings/settings-row.module.css";
 }
 </style>

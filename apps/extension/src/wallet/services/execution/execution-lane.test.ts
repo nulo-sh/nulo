@@ -19,6 +19,9 @@ import { describe, expect, test, vi } from "vitest"
 import { SessionEndedError, TooManyPendingError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { deferred } from "@nulo/wallet-core/utils"
+import { journalCallTitle } from "@/utils/journal-state"
+import { getTxTitle } from "@/utils/tx-enrichment"
+import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { ExecutionLane, type ExecutionLaneDeps } from "./execution-lane"
 import type { ExecutionMutex } from "./execution-mutex"
 
@@ -605,6 +608,83 @@ describe("pre-claim wait heartbeat", () => {
 		await lane.cancelJob("cancel-1") // no controller registered — pre-acquire
 		expect(queuedWaiters(lane).has("cancel-1")).toBe(false)
 		expect(deps.operationJournal.transitionOperation).toHaveBeenCalled()
+	})
+})
+
+describe("ExecutionLane: the call a record reads by", () => {
+	const TOKEN = `0x${"0d".repeat(32)}`
+	const CLASS = `0x${"0e".repeat(32)}`
+	const FEE = `0x${"0f".repeat(32)}`
+
+	test("beginJournal titles and names the record by one primary of the calls it is given", async () => {
+		const createOperation = vi.fn(async (input: unknown) => ({ id: "op-1", ...(input as object) }) as never)
+		const { lane } = makeLane({ operationJournal: { createOperation } as never })
+		const calls = [
+			{ method: "claim_and_end_setup", call: { contract: FEE, argCount: 0 } },
+			{ method: "transfer_in_public", call: { contract: TOKEN, argCount: 4 } },
+		]
+		await lane.beginJournal("net-1", "0xacct", { type: 1, name: "dapp" } as never, calls, FENCE)
+		expect(createOperation).toHaveBeenCalledWith(
+			expect.objectContaining({ title: "transfer_in_public", call: { contract: TOKEN, argCount: 4 } }),
+		)
+	})
+
+	test("a build writes the title and the call of its primary in one write, past an unnamed call and a fee call", async () => {
+		const setOperationMeta = vi.fn(async () => ({}))
+		const { lane, deps } = makeLane({ operationJournal: { setOperationMeta } as never })
+		await lane.recordBuiltCall("j1", [
+			{ contract: TOKEN, method: "", args: [] },
+			{ contract: FEE, method: "sponsor_unconditionally", args: [1], classId: CLASS },
+			{ contract: TOKEN, method: "transfer_in_public", args: [1, 2, 3, 4], classId: CLASS },
+		])
+		expect(setOperationMeta.mock.calls).toEqual([
+			["j1", { title: "transfer_in_public", call: { contract: TOKEN, argCount: 4, classId: CLASS } }],
+		])
+		expect(deps.logDebug).not.toHaveBeenCalled()
+	})
+
+	test("the record a build names reads as the settled row of the same calls will", async () => {
+		const OTHER = `0x${"0c".repeat(32)}`
+		const tokens = [{ contract: TOKEN, classId: CLASS }]
+		const transfer = (contract: string, classId: string, args = [1, 2, 3, 4]) => ({
+			contract,
+			method: "transfer_in_public",
+			args,
+			classId,
+		})
+		const lists = [
+			[{ contract: FEE, method: "sponsor_unconditionally", args: [1], classId: CLASS }, transfer(TOKEN, CLASS)],
+			[{ contract: FEE, method: "sponsor_unconditionally", args: [1], classId: CLASS }],
+			[transfer(OTHER, CLASS)],
+			[transfer(TOKEN, `0x${"0a".repeat(32)}`)],
+			[transfer(TOKEN, CLASS, [1, 2, 3])],
+			[{ contract: OTHER, method: "claim", args: [1, 2] }],
+			[
+				{ contract: TOKEN, method: "approve", args: [1] },
+				{ contract: TOKEN, method: "mint_to_public", args: [1, 2], classId: CLASS },
+			],
+		]
+		for (const txCalls of lists) {
+			const setOperationMeta = vi.fn(async () => ({}))
+			const { lane } = makeLane({ operationJournal: { setOperationMeta } as never })
+			await lane.recordBuiltCall("j1", txCalls)
+			const [, meta] = setOperationMeta.mock.calls[0] as unknown as [string, Pick<OperationRecord, "title" | "call">]
+			const record = { kind: "dapp_execute", ...meta } as OperationRecord
+			expect(journalCallTitle(record, tokens)).toBe(getTxTitle(txCalls, tokens))
+		}
+	})
+
+	test("a refused or unreadable write never fails the send, and logs one fixed line at debug", async () => {
+		const setOperationMeta = vi.fn(async () => {
+			throw new Error("refused")
+		})
+		const { lane, deps } = makeLane({ operationJournal: { setOperationMeta } as never })
+		await expect(lane.recordBuiltCall("j1", [{ contract: TOKEN, method: "transfer_in_public", args: [] }])).resolves.toBeUndefined()
+		await lane.recordBuiltCall("j1", [{ contract: "0xc", method: "transfer_in_public", args: [] }])
+		await lane.recordBuiltCall(undefined, [{ contract: TOKEN, method: "transfer_in_public", args: [] }])
+		expect(setOperationMeta).toHaveBeenCalledTimes(1)
+		expect(vi.mocked(deps.logDebug).mock.calls).toEqual([["journal call not recorded"], ["journal call not recorded"]])
+		expect(deps.logError).not.toHaveBeenCalled()
 	})
 })
 

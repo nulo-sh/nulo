@@ -7,6 +7,7 @@ import { profileDeletedError } from "@/wallet/services/profile/profile-deletion-
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { validateParams } from "@nulo/extension-messaging/zod"
+import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
 import { AztecNodeFactoryAdapter, isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
 import type { NodeFactory } from "@nulo/aztec-runtime/ports"
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@nulo/aztec-runtime/utils"
@@ -39,6 +40,7 @@ import {
 	ERR_RESET_RUNNING,
 	ERR_UNATTENDED_LIVE_CHECK,
 	type Events,
+	IDENTITY_PROBE_MS,
 	findPrimaryEndpoint,
 	type Methods,
 	type Network,
@@ -431,7 +433,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	 * that the node still reports the stored L1 identity — required at ACCOUNT CREATION so a
 	 * poisoned custom-network row cannot mint a wrong-chain account. Seeded kinds are already
 	 * bound to in-code constants and stay offline-creatable; custom networks are online-configured
-	 * by nature, so an unreachable node fails creation with a clear error.
+	 * by nature, so a node that does not answer one bounded read fails creation with
+	 * `NodeUnreachableError`, which callers may tolerate, while a mismatch stays a plain refusal.
 	 *
 	 * ONE row read: the probe target and the returned l1ChainId must come from the same
 	 * snapshot — two independent reads could validate one row and return another's value.
@@ -451,7 +454,12 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			if (opts?.unattended) throw new Error(`${ERR_UNATTENDED_LIVE_CHECK}: network ${chainId} needs a live L1 identity check`)
 			const primary = findPrimaryEndpoint(network) ?? network.endpoints[0]
 			if (!primary) throw new Error("Network has no endpoint to verify its L1 identity against")
-			const probed = await this._probeChainIdentity(primary.rpcUrl, kind)
+			const probed = await this.probeIdentityOnce(primary.rpcUrl, kind, IDENTITY_PROBE_MS).catch((error: unknown) => {
+				// A node that answered chain 0 answered: only a read that got no answer is tolerable.
+				if (error instanceof Error && error.message.startsWith(ERR_ENDPOINT_CHAIN_MISMATCH)) throw error
+				this.logDebug("custom network's node did not answer its identity read")
+				throw new NodeUnreachableError()
+			})
 			if (probed.l1ChainId !== stored) {
 				throw new Error(`Custom network L1 identity mismatch: stored ${stored}, node reports ${probed.l1ChainId}`)
 			}
@@ -606,14 +614,25 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	 * a SW restart kills both the flag and any stale creator closure that
 	 * captured the network, so cross-restart staleness cannot occur. A read
 	 * that a reservation overlapped answers false: its cascade may already have
-	 * swept what the caller is about to treat as live.
+	 * swept what the caller is about to treat as live. With `since`, a mark from
+	 * {@link captureLiveness}, a reservation begun after the mark answers false too.
 	 */
-	public async isNetworkLive(networkId: string): Promise<boolean> {
+	public async isNetworkLive(networkId: string, since?: number): Promise<boolean> {
 		await this.ensureInitialized()
-		const countBefore = this.reservations.get(networkId) ?? 0
+		const countBefore = since ?? this.reservations.get(networkId) ?? 0
 		if (this.deletingNetworks.has(networkId)) return false
 		const row = await this.storage.get(networkId)
 		return row !== undefined && !this.reservedSince(networkId, countBefore)
+	}
+
+	/**
+	 * A mark for {@link isNetworkLive}, for work that spans awaits before its write: undefined
+	 * unless the network is live now. Never taken while a reservation is open, since one that
+	 * closes before the write would leave the count the mark holds.
+	 */
+	public async captureLiveness(networkId: string): Promise<number | undefined> {
+		const mark = this.reservations.get(networkId) ?? 0
+		return (await this.isNetworkLive(networkId, mark)) ? mark : undefined
 	}
 
 	/** Chain-keyed variant of {@link isNetworkLive} for writers that carry only

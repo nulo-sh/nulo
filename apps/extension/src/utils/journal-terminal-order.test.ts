@@ -8,7 +8,7 @@ import { describe, expect, test } from "vitest"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { buildJournalTerminalCardProps, journalCardTitle } from "./journal-state"
 
-const CARD_KEYS = new Set(["tokenId", "amountRaw", "transferType", "title", "subtitle"])
+const CARD_KEYS = new Set(["tokenId", "amountRaw", "transferType", "title", "subtitle", "call"])
 
 function recorded<T extends object>(target: T, name: string, log: string[], keys?: Set<string>): T {
 	return new Proxy(target, {
@@ -45,6 +45,7 @@ function build(op: OperationRecord, log: string[]) {
 				log.push(`lookup(${id})`)
 				return id === 42 ? token : undefined
 			},
+			tokens: [],
 		},
 		"ctx",
 		log,
@@ -101,7 +102,7 @@ describe("buildJournalTerminalCardProps — evaluation order", () => {
 		)
 		expect(run()).toMatchObject({ title: "Swap", originLabel: "alpha.example", amount: null })
 		expect(lookups).toEqual([])
-		expect(log).toEqual(["op.title", "op.title", "op.subtitle"])
+		expect(log).toEqual(["ctx.tokens", "op.title", "op.call", "op.title", "op.subtitle"])
 	})
 })
 
@@ -112,9 +113,10 @@ describe("journalCardTitle — the awaiting card's title", () => {
 			lookups.push(id)
 			return id === 42 ? { symbol: "USDC", decimals: 6, hasDecimals: true } : undefined
 		}
-		expect(journalCardTitle(terminal({ kind: "dapp_execute", origin: "dapp", tokenId: 42, title: "swap" }), tokenById)).toBe("Swap")
+		const ctx = { tokenById, tokens: [] }
+		expect(journalCardTitle(terminal({ kind: "dapp_execute", origin: "dapp", tokenId: 42, title: "swap" }), ctx)).toBe("Swap")
 		expect(lookups).toEqual([])
-		expect(journalCardTitle(terminal({ tokenId: 42 }), tokenById)).toBe("USDC")
+		expect(journalCardTitle(terminal({ tokenId: 42 }), ctx)).toBe("USDC")
 		expect(lookups).toEqual([42])
 	})
 })

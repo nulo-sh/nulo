@@ -30,9 +30,9 @@ import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Utils */
 import { DETAIL_TIME_FORMAT } from "../detail-page"
-import { categoricalLabel, journalCardOriginLabel, journalTerminalDisplay } from "@/utils/journal-state"
+import { categoricalLabel, journalCallTitle, journalCardOriginLabel, journalTerminalDisplay } from "@/utils/journal-state"
 import { bindJournalDetailUpdates, readJournalDetail } from "./journal-detail-scope"
-import { humanizeMethodName, formatTransferType } from "@/utils/tx-enrichment"
+import { formatTransferType } from "@/utils/tx-enrichment"
 import { usePrices } from "@/composables/usePrices"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { balanceFormatted } from "@/utils/amount.js"
@@ -77,7 +77,7 @@ const token = computed(() => {
 const title = computed(() => {
 	if (!op.value) return "Transaction"
 	if (isTransfer.value) return token.value?.symbol || "Transfer"
-	return op.value.title ? humanizeMethodName(op.value.title) : "Transaction"
+	return journalCallTitle(op.value, tokens.value)
 })
 
 const amountDisplay = computed(() => {
@@ -103,7 +103,7 @@ const transferFiat = computed(() => {
 const methodLabel = computed(() => {
 	if (!op.value?.title) return null
 	if (isTransfer.value) return null
-	return humanizeMethodName(op.value.title)
+	return journalCallTitle(op.value, tokens.value)
 })
 
 // Recipient surface for transfer kinds (only populated post-broadcast on
