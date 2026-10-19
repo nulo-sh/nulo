@@ -2357,11 +2357,12 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 
 		test("after a failed read, the next account's failed read brings its own line back", async () => {
 			const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+			let w: ReturnType<typeof mount> | undefined
 			try {
 				const gas = deferred<unknown>()
 				mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
 				mocks.getGasBalances.mockRejectedValueOnce(new Error("boom")).mockReturnValueOnce(gas.promise)
-				const w = mountSend()
+				w = mountSend()
 				await flushPromises()
 				expect(degradedText(w)).toBe("Couldn't load fee data. Retrying in the background.")
 
@@ -2381,17 +2382,20 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 				await flushPromises()
 				expect(degradedText(w)).toBe("Couldn't load fee data. Close and reopen to try again.")
 			} finally {
+				// A degraded identity arms the store's retry timer: unmounting releases it.
+				w?.unmount()
 				logged.mockRestore()
 			}
 		})
 
 		test("a committed account's failed read keeps its line while the same account reads again", async () => {
 			const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+			let w: ReturnType<typeof mount> | undefined
 			try {
 				const gas = deferred<unknown>()
 				mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
 				mocks.getGasBalances.mockRejectedValueOnce(new Error("boom")).mockReturnValue(gas.promise)
-				const w = mountSend()
+				w = mountSend()
 				await flushPromises()
 				expect(degradedText(w)).toBe("Couldn't load fee data. Retrying in the background.")
 
@@ -2402,6 +2406,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 				gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: HELD })
 				await flushPromises()
 			} finally {
+				w?.unmount()
 				logged.mockRestore()
 			}
 		})

@@ -30,7 +30,7 @@ const sponsoredSentence = computed(() => {
 </script>
 
 <template>
-	<!-- Pending, estimating and estimated stack label over value, so the row keeps its height when the number lands. -->
+	<!-- Pending with an amount, estimating and estimated stack label over value, so the row keeps its height when the number lands. -->
 	<Flex
 		v-if="estimating && isQueued && queuedCap"
 		direction="column"
