@@ -12,6 +12,10 @@
 | network Firefox | merge `f466e3be` | 3 passed | 590 s |
 | smoke Chrome, armed build | merge `f466e3be` | 57 files, 263 passed | 1894 s |
 | smoke Firefox, armed build | merge `f466e3be` | 60 files, 263 passed | 2697 s |
+| unit: `audit:vue` (858 files), `test:all`, `check:plans` | merge `274f3cb6` | green | |
+| network Chrome | merge `274f3cb6` | 3 passed | 323 s |
+| network Firefox | merge `274f3cb6` | 3 passed | 626 s |
+| after pictures again (Chrome) | merge `274f3cb6` | taken | |
 
 scope-refusal test 2 against test 1 on the same run, locally: Chrome 20.4 s / 20.4 s, then 24.4 s / 23.8 s; Firefox 25.0 s / 25.6 s, then 23.0 s / 21.7 s. On `dev` before the arc (CI): Chrome 11.2 s / 11.0 s, Firefox 21.4 s / 20.1 s. Test 2 now refuses in the window instead of at execution; its time stays level with test 1's.
 
@@ -19,6 +23,7 @@ scope-refusal test 2 against test 1 on the same run, locally: Chrome 20.4 s / 20
 
 ## Pictures
 
+- `dev` moved again before the PR (#826 retitles a failed record through `refusalOf`, a title and the refused call, and spells a classless call's name as its contract does). The second merge, `274f3cb6`, moved the queued retitle onto that contract; History now reads "Transfer Public To Public", so the after pictures were taken again there. Smoke was not rerun on it: the merge touches no window code of the arc, and the PR's required smoke lanes run on the merge ref.
 - Before and #777: taken at `dev` `97ffa088` (detached, the two scratch edits of Pictures step 2 applied, then discarded); after: at the merge `f466e3be`. Both in one `agent.sh` run each. `shotSend` writes the default (light) theme as `<name>.png`, renamed `-light`.
 - The base window shows today's toast with Confirm on (Sponsored), and History after Reject reads "Balance Of Public / Transaction failed", the name the call claimed.
 
