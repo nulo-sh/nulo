@@ -10,7 +10,7 @@ eli5_mode: skipped (orchestrator-owned)
 base: 993b3efc
 trunk: dev
 post_implementation_hardening: not scheduled
-status: approved by the final Codex pass; arc 1 next
+status: arc 1 in review (#889, draft for the owner's look); close-out after the owner's answers
 ---
 
 # firefox-sidebar-1: a Firefox sidebar whose passkey steps run in place (#596)
@@ -194,14 +194,14 @@ Nothing else changes: the predicate already runs the step in place (Fact 2), and
 
 ## Arc 1
 
-### Phase 1: the manifest key and its pin
+### Phase 1: the manifest key and its pin ✓
 
 1. Add the key and the comment (§ Architecture), and the `manifest.test.ts` case.
 2. Build Firefox with the smoke flags; `dist/firefox/manifest.json` carries the key.
 
 **Gate**: `cd apps/extension && bun --bun vitest run src/manifest.test.ts`, then root `bun run lint` and `bun run typecheck:all`. Pass: exit 0. Layers: lint, typecheck, unit.
 
-### Phase 2: the driver and the scenario
+### Phase 2: the driver and the scenario ✓
 
 1. Add `chromeActions`, `firefox-sidebar.ts`, `FIREFOX_ONLY.sidebar`, the spec and the `FIREFOX.md` row.
 2. With load1 under 150 before each run, run the spec on Firefox three times at `--retry=0`, then on Chrome (skipped, exit 0). Record each wall-clock in `lessons/phase-2.md`.
@@ -209,7 +209,7 @@ Nothing else changes: the predicate already runs the step in place (Fact 2), and
 
 **Gate**: steps 2 and 3, plus `cd apps/extension && bun --bun vitest run scripts/e2e/browser-seam.test.ts scripts/e2e/firefox-driver.test.ts`. Pass: every run exits 0. Layers: unit, smoke e2e.
 
-### Phase 3: pictures
+### Phase 3: pictures ✓
 
 1. A scratch spec (uncommitted), run headful under Xvfb (`HEADLESS=0 xvfb-run -a`), opens the sidebar on a registered profile and captures the browser window. For the revamped shots it sets `sidebar.revamp` before opening.
    - In chrome scope it draws the window's own global with `drawSnapshot`, which composites remote content, so each picture shows the browser around the sidebar.
@@ -218,7 +218,7 @@ Nothing else changes: the predicate already runs the step in place (Fact 2), and
 
 **Gate**: every listed shot exists as a whole-window picture showing the sidebar's content, the clipping at the old sidebar's opening width, and Nulo's icon in the revamped launcher. A picture of the sidebar's document alone does not pass: it cannot show the width or the launcher. If whole-window capture fails, the phase stops and the failure goes in `lessons/phase-3.md`. Layers: none (evidence).
 
-### Phase 4: arc gate
+### Phase 4: arc gate ✓
 
 1. From the root, in order: `bun run audit:vue`, `bun run test:all`, `bun run check:plans`.
 2. The armed builds and the full smoke suite on Chrome and on Firefox, at retry 0, because the manifest change reaches every Firefox launch.

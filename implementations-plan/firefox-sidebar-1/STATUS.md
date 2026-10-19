@@ -9,3 +9,4 @@
 - 2026-10-19 arc 1 phase 3: gate pass (five whole-window pictures; default_icon added, D7).
 - 2026-10-19 arc 1 phase 4: audit:vue, test:all, check:plans pass at 6c41b0ab; Codex loop converged (r1 approve, Opus request changes folded, r2 approve); smoke both browsers ran (load-timeout failures pass on rerun); Firefox network suite running.
 - 2026-10-19 arc 1 phase 4: gate pass at 364ef898 (origin/dev merged): smoke reruns green on both browsers, lint, typecheck:all, test:all, check:plans, full Firefox network suite 129/129 files green.
+- 2026-10-19 arc 1: draft PR #889 open; CI green on a4d3e249 (all five required aggregators). Waiting on the owner's look (sign-off, OA-2, OA-4).

@@ -20,3 +20,7 @@ The host is shared, and its load swung between 150 and 800 through the afternoon
 ## Consults
 
 - **Codex, on stopping the local network run.** At 11 of 129 files after about 45 minutes, the run projected about 8 hours, and CI's required Firefox network lane runs the same suite. Codex's verdict was **finish locally**: CLAUDE.md puts the run before the PR, Phase 4 requires it, and only the owner could amend that. The run continues.
+
+## CI on the PR
+
+#889 at `a4d3e249`: every check green, including `quality-status` and the four e2e aggregators. Smoke shard wall-clock (shards 1, 2, 3): Chrome 7:16, 10:01, 9:29; Firefox 9:07, 15:04, 10:20. Before, on #848's run (the `dev` commit the arc first merged): Chrome 7:18, 10:16, 7:55; Firefox 9:16, 18:27, 10:28. No CI smoke run exists on `dev` itself (the lanes run on PRs), so #848's is the baseline.
