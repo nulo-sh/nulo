@@ -53,8 +53,10 @@ const twoBalances = scene(
 	(g, at) => {
 		const card = plate(g, 144, 30, 352, 300)
 		text(card, 24, 56, "USDC", "c-head")
-		const toPrivate = stroke(card, "M 38 76 V 100")
-		const toPublic = stroke(card, "M 38 76 V 104 H 30 V 190")
+		// Both wires run down the marks' centre line and end on their drawn edges: in its 24-unit box the
+		// shield spans y 2 to 22, and the globe's stroke starts at y 2.
+		const toPrivate = stroke(card, "M 38 76 V 116.33")
+		const toPublic = stroke(card, "M 38 139.67 V 216.33")
 		const priv = balanceRow(card, "private", "1,800.00")
 		place(priv.g, 24, 136)
 		const only = text(card, 64, 168, "ONLY YOU CAN SEE IT")

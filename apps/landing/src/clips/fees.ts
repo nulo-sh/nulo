@@ -155,9 +155,35 @@ const sponsored = scene({ sponsored: ["sponsored", 0], someone: ["someone", 0], 
 	}
 })
 
+const METHODS = [
+	["public", "PUBLIC FEE JUICE"],
+	["private", "PRIVATE FEE JUICE"],
+	["user", "SPONSORED"],
+] as const
+const METHOD_ROW = 64
+
+const inControl = scene({ tells: ["tells", 0], always: ["always", 1], control: ["control", 0] }, (g, at) => {
+	const card = plate(g, 152, 48, 336, 264)
+	text(card, 24, 40, "PAY THE FEE WITH")
+	const rows = METHODS.map(([mark, label], i) => {
+		const row = group(card)
+		place(row, 0, 60 + i * METHOD_ROW)
+		glyph(row, mark, 24, 14, 28)
+		text(row, 64, 36, label)
+		return row
+	})
+	const pick = node(card, "rect", { class: "c-box", x: 12, width: 312, height: 48 })
+	return (t, local) => {
+		show(card, seg(local, 0, 0.4))
+		for (const [i, row] of rows.entries()) show(row, seg(t, at.tells + i * 0.25, at.tells + i * 0.25 + 0.4))
+		show(pick, seg(t, at.always, at.always + 0.3))
+		pick.setAttribute("y", lerp(64, 64 + METHOD_ROW, seg(t, at.control - 0.2, at.control + 0.4)).toFixed(2))
+	}
+})
+
 export const fees: Clip = {
 	id: "fees",
 	seed: 0x66656573,
 	timings,
-	scenes: { s1: networkFee, s2: feeJuice, s3: price, s4: whoPays, s5: sponsored },
+	scenes: { s1: networkFee, s2: feeJuice, s3: price, s4: whoPays, s5: sponsored, s6: inControl },
 }

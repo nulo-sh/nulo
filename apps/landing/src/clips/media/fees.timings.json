@@ -1,5 +1,5 @@
 {
-	"duration": 40.322,
+	"duration": 45.192,
 	"scenes": [
 		{ "id": "s1", "start": 0, "end": 4.826, "text": "Every Aztec transaction pays a network fee, the way Ethereum charges gas." },
 		{
@@ -20,7 +20,8 @@
 			"end": 36.843,
 			"text": "How you pay matters. Pay with public Fee Juice, and the record names you as the payer, each time. Pay with private Fee Juice, and the payer on record is a contract many people share."
 		},
-		{ "id": "s5", "start": 36.843, "end": 40.322, "text": "Sometimes the fee is sponsored: someone else pays it for you." }
+		{ "id": "s5", "start": 36.843, "end": 40.487, "text": "Sometimes the fee is sponsored: someone else pays it for you." },
+		{ "id": "s6", "start": 40.487, "end": 45.192, "text": "Nulo always tells you how the fee is paid, and you are always in control." }
 	],
 	"words": [
 		{ "w": "Every", "s": 0, "e": 0.25 },
@@ -145,6 +146,21 @@
 		{ "w": "pays", "s": 39.348, "e": 39.487 },
 		{ "w": "it", "s": 39.557, "e": 39.626 },
 		{ "w": "for", "s": 39.696, "e": 39.835 },
-		{ "w": "you.", "s": 39.904, "e": 40.322 }
+		{ "w": "you.", "s": 39.904, "e": 40.322 },
+		{ "w": "Nulo", "s": 40.487, "e": 40.904 },
+		{ "w": "always", "s": 40.974, "e": 41.322 },
+		{ "w": "tells", "s": 41.391, "e": 41.6 },
+		{ "w": "you", "s": 41.67, "e": 41.809 },
+		{ "w": "how", "s": 41.878, "e": 42.017 },
+		{ "w": "the", "s": 42.087, "e": 42.157 },
+		{ "w": "fee", "s": 42.226, "e": 42.365 },
+		{ "w": "is", "s": 42.435, "e": 42.504 },
+		{ "w": "paid,", "s": 42.574, "e": 43.061 },
+		{ "w": "and", "s": 43.13, "e": 43.2 },
+		{ "w": "you", "s": 43.27, "e": 43.339 },
+		{ "w": "are", "s": 43.374, "e": 43.409 },
+		{ "w": "always", "s": 43.687, "e": 44.104 },
+		{ "w": "in", "s": 44.174, "e": 44.313 },
+		{ "w": "control.", "s": 44.383, "e": 45.009 }
 	]
 }
