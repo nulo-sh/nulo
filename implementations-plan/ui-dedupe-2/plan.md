@@ -80,7 +80,7 @@ Decision page 59 (2026-10-19), both option B. Recon: [`recon.md`](recon.md). Own
 - Change: `composables/useFullBackupExport.ts` (F1 line). Test: `useFullBackupExport.test.ts:347-366` becomes "a discard in the open-run hop stops the run before it builds clients or requests its keys": the same `profileId` getter discards in the hop; `exportCalls()` is 0, nothing is built, and `expectNothingPublished` holds. The success controls ("a current run") stay.
 - Gate: `bun --bun vitest run src/composables/useFullBackupExport.test.ts` (in `apps/extension`) green; the base test file over the new code red on the old case; the new case red over the base composable; `bun run lint`, `bun run typecheck:all`.
 
-**Phase 2 — #839 rows 1, 2 and the held row.** ✗
+**Phase 2 — #839 rows 1, 2 and the held row.** ✓
 - Change: `useTokenBalanceSnapshot.ts`, `holdings.vue`, `SelectTokenPopup.vue`, `send.vue`.
 - Tests (D5):
   - hook: the cases "an unseen update is ignored; with insertUnseenUpdated…", both `added: append` cases and "refetchWhenDirty: false lands…" go; the Home halves they carried are already default cases or stay as one.
