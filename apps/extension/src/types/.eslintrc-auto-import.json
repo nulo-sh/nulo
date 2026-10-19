@@ -163,7 +163,6 @@
     "OWN_WINDOW_ROUTES": true,
     "OrderCtx": true,
     "OrderableRow": true,
-    "PASSKEY_BACKUP_UNCHECKED": true,
     "PASSKEY_COPY": true,
     "PINNED_TOKENS_MAX": true,
     "PINNED_TOKENS_MAX_CHAINS": true,

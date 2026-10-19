@@ -208,13 +208,7 @@ import {
 	settleHeldAccounts,
 } from "./full-backup-restore"
 import { deferred } from "@nulo/wallet-core/utils"
-import {
-	DECRYPTION_FAILED,
-	errorLogWriters,
-	PASSKEY_BACKUP_UNCHECKED,
-	useFullBackupImport,
-	validateAndMigrateBackup,
-} from "./useFullBackupImport"
+import { DECRYPTION_FAILED, errorLogWriters, useFullBackupImport, validateAndMigrateBackup } from "./useFullBackupImport"
 import { showsDecryptCta } from "@/utils/full-backup-ctas"
 import { collectRestoreErrors, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
@@ -2304,6 +2298,12 @@ describe("useFullBackupImport — passkey backup", () => {
 		return { ...backup, "backup-mac": await macOf(backup.checksum) }
 	}
 
+	/** The refusal's words, pinned: changing them is the owner's UI decision. */
+	const UNCHECKED_REFUSAL = [
+		"Backup cannot be restored",
+		"This passkey backup is from an older version or was changed, so it cannot be restored. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
+	] as const
+
 	/** The body edited after export, its checksum recomputed and its MAC kept. */
 	async function editedPasskeyBackup(edit: (body: { data: Record<string, unknown> } & Record<string, unknown>) => void) {
 		const { checksum: _stale, "backup-mac": mac, ...body } = await buildPasskeyBackup()
@@ -2399,13 +2399,12 @@ describe("useFullBackupImport — passkey backup", () => {
 	])("a passkey body with %s is refused before any prompt, with the way back", async (_label, mac) => {
 		const { c, opts, runCeremony } = mountPasskeyImport({ ...(await buildPasskeyBackup()), "backup-mac": mac })
 		await c.restoreBackup()
-		expect(opts.fillError).toHaveBeenCalledWith("full_backup", PASSKEY_BACKUP_UNCHECKED.title, PASSKEY_BACKUP_UNCHECKED.message)
+		expect(opts.fillError).toHaveBeenCalledWith("full_backup", ...UNCHECKED_REFUSAL)
 		expect(runCeremony).not.toHaveBeenCalled()
 		expectNothingWritten()
 	})
 
-	/** A passkey profile's file as the exporter writes it: its field order, pretty-printed, a Testnet
-	 *  account and a contact, and the check beside the checksum only when `withCheck`. */
+	/** The exporter's field order and layout; `withCheck` adds the MAC. */
 	async function exportedPasskeyFile(withCheck: boolean): Promise<File> {
 		const profileId = "9f2c4e1ab37d4f60"
 		const body = {
@@ -2456,16 +2455,12 @@ describe("useFullBackupImport — passkey backup", () => {
 			expect(opts.fillError).not.toHaveBeenCalled()
 			return
 		}
-		expect(opts.fillError).toHaveBeenCalledWith(
-			"full_backup",
-			"Backup cannot be restored",
-			"This passkey backup is from an older version or was changed, so it cannot be restored. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
-		)
+		expect(opts.fillError).toHaveBeenCalledWith("full_backup", ...UNCHECKED_REFUSAL)
 		expect(runCeremony).not.toHaveBeenCalled()
 		expectNothingWritten()
 	})
 
-	it("a passkey body of a retired generation keeps the incompatible-version words, check or not", async () => {
+	it("a passkey body of a retired generation without its check keeps the incompatible-version words", async () => {
 		const { checksum: _stale, "backup-mac": _mac, ...body } = await buildPasskeyBackup()
 		const retired = { ...body, "compat-epoch": 4 }
 		const { c, opts, runCeremony } = mountPasskeyImport({
@@ -2495,7 +2490,7 @@ describe("useFullBackupImport — passkey backup", () => {
 			expect(profileClient.restore).toHaveBeenCalledOnce()
 			return
 		}
-		expect(opts.fillError).toHaveBeenCalledWith("full_backup", PASSKEY_BACKUP_UNCHECKED.title, PASSKEY_BACKUP_UNCHECKED.message)
+		expect(opts.fillError).toHaveBeenCalledWith("full_backup", ...UNCHECKED_REFUSAL)
 		expect(runCeremony).not.toHaveBeenCalled()
 		expectNothingWritten()
 	})
