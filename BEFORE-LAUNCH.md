@@ -4,9 +4,9 @@ The Terms and the Privacy Policy ship with `«FILL: …»` placeholders: facts t
 of this repository. While any survives, `nulo.sh/terms` and `/privacy` carry a **DRAFT banner and
 `noindex`**, so nothing here blocks a merge. It blocks **v1.0.0**.
 
-Find every one: `git grep -n "«FILL" -- legal/`. What each one needs is described in
-[`legal/README.md` § Placeholders](./legal/README.md#placeholders). This file is the schedule.
-Accepted code work that blocks launch is not listed here: it is the
+Find every one: `git grep -n "«FILL" -- legal/terms.md legal/privacy.md`. What each one needs
+is described in [`legal/README.md` § Placeholders](./legal/README.md#placeholders). This file is
+the schedule. Accepted code work that blocks launch is not listed here: it is the
 [`v1.0.0` milestone](https://github.com/nulo-sh/nulo/milestone/1).
 
 ## 1. Any time before v1.0.0 — look these up, do not guess
@@ -37,11 +37,16 @@ URL and Presto links. Each filled fact reads in place in `legal/privacy.md` and 
 The store launch left two owner steps in the dashboards
 ([record](./implementations-plan/archive/nulo-v6/plan.md#store-upload)):
 
-- [ ] Chrome: publish the staged V6 submission from the dashboard once Google approves it, before
-      the approval lapses (30 days). The item stays Unlisted until a `/harden security` pass and
-      the owner decides on Public.
-- [ ] AMO: the listing still carries the "This add-on is experimental" flag (owner decision);
-      Mozilla may review the live version later, the modified-library rule being the open risk.
+- [x] Chrome: publish the staged V6 submission from the dashboard once Google approves it, before
+      the approval lapses (30 days). On 2026-10-19 the listing serves "Nulo V6" 0.31.0, updated
+      18 October 2026; the store page shows only a published revision, not its visibility.
+- [ ] AMO: the listing still carries the "This add-on is experimental" flag (`is_experimental` is
+      `true` in AMO's API on 2026-10-19). Mozilla may review the live version later, the
+      modified-library rule being the open risk.
+
+The owner decided both listings' launch state (2026-10-19, decision page 62, #864): Chrome goes
+Public once the security work in flight has landed, and AMO drops the experimental flag, both at
+1.0.0 (§ 3).
 
 Also at this point, not a placeholder but the same deadline: the **Chrome trader disclosure**
 ([`legal/README.md`](./legal/README.md), blocker 5) is declared non-trader; it must be re-declared
@@ -88,9 +93,13 @@ Then:
 - [ ] `git grep -n "«FILL" -- legal/terms.md legal/privacy.md` prints nothing (`legal/README.md`
       names the placeholder in prose). The `launch-legal` check refuses the 1.0.0 Release PR until it does
 - [ ] Both listing URLs in `legal/terms.md` § 1 open the live listings (a store serves an item's
-      public page only once it has published it)
+      public page only once it has published it). Both did on 2026-10-19; check again on the day
 - [ ] `bun run --cwd packages/legal test` and `bun run --cwd apps/landing test` are green
-- [ ] After the deploy, `nulo.sh/terms/v1.0/` shows **no DRAFT banner** and no `noindex` meta
+- [ ] After the deploy and before the Release PR merges, `nulo.sh/terms` shows **no DRAFT banner**
+      and no `noindex` meta, and the current version's permalink (`nulo.sh/terms/v<version>/`)
+      shows no DRAFT banner. A permalink always carries `noindex`: it duplicates the canonical page
+- [ ] Chrome: set the listing to Public, once the security work in flight has landed (owner)
+- [ ] AMO: remove the "This add-on is experimental" flag, which ticks § 2's AMO box (owner)
 - [ ] The README's "DEMO / PREVIEW BUILD — NOT A PRODUCTION WALLET" banner is rewritten
 
 ## 4. Every later `release: promote dev → main`
@@ -107,8 +116,9 @@ archived, versioned and effective 6 October 2026:
 
 - [x] `legal/privacy.md` — the version line and the 1.1.1 history row
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.1.1
-- [ ] After the deploy, `nulo.sh/privacy` shows no DRAFT banner, and AMO's Privacy policy field
-  carries the 1.1.1 text (`apps/extension/store/listing.md` § Privacy policy text)
+- [x] After the deploy, `nulo.sh/privacy` shows no DRAFT banner, and AMO's Privacy policy field
+  carries the 1.1.1 text (`apps/extension/store/listing.md` § Privacy policy text). On 2026-10-19
+  both carry 1.2.1, which keeps 1.1.1's address for reporting security vulnerabilities
 
 **Due at the release that carries the Privacy page:** privacy § 5.3 says the explorer "can be
 disabled in Settings → Advanced". That control now lives in Settings → Privacy. Ship a new privacy
@@ -117,14 +127,17 @@ version before that release reaches users (procedure above):
 - [x] `legal/privacy.md` — § 5.3 reads "Settings → Privacy"; the version line and a new history
       row, effective the day it is published (1.2.1, 15 October 2026)
 - [x] `packages/legal/src/manifest.ts` — the new `privacy` entry, `material: false`, same date
-- [ ] After the deploy, AMO's Privacy policy field carries the new text
-      (`apps/extension/store/listing.md` § Privacy policy text)
+- [x] After the deploy, AMO's Privacy policy field carries the new text
+      (`apps/extension/store/listing.md` § Privacy policy text). On 2026-10-19 it begins "Version
+      1.2.1 — effective 15 October 2026", and its § 5.3 reads "Settings → Privacy"
 
 **Due at the release that first uploads an Aztec 6.0.0-rc.3 build to a store** (owner's call,
 2026-10-14; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
 
-- [ ] The wallet's in-place reset of a stale network (planned as `stale-network-reset`) is on `dev`:
-      until it is, an rc.3 update shows a store-installed V6 account the integrity barrier
+- [x] The wallet's in-place reset of a stale network (planned as `stale-network-reset`) is on `dev`:
+      until it is, an rc.3 update shows a store-installed V6 account the integrity barrier. #485,
+      #486 and #487 merged on 2026-10-15, and #497 promoted them before 0.31.0 went to the stores
+      that day
 - [ ] The owner sends from that build on the live Testnet, which no e2e suite reaches (they run
       against a local sandbox)
 

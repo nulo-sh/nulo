@@ -91,7 +91,7 @@ Outsider builds older than the two fixes are AMO 0.28.0, 0.30.0, 0.30.1 and 0.30
 
 ### Arc A1 (branch `launch-prep-1-a1`, from this plan's commit on `origin/dev`)
 
-**Phase 1 — the checklist and the Mainnet line.** Files: `BEFORE-LAUNCH.md`, `legal/README.md`. Re-fetch each URL in [recon.md](recon.md) first; tick a box only if the fetch still matches. Gate: `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run test:ci-gating` exit 0; `bun run check:plans` exit 0 after staging; `git grep -n "seeded default" -- legal/` prints nothing.
+**Phase 1 — the checklist and the Mainnet line.** ✓ 2026-10-19: every fetch re-matched; gate green. Files: `BEFORE-LAUNCH.md`, `legal/README.md`. Re-fetch each URL in [recon.md](recon.md) first; tick a box only if the fetch still matches. Gate: `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run test:ci-gating` exit 0; `bun run check:plans` exit 0 after staging; `git grep -n "seeded default" -- legal/` prints nothing.
 
 ### Arc A2 (branch `launch-prep-1-a2`, off `dev` after A1 merges; merged before the 1.0.0 promote)
 
