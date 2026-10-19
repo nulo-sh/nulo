@@ -138,6 +138,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | 2 | Codex, resumed | approve | round 1's fixes verified; no remaining finding | none |
 | impl 1 | Codex, gpt-6.1-sol | approve | one redundant fixture comment removed | none |
 | impl 1 | Opus 5.5 review | approve with changes | the line gated on a synced row (`updatedAt !== 0`, D3), with a placeholder step and its success control in the account-switch test; one `balanceUpdated()` helper in the integration file; the stubs declare `exceedsBalance` | none |
+| impl 2 | Codex, resumed | approve | the fixes verified; no new finding | none |
 
 ## Seeds
 
