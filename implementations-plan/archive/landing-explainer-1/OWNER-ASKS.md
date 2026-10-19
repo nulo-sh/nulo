@@ -121,12 +121,12 @@ No landing branch build has run so far: Workers Builds has built `nulo-landing` 
 
 **Surface:** the player at the top of each card of `nulo.sh/how-aztec-works`.
 
-The clips follow your approved scripts word for word, in the voice from your ElevenLabs file, drawn in the landing's look. The review folder (`REVIEW.md`, relayed by the orchestrator) holds, per clip: a review video of exactly what the page draws, its length, its characters, its captions and transcript, and a still of every scene. It also lists every word drawn inside the clips and what to listen for (how the voice reads "3.50" and "1.50").
+The clips follow your approved scripts as your two retake notes changed them (below), in the voice from your ElevenLabs file, drawn in the landing's look. The review folder (`REVIEW.md`, relayed by the orchestrator) holds, per clip: a review video of exactly what the page draws, its length, its characters, its captions and transcript, and a still of every scene. It also lists every word drawn inside the clips and what to listen for (how the voice reads "3.50" and "1.50").
 
 | Option | What happens |
 |---|---|
 | **A. Approve as they are** | The arc 2 PR leaves draft. |
-| **B. Approve with changes** | A note per clip. A changed picture costs nothing; a changed word means a new narration of that clip, about 600 to 800 of the 12,821 characters left under the cap. |
+| **B. Approve with changes** | A note per clip. A changed picture costs nothing; a changed line means narrating its scene again, about 150 to 250 characters, spliced into the clip. |
 
 **Recommendation: A.** **What ships now:** the arc 2 PR, as a draft.
 
@@ -175,12 +175,12 @@ The note, verbatim:
 
 What each item became:
 
-- **"On Aztec", and Nulo handles it:** clip 01, scene 2 now opens "On Aztec, each token has two balances. Nulo handles both for you." It replaces "Nulo shows two balances for each token." Scene 1's "On most blockchains" stays as the contrast. No other line set blockchains against Nulo.
+- **"On Aztec", and Nulo handles it:** clip 01, scene 2 now opens "On Aztec, a token can have two balances. Nulo handles both for you." ("can have": not every token keeps both, and Nulo also holds public-only ones.) It replaces "Nulo shows two balances for each token." Scene 1's "On most blockchains" stays as the contrast. No other line set blockchains against Nulo.
 - **The line from the shield to the globe:** the wires now run down the marks' centre line. One goes from the USDC heading to the shield's top edge, the other from the shield's tip to the globe's top edge, in the scene's own wire stroke. Measured in Chrome and Firefox, every end point is 0.00 units off its edge and off the centre line. Before, the second wire jogged 8 units left, across the shield, and stopped 26 units above the globe.
 - **"three fifty":** scene 4 is narrated again with the amounts written as they are read: "three fifty", "one fifty", "five". The captions, the WebVTT track and the transcript write the figures, 3.50, 1.50 and 5, as the drawn notes and the wallet do. No other clip speaks an amount.
-- **Fees, a closing line:** read after scene 5 (sponsored), "which is which" has no pair to point to. Scene 4's pair is public and private Fee Juice, but scene 5 adds a third way to pay. The new scene 6 says "Nulo always tells you how the fee is paid, and you are always in control." It is drawn as a fee-method card (public Fee Juice, private Fee Juice, sponsored) whose selection moves on "control". Your sentence is narrated too, as an alternative (OA-12).
+- **Fees, a closing line:** read after scene 5 (sponsored), "which is which" has no pair to point to. Scene 4's pair is public and private Fee Juice, but scene 5 adds a third way to pay. The new scene 6 says "Nulo always tells you how the fee is paid, and you are always in control." It is drawn as a fee-method card (public Fee Juice, private Fee Juice, sponsored) marking the method in use, with Send appearing on "control": an app can set the method itself, so the picture shows control as your yes, not as a switch. Your sentence is narrated too, as an alternative (OA-12).
 - **Closings:** five treatments for each clip, rendered as review videos and not wired into the clips (OA-13).
-- **Characters:** 1,044 of this pass's 3,000: 176 + 262 for clip 01, 73 + 68 for the two clip 03 lines, 465 for the closings.
+- **Characters:** 1,222 of this pass's 3,000: 262 for clip 01's scene 4 and 178 for its scene 2, after a first take (176) said "each token has two balances"; 73 + 68 for the two clip 03 lines; 465 for the closings.
 
 ## OA-10. Labels close to a border that the note did not name
 
@@ -217,7 +217,7 @@ What each item became:
 | **A. "Nulo always tells you how the fee is paid, and you are always in control."** | Ships now. |
 | **B. Your sentence, "Nulo always tells you which is which, and you are always in control."** | The same picture. Already narrated: swapping costs no characters (`closings/fees-s6-owner/`). |
 
-**Recommendation: A** (moderate confidence). "Which is which" points back two scenes, across the sponsored one, to the public and private pair. Against: yours matches clip 01's last line, so the two clips end alike.
+**Recommendation: A** (moderate confidence). "Which is which" points back two scenes, across the sponsored one, to the public and private pair. Against: yours matches clip 01's last line, so the two clips end alike. Both keep "you are always in control"; Codex read it as more than the wallet does when an app sets the fee method, and offered "Nulo shows how the fee is paid. You decide whether to approve." (not narrated).
 
 ## OA-13. How each clip closes
 

@@ -160,24 +160,28 @@ const METHODS = [
 	["private", "PRIVATE FEE JUICE"],
 	["user", "SPONSORED"],
 ] as const
-const METHOD_ROW = 64
+const METHOD_ROW = 56
 
-const inControl = scene({ tells: ["tells", 0], always: ["always", 1], control: ["control", 0] }, (g, at) => {
-	const card = plate(g, 152, 48, 336, 264)
+const inControl = scene({ tells: ["tells", 0], control: ["control", 0] }, (g, at) => {
+	const card = plate(g, 152, 28, 336, 304)
 	text(card, 24, 40, "PAY THE FEE WITH")
 	const rows = METHODS.map(([mark, label], i) => {
 		const row = group(card)
-		place(row, 0, 60 + i * METHOD_ROW)
+		place(row, 0, 52 + i * METHOD_ROW)
 		glyph(row, mark, 24, 14, 28)
 		text(row, 64, 36, label)
 		return row
 	})
-	const pick = node(card, "rect", { class: "c-box", x: 12, width: 312, height: 48 })
+	// An app may fix the method, so the picture shows the one in use and ends on Send, not on a switch.
+	const pick = node(card, "rect", { class: "c-box", x: 12, y: 52 + METHOD_ROW + 4, width: 312, height: 48 })
+	const button = group(card)
+	node(button, "rect", { class: "c-button", x: 20, y: 236, width: 296, height: 48 })
+	text(button, 139, 267, "SEND", "c-eb c-button-text")
 	return (t, local) => {
 		show(card, seg(local, 0, 0.4))
 		for (const [i, row] of rows.entries()) show(row, seg(t, at.tells + i * 0.25, at.tells + i * 0.25 + 0.4))
-		show(pick, seg(t, at.always, at.always + 0.3))
-		pick.setAttribute("y", lerp(64, 64 + METHOD_ROW, seg(t, at.control - 0.2, at.control + 0.4)).toFixed(2))
+		show(pick, seg(t, at.tells + 0.8, at.tells + 1.2))
+		show(button, seg(t, at.control - 0.5, at.control))
 	}
 })
 

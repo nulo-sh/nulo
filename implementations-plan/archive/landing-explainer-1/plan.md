@@ -22,7 +22,7 @@ post_implementation_hardening: not scheduled
 - **Shipped:** the page `nulo.sh/how-aztec-works` with three narrated clips over their text versions.
   - Each clip is an SVG stage drawn from the narration's word timings, with a captions line, a WebVTT track and a transcript (D10 to D15).
   - Media is self-hosted and hashed under `/assets/`, fetched only on a press, 2.4 MB in all; the CSP is unchanged.
-  - Narration: 2,179 of the 15,000-character cap, one take per clip; the owner's retake note (2026-10-19) re-narrated two scenes, 455 characters, and set the pace to 1.15x (D16, D17); a second pass re-narrated clip 01's scene 4 again, 237 characters (OA-11); the owner's second note re-narrated clip 01's scenes 2 and 4, added clip 03's scene 6 and narrated five closing options, 1,044 characters (D19, D20).
+  - Narration: 2,179 of the 15,000-character cap, one take per clip; the owner's retake note (2026-10-19) re-narrated two scenes, 455 characters, and set the pace to 1.15x (D16, D17); a second pass re-narrated clip 01's scene 4 again, 237 characters (OA-11); the owner's second note re-narrated clip 01's scenes 2 and 4, added clip 03's scene 6 and narrated five closing options, 1,222 characters (D19, D20).
   - CI fails a landing build that drops the page (D4).
 - **Known limits:** none.
 - **Open items:**
@@ -125,7 +125,7 @@ Done: narration outside the repo (D6), 2,179 characters in one take per clip (Pr
 
 **Retake pass 2 (orchestrator, 2026-10-19, same class as the owner's note):** OA-11 B, clip 01's two "3.50"s spoken "three point five" (scene 4 narrated again, 237 characters, same splice and pace; 51.6 to 50.9 s); OA-10 B, every label 14 units from both sides of its box (four boxes grew). QA, the inset probe and Codex round 3 passed.
 
-**Retake pass 3 (the owner's second note, P60-01, quoted in OWNER-ASKS under OA-8):** clip 01's scene 2 opens "On Aztec, each token has two balances. Nulo handles both for you."; scene 4 is read as money, "three fifty", and shown as figures (D19); the two scene 2 wires run down the marks' centre line and end on their drawn edges, 0.00 units off in Chrome and Firefox; clip 03 gains scene 6, "Nulo always tells you how the fee is paid, and you are always in control.", over a fee-method card (OA-12 holds the owner's sentence as the alternative); five closing options per clip rendered outside the page (D20, OA-13). 1,044 characters of a 3,000 cap. Lengths: clip 01 50.9 to 52.6 s, clip 03 40.3 to 45.2 s.
+**Retake pass 3 (the owner's second note, P60-01, quoted in OWNER-ASKS under OA-8):** clip 01's scene 2 opens "On Aztec, a token can have two balances. Nulo handles both for you."; scene 4 is read as money, "three fifty", and shown as figures (D19); the two scene 2 wires run down the marks' centre line and end on their drawn edges, 0.00 units off in Chrome and Firefox; clip 03 gains scene 6, "Nulo always tells you how the fee is paid, and you are always in control.", over a fee-method card that marks the method in use and ends on Send (OA-12 holds the owner's sentence as the alternative); five closing options per clip rendered outside the page (D20, OA-13). 1,222 characters of a 3,000 cap. Lengths: clip 01 50.9 to 52.7 s, clip 03 40.3 to 45.2 s.
 
 ## Security & Adversarial Considerations
 
