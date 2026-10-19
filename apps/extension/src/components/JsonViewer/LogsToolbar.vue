@@ -44,17 +44,20 @@ const filteredKeys = (kind, filters, search) => {
 			:width="kind === 'source' ? '200' : '136'"
 		>
 			<Flex
+				tag="button"
+				type="button"
 				@click="emit('openPopover', kind)"
 				align="center"
 				gap="4"
 				:class="$style.filter_button"
+				:data-testid="`logs-filter-${kind}`"
 			>
 				<Icon :name="allOptionsSelected[kind] ? 'filter' : 'filter-solid'" size="14" />
 				<Text variant="label-section">{{ capitalize(kind) }}</Text>
 			</Flex>
 
 			<template #content>
-				<Flex direction="column" gap="4" :class="$style.filter_content_wrapper">
+				<Flex direction="column" gap="4" :class="$style.filter_content_wrapper" :data-testid="`logs-filter-${kind}-panel`">
 					<Flex direction="column" gap="8" wide :class="$style.filter_content_title">
 						<Text variant="label-section" color="tertiary">{{ `Filter by log ${kind}` }}</Text>
 
@@ -111,7 +114,15 @@ const filteredKeys = (kind, filters, search) => {
 		</Popover>
 
 		<Dropdown>
-			<Flex align="center" gap="4" :class="$style.filter_button" data-testid="logs-more-trigger">
+			<Flex
+				tag="button"
+				type="button"
+				align="center"
+				gap="4"
+				aria-label="Log actions"
+				:class="$style.filter_button"
+				data-testid="logs-more-trigger"
+			>
 				<Icon name="more" size="14" />
 			</Flex>
 
@@ -149,10 +160,16 @@ const filteredKeys = (kind, filters, search) => {
 	border-radius: 6px;
 
 	color: var(--txt-secondary);
+	font: inherit;
 
 	cursor: pointer;
 
 	transition: all 0.1s ease;
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
+	}
 
 	&:hover {
 		border-color: var(--txt-tertiary);

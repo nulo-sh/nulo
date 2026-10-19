@@ -65,6 +65,23 @@ function shownItem(testid: string): HTMLElement {
 	return el
 }
 
+describe("LogsToolbar — the triggers", () => {
+	test("Source, Level and more are native buttons in that order, the icon-only one named", () => {
+		const w = mountToolbar()
+		const triggers = w.findAll("button")
+		expect(triggers.map((b) => b.attributes("data-testid"))).toEqual(["logs-filter-source", "logs-filter-level", "logs-more-trigger"])
+		expect(triggers.every((b) => b.attributes("type") === "button")).toBe(true)
+		expect(triggers[2]?.attributes("aria-label")).toBe("Log actions")
+	})
+
+	test("a click on Source or Level asks for its own panel", async () => {
+		const w = mountToolbar()
+		await w.get('[data-testid="logs-filter-source"]').trigger("click")
+		await w.get('[data-testid="logs-filter-level"]').trigger("click")
+		expect(w.emitted("openPopover")).toEqual([["source"], ["level"]])
+	})
+})
+
 describe("LogsToolbar — the more menu", () => {
 	test("the more button opens a menu with Export logs to CSV and Clear logs", async () => {
 		const w = mountToolbar()

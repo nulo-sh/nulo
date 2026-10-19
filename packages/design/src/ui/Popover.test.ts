@@ -1,5 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { useOutside } from "../composables/outside"
 import Popover from "./Popover.vue"
 
 vi.mock("../composables/outside", () => ({
@@ -54,6 +55,61 @@ describe("Popover", () => {
 		document.dispatchEvent(new KeyboardEvent("keydown", { code: "Escape" }))
 		await flushPromises()
 		expect(w.emitted("onClose")).toBeTruthy()
+	})
+
+	describe("Escape", () => {
+		const FIELD = { content: '<input data-testid="field" />' }
+		const pressEscape = () => {
+			const e = new KeyboardEvent("keydown", { code: "Escape", cancelable: true })
+			document.dispatchEvent(e)
+			return e
+		}
+		/** Opened from its focused trigger, as Enter on it does; the field then takes focus, as autofocus does. */
+		async function openWithFieldFocused() {
+			const w = mountPopover({ open: false }, FIELD)
+			const trigger = w.get("button").element
+			trigger.focus()
+			await w.setProps({ open: true })
+			await flushPromises()
+			popoverRoot.querySelector<HTMLInputElement>('[data-testid="field"]')?.focus()
+			return { w, trigger }
+		}
+
+		test("marks the key handled", async () => {
+			const { w } = await openWithFieldFocused()
+			expect(pressEscape().defaultPrevented).toBe(true)
+			w.unmount()
+		})
+
+		test("with focus in the panel, returns it to the trigger's control focused at open", async () => {
+			const { w, trigger } = await openWithFieldFocused()
+			pressEscape()
+			expect(document.activeElement).toBe(trigger)
+			expect(w.emitted("onClose")).toHaveLength(1)
+			w.unmount()
+		})
+
+		test("with focus outside the panel, leaves it there", async () => {
+			const { w, trigger } = await openWithFieldFocused()
+			const elsewhere = document.createElement("button")
+			document.body.appendChild(elsewhere)
+			elsewhere.focus()
+			pressEscape()
+			expect(document.activeElement).toBe(elsewhere)
+			expect(document.activeElement).not.toBe(trigger)
+			elsewhere.remove()
+			w.unmount()
+		})
+
+		test("an outside press closes without moving focus", async () => {
+			const { w } = await openWithFieldFocused()
+			const field = popoverRoot.querySelector('[data-testid="field"]')
+			const onOutside = vi.mocked(useOutside).mock.calls.at(-1)?.[1] as () => void
+			onOutside()
+			expect(w.emitted("onClose")).toHaveLength(1)
+			expect(document.activeElement).toBe(field)
+			w.unmount()
+		})
 	})
 
 	test("disabled prop applies the disabled CSS class on the wrapper", () => {

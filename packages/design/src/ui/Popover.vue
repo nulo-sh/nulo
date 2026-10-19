@@ -48,19 +48,27 @@ const triggerEl = ref<HTMLElement>()
 const cardEl = ref<HTMLElement>()
 
 const popoverStyles = reactive<Record<string, string>>({})
+/** The trigger's control focused when the panel opened, read before the content mounts and takes focus. */
+let opener: HTMLElement | null = null
 
 const onClose = () => {
 	emit("onClose")
 }
 
 const onKeydown = (e: KeyboardEvent) => {
-	if (e.code === "Escape") onClose()
+	if (e.code !== "Escape") return
+	e.preventDefault()
+	// Only a key hands focus back: a pointer close from the autofocused content would carry the ring.
+	if (cardEl.value?.contains(document.activeElement) && opener?.isConnected) opener.focus()
+	onClose()
 }
 
 watch(
 	() => props.open,
 	() => {
 		if (props.open) {
+			const focused = document.activeElement
+			opener = focused instanceof HTMLElement && triggerEl.value?.contains(focused) ? focused : null
 			const triggerRect = (triggerEl.value as HTMLElement).getBoundingClientRect()
 
 			popoverStyles.top = `${triggerRect.y + triggerRect.height + 8}px`
@@ -80,6 +88,7 @@ watch(
 				removeOutside = useOutside(cardEl.value, onClose)
 			})
 		} else {
+			opener = null
 			document.removeEventListener("scroll", onClose)
 			document.removeEventListener("keydown", onKeydown)
 			;(removeOutside as () => void)()
