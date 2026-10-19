@@ -48,9 +48,6 @@ vi.mock("@/composables/useDappInteractionPayload", () => ({
 		reject: vi.fn(),
 	}),
 }))
-vi.mock("@/composables/useDappHostname", () => ({
-	useDappHostname: () => ({ hostname: ref("dapp.example"), isSuspicious: ref(false) }),
-}))
 // The approval-window composable is mocked thin: `start` runs the real init
 // thunk (so initComplete flips through the REAL code path), the rest are
 // inert holders.

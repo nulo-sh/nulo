@@ -1,7 +1,7 @@
 ---
 plan: consent-display-1
 tier: mid
-status: arc 1 merged (#712); arc 2 in review (its PR against dev); arc 3 not started
+status: completed (arc 3's PR carries this record)
 issues: "none: no public issue exists for this lane's items, so no PR closes one"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 2c0df3b9
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** closed. Arc 1 (#712, 34d97084) and arc 2 (#795, 767789b7) are on `dev`; arc 3's PR carries this record, and its merge closes the plan.
+- **Shipped:** discovery admits `https:` origins and loopback `http:` ones only (arc 1); token names, symbols and import titles are cleaned at every write, and a dApp's token add stores the details its window showed or nothing, with Confirm disabled while they are unread (arc 2); the consent windows name the full origin, wrapped; the app-set fee sentence says "About"; Send carries a caveat under the strip for a token outside the bundled classes, and a restored row holds no class until the chain supplies one; a registered token's call that claims the vocabulary but fails it carries the label mark (arc 3).
+- **Owner asks:** OA-1 = A (P42-08), OA-2 = A (P42-09), OA-3 to OA-5 as planned (P42-10); OA-5's addendum and OA-7 shipped in arc 3 for sign-off in its PR; OA-6 is #803.
+- **Known limits:** #794.
+- **Open items:** #803 (the failed-preview warning's second sentence), #804 (a restored token whose read failed is never read again).
+- **Dropped:** none. Deviations from the plan are D10 to D17.
+- **Lessons:** none promoted: `lessons.md` is at its 8 KiB budget, and arc 3's gotchas (the type-roles inventory's keys, Storybook's chunk-cycle guard) stay in [lessons/phase-4.md](lessons/phase-4.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # consent-display-1: what the consent windows say about a dApp, a fee and a token
 
@@ -125,7 +137,7 @@ In `popup/components/modules/send/AppFeeLine.vue` (fees-display-1's home for the
 - **Identity line** in the discover, capabilities, execute, fee, verify and network-unavailable windows. Before: the hostname, one line, cut with "…". After: the full origin, wrapped, never cut (drawings `p38-identity-b-*`). Signed: P38-02 = B, "A, plus discovery refuses origins that are not secure, except localhost."
 - **The execute window's app-set fee row.** Before: "Fee up to X". After: "About X" (drawing `p38-feelabel-a-*`). Signed: P38-03 = A, "Keep the 10 % tolerance; cards that print a wallet-estimated fee say About X instead of Fee up to X."
 - **Send's footer**, a token whose class is outside the validated set: one caveat line under the strip (drawing `p38-strip-b-*`). Signed: P38-07 = B, "Keep the labels and add one caveat line under the strip for non-bundled tokens.", with the owner's note that the caveat follows the validated class ids. The sentence is drafted above and signed in the PR.
-- **A restored token before its refresh succeeds** (OA-5): the caveat shows on Send, and its past mints show no amount on Activity's card (`TransactionCard.vue:46`) and the transaction page (`popup/pages/tx/[id].vue:86`), as a row added before classes were recorded does today.
+- **A restored token before its refresh succeeds** (OA-5): the caveat shows on Send, and its past mints show no amount on Activity's card (`TransactionCard.vue:46`) and the transaction page (`popup/pages/tx/[id].vue:86`), as a row added before classes were recorded does today. Its past app transfers and mints also read as plain calls, title and icon (`utils/tx-enrichment.ts` `getTxTitle`, `getTxCategory`; found in arc 3's review, shown in its PR for sign-off).
 - **The execute window's call rows**: the label mark (in the lane's signed budget); its words are OA-2, signed in the PR.
 - Arc 3's PR body carries light and dark screenshots of each surface, before and after.
 
@@ -155,21 +167,25 @@ Fast layers in every phase gate: `bun run lint`, `bun run typecheck:all`, `bun r
 - Change map: `composables/useDappHostname.ts` → `useDappOrigin.ts` (+ test), `DappIdentityBlock.vue` (+ test), the six windows and their tests, `src/types/*.d.ts` (regenerated).
 - Tests: four same-host origins (`https`, `https:8443`, `http`, `http:8080`) give four strings; the IDN flag unchanged; a 65-character origin renders whole, and `.dapp_hostname` computes `overflow-wrap: anywhere` with no `text-overflow: ellipsis` and no `white-space: nowrap` (the `WRAPS` idiom of `OperationCard.long-strings.test.ts`).
 - Gate: the fast layers.
+- **Done** (e32c1472): gate green, STATUS.md.
 
 ### Arc 3, phase 5: "About" on the app-set fee row
 - Change map: `AppFeeLine.vue` and its test (or `OperationCard.vue`, `OperationCard.fee.test.ts`), `apps/extension/tests/e2e/network/fee-sponsor-funding.test.ts` (its regex).
 - Tests: the loaded and the estimating rows read "About"; neither contains "Fee up to".
 - Gate: the fast layers.
+- **Done** (509a7831): gate green; the row's words are P47-02 C's sentence (D15, OA-7).
 
 ### Arc 3, phase 6: the strip's caveat
 - Change map: `components/composite/send/publish-facts.ts` (+ test), `popup/pages/send.vue`, `popup/pages/send.integration.test.ts`, `token/service.ts` (`restoreRow`).
 - Tests: `isValidatedTokenClass`: the bundled id, and the same id upper-cased, are in; another id and an absent one are out. Page: a token of another class shows `send-token-caveat` with the sentence; a validated token shows none (control); a blocked transfer shows none. `restore()` stores no `classId`; a failed and a late refresh leave none (the caveat shows; `txAmount` gives no mint amount), and a successful refresh writes the chain's (control).
 - Gate: the fast layers.
+- **Done** (5c142d61): gate green, STATUS.md. The check moved to `utils/token-class.ts` after the PR's Storybook build (D17).
 
 ### Arc 3, phase 7: the label mark
 - Change map: `popup/windows/execute/call-surface.ts` (+ `call-surface.test.ts`), `CallArguments.vue`, `UnreadableArgsNotice.vue` → `ArgsNotice.vue`, `SendTxSummary.vue`, their tests.
 - Tests: on a registered token, `transfer_private_to_private` decoded as `(to, from, amount, _nonce)` is marked; a call carrying `transfer_private_to_private`'s selector whose decode names another function (`claim_x`) is marked; the corroborating order reads as a transfer (control); the same rows on an unregistered contract, and a non-vocabulary function on a token, are not marked. `CallArguments` renders `${prefix}-labels-warning` above marked rows only, from a wire-shaped fixture (`0x` + 64 hex fields).
 - Gate: the fast layers, `bun run test:all`, then network `register-token.test.ts connect-unserved-chain.test.ts fee-sponsor-funding.test.ts` (under `tests/e2e/network/`) and smoke `send-fee-privacy.test.ts send-keyboard.test.ts`.
+- **Done** (ef37a3a7; review fixes 2ce6d068, 10f242ba, 27165609): gate green, plus network `cap-window.test.ts`; the review deviation is D16.
 
 ## Delivery
 
@@ -209,6 +225,9 @@ Outline B (not committed) proposed a worker snapshot by id with a 120 s life, cl
 | D12 | Arc 2: which commits must carry shown details | | | **Every dApp-origin `register_token`**, not only those with an envelope: a dApp's add is always confirmed, so the two sets are one today, and keying on the origin fails closed if that changes. The refusal ("Token details were not shown for approval") precedes the parse and any import record, so only the dApp sees it. `ShownTokenMetadata` and its check live beside the delta in `approval-delta.ts`; the envelope imports the type. |
 | D13 | Arc 2: the window's guard (tree deviation) | | | **One computed, `tokenMetadataUnread`, is loading or a failed preview**, read by `approve()` and `confirm-disabled`. `approve()` was at the cognitive budget (15), and a second operand made it 16; extracting the delta builder did not help, since Biome scores the closure apart. |
 | D14 | Arc 2: compare before the title | | | **The compare runs before the title backfill**, so a refused add's import row shows the address and the message, never the read nobody approved. The cleaning tests live in `token/service.test.ts`. |
+| D15 | Arc 3: the fee row's words (tree deviation) | | | **"About" replaces "Fee could be up to" in the one sentence P47-02 C set** (#793, merged after this plan): "About {amount}; payment method set by {app}." The priority clause is unchanged. OA-7 carries both forms for sign-off in the PR. |
+| D16 | Arc 3: the mark's name arm (review) | | the name at its arity lets a token dodge the mark with one more parameter | **The decoded name at any arity**, beside the selector. Both bundled token artifacts give every vocabulary-named function a vocabulary arity and fitting names, so no honest call of theirs is marked; the mark's words hold for any call it lands on. |
+| D17 | Arc 3: where the class check lives (CI) | | `publish-facts.ts` is imported by five modules Storybook reaches; its new `@nulo/wallet-bridge` import put the bridge's chunk and the service clients' on a static import cycle, which the Storybook build's chunk guard refuses | **`isValidatedTokenClass` lives in `utils/token-class.ts`** (+ test), imported by `send.vue` alone; `publish-facts.ts` gains `TOKEN_CAVEAT` and no import. |
 
 ## Plan review record
 
@@ -228,6 +247,13 @@ Outline B (not committed) proposed a worker snapshot by id with a 120 s life, cl
 - **Codex round 1** (gpt-6.1-sol, high, session 01a15024) on ce8cc3d7: approve. Taken: the pin comment claimed an upgrade is refused, but a PXE-held instance reports its original class (`hydratePreimage`), so it now says an interface of another class refuses; the window's doc block cut to its invariant, the computed's restating comment removed. Not taken: rewording the failed preview's "Verify the contract address before approving." (copy; OA-1 A keeps the warning): OA-6.
 - **Opus review** of ce8cc3d7 and 13eb2fa3: approve. Taken: the window's guard keys on a card with no details, which covers a read in flight and a failed one; the pin test's stub refuses only a pinned parse of another class; the hidden characters in the cleaning cases written as escapes; `packages/wallet-bridge/README.md` states the commit's contract. Not taken: a released add whose read matched can title its import record with that read and then succeed against another add's same-contract row; it needs a five-minute storage stall, and a succeeded `token_import` record renders nowhere (Home drops it, the activity feed excludes the kind). Known limit #794.
 - **Codex round 2** (resumed) on 473a2867: **approve**, no new material issue; it verified the guard, the pin test, the comments, the escapes and the README, and held the copy and the known limit settled. The loop converged in two rounds.
+
+### Arc 3 implementation review
+
+- **Codex round 1** (gpt-6.1-sol, high, session 01a1509a) on ef37a3a7: reject. Taken, all three: a restored token with no class also reads its past app transfers and mints as plain calls, title and icon, beyond OA-5's two effects (→ OA-5's addendum, the UI impact line, a test of the unclassed reading; the class stays dropped); `classId`'s doc comments still called a restored class unauthenticated; the notice's comments restated its template.
+- **Opus review** of ef37a3a7 and 2ce6d068: approve with fixes. Taken: the restore refresh runs once inside the import's 45 s budget and nothing retries it, so a failed one leaves the token unclassed until re-added (→ OA-5's addendum; a later read is a background step, a plan change, not taken); the restore stage's comment still said a token keeps the backup's values; the fee comment's 10 % holds only when the person's balance pays (→ comment, OA-7); a token could dodge the mark with a vocabulary name at another arity (→ D16).
+- **Codex round 2** (resumed) on 10f242ba: **approve**, no new material issue; it verified the four fixes and D16. The loop converged in two rounds.
+- **Cross-arc pass** (fresh Codex session 01a150ab over 34d97084, 767789b7 and arc 3): approve, no runtime seam. Taken: OA-1's "ships now" line still read C (→ marked answered A); `refreshRestoredTokens`' contract still said the backup's values are kept; the mark title's comment restated its placement. Not taken: a template comment in `OperationCard.vue`'s token card, which predates the lane and is outside its diff.
 
 ## Seeds
 

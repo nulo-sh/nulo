@@ -48,7 +48,7 @@ function harness() {
 	const registry = new EstimateCancelRegistry({ evictStash: () => {}, logDebug: () => {} })
 	const service = Object.assign(Object.create(ExecutionService.prototype), {
 		ensureInitialized: async () => {},
-		services: { get: () => ({ materializeStoredOperation: async () => ({}) }) },
+		services: { get: () => ({ materializeStoredOperation: async () => ({}), refusalOf: () => undefined, recordRefusal: () => {} }) },
 		profileService: { getActiveProfile: async () => ({ id: "p1" }) },
 		pxeService: pxe,
 		estimateCancel: registry,
