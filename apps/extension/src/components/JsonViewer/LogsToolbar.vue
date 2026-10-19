@@ -233,7 +233,7 @@ const filteredKeys = (kind, filters, search) => {
 	}
 }
 
-/* A button reset to the row's look; the ring is inset because the Source list's scroll box clips outside its rows. */
+/* Inset because the Source list's scroll box clips outside its rows. */
 .filter_toggle {
 	font: inherit;
 	text-align: inherit;

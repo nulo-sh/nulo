@@ -64,7 +64,6 @@ function tabbables(root: Element | undefined): HTMLElement[] {
 	return [...all].filter((el) => el.tabIndex >= 0 && !el.matches(":disabled"))
 }
 
-/** Opened from its focused trigger, the panel takes focus, unless its content already took it. */
 function focusIn() {
 	const card = cardEl.value
 	if (opener && card && !card.contains(document.activeElement)) tabbables(card)[0]?.focus()
@@ -84,7 +83,6 @@ function onTab(e: KeyboardEvent) {
 	onClose()
 }
 
-/** Focus leaving both the trigger and the panel closes it, as a press outside does. */
 const onFocusin = (e: FocusEvent) => {
 	const target = e.target
 	if (target instanceof Node && !triggerEl.value?.contains(target) && !cardEl.value?.contains(target)) onClose()
