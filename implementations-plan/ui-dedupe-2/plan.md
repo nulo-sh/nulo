@@ -99,7 +99,7 @@ Decision page 59 (2026-10-19), both option B. Recon: [`recon.md`](recon.md). Own
   - `RecentActivityView.test.ts` and the store's suites: unchanged and green (I2).
 - Gate: as phase 2, over these suites; mutations (D6) red.
 
-**Phase 4 — validation and pictures.** ✗
+**Phase 4 — validation and pictures.** ✓
 - `bun run audit:vue`; `bun run test:all`; smoke on Chrome, then Firefox, on the armed build, `--retry=0`, load1 under 150: `holdings-add-token`, `token-list`, `send-outcome-rows`, `type-roles`, `navigation`, `send-keyboard` (`recon.md` § E2E). No network subset: the journal's import path is unchanged. Pass: every spec green on both browsers.
 - Row 5's after pictures: ui-dedupe-1's scratch spec (outside the repo, copied into `tests/e2e/` only for the run, never staged) on the new Chrome build with `NULO_E2E_SHOT_DIR`; the shots land in `implementations-plan/ui-dedupe-2/screenshots/`.
 
@@ -123,6 +123,7 @@ Each finding verified against the tree before it was taken; details in [`lessons
 - **Opus R1** (Plan): `conditional approve`. F1: `auto-imports.d.ts` (taken). F2: the superseded mount read belongs in § UI impact (taken; #839 row 5 names it). F3: two Security sentences (taken). F4: D6 and D7 wording (taken). F5: two tests leave timers armed (taken). F6: what the catch covers (taken, D8).
 - **Codex R2** (resumed): `approve`, no new material finding; the revisions add no state, lifecycle, protocol or recovery policy beyond the signed retry.
 - **Diff review R1**: Codex `findings 1` (a stale comment over Home's retry, taken); Opus `findings 3` (the regenerated `.eslintrc-auto-import.json`, the docblock's "until one lands", a blank line; all taken). Details: [`lessons/phase-4.md`](lessons/phase-4.md).
+- **Diff review R2** (Codex, resumed): `clean`; the loop converged after two rounds.
 
 ## Delivery
 
