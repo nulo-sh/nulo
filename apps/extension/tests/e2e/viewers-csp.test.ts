@@ -430,17 +430,31 @@ async function waitForShownLine(page: Page, text: string, shown: boolean): Promi
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const OPEN_KEYS: KeyInput[] = ["Enter", SPACE]
 
-async function expectAccentRing(page: Page, testid: string): Promise<void> {
+const INSET = "-2px"
+
+async function expectAccentRing(page: Page, testid: string, offset = "2px"): Promise<void> {
 	await waitForFocus(page, testid)
-	expect(await focusRing(page, testid)).toEqual({ ring: "solid 2px 2px", color: await tokenColor(page, "--nulo-accent") })
+	expect(await focusRing(page, testid)).toEqual({ ring: `solid 2px ${offset}`, color: await tokenColor(page, "--nulo-accent") })
 }
 
-async function tabStep(page: Page, testid: string, back = false): Promise<void> {
+async function tabStep(page: Page, testid: string, back = false, offset = "2px"): Promise<void> {
 	if (back) await page.keyboard.down("Shift")
 	await page.keyboard.press("Tab")
 	if (back) await page.keyboard.up("Shift")
-	await expectAccentRing(page, testid)
+	await expectAccentRing(page, testid, offset)
 }
+
+async function pressToggle(page: Page, key: KeyInput, testid: string, pressed: "true" | "false"): Promise<void> {
+	await page.keyboard.press(key)
+	await page.waitForFunction(
+		(s: string, v: string) => document.querySelector(s)?.getAttribute("aria-pressed") === v,
+		{ timeout: 5_000, polling: 50 },
+		sel(testid),
+		pressed,
+	)
+}
+
+const panelGone = (page: Page, kind: string) => page.waitForSelector(sel(`logs-filter-${kind}-panel`), { hidden: true, timeout: 5_000 })
 
 async function openAndEscape(page: Page, key: KeyInput, opened: string, focusInside: () => Promise<void>): Promise<void> {
 	await page.keyboard.press(key)
@@ -468,13 +482,13 @@ test("the toolbar's Source, Level and more are Tab stops in that order, ringed, 
 		await expectAccentRing(page, "logs-more-trigger")
 	}
 
+	// Each panel takes focus as it opens, so the Escape must hand it back.
 	await tabStep(page, "logs-filter-level", true)
 	for (const key of OPEN_KEYS) {
-		await openAndEscape(page, key, "logs-filter-level-panel", async () => {})
+		await openAndEscape(page, key, "logs-filter-level-panel", () => waitForFocus(page, "logs-filter-level-all"))
 		await expectAccentRing(page, "logs-filter-level")
 	}
 
-	// Source's search field takes focus as its panel opens, so the Escape must hand it back.
 	await tabStep(page, "logs-filter-source", true)
 	for (const key of OPEN_KEYS) {
 		await openAndEscape(page, key, "logs-filter-source-panel", () => waitForFocus(page, "logs-filter-source-panel"))
@@ -483,6 +497,55 @@ test("the toolbar's Source, Level and more are Tab stops in that order, ringed, 
 
 	await tabStep(page, "logs-filter-level")
 	await shotSend(page, "logs-toolbar-focus", "logs-filter-level")
+	await page.close()
+})
+
+test("each filter row is a ringed Tab stop that Space and Enter toggle, and Tab past either edge closes its panel onto the next control or its trigger", async ({
+	registeredExtension: ctx,
+}) => {
+	const page = await openLogs(ctx)
+	await tabTo(page, "logs-filter-level")
+	await page.keyboard.press("Enter")
+	await expectAccentRing(page, "logs-filter-level-all", INSET)
+	await pressToggle(page, SPACE, "logs-filter-level-all", "false")
+	await pressToggle(page, "Enter", "logs-filter-level-all", "true")
+	await tabStep(page, "logs-filter-level-item-DEBUG", false, INSET)
+	await pressToggle(page, SPACE, "logs-filter-level-item-DEBUG", "false")
+	await pressToggle(page, SPACE, "logs-filter-level-item-DEBUG", "true")
+	for (const level of ["INFO", "WARN", "ERROR"]) await tabStep(page, `logs-filter-level-item-${level}`, false, INSET)
+	await tabStep(page, "logs-more-trigger")
+	await panelGone(page, "level")
+
+	await tabStep(page, "logs-filter-level", true)
+	await page.keyboard.press("Enter")
+	await waitForFocus(page, "logs-filter-level-all")
+	await tabStep(page, "logs-filter-level", true)
+	await panelGone(page, "level")
+
+	await tabStep(page, "logs-filter-source", true)
+	await page.keyboard.press("Enter")
+	await waitForFocus(page, "logs-filter-source-panel")
+	await page.keyboard.type("pxe")
+	await page.waitForSelector(sel("logs-filter-source-item-pxe-client"), { visible: true, timeout: 5_000 })
+	await tabStep(page, "logs-filter-source-item-pxe", false, INSET)
+	await tabStep(page, "logs-filter-source-item-pxe-client", false, INSET)
+	await tabStep(page, "logs-filter-level")
+	await panelGone(page, "source")
+	// The close cleared the search, so Select All is back, and Tab from the field reaches it
+	// with no stop between.
+	await tabStep(page, "logs-filter-source", true)
+	await page.keyboard.press("Enter")
+	await waitForFocus(page, "logs-filter-source-panel")
+	await tabStep(page, "logs-filter-source-all", false, INSET)
+	expect(await pressEscape(page)).toBe(true)
+	await panelGone(page, "source")
+
+	// A clicked button takes focus on Linux, where this suite runs, so a pointer open moves focus in, unringed.
+	await pointerClick(page, "logs-filter-level")
+	await waitForFocus(page, "logs-filter-level-all")
+	expect((await focusRing(page, "logs-filter-level-all")).ring).toMatch(/^none /)
+	expect(await pressEscape(page)).toBe(true)
+	await panelGone(page, "level")
 	await page.close()
 })
 

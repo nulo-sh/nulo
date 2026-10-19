@@ -3,8 +3,8 @@
 Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 
 - [test-infra-1](test-infra-1/plan.md) — arcs 1 and 2 merged, arc 3 in review (#830) — one source walker and TS tokenizer, one approval-window harness, one wait per test layer, shared builders (#561 #550 #540 #536)
-- [landing-explainer-1](landing-explainer-1/plan.md) — arc 1 merged; arc 2 (clips) in progress — the How Aztec works page at nulo.sh/how-aztec-works: text versions now, the three clips after the owner approves the scripts and picks the tool (OA-1 to OA-4)
 - [structure-2](structure-2/plan.md) — planned, final Codex approve, awaiting the orchestrator — one settings control row, detail hero line and hero observer (#735, after OA-1); the Allow bound to its profile (#680); Presto's onboarding leftovers (#730); #750 mapped, no split
 - [e2e-flakes-2](e2e-flakes-2/plan.md) — arc 2 in review — arc 1 (#813) made the balance-row reconciliation spec's gap with the worker stopped (#774); arc 2 waits for the header copy's snack to leave before the drag-select test presses About's foot (#816)
 - [tx-record-1](tx-record-1/plan.md) — arc 1 in review — a failed estimate keeps its class (#820, arc 1); a rejected dApp send reads Cancelled and who chose a transaction's fee (#828 after OA-2, #821, arc 2)
-- [egress-flake-1](egress-flake-1/plan.md) — planned, final Codex approve; arc 1 in progress — a reply to a paused request its worker's stop cancelled (`Invalid InterceptionId`) is no interception failure (#857)
+- [harden-security-fixes-3](harden-security-fixes-3/plan.md) — arc 1 merged (#869), arc 2 in review — a bound on dApp-added tagging sources, six owner picks, the token-list signer-code caveat in SECURITY.md (#661)
+- [egress-flake-1](egress-flake-1/plan.md) — arc 1 in review — a reply to a paused request its worker's stop cancelled (`Invalid InterceptionId`) is no interception failure (#857)

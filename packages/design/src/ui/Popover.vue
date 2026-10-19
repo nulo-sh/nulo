@@ -4,6 +4,7 @@
 import { nextTick, onBeforeUnmount, reactive, ref, watch } from "vue"
 
 /** Composables */
+import { isComposing } from "../composables/keys"
 import { useOutside } from "../composables/outside"
 
 /** Components */
@@ -55,7 +56,52 @@ const onClose = () => {
 	emit("onClose")
 }
 
+/** The controls Tab walks, in DOM order. A panel holds no hidden control: one at an edge would hide
+ *  that edge from the hand-off below. */
+function tabbables(root: Element | undefined): HTMLElement[] {
+	if (!root) return []
+	const all = root.querySelectorAll<HTMLElement>("button, input, select, textarea, a[href], [tabindex]")
+	return [...all].filter((el) => el.tabIndex >= 0 && !el.matches(":disabled"))
+}
+
+/** Any open from a focused trigger, a pointer's included: a screen reader's activation may carry
+ *  no keyboard modality. */
+function focusIn() {
+	const card = cardEl.value
+	if (opener && card && !card.contains(document.activeElement)) tabbables(card)[0]?.focus()
+}
+
+/** The teleported panel keeps the Tab order it would have right after its trigger: past its last
+ *  control focus returns to the trigger and the browser's own Tab goes on from there; before its
+ *  first, it closes back onto the trigger. */
+function onTab(e: KeyboardEvent) {
+	const active = document.activeElement
+	if (!(active instanceof HTMLElement) || !cardEl.value?.contains(active)) return
+	const controls = tabbables(cardEl.value)
+	const anchor = opener ?? tabbables(triggerEl.value)[0]
+	if (active !== (e.shiftKey ? controls[0] : controls.at(-1)) || !anchor?.isConnected) return
+	if (e.shiftKey) e.preventDefault()
+	anchor.focus()
+	onClose()
+}
+
+/** `focusin`, not `focusout`: a window blur or a press on no control moves focus nowhere, and must
+ *  not close. */
+const onFocusin = (e: FocusEvent) => {
+	const target = e.target
+	if (target instanceof Node && !triggerEl.value?.contains(target) && !cardEl.value?.contains(target)) onClose()
+}
+
+/** A closed panel stays in the DOM for its leave; inert keeps a held Tab or a click off it. */
+const onBeforeLeave = (el: Element) => {
+	el.setAttribute("inert", "")
+}
+
 const onKeydown = (e: KeyboardEvent) => {
+	if (e.key === "Tab" && !isComposing(e)) {
+		onTab(e)
+		return
+	}
 	if (e.code !== "Escape") return
 	e.preventDefault()
 	// Only a key, and only from inside the panel, hands focus back: a pointer close from the
@@ -84,14 +130,18 @@ watch(
 
 			document.addEventListener("scroll", onClose)
 			document.addEventListener("keydown", onKeydown)
+			document.addEventListener("focusin", onFocusin)
 
 			nextTick(() => {
 				removeOutside = useOutside(cardEl.value, onClose)
+				focusIn()
 			})
 		} else {
 			opener = null
+			// Listeners first: the pinned call below can throw.
 			document.removeEventListener("scroll", onClose)
 			document.removeEventListener("keydown", onKeydown)
+			document.removeEventListener("focusin", onFocusin)
 			;(removeOutside as () => void)()
 		}
 	},
@@ -101,6 +151,7 @@ watch(
 onBeforeUnmount(() => {
 	document.removeEventListener("scroll", onClose)
 	document.removeEventListener("keydown", onKeydown)
+	document.removeEventListener("focusin", onFocusin)
 	removeOutside?.()
 })
 </script>
@@ -114,7 +165,7 @@ onBeforeUnmount(() => {
 		<teleport :to="teleportTo">
 			<div v-if="open" :class="$style.canvas" />
 
-			<Transition name="fastfade">
+			<Transition name="fastfade" @before-leave="onBeforeLeave">
 				<div v-if="open" :style="popoverStyles" :class="$style.popover">
 					<div ref="cardEl" :style="{ width: `${width}px`, height: `${height}px` }" :class="$style.card">
 						<slot name="content" />
