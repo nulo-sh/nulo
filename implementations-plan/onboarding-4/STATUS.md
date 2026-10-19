@@ -1,4 +1,0 @@
-- 2026-10-19 11:05Z planning started on #743's head `bcee404d` (origin/worktree-onboarding-3); registered; tier light.
-- 2026-10-19 12:20Z recon done; draft written; Codex r1 and Opus both conditional approve; findings applied (see plan § Audit verdicts).
-- 2026-10-19 12:50Z Codex r2 conditional approve (lifecycle on the purging delegate); applied; Codex r3 approve (final). Plan committed; auto-continue into arc 1.
-- 2026-10-19 13:40Z arc 1 phase 1 gate: suites 298/298, red proofs (service mark, view rule, order) fail as expected, lint 0, typecheck:all 0, test 14144 passed. Pass.

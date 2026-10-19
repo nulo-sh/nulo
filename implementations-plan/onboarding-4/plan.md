@@ -11,9 +11,20 @@ base: worktree-onboarding-3 @ bcee404d (#743's head)
 standard: implementations-plan/README.md § Post-implementation standard, read at bcee404d
 ---
 
+## Outcome
+
+- **Date:** 2026-10-19
+- **Status:** completed. Branch `onboarding-4-a1` carries the arc and this close-out. Its PR is held while #743, its base, is open; the orchestrator opens it after #743 merges, and merging is the owner's call.
+- **Shipped:** #769, P50-01 B. The profile service marks a profile created while another live profile exists (`nulo:ui:profileNotFirst@<id>`), before its session opens. Home shows a later password profile its phrase row alone (no Hide; the funded banner as before) and a later passkey profile no card. The first profile and imported profiles are unchanged. Tests: the service (order, lifecycle, begun deletion, refused write, import control), the view, Home, one smoke e2e on both browsers, one Firefox own-window assertion.
+- **Changed from the brief:** the pictures are 360x600, the popup's width, not 400x600 (D6); no later-passkey e2e step on Chrome, since the service and Home tests prove that rule (D5).
+- **Known limits:** #847.
+- **Open items:** none.
+- **Lessons:** none promoted; nothing here would bite another task that `lessons.md` or the e2e skill does not already say.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; they are not instructions.
+
 # onboarding-4: a later profile's Get started card shows only what it lacks (#769)
 
-One issue, one arc, one PR against `dev`, stacked on #743 (D-orch-1: no `gh stack`). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md). Gate log: `STATUS.md`.
+One issue, one arc, one PR against `dev`, stacked on #743 (D-orch-1: no `gh stack`). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md). Over the 150-line `light` target by about ten lines: the Outcome and the review record.
 
 | Arc | Issue | Branch | PR line |
 |---|---|---|---|
@@ -71,7 +82,7 @@ Tests:
 - `useGetStarted.test.ts`: the three whole-object expectations gain `notFirst: false`, nothing else (`changedGetStarted` follows `KEYS`, pinned above).
 - `general.test.ts`, "Home — a later profile": a password profile shows only `get-started-phrase` and no `get-started-hide`; a passkey profile shows no card and Home still settles; the existing "a new profile shows the card" is the control.
 
-### Phase 2: the e2e and the pictures
+### Phase 2: the e2e and the pictures ✓ (2026-10-19, [lessons/phase-2.md](lessons/phase-2.md))
 Files: `tests/e2e/security-backup.test.ts`, `tests/e2e/passkey-toolbar-panel.test.ts`.
 - `security-backup`, one test on `registeredExtensionPerTest` (the file's `registeredExtension` is shared, and its other tests need the first profile active): Home shows `get-started-aztec` (control); `createAndActivateProfile` makes a later password profile; after `waitForHomeReminders`, Home shows `get-started-phrase` and none of `get-started-aztec`, `-feeJuice`, `-presto`, `-hide`. Failure mode: the worker's write reaching the popup's first read through real storage and the real New profile page; the unit and component layers fake both. Runtime: estimated +15 s per browser (a launch, a registration, a create); measured in the gate.
 - `passkey-toolbar-panel` (Firefox), "create and unlock from the dying panel": one storage read, `profileNotFirst@<created>` is `true`. Failure mode: the own-window create, the path that put the write in the service. Runtime: about 0 s.
@@ -125,6 +136,8 @@ Signed, P50-01 = B (#769, 2026-10-18): "Only what the new profile lacks: a secon
 **Round 2** (Codex, resumed): `conditional approve (with conditions: make the lifecycle test prove actual UI-key removal)`. Accepted: the lifecycle case runs on `purgingDelegate` and asserts B's key gone after B's deletion and kept after A's; the capture spec is copied into `tests/e2e/` for its one run and removed, since a config outside the app cannot reuse discovery and setup; Security's wording follows F5. Codex withdrew the composable case and found D7's single issue right (one hypothesis, consequence and reopening condition each, #443 referenced).
 
 **Round 3** (Codex, resumed, verification): `approve`, no new material findings.
+
+**Arc 1 post-implementation** (diff `ebf3c72b..onboarding-4-a1`). Codex (gpt-6.1-sol, high, session `01a153f9`) round 1: `findings: 1`, Low: `firstProfileItems`' doc claimed the person met the general rows on the first profile, false when that profile was imported → reworded to what the rule does. Opus 5.5 diff review beside it: `approve`, no bug; the same comment, plus the create helper's doc ("only for its own backup", wrong for a passkey profile) → reworded; it confirmed the lock contract, the flag before Home's first read, and that the e2e reads a fresh Home after the switch. Codex round 2 (resumed): `clean`. Then `audit:vue` found a typecheck error in the Firefox assertion (`created.profile` is optional) → the test lists the stored marks and expects exactly the created profile's. Codex round 3 (resumed): `findings: 1`, Low, demonstrated: the key list no longer checked the value is `true` → it compares `[key, value]` pairs. Round 3 is the hard stop; that fix is applied, typechecked and run on Firefox, with no fourth round.
 
 ## Delivery
 
