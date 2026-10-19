@@ -61,7 +61,8 @@ async function launch({ extensionPath, userDataDir, headless, fixedWindowSize = 
 			// Chrome doesn't have a "focused" page, so without these flags the
 			// renderer backgrounds the tab and rAF gets throttled to ~1Hz —
 			// which freezes Vue's `<Transition>` classes mid-enter and breaks
-			// any test that depends on a popup actually rendering.
+			// any test that depends on a popup actually rendering. They do not make
+			// a tab behind another draw: it runs no frame until brought to front.
 			"--disable-renderer-backgrounding",
 			"--disable-backgrounding-occluded-windows",
 			"--disable-features=CalculateNativeWinOcclusion",
