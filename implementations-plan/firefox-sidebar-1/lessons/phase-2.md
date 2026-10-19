@@ -11,3 +11,12 @@ Firefox 153.0.4, geckodriver 0.37.1, at the arc branch after merging `origin/dev
 | — | `scripts/e2e/browser-seam.test.ts`, `scripts/e2e/firefox-driver.test.ts` | 102 of 102 pass. |
 
 Deviation: `closeSidebar` is not added. No spec closes the sidebar (the launch is torn down with it), and an unused export is dead code.
+
+## After the first review round
+
+| Run | What | Outcome |
+|---|---|---|
+| 7–9 | The scenario per sidebar kind, the revamp pref set and the open issued at once | Default passes 3 of 3; revamped fails 3 of 3, `openSidebar: the sidebar never opened`. The pref's observer rebuilds the sidebar in `toggleRevampSidebar`, a continuation queued behind `promiseInitialized`, so the open ran before the rebuild and the rebuild undid it. |
+| 10–12 | The open issued after `promiseInitialized` and one task more | Both pass 3 of 3: default 16.4, 15.8, 20.7 s; revamped 13.1, 13.4, 15.4 s. |
+
+The page-realm `get` counter counts calls, not successes: a future fallback that retried a refused sidebar call in a tab could still read one. No such fallback exists (a known limit of the check, from the Opus review).

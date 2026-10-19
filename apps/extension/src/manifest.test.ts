@@ -207,8 +207,8 @@ describe("firefox manifest", () => {
 		expect(permissions).toContain("storage")
 	})
 
-	// The sidebar is Chrome's side panel on Firefox: the same page and the add-on's own icon, and
-	// nothing opened at install.
+	// The sidebar takes its page from the side panel's, so the two surfaces cannot drift apart; one
+	// opened at install would put the wallet beside every new Firefox user's first tab unasked.
 	test("declares a sidebar on the side panel's page, closed at install, on Firefox only", () => {
 		const chrome = chromeFor({ command: "build", mode: "production" })
 		expect(buildFirefox().sidebar_action).toEqual({

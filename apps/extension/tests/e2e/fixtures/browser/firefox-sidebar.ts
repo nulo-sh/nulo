@@ -25,23 +25,39 @@ const LOCATE_SIDEBAR = `
 	const origin = "moz-extension://" + WebExtensionPolicy.getByID(addonId).mozExtensionHostname + "/";
 	return host?.currentURI?.spec.startsWith(origin) ? host : null;`
 
-/** Opens the add-on's sidebar, as `sidebarAction.open()` does, and resolves once its document is loaded. */
-export async function openSidebar(browser: Browser): Promise<void> {
+/** Which sidebar Firefox draws: the default one, or the revamped one with its launcher, which some
+ *  profiles get on their own. Each lays the page out at its own width. */
+export type SidebarKind = "default" | "revamped"
+
+/**
+ * Opens the add-on's sidebar, as `sidebarAction.open()` does, in the sidebar `kind` names, and resolves
+ * once the add-on's page is the sidebar's document. The kind is set every time: a launch may come up
+ * with either, and a spec that does not choose would drive whichever it got.
+ */
+export async function openSidebar(browser: Browser, kind: SidebarKind): Promise<void> {
 	const { session, addonId } = actionPopupContext(browser)
 	const opened = await session.chromeScript<string>(
 		`
-		const [addonId, done] = arguments;
+		const [addonId, revamped, done] = arguments;
 		const sidebar = () => { ${LOCATE_SIDEBAR} };
+		const controller = window.SidebarController;
 		const { extension } = WebExtensionPolicy.getByID(addonId);
-		extension.apiManager.global.sidebarActionFor(extension).open(window);
 		const started = Date.now();
-		(function poll() {
+		const poll = () => {
 			if (sidebar()?.browsingContext?.currentWindowGlobal) return done("open");
 			if (Date.now() - started > 15000) return done("the sidebar never opened");
 			window.setTimeout(poll, 100);
-		})();
+		};
+		const open = () => {
+			if (controller.sidebarRevampEnabled !== revamped) return done("the sidebar kind did not switch");
+			Promise.resolve(extension.apiManager.global.sidebarActionFor(extension).open(window)).then(poll, (err) => done("open failed: " + err));
+		};
+		// The pref's observer rebuilds the sidebar in a continuation queued behind the controller's
+		// initialisation, so the open waits for that and one task more, after which the rebuild is done.
+		Services.prefs.setBoolPref("sidebar.revamp", revamped);
+		controller.promiseInitialized.then(() => window.setTimeout(open, 0));
 		`,
-		[addonId],
+		[addonId, kind === "revamped"],
 	)
 	if (opened !== "open") throw new Error(`openSidebar: ${opened}`)
 }
@@ -58,24 +74,29 @@ export async function evaluateInSidebar<T>(browser: Browser, body: string): Prom
 
 /**
  * Clicks the centre of the element with `testid` with a real pointer, which also gives the sidebar
- * focus. An element outside the sidebar's view is refused: no person could click it there.
+ * focus. An element outside the sidebar's view is refused: no person could click it there. The
+ * sidebar's coordinates are mapped onto its window's, which holds only while both share one scale.
  */
 export async function clickInSidebar(browser: Browser, testid: string): Promise<void> {
 	const { session } = actionPopupContext(browser)
-	const target = await evaluateInSidebar<{ x: number; y: number; inView: boolean } | null>(
+	const target = await evaluateInSidebar<{ x: number; y: number; scale: number; inView: boolean } | null>(
 		browser,
 		`const el = content.document.querySelector(${JSON.stringify(`[data-testid="${testid}"]`)});
 		if (!el) return null;
 		const rect = el.getBoundingClientRect();
 		const x = rect.left + rect.width / 2;
 		const y = rect.top + rect.height / 2;
-		return { x: content.mozInnerScreenX + x, y: content.mozInnerScreenY + y, inView: x >= 0 && y >= 0 && x < content.innerWidth && y < content.innerHeight };`,
+		return { x: content.mozInnerScreenX + x, y: content.mozInnerScreenY + y, scale: content.devicePixelRatio, inView: x >= 0 && y >= 0 && x < content.innerWidth && y < content.innerHeight };`,
 	)
 	if (!target) throw new Error(`clickInSidebar: no ${testid} in the sidebar`)
 	if (!target.inView) throw new Error(`clickInSidebar: ${testid} is outside the sidebar's view`)
-	const origin = await session.chromeScript<{ x: number; y: number }>(
-		`const [done] = arguments; done({ x: window.mozInnerScreenX, y: window.mozInnerScreenY });`,
+	const origin = await session.chromeScript<{ x: number; y: number; scale: number }>(
+		`const [done] = arguments; done({ x: window.mozInnerScreenX, y: window.mozInnerScreenY, scale: window.devicePixelRatio });`,
 	)
+	if (origin.scale !== target.scale)
+		throw new Error(
+			`clickInSidebar: the sidebar is zoomed (scale ${target.scale}, its window ${origin.scale}), so the click would miss`,
+		)
 	await session.chromeActions([
 		{
 			type: "pointer",

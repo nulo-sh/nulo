@@ -121,10 +121,10 @@ Nothing else changes: the predicate already runs the step in place (Fact 2), and
   - it reuses `actionPopupContext` for the session and add-on id, and `evaluateViaFrameScript`.
 - `fixtures/browser/index.ts`: `FIREFOX_ONLY.sidebar`.
 
-**e2e spec** `tests/e2e/firefox-sidebar.test.ts`, one scenario under `describe.skipIf(!isFirefox)(FIREFOX_ONLY.sidebar, …)`:
+**e2e spec** `tests/e2e/firefox-sidebar.test.ts`, one scenario per sidebar kind (D8) under `describe.skipIf(!isFirefox)(FIREFOX_ONLY.sidebar, …)`:
 - Steps:
   1. Register a passkey profile in a control popup (`registerPasskeyProfile`, `sessionAuthenticator`), note its session's profile, then lock it.
-  2. Open the sidebar, wait for its lock screen, and start counting `navigator.credentials.get` calls in the sidebar page's own realm (`inPageRealm`, as `armPanelDeath` counts the panel's).
+  2. Open the sidebar of the named kind, wait for its lock screen, and start counting `navigator.credentials.get` calls in the sidebar page's own realm (`inPageRealm`, as `armPanelDeath` counts the panel's).
   3. On the control page, assert there is no session row, then start `watchPasskeySurface` (`fixtures/passkey.ts`), whose `chrome.windows.onCreated` counter records every window Firefox opens, whichever API or context opens it, even one that opens and closes between two reads.
   4. Click Continue in the sidebar (`clickInSidebar`).
   5. Read only through the control page: `waitForSessionRow` sees the noted profile's session (the success control), and `readPasskeySurface` counts no window (the never-happens check).
@@ -135,7 +135,7 @@ Nothing else changes: the predicate already runs the step in place (Fact 2), and
   - a manifest that stops declaring the sidebar;
   - a Firefox that stops allowing WebAuthn in a focused sidebar.
 - **Why no cheaper layer**: view types and WebAuthn's focus rule exist only in a real Firefox.
-- **Estimate**: 25 s. The spike's passkey case, setup included and with three extra WebAuthn probes, measured 19.3–21.7 s headless (runs 2–4).
+- **Estimate**: 25 s. The spike's passkey case, setup included and with three extra WebAuthn probes, measured 19.3–21.7 s headless (runs 2–4). Measured in arc 1: 15.8–20.7 s for the default sidebar, 13.1–15.4 s for the revamped one (`lessons/phase-2.md`).
 
 **Pins**: `src/manifest.test.ts` adds one case. Firefox's `sidebar_action.default_panel` equals Chrome's `side_panel.default_path`, `open_at_install` is false, and Chrome's build has no `sidebar_action`.
 
@@ -166,6 +166,7 @@ Nothing else changes: the predicate already runs the step in place (Fact 2), and
 - **D5, the issues.** The PR says `Closes #596`. When the PR opens, #593 gets a comment: the sidebar runs the step in place; the panel's window stays as the owner decided; #593 stays closed.
 - **D6, no `closeSidebar`** (arc 1, a deviation). No spec closes the sidebar, since the launch is torn down with it, so the module exports `openSidebar`, `evaluateInSidebar` and `clickInSidebar` only.
 - **D7, `default_icon`** (arc 1, a correction). The first pictures showed Firefox's generic puzzle piece for Nulo in the revamped launcher: with no `default_icon`, `IconDetails` falls back to its default icon, not the manifest's `icons`, so Fact 3 was wrong. The key now names the add-on's own icons, which is what § UI impact promised ("its name and icon"). The pin covers it.
+- **D8, both sidebars driven** (arc 1, from the Opus review). A launch comes up with either sidebar (Phase 0 run 7 and the first pictures got the revamped one unasked), so a spec that does not choose drives whichever it gets, and a regression in one would read as a flake. `openSidebar` takes the kind and sets `sidebar.revamp` before opening, and the scenario runs once per kind (`test.for`). The revamped sidebar is its own Firefox code path (launcher, panel header, width), which is the second scenario's failure mode; it costs 13–15 s.
 
 ## Security & Adversarial Considerations
 
@@ -187,7 +188,7 @@ Nothing else changes: the predicate already runs the step in place (Fact 2), and
   - A passkey step started there runs in place.
   - **At the width Firefox opens it, the shell is clipped.** The page keeps its 360 px width and scrolls sideways. In the old sidebar (240–252 px) about a third of the page is cut until the person widens the sidebar or scrolls: the network badge and Lock, half of Receive, the end of the balance, and the Settings tab (`screenshots/sidebar-home-opening-width.png`). In the revamped sidebar (340 px) every control shows, and the page still scrolls 20 px. This is named here for the owner's look (OA-2), and the arc does not change the layout.
   - P28-08's condition, "be sure that the "side-panel" option can be really tested", is met by the spike (§ Phase 0).
-  - Pictures, taken headful, in [`screenshots/`](screenshots/): the lock screen and Home in the old sidebar at its opening width, with the clipping visible (`sidebar-lock-opening-width.png`, `sidebar-home-opening-width.png`); Home in the revamped sidebar at 340 px, with Nulo's icon in its launcher (`revamped-sidebar-home.png`); Home at 420 px, light and dark (`sidebar-home-420.png`, `sidebar-home-420-dark.png`).
+  - Pictures, taken headful, in [`screenshots/`](screenshots/): the passkey lock screen and Home in the old sidebar at its opening width, with the clipping visible (`sidebar-lock-opening-width.png`, `sidebar-home-opening-width.png`); Home in the revamped sidebar at 340 px, with Nulo's icon in its launcher (`revamped-sidebar-home.png`); Home at 420 px, light and dark (`sidebar-home-420.png`, `sidebar-home-420-dark.png`).
 - **At install** no sidebar opens, but Firefox lists Nulo in View → Sidebar and in the sidebar's switcher. With the revamped sidebar, it also adds Nulo's icon to the launcher's tools until the person removes it (`browser-sidebar.js` `registerExtension`). This is pictured.
 - **Unchanged**: the toolbar popup and its passkey window, Settings → Display (no row on Firefox), and the Chrome side panel.
 
@@ -270,6 +271,8 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | 2 | Codex, resumed | conditional approve | 1, poll the sidebar after the session (step 6); 2, the window recorder: `watchPasskeySurface`, no session before the click, a one-off forced-window run must fail; 3, the clipping named in UI impact and owner-gated (OA-2, Delivery); 4, the native-surface exception written into FIREFOX.md; 5, OA-4 answered before the PR leaves draft, and the Known limits line names every accepted OA | none |
 | 2 | Opus 5.5 lens | conditional approve | 1, the revamped sidebar (runs 6a, 6b; I2 rewritten; pictures headful, both sidebars); 2, leaving draft needs the owner's quoted sign-off; 3, the locator held to the driver's window; 4, the 0b evidence stated as it stands (runs 1–6, the click row qualified by width); 5, the success control: the noted profile and exactly one `get` in the sidebar; 6, the install-time launcher and menu entries in UI impact, pictured; 7, OA-4 listed in the PR body; 8, the seed's command | none |
 | final | Codex, fresh session | conditional approve, then approve on resume | 1, the full Firefox network suite in Phase 4; 2, Phase 3's gate takes only whole-window pictures; 3, each browser's smoke wall-clock in the PR body | none |
+| arc 1, loop 1 | Codex, gpt-6.1-sol | approve | 1, a click mapped across different scales (the sidebar zoomed): `clickInSidebar` refuses it by name | 2, readiness markers are not testids: they are the suite's readiness convention (`fixtures/wallet-pages.ts`), not a selection |
+| arc 1, loop 1 | Opus 5.5, diff review | request changes | 1, the sidebar kind pinned and both driven (D8); 2, the lock picture retaken on a passkey profile, the password screen's button shown to be disabled, not missing; 3, folded into Codex 1; 4, `chromeActions` reports the actions' own error; 5, `openSidebar` reports a refused open and says what it waits for; 6, the context's doc, FIREFOX.md's exception wording, the manifest pin's comment | 7, the `get` counter counts calls, not successes: no retrying fallback exists, recorded as a limit of the check |
 
 ## Seeds
 

@@ -143,9 +143,12 @@ export class WebDriverSession {
 				await this.switchToWindow(handle)
 				try {
 					await this.send("POST", "/actions", { actions })
-				} finally {
-					await this.send("DELETE", "/actions")
+				} catch (err) {
+					// Released on the way out, but the actions' own failure is the one to report.
+					await this.send("DELETE", "/actions").catch(() => {})
+					throw err
 				}
+				await this.send("DELETE", "/actions")
 			} finally {
 				await this.send("POST", "/moz/context", { context: "content" })
 			}
