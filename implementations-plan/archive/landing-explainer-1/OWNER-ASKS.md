@@ -1,6 +1,6 @@
 # Owner asks: landing-explainer-1
 
-**Answered by the owner (2026-10-17/18):** P42-01, P42-02, P42-03 = A (the scripts and card texts as written) and P42-04 = A (the `explainer` skill, narrated with the voice in the owner's ElevenLabs file). Arc 2 made the clips; OA-8 and OA-9 below are what is still open.
+**Answered by the owner (2026-10-17/18):** P42-01, P42-02, P42-03 = A (the scripts and card texts as written) and P42-04 = A (the `explainer` skill, narrated with the voice in the owner's ElevenLabs file). Arc 2 made the clips; OA-8 and OA-9 below are what is still open, with OA-10 and OA-11 from the 2026-10-19 retake.
 
 **Settled by the orchestrator (D-orch, 2026-10-17 22:0xZ), on the plan's approval:** OA-5 = A, the page ships unlinked from the home page. OA-6 = A, the owner runs the preview command by hand; nothing enables branch builds. OA-7 = A ships now, quoted in the PR body for the owner to flip. OA-1 to OA-4 stay the owner's: the three scripts and their text versions go on the owner's next decision page verbatim from this file, and the page ships the text versions until the owner picks.
 
@@ -129,6 +129,60 @@ The clips follow your approved scripts word for word, in the voice from your Ele
 | **B. Approve with changes** | A note per clip. A changed picture costs nothing; a changed word means a new narration of that clip, about 600 to 800 of the 12,821 characters left under the cap. |
 
 **Recommendation: A.** **What ships now:** the arc 2 PR, as a draft.
+
+### Owner's retake note, 2026-10-19 (P53-04 = B)
+
+The note, verbatim:
+
+> General feedback:
+> - It feels that it can be a little faster like 1.15x?
+>
+> Some feedback "The Private / Public balance":
+> - It names "one point five zero" instead of saying "one point five" which is the natural thing to say.
+> - It needs to update public and private icons, to the new ones selected
+>
+> On Proofs:
+> - I think the "USDC" is too close to one of the borders / envelopes.
+>
+> On Fees:
+> - The token that you bridge to Aztec from Ethereum it's $AZTEC that gets converted to FeeJuice and it's non transferrable once converted to FeeJuice
+> - Same on the icon for private / public
+
+What the retake changed, and nothing else:
+
+- **Pace, all three:** 1.15 times faster, by a tempo change on the narration, so nothing was narrated again for it.
+- **Clip 01, scene 4, the new line** (only "1.50" became "1.5"): "Say you pay 3.50 from a note worth 5. Nulo spends that note and makes new ones: 3.50 for the person you pay, and 1.5 change for you. In a private payment, the record shows that something was spent. It does not show which note, or how much."
+- **Clip 03, scene 2, the new line:** "The fee is paid in Fee Juice, the token that pays network fees on Aztec. You bring the Aztec token over from Ethereum, and it becomes Fee Juice. Once converted, it cannot be transferred, and it is used only for fees." Its picture: a $AZTEC chip crosses the bridge, becomes FEE JUICE on the Aztec side, NO TRANSFERS appears above it, and it drops into the fee meter.
+- **The Fees card's text** gains a second sentence: "You bring $AZTEC over from Ethereum, and it becomes Fee Juice, which cannot be transferred."
+- **Icons:** the private and public marks are the shield and globe the wallet draws on `dev` (#812), the pair Home's balance view renders.
+- **Clip 02:** "40.00 USDC" keeps 14 units from its note's right border, as from its left.
+- **Characters:** 455 (239 and 216) of the retake's 5,000.
+
+## OA-10. Labels close to a border that the note did not name
+
+**Surface:** four labels inside the clips, each nearer the right border of its box than the 14 units it keeps on the left: "ONLY YOU CAN SEE IT" 2.7 (clip 01, scene 2), the moving "40.00" coin 4.1 (clip 01, scene 5), "SOMEONE ELSE" 7.4 (clip 03, scene 5), "795.00" 8.5 (clip 02, scenes 2 and 4). Measured in the browser.
+
+| Option | What happens |
+|---|---|
+| **A. Leave them** | As they play now. |
+| **B. Give each the same inset** | The box widens or the label moves; a picture change, no characters. |
+
+**Recommendation: B.** It is the same thing you saw in the USDC note. **What ships now:** A.
+
+## OA-11. The figures in clip 01
+
+**Surface:** scene 4 of Private balances.
+
+- **"3.50", spoken:** your note named only "1.50", so the two "3.50"s kept their words. From the narration's timing alone (nobody has listened), the voice likely reads them as it read "1.50" before, digit by digit: "three point five zero".
+- **"1.50", drawn:** the change note on the picture still reads 1.50, as the wallet writes an amount, while the voice says "one point five".
+
+| Option | What happens |
+|---|---|
+| **A. Keep both** | As they play now. |
+| **B. Say "3.50" another way** | Your words, for example "three fifty"; scene 4 is narrated again, about 240 characters. |
+| **C. Draw the change as 1.5** | A picture change, no characters. |
+
+**Recommendation:** listen first; B if the voice says "three point five zero". **What ships now:** A.
 
 ## OA-9. Chapters under each clip
 

@@ -22,11 +22,11 @@ post_implementation_hardening: not scheduled
 - **Shipped:** the page `nulo.sh/how-aztec-works` with three narrated clips over their text versions.
   - Each clip is an SVG stage drawn from the narration's word timings, with a captions line, a WebVTT track and a transcript (D10 to D15).
   - Media is self-hosted and hashed under `/assets/`, fetched only on a press, 2.4 MB in all; the CSP is unchanged.
-  - Narration: 2,179 of the 15,000-character cap, one take per clip.
+  - Narration: 2,179 of the 15,000-character cap, one take per clip; the owner's retake note (2026-10-19) re-narrated two scenes, 455 characters, and set the pace to 1.15x (D16, D17).
   - CI fails a landing build that drops the page (D4).
 - **Known limits:** none.
 - **Open items:**
-  - OA-8 (approve the clips) and OA-9 (chapters; A, none, ships if unanswered) are answered on the PR before it leaves draft.
+  - OA-8 (approve the clips) and OA-9 (chapters; A, none, ships if unanswered) are answered on the PR before it leaves draft; so are the retake's OA-10 (tight labels) and OA-11 (clip 01's figures), A shipping if unanswered.
   - #722 stays open: the wallet's `HOW_AZTEC_WORKS_URL` repoint ships with onboarding-3, which has not landed.
   - Before ready, on the OA-6 preview: the MP3s answer range requests (206) and the tracks are served as `text/vtt`; `vite preview` cannot show either.
 - **Dropped:** chapters (D13, OA-9 A). **Lessons:** none promoted. Each gotcha is stated at the code it guards (`vite.config.ts`'s inline limit, the player's `networkState` read, the card's `min-width: 0`), and `lessons.md` is at its budget (8188 of 8192 bytes). Detail: `lessons/phase-3.md`.
@@ -74,6 +74,9 @@ For a new Nulo user who taps "How Aztec works" on Home and lands in a tab, and f
 | D13 | The transcript under the card's text, collapsed; no chapters | Chapters need a title per scene, words the owner has not seen (OA-9). OA-4 A named both |
 | D14 | Narration as written: `eleven_v4`, the key file's voice, no emotion tags; the skill's script review and four-look board skipped | P42-01 to -03 A approved the words, and tags would change what is sent; P42-04 A picked the landing's look |
 | D15 | One clip speaks at a time; a hidden tab pauses; the big play square shows only before the start and after the end | A square on a paused clip would hide the picture being looked at |
+| D16 | Retake pace: ffmpeg `atempo=1.15` on the narration, every alignment time divided by 1.15 | Re-narrating at a faster voice speed: the skill's client sends no speed, its script may not be edited, and it would re-roll every take |
+| D17 | A changed scene is narrated alone and spliced in at the middle of the measured silence around it | Cutting at the alignment's scene edges: it stretches a scene's last word over the pause, so those cuts fell in speech (-13 dBFS) |
+| D18 | The USDC note widened at its call site (184), and a scene test refuses any mono label past its box | A note that sizes itself to its label: it would also move clip 01's coin, a picture the note did not name (OA-10) |
 
 ## Phase 1 (arc 1): the page ✓
 
@@ -115,6 +118,8 @@ Assumptions: F1 to F10, I1. Steps:
 Owner picks (2026-10-17/18, quoted by id): P42-01, P42-02, P42-03 = A, "Approve the script and the card's text as written"; P42-04 = A, "The explainer skill: drawn scenes in the landing's look; your yes, your cap and voice or captions in the note", and in chat: "regarding voice: just use the voice we have set on our eleven labs file". Cap, set by the orchestrator under that yes: 15,000 ElevenLabs characters.
 
 Done: narration outside the repo (D6), 2,179 characters in one take per clip (Private balances 58.9 s, Proofs 50.7 s, Fees 40.6 s); the player and scenes (D10 to D15); each clip at the top of its card over the text version; the "3 clips" eyebrow; `README.md`. Media 2.4 MB in all. Tests: `timeline.test.ts` (cue lookup per scene, caption lines), `clips.test.ts` (one player per clip, every cue spoken, preload none and no autoplay, the track equals the captions, the transcript equals the narration, media within 20 MB) and `scenes.test.ts` (every scene swept forward and backward draws the same picture, with finite values, and moves); each was proved red by a mutation. The clips draw the wallet's glyphs as dev's #790 restyled them (Tabler outlines). Gate results: `lessons/phase-3.md`. The clips go to the owner as OA-8.
+
+**Retake (2026-10-19), the owner's note (P53-04 = B, quoted in OWNER-ASKS under OA-8):** all three clips at 1.15x (D16); clip 01's scene 4 and clip 03's scene 2 narrated again, 239 + 216 characters of a 5,000 cap, and spliced in (D17); the shield and globe marks from `dev` (#812), with the proof's cells fading under the shield, which covers less than the square did; the USDC note (D18); the fees scene 2 drawing $AZTEC becoming Fee Juice with no transfers, on taller plates so the chip clears the meter; the Fees card's new sentence. Lengths: 58.9 to 51.6 s, 50.7 to 44.1 s, 40.6 to 40.3 s. QA passed in Chrome and Firefox; detail in `lessons/phase-3.md`.
 
 ## Security & Adversarial Considerations
 
@@ -174,6 +179,8 @@ The steps are `implementations-plan/README.md` § Post-implementation standard a
 **Arc 2 implementation, Opus diff review:** conditional approve, 7 findings, 6 accepted. A source that fails to load left the clip "playing" (the player reads `networkState`, not `error`, which Firefox sets while it plays, and reloads on the next press); the focus ring; the captions line kept its last line after the end; the one-voice swap ran only from the click (now on `play`, so media keys count); `seg` returned `NaN` on an empty interval, and a test that could not fail (now `scenes.test.ts`); a comment and a stray `;` in the clause pattern. Rejected: re-announcing `aria-valuetext` on a focused slider during playback (unverified, the common players do the same, and freezing the thumb hides the position from sighted keyboard users).
 
 **Cross-arc pass, Codex** (fresh session over the net diff from the plan's base): **approve**, 2 low findings, both accepted: the architecture and security lines' "no new TypeScript" and "no new script" scoped to arc 1; `kit.ts`'s export inventory removed. Seams verified: one bundled entry imports `main` once, clips stay off the home page, the store pin and the dist check cover both pages.
+
+**Retake, Codex** (gpt-6.1-sol, high, read-only, session 01a153b1): round 1 **approve**, no findings; it checked timings against text, cue order, both-way rendering, the overrun test (red on the old width) and the Fees claim against the docs.
 
 **Arc 2 deviations:** the base moved to `origin/dev` when #723 merged mid-review (one README conflict, dev's wording kept); dev's #790 restyled the wallet's glyphs, so the clips' glyph rules followed and one check glyph moved clear of the packet. Gates and QA reran on the rebased branch.
 

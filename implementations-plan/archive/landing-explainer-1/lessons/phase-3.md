@@ -27,3 +27,15 @@ The review renders seek the page's own player frame by frame (24 fps) and captur
 ## Rebase onto dev
 
 Arc 1 (#723) merged while arc 2 was in review, so the branch moved onto `origin/dev`, as the orchestrator's brief says. One conflict: the landing README's `index.html` row, where dev renamed the preview notice to the early-days notice (#791). dev's #790 also redrew the wallet's glyphs from Tabler Icons: stroke 2, round caps and joins, the nonzero fill rule, the public mark a dashed square. The clips' glyph rules follow, and the proofs clip's check moved above the packet it had overlapped (Tabler's check sits lower in its box). Stills, review videos and the before/after pictures were made again; gates and QA in both browsers were run again on the rebased branch.
+
+## Retake (2026-10-19)
+
+The owner's note (P53-04 = B): 1.15x, "one point five", the new marks, USDC off its border, $AZTEC in Fees.
+
+- **Pace in the render.** `atempo=1.15` on the decoded narration, then one MP3 encode; every word and scene time divided by 1.15 and rounded to the millisecond. Each scene's words still equal its text, and the page's own `toVtt(captions())` rebuilt the tracks (the v1 track it rebuilds matched the repo byte for byte first).
+- **Splicing a re-narrated scene.** The first cut at the alignment's scene edges landed in speech (-25 and -13 dBFS): the alignment stretches a scene's last word, with its full stop and paragraph break, over the pause that follows, ending it up to 0.6 s late. The cuts now go at the middle of the longest run of 10 ms windows under -60 dBFS around each edge (-84 to -89 dBFS), the new take is trimmed to its own speech and padded so both pauses keep their v1 length, its level matched by RMS (-0.44 dB and +0.05 dB), with 10 ms fades. An audio check confirmed the onsets: "Say" at 25.887 s in the timings, speech from 25.86 s.
+- **"1.50" read digit by digit.** The alignment cannot say what was spoken, but durations can: v1's "1.50" took 0.96 s, the new "1.5" 0.64 s, and each "3.50" about 1.0 s, so "3.50" likely still reads "three point five zero" (OA-11).
+- **The shield covers less than the square.** Proofs scene 3 closed the cell grid under the private mark; the shield left the grid's corners showing, so the cells now fade as the mark closes.
+- **Fees scene 2 holds the chip longer.** The new line keeps FEE JUICE on the Aztec plate for a whole sentence, where v1's sat there about a second, so it covered the fee meter. The plates grew and the chip rides centred on the bridge.
+- **USDC.** The note was 168 wide for a 170-unit label. Widened to 184 at the call site; the measured right margin is 14.2 against the 14.0 left inset. A note that sizes itself would also have moved clip 01's coin, so it stays an ask (OA-10) with three other tight labels the browser measured.
+- **Gates:** landing tests 79/79 (the overrun test red on 168), lint, typecheck, build (media 2.18 MB), browser QA in Chrome and Firefox. Codex round 1 approved with no findings.
