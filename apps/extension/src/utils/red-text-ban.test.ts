@@ -72,17 +72,12 @@ const RED_ATTR = new Map<string, (value: string, bound: boolean) => boolean>([
 type Finding = { file: string; line: number; text: string }
 type Reviewed = { file: string; text: string; why: string }
 
-/** Red that is a glyph, large text, or waits on a decision; one entry per finding. */
+/** Red that is a glyph, large text or a recorded decision; one entry per finding. */
 const REVIEWED: Reviewed[] = [
 	{
 		file: "apps/extension/src/components/composite/CollapsingHeroLayout.vue",
 		text: ".title_main_destructive { color: var(--red) }",
 		why: "the 40 px Reset hero: large text, where AA asks 3:1",
-	},
-	{
-		file: "apps/extension/src/popup/pages/tokens/[id].vue",
-		text: ".hover_red:hover span { color: var(--red) }",
-		why: "a destructive row's hover label, not an error; its colour awaits an owner decision",
 	},
 	{
 		file: "apps/extension/src/popup/pages/tokens/[id].vue",

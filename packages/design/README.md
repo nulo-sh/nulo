@@ -34,8 +34,9 @@ bun run gen:tokens
 on divergence — modeled on the repo's other generated-artifact pins). Per-theme VALUES live in
 `src/base.css`.
 
-Error and refusal text is `txt-danger`: 4.5:1 in both themes on the page, a row, a card and a window
-footer (`src/theme-contrast.test.ts`), though not on `--nulo-surface-highest`. `--red` reads 3.56:1 on
+Error and refusal text is `txt-danger`: 4.5:1 in both themes on the page, a row, a card, a window
+footer and, as `--log-error-color`, a log line's tint (`src/theme-contrast.test.ts`), though not on
+`--nulo-surface-highest`. `--red` reads 3.56:1 on
 the light page, so `red` paints glyphs, fills, borders and large text. The extension's
 `src/utils/red-text-ban.test.ts` refuses other text in `--red`.
 

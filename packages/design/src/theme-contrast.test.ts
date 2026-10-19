@@ -236,6 +236,11 @@ describe("theme contrast — status text (required)", () => {
 			expect(contrast("--txt-danger", "--nulo-surface", theme)).toBeGreaterThanOrEqual(AA_TEXT)
 		})
 	}
+	for (const theme of ["light", "dark"] as const) {
+		test(`${theme}: a log viewer's ERROR line on its tint >= ${AA_TEXT}:1`, () => {
+			expect(contrast("--log-error-color", "--log-error-background", theme)).toBeGreaterThanOrEqual(AA_TEXT)
+		})
+	}
 	for (const [fg, status] of Object.entries({ "--txt-warning": "--yellow", "--txt-success": "--green" })) {
 		test(`dark: ${fg} is ${status}`, () => {
 			expect(resolveColor(fg, themeMap("dark"))).toEqual(resolveColor(status, themeMap("dark")))
