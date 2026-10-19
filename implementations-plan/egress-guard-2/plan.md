@@ -1,7 +1,7 @@
 ---
 plan: egress-guard-2
 tier: light
-status: planned, final Codex approve; arc 1 next
+status: completed (PR #845 carries this close-out)
 issues: "#836 #835 (arc 1 closes both)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,22 @@ base: origin/dev at 19399c82
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** closed. PR #845 (one arc, `egress-guard-2-a1`) delivers #836 and #835 and carries this close-out; its merge closes the plan.
+- **Shipped:**
+  - The egress guard counts a Testnet-node attempt that arrives while the launch's stand-in holds the origin (`HeldInterception.holding()`, `EgressGuard.watch`, `EgressAttempt.held`). The close fails on one, naming the host and the count, until the close begins (D8).
+  - One control-spec case proves a real launch is watched (D4).
+  - The README, the e2e-testing skill and `FIREFOX.md` describe the guard as every launch runs it.
+- **Proof:** an allow-list red run failed with exactly the held diagnostic (20 attempts). Full smoke, a 14-file network subset and both canaries prover-ON ran green on both browsers at retry 0 (`lessons/phase-3.md`).
+- **Owner asks:** none.
+- **Known limits:** #846 (a held count cannot be ordered against an interception arm: I2, D5, D8's edge).
+- **Open items:** none.
+- **Dropped:** none. The ledger records each alternative not taken.
+- **Lessons:** none promoted. `lessons.md` is at its 8 KiB budget, and the one generalizable gotcha (a proxy record cannot be ordered against a CDP or observer arm) is stated in #846 and README § Egress guard.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # egress-guard-2: fail the guard's close on a node request the stand-in missed
 
@@ -126,6 +142,10 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `1939
 **Round 2, Codex** (resume): D8 and D4 hold; conditional approve, 2 findings, both accepted. #1 Medium, attribution and recurrence claims still too strong (F5, the README remedy, I2, D8, Security): qualified. #2 Low, Phase 1's gate named two mutations of four: fixed; Phase 3's gate now says "unexpected" egress failure.
 
 **Round 3, Codex** (resume): **approve**, high confidence; both conditions met, no new contradiction.
+
+**Implementation round 1** (diff `19399c82..a1d5a008`). Codex (gpt-6.1-sol, high, session `01a152de`): conditional approve, 3 findings, all accepted. They were an unanchored control assertion, the close cut-off unstated in three places, and a narrating comment. The Opus diff review gave conditional approve with 6 Low findings, all taken: the cut-off in the node's refusal reason, the README remedy, `watch`'s replace stated, a trimmed doc, the reason keyed by `LIVE_NODE_HOST`. Fixed in 41caa010.
+
+**Implementation round 2** (Codex resume): **approve**; the loop converged. Final gates on the head after merging `dev` (#842): lint, `typecheck:all`, `test:all`, `test:ci-gating`, `check:plans` exit 0; the control spec and `security-reset` green on both browsers.
 
 ## Seeds
 
