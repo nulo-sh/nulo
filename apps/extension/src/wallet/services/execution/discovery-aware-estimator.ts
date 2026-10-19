@@ -25,7 +25,7 @@ import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-
 import type { WrappedTask } from "@/wallet/services/task/service"
 import type { AuthwitDiscoverer, BuildTxRequestFn } from "./authwit-discoverer"
 import { CollectingDiscoveryProbe } from "./discovery-probe"
-import type { FeeEstimate } from "./fee/fee-strategy"
+import type { FeeEstimate, OnBuilt } from "./fee/fee-strategy"
 import { throwIfAborted } from "./rpc-cancel"
 import type { Action, AddPrivateAuthwitAction, FeeOptions, FeeSettings, Operation, SendTransactionOperation } from "./spec"
 import type { DiscoveredAuthwit } from "@nulo/wallet-bridge"
@@ -46,6 +46,7 @@ export interface DiscoveryAwareEstimatorDeps {
 		fence: ExecutionFence,
 		parentTask?: WrappedTask,
 		signal?: AbortSignal,
+		onBuilt?: OnBuilt,
 	): Promise<FeeEstimate>
 	/** The FOLDED pipeline — same strategy dispatch with `ctx.probe` set, so a
 	 *  probe-aware strategy runs its first sim stubbed and discovery collapses
@@ -57,6 +58,7 @@ export interface DiscoveryAwareEstimatorDeps {
 		probe: DiscoveryProbe,
 		parentTask?: WrappedTask,
 		signal?: AbortSignal,
+		onBuilt?: OnBuilt,
 	): Promise<FeeEstimate>
 	/** Discovery's throwaway build (hardcoded PREEXISTING_FEE_JUICE inside),
 	 *  run under the same fence as the estimate it serves. */
@@ -64,6 +66,7 @@ export interface DiscoveryAwareEstimatorDeps {
 		op: Parameters<BuildTxRequestFn>[0],
 		paymentMethod: Parameters<BuildTxRequestFn>[1],
 		fence: ExecutionFence,
+		onBuilt?: OnBuilt,
 	): ReturnType<BuildTxRequestFn>
 }
 
@@ -105,6 +108,7 @@ export class DiscoveryAwareEstimator {
 		fence: ExecutionFence,
 		parentTask?: WrappedTask,
 		signal?: AbortSignal,
+		onBuilt?: OnBuilt,
 	): Promise<DiscoveryEstimateResult> {
 		const hasPreAttachedAuthwit = actions.some((a) => a.kind === "add_private_authwit")
 		const foldableKind = feeSettings.paymentMethod.kind === "fpc" || feeSettings.paymentMethod.kind === "fj"
@@ -112,19 +116,27 @@ export class DiscoveryAwareEstimator {
 			({ ...operation, actions: [...acts], ...(detectedFee ? { fee: detectedFee } : {}) }) as SendTransactionOperation
 		if (foldableKind && !hasPreAttachedAuthwit) {
 			const probe = new CollectingDiscoveryProbe()
-			const built = await this.deps.buildAndEstimateFolded(withActions(actions), feeSettings, fence, probe, parentTask, signal)
+			const built = await this.deps.buildAndEstimateFolded(
+				withActions(actions),
+				feeSettings,
+				fence,
+				probe,
+				parentTask,
+				signal,
+				onBuilt,
+			)
 			return { built, discoveredActions: [...probe.collected], discovered: [...probe.discovered] }
 		}
 
 		const { actions: discoveredActions, discovered } = await this.deps.authwit.discoverPrivateAuthwits(
 			withActions(actions),
-			(op, method) => this.deps.buildForDiscovery(op, method, fence),
+			(op, method) => this.deps.buildForDiscovery(op, method, fence, onBuilt),
 		)
 		// Stage boundary preserved from the inline shape: a cancel landing
 		// during discovery must not start the sizing pipeline.
 		throwIfAborted(signal)
 		const finalActions = discoveredActions.length ? [...actions, ...discoveredActions] : actions
-		const built = await this.deps.buildAndEstimateValidated(withActions(finalActions), feeSettings, fence, parentTask, signal)
+		const built = await this.deps.buildAndEstimateValidated(withActions(finalActions), feeSettings, fence, parentTask, signal, onBuilt)
 		return { built, discoveredActions, discovered }
 	}
 }
