@@ -175,7 +175,7 @@ const STUBS = {
 		`,
 	},
 	SectionLabel: { template: "<div />" },
-	OperationCard: { template: '<div><slot name="fee" /></div>' },
+	OperationCard: { props: ["refused"], template: '<div><slot name="fee" /></div>' },
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" />',
@@ -1196,16 +1196,20 @@ describe("execute window — a request the wallet refused", () => {
 		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
 		await flushPromises()
 		toastMocks.openToast.mockClear()
+		const refused = () => w!.findComponent(STUBS.OperationCard).props("refused")
+		expect(refused()).toBe(false)
 		return {
 			vm,
+			refused,
 			notice: () => w!.find('[data-testid="execute-op-refusal"]'),
 			confirm: () => w!.find('[data-testid="execute-confirm-btn"]'),
 		}
 	}
 
-	async function expectRefused(kind: "registry" | "call", { vm, notice, confirm }: Awaited<ReturnType<typeof opened>>) {
+	async function expectRefused(kind: "registry" | "call", { vm, refused, notice, confirm }: Awaited<ReturnType<typeof opened>>) {
 		await flushPromises()
 		expect(notice().attributes()).toMatchObject({ "data-kind": kind, role: "alert" })
+		expect(refused()).toBe(true)
 		expect(w!.find('[data-testid="execute-op-refusal-title"]').text()).toBe("Nulo won't send this")
 		expect(w!.find('[data-testid="execute-op-refusal-reason"]').text()).toBe(REASON[kind])
 		expect(toastMocks.openToast).not.toHaveBeenCalled()
@@ -1241,11 +1245,12 @@ describe("execute window — a request the wallet refused", () => {
 	})
 
 	test("any other estimate failure keeps today's toast and Confirm", async () => {
-		const { notice, confirm } = await opened()
+		const { refused, notice, confirm } = await opened()
 		feeMapInstances[0]!.opts.onError?.(0, new Error("node down"))
 		await flushPromises()
 		expect(toastMocks.openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't estimate fee. Try again." })
 		expect(notice().exists()).toBe(false)
+		expect(refused()).toBe(false)
 		expect(confirm().attributes("disabled")).toBeUndefined()
 	})
 })
