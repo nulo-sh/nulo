@@ -2,12 +2,13 @@
  * Composition test: the real IncomingTransferService, its real repository and the lock on
  * FakeBrowserApi storage, every other service a canned stub. The Allow touches trust, records and
  * the lock only, and a scan reads notes from a constant `NoteService` stub (no PXE, no bb, no
- * simulate or prove), so the stored rows and the log buffer are the oracle. See
+ * simulate or prove), so the stored rows and the log buffer are the oracle. Block's tests run the
+ * schedulers too and record each arm's reads by contract. See
  * `apps/extension/tests/COMPOSITION-TESTS.md`.
  */
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import type { ConfigProp, IConfig } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { ServiceCollection } from "@/wallet/base"
@@ -80,7 +81,10 @@ function debugLogger(): LoggerStore {
 	return new LoggerStore(config)
 }
 
-async function startService(api: FakeBrowserApi, notes: Record<string, unknown> = NO_NOTES) {
+/** What the service schedules from: its tokens, the accounts that scan them and the public reader. */
+type Scope = { tokens?: (typeof TOKEN)[]; accounts?: { address: string }[]; reader?: PublicEventReader }
+
+async function startService(api: FakeBrowserApi, notes: Record<string, unknown> = NO_NOTES, scope: Scope = {}) {
 	const deletion = new ProfileDeletionState()
 	const session = 1
 	const visibility = { gate: undefined as Promise<void> | undefined, reached: false }
@@ -102,17 +106,22 @@ async function startService(api: FakeBrowserApi, notes: Record<string, unknown> 
 			getNetworks: async () => [NETWORK],
 			getNetworksRaw: async () => [NETWORK],
 			registerChainPurgeSubscriber: () => {},
+			isChainQuarantined: async () => false,
 		}),
 	)
 	collection.add(
 		svc(AccountService.name, {
 			onAccountAdded: new EventHandler(),
 			onAccountDeleted: new EventHandler(),
-			getAccounts: async () => [],
+			getAccounts: async () => scope.accounts ?? [],
 		}),
 	)
 	collection.add(
-		svc(TokenService.name, { onTokenAdded: new EventHandler(), onTokenDeleted: new EventHandler(), getTokensRaw: async () => [TOKEN] }),
+		svc(TokenService.name, {
+			onTokenAdded: new EventHandler(),
+			onTokenDeleted: new EventHandler(),
+			getTokensRaw: async () => scope.tokens ?? [TOKEN],
+		}),
 	)
 	collection.add(svc(TransactionService.name, { onTransactionAdded: new EventHandler(), getTransactions: async () => [] }))
 	collection.add(svc(OperationJournalService.name, { getOperations: async () => [] }))
@@ -133,7 +142,7 @@ async function startService(api: FakeBrowserApi, notes: Record<string, unknown> 
 	collection.add(svc(TaskService.name, { getTaskSync: () => ({ status: 0 }) }))
 	collection.add(svc(PriceService.name, { getQuotes: async () => ({ quotes: {}, pricedTokens: {} }) }))
 	const logger = debugLogger()
-	const service = new IncomingTransferService(logger, api, 1_000_000, reader)
+	const service = new IncomingTransferService(logger, api, 1_000_000, scope.reader ?? reader)
 	collection.add(service)
 	await collection.start()
 	return { service, logger, visibility }
@@ -276,5 +285,191 @@ describe("IncomingTransferService composition — a received note, scanned in-pr
 		await scan(await start(), await reader.getScanTips("n1"))
 		expect((await noteRows()).map((r) => [r.id, r.settled])).toEqual([[id, true]])
 		await expectNoNullifier()
+	})
+})
+
+describe("IncomingTransferService composition — Block stops the token's scans", () => {
+	const ACCOUNT = `0x${"a1".repeat(32)}`
+	const OTHER = { ...TOKEN, id: 8, contract: `0x${"d4".repeat(32)}`, symbol: "TKB" }
+	const wireNote = (contract: string) =>
+		({
+			contract,
+			storageSlot: "0x1",
+			txHash: `0x${"7b".repeat(32)}`,
+			rawContent: ["0x64"],
+			content: { value: "100" },
+			uniqueNoteHash: `0x${"1c".repeat(32)}`,
+			noteHash: `0x${"ab".repeat(32)}`,
+			l2BlockNumber: TIP - 10,
+			txIndexInBlock: 0,
+			noteIndexInTx: 0,
+		}) as RawNote
+
+	type Internals = {
+		serviceEpoch: number
+		polling: Set<string>
+		publicPolling: Set<string>
+		accountService: { getAccounts: () => Promise<{ address: string }[]> }
+		repo: IncomingTransferRepository
+		hydrateSchedulers: () => Promise<void>
+		scanContract: (p: string, n: string, a: string, c: string, epoch: number) => Promise<boolean>
+		onTokenDeleted: (token: unknown) => Promise<void>
+		onTokenAdded: (token: unknown) => Promise<void>
+	}
+	const internals = (service: IncomingTransferService) => service as unknown as Internals
+	const scan = (service: IncomingTransferService, contract = CONTRACT) =>
+		internals(service).scanContract("p1", "n1", ACCOUNT, contract, internals(service).serviceEpoch)
+
+	async function fixture() {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const repo = new IncomingTransferRepository(api)
+		await repo.setTrust("p1", "n1", CONTRACT, "pending")
+		await repo.setTrust("p1", "n1", OTHER.contract, "trusted")
+		return { api, repo }
+	}
+
+	/** Every read either arm makes, by contract. */
+	function recordingReads() {
+		const reads: string[] = []
+		const notes = {
+			getNotesRaw: async (_network: string, _account: string, contract: string) => {
+				reads.push(`note ${contract}`)
+				return []
+			},
+			getBlockTimestamp: async () => undefined,
+		}
+		const recorder: PublicEventReader = {
+			...reader,
+			getTokenClassStatus: async (_network, contract) => {
+				reads.push(`public ${contract}`)
+				return "standard"
+			},
+			fetchTransferPage: async (network, contract, args) => {
+				reads.push(`public ${contract}`)
+				return reader.fetchTransferPage(network, contract, args)
+			},
+		}
+		return { reads, notes, recorder }
+	}
+	/** No poll of either arm is running: every read a scan makes has been made. */
+	const idle = (service: IncomingTransferService) => internals(service).polling.size + internals(service).publicPolling.size === 0
+	const readsOf = (reads: string[], contract: string) => [...new Set(reads.filter((r) => r.endsWith(contract)))].sort()
+	const BOTH_ARMS = (contract: string) => [`note ${contract}`, `public ${contract}`]
+
+	test("after Block neither arm reads the token, the allowed token reads on, and a delete and re-add resumes both", async () => {
+		const { api } = await fixture()
+		const { reads, notes, recorder } = recordingReads()
+		const { service } = await startService(api, notes, { tokens: [TOKEN, OTHER], accounts: [{ address: ACCOUNT }], reader: recorder })
+		await vi.waitFor(() => expect(readsOf(reads, CONTRACT)).toEqual(BOTH_ARMS(CONTRACT)))
+		await vi.waitFor(() => expect(idle(service)).toBe(true))
+
+		reads.length = 0
+		expect(await service.setTrustReject("p1", "n1", CONTRACT)).toBe(true)
+		await vi.waitFor(() => expect(readsOf(reads, OTHER.contract)).toEqual(BOTH_ARMS(OTHER.contract)))
+		await vi.waitFor(() => expect(idle(service)).toBe(true))
+		expect(readsOf(reads, CONTRACT)).toEqual([])
+
+		await internals(service).onTokenDeleted(TOKEN)
+		await internals(service).onTokenAdded(TOKEN)
+		await vi.waitFor(() => expect(readsOf(reads, CONTRACT)).toEqual(BOTH_ARMS(CONTRACT)))
+	})
+
+	test("a rebuild that read the trust before Block, and resumes during it, schedules no read of the token", async () => {
+		const { api } = await fixture()
+		const { reads, notes, recorder } = recordingReads()
+		const { service } = await startService(api, notes, { tokens: [TOKEN, OTHER], accounts: [{ address: ACCOUNT }], reader: recorder })
+		await vi.waitFor(() => expect(readsOf(reads, CONTRACT)).toEqual(BOTH_ARMS(CONTRACT)))
+		await vi.waitFor(() => expect(idle(service)).toBe(true))
+		const s = internals(service)
+		const parked = deferred()
+		const resume = deferred()
+		vi.spyOn(s.accountService, "getAccounts").mockImplementationOnce(async () => {
+			parked.resolve()
+			await resume.promise
+			return [{ address: ACCOUNT }]
+		})
+		const stale = s.hydrateSchedulers()
+		await parked.promise
+		const listByContract = s.repo.listByContract.bind(s.repo)
+		vi.spyOn(s.repo, "listByContract").mockImplementationOnce(async (...args) => {
+			resume.resolve()
+			await stale
+			return listByContract(...args)
+		})
+
+		reads.length = 0
+		expect(await service.setTrustReject("p1", "n1", CONTRACT)).toBe(true)
+		await vi.waitFor(() => expect(readsOf(reads, OTHER.contract)).toEqual(BOTH_ARMS(OTHER.contract)))
+		await vi.waitFor(() => expect(idle(service)).toBe(true))
+		expect(readsOf(reads, CONTRACT)).toEqual([])
+	})
+
+	test("Block deletes the token's hidden receipts on every account and keeps its trust; another token's stay", async () => {
+		const { api, repo } = await fixture()
+		await repo.setTrust("p1", "n1", OTHER.contract, "pending")
+		const blockedReceipts = [hiddenReceipt(1, "0xa", 40), hiddenReceipt(2, "0xb", 41)]
+		const otherReceipt = { ...hiddenReceipt(3, "0xa", 42), contract: OTHER.contract, tokenId: OTHER.id }
+		for (const r of [...blockedReceipts, otherReceipt]) await repo.upsertRecord(r)
+		const { service } = await startService(api, NO_NOTES, { tokens: [TOKEN, OTHER] })
+		const deleted: string[] = []
+		service.onIncomingTransferDeleted.add((r) => deleted.push(r.id))
+
+		expect(await service.setTrustReject("p1", "n1", CONTRACT)).toBe(true)
+
+		expect(await repo.listByContract("p1", "n1", CONTRACT)).toEqual([])
+		expect(deleted.sort()).toEqual(blockedReceipts.map((r) => r.id).sort())
+		expect(await repo.getRecord(otherReceipt.id)).toEqual(otherReceipt)
+		expect(await repo.getTrust("p1", "n1", CONTRACT)).toMatchObject({ state: "blocked" })
+	})
+
+	test("a note scan in flight when Block lands stores no receipt and marks no balance dirty", async () => {
+		const { api, repo } = await fixture()
+		const read = deferred()
+		const release = deferred()
+		const notes = {
+			getNotesRaw: async () => {
+				read.resolve()
+				await release.promise
+				return [wireNote(CONTRACT)]
+			},
+			getBlockTimestamp: async () => 1_700_000_000,
+		}
+		const { service } = await startService(api, notes)
+		const scanning = scan(service)
+		await read.promise
+
+		expect(await service.setTrustReject("p1", "n1", CONTRACT)).toBe(true)
+		release.resolve()
+		await scanning
+
+		expect(await repo.listByContract("p1", "n1", CONTRACT)).toEqual([])
+		expect(await repo.listOutbox()).toEqual([])
+	})
+
+	test("a note scan of a blocked token stores no receipt and marks no balance dirty; an allowed token's does", async () => {
+		const { api, repo } = await fixture()
+		const notes = {
+			getNotesRaw: async (_n: string, _a: string, contract: string) => [wireNote(contract)],
+			getBlockTimestamp: async () => 1,
+		}
+		const { service } = await startService(api, notes, { tokens: [TOKEN, OTHER] })
+		expect(await service.setTrustReject("p1", "n1", CONTRACT)).toBe(true)
+
+		await scan(service, CONTRACT)
+		await scan(service, OTHER.contract)
+
+		expect(await repo.listByContract("p1", "n1", CONTRACT)).toEqual([])
+		expect(await repo.listByContract("p1", "n1", OTHER.contract)).toHaveLength(1)
+		expect((await repo.listOutbox()).map(([key]) => key.endsWith(`|${OTHER.id}`))).toEqual([true])
+	})
+
+	test("an Allow after Block is refused, and the token stays blocked", async () => {
+		const { api, repo } = await fixture()
+		const { service } = await startService(api)
+		expect(await service.setTrustReject("p1", "n1", CONTRACT)).toBe(true)
+
+		expect(await service.setTrustAllow("p1", "n1", CONTRACT)).toBe(false)
+		expect(await repo.getTrust("p1", "n1", CONTRACT)).toMatchObject({ state: "blocked" })
 	})
 })

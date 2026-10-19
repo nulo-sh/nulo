@@ -13,7 +13,8 @@
  *   - Pollution defense via the `IncomingTrustState` state machine:
  *     `unknown` → first note arrival → `pending` (record hidden, popup
  *     prompts user) → `trusted` (record visible + future receives auto-
- *     display) OR `blocked` (records stay hidden forever).
+ *     display) OR `blocked` (neither arm scans the contract again and its
+ *     hidden records are deleted; only a token delete leaves `blocked`).
  *   - Scope is locked to fungible-token receives for tokens the user has
  *     explicitly added. NFTs + unknown-contract notes are out.
  */
@@ -72,7 +73,7 @@ type IncomingTransferRecordCommon = {
 	 * arbitrary; the block+txIndex prefix keeps cross-tx ordering correct.
 	 */
 	indexInTx: number
-	/** When `true`, suppressed from rendering (contract `pending` or `blocked`). */
+	/** When `true`, suppressed from rendering (contract `pending`). */
 	hidden: boolean
 	/** Local Date.now() at first discovery. Fallback ordering tiebreak. */
 	discoveredAt: number
@@ -326,7 +327,7 @@ export type Events = {
 export type Methods = {
 	/**
 	 * Returns the visible incoming-transfer records for an account on a
-	 * network. Records flagged `hidden: true` (pending / blocked) are
+	 * network. Records flagged `hidden: true` (pending) are
 	 * filtered out by default.
 	 */
 	getIncomingTransfers(profileId: string, networkId: string, accountAddress: string, tokenId?: number): IncomingTransferRecord[]
@@ -360,12 +361,13 @@ export type Methods = {
 	 *  contract to visible in the same storage write, and emits `onIncomingTransferAdded` for each when
 	 *  visibility is on and the lock ticket is still current. Returns `false`, writing nothing, when the
 	 *  token's registration cannot be verified (deleted between the prompt and the click, or the
-	 *  lookup failed), the trust row is missing or `unknown` (a wipe or token delete reset it), a row
+	 *  lookup failed), the trust row is missing, `unknown` (a wipe or token delete reset it) or `blocked`, a row
 	 *  delete is still running, or a lock, a profile switch, the profile's deletion or a lock handoff
 	 *  overtook the write — caller should suppress the success toast in that case. */
 	setTrustAllow(profileId: string, networkId: string, contract: string): boolean
-	/** User rejected the first-receive prompt: `pending → blocked`. Same
-	 *  `false`-on-stale-token contract as `setTrustAllow`. */
+	/** User rejected the first-receive prompt: `pending → blocked`. Neither arm scans the contract
+	 *  again and its hidden records are deleted, in the same locked section; its outbox rows stay.
+	 *  Same `false`-on-stale-token contract as `setTrustAllow`. */
 	setTrustReject(profileId: string, networkId: string, contract: string): boolean
 	/** Clear all records + trust state for a profile. Called from the
 	 *  profile-delete fanout. */
