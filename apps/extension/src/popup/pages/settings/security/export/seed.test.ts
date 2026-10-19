@@ -14,6 +14,7 @@ import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import { useAppStore } from "@/stores/app.store"
 import { RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
 import Seed from "./seed.vue"
+import { installChromeStorage } from "../../../../../../tests/helpers/chrome-storage-mock"
 
 const wrappers: VueWrapper[] = []
 
@@ -43,11 +44,7 @@ const retrieve = (w: VueWrapper) => w.get('[data-testid="unlock-submit-btn"]').e
 
 beforeEach(() => {
 	vi.clearAllMocks()
-	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
-	if (c) {
-		c.storage.local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }
-		c.storage.onChanged = { addListener: vi.fn(), removeListener: vi.fn() }
-	}
+	installChromeStorage({}, { persist: false })
 })
 
 afterEach(() => {
