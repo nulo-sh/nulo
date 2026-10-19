@@ -91,7 +91,7 @@ Reuse per recon: the standing interception already knows when the launch holds t
 
 **Validation gate:** `grep -nE "Smoke refuses|liveNode|guarded smoke launch|smoke launch's stand-in|the one .DIRECT. line|only the slowness of a refused node" .claude/skills/e2e-testing/SKILL.md apps/extension/tests/e2e/FIREFOX.md apps/extension/tests/e2e/README.md` prints nothing; `grep -c closePxeHost .claude/skills/e2e-testing/SKILL.md` and `grep -c CRS_HOSTS apps/extension/tests/e2e/FIREFOX.md .claude/skills/e2e-testing/SKILL.md` each print at least 1; `bun run lint`. Pass: both, and a sentence-by-sentence read against the code each sentence names (the grep catches only the known phrases). Layers: lint, review.
 
-### Phase 3: the e2e runs stay green, and the leak goes red
+### Phase 3: the e2e runs stay green, and the leak goes red ✓
 
 Warnings first. Check `uptime` and start a build or run only when load1 is under 150. Run every network file through `agent.sh` (`bun run e2e:agent`) with `NULO_E2E_RETRY=0` (F8), one run per worktree at a time. Never raise the stall watchdog.
 

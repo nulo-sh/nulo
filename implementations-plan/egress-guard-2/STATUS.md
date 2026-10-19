@@ -7,3 +7,4 @@
 - 2026-10-19: Codex r2 conditional approve (2, applied), r3 approve. Plan committed; arc 1 starts on egress-guard-2-a1.
 - 2026-10-19: arc 1 Phase 1 gate green: lint, typecheck:all, units (51), bun run test (14059), four mutations red plus D8's.
 - 2026-10-19: arc 1 Phase 2 gate green: stale-phrase grep empty, positive greps, lint; read against the code.
+- 2026-10-19: arc 1 Phase 3 gate green: red run held diagnostic (20); smoke Chrome 1858 s, Firefox 2288 s; network subset Chrome 1718 s, Firefox 1788 s; canaries prover-ON Chrome 254 s, Firefox 492 s; all retry 0; I2/I4 unreproduced.
