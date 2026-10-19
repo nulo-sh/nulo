@@ -8,3 +8,5 @@
 - 2026-10-19 A1 started on `mainnet-arrival-1-a1` off origin/dev with the plan commit.
 - 2026-10-19 A1 phase 1: code and tests in; `vitest run src/wallet/services/network src/wallet/services/stale-network` pass; proofs recorded (lessons/phase-1.md); `lint`, `typecheck:all` exit 0; `test`, `test:all` running.
 - 2026-10-19 A1 `test` and `test:all` exit 0. Review r1: Codex 1 low, Opus 3 low, all fixed (D14); network tests pass; resuming Codex.
+- 2026-10-19 A1 Codex r2 1 low (comment) fixed; r3 clean. Loop converged; e2e gates next.
+- 2026-10-19 A1 phase 1 gate: smoke e2e (4 files, 21 tests, retry 0, 128 s) and network e2e (2 files, 6 tests, retry 0, 121 s), Chrome, pass; `bun run test` and `typecheck:all` on head exit 0. PR next.
