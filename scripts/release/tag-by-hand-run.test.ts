@@ -177,7 +177,7 @@ describe("tagByHand", () => {
 	})
 })
 
-/** `gh` and `git` stand-ins that log every call; the open PUT hangs until something kills it. */
+/** `gh` and `git` stand-ins that log every call; the open PUT hangs in a descendant that keeps stdout open. */
 function fakeTools(): { dir: string; log: string } {
 	const dir = mkdtempSync(join(tmpdir(), "tag-by-hand-"))
 	const log = join(dir, "calls.log")
@@ -193,7 +193,7 @@ function fakeTools(): { dir: string; log: string } {
 echo "gh $*" >> '${log}'
 case "$*" in
   "api user --jq .id") echo 2982991 ;;
-  *"-X PUT"*) body=$(cat); echo "body $body" >> '${log}'; case "$body" in *User*) exec sleep 30 ;; esac ;;
+  *"-X PUT"*) body=$(cat); echo "body $body" >> '${log}'; case "$body" in *User*) sleep 30 & echo "descendant $!" >> '${log}'; wait ;; esac ;;
   *) echo '${ruleset}' ;;
 esac
 `
@@ -211,7 +211,7 @@ echo "git $*" >> '${log}'
 }
 
 describe("the runner process", () => {
-	test("a SIGTERM to it alone during the open ends that step, skips the push and closes", async () => {
+	test("a SIGTERM to it alone mid-open ends that step past a descendant holding its output, skips the push, closes", async () => {
 		const { dir, log } = fakeTools()
 		const child = Bun.spawn(["bun", join(import.meta.dir, "tag-by-hand-run.ts"), "1.0.0", SHA], {
 			env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
@@ -221,7 +221,10 @@ describe("the runner process", () => {
 		const calls = () => readFileSync(log, "utf8")
 		for (let i = 0; i < 100 && !/body .*User/.test(calls()); i++) await Bun.sleep(30)
 		child.kill("SIGTERM")
-		expect(await child.exited).toBe(2)
+		const code = await child.exited
+		const descendant = calls().match(/descendant (\d+)/)?.[1]
+		if (descendant) process.kill(Number(descendant), "SIGKILL")
+		expect(code).toBe(2)
 		expect(calls()).not.toContain("git tag")
 		expect(calls()).not.toContain("git push")
 		expect(

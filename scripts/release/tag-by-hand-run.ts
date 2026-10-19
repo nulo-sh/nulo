@@ -19,6 +19,10 @@ export const RULESET_ID = 25437716
 export const RELEASE_APP_ID = 5179103
 /** A tag push is a few hundred bytes; any step slower than this is hung, not slow. */
 export const STEP_TIMEOUT_MS = 120_000
+/** How long a stopped child gets between SIGTERM (which lets git drop its lock files) and SIGKILL. */
+const KILL_GRACE_MS = 5_000
+/** How long output may stay open after its child exits: a descendant (a hook, a helper) can hold the pipe. */
+const DRAIN_GRACE_MS = 1_000
 
 export interface BypassActor {
 	actor_id: number
@@ -158,24 +162,33 @@ export async function tagByHand(version: string, sha: string, io: TagByHandIO): 
 
 if (import.meta.main) {
 	const path = `repos/${REPO}/rulesets/${RULESET_ID}`
-	let active: ReturnType<typeof Bun.spawn> | null = null
+	type Child = ReturnType<typeof Bun.spawn>
+	let active: Child | null = null
 	let stopped = false
+	const stop = (child: Child) => {
+		child.kill("SIGTERM")
+		setTimeout(() => child.kill("SIGKILL"), KILL_GRACE_MS).unref()
+	}
 	/** Runs one bounded child; only stdout is captured, so git's prompts and progress stay visible. */
 	const run = async (cmd: string[], input?: string): Promise<string> => {
 		const child = Bun.spawn(cmd, {
 			stdin: input === undefined ? "inherit" : new Response(input),
 			stdout: "pipe",
 			stderr: "inherit",
-			timeout: STEP_TIMEOUT_MS,
 		})
 		active = child
+		const watchdog = setTimeout(() => stop(child), STEP_TIMEOUT_MS)
+		const output = new Response(child.stdout).text()
 		try {
-			const out = await new Response(child.stdout).text()
 			const code = await child.exited
-			if (code !== 0)
-				throw new Error(`${cmd.slice(0, 3).join(" ")} exited ${code}${child.signalCode ? ` (${child.signalCode})` : ""}`)
+			const drained = Bun.sleep(DRAIN_GRACE_MS).then(() => null)
+			const out = await Promise.race([output, drained])
+			const name = cmd.slice(0, 3).join(" ")
+			if (code !== 0) throw new Error(`${name} exited ${code}${child.signalCode ? ` (${child.signalCode})` : ""}`)
+			if (out === null) throw new Error(`${name} exited, but something it started kept its output open`)
 			return out
 		} finally {
+			clearTimeout(watchdog)
 			active = null
 		}
 	}
@@ -228,7 +241,7 @@ if (import.meta.main) {
 	for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
 		process.on(signal, () => {
 			stopped = true
-			active?.kill()
+			if (active) stop(active)
 			console.error(`${signal}: stopping the current step; the ruleset is closed next`)
 		})
 	const [version = "", sha = ""] = process.argv.slice(2)
