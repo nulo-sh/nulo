@@ -5,8 +5,8 @@
  * stops that Enter and Space open and Escape closes, focus back on each; the more menu opens, and
  * its Clear empties the log, which keeps taking lines. The launch's CSP recorder fails the
  * file on a blocked style. The wallet logs its own lines into the window at any time, so a test waits
- * for its own lines by a nonce, and reads a hold off where a shown line lands and off the viewer's
- * scroll-to-end button.
+ * for its own lines by a nonce. A hold is read off where a shown line lands, measured from where the
+ * viewer stopped its follow, and off the viewer's scroll-to-end button.
  */
 import { randomUUID } from "node:crypto"
 import type { KeyInput, Page } from "puppeteer"
@@ -99,7 +99,7 @@ async function logLines(page: Page, count: number, timeoutMs = 10_000): Promise<
 /**
  * Arms the follow check before the step that should stop the follow, so a wallet line landing after
  * that step is seen too. Latched: CodeMirror's stick to the end scrolls the view back, which hides
- * the button again. A scroll away from the end before the first show is recorded and refused.
+ * the button again. A scroll that leaves the view away from its end is recorded and refused.
  */
 async function armFollowCheck(page: Page): Promise<void> {
 	const shownAlready = await page.evaluate(
@@ -111,20 +111,20 @@ async function armFollowCheck(page: Page): Promise<void> {
 			const onScroll = () => {
 				if (el.scrollHeight - el.scrollTop - el.clientHeight >= away) latch.scrolledAway = true
 			}
+			// Never stops the latch: Vue renders the button between the scroll's listeners, and a stop
+			// there would drop this one's before it reads.
 			const observer = new MutationObserver((records) => {
-				const added = records.some(({ addedNodes }) =>
+				latch.shown ||= records.some(({ addedNodes }) =>
 					[...addedNodes].some((node) => node instanceof Element && (node.matches(button) || node.querySelector(button))),
 				)
-				if (!added) return
-				latch.shown = true
-				latch.stop()
 			})
 			latch.stop = () => {
 				observer.disconnect()
-				el.removeEventListener("scroll", onScroll, { capture: true })
+				el.removeEventListener("scroll", onScroll)
 			}
-			// Capture runs before the viewer's own listener, whose button can stop the latch mid-dispatch.
-			el.addEventListener("scroll", onScroll, { capture: true })
+			// Added after the viewer's listener, so it reads the gap the viewer judges, once CodeMirror's
+			// own listener has measured in the event and landed a follow still due.
+			el.addEventListener("scroll", onScroll)
 			observer.observe(document.body, { childList: true, subtree: true })
 			;(window as unknown as { __followCheck?: typeof latch }).__followCheck = latch
 			return document.querySelector(button) !== null
@@ -144,7 +144,7 @@ async function followedSinceArmed(page: Page): Promise<boolean> {
 		latch.stop()
 		return { shown: latch.shown, scrolledAway: latch.scrolledAway }
 	})
-	expect(scrolledAway, "the view scrolled away from its end before the button showed").toBe(false)
+	expect(scrolledAway, "the view scrolled away from its end").toBe(false)
 	return !shown
 }
 
@@ -238,40 +238,57 @@ async function expectHeld(page: Page, line: ShownLine): Promise<void> {
 	expect(await page.$('[data-testid="logs-scroll-btn"]')).not.toBeNull()
 }
 
-/** Drags across part of `line`, leaving it selected. */
-async function selectAcross(page: Page, line: ShownLine): Promise<void> {
+/**
+ * Drags across part of `line`, leaving it selected, and returns it where it rests once the viewer has
+ * stopped its follow: the hold is measured from there.
+ */
+async function selectAcross(page: Page, line: ShownLine): Promise<ShownLine> {
 	// The viewer stops its follow on `selectionchange`, which Firefox dispatches in a later task: the
 	// drag is done once a change that shows the selection has run its listeners, the viewer's first.
-	await page.evaluate((id) => {
-		const root = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot as
-			| (ShadowRoot & { getSelection?: () => Selection | null })
-			| null
-			| undefined
-		;(window as unknown as { __selectionSeen?: Promise<void> }).__selectionSeen = new Promise((resolve, reject) => {
-			const onChange = () => {
-				const selection = root?.getSelection ? root.getSelection() : document.getSelection()
-				if (!selection || selection.isCollapsed) return
-				document.removeEventListener("selectionchange", onChange)
-				resolve()
-			}
-			document.addEventListener("selectionchange", onChange)
-			setTimeout(() => reject(new Error("no selectionchange showed the drag's selection")), 10_000)
-		})
-	}, HOST)
+	// A follow due at the stop lands in CodeMirror's next measure, and its scroll is judged the frame
+	// after, so the line is read two frames on.
+	await page.evaluate(
+		(id, text) => {
+			const root = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot as
+				| (ShadowRoot & { getSelection?: () => Selection | null })
+				| null
+				| undefined
+			;(window as unknown as { __selectionSeen?: Promise<number | null> }).__selectionSeen = new Promise((resolve, reject) => {
+				const onChange = () => {
+					const selection = root?.getSelection ? root.getSelection() : document.getSelection()
+					if (!selection || selection.isCollapsed) return
+					document.removeEventListener("selectionchange", onChange)
+					requestAnimationFrame(() =>
+						requestAnimationFrame(() => {
+							const view = root?.querySelector(".cm-scroller")?.getBoundingClientRect()
+							const shown = [...(root?.querySelectorAll(".cm-line") ?? [])].find((el) => el.textContent === text)
+							resolve(view && shown ? shown.getBoundingClientRect().top - view.top : null)
+						}),
+					)
+				}
+				document.addEventListener("selectionchange", onChange)
+				setTimeout(() => reject(new Error("no selectionchange showed the drag's selection")), 10_000)
+			})
+		},
+		HOST,
+		line.text,
+	)
 	await prepareClick(page)
 	await page.mouse.move(line.left, line.y)
 	await page.mouse.down()
 	await page.mouse.move(line.right, line.y, { steps: 5 })
 	await page.mouse.up()
-	const selected = await page.evaluate(async (id) => {
-		await (window as unknown as { __selectionSeen?: Promise<void> }).__selectionSeen
+	const { selected, top } = await page.evaluate(async (id) => {
+		const top = await (window as unknown as { __selectionSeen?: Promise<number | null> }).__selectionSeen
 		const root = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot as
 			| (ShadowRoot & { getSelection?: () => Selection | null })
 			| null
 			| undefined
-		return (root?.getSelection ? root.getSelection() : document.getSelection())?.toString() ?? ""
+		return { selected: (root?.getSelection ? root.getSelection() : document.getSelection())?.toString() ?? "", top }
 	}, HOST)
 	expect(selected.length).toBeGreaterThan(0)
+	expect(top, `${line.text} once the selection stopped the follow`).not.toBeNull()
+	return { ...line, top: top ?? Number.NaN }
 }
 
 async function openLogs(ctx: ExtensionContext): Promise<Page> {
@@ -354,8 +371,7 @@ test("with nothing selected and the search panel closed, new lines are followed"
 
 test("a selection at the end holds the view while lines arrive", async ({ registeredExtension: ctx }) => {
 	const page = await filledLogs(ctx)
-	const line = await middleLine(page)
-	await selectAcross(page, line)
+	const line = await selectAcross(page, await middleLine(page))
 	await logLines(page, 2)
 	await expectHeld(page, line)
 	await page.close()
@@ -397,8 +413,7 @@ test("a selection at the end holds the view through the line that trims the log,
 	registeredExtension: ctx,
 }) => {
 	const page = await cappedLogs(ctx)
-	const line = await middleLine(page)
-	await selectAcross(page, line)
+	const line = await selectAcross(page, await middleLine(page))
 	// The trim restores the view one line off the end, inside the band a scroll to the end resumes in.
 	await logTrimming(page, 1)
 	await expectHeld(page, line)
