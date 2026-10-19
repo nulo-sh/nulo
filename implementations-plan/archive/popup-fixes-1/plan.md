@@ -10,8 +10,20 @@ eli5_mode: skipped (orchestrator-owned)
 base: 24c68cb4
 trunk: dev
 post_implementation_hardening: not scheduled
-status: planned, final Codex approve; arc 1 auto-continues, arc 2 waits on OA-1 and OA-2
+status: completed 2026-10-18; arc 1 merged as #811, arc 2 delivered in #827 as a draft until the owner signs OA-1 and OA-2
 ---
+
+## Outcome
+
+- **Date:** 2026-10-18.
+- **Status:** completed. #811 (arc 1, merged) closed #773, #770, #582, #584 and #586; #827 (arc 2) closes #786 and #626, and its merge into `dev` closes the plan.
+- **Shipped:** the logs window's more menu opens, with a component test and a smoke case; the recovery phrase button reads "Reveal Recovery Phrase" (P49-03 A); the toast docs match the code; #582, #584 and #586 closed on what #642 and #678 shipped. Home's ghost token rows stand 53 px with their bars 2 px apart, as tall as the rows that replace them, from one rule the loaded, seed and ghost rows share; Send and Receive, on Home and on a token's page, are native buttons the keyboard reaches after the hero and presses, with the accent ring on keyboard focus and no change for a pointer (0 differing pixels in Chrome and Firefox). Pictures in `screenshots/` (arc 1) and `screenshots/arc2/` (arc 2).
+- **Owner asks:** OA-1 and OA-2 shipped on the lane's recommendation A before the owner answered (D9); the PR waits on the owner's signature, and a B or C answer becomes a follow-up commit on it.
+- **Dropped:** none.
+- **Known limits:** #593 (Firefox's passkey window, kept on P28-08 C), #824 (popups carry no dialog semantics; surfaced by arc 2's review).
+- **Open items:** #810 (the logs menu's two items set differently), #823 (the logs toolbar's three triggers are mouse-only, D3).
+- **Lessons:** none promoted (`lessons.md` is at its budget); the Firefox Tab-walk and Chrome focus-starting-point notes are in [lessons/phase-7.md](lessons/phase-7.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # popup-fixes-1: eight popup issues, two unstacked arcs
 
@@ -65,6 +77,7 @@ Arc 1 ships now: #773 and #770 get code, #582, #584 and #586 close on what #642 
 - D6 (#626, on OA-2). Native buttons through `Flex`'s `tag`, so Enter and Space activate and the testids stay on the element. `.button` adds `font: inherit; margin: 0` (as `TokensView`'s `.empty_link`), so the label lays out as in the div, and the design `Button`'s ring (`outline: 2px solid var(--nulo-accent); outline-offset: 2px` on `:focus-visible`). No `disabled`: a not-ready account keeps today's silent no-op and the Tab stop. No `refuseRepeatEnter`: no key handler moves focus onto these, and Home has no Enter shortcut (I2).
 - D7 (#770). The label alone. Test titles and code names keep "retrieve": it names the vault read, and renaming them collides with #743's rewrite of `seed.test.ts` and `keyboard-guards.test.ts`. The label line and lines 66-73 of `seed.test.ts` sit outside #743's hunks, so either order merges cleanly.
 - D8 (#593). No code. Close #593 as not planned with the `known-limit` label (Phase 4).
+- D9 (arc 2, as run). The spawn brief started arc 2 on OA-1 A and OA-2 A, the lane's recommendations, before the owner answered: the PR opens as a draft that waits on the owner's signature, and a B or C becomes a follow-up commit on it. Deviations from Phase 7's text: each Tab walk starts at `header-lock` by a scripted focus, then real Tabs, since on Firefox a walk from the shared context's starting point passed the page's last stop and left the document (`apps/extension/tests/e2e/FIREFOX.md`, the Tab walk row), after which `:focus` never matched (`lessons/phase-7.md`); the walk from `header-lock` still crosses the hero to both actions. The Send leg waits for `send-footer`, since a blocked transfer hides the publish strip. The token page is covered by pictures, not a second e2e walk: one component draws both pages' actions, and the unit test pins the element.
 
 ## Security & Adversarial Considerations
 
@@ -75,7 +88,7 @@ Arc 1 ships now: #773 and #770 get code, #582, #584 and #586 close on what #642 
 
 ## Arc 1
 
-### Phase 1: #773, the logs menu
+### Phase 1 ✓: #773, the logs menu
 
 1. Add the import and the three testids.
 2. `LogsToolbar.test.ts`: mount with the components production registers (`DropdownItem`, and `Popover`, `Flex`, `Icon`, `Text`, `Input` from `@nulo/design`) and a `#dropdown` target. A trigger click shows both items; each item emits its event once. Red on base.
@@ -83,7 +96,7 @@ Arc 1 ships now: #773 and #770 get code, #582, #584 and #586 close on what #642 
 
 **Gate**: `cd apps/extension && bun --bun vitest run src/components/JsonViewer`; S on `viewers-csp.test.ts`, Chrome then Firefox. Pass: exit 0; step 2 red against `git show 24c68cb4:apps/extension/src/components/JsonViewer/LogsToolbar.vue`. Layers: unit, smoke e2e.
 
-### Phase 2: #770, the button's verb
+### Phase 2 ✓: #770, the button's verb
 
 1. Take the before picture of the password step. Warning: never commit the scratch spec; it lives under `~/.cache/nulo-backlog/popup-fixes-1/shots/` with a config that extends `apps/extension/vitest.e2e.config.ts` and includes only it, and takes `shotSend` pictures.
 2. Change the label. In `seed.test.ts`, assert the button reads "Reveal Recovery Phrase" in the existing Enter test (lines 66-73). Red on base.
@@ -91,28 +104,28 @@ Arc 1 ships now: #773 and #770 get code, #582, #584 and #586 close on what #642 
 
 **Gate**: `cd apps/extension && bun --bun vitest run src/popup/pages/settings/security/export`; S on `keyboard-guards.test.ts`, Chrome then Firefox. Pass: exit 0. Layers: unit, smoke e2e.
 
-### Phase 3: #582, #584, #586 verified; the toast docs
+### Phase 3 ✓: #582, #584, #586 verified; the toast docs
 
 1. Apply D2's two doc edits.
 2. Run the pins: from `packages/design`, `bun --bun vitest run src/composables/toast.test.ts src/ui/ToastManagerBase.test.ts`; from `apps/extension`, `bun --bun vitest run src/popup/scroll-memory.test.ts src/popup/components/modules/general/BalanceView.test.ts src/utils/toast-call-sites.test.ts`; S on `navigation.test.ts` and `snackbar.test.ts`.
 
 **Gate**: step 2, Chrome then Firefox for S. Pass: exit 0. Layers: unit, smoke e2e.
 
-### Phase 4: #593, evidence and disposition
+### Phase 4 ✓: #593, evidence and disposition
 
 1. Warning: headless Firefox keeps the panel open, and the test kills it the Mac way (`armPanelDeath`), so the run proves the window path, not the browser's cause. S on Firefox: `passkey-toolbar-panel.test.ts -t "create and unlock"`. Record it in `lessons/phase-4.md`.
 2. Comment on #593, add `known-limit`, close as not planned. Body: the window path the run drives (open, prompt, finishing, close, the toolbar popup back); the cause as `FIREFOX.md` records it (Mozilla bug 2026687, on a Mac; not reproducible headless); the owner kept it (P28-08 C); no Firefox sidebar exists (#596). Reopen when Firefox keeps a toolbar panel open under the OS prompt, or a Firefox sidebar ships.
 
 **Gate**: step 1 exits 0. Layers: smoke e2e.
 
-### Phase 5: arc 1 gate
+### Phase 5 ✓: arc 1 gate
 
 **S (a smoke run)**, warning first: rebuild after every source change, and after `audit:vue`, whose unarmed build the smoke setup refuses (Fact 7). Load1 under 150 before a build or a run. From the root, per browser `<b>`: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:<b>`, then `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 [NULO_E2E_BROWSER=firefox] bun run test:e2e -- <files> --retry=0`.
 From the root, in order: `bun run audit:vue`, `bun run test:all`, `bun run check:plans`; then the armed builds and every arc-1 phase's e2e files, both browsers. Pass: every command exits 0, one rerun for a known flake. The PR body names the new e2e case's failure mode and measured time, and `viewers-csp.test.ts`'s wall-clock before and after per browser.
 
 ## Arc 2 (after OA-1 and OA-2)
 
-### Phase 6: #786, the ghost rows
+### Phase 6 ✓: #786, the ghost rows
 
 1. Extend the scratch spec: hold Home's `getTokenBalances` request with a `chrome.runtime.connect` wrapper installed by `page.evaluateOnNewDocument` before the popup loads; the armed smoke build supplies no default tokens, so `hasAnyRow` stays false. Wait for `tokens-skeleton-row`; record its height and each column's gap; take pictures.
 2. Run it on the base build (Chrome): before pictures and heights into `lessons/phase-6.md`.
@@ -121,7 +134,7 @@ From the root, in order: `bun run audit:vue`, `bun run test:all`, `bun run check
 
 **Gate**: `cd apps/extension && bun --bun vitest run src/popup/components/modules/general`; S on `rows.test.ts` and `home-links.test.ts`, Chrome then Firefox. Pass: exit 0; the heights recorded. Layers: unit, smoke e2e.
 
-### Phase 7: #626, Send and Receive
+### Phase 7 ✓: #626, Send and Receive
 
 1. Before pictures (scratch spec): the actions unfocused on Home and a token page, both themes.
 2. Apply D6. `ActionButtonsView.test.ts`: mount with the real `Flex`; both actions are `button[type="button"]` (red on base); the click cases stay.
@@ -130,7 +143,7 @@ From the root, in order: `bun run audit:vue`, `bun run test:all`, `bun run check
 
 **Gate**: `cd apps/extension && bun --bun vitest run src/popup/components/modules/general/ActionButtonsView.test.ts`, root `bun run lint` and `bun run typecheck:all`; S on `home-links`, `send-keyboard`, `snackbar`, `registration`, `type-roles`, `send-fee-privacy`, `tooltips-glossary`, `rows` and `navigation` (`.test.ts`), Chrome then Firefox. Pass: exit 0. Layers: lint, typecheck, unit, smoke e2e.
 
-### Phase 8: arc 2 gate
+### Phase 8 ✓: arc 2 gate
 
 As Phase 5, over arc 2's files. The PR body states `home-links.test.ts`'s wall-clock before and after per browser.
 
@@ -159,7 +172,7 @@ As Phase 5, over arc 2's files. The PR body states `home-links.test.ts`'s wall-c
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 24c68cb4. Specific to this plan:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 24c68cb4. Specific to this plan:
 - Step 1 is absent (`code_review: off`). Step 2 runs per arc over `git diff origin/dev...HEAD` after its gate: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; prompts under `~/.cache/nulo-backlog/popup-fixes-1/`; hard stop at three rounds; one Opus review alongside round 1; rounds in `lessons/phase-5.md` and `lessons/phase-8.md`. After arc 2's loop, one fresh Codex session reads the net diff from 24c68cb4 across both arcs for seams, duplication and drift from the plan, in the same loop.
 - Approval boundary: a new control, a change to the logs toolbar's other buttons, a product test hook, a shared token-row component, or any copy beyond the label is a plan change and stops for the orchestrator.
 - Close-out (arc 2): file the logs toolbar's keyboard reach (D3) as an issue after a dedupe; Outcome block (`Known limits: #593`); `lessons.md` promotes nothing unless a retirement pays for it; `STATUS.md` deleted; `git mv` to `archive/` in its own commit. Teardown: slug `popup-fixes-1`, trunk `dev`.
@@ -175,6 +188,10 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | arc 1, impl 1 | Opus 5.5 review | approve with changes | the clear case waits for the log to empty, not only the marker to leave the rendered range; CLAUDE.md states the call-site guard's whole rule; the `Input` stub is a `div`; the file header names the menu case; D2's wording matches what shipped | none |
 | arc 1, impl 2 | Codex, resumed | approve with changes | the bound after Clear is a fixed 100 lines, since a trim at the cap drops 100 lines with no clear | none |
 | arc 1, impl 3 | Codex, resumed | approve | no new material finding | none |
+| arc 2, impl 1 | Codex, gpt-6.1-sol | approve | no finding | none |
+| arc 2, impl 1 | Opus 5.5 review | approve with changes | one Tab into the Receive sheet before Escape, so focus returning to Receive proves the sheet recorded its opener; `margin: 0` and `user-select: none` dropped (the base `button` reset applies both); `SPACE` exported once from the pointer probes, replacing two copies and the arc's third; a Firefox unfocused comparison (0 differing pixels, labels unmoved); the popup screen-reader gap filed as #824, a known limit | pinning the stop after Receive (the walk already proves no list or nav stop precedes Send; pinning couples the case to the token card's first control); "opens once" read as proof the repeat did nothing (kept as what the person sees, I2) |
+| arc 2, impl 2 | Codex, resumed | approve | no new material finding | none |
+| cross-arc | Codex, fresh session | approve | no cross-arc finding | none |
 
 ## Seeds
 
