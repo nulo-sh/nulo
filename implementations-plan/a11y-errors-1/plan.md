@@ -121,6 +121,8 @@ The lane's whole visible budget, the orchestrator's record on #874: every error 
 
 Round 2 (Codex, resumed): `findings: 1`, Medium, demonstrated: the per-part match flagged a fill or border beside a white `color` inside a style array or parentheses → each `color` value is now cut at the first `,`, `;` or closing bracket at its own depth; an array's red colour hits, an array's red fill and a parenthesised red border do not.
 
+Round 3 (Codex, resumed): `clean`. Converged.
+
 ## Delivery
 
 - PR title: ``fix(ui): error and refusal text in `--txt-danger`, aa on the light theme`` (73 characters). Opened ready, no label; add `e2e:extension-smoke` only if the path filter skipped smoke.
