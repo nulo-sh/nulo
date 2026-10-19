@@ -297,6 +297,12 @@ It found `awaitedBus`, the storage moves, `world(opts)`, the L and B catches and
 
 **Arc 3 Codex fix loop, round 3** (resumed, verification of cb23cbc1): `approve`. The round 2 reproducer reads absent; an encoded interpolation or directive fails closed with the reference before or after the call; verbatim dynamic arguments, directives and interpolations keep exact offsets; the other `callsTo` consumers read only the fields they read before; its own full-tree sweep found no unplaced call and no offset mismatch. The loop converged in three rounds.
 
+**Arc 4 implementation: deviations from the plan** (each recorded in `lessons/phase-N.md`):
+- Delivery: the branch stacks on #743 (`worktree-onboarding-3`), not on `dev`, the orchestrator's call while #743 waits for the owner's build test; its head moves are merged in, and the PR opens once #743 merges.
+- Phase 8: most guessed drains before a "not yet", a "never" or an exact count stay, each helper with a line saying what it guards: the Codex consult (`lessons/phase-8.md`) allows a negative to move only onto a completion covering every path that could break it, and a park point's entry is none. Moved per file, and kept: connect-window 94/27, admission 24/4, origin-admission 5/0, reset-wait 2/2, unserved-chain 24/1, verify-reservation.pins 2/1, transport 1/16, `useArrivals` 11/54, the executor's `addTransaction` test 1/1. The six suites that await a discovery's run share `wallet-sdk/discovery-run.harness.ts`. `auto-lock-defers-while-proving`'s lock wait, missed by arc 2's inventory, moved too.
+- Phase 9: one test body changed, "stage-order law"'s finalize stub, to the real `{ profile, fence }` shape the harness's reminder now reads; the mocked spec modules take their storage roots from the real constants.
+- Phase 10: no test reads the `updatedAt` of a row the service wrote, so no `vi.setSystemTime`. A mutant of `setTrust` that drops the stored floor passes the scenario suite; `repository.test.ts` catches it, and a new scenario was outside the phase.
+
 ## Seeds
 
 ```
