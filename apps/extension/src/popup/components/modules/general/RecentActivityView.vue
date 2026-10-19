@@ -611,12 +611,7 @@ async function readJournalSnapshot() {
  * terminal transitions during SW down windows.
  */
 function resnapshotJournal(isCurrent = journal.begin()) {
-	// Generation guard (not captured-equality): equality re-validates on
-	// A→B→A, letting the ABA run's stale snapshot land. Every trigger is a
-	// run on the shared scope fence — a standalone call (mount, reconnect,
-	// journal event) begins its own run; the scope watcher passes ITS run
-	// so the clear + both reloads share one supersede unit. The mirror
-	// retries a refused read on that run.
+	// A refused read is the mirror's to retry, on this run.
 	return journal.resnapshot(isCurrent).catch(() => undefined)
 }
 journalService.onConnected.add(resnapshotJournal)

@@ -122,6 +122,7 @@ Each finding verified against the tree before it was taken; details in [`lessons
 - **Codex R1** (sol, high): `conditional approve`. F1: F8's impossibility claim was wrong; screen equivalence holds, D5's control holds the read (taken). F2: the retry is not scope-fenced in History or TokensView (taken as wording and a control; no scope watcher). F3: late refusals after supersession and dispose (taken: two cases). F6's trigger list (taken).
 - **Opus R1** (Plan): `conditional approve`. F1: `auto-imports.d.ts` (taken). F2: the superseded mount read belongs in § UI impact (taken; #839 row 5 names it). F3: two Security sentences (taken). F4: D6 and D7 wording (taken). F5: two tests leave timers armed (taken). F6: what the catch covers (taken, D8).
 - **Codex R2** (resumed): `approve`, no new material finding; the revisions add no state, lifecycle, protocol or recovery policy beyond the signed retry.
+- **Diff review R1**: Codex `findings 1` (a stale comment over Home's retry, taken); Opus `findings 3` (the regenerated `.eslintrc-auto-import.json`, the docblock's "until one lands", a blank line; all taken). Details: [`lessons/phase-4.md`](lessons/phase-4.md).
 
 ## Delivery
 

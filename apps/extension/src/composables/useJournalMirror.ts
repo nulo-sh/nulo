@@ -22,7 +22,7 @@ const RETRY_MS = 2_000
  * The part of the operation journal a view lists, kept by snapshots and live events. A run begun
  * later supersedes one in flight, and a snapshot lands only while its run is current. A refused read
  * keeps the rows shown and still rejects to the caller; while its run is current it is read again
- * on that run every 2 s until one lands. The parent subscribes the returned handlers and its
+ * on that run every 2 s until one answers. The parent subscribes the returned handlers and its
  * reconnect, and calls `dispose()` in its teardown.
  */
 export function useJournalMirror(deps: JournalMirrorDeps) {

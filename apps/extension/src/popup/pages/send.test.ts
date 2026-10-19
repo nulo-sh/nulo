@@ -1026,6 +1026,7 @@ describe("send page — the token card while the tokens load", () => {
 		expect([await shown(TOKEN.id), await shown(NEW.id)]).toEqual(["0", "4"])
 		w.unmount()
 	})
+
 	test("a worker restart re-reads the balances: the first connect is the load's own, a later one lands the new amount", async () => {
 		const { w } = await mountSend()
 		expect(amount(w).attributes("data-balance")).toBe("5")
