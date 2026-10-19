@@ -112,7 +112,7 @@ import { type ArtifactLookup, decodeCallForDisplay, decodeGrantForDisplay } from
 import { getViewSimulationDeps } from "./helpers/get-view-simulation-deps"
 import { AuthwitDiscoverer } from "./authwit-discoverer"
 import { TxRequestBuilder } from "./tx-request-builder"
-import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee/fee-strategy"
+import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps, OnBuilt } from "./fee/fee-strategy"
 import { appPriorityOf } from "./fee/fee-strategy"
 import { buildFeeStrategies } from "./fee/build-fee-strategies"
 import { ExecutionCoordinator } from "./execution-coordinator"
@@ -472,20 +472,21 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	private wireDappSendAndViewExecutors(): void {
 		const estimateWithDiscovery = new DiscoveryAwareEstimator({
 			authwit: this.authwit,
-			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal),
-			buildAndEstimateFolded: (op, feeSettings, fence, probe, parentTask, signal) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, probe),
-			buildForDiscovery: async (op, method, fence) => {
+			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt),
+			buildAndEstimateFolded: (op, feeSettings, fence, probe, parentTask, signal, onBuilt) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, probe, undefined, onBuilt),
+			buildForDiscovery: async (op, method, fence, onBuilt) => {
 				const sendOp = op as SendTransactionOperation
 				// An app's private call may read its gas settings, so discovery simulates with its priority too.
-				const { txRequest, node, pxe, account, network } = await this.txBuilder.buildStandard(
+				const { txRequest, node, pxe, account, network, txCalls } = await this.txBuilder.buildStandard(
 					sendOp,
 					fence,
 					method,
 					undefined,
 					appPriorityOf(sendOp.fee),
 				)
+				await onBuilt?.(txCalls)
 				return { txRequest, node, pxe, account, network }
 			},
 		})
@@ -529,8 +530,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			},
 			sequencer: this.sendSequencer,
 			chainTip: this.chainTipGate,
-			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal),
+			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt),
 			addTransaction: (...args) => this.transactionService.addTransaction(...args),
 			recordPendingAuthwits: (...args) => this.authRegistryService.recordPendingAuthwits(...args),
 			noteSent: (chainId, account, txHash, calls) =>
@@ -1340,6 +1341,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		signal?: AbortSignal,
 		probe?: DiscoveryProbe,
 		fpc?: Fpc,
+		onBuilt?: OnBuilt,
 	): Promise<FeeEstimate> {
 		// Clone the op + its actions array. fjwc / fpc branches mutate
 		// `op.actions` (unshift / splice) to prepend fee payloads; leaking
@@ -1362,6 +1364,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			signal,
 			probe,
 			fpc,
+			onBuilt,
 		}
 		return strategy.buildAndEstimate(ctx)
 	}

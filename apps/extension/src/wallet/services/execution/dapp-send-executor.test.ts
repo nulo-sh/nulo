@@ -171,8 +171,14 @@ function makeHarness(
 	const authwit = overrides.authwit ?? {
 		discoverPrivateAuthwits: vi.fn(async () => ({ actions: [] as unknown[], discovered: [] as unknown[] })),
 	}
-	const buildAndEstimateValidated = overrides.buildAndEstimateValidated ?? vi.fn(async () => built as never)
-	const buildAndEstimateFolded = overrides.buildAndEstimateFolded ?? vi.fn(async () => built as never)
+	// As the real pipelines do, the last build hands its calls to the hook a send passes.
+	const handOver = (at: number) =>
+		vi.fn(async (...args: unknown[]) => {
+			await (args[at] as ((txCalls: unknown) => Promise<void>) | undefined)?.(built.txCalls)
+			return built as never
+		})
+	const buildAndEstimateValidated = overrides.buildAndEstimateValidated ?? handOver(5)
+	const buildAndEstimateFolded = overrides.buildAndEstimateFolded ?? handOver(6)
 	const estimateWithDiscovery = new DiscoveryAwareEstimator({
 		authwit: authwit as never,
 		buildAndEstimateValidated: buildAndEstimateValidated as never,
@@ -1545,6 +1551,7 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 				probe.collected.push({ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: `mh:ih:${tag}` } })
 				probe.discovered.push(record(tag))
 			}
+			await (args[6] as ((txCalls: unknown) => Promise<void>) | undefined)?.((built as { txCalls: unknown }).txCalls)
 			return built
 		})
 	const harnessDiscovering = (tags: string[], overrides: Parameters<typeof makeHarness>[0] = {}) => {
@@ -2564,6 +2571,66 @@ describe("DappSendExecutor: every build names its record before the send", () =>
 		const record = deps.lane.recordBuiltCall as ReturnType<typeof vi.fn>
 		expect(record.mock.calls).toEqual([["j1", reuse ? reusedCalls : built.txCalls]])
 		expect(record.mock.invocationCallOrder[0]).toBeLessThan(proveAndSend.mock.invocationCallOrder[0])
+	})
+})
+
+describe("DappSendExecutor: a send whose simulation fails keeps the call its build named", () => {
+	const builtCalls = [{ contract: "0xc", method: "transfer_public_to_public", args: [], classId: "0x0c1a55" }]
+	const simulationFailure = new Error("Assertion failed: balance too low")
+	/** A pipeline that builds, hands the build's calls to the hook at argument `at`, then fails simulating. */
+	const failsAfterBuild = (at: number) =>
+		vi.fn(async (...args: unknown[]) => {
+			await (args[at] as ((txCalls: unknown) => Promise<void>) | undefined)?.(builtCalls)
+			throw simulationFailure
+		})
+	const embeddedPlanner = {
+		processAztecJsPayload: vi.fn(async () => ({
+			actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+			feePaymentMethod: undefined,
+			feeOptions: { embeddedFeePayment: "fpc" },
+		})),
+	} as never
+	const sendTransaction = {
+		kind: "send_transaction",
+		networkId: "net-1",
+		accountAddress: "0xacct",
+		feeSettings: { paymentMethod: { kind: "fj" } },
+		actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+	} as never
+	const paths: Array<[string, Parameters<typeof makeHarness>[0], (executor: DappSendExecutor) => Promise<unknown>]> = [
+		[
+			"a fresh standard build",
+			{ buildAndEstimateFolded: failsAfterBuild(6) },
+			(executor) => executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE),
+		],
+		[
+			"an embedded build",
+			{ planner: embeddedPlanner, buildAndEstimateValidated: failsAfterBuild(5) },
+			(executor) =>
+				executor.executeAztecSendTx(
+					makeAztecOp({ feeSettings: { paymentMethod: { kind: "embedded" } } }),
+					ORIGIN,
+					undefined,
+					undefined,
+					FENCE,
+				),
+		],
+		[
+			"send_transaction",
+			{ buildAndEstimateValidated: failsAfterBuild(5) },
+			(executor) => executor.executeSendTransaction(sendTransaction, ORIGIN, undefined, FENCE),
+		],
+	]
+
+	test.each(paths)("%s: the record is named before it is failed", async (_label, overrides, send) => {
+		const { executor, deps } = makeHarness(overrides)
+		expect(await send(executor).catch((error: unknown) => error)).toBe(simulationFailure)
+		const record = deps.lane.recordBuiltCall as ReturnType<typeof vi.fn>
+		const mark = deps.lane.markJournal as ReturnType<typeof vi.fn>
+		expect(record.mock.calls).toEqual([["j1", builtCalls]])
+		const failedAt = mark.mock.calls.findIndex(([, patch]) => (patch as { stage?: string }).stage === "failed")
+		expect(failedAt).toBeGreaterThanOrEqual(0)
+		expect(record.mock.invocationCallOrder[0]).toBeLessThan(mark.mock.invocationCallOrder[failedAt] ?? 0)
 	})
 })
 

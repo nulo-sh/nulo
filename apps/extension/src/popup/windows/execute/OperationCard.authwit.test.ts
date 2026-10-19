@@ -43,7 +43,6 @@ const LINES: Record<UndecodedReason, string> = {
 	arguments: "The arguments don't fit the interface.",
 	unavailable: "Nulo couldn't read the arguments right now.",
 }
-const ADVICE = "Check what the app says this does before approving."
 
 let decoded: DecodedGrant
 beforeAll(async () => {
@@ -101,7 +100,9 @@ describe("OperationCard: a public grant", () => {
 		expect(lines[2]).toContain("Transfer (public)")
 	})
 
-	test("three grants, the first two unreadable: each says why, and the advice reads once, under the second", () => {
+	// An unreadable grant refuses its request, so no grant ever carries the advice: each reason is the check
+	// that the notice rendered at all.
+	test("three grants, the first two unreadable: each says why, and none advises approving", () => {
 		const grants = [GRANT, GRANT, GRANT].map((content) => ({ kind: "add_public_authwit" as const, content }))
 		const w = mountGrant(
 			{
@@ -116,8 +117,7 @@ describe("OperationCard: a public grant", () => {
 		)
 		const blocks = w.findAll('[data-testid="execute-grant-args"]')
 		expect(blocks.map((b) => b.find('[data-testid="execute-grant-unverified-reason"]').exists())).toEqual([true, true, false])
-		expect(w.findAll('[data-testid="execute-grant-unverified-advice"]')).toHaveLength(1)
-		expect(blocks[1]!.find('[data-testid="execute-grant-unverified-advice"]').text()).toBe(ADVICE)
+		expect(w.findAll('[data-testid="execute-grant-unverified-advice"]')).toHaveLength(0)
 	})
 
 	test("while the wallet decodes, its arguments read as pending", () => {
@@ -134,7 +134,7 @@ describe("OperationCard: a public grant", () => {
 			expect(byTestid(w, "execute-grant-unverified-warning").text()).toBe("Can't read the arguments")
 			expect(shownText(byTestid(w, "execute-grant-unverified-reason").element)).toBe(LINES[reason])
 			expect(w.findAllComponents(DottedTerm).map((t) => t.props("term"))).toEqual(reason === "unavailable" ? [] : ["interface"])
-			expect(byTestid(w, "execute-grant-unverified-advice").text()).toBe(ADVICE)
+			expect(w.find('[data-testid="execute-grant-unverified-advice"]').exists()).toBe(false)
 			await byTestid(w, "execute-grant-raw-toggle").trigger("click")
 			expect(w.findAll('[data-testid="execute-grant-arg-field"]').map((f) => f.text().split(" ")[0])).toEqual([MAIN, RECIPIENT])
 		},
