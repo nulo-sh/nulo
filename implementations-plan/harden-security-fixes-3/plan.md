@@ -149,6 +149,7 @@ Each phase builds its ask's option A only on that pick, with the tests and pictu
 | Opus R1 | conditional approve | unreachable cancel test replaced; one write site; estimate-reuse covered by the `:1087` site; account registered before the contract; the keyed figure's basis restated as one tagging-source figure; committed wording | send-check reconciliation (D2) |
 | Codex final | conditional approve; approve on the second resume | `sent` flag set before the original `onSent`; Phase 2 moved behind OA-6 (its order change is visible); distinct-address count and both duplicate directions tested; the error registered in the reconstruction table; A1 stated as provisional; OA-3, OA-4, OA-5 wording; committed text states behaviour only | counting keystore entries through an upstream private field (ledger D3) |
 | Arc 1 Codex R1, Opus | conditional approve (both) | the runbook and `CI.md` stop saying the summary shows every signing-relevant change; #860 recorded as merged; F2 and F6 re-read at 2a5960da | the signer's comments (HS3-D5) |
+| Arc 1 Codex R2 | approve | wording consistent across the three docs; citations resolve; HS3-D5 accepted | none |
 
 ## Delivery
 
