@@ -8,7 +8,7 @@ import { createHash } from "node:crypto"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { WindowPort } from "@nulo/wallet-core/ports"
 import { DISCOVERY_STALE_MS, WalletSdkDispatcher } from "@nulo/wallet-bridge"
-import { deferred } from "@nulo/wallet-core/utils"
+import { type Deferred, deferred } from "@nulo/wallet-core/utils"
 
 type Callbacks = {
 	onPendingDiscovery: (d: unknown) => void
@@ -23,6 +23,8 @@ const handlerCalls: string[] = []
 const sessions = new Map<string, Session>()
 /** Every response the handler was asked to send, by session id. */
 const responses: Array<{ sessionId: string; response: { messageId: string; error?: { code: number } } }> = []
+/** Per message id, resolved when the handler is asked to send its response. */
+const responseSent = new Map<string, Deferred<void>>()
 /** Session ids whose termination throws before the handler forgets them. */
 const failingTerminations = new Set<string>()
 const discoveryTabs = new Map<string, number>()
@@ -58,6 +60,7 @@ vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 		}
 		sendResponse(sessionId: string, response: { messageId: string; error?: { code: number } }) {
 			responses.push({ sessionId, response })
+			signal(responseSent, response.messageId).resolve()
 			const outcome = nextResponse
 			nextResponse = undefined
 			return outcome ?? Promise.resolve()
@@ -82,9 +85,20 @@ vi.mock("./discovery-approval", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("./discovery-approval")>()
 	return { ...actual, approveOrRollbackDiscoverySession: vi.fn(actual.approveOrRollbackDiscoverySession) }
 })
+vi.mock("./discovery-flow", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("./discovery-flow")>()
+	return { ...actual, handleDiscovery: vi.fn(actual.handleDiscovery) }
+})
+vi.mock("./queued-wait-vouching", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("./queued-wait-vouching")>()
+	return { ...actual, chainSendTxWithVouching: vi.fn(actual.chainSendTxWithVouching) }
+})
 
 import { initWalletSdkHandler } from "./background"
 import { approveOrRollbackDiscoverySession } from "./discovery-approval"
+import { handleDiscovery } from "./discovery-flow"
+import { discoveryRun } from "./discovery-run.harness"
+import { chainSendTxWithVouching } from "./queued-wait-vouching"
 import type { PendingVerificationEntry } from "./pending-verification"
 import { chainInfoToChainId } from "./session-established"
 import { RESERVATION_GRACE_MS, VerifyAdmissionGate } from "./verify-admission"
@@ -122,6 +136,16 @@ function keyExchange(requestId: string, over: Record<string, unknown> = {}): Ses
 	return session
 }
 
+/** The signal for `key`, made by whichever side reaches it first: each key a test waits on happens
+ *  once in it. */
+function signal<K>(signals: Map<K, Deferred<void>>, key: K): Deferred<void> {
+	const existing = signals.get(key)
+	if (existing) return existing
+	const made = deferred<void>()
+	signals.set(key, made)
+	return made
+}
+
 /** A browser that knows which windows are open: `remove` or `navigate` of a gone window rejects,
  *  and every removal reaches the listeners a turn later, as `chrome.windows.onRemoved` does. */
 function fakeWindows() {
@@ -131,12 +155,15 @@ function fakeWindows() {
 	const navigated: Array<{ windowId: number; url: string }> = []
 	const focused: number[] = []
 	const listeners: Array<(id: number) => void> = []
+	/** Per window id, resolved once the listeners have been told that window is gone. */
+	const removals = new Map<number, Deferred<void>>()
 	let nextId = 100
 	/** Replaces the next navigation's outcome, once. */
 	let nextNavigation: Promise<void> | undefined
 	const fire = (id: number) => {
 		void Promise.resolve().then(() => {
 			for (const l of listeners) l(id)
+			signal(removals, id).resolve()
 		})
 	}
 	const port: WindowPort = {
@@ -173,7 +200,9 @@ function fakeWindows() {
 	const holdNextNavigation = (outcome: Promise<void>) => {
 		nextNavigation = outcome
 	}
-	return { port, open, removed, created, navigated, focused, closeByUser, holdNextNavigation }
+	/** Resolves once the worker has been told that window `id` is gone. */
+	const gone = (id: number) => signal(removals, id).promise
+	return { port, open, removed, created, navigated, focused, closeByUser, holdNextNavigation, gone }
 }
 
 const chain = (n: number) => ({ chainInfo: { chainId: String(n), version: "0" } })
@@ -181,9 +210,13 @@ const chain = (n: number) => ({ chainInfo: { chainId: String(n), version: "0" } 
 /** The operation journal as far as the queued row goes: created at `queued`, failed by kind. */
 function fakeJournal() {
 	const ops = new Map<string, { sessionId: string; stage: string; kind?: string }>()
+	/** Per row id, resolved when that row is filed. */
+	const filings = new Map<string, Deferred<void>>()
 	let seq = 0
 	return {
 		ops,
+		/** Resolves once the n-th queued row is filed. */
+		filed: (n: number) => signal(filings, `queued-${n}`).promise,
 		countOperations: vi.fn(
 			async (q: { sessionId?: string; stage?: string }) =>
 				[...ops.values()].filter((op) => (q.sessionId ?? op.sessionId) === op.sessionId && (q.stage ?? op.stage) === op.stage)
@@ -192,6 +225,7 @@ function fakeJournal() {
 		createOperation: vi.fn(async (args: { sessionId: string }) => {
 			const id = `queued-${++seq}`
 			ops.set(id, { sessionId: args.sessionId, stage: "queued" })
+			signal(filings, id).resolve()
 			return { id }
 		}),
 		transitionIfStage: vi.fn(async (id: string, stages: string[], next: { stage: string }, error?: { kind: string }) => {
@@ -209,20 +243,24 @@ function boot(
 	const windows = fakeWindows()
 	const popups = new Map<string, (answer: { approved: boolean; windowId?: number; expiredUrl?: string }) => void>()
 	const asked = new Map<string, unknown>()
+	/** Per request id, armed when its discovery is sent and resolved when its connect window is asked. */
+	const asking = new Map<string, Deferred<void>>()
 	const journal = fakeJournal()
 	let activeProfile: { id: string } | undefined = { id: "p1" }
 	/** Holds the next active-profile read, once: the execution fence's, for a read call. */
-	let nextProfileRead: Promise<void> | undefined
+	let nextProfileRead: { until: Promise<void>; taken: Deferred<void> } | undefined
 	const { services, rows, onDappSessionDeleted, onVerificationRefused, onVerificationConfirmed, onActiveProfileChanged } =
 		fakeSdkServices({
 			popup: (params, requestId) => {
 				asked.set(requestId, params)
+				asking.get(requestId)?.resolve()
 				return new Promise((resolve) => popups.set(requestId, resolve))
 			},
 			activeProfile: async () => {
 				const held = nextProfileRead
 				nextProfileRead = undefined
-				await held
+				held?.taken.resolve()
+				await held?.until
 				return activeProfile
 			},
 			setCapabilityGrants: opts.setCapabilityGrants,
@@ -235,8 +273,11 @@ function boot(
 		const discovery = { requestId, origin: ORIGIN, appId: "app", appName: "App", ...chain(1), timestamp: Date.now(), tabId: 7, ...over }
 		discoveryTabs.set(requestId, discovery.tabId)
 		discovered.set(requestId, { origin: discovery.origin, chainInfo: discovery.chainInfo })
+		asking.set(requestId, deferred<void>())
 		captured?.onPendingDiscovery(discovery)
 	}
+	/** Resolves once `requestId`'s latest discovery has asked for its connect window. */
+	const prompted = (requestId: string) => asking.get(requestId)!.promise
 	/** The person clicks Allow in `requestId`'s connect window, which the browser knows as `windowId`. */
 	const allow = (requestId: string, windowId: number) => {
 		windows.open.add(windowId)
@@ -246,9 +287,14 @@ function boot(
 	const establish = async (requestId: string, over: Record<string, unknown> = {}) => {
 		await captured?.onSessionEstablished(keyExchange(requestId, over))
 	}
-	/** The app sends `type` on `requestId`'s live session, or on the `session` object given. */
-	const send = (requestId: string, type: string, messageId: string, session: Session | undefined = sessions.get(requestId)) =>
+	/** The app sends `type` on `requestId`'s live session, or on the `session` object given. Returns the
+	 *  handling this call started, which settles once the call ran or was dropped; none when refused on
+	 *  arrival. */
+	const send = (requestId: string, type: string, messageId: string, session: Session | undefined = sessions.get(requestId)) => {
+		const started = vi.mocked(chainSendTxWithVouching).mock.calls.length
 		captured?.onWalletMessage(session, { type, args: [], messageId })
+		return vi.mocked(chainSendTxWithVouching).mock.results[started]?.value as Promise<unknown> | undefined
+	}
 	/** The check of the session whose hash is `verificationHash` reports They match. */
 	const confirm = (verificationHash: string) => onVerificationConfirmed.invoke({ verificationHash })
 	/** The check reports They don't match for the app's row on chain 1 under p1. */
@@ -261,8 +307,11 @@ function boot(
 		activeProfile = { id }
 		onActiveProfileChanged.invoke({ id })
 	}
+	/** Resolves once a read takes the hold. */
 	const holdNextProfileRead = (until: Promise<void>) => {
-		nextProfileRead = until
+		const taken = deferred<void>()
+		nextProfileRead = { until, taken }
+		return taken.promise
 	}
 	const closeTab = (tabId: number) => {
 		for (const l of tabRemoved) l(tabId)
@@ -274,6 +323,7 @@ function boot(
 	const rowDeleted = (profileId: string) => onDappSessionDeleted.invoke({ dappMetadata: { url: ORIGIN }, chainId: "1", profileId })
 	return {
 		discover,
+		prompted,
 		allow,
 		establish,
 		send,
@@ -296,10 +346,13 @@ function boot(
 /** The hash of `requestId`'s live session. */
 const hashOf = (requestId: string) => sessions.get(requestId)?.verificationHash ?? ""
 
-/** Settle the handler's pending microtasks without moving the clock. */
+/** Turns for a park point or a detached branch that no awaited cause covers: a "not yet" read, or a
+ *  wait with no seam. */
 const flush = async () => {
 	for (let i = 0; i < 50; i++) await Promise.resolve()
 }
+/** Resolves once the handler has been asked to send the response to `messageId`. */
+const responded = (messageId: string) => signal(responseSent, messageId).promise
 const approved = () => handlerCalls.filter((c) => c.startsWith("approve:")).map((c) => c.slice(8))
 const rejected = () => handlerCalls.filter((c) => c.startsWith("reject:")).map((c) => c.slice(7))
 const terminated = () => handlerCalls.filter((c) => c.startsWith("terminate:")).map((c) => c.slice(10))
@@ -314,6 +367,7 @@ beforeEach(() => {
 	handlerCalls.length = 0
 	sessions.clear()
 	responses.length = 0
+	responseSent.clear()
 	failingTerminations.clear()
 	keyExchanges.clear()
 	discoveryTabs.clear()
@@ -327,6 +381,8 @@ beforeEach(() => {
 	admit.mockClear()
 	dispatch.mockClear()
 	vi.mocked(approveOrRollbackDiscoverySession).mockClear()
+	vi.mocked(handleDiscovery).mockClear()
+	vi.mocked(chainSendTxWithVouching).mockClear()
 	// biome-ignore lint/suspicious/noExplicitAny: chrome stub
 	;(globalThis as any).chrome = {
 		runtime: { getURL: (p: string) => p },
@@ -346,7 +402,7 @@ describe("the connect window before Allow", () => {
 	test("is told the chain the discovery named, as the wallet decoded it", async () => {
 		const h = boot()
 		h.discover("f1", chain(5))
-		await flush()
+		await h.prompted("f1")
 
 		expect(h.asked.get("f1")).toMatchObject({ chainId: String(chainInfoToChainId(chain(5))) })
 		expect(String(chainInfoToChainId(chain(5)))).not.toBe(String(chainInfoToChainId(chain(1))))
@@ -357,9 +413,9 @@ describe("the connect window after Allow", () => {
 	test("an approved connection keeps its connect window as the check's standby window and creates none", async () => {
 		const h = boot()
 		h.discover("f1")
-		await flush()
+		await h.prompted("f1")
 		h.allow("f1", 41)
-		await flush()
+		await discoveryRun("f1")
 
 		expect(approved()).toEqual(["f1"])
 		expect(gate().reservation("f1")?.status).toBe("standby")
@@ -372,10 +428,10 @@ describe("the connect window after Allow", () => {
 	test("an Allow past the discovery cutoff is rejected and its window closed", async () => {
 		const h = boot()
 		h.discover("f1", { timestamp: Date.now() - DISCOVERY_STALE_MS + 1_000 })
-		await flush()
+		await h.prompted("f1")
 		await vi.advanceTimersByTimeAsync(2_000)
 		h.allow("f1", 41)
-		await flush()
+		await discoveryRun("f1")
 
 		expect(rejected()).toEqual(["f1"])
 		expect(approved()).toEqual([])
@@ -385,10 +441,11 @@ describe("the connect window after Allow", () => {
 	test("an Allow that meets another active profile is rejected and its window closed", async () => {
 		const h = boot()
 		h.discover("f1")
-		await flush()
+		await h.prompted("f1")
 		h.setProfile({ id: "p2" })
 		h.allow("f1", 41)
-		await flush()
+		await discoveryRun("f1")
+		await h.windows.gone(41)
 
 		expect(rejected()).toEqual(["f1"])
 		expect(approved()).toEqual([])
@@ -400,9 +457,10 @@ describe("the connect window after Allow", () => {
 		const h = boot()
 		approveReturns = false
 		h.discover("f1")
-		await flush()
+		await h.prompted("f1")
 		h.allow("f1", 41)
-		await flush()
+		await discoveryRun("f1")
+		await h.windows.gone(41)
 
 		expect(h.windows.removed).toEqual([41])
 		expect(markers().has("f1")).toBe(false)
@@ -413,13 +471,14 @@ describe("the connect window after Allow", () => {
 	test("an approval that does not land while a duplicate waits on the window keeps the row, and the duplicate connects on it", async () => {
 		const h = boot()
 		h.discover("f1")
-		await flush()
+		await h.prompted("f1")
 		h.discover("twin", { tabId: 8 })
 		await flush()
 		// The SDK no longer holds f1's request, while its connect window stays open.
 		droppedTabs.add(7)
 		h.allow("f1", 41)
-		await flush()
+		await discoveryRun("f1")
+		await discoveryRun("twin")
 
 		expect(approved()).toEqual(["f1", "twin"])
 		expect(h.rows.size).toBe(1)
@@ -428,11 +487,17 @@ describe("the connect window after Allow", () => {
 
 	test("a duplicate arriving while the approval's writes run waits on the window and connects through it, not as a returning app", async () => {
 		const grants = deferred<undefined>()
-		const h = boot({ setCapabilityGrants: () => grants.promise })
+		const granting = deferred<void>()
+		const h = boot({
+			setCapabilityGrants: () => {
+				granting.resolve()
+				return grants.promise
+			},
+		})
 		h.discover("f1")
-		await flush()
+		await h.prompted("f1")
 		h.allow("f1", 41)
-		await flush()
+		await granting.promise
 		expect(h.rows.size).toBe(1)
 
 		h.discover("twin")
@@ -440,7 +505,8 @@ describe("the connect window after Allow", () => {
 		expect(approved()).toEqual([])
 
 		grants.resolve(undefined)
-		await flush()
+		await discoveryRun("f1")
+		await discoveryRun("twin")
 		expect(approved()).toEqual(["f1", "twin"])
 		expect(admit.mock.calls.map(([request]) => request.consumesToken)).toEqual([false, false])
 	})
@@ -448,7 +514,7 @@ describe("the connect window after Allow", () => {
 	test("a remembered row of the profile switched to reconnects at once while the other profile's connect window is open", async () => {
 		const h = boot()
 		h.discover("f1")
-		await flush()
+		await h.prompted("f1")
 		h.switchProfile("p2")
 		h.rows.set(`${ORIGIN}|${chainInfoToChainId(chain(1))}`, {
 			id: "row-p2",
@@ -456,7 +522,7 @@ describe("the connect window after Allow", () => {
 			chainId: String(chainInfoToChainId(chain(1))),
 		})
 		h.discover("back")
-		await flush()
+		await discoveryRun("back")
 
 		expect(approved()).toEqual(["back"])
 		expect(admit.mock.calls.map(([request]) => request.consumesToken)).toEqual([true])
@@ -465,9 +531,9 @@ describe("the connect window after Allow", () => {
 	test("a grant write that fails deletes the row it followed and refuses the discovery", async () => {
 		const h = boot({ setCapabilityGrants: () => Promise.reject(new Error("write failed")) })
 		h.discover("f1")
-		await flush()
+		await h.prompted("f1")
 		h.allow("f1", 41)
-		await flush()
+		await discoveryRun("f1")
 
 		expect(rejected()).toEqual(["f1"])
 		expect(approved()).toEqual([])
@@ -477,17 +543,23 @@ describe("the connect window after Allow", () => {
 
 	test("a window closed while the approval's writes run: rejected, the row deleted, no marker set", async () => {
 		const grants = deferred<undefined>()
-		const h = boot({ setCapabilityGrants: () => grants.promise })
+		const granting = deferred<void>()
+		const h = boot({
+			setCapabilityGrants: () => {
+				granting.resolve()
+				return grants.promise
+			},
+		})
 		h.discover("f1")
-		await flush()
+		await h.prompted("f1")
 		h.allow("f1", 41)
-		await flush()
+		await granting.promise
 		expect(h.rows.size).toBe(1)
 
 		h.windows.closeByUser(41)
-		await flush()
+		await h.windows.gone(41)
 		grants.resolve(undefined)
-		await flush()
+		await discoveryRun("f1")
 
 		expect(rejected()).toEqual(["f1"])
 		expect(approved()).toEqual([])
@@ -499,13 +571,13 @@ describe("the connect window after Allow", () => {
 	test("the dApp's tab closing after the approval closes the window and deletes the marker", async () => {
 		const h = boot()
 		h.discover("f1")
-		await flush()
+		await h.prompted("f1")
 		h.allow("f1", 41)
-		await flush()
+		await discoveryRun("f1")
 		expect(markers().has("f1")).toBe(true)
 
 		h.closeTab(7)
-		await flush()
+		await h.windows.gone(41)
 
 		expect(h.windows.removed).toEqual([41])
 		expect(markers().has("f1")).toBe(false)
@@ -519,13 +591,15 @@ describe("an Allow while the origin's two verification slots are held", () => {
 		const h = boot()
 		h.discover("f1", chain(1))
 		h.discover("f2", chain(2))
-		await flush()
+		await h.prompted("f1")
+		await h.prompted("f2")
 		h.allow("f1", 41)
 		h.allow("f2", 42)
-		await flush()
+		await discoveryRun("f1")
+		await discoveryRun("f2")
 		expect(approved()).toEqual(["f1", "f2"])
 		h.discover("f3", { ...chain(3), ...third })
-		await flush()
+		await h.prompted("f3")
 		h.allow("f3", 43)
 		await flush()
 		return h
@@ -538,7 +612,7 @@ describe("an Allow while the origin's two verification slots are held", () => {
 		expect(h.windows.removed).toEqual([])
 
 		h.windows.closeByUser(41)
-		await flush()
+		await discoveryRun("f3")
 
 		expect(approved()).toEqual(["f1", "f2", "f3"])
 		expect(gate().reservation("f3")?.status).toBe("standby")
@@ -557,9 +631,9 @@ describe("an Allow while the origin's two verification slots are held", () => {
 	test("whose window is closed while queued fails its attach when a slot frees, and is rejected", async () => {
 		const h = await thirdAllowQueued()
 		h.windows.closeByUser(43)
-		await flush()
+		await h.windows.gone(43)
 		h.windows.closeByUser(41)
-		await flush()
+		await discoveryRun("f3")
 
 		expect(rejected()).toEqual(["f3"])
 		expect(approved()).toEqual(["f1", "f2"])
@@ -569,11 +643,11 @@ describe("an Allow while the origin's two verification slots are held", () => {
 	test("whose dApp tab closes while it is queued has its window closed at once", async () => {
 		const h = await thirdAllowQueued({ tabId: 9 })
 		h.closeTab(9)
-		await flush()
+		await h.windows.gone(43)
 		expect(h.windows.removed).toEqual([43])
 
 		h.windows.closeByUser(41)
-		await flush()
+		await discoveryRun("f3")
 		expect(rejected()).toEqual(["f3"])
 		expect(approved()).toEqual(["f1", "f2"])
 	})
@@ -583,9 +657,9 @@ describe("an approved connection whose key exchange never completes", () => {
 	test("keeps its window on the expired page and its slot, tombstones at once, and opens no window when it establishes late", async () => {
 		const h = boot()
 		h.discover("f1")
-		await flush()
+		await h.prompted("f1")
 		h.allow("f1", 41)
-		await flush()
+		await discoveryRun("f1")
 
 		await vi.advanceTimersByTimeAsync(DISCOVERY_STALE_MS + RESERVATION_GRACE_MS + 1)
 		expect(h.windows.navigated).toEqual([{ windowId: 41, url: "EXPIRED-f1" }])
@@ -599,7 +673,7 @@ describe("an approved connection whose key exchange never completes", () => {
 		expect(h.windows.navigated).toHaveLength(1)
 
 		h.windows.closeByUser(41)
-		await flush()
+		await h.windows.gone(41)
 		expect(gate().windowsHeld(ORIGIN)).toBe(0)
 	})
 })
@@ -611,9 +685,9 @@ describe("a deleted row while an approved handshake is not stamped yet", () => {
 	])("%s", async (_name, profileId, ended) => {
 		const h = boot()
 		h.discover("f1")
-		await flush()
+		await h.prompted("f1")
 		h.allow("f1", 41)
-		await flush()
+		await discoveryRun("f1")
 		// Key exchange is done, so the SDK lists the session; establishment has not stamped it.
 		keyExchange("f1")
 
@@ -628,9 +702,9 @@ describe("establishment shows the check in the connect window", () => {
 	/** One approved connection for `requestId` waiting in `windowId`. */
 	async function approvedIn(h: ReturnType<typeof boot>, requestId: string, windowId: number, over: Record<string, unknown> = {}) {
 		h.discover(requestId, over)
-		await flush()
+		await h.prompted(requestId)
 		h.allow(requestId, windowId)
-		await flush()
+		await discoveryRun(requestId)
 	}
 
 	test("the approved connection navigates window 41 to its own hash and creates no window", async () => {
@@ -664,11 +738,12 @@ describe("establishment shows the check in the connect window", () => {
 	test("the twin of a pending popup opens its own window with its own hash while 41 shows the first's", async () => {
 		const h = boot()
 		h.discover("f1")
-		await flush()
+		await h.prompted("f1")
 		h.discover("twin")
 		await flush()
 		h.allow("f1", 41)
-		await flush()
+		await discoveryRun("f1")
+		await discoveryRun("twin")
 		expect(approved()).toEqual(["f1", "twin"])
 
 		await h.establish("f1")
@@ -685,7 +760,7 @@ describe("establishment shows the check in the connect window", () => {
 		const h = boot()
 		await approvedIn(h, "f1", 41)
 		h.windows.closeByUser(41)
-		await flush()
+		await h.windows.gone(41)
 		await h.establish("f1")
 
 		expect(terminated()).toEqual(["f1"])
@@ -767,7 +842,7 @@ describe("establishment shows the check in the connect window", () => {
 			"a lock closed its window",
 			async (h) => {
 				h.windows.closeByUser(41)
-				await flush()
+				await h.windows.gone(41)
 			},
 			false,
 		],
@@ -784,7 +859,7 @@ describe("establishment shows the check in the connect window", () => {
 
 			// A new discovery from the origin is a reconnect, which shows its check in a window of its own.
 			h.discover("r2")
-			await flush()
+			await discoveryRun("r2")
 			await h.establish("r2")
 			expect(h.windows.created).toHaveLength(1)
 			expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("r2")}&isReconnect=true`)
@@ -816,18 +891,18 @@ describe("an app's calls wait for the person to confirm the check", () => {
 	/** A reconnect of the remembered app on `requestId`, which shows its own check. */
 	async function reconnect(h: ReturnType<typeof boot>, requestId: string) {
 		h.discover(requestId)
-		await flush()
+		await discoveryRun(requestId)
 		await h.establish(requestId)
-		await settle()
 	}
 	/** The session ends, its check window closes, and the page key-exchanges the same id again. */
 	async function rekey(h: ReturnType<typeof boot>, requestId: string, checkWindow: number) {
 		h.handler.terminateSession(requestId)
 		h.windows.closeByUser(checkWindow)
-		await settle()
+		await h.windows.gone(checkWindow)
 		await reconnect(h, requestId)
 	}
-	/** Enough turns for a released call to reach the dispatcher; each control proves it with the same count. */
+	/** Turns for a "not yet" or "never" read that no awaited cause covers: calls parked at a hold, a
+	 *  lane or the FIFO, or a refusal decided at once that a regression could still deliver later. */
 	const settle = async () => {
 		for (let i = 0; i < 300; i++) await Promise.resolve()
 	}
@@ -848,18 +923,17 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			remember(h).trustedVerification = skipFlag
 			await reconnect(h, "r1")
 			expect(h.windows.created).toHaveLength(1)
-			h.send("r1", "getChainInfo", "a")
-			h.send("r1", "sendTx", "s")
-			h.send("r1", "getAccounts", "b")
+			const a = h.send("r1", "getChainInfo", "a")
+			const s = h.send("r1", "sendTx", "s")
+			const b = h.send("r1", "getAccounts", "b")
 			await settle()
 			expect(row(h)?.stage).toBe("queued")
 			expect(dispatched()).toEqual([])
 
 			h.confirm(hashOf("r1"))
-			await settle()
+			await Promise.all([a, s, b])
 			expect(dispatched()).toEqual(["r1:getChainInfo", "r1:sendTx", "r1:getAccounts"])
-			h.send("r1", "getAddressBook", "c")
-			await settle()
+			await h.send("r1", "getAddressBook", "c")
 			expect(dispatched()).toEqual(["r1:getChainInfo", "r1:sendTx", "r1:getAccounts", "r1:getAddressBook"])
 			expect(terminated()).toEqual([])
 		},
@@ -869,11 +943,11 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		const h = boot()
 		remember(h)
 		await reconnect(h, "r1")
-		h.send("r1", "getChainInfo", "a")
-		h.send("r1", "sendTx", "s")
-		await settle()
+		const a = h.send("r1", "getChainInfo", "a")
+		const s = h.send("r1", "sendTx", "s")
+		await h.journal.filed(1)
 		h.refuse()
-		await settle()
+		await Promise.all([a, s])
 		expect(terminated()).toEqual(["r1"])
 		expect(dispatched()).toEqual([])
 		expect(responses).toEqual([])
@@ -884,7 +958,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		const h = boot()
 		remember(h)
 		await reconnect(h, "r1")
-		h.send("r1", "sendTx", "s")
+		const s = h.send("r1", "sendTx", "s")
 		await settle()
 		h.windows.closeByUser(FIRST_CHECK_WINDOW)
 		await settle()
@@ -892,7 +966,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		expect(row(h)?.stage).toBe("queued")
 
 		h.closeTab(7)
-		await settle()
+		await s
 		expect(terminated()).toEqual(["r1"])
 		expect(dispatched()).toEqual([])
 		expect(row(h)?.kind).toBe("wallet_refused")
@@ -904,11 +978,11 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		await reconnect(h, "c1")
 		h.confirm(hashOf("c1"))
 		await reconnect(h, "h1")
-		h.send("h1", "sendTx", "s")
-		await settle()
+		const s = h.send("h1", "sendTx", "s")
+		await h.journal.filed(1)
 
 		h.lock()
-		await settle()
+		await s
 		expect(terminated()).toEqual(["h1"])
 		expect(sessions.has("c1")).toBe(true)
 		expect(row(h)?.kind).toBe("session_ended")
@@ -918,13 +992,12 @@ describe("an app's calls wait for the person to confirm the check", () => {
 	test("an establishment that fails with no termination, its id's approval taken by another attempt, settles its hold: a lock ends nothing", async () => {
 		const h = boot()
 		h.discover("f1")
-		await flush()
+		await h.prompted("f1")
 		h.allow("f1", 41)
-		await flush()
+		await discoveryRun("f1")
 		const establishing = h.establish("f1")
 		markers().set("f1", { ...markers().get("f1")! })
 		await establishing
-		await settle()
 		expect(terminated()).toEqual([])
 		expect(sessions.has("f1")).toBe(true)
 
@@ -938,13 +1011,14 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		remember(h)
 		await reconnect(h, "h1")
 		await reconnect(h, "h2")
-		h.send("h1", "sendTx", "s1")
-		h.send("h2", "sendTx", "s2")
-		await settle()
+		const s1 = h.send("h1", "sendTx", "s1")
+		const s2 = h.send("h2", "sendTx", "s2")
+		await h.journal.filed(1)
+		await h.journal.filed(2)
 		failingTerminations.add("h1")
 
 		h.lock()
-		await settle()
+		await Promise.all([s1, s2])
 		expect(terminated()).toEqual(["h1", "h2"])
 		expect([row(h, 1)?.kind, row(h, 2)?.kind]).toEqual(["session_ended", "session_ended"])
 		expect(dispatched()).toEqual([])
@@ -954,10 +1028,10 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		const h = boot()
 		remember(h)
 		await reconnect(h, "r1")
-		h.send("r1", "sendTx", "s")
-		await settle()
+		const s = h.send("r1", "sendTx", "s")
+		await h.journal.filed(1)
 		h.switchProfile("p2")
-		await settle()
+		await s
 		expect(terminated()).toEqual(["r1"])
 		expect(dispatched()).toEqual([])
 		expect(row(h)?.kind).toBe("wallet_refused")
@@ -968,14 +1042,14 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		remember(h)
 		await reconnect(h, "r1")
 		await reconnect(h, "r2")
-		h.send("r1", "getChainInfo", "a1")
+		const a1 = h.send("r1", "getChainInfo", "a1")
 		h.send("r2", "getChainInfo", "a2")
 		await settle()
 		h.confirm(hashOf("r2"))
 		await settle()
 		expect(dispatched()).toEqual(["r2:getChainInfo"])
 		h.confirm(hashOf("r1"))
-		await settle()
+		await a1
 		expect(dispatched()).toEqual(["r2:getChainInfo", "r1:getChainInfo"])
 	})
 
@@ -1009,19 +1083,20 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		remember(h)
 		await reconnect(h, "r1")
 		const write = deferred<void>()
+		const writing = deferred<void>()
 		const create = h.journal.createOperation.getMockImplementation()!
 		h.journal.createOperation.mockImplementationOnce(async (args) => {
+			writing.resolve()
 			await write.promise
 			return create(args)
 		})
-		h.send("r1", "sendTx", "s")
-		await settle()
+		const s = h.send("r1", "sendTx", "s")
+		await writing.promise
 		expect(h.journal.createOperation).toHaveBeenCalledTimes(1)
 		h.refuse()
-		await settle()
 
 		write.resolve()
-		await settle()
+		await s
 		expect(row(h)?.kind).toBe("wallet_refused")
 		expect(dispatched()).toEqual([])
 	})
@@ -1030,10 +1105,10 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		const h = boot()
 		remember(h)
 		await reconnect(h, "r1")
-		h.send("r1", "sendTx", "s")
-		await settle()
+		const s = h.send("r1", "sendTx", "s")
+		await h.journal.filed(1)
 		h.rowDeleted("p1")
-		await settle()
+		await s
 		expect(terminated()).toEqual(["r1"])
 		expect(dispatched()).toEqual([])
 		expect(row(h)?.kind).toBe("wallet_refused")
@@ -1050,17 +1125,16 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			remember(h)
 			await reconnect(h, "r1")
 			const held = hashOf("r1")
-			h.send("r1", "sendTx", "s1")
-			await settle()
+			const s1 = h.send("r1", "sendTx", "s1")
+			await h.journal.filed(1)
 			failingTerminations.add("r1")
 
 			end(h)
-			await settle()
+			await s1
 			expect(sessions.has("r1")).toBe(true)
 			expect(row(h)?.kind).toBe("wallet_refused")
 			h.confirm(held)
-			h.send("r1", "sendTx", "s2")
-			await settle()
+			await h.send("r1", "sendTx", "s2")
 			expect(dispatched()).toEqual([])
 			expect([...h.journal.ops.keys()]).toEqual(["queued-1"])
 		},
@@ -1073,21 +1147,27 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		"an establishment whose hash write %s after a lock, an unlock into another profile and a same-id re-key leaves the successor alone",
 		async (_, finish) => {
 			const firstWrite = deferred<undefined>()
+			const writing = deferred<void>()
 			let writes = 0
-			const h = boot({ setVerificationHash: () => (++writes === 1 ? firstWrite.promise : Promise.resolve()) })
+			const h = boot({
+				setVerificationHash: () => {
+					if (++writes > 1) return Promise.resolve()
+					writing.resolve()
+					return firstWrite.promise
+				},
+			})
 			remember(h)
 			h.discover("r1")
-			await flush()
+			await discoveryRun("r1")
 			const stale = h.establish("r1")
-			await settle()
+			await writing.promise
 			h.lock()
-			await settle()
 			// The person unlocks another profile, which has its own row for the app.
 			h.rows.set(`${ORIGIN}|${CHAIN}`, { ...h.rows.get(`${ORIGIN}|${CHAIN}`)!, profileId: "p2" })
 			h.switchProfile("p2")
 			await reconnect(h, "r1")
 			const successor = sessions.get("r1")
-			h.send("r1", "getChainInfo", "a")
+			const a = h.send("r1", "getChainInfo", "a")
 
 			finish(firstWrite)
 			await stale
@@ -1096,7 +1176,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			expect(terminated()).toEqual(["r1"])
 			expect(dispatched()).toEqual([])
 			h.confirm(hashOf("r1"))
-			await settle()
+			await a
 			expect(dispatched()).toEqual(["r1:getChainInfo"])
 			expect(terminated()).toEqual(["r1"])
 		},
@@ -1109,15 +1189,13 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		const ended = sessions.get("r1")
 		await rekey(h, "r1", FIRST_CHECK_WINDOW)
 		h.confirm(hashOf("r1"))
-		await settle()
 
 		h.send("r1", "sendTx", "late", ended)
 		await settle()
 		expect(h.journal.createOperation).not.toHaveBeenCalled()
 		expect(dispatched()).toEqual([])
 		expect(responses).toEqual([])
-		h.send("r1", "sendTx", "own")
-		await settle()
+		await h.send("r1", "sendTx", "own")
 		expect(h.journal.createOperation).toHaveBeenCalledTimes(1)
 		expect(dispatched()).toEqual(["r1:sendTx"])
 	})
@@ -1130,24 +1208,24 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		h.confirm(hashOf("r1"))
 		const slow = deferred<unknown>()
 		dispatch.mockImplementationOnce(() => slow.promise as never)
-		h.send("r1", "getChainInfo", "first")
-		h.send("r1", "sendTx", "parked")
+		const first = h.send("r1", "getChainInfo", "first")
+		const parked = h.send("r1", "sendTx", "parked")
 		await settle()
 		expect(dispatched()).toEqual(["r1:getChainInfo"])
 
 		await rekey(h, "r1", FIRST_CHECK_WINDOW)
 		const termsReads = legal.mock.calls.length
 		slow.resolve("ok")
-		await settle()
+		await Promise.all([first, parked])
 		expect(dispatched()).toEqual(["r1:getChainInfo"])
 		expect(responses).toEqual([])
 		expect(row(h)?.kind).toBe("wallet_refused")
 		// Dropped as soon as the FIFO reaches it, before it reads anything for a session that is gone.
 		expect(legal.mock.calls.length).toBe(termsReads)
 
-		h.send("r1", "getAccounts", "own")
+		const own = h.send("r1", "getAccounts", "own")
 		h.confirm(hashOf("r1"))
-		await settle()
+		await own
 		expect(dispatched()).toEqual(["r1:getChainInfo", "r1:getAccounts"])
 	})
 
@@ -1168,13 +1246,13 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		h.confirm(hashOf("r1"))
 		const read = deferred<void>()
 		nextRead = read.promise
-		h.send("r1", "sendTx", "s")
+		const s = h.send("r1", "sendTx", "s")
 		await settle()
 		expect(dispatched()).toEqual([])
 
 		if (rekeyed) await rekey(h, "r1", FIRST_CHECK_WINDOW)
 		read.resolve()
-		await settle()
+		await s
 		expect(dispatched()).toEqual(rekeyed ? [] : ["r1:sendTx"])
 		expect(responses.map((r) => r.response.messageId)).toEqual(rekeyed ? [] : ["s"])
 		expect(row(h)?.kind).toBe(rekeyed ? "wallet_refused" : undefined)
@@ -1189,15 +1267,15 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		await reconnect(h, "r1")
 		h.confirm(hashOf("r1"))
 		const fence = deferred<void>()
-		h.holdNextProfileRead(fence.promise)
-		h.send("r1", "getChainInfo", "g")
-		await settle()
+		const fenceRead = h.holdNextProfileRead(fence.promise)
+		const g = h.send("r1", "getChainInfo", "g")
+		await fenceRead
 
 		if (rekeyed) await rekey(h, "r1", FIRST_CHECK_WINDOW)
 		const successor = sessions.get("r1")
 		h.setProfile({ id: "p2" })
 		fence.resolve()
-		await settle()
+		await g
 		expect(dispatched()).toEqual([])
 		if (rekeyed) {
 			expect(responses).toEqual([])
@@ -1223,14 +1301,17 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		async function confirmedSession(h: ReturnType<typeof boot>, requestId: string) {
 			await reconnect(h, requestId)
 			h.confirm(hashOf(requestId))
-			await settle()
 		}
 		/** The bound's worth of calls in flight on `requestId`: its head waits in dispatch, the rest behind it. */
 		async function fillToBound(h: ReturnType<typeof boot>, requestId: string) {
-			dispatch.mockImplementationOnce(() => new Promise(() => {}))
+			const head = deferred<void>()
+			dispatch.mockImplementationOnce(() => {
+				head.resolve()
+				return new Promise(() => {})
+			})
 			h.send(requestId, "getChainInfo", `${requestId}-head`)
 			for (let i = 1; i < MAX_PENDING_PER_SESSION; i++) h.send(requestId, "getAccounts", `${requestId}-${i}`)
-			await settle()
+			await head.promise
 		}
 		const range = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => `${prefix}${i}`)
 
@@ -1240,11 +1321,15 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			await confirmedSession(h, "r1")
 			await confirmedSession(h, "r2")
 			const head = deferred<unknown>()
-			dispatch.mockImplementationOnce(() => head.promise as never)
+			const headDispatched = deferred<void>()
+			dispatch.mockImplementationOnce(() => {
+				headDispatched.resolve()
+				return head.promise as never
+			})
 			h.send("r1", "getChainInfo", "head")
 			h.send("r1", "sendTx", "admitted")
 			for (let i = 0; i < MAX_PENDING_PER_SESSION - 2; i++) h.send("r1", "getAccounts", `m${i}`)
-			await settle()
+			await headDispatched.promise
 			h.send("r1", "sendTx", "over")
 			h.send("r2", "getChainInfo", "other")
 			await settle()
@@ -1274,8 +1359,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 					captured?.onWalletMessage(sessions.get("r1"), null)
 				} catch {}
 			}
-			h.send("r1", "getChainInfo", "valid")
-			await settle()
+			await h.send("r1", "getChainInfo", "valid")
 			expect(refusedIds()).toEqual([])
 			expect(dispatched()).toEqual(["r1:getChainInfo"])
 		})
@@ -1296,7 +1380,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			expect(dispatched()).toEqual(["r1:sendTx", "r1:getAccounts"])
 
 			h.send("r1", "getAccounts", "over")
-			await settle()
+			await responded("over")
 			expect(refusedIds()).toEqual(["over"])
 		})
 
@@ -1311,15 +1395,12 @@ describe("an app's calls wait for the person to confirm the check", () => {
 				if (encrypted === "head") await head.promise
 			}
 			const queued = range("c", MAX_PENDING_PER_SESSION)
-			void post(h, "r1", "head")
-			for (const c of queued) void post(h, "r1", c)
-			void post(h, "r1", "over")
+			const posted = [post(h, "r1", "head"), ...queued.map((c) => post(h, "r1", c)), post(h, "r1", "over")]
 			head.resolve()
-			await settle()
+			await Promise.all(posted)
 			expect(decrypted).toEqual(["head", ...queued])
 
-			void post(h, "r1", "after")
-			await settle()
+			await post(h, "r1", "after")
 			expect(decrypted.at(-1)).toBe("after")
 		})
 
@@ -1335,14 +1416,14 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			}
 			const queued = range("c", MAX_PENDING_PER_SESSION)
 			void post(h, "r1", "head")
-			for (const c of queued) void post(h, "r1", c)
+			const behindHead = queued.map((c) => post(h, "r1", c))
 
 			await rekey(h, "r1", FIRST_CHECK_WINDOW)
 			void post(h, "r1", "successor")
 			await settle()
 			expect(decrypted).toEqual(["head", "successor"])
 			head.resolve()
-			await settle()
+			await Promise.all(behindHead)
 			expect(decrypted).toEqual(["head", "successor", ...queued])
 		})
 
@@ -1359,11 +1440,11 @@ describe("an app's calls wait for the person to confirm the check", () => {
 				captured?.onWalletMessage(sessions.get(id), { type: "getChainInfo", args: [], messageId: encrypted })
 			}
 			const behind = range("q", MAX_PENDING_PER_SESSION)
-			void post(h, "r1", "d0")
-			for (const q of behind) void post(h, "r1", q)
-			void post(h, "r1", "dropped")
+			const posted = [post(h, "r1", "d0"), ...behind.map((q) => post(h, "r1", q)), post(h, "r1", "dropped")]
 			first.resolve()
-			await settle()
+			await Promise.all(posted)
+			// The refusals ride the lane in decrypt order, so the last one out is the last decrypted call's.
+			await responded(`q${MAX_PENDING_PER_SESSION - 1}`)
 			expect(decrypted).toEqual(["d0", ...behind])
 			expect(refusedIds()).toEqual(["d0", ...behind])
 		})
@@ -1376,20 +1457,19 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			const reply = deferred<void>()
 			nextResponse = reply.promise
 			h.send("r1", "getChainInfo", "over")
-			await settle()
+			await responded("over")
 			expect(refusedIds()).toEqual(["over"])
 			const decrypted: unknown[] = []
 			decryptHook = async (_id, encrypted) => {
 				decrypted.push(encrypted)
 			}
 			const queued = range("c", MAX_PENDING_PER_SESSION)
-			for (const c of queued) void post(h, "r1", c)
-			void post(h, "r1", "dropped")
+			const posted = [...queued.map((c) => post(h, "r1", c)), post(h, "r1", "dropped")]
 			await settle()
 			expect(decrypted).toEqual([])
 
 			reply.reject(new Error("tab gone"))
-			await settle()
+			await Promise.all(posted)
 			expect(decrypted).toEqual(queued)
 		})
 
@@ -1407,7 +1487,6 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 			await rekey(h, "r1", FIRST_CHECK_WINDOW)
 			h.confirm(hashOf("r1"))
-			await settle()
 			await fillToBound(h, "r1")
 			h.send("r1", "getChainInfo", "new-over")
 			await settle()
