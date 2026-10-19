@@ -1,4 +1,4 @@
-/** Kept free of the other fixtures' imports: its unit test loads it under the scripts typecheck. */
+/** Imports no other fixture: its unit test loads it into the scripts typecheck, which lacks the e2e typings. */
 import type { Page } from "puppeteer"
 
 /** Waits, at most 1 s and never throwing, for the CSS transitions a theme flip started: sheets and
@@ -13,10 +13,9 @@ export async function settleThemeTransitions(page: Page): Promise<void> {
 		.catch(() => undefined)
 }
 
-/** Opt-in capture of the popup (`NULO_E2E_SHOT_DIR`), both themes: a popup-surface change ships with a
- *  picture of it, and a colour token that only reads well on one theme is what a row count never sees.
- *  The page must be shown on entry: a hidden one (a Chrome tab behind another) draws no frame, and a
- *  capture of it can hang, so it is refused before any capture. */
+/** Opt-in capture of the popup in both themes under `NULO_E2E_SHOT_DIR`: a colour that reads well on
+ *  one theme only is what a row count never sees. The page must be shown on entry: a hidden one (a
+ *  Chrome tab behind another) draws no frame, and its capture can hang. */
 export async function shotSend(page: Page, name: string, focus = "send-publish-strip"): Promise<void> {
 	const dir = process.env.NULO_E2E_SHOT_DIR
 	if (!dir) return

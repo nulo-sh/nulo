@@ -36,12 +36,13 @@ describe("shotSend", () => {
 		document.documentElement.removeAttribute("theme")
 	})
 
-	test("refuses a hidden page before any capture", async () => {
+	test("refuses a hidden page before it waits or captures", async () => {
 		vi.stubEnv("NULO_E2E_SHOT_DIR", DIR)
 		showPage("hidden")
 		const { page, asPage } = fakePage()
 
 		await expect(shotSend(asPage, "row")).rejects.toThrow("shotSend(row): the page is hidden")
+		expect(page.waitForFunction).not.toHaveBeenCalled()
 		expect(page.screenshot).not.toHaveBeenCalled()
 	})
 

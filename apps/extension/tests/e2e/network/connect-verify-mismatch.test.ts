@@ -75,7 +75,8 @@ test.skipIf(!hasConfig)(
 		await dapp.waitForSelector(CONNECTED, { timeout: 20_000 })
 
 		// The app's page shows the last connection's grid. On Chrome the playground's tab hides the
-		// wallet's, and a hidden tab draws no frame to photograph; the dApp comes back for its own steps.
+		// wallet's, and a hidden tab draws no frame to photograph; the dApp is fronted again after, so
+		// the rest of the case runs in the order it always has.
 		await wallet.bringToFront()
 		await listConnectedApps(wallet)
 		await clickByTestId(wallet, "connected-app-row")
