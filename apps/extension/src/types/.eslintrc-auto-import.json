@@ -57,6 +57,7 @@
     "DappInteractionLike": true,
     "DappWindowError": true,
     "DirectiveBinding": true,
+    "END_ACK_TIMEOUT_MS": true,
     "EffectScope": true,
     "EnsureSnapshot": true,
     "EnsureSuperseded": true,

@@ -5,7 +5,9 @@
  * as the fee payer, and the node would refuse its send for want of a balance. An app that pays
  * through it is read from the final simulation's kernel the same way: no unit layer runs that kernel.
  * An app that asks for a priority fee through Nulo's sponsor proves the node admits a send whose cap
- * makes room for it: no installed package holds the node's admission code.
+ * makes room for it: no installed package holds the node's admission code. Its transaction page names
+ * the sponsor as the app's choice, matched against the address the wallet derives for the deployed
+ * sponsor and the call the build actually recorded.
  */
 import { getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
 import { Fr } from "@aztec-labs/aztec.js/fields"
@@ -24,7 +26,7 @@ import {
 	waitForHash,
 } from "../fixtures/extension"
 import { pinnedFeeTexts, refusePrices, seedFeeJuiceQuote } from "../fixtures/fee-quote"
-import { fillSendForm, navigateToSettings, setActiveSendType } from "../fixtures/helpers"
+import { fillSendForm, navigateByHash, navigateToSettings, setActiveSendType } from "../fixtures/helpers"
 import {
 	assertPgOk,
 	callExpectingNoPopup,
@@ -322,7 +324,26 @@ test.skipIf(!hasConfig)(
 			// `NO_WAIT` resolves with the hash only once the node has admitted the transaction.
 			const result = await waitForPgResult(pg, "sendTx", seq, 240_000)
 			await assertPgOk(pg, result, "fee-sponsor-funding:priority")
-			expect(typeof (result.resultJson as { txHash?: unknown }).txHash).toBe("string")
+			const txHash = (result.resultJson as { txHash?: unknown }).txHash
+			expect(typeof txHash).toBe("string")
+
+			// The row names the app as the window's fee line does: both read the session's dApp name.
+			const expected = `Sponsored, set by ${app}`
+			const wallet = await openPopup(tokenReadyExtension)
+			await waitForHash(wallet, "#/popup/general")
+			await navigateByHash(wallet, `#/popup/tx/${txHash as string}`)
+			await wallet
+				.waitForFunction(
+					(want: string) => document.querySelector('[data-testid="tx-detail-fee-method"]')?.textContent?.trim() === want,
+					{ timeout: 15_000, polling: 200 },
+					expected,
+				)
+				.catch(() => undefined)
+			const feeMethod = await wallet.evaluate(
+				() => document.querySelector('[data-testid="tx-detail-fee-method"]')?.textContent?.trim() ?? null,
+			)
+			expect(feeMethod, "the transaction page's Fee method row").toBe(expected)
+			await wallet.close()
 		} finally {
 			await prices.refused.stop()
 			await setPgInput(pg, "maxPriorityFeesPerGas", "")

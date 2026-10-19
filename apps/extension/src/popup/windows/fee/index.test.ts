@@ -282,7 +282,7 @@ describe("the fee question window", () => {
 		await opened()
 		await byId("fee-reject-btn").trigger("click")
 		await flushPromises()
-		expect(rejectMock).toHaveBeenCalledExactlyOnceWith("User rejected")
+		expect(rejectMock).toHaveBeenCalledExactlyOnceWith("User rejected", "reject")
 		expect(resolveInteractionMock).not.toHaveBeenCalled()
 		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
 	})
