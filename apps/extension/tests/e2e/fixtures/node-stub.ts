@@ -1,5 +1,5 @@
 /**
- * The guarded smoke launch's stand-in for an outside node: a loopback endpoint that answers every
+ * A guarded launch's stand-in for an outside node: a loopback endpoint that answers every
  * call with HTTP 400 and a JSON-RPC error. The node client stops at once on a 4xx with a readable
  * JSON body; a refused connection, or a 400 without one, it retries for seconds per call.
  */
@@ -9,7 +9,7 @@ import { holdRpcInterception } from "./browser"
 import { listenClaimed } from "./egress-guard"
 import type { HeldNode } from "./egress-guard"
 
-const REFUSAL = JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32601, message: "no node answers a guarded smoke run" } })
+const REFUSAL = JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32601, message: "no node answers a guarded e2e run" } })
 
 export interface NodeStub {
 	url: string
@@ -46,6 +46,8 @@ export async function holdNodeStub(browser: Browser, extensionId: string, nodeUr
 	try {
 		const held = await holdRpcInterception(browser, extensionId, nodeUrl, { kind: "redirect", to: stub.url })
 		return {
+			host: new URL(nodeUrl).hostname,
+			holding: held.holding,
 			requests: stub.requests,
 			failures: held.failures,
 			stop: async () => {

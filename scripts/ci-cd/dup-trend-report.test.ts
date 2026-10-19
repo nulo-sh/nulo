@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { formatDupReport, JSCPD_VERSION, type JscpdReport } from "../dup-trend/report"
+import { formatDupReport, type JscpdReport } from "../dup-trend/report"
+import rootPackage from "../../package.json"
 
 const clone = (a: string, b: string, lines: number, format = "typescript"): JscpdReport["duplicates"][number] => ({
 	format,
@@ -48,7 +49,7 @@ describe("dup-trend report", () => {
 		expect(md).toContain("| 20 | 2 | `apps/x/src/service.ts ↔ packages/y/src/util.ts` |")
 	})
 
-	test("jscpd pin is an exact version", () => {
-		expect(JSCPD_VERSION).toMatch(/^\d+\.\d+\.\d+$/)
+	test("jscpd is an exact root devDependency, so bun.lock and its age gate hold the copy the report runs", () => {
+		expect(rootPackage.devDependencies.jscpd).toMatch(/^\d+\.\d+\.\d+$/)
 	})
 })

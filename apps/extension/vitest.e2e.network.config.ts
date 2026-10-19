@@ -13,7 +13,9 @@ export default defineConfig({
 	test: {
 		...e2eIsolation,
 		...networkRunner(),
-		include: ["tests/e2e/network/**/*.test.ts"],
+		// The guard's control spec runs here too, so the network lane proves its own launches refuse
+		// an outside host.
+		include: ["tests/e2e/network/**/*.test.ts", "tests/e2e/egress-guard.test.ts"],
 		globalSetup: "./tests/e2e/global-setup.ts",
 		// Per-worker: marks `.e2e-state/tests-started` so the boot-failure
 		// classifier never misclassifies a run that reached test execution as an
