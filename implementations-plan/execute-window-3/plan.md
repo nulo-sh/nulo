@@ -23,6 +23,7 @@ post_implementation_hardening: not scheduled
 - **Open items:** none of this plan's. Found on the way and filed: #849 (a Firefox flake in `viewers-csp.test.ts`, unrelated to this diff).
 - **Lessons:** none promoted: `lessons.md` is at 8191 of 8192 bytes; the notes stay in [lessons/phase-1.md](lessons/phase-1.md) and [lessons/phase-2.md](lessons/phase-2.md).
 - **Seeds retired:** the `/goal` and `/loop` seeds below.
+- **Size:** 157 lines against the light tier's 150: this block and the arc's review rows.
 
 # execute-window-3: the advice once after the calls, none on a refused request; an unreadable authorization flagged at rest
 
