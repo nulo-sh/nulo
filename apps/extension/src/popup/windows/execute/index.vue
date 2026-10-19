@@ -258,7 +258,9 @@ const {
 		tokenService.disconnect()
 	},
 	init: () => init(),
-	reject: (end) => reject(end),
+	// A request of another profile than the active one was ended by that lock or switch, not by the
+	// person, whatever then closes its window.
+	reject: (end) => reject(isWrongProfile.value && end === "close" ? (profile.value ? "switch" : "lock") : end),
 })
 
 const init = async () => {

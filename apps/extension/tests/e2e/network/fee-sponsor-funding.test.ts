@@ -327,8 +327,8 @@ test.skipIf(!hasConfig)(
 			const txHash = (result.resultJson as { txHash?: unknown }).txHash
 			expect(typeof txHash).toBe("string")
 
-			// The record holds the app's session origin, the name its Fee method row reads.
-			const expected = `Sponsored, set by ${await pg.evaluate(() => location.origin)}`
+			// The row names the app as the window's fee line does: both read the session's dApp name.
+			const expected = `Sponsored, set by ${app}`
 			const wallet = await openPopup(tokenReadyExtension)
 			await waitForHash(wallet, "#/popup/general")
 			await navigateByHash(wallet, `#/popup/tx/${txHash as string}`)

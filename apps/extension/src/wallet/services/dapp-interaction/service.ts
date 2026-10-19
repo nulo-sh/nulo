@@ -327,8 +327,8 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		this.storage.delete(id)
 		// Typed so the dApp sees EIP-1193 4001 / USER_REJECTED. `reason` is
 		// popup-authored and forwarded verbatim to the dApp — never route a
-		// dApp-influenced string here. The end is held before the window closes, so its close can no
-		// longer reach the request first.
+		// dApp-influenced string here. The window closes only after this returns, so its close cannot
+		// reach the request first.
 		const rejection = isWindowEnd(end) ? new WindowEndedError(reason, end) : new UserRejectedError(reason)
 		this.windowManager.cancel(interactionRequest.handleId, rejection)
 	}

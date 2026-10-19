@@ -369,13 +369,28 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		// the rejection (requestId was set by load() before the profile check).
 		window.dispatchEvent(new Event("beforeunload"))
 		await flushPromises()
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledWith("User rejected", "close")
+		// The request is another profile's: its end is the switch, not the person's close.
+		expect(rejectViaInteractionServiceMock).toHaveBeenCalledWith("User rejected", "switch")
 		expect(callLog).toEqual([
 			"windows.remove",
 			"removeEventListener:beforeunload",
-			"composableReject:User rejected:close",
+			"composableReject:User rejected:switch",
 			"windows.remove",
 		])
+	})
+
+	test("D14-lock: another profile's request, with no profile active, ends as the lock", async () => {
+		approval.payloadToLoad = wrongProfilePayload()
+		w = factory()
+		await flushPromises()
+		approval.resolveProfile?.(undefined)
+		await flushPromises()
+		approval.resolveLoad?.()
+		await flushPromises()
+		await w.find('[data-testid="dapp-cancelled-overlay"]').trigger("click")
+		window.dispatchEvent(new Event("beforeunload"))
+		await flushPromises()
+		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected", "lock")
 	})
 })
 

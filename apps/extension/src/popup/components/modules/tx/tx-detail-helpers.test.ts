@@ -142,6 +142,12 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 		expect(describeFeePaymentMethod(popupSend(SPONSOR))).toBe("Sponsored")
 	})
 
+	test("a popup Send that records the person's pick reads the same as one that does not", () => {
+		expect(describeFeePaymentMethod({ ...popupSend(PRIVATE_FPC_ADDRESS), feeChoice: "wallet" })).toBe("Private Fee Juice")
+		expect(describeFeePaymentMethod({ ...popupSend(), feeChoice: "wallet" })).toBe("Sponsored")
+		expect(describeFeePaymentMethod({ ...popupSend(SPONSOR), feeChoice: "wallet" })).toBe("Sponsored")
+	})
+
 	test("a recorded fee call outranks the spender: the auth registry's own send, which keeps its pay_fee call", () => {
 		const revoke = [call(PRIVATE_FPC_ADDRESS, "pay_fee"), call(field(1n), "set_authorized", [field(0xa17n), false])]
 		expect(describeFeePaymentMethod({ ...popupSend(), calls: revoke })).toBe("Private Fee Juice")

@@ -755,8 +755,7 @@ describe("DappInteractionService — a request an estimate refused ends as that 
 		h.dapp.recordRefusal(rejected.id, registryRefusal)
 		h.dapp.recordRefusal(closed.id, bindingRefusal)
 
-		// A named end never outranks the refusal: a lock reads as the refusal, like the Reject.
-		await h.dapp.rejectInteraction(rejected.id, "User rejected", "lock")
+		await h.dapp.rejectInteraction(rejected.id, "User rejected", "reject")
 		h.closeByUser(closed.windowId)
 		await h.dapp.rejectInteraction(plain.id, "User rejected", "reject")
 		await expect.poll(() => [rejected, closed, plain].every((w) => w.outcome.settled)).toBe(true)
@@ -778,7 +777,17 @@ describe("DappInteractionService — a request an estimate refused ends as that 
 		expect(h.executeOperations).not.toHaveBeenCalled()
 		expect(h.storage.has(window.id)).toBe(true)
 
-		await h.dapp.rejectInteraction(window.id, "User rejected")
+		await h.dapp.rejectInteraction(window.id, "User rejected", "reject")
+		await expect.poll(() => window.outcome.settled).toBe(true)
+		expect(window.outcome.err).toBe(refusal)
+	})
+
+	test.each(["close", "lock", "switch"] as const)("a refused request ended by a %s still ends as its refusal", async (end) => {
+		const h = await windowHarness()
+		const window = await h.open()
+		const refusal = binding()
+		h.dapp.recordRefusal(window.id, refusal)
+		await h.dapp.rejectInteraction(window.id, "User rejected", end)
 		await expect.poll(() => window.outcome.settled).toBe(true)
 		expect(window.outcome.err).toBe(refusal)
 	})
