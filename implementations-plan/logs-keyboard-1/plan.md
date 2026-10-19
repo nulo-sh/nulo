@@ -76,7 +76,7 @@ Three rules in `Popover`, for every consumer (D2): the panel sits in the Tab ord
 - Pictures, by #852's method: a scratch spec under `~/.cache/nulo-backlog/logs-keyboard-1/`, copied into `apps/extension/tests/e2e/` for the run only and removed before lint and commit; armed builds of `d0551f7a` (before) and the head (after); 400x600 at DPR 1; light and dark; Chrome and Firefox. Each panel pointer-opened, at rest and with a row hovered, clipped to its card: sha256 equal and each row's box equal. Keyboard shots (after only): Level's first row and a Source row ringed. A differing pair fails the gate: set on `filter_toggle` only the property shown to differ; never relax the comparison.
 - **Gate**: check `cat /proc/loadavg` reads a 1-minute load under 150 before each build or e2e run; build both armed bundles (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:<chrome|firefox>`); `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 [NULO_E2E_BROWSER=firefox] bun run test:e2e -- tests/e2e/viewers-csp.test.ts --retry=0` per browser, on the base build and the head. Pass: exit 0 on the head; the new scenario reds on a head build with the base `Popover.vue`; every clip and box equal; the file's wall-clock per browser, base and head, in `STATUS.md`.
 
-### Phase 4: the full gate
+### Phase 4: the full gate ✓
 
 - **Gate**: `bun run audit:vue`; `bun run test:all`; both armed builds of the final head; smoke on Chrome and Firefox for `viewers-csp` and `keyboard-guards` (Phase 3's run command); `bun run check:plans` after staging. Pass: exit 0 each; a red re-run once only for a named known flake (#849 is one on Firefox).
 
