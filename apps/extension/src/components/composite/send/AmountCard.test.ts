@@ -1029,9 +1029,10 @@ describe("composite/AmountCard — an amount over the balance", () => {
 		})
 	const line = (w: ReturnType<typeof mountCard>) => w.find("[data-testid='send-amount-over-balance']")
 
-	test("says so under the amount, as an alert the field names", () => {
+	test("says so under the amount in the danger text colour, as an alert the field names", () => {
 		const w = mountOver()
 		expect(line(w).text()).toBe("More than your balance")
+		expect(line(w).attributes("color")).toBe("txt-danger")
 		expect(line(w).attributes("role")).toBe("alert")
 		const input = w.get("[data-testid='send-amount-input']")
 		expect(input.attributes("aria-invalid")).toBe("true")

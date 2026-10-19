@@ -533,7 +533,7 @@ const handleFiatBalanceAction = (divisor) => {
 				v-if="exceedsBalance"
 				:id="overBalanceId"
 				variant="body"
-				color="red"
+				color="txt-danger"
 				role="alert"
 				:class="$style.over_balance"
 				data-testid="send-amount-over-balance"
