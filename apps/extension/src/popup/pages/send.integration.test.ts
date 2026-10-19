@@ -240,7 +240,10 @@ async function estimateLands() {
 	await flushPromises()
 }
 
-async function mountSend(funding: Funding, opts: { storage?: Record<string, unknown>; holdGas?: boolean; realTokenCard?: boolean } = {}) {
+async function mountSend(
+	funding: Funding,
+	opts: { storage?: Record<string, unknown>; holdGas?: boolean; realTokenCard?: boolean; realFeeRow?: boolean } = {},
+) {
 	vi.useFakeTimers()
 	installChromeStorage(opts.storage ?? funding.storage ?? {})
 	mocks.getFpcs.mockResolvedValue(funding.fpcs)
@@ -259,7 +262,7 @@ async function mountSend(funding: Funding, opts: { storage?: Record<string, unkn
 		attachTo: document.body,
 		global: {
 			plugins: [pinia],
-			stubs: opts.realTokenCard ? { ...STUBS, SelectTokenCard: false } : STUBS,
+			stubs: { ...STUBS, ...(opts.realTokenCard && { SelectTokenCard: false }), ...(opts.realFeeRow && { FeeCostReadout: false }) },
 		},
 	})
 	await flushPromises()
@@ -911,6 +914,28 @@ describe("send page — Confirm waits for the current input's estimate", () => {
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
 		expect(mocks.estimateTransferFee.mock.calls[0]?.[6]).toBe(6_000_000n)
 		expect(sendDisabled(w)).toBe(false)
+		w.unmount()
+	})
+
+	test("the fee row reads the same hint for an amount typed over the balance and for a landed amount the balance falls below", async () => {
+		const { w } = await mountSend(FUNDING["no gas, a sponsor"], { realFeeRow: true })
+		const row = () => w.getComponent({ name: "FeeCostReadout" })
+		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		await w.get('[data-testid="stub-amount"]').setValue("6")
+		await estimateLands()
+		expect(row().text()).toBe("Fee estimated after simulation")
+
+		await w.get('[data-testid="stub-amount"]').setValue("1.5")
+		await estimateLands()
+		expect(row().find('[data-testid="fee-estimate"]').exists()).toBe(true)
+
+		const balances = vi.mocked(TokenBalanceServiceClient).mock.results.at(-1)?.value as unknown as {
+			onTokenBalanceUpdated: EventHandler<unknown>
+		}
+		balances.onTokenBalanceUpdated.invoke({ ...BALANCE, privateBalance: "1000000", updatedAt: 2 })
+		await flushPromises()
+		expect(row().find('[data-testid="fee-estimate"]').exists()).toBe(false)
+		expect(row().text()).toBe("Fee estimated after simulation")
 		w.unmount()
 	})
 

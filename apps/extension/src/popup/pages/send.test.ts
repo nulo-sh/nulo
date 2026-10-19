@@ -696,6 +696,7 @@ describe("send page — an amount over the balance says so", () => {
 
 describe("send page — the estimate follows the amount the balance covers", () => {
 	const fee = (w: W) => w.findComponent({ name: "FeeSettingsCard" }).props("feeEstimate")
+	const estimating = (w: W) => w.findComponent({ name: "FeeSettingsCard" }).props("isEstimating")
 	const balanceShown = (w: W) => w.get('[data-testid="stub-amount"]').attributes("data-balance")
 
 	test("public side: an amount over the balance asks nothing; the balance rising to cover it asks for that amount", async () => {
@@ -732,21 +733,22 @@ describe("send page — the estimate follows the amount the balance covers", () 
 		w.unmount()
 	})
 
-	test("a balance falling below a landed amount leaves the fee; an edit clears it, and covering it again asks anew", async () => {
+	test("a balance falling below a landed amount clears the fee and stops its estimate; covering it again asks anew", async () => {
 		const { w } = await mountSend()
 		await fillForm(w)
+		const landed = mocks.estimateTransferFee.mock.calls[0]?.[8]
 
 		balanceUpdated().invoke({ ...BALANCE, privateBalance: "1000000", updatedAt: 2 })
 		await flushPromises()
-		await estimateLands()
 		expect(balanceShown(w)).toBe("1")
-		expect(mocks.cancelEstimate).not.toHaveBeenCalled()
-		expect(fee(w)).toEqual(LANDED)
+		expect(mocks.cancelEstimate).toHaveBeenCalledExactlyOnceWith(landed)
+		expect(fee(w)).toBeNull()
+		expect(estimating(w)).toBe(false)
 		expect(submit(w).attributes("disabled")).toBeDefined()
 
 		await w.get('[data-testid="stub-amount"]').setValue("1.50")
 		await estimateLands()
-		expect(fee(w)).toBeNull()
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
 
 		balanceUpdated().invoke({ ...BALANCE, privateBalance: "5000000", updatedAt: 3 })
 		await flushPromises()
@@ -754,6 +756,36 @@ describe("send page — the estimate follows the amount the balance covers", () 
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(2)
 		expect(mocks.estimateTransferFee.mock.calls[1]?.[6]).toBe(1_500_000n)
 		expect(submit(w).attributes("disabled")).toBeUndefined()
+		w.unmount()
+	})
+
+	test("an estimate running when the balance falls below its amount is stopped, and its late answer never lands", async () => {
+		let answer: (value: unknown) => void = () => {}
+		mocks.estimateTransferFee.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					answer = resolve
+				}),
+		)
+		const { w } = await mountSend()
+		await fillForm(w)
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
+		const started = mocks.estimateTransferFee.mock.calls[0]?.[8]
+		expect(estimating(w)).toBe(true)
+
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "1000000", updatedAt: 2 })
+		await flushPromises()
+		expect(mocks.cancelEstimate).toHaveBeenCalledExactlyOnceWith(started)
+		expect(estimating(w)).toBe(false)
+		answer(LANDED)
+		await flushPromises()
+		expect(fee(w)).toBeNull()
+
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "5000000", updatedAt: 3 })
+		await flushPromises()
+		await estimateLands()
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(2)
+		expect(fee(w)).toEqual(LANDED)
 		w.unmount()
 	})
 })

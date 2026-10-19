@@ -77,7 +77,7 @@ One arc, one draft PR against `dev`: #870 (P64-02 B), #863 (P64-01 B), #746 (P61
 
 **Gate**: `cd apps/extension && bun --bun vitest run src/popup/pages/send-amount.test.ts src/components/composite/send src/popup/pages/send.test.ts src/utils/copy-dash-ban.test.ts src/utils/type-role-ban.test.ts`; root `bun run lint`, `bun run typecheck:all`. Pass: exit 0; step 1's new tests red on base; the account switch's no-line step also red with D3 reverted. Layers: lint, typecheck, unit, component.
 
-### Phase 2: #863, the fee row
+### Phase 2: #863, the fee row ✓
 
 1. Tests first. In `send.test.ts`: flip `:695` to "a balance falling below a landed amount clears the fee and stops its estimate; …": after the drop `cancelEstimate` is called once with the landed estimate's token, `fee(w)` is null, the fee card's `isEstimating` is false and Send is disabled; "1.50" asks nothing; private 5 asks with `1_500_000n` and enables Send. New: an estimate whose RPC started (`estimateTransferFee` called, its answer held) when the balance drops is remote-cancelled with that call's token (`calls[0][8]`), and its answer, released after, leaves `fee(w)` null; success control: private 5 asks again and that answer lands as `fee(w)`. In `send.integration.test.ts`, a `realFeeRow` option (like `realTokenCard`: `FeeCostReadout: false`) and one test: 6 typed over private 5 reads exactly "Fee estimated after simulation"; 1.5 landed shows the fee (`fee-estimate`), then private 1 reads exactly the same hint with no `fee-estimate`.
 2. Apply D6.
