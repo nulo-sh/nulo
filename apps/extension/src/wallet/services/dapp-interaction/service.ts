@@ -291,18 +291,17 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		// with settle if it arrives first.
 		this.windowManager.detach(interactionRequest.handleId)
 		if (isDiscoveryPayload(interactionRequest.payload)) {
-			this.settleDiscovery(interactionRequest.handleId, id, result)
+			this.settleDiscovery(interactionRequest.handleId, result)
 			return
 		}
 		this.windowManager.settle(interactionRequest.handleId, result)
 	}
 
-	/** An approved connect window stays open to show the emoji check, and its id comes from the
-	 *  handle, never the page. Any other answer is a denial and closes the window. */
-	private settleDiscovery(handleId: string, id: string, result: unknown): void {
+	/** An approved connect window stays open until the connection flow closes it, and its id comes
+	 *  from the handle, never the page. Any other answer is a denial and closes the window. */
+	private settleDiscovery(handleId: string, result: unknown): void {
 		if ((result as Partial<DiscoveryResult> | null | undefined)?.approved === true) {
-			const expiredUrl = `${windowUrl("discover", id)}&expired=1`
-			this.windowManager.handOver(handleId, (windowId): DiscoveryOutcome => ({ approved: true, windowId, expiredUrl }))
+			this.windowManager.handOver(handleId, (windowId): DiscoveryOutcome => ({ approved: true, windowId }))
 			return
 		}
 		this.windowManager.settle<DiscoveryOutcome>(handleId, { approved: false })

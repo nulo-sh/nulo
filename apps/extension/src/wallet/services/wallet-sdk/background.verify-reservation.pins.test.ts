@@ -27,14 +27,10 @@ const slot = (id: string) =>
 	new WindowReservation(
 		id,
 		ORIGIN,
+		7,
 		Number.MAX_SAFE_INTEGER,
 		() => {},
 		() => false,
-		{
-			closeWindow: () => {},
-			navigateWindow: async () => {},
-			expired: () => {},
-		},
 	)
 
 vi.mock("./verify-admission", async (importOriginal) => ({
@@ -160,6 +156,7 @@ async function freshWithDuplicate(windowId?: number) {
 const request = (id: string) => ({
 	id,
 	origin: ORIGIN,
+	tabId: 7,
 	deadline: Date.now() + DISCOVERY_STALE_MS,
 	consumesToken: false,
 })

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /** Components */
 import EmojiGrid from "@/components/composite/general/EmojiGrid.vue"
-import ConnectStepBar from "../ConnectStepBar.vue"
 
 /** Vendor */
 import { onMounted, onUnmounted, watch } from "vue"
@@ -206,7 +205,6 @@ onUnmounted(() => {
 	<Flex v-if="session" direction="column" :class="$style.wrapper">
 		<!-- Identity strip: anti-phishing trust anchor. Status is always ready on verify. -->
 		<IdentityStrip v-if="header" :accountLabel="header.account" :networkLabel="header.network" :warn="header.warn" />
-		<ConnectStepBar v-if="!isReconnect" :step="2" />
 
 		<Flex direction="column" :class="$style.scroll_area">
 			<DappIdentityBlock

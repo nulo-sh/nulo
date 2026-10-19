@@ -124,8 +124,7 @@ vi.mock("@/stores/app.store", () => ({
 	}),
 }))
 
-// The page reads its request id through the mocked payload composable; the route carries only the
-// expired flag the worker sets.
+// The page reads its request id through the mocked payload composable.
 const routeMock = ref<{ query: Record<string, string> }>({ query: { requestId: "req-123" } })
 vi.mock("vue-router", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("vue-router")>()
@@ -197,7 +196,7 @@ const STUBS = {
 // Lazy import after vi.mock hoist
 import Discover from "./index.vue"
 
-// Every mount reads the one shared route: a page left mounted would react to the next test's flag.
+// Every mount shares the mocks above: a page left mounted would react to the next test's state.
 enableAutoUnmount(afterEach)
 
 const factory = () => mount(Discover, { global: { stubs: STUBS } })
@@ -459,95 +458,6 @@ describe("discover popup — the line under the app names the app's network", ()
 	})
 })
 
-describe("discover popup — a connection request that expired", () => {
-	const EXPIRED = { requestId: "req-123", expired: "1" }
-	// biome-ignore lint/suspicious/noExplicitAny: chrome runtime stub for tests
-	const windowsRemove = () => (globalThis as any).chrome.windows.remove as ReturnType<typeof vi.fn>
-	const overlays = (w: ReturnType<typeof factory>) => w.findAll('[data-testid="cancelled-overlay"]')
-
-	afterEach(() => {
-		vi.useRealTimers()
-	})
-
-	test("shows the cancelled overlay with its own line, and OK closes the window", async () => {
-		routeMock.value = { query: EXPIRED }
-		const w = factory()
-		await flushPromises()
-		expect(overlays(w).map((o) => o.attributes("data-message"))).toEqual(["Connection request expired"])
-		await w.get('[data-testid="overlay-ok"]').trigger("click")
-		expect(windowsRemove()).toHaveBeenCalledWith(42)
-	})
-
-	test("closes the window by itself after 30 seconds, not before", async () => {
-		vi.useFakeTimers()
-		routeMock.value = { query: EXPIRED }
-		factory()
-		await vi.advanceTimersByTimeAsync(29_999)
-		expect(windowsRemove()).not.toHaveBeenCalled()
-		await vi.advanceTimersByTimeAsync(1)
-		expect(windowsRemove()).toHaveBeenCalledTimes(1)
-	})
-
-	test("leaving the expired page (a lock routes the window away) closes the window at once, and the timer never fires", async () => {
-		vi.useFakeTimers()
-		routeMock.value = { query: EXPIRED }
-		factory()
-		await flushPromises()
-		routeMock.value = { query: {} }
-		await flushPromises()
-		expect(windowsRemove()).toHaveBeenCalledTimes(1)
-		await vi.advanceTimersByTimeAsync(30_000)
-		expect(windowsRemove()).toHaveBeenCalledTimes(1)
-	})
-
-	test("unmounting the expired page closes the window; unmounting a live one does not", async () => {
-		routeMock.value = { query: EXPIRED }
-		factory().unmount()
-		expect(windowsRemove()).toHaveBeenCalledTimes(1)
-		routeMock.value = { query: { requestId: "req-123" } }
-		factory().unmount()
-		expect(windowsRemove()).toHaveBeenCalledTimes(1)
-	})
-
-	test("a page loaded already expired starts no live request", async () => {
-		routeMock.value = { query: EXPIRED }
-		factory()
-		await flushPromises()
-		expect(profileServiceConnectMock).not.toHaveBeenCalled()
-		expect(getActiveProfileMock).not.toHaveBeenCalled()
-		expect(loadInteractionPayloadMock).not.toHaveBeenCalled()
-	})
-
-	test("a page waiting after Allow shows the overlay over itself when the flag arrives, and starts the close", async () => {
-		vi.useFakeTimers()
-		const w = factory()
-		await flushPromises()
-		getActiveProfilePromiseResolve?.({ id: "p1" })
-		await flushPromises()
-		loadPromiseResolve?.()
-		await flushPromises()
-		await (w.vm as unknown as { approve: () => Promise<void> }).approve()
-		await flushPromises()
-		expect(overlays(w)).toHaveLength(0)
-
-		routeMock.value = { query: EXPIRED }
-		await flushPromises()
-		expect(overlays(w).map((o) => o.attributes("data-message"))).toEqual(["Connection request expired"])
-		expect(w.find('[data-testid="discover-allow-btn"]').exists()).toBe(true)
-		expect(loadInteractionPayloadMock).toHaveBeenCalledTimes(1)
-		await vi.advanceTimersByTimeAsync(30_000)
-		expect(windowsRemove()).toHaveBeenCalledTimes(1)
-	})
-
-	test("a cancelled request on the expired page shows only the expired line", async () => {
-		routeMock.value = { query: EXPIRED }
-		isCancelledMock.value = true
-		const w = factory()
-		await flushPromises()
-		expect(overlays(w).map((o) => o.attributes("data-message"))).toEqual(["Connection request expired"])
-	})
-})
-
 describe("discover popup — the revoke line", () => {
 	test("names the settings screen that lists connections", () => {
 		const text = factory().text()
@@ -556,7 +466,7 @@ describe("discover popup — the revoke line", () => {
 	})
 })
 
-describe("discover popup — after Allow the window waits for its emoji check", () => {
+describe("discover popup — after Allow the window waits for the worker to close it", () => {
 	/** Mounted with init complete, so Allow is enabled. */
 	const ready = async () => {
 		const w = factory()
@@ -582,12 +492,28 @@ describe("discover popup — after Allow the window waits for its emoji check", 
 		expect(w.find('[data-testid="status-strip"]').attributes("data-status")).toBe("loading")
 	})
 
-	test("the connect step bar shows step 1 before Allow and while it connects", async () => {
+	test("an accepted Allow never closes the window itself, however long it waits, nor on unmount", async () => {
+		vi.useFakeTimers()
+		try {
+			const w = await ready()
+			await approve(w)
+			await flushPromises()
+			await vi.advanceTimersByTimeAsync(10 * 60_000)
+			expect(windowsRemove()).not.toHaveBeenCalled()
+			expect(w.get('[data-testid="identity-block"]').attributes("data-action")).toBe("Connecting on Devnet")
+			w.unmount()
+			expect(windowsRemove()).not.toHaveBeenCalled()
+			expect(rejectViaInteractionServiceMock).not.toHaveBeenCalled()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("Deny before Allow closes the window (control)", async () => {
 		const w = await ready()
-		expect(w.get('[data-testid="connect-step-bar"]').attributes("data-step")).toBe("1")
-		await approve(w)
+		await (w.vm as unknown as { reject: () => Promise<void> }).reject()
 		await flushPromises()
-		expect(w.get('[data-testid="connect-step-bar"]').attributes("data-step")).toBe("1")
+		expect(windowsRemove()).toHaveBeenCalledWith(42)
 	})
 
 	test("a second Allow while it connects (a repeated Enter) sends nothing and sets no error", async () => {

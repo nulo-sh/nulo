@@ -87,6 +87,9 @@ function boot(
 	}
 	const { services, rows } = fakeSdkServices(opts)
 	initWalletSdkHandler(services, (opts.logger ?? noopLogger) as never, ports)
+	// Each handshake comes from its own tab, so the one-check-per-tab cap never stands in for the
+	// origin's budget these tests measure.
+	let nextTab = 7
 	const discover = (requestId: string, over: Record<string, unknown> = {}) =>
 		captured?.onPendingDiscovery({
 			requestId,
@@ -95,7 +98,7 @@ function boot(
 			appName: "App",
 			chainInfo: { chainId: "1", version: "1" },
 			timestamp: Date.now(),
-			tabId: 7,
+			tabId: nextTab++,
 			...over,
 		})
 	/** The SDK finished key exchange for an approved request: establish it (opens the verify window if due). */

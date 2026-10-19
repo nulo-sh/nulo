@@ -939,14 +939,14 @@ describe("DappInteractionService — an approved connect window is handed to the
 		return { dapp, clock, removes, open, interaction, closeByUser }
 	}
 
-	test("an approved discovery resolves with the handle's window id and its own page marked expired, never the page's values, and the window stays open", async () => {
+	test("an approved discovery resolves with the handle's window id, never the page's values, and the window stays open", async () => {
 		const h = handOverHarness()
 		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
-		await h.dapp.resolveInteraction(w.id, { approved: true, windowId: 999, expiredUrl: "https://evil.example" } as DiscoveryResult)
+		await h.dapp.resolveInteraction(w.id, { approved: true, windowId: 999, extra: "https://evil.example" } as DiscoveryResult)
 
 		expect(w.url).toContain(`#/windows/discover?requestId=${w.id}`)
-		await expect(w.pending).resolves.toEqual({ approved: true, windowId: w.windowId, expiredUrl: `${w.url}&expired=1` })
+		await expect(w.pending).resolves.toEqual({ approved: true, windowId: w.windowId })
 		expect(w.windowId).not.toBe(999)
 		// Nothing watches the window now: its later close and the old timeout settle nothing.
 		h.closeByUser(w.windowId)

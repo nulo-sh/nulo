@@ -81,6 +81,7 @@ import {
 } from "@nulo/extension-messaging/errors"
 import type { KeyedLock } from "@nulo/wallet-core/utils"
 import { VerifyAdmissionGate } from "./verify-admission"
+import { ConnectBridge } from "./connect-bridge"
 import { type DiscoveryDeps, handleDiscovery, type PendingWindow } from "./discovery-flow"
 import { failQueuedForError, failQueuedIfUnclaimed, type QueuedFailureKind, tryCreateQueuedJournal } from "./queued-journal"
 import { chainSendTxWithVouching } from "./queued-wait-vouching"
@@ -149,7 +150,10 @@ export function initWalletSdkHandler(
 	state.late.handler = handler
 	state.late.discoveryQueue = new DiscoveryQueue(handler, logger)
 	// A verify window's slot is freed only when the window itself is gone.
-	ports.windows.onRemoved((windowId) => state.admission.windowRemoved(windowId))
+	ports.windows.onRemoved((windowId) => {
+		state.admission.windowRemoved(windowId)
+		state.bridge.windowRemoved(windowId)
+	})
 
 	serializeDecryption(handler, state.sessions.decryptLocks, logger)
 	// The wallet's decision to end a session drops its held calls before the transport is told: a
@@ -299,11 +303,8 @@ type SdkHandlerState = {
 	admission: VerifyAdmissionGate
 	/** Handshakes currently waiting on another popup for the same `(origin, chainId)`, bounded. */
 	dedupeWaiters: Map<string, number>
-	/** Request id → the connect window its Allow handed over, until `runDiscoveryPopup` settles: a
-	 *  closed tab finds it here while the Allow still waits for a slot and no marker exists. */
-	handedOver: Map<string, { tabId: number; windowId: number }>
-	/** Best effort: a window already gone rejects, and its removal is what frees anything it held. */
-	closeWindow: (windowId: number) => void
+	/** The connect windows Allows handed over, each kept until its check opens (see `connect-bridge.ts`). */
+	bridge: ConnectBridge
 	/**
 	 * Bound right after the handler is constructed, before `initialize()`
 	 * attaches any listener; callbacks read these at call time, never earlier.
@@ -313,22 +314,17 @@ type SdkHandlerState = {
 
 export function createSdkHandlerState(ports: { windows: WindowPort; clock: ClockPort }): SdkHandlerState {
 	const pendingVerification = new Map<string, PendingVerificationEntry>()
-	const closeWindow = (windowId: number) => void ports.windows.remove(windowId).catch(() => undefined)
 	return {
 		pendingVerification,
 		sessions: new SessionHolders(),
 		pendingDiscoveryPromises: new Map(),
 		admission: new VerifyAdmissionGate(ports.clock, {
-			closeWindow,
-			navigateWindow: (windowId, url) => ports.windows.navigate(windowId, url),
-			// A marker still waiting when its slot is given back, or when its reservation expires with the
-			// window kept open, is tombstoned: that id can no longer establish.
-			expired: (id) => cancelPendingVerification(pendingVerification, id),
+			// A marker still waiting when its slot is given back is tombstoned: that id can no longer establish.
 			released: (id) => cancelPendingVerification(pendingVerification, id),
 		}),
 		dedupeWaiters: new Map(),
-		handedOver: new Map(),
-		closeWindow,
+		// Best effort: a window already gone rejects, and the bridge has dropped it either way.
+		bridge: new ConnectBridge(ports.clock, (windowId) => void ports.windows.remove(windowId).catch(() => undefined)),
 		late: {},
 	}
 }
@@ -337,7 +333,7 @@ export function createSdkHandlerState(ports: { windows: WindowPort; clock: Clock
  *  safe because the SDK has already dropped the tab's discoveries, so none of their ids can
  *  establish. */
 function tearDownTabAttempts(state: SdkHandlerState, tabId: number): void {
-	for (const waiting of state.handedOver.values()) if (waiting.tabId === tabId) state.closeWindow(waiting.windowId)
+	state.bridge.endForTab(tabId)
 	for (const [id, marker] of state.pendingVerification) if (marker.tabId === tabId) state.admission.onSessionGone(id)
 	deletePendingVerificationForTab(state.pendingVerification, tabId)
 }
@@ -507,6 +503,9 @@ function buildHandlerCallbacks(
 			// Upstream calls this synchronously after posting the key-exchange response, and a message
 			// needs a round trip and a decrypt to arrive, so the hold exists before any message does.
 			const hold = state.sessions.holds.open(session.sessionId, session.verificationHash)
+			// The connect window stays until this establishment's check window exists or it fails.
+			state.bridge.pin(session.sessionId)
+			const endBridge = () => state.bridge.end(session.sessionId)
 			// Liveness and termination read this session object, not its id: an establishment paused
 			// across its own end and a same-id re-key must neither proceed on nor end the successor.
 			const live = bindLiveSession(handler, session)
@@ -531,6 +530,7 @@ function buildHandlerCallbacks(
 				(ok) => ok || hold.drop("wallet_refused"),
 				() => hold.drop("wallet_refused"),
 			)
+			void validated.then(endBridge, endBridge)
 			state.sessions.establishmentStatus.set(session.sessionId, validated)
 			return validated.then(() => undefined)
 		},
@@ -816,8 +816,7 @@ function discoveryDeps(deps: SdkDeps, state: SdkHandlerState): DiscoveryDeps {
 		resetRun: deps.resetRun,
 		admission: state.admission,
 		dedupeWaiters: state.dedupeWaiters,
-		handedOver: state.handedOver,
-		closeWindow: state.closeWindow,
+		bridge: state.bridge,
 		switchEpoch: state.late.switchEpoch!,
 		logger: deps.logger,
 	}

@@ -60,7 +60,7 @@ export interface SessionEstablishedDeps {
 	 *  the dispatch guard and the switch-teardown listener consume this. */
 	stampSessionProfile: (sessionId: string, profileId: string) => void
 	/** The port the check is shown on; a window's `onRemoved` is what frees its slot. */
-	windows: Pick<WindowPort, "create" | "remove" | "getLastFocused" | "navigate" | "update">
+	windows: Pick<WindowPort, "create" | "remove" | "getLastFocused">
 	/** The verify-window slot admission reserved for this session id; termination can free it first. */
 	reservations: { reservation(sessionId: string): WindowReservation | undefined }
 	logger: ILogger
@@ -181,7 +181,7 @@ export async function handleSessionEstablished(
 		// admission at discovery is the only place the cap is enforced, so fail closed.
 		if (!reservation) throw new Error("verify window has no reserved slot")
 		const url = verifyWindowUrl(dappSession.id, session.verificationHash, !isNewConnection)
-		await showVerifyWindow(url, session.sessionId, reservation, deps)
+		await openVerifyWindow(url, session.sessionId, reservation, deps)
 		established = true
 		return true
 	} catch (err) {
@@ -238,34 +238,6 @@ function settleCapturedMarker(
 	established: boolean,
 ): void {
 	if (marker !== undefined && markers.get(id) === marker) settlePendingVerification(markers, id, established)
-}
-
-function showVerifyWindow(url: string, sessionId: string, reservation: WindowReservation, deps: SessionEstablishedDeps): Promise<void> {
-	const standby = reservation.claimStandby()
-	return standby === undefined
-		? openVerifyWindow(url, sessionId, reservation, deps)
-		: showVerifyInConnectWindow(url, standby, reservation, deps)
-}
-
-/** Load the check in the claimed connect window. A failed navigation adopts the window before
- *  closing it, so the slot frees on its removal and never while the window still shows. */
-async function showVerifyInConnectWindow(
-	url: string,
-	windowId: number,
-	reservation: WindowReservation,
-	deps: SessionEstablishedDeps,
-): Promise<void> {
-	// The browser's rejection can carry the URL, and with it the hash and the row id: it is dropped
-	// here so no log line or error ever holds it.
-	const shown = await deps.windows.navigate(windowId, url).then(
-		() => true,
-		() => false,
-	)
-	if (reservation.adopt(windowId) === "abort" || !shown) {
-		await deps.windows.remove(windowId).catch(() => undefined)
-		throw new Error(shown ? "session ended while its verify window was loading" : "verify window could not be shown")
-	}
-	void deps.windows.update(windowId, { focused: true }).catch(() => undefined)
 }
 
 /** Open the verify window against its reservation. The slot is held from the moment `create` is
