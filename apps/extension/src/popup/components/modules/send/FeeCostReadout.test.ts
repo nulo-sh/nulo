@@ -45,18 +45,28 @@ describe("FeeCostReadout", () => {
 		expect(w.findComponent(Skeleton).attributes("style")).toBe("width: 60px; height: 12px;")
 	})
 
-	test("pending, the bar stands for any estimate or queue still on the props", async () => {
+	test("pending with an amount typed, the bar stands for any estimate or queue still on the props", async () => {
 		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }
-		const queued = factory({ pending: true, isEstimating: true, isQueued: true, queuedCap })
+		const queued = factory({ pending: true, amountTyped: true, isEstimating: true, isQueued: true, queuedCap })
 		expect(queued.text()).toBe("You pay")
 		expect(queued.findComponent(Skeleton).attributes("style")).toBe("width: 60px; height: 12px;")
 		await queued.setProps({ pending: false })
 		expect(queued.find('[data-testid="fee-estimate-queued-cap-line"]').exists()).toBe(true)
 
-		const landed = factory({ pending: true, estimate: ESTIMATE })
+		const landed = factory({ pending: true, amountTyped: true, estimate: ESTIMATE })
 		expect(landed.text()).toBe("You pay")
 		await landed.setProps({ pending: false })
 		expect(drawn(landed)).toBe("You pay ~3.577824 FJ ($0.215)")
+	})
+
+	test("pending with no amount typed, the row reads the hint, whatever estimate or queue is still on the props", async () => {
+		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }
+		const stale = factory({ pending: true, estimate: ESTIMATE, isEstimating: true, isQueued: true, queuedCap })
+		expect(stale.text()).toBe("Fee estimated after simulation")
+		expect(stale.findComponent(Skeleton).exists()).toBe(false)
+		await stale.setProps({ amountTyped: true })
+		expect(stale.text()).toBe("You pay")
+		expect(stale.findComponent(Skeleton).exists()).toBe(true)
 	})
 
 	test("estimate takes precedence over the estimating skeleton", () => {

@@ -1,21 +1,23 @@
 /**
  * The logs window's editor under `style-src` without `'unsafe-inline'`: its styles reach it in its
  * shadow root, new lines are followed, and a selection or focus inside the root holds the view where
- * it rests while lines arrive, a line that trims the log included; the toolbar's more menu opens, and
+ * it rests while lines arrive, a line that trims the log included; the toolbar's three triggers are Tab
+ * stops that Enter and Space open and Escape closes, focus back on each; the more menu opens, and
  * its Clear empties the log, which keeps taking lines. The launch's CSP recorder fails the
  * file on a blocked style. The wallet logs its own lines into the window at any time, so a test waits
  * for its own lines by a nonce, and reads a hold off where a shown line lands and off the viewer's
  * scroll-to-end button.
  */
 import { randomUUID } from "node:crypto"
-import type { Page } from "puppeteer"
+import type { KeyInput, Page } from "puppeteer"
 import { expect } from "vitest"
 import { extensionUrl, gotoExtensionPage, newPage, prepareClick } from "./fixtures/browser"
 import { readEditorStyles } from "./fixtures/code-editor"
-import { clickByTestId, type ExtensionContext, test } from "./fixtures/extension"
-import { openDropdown } from "./fixtures/helpers"
+import { type ExtensionContext, test } from "./fixtures/extension"
 import { pollUntil } from "./fixtures/poll"
 import { shotSend } from "./fixtures/send-page"
+import { pointerClick } from "./helpers/legal-drivers"
+import { focusRing, pressEscape, SPACE, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
 const HOST = "logs-editor"
 /** Under one line's height: the follow's scroll to the end, give or take CodeMirror's margin. */
@@ -425,6 +427,65 @@ async function waitForShownLine(page: Page, text: string, shown: boolean): Promi
 	)
 }
 
+const sel = (testid: string) => `[data-testid="${testid}"]`
+const OPEN_KEYS: KeyInput[] = ["Enter", SPACE]
+
+async function expectAccentRing(page: Page, testid: string): Promise<void> {
+	await waitForFocus(page, testid)
+	expect(await focusRing(page, testid)).toEqual({ ring: "solid 2px 2px", color: await tokenColor(page, "--nulo-accent") })
+}
+
+async function tabStep(page: Page, testid: string, back = false): Promise<void> {
+	if (back) await page.keyboard.down("Shift")
+	await page.keyboard.press("Tab")
+	if (back) await page.keyboard.up("Shift")
+	await expectAccentRing(page, testid)
+}
+
+async function openAndEscape(page: Page, key: KeyInput, opened: string, focusInside: () => Promise<void>): Promise<void> {
+	await page.keyboard.press(key)
+	await page.waitForSelector(sel(opened), { visible: true, timeout: 5_000 })
+	await focusInside()
+	expect(await pressEscape(page)).toBe(true)
+	await page.waitForSelector(sel(opened), { hidden: true, timeout: 5_000 })
+}
+
+test("the toolbar's Source, Level and more are Tab stops in that order, ringed, that Enter and Space open and Escape closes back onto them", async ({
+	registeredExtension: ctx,
+}) => {
+	const page = await openLogs(ctx)
+	await tabTo(page, "logs-filter-source")
+	await expectAccentRing(page, "logs-filter-source")
+	await tabStep(page, "logs-filter-level")
+	await tabStep(page, "logs-more-trigger")
+
+	// The menu's trap sets no first focus, so ArrowDown moves it in: the hand-back below is real.
+	for (const key of OPEN_KEYS) {
+		await openAndEscape(page, key, "logs-export-csv", async () => {
+			await page.keyboard.press("ArrowDown")
+			await waitForFocus(page, "logs-export-csv")
+		})
+		await expectAccentRing(page, "logs-more-trigger")
+	}
+
+	await tabStep(page, "logs-filter-level", true)
+	for (const key of OPEN_KEYS) {
+		await openAndEscape(page, key, "logs-filter-level-panel", async () => {})
+		await expectAccentRing(page, "logs-filter-level")
+	}
+
+	// Source's search field takes focus as its panel opens, so the Escape must hand it back.
+	await tabStep(page, "logs-filter-source", true)
+	for (const key of OPEN_KEYS) {
+		await openAndEscape(page, key, "logs-filter-source-panel", () => waitForFocus(page, "logs-filter-source-panel"))
+		await expectAccentRing(page, "logs-filter-source")
+	}
+
+	await tabStep(page, "logs-filter-level")
+	await shotSend(page, "logs-toolbar-focus", "logs-filter-level")
+	await page.close()
+})
+
 test("the more menu offers the CSV export and Clear logs, which empties the log and keeps it live", async ({
 	registeredExtension: ctx,
 }) => {
@@ -436,12 +497,15 @@ test("the more menu offers the CSV export and Clear logs, which empties the log 
 	await waitForShownLine(page, marker, true)
 	const line = await lineHeight(page)
 
-	await openDropdown(page, "logs-more-trigger")
-	await page.waitForSelector('[data-testid="logs-export-csv"]', { visible: true, timeout: 5_000 })
-	await page.waitForSelector('[data-testid="logs-clear"]', { visible: true, timeout: 5_000 })
+	await pointerClick(page, "logs-more-trigger")
+	await page.waitForSelector(sel("logs-export-csv"), { visible: true, timeout: 5_000 })
+	await page.waitForSelector(sel("logs-clear"), { visible: true, timeout: 5_000 })
 	await shotSend(page, "logs-more-menu", "logs-more-trigger")
 
-	await clickByTestId(page, "logs-clear")
+	await pointerClick(page, "logs-clear")
+	// The menu's trap hands focus back on a timer; a pointer's focus draws no ring.
+	await waitForFocus(page, "logs-more-trigger")
+	expect((await focusRing(page, "logs-more-trigger")).ring).toMatch(/^none /)
 	// Later lines alone can push the marker out of the rendered range. A cleared log floors at the
 	// window's height, under 100 lines.
 	await settle(page, 0, 100 * line)

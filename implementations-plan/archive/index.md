@@ -280,6 +280,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [self-pay-setup-fix](self-pay-setup-fix/plan.md) — completed — simulate and profile run as the account the dApp named
 - [send-amount-exact](send-amount-exact/plan.md) — completed — every amount path on the Send page made exact
 - [send-fee-privacy-notice](send-fee-privacy-notice/plan.md) — completed — the Send fee source follows the transfer's privacy and says so where it cannot
+- [send-fees-3](send-fees-3/plan.md) — completed — Send's fee card: the cap's refusal reads as an app's, You pay reads as it will while the read runs, a failed read's line hides under another account's read (#799, P54-02 to P54-04)
 - [send-fees-ux](send-fees-ux/plan.md) — completed — the sponsor forms' "Already added", "Refused before sending" for a capped app send, the app-set fee legend kept while estimating, a sponsored send queued behind an earlier one, and Send's fee card drawn as a skeleton while it reads balances
 - [send-fixes-1](send-fixes-1/plan.md) — completed — start finishes on a custom node that does not answer, a paused reset's imported accounts export as account files, the re-ask button reads Send (#498 #710; #112 held for the owner)
 - [send-followups-1](send-followups-1/plan.md) — completed — the queued cap from a like send (#412), a row for a long USD line (#408), the fee card without its dead override path (#406)
@@ -354,3 +355,5 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [popup-fixes-1](popup-fixes-1/plan.md) — completed — eight popup issues in two arcs: the logs menu opens and the recovery phrase button reads Reveal (#773 #770), three shipped fixes closed (#582 #584 #586), #593 a known limit; Send and Receive keyboard buttons and the ghost rows the loaded height (#626 #786, on OA-1 A and OA-2 A)
 - [store-art-2](store-art-2/plan.md) — completed — the store captures and listing screenshots regenerated after Home's fixed hero, the type scale and the Tabler glyphs (#627); held for the owner's signature of the new set (OA-1, OA-2)
 - [ui-dedupe-2](ui-dedupe-2/plan.md) — completed — the five list rules on Home's, the held Holdings row with them (#839); a dropped backup export stops before its keys (#840)
+- [ui-polish-4](ui-polish-4/plan.md) — completed — the logs toolbar on native buttons with Escape handing focus back, its menu items in one role, the recovery Close on the design button's look, Holdings' error line without a false total (#810 #823 #831 #825)
+- [copy-polish-1](copy-polish-1/plan.md) — completed — the failed token preview's warning points at Reject and sits left-aligned, fixed at the card's layout rule with the opaque authorization warning (#803); the restore warning's account-file clause (#746 OA-2)

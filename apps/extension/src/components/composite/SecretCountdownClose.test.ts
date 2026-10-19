@@ -1,6 +1,7 @@
 import { Button as ButtonBase } from "@nulo/design"
 import { describe, expect, test } from "vitest"
 import { mount } from "@vue/test-utils"
+import Button from "@/components/ui/Button.vue"
 import SecretCountdownClose from "./SecretCountdownClose.vue"
 
 const STUBS = {
@@ -77,12 +78,14 @@ describe("composite/SecretCountdownClose", () => {
 		expect(w.emitted("disableAutoClose")).toHaveLength(1)
 	})
 
-	test("the Close is the design Button's outline CTA, its overrides on the same <button>", () => {
+	test("the Close is the design Button's outline CTA with no look of its own", () => {
 		const w = factory({ countdownLabel: "1:30" })
 		const close = w.getComponent(ButtonBase)
 		expect(close.props("variant")).toBe("cta_outline")
 		expect(close.element).toBe(w.get('[data-testid="close-btn"]').element)
 		expect(close.element.tagName).toBe("BUTTON")
-		expect(close.classes().some((c) => c.includes("countdown_cta"))).toBe(true)
+		expect(close.find("button > div").exists()).toBe(true)
+		const bare = mount(Button, { props: { variant: "cta_outline" } })
+		expect([...close.classes()].sort()).toEqual([...bare.classes()].sort())
 	})
 })

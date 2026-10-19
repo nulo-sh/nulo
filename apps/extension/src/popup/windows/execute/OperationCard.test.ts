@@ -131,3 +131,23 @@ describe("windows/execute/OperationCard — action rows", () => {
 		expect(sent.find("[data-testid='execute-grant-args']").exists()).toBe(true)
 	})
 })
+
+describe("windows/execute/OperationCard — a token add", () => {
+	test("a token whose details cannot be read points the person at Reject, since Confirm stays off", () => {
+		const token = `0x${"0c".repeat(32)}`
+		const w = mount(OperationCard, {
+			props: {
+				op: { kind: "register_token", account: { name: "Owner", address: "0xacct" }, address: token } as never,
+				index: 0,
+				tokenMetadataError: "read failed",
+			},
+			global: { stubs },
+		})
+		const lines = w.get("[data-testid='register-token-meta-error']").element.parentElement?.children ?? []
+		expect([...lines].map((line) => line.textContent?.trim())).toEqual([
+			"Couldn't resolve token metadata",
+			"Reject this request and ask the app to add the token again.",
+		])
+		expect(w.get("[data-testid='register-token-address']").attributes("data-address")).toBe(token)
+	})
+})
