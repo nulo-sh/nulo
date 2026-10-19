@@ -1,7 +1,7 @@
 ---
 plan: log-warn-contrast-1
 tier: light
-status: planned, Codex approve
+status: completed (delivered as #899)
 issues: "#887 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -12,6 +12,20 @@ eli5_mode: skipped (orchestrator-owned)
 base: dev @ 24399338
 standard: implementations-plan/README.md § Post-implementation standard, read at 24399338
 ---
+
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** delivered as one ready PR against `dev`, #899, which carries this close-out; its merge closes the plan.
+- **Shipped:** the light `--log-warn-color` refers to `--txt-warning`: the logs window's WARN lines read 5.42:1 on their tint in Chrome (2.91 before); dark keeps #a99d5e at 5.05:1. The log line gate in `theme-contrast.test.ts` iterates a literal ERROR and WARN table in both themes, red only on the light WARN pair before the change; the `base.css` pin takes the new hash. Four before and after pictures under `screenshots/`. Closes #887.
+- **Review loop:** the plan took Codex and Opus conditional approves, then a Codex approve; the arc's diff took Codex clean and Opus findings 1 (the after pictures uncommitted, fixed) at round 1.
+- **Gates at the head:** `audit:vue` and `test:all` 0 at `16eb32dc`; `viewers-csp.test.ts` 8/8 on Chrome at retry 0; after merging `origin/dev` at `656ac563` (no file in common): lint, `typecheck:all` and `check:plans` 0; `test:all` 0 on its rerun (the first run timed out three static source scans at 5 s under host load, green alone); CI green on `16eb32dc`, all five e2e aggregators included.
+- **Deviations:** the base moved from `24399338` to `ab5442d7` before the arc (#891, #882), then took `656ac563` (#892, #894); none touches `packages/design` or the viewer.
+- **Dropped:** a README clause (D3); a committed e2e scenario (D4).
+- **Known limits:** #900 (selected text sits on `::selection`, 4.09:1 under the light shade, D6), #901 (a level token inside an INFO entry's message colours the entry, D7).
+- **Open items:** none.
+- **Lessons:** none promoted (`lessons.md` sits at its 8 KiB budget); the reading's traps are in [lessons/phase-0.md](lessons/phase-0.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # log-warn-contrast-1: the log viewer's WARN lines in an AA amber
 
