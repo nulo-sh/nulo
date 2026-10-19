@@ -248,7 +248,7 @@ onUnmounted(() => {
 					They match
 				</Button>
 			</Flex>
-			<Text v-if="refusalError" variant="body" color="red" role="alert" data-testid="verify-mismatch-error">
+			<Text v-if="refusalError" variant="body" color="txt-danger" role="alert" data-testid="verify-mismatch-error">
 				{{
 					refusalError === "unremoved"
 						? "The connection ended, but this app could not be removed. Remove it in Settings, Connected apps."
