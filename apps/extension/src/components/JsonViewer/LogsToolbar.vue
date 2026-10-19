@@ -73,11 +73,13 @@ const filteredKeys = (kind, filters, search) => {
 						/>
 					</Flex>
 
+					<!-- Its rows take focus and scroll into view, so the scroll box is no Tab stop (Firefox's would be). -->
 					<Flex
 						align="start"
 						direction="column"
 						gap="4"
 						:class="kind === 'source' && $style.filter_items_wrapper"
+						:tabindex="kind === 'source' ? -1 : undefined"
 					>
 						<Flex
 							v-if="!searchTerm"

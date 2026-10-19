@@ -150,6 +150,8 @@ describe("LogsToolbar — the filter rows", () => {
 		expect(pressed("logs-filter-level-all")).toBe("true")
 		expect(pressed("logs-filter-level-item-DEBUG")).toBe("true")
 		expect(pressed("logs-filter-level-item-ERROR")).toBe("false")
+		const sourceList = w.get('[data-testid="logs-filter-source-all"]').element.parentElement
+		expect(sourceList?.getAttribute("tabindex")).toBe("-1")
 	})
 
 	test("a click on a row or Select All emits its toggle", async () => {

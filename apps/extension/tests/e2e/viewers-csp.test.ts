@@ -531,10 +531,12 @@ test("each filter row is a ringed Tab stop that Space and Enter toggle, and Tab 
 	await tabStep(page, "logs-filter-source-item-pxe-client", false, INSET)
 	await tabStep(page, "logs-filter-level")
 	await panelGone(page, "source")
-	// The close cleared the search, so the reopened panel lists Select All again.
+	// The close cleared the search, so Select All is back, and Tab from the field reaches it
+	// with no stop between.
 	await tabStep(page, "logs-filter-source", true)
 	await page.keyboard.press("Enter")
-	await page.waitForSelector(sel("logs-filter-source-all"), { visible: true, timeout: 5_000 })
+	await waitForFocus(page, "logs-filter-source-panel")
+	await tabStep(page, "logs-filter-source-all", false, INSET)
 	expect(await pressEscape(page)).toBe(true)
 	await panelGone(page, "source")
 
