@@ -14,15 +14,14 @@
  * reaper handles non-terminal stuck records; the two paths never touch the
  * same record set.
  *
- * **Eviction policy**: only `succeeded` records
- * are evictable. Failed and cancelled records have NO on-chain truth
- * elsewhere — they exist only in this journal, so losing them is real
- * data loss for the user. Succeeded records correspond to confirmed
- * on-chain transactions; their history is re-derivable from PXE + the
- * tx hash, so capping them keeps storage bounded without losing
- * irretrievable state. Failed/cancelled records still count toward the
- * group when grouping by scope, but are skipped during the eviction-
- * candidate selection.
+ * **Eviction policy**: two classes are evictable, each under its own cap, so
+ * neither pushes the other out. `succeeded` records correspond to confirmed
+ * on-chain transactions; their history is re-derivable from PXE + the tx
+ * hash. A request the wallet refused before sending it (a refusal kind on a
+ * record `wasNeverSent` holds for) records only that refusal, and an app
+ * files them at its own pace. Every other failed or cancelled record has NO on-chain truth
+ * elsewhere, so it is never evicted, and neither is any record that carries
+ * a transaction hash without having succeeded.
  *
  * `accountAddress`-less terminal records (a failed token-import before the
  * account scope was set, for instance) cluster under a synthetic
@@ -34,7 +33,7 @@ import { AlarmDispatcher } from "@nulo/wallet-core/utils"
 import { LogLevel } from "@nulo/wallet-core/logger"
 import type { ILogger } from "@/wallet/logger"
 import type { OperationJournalService } from "./service"
-import { OPERATION_JOURNAL_SERVICE_NAME } from "./spec"
+import { OPERATION_JOURNAL_SERVICE_NAME, wasNeverSent } from "./spec"
 
 export const JOURNAL_GC_ALARM_NAME = "nulo:journal:gc"
 
@@ -42,7 +41,7 @@ export const JOURNAL_GC_ALARM_NAME = "nulo:journal:gc"
  *  reaper's 1-min cadence. */
 export const JOURNAL_GC_PERIOD_MINUTES = 60
 
-/** Per-(profile, accountAddress) terminal-record cap. 10× the home-tab UI
+/** Per-(profile, accountAddress) cap for each evictable class. 10× the home-tab UI
  *  budget; ample headroom for "I want to scroll back" while still bounding
  *  session storage. */
 export const DEFAULT_TERMINAL_CAP_PER_SCOPE = 50
@@ -51,6 +50,22 @@ const LOG_SOURCE = OPERATION_JOURNAL_SERVICE_NAME
 
 /** Synthetic key for the "no account address" bucket. */
 const NO_ACCOUNT = "<no-account>"
+
+/** The kinds of a request refused before anything was signed or sent. */
+const REFUSED_BEFORE_SENDING: ReadonlySet<string> = new Set([
+	"scope_refused",
+	"registry_refused",
+	"malformed_request",
+	"terms_refused",
+	"wallet_refused",
+	"too_many_pending",
+])
+
+type TerminalRecord = Awaited<ReturnType<OperationJournalService["getOperations"]>>[number]
+
+const isSucceeded = (op: TerminalRecord): boolean => op.progress?.stage === "succeeded"
+
+const isRefusedBeforeSending = (op: TerminalRecord): boolean => wasNeverSent(op) && REFUSED_BEFORE_SENDING.has(op.error?.kind ?? "")
 
 /**
  * Watches the operation journal for terminal records that exceed the
@@ -125,24 +140,28 @@ export class JournalGC {
 
 		let evicted = 0
 		for (const [key, bucket] of groups) {
-			// Only `succeeded` records are evictable. Failed/cancelled exist
-			// only here; losing them is real data loss.
-			const evictable = bucket.filter((op) => op.progress?.stage === "succeeded")
-			if (evictable.length <= this.capPerScope) continue
-			// Newest first; entries beyond the cap are the oldest by terminalAt.
-			evictable.sort((a, b) => (b.terminalAt ?? 0) - (a.terminalAt ?? 0))
-			for (const victim of evictable.slice(this.capPerScope)) {
-				try {
-					await this.journal.deleteOperation(victim.id)
-					evicted++
-				} catch (err) {
-					this.logger.log(LOG_SOURCE, LogLevel.Debug, `evict skipped ${victim.id} (group=${key})`, err)
-				}
-			}
+			evicted += await this.evictBeyondCap(key, bucket.filter(isSucceeded))
+			evicted += await this.evictBeyondCap(key, bucket.filter(isRefusedBeforeSending))
 		}
 
 		if (evicted > 0) {
 			this.logger.log(LOG_SOURCE, LogLevel.Info, `evicted ${evicted} terminal record(s); cap=${this.capPerScope}/scope`)
 		}
+	}
+
+	/** Deletes the oldest of `evictable` by `terminalAt` past the cap; returns how many went. */
+	private async evictBeyondCap(key: string, evictable: TerminalRecord[]): Promise<number> {
+		if (evictable.length <= this.capPerScope) return 0
+		evictable.sort((a, b) => (b.terminalAt ?? 0) - (a.terminalAt ?? 0))
+		let evicted = 0
+		for (const victim of evictable.slice(this.capPerScope)) {
+			try {
+				await this.journal.deleteOperation(victim.id)
+				evicted++
+			} catch (err) {
+				this.logger.log(LOG_SOURCE, LogLevel.Debug, `evict skipped ${victim.id} (group=${key})`, err)
+			}
+		}
+		return evicted
 	}
 }
