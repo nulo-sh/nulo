@@ -130,7 +130,7 @@ A scratch spec in `~/.cache/nulo-backlog/execute-window-3/`, from the shots-776 
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `993b3efc`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `993b3efc`. Specific here:
 - Step 1 is absent. Step 2 runs once over the arc's diff from its merge base with `origin/dev`, after Phase 2: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus 5.5 diff review (`general-purpose`) beside round 1; prompts under `~/.cache/nulo-backlog/execute-window-3/`; hard stop at three rounds; rounds in `lessons/phase-2.md` and the table below.
 - Approval boundary (a plan change; stop): any copy change, moving the fallback or the one-call advice, a new `.vue` file or window-level coordinator, a refusal concept in the fee-raised window, any advice on a refused request.
 - Close-out in the PR's final commits: Outcome; lessons promoted only within the 8 KiB budget; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. Teardown after the merge: `agent-worktree done execute-window-3 --merged`; trunk `dev`; `implementations-plan/archive/execute-window-3/plan.md`.
