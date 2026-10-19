@@ -5,6 +5,7 @@ import { proofs } from "./proofs"
 
 /** Just the DOM surface the drawing kit uses, so every scene can be built and swept in Node. */
 class FakeNode {
+	constructor(readonly tag = "") {}
 	readonly attrs = new Map<string, string>()
 	readonly children: FakeNode[] = []
 	textContent = ""
@@ -20,8 +21,26 @@ const snapshot = (node: FakeNode): string => `${[...node.attrs].join(";")}|${nod
 
 const STEP = 0.1
 
+/** Advance per character of each mono label face the stage sets: the font's 0.6 em, plus `c-eb`'s 0.12 em tracking. */
+const ADVANCE: Readonly<Record<string, number>> = { "c-num": 26 * 0.6, "c-mono": 20 * 0.6, "c-eb": 20 * 0.72 }
+
+/** Every mono label drawn directly on a plate or chip that runs past its right border. */
+function overruns(node: FakeNode): string[] {
+	const box = node.children.find((c) => c.tag === "rect" && /\bc-(plate|chip)\b/.test(c.attrs.get("class") ?? "") && !c.attrs.has("x"))
+	const width = Number(box?.attrs.get("width"))
+	const own = box
+		? node.children.flatMap((label) => {
+				const advance = ADVANCE[(label.attrs.get("class") ?? "").split(" ")[0] ?? ""]
+				if (label.tag !== "text" || advance === undefined) return []
+				const end = Number(label.attrs.get("x")) + [...label.textContent].length * advance
+				return end <= width ? [] : [`"${label.textContent}" ends at ${end.toFixed(1)} on a ${width}-wide plate`]
+			})
+		: []
+	return [...own, ...node.children.flatMap(overruns)]
+}
+
 beforeAll(() => {
-	vi.stubGlobal("document", { createElementNS: () => new FakeNode() })
+	vi.stubGlobal("document", { createElementNS: (_: string, tag: string) => new FakeNode(tag) })
 })
 
 describe("scenes", () => {
@@ -47,5 +66,14 @@ describe("scenes", () => {
 			const own = times.filter((t) => t >= span.start && t < span.end).map((t) => forward[times.indexOf(t)])
 			expect(own[0], `${clip.id} ${span.id} moves`).not.toBe(own.at(-1))
 		}
+	})
+
+	it.each([privateBalances, proofs, fees])("$id keeps every label inside the plate it is drawn on", (clip) => {
+		const labels = clip.timings.scenes.flatMap((span) => {
+			const g = new FakeNode()
+			clip.scenes[span.id]?.mount(g as unknown as SVGGElement, clip.timings, span)
+			return overruns(g)
+		})
+		expect(labels).toEqual([])
 	})
 })

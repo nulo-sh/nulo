@@ -108,7 +108,7 @@ const checked = scene(
 
 const inPublic = scene({ anything: ["anything", 0], open: ["open", 0], everyone: ["everyone", 0] }, (g, at) => {
 	const { net } = setting(g)
-	const packet = note(g, "40.00 USDC", 168)
+	const packet = note(g, "40.00 USDC", 184)
 	const line = entry(net.g, 76, "PUBLIC", "40.00 USDC", 212)
 	const eyes = [0, 1, 2].map((i) => glyph(g, "eye", 420 + i * 56, 6, 32, "c-dim"))
 	return (t) => {
