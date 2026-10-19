@@ -1033,38 +1033,45 @@ describe("TokensView — the token-import rows' events and reads", () => {
 		expect(importRows().map((op) => op.id)).toEqual(["b", "c"])
 	})
 
-	test("(BUG PIN) an add for a listed import lists it again, and its end reaches only the first copy", async () => {
+	test("an add for a listed import replaces it where it is, and its end reaches the one row", async () => {
 		// A read can answer with a record whose add the worker has not delivered yet.
-		H.getOperations.mockResolvedValue([imp("a")])
+		H.getOperations.mockResolvedValue([imp("a"), imp("b")])
 		wrapper = mount(TokensView, { shallow: true })
 		await flushPromises()
-		H.journalAdded.emit(imp("a"))
+		H.journalAdded.emit(imp("a", { progress: { stage: "simulating" } }))
 		await nextTick()
-		expect(importRows().map((op) => op.id)).toEqual(["a", "a"])
+		expect(importRows().map((op) => [op.id, op.progress.stage])).toEqual([
+			["a", "simulating"],
+			["b", "pending"],
+		])
 
 		H.journalUpdated.emit(imp("a", { terminalAt: 2, progress: { stage: "succeeded" } }))
 		await nextTick()
-		expect(importRows().map((op) => [op.id, op.progress.stage])).toEqual([["a", "pending"]])
+		expect(importRows().map((op) => op.id)).toEqual(["b"])
 	})
 
-	test("a reconnect reads again, and its refused read keeps what the mount's read listed", async () => {
-		const mountRead = deferred<unknown[]>()
-		const reconnectRead = deferred<unknown[]>()
-		H.getOperations.mockReturnValueOnce(mountRead.promise).mockReturnValueOnce(reconnectRead.promise)
-		wrapper = mount(TokensView, { shallow: true })
-		await flushPromises()
-		H.journalConnected.emit()
-		mountRead.resolve([imp("a")])
-		await flushPromises()
-		expect(importRows().map((op) => op.id)).toEqual(["a"])
+	test("a reconnect's read supersedes the mount's, and a refused one is read again after 2 s", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		try {
+			const mountRead = deferred<unknown[]>()
+			const reconnectRead = deferred<unknown[]>()
+			H.getOperations.mockReturnValueOnce(mountRead.promise).mockReturnValueOnce(reconnectRead.promise)
+			wrapper = mount(TokensView, { shallow: true })
+			await flushPromises()
+			H.journalConnected.emit()
+			mountRead.resolve([imp("a")])
+			await flushPromises()
+			expect(importRows()).toEqual([])
 
-		reconnectRead.reject(new Error("port closed"))
-		await flushPromises()
-		expect(importRows().map((op) => op.id)).toEqual(["a"])
+			reconnectRead.reject(new Error("port closed"))
+			await flushPromises()
+			expect(importRows()).toEqual([])
 
-		H.getOperations.mockResolvedValueOnce([imp("a"), imp("b")])
-		H.journalConnected.emit()
-		await flushPromises()
-		expect(importRows().map((op) => op.id)).toEqual(["a", "b"])
+			H.getOperations.mockResolvedValueOnce([imp("a"), imp("b")])
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(importRows().map((op) => op.id)).toEqual(["a", "b"])
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })

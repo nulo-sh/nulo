@@ -7,20 +7,15 @@ const ids = (rows: { id: string }[]) => rows.map((r) => r.id)
 describe("journalAdded", () => {
 	test("at the front, a new row leads and a listed id moves to the front as received", () => {
 		const rows = [row("a"), row("b")]
-		expect(ids(journalAdded(rows, row("c"), { place: "front" }))).toEqual(["c", "a", "b"])
-		const moved = journalAdded(rows, row("b", 1), { place: "front" })
+		expect(ids(journalAdded(rows, row("c"), "front"))).toEqual(["c", "a", "b"])
+		const moved = journalAdded(rows, row("b", 1), "front")
 		expect(moved).toEqual([row("b", 1), row("a")])
 	})
 
 	test("at the back, a new row trails and a listed id is replaced where it is", () => {
 		const rows = [row("a"), row("b"), row("c")]
-		expect(ids(journalAdded(rows, row("d"), { place: "back" }))).toEqual(["a", "b", "c", "d"])
-		expect(journalAdded(rows, row("b", 1), { place: "back" })).toEqual([row("a"), row("b", 1), row("c")])
-	})
-
-	test("appending lists every add, a listed id again", () => {
-		const rows = [row("a")]
-		expect(journalAdded(rows, row("a", 1), { place: "back", appendAdded: true })).toEqual([row("a"), row("a", 1)])
+		expect(ids(journalAdded(rows, row("d"), "back"))).toEqual(["a", "b", "c", "d"])
+		expect(journalAdded(rows, row("b", 1), "back")).toEqual([row("a"), row("b", 1), row("c")])
 	})
 })
 
@@ -51,9 +46,8 @@ describe("journalDeleted", () => {
 
 test("no reducer writes into the array it was given", () => {
 	const rows = Object.freeze([row("a"), row("b")])
-	journalAdded(rows, row("c"), { place: "front" })
-	journalAdded(rows, row("b", 1), { place: "back" })
-	journalAdded(rows, row("b", 1), { place: "back", appendAdded: true })
+	journalAdded(rows, row("c"), "front")
+	journalAdded(rows, row("b", 1), "back")
 	journalUpdated(rows, row("a", 1), "front")
 	journalDeleted(rows, row("a"))
 	expect(rows).toEqual([row("a"), row("b")])

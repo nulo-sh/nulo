@@ -65,8 +65,6 @@ const {
 	read: () => journalService.getOperations({ kind: TOKENS_VIEW_KIND }),
 	accept: (op) => op.kind === TOKENS_VIEW_KIND,
 	place: "back",
-	appendAdded: true,
-	supersede: false,
 })
 // 5s tick is a generous fraction of the 30s retention window — the failed
 // row visibly disappears even if no new journal event fires.
@@ -240,7 +238,7 @@ async function fetchTokenImports() {
 	try {
 		await resnapshotImports()
 	} catch {
-		// Reconnect may race the port — next event or the next reconnect retries.
+		// The mirror reads again on this run.
 	}
 }
 
@@ -403,11 +401,11 @@ onBeforeUnmount(() => {
 			</template>
 			<template v-if="showGhostRows">
 				<div v-for="n in GHOST_ROWS" :key="n" data-testid="tokens-skeleton-row" aria-hidden="true" :class="$style.ghost_row">
-					<Flex direction="column" gap="5">
+					<Flex direction="column" gap="2">
 						<Skeleton :width="52" :height="14" />
 						<Skeleton :width="84" :height="11" />
 					</Flex>
-					<Flex direction="column" align="end" gap="5">
+					<Flex direction="column" align="end" justify="center" gap="2" :class="$style.loading_block">
 						<Skeleton :width="64" :height="13" />
 						<Skeleton :width="92" :height="11" />
 					</Flex>
@@ -494,6 +492,10 @@ onBeforeUnmount(() => {
 
 	min-height: 32px;
 	padding: 8px 0;
+}
+
+.loading_block {
+	composes: loading_block from "./token-row.module.css";
 }
 
 .empty_state {
