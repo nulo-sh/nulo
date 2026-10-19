@@ -14,6 +14,8 @@ const props = defineProps({
 	queuedCap: { type: Object, default: null },
 	/** The card is still reading what can pay: an estimate or queue on the other props is stale. */
 	pending: { type: Boolean, default: false },
+	/** Send's amount field holds an amount. While `pending`, You pay draws a bar only then. */
+	amountTyped: { type: Boolean, default: false },
 })
 
 const estimating = computed(() => props.isEstimating && !props.estimate && !props.pending)
@@ -57,11 +59,11 @@ const sponsoredSentence = computed(() => {
 		<span :class="$style.fee_label">You pay</span>
 		<span :class="$style.queued">{{ QUEUED_FEE_COPY }}</span>
 	</Flex>
-	<Flex v-else-if="estimating || pending" direction="column" gap="4" :class="$style.detail_row">
+	<Flex v-else-if="estimating || (pending && amountTyped)" direction="column" gap="4" :class="$style.detail_row">
 		<span :class="$style.fee_label">You pay</span>
 		<span :class="$style.fee_value"><Skeleton /></span>
 	</Flex>
-	<Flex v-else-if="estimate" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate">
+	<Flex v-else-if="estimate && !pending" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate">
 		<span :class="$style.fee_label" :aria-hidden="payer === 'sponsor' ? 'true' : undefined">You pay</span>
 		<span v-if="payer === 'sponsor'" :class="$style.fee_value">
 			<span aria-hidden="true">

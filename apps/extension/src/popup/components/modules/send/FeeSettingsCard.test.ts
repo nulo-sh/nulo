@@ -127,8 +127,9 @@ const STUBS = {
 	},
 	FeeMethodRow: { props: ["pending"], template: '<div data-testid="fee-method-row" :data-pending="String(pending)" />' },
 	FeeCostReadout: {
-		props: ["estimate", "isEstimating", "payer", "pending"],
-		template: '<div data-testid="fee-cost-readout" :data-payer="payer" :data-pending="String(pending)" />',
+		props: ["estimate", "isEstimating", "payer", "pending", "amountTyped"],
+		template:
+			'<div data-testid="fee-cost-readout" :data-payer="payer" :data-pending="String(pending)" :data-amount-typed="String(amountTyped)" />',
 	},
 	FeePriorityRow: {
 		props: ["modelValue"],
@@ -2285,6 +2286,19 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			expect(everEmittedSettings(w)).toEqual([{ paymentMethod: { kind: "fpc", fpcId: "p1" }, priorityLevel: "fast" }])
 			expect(payers().at(-1)).toEqual({ type: "private_fpc", fpcId: "p1", isProtocol: true })
 			expect(pendingOf(w)).toEqual(["false", "false", "false"])
+		})
+
+		test("the readout hears whether Send's amount field holds an amount while the read runs", async () => {
+			const gas = deferred<unknown>()
+			mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
+			mocks.getGasBalances.mockReturnValue(gas.promise)
+			const w = mountSend()
+			const readout = () => w.get('[data-testid="fee-cost-readout"]')
+			expect([readout().attributes("data-pending"), readout().attributes("data-amount-typed")]).toEqual(["true", "false"])
+			await w.setProps({ amountTyped: true })
+			expect(readout().attributes("data-amount-typed")).toBe("true")
+			gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: HELD })
+			await flushPromises()
 		})
 
 		test("a read that holds or an init that throws leaves no bar: the trigger asks for a method", async () => {

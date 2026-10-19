@@ -73,6 +73,8 @@ const props = defineProps({
 	fallsBack: { type: Boolean, default: false },
 	/** `{ basis, cap }` in base units while the page offers to queue the send against a cap. */
 	queuedCap: { type: Object, default: null },
+	/** Send's amount field holds an amount; read only while the card reads what can pay. */
+	amountTyped: { type: Boolean, default: false },
 })
 
 const settings = defineModel()
@@ -465,6 +467,7 @@ onBeforeUnmount(() => {
 		<FeeCostReadout
 			v-if="showsCostRows"
 			:pending="readPending"
+			:amountTyped="amountTyped"
 			:estimate="estimatedFeeDisplay"
 			:isEstimating="isEstimating"
 			:isQueued="isQueued"
