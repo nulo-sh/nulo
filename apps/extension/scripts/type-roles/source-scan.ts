@@ -45,7 +45,7 @@ export const PACKAGE_SRC_ROOTS = workspaceSrcRoots("packages")
 /** compiler-core's `NodeTypes`, which compiler-sfc does not re-export. */
 export const NODE = { ELEMENT: 1, TEXT: 2, INTERPOLATION: 5, ATTRIBUTE: 6, DIRECTIVE: 7 } as const
 
-export type Position = { line: number }
+export type Position = { line: number; offset: number }
 export type Expression = { content: string; loc: { start: Position; source: string } }
 export type TemplateProp = {
 	type: number
@@ -65,7 +65,8 @@ export type TemplateNode = {
 }
 
 export type StyleSheet = { root: Root; module: boolean; lang: "css" | "scss"; startLine: number }
-export type ScriptBlock = { content: string; startLine: number }
+/** `startOffset` is the content's offset in the file, as `startLine` is its line. */
+export type ScriptBlock = { content: string; startLine: number; startOffset: number }
 export type ParsedSource = {
 	/** Repo-relative, `/`-separated. */
 	file: string
@@ -125,7 +126,7 @@ function parseVue(file: string, source: string): ParsedSource {
 	const { descriptor } = parseSfc(source, { filename: file, sourceMap: false })
 	const scripts = [descriptor.script, descriptor.scriptSetup]
 		.filter((block) => block !== null)
-		.map((block) => ({ content: block.content, startLine: block.loc.start.line }))
+		.map((block) => ({ content: block.content, startLine: block.loc.start.line, startOffset: block.loc.start.offset }))
 	const styles = descriptor.styles.map((block) => ({
 		root: parseCss(block.content, file),
 		module: Boolean(block.module),
@@ -149,7 +150,7 @@ export function parseSource(file: string, source = readFileSync(join(REPO_ROOT, 
 			styles: [{ root: parseCss(source, file), module: file.endsWith(".module.css"), lang: "css", startLine: 1 }],
 		}
 	}
-	return { file, scripts: [{ content: source, startLine: 1 }], styles: [] }
+	return { file, scripts: [{ content: source, startLine: 1, startOffset: 0 }], styles: [] }
 }
 
 /** `text` with every regular-expression metacharacter escaped, so it matches only itself. */
