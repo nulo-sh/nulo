@@ -24,6 +24,7 @@ import { carriesFeeSettings, isSelfPay } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
 import { type FeePayerPick, personPaysAppPayment, waitsForFeeFigure } from "./fee-figure"
 import { authwitDisplayCall, grantContentsOf, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
+import { REFUSAL_REASON, REFUSAL_TITLE, type RefusalKind, refusalKind } from "./refusal"
 import { grantRefusalRow, readableGrants } from "./call-surface"
 import { decodeOperationArguments, followKnownTokens, resolveOperations } from "./operation-display"
 import type { DraftUIOperation } from "./types"
@@ -167,13 +168,23 @@ const {
 	},
 	debounceMs: 500,
 	onError: (key, err) => {
+		if (holdRefusal(err)) return
 		console.error(`[Execute] Fee estimation failed for op ${key}:`, err)
-		// An app-paid operation's estimate only checks the app's fee contract; a failed check is unknown,
-		// never a refusal. A payment the person makes all the same keeps Confirm waiting on a retry.
+		// An app-paid operation's estimate only checks the app's fee contract, so its other failures are
+		// unknown, never a verdict. A payment the person makes all the same keeps Confirm waiting on a retry.
 		const op = operations.value[key] as unknown as UIOperation
 		if (!isAppPaid(op) || personPaysAppPayment(op)) openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
 	},
 })
+
+/** The wallet's refusal of the request, met by an estimate, a preview or an approval. The worker keeps
+ *  it too, so it never clears: Reject is the one way on, and it answers the dApp with the refusal. */
+const refusal = ref<RefusalKind | undefined>()
+const holdRefusal = (error: unknown): boolean => {
+	const kind = refusalKind(error)
+	if (kind) refusal.value ??= kind
+	return kind !== undefined
+}
 
 /** A send whose fee the app pays through its own payload. */
 const isAppPaid = (op: UIOperation | undefined): boolean => carriesFeeSettings(op) && isEmbeddedFeePayment(op)
@@ -215,6 +226,7 @@ const {
 	},
 	debounceMs: 0,
 	onError: (key, err) => {
+		if (holdRefusal(err)) return
 		console.error(`[Execute] Authorization preview failed for op ${key}:`, err)
 		openToast({ kind: "error", label: "Couldn't preview authorizations. Try again." })
 	},
@@ -416,7 +428,7 @@ const approve = async () => {
 		return
 	}
 	if (payerShort.value || awaitsFeeFigure.value) return
-	if (grantsPending.value || grantRefusal.value) return
+	if (grantsPending.value || grantRefusal.value || refusal.value) return
 	try {
 		isLoading.value = true
 		// Ownership handoff: approval transfers the estimates and previews to the
@@ -449,17 +461,21 @@ const approve = async () => {
 		// reject/unmount can still cancel + evict the handed-off estimates.
 		rearmFeeEstimates()
 		rearmAuthwitPreviews()
-		if (error instanceof JobCancelledError) {
-			// A raced approve refused service-side (the dApp cancelled first):
-			// the refusal IS the cancelled state — render the overlay, never an
-			// error banner. Covers the case where the cancel broadcast itself
-			// was lost to this popup.
-			isInteractionCancelled.value = true
-		} else {
-			setError("Processing error.", getErrorMessage(error))
-		}
+		showApprovalFailure(error)
 	} finally {
 		isLoading.value = false
+	}
+}
+
+const showApprovalFailure = (error: unknown) => {
+	if (error instanceof JobCancelledError) {
+		// A raced approve refused service-side (the dApp cancelled first):
+		// the refusal IS the cancelled state — render the overlay, never an
+		// error banner. Covers the case where the cancel broadcast itself
+		// was lost to this popup.
+		isInteractionCancelled.value = true
+	} else if (!holdRefusal(error)) {
+		setError("Processing error.", getErrorMessage(error))
 	}
 }
 
@@ -612,7 +628,25 @@ onUnmounted(() => {
 						:tokenMetadataLoading="op.kind === 'register_token' && tokenMetadataLoading"
 						@updateFeeSettings="handleFeeUpdate"
 						@updatePayer="(index: number, payer: FeePayerPick | null) => (feePayers[index] = payer)"
-					/>
+					>
+						<template v-if="refusal" #fee>
+							<Flex
+								data-testid="execute-op-refusal"
+								:data-kind="refusal"
+								role="alert"
+								direction="column"
+								gap="4"
+								wide
+								:class="$style.refusal"
+							>
+								<Flex align="center" gap="4">
+									<Icon name="warning" size="12" color="orange" />
+									<Text data-testid="execute-op-refusal-title" variant="body" color="orange">{{ REFUSAL_TITLE }}</Text>
+								</Flex>
+								<Text data-testid="execute-op-refusal-reason" variant="body" color="secondary">{{ REFUSAL_REASON[refusal] }}</Text>
+							</Flex>
+						</template>
+					</OperationCard>
 				</Flex>
 			</Flex>
 		</Flex>
@@ -623,6 +657,7 @@ onUnmounted(() => {
 			reject-label="Reject"
 			:reject-disabled="isLoading || !requestId"
 			confirm-testid="execute-confirm-btn"
+			:confirm-hidden="refusal !== undefined"
 			:confirm-label="isLoading ? 'EXECUTING' : 'Confirm'"
 			:confirm-loading="isLoading"
 			:confirm-disabled="
@@ -665,6 +700,11 @@ onUnmounted(() => {
 
 .sections {
 	padding: 16px;
+}
+
+.refusal {
+	padding: 12px;
+	background: var(--nulo-surface-low);
 }
 
 .fullscreen_icon {

@@ -14,7 +14,7 @@ import {
 	snapshotResultSeq,
 	waitForPgResult,
 } from "../fixtures/playground"
-import { approveCapabilities, approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
+import { approveCapabilities, rejectExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import type { AztecTestConfig } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -24,9 +24,10 @@ const hasConfig = aztecConfig !== undefined
  * A send outside the app's transaction grant is refused before any window opens. The app gets the
  * one scope-refusal envelope, and the send's journal record and its History card read as not
  * allowed, the record's developer view showing the refusal's fixed text, which names no address.
- * A call whose selector runs another function than the name its grant check read is refused at
- * execution the same way. A refused row is titled by what the wallet resolved, never by the name the
- * app claimed: "Transaction" when nothing resolved it, the selector's function otherwise.
+ * A call whose selector runs another function than the name its grant check read is refused while
+ * its window estimates the fee: the window offers only Reject, which answers the same refusal.
+ * A refused row is titled by what the wallet resolved, never by the name the app claimed:
+ * "Transaction" when nothing resolved it, the selector's function otherwise.
  */
 
 const OTHER = `0x${"0a".repeat(32)}`
@@ -110,7 +111,10 @@ test.skipIf(!hasConfig)(
 		await clickByTestId(page, "pg-btn-sendTx-default")
 		const execute = await opened
 		await waitForExecuteContent(execute)
-		await approveExecute(execute, { approvableTimeoutMs: 120_000 })
+		await execute.waitForSelector('[data-testid="execute-op-refusal"]', { visible: true, timeout: 120_000 })
+		expect(await execute.$eval('[data-testid="execute-op-refusal"]', (el) => el.getAttribute("data-kind"))).toBe("call")
+		expect(await execute.$('[data-testid="execute-confirm-btn"]')).toBeNull()
+		await rejectExecute(execute)
 		const answer = await waitForPgResult(page, "sendTx", seq, 120_000)
 
 		const wallet = await openPopup(ctx)
@@ -143,8 +147,7 @@ test.skipIf(!hasConfig)(
 		await setDeveloperMode(wallet, true)
 		const detail = await readJournalDetail(wallet, record.id)
 		expect(detail["journal-detail-error-message"]).toBe("Scope violation: call name does not match selector's function")
-		const raw = await wallet.$eval('[data-testid="journal-detail-error-raw"]', (el) => el.textContent ?? "")
-		expect(raw).toContain('"name":"ScopeViolationError"')
-		expect(raw).toContain(`"message":"Scope violation: call name does not match selector's function"`)
+		// Refused before any claim, so the record carries no raw error.
+		expect(await wallet.$('[data-testid="journal-detail-error-raw"]')).toBeNull()
 	},
 )

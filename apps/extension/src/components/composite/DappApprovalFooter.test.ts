@@ -88,6 +88,12 @@ describe("composite/DappApprovalFooter", () => {
 		expect((w.find('[data-testid="x-confirm-btn"]').element as HTMLButtonElement).disabled).toBe(true)
 	})
 
+	test("confirmHidden leaves Reject alone; Confirm renders by default", () => {
+		expect(factory({ confirmHidden: true }).find('[data-testid="x-confirm-btn"]').exists()).toBe(false)
+		expect(factory({ confirmHidden: true }).find('[data-testid="x-reject-btn"]').exists()).toBe(true)
+		expect(factory({ confirmHidden: false }).find('[data-testid="x-confirm-btn"]').exists()).toBe(true)
+	})
+
 	test("confirmLoading is forwarded to the confirm button's loading state", () => {
 		const w = factory({ confirmLoading: true })
 		expect(w.find('[data-testid="x-confirm-btn"]').attributes("data-loading")).toBe("true")

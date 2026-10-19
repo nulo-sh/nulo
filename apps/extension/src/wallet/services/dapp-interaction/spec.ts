@@ -12,6 +12,7 @@ import type {
 	OperationRequest,
 } from "@nulo/wallet-bridge"
 import type { QueuedFeePayer } from "@nulo/wallet-core/jobs"
+import type { ScopeViolationError } from "@nulo/extension-messaging/errors"
 
 /** Protocol-shape types (`ExecutionParams`, `ExecutionResult`,
  *  `CapabilityParams`, `CapabilityResult`, all `OperationRequest`
@@ -89,6 +90,9 @@ export type DappInteraction = {
 	 * verify, discover).
 	 */
 	hooks?: ExecutionHooks
+	/** The first refusal an estimate or preview of this request met. The request can no longer be
+	 *  approved, and the window's own end of it (Reject, unload, close) answers this refusal. */
+	refusal?: ScopeViolationError
 }
 
 export type ExecutionPayload = {
