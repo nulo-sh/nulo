@@ -230,6 +230,12 @@ describe("theme contrast — status text (required)", () => {
 			expect(contrast("--txt-danger", bg, "dark")).toBeGreaterThanOrEqual(AA_TEXT)
 		})
 	}
+	// Error text also sits on a popup card and a window's footer.
+	for (const theme of ["light", "dark"] as const) {
+		test(`${theme}: --txt-danger on --nulo-surface >= ${AA_TEXT}:1`, () => {
+			expect(contrast("--txt-danger", "--nulo-surface", theme)).toBeGreaterThanOrEqual(AA_TEXT)
+		})
+	}
 	for (const [fg, status] of Object.entries({ "--txt-warning": "--yellow", "--txt-success": "--green" })) {
 		test(`dark: ${fg} is ${status}`, () => {
 			expect(resolveColor(fg, themeMap("dark"))).toEqual(resolveColor(status, themeMap("dark")))

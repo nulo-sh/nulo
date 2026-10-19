@@ -350,7 +350,7 @@ onBeforeUnmount(() => {
 
 .render_error_label {
 	composes: type--label-section from global;
-	color: var(--red);
+	color: var(--txt-danger);
 }
 
 .render_error_msg {

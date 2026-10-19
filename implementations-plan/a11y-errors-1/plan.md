@@ -62,7 +62,7 @@ Values only: each site's `red` becomes `txt-danger`; a source guard keeps it so.
 - Self-tests on snippets through `parseSource(name, source)`, one finding each: a static `Text` prop; a ternary `:color`; `AddressDisplay color="red"` (a forwarding wrapper); `class="color--red"`; `:style="{ color: 'var(--red)' }"`; a flat rule; a nested `&:hover span` rule. No finding (controls): `Icon color="red"`; `ProcessingErrorNote color="red"`; `Text color="txt-danger"`; `background: var(--red)`; `border-color: var(--red)`; `:style="{ borderColor: 'var(--red)' }"`. A stale entry is reported.
 - **Gate**: lint; typecheck; `cd apps/extension && bun run test -- src/utils/red-text-ban.test.ts src/components/composite/ProcessingErrorNote.test.ts`. Pass: the self-tests and the `ProcessingErrorNote` test green; the tree test red with exactly 19 open findings, one per recon row (row 11 once), and none stale. Log the run in `lessons/phase-2.md`.
 
-### Phase 3: The change
+### Phase 3: The change ✓
 
 - The 7 `T` rows: `color="red"` → `color="txt-danger"`. The 12 `C` rows: `color: var(--red)` → `color: var(--txt-danger)`. Borders, icons and the rest of each rule stay.
 - `theme-contrast.test.ts` § status text: add `--nulo-surface` (popup cards, window footers) to the `--txt-danger` pairs, both themes (F3).

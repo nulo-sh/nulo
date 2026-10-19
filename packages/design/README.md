@@ -34,6 +34,10 @@ bun run gen:tokens
 on divergence — modeled on the repo's other generated-artifact pins). Per-theme VALUES live in
 `src/base.css`.
 
+Error and refusal text is `txt-danger`, which reads 4.5:1 in both themes; `red` paints glyphs, fills
+and borders only, as `--red` reads 3.56:1 on the light page. The extension's
+`src/utils/red-text-ban.test.ts` refuses text in `--red`.
+
 ## Type roles
 
 A face, letter spacing or upper case comes only from a **type role**: one of the 24 records of
