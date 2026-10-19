@@ -11,9 +11,24 @@ base: dev @ 19399c82
 standard: implementations-plan/README.md § Post-implementation standard, read at 19399c82
 ---
 
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** closed. Arc 1 (#842) carries this close-out, and the merge that lands it closes the plan and #553.
+- **Shipped:**
+  - `FpcService.getFpcs` discovery registers each missing protocol FPC with no lock held, then stores its row under the FPC lock through `writeFencedRow`, which `addFpc` shares. A concurrent discovery's row is re-read under the lock and kept.
+  - `NetworkService.captureLiveness` and `isNetworkLive(id, since)`: a mark refused while a reservation is open, and a read refused for a reservation begun after the mark. Discovery checks the mark before each registration and in every write. `addFpc` takes it at entry.
+  - Tests T0-T6 in `fpc/service-create.test.ts` and one case in `network/service.test.ts`. With discovery retrying against a refused node, the reset dropped from 4.1-9.0 s to 1.9-3.0 s on Chrome and Firefox ([lessons/phase-2.md](lessons/phase-2.md)).
+- **Owner asks:** none.
+- **Known limits:** #843 (F10's two gaps, D9).
+- **Open items:** none.
+- **Dropped:** a composition test (D5) and a new e2e scenario (D6). The ledger records why.
+- **Lessons:** none promoted. `lessons.md` is at its budget, and the trail-filter gotcha is already in the e2e-testing skill (`readSwLogTrail(popup, { match })`). The detail is in `lessons/phase-2.md`.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+
 # fpc-discovery-1: a reset never waits on protocol FPC discovery
 
-One issue, one arc, one PR against `dev`, not stacked (D-orch-1). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Gate log: `STATUS.md`.
+One issue, one arc, one PR against `dev`, not stacked (D-orch-1). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none).
 
 | Arc | Issue | PR line | Phases |
 |---|---|---|---|
