@@ -44,3 +44,15 @@ The owner's note (P53-04 = B): 1.15x, "one point five", the new marks, USDC off 
 
 - **"3.50" → "3.5":** the take's figures shortened as "1.5" had ("3.5 from" 1.6 s against 2.0 s, "3.5 for" 0.96 s against 1.2 s), consistent with "three point five". Spliced into the v1 audio, not the v2 one, so the clip is still one tempo pass and one encode from the original. The seek bar's static `max` moved (52 to 51), and its pin caught it.
 - **Insets:** a browser probe measured every text element against its innermost plate, note or chip (the stage when none), at nine moments per scene. Exactly the four labels OA-10 named fell under 14; everything else already cleared it. The scene test now walks nested groups through their `place()` transforms after each scene's last frame; reverting each width, or moving the record entries' labels to x 6, turns it red.
+
+## Retake pass 3 (2026-10-19)
+
+The owner's second note (P60-01): "On Aztec" with Nulo handling it, "three fifty", the shield-to-globe line, a closing line for Fees, and closing options for all three.
+
+- **Two scenes in one clip.** The splice now takes a list per clip and works from the latest scene back, so each earlier cut still finds its pause where the first take put it; every later scene's span shifts by the change in length. Both clip 01 cuts landed at -85 dBFS, as before.
+- **Money read as money.** The narration text says "three fifty", "one fifty", "five"; the splice merges each spoken run into one word written as its figure, spanning the run, so the captions, track and transcript read 3.50, 1.50 and 5 while the cue words stay as they were.
+- **An appended scene.** The first take of Fees ends about 0.2 s after its last word, so there is no pause to cut in. The new scene follows the pause the voice took between its last two scenes (0.45 s before the tempo change) and keeps its own take's 0.3 s tail.
+- **The wires.** The old second wire jogged to x 30 to pass beside the shield and ran across it. Both wires now sit on the marks' centre line, with end points from the glyph data: the shield spans y 2 to 22 of its 24-unit box, and the globe's stroke starts at y 2. A browser probe measured the end points against each mark's drawn box, stroke included: 0.00 off in Chrome and Firefox.
+- **"Which is which" in Fees.** After the sponsored scene there are three ways to pay, not a pair, so the shipped line says "how the fee is paid". The owner's sentence is narrated and rendered beside it (OA-12).
+- **Closings outside the page.** Each option is drawn into the built page's stage during a scratch render, with styles set through the CSSOM, because a presentation attribute loses to the class rule (`c-head`'s font size). Nothing is in the repo until the owner picks (OA-13).
+- **Host rule.** One Firefox probe started at load 168, above the 150 limit; every later build and browser run waited for the window inside its own call.

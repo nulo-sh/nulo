@@ -1,6 +1,6 @@
 # Owner asks: landing-explainer-1
 
-**Answered by the owner (2026-10-17/18):** P42-01, P42-02, P42-03 = A (the scripts and card texts as written) and P42-04 = A (the `explainer` skill, narrated with the voice in the owner's ElevenLabs file). Arc 2 made the clips; OA-8 and OA-9 below are what is still open. OA-10 and OA-11, from the 2026-10-19 retake, shipped fixed the same day.
+**Answered by the owner (2026-10-17/18):** P42-01, P42-02, P42-03 = A (the scripts and card texts as written) and P42-04 = A (the `explainer` skill, narrated with the voice in the owner's ElevenLabs file). Arc 2 made the clips; OA-8 and OA-9 below are what is still open. OA-10 and OA-11, from the 2026-10-19 retake, shipped fixed the same day. OA-12 (clip 03's last line) and OA-13 (how each clip closes), from the second retake note, are open.
 
 **Settled by the orchestrator (D-orch, 2026-10-17 22:0xZ), on the plan's approval:** OA-5 = A, the page ships unlinked from the home page. OA-6 = A, the owner runs the preview command by hand; nothing enables branch builds. OA-7 = A ships now, quoted in the PR body for the owner to flip. OA-1 to OA-4 stay the owner's: the three scripts and their text versions go on the owner's next decision page verbatim from this file, and the page ships the text versions until the owner picks.
 
@@ -158,6 +158,30 @@ What the retake changed, and nothing else:
 - **Clip 02:** "40.00 USDC" keeps 14 units from its note's right border, as from its left.
 - **Characters:** 455 (239 and 216) of the retake's 5,000.
 
+### Owner's second retake note, 2026-10-19 (P60-01)
+
+The note, verbatim:
+
+> On the public / private balance:
+> - we say "in blockchains" and then "in Nulo" -- i think we should say "On Aztec" / "In Aztec" and say that Nulo handles that.
+> - The line that connects the shield from private balance and the world glyph does not align correctly / does not look ok.
+> - I said to say three point five, but we should be saying "three fifty" like how amounts are actually read. My bad. Three fifty and 1 fifty, etc. Like when you talk to another human haha.
+>
+> On fee:
+> - I think it's great, but in the end I'd add something like "Nulo always tells you which is which, and you are always in control". Like yes, we've explained awesomely, but remember this is for users to watch.
+>
+> On all:
+> - Look good, but the closing feels a bit abrupt. Maybe we should put Nulo's logo? Or something? I don't know how to close it really. Maybe record 4 / 5 ideas of closings we can choose from?
+
+What each item became:
+
+- **"On Aztec", and Nulo handles it:** clip 01, scene 2 now opens "On Aztec, each token has two balances. Nulo handles both for you." It replaces "Nulo shows two balances for each token." Scene 1's "On most blockchains" stays as the contrast. No other line set blockchains against Nulo.
+- **The line from the shield to the globe:** the wires now run down the marks' centre line. One goes from the USDC heading to the shield's top edge, the other from the shield's tip to the globe's top edge, in the scene's own wire stroke. Measured in Chrome and Firefox, every end point is 0.00 units off its edge and off the centre line. Before, the second wire jogged 8 units left, across the shield, and stopped 26 units above the globe.
+- **"three fifty":** scene 4 is narrated again with the amounts written as they are read: "three fifty", "one fifty", "five". The captions, the WebVTT track and the transcript write the figures, 3.50, 1.50 and 5, as the drawn notes and the wallet do. No other clip speaks an amount.
+- **Fees, a closing line:** read after scene 5 (sponsored), "which is which" has no pair to point to. Scene 4's pair is public and private Fee Juice, but scene 5 adds a third way to pay. The new scene 6 says "Nulo always tells you how the fee is paid, and you are always in control." It is drawn as a fee-method card (public Fee Juice, private Fee Juice, sponsored) whose selection moves on "control". Your sentence is narrated too, as an alternative (OA-12).
+- **Closings:** five treatments for each clip, rendered as review videos and not wired into the clips (OA-13).
+- **Characters:** 1,044 of this pass's 3,000: 176 + 262 for clip 01, 73 + 68 for the two clip 03 lines, 465 for the closings.
+
 ## OA-10. Labels close to a border that the note did not name
 
 **Surface:** four labels inside the clips, each nearer the right border of its box than the 14 units it keeps on the left: "ONLY YOU CAN SEE IT" 2.7 (clip 01, scene 2), the moving "40.00" coin 4.1 (clip 01, scene 5), "SOMEONE ELSE" 7.4 (clip 03, scene 5), "795.00" 8.5 (clip 02, scenes 2 and 4). Measured in the browser.
@@ -182,7 +206,35 @@ What the retake changed, and nothing else:
 | **B. Say "3.50" another way** | Your words, for example "three fifty"; scene 4 is narrated again, about 240 characters. |
 | **C. Draw the change as 1.5** | A picture change, no characters. |
 
-**Recommendation:** listen first; B if the voice says "three point five zero". **Shipped: B** (orchestrator, 2026-10-19: same class as the owner's retake note), the way "1.50" was done: both "3.50"s written "3.5", so the voice says "three point five"; scene 4 narrated again, 237 characters. The drawn notes still read 3.50 and 1.50 (C not taken).
+**Recommendation:** listen first; B if the voice says "three point five zero". **Shipped: B** (orchestrator, 2026-10-19: same class as the owner's retake note), the way "1.50" was done: both "3.50"s written "3.5", so the voice says "three point five"; scene 4 narrated again, 237 characters. The drawn notes still read 3.50 and 1.50 (C not taken). Replaced the same day by your second retake note: the voice now says "three fifty" and "one fifty" (OA-8).
+
+## OA-12. Clip 03's last line
+
+**Surface:** the last scene of Fees.
+
+| Option | What happens |
+|---|---|
+| **A. "Nulo always tells you how the fee is paid, and you are always in control."** | Ships now. |
+| **B. Your sentence, "Nulo always tells you which is which, and you are always in control."** | The same picture. Already narrated: swapping costs no characters (`closings/fees-s6-owner/`). |
+
+**Recommendation: A** (moderate confidence). "Which is which" points back two scenes, across the sponsored one, to the public and private pair. Against: yours matches clip 01's last line, so the two clips end alike.
+
+## OA-13. How each clip closes
+
+**Surface:** the end of each clip, after its last line. Today the picture stops on the last scene.
+
+| Option | What it is | Characters spent |
+|---|---|---|
+| **1. Mark** | The scene fades to the stage, and Nulo's mark (the ring and NULO, as in the site's header) draws on, silent, for 3 s | 0 |
+| **2. Mark and line** | The mark, then "Nulo. Private by default. Public when you say so." | 49, one take for all three |
+| **3. Next** | 01: "Next: how a proof lets the network trust what it cannot see." 02: "Next: what a transaction costs, and who pays." 03: "Ready to try it? Get Nulo for Chrome or Firefox." | 153 |
+| **4. Recap** | 01: "Private: only you can see it. Public: anyone can. Nulo shows you both." 02: "Your computer proves it, the network checks it, and your private data stays with you." 03: "Fees are paid in Fee Juice, and how you pay decides what the record shows." | 229 |
+| **5. Headline** | The mark, then "Nothing to see. Everything to own." (the store listing's and the home page's headline) | 34, one take for all three |
+| **None** | As today | 0 |
+
+Each is in `closings/<option>/<clip>.mp4` (the clip's last scene, then the closing), with `sheet.png`. Every spoken one is narrated already, so picking any costs no more characters. Options can differ per clip (for example, 1 for clips 01 and 02 and 3 for clip 03).
+
+**Recommendation: 1 for all three** (moderate confidence). It ends each clip on a beat and the brand. The voice's last line stays the clip's point, and three clips on one page do not repeat a slogan. Against: a silent card after a narrated clip can feel like dead air, and 3 gives clip 03 a call to act. **What ships now:** none; the pick is applied after your answer.
 
 ## OA-9. Chapters under each clip
 
