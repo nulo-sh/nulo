@@ -1,7 +1,7 @@
 ---
 plan: harden-security-fixes-3
 tier: mid
-status: planned, final Codex pass approved; awaiting the orchestrator
+status: arc 1 in review; arc 2 ready (its wait cleared), arc 3 on the owner's picks
 issues: "#661 (closed known limit; its SECURITY.md caveat lands in arc 1)"
 driver: claude-code
 claude_model: opus
