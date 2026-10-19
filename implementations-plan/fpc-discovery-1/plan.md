@@ -27,7 +27,7 @@ One issue, one arc, one PR against `dev`, not stacked (D-orch-1). Recon: [recon.
 - **Excellent**:
   1. No FPC locked section awaits the node: the purge's FPC step, a network delete's or reset's FPC sweep and every other FPC write wait only for storage writes.
   2. The fences keep their guarantees: no protocol row survives for a deleted profile, none lands across a chain purge it did not see, and a racing discovery stores at most one row per protocol FPC.
-  3. Measured, not asserted: with discovery retrying against a refused node at submit, the reset drops from 10.2-10.6 s to the seeded case's 0.5-2.3 s, on Chrome and Firefox.
+  3. Measured, not asserted: with discovery retrying against a refused node at submit, the reset drops from about 8-9 s to under 3.1 s, the in-flight registration's backoff sleep, on Chrome and Firefox ([lessons/phase-2.md](lessons/phase-2.md)).
 - **Good enough**: against a node that accepts connections and never answers, each PXE call already queued on the chain ahead of the purge's drain still makes its first attempt, up to 60 s each (#551, KL-3, unchanged).
 
 ## UI impact
@@ -119,6 +119,7 @@ Steps:
    - **T3** (a reset that completes during the registration): let the Sponsored row land; park the Private registration on a gate. From the test, open a reservation, start `clearChainState("p1", 1)`, assert it settles while parked (it removes the Sponsored row), close the reservation. Release the gate in `finally` and join both: no row is left, and `getFpcs` returns no Sponsored row.
    - **T4** (admitted after the FPC sweep): with a reservation open, `getFpcs` sends no registration and stores no row. Close it: the next `getFpcs` discovers both (T0's result).
    - **T5** (`addFpc` admitted mid-purge): with a reservation open, `addFpc` rejects with "network deleted" before any PXE call and stores no row.
+   - **T6** (added in review): a reset during the Sponsored registration stops the Private one; only one registration is sent and no row lands. Red when the per-registration check is deleted.
 5. Prove red on the base: copy `service.ts` from `git show 19399c82:apps/extension/src/wallet/services/fpc/service.ts`, run the file, expect T1, T3, T4 and T5 red by assertion, restore the head copy.
 
 **Validation gate:**
@@ -126,7 +127,7 @@ Steps:
 - Pass: exit 0 each; T0-T5 and the network case green on the head; T1, T3, T4 and T5 red by assertion on the base copy; no new `biome-ignore`.
 - Layers: lint, typecheck, unit.
 
-### Phase 2: the reset in a browser, before and after ✗
+### Phase 2: the reset in a browser, before and after ✓
 
 Steps:
 1. Edit the comment of the second test in `security-reset.test.ts` (map row 5).
@@ -139,6 +140,7 @@ Steps:
 **Validation gate:**
 - Commands: `cd apps/extension && bun run test:e2e -- tests/e2e/security-reset.test.ts --retry=0`, then the same with `NULO_E2E_BROWSER=firefox`; the overlay runs of step 4; step 6; `git status --porcelain` shows no overlay.
 - Pass: the committed file green on both browsers; every overlay run shows the witness; every "after" run purges in under 5 s with no FPC lock wait over 1 s; the "before" runs show the wait (expect about 9 s); step 6 green; the tree clean.
+- Result: met, except that no run stored an FPC lock line, before included (the purge removes Developer Mode before the trail's next flush), so the purge times carry the evidence: before 4.1-9.0 s, after 1.9-3.0 s; committed file Chrome 25.9 → 25.6 s, Firefox 36.9 → 34.7 s; step 6 9/9 ([lessons/phase-2.md](lessons/phase-2.md)).
 - Layers: smoke e2e (both browsers), network e2e (Chrome; CI runs both).
 
 ## Decision ledger
@@ -161,6 +163,8 @@ Steps:
 | 1 | Codex `gpt-6.1-sol` high | reject | R4 not fenced (D2); I1's aggregate bound and I2's cost reworded; T3 replaced by a completed-reset interleaving, T4 added; gates released in `finally`; the overlay's witness | a dedupe of discovery admission (D3); a queued-drain test (D8); an FPC-local counter (Alternatives) |
 | 1 | Opus 5.5 (Plan) | conditional approve | R4 relabelled and fenced with the reservation count; R4's second-registration path closed by step 2; I1 wording; T1 folded into the existing park test; red by assertion, not timeout; T3 asserts the return; "no FPC lock wait over 1 s" | none |
 | final | Codex `gpt-6.1-sol` high, fresh | reject, then **approve** on resume | `addFpc` admission check (now in `captureLiveness`, T5); T3 rebuilt so the base fails by assertion, not deadlock; F10 widened to the chain-id gap, kept a known limit (D9); I1 no longer claims an aggregate bound | none |
+| impl r1 | Codex `gpt-6.1-sol` high | clean | none | none |
+| impl r1 | Opus 5.5 (diff) | findings | T6 pins the per-registration check (deleting it left every test green); a comment over the soft cap; the concurrent-skip log line reworded | none |
 
 ## Delivery
 

@@ -173,7 +173,7 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 			try {
 				const type = this.detectFpcType(item.artifact)
 				getFpcHandler(type).validateArtifact(item.artifact)
-				// A purge since the mark wipes the chain's PXE state: a registration now would serve no row.
+				// A purge since the mark wiped the PXE: a registration would serve no row.
 				if (!(await this.networkService.isNetworkLive(network.id, since))) return
 				await pxe.registerContract({ instance: item.instance, artifact: item.artifact })
 				this.logInfo(`Registered protocol FPC: ${item.instance.address.toString()}`)
@@ -206,7 +206,7 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 	private async storeProtocolFpc(item: ProtocolFpc, type: FpcType, chainId: number, scope: WriteScope): Promise<void> {
 		const address = item.instance.address.toString()
 		if (hasRow(await this.rowsOn(scope.fence.profileId, chainId), type, address)) {
-			this.logDebug("Discovery skipped — already completed by concurrent holder")
+			this.logDebug("Discovery skipped: a concurrent discovery stored the row")
 			return
 		}
 		const fpc: StoredFpc = {

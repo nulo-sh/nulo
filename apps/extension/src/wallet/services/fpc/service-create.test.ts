@@ -237,6 +237,34 @@ describe("FPC creation fences", () => {
 		expect(await fpcRowCount(h.api)).toBe(0)
 	})
 
+	test("getFpcs discovery: a network reset during one registration stops the next one", async () => {
+		const h = await makeHarness()
+		const reached = deferred<void>()
+		const gate = deferred<void>()
+		const registered: string[] = []
+		setPxe(h, {
+			registerContract: async ({ instance }: Registration) => {
+				registered.push(instance.address.toString())
+				reached.resolve()
+				await gate.promise
+			},
+		})
+
+		const run = h.service.getFpcs(1)
+		try {
+			await reached.promise
+			h.reservations.reserve()
+			await h.service.clearChainState("p1", 1)
+			h.reservations.release()
+		} finally {
+			gate.resolve()
+		}
+
+		expect(await run).toEqual([])
+		expect(registered).toEqual(["0xsponsored"])
+		expect(await fpcRowCount(h.api)).toBe(0)
+	})
+
 	test("getFpcs discovery: admitted while its network is reserved, it registers nothing and stores NO row", async () => {
 		const h = await makeHarness()
 		const registered: string[] = []
