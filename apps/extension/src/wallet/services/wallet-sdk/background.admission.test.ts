@@ -140,7 +140,8 @@ function boot(
 	return { discover, prompted, establish, closeWindow, windowsCreated: () => created, rows }
 }
 
-/** Turns for discoveries to reach a park point no fake observes; no awaited cause covers a "not yet" there. */
+/** Turns before a "not yet" or "never" read: a park point no fake observes, or a decision whose run
+ *  settles with it, so an effect a regression defers past it lands inside them. */
 const flush = async () => {
 	for (let i = 0; i < 20; i++) await Promise.resolve()
 }
@@ -308,6 +309,7 @@ describe("handleDiscovery — fresh connection and dedupe waiters", () => {
 		await vi.advanceTimersByTimeAsync(2_000)
 		popup.resolve({ approved: true })
 		await discoveryRun("f1")
+		await flush()
 		expect(rejected()).toEqual(["f1"])
 		expect(windowsCreated()).toBe(0)
 		// The slot came back: two more window-needing handshakes are admitted at once.
@@ -340,6 +342,7 @@ describe("discovery with a chainInfo that does not decode", () => {
 
 		discover("bad-chain-1", { chainInfo: { chainId: "", version: "0x1" } })
 		await discoveryRun("bad-chain-1")
+		await flush()
 
 		expect(rejected()).toEqual(["bad-chain-1"])
 		expect(popup).not.toHaveBeenCalled()
@@ -374,6 +377,7 @@ describe("discovery without a current Terms acceptance", () => {
 
 		discover("fresh-1")
 		await discoveryRun("fresh-1")
+		await flush()
 
 		expect(rejected()).toEqual(["fresh-1"])
 		expect(approved()).toEqual([])
@@ -382,6 +386,7 @@ describe("discovery without a current Terms acceptance", () => {
 		// The discovery protocol has no rejection reply, so nothing typed reaches the app; a key
 		// exchange that completed anyway finds no approval to ride and is ended with no window.
 		await establish("fresh-1")
+		await flush()
 		expect(live.has("fresh-1")).toBe(false)
 		expect(windowsCreated()).toBe(0)
 	})

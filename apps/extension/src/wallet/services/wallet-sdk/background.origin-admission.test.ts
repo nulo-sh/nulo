@@ -82,6 +82,10 @@ function boot(activeProfile?: () => Promise<{ id: string } | undefined>) {
 	return { discover, reads, rows: fake.rows, onActiveProfileChanged: fake.onActiveProfileChanged }
 }
 
+/** Turns after a refusal decided at once: an effect a regression defers past it lands inside them. */
+const flush = async () => {
+	for (let i = 0; i < 30; i++) await Promise.resolve()
+}
 const approved = () => handlerCalls.filter((c) => c.startsWith("approve:")).map((c) => c.slice(8))
 const rejected = () => handlerCalls.filter((c) => c.startsWith("reject:")).map((c) => c.slice(7))
 
@@ -121,6 +125,7 @@ describe("discovery admits secure origins only", () => {
 		discover("d1", FAKE_DAPP_ORIGIN)
 		expect(rejected()).toEqual([])
 		await discoveryRun("d1")
+		await flush()
 
 		expect(reads.resetRun).toHaveBeenCalledTimes(1)
 		expect(reads.legal).toHaveBeenCalledTimes(1)
@@ -141,12 +146,14 @@ describe("discovery admits secure origins only", () => {
 		discover("d1", origin)
 		expect(rejected()).toEqual(admitted ? [] : ["d1"])
 		await discoveryRun("d1")
+		await flush()
 		expect(enqueue).toHaveBeenCalledTimes(admitted ? 1 : 0)
 
 		unlocked = true
 		onActiveProfileChanged.invoke({ id: "p1" })
 		// The unlock's one drain of the locked queue, which runs each queued discovery to its end.
 		await drain.mock.results[0]?.value
+		await flush()
 		expect(reads.popup).toHaveBeenCalledTimes(admitted ? 1 : 0)
 		expect(approved()).toEqual(admitted ? ["d1"] : [])
 	})
@@ -161,6 +168,7 @@ describe("discovery admits secure origins only", () => {
 		discover("d1", origin)
 		expect(rejected()).toEqual(admitted ? [] : ["d1"])
 		await discoveryRun("d1")
+		await flush()
 
 		expect(approved()).toEqual(admitted ? ["d1"] : [])
 		expect(reads.popup).not.toHaveBeenCalled()

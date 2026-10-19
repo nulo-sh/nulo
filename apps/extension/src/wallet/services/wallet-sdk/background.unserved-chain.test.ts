@@ -101,7 +101,8 @@ function boot(opts: Parameters<typeof fakeSdkServices>[0] = {}) {
 	return { discover, prompted, rows: fake.rows, onActiveProfileChanged: fake.onActiveProfileChanged }
 }
 
-/** Turns for a read at a park point, where no awaited cause covers a "not yet". */
+/** Turns before a "not yet" or "never" read: a park point, or a decision whose run settles with it,
+ *  so an effect a regression defers past it lands inside them. */
 const flush = async () => {
 	for (let i = 0; i < 30; i++) await Promise.resolve()
 }
@@ -139,6 +140,7 @@ describe("discovery for a chain the profile has no network for", () => {
 
 		discover("u1", 1816023401)
 		await discoveryRun("u1")
+		await flush()
 
 		expect(rejected()).toEqual(["u1"])
 		expect(approved()).toEqual([])
@@ -159,6 +161,7 @@ describe("discovery for a chain the profile has no network for", () => {
 		expect(rejected()).toEqual(["u1"])
 		window.resolve()
 		await discoveryRun("u1")
+		await flush()
 		expect(approved()).toEqual([])
 	})
 
@@ -169,6 +172,7 @@ describe("discovery for a chain the profile has no network for", () => {
 
 		discover("s1", 0)
 		await discoveryRun("s1")
+		await flush()
 
 		expect(approved()).toEqual([])
 		expect(rejected()).toEqual(["s1"])
@@ -189,6 +193,7 @@ describe("discovery for a chain the profile has no network for", () => {
 		await opened.promise
 		discover("d2", 9)
 		await discoveryRun("d2")
+		await flush()
 		expect(rejected()).toEqual(["d1", "d2"])
 		expect(notice).toHaveBeenCalledTimes(1)
 
@@ -196,6 +201,7 @@ describe("discovery for a chain the profile has no network for", () => {
 		await discoveryRun("d1")
 		discover("d3", 9)
 		await discoveryRun("d3")
+		await flush()
 		expect(notice).toHaveBeenCalledTimes(2)
 		expect(approved()).toEqual([])
 	})
@@ -212,6 +218,7 @@ describe("discovery for a chain the profile has no network for", () => {
 
 		for (let chain = 1; chain <= 5; chain++) discover(`c${chain}`, chain)
 		await Promise.all([fourthOpened.promise, discoveryRun("c5")])
+		await flush()
 
 		expect(notice).toHaveBeenCalledTimes(4)
 		expect(rejected()).toEqual(["c1", "c2", "c3", "c4", "c5"])
@@ -236,6 +243,7 @@ describe("discovery for a chain the profile has no network for", () => {
 		onActiveProfileChanged.invoke({ id: "p2" })
 		reads.resolve()
 		await discoveryRun("sw1")
+		await flush()
 
 		expect(rejected()).toEqual(["sw1"])
 		expect(notice).not.toHaveBeenCalled()
@@ -249,6 +257,7 @@ describe("discovery for a chain the profile has no network for", () => {
 
 		discover("back1", 0)
 		await discoveryRun("back1")
+		await flush()
 
 		expect(rejected()).toEqual(["back1"])
 		expect(notice).toHaveBeenCalledTimes(1)
@@ -285,6 +294,7 @@ describe("discovery for a chain the profile has no network for", () => {
 
 		discover("q1", 1816023401)
 		await discoveryRun("q1")
+		await flush()
 		expect(rejected()).toEqual([])
 		expect(notice).not.toHaveBeenCalled()
 
@@ -292,6 +302,7 @@ describe("discovery for a chain the profile has no network for", () => {
 		onActiveProfileChanged.invoke({ id: "p1" })
 		// The unlock's one drain of the locked queue, which runs each queued discovery to its end.
 		await drain.mock.results[0]?.value
+		await flush()
 
 		expect(rejected()).toEqual(["q1"])
 		expect(notice).toHaveBeenCalledTimes(1)
@@ -307,6 +318,7 @@ describe("discovery for a chain the profile serves", () => {
 
 		discover("ok1", 0)
 		await discoveryRun("ok1")
+		await flush()
 
 		expect(popup).toHaveBeenCalledTimes(1)
 		expect(notice).not.toHaveBeenCalled()
@@ -322,10 +334,12 @@ describe("discovery for a chain the profile serves", () => {
 
 		discover("gone1", 0)
 		await prompted("gone1")
+		await flush()
 		expect(popup).toHaveBeenCalledTimes(1)
 		servedNow = false
 		window.resolve()
 		await discoveryRun("gone1")
+		await flush()
 
 		expect(approved()).toEqual([])
 		expect(rejected()).toEqual(["gone1"])
@@ -352,6 +366,7 @@ describe("discovery for a chain the profile serves", () => {
 		active = "p2"
 		reread.resolve()
 		await discoveryRun("sw2")
+		await flush()
 
 		expect(approved()).toEqual([])
 		expect(rejected()).toEqual(["sw2"])
@@ -364,6 +379,7 @@ describe("discovery for a chain the profile serves", () => {
 
 		discover("again-1", 0)
 		await discoveryRun("again-1")
+		await flush()
 
 		expect(approved()).toEqual(["again-1"])
 		expect(popup).not.toHaveBeenCalled()
@@ -378,6 +394,7 @@ describe("a quarantined chain keeps its network row but serves no dApp", () => {
 
 		discover("q1", 0)
 		await discoveryRun("q1")
+		await flush()
 
 		expect(rejected()).toEqual(["q1"])
 		expect(approved()).toEqual([])
@@ -394,10 +411,12 @@ describe("a quarantined chain keeps its network row but serves no dApp", () => {
 
 		discover("q2", 0)
 		await prompted("q2")
+		await flush()
 		expect(popup).toHaveBeenCalledTimes(1)
 		quarantinedNow = true
 		window.resolve()
 		await discoveryRun("q2")
+		await flush()
 
 		expect(approved()).toEqual([])
 		expect(rejected()).toEqual(["q2"])

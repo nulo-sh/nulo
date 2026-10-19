@@ -346,8 +346,9 @@ function boot(
 /** The hash of `requestId`'s live session. */
 const hashOf = (requestId: string) => sessions.get(requestId)?.verificationHash ?? ""
 
-/** Turns for a park point or a detached branch that no awaited cause covers: a "not yet" read, or a
- *  wait with no seam. */
+/** Turns before a "not yet" or "never" read that no awaited cause covers: a park point, a detached
+ *  branch, or a decision whose run settles with it, so an effect a regression defers past it lands
+ *  inside them. */
 const flush = async () => {
 	for (let i = 0; i < 50; i++) await Promise.resolve()
 }
@@ -416,6 +417,7 @@ describe("the connect window after Allow", () => {
 		await h.prompted("f1")
 		h.allow("f1", 41)
 		await discoveryRun("f1")
+		await flush()
 
 		expect(approved()).toEqual(["f1"])
 		expect(gate().reservation("f1")?.status).toBe("standby")
@@ -432,6 +434,7 @@ describe("the connect window after Allow", () => {
 		await vi.advanceTimersByTimeAsync(2_000)
 		h.allow("f1", 41)
 		await discoveryRun("f1")
+		await flush()
 
 		expect(rejected()).toEqual(["f1"])
 		expect(approved()).toEqual([])
@@ -446,6 +449,7 @@ describe("the connect window after Allow", () => {
 		h.allow("f1", 41)
 		await discoveryRun("f1")
 		await h.windows.gone(41)
+		await flush()
 
 		expect(rejected()).toEqual(["f1"])
 		expect(approved()).toEqual([])
@@ -461,6 +465,7 @@ describe("the connect window after Allow", () => {
 		h.allow("f1", 41)
 		await discoveryRun("f1")
 		await h.windows.gone(41)
+		await flush()
 
 		expect(h.windows.removed).toEqual([41])
 		expect(markers().has("f1")).toBe(false)
@@ -479,6 +484,7 @@ describe("the connect window after Allow", () => {
 		h.allow("f1", 41)
 		await discoveryRun("f1")
 		await discoveryRun("twin")
+		await flush()
 
 		expect(approved()).toEqual(["f1", "twin"])
 		expect(h.rows.size).toBe(1)
@@ -534,6 +540,7 @@ describe("the connect window after Allow", () => {
 		await h.prompted("f1")
 		h.allow("f1", 41)
 		await discoveryRun("f1")
+		await flush()
 
 		expect(rejected()).toEqual(["f1"])
 		expect(approved()).toEqual([])
@@ -560,6 +567,7 @@ describe("the connect window after Allow", () => {
 		await h.windows.gone(41)
 		grants.resolve(undefined)
 		await discoveryRun("f1")
+		await flush()
 
 		expect(rejected()).toEqual(["f1"])
 		expect(approved()).toEqual([])
@@ -578,6 +586,7 @@ describe("the connect window after Allow", () => {
 
 		h.closeTab(7)
 		await h.windows.gone(41)
+		await flush()
 
 		expect(h.windows.removed).toEqual([41])
 		expect(markers().has("f1")).toBe(false)
@@ -613,6 +622,7 @@ describe("an Allow while the origin's two verification slots are held", () => {
 
 		h.windows.closeByUser(41)
 		await discoveryRun("f3")
+		await flush()
 
 		expect(approved()).toEqual(["f1", "f2", "f3"])
 		expect(gate().reservation("f3")?.status).toBe("standby")
@@ -674,6 +684,7 @@ describe("an approved connection whose key exchange never completes", () => {
 
 		h.windows.closeByUser(41)
 		await h.windows.gone(41)
+		await flush()
 		expect(gate().windowsHeld(ORIGIN)).toBe(0)
 	})
 })
@@ -949,6 +960,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		await h.journal.filed(1)
 		h.refuse()
 		await Promise.all([a, s])
+		await settle()
 		expect(terminated()).toEqual(["r1"])
 		expect(dispatched()).toEqual([])
 		expect(responses).toEqual([])
@@ -968,6 +980,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 		h.closeTab(7)
 		await s
+		await settle()
 		expect(terminated()).toEqual(["r1"])
 		expect(dispatched()).toEqual([])
 		expect(row(h)?.kind).toBe("wallet_refused")
@@ -984,6 +997,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 		h.lock()
 		await s
+		await settle()
 		expect(terminated()).toEqual(["h1"])
 		expect(sessions.has("c1")).toBe(true)
 		expect(row(h)?.kind).toBe("session_ended")
@@ -999,6 +1013,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		const establishing = h.establish("f1")
 		markers().set("f1", { ...markers().get("f1")! })
 		await establishing
+		await settle()
 		expect(terminated()).toEqual([])
 		expect(sessions.has("f1")).toBe(true)
 
@@ -1020,6 +1035,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 
 		h.lock()
 		await Promise.all([s1, s2])
+		await settle()
 		expect(terminated()).toEqual(["h1", "h2"])
 		expect([row(h, 1)?.kind, row(h, 2)?.kind]).toEqual(["session_ended", "session_ended"])
 		expect(dispatched()).toEqual([])
@@ -1033,6 +1049,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		await h.journal.filed(1)
 		h.switchProfile("p2")
 		await s
+		await settle()
 		expect(terminated()).toEqual(["r1"])
 		expect(dispatched()).toEqual([])
 		expect(row(h)?.kind).toBe("wallet_refused")
@@ -1093,11 +1110,13 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		})
 		const s = h.send("r1", "sendTx", "s")
 		await writing.promise
+		await settle()
 		expect(h.journal.createOperation).toHaveBeenCalledTimes(1)
 		h.refuse()
 
 		write.resolve()
 		await s
+		await settle()
 		expect(row(h)?.kind).toBe("wallet_refused")
 		expect(dispatched()).toEqual([])
 	})
@@ -1110,6 +1129,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		await h.journal.filed(1)
 		h.rowDeleted("p1")
 		await s
+		await settle()
 		expect(terminated()).toEqual(["r1"])
 		expect(dispatched()).toEqual([])
 		expect(row(h)?.kind).toBe("wallet_refused")
@@ -1198,6 +1218,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		expect(dispatched()).toEqual([])
 		expect(responses).toEqual([])
 		await h.send("r1", "sendTx", "own")
+		await settle()
 		expect(h.journal.createOperation).toHaveBeenCalledTimes(1)
 		expect(dispatched()).toEqual(["r1:sendTx"])
 	})
@@ -1219,6 +1240,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		const termsReads = legal.mock.calls.length
 		slow.resolve("ok")
 		await Promise.all([first, parked])
+		await settle()
 		expect(dispatched()).toEqual(["r1:getChainInfo"])
 		expect(responses).toEqual([])
 		expect(row(h)?.kind).toBe("wallet_refused")
@@ -1278,6 +1300,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		h.setProfile({ id: "p2" })
 		fence.resolve()
 		await g
+		await settle()
 		expect(dispatched()).toEqual([])
 		if (rekeyed) {
 			expect(responses).toEqual([])
@@ -1362,6 +1385,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 				} catch {}
 			}
 			await h.send("r1", "getChainInfo", "valid")
+			await settle()
 			expect(refusedIds()).toEqual([])
 			expect(dispatched()).toEqual(["r1:getChainInfo"])
 		})
