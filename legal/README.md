@@ -42,8 +42,8 @@ These are **not** fixed by editing the documents.
    with an older or no record; the version and time are recorded on the device by
    `LegalAcceptanceService`. No "By continuing…" browsewrap footer stands in for it.
 3. ~~**Preserve export access on decline.**~~ — done, and proved end to end: nothing but
-   broadcasting and dApp requests is gated, and the sheet cannot cover an export page
-   (`apps/extension/tests/e2e/legal-acceptance.test.ts`, scenarios S5, S6, S8).
+   broadcasting, dApp requests and the token-list download is gated, and the sheet cannot cover
+   an export page (`apps/extension/tests/e2e/legal-acceptance.test.ts`, scenarios S5, S6, S8).
 
    Blockers 1–3 are recorded in `implementations-plan/archive/legal-terms/`.
 4. ~~**Verify the Presto MIT relicense reached the bundled artifacts.**~~ — done. The lockfile

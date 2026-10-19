@@ -12,7 +12,8 @@
 - **OA-3, P68-04: B**, "Replace the box: before the promote, you send from the 1.0.0 candidate on
   the new Testnet."
 - **OA-4, P68-05: A**, "Accept the window by name: #385 stays a known limit with its corrected
-  condition." Note: "Don't even mention it." The condition lives on #385 only.
+  condition." Note: "Don't even mention it." So no launch document, `SECURITY.md`, README or
+  release note names it; the condition is posted on #385.
 
 The asks as they were put:
 

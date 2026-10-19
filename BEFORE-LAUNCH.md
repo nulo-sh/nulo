@@ -109,8 +109,8 @@ Then:
       submission locks every dashboard field ([`release` skill](./.claude/skills/release/SKILL.md),
       troubleshooting)
 - [ ] AMO (owner): remove the "This add-on is experimental" flag
-- [x] The README's "DEMO / PREVIEW BUILD — NOT A PRODUCTION WALLET" banner is rewritten, with the
-      copy the owner signed (2026-10-19, decision page 68)
+- [x] The README's "DEMO / PREVIEW BUILD — NOT A PRODUCTION WALLET" banner is rewritten to the
+      owner's picks (2026-10-19, decision page 68)
 
 ## 4. Every later `release: promote dev → main`
 
