@@ -10,8 +10,20 @@ eli5_mode: skipped (orchestrator-owned)
 base: 60fde7e7
 trunk: dev
 post_implementation_hardening: not scheduled
-status: planned; Codex approve (round 2)
+status: completed 2026-10-19; delivered in #877
 ---
+
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** completed. #877 closes #870, #863 and #746; its merge into `dev` closes the plan.
+- **Shipped:** Send's amount card says "More than your balance" under an amount above a balance the wallet read (P64-02 B), last in the card, `role="alert"`, with `aria-invalid` and `aria-describedby` on the shown input (D5); a missing or unreadable balance is `balanceUnknown`, and a row never synced shows no line (D3). A balance falling below the amount clears the fee row to "Fee estimated after simulation" and cancels an estimate still running (P64-01 B, D6). The restore warning's held sentence ends "Turn on Developer Mode in Settings to add a network." (P61-03 B). Pictures in `screenshots/`.
+- **Owner asks:** OA-1 to OA-5 ship in their "what ships now" form ([OWNER-ASKS.md](OWNER-ASKS.md)); #877 stays a draft until the owner has seen the line and the asks, so a different answer amends it before the merge.
+- **Dropped:** none.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted; the capture method and the two-held restore's smoke fallback are in [lessons/phase-4.md](lessons/phase-4.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # ui-picks-1: an amount over the balance says so, its fee row resets, the restore warning names Developer Mode
 
