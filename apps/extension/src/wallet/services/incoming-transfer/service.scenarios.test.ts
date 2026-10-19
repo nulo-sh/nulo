@@ -55,8 +55,8 @@ import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/li
 
 // ── Storage ─────────────────────────────────────────────────────────────
 
-// `@webext-core/fake-browser` keeps one store per process, so this repository reads and writes the
-// rows of every service the suite boots.
+// Every `FakeBrowserApi` in this file shares `@webext-core/fake-browser`'s one store, so this
+// repository reads and writes the rows of every service the suite boots.
 const suiteBrowser = new FakeBrowserApi()
 const repo = new IncomingTransferRepository(suiteBrowser)
 

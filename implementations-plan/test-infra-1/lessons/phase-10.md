@@ -7,7 +7,7 @@
 - Parks and spies sit on the service's repository instance; `instrumentReceipt` and `bootClear` bind each captured method to it, since the real methods read `this`.
 - 7406 → 7342 lines, 339 = 339 titles. `repository.test.ts` and `service.composition.test.ts` unchanged and green. The fake's accepted `clearChain` complexity record left the baseline with it.
 
-## Changed assertions (30; the full list with old and new lines is in the PR body)
+## Changed assertions (30; the PR body lists each with its old and new lines)
 
 | class | count | why |
 |---|---|---|

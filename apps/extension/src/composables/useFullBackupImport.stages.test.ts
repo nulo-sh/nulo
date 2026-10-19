@@ -1,7 +1,8 @@
 /**
  * Real-wiring pins for restoreBackup/pickBackupFile/decryptBackup: they drive the whole composable
  * over the scaffold useFullBackupImport.test.ts drives, shared through
- * useFullBackupImport.harness.ts (each file keeps its own `vi.mock` lines: they hoist per file).
+ * tests/helpers/backup-import-harness.ts (each file keeps its own `vi.mock` lines: they hoist per
+ * file).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { computeBackupMac, EncryptionKey, PasskeyCredential } from "@nulo/wallet-crypto"
@@ -22,46 +23,61 @@ import {
 	tokenBalanceClient,
 	tokenClient,
 	transactionClient,
-} from "./useFullBackupImport.harness"
+} from "../../tests/helpers/backup-import-harness"
 
 // ── Mocks ───────────────────────────────────────────────────────────────────
 
-vi.mock("@/utils/restore-outcome", async () => (await import("./useFullBackupImport.harness")).restoreOutcomeModule)
-vi.mock("@/wallet/services/profile/client", async () => (await import("./useFullBackupImport.harness")).profileClientModule)
-vi.mock("@/wallet/services/network/client", async () => (await import("./useFullBackupImport.harness")).networkClientModule)
-vi.mock("@/wallet/services/account/client", async () => (await import("./useFullBackupImport.harness")).accountClientModule)
-vi.mock("@/wallet/services/token/client", async () => (await import("./useFullBackupImport.harness")).tokenClientModule)
-vi.mock("@/wallet/services/transaction/client", async () => (await import("./useFullBackupImport.harness")).transactionClientModule)
-vi.mock("@/wallet/services/token-balance/client", async () => (await import("./useFullBackupImport.harness")).tokenBalanceClientModule)
-vi.mock("@/wallet/services/account-state/client", async () => (await import("./useFullBackupImport.harness")).accountStateClientModule)
-vi.mock("@/wallet/services/auth-registry/client", async () => (await import("./useFullBackupImport.harness")).authRegistryClientModule)
-vi.mock("@/wallet/services/contact/client", async () => (await import("./useFullBackupImport.harness")).contactClientModule)
-vi.mock("@/wallet/services/config/client", async () => (await import("./useFullBackupImport.harness")).configClientModule)
+vi.mock("@/utils/restore-outcome", async () => (await import("../../tests/helpers/backup-import-harness")).restoreOutcomeModule)
+vi.mock("@/wallet/services/profile/client", async () => (await import("../../tests/helpers/backup-import-harness")).profileClientModule)
+vi.mock("@/wallet/services/network/client", async () => (await import("../../tests/helpers/backup-import-harness")).networkClientModule)
+vi.mock("@/wallet/services/account/client", async () => (await import("../../tests/helpers/backup-import-harness")).accountClientModule)
+vi.mock("@/wallet/services/token/client", async () => (await import("../../tests/helpers/backup-import-harness")).tokenClientModule)
+vi.mock(
+	"@/wallet/services/transaction/client",
+	async () => (await import("../../tests/helpers/backup-import-harness")).transactionClientModule,
+)
+vi.mock(
+	"@/wallet/services/token-balance/client",
+	async () => (await import("../../tests/helpers/backup-import-harness")).tokenBalanceClientModule,
+)
+vi.mock(
+	"@/wallet/services/account-state/client",
+	async () => (await import("../../tests/helpers/backup-import-harness")).accountStateClientModule,
+)
+vi.mock(
+	"@/wallet/services/auth-registry/client",
+	async () => (await import("../../tests/helpers/backup-import-harness")).authRegistryClientModule,
+)
+vi.mock("@/wallet/services/contact/client", async () => (await import("../../tests/helpers/backup-import-harness")).contactClientModule)
+vi.mock("@/wallet/services/config/client", async () => (await import("../../tests/helpers/backup-import-harness")).configClientModule)
 vi.mock("@/wallet/services/account/spec", async (importOriginal) =>
-	(await import("./useFullBackupImport.harness")).accountSpecModule(importOriginal),
+	(await import("../../tests/helpers/backup-import-harness")).accountSpecModule(importOriginal),
 )
-vi.mock("@/wallet/services/account-state/spec", async () => (await import("./useFullBackupImport.harness")).accountStateSpecModule)
-vi.mock("@/utils/background-liveness", async () => (await import("./useFullBackupImport.harness")).livenessModule)
+vi.mock(
+	"@/wallet/services/account-state/spec",
+	async () => (await import("../../tests/helpers/backup-import-harness")).accountStateSpecModule,
+)
+vi.mock("@/utils/background-liveness", async () => (await import("../../tests/helpers/backup-import-harness")).livenessModule)
 vi.mock("@/wallet/services/auth-registry/spec", async (importOriginal) =>
-	(await import("./useFullBackupImport.harness")).authRegistrySpecModule(importOriginal),
+	(await import("../../tests/helpers/backup-import-harness")).authRegistrySpecModule(importOriginal),
 )
-vi.mock("@/wallet/services/config/spec", async () => (await import("./useFullBackupImport.harness")).configSpecModule)
+vi.mock("@/wallet/services/config/spec", async () => (await import("../../tests/helpers/backup-import-harness")).configSpecModule)
 vi.mock("@/wallet/services/contact/spec", async (importOriginal) =>
-	(await import("./useFullBackupImport.harness")).contactSpecModule(importOriginal),
+	(await import("../../tests/helpers/backup-import-harness")).contactSpecModule(importOriginal),
 )
 vi.mock("@/wallet/services/network/spec", async (importOriginal) =>
-	(await import("./useFullBackupImport.harness")).networkSpecModule(importOriginal),
+	(await import("../../tests/helpers/backup-import-harness")).networkSpecModule(importOriginal),
 )
 vi.mock("@/wallet/services/token-balance/spec", async (importOriginal) =>
-	(await import("./useFullBackupImport.harness")).tokenBalanceSpecModule(importOriginal),
+	(await import("../../tests/helpers/backup-import-harness")).tokenBalanceSpecModule(importOriginal),
 )
 vi.mock("@/wallet/services/token/spec", async (importOriginal) =>
-	(await import("./useFullBackupImport.harness")).tokenSpecModule(importOriginal),
+	(await import("../../tests/helpers/backup-import-harness")).tokenSpecModule(importOriginal),
 )
 vi.mock("@/wallet/services/transaction/spec", async (importOriginal) =>
-	(await import("./useFullBackupImport.harness")).transactionSpecModule(importOriginal),
+	(await import("../../tests/helpers/backup-import-harness")).transactionSpecModule(importOriginal),
 )
-vi.mock("@/wallet/storage/migrations", async () => (await import("./useFullBackupImport.harness")).migrationsModule())
+vi.mock("@/wallet/storage/migrations", async () => (await import("../../tests/helpers/backup-import-harness")).migrationsModule())
 
 // Imported AFTER mocks are registered.
 import { useFullBackupImport } from "./useFullBackupImport"
@@ -72,7 +88,7 @@ import { FilePickCanceledError } from "@/utils/files"
 
 beforeEach(resetBackupImportHarness)
 
-// ── Pre-extraction pins ─────────────────────────────────────────────────────
+// ── Real-wiring pins ────────────────────────────────────────────────────────
 
 function happyWiring() {
 	profileClient.restore.mockResolvedValue({ id: "new-id", name: "Imported", type: "password" })

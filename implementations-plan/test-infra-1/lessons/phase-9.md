@@ -1,8 +1,10 @@
 # test-infra-1: phase 9 (the backup-import harness, `makeDispatcher`, the last storage stubs)
 
-## `useFullBackupImport.harness.ts`
+## The backup-import harness (`apps/extension/tests/helpers/backup-import-harness.ts`)
 
-- The harness holds the spies, `FENCE`, the builders (`buildBackup`, `makeOpts`) and `resetBackupImportHarness`; it calls no `vi.mock` and imports nothing a suite mocks. Each suite keeps its own one-line `vi.mock` calls with the literal harness path (O9).
+- It lives in `tests/helpers/`, not beside the composable as the plan named it: `unplugin-auto-import` scans `src/composables/` and would publish every harness export as an app-wide global in `src/types/auto-imports.d.ts`, which `_build-extension.yml` refuses as a stale generated file.
+
+- The harness holds the spies, `FENCE`, the builders (`buildBackup`, `makeOpts`) and `resetBackupImportHarness`; it calls no `vi.mock` and imports nothing a suite mocks. Each suite keeps its own `vi.mock` calls with the literal harness path (O9).
 - The six pass-through clients stay `export let`, replaced each test rather than reset in place, so late work from one test lands on that test's spies, never the next one's.
 - The stages copy's drift was resolved toward the main suite: it had no restore-outcome mock (the real reminder ran and logged "the reminder could not be armed" on `navigator.locks`), no `FENCE` (every stage got an empty fence), no `assertRunFence`, and two account-client spies never reset. The one edit inside a test body: "stage-order law"'s own finalize stub returned the stale `{ id }` shape and now returns `{ profile, fence: FENCE }`, the real return type.
 - Storage roots come from the real spec modules through `importOriginal`. A scratch config that renamed every root printed the renamed values and kept both suites green; renaming a constant now fails `typecheck:all`.

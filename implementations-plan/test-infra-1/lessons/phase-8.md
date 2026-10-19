@@ -19,7 +19,7 @@ Counted sites are guessed turn loops (`for (…) await Promise.resolve()` and th
 | file | sites | moved (a/b/c/d) | kept | tests |
 |---|---|---|---|---|
 | `background.connect-window` | 121 | 94 (7/41/41/0, and 5 deleted after a synchronous trigger) | 27 | 58 = 58 |
-| `background.admission` | 28 | 24 (1/17/6/0) | 4 | 12 = 12 |
+| `background.admission` | 28 | 23 (1/16/6/0) | 5 | 12 = 12 |
 | `background.origin-admission` | 5 | 5 (0/5/0/0), `flush` deleted | 0 | 6 = 6 |
 | `background.reset-wait` | 4 | 2 (b) | 2 | 4 = 4 |
 | `background.unserved-chain` | 25 | 24 (b and c) | 1 | 16 = 16 |
@@ -52,3 +52,8 @@ No hand-rolled deadline loop had entered the e2e tree since arc 2's inventory (r
 
 - A mutation command's restore copy used a path relative to the repository root after a `cd apps/extension`; it failed silently and three mutations of `incoming-transfer/repository.ts` stacked from 11:08 to 11:13:45 UTC. Every agent's runs in that window were re-run. The command shape now uses absolute paths and ends with a `git status --porcelain <file>` that must print nothing.
 - `bun run baseline:complexity` reads the whole tree; run without the lock, it read a production file mid-mutation and wrote "JUSTIFICATION REQUIRED" records. A whole-tree generator takes the exclusive lock, like a mutation.
+
+## Review rounds
+
+- Codex round 1 (`approve with fixes`) and the Opus diff review (`approve with fixes`) found two loosened bounds: a stage card sampled past its 30 s or 10 s bound passed on `pollUntil`'s last read, and one admission "not yet" awaited a run that settles while its reconnect waits in the queue. Both are back to the old strictness; the plan's ledger has each finding and its disposition.
+- The lesson for the next move onto `pollUntil`: a loop that checked its deadline before reading the value refuses a late success, which `pollUntil` accepts on its last read; keep that check in the probe. A discovery's run covers its own decision, never a slot release or an unlock that later approves what it queued.

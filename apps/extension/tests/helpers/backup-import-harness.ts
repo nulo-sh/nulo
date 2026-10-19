@@ -1,6 +1,6 @@
 /**
- * Test-only scaffold for the full-backup-import suites. Each suite keeps its own one-line `vi.mock`
- * per module with a literal specifier: the hoisted factory runs before any top-level constant exists.
+ * Test-only scaffold for the full-backup-import suites. Each suite keeps its own `vi.mock` per
+ * module with a literal specifier: the hoisted factory runs before any top-level constant exists.
  * A factory is what first loads this file, so it imports no module a suite mocks (that import would
  * wait on the factory loading it).
  */
