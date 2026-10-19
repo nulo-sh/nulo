@@ -78,7 +78,7 @@ One arc, one PR against `dev`, no stack, `Closes #850`. Recon: [recon.md](recon.
 
 **Gate.** The two e2e runs and the picture run exit 0 at retry 0, so the rows keep their boxes across the load (I1) and the long values stay inside the card; `git diff --quiet b6208221 -- apps/extension/src/popup/windows/execute/index.vue && test -z "$(git status --porcelain apps/extension/tests/e2e/network)"` exits 0. Layers: network e2e on Chrome and Firefox.
 
-### Pre-delivery gate
+### Pre-delivery gate ✓
 `bun run audit:vue && bun run test:all`; the smoke suite on Chrome at load1 < 150 (CLAUDE.md asks it for a popup edit; no smoke spec reaches this card, and CI runs both browsers): `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build`, then `cd apps/extension && env -u EXTENSION_PATH -u NULO_E2E_ARTIFACT_RUN NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- --retry=0`; then `bun run check:plans` after staging. Pass: exit 0 everywhere; a red is a known flake (one rerun) or a fix, never a retry, timeout or skip.
 
 ## Security & Adversarial Considerations
@@ -108,6 +108,11 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 | Codex gpt-6.1-sol high, session `01a155ff-a185-78a3-96f0-d293c825a1d6` | conditional approve (C1-C4) | C1 Fact 7's fallback wording (Fee Juice; the ellipsis): accepted. C2 the spinner's status semantics would be lost: accepted, D2 is a status region. C3 the no-movement claim holds for one-line values only: accepted (Outcome, I1, the long case in phase 2). C4 a transition test, both bar dimensions, the value role: accepted. |
 | Codex final fresh pass, session `01a1560e-5292-7d43-8bbf-7d27124abb59` | conditional approve (F1), then on resume **approve** | F1 the scratch spec waited on a row's `aria-busy` and lacked the long case: accepted; spec, script and exact invocation fixed (phase 2 step 2). Security, Facts, D1-D4 and D2 confirmed. |
 | Opus 5.5 Plan lens | conditional approve (O1-O13) | O1 a blank-looking name: OA-1 widened. O2 the name's weight beside the address: a Security line, no code. O3 an exact gate for the scratch edits: accepted. O4 line references, the hidden empty name: corrected. O5 no centring: accepted (D1). O6 first frame: Fact 3. O7 one-line values: as C3. O8 `v-else-if` for `vue-tsc`: accepted (D1). O9 the transition test with metadata while loading and the same elements: accepted, merged with C4. O10 stub mechanics and tests first: accepted (phase 1). O11 the name and decimals testids: stated in D1. O12 the lessons file: written. O13 the smoke gate: pre-delivery runs it on Chrome. Per-row `aria-busy` (Opus's reading of D2): superseded by C2. |
+| Codex gpt-6.1-sol high, review round 1 over the arc's diff, session `01a1563b-a47c-7392-ad51-2c7fe726f8cb` | **approve**, no finding | |
+| Opus 5.5 general-purpose review of the same diff | approve, V1 (low), V2 (nit) | V1 the transition test did not pin the rows' order: fixed (the region's children are the three rows, in order). V2 the `tokenMetadata` prop's doc named an "Allow" button and a read before the first render: fixed. Commit b8804ed3. |
+| Codex, review round 2 (resume) over b8804ed3 | **approve**, no regression | Loop converged. |
+
+**Deviations (arc 1).** The review loop began once `audit:vue` and `test:all` were green, while the smoke suite still ran; a red smoke would have restarted it. Phase 2 also commits the two long-value pictures. The error block lost its `<template>` wrapper so its `v-else-if` follows the details region; its markup is unchanged.
 
 **Decision ledger.** D2 is the one point where the legs differed: Opus accepted `aria-busy` on each row; Codex showed that `aria-busy` makes no live region, so the arrival of the values would go unannounced where the spinner's `role="status"` had one. The status wrapper wins on that argument, follows the house's `TransactionAwaitingCard` precedent and moves nothing. Unresolved: none. Open for the owner: OA-1.
 
