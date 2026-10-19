@@ -169,6 +169,15 @@ describe("useTokenBalanceSnapshot", () => {
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(4)
 	})
 
+	test("an update for an unseen id waits for the next read, in scope or not", async () => {
+		const s = setup()
+		s.client.getTokenBalances.mockResolvedValue([row(1)])
+		await s.snap.fetchTokenBalances()
+		s.snap.onBalanceUpdated(row(8, 2))
+		s.snap.onBalanceUpdated(row(9))
+		expect(ids(s.rows)).toEqual([1])
+	})
+
 	test("an add for a listed id adds nothing; a new id lands through mapRow", async () => {
 		const s = setup({ mapRow: (r) => ({ ...r, mapped: true }) as never })
 		s.client.getTokenBalances.mockResolvedValue([row(1)])
@@ -187,6 +196,7 @@ describe("useTokenBalanceSnapshot", () => {
 		const p1 = s.snap.fetchTokenBalances()
 		s.snap.onBalanceAdded(row(7, 2))
 		s.snap.onBalanceAdded(row(8, 1, "0xother"))
+		expect(ids(s.rows)).toEqual([])
 		quiet.resolve([row(1)])
 		await p1
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
@@ -256,24 +266,6 @@ describe("useTokenBalanceSnapshot — the rules a view keeps over the defaults",
 		vi.useRealTimers()
 	})
 
-	test("an unseen update is ignored; with insertUnseenUpdated an in-scope one is listed through mapRow", async () => {
-		const home = setup()
-		home.client.getTokenBalances.mockResolvedValue([row(1)])
-		await home.snap.fetchTokenBalances()
-		home.snap.onBalanceUpdated(row(9))
-		expect(ids(home.rows)).toEqual([1])
-
-		const s = setup({ insertUnseenUpdated: true, mapRow: (r) => ({ ...r, mapped: true }) as never })
-		s.client.getTokenBalances.mockResolvedValue([row(1)])
-		await s.snap.fetchTokenBalances()
-		s.snap.onBalanceUpdated(row(8, 2))
-		s.snap.onBalanceUpdated(row(9))
-		expect(s.rows.value).toEqual([
-			{ ...row(1), mapped: true },
-			{ ...row(9), mapped: true },
-		])
-	})
-
 	test("added: replace swaps a listed row for the add, through mapRow; a new id is appended", async () => {
 		const s = setup({ added: "replace", mapRow: (r) => ({ ...r, mapped: true }) as never })
 		s.client.getTokenBalances.mockResolvedValue([row(1), row(2)])
@@ -286,49 +278,6 @@ describe("useTokenBalanceSnapshot — the rules a view keeps over the defaults",
 			{ ...row(2), mapped: true },
 			{ ...row(3), mapped: true },
 		])
-	})
-
-	test("added: append lists every add for the active account, any chain and a listed id again, and no other account's", async () => {
-		const s = setup({ added: "append" })
-		s.rows.value = [row(1)]
-		s.snap.onBalanceAdded(row(1))
-		s.snap.onBalanceAdded(row(2, 2))
-		s.snap.onBalanceAdded(row(3, 1, "0xother"))
-		expect(ids(s.rows)).toEqual([1, 1, 2])
-	})
-
-	test("added: append marks a run in flight dirty only for an add in scope", async () => {
-		const s = setup({ added: "append" })
-		const quiet = deferred<TokenBalanceInfo[]>()
-		s.client.getTokenBalances.mockReturnValueOnce(quiet.promise)
-		const p1 = s.snap.fetchTokenBalances()
-		s.snap.onBalanceAdded(row(7, 2))
-		quiet.resolve([row(1)])
-		await p1
-		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
-		expect(ids(s.rows)).toEqual([1])
-
-		const stale = deferred<TokenBalanceInfo[]>()
-		s.client.getTokenBalances.mockReturnValueOnce(stale.promise).mockResolvedValueOnce([row(1), row(9)])
-		const p2 = s.snap.fetchTokenBalances()
-		s.snap.onBalanceAdded(row(9))
-		stale.resolve([row(1)])
-		await p2
-		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(3)
-		expect(ids(s.rows)).toEqual([1, 9])
-	})
-
-	test("refetchWhenDirty: false lands the run's own answer over an event that came meanwhile", async () => {
-		const s = setup({ refetchWhenDirty: false })
-		const first = deferred<TokenBalanceInfo[]>()
-		s.client.getTokenBalances.mockReturnValueOnce(first.promise)
-		const p = s.snap.fetchTokenBalances()
-		s.snap.onBalanceAdded(row(2))
-		expect(ids(s.rows)).toEqual([2])
-		first.resolve([row(1)])
-		await p
-		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
-		expect(ids(s.rows)).toEqual([1])
 	})
 
 	test("invalidate drops the pending retry and the run in flight, and keeps the connect count", async () => {

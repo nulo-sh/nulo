@@ -1,5 +1,5 @@
 import { deferred } from "@nulo/wallet-core/utils"
-import { describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { useJournalMirror } from "./useJournalMirror"
 
@@ -46,29 +46,6 @@ describe("useJournalMirror — snapshots", () => {
 		expect(onSnapshot).toHaveBeenCalledTimes(1)
 	})
 
-	test("without supersede every read lands as it answers, and a later refused one keeps the rows", async () => {
-		const { m, read } = mirror({ supersede: false })
-		const first = deferred<OperationRecord[]>()
-		const second = deferred<OperationRecord[]>()
-		read.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
-		const runs = [m.resnapshot(), m.resnapshot()]
-		second.resolve([op("second")])
-		await runs[1]
-		first.resolve([op("first")])
-		await runs[0]
-		expect(ids(m.rows.value)).toEqual(["first"])
-
-		const ok = deferred<OperationRecord[]>()
-		const refused = deferred<OperationRecord[]>()
-		read.mockReturnValueOnce(ok.promise).mockReturnValueOnce(refused.promise)
-		const [landing, failing] = [m.resnapshot(), m.resnapshot()]
-		ok.resolve([op("ok")])
-		await landing
-		refused.reject(new Error("port closed"))
-		await expect(failing).rejects.toThrow("port closed")
-		expect(ids(m.rows.value)).toEqual(["ok"])
-	})
-
 	test("a run handed in is the one checked: stale, it reads nothing; current, it lands again on a retry", async () => {
 		const { m, read } = mirror()
 		const stale = m.begin()
@@ -80,16 +57,7 @@ describe("useJournalMirror — snapshots", () => {
 		await expect(m.resnapshot(run)).rejects.toThrow("port closed")
 		await m.resnapshot(run)
 		expect(ids(m.rows.value)).toEqual(["a"])
-	})
-
-	test("a rejected read rejects to the caller and keeps the rows shown", async () => {
-		const { m, read, onSnapshot } = mirror()
-		read.mockResolvedValueOnce([op("a")])
-		await m.resnapshot()
-		read.mockRejectedValueOnce(new Error("port closed"))
-		await expect(m.resnapshot()).rejects.toThrow("port closed")
-		expect(ids(m.rows.value)).toEqual(["a"])
-		expect(onSnapshot).toHaveBeenCalledTimes(1)
+		m.dispose()
 	})
 
 	test("an event during a read is overwritten when the read lands", async () => {
@@ -136,16 +104,6 @@ describe("useJournalMirror — events", () => {
 		expect(onRecord).toHaveBeenCalledTimes(1)
 	})
 
-	test("with dropRefusedUpdate a refused update drops its row; a refused add still changes nothing", async () => {
-		const { m, read, onRecord } = mirror({ dropRefusedUpdate: true })
-		read.mockResolvedValueOnce([op("a"), op("b")])
-		await m.resnapshot()
-		m.onOperationAdded(op("x", { kind: "token_import" }))
-		m.onOperationUpdated(op("a", { kind: "token_import" }))
-		expect(ids(m.rows.value)).toEqual(["b"])
-		expect(onRecord).not.toHaveBeenCalled()
-	})
-
 	test("a delete is never refused and runs no onRecord", async () => {
 		const { m, read, onRecord } = mirror()
 		read.mockResolvedValueOnce([op("a"), op("b")])
@@ -153,14 +111,6 @@ describe("useJournalMirror — events", () => {
 		m.onOperationDeleted(op("a", { kind: "token_import" }))
 		expect(ids(m.rows.value)).toEqual(["b"])
 		expect(onRecord).not.toHaveBeenCalled()
-	})
-
-	test("appendAdded lists an add for a listed id again", async () => {
-		const { m, read } = mirror({ place: "back", appendAdded: true })
-		read.mockResolvedValueOnce([op("a")])
-		await m.resnapshot()
-		m.onOperationAdded(op("a"))
-		expect(ids(m.rows.value)).toEqual(["a", "a"])
 	})
 })
 
@@ -187,15 +137,84 @@ describe("useJournalMirror — dispose", () => {
 		expect(onRecord).not.toHaveBeenCalled()
 		expect(onSnapshot).toHaveBeenCalledTimes(1)
 	})
+})
 
-	test("without supersede, dispose still drops the read in flight", async () => {
-		const { m, read } = mirror({ supersede: false })
+describe("useJournalMirror — a refused read", () => {
+	beforeEach(() => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+	})
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	test("rejects to the caller, keeps the rows, and is read again on its run every 2 s until one lands", async () => {
+		const { m, read, onSnapshot } = mirror()
+		read.mockResolvedValueOnce([op("a")])
+		await m.resnapshot()
+		read.mockRejectedValueOnce(new Error("port closed"))
+			.mockRejectedValueOnce(new Error("port closed"))
+			.mockResolvedValueOnce([op("b")])
+		await expect(m.resnapshot()).rejects.toThrow("port closed")
+		expect(ids(m.rows.value)).toEqual(["a"])
+		await vi.advanceTimersByTimeAsync(1_999)
+		expect(read).toHaveBeenCalledTimes(2)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(read).toHaveBeenCalledTimes(3)
+		expect(ids(m.rows.value)).toEqual(["a"])
+		await vi.advanceTimersByTimeAsync(2_000)
+		expect(read).toHaveBeenCalledTimes(4)
+		expect(ids(m.rows.value)).toEqual(["b"])
+		expect(onSnapshot).toHaveBeenCalledTimes(2)
+		await vi.advanceTimersByTimeAsync(10_000)
+		expect(read).toHaveBeenCalledTimes(4)
+	})
+
+	test("a retry armed for a run a later run superseded reads nothing", async () => {
+		const { m, read } = mirror()
+		read.mockRejectedValueOnce(new Error("port closed"))
+		await expect(m.resnapshot()).rejects.toThrow("port closed")
+		read.mockResolvedValueOnce([op("new")])
+		await m.resnapshot()
+		await vi.advanceTimersByTimeAsync(10_000)
+		expect(read).toHaveBeenCalledTimes(2)
+		expect(ids(m.rows.value)).toEqual(["new"])
+	})
+
+	test("a superseded run's late refusal still rejects, arms nothing, and leaves the current run's retry armed", async () => {
+		const { m, read } = mirror()
+		const older = deferred<OperationRecord[]>()
+		read.mockReturnValueOnce(older.promise)
+			.mockRejectedValueOnce(new Error("refused"))
+			.mockResolvedValueOnce([op("b")])
+		const first = m.resnapshot()
+		await expect(m.resnapshot()).rejects.toThrow("refused")
+		await vi.advanceTimersByTimeAsync(1_000)
+		older.reject(new Error("late"))
+		await expect(first).rejects.toThrow("late")
+		await vi.advanceTimersByTimeAsync(1_000)
+		expect(read).toHaveBeenCalledTimes(3)
+		expect(ids(m.rows.value)).toEqual(["b"])
+		await vi.advanceTimersByTimeAsync(10_000)
+		expect(read).toHaveBeenCalledTimes(3)
+	})
+
+	test("dispose cancels an armed retry, and a read refused after it arms none", async () => {
+		const armed = mirror()
+		armed.read.mockRejectedValueOnce(new Error("refused"))
+		await expect(armed.m.resnapshot()).rejects.toThrow("refused")
+		expect(vi.getTimerCount()).toBe(1)
+		armed.m.dispose()
+		expect(vi.getTimerCount()).toBe(0)
+
+		const { m, read } = mirror()
 		const pending = deferred<OperationRecord[]>()
 		read.mockReturnValueOnce(pending.promise)
 		const inFlight = m.resnapshot()
 		m.dispose()
-		pending.resolve([op("late")])
-		await inFlight
-		expect(m.rows.value).toEqual([])
+		pending.reject(new Error("disconnected"))
+		await expect(inFlight).rejects.toThrow("disconnected")
+		expect(vi.getTimerCount()).toBe(0)
+		await vi.advanceTimersByTimeAsync(10_000)
+		expect(read).toHaveBeenCalledTimes(1)
 	})
 })

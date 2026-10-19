@@ -195,7 +195,7 @@ describe("holdings page", () => {
 		expect(usePopupStore().isOpened("new_token")).toBe(true)
 	})
 
-	test("live events: a delete from any chain removes its row, an add replaces a listed row, an update lists an unseen one of this chain", async () => {
+	test("live events: a delete from any chain removes its row, an add replaces a listed row, an update for an unseen row waits for the next read", async () => {
 		installChromeStorage()
 		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET), row("b2", "BBB", CHAIN_IDS.TESTNET), row("b3", "CCC", CHAIN_IDS.TESTNET)]
 		const w = await mountPage()
@@ -207,8 +207,14 @@ describe("holdings page", () => {
 		balanceEvents.updated.invoke(row("b9", "DDD", CHAIN_IDS.TESTNET))
 		await flushPromises()
 
-		const symbols = w.findAll('[data-testid="token-symbol"]').map((s) => s.attributes("data-symbol"))
-		expect(symbols).toEqual(["BB2", "CCC", "DDD"])
+		const symbols = () => w.findAll('[data-testid="token-symbol"]').map((s) => s.attributes("data-symbol"))
+		expect(symbols()).toEqual(["BB2", "CCC"])
+
+		seedRows = [row("b2", "BB2", CHAIN_IDS.TESTNET), row("b3", "CCC", CHAIN_IDS.TESTNET), row("b9", "DDD", CHAIN_IDS.TESTNET)]
+		balanceEvents.connected.invoke(undefined as never)
+		balanceEvents.connected.invoke(undefined as never)
+		await flushPromises()
+		expect(symbols()).toEqual(["BB2", "CCC", "DDD"])
 		w.unmount()
 	})
 
@@ -278,7 +284,7 @@ describe("holdings page", () => {
 		}
 	})
 
-	test("a read in flight lands over an add that came meanwhile", async () => {
+	test("a read in flight reads again over an add that came meanwhile, which stays", async () => {
 		installChromeStorage()
 		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET)]
 		const w = await mountPage()
@@ -296,8 +302,8 @@ describe("holdings page", () => {
 		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET), row("b2", "BBB", CHAIN_IDS.TESTNET)]
 		release([row("b1", "AAA", CHAIN_IDS.TESTNET)])
 		await flushPromises()
-		expect(balanceReads()).toBe(2)
-		expect(symbols()).toEqual(["AAA"])
+		expect(balanceReads()).toBe(3)
+		expect(symbols()).toEqual(["AAA", "BBB"])
 		w.unmount()
 	})
 

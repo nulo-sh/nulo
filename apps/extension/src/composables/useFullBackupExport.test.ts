@@ -344,10 +344,9 @@ describe("useFullBackupExport — a create superseded at an await", () => {
 		await expectNothingPublished(api, opts, at)
 	})
 
-	// The open-run hop: a discard after openRun's last check still reaches the key export once, as
-	// today, and the check after the export drops the result. openRun reads the fence's `profileId`
-	// after that check, so a discard there lands in the hop.
-	it("a discard in the open-run hop reaches the key export once and publishes nothing", async () => {
+	// openRun reads the fence's `profileId` after its last check, so a discard there lands in the hop
+	// between openRun's return and the run's next step.
+	it("a discard in the open-run hop stops the run before it builds clients or requests its keys", async () => {
 		const { api, opts } = setup("password")
 		let at: ReturnType<typeof snapshot> | undefined
 		m.captureRunFence.mockImplementationOnce(async () => ({
@@ -364,9 +363,10 @@ describe("useFullBackupExport — a create superseded at an await", () => {
 		await api.handleBackup()
 		await flushPromises()
 
-		expect(exportCalls()).toBe(1)
-		expect(h.state.built).toHaveLength(10)
-		await expectNothingPublished(api, opts, { ...(at as ReturnType<typeof snapshot>), built: 10 })
+		expect(at).toBeDefined()
+		expect(exportCalls()).toBe(0)
+		expect(h.state.built).toHaveLength(0)
+		await expectNothingPublished(api, opts, at as ReturnType<typeof snapshot>)
 	})
 
 	it("a dropped run leaves its successor's latch and clients alone", async () => {

@@ -255,11 +255,10 @@ describe("pages/activity — the cancelled and failed list's events and reads", 
 	})
 	const mountActivity = () =>
 		mount(Activity, { shallow: true, global: { plugins: [router], stubs: { Flex: { template: "<div><slot /></div>" } } } })
-	const keys = (w: ReturnType<typeof mountActivity>) =>
-		w
-			.findComponent(TransactionsList)
-			.props("rows")
-			.map((row: { key: string }) => row.key)
+	const keys = (w: ReturnType<typeof mountActivity>) => {
+		const list = w.findComponent(TransactionsList)
+		return list.exists() ? list.props("rows").map((row: { key: string }) => row.key) : []
+	}
 
 	test("a new or re-added row leads, an update keeps a listed row in place, and a refused add changes nothing", async () => {
 		// One end time for every row: the list's stable sort then shows the mirror's own order.
@@ -279,7 +278,7 @@ describe("pages/activity — the cancelled and failed list's events and reads", 
 		w.unmount()
 	})
 
-	test("an update it refuses drops its row and a later terminal one lists it again at the front", async () => {
+	test("an update it refuses keeps the row where it is, and a later terminal one replaces it", async () => {
 		H.getOperations.mockResolvedValue([op("x"), op("y")])
 		const w = mountActivity()
 		await flushPromises()
@@ -288,7 +287,7 @@ describe("pages/activity — the cancelled and failed list's events and reads", 
 		// A non-terminal update delivered after the read that saw the record end.
 		H.journal.updated.emit(op("y", { terminalAt: null, progress: { stage: "proving" } }))
 		await flushPromises()
-		expect(keys(w)).toEqual(["journal:x"])
+		expect(keys(w)).toEqual(["journal:x", "journal:y"])
 		H.journal.updated.emit(op("y"))
 		H.journal.deleted.emit(op("x"))
 		await flushPromises()
@@ -296,27 +295,59 @@ describe("pages/activity — the cancelled and failed list's events and reads", 
 		w.unmount()
 	})
 
-	test("a reconnect reads again, and its refused read keeps what the mount's read listed", async () => {
-		const mountRead = deferred<unknown[]>()
-		const reconnectRead = deferred<unknown[]>()
-		H.getOperations.mockReturnValueOnce(mountRead.promise).mockReturnValueOnce(reconnectRead.promise)
-		const w = mountActivity()
-		await flushPromises()
-		const [reconnect] = H.journal.connected.emit()
-		mountRead.resolve([op("x")])
-		await flushPromises()
-		expect(keys(w)).toEqual(["journal:x"])
+	test("a reconnect's read supersedes the mount's, and a refused one is read again after 2 s", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		try {
+			const mountRead = deferred<unknown[]>()
+			const reconnectRead = deferred<unknown[]>()
+			H.getOperations.mockReturnValueOnce(mountRead.promise).mockReturnValueOnce(reconnectRead.promise)
+			const w = mountActivity()
+			await flushPromises()
+			const [reconnect] = H.journal.connected.emit()
+			mountRead.resolve([op("x")])
+			await flushPromises()
+			expect(keys(w)).toEqual([])
 
-		reconnectRead.reject(new Error("port closed"))
-		await expect(reconnect).rejects.toThrow("port closed")
-		await flushPromises()
-		expect(keys(w)).toEqual(["journal:x"])
+			reconnectRead.reject(new Error("port closed"))
+			await expect(reconnect).rejects.toThrow("port closed")
+			await flushPromises()
+			expect(keys(w)).toEqual([])
 
-		H.getOperations.mockResolvedValueOnce([op("x"), op("y", { terminalAt: 1000 })])
-		await H.journal.connected.emit()[0]
-		await flushPromises()
-		expect(keys(w)).toEqual(["journal:x", "journal:y"])
-		w.unmount()
+			H.getOperations.mockResolvedValueOnce([op("x"), op("y", { terminalAt: 1000 })])
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(keys(w)).toEqual(["journal:x", "journal:y"])
+			w.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	// History has no journal scope watcher: a retry reads whatever profile is live when it fires.
+	test("a retry armed under one profile reads the live one; one that finds no profile reads nothing and stops", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		try {
+			const w = mountActivity()
+			await flushPromises()
+			H.getOperations.mockRejectedValueOnce(new Error("port closed"))
+			const [reconnect] = H.journal.connected.emit()
+			await expect(reconnect).rejects.toThrow("port closed")
+
+			H.store.current.profile = { ...H.store.current.profile, id: "p2" } as never
+			H.getOperations.mockRejectedValueOnce(new Error("port closed"))
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(H.getOperations).toHaveBeenLastCalledWith({ profileId: "p2", isTerminal: true })
+
+			const reads = H.getOperations.mock.calls.length
+			const profile = H.store.current.profile
+			H.store.current.profile = null as never
+			await vi.advanceTimersByTimeAsync(2_000)
+			H.store.current.profile = profile
+			await vi.advanceTimersByTimeAsync(10_000)
+			expect(H.getOperations).toHaveBeenCalledTimes(reads)
+			w.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })
 
@@ -412,6 +443,7 @@ describe("pages/activity — the received row's token", () => {
 			expect.anything(),
 		)
 		expect(rowOf(w)).toEqual({ title: "TST", amount: "+1,000", fiat: "≈ $1,000.00" })
+		w.unmount()
 	})
 })
 
