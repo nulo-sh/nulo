@@ -88,6 +88,10 @@ const EXPIRY_DEFERRAL_STEP_MS = 60_000
 /** Deletes `close()` makes of the persisted session before it leaves the row to the read-back. */
 const CLOSE_DELETE_ATTEMPTS = 2
 
+/** What `close()` did: whether it announced the lock, and whether the persisted record survived
+ *  every delete attempt. */
+export type CloseOutcome = { emitted: boolean; recordKept: boolean }
+
 /** The deadline and TTL revision a snapshot-based write was decided on. */
 type CommitExpectation = { lockedAt: number | undefined; configRev: number }
 
@@ -376,22 +380,25 @@ export class SessionManager {
 	 *  iff a session was actually open (idempotent when already closed).
 	 *  Safe to call multiple times.
 	 *
-	 *  Returns whether it emitted. A worker that restarted holds no in-memory
-	 *  session while the persisted record may still exist, so an explicit lock
-	 *  that reaches here emits nothing — the caller that owns the user's intent
-	 *  (`lockActiveProfile`) announces the lock itself on `false`.
+	 *  `emitted`: a worker that restarted holds no in-memory session while the
+	 *  persisted record may still exist, so an explicit lock that reaches here
+	 *  emits nothing — the caller that owns the user's intent
+	 *  (`lockActiveProfile`) announces the lock itself on `false`. `recordKept`:
+	 *  every delete attempt of the persisted record failed; a stale close that
+	 *  stood down reports `false`, since the row is a successor's.
 	 *
 	 *  `expected` (the expiry path passes the session it OBSERVED): when the
 	 *  active session is no longer that exact object, a successor already
 	 *  replaced it — this stale close must not touch the successor's
 	 *  in-memory state or artifacts, so it returns untouched. */
-	public async close(expected?: ActiveSession): Promise<boolean> {
+	public async close(expected?: ActiveSession): Promise<CloseOutcome> {
 		let emitted = false
+		let recordKept = false
 		try {
 			// Identity guard — synchronous, so there is no TOCTOU between the
 			// check and the in-memory head below.
 			if (expected && this.activeSession !== expected) {
-				return false
+				return { emitted, recordKept }
 			}
 			const gen = this.sessionGeneration
 			// Memory-first + asymmetric-to-open. Clear the in-memory session
@@ -417,7 +424,7 @@ export class SessionManager {
 					this.logger.log(LOG_SOURCE, LogLevel.Info, "Stale close stood down — a newer session committed its artifacts")
 					return
 				}
-				await this.deletePersistedSession()
+				recordKept = !(await this.deletePersistedSession())
 				// Cancel any pending lock alarm. Idempotent — `clear()` returns
 				// `false` if no alarm exists. Run after state-clear so a racing
 				// alarm fire that arrives during this call sees
@@ -428,24 +435,25 @@ export class SessionManager {
 		} catch (error) {
 			this.logger.log(LOG_SOURCE, LogLevel.Error, "Failed to close profile session", error)
 		}
-		return emitted
+		return { emitted, recordKept }
 	}
 
-	/** Deletes the persisted session, reattempting a rejected delete once. Runs inside the
-	 *  artifact section, so no attempt can reach a successor's row. Never throws: exhaustion is
-	 *  logged, and `lockActiveProfile`'s read-back decides whether the lock persisted. No backoff:
-	 *  a `storage.session` removal has no quota or throttling path to wait out. */
-	private async deletePersistedSession(): Promise<void> {
+	/** Deletes the persisted session, reattempting a rejected delete once, and reports whether a
+	 *  delete succeeded. Runs inside the artifact section, so no attempt can reach a successor's
+	 *  row. Never throws. No backoff: a `storage.session` removal has no quota or throttling path
+	 *  to wait out. */
+	private async deletePersistedSession(): Promise<boolean> {
 		for (let attempt = 1; attempt <= CLOSE_DELETE_ATTEMPTS; attempt++) {
 			try {
 				await this.session.delete()
-				return
+				return true
 			} catch (error) {
 				const last = attempt === CLOSE_DELETE_ATTEMPTS
 				const message = last ? "Failed to delete persisted session on close" : "Persisted session delete failed; reattempting"
 				this.logger.log(LOG_SOURCE, last ? LogLevel.Error : LogLevel.Warn, message, { error })
 			}
 		}
+		return false
 	}
 
 	/** True iff a session record is still persisted in storage. Used by

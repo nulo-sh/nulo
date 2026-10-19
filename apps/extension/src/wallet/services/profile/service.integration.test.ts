@@ -3142,35 +3142,55 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 	// (CLOSE READ-BACK PIN) An explicit lock whose persisted-session delete
 	// fails must NOT report success — lockActiveProfile reads back and surfaces it,
 	// else the surviving bearer would silently re-unlock on the next SW start.
+	// A record that refused both deletes restarts the wallet; nothing else does.
 	describe("(CLOSE READ-BACK PIN) lockActiveProfile surfaces a failed persisted-session clear", () => {
-		test("a rejecting session.remove during lock makes lockActiveProfile throw", async () => {
+		// The read-back fails in every row, so a restart keyed on it rather than on the deletes fails here.
+		test.each([
+			{ failedDeletes: 0, attempts: 1, restarts: 0 },
+			{ failedDeletes: 1, attempts: 2, restarts: 0 },
+			{ failedDeletes: 2, attempts: 2, restarts: 1 },
+		])(
+			"a lock with $failedDeletes failed delete(s) restarts the wallet $restarts time(s), and throws",
+			async ({ failedDeletes, attempts, restarts }) => {
+				const { api, service } = await makeService()
+				await service.createProfile("P", "pass1234")
+				const reload = vi.spyOn(api.runtime, "reload")
+				const remove = vi.spyOn(api.storage.session, "remove")
+				for (let i = 0; i < failedDeletes; i++) remove.mockRejectedValueOnce(new Error("session remove failed"))
+				vi.spyOn(api.storage.session, "get").mockRejectedValue(new Error("session get failed"))
+
+				await expect(service.lockActiveProfile()).rejects.toThrow(/did not persist/)
+				expect(remove).toHaveBeenCalledTimes(attempts)
+				expect(reload).toHaveBeenCalledTimes(restarts)
+			},
+			30_000,
+		)
+
+		test("a lock that saves restarts nothing", async () => {
 			const { api, service } = await makeService()
 			await service.createProfile("P", "pass1234")
-			expect((await service.getActiveProfile())?.id).toBeDefined()
+			const reload = vi.spyOn(api.runtime, "reload")
 
-			vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("session remove failed"))
-			await expect(service.lockActiveProfile()).rejects.toThrow(/did not persist/)
+			await service.lockActiveProfile()
+			expect(await service.getActiveProfile()).toBeUndefined()
+			expect(reload).not.toHaveBeenCalled()
 		}, 30_000)
 
-		test("a read-back that cannot read the record makes lockActiveProfile throw", async () => {
-			const { api, service } = await makeService()
-			await service.createProfile("P", "pass1234")
-
-			vi.spyOn(api.storage.session, "get").mockRejectedValue(new Error("session get failed"))
-			await expect(service.lockActiveProfile()).rejects.toThrow(/did not persist/)
-		}, 30_000)
-
-		test("a restarted worker whose lock cannot be confirmed still announces the lock", async () => {
+		test("a restarted worker whose lock cannot be saved announces the lock, then restarts", async () => {
 			const { api, service } = await makeService()
 			await service.createPasskeyProfile("PK")
 			const { service: rebooted } = await makeServiceFromExistingApi(api)
 			expect(await rebooted.getActiveProfile()).toBeUndefined()
 			const events: unknown[] = []
+			const reload = vi.spyOn(api.runtime, "reload").mockImplementation(() => {
+				events.push("reload")
+			})
 			rebooted.onActiveProfileChanged.add((p) => events.push(p))
 
 			vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("session remove failed"))
 			await expect(rebooted.lockActiveProfile()).rejects.toThrow(/did not persist/)
-			expect(events).toEqual([undefined])
+			expect(events).toEqual([undefined, "reload"])
+			expect(reload).toHaveBeenCalledTimes(1)
 		}, 30_000)
 	})
 
