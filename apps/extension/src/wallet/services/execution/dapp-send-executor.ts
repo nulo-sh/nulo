@@ -68,7 +68,7 @@ import type { QueuedFeeAnswers } from "./queued-fee-cap"
 import { MAX_WAIT_MS, type SendSequencer, type SequenceScope, type SequenceTicket } from "./send-sequencer"
 import { probeAppPayerFunding, probeOwnFeeJuice, probeSponsorFunding } from "./sponsor-funding"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
-import { type FeeEstimate, finalizeGasLimits, suggestGasLimits } from "./fee/fee-strategy"
+import { type FeeEstimate, finalizeGasLimits, type OnBuilt, suggestGasLimits } from "./fee/fee-strategy"
 import type { OperationPlanner } from "./operation-planner"
 import type {
 	Action,
@@ -208,6 +208,7 @@ export interface DappSendExecutorDeps {
 		fence: ExecutionFence,
 		parentTask?: WrappedTask,
 		signal?: AbortSignal,
+		onBuilt?: OnBuilt,
 	): Promise<FeeEstimate>
 	/** Mirrors `TransactionService.addTransaction` — indexed type keeps the
 	 *  seam in sync with the source signature. */
@@ -845,7 +846,7 @@ export class DappSendExecutor {
 		ceiling: string | undefined,
 		ctx: SlotRun,
 	): Promise<{ built: FeeEstimate } | { over: OverCeiling }> {
-		const built = await this.deps.buildAndEstimateValidated(op, op.feeSettings, fence, parentTask)
+		const built = await this.deps.buildAndEstimateValidated(op, op.feeSettings, fence, parentTask, undefined, ctx.recordCall)
 		await ctx.recordCall(built.txCalls)
 		const reask = overCeiling(approval, ceiling, built)
 		return reask ? { over: { reask } } : { built }
@@ -1033,7 +1034,7 @@ export class DappSendExecutor {
 	): Promise<{ built: StandardBuild } | { over: OverCeiling }> {
 		const { op, identity, fence, parentTask, checkCancelled, preview, approval } = run
 		const before = await this.reuseSnapshot(op.networkId, op.accountAddress)
-		const built = await this.resolveStandardBuild(op, identity, reuseId, fence, parentTask, checkCancelled)
+		const built = await this.resolveStandardBuild(op, identity, reuseId, fence, parentTask, checkCancelled, run.recordCall)
 		await run.recordCall(built.txCalls)
 		if (preview) assertWithinPreview(preview, built.discoveredHashes)
 		checkCancelled()
@@ -1125,6 +1126,7 @@ export class DappSendExecutor {
 		fence: ExecutionFence,
 		parentTask: WrappedTask | undefined,
 		checkCancelled: () => void,
+		onBuilt: OnBuilt,
 	): Promise<StandardBuild> {
 		const { actions, fee } = identity
 		const reused = estimateId ? await this.deps.operationEstimateReuse.tryConsume(estimateId, identity, fence) : undefined
@@ -1166,10 +1168,21 @@ export class DappSendExecutor {
 				op.feeSettings,
 				fence,
 				parentTask,
+				undefined,
+				onBuilt,
 			)
 			return { ...built, discoveredHashes: [] }
 		}
-		const { built, discovered } = await this.deps.estimateWithDiscovery.estimate(op, actions, fee, op.feeSettings, fence, parentTask)
+		const { built, discovered } = await this.deps.estimateWithDiscovery.estimate(
+			op,
+			actions,
+			fee,
+			op.feeSettings,
+			fence,
+			parentTask,
+			undefined,
+			onBuilt,
+		)
 		if (discovered.length) {
 			this.deps.logDebug(`[executeAztecSendTx] Discovered ${discovered.length} auth witness(es) via offchain effects`)
 		}
