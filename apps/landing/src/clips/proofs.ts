@@ -53,14 +53,17 @@ const CELL_ORDER = [
 	14, 3, 27, 9, 33, 20, 1, 30, 11, 24, 6, 17, 35, 0, 22, 12, 29, 5, 19, 32, 8, 26, 15, 2, 34, 23, 10, 28, 4, 18, 31, 7, 25, 13, 21, 16,
 ]
 
-function proofSquare(parent: Element, x: number, y: number): (k: number) => void {
+function proofSquare(parent: Element, x: number, y: number): { readonly g: SVGGElement; fill(k: number): void } {
 	const g = group(parent)
 	place(g, x, y)
 	const cells = CELL_ORDER.map((i) =>
 		node(g, "rect", { class: "c-cell", x: (i % 6) * 12, y: Math.floor(i / 6) * 12, width: 10, height: 10 }),
 	)
-	return (k) => {
-		for (const [n, cell] of cells.entries()) show(cell, n < k * cells.length ? 1 : 0.12)
+	return {
+		g,
+		fill: (k) => {
+			for (const [n, cell] of cells.entries()) show(cell, n < k * cells.length ? 1 : 0.12)
+		},
 	}
 }
 
@@ -75,9 +78,12 @@ const proving = scene({ builds: ["builds", 0], proof: ["proof", 0], without: ["w
 		show(net.g, 0.4)
 		const k = seg(t, at.builds, at.without + 1.2)
 		progress(k)
-		square(k)
+		square.fill(k)
 		show(label, seg(t, at.proof, at.proof + 0.4))
-		show(wall, seg(t, at.without, at.without + 0.6))
+		// The private mark does not cover the whole grid, so the proof's cells give way to it.
+		const closed = seg(t, at.without, at.without + 0.6)
+		show(square.g, 1 - closed)
+		show(wall, closed)
 	}
 })
 
@@ -153,7 +159,7 @@ const slowStep = scene({ building: ["building", 0], sending: ["sending", 0] }, (
 		show(net.g, 0.4)
 		const k = seg(t, at.building, at.sending)
 		progress(k)
-		square(k)
+		square.fill(k)
 		show(send, seg(t, at.sending, at.sending + 0.4))
 	}
 })
