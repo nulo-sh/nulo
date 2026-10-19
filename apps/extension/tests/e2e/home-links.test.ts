@@ -5,7 +5,7 @@ import { openPopup, test, waitForHash } from "./fixtures/extension"
 import { navigateByHash, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { shotSend } from "./fixtures/send-page"
 import { readActivityScope, secondToken, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
-import { focusRing, tabTo, tokenColor } from "./helpers/pointer-probes"
+import { activeTestId, focusInPopupOf, focusRing, pressEscape, SPACE, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 
@@ -129,3 +129,98 @@ test("View history on Home and on a token's page is a Tab stop after the token l
 
 	expect(ctx.pageErrors).toEqual([])
 }, 240_000)
+
+type EnterRead = { __enters?: { on: string | null; repeat: boolean }[]; __entersHeard?: boolean }
+
+/** Holds Enter on the focused control: a press, its repeat and the release. Returns each Enter
+ *  keydown's target and `repeat`, so a driver that sends no repeat proves nothing and fails. */
+async function holdEnter(page: Page): Promise<{ on: string | null; repeat: boolean }[]> {
+	await page.evaluate(() => {
+		const w = window as unknown as EnterRead
+		w.__enters = []
+		// A route change keeps the document, and with it a listener an earlier hold installed.
+		if (w.__entersHeard) return
+		w.__entersHeard = true
+		window.addEventListener(
+			"keydown",
+			(e) => {
+				if (e.key !== "Enter") return
+				const on = e.target instanceof Element ? (e.target.closest("[data-testid]")?.getAttribute("data-testid") ?? null) : null
+				w.__enters?.push({ on, repeat: e.repeat })
+			},
+			true,
+		)
+	})
+	await page.keyboard.down("Enter")
+	await page.keyboard.down("Enter")
+	await page.keyboard.up("Enter")
+	return page.evaluate(() => (window as unknown as EnterRead).__enters ?? [])
+}
+
+const historyLength = (page: Page) => page.evaluate(() => history.length)
+
+test("Send and Receive on Home are the Tab stops after the hero, with the accent ring; a held Enter on Send opens Send once; a held Enter on Receive opens one sheet, Escape closes it back onto Receive and Space opens it again", async ({
+	registeredExtension: ctx,
+}) => {
+	const page = await openPopup(ctx)
+	await waitForHash(page, "#/popup/general")
+	await page.waitForSelector(sel("actions-send"), { visible: true, timeout: 15_000 })
+	await prepareKeys(page)
+
+	// A walk that passes the page's last stop leaves the document on Firefox, so each starts at a named stop.
+	await page.focus(sel("header-lock"))
+	const onward = await tabTo(page, "actions-send")
+	expect(
+		onward.filter((id) => id === "BODY" || id.startsWith("nav-") || id.startsWith("tokens-")),
+		`the walk on: ${onward.join(" → ")}`,
+	).toEqual([])
+	const accent = await tokenColor(page, "--nulo-accent")
+	expect(await focusRing(page, "actions-send")).toEqual({ ring: "solid 2px 2px", color: accent })
+	await shotSend(page, "home-actions-send-focused", "actions-send")
+	await page.keyboard.press("Tab")
+	expect(await activeTestId(page)).toBe("actions-receive")
+	expect(await focusRing(page, "actions-receive")).toEqual({ ring: "solid 2px 2px", color: accent })
+	await shotSend(page, "home-actions-receive-focused", "actions-receive")
+
+	await page.keyboard.down("Shift")
+	await page.keyboard.press("Tab")
+	await page.keyboard.up("Shift")
+	await waitForFocus(page, "actions-send")
+	const before = await historyLength(page)
+	const sendEnters = await holdEnter(page)
+	expect(
+		sendEnters.map((e) => e.repeat),
+		`the Enter keydowns: ${JSON.stringify(sendEnters)}`,
+	).toEqual([false, true])
+	await waitForHash(page, "#/popup/send")
+	await page.waitForSelector(sel("send-footer"), { visible: true, timeout: 15_000 })
+	expect(await historyLength(page), "pushStates the held Enter made").toBe(before + 1)
+
+	await page.evaluate(() => history.back())
+	await waitForHash(page, "#/popup/general")
+	await page.waitForSelector(sel("actions-receive"), { visible: true, timeout: 15_000 })
+	await prepareKeys(page)
+	await page.focus(sel("header-lock"))
+	await tabTo(page, "actions-receive")
+	const receiveEnters = await holdEnter(page)
+	expect(receiveEnters, "both Enter keydowns reach Receive").toEqual([
+		{ on: "actions-receive", repeat: false },
+		{ on: "actions-receive", repeat: true },
+	])
+	await page.waitForSelector(sel("receive-close"), { visible: true, timeout: 15_000 })
+	expect(await page.$$eval(sel("receive-close"), (closes) => closes.length)).toBe(1)
+	expect(await activeTestId(page)).toBe("actions-receive")
+	await page.keyboard.press("Tab")
+	expect(await focusInPopupOf(page, "receive-close"), "Tab moves into the sheet").toBe(true)
+
+	expect(await pressEscape(page), "Escape is handled").toBe(true)
+	await page.waitForFunction((s: string) => !document.querySelector(s), { timeout: 5_000, polling: 50 }, sel("receive-close"))
+	await waitForFocus(page, "actions-receive")
+	await page.keyboard.press(SPACE)
+	await page.waitForSelector(sel("receive-close"), { visible: true, timeout: 15_000 })
+	expect(await pressEscape(page), "Escape is handled").toBe(true)
+	await waitForFocus(page, "actions-receive")
+
+	expect(ctx.consoleErrors).toEqual([])
+	expect(ctx.pageErrors).toEqual([])
+}, 120_000)

@@ -1,3 +1,4 @@
+import { Flex } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 
@@ -23,9 +24,13 @@ const activeStore = (): Record<string, unknown> => ({
 	account: { profileId: "p1", chainId: 2, address: "0x01" },
 })
 
-async function clickBoth(over: Record<string, unknown> = {}) {
+function mountActions(over: Record<string, unknown> = {}) {
 	H.store = { ...activeStore(), ...over }
-	const wrapper = mount(ActionButtonsView, { global: { stubs: { Flex: { template: "<div><slot /></div>" } } } })
+	return mount(ActionButtonsView, { global: { components: { Flex } } })
+}
+
+async function clickBoth(over: Record<string, unknown> = {}) {
+	const wrapper = mountActions(over)
 	await wrapper.find('[data-testid="actions-send"]').trigger("click")
 	await wrapper.find('[data-testid="actions-receive"]').trigger("click")
 }
@@ -36,6 +41,15 @@ beforeEach(() => {
 })
 
 describe("ActionButtonsView", () => {
+	test("Send and Receive are native buttons, so Tab reaches them and Enter and Space press them", () => {
+		const wrapper = mountActions()
+		for (const testid of ["actions-send", "actions-receive"]) {
+			const action = wrapper.find(`[data-testid="${testid}"]`).element
+			expect(action.tagName, testid).toBe("BUTTON")
+			expect(action.getAttribute("type"), testid).toBe("button")
+		}
+	})
+
 	test("Send and Receive act on the active network's account", async () => {
 		await clickBoth()
 		expect(H.push).toHaveBeenCalledWith({ path: "/popup/send", query: {} })

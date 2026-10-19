@@ -7,6 +7,9 @@ import type { Page } from "puppeteer"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 
+/** The space bar for `keyboard.press`: Puppeteer's BiDi keyboard (Firefox) knows it only by its key value, not as "Space". */
+export const SPACE = " "
+
 /** What sits on top of the element at its centre — its testid or tag — or null when the element itself is hit. */
 export async function coveredAt(page: Page, testid: string): Promise<string | null> {
 	return page.evaluate((s) => {
