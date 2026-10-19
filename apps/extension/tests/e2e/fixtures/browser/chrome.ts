@@ -211,6 +211,24 @@ async function evaluateInBackground<T>(browser: Browser, extensionId: string, bo
 	}
 }
 
+async function backgroundOrigin(browser: Browser, extensionId: string): Promise<number | undefined> {
+	const workers = browser.targets().filter(isServiceWorkerOf(extensionId))
+	const origins = await Promise.all(workers.map((t) => readWorkerTimeOrigin(t, WORKER_PROBE_BUDGET_MS).catch(() => undefined)))
+	const answered = origins.filter((origin): origin is number => origin !== undefined)
+	return answered.length > 0 ? Math.max(...answered) : undefined
+}
+
+/** Developer mode is a profile setting with no launch flag; the extensions page's own API sets it. */
+async function allowSelfRestart(browser: Browser): Promise<void> {
+	const page = await browser.newPage()
+	try {
+		await page.goto("chrome://extensions", { waitUntil: "domcontentloaded" })
+		await page.evaluate("chrome.developerPrivate.updateProfileConfiguration({ inDeveloperMode: true })")
+	} finally {
+		await page.close()
+	}
+}
+
 /** The MV3 service worker is the first extension context Chrome starts, and its URL carries the id. */
 async function discoverExtensionId(browser: Browser): Promise<string> {
 	const worker = await browser.waitForTarget(
@@ -282,6 +300,8 @@ export const chromeDriver: BrowserDriver = {
 	pxeHostState,
 	closePxeHost: (page) => page.evaluate(() => chrome.offscreen.closeDocument()),
 	stopBackground,
+	allowSelfRestart,
+	backgroundOrigin,
 	backgroundAlive,
 	evaluateInBackground,
 	openScratchPage: async (browser, extensionId) => {

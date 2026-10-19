@@ -1,6 +1,7 @@
 import { MessageType } from "@nulo/extension-messaging/messages"
 import { wrapParams } from "@nulo/extension-messaging/utils"
 import type { Page } from "puppeteer"
+import { type BackgroundOwner, backgroundOrigin } from "./browser"
 import { pollUntil } from "./poll"
 
 /** The persisted session row's public fields: the unlocked profile, the last refresh, and when auto-lock is due. */
@@ -134,5 +135,34 @@ export async function waitForWorkerLiveness(page: Page, afterTs: number, opts: {
 		},
 		{ timeout: opts.timeoutMs ?? 30_000, polling: 500 },
 		afterTs,
+	)
+}
+
+const RESTART_BUDGET_MS = 30_000
+
+/**
+ * Run `restart`, then resolve once the extension has restarted: `openPage`, an extension page open
+ * before it, is closed, as both browsers close every extension page when the extension unloads, and
+ * a background newer than the one that ran before `restart` runs. A background restart alone
+ * closes no page, so it never satisfies this.
+ */
+export async function waitForExtensionRestart(owner: BackgroundOwner, openPage: Page, restart: () => Promise<void>): Promise<void> {
+	const before = await backgroundOrigin(owner)
+	if (before === undefined) throw new Error("waitForExtensionRestart: no background runs before the restart")
+	await restart()
+	const deadline = Date.now() + RESTART_BUDGET_MS
+	await pollUntil(
+		async () => openPage.isClosed(),
+		(closed) => closed,
+		{
+			label: "the extension's pages closing on its restart",
+			timeoutMs: RESTART_BUDGET_MS,
+			intervalMs: 100,
+		},
+	)
+	await pollUntil(
+		() => backgroundOrigin(owner),
+		(origin) => origin !== undefined && origin > before,
+		{ label: "a background newer than the restarted one", timeoutMs: Math.max(0, deadline - Date.now()), intervalMs: 250 },
 	)
 }
