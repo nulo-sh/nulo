@@ -65,7 +65,7 @@ const STUBS = {
 	SectionLabel: { props: ["label"], template: "<div />" },
 	Toggle: { props: ["modelValue"], template: "<div />" },
 	EmojiGrid: { props: ["emojis"], template: '<div data-testid="emoji-grid-stub">{{ emojis }}</div>' },
-	DappIdentityBlock: { props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel"], template: "<div />" },
+	DappIdentityBlock: { props: ["dapp", "actionLabel"], template: "<div />" },
 	// As the real primitive: only `disabled` sets the attribute, and listeners reach the button.
 	Button: { props: ["disabled", "loading"], template: '<button :disabled="disabled"><slot /></button>' },
 }

@@ -4,8 +4,8 @@ import { reactive, ref } from "vue"
 
 /**
  * The world every dApp approval window suite mounts its window in: the interaction payload, the
- * hostname, the profile client, the app store and the router, one ordered call log, and spies on
- * the window's `beforeunload` listener. A suite mocks each module in one line, with a literal path
+ * profile client, the app store and the router, one ordered call log, and spies on the window's
+ * `beforeunload` listener. A suite mocks each module in one line, with a literal path
  * (a top-level constant is still in its temporal dead zone when the hoisted factory runs):
  *
  * ```ts
@@ -94,10 +94,6 @@ export const payloadModule = {
 		load: loadInteractionPayloadMock,
 		reject: rejectViaInteractionServiceMock,
 	})),
-}
-
-export const hostnameModule = {
-	useDappHostname: vi.fn(() => ({ hostname: ref("example.com"), isSuspicious: ref(false) })),
 }
 
 // The clients are constructed with `new`, which an arrow cannot be: hence function declarations.

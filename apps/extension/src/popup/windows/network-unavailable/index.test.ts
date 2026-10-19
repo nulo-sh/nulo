@@ -72,7 +72,7 @@ const STUBS = {
 	DappIdentityBlock: {
 		template:
 			'<div data-testid="identity-block" :data-action="actionLabel" :data-hostname-testid="hostnameTestId" :data-name-testid="nameTestId" />',
-		props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel", "hostnameTestId", "nameTestId"],
+		props: ["dapp", "actionLabel", "hostnameTestId", "nameTestId"],
 	},
 }
 

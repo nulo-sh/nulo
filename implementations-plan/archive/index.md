@@ -63,6 +63,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [composition-test-rollout](composition-test-rollout/plan.md) — completed — composition tests behind one shared minimal PXE seam, where they pay
 - [connect-chain-mismatch](connect-chain-mismatch/plan.md) — completed — connecting on another chain derives that chain's default account on demand
 - [connect-window](connect-window/plan.md) — completed — after Allow the connect window becomes the emoji check instead of opening a second window
+- [consent-display-1](consent-display-1/plan.md) — completed — the consent windows name the full origin and discovery admits secure origins only; a dApp's token add stores what its window showed, token text cleaned; "About" on the app-set fee; Send's caveat for a token outside the bundled classes; the label mark on a registered token's call
 - [contacts-export-uxr](contacts-export-uxr/plan.md) — abandoned — a proposed rework of the contacts export, never carried out
 - [contacts-import-1](contacts-import-1/plan.md) — completed — a closed file chooser settles the pick (#45), a contacts import pinned to the session its rows were shown in (#43)
 - [contacts-rename-export-senders](contacts-rename-export-senders/plan.md) — completed — senders renamed to contacts, with the sender flag kept across export and import
