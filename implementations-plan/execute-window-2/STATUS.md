@@ -6,3 +6,4 @@
 - 2026-10-18 arc 1 phase 1: worker half (record, terminal refusal, queued title) green on lint, `typecheck:all` and the targeted vitest; T1 mutation-checked against a reverted D1/D7.
 - 2026-10-18 arc 1 phase 2: window notice, `confirmHidden`, README; `audit:vue` and `test:all` green (one run started above the load limit, logged).
 - 2026-10-18 arc 1 phase 3: network e2e green on both browsers before and after merging `dev`; Chrome smoke green (armed); pictures taken; Codex approve twice, Opus folded.
+- 2026-10-19 arc 1: second merge of `dev` (retitle contract), gates and network e2e green again, Codex approve (3/3); PR opening.

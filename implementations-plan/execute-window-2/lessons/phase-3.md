@@ -33,3 +33,4 @@ scope-refusal test 2 against test 1 on the same run, locally: Chrome 20.4 s / 20
 - **Codex round 1** (gpt-6.1-sol, high, session `01a150a0`, over `132a3171`): approve, no finding. Its one evidence gap, T2 and T3 red on the base, was then run: four tests red on the base copies of `execution/service.ts` and `queued-journal.ts`.
 - The first Codex call passed the prompt as text; `run-codex.sh` takes a file path and exited at once. Rerun with the file.
 - **Codex, resumed after the merge of `dev`** (`f466e3be`): approve, no new material finding. The loop converged.
+- **Codex, resumed after the second merge** (`274f3cb6`): approve, no new material finding on the retitle resolution. Three Codex rounds in all, each an approve.

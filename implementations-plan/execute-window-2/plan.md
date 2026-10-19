@@ -138,6 +138,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | arc 1 | Opus 5.5 (general-purpose) | conditional approve | the vacuous T1 sub-assertion; every attempt answers the first recorded refusal (`refusalBound`); the comment cap | its conditions are the Phase 3 gates and D10, already in the plan |
 | arc 1 | Codex, gpt-6.1-sol (session 01a150a0) | **approve** | T2 and T3 base-red runs recorded (`lessons/phase-3.md`) | none |
 | arc 1, after the merge of `dev` | Codex, resumed | **approve** | none new: `confirmHidden` drops #805's two-line Confirm whole; the `fee` slot contract is unchanged | none |
+| arc 1, after the second merge | Codex, resumed | **approve** | none new: the queued retitle follows `refusalOf`'s title and call, as execution does | none |
 
 ## Seeds
 
