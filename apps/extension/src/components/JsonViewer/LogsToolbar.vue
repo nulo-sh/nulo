@@ -10,6 +10,7 @@
  * its "active" tint from `allOptionsSelected[kind]` (false = filtered,
  * which renders the chip in the accent color).
  */
+import { Dropdown } from "@/components/ui/Dropdown"
 import { capitalize } from "@/utils"
 import { getDisplayName } from "./logs-format"
 
@@ -110,18 +111,18 @@ const filteredKeys = (kind, filters, search) => {
 		</Popover>
 
 		<Dropdown>
-			<Flex align="center" gap="4" :class="$style.filter_button">
+			<Flex align="center" gap="4" :class="$style.filter_button" data-testid="logs-more-trigger">
 				<Icon name="more" size="14" />
 			</Flex>
 
 			<template #popup>
-				<DropdownItem @click="emit('exportCsv')" :class="$style.filter_content_item">
+				<DropdownItem @click="emit('exportCsv')" :class="$style.filter_content_item" data-testid="logs-export-csv">
 					<Flex align="center" gap="8">
 						<Icon name="download" size="12" />
 						<Text variant="body">Export logs to CSV</Text>
 					</Flex>
 				</DropdownItem>
-				<DropdownItem @click="emit('clearLogs')" :class="$style.filter_content_item">
+				<DropdownItem @click="emit('clearLogs')" :class="$style.filter_content_item" data-testid="logs-clear">
 					<Flex align="center" gap="6">
 						<Icon name="close" size="14" style="padding-right: 4px" />
 						Clear logs

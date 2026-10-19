@@ -1,6 +1,8 @@
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { OriginType, TransferType, TxStatus } from "@/wallet/services/transaction/spec"
 import TxDetail from "./[id].vue"
@@ -157,6 +159,27 @@ describe("the transaction page's fee", () => {
 		const w = await mountPage({ ...sentTransfer, estimatedFee: "4000000000000000000" }, Promise.resolve([listed]), { TxFeeRow: false })
 		expect(w.text()).toContain("Estimated fee")
 		expect(headerOf(w).text()).toBe("~4 FJ ($0.240)")
+	})
+
+	test("an app's own fee contract reads as the app's, whatever it names its fee function; the person's pick reads its method", async () => {
+		const transfer = { contract: TOKEN, method: "transfer_in_private", args: [ACCOUNT, ACCOUNT, field(5n), field(0n)], classId: CLASS }
+		const dappSend = (feeCall: unknown) => ({
+			...settled({ type: OriginType.DAPP, name: "example.dapp.io" }, [feeCall, transfer]),
+			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
+		})
+		const appFpc = {
+			contract: `0x${"1d".repeat(32)}`,
+			method: "fee_entrypoint_private",
+			args: [field(1n), field(2n)],
+			classId: field(0xfc1n),
+		}
+		const embedded = await mountPage(dappSend(appFpc), Promise.resolve([listed]))
+		expect(embedded.text()).toContain("Set by example.dapp.io")
+		expect(embedded.text()).not.toContain("Private Fee Juice")
+		const privateFpc = { contract: PRIVATE_FPC_ADDRESS, method: "pay_fee", args: [], classId: field(0xfc2n) }
+		const picked = await mountPage(dappSend(privateFpc), Promise.resolve([listed]))
+		expect(picked.text()).toContain("Private Fee Juice")
+		expect(picked.text()).not.toContain("Set by")
 	})
 })
 

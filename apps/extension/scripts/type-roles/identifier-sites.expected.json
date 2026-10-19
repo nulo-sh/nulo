@@ -281,8 +281,8 @@
 		},
 		{
 			"file": "apps/extension/src/components/stale-network/StaleNetworkTakeover.vue",
-			"expression": "content.secondary.text",
-			"branch": "content && content.secondary",
+			"expression": "action.text",
+			"branch": "content",
 			"ordinal": 0,
 			"role": "none",
 			"selector": "",

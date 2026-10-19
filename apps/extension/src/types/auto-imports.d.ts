@@ -141,6 +141,7 @@ declare global {
   const copyWithToast: typeof import('../utils/clipboard').copyWithToast
   const createApp: typeof import('vue').createApp
   const createContactImportGuard: typeof import('../stores/contact-import-guard').createContactImportGuard
+  const createFailedNotice: typeof import('../utils/profile-flow-notices').createFailedNotice
   const createRunFence: typeof import('../composables/runFence').createRunFence
   const customRef: typeof import('vue').customRef
   const debounce: typeof import('../utils/general').debounce
@@ -156,6 +157,7 @@ declare global {
   const endsSelection: typeof import('../utils/selection').endsSelection
   const errorLogWriters: typeof import('../composables/useFullBackupImport').errorLogWriters
   const estimateWhenClear: typeof import('../utils/estimate-when-clear').estimateWhenClear
+  const exportsHeld: typeof import('../composables/useStaleNetwork').exportsHeld
   const feeDisplay: typeof import('../utils/fee-estimation').feeDisplay
   const feeFigure: typeof import('../utils/fee-estimation').feeFigure
   const feePicksKey: typeof import('../utils/profile-ui-keys').feePicksKey
@@ -237,6 +239,7 @@ declare global {
   const isValidHex: typeof import('../utils/string').isValidHex
   const isValidatedTokenClass: typeof import('../utils/token-class').isValidatedTokenClass
   const journalAdded: typeof import('../utils/journal-mirror').journalAdded
+  const journalCallTitle: typeof import('../utils/journal-state').journalCallTitle
   const journalCardIcon: typeof import('../utils/journal-state').journalCardIcon
   const journalCardOriginLabel: typeof import('../utils/journal-state').journalCardOriginLabel
   const journalCardTitle: typeof import('../utils/journal-state').journalCardTitle
@@ -291,13 +294,14 @@ declare global {
   const parseTransferIntent: typeof import('../utils/transfer-intent').parseTransferIntent
   const passkeyBackupAuthenticator: typeof import('../utils/full-backup-helpers').passkeyBackupAuthenticator
   const passkeyFailureCopy: typeof import('../utils/passkey-copy').passkeyFailureCopy
+  const passkeyImportFailedNotice: typeof import('../utils/profile-flow-notices').passkeyImportFailedNotice
   const passkeyNeedsOwnWindow: typeof import('../utils/browser-surface').passkeyNeedsOwnWindow
   const passkeyTag: typeof import('../utils/passkey-copy').passkeyTag
   const persistThemeHint: typeof import('../utils/general').persistThemeHint
   const pickFile: typeof import('../utils/files').pickFile
   const pickPrimaryIndex: typeof import('../utils/primary-method').pickPrimaryIndex
   const pickPrimaryMethod: typeof import('../utils/tx-enrichment').pickPrimaryMethod
-  const pickPrimaryWireMethod: typeof import('../utils/primary-method').pickPrimaryWireMethod
+  const pickPrimaryWireCall: typeof import('../utils/primary-method').pickPrimaryWireCall
   const pinScopeOf: typeof import('../composables/usePinnedTokens').pinScopeOf
   const pinnedTokensKey: typeof import('../utils/profile-ui-keys').pinnedTokensKey
   const plainMethodName: typeof import('../utils/tx-enrichment').plainMethodName
@@ -901,6 +905,7 @@ declare module 'vue' {
     readonly copyWithToast: UnwrapRef<typeof import('../utils/clipboard')['copyWithToast']>
     readonly createApp: UnwrapRef<typeof import('vue')['createApp']>
     readonly createContactImportGuard: UnwrapRef<typeof import('../stores/contact-import-guard')['createContactImportGuard']>
+    readonly createFailedNotice: UnwrapRef<typeof import('../utils/profile-flow-notices')['createFailedNotice']>
     readonly createRunFence: UnwrapRef<typeof import('../composables/runFence')['createRunFence']>
     readonly customRef: UnwrapRef<typeof import('vue')['customRef']>
     readonly debounce: UnwrapRef<typeof import('../utils/general')['debounce']>
@@ -916,6 +921,7 @@ declare module 'vue' {
     readonly endsSelection: UnwrapRef<typeof import('../utils/selection')['endsSelection']>
     readonly errorLogWriters: UnwrapRef<typeof import('../composables/useFullBackupImport')['errorLogWriters']>
     readonly estimateWhenClear: UnwrapRef<typeof import('../utils/estimate-when-clear')['estimateWhenClear']>
+    readonly exportsHeld: UnwrapRef<typeof import('../composables/useStaleNetwork')['exportsHeld']>
     readonly feeDisplay: UnwrapRef<typeof import('../utils/fee-estimation')['feeDisplay']>
     readonly feeFigure: UnwrapRef<typeof import('../utils/fee-estimation')['feeFigure']>
     readonly feePicksKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['feePicksKey']>
@@ -997,6 +1003,7 @@ declare module 'vue' {
     readonly isValidHex: UnwrapRef<typeof import('../utils/string')['isValidHex']>
     readonly isValidatedTokenClass: UnwrapRef<typeof import('../utils/token-class')['isValidatedTokenClass']>
     readonly journalAdded: UnwrapRef<typeof import('../utils/journal-mirror')['journalAdded']>
+    readonly journalCallTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCallTitle']>
     readonly journalCardIcon: UnwrapRef<typeof import('../utils/journal-state')['journalCardIcon']>
     readonly journalCardOriginLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardOriginLabel']>
     readonly journalCardTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCardTitle']>
@@ -1051,13 +1058,14 @@ declare module 'vue' {
     readonly parseTransferIntent: UnwrapRef<typeof import('../utils/transfer-intent')['parseTransferIntent']>
     readonly passkeyBackupAuthenticator: UnwrapRef<typeof import('../utils/full-backup-helpers')['passkeyBackupAuthenticator']>
     readonly passkeyFailureCopy: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyFailureCopy']>
+    readonly passkeyImportFailedNotice: UnwrapRef<typeof import('../utils/profile-flow-notices')['passkeyImportFailedNotice']>
     readonly passkeyNeedsOwnWindow: UnwrapRef<typeof import('../utils/browser-surface')['passkeyNeedsOwnWindow']>
     readonly passkeyTag: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyTag']>
     readonly persistThemeHint: UnwrapRef<typeof import('../utils/general')['persistThemeHint']>
     readonly pickFile: UnwrapRef<typeof import('../utils/files')['pickFile']>
     readonly pickPrimaryIndex: UnwrapRef<typeof import('../utils/primary-method')['pickPrimaryIndex']>
     readonly pickPrimaryMethod: UnwrapRef<typeof import('../utils/tx-enrichment')['pickPrimaryMethod']>
-    readonly pickPrimaryWireMethod: UnwrapRef<typeof import('../utils/primary-method')['pickPrimaryWireMethod']>
+    readonly pickPrimaryWireCall: UnwrapRef<typeof import('../utils/primary-method')['pickPrimaryWireCall']>
     readonly pinScopeOf: UnwrapRef<typeof import('../composables/usePinnedTokens')['pinScopeOf']>
     readonly pinnedTokensKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['pinnedTokensKey']>
     readonly plainMethodName: UnwrapRef<typeof import('../utils/tx-enrichment')['plainMethodName']>

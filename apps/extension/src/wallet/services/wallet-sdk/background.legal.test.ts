@@ -77,7 +77,7 @@ describe("handleWalletMessage — Terms admission", () => {
 			["queued"],
 			{ stage: "failed" },
 			{ kind: "terms_refused", message: "Open Nulo and accept the Terms to continue.", normalizedRaw: null },
-			{ failedTitle: "Transaction" },
+			{ retitle: { title: "Transaction" } },
 		)
 	})
 

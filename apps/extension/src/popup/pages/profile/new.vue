@@ -15,6 +15,7 @@ import { useToast } from "@/composables/toast"
 import { useProfileCreateFlow } from "@/composables/useProfileCreateFlow"
 
 /** Utils */
+import { createFailedNotice } from "@/utils/profile-flow-notices"
 import { capitalize } from "@/utils/string"
 import { redirectToOnboardingTabIfNeeded } from "@/wallet/utils/onboarding-tab"
 import { activateCreatedProfile, makeCreateKeydownHandler } from "./new-profile-helpers"
@@ -71,20 +72,7 @@ const {
 	// the active account, and routes. Extracted to a testable page helper.
 	onCreated: (profile) => activateCreatedProfile(profile, { appStore, router, openToast, selectedOnEntry }),
 	openToast,
-	notifyCreateFailed: (isPasskey) => {
-		notificationStore.create({
-			type: "warning",
-			payload: {
-				title: "Profile creation failed",
-				description: isPasskey
-					? "An error occurred while creating the profile. This authenticator may not be supported or encountered an issue. Try again or use another one."
-					: "An error occurred while creating the profile. Please try again.",
-				note: isPasskey ? "Windows Hello may not work correctly with some versions of Windows." : undefined,
-				confirmText: "OK",
-				onConfirm: () => {},
-			},
-		})
-	},
+	notifyCreateFailed: (isPasskey) => notificationStore.create(createFailedNotice(isPasskey)),
 })
 
 const onKeydown = makeCreateKeydownHandler(handleCreate)

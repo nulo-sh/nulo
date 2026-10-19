@@ -551,7 +551,7 @@ describe("DappInteractionService when the Terms acceptance lapses after the requ
 			["pending"],
 			{ stage: "failed" },
 			{ kind: "terms_refused", message: TermsAcceptanceRequiredError.MESSAGE, normalizedRaw: null },
-			{ failedTitle: "Transaction" },
+			{ retitle: { title: "Transaction" } },
 		)
 	})
 

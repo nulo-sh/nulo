@@ -90,7 +90,7 @@ describe("payerKindOf", () => {
 })
 
 describe("publishGlyph", () => {
-	test("the solid square only for hidden, the dotted square for anything public, nothing when Nulo can't tell", () => {
+	test("the private mark only for hidden, the public mark for anything public, nothing when Nulo can't tell", () => {
 		expect(publishGlyph("hidden")).toBe("private")
 		expect(publishGlyph("public")).toBe("public")
 		expect(publishGlyph("exposed")).toBe("public")
