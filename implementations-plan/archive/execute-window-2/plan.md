@@ -135,7 +135,7 @@ Scratch spec `ew2-shots.test.ts`, kept in `~/.cache/nulo-backlog/execute-window-
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `24c68cb4`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `24c68cb4`. Specific here:
 - Step 1 is absent. Step 2 runs once over the arc's diff from its merge base with `origin/dev`, after Phase 3: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus 5.5 diff review (`general-purpose`) beside round 1; prompts under `~/.cache/nulo-backlog/execute-window-2/`; hard stop at three rounds; rounds in `lessons/phase-3.md` and the table below.
 - Approval boundary (a plan change; stop): the popup naming a refusal, settling at estimate time, recording anything but a `ScopeViolationError`, substituting the refusal on any end but Reject and close, a raw block in queued records, an `OperationCard.vue` edit, any persistence, words beyond OA-1, any #777 change.
 - Close-out in the PR's final commits: Outcome; comments on #104, #106 and #575 (reasons above) and on #777 (its pictures); OA-1 filed as an `owner-decision` issue if the PR merges before its answer (D10); lessons promoted only within the 8 KiB budget; `STATUS.md` deleted; `git mv` into `archive/`. Teardown after the merge: `agent-worktree done execute-window-2 --merged`; trunk `dev`; `implementations-plan/archive/execute-window-2/plan.md`.
