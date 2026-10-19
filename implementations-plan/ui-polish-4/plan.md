@@ -118,6 +118,8 @@ The brief's no-ask records are the picks above, and nothing more. Logs window's 
 **Round 2** (Codex, resumed): `conditional approve (with conditions: compare trigger positions and dimensions independently of their cropped-image hashes)`. Accepted: a moved trigger keeps its clip's hash, so every trigger's box is compared too. Codex verified that the pre-flush `open` watcher runs before the search field's `onMounted` focus (Vue `runtime-core`), that refocusing before `onClose()` is right, and Opus's focus-trap claim (`focus-trap.esm.js:819-831,878`).
 
 **Round 3** (Codex, resumed, verification): `approve`, no new finding.
+
+**Post-implementation** (diff `948670ca..ui-polish-4-a1`). Codex (gpt-6.1-sol, high, session `01a15405`) round 1: `findings: 1`, Low: two e2e comments restated their code → deleted. Opus 5.5 diff review beside it: `approve`; accepted: `Popover` kept its document listeners past an unmount, and a leaked one would now mark every later Escape handled → `onBeforeUnmount` cleanup with a case that reds without it (the file now unmounts what each case leaves mounted, or the leaked listeners of earlier cases hide it); the Escape comment names the inside-the-panel guard; the comment nits as Codex. Rejected: "Firefox on macOS does not focus a clicked button" (the Firefox harness runs on Linux only, `apps/extension/tests/e2e/FIREFOX.md`); "Level's Escape cannot catch a missing hand-back" and D6's limit (both by design, no change asked). Codex round 2 (resumed, verifying `342a4f91`): `clean`. Converged.
  O4 Clear logs 4 px shorter → named in UI impact. O5 a key after a mouse focus shows the ring → named in the PR body. O6 the live-add row priced. O7 Level focused and settled before the shot.
 
 ## Delivery

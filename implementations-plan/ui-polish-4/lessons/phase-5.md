@@ -1,0 +1,4 @@
+# Phase 5: full gate and review loop
+
+- 2026-10-19: `audit:vue` green (860 files, 14,096 tests; build). `test:all`: one red, `scripts/e2e/reconcile-lock.test.ts` "waiters in separate processes ... never overlap" timed out at 5 s at load1 ~170; untouched by this arc, it passed in `audit:vue`'s run before and 6/6 alone at load1 250. Re-run on the final head below.
+- 2026-10-19: Codex round 1 (`01a15405`) `findings: 1` (two e2e comments) and Opus `approve` with a latent leak: `Popover` never removed its document listeners on unmount. Fixed in `342a4f91`; the new case first passed for the wrong reason, red even with the fix, because earlier cases left open popovers mounted and their listeners now mark Escape handled. The file unmounts every wrapper a case leaves mounted (`VueWrapper.exists()` is false after an unmount). Codex round 2: `clean`.
