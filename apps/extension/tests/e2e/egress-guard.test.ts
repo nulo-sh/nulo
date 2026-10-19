@@ -3,7 +3,7 @@ import { type Server, createServer } from "node:http"
 import type { Page } from "puppeteer"
 import { afterAll, beforeAll, describe, expect, inject, test } from "vitest"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
-import { evaluateInBackground, newPage, openScratchPage } from "./fixtures/browser"
+import { evaluateInBackground, isFirefox, newPage, openScratchPage } from "./fixtures/browser"
 import {
 	EGRESS_CANARY_HOST,
 	EGRESS_LINK_LOCAL_HOST,
@@ -118,6 +118,34 @@ function pageRequests(page: Page, requests: Record<string, string>): Promise<Rec
 	)
 }
 
+/** Posts `node_getNodeInfo` to the Testnet node from an extension page: `status N`, or `rejected: <error name>`. */
+async function pageNodeCall(ctx: ExtensionContext): Promise<string> {
+	const page = await openScratchPage(ctx.browser, ctx.extensionId)
+	try {
+		return await page.evaluate(
+			async (url: string, budgetMs: number) => {
+				const call = { jsonrpc: "2.0", id: 1, method: "node_getNodeInfo", params: [] }
+				try {
+					const response = await fetch(url, {
+						method: "POST",
+						headers: { "content-type": "application/json" },
+						body: JSON.stringify(call),
+						cache: "no-store",
+						signal: AbortSignal.timeout(budgetMs),
+					})
+					return `status ${response.status}`
+				} catch (err) {
+					return `rejected: ${(err as Error).name}`
+				}
+			},
+			TESTNET_RPC_URL,
+			PROBE_BUDGET_MS,
+		)
+	} finally {
+		await page.close().catch(() => {})
+	}
+}
+
 const countFor = (guard: EgressGuard, host: string, port: number): number =>
 	guard.attempts().find((attempt) => attempt.host === host && attempt.port === port)?.count ?? 0
 
@@ -215,5 +243,25 @@ describe("the launch's egress guard", () => {
 			wss: "failed",
 		})
 		expect(canary.connections()).toBe(0)
+	})
+})
+
+// Its own launch: the close is what it checks, and the launch above stops its guard.
+describe("a node request the stand-in's interception does not see", () => {
+	test("fails the launch's close; Chrome never attaches a page, Firefox's observer covers it", async () => {
+		const leaky = await launchExtension()
+		let closing: Promise<void> | undefined
+		try {
+			// Awaited before the close: the guard has counted the attempt by the time the fetch settles.
+			expect(await pageNodeCall(leaky)).toBe(isFirefox ? "status 400" : "rejected: TypeError")
+			closing = leaky.close()
+			if (isFirefox) await closing
+			else
+				await expect(closing).rejects.toThrow(
+					/^egress guard: egress-guard\.test\.ts: chrome sent lb\.drpc\.live:443 to the guard \d+ time\(s\) while the launch's stand-in held its origin: [^\n]*cannot fix this\.$/,
+				)
+		} finally {
+			if (!closing) await leaky.close().catch(() => {})
+		}
 	})
 })

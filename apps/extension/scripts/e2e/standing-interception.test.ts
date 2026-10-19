@@ -209,6 +209,35 @@ describe("standing interceptions", () => {
 		expect(log.at(-1)).toBe("arm redirect https://node.test")
 	})
 
+	test("the launch's handle holds only while its own interception is armed", async () => {
+		const { browser, arm, failArm, pauseArm } = fakeBrowser()
+		const standing = standingInterceptions(arm)
+		const held = await standing.hold(browser, "ext", NODE, REDIRECT)
+		expect(held.holding()).toBe(true)
+		let duringKill: boolean | undefined
+		await standing.whileReleased(browser, async () => {
+			duringKill = held.holding()
+		})
+		expect([duringKill, held.holding()]).toEqual([false, true])
+		const own = await standing.intercept(browser, "ext", NODE, REFUSE)
+		expect(held.holding()).toBe(false)
+		const rearm = pauseArm()
+		const stopped = own.stop()
+		await rearm.started
+		expect(held.holding()).toBe(false)
+		rearm.release()
+		await stopped
+		expect(held.holding()).toBe(true)
+		await held.stop()
+		expect(held.holding()).toBe(false)
+
+		const other = await standing.hold(browser, "ext", OTHER, REDIRECT)
+		const swap = await standing.intercept(browser, "ext", OTHER, REFUSE)
+		failArm()
+		await swap.stop()
+		expect(other.holding()).toBe(false)
+	})
+
 	test("a spec that stops after the launch let go re-arms nothing", async () => {
 		const { browser, log, arm } = fakeBrowser()
 		const standing = standingInterceptions(arm)

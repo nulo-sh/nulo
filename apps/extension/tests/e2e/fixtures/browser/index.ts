@@ -51,6 +51,12 @@ export interface ArmedInterception {
 	stop: () => Promise<void>
 }
 
+export interface HeldInterception extends ArmedInterception {
+	/** Whether the launch's own interception is armed now: false while a kill or a spec's interception
+	 *  has the origin, while it re-arms, after a failed re-arm and after `stop()`. */
+	holding: () => boolean
+}
+
 /**
  * The documents hosting the PXE — Chrome's offscreen document, Firefox's background-page frame —
  * and each one's own `visibilityState`. Visibility is what keeps a document's timers unthrottled.
@@ -264,7 +270,7 @@ export const holdRpcInterception = (
 	extensionId: string,
 	fromOrigin: string,
 	mode: RpcInterception,
-): Promise<ArmedInterception> => standing.hold(browser, extensionId, fromOrigin, mode)
+): Promise<HeldInterception> => standing.hold(browser, extensionId, fromOrigin, mode)
 export const openScratchPage = (browser: Browser, extensionId: string): Promise<Page> => driver.openScratchPage(browser, extensionId)
 export const prepareClick = (page: Page): Promise<void> => driver.prepareClick(page)
 export const prepareKeys = (page: Page): Promise<void> => driver.prepareKeys(page)
