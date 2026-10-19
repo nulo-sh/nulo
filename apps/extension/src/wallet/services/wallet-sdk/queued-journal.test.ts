@@ -27,6 +27,8 @@ import {
 	type SelectorBindingPolicy,
 } from "@/wallet/services/execution/contract-resolver"
 import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
+import { WindowEndedError } from "@/wallet/services/dapp-interaction/window-end"
+import { WINDOW_CLOSED_BY_USER } from "@/wallet/services/window-manager/window-manager"
 import {
 	MAX_QUEUED_GLOBAL,
 	MAX_QUEUED_PER_SESSION,
@@ -410,8 +412,8 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 		expect({ stage: rec?.progress.stage, title: rec?.title }).toEqual({ stage: "pending", title: "drip_to_public" })
 	})
 
-	// A refusal before the person saw anything is retitled; a popup_bound row keeps the title the
-	// person saw in the approval window.
+	// A refusal before the person saw anything is retitled; a row its window ended without a refusal
+	// keeps the title the person saw in the approval window, and a lock reads as every lock does.
 	test.each([
 		["a Terms refusal", "terms_refused", new TermsAcceptanceRequiredError(), "Transaction"],
 		["a scope refusal", "scope_refused", refusal, "Transaction"],
@@ -434,7 +436,11 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 			new NoUsableAccountError("No authorized accounts found for this dApp session"),
 			"Transaction",
 		],
-		["the person rejecting the approval", "popup_bound", new UserRejectedError(), "drip_to_public"],
+		["the window's Reject", "user_rejected", new WindowEndedError("User rejected", "reject"), "drip_to_public"],
+		["the window's X", "user_rejected", new WindowEndedError("User rejected", "close"), "drip_to_public"],
+		["a lock with the window open", "session_ended", new WindowEndedError("User rejected", "lock"), "Transaction"],
+		["a profile switch with the window open", "popup_bound", new WindowEndedError("User rejected", "switch"), "drip_to_public"],
+		["a Reject that names no end", "popup_bound", new UserRejectedError(), "drip_to_public"],
 		["the approval window closing", "popup_bound", new JobCancelledError(), "drip_to_public"],
 		["any other failure", "popup_bound", new Error("session gone"), "drip_to_public"],
 		// Classified by class, never by text: a bare error carrying the lock's words stays unclassified.
@@ -449,6 +455,18 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 			kind,
 			message: error.message,
 			title,
+		})
+	})
+
+	test("the window's close reaching the wallet before its end reads as the person's X", async () => {
+		const { deps, journal } = makeDeps()
+		const id = await tryCreateQueuedJournal(makeSendTxMessage(), makeSession(), deps)
+		await failQueuedForError(journal, id as string, WINDOW_CLOSED_BY_USER, deps.logger)
+		const rec = await journal.getOperation(id as string)
+		expect({ kind: rec?.error?.kind, message: rec?.error?.message, title: rec?.title }).toEqual({
+			kind: "user_rejected",
+			message: WINDOW_CLOSED_BY_USER,
+			title: "drip_to_public",
 		})
 	})
 

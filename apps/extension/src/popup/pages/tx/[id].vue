@@ -277,7 +277,7 @@ onBeforeUnmount(() => {
 
 					<Flex v-if="feePaymentLabel" wide justify="between" align="center">
 						<span :class="$style.detail_key">Fee method</span>
-						<span :class="$style.detail_value">{{ feePaymentLabel }}</span>
+						<span :class="$style.detail_value" data-testid="tx-detail-fee-method">{{ feePaymentLabel }}</span>
 					</Flex>
 
 					<TxFeeRow

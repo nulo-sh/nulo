@@ -25,6 +25,7 @@ import { ConfigSchema } from "@/wallet/config/config"
 import { decodeStoredConfig } from "@/wallet/config/store"
 import { ACCOUNT_INTEGRITY_BLOCKED_ROOT, ACCOUNT_INTEGRITY_VERIFIED_ROOT } from "@/wallet/services/account-integrity/types"
 import { AccountIntegrityBlockedSchema, VerifiedStampSchema } from "@/wallet/services/account-integrity/types"
+import { SEED_OFFERS_ROOT, SeedOffersSchema } from "@/wallet/services/network/seed-offers"
 import { ACTIVE_NETWORK_STORAGE_ROOT, decodeActiveNetworkId } from "@/wallet/services/network/spec"
 import { usableQuotes } from "@/wallet/services/price/service"
 import { RESTORE_PENDING_ROOT, RestorePendingSchema } from "@/wallet/services/profile/restore-pending-repository"
@@ -200,6 +201,7 @@ export const STORED_SHAPES = {
 	staleNetworks: rawRow(STALE_NETWORKS_ROOT, StaleNetworksRecordSchema),
 	networkReset: rawRow(NETWORK_RESET_ROOT, ResetJournalSchema),
 	networkResetDone: rawRow(NETWORK_RESET_DONE_ROOT, ResetNoticeSchema),
+	networkSeeded: rawRow(SEED_OFFERS_ROOT, SeedOffersSchema),
 
 	// No profile codec: a row the service cannot fully check still opens derived-only.
 	profiles: described("profiles", ProfileRowSchema, asStored),

@@ -428,7 +428,7 @@ watch(
 
 .error_text {
 	composes: type--body from global;
-	color: var(--red);
+	color: var(--txt-danger);
 	margin-top: -8px;
 }
 

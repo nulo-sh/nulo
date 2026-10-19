@@ -48,6 +48,7 @@ import {
 	type ExecutionPayload,
 	type OperationApprovalDelta,
 	type ShownTokenMetadata,
+	type WindowEnd,
 } from "@/wallet/services/dapp-interaction/client"
 import type { DappMetadata } from "@/wallet/services/dapp-session/client"
 
@@ -235,6 +236,7 @@ const {
 	start: startWindow,
 	dispose: disposeWindow,
 	closeWindow,
+	endAndClose,
 	onActiveProfileChanged,
 	stripStatus,
 	processingError,
@@ -256,7 +258,9 @@ const {
 		tokenService.disconnect()
 	},
 	init: () => init(),
-	reject: () => reject(),
+	// A request of another profile than the active one was ended by that lock or switch, not by the
+	// person, whatever then closes its window.
+	reject: (end) => reject(isWrongProfile.value && end === "close" ? (profile.value ? "switch" : "lock") : end),
 })
 
 const init = async () => {
@@ -476,16 +480,20 @@ const showApprovalFailure = (error: unknown) => {
 	}
 }
 
-const reject = async () => {
+const reject = async (end: WindowEnd) => {
 	if (isInteractionCancelled.value || !requestId.value) return
 	// Reject-time eviction: abort in-flight estimates and drop any stashed
 	// signed requests NOW — window teardown alone isn't guaranteed to run
 	// dispose before the window dies.
 	cancelAllFeeEstimates()
 	cancelAllAuthwitPreviews()
-	rejectViaInteractionService("User rejected")
-	closeWindow(true)
+	await endAndClose(() => rejectViaInteractionService("User rejected", end))
 }
+
+// The notice's OK ends another profile's request as the lock or switch that made it, with the same
+// wait as Reject, so the window's close cannot reach the request first.
+const dismissWrongProfile = () =>
+	requestId.value && !isInteractionCancelled.value ? reject(profile.value ? "switch" : "lock") : closeWindow()
 
 const signerAccounts = computed(() => uniqueSignerAccounts(operations.value))
 const signerNetworks = computed(() => uniqueSignerNetworks(operations.value))
@@ -668,14 +676,14 @@ onUnmounted(() => {
 				grantRefusal !== undefined ||
 				isInteractionCancelled
 			"
-			@reject="reject"
+			@reject="reject('reject')"
 			@approve="approve"
 		/>
 
 		<DappCancelledOverlay
 			v-if="isWrongProfile"
 			message="You are signed in to a different profile. Please switch profiles and resend your request."
-			@dismiss="closeWindow()"
+			@dismiss="dismissWrongProfile"
 		/>
 		<DappCancelledOverlay
 			v-else-if="isInteractionCancelled"

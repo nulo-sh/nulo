@@ -6,7 +6,7 @@
  * Trust-state machine (per `(profileId, networkId, contract)`):
  *   unknown → first note → pending (record hidden, this popup opens)
  *   user Allow → trusted (queued hidden records flip visible atomically)
- *   user Reject → blocked (queued records stay hidden permanently)
+ *   user Reject → blocked (both scans stop, queued records are deleted)
  *
  * Adding a token trusts its contract at once, so this opens only for a listed token with no trust
  * row, after a trust write that failed at add or a backup restore. It states no amount, which the

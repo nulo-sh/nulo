@@ -1516,6 +1516,28 @@
 						"type": "object"
 					}
 				},
+				"networkSeeded": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:network-seeded"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"offered": {
+								"items": {
+									"enum": ["mainnet", "testnet", "devnet", "local", "custom"],
+									"type": "string"
+								},
+								"type": "array"
+							}
+						},
+						"required": ["offered"],
+						"type": "object"
+					}
+				},
 				"networks": {
 					"ref": {
 						"kind": "root",
@@ -2356,6 +2378,12 @@
 							"fee": {
 								"type": "string"
 							},
+							"feeChoice": {
+								"description": "anything else reads as absent",
+								"enum": ["wallet", "app", "app_protocol_sponsor"],
+								"type": "string",
+								"x-catch": "anything else reads as absent"
+							},
 							"feePaymentMethod": {
 								"description": "any number",
 								"x-custom": "any number"
@@ -3041,6 +3069,7 @@
 					"estimatedFee": "4210000000000",
 					"executionResult": 1,
 					"fee": "3120000000000",
+					"feeChoice": "app",
 					"feePaymentMethod": 2,
 					"feeSpender": "0x261442f769babc690b9ceed102d19aa02a7f2f9d49e1fc8c94e5b877071e630c",
 					"gasDetails": {
@@ -3391,6 +3420,12 @@
 				"networkResetDone.minimal": {
 					"addressesMoved": false,
 					"networkId": "9e21b7f0"
+				},
+				"networkSeeded.full": {
+					"offered": ["custom", "devnet", "local", "mainnet", "testnet"]
+				},
+				"networkSeeded.minimal": {
+					"offered": []
 				},
 				"profiles.full": {
 					"dekSealed": "LOsyobbwKxTww4CuZ8N6+nFigEl5PcGsKPd/5Cwr9shUgPAspwMM9qqcYJefWVEixLkjFk3ATudEbMOK",

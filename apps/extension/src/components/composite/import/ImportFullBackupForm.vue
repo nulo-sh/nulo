@@ -90,11 +90,11 @@ watch(
 		>
 			<Flex align="center" gap="8" :class="$style.error_title_wrapper">
 				<span :class="$style.error_tag">Error</span>
-				<Text variant="body" color="red" :class="$style.error_title">{{ error.title }}</Text>
+				<Text variant="body" color="txt-danger" :class="$style.error_title">{{ error.title }}</Text>
 				<Icon :name="isCopied ? 'check' : 'copy'" size="13" color="red" />
 			</Flex>
 			<Flex v-if="error.tooltip" align="start" :class="$style.error_description_wrapper" wide>
-				<Text variant="body" height="120" color="red" :class="$style.error_description">{{ error.tooltip }}</Text>
+				<Text variant="body" height="120" color="txt-danger" :class="$style.error_description">{{ error.tooltip }}</Text>
 			</Flex>
 		</Flex>
 
@@ -195,7 +195,7 @@ watch(
 
 .error_tag {
 	composes: type--label-section from global;
-	color: var(--red);
+	color: var(--txt-danger);
 	border: 1px solid var(--red);
 	padding: 2px 6px;
 	flex-shrink: 0;

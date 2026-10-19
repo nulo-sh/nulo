@@ -85,6 +85,9 @@ const MAX_EXPIRY_DEFERRAL_MS = 10 * 60_000
 /** How far one deferral moves the deadline, capped again by the TTL. */
 const EXPIRY_DEFERRAL_STEP_MS = 60_000
 
+/** Deletes `close()` makes of the persisted session before it leaves the row to the read-back. */
+const CLOSE_DELETE_ATTEMPTS = 2
+
 /** The deadline and TTL revision a snapshot-based write was decided on. */
 type CommitExpectation = { lockedAt: number | undefined; configRev: number }
 
@@ -395,9 +398,9 @@ export class SessionManager {
 			// FIRST so a rejecting `session.delete` can't leave the secret live in
 			// memory after an explicit lock. Unlike open(), a swallowed delete
 			// failure here is NOT benign — the persisted bearer would survive and
-			// re-unlock on the next SW start — so `delete()` gets its OWN catch
-			// (clearLockAlarm must still run) and callers that need the durable
-			// guarantee (lockActiveProfile) read back via hasPersistedSession().
+			// re-unlock on the next SW start — so the delete never throws past
+			// clearLockAlarm, and callers that need the durable guarantee
+			// (lockActiveProfile) read back via hasPersistedSession().
 			if (this.activeSession) {
 				zeroize(this.activeSession.dek)
 				this.activeSession = undefined
@@ -414,11 +417,7 @@ export class SessionManager {
 					this.logger.log(LOG_SOURCE, LogLevel.Info, "Stale close stood down — a newer session committed its artifacts")
 					return
 				}
-				try {
-					await this.session.delete()
-				} catch (error) {
-					this.logger.log(LOG_SOURCE, LogLevel.Error, "Failed to delete persisted session on close", error)
-				}
+				await this.deletePersistedSession()
 				// Cancel any pending lock alarm. Idempotent — `clear()` returns
 				// `false` if no alarm exists. Run after state-clear so a racing
 				// alarm fire that arrives during this call sees
@@ -430,6 +429,23 @@ export class SessionManager {
 			this.logger.log(LOG_SOURCE, LogLevel.Error, "Failed to close profile session", error)
 		}
 		return emitted
+	}
+
+	/** Deletes the persisted session, reattempting a rejected delete once. Runs inside the
+	 *  artifact section, so no attempt can reach a successor's row. Never throws: exhaustion is
+	 *  logged, and `lockActiveProfile`'s read-back decides whether the lock persisted. No backoff:
+	 *  a `storage.session` removal has no quota or throttling path to wait out. */
+	private async deletePersistedSession(): Promise<void> {
+		for (let attempt = 1; attempt <= CLOSE_DELETE_ATTEMPTS; attempt++) {
+			try {
+				await this.session.delete()
+				return
+			} catch (error) {
+				const last = attempt === CLOSE_DELETE_ATTEMPTS
+				const message = last ? "Failed to delete persisted session on close" : "Persisted session delete failed; reattempting"
+				this.logger.log(LOG_SOURCE, last ? LogLevel.Error : LogLevel.Warn, message, { error })
+			}
+		}
 	}
 
 	/** True iff a session record is still persisted in storage. Used by
