@@ -342,7 +342,7 @@ function subscribeInFlight(state: InFlightState, profile: Ref<ProfileInfo | unde
 		state.revision++
 		state.ops.value = reduce(state.ops.value, op)
 	}
-	state.journal.onOperationAdded.add(applyInFlight((rows, op) => journalAdded(rows, op, { place: "back" })))
+	state.journal.onOperationAdded.add(applyInFlight((rows, op) => journalAdded(rows, op, "back")))
 	state.journal.onOperationUpdated.add(applyInFlight((rows, op) => journalUpdated(rows, op, "back")))
 	state.journal.onOperationDeleted.add(applyInFlight(journalDeleted))
 	// A reconnect can drop events, so re-read rather than trusting the cache.
