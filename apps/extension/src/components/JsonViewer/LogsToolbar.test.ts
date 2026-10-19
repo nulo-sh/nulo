@@ -65,6 +65,23 @@ function shownItem(testid: string): HTMLElement {
 	return el
 }
 
+describe("LogsToolbar — the triggers", () => {
+	test("Source, Level and more are native buttons in that order, the icon-only one named", () => {
+		const w = mountToolbar()
+		const triggers = w.findAll("button")
+		expect(triggers.map((b) => b.attributes("data-testid"))).toEqual(["logs-filter-source", "logs-filter-level", "logs-more-trigger"])
+		expect(triggers.every((b) => b.attributes("type") === "button")).toBe(true)
+		expect(triggers[2]?.attributes("aria-label")).toBe("Log actions")
+	})
+
+	test("a click on Source or Level asks for its own panel", async () => {
+		const w = mountToolbar()
+		await w.get('[data-testid="logs-filter-source"]').trigger("click")
+		await w.get('[data-testid="logs-filter-level"]').trigger("click")
+		expect(w.emitted("openPopover")).toEqual([["source"], ["level"]])
+	})
+})
+
 describe("LogsToolbar — the more menu", () => {
 	test("the more button opens a menu with Export logs to CSV and Clear logs", async () => {
 		const w = mountToolbar()
@@ -72,6 +89,18 @@ describe("LogsToolbar — the more menu", () => {
 		await openMenu(w)
 		expect(shownItem("logs-export-csv").textContent).toContain("Export logs to CSV")
 		expect(shownItem("logs-clear").textContent).toContain("Clear logs")
+	})
+
+	test("both items set their words in the body role beside a 12 px icon, 8 px apart", async () => {
+		const w = mountToolbar()
+		await openMenu(w)
+		for (const testid of ["logs-export-csv", "logs-clear"]) {
+			const row = shownItem(testid).firstElementChild as HTMLElement
+			expect(row.classList.contains("gap--8")).toBe(true)
+			expect(row.querySelector("[name]")?.getAttribute("size")).toBe("12")
+			expect(row.querySelector("[variant]")?.getAttribute("variant")).toBe("body")
+			expect(row.querySelector("[style]")).toBeNull()
+		}
 	})
 
 	test("each item emits its own event once", async () => {

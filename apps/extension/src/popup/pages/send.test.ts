@@ -187,6 +187,7 @@ const STUBS = {
 			"isEstimating",
 			"originPrivacy",
 			"payerNoticeShape",
+			"amountTyped",
 			"modelValue",
 			"needsFeeJuice",
 			"payer",
@@ -621,6 +622,17 @@ describe("send page — the footer", () => {
 		await w.get('[data-testid="send-from-type"]').trigger("click")
 		expect(submit(w).attributes("data-action")).toBe("send")
 		expect(strip(w).attributes("data-you")).toBe("public")
+		w.unmount()
+	})
+
+	test("the card hears whether the amount field holds an amount, with no recipient needed", async () => {
+		const { w } = await mountSend()
+		const typed = () => w.findComponent({ name: "FeeSettingsCard" }).props("amountTyped")
+		expect(typed()).toBe(false)
+		await w.get('[data-testid="stub-amount"]').setValue("1.5")
+		expect(typed()).toBe(true)
+		await w.get('[data-testid="stub-amount"]').setValue("")
+		expect(typed()).toBe(false)
 		w.unmount()
 	})
 
