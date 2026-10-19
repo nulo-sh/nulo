@@ -71,7 +71,7 @@ Values only: one token value, one gate loop, one re-pinned hash. No new token, c
 - `packages/design/src/base.css.test.ts`: append to the comment's ERROR clause, "and the light `--log-warn-color` is `--txt-warning`, AA on its tint". Then set the new hash from a run of the test.
 - **Gate**: `bun run --cwd packages/design test`; `bun run lint`; `bun run typecheck:all`. Pass: exit 0 each; the Phase 1 test is green in both themes. `git diff --stat origin/dev...HEAD` shows code changes only in `base.css`, `base.css.test.ts` and `theme-contrast.test.ts`. Layers: lint, typecheck, unit.
 
-### Phase 4: Pictures after, the touched viewer's smoke, full gate
+### Phase 4: Pictures after, the touched viewer's smoke, full gate ✓
 
 - Build again (as Phase 2), then run the spec with `WARN_PHASE=after`. Then run `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/viewers-csp.test.ts --retry=0`.
 - **Gate** (spec): exit 0. Pass: every WARN span reads 5.42:1 light at `rgb(127, 98, 0)` and 5.05:1 dark at `rgb(169, 157, 94)` (± 0.01), the dark reading the same as Phase 2's; two PNGs `logs-warn-lines-after-{light,dark}.png`; the before and after table in `STATUS.md`; `git status --porcelain apps/extension/tests/e2e` is empty. A head reading under 4.5:1 stops the arc: record it and report.
@@ -96,6 +96,7 @@ The lane's whole visible budget, the orchestrator's record on #887 (quoted above
 | D4 | No committed e2e scenario; a scratch spec gives the readings and pictures | a committed colour spec | the unit gate proves the token pair; a spec would add runtime to prove a value the gate holds |
 | D5 | One arc, one PR, the gate first | the change first | its red run is then the untouched tree (#878's D11) |
 | D6 | Selected text stays outside the arc: K1, a closed `known-limit` issue at close-out | recolour `::selection`; assert on selected text | the decision covers the line's colour; a selection is a transient state the person chose, and its highlight is the whole viewer's |
+| D7 | A level token inside an INFO entry's message stays outside the arc: K2, a closed `known-limit` issue at close-out | anchor `LEVEL_RE` to the entry's header | a change to which lines take which colour is outside the call; the consequence is one line's colour |
 
 ## Audit verdicts
 
@@ -106,6 +107,8 @@ The lane's whole visible budget, the orchestrator's record on #887 (quoted above
 - O2 exact pass readings, dark the same as before; O3 three line references; O4 `origin/dev...HEAD` and a clean `tests/e2e` after Phase 2; O5 literal token names (D2). O6 `filter` and blend modes: none in the path, no change.
 
 **Round 2** (Codex, resumed, verification): `approve`, no remaining finding; O1's partial rejection holds (moderate confidence), the reading disclosed in the PR body and the report.
+
+**Post-implementation** (diff `origin/dev...log-warn-contrast-1-a1`, code in three files). Round 1: Codex (gpt-6.1-sol, high, session `01a1566f`) `clean`: the pin matches the file, and the old CSS fails only light WARN (2.9128). Opus 5.5 diff review beside it `findings: 1`: the after pictures were not yet committed → committed with the Phase 4 record. Its note on pre-existing code outside the diff: `LEVEL_RE` (`logs-decoration.ts:6`) matches anywhere in an entry, so an INFO entry whose message holds `] WARN:` paints as a WARN line; demonstrated by trace, colour only (the level filter reads the entry's level) → K2, a closed `known-limit` issue at close-out (D7). Converged at round 1.
 
 ## Delivery
 
@@ -118,7 +121,7 @@ The standard is `implementations-plan/README.md` § Post-implementation standard
 - Step 1 is absent (`code_review: off`).
 - Step 2 once, after Phase 4, over `git diff origin/dev...log-warn-contrast-1-a1`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, then `resume-codex.sh` until a round has no material finding; hard stop at three. One Opus 5.5 diff review (`Agent`, `model: "opus"`, `general-purpose`) beside round 1.
 - Step 3: one PR against `dev`, then `gh pr checks <n> --watch`.
-- Step 4 as this PR's final commits: merge `origin/dev`, read `index.md` and `lessons.md`; the Outcome; K1 filed as a closed `known-limit` issue (dedupe first) and named on `Known limits:`; the lessons pass; `STATUS.md` deleted; `git mv` into `archive/` in its own commit; the index line moved; `bun run check:plans` green.
+- Step 4 as this PR's final commits: merge `origin/dev`, read `index.md` and `lessons.md`; the Outcome; K1 and K2 filed as closed `known-limit` issues (dedupe first) and named on `Known limits:`; the lessons pass; `STATUS.md` deleted; `git mv` into `archive/` in its own commit; the index line moved; `bun run check:plans` green.
 - Step 5 after the merge: `agent-worktree done log-warn-contrast-1 --merged`, once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/log-warn-contrast-1/plan.md` succeeds.
 
 ## Seeds
