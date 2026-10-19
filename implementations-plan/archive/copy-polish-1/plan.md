@@ -129,7 +129,7 @@ Warning: load1 must be under 150 before every build and e2e run (`cut -d' ' -f1 
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 993b3efc. Specific to this plan:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 993b3efc. Specific to this plan:
 - Step 1 is absent (`code_review: off`). Step 2 runs once over `git diff origin/dev...HEAD` after Phase 3: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; prompts under `~/.cache/nulo-backlog/copy-polish-1/`; one Opus review alongside round 1; hard stop at three rounds; rounds in `lessons/phase-3.md` and the table below.
 - Approval boundary: any other copy, any other row's layout, a new class beyond D2, or a committed e2e scenario is a plan change and stops for the orchestrator.
 - Close-out (this PR's final commits): file D4 after `gh issue list --state all --search "Loading token metadata"`; comment on #744 (D5); Outcome block; `lessons.md` promotes nothing unless a retirement pays for it; `STATUS.md` deleted; `git mv` to `archive/` in its own commit. Teardown: slug `copy-polish-1`, trunk `dev`.
