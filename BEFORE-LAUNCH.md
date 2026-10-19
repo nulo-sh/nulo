@@ -79,12 +79,19 @@ loading remote scripts".
 
 ## 3. The day v1.0.0 ships — in the `release: promote dev → main` PR that carries it
 
-The Terms' **effective date** is the date the 1.0 listing goes live (privacy 1.0's is already set,
-§ 2). It appears in three places, two in `legal/terms.md` (tests hold the version line to the
-manifest, not the history row's date), so change them together:
+Before the promote:
 
-- [ ] `legal/terms.md` — the version line at the top, and the 1.0 row of the history table
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.0 (currently `null`)
+- [ ] The owner sends from the 1.0.0 candidate on the new Testnet, which no e2e suite reaches
+      (they run against a local sandbox). Owner's call, 2026-10-19, decision page 68
+
+The Terms' **effective date** is the date the 1.0.0 listing goes live (privacy 1.0's is already
+set, § 2). Terms 1.0 never takes effect: it was a draft, replaced by 1.1, which carries the date.
+It appears in three places, two in `legal/terms.md` (tests hold the version line to the manifest,
+not the history row's date), so change them together:
+
+- [ ] `legal/terms.md` — the version line at the top, and the 1.1 row of the history table
+- [ ] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.1 (currently `null`; 1.0 stays
+      `null`)
 - [ ] `legal/privacy.md` + its manifest entries — 1.0 and 1.1 already dated, confirm unchanged;
       1.1.1 per § 4
 
@@ -102,7 +109,8 @@ Then:
       submission locks every dashboard field ([`release` skill](./.claude/skills/release/SKILL.md),
       troubleshooting)
 - [ ] AMO (owner): remove the "This add-on is experimental" flag
-- [ ] The README's "DEMO / PREVIEW BUILD — NOT A PRODUCTION WALLET" banner is rewritten
+- [x] The README's "DEMO / PREVIEW BUILD — NOT A PRODUCTION WALLET" banner is rewritten, with the
+      copy the owner signed (2026-10-19, decision page 68)
 
 ## 4. Every later `release: promote dev → main`
 
@@ -140,8 +148,9 @@ version before that release reaches users (procedure above):
       until it is, an rc.3 update shows a store-installed V6 account the integrity barrier. #485,
       #486 and #487 merged on 2026-10-15, and #497 promoted them before 0.31.0 went to the stores
       that day
-- [ ] The owner sends from that build on the live Testnet, which no e2e suite reaches (they run
-      against a local sandbox)
+
+The owner's live-Testnet send moved to § 3: from the 1.0.0 candidate, before the promote (owner's
+call, 2026-10-19, decision page 68).
 
 ## Not legal text, same deadline
 
