@@ -1,7 +1,7 @@
 ---
 plan: token-skeleton-1
 tier: light (the lane brief's call; one Codex audit round-trip plus one Opus Plan lens, then a fresh Codex pass)
-status: planned, final Codex approve
+status: closed (arc 1 delivered in one PR against dev; the merge closes the plan)
 issues: "#850 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at b6208221
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** closed. One arc, #896 against `dev` from `token-skeleton-1-a1`; the merge that lands it closes the plan.
+- **Shipped:** #850 by P66-02 B. While the token is read, the Register token card shows Symbol, Name and Decimals rows with `Skeleton` bars (40, 84 and 20 by 12). The same rows then hold the values in the `name` role, and the Name row shows also when it equals the symbol. The rows sit in one `role="status"` region, `aria-busy` while the bars show (an accessibility call under the 2026-10-19 delegation). `.token_meta` is gone. The tests landed with the change.
+- **Known limits:** #898 (a value that fills its row touches its label; `.prop` has no gap).
+- **Open items:** #897 (OA-1, an empty or blank-looking name, `owner-decision`).
+- **Lessons:** nothing new in `lessons.md` (8,191 of 8,192 bytes): the one general point, that a skeleton's region takes `role="status"` because `aria-busy` makes no live region, is the house pattern `TransactionAwaitingCard` already shows.
+- **Size:** about 140 lines against the light target of 150.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # token-skeleton-1: the Register token card as labelled rows, with bars while it reads
 
@@ -94,12 +105,12 @@ Single arc on branch `token-skeleton-1-a1` off `origin/dev`. No PR before the pr
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at b6208221. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at b6208221. Plan-specific values:
 
 - Comments to the comment bar while coding; attempts in `lessons/phase-N.md`; `agent-worktree status token-skeleton-1 "phase N green: <next>"` at each gate. Three failures on one step: stop and reassess.
 - Step 1 is absent (`code_review: off`).
 - Step 2, once over the net diff from b6208221 after the pre-delivery gate: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`; later rounds `~/.claude/skills/codex/scripts/resume-codex.sh <session-id> <followup-file> <codex-dir> high`. Prompt: the diff, this plan, the adversarial ask and the standard's two rules verbatim. One Opus 5.5 `general-purpose` review of the same diff runs beside round 1. Hard stop at three rounds.
-- Step 3, Delivery above. Step 4, close-out as the PR's final commits; delete `STATUS.md`. Step 5, teardown: `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/token-skeleton-1/plan.md`, then `agent-worktree done token-skeleton-1 --merged`.
+- Step 3, Delivery above. Step 4, close-out as the PR's final commits; delete `STATUS.md`. ✓ (#897, #898 filed) Step 5, teardown: `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/token-skeleton-1/plan.md`, then `agent-worktree done token-skeleton-1 --merged`.
 
 ## Audit verdicts
 
