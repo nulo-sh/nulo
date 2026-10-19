@@ -362,3 +362,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [execute-window-3](execute-window-3/plan.md) — completed — the advice once after the calls and none on a refused request (#776, P52-01 F); an unreadable authorization flagged at rest (#777, P58-05 B); #854
 - [logs-keyboard-1](logs-keyboard-1/plan.md) — completed — the logs filter panels from the keyboard: native toggle rows with an inset ring, the popover's Tab order stitched after its trigger, a panel closed when focus leaves it (#851); known limit #866
 - [egress-flake-1](egress-flake-1/plan.md) — completed — a reply to a paused request its worker's stop cancelled (`Invalid InterceptionId`) is no interception failure (#857)
+- [ui-picks-1](ui-picks-1/plan.md) — completed — Send says "More than your balance" under an amount over a read balance (#870, P64-02 B) and clears its fee row when the balance falls below it (#863); the restore warning names Developer Mode (#746)

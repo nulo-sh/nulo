@@ -136,7 +136,7 @@ Warning: load1 must be under 150 before every build and e2e run; poll for it ins
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `60fde7e7`. Specific to this plan:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `60fde7e7`. Specific to this plan:
 - Step 1 is absent (`code_review: off`). Step 2 runs once over `git diff origin/dev...HEAD` after Phase 3, before Phase 4: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; prompts under `~/.cache/nulo-backlog/ui-picks-1/`; one Opus review (`general-purpose`) alongside round 1; hard stop at three rounds; rounds in `lessons/phase-4.md` and the table below.
 - Approval boundary: any other copy, any other reason's line, a layout change beyond the line, or a committed e2e scenario is a plan change and stops for the orchestrator.
 - Close-out (the PR's final commits): Outcome block; `lessons.md` promotes nothing unless a retirement pays for it; `STATUS.md` deleted; `git mv` to `archive/` in its own commit, its index line to `archive/index.md`. Teardown after the merge: slug `ui-picks-1`, trunk `dev`.
