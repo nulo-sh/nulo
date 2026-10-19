@@ -46,6 +46,8 @@ export async function holdNodeStub(browser: Browser, extensionId: string, nodeUr
 	try {
 		const held = await holdRpcInterception(browser, extensionId, nodeUrl, { kind: "redirect", to: stub.url })
 		return {
+			host: new URL(nodeUrl).hostname,
+			holding: held.holding,
 			requests: stub.requests,
 			failures: held.failures,
 			stop: async () => {
