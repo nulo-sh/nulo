@@ -142,7 +142,8 @@ const onEthereum = scene({ batch: ["batch", 0], checkedOn: ["checked", 0], ether
 			b.setAttribute("y", "92")
 			show(b, seg(local, i * 0.08, i * 0.08 + 0.3) * (1 - seg(t, at.batch + 0.6, at.batch + 0.9)))
 		}
-		const drop = seg(t, at.checkedOn - 0.4, at.checkedOn + 0.2)
+		// The proof falls only once the folded blocks have formed it, whatever the pace of the words.
+		const drop = seg(t, Math.max(at.checkedOn - 0.4, at.batch + 0.9), at.checkedOn + 0.2)
 		place(proof, 288, lerp(80, 186, drop))
 		show(proof, seg(t, at.batch + 0.6, at.batch + 0.9))
 		show(tick, seg(t, at.ethereum, at.ethereum + 0.4))

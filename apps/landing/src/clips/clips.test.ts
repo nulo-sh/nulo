@@ -34,6 +34,7 @@ describe("clips", () => {
 		const track = /<track kind="captions" src="([^"]+)" srclang="en" label="English" default \/>/.exec(markup)
 		expect(audio?.[1]).toBe(`/src/clips/media/${clip.id}.mp3`)
 		expect(markup).not.toMatch(/autoplay/i)
+		expect(/class="clip__seek"[^>]*?max="(\d+)"/.exec(markup)?.[1]).toBe(String(Math.ceil(clip.timings.duration)))
 		expect(readFileSync(fileAt(track?.[1] ?? ""), "utf8")).toBe(toVtt(captions(clip.timings)))
 		const transcript = [...(markup.split('<details class="transcript">')[1] ?? "").matchAll(/<p>([\s\S]*?)<\/p>/g)].map((m) =>
 			flat(m[1] ?? ""),
