@@ -6,3 +6,4 @@
 - 2026-10-19: arc 1 phase 1 gate green (`vitest run src/components/composite/import`, 56/56; the seven strings red on base first).
 - 2026-10-19: arc 1 phase 2 gate green (`vitest run src/popup/windows/execute` 308/308, `lint` and `typecheck:all` exit 0; the four pins red on base first).
 - 2026-10-19: before pictures and readings taken (Chrome); review loop converged (Codex impl r1 approve, r2 approve with changes, r3 approve; Opus approve with changes, taken); audit:vue red twice on a left-in scratch spec and a load timeout, rerun pending.
+- 2026-10-19: arc 1 phase 3 gate green: audit:vue, test:all, check:plans; smoke Chrome 8/8 and Firefox 8/8; network Chrome 11/11 and Firefox 11/11; both warnings read start on both browsers; I1 holds.

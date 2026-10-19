@@ -10,7 +10,7 @@ eli5_mode: skipped (orchestrator-owned)
 base: 993b3efc
 trunk: dev
 post_implementation_hardening: not scheduled
-status: planned, Codex approve; arc 1 auto-continues
+status: arc 1 implemented and gated; PR next
 ---
 
 # copy-polish-1: the failed token preview's warning, the restore warning's clause
@@ -68,21 +68,21 @@ One arc, one PR against `dev`: #803 (P54-01 B, and the left alignment the owner 
 
 ## Arc 1
 
-### Phase 1: #746, the restore clause
+### Phase 1: #746, the restore clause ✓
 
 1. Update the seven exact strings first; run them red on base.
 2. Edit `heldAccountsText`: `Add ${network} to restore ${it}, or import ${it} again from ${one ? "its account file" : "their account files"}.`
 
 **Gate**: `cd apps/extension && bun --bun vitest run src/components/composite/import`. Pass: exit 0, step 1 red on base. Layers: unit, component.
 
-### Phase 2: #803, the sentence and the layout rule
+### Phase 2: #803, the sentence and the layout rule ✓
 
 1. Write D3's pins; run them red on base (the control green).
 2. Apply D2 and the new sentence.
 
 **Gate**: `cd apps/extension && bun --bun vitest run src/popup/windows/execute`; root `bun run lint`, `bun run typecheck:all`. Pass: exit 0. Layers: lint, typecheck, unit, component.
 
-### Phase 3: pictures and the arc gate
+### Phase 3: pictures and the arc gate ✓
 
 Warning: load1 must be under 150 before every build and e2e run (`cut -d' ' -f1 /proc/loadavg`). Never commit a scratch spec, and never run two e2e runs in this worktree at once.
 
