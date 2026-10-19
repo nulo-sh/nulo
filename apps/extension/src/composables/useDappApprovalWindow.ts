@@ -11,8 +11,7 @@
  *   interaction is never rejected again on unload; `closeWindow()` with no argument leaves it, so an
  *   overlay dismiss delivers the rejection through the unload event.
  * - Every rejection names the window's end: the unload `close`, the profile guard `lock` or
- *   `switch`, the window's own Reject `reject`. `endAndClose` closes only once the wallet has taken
- *   the end, so the close cannot reach the request first and read as another end.
+ *   `switch`, the window's own Reject `reject`.
  * - The listener is added after `init()` resolves, including when init fails internally (every
  *   window's init swallows its errors into `setError`), so a half-loaded window still rejects on
  *   close. A rejecting `init` would skip the registration.

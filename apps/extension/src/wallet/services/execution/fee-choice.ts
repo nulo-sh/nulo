@@ -10,13 +10,8 @@ export function feeChooserOf(feeSettings: FeeSettings): FeeChooser {
 	return feeSettings.paymentMethod.kind === "embedded" ? "app" : "wallet"
 }
 
-/**
- * The fee chooser a transaction row records. An app's pick is `app_protocol_sponsor` when any of its
- * calls is `sponsor_unconditionally` on `protocolSponsor`, the canonical SponsoredFPC's derived
- * address: that contract elects itself fee payer and the kernel refuses a second one, so a recorded
- * call to it is what paid. Any position counts, so a decoy fee call ahead of it cannot withhold the
- * label; no address, or the method on any other contract, reads as the app's plain pick.
- */
+/** The canonical SponsoredFPC elects itself fee payer and the kernel refuses a second one, so a call
+ *  to it in any position is what paid; a decoy fee call ahead of it cannot withhold the label. */
 export function feeChoiceOf(
 	by: FeeChooser,
 	calls: readonly Pick<TxCall, "contract" | "method">[],

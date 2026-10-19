@@ -792,11 +792,8 @@ export class DappSendExecutor {
 		}
 	}
 
-	/**
-	 * Who chose the fee, for the row a send writes. Called before the prove, so the row's write never
-	 * waits on a first derivation. Never rejects: an address the wallet cannot derive leaves the app's
-	 * plain pick, which is never wrong.
-	 */
+	/** Started before the prove to overlap the derivation. Never rejects: an address the wallet cannot
+	 *  derive leaves the app's plain pick, which is never wrong. */
 	private async feeChoiceFor(by: FeeChooser, chainId: number, calls: SentTx["txCalls"]): Promise<FeeChoice> {
 		if (by === "wallet") return "wallet"
 		let sponsor: string | undefined

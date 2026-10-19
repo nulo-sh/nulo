@@ -37,9 +37,9 @@ export const FEE_CHOICES = ["wallet", "app", "app_protocol_sponsor"] as const
 
 /**
  * Who chose how a transaction's fee was paid: the person in the wallet, or the app through a fee
- * payment it supplied itself. `app_protocol_sponsor` is the app's choice whose calls include
- * `sponsor_unconditionally` on the protocol's canonical SponsoredFPC, matched against the address
- * the wallet derives when it writes the row, so it never rests on a function name alone.
+ * payment it supplied itself. `app_protocol_sponsor` is the app's pick paid by the canonical
+ * SponsoredFPC, matched by the address the wallet derives when it writes the row, never by a
+ * function name alone.
  */
 export type FeeChoice = (typeof FEE_CHOICES)[number]
 
