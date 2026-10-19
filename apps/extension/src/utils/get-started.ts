@@ -106,8 +106,7 @@ const aztecShown = (i: Ready) => !i.flags.aztecOpened && !i.flags.hidden
 const feeJuiceShown = (i: Ready) => i.feeJuice === "none" && !i.flags.hidden
 const prestoShown = (i: Ready) => !i.prestoReached && !i.flags.hidden
 
-/** Every row but the phrase. A profile made beside another shows none: the person met the general
- *  rows on the install's first profile, and a passkey is its own backup. */
+/** Every row but the phrase; a profile created while another existed shows none of them. */
 function firstProfileItems(i: Ready): GetStartedItem[] {
 	if (i.flags.notFirst) return []
 	const items: GetStartedItem[] = []

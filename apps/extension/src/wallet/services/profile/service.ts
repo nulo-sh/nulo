@@ -1446,8 +1446,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		this.emit("onProfileAdded", this.getProfileInfo(profile))
 	}
 
-	/** A create's commit. A profile made while another exists is marked, so Home asks it only for its
-	 *  own backup; a tombstoned or undecodable row is no profile here, as in `getProfiles`. Caller
+	/** A create's commit. A profile made while another exists is marked, so Home asks it at most for
+	 *  its phrase; a tombstoned or undecodable row is no profile here, as in `getProfiles`. Caller
 	 *  MUST hold the facade lock. */
 	private async persistCreatedProfileHoldingLock(profile: Profile): Promise<void> {
 		const notFirst = (await this.repo.getAll()).some((p) => !this.deletionState.isReserved(p.id))
