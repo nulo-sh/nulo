@@ -25,6 +25,7 @@ import {
 	PxeStaleAnchorError,
 	PxeStoreKeyMissingError,
 	PxeScopeUnregisteredError,
+	PxeTaggingSourcesFullError,
 	remoteErrorFromResponseContent,
 	RpcConnectError,
 	RpcDisconnectedError,
@@ -261,6 +262,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			name: "PxeScopeUnregisteredError",
 			code: "PXE_SCOPE_UNREGISTERED",
 			rebuild: { kind: "constant", message: "The wallet has not finished loading this account. Try again." },
+		},
+		{
+			ctor: PxeTaggingSourcesFullError,
+			make: () => new PxeTaggingSourcesFullError(),
+			name: "PxeTaggingSourcesFullError",
+			code: "PXE_TAGGING_SOURCES_FULL",
+			rebuild: { kind: "constant", message: "This network holds as many senders and accounts as an app may add." },
 		},
 		{
 			ctor: TermsAcceptanceRequiredError,

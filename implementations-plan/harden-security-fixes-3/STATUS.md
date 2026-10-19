@@ -1,0 +1,13 @@
+- 2026-10-19 16:0x recon: 3 explorers + lead reads; plan drafted.
+- 2026-10-19 16:1x review R1: Codex reject, Opus conditional approve; plan revised.
+- 2026-10-19 16:4x final Codex pass: approve (second resume). Plan committed; arc 1 next.
+- 2026-10-19 16:4x arc 1 phase 1: `SECURITY.md` caveat; lint, check:plans, test:ci-gating green.
+- 2026-10-19 16:4x arc 1 Codex R1 + Opus: conditional approve (both); docs aligned, plan re-anchored at 2a5960da.
+- 2026-10-19 16:5x arc 1 Codex R2: approve; loop converged.
+- 2026-10-19 17:1x arc 1 final head: lint, typecheck:all, test:all, test:ci-gating (626/0), check:plans green; no e2e (docs only).
+- 2026-10-19 17:3x arc 2: A1 answered (128, the orchestrator's call, provisional); branch off origin/dev 0820b08a.
+- 2026-10-19 17:5x arc 2 Phase 3 committed: PXE-level and handler-level tests green, each red under its mutation; lint, typecheck:all, the pre-PR gate green.
+- 2026-10-19 18:1x arc 2 test:all: red twice on load-induced timeouts in files this arc does not touch (load1 575, then 2900); rerun in a calm window pending.
+- 2026-10-19 18:5x arc 2 Codex R1 conditional (gates) + Opus approve, fixes taken; Codex R2 approve: converged.
+- 2026-10-19 19:0x arc 2 network e2e retry 0: data-registerSender, contracts-register, senders-advanced: Chrome and Firefox green.
+- 2026-10-19 19:1x arc 2 final head (origin/dev merged): lint, typecheck:all, the pre-PR gate, test:all green.
