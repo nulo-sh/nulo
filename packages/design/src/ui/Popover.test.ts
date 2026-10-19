@@ -1,4 +1,4 @@
-import { flushPromises, mount } from "@vue/test-utils"
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { useOutside } from "../composables/outside"
 import Popover from "./Popover.vue"
@@ -8,9 +8,11 @@ vi.mock("../composables/outside", () => ({
 }))
 
 let popoverRoot: HTMLDivElement
+/** An open popover keeps its document listeners until it unmounts, so no case may leave one mounted. */
+const mounted: VueWrapper[] = []
 
-const mountPopover = (props: Record<string, unknown> = {}, slots: Record<string, string> = {}) =>
-	mount(Popover, {
+const mountPopover = (props: Record<string, unknown> = {}, slots: Record<string, string> = {}) => {
+	const w = mount(Popover, {
 		props: { width: "200", ...props },
 		slots: { default: "<button>trigger</button>", content: "Popover body", ...slots },
 		attachTo: document.body,
@@ -20,6 +22,9 @@ const mountPopover = (props: Record<string, unknown> = {}, slots: Record<string,
 			},
 		},
 	})
+	mounted.push(w)
+	return w
+}
 
 describe("Popover", () => {
 	beforeEach(() => {
@@ -29,6 +34,7 @@ describe("Popover", () => {
 	})
 
 	afterEach(() => {
+		for (const w of mounted.splice(0)) if (w.exists()) w.unmount()
 		popoverRoot.remove()
 	})
 
@@ -76,9 +82,8 @@ describe("Popover", () => {
 		}
 
 		test("marks the key handled", async () => {
-			const { w } = await openWithFieldFocused()
+			await openWithFieldFocused()
 			expect(pressEscape().defaultPrevented).toBe(true)
-			w.unmount()
 		})
 
 		test("with focus in the panel, returns it to the trigger's control focused at open", async () => {
@@ -86,11 +91,10 @@ describe("Popover", () => {
 			pressEscape()
 			expect(document.activeElement).toBe(trigger)
 			expect(w.emitted("onClose")).toHaveLength(1)
-			w.unmount()
 		})
 
 		test("with focus outside the panel, leaves it there", async () => {
-			const { w, trigger } = await openWithFieldFocused()
+			const { trigger } = await openWithFieldFocused()
 			const elsewhere = document.createElement("button")
 			document.body.appendChild(elsewhere)
 			elsewhere.focus()
@@ -98,7 +102,12 @@ describe("Popover", () => {
 			expect(document.activeElement).toBe(elsewhere)
 			expect(document.activeElement).not.toBe(trigger)
 			elsewhere.remove()
+		})
+
+		test("an unmount while open leaves later Escapes unhandled", async () => {
+			const { w } = await openWithFieldFocused()
 			w.unmount()
+			expect(pressEscape().defaultPrevented).toBe(false)
 		})
 
 		test("an outside press closes without moving focus", async () => {
@@ -108,7 +117,6 @@ describe("Popover", () => {
 			onOutside()
 			expect(w.emitted("onClose")).toHaveLength(1)
 			expect(document.activeElement).toBe(field)
-			w.unmount()
 		})
 	})
 

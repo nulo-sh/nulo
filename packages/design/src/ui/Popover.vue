@@ -1,7 +1,7 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup lang="ts">
 /** Vendor */
-import { nextTick, reactive, ref, watch } from "vue"
+import { nextTick, onBeforeUnmount, reactive, ref, watch } from "vue"
 
 /** Composables */
 import { useOutside } from "../composables/outside"
@@ -58,7 +58,8 @@ const onClose = () => {
 const onKeydown = (e: KeyboardEvent) => {
 	if (e.code !== "Escape") return
 	e.preventDefault()
-	// Only a key hands focus back: a pointer close from the autofocused content would carry the ring.
+	// Only a key, and only from inside the panel, hands focus back: a pointer close from the
+	// autofocused content would carry the ring there.
 	if (cardEl.value?.contains(document.activeElement) && opener?.isConnected) opener.focus()
 	onClose()
 }
@@ -95,6 +96,13 @@ watch(
 		}
 	},
 )
+
+// A listener left behind would mark every later Escape handled.
+onBeforeUnmount(() => {
+	document.removeEventListener("scroll", onClose)
+	document.removeEventListener("keydown", onKeydown)
+	removeOutside?.()
+})
 </script>
 
 <template>

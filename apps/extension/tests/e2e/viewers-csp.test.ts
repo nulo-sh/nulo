@@ -428,7 +428,6 @@ async function waitForShownLine(page: Page, text: string, shown: boolean): Promi
 }
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
-/** Each trigger opens on both keys a native button answers. */
 const OPEN_KEYS: KeyInput[] = ["Enter", SPACE]
 
 async function expectAccentRing(page: Page, testid: string): Promise<void> {
@@ -443,7 +442,6 @@ async function tabStep(page: Page, testid: string, back = false): Promise<void> 
 	await expectAccentRing(page, testid)
 }
 
-/** Opens what the focused trigger opens with `key`, moves focus into it, then closes it by Escape. */
 async function openAndEscape(page: Page, key: KeyInput, opened: string, focusInside: () => Promise<void>): Promise<void> {
 	await page.keyboard.press(key)
 	await page.waitForSelector(sel(opened), { visible: true, timeout: 5_000 })
