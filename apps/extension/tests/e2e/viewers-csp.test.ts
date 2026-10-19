@@ -430,7 +430,6 @@ async function waitForShownLine(page: Page, text: string, shown: boolean): Promi
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const OPEN_KEYS: KeyInput[] = ["Enter", SPACE]
 
-/** A filter row's ring is inset: the Source list's scroll box clips outside its rows. */
 const INSET = "-2px"
 
 async function expectAccentRing(page: Page, testid: string, offset = "2px"): Promise<void> {
@@ -483,13 +482,13 @@ test("the toolbar's Source, Level and more are Tab stops in that order, ringed, 
 		await expectAccentRing(page, "logs-more-trigger")
 	}
 
+	// Each panel takes focus as it opens, so the Escape must hand it back.
 	await tabStep(page, "logs-filter-level", true)
 	for (const key of OPEN_KEYS) {
-		await openAndEscape(page, key, "logs-filter-level-panel", async () => {})
+		await openAndEscape(page, key, "logs-filter-level-panel", () => waitForFocus(page, "logs-filter-level-all"))
 		await expectAccentRing(page, "logs-filter-level")
 	}
 
-	// Source's search field takes focus as its panel opens, so the Escape must hand it back.
 	await tabStep(page, "logs-filter-source", true)
 	for (const key of OPEN_KEYS) {
 		await openAndEscape(page, key, "logs-filter-source-panel", () => waitForFocus(page, "logs-filter-source-panel"))

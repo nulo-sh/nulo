@@ -64,6 +64,8 @@ function tabbables(root: Element | undefined): HTMLElement[] {
 	return [...all].filter((el) => el.tabIndex >= 0 && !el.matches(":disabled"))
 }
 
+/** Any open from a focused trigger, a pointer's included: a screen reader's activation may carry
+ *  no keyboard modality. */
 function focusIn() {
 	const card = cardEl.value
 	if (opener && card && !card.contains(document.activeElement)) tabbables(card)[0]?.focus()
@@ -83,6 +85,8 @@ function onTab(e: KeyboardEvent) {
 	onClose()
 }
 
+/** `focusin`, not `focusout`: a window blur or a press on no control moves focus nowhere, and must
+ *  not close. */
 const onFocusin = (e: FocusEvent) => {
 	const target = e.target
 	if (target instanceof Node && !triggerEl.value?.contains(target) && !cardEl.value?.contains(target)) onClose()
@@ -134,6 +138,7 @@ watch(
 			})
 		} else {
 			opener = null
+			// Listeners first: the pinned call below can throw.
 			document.removeEventListener("scroll", onClose)
 			document.removeEventListener("keydown", onKeydown)
 			document.removeEventListener("focusin", onFocusin)
