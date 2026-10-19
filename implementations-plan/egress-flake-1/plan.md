@@ -53,7 +53,7 @@ For a maintainer reading a red smoke lane: an interception failure means a live 
 - **Suspend the spec's interception across the kill too** (`whileReleased`): a context still polling during the kill would reach the real seed endpoint with nothing armed; the spec's interception stays armed for that reason. Rejected (D3).
 - **Reply faster / reorder:** the cancel can land after any pause; no order closes the window. Rejected.
 
-## Phase 1 — classify the cancelled request as gone
+## Phase 1 — classify the cancelled request as gone ✓
 
 1. Edit the regex and the comment in `chrome-rpc-intercept.ts`.
 2. Add the three cases to `scripts/e2e/chrome-rpc-intercept.test.ts`.
@@ -103,6 +103,8 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `175d
 **Round 1, Opus Plan:** conditional approve, 7 findings, all accepted. #1 the fake fires the pause after the arm resolves, or a rejection throws from the arm. #2 record the Codex round. #3 the local network suite is skipped without saying so: D7; wall-clock dropped, no scenario changes. #4 "keeps polling" and "never sent" overclaimed: reworded. #5 `hits()` proves nothing about the fix: dropped (the reply pin shows the handler ran). #6 the `FIREFOX.md` change folds into the row's phrase. #7 F3's range. Its Ask on CI's Chrome version: the log prints none; `bun.lock` pins Puppeteer 25.8.0, whose build is 152.0.7977.42.
 
 **Final pass, Codex** (resume, session 01a15512): **approve**, no findings, high confidence. It confirmed the four fixes, that a pre-arm rejection would throw from the arm (so the pause fires after it), the dropped `hits()`, and D7 as a documented, proportionate deviation.
+
+**Implementation rounds 1-2** (diff 25f2c63e..b238a08b). Codex r1 (gpt-6.1-sol, high, session 01a15530): approve, 2 comment findings, fixed. Opus diff review: conditional approve, 3 comment findings, fixed (`b238a08b`). Codex r2 (resume): approve, none; the loop converged. Log: [lessons/phase-1.md](lessons/phase-1.md).
 
 ## Seeds
 
