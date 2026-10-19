@@ -62,3 +62,10 @@ All runs on this host at retry 0 through `agent.sh`, load1 under 150 at each sta
 
 - Codex, three rounds in session `01a14fe3`: conditional approve each time. Round 1 had 2 findings and round 2 had 2 (one fixed, one disposed as a known limit). In round 3 the cold-wake fix drew no new material finding; one Low on the status-function ban was fixed and mutation-checked. Round 3 was the cap. The plan's Audit verdicts have each finding. The Opus diff review ran alongside round 1.
 - OA-3: #789 shipped #616's option A and replaced "focusing the search panel stops the follow" with "the search panel open at the end holds the view while lines arrive". That test went 10/10 green on Firefox at retry 0, on 58a5f88b with the armed build, so no race issue was filed.
+
+## The PR's first CI run: `backup-import-stalled-network` red on Chrome (shard 5/5)
+
+- The Retry's row read "Skipped: couldn't reach the network" where the spec asserts the deadline. Locally the spec had passed once per browser in the inventory. Reproduced at retry 0: red 1 of 3 guarded, then 2 of 4; unguarded green 4/4 and 3/3. No such failure appeared in the last 30 failed CI network runs.
+- An instrumented stub showed the cause. It keeps each blackholed call's connection open, and Chrome sends at most six requests at once to one host over HTTP/1.1. Before the Retry, the red runs held six (four `aztec_getBlockNumber` and one `aztec_getL1ContractAddresses`), so the Retry's identity probe was redirected but never sent. Green runs held three, unguarded ones three or four.
+- Under the guard, Home on Testnet, in the spec's second popup, issued up to four concurrent block-number reads where unguarded runs issued one or two. The cause of the extra reads was not isolated. Production's Testnet is HTTP/2, which has no such cap.
+- Fix (23fc1028): `StubServer.dropUnanswered()` resets every connection holding an unanswered call, and the spec calls it right before its Retry, so every new call still hangs. Guarded: 6/6 on Chrome, 2/2 on Firefox.

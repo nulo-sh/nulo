@@ -21,7 +21,7 @@ post_implementation_hardening: not scheduled
 - **Status:** closed. Arc 1 (#783) closed #749 #630 #612 #643. Arc 2 carries this close-out, and the merge that lands it closes the plan and #620 #555.
 - **Shipped:**
   - Four e2e reds fixed at their cause in test code: the logs probe waits for its own last line, the refused-node reset seeds both protocol FPC rows, the no-popup dApp call dumps on timeout, and the passkey matrix row verifies the wallet's MAC and re-seals (it runs in CI).
-  - The network suite launches behind the egress guard, with its control spec in the network selection. bb.js's CRS hosts go direct (`CRS_HOSTS`). Chrome's autofill server is off at the source. Chrome's node interception attaches no page. `cold-wake-discovery` closes Chrome's offscreen document before its kill (`BrowserDriver.closePxeHost`).
+  - The network suite launches behind the egress guard, with its control spec in the network selection. bb.js's CRS hosts go direct (`CRS_HOSTS`). Chrome's autofill server is off at the source. Chrome's node interception attaches no page. `cold-wake-discovery` closes Chrome's offscreen document before its kill (`BrowserDriver.closePxeHost`). The stalled-network import spec resets its stub's hung connections before its Retry.
   - Every smoke and publisher artifact is taken by its producer's upload id, behind a checked id, and `artifact-handoffs.test.ts` pins each chain.
   - jscpd is an exact root devDependency, so `bun.lock` and the age gate hold it.
 - **Owner asks:**
@@ -209,6 +209,7 @@ Assumes F8.
 | D13 | #620: `CRS_HOSTS` go direct on every guarded launch; the stand-in stays | a loopback CRS mirror; drop the stand-in with any direct host | Phase 5 pre-describes it, the WASM inventory recorded both hosts (I3); a mirror is a new server (D6); F6 |
 | D14 | #620: Chrome's node interception auto-attaches what Chrome's default filter does, minus pages | allow only `service_worker` and `background_page` (Codex); release only the worker for the kill; attach pages and detach them at once | detaching any session from a page clears its WebAuthn virtual authenticators, which red the passkey canary; a new offscreen document attaches as `other`, so the allow-list let it dial the Testnet node at the guard (24 refused attempts in one canary file, measured), a leak the declared refusal hid; releasing only the worker changes the release protocol |
 | D15 | #620: `cold-wake-discovery` closes Chrome's offscreen document before its kill (`BrowserDriver.closePxeHost`) | make the guard's re-arm faster; check before the re-arm | the offscreen document wakes every killed worker 50-350 ms later, guard or not, so the spec's dead-at-click premise held only on timing; a faster re-arm keeps the race |
+| D16 | #620: the stalled-network spec's stub resets its hung connections before the Retry (`dropUnanswered`) | loosen the Retry's row to either skip; hold calls in the interception instead of the stub | the Retry asserts the deadline path, so its identity probe must be sent; a held interception is a new driver mode on both browsers, while the stub's HTTP/1.1 hang is what starves Chrome's six connections per host |
 
 ## Audit verdicts
 
@@ -242,6 +243,8 @@ Assumes F8.
 - Codex also judged the silent missed redirect a follow-up, not this arc's: an open issue.
 
 **Arc 2, round 3** (Codex resume, over `a6374911 f5c27522 8eb9518b`): conditional approve. No new material finding in the cold-wake fix: the driver is the right home, the spec's purpose holds, and a recreated offscreen document fails loud. One Low, demonstrated: `success() || true` and an upper-case `ALWAYS()` slipped the status-function ban. Fixed (8dbbd12f): all four functions, case-blind, with both mutations; under the old regex both mutations pass. Round 3 was the plan's hard stop, so no Codex pass verified that last fix.
+
+**After the PR opened:** CI's Chrome network shard 5/5 went red on `backup-import-stalled-network` (D16), which the local inventory had passed once per browser. Its fix (23fc1028) came after the loop's three rounds, so no Codex pass reviewed it.
 
 Deviation: the round prompts did not carry the Post-implementation standard's two rules verbatim. Each asked for adversarial review, small fixes, and comments that narrate or cite a plan.
 
