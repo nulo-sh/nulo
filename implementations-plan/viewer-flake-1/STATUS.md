@@ -1,0 +1,7 @@
+- 2026-10-19 phase 0: root cause traced (P1 viewer, T1 and T2 test), reproducers R1b/R2/R3 on Firefox; trial fix 0/16 resumes
+- 2026-10-19 plan drafted; Codex audit next
+- 2026-10-19 plan r1: Codex reject, Opus conditional; redesigned to pin-only (no dispatch), trial 0/16
+- 2026-10-19 plan r2: Codex reject (stop-time pin blocks timer/band resumes); pin moved into scrollToBottom
+- 2026-10-19 plan r3: Codex reject (sub-frame reader scroll) -> KL-2; wording qualified; final fresh pass next
+- 2026-10-19 Chrome follow-pin trial: R1b 0/8, R3 0/8, R5 resumes
+- 2026-10-19 final fresh Codex pass: conditional approve; KL-2 -> owner ask A1; R5, T2 and layout-cost findings applied; session ends at the plan report
