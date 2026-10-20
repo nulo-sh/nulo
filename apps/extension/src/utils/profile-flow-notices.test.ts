@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest"
+import { PasskeyProfileExistsError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
 import { createFailedNotice, passkeyImportFailedNotice } from "./profile-flow-notices"
 
 const WINDOWS_HELLO = "Windows Hello may not work correctly with some versions of Windows."
@@ -31,8 +32,9 @@ describe("profile-flow notices", () => {
 		})
 	})
 
+	// A plain error carrying the very message of the typed one: the choice is by class, never by text.
 	test("a failed passkey import names the authenticator and notes Windows Hello", () => {
-		expect(passkeyImportFailedNotice()).toStrictEqual({
+		expect(passkeyImportFailedNotice(new Error("Passkey profile already exists"))).toStrictEqual({
 			type: "warning",
 			payload: {
 				title: "Profile import failed",
@@ -44,4 +46,28 @@ describe("profile-flow notices", () => {
 			},
 		})
 	})
+
+	test("a passkey whose profile is already here names that profile, with no note", () => {
+		const err = walletErrorFromPayload(new PasskeyProfileExistsError(undefined, { existingProfileName: "Daily" }).toPayload())
+		expect(passkeyImportFailedNotice(err)).toStrictEqual({
+			type: "warning",
+			payload: {
+				title: "Passkey already in use",
+				description:
+					"“Daily” already uses this passkey in this wallet. Click the profile name on the lock screen and choose “Daily”.",
+				confirmText: "OK",
+				onConfirm: expect.any(Function),
+			},
+		})
+	})
+
+	test.each([undefined, { existingProfileName: "" }, { existingProfileName: 7 }])(
+		"a passkey whose profile is already here, with details %j, reads nameless",
+		(details) => {
+			const err = walletErrorFromPayload({ code: PasskeyProfileExistsError.CODE, message: "Passkey profile already exists", details })
+			expect(passkeyImportFailedNotice(err).payload.description).toBe(
+				"This passkey already has a profile in this wallet. Click the profile name on the lock screen and choose it.",
+			)
+		},
+	)
 })
