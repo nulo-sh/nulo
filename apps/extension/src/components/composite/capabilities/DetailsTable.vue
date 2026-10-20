@@ -1,40 +1,55 @@
 <script setup lang="ts">
 /**
- * The Details fold: every contract the app would reach, once, with a mark per permission that
- * includes it, and on opening a row the functions it listed. Function names and unknown addresses
- * are the app's own strings: control and bidi characters are stripped before they show.
+ * The Details fold: every contract and contract class the app would reach, once, with a mark per
+ * permission that includes it, and on opening a row the functions it listed. Function names,
+ * unknown addresses and class ids are the app's own strings: control and bidi characters are
+ * stripped before they show.
  */
 import { trimAddress } from "@/utils/string"
 import { sanitizeWireString, stripWireControl } from "@/wallet/services/dapp-session/capability-meta"
 import RowTarget from "@/components/ui/RowTarget.vue"
 import CapabilityDisclosure from "./CapabilityDisclosure.vue"
 
-type Row = { address?: string; name?: string; simulate: readonly string[]; add: boolean; transact: readonly string[] }
+type Row = {
+	address?: string
+	name?: string
+	simulate: readonly string[]
+	add: boolean
+	transact: readonly string[]
+	details: boolean
+	events: boolean
+	code: boolean
+}
 
 const props = defineProps<{
 	known: readonly Row[]
 	unknown: readonly Row[]
+	classes: readonly Row[]
 	anyContract: Row | null
-	/** "any contract", or the count of listed contracts. */
+	/** "any contract", or the count of listed contracts or, with none, of classes. */
 	label: string
 }>()
 
 const emit = defineEmits<{ copy: [address: string] }>()
 
-type Entry = { kind: "sub"; key: string; text: string } | { kind: "row"; key: string; row: Row; named: boolean }
+type SectionKey = "known" | "unknown" | "classes"
+type Entry = { kind: "sub"; key: string; text: string } | { kind: "row"; key: string; row: Row; section: SectionKey | "any" }
 
 /** Keys double as id suffixes, so they hold no whitespace. */
-const section = (key: "known" | "unknown", text: string, rows: readonly Row[]): Entry[] =>
+const section = (key: SectionKey, text: string, rows: readonly Row[]): Entry[] =>
 	rows.length === 0
 		? []
-		: [{ kind: "sub", key, text }, ...rows.map((row, i): Entry => ({ kind: "row", key: `${key}-${i}`, row, named: key === "known" }))]
+		: [{ kind: "sub", key, text }, ...rows.map((row, i): Entry => ({ kind: "row", key: `${key}-${i}`, row, section: key }))]
 
 /** "Any contract" goes last, under no sub-header. */
 const entries = computed<Entry[]>(() => [
 	...section("known", "Nulo knows", props.known),
 	...section("unknown", "Nulo doesn't know", props.unknown),
-	...(props.anyContract ? [{ kind: "row" as const, key: "any", row: props.anyContract, named: true }] : []),
+	...section("classes", "Contract classes", props.classes),
+	...(props.anyContract ? [{ kind: "row" as const, key: "any", row: props.anyContract, section: "any" as const }] : []),
 ])
+
+const isNamed = (entry: { section: SectionKey | "any" }) => entry.section === "known" || entry.section === "any"
 
 const opened = ref(new Set<string>())
 
@@ -50,17 +65,22 @@ const shownAddress = (address: string | undefined) => trimAddress(sanitizeWireSt
 
 const functions = (names: readonly string[]) => names.map((name) => sanitizeWireString(name, 64)).join(" · ")
 
+/** Each column's word, which a row's spoken name uses, and the glyph of the row it stands for. */
 const COLUMNS = [
-	["simulate", (row: Row) => row.simulate.length > 0],
-	["add", (row: Row) => row.add],
-	["transact", (row: Row) => row.transact.length > 0],
+	["simulate", "play", (row: Row) => row.simulate.length > 0],
+	["add", "add", (row: Row) => row.add],
+	["transact", "check", (row: Row) => row.transact.length > 0],
+	["details", "info", (row: Row) => row.details],
+	["events", "mail-lock", (row: Row) => row.events],
+	["code", "code", (row: Row) => row.code],
 ] as const
 
 /** A row's target reads "{name}: {columns}", since the head is hidden from screen readers, and an
- *  unknown row's name says so, since a Tab to it skips its sub-header. */
-const spokenName = (entry: { row: Row; named: boolean }) => {
-	const name = entry.named ? entry.row.name : `Unknown contract ${shownAddress(entry.row.address)}`
-	const columns = COLUMNS.filter(([, has]) => has(entry.row)).map(([column]) => column)
+ *  unknown contract's or a class's name says so, since a Tab to it skips its sub-header. */
+const spokenName = (entry: { row: Row; section: SectionKey | "any" }) => {
+	const shown = shownAddress(entry.row.address)
+	const name = isNamed(entry) ? entry.row.name : entry.section === "classes" ? `Contract class ${shown}` : `Unknown contract ${shown}`
+	const columns = COLUMNS.filter(([, , has]) => has(entry.row)).map(([column]) => column)
 	return `${name}: ${columns.join(", ")}`
 }
 </script>
@@ -70,9 +90,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 		<div :class="$style.table">
 			<div :class="[$style.grid, $style.head]" aria-hidden="true">
 				<span>Contract</span>
-				<span>Simulate</span>
-				<span>Add</span>
-				<span>Transact</span>
+				<Icon v-for="[column, glyph] in COLUMNS" :key="column" :name="glyph" :size="14" :class="$style.head_glyph" />
 				<span />
 			</div>
 
@@ -89,7 +107,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 						/>
 
 						<span :id="`${uid}-${entry.key}`" hidden>{{ spokenName(entry) }}</span>
-						<span v-if="entry.named" :class="$style.name">{{ entry.row.name }}</span>
+						<span v-if="isNamed(entry)" :class="$style.name">{{ entry.row.name }}</span>
 						<span v-else :class="$style.address">
 							<span :class="$style.address_text" data-testid="capability-address">{{ shownAddress(entry.row.address) }}</span>
 							<RowAction
@@ -104,7 +122,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 							</RowAction>
 						</span>
 
-						<template v-for="[column, has] in COLUMNS" :key="column">
+						<template v-for="[column, , has] in COLUMNS" :key="column">
 							<Icon v-if="has(entry.row)" name="check" :size="15" :class="$style.yes" aria-hidden="true" />
 							<span v-else :class="$style.no" aria-hidden="true" />
 						</template>
@@ -145,7 +163,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 
 .grid {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 66px 34px 66px 14px;
+	grid-template-columns: minmax(0, 1fr) repeat(6, 26px) 14px;
 	align-items: center;
 	column-gap: 4px;
 }
@@ -157,8 +175,8 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 	color: var(--nulo-secondary);
 }
 
-.head > span + span {
-	text-align: center;
+.head .head_glyph {
+	justify-self: center;
 }
 
 .sub {

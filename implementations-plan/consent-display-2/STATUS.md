@@ -6,3 +6,5 @@
 - 2026-10-20 Opus plan r1: conditional approve, 11 findings (10 accepted, 1 rejected with the contract's accounting); plan revised; base e2e timing attempt exit 86 under load1 ~190 (retry in phase 5). Final fresh Codex pass next.
 - 2026-10-20 Codex final pass (fresh session `01a15b9d`): conditional approve, D1-D15 hold; 5 arc 2 findings folded (journal-held imports, read readiness, locked-read claim, full backup under a pending reset, explicit test commands). Confirmation resume next.
 - 2026-10-20 Codex final confirmation turns: chain-scoped merge folded; **approve**. Plan committed next; arc 1 follows.
+- 2026-10-20 phase 1 gate pass: `bun run lint` 0, `bun run typecheck:all` 0, `bun run --cwd apps/extension test src/popup/windows/capabilities` 157 passed.
+- 2026-10-20 phase 2 gate pass: lint 0, `typecheck:all` 0, `bun run --cwd apps/extension test src/popup/windows/capabilities src/components/composite/capabilities` 237 passed, `build-storybook` 0.

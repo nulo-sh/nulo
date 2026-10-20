@@ -527,14 +527,8 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 
 	test.each([
 		["an accounts-only connect", [{ type: "accounts", canGet: true, canCreateAuthWit: false }]],
-		[
-			"U4's data and contract classes",
-			[
-				{ type: "data", privateEvents: { contracts: [TOKEN] } },
-				{ type: "contractClasses", classes: "*", canGetMetadata: true },
-			],
-		],
-	])("no Details when the grants reach no contract: %s", async (_case, capabilities) => {
+		["the address book alone", [{ type: "data", addressBook: true }]],
+	])("no Details when the grants reach no contract or class: %s", async (_case, capabilities) => {
 		await mountWindow(firstRequest(capabilities, { availableAccounts: [ALICE] }))
 		expect(shownRows().length).toBeGreaterThan(0)
 		expect(detailsToggle().exists()).toBe(false)
@@ -682,6 +676,25 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 		})
 		expect(read("contract-classes").title).toMatch(/^Look up the code of 1 contract class on /)
 		expect(await approve()).toEqual({ granted: [details, classes, txListed] })
+	})
+
+	test("Details shows what the app asked for, a row switched Off included, with its classes", async () => {
+		const events = { type: "data", privateEvents: { contracts: [TOKEN] } }
+		const classes = { type: "contractClasses", classes: [FEE_JUICE], canGetMetadata: true }
+		await mountWindow(firstRequest([events, classes]))
+		expect(read("private-events").on).toBe(false)
+		expect(detailsToggle().find("span").text()).toBe("Details · 1 contract")
+		await detailsToggle().trigger("click")
+		const spokenRows = w!.findAll('[data-testid="cap-details-row"]').map((row) => {
+			const id = row.attributes("aria-labelledby")
+			return w!.find(`[id="${id}"]`).text()
+		})
+		expect(spokenRows).toEqual(["Unknown contract 0x1b1b…1b1b: events", "Contract class 0x0000…0003: code"])
+	})
+
+	test("grants reaching only contract classes still show Details, counting the classes", async () => {
+		await mountWindow(firstRequest([{ type: "contractClasses", classes: [FEE_JUICE], canGetMetadata: true }]))
+		expect(detailsToggle().find("span").text()).toBe("Details · 1 contract class")
 	})
 
 	test("a Settings change after dispatch: the defaults follow the snapshot, not the session", async () => {
