@@ -49,7 +49,7 @@ Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 One CSS line removed and one source pin added. No token, component, dependency or e2e scenario. The pin lands first, so its red run reads the untouched card; the rejected order, change first, would prove nothing red.
 
-### Phase 1: The pin ☐
+### Phase 1: The pin ✓
 
 - Add `apps/extension/src/components/NotificationManager.test.ts`, a source test (D2). A private `roundedCorners(file, source?)` parses the SFC with `parseSource`. It returns `"<selector> { <prop>: <value> }"` for each declaration whose property matches `/(^|-)radius$/i` and whose value is not all zeros. It also returns each template element whose static or bound `style` matches `/radius/i`.
 - Tests: (a) the file yields `[]`; (b) a `test.each` of snippets, each yielding one finding: `border-radius: 16px`, `border-top-left-radius`, `border-start-end-radius`, `BORDER-RADIUS`, `-webkit-border-radius`, a static `style="border-radius:4px"`, a bound `:style="{ borderRadius: '4px' }"`; and `border-radius: 0` / `0 0` yielding `[]`; (c) non-vacuity: `declarationsOf(parsed, ".card")` holds `background`, and the template walk reaches the `font-style: italic` element. A header sentence names the blind spots: a global or shared rule, a `composes`, a style set in script or through a variable, `clip-path` rounding.
