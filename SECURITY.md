@@ -247,7 +247,8 @@ sits at the SW seam where content-script messages arrive:
 The background sets `chrome.storage.local` to trusted contexts at every start
 (`src/wallet/utils/storage-access.ts`): the extension's pages and workers read it, a content script
 does not, and Chrome keeps the level across restarts. Firefox has no such setting, so there the
-area keeps the browser's default access.
+area keeps the browser's default access, and a compromised content script is a writer with storage
+access in the sense of § Storage privacy.
 
 ## Authorization enforcement
 
@@ -386,6 +387,11 @@ Plaintext at rest (`chrome.storage.local`):
 Expanding the encrypted boundary to cover profile-scoped metadata (contacts,
 dApp sessions, tx history) is not done: a large refactor, not a near-term
 patch.
+
+Each dApp-session row carries a MAC keyed from the profile's keys: it stops a
+forged row and a row replayed under another id or profile, not a writer with
+storage access putting back an earlier authentic row under the same key
+(known limit #967).
 
 ### External price feed (CoinGecko)
 

@@ -41,9 +41,11 @@ const NETWORK = {
 }
 
 function fakeInstance(addressBigInt: bigint) {
+	const classId = { toString: () => "0xclass", equals: (other: { toString(): string }) => other.toString() === "0xclass" }
 	return {
 		address: { toBigInt: () => addressBigInt },
-		currentContractClassId: { toString: () => "0xclass" },
+		currentContractClassId: classId,
+		originalContractClassId: classId,
 	}
 }
 
