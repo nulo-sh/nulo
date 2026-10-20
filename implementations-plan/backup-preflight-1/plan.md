@@ -1,7 +1,7 @@
 ---
 plan: backup-preflight-1
 tier: light
-status: arc 1 in review
+status: completed
 issues: "#934 (arc 1, Closes)"
 driver: claude-code
 claude_model: opus
@@ -12,6 +12,20 @@ eli5_mode: skipped (orchestrator-owned)
 base: dev @ e8fe932d4
 standard: implementations-plan/README.md § Post-implementation standard, read at e8fe932d4
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** delivered as one ready PR against `dev`, #951, which carries this close-out; its merge closes the plan and #934.
+- **Shipped:** the backup-import preflight's uncovered-ref gate deleted (`backup-migrator.ts`): a backup-safe migration of a root or value key no slice carries imports an older backup unchanged, a mixed footprint migrates its sliced roots, and the imperative, block-listed and absent-read refusals keep their reasons. `footprint-coverage.test.ts` acknowledges only imperative or block-listed migrations and checks that rule against the real import; the reject-oracle pins and the migrator suite pin the new contract; `emptyBackup` exported from `stored-shapes/baseline.ts` for that check; the backup README and `ARCHITECTURE.md` updated.
+- **Review loop:** plan: Codex and Opus conditional approve, then Codex approve; arc: Codex `FINDINGS: 0`, Opus 4 (3 fixed, 1 known limit), then Codex `FINDINGS: 0`.
+- **Gates at the head:** the backup suite red on base for exactly the five planned cases, then green; lint, `typecheck:all`, `test:all`, `check:plans` exit 0 before the `origin/dev` merge at `f73ce69d6`, re-run after it; `git merge-file` against #938's head clean for every touched file.
+- **Deviations:** D1 reads the brief's "whole footprint" per ref (flagged in the PR body); `snapshot.test.ts` unchanged (D4).
+- **Dropped:** `CLAUDE.md`'s "registry-covered footprints" and #938's "until #934" clause, left to #938 to keep its merge textual (D5; relayed on #938).
+- **Known limits:** #952 (a migration ref aliasing another root's row keys passes the preflight by name).
+- **Open items:** none.
+- **Lessons:** none promoted; git's adjacent-line conflict is general git behaviour, and `lessons.md` sits at its budget.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # backup-preflight-1: a migration that cannot touch a backup's rows never refuses it
 
