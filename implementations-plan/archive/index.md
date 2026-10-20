@@ -212,6 +212,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [network-e2e-required](network-e2e-required/plan.md) — completed — the network e2e check made reliably green, then required
 - [network-e2e-unquarantine](network-e2e-unquarantine/plan.md) — completed — the network suite restored to zero skips and no stretched waits
 - [network-identity-1](network-identity-1/plan.md) — completed — chain 0 is the local L1 on a loopback node; SECURITY.md says what adoption, promotion and use check (#659)
+- [network-identity-2](network-identity-2/plan.md) — completed — the token-list and price requests bypass the browser's HTTP cache; the price request omits credentials and the referrer
 - [network-playground-testing](network-playground-testing/plan.md) — completed — the wallet's dApp surface covered in the network suite through a local playground dApp
 - [network-test-triage](network-test-triage/plan.md) — completed — the failing network e2e tests diagnosed before any timeout was touched
 - [nightly-release](nightly-release/plan.md) — completed — one tagged nightly prerelease per day from the tip of dev
