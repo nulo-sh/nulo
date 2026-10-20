@@ -135,6 +135,13 @@ describe("renderLegalPage", () => {
 		expect(html).toContain("not yet effective")
 	})
 
+	test("an undated version that is no longer the head reads as never in effect", () => {
+		const undated = { ...manifest, terms: [v("1.0"), v("1.1")] }
+		const html = renderLegalPage({ doc: "terms", version: "1.1", markdown: md("1.1") }, { permalink: false, manifest: undated })
+		expect(html).toContain('<a href="/terms/v1.0/">Version 1.0</a> <span>never in effect</span>')
+		expect(html).toContain('<a href="/terms/v1.1/">Version 1.1</a> <span>not yet effective</span>')
+	})
+
 	test("ships exactly one script, external, as the CSP requires", () => {
 		const scripts = render().match(/<script[^>]*>/g) ?? []
 		expect(scripts).toEqual(['<script type="module" src="/src/legal.ts">'])

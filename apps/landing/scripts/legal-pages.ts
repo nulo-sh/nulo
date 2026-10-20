@@ -3,7 +3,7 @@
  * so the same functions plan the Vite inputs and are unit-tested without touching disk.
  */
 
-import { LEGAL_MANIFEST, type LegalDocument, hasPlaceholders, parseDocumentHeader } from "@nulo/legal"
+import { LEGAL_MANIFEST, type LegalDocument, type LegalVersion, hasPlaceholders, parseDocumentHeader } from "@nulo/legal"
 
 /** Built into the pinned Bun line; Cloudflare's Bun is pinned by a dashboard variable, not the repo. */
 declare const Bun: { markdown?: { html(source: string, options?: { headings?: { ids?: boolean } }): string } } | undefined
@@ -129,11 +129,14 @@ function banner(kind: "draft" | "superseded", doc: LegalDocument): string {
 }
 
 function versionList(doc: LegalDocument, manifest: typeof LEGAL_MANIFEST): string {
+	const head = manifest[doc].at(-1)
+	// An undated version that is no longer the head was replaced before it ever took effect.
+	const undated = (entry: LegalVersion) => (entry === head ? "not yet effective" : "never in effect")
 	const items = [...manifest[doc]]
 		.reverse()
 		.map(
 			(entry) =>
-				`<li><a href="/${doc}/v${entry.version}/">Version ${escapeHtml(entry.version)}</a> <span>${escapeHtml(entry.effective ?? "not yet effective")}</span></li>`,
+				`<li><a href="/${doc}/v${entry.version}/">Version ${escapeHtml(entry.version)}</a> <span>${escapeHtml(entry.effective ?? undated(entry))}</span></li>`,
 		)
 	return `<nav class="legal-versions" aria-label="All versions"><h2>All versions</h2><ul>${items.join("")}</ul></nav>`
 }

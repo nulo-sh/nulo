@@ -13,7 +13,15 @@ export interface LegalVersion {
 
 /** Oldest first. The last entry of each list is what `legal/<doc>.md` currently says. */
 export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersion[]>> = {
-	terms: [{ version: "1.0", effective: null, material: true, changes: ["First published version."] }],
+	terms: [
+		{ version: "1.0", effective: null, material: true, changes: ["First published version."] },
+		{
+			version: "1.1",
+			effective: null,
+			material: true,
+			changes: ["You accepted a draft of these Terms. This version is the one in effect."],
+		},
+	],
 	privacy: [
 		{ version: "1.0", effective: "23 September 2026", material: true, changes: ["First published version."] },
 		{

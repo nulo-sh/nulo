@@ -100,6 +100,24 @@ describe("LegalAcceptanceSheet", () => {
 		expect(review.getComponent({ name: "LegalConsent" }).props("points")).toEqual(RISK_POINTS)
 	})
 
+	test("a record at the first Terms version lists only the later versions' changes", async () => {
+		legal.getRecord.mockResolvedValue({
+			termsVersion: LEGAL_MANIFEST.terms[0]?.version,
+			privacyVersionShown: "1.0",
+			acceptedAt: 1,
+			surface: "onboarding",
+			history: [],
+		})
+		const later = LEGAL_MANIFEST.terms
+			.slice(1)
+			.filter((v) => v.material)
+			.flatMap((v) => v.changes)
+		expect(later.length).toBeGreaterThan(0)
+		const wrapper = await mountSheet()
+		expect(sheet(wrapper).attributes("data-variant")).toBe("changed")
+		expect(wrapper.get('[data-testid="stub-consent"]').attributes("data-changes")).toBe(later.join("|"))
+	})
+
 	test("Continue records a popup acceptance and the sheet leaves; Not now remembers the version and goes to the declined screen", async () => {
 		const accepting = await mountSheet()
 		await accepting.get('[data-testid="stub-consent"]').trigger("click")
