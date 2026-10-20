@@ -38,6 +38,10 @@ A local trace patch (kept at `~/.cache/nulo-backlog/stalled-retry-flake-1/repro.
 | Chrome, forced (background fill), reset | 6 | 4 | +133 ms | deadline |
 | Firefox, forced (page fill), 400 | 6 | 0 | +90 ms | deadline |
 | Chrome, forced (background fill), 400 | 6 | 0 | +64 ms | deadline |
+| Firefox, forced (background fill), reset, arc base | 6 (all the wallet's) | 4 | +70 ms | deadline |
+| Firefox / Chrome, forced, 400, on the fix | 6 | 0 | +124 / +64 ms | deadline |
+
+Browser probe (smoke launch, a local server behind the same redirect): six held calls, each on a connection that first carried an answered call. Reset: 6 of 6 re-sent, the next identity call never arrived in 8 s, 3/3 on Chrome and 3/3 on Firefox. 400: none re-sent, the call arrived within 3 ms, 3/3 each. With some held calls on new connections, Chrome re-sent the reused ones only; Firefox also re-sent some new-connection ones.
 
 In every run, nothing else reached the stub between the release and the probe except the copies and, in the 400 runs, one `aztec_getL1ContractAddresses` of the first pass's next registration launch.
 

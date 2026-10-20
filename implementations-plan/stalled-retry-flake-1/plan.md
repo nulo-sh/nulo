@@ -1,7 +1,7 @@
 ---
 plan: stalled-retry-flake-1
 tier: light
-status: planned, final Codex approve (2026-10-20); arc 1 under auto-continue
+status: arc 1 green and reviewed (2026-10-20); PR open
 issues: "#911 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -25,7 +25,7 @@ Initial conditions: the spec's stub answers Testnet's identity probe (`aztec_get
 
 1. Before the Retry, up to six calls are held: the first pass's abandoned registration (`aztec_getL1ContractAddresses`) and block-number reads, most from the second popup's Home on Testnet.
 2. `stub.dropUnanswered()` destroys their sockets (`tests/e2e/helpers/rpc-stub.ts:120-122`).
-3. The browser re-sends each reset request at once on a new connection, since no reply had started: Firefox every one, Chrome only those on a connection that carried an earlier call. The stub holds each copy again.
+3. The browser re-sends at once, on a new connection, each reset request whose connection had carried an earlier one: Chrome and Firefox alike. Firefox also re-sent the PXE's call and some on new connections. The stub holds each copy again.
 4. With six copies held, the Retry's probe waits for a connection. Each attempt aborts at 5 s; after the third, the preflight's 21 s are spent, and the tail records `ACCOUNT_STATE_SKIP_UNREACHABLE` (`src/composables/importChainSync.ts:105`).
 
 Invariant broken: the Retry's probe reaches the stub, which the spec assumes the drop guarantees (`backup-import-stalled-network.test.ts:193-195`). Consequence: the Retry's row reads "couldn't reach the network", and the exact deadline row fails.
@@ -33,10 +33,11 @@ Invariant broken: the Retry's probe reaches the stub, which the spec assumes the
 Evidence, at retry 0 through `agent.sh` (table in recon.md § Traces):
 - CI job 118387660896: the Retry ran about 22 s (00:45:38 to 00:46:01). That fits a spent preflight (three timed-out attempts, 21 s), not three fast resets (about 6 s). Its stub log does not exist, so how many calls it held is unknown (I2).
 - Unforced: Firefox held 4 and got 3 back within 3 ms; Chrome held 6 and got back the 2 on reused connections. Both green.
-- Forced to six held (uncommitted fill): Firefox red 2/2 with the CI row, all six back within 4 ms and no probe in 21 s; Chrome green, four back.
-- Forced, the held calls answered with the stand-in's 400: green on both, nothing back, the probe 64-90 ms after the click.
+- Forced to six held (uncommitted fill): Firefox red 2 of 3 with the CI row, all six back within 4 ms and no probe in 21 s (the third got four back); Chrome green, four back.
+- Forced, the held calls answered with the stand-in's 400: green on both (twice on Firefox, twice on Chrome), nothing back, the probe 60-125 ms after the click.
+- A browser probe (uncommitted, smoke launch, no sandbox): six held calls on six reused connections. A reset: all six back at once and the next identity call never reached the server in 8 s, 3/3 on each browser. The 400: none back and the call there within 3 ms, 3/3 on each.
 
-The issue's hypotheses: (1) holds in part. The first pass's calls are still in flight, but the Retry inherits no outcome from them: its own probe starves. (2) does not hold. The probe leaves on a new connection; the cause is the re-send, and Chrome does it too, on reused connections.
+The issue's hypotheses: (1) holds in part. The first pass's calls are still in flight, but the Retry inherits no outcome from them: its own probe starves. (2) does not hold. The probe leaves on a new connection; the cause is the re-send, and Chrome does it too.
 
 Not a product defect: each Retry probes with fresh clients and no status cache (recon § Product path). Against a really stalled node nothing resets the wallet's own pending calls, but they can still fill the pool. The row then says "couldn't reach the network", which is true of that node, and stays retryable: known limit KL-1, filed closed at close-out.
 
@@ -64,7 +65,7 @@ Mechanics. A 400 with a readable JSON-RPC body ends each held request at both la
 - (D) Raise Firefox's per-host connection pref: masks the cause, and the suite runs with users' prefs (`FIREFOX.md`).
 - (E) Abort a tail's abandoned calls in the product: no consequence that matters (KL-1); outside this lane.
 
-## Phase 1 (arc 1): the stub refuses what it held
+## Phase 1 (arc 1): the stub refuses what it held ✓
 
 Steps:
 1. Branch `stalled-retry-flake-1-a1` off `origin/dev`, with the plan commit.
@@ -101,7 +102,7 @@ Facts:
 - F7. The traces in recon.md, all at retry 0 through `agent.sh`.
 
 Inferences:
-- I1 (moderate confidence). The copies are each browser's transport re-sending a request whose connection closed before any reply: millisecond copies of the forced fetches, with no app-level wait between. The browser source was not read.
+- I1 (high confidence for reused connections). The copies are each browser's transport re-sending a request whose connection closed before any reply: millisecond copies, no app-level wait, 6 of 6 in the browser probe on both. Why Firefox also re-sends some on new connections is unknown; the browser source was not read.
 - I2 (low confidence). CI's run held six calls at the drop. A spent preflight fits it, but does not prove it.
 
 Asks: none for the owner.
@@ -139,6 +140,7 @@ Detail and each finding's disposition: [lessons/phase-0.md](lessons/phase-0.md) 
 - Opus Plan leg: approve with changes. Six findings: four accepted, two moot once the window went. It dissented on D3 (for the window); decided for A.
 - Codex round 2: approve with changes; the eleven-pending count qualified with its assumptions.
 - Codex round 3: approve.
+- Fix loop, round 1: Codex (fix these, one doc wording) and the Opus diff review (clean; two comment fixes accepted, one time-bounded pin rejected). Round 2: Codex clean. Detail: [lessons/phase-1.md](lessons/phase-1.md).
 
 ## Seeds
 
