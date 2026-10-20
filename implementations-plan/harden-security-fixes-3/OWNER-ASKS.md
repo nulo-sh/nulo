@@ -2,7 +2,7 @@
 
 Eight asks. Each ask names the surface, what it does today, the options, the recommendation and what ships now. Arc 3 builds an option only on its pick; "what ships now" is the state without a pick. Pictures of both states come with arc 3's PR, before merge.
 
-The owner answered OA-1 to OA-6 on decision page 65 (P65-01 to P65-06, 2026-10-19) and OA-7 on decision page 68 (P68-06, 2026-10-19); each pick is quoted under its ask. OA-7 came out of OA-4's design pass. OA-8 came out of OA-7's tests and is open.
+The owner answered OA-1 to OA-6 on decision page 65 (P65-01 to P65-06, 2026-10-19), OA-7 on decision page 68 (P68-06, 2026-10-19) and OA-8 on decision page 71 (P71-06, 2026-10-20); each pick is quoted under its ask. OA-7 came out of OA-4's design pass, OA-8 out of OA-7's tests.
 
 ## OA-1: an app's `claim` call titled "Claim Fee Juice" on another contract (Phase 4)
 
@@ -93,5 +93,6 @@ The owner answered OA-1 to OA-6 on decision page 65 (P65-01 to P65-06, 2026-10-1
 - **Option A (recommended).** Keep it as measured. Nothing more is built.
 - **Option B.** After the restart the wallet reopens the Nulo tabs it closed, on the lock screen. It needs a record of the open Nulo pages written before the restart and read after it: new stored state and a recovery step, a plan change of its own.
 - **Option C.** Before restarting, the wallet tells each connected app it is disconnecting (the SDK's disconnect message), so an app that listens shows it at once. On Chrome the app still reconnects only after its page loads again. A message the wallet must send and wait on before every such restart: a plan change of its own.
-- **What ships now.** A. The arc-4 PR stays a draft until this answer.
+- **What ships now.** A: arc 4 ships the restart as measured.
 - **Pictures.** None new: the screen the next popup opens on is OA-7's `oa7-lock-today-light-chrome.png` and `oa7-lock-today-dark-chrome.png`.
+- **Pick (P71-06): C.** "Before restarting, the wallet tells each connected app it is disconnecting, so an app that listens shows it at once. On Chrome the app still answers only after its page loads again. New behaviour, built and reviewed on its own." Not built in arc 4: #926 builds it, with the owner's related note on the connection windows after any restart.
