@@ -71,7 +71,7 @@ None. The arc changes CI tooling, a GitHub PR body, a CI step summary line and d
 
 ## Phases (arc 1, branch `floor-superseded-1-a1` off `origin/dev`, this plan's commit cherry-picked first)
 
-### Phase 1: the rule reads every unserved list
+### Phase 1: the rule reads every unserved list ✓
 - `floor.ts`: `floorSequence(text: string | null): number`, the sequence when it is a positive safe integer, else 0 (absent, not JSON, `null`, wrong type, unsafe).
 - `open-publish-pr.ts`: the IO, flow, bound, unreadable rule and body above; `raisesFloorAt` returns `raisedBy: string[]`; `githubIO` exported for its paging test.
 - `summary.ts`: the floor line says "against the served list", and points to the publish PR body for the final decision.
