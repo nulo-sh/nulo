@@ -82,6 +82,8 @@ function holdPlace(changes) {
 	if (shouldAutoScroll.value || snapshotPending) return []
 	snapshotPending = true
 	view.requestMeasure({ read: () => (snapshotPending = false) })
+	// The snapshot replaces a follow still due, whose scroll then never comes to lower the reference.
+	lastScrollTop = Math.min(lastScrollTop, view.scrollDOM.scrollTop)
 	return view.scrollSnapshot().map(changes)
 }
 
@@ -123,6 +125,9 @@ function scrollToBottom() {
 	enableAutoScroll()
 	const lastLine = view.state.doc.line(view.state.doc.lines)
 	view.dispatch({ effects: EditorView.scrollIntoView(lastLine.from, { y: "end" }) })
+	// No scroll reads as the reader moving down until the next scroll event resets this, so the
+	// follow's own landing cannot resume a stop; reading the end here would force a layout per line.
+	lastScrollTop = Number.POSITIVE_INFINITY
 	showScrollBtn.value = false
 }
 
