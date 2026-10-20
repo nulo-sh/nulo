@@ -24,6 +24,19 @@ Each run starts with load1 under 150. Logs are in the scratch directory (`p5-run
 | z3 | `firefox-sidebar.test.ts` three times, retry 0 | Runs 1 and 3 pass all four (toolbar scenarios 19.2–26.9 s). Run 2's revamped scenario failed in `openOnboarding`, whose wait for the welcome CTA races the shell's own replace to Learn for a known profile: a race in the test's use of the helper. The step now resets the flag and opens the onboarding document itself, waiting only for Learn. |
 | w3 | `firefox-sidebar.test.ts` three times, retry 0, after that fix | 3 of 3 runs pass all four. Toolbar scenarios: default 26.0–29.0 s, revamped 23.1–28.9 s; passkey scenarios 9.4–14.4 s. |
 
+## Gates at `a1c6c8409`
+
+| Gate | Outcome |
+|---|---|
+| `lint`, `typecheck:all`, `check:plans` | Exit 0. |
+| `test:all` | Exit 0 (rerun after the last source change; the first run, before the review fixes, also exit 0). |
+| `audit:vue` | Exit 0: 14444 tests passed, the build green (before the review fixes, which added no Vue file). |
+| Full smoke on Firefox, retry 0 | 275 passed, 17 skipped, 0 failed; 64 of 68 files, 53 min. |
+| `settings-routes`, `onboarding-tab` and `firefox-sidebar` on Chrome, retry 0 | 17 passed; the Firefox-only file skipped. |
+| `onboarding-tab` on Firefox (`waitForOpenPanel` moved) | 11 of 11. |
+| Full Firefox network suite | #889's required `extension-network-e2e-firefox-status`, at retry 0 on the pushed head. Shard 1 failed once: `stale-network-resume` N3 waited 60 s for the import-token toast after the background's death. Locally on Firefox, proverless as CI's pool runs it, N3 passed 3 of 3 at retry 0 (36.8–41.4 s); the shard was re-run. |
+| Smoke wall-clock per shard (1, 2, 3), CI | Chrome 7:25, 12:49, 8:37; Firefox 11:06, 15:00, 9:39. Before, at #909 (the `dev` commit last merged): Chrome 7:40, 11:36, 9:12; Firefox 10:31, 18:37, 9:40. |
+
 ## Notes
 
 - Firefox's `sidebar_action.json` marks `open`, `close` and `toggle` `requireUserInput`. `extension.json`'s `ViewType` is `tab`, `popup` or `sidebar`.
