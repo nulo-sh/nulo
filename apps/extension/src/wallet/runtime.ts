@@ -66,6 +66,7 @@ import { TokenService } from "./services/token/service"
 import { TokenBalanceService } from "./services/token-balance/service"
 import { TransactionService } from "./services/transaction/service"
 import { IncomingTransferService } from "./services/incoming-transfer/service"
+import { closeRestartEndedTabs } from "./services/window-manager/restart-ended-windows"
 import { WindowManager } from "./services/window-manager/window-manager"
 import { initWalletSdkHandler } from "./services/wallet-sdk/background"
 import { type MigrationResult, Migrator, SCHEMA_ATTEMPTS_KEY } from "@nulo/wallet-core/migration"
@@ -204,10 +205,10 @@ export function stopRuntime(state: RuntimeState, clock: WalletRuntimeDeps["clock
 }
 
 /** The boot sequence — the single-flight memo's body. Phase order is the
- *  contract: uninstall URL → migration gate → engine → outcome persistence →
- *  config + Barretenberg → registration → `services.start()` (with the journal
- *  boot cutoff captured IMMEDIATELY before it) → post-start work → wallet-sdk
- *  handler → first liveness write → heartbeat (deliberately last). */
+ *  contract: uninstall URL → restart-ended windows → migration gate → engine →
+ *  outcome persistence → config + Barretenberg → registration → `services.start()`
+ *  (with the journal boot cutoff captured IMMEDIATELY before it) → post-start
+ *  work → wallet-sdk handler → first liveness write → heartbeat (deliberately last). */
 async function bootRuntime(deps: WalletRuntimeDeps, services: ServiceCollection, state: RuntimeState): Promise<void> {
 	const { browserApi, clock, config, logger } = deps
 	// Uninstall URL comes first — zero-cost and covers the user experience
@@ -217,6 +218,7 @@ async function bootRuntime(deps: WalletRuntimeDeps, services: ServiceCollection,
 	} catch (error) {
 		logger.log("wallet", LogLevel.Warn, "Failed to set uninstall URL", error)
 	}
+	await closeRestartEndedTabs(browserApi.runtime, browserApi.windows, logger)
 
 	let gateDecision: MigrationGateDecision
 	try {

@@ -155,6 +155,7 @@ function fakeWindows() {
 			if (!open.delete(id)) throw new Error(`No window with id: ${id}.`)
 			fire(id)
 		},
+		closeTab: async () => {},
 		update: async (id, options) => {
 			if (options.focused) focused.push(id)
 		},

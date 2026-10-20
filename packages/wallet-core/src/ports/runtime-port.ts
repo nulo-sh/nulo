@@ -28,6 +28,15 @@ export interface MessageSender {
 
 export type MessageListener = (message: unknown, sender: MessageSender) => Promise<unknown> | unknown
 
+/** One extension context. `windowId` and `tabId` are set for a page in a tab, on both browsers. */
+export interface ExtensionContextInfo {
+	contextId: string
+	contextType: string
+	documentUrl?: string
+	windowId?: number
+	tabId?: number
+}
+
 export interface RuntimePort {
 	/** Send a one-shot message; resolves with the receiver's reply. */
 	sendMessage(message: unknown): Promise<unknown>
@@ -64,8 +73,5 @@ export interface RuntimePort {
 	 * filter; used by `ensureOffscreenRunning()` to detect zombies.
 	 * Optional because not all adapters need it (e.g. FakeBrowserApi).
 	 */
-	getContexts?(filter: {
-		contextTypes?: string[]
-		documentUrls?: string[]
-	}): Promise<Array<{ contextId: string; contextType: string; documentUrl?: string }>>
+	getContexts?(filter: { contextTypes?: string[]; documentUrls?: string[] }): Promise<ExtensionContextInfo[]>
 }

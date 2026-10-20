@@ -217,6 +217,8 @@ class FakeWindowsAdapter implements WindowPort {
 	public readonly navigates: Array<{ windowId: number; url: string }> = []
 	/** Test-only: what `getLastFocused` returns. */
 	public lastFocused: WindowBounds | undefined
+	/** Test-only: every `closeTab` call, in order. The fake models no tabs, so no window closes. */
+	public readonly closedTabs: number[] = []
 
 	public async create(options: CreateWindowOptions): Promise<CreatedWindow> {
 		this.creates.push(options)
@@ -250,6 +252,10 @@ class FakeWindowsAdapter implements WindowPort {
 		}
 	}
 
+	public async closeTab(tabId: number): Promise<void> {
+		this.closedTabs.push(tabId)
+	}
+
 	/** Test-only: fire onRemoved for `windowId` as if the user closed it. */
 	public closeByUser(windowId: number): void {
 		if (this.live.delete(windowId)) {
@@ -263,6 +269,7 @@ class FakeWindowsAdapter implements WindowPort {
 		this.creates.length = 0
 		this.updates.length = 0
 		this.navigates.length = 0
+		this.closedTabs.length = 0
 		this.lastFocused = undefined
 	}
 }

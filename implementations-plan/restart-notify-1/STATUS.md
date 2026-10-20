@@ -6,3 +6,4 @@
 - 2026-10-20 plan drafted; OA-1 written; audits next.
 - 2026-10-20 audit round 1: Codex reject (2 blocking), Opus conditional approve; spike 2 (same-tick removal) 6/6 on Chrome; plan revised (tracker, nothing awaited, tabs at boot).
 - 2026-10-20 audit round 2 (Codex resumed): conditional approve, applied. Final fresh Codex pass: conditional approve, applied; verification: approve. Plan committed; arc 1 next (OA-1 does not gate it).
+- 2026-10-20 arc 1 branch `restart-notify-1-a1` off origin/dev 973778cc3 (the plan commit rebased onto it; #909 and #915 landed meanwhile). Phase 1 gate: lint, typecheck:all, test (879 files) pass.
