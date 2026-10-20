@@ -482,6 +482,27 @@ describe("port disconnect race", () => {
 		await expect(client.echo("ping")).rejects.toBeInstanceOf(RpcDisconnectedError)
 	})
 
+	test("a port whose send throws stops reading as connected at once, fails its other requests, and reopens", async () => {
+		portRegistry().holdReady = true
+		const client = newClient()
+		const posted = client.echo("posted").catch((e: unknown) => e)
+		portRegistry().ready(SERVICE)
+		await postedRequestId()
+		const disconnected = vi.fn()
+		client.onDisconnected.add(disconnected)
+
+		capturePortMessage(SERVICE).mockImplementationOnce(() => {
+			throw new Error("Attempting to use a disconnected port object")
+		})
+		const failed = client.echo("ping")
+		expect(client.isConnected).toBe(false)
+		await expect(failed).rejects.toBeInstanceOf(RpcDisconnectedError)
+		expect(await posted).toBeInstanceOf(Error)
+		expect(disconnected).toHaveBeenCalledTimes(1)
+		expect(connectMock()).toHaveBeenCalledTimes(2)
+		client.disconnect()
+	})
+
 	test("RpcDisconnectedError carries methodName, requestId, and the underlying cause", async () => {
 		const client = newClient()
 		await client.connect()

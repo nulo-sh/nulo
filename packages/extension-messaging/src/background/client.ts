@@ -218,7 +218,15 @@ export abstract class ServiceClient<
 	protected sendEnvelope(content: unknown): void {
 		const port = this.port
 		if (this.state !== ClientState.Connected || !port) throw new Error("port not ready at send")
-		port.postMessage({ type: MessageType.Request, content })
+		try {
+			port.postMessage({ type: MessageType.Request, content })
+		} catch (error) {
+			// A port that throws is gone before its onDisconnect comes: the client stops reading as
+			// connected at once, and drops the port once this request has failed as a send failure.
+			this.state = ClientState.Disconnected
+			queueMicrotask(() => this.onDisconnect(port))
+			throw error
+		}
 	}
 
 	protected timeoutMessage(meta: RequestErrorMeta): string {
