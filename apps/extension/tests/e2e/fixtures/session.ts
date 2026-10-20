@@ -188,11 +188,3 @@ const REFUSE_SESSION_DELETES = `
 export async function refuseSessionDeletes(owner: BackgroundOwner): Promise<void> {
 	await evaluateInBackground(owner, REFUSE_SESSION_DELETES)
 }
-
-/** Press the header's lock control; resolves once the click is dispatched, not once it locks. */
-export async function pressHeaderLock(page: Page): Promise<void> {
-	await page.waitForSelector('[data-testid="header-lock"]', { visible: true, timeout: 15_000 })
-	await page.evaluate(() => {
-		;(document.querySelector('[data-testid="header-lock"]') as HTMLElement).click()
-	})
-}

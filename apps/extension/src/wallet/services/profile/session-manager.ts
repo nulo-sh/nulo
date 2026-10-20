@@ -88,8 +88,8 @@ const EXPIRY_DEFERRAL_STEP_MS = 60_000
 /** Deletes `close()` makes of the persisted session before it leaves the row to the read-back. */
 const CLOSE_DELETE_ATTEMPTS = 2
 
-/** What `close()` did: whether it announced the lock, and whether the persisted record survived
- *  every delete attempt. */
+/** What `close()` did: whether it announced the lock, and whether every delete attempt of the
+ *  persisted record was refused. */
 export type CloseOutcome = { emitted: boolean; recordKept: boolean }
 
 /** The deadline and TTL revision a snapshot-based write was decided on. */

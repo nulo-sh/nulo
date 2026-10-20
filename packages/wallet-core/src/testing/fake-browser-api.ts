@@ -194,7 +194,7 @@ class FakeRuntimeAdapter implements RuntimePort {
 	}
 
 	public reload(): void {
-		// No-op in tests; a test spies on it.
+		// No-op in tests.
 	}
 
 	public async setUninstallURL(_url: string): Promise<void> {

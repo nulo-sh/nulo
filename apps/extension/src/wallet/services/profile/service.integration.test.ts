@@ -3166,6 +3166,17 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			30_000,
 		)
 
+		test("a close the person did not ask for restarts nothing, its deletes refused", async () => {
+			const { api, service } = await makeService()
+			const profile = await service.createProfile("P", "pass1234")
+			const reload = vi.spyOn(api.runtime, "reload")
+
+			vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("session remove failed"))
+			await service.lockProfileIfActive(profile.id)
+			expect(await service.getActiveProfile()).toBeUndefined()
+			expect(reload).not.toHaveBeenCalled()
+		}, 30_000)
+
 		test("a lock that saves restarts nothing", async () => {
 			const { api, service } = await makeService()
 			await service.createProfile("P", "pass1234")

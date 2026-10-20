@@ -2,10 +2,10 @@ import { inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { allowSelfRestart, reloadExtensionPage } from "../fixtures/browser"
 import { clickByTestId, grantCapBundle, openPopup, test, waitForHash } from "../fixtures/extension"
-import { ensureUnlocked, switchToLocalNetwork } from "../fixtures/helpers"
+import { ensureUnlocked, pressHeaderLock, switchToLocalNetwork } from "../fixtures/helpers"
 import { assertPgOk, callExpectingNoPopup, openPlayground, selectPgBundle } from "../fixtures/playground"
 import { approveConnect, approveVerify, waitForPopup } from "../fixtures/popups"
-import { pressHeaderLock, refuseSessionDeletes, waitForExtensionRestart } from "../fixtures/session"
+import { refuseSessionDeletes, waitForExtensionRestart } from "../fixtures/session"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -24,7 +24,7 @@ const firstAccount = async (accountIds: (string | null)[]): Promise<string[]> =>
  * screen, and the unlock drains it into the remembered session's emoji check, its grants intact.
  */
 test.skipIf(!hasConfig)(
-	"lock-restart-reconnect — after a restart the wallet ends a lock with, a reloaded app reconnects through the unlock",
+	"lock-restart-reconnect — after the restart that ends a lock the wallet could not save, a reloaded app reconnects through the unlock",
 	{ timeout: 240_000 },
 	async ({ registeredExtensionPerTest: ctx }) => {
 		await allowSelfRestart(ctx.browser)
@@ -40,6 +40,7 @@ test.skipIf(!hasConfig)(
 		await grantCapBundle(ctx, dappPage, "accounts", firstAccount)
 
 		await refuseSessionDeletes(ctx)
+		await ctx.checkCspViolations()
 		await waitForExtensionRestart(ctx, control, () => pressHeaderLock(control))
 
 		await reloadExtensionPage(dappPage)
@@ -48,6 +49,8 @@ test.skipIf(!hasConfig)(
 		await clickByTestId(dappPage, "pg-btn-connect")
 		const popup = await openPopup(ctx)
 		await waitForHash(popup, "#/popup/auth", 15_000)
+		// The toolbar badge counts the connects queued behind the lock screen.
+		await popup.waitForFunction(async () => (await chrome.action.getBadgeText({})) === "1", { timeout: 15_000, polling: 250 })
 		await ensureUnlocked(popup)
 		await approveVerify(await verifyP)
 		await dappPage.waitForSelector(CONNECTED, { timeout: 20_000 })
