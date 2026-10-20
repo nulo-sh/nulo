@@ -45,7 +45,7 @@ async function refuseAndExpectForgotten(check: Page, dapp: Page, wallet: Page): 
 }
 
 test.skipIf(!hasConfig)(
-	"connect-verify-mismatch — a new connection's check refused in the connect window",
+	"connect-verify-mismatch — a new connection's check refused in its own window",
 	{ timeout: 120_000 },
 	async ({ registeredExtensionPerTest: ctx }) => {
 		const wallet = await walletOnLocalNetwork(ctx)

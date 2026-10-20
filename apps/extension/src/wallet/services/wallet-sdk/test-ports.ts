@@ -8,7 +8,6 @@ export function fakeSdkPorts(over: Partial<WindowPort> = {}): { windows: WindowP
 			onRemoved: () => () => {},
 			remove: async () => {},
 			update: async () => {},
-			navigate: async () => {},
 			getLastFocused: async () => undefined,
 			...over,
 		},
