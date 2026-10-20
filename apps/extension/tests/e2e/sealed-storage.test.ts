@@ -68,8 +68,8 @@ async function seedPlaintext(page: Page, profileId: string, address: string): Pr
 }
 
 /** The median round trip, in ms, of `LOADS` contacts list reads after one unmeasured read, from a
- *  popup opened for them so both samples come from the same page state; each must return `count`
- *  rows. */
+ *  popup opened for them, with no other popup open, so both samples come from the same page state;
+ *  each must return `count` rows. */
 async function listLoadMs(ctx: ExtensionContext, count: number): Promise<number> {
 	const page = await openPopup(ctx)
 	try {
@@ -104,8 +104,8 @@ test("sealed storage: a new contact is written sealed, plaintext rows outlive a 
 
 		const profile = await callService<{ id: string }>(page, "profile", "getActiveProfile")
 		await seedPlaintext(page, profile.id, address)
-		const plaintextLoad = await listLoadMs(ctx, SEEDED + 1)
 		await page.close()
+		const plaintextLoad = await listLoadMs(ctx, SEEDED + 1)
 		await ctx.close()
 
 		ctx = await launchExtension({ userDataDir: profileDir })
@@ -135,6 +135,7 @@ test("sealed storage: a new contact is written sealed, plaintext rows outlive a 
 			{ timeout: 60_000 },
 			SEEDED + 1,
 		)
+		await page.close()
 		const sealedLoad = await listLoadMs(ctx, SEEDED + 1)
 
 		console.log(
