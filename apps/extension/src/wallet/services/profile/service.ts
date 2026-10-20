@@ -2,7 +2,7 @@
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { toRestoreError } from "@/utils/restore-error"
-import type { BrowserApi, StorageArea } from "@nulo/wallet-core/ports"
+import type { BrowserApi, RuntimePort, StorageArea } from "@nulo/wallet-core/ports"
 import { feePicksKey, profileUiKeys, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { applyFeePickUpdate, type FeePickUpdate, parseFeePickUpdate } from "@/utils/fee-picks"
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
@@ -273,11 +273,13 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	/** Restore-in-progress markers (torn-import detection at the unlock gate). */
 	private readonly restorePending: RestorePendingRepository
 	private readonly local: StorageArea
+	private readonly runtime: RuntimePort
 
 	public constructor(config: IConfig, logger: ILogger, browserApi: BrowserApi) {
 		super(PROFILE_SERVICE_NAME, logger)
 		this.repo = new ProfileRepository(browserApi)
 		this.local = browserApi.storage.local
+		this.runtime = browserApi.runtime
 		this.tombstones = new TombstoneRepository(this.local)
 		this.integrityBlocked = new AccountIntegrityBlockedRepository(this.local)
 		this.integrityStamps = new AccountIntegrityVerifiedStampRepository(this.local)
@@ -950,12 +952,18 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// An explicit lock also ends every pending restore, before the close can fail: a
 			// stashed restore secret must not outlive the user's intent to lock.
 			this.sweepStalePendingRestore(Number.POSITIVE_INFINITY)
-			const emitted = await this.sessionManager.close()
+			const { emitted, recordKept } = await this.sessionManager.close()
 			// A restarted worker holds no in-memory session, so `close()` emits
 			// nothing. Memory is locked either way, and the popups that route on this
 			// event would stay rendered as authenticated, so it fires before the
 			// read-back below can throw, unless a successor's session is published by now.
 			if (!emitted && this.sessionHandle() === undefined) this.emit("onActiveProfileChanged", undefined)
+			// A lock leaves no session record for the next worker to restore: when every delete
+			// fails, a restart clears it, as both browsers start `storage.session` empty.
+			if (recordKept && this.sessionHandle() === undefined) {
+				this.logger.log(this.name, LogLevel.Error, "lock could not be saved; restarting the wallet")
+				this.runtime.reload()
+			}
 			// Post-close read-back: `close()` is memory-first and swallows a
 			// storage-delete failure (so clearLockAlarm always runs), but an
 			// explicit lock that leaves the persisted bearer alive would silently
