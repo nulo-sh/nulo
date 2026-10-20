@@ -6,3 +6,4 @@
 - Smoke wall-clock, retry 0, one run each, no shots: Chrome 19.6 s → 17.8 s, Firefox 29.9 s → 28.8 s (the added step is under the run-to-run noise).
 - Network: `failed-send-check.test.ts` gates on `NULO_E2E_PROVERLESS=1`; `agent.sh` refuses the run without it. `wait-for-tx-mined.test.ts` + `failed-send-check.test.ts`, Chrome, retry 0: 5 passed, 625 s wall (boot included). The resend of the mined mint threw a text `isFinalRefusal` accepts on the real rc.3 node; the mint test took 5.1 s.
 - Gate F: lint 0, typecheck:all 0, test 0 (14659 passed).
+- Network timing, Chrome, one run each: before (dev's file, run alone) the mint test 5.7 s and the file 11.8 s; after 5.1 s and 10.7 s. The resend is one RPC to the local node, under the run-to-run noise.
