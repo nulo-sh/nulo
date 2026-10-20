@@ -32,7 +32,6 @@ export function isRestartEndedUrl(url: string, popupPageUrl: string): boolean {
 	return route !== undefined && RESTART_ENDED_ROUTES.has(route)
 }
 
-/** Whether `url` is any page of the extension `popupPageUrl` belongs to. */
 function isOwnExtensionUrl(url: string | undefined, popupPageUrl: string): boolean {
 	const page = url === undefined ? undefined : parse(url)
 	const own = parse(popupPageUrl)
