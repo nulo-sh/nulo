@@ -161,6 +161,8 @@ No trust boundary moves: no dApp input, storage, message, permission, log or dep
 
 **Post-implementation round 2** (Codex, resumed): `findings: 1`, demonstrated: the hand-split inline parser missed `border-radius/**/: 16px`, which the round-1 check caught → inline styles parse through `parseSource` as CSS; a control. Red/green: base fails 1 of 17, head passes 17. **Round 3** (resumed): `clean`; converged.
 
+**Arc 2, post-implementation round 1** (diff `origin/dev...square-corners-1-a2`; Codex gpt-6.1-sol, high, session `01a159b5`): `findings: 1`, demonstrated from the base theme's source: CodeMirror's `&dark .cm-button:active` gradient outranks the theme's `.cm-button`, so a pressed button would put the new dark text on a dark gradient in the light theme → an `&:active` background of `--nulo-surface-high` (light 13.62:1, dark 12.62:1). Codex confirmed the corners, the circles, D13, D14 and the re-stamp, and backed D15 (no test).
+
 ## Delivery
 
 - One PR against `dev`, opened ready (P71-07 signs the card) after Phase 4 and the Codex loop. No label at creation.

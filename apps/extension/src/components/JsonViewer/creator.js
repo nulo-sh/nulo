@@ -5,7 +5,7 @@
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language"
 import { EditorView } from "@codemirror/view"
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: accepted at 146 lines — one declarative CodeMirror theme value; splitting selector groups only fragments a single style sheet
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: accepted at 148 lines — one declarative CodeMirror theme value; splitting selector groups only fragments a single style sheet
 export const createTheme = ({ styles }) => {
 	const theme = EditorView.theme(
 		{
@@ -111,6 +111,10 @@ export const createTheme = ({ styles }) => {
 				background: "var(--nulo-surface-low)",
 				border: "1px solid var(--nulo-surface-highest)",
 				textTransform: "capitalize",
+				// The base theme's pressed gradient is one class more specific than this rule.
+				"&:active": {
+					background: "var(--nulo-surface-high)",
+				},
 			},
 			".cm-search label": {
 				textTransform: "capitalize",

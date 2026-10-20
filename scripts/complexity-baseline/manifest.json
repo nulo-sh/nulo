@@ -153,7 +153,7 @@
 			"file": "apps/extension/src/components/JsonViewer/creator.js",
 			"rule": "noExcessiveLinesPerFunction",
 			"anchor": "export const createTheme = ({ styles }) => {",
-			"accepted": 146,
+			"accepted": 148,
 			"sentence": "one declarative CodeMirror theme value; splitting selector groups only fragments a single style sheet"
 		},
 		{
