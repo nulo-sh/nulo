@@ -17,3 +17,9 @@ Branch `unit-flake-1-a1` off the plan commit 7062080a (base `origin/dev` 4aa9d1a
 
 - The gate's probe list named only the two `RowTarget` sends; `Popup.test.ts:238` also remains, by the plan's own design (its presses that carry `detail` stay raw).
 - The sweep's pass criterion said "exactly the 10"; the tenth is itself clock-quantum dependent. The intent holds: no red outside the 10, and none of the 24.
+
+## Review loop
+
+- Round 1, Codex (gpt-6.1-sol, high, session 01a156ad, diff 7062080a..88bcd2ca): approve; one comment nit (the `typeNow` and `enterOn` TSDocs said "through `sendEvent`" above the call), fixed.
+- Opus diff review (general-purpose): approve; three low findings, fixed in e5e9169e. `trigger` copies a `keyCode` without `code` into `code` (`"13"`; checked with jsdom and test-utils 2.4.11), so `enterOn` sends `code: "Enter"` and the TSDoc says so; the click-shape sentence named every event; the CLAUDE.md bullet overstated Popup's capture (clicks and mousedowns only) and omitted that a refused press must prove it was sent; `typeNow` ignored an unsent input.
+- Round 2, Codex (resume): approve, no findings. Converged.

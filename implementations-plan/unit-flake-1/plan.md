@@ -1,7 +1,7 @@
 ---
 plan: unit-flake-1
 tier: light
-status: arc 1 phase 1 green (88bcd2ca); Codex fix loop next
+status: arc 1 green, Codex loop converged; PR next
 issues: "#895 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -110,6 +110,8 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `4aa9
 **Round 2, Codex** (resume): conditional approve, 1 finding, accepted: the inlined path probe needed a DOM guard for `@vitest-environment node` files.
 
 **Round 3, Codex** (resume): **approve**, high confidence, no new findings or regressions. Light tier: this resumed verdict is the final pass (no separate fresh session).
+
+**Implementation rounds 1-2** (diff 7062080a..e5e9169e). Round 1, Codex (gpt-6.1-sol, high, session 01a156ad): approve, 1 comment nit (two TSDocs restated their call), fixed. Opus diff review: approve, 3 low findings, all fixed: the TSDoc missed that `trigger` copies `keyCode`'s digits into `code` (`enterOn` now sends `code: "Enter"`) and overstated the click shape; the CLAUDE.md bullet now scopes the Popup and Tooltip example to clicks and asks a refused press to check it was sent; `typeNow` throws on a disabled field as `enterOn` does. Round 2 (resume): approve, no findings; the loop converged. Log: [lessons/phase-1.md](lessons/phase-1.md).
 
 ## Seeds
 
