@@ -37,9 +37,8 @@ const request = shallowRef<PasskeyRequest>()
 const unconfirmed = shallowRef<PasskeyUnconfirmedError>()
 
 const tag = computed(() => (request.value ? passkeyTag(request.value.step, request.value.profileName) : ""))
-const isStepEnd = computed(() => state.value === "step-failed" || state.value === "step-exists")
-const tone = computed(() => (isStepEnd.value ? "failed" : state.value))
-const isFailure = computed(() => state.value === "failed" || isStepEnd.value)
+const tone = computed(() => (state.value === "step-failed" || state.value === "step-exists" ? "failed" : state.value))
+const isFailure = computed(() => tone.value === "failed")
 const title = computed<PasskeyTitle>(() => {
 	if (state.value === "finishing") return PASSKEY_COPY.finishing.title
 	if (state.value === "failed") return PASSKEY_COPY.failed.title
