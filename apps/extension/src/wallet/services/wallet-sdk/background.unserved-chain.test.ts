@@ -102,7 +102,7 @@ function boot(opts: Parameters<typeof fakeSdkServices>[0] = {}) {
 }
 
 /** Turns before a "not yet", "never" or exact-list read: a park point, or a decision whose run settles
- *  with it, so an effect a regression defers past it lands inside them. */
+ *  with it, so an effect a regression defers past it gets these turns to surface. */
 const flush = async () => {
 	for (let i = 0; i < 30; i++) await Promise.resolve()
 }

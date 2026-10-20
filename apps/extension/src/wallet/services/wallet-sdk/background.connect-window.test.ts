@@ -359,7 +359,7 @@ const hashOf = (requestId: string) => sessions.get(requestId)?.verificationHash 
 
 /** Turns before a "not yet", "never" or exact-list read that no awaited cause covers: a park point, a
  *  detached branch, or a decision whose run settles with it, so an effect a regression defers past it
- *  lands inside them. */
+ *  gets these turns to surface. */
 const flush = async () => {
 	for (let i = 0; i < 50; i++) await Promise.resolve()
 }

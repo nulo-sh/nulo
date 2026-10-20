@@ -3379,9 +3379,11 @@ describe("IncomingTransferService — balance-refresh outbox (write-side)", () =
 		})
 		state.responses.push(pubPage([pubEvent({ txHash: "0xblocked" })]))
 
+		const setOutbox = vi.spyOn((service as never as { repo: IncomingTransferRepository }).repo, "setOutbox")
 		await scanPublic(service)
 
 		expect(await repo.hasRecord("pub:p1|n1|0xblocked|0")).toBe(false)
+		expect(setOutbox).not.toHaveBeenCalled()
 		expect(await outboxFor()).toBeUndefined()
 	})
 

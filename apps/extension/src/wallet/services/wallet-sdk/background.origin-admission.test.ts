@@ -82,7 +82,7 @@ function boot(activeProfile?: () => Promise<{ id: string } | undefined>) {
 	return { discover, reads, rows: fake.rows, onActiveProfileChanged: fake.onActiveProfileChanged }
 }
 
-/** Turns after a decision settles: an effect a regression defers past it lands inside them. */
+/** Turns after a decision settles, in which an effect a regression defers past it can surface. */
 const flush = async () => {
 	for (let i = 0; i < 30; i++) await Promise.resolve()
 }
