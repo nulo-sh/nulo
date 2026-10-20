@@ -58,7 +58,7 @@ import {
 import { isFeeAmount, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity, liveChainInfo } from "@nulo/aztec-runtime/utils"
-import { assertArtifactClassId } from "@nulo/aztec-runtime/pxe"
+import { assertArtifactClassId, assertInstanceArtifactClassId } from "@nulo/aztec-runtime/pxe"
 import {
 	type DraftOperation,
 	type FeeSettingsReaders,
@@ -1240,7 +1240,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		// compiled-in known bundle (Aztec/Wonderland tokens, FPCs, NFTs,
 		// etc.). When neither has it, fail loudly with a message telling
 		// the dApp to pass `artifact` — there is no remote registry fallback.
-		const classId = instance.currentContractClassId
+		const classId = instance.originalContractClassId
 		const artifact = providedArtifact ?? (await this.pxeService.getContractArtifact(networkInfoFrom(network), classId))
 		if (!artifact) {
 			throw new ContractNotRegisteredError(
@@ -1250,7 +1250,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			)
 		}
 
-		await assertArtifactClassId(artifact, instance.currentContractClassId)
+		await assertInstanceArtifactClassId(instance, artifact)
 
 		// A secret key registers the instance's own account or nothing: one that derives another
 		// address or other keys would add an account the dApp's contract grant never named, or one
