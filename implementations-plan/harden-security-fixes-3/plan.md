@@ -143,7 +143,7 @@ Pick P68-06 (2026-10-19): A, no note. Built in the order OWNER-ASKS.md set:
 
 **Measured against OA-7's text** (both browsers): an open Nulo tab closes rather than reloading onto the lock screen, and a connected app reconnects once its page loads again, through the unlock and its emoji check (that the app is not told is read in the source). OA-8 asks the owner to confirm it.
 
-**Validation gate:** the fast layers, the pre-PR gate, `test:all`; smoke and network e2e at retry 0 on both browsers (after round 1: smoke Chrome 16.2 s, Firefox 14.5 s; network Chrome 15.6 s, Firefox 20.7 s).
+**Validation gate:** the fast layers, the pre-PR gate, `test:all`; smoke and network e2e at retry 0 on both browsers (final: smoke Chrome 13.2 s, Firefox 15.3 s; network Chrome 14.9 s, Firefox 27.2 s). CI's first run caught two causes local runs did not: the unlock's route racing the hash navigation, and the launch's RPC interception left attached across the restart (`lessons/phase-9.md`).
 
 ## UI impact
 

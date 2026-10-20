@@ -23,3 +23,4 @@
 - 2026-10-20 00:0x arc 4 step 3 committed: smoke and network e2e green on both browsers; OA-8 raised (an open Nulo tab closes; an app reconnects after its page loads again).
 - 2026-10-20 00:3x arc 4 Codex R1 + Opus conditional approve; round 1 fixed (the restart spec now proves the store empties: strict mode off and a seeded key; CSP checked first; queued connect seen); reruns green.
 - 2026-10-20 00:5x arc 4 Codex R2 approve: converged.
+- 2026-10-20 01:0x arc 4 draft PR #907; CI's Chrome smoke shard caught the unlock-route race and the interception left attached across the restart; both fixed at the cause, reruns green on both browsers.

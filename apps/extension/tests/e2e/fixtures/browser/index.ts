@@ -299,6 +299,10 @@ export const allowSelfRestart = (browser: Browser): Promise<void> => driver.allo
 export const backgroundOrigin = (owner: BackgroundOwner): Promise<number | undefined> =>
 	driver.backgroundOrigin(owner.browser, owner.extensionId)
 export const backgroundAlive = (owner: BackgroundOwner): Promise<boolean> => driver.backgroundAlive(owner.browser, owner.extensionId)
+/** Runs `run`, which ends the background, with the launch's interceptions let go as `stopBackground`
+ *  does, and re-arms them after it for the background that replaces it. */
+export const withInterceptionsReleased = <T>(owner: BackgroundOwner, run: () => Promise<T>): Promise<T> =>
+	standing.whileReleased(owner.browser, run)
 /** Stops a live background; false, with a warning, when the browser already stopped it. A failed
  *  kill still throws. */
 export const stopBackgroundIfAlive = async (owner: BackgroundOwner): Promise<boolean> => {

@@ -490,7 +490,8 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   and starts `chrome.storage.session` empty, on both browsers. A spec that drives one calls
   `allowSelfRestart` first (with developer mode off Chrome leaves an unpacked extension disabled
   after a reload, and every extension URL fails with `ERR_BLOCKED_BY_CLIENT`) and waits with
-  `waitForExtensionRestart`, which needs an open extension page to close. Chrome can then list the
+  `waitForExtensionRestart`, which needs an open extension page to close and, as `stopBackground`
+  does, lets the launch's interceptions go across the restart. Chrome can then list the
   dead worker's target beside its successor's, and an attach to the dead one never answers:
   `backgroundOrigin` reads every listed worker, while `evaluateInBackground` takes the first
   (`extension-restart.test.ts`, FIREFOX.md's restart row).

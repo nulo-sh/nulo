@@ -16,6 +16,7 @@ test("a lock the wallet cannot save restarts it, locked", async ({ registeredExt
 	await allowSelfRestart(ctx.browser)
 	const page = await openPopup(ctx)
 	await ensureUnlocked(page)
+	await waitForHash(page, "#/popup/general")
 	await optOutOfStrictMode(page)
 	const tab = await openPopup(ctx)
 	await waitForHash(tab, "#/popup/general")

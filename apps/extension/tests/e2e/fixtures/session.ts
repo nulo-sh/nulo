@@ -1,7 +1,7 @@
 import { MessageType } from "@nulo/extension-messaging/messages"
 import { wrapParams } from "@nulo/extension-messaging/utils"
 import type { Page } from "puppeteer"
-import { type BackgroundOwner, backgroundOrigin, evaluateInBackground } from "./browser"
+import { type BackgroundOwner, backgroundOrigin, evaluateInBackground, withInterceptionsReleased } from "./browser"
 import { pollUntil } from "./poll"
 
 /** The persisted session row's public fields: the unlocked profile, the last refresh, and when auto-lock is due. */
@@ -144,22 +144,25 @@ const RESTART_BUDGET_MS = 30_000
  * Run `restart`, then resolve once the extension has restarted: `openPage`, an extension page open
  * before it, is closed, as both browsers close every extension page when the extension unloads, and
  * a background newer than the one that ran before `restart` runs. A background restart alone
- * closes no page, so it never satisfies this.
+ * closes no page, so it never satisfies this. The launch's interceptions are let go before the
+ * restart and re-armed once the pages close, so the successor starts under them.
  */
 export async function waitForExtensionRestart(owner: BackgroundOwner, openPage: Page, restart: () => Promise<void>): Promise<void> {
 	const before = await backgroundOrigin(owner)
 	if (before === undefined) throw new Error("waitForExtensionRestart: no background runs before the restart")
-	await restart()
 	const deadline = Date.now() + RESTART_BUDGET_MS
-	await pollUntil(
-		async () => openPage.isClosed(),
-		(closed) => closed,
-		{
-			label: "the extension's pages closing on its restart",
-			timeoutMs: RESTART_BUDGET_MS,
-			intervalMs: 100,
-		},
-	)
+	await withInterceptionsReleased(owner, async () => {
+		await restart()
+		await pollUntil(
+			async () => openPage.isClosed(),
+			(closed) => closed,
+			{
+				label: "the extension's pages closing on its restart",
+				timeoutMs: RESTART_BUDGET_MS,
+				intervalMs: 100,
+			},
+		)
+	})
 	await pollUntil(
 		() => backgroundOrigin(owner),
 		(origin) => origin !== undefined && origin > before,
