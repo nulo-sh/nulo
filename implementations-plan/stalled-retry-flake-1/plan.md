@@ -1,7 +1,7 @@
 ---
 plan: stalled-retry-flake-1
 tier: light
-status: arc 1 green and reviewed (2026-10-20); PR open
+status: completed (delivered as #916)
 issues: "#911 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at a36fd2445
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** delivered as one ready PR against `dev`, #916, which carries this close-out; its merge closes the plan.
+- **Shipped:** the stalled-network stub answers its held calls with the node stand-in's 400 (`refuseUnanswered`, the shared `refuseNodeCall`) instead of resetting their sockets, which the browser undid by re-sending them; T1 pins the refusal.
+- **Dropped or rejected:** the refusal window (W, decision D3); the extra probe assertion (the deadline row already implies an answered probe); the time-bounded "later calls stay held" pin (a wait on time).
+- **Lessons:** in the owning skill (`.claude/skills/e2e-testing/SKILL.md`, ledger row 62); nothing promoted to `lessons.md`, which sits at 8133 of its 8192 B budget.
+- **Known limits:** #917, #918.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # stalled-retry-flake-1: the stalled-network stub ends held calls with a refusal, not a reset
 
