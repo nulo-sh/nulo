@@ -6,3 +6,4 @@
 - Fix loop round 1: Codex (session `01a15930`) 2 findings, Opus diff review 4; all fixed (plan.md § Audit verdicts). Red/green on the reworked pin: base card from `origin/dev` 1 failed of 16, naming `.card { border-radius: 16px }`; head 16 passed.
 - Fix loop round 2: Codex 1 finding (a comment inside an inline property name), fixed by parsing inline styles as CSS. Red/green: base 1 failed of 17, head 17 passed.
 - Fix loop round 3: Codex `clean`; converged.
+- `origin/dev` took #915 (this notice's new words) and #909; merged in (no conflict). The four popup notice pictures were re-shot on the merged head: before from a build with `origin/dev`'s card restored under a trap (`RESTORED_OK`), after from the head; readings 16px before, none after. The onboarding pictures did not change. Final gates on the merged head: `import-errors-scroll.test.ts` 4/4 at retry 0 (70 s), lint 0, `typecheck:all` 0, `test:all` 0 (214 s).
