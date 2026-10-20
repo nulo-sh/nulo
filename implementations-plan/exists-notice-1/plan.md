@@ -100,6 +100,7 @@ Per `implementations-plan/README.md` § Post-implementation standard at `eb0dd17
 - **Round 1, Opus** (`conditional approve`): the same unreadable-row finding (accepted); the page test's Pinia, teleport and dialog (accepted); OA-1's window lacks the Firefox note in the failed tone (accepted, fixed); pin `"exists"` in the popup-return loop (accepted); refresh three code docs (accepted); a required parameter and a guarded name (accepted). Onboarding's lock-screen wording went to OA-1.
 - **Final fresh Codex pass** (`conditional approve`): the red/green gate could not fail on (c) as written (accepted: keep the class, revert the behaviour); id-clash wording needs "when no credential match exists" (accepted); onboarding's profile may be locked, not open (accepted, Inferences and OA-1); add a readable row holding another credential to (c) (accepted). Reorder confirmed safe: both orders refuse `I ∨ C` before any write, under the same lock, independent of `allowDuplicate`. Resumed on the fixes: `approve`, no new regression.
 - **Fix loop, round 1** (Codex session `01a15736-35e9-74b2-9f11-5caae22d0dab`, gpt-6.1-sol high, over `git diff origin/dev...HEAD`): 0 material; two narration comments (`profile-flow-notices.ts`, the page test's helper), removed. **Opus diff review** beside it: clean; nit taken: test (a) holds a second profile so it proves the matched row is the one named; nit declined: `notifyImportFailed`'s doc tail states why the parameter exists.
+- **Fix loop, round 2** (same Codex session, resumed on the fix diff): `clean`. Converged.
 
 ## Seeds
 
