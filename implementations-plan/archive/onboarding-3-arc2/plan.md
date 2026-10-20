@@ -235,6 +235,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
   - Smoke, the full suite: Chrome 266 passed, 16 skipped, none failed (2,089 s); Firefox the same counts (2,891 s).
   - Network `fee-methods`: Chrome 8/8. Firefox 7/8 twice, and the base `ab74f44b` failed the same way: the shield's 60 s toast wait in "public gas only…", a step before the card. This host ran the sends about 2.5 times slower than CI ([lessons/phase-7.md](lessons/phase-7.md)).
   - The fix loop converged at round 2 (below).
+  - `dev` moved again before the push. A second merge (`54ef49f6`) resolved one import line in the profile service, and `baseline:storage` rewrote stamp 0 with no diff. After it: `audit:vue` exit 0 (14,594 passed), and `security-backup`, `onboarding-tab` and `stale-network` 13/13 on Chrome and on Firefox.
 
 ## Decision ledger
 
