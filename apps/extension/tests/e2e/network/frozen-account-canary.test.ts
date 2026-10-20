@@ -62,13 +62,7 @@ describe("frozen-account canary — the execution gate every @aztec bump runs, o
 			step("revealing recovery phrase")
 			const popup = await openPopup(ctx)
 			await waitForHash(popup, "#/popup/general", 30_000)
-			await revealSeedPhrase(popup, TEST_PASSWORD)
-			const words = await popup.evaluate(() => {
-				const scope = document.querySelector('[data-testid="reveal-content"]')
-				const input = scope?.querySelector("input") as HTMLInputElement | null
-				if (!input) throw new Error("reveal-content input not present")
-				return input.value
-			})
+			const words = (await revealSeedPhrase(popup, TEST_PASSWORD)).join(" ")
 			await popup.close()
 			expect(words.split(" ").length).toBe(24)
 

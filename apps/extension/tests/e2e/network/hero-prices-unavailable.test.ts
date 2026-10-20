@@ -9,10 +9,12 @@ import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { interceptRpc } from "../fixtures/browser"
 import { type ExtensionContext, launchExtension, test } from "../fixtures/extension"
-import { switchToLocalNetwork, waitForHomeTotal, waitForTokenCardAmount } from "../fixtures/helpers"
+import { navigateByHash, revealSeedPhrase, switchToLocalNetwork, waitForHomeTotal, waitForTokenCardAmount } from "../fixtures/helpers"
 import { shotSend } from "../fixtures/send-page"
+import { waitForHomeReminders } from "../fixtures/tokens"
 import { exportFundedBackup } from "../helpers/crash-truth"
 import { gotoPopupImport, importFullBackup, POPUP_IMPORT_SHELL, TEST_PASSWORD } from "../helpers/import-drivers"
+import { profileImportedKey } from "@/utils/profile-ui-keys"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 
@@ -39,6 +41,26 @@ test.skipIf(!aztecConfig)(
 			expect(await refused.hits(), "price requests refused").toBeGreaterThan(0)
 			expect(await refused.failures(), "price interception failures").toEqual([])
 			await shotSend(page, "hero-prices-unavailable", "balance-amount")
+
+			// A restored wallet asks for no backup.
+			await waitForHomeReminders(page)
+			expect(await page.$('[data-testid="get-started"]')).toBeNull()
+			expect(await page.$('[data-testid="backup-reminder-banner"]')).toBeNull()
+
+			// Without the import record, funds no price covers still need their phrase saved: the
+			// reminder is the banner, until the phrase is revealed.
+			await page.evaluate(async (prefix: string) => {
+				const keys = Object.keys(await chrome.storage.local.get(null)).filter((key) => key.startsWith(prefix))
+				if (keys.length !== 1) throw new Error(`expected one import record, saw ${keys.length}`)
+				await chrome.storage.local.remove(keys)
+			}, profileImportedKey(""))
+			await page.waitForSelector('[data-testid="backup-reminder-banner"]', { visible: true, timeout: 30_000 })
+			expect(await page.$('[data-testid="get-started-phrase"]')).toBeNull()
+			await shotSend(page, "home-backup-reminder", "backup-reminder-banner")
+			await revealSeedPhrase(page, TEST_PASSWORD)
+			await navigateByHash(page, "#/popup/general")
+			await waitForHomeReminders(page)
+			expect(await page.$('[data-testid="backup-reminder-banner"]')).toBeNull()
 		} finally {
 			await ctx?.close()
 		}

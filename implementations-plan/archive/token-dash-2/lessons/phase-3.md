@@ -1,0 +1,8 @@
+# Phase 3: pictures and the pre-delivery gate
+
+- **Order.** `audit:vue` 0 and `test:all` 0 first, then the armed build (`build:chrome` with the four fixture flags) 0, then the pictures, then the smoke suite on that build, then the network specs.
+- **Pictures.** `zz-shots-932.test.ts` (scratch, removed after) ran green at retry 0 in 60 s on the armed build. Readings (`~/.cache/nulo-backlog/token-dash-2/readings.jsonl`): Home's blank row reads "—" over "—" (symbol box 12×18, today 0 px); the import title "—" at 18 px (today 0 px); History's blank row title "—" with its amount column "1.5" (unchanged); the filter chip "—"; the picker row "—"; Send's asset card "—" (symbol box 14×21); Send's balance corner and the token page's hero carry no dash; Settings' blank row "—" over "—" at 72 px (today 56 px), as tall as the USDC row. Committed: the 20 `-after` PNGs and shots-p72's 18 `-today` PNGs (no `-today` frame exists for the filter chip).
+- **Smoke, first attempt.** Started as a foreground call, which the harness moves to the background after 10 minutes and then stops; stopped by its own process group at 618 s (`EXIT 143`, nothing red before it), rerun detached with a long timeout.
+- **Smoke, rerun.** Chrome, retry 0, on the armed build: 60 files passed, 7 skipped; 271 tests passed, 17 skipped; 2006 s. No e2e scenario added, so neither browser's suite wall-clock moves because of this arc.
+- **Network.** `send-picker.test.ts` and `token-management.test.ts` through `e2e:agent`, Chrome, retry 0: 2/2, 343 s (both read the touched text nodes with normal symbols).
+- **Gate.** `git status --porcelain apps/extension/tests apps/extension/src/types` empty after the runs.

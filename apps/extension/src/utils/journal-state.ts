@@ -9,6 +9,7 @@
 import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import { balanceFormatted } from "@/utils/amount.js"
+import { dashIfBlank } from "@/utils/string"
 import { knownDecimals } from "@/utils/token-amount"
 import type { ListedToken } from "@/utils/tx-amount"
 import { DAPP_LABEL, callTitle, formatTransferType, settledCallTitle } from "@/utils/tx-enrichment"
@@ -454,7 +455,7 @@ export function journalCardTransferTypeLabel(op: OperationRecord): string | null
 }
 
 function transferTitle(token: TokenForCardProps | undefined): string {
-	return token?.symbol || "Transfer"
+	return dashIfBlank(token?.symbol || "Transfer")
 }
 
 /**

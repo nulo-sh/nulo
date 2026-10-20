@@ -33,6 +33,7 @@ import { DETAIL_TIME_FORMAT } from "../detail-page"
 import { categoricalLabel, journalCallTitle, journalCardOriginLabel, journalTerminalDisplay } from "@/utils/journal-state"
 import { bindJournalDetailUpdates, readJournalDetail } from "./journal-detail-scope"
 import { formatTransferType } from "@/utils/tx-enrichment"
+import { dashIfBlank } from "@/utils/string"
 import { usePrices } from "@/composables/usePrices"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { balanceFormatted } from "@/utils/amount.js"
@@ -76,7 +77,7 @@ const token = computed(() => {
 
 const title = computed(() => {
 	if (!op.value) return "Transaction"
-	if (isTransfer.value) return token.value?.symbol || "Transfer"
+	if (isTransfer.value) return dashIfBlank(token.value?.symbol || "Transfer")
 	return journalCallTitle(op.value, tokens.value)
 })
 

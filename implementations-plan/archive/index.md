@@ -28,6 +28,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [backup-import-repair](backup-import-repair/plan.md) — completed — restore writes the profile, and a separate last step opens the session
 - [backup-integrity](backup-integrity/plan.md) — completed — the backup migration core and restore surface split under the complexity budget, behaviour unchanged
 - [backup-log-hygiene](backup-log-hygiene/plan.md) — completed — every extension log line made safe to persist and export, in three redundant layers
+- [backup-preflight-1](backup-preflight-1/plan.md) — completed — a migration that cannot touch a backup's rows never refuses it: the backup preflight drops its unsliced-ref gate (#934)
 - [backup-restore-1](backup-restore-1/plan.md) — completed — what a paused reset, the migration barrier and a restore tell a person; restored imported accounts kept until their network is added, and the export warns of them (P38-04, -05, -09, -10; #663, #671)
 - [backup-restore-corruption-fix](backup-restore-corruption-fix/plan.md) — completed — three high-severity data-corruption bugs in full-backup restore and profile deletion
 - [backup-restore-security-hardening](backup-restore-security-hardening/plan.md) — completed — a backup treated as attacker-controlled, with the restore and delete paths hardened together
@@ -216,6 +217,9 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [nightly-release](nightly-release/plan.md) — completed — one tagged nightly prerelease per day from the tip of dev
 - [nulo-v6](nulo-v6/plan.md) — completed — the dependency line and the chain identity moved to Aztec V6 as Nulo V6
 - [on-camera-landing](on-camera-landing/plan.md) — completed — the landing replaced with a character-drawn CCTV-style feed
+- [onboarding-3](onboarding-3/plan.md) — completed — the fast-lane tab, the recovery phrase step and Home's Get started card (#588 #585 #581 #636); held for the owner's build test
+- [onboarding-3-arc2](onboarding-3-arc2/plan.md) — completed — the owner's later rounds on #743: P50-01 B folded in, the Get started matrix pinned, Fee Juice done for good once held, and the card as numbered steps (#769 #881); #936 asks the owner about the funded-banner count
+- [onboarding-4](onboarding-4/plan.md) — completed — a later profile's Get started card shows only its own backup: the phrase row for a password profile, nothing for a passkey one (#769); held on #743
 - [onboarding-fees-history-arc](onboarding-fees-history-arc/plan.md) — completed — onboarding, fees and history changes in one risk-ordered change
 - [onboarding-tab](onboarding-tab/plan.md) — completed — first-time onboarding moved from the popup into a dedicated extension tab
 - [onboarding-width-unification](onboarding-width-unification/plan.md) — completed — one onboarding page width through a single layout component
@@ -378,3 +382,6 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [ui-picks-1](ui-picks-1/plan.md) — completed — Send says "More than your balance" under an amount over a read balance (#870, P64-02 B) and clears its fee row when the balance falls below it (#863); the restore warning names Developer Mode (#746)
 - [exists-notice-1](exists-notice-1/plan.md) — completed — a passkey whose profile is already here gets a typed refusal and the owner's words in the popup, onboarding and Firefox's passkey window (#914)
 - [connect-split-1](connect-split-1/plan.md) — completed — Allow closes the connect window at once and the emoji check opens its own when the dApp starts its exchange (#859); an app allowed but never connected reads "Not connected yet" and its next check as a first one (#884); admission as today (known limit #883); a refusal after Allow shows nothing in the wallet (known limit #927)
+- [e2e-flakes-2](e2e-flakes-2/plan.md) — completed — arc 1 (#813) made the balance-row reconciliation spec's gap with the worker stopped (#774); arc 2 waits for the header copy's snack to leave before the drag-select test presses About's foot (#816)
+- [square-corners-1](square-corners-1/plan.md) — completed — every rounded corner the wallet draws goes square on the owner's P71-07 and P72-01; the JSON viewer's search box reads in the light theme (#928 #937)
+- [token-dash-2](token-dash-2/plan.md) — completed — a blank token name or symbol reads as the empty-value dash wherever it names the token: Home, Send, Settings, the token page, the metadata popup, activity titles and the filter chip; amounts unchanged (#932, P72-05 C); sentences are #949

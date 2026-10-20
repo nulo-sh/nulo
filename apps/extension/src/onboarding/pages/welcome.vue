@@ -15,7 +15,7 @@ const router = useRouter()
 			<BrutalistTitle main="Welcome" sub="to Nulo" align="center" size="hero" />
 			<div :class="$style.hero_bar" />
 			<Text variant="body" color="secondary" height="150" align="center" :class="$style.subhead">
-				Access the internet-native coordination layer.
+				A wallet that keeps your balance to yourself.
 			</Text>
 			<Text variant="body" color="secondary" height="150" align="center" :class="$style.tagline">
 				Private by default. Sovereign by design.
