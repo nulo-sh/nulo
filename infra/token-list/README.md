@@ -27,7 +27,10 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
 - **A delisting or a flag raises the floor.** The publish PR of a list that drops a served token or
   flags a new pair also sets `packages/token-list/src/floor.json` to its sequence, so every release
   built after it refuses an older list. That file is under the extension e2e lanes' path filters,
-  so such a PR runs them. The tree tests refuse a floor below 1 or above the committed list.
+  so such a PR runs them. The tree tests refuse a floor below 1 or above the committed list. A list
+  at the head of a publish PR (open or closed unmerged) or of a publish branch, signed from the floor
+  up to the new list, counts as served for this rule, so a list signed but never served is retired as
+  a served one would be; one that cannot be read raises the floor too.
 - **The tree tests are strict** (`bun run test`, in `test:all`): the source passes the strict rules in
   canonical form; every pinned key is real (a placeholder fails) and is the one `FORMAT.md` publishes;
   `public/` holds `_headers` and `v1/list.json` only; a committed envelope is canonical, verifies and
@@ -49,12 +52,14 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
    GitHub's compare view of the range is the authoritative review.
 3. Approve `sign` in the `token-list` environment.
 4. Merge the `chore(token-list): publish sequence <n>` PR the release App opens; when the list delists
-   or flags, it also raises the floor and says so. Workers Builds deploys `dev`; the nightly
+   or flags against any list the floor rule reads, it also raises the floor and its body says why. Workers Builds deploys `dev`; the nightly
    `token-list-host-live` job checks the served list.
 
 A run whose base no longer holds the list `dev` serves fails before it opens a PR: its summary and its
 floor decision compared against a list no longer served. A publish PR that conflicts with `dev` on
-`list.json` is stale the same way: close it and re-dispatch, never resolve the conflict.
+`list.json` is stale the same way: close it and re-dispatch, never resolve the conflict. A closed
+publish PR's list stays on record: the next publish's floor rule reads it at the PR's head commit,
+whether or not its branch is deleted.
 
 `gh workflow run publish-token-list.yml --ref dev` re-signs the current source with a new sequence.
 
@@ -70,7 +75,8 @@ file ever holds one.
 - **Rotation** after a suspected leak: delete the `TOKEN_LIST_SIGNING_KEY` secret; sign the current
   source with the recovery key as a keyed run (`sign-cli.ts --key-id nulo-recovery-1 --seed-env
   TOKEN_LIST_RECOVERY_SEED`) and commit the envelope, with `floor.json` set to its sequence when it
-  delists or flags against the served list (`raisesFloor` in `scripts/floor.ts`); generate a new CI key; ship a wallet release whose
+  delists or flags against the served list or a list at a publish PR or branch head signed since the
+  floor (`raisesFloor` in `scripts/floor.ts`); generate a new CI key; ship a wallet release whose
   `keys.ts` drops the leaked key. Until that release, the leaked key still verifies (`SECURITY.md`).
 
 ## Cloudflare (owner steps, outside this file)

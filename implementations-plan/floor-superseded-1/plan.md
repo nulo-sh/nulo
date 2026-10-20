@@ -84,7 +84,7 @@ None. The arc changes CI tooling, a GitHub PR body, a CI step summary line and d
   - The `publishPrs` filter case adds a merged PR (dropped) and carries the head SHA; the PR-body case names the reasons.
 - **Validation gate:** `bun run --cwd infra/token-list test` (all pass); `bun run --cwd infra/token-list typecheck` exit 0. Copy `open-publish-pr.ts` from `origin/dev` into place with a scratch fake that also answers `openPublishPrs`: T1 and T2's closed-PR row fail on their floor assertion, not a type error; restore. Layers: typecheck, unit.
 
-### Phase 2: the docs state the rule
+### Phase 2: the docs state the rule ✓
 - `infra/token-list/README.md`: the floor invariant gains the one-sentence invariant above; step 4 and the "close it and re-dispatch" paragraph say that a closed PR's list stays on record and the next publish's floor rule reads it at the PR's head, branch deleted or not; the Rotation step adds the unserved lists to the hand-set floor check.
 - `SECURITY.md` § Rollback and freeze and § The floor's writer: one clause each naming the unserved lists.
 - **Validation gate:** `bun run test:ci-gating` exit 0; `bun run lint` exit 0.
