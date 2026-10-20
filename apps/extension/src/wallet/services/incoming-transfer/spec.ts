@@ -21,6 +21,13 @@
 
 export const INCOMING_TRANSFER_SERVICE_NAME = "incoming-transfer"
 
+/** EntityStorage roots of the incoming-transfer tables. Frozen: renaming one detaches its rows. */
+export const INCOMING_RECORDS_STORAGE_ROOT = "nulo:core:incoming-transfers"
+export const INCOMING_TRUST_STORAGE_ROOT = "nulo:core:incoming-trust"
+export const INCOMING_CURSORS_STORAGE_ROOT = "nulo:core:incoming-public-cursors"
+export const INCOMING_OUTBOX_STORAGE_ROOT = "nulo:core:incoming-balance-outbox"
+export const INCOMING_ARRIVALS_STORAGE_ROOT = "nulo:core:incoming-arrivals"
+
 /** Trust-state per `(profileId, networkId, contract)`. Replaces the v1
  *  split-state shape (Token boolean + blocked Set + hidden flag) that left
  *  bursty-during-pending behaviour under-specified. */

@@ -63,7 +63,7 @@ export const TokenBalanceRawSchema: z.ZodType<TokenBalanceRaw> = z.object({
 			// Imported/restored rows are untrusted: bound the persisted text at
 			// the schema so a hostile backup can't smuggle megabyte messages
 			// (truncate, never reject — rejection would hide the whole row).
-			message: z.string().transform(boundSyncFailureMessage),
+			message: z.string().transform(boundSyncFailureMessage).describe("any string, cut to the sync-failure bound"),
 		})
 		.optional(),
 })

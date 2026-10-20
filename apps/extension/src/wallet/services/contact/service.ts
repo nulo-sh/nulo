@@ -14,12 +14,13 @@ import { restoreRows } from "@/wallet/services/restore-rows"
 import { nextRandomId, preferOrReallocId } from "@/wallet/services/id-allocators"
 import { requireOwnedRow } from "@/wallet/services/require-owned-row"
 import { type RestoreGate, NOOP_RESTORE_GATE } from "@/e2e/restore-gate"
-import { EntityStorage } from "@/wallet/storage"
+import type { EntityStorage } from "@/wallet/storage"
+import { entityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { getInitials } from "@/utils"
 import { isEmptyContactName, sanitizeContactName } from "@/utils/contact-name"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { type Contact, CONTACT_SERVICE_NAME, CONTACT_STORAGE_ROOT, ContactSchema, type Events, type Methods } from "./spec"
+import { type Contact, CONTACT_SERVICE_NAME, ContactSchema, type Events, type Methods } from "./spec"
 
 export * from "./spec"
 
@@ -56,7 +57,7 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 		private readonly restoreGate: RestoreGate = NOOP_RESTORE_GATE,
 	) {
 		super(CONTACT_SERVICE_NAME, logger)
-		this.storage = new EntityStorage<Contact>(CONTACT_STORAGE_ROOT, browserApi.storage.local, (raw) => ContactSchema.parse(raw))
+		this.storage = entityStorage("contacts", browserApi.storage.local)
 	}
 
 	protected async init(services: ServiceCollection) {
