@@ -120,4 +120,4 @@ The brief's ring before each row is drawn as a square (Q2, Q5) and a node (Q6), 
 | The profile has held Fee Juice (P67-02 B) | ![](screenshots/q3-fee-juice-held-light.png) | ![](screenshots/q3-fee-juice-held-dark.png) |
 | The phrase step alone (Hide, or a later profile): no count, no Hide | ![](screenshots/q3-phrase-alone-light.png) | ![](screenshots/q3-phrase-alone-dark.png) |
 | A first passkey profile, nothing done | ![](screenshots/q3-passkey-none-done-light.png) | ![](screenshots/q3-passkey-none-done-dark.png) |
-| **Not signed** ({{ISSUE}}): funded, phrase unsaved; the banner holds the phrase step, so the card counts and numbers three (a real node; this account's Fee Juice arrived after its cached gas read) | ![](screenshots/q3-funded-banner-light.png) | ![](screenshots/q3-funded-banner-dark.png) |
+| **Not signed** (#936): funded, phrase unsaved; the banner holds the phrase step, so the card counts and numbers three (a real node; this account's Fee Juice arrived after its cached gas read) | ![](screenshots/q3-funded-banner-light.png) | ![](screenshots/q3-funded-banner-dark.png) |

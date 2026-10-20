@@ -29,7 +29,7 @@ post_implementation_hardening: not scheduled
   - How Aztec works opens `https://nulo.sh/how-aztec-works`, the landing's page (#722).
 - **Superseded or dropped:** OA-17's O0 to O4, by P69-01. OA-21's Q1, Q2 and Q4 to Q6 were pictures only, drawn by a scratch spec that was never committed; no code of theirs exists.
 - **Known limits:** #867.
-- **Open items:** {{ISSUE}}, an `owner-decision` issue: the count and the numbers while the funded banner holds the phrase step (D38).
+- **Open items:** #936, an `owner-decision` issue: the count and the numbers while the funded banner holds the phrase step (D38).
 - **Lessons:** none promoted. `lessons.md` is 97 B under its budget, and the one candidate (commit the regenerated auto-import files with a new `src/utils/` export, [lessons/phase-6.md](lessons/phase-6.md)) is reported by CI's build on the first push.
 - **Seeds retired:** the `/goal` and `/loop` seeds below; they are not instructions.
 
@@ -221,7 +221,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
 - Pictures: the built cell, a first password profile once it has held Fee Juice and holds none (`p67-02-fee-juice-held-*`, a scratch capture on the armed Chrome build, deleted after its run). M10, M14 and M15 all draw it.
 - Gate: `F`; smoke `stale-network` and `security-backup` on Chrome and Firefox; network `fee-methods` on Chrome; the fix loop; push; the five required checks.
 
-**7. Round 3: P69-01 C, numbered steps (#881).**
+**7. Round 3: P69-01 C, numbered steps (#881).** Local gates ✓ (2026-10-20; [lessons/phase-7.md](lessons/phase-7.md)); Firefox `fee-methods` is CI's call.
 - Merge `origin/dev` (no rebase). `profile-ui-keys.ts` takes dev's exported roots plus this arc's seven; the stored-shape registry (migration-rule-1, now on `dev`) gets the seven keys as `true`-only flags, their goldens, a regenerated snapshot and a writer test.
 - Change map:
   - `src/utils/get-started.ts`: `steps` in place of `items`; `firstProfileSteps`; the card leaves once every listed step is done (D37, D38).
@@ -231,6 +231,10 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
 - Red proofs, each restored after: an always-on click handler, the next step taken as the first, and the count shown for one step each fail the card's tests; dropping the Fee Juice flag from the done test fails two pure and two Home cases.
 - Pictures: the built card on the armed Chrome build (`q3-*`): a first password profile with nothing done (and scrolled), two done, the Fee Juice flag set, the phrase step alone, and a first passkey profile. A scratch spec drew them and was deleted after its run.
 - Gate: `bun run audit:vue`; the full smoke suite on Chrome and Firefox; network `fee-methods` on Chrome and Firefox; the fix loop; push; the five required checks.
+- Results, retry 0:
+  - Smoke, the full suite: Chrome 266 passed, 16 skipped, none failed (2,089 s); Firefox the same counts (2,891 s).
+  - Network `fee-methods`: Chrome 8/8. Firefox 7/8 twice, and the base `ab74f44b` failed the same way: the shield's 60 s toast wait in "public gas only…", a step before the card. This host ran the sends about 2.5 times slower than CI ([lessons/phase-7.md](lessons/phase-7.md)).
+  - The fix loop converged at round 2 (below).
 
 ## Decision ledger
 
@@ -249,7 +253,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
 | D35 | OA-21 options | Q1 to Q6 (`OWNER-ASKS.md`); recommend Q3, numbered steps that turn into checks | a ring per row whose row then leaves (it never gets its check); invented copy (each drawing uses only today's titles and values, plus the counts and "Next") |
 | D36 | S1a's reset step | the Fee Juice flag stored before the lock; the rows after the reset are P, A and R (since P69-01 C: P, A, F ✓ and R) | Hide before the lock (it hides F itself, so it cannot show the flag at work); a gas stub in smoke (a node fixture for one flag) |
 | D37 | Q3's model | the view lists each step with its done flag, in the drawn order; no card once every listed step is done | a progress record of its own (a second source for what the flags already say) |
-| D38 | The banner and the phrase step (**not signed**: OA-21 told the owner the count covers the four steps the profile started with; owner-decision {{ISSUE}}) | the signed rule holds: a funded password wallet with its phrase unsaved gets the banner, and the phrase step leaves the list, so the steps read A F R, numbered from 1, "n of 3 done"; saving the phrase then brings P back as step 1, checked, and the count to "of 4" | keeping P listed beside the banner (the phrase asked for twice, and a signed cell changed) |
+| D38 | The banner and the phrase step (**not signed**: OA-21 told the owner the count covers the four steps the profile started with; owner-decision #936) | the signed rule holds: a funded password wallet with its phrase unsaved gets the banner, and the phrase step leaves the list, so the steps read A F R, numbered from 1, "n of 3 done"; saving the phrase then brings P back as step 1, checked, and the count to "of 4" | keeping P listed beside the banner (the phrase asked for twice, and a signed cell changed) |
 | D39 | Accessibility (the owner's delegation) | the steps are a list, so assistive tech hears each step's position and the total; the number and the check are `aria-hidden`; a done step says "Done" in words; the next step is `aria-current="step"`; the count is a polite `role="status"`, announced when it changes while Home is open | `aria-label` on the number box (a name on a generic element, which screen readers do not read reliably); a count announced on every mount |
 | D40 | The card's script | plain `<script setup>`, as most of the extension's SFCs: with `lang="ts"`, vue-tsc types the JS `SettingItem`'s slots as `{}` | typing `SettingItem`'s slots (a shared row changed for one consumer) |
 | D41 | E2E reads of a done step | `data-done` on the row's testid, and the count's own testid | text or role selectors (CLAUDE.md § testid preservation rule) |
@@ -311,7 +315,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
 
 | Finding | Source | Disposition |
 |---|---|---|
-| While the funded banner holds the phrase step, the count reads "of 3" and the steps renumber; OA-21 told the owner the count covers the four steps the profile started with | Opus, demonstrated | not changed: the owner's call, filed as {{ISSUE}}; D38 marked not signed |
+| While the funded banner holds the phrase step, the count reads "of 3" and the steps renumber; OA-21 told the owner the count covers the four steps the profile started with | Opus, demonstrated | not changed: the owner's call, filed as #936; D38 marked not signed |
 | An unread Fee Juice read now lists F open, where the row used to be absent; plan text said the listed steps were unchanged | Opus, demonstrated | kept (the step is listed for the profile; not known to be held is open); the plan, M11 and the PR body say so |
 | The order test used the canonical order, and nothing asserted the struck title; nothing pinned a step turning done while shown | both | fixed: a shuffled order, the done class asserted, a `setProps` case; the first two red-proven |
 | Stale comments (`general.vue`'s watcher, `firstProfileSteps`) and a test comment restating its line | both | fixed |
