@@ -9,3 +9,4 @@
 - 2026-10-20 e2e at retry 0 on armed builds: Firefox `passkey-toolbar-panel.test.ts` 6/6 (file 118 s before, 113 s after; the changed case 22.6 s, 23.7 s); Chrome `passkey-paths.test.ts` 3/3 (20 s). OA-1 pictures for today and options A-C taken (Chrome popup 400×600, Firefox window), one build per option.
 - 2026-10-20 fix loop: Codex r1 0 material (2 comments removed), Opus clean (test (a) strengthened), Codex r2 clean: converged.
 - 2026-10-20 final head (dev merged): audit:vue green (874 files, 14382 tests), test:all green, check:plans green; armed rebuild: Firefox passkey-toolbar-panel 6/6 at retry 0 (106 s), Chrome passkey-paths 3/3 (19 s). Draft PR next.
+- 2026-10-20 owner signed OA-1 B (P71-07) and OA-2 A; B wired with its pins; corners traced to NotificationManager's own card (shared by every notice, routed); B pictures from an armed build of the branch.

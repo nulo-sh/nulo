@@ -1,6 +1,6 @@
 # exists-notice-1: owner asks
 
-The arc builds OA-1's recommendation and opens as a **draft** until the owner signs. OA-2 ships "unchanged".
+**Signed 2026-10-20: OA-1 B (P71-07), with B's nameless form below as the fallback; OA-2 A.** The owner's words are quoted in [plan.md § UI impact](plan.md#ui-impact). The arc first built OA-1's recommendation (A) as a draft.
 
 ## OA-1: the words for a passkey whose profile is already in this wallet (#914)
 
@@ -20,7 +20,7 @@ The arc builds OA-1's recommendation and opens as a **draft** until the owner si
   - **C (nameless everywhere):**
     - Notice title "Already imported"; "This passkey already has a profile in this wallet. Unlock that profile instead of importing it again." Button "Got it".
     - Window: "Already / imported"; "This passkey already has a profile in this wallet. Close this window and unlock that profile in Nulo."
-- **Pictures** (Chrome popup, 400×600, light and dark, profile "Daily"): `screenshots/exists-today-{light,dark}.png`, `screenshots/exists-option-{a,b,c}-{light,dark}.png`. Window (Firefox, 500×800): `screenshots/window-today-{light,dark}.png`, `screenshots/window-option-{a,b,c}-{light,dark}.png`.
+- **Pictures** (Chrome popup, 400×600, light and dark, profile "Daily"): `screenshots/exists-today-{light,dark}.png`, `screenshots/exists-option-{a,b,c}-{light,dark}.png`. Window (Firefox, 500×800): `screenshots/window-today-{light,dark}.png`, `screenshots/window-option-{a,b,c}-{light,dark}.png`. Shipped (B, from a build of the branch after the sign-off): `screenshots/exists-shipped-{light,dark}.png`, `screenshots/window-shipped-{light,dark}.png`.
 - **Recommendation.** A. The title says what happened; the body names the profile the person already has and says to choose it rather than import it, which reads true from the popup (the lock screen's profile list) and from onboarding (the profiles are one click away in Nulo). B if the owner wants the exact control named, accepting its onboarding mismatch; C if no name.
 
 ## OA-2: the full-backup box for the same case

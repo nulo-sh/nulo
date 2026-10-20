@@ -1,7 +1,7 @@
 ---
 plan: exists-notice-1
 tier: light
-status: arc 1 in review as a draft (OA-1 unsigned)
+status: completed (delivered as #915)
 issues: "#914 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,19 @@ base: origin/dev at eb0dd17fa
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** delivered as one PR against `dev`, #915, which carries this close-out; its merge closes the plan.
+- **Shipped:** `PasskeyProfileExistsError`, thrown only when a live, readable passkey profile here holds the imported credential, its check moved above the id check in the import and the passkey restore commit; the popup's and onboarding's notice and Firefox's passkey window (`step-exists`) in OA-1 option B's words, signed by the owner (P71-07, § UI impact). Every other passkey failure, a reserved or unreadable id clash included, keeps today's refusal and words.
+- **OA-2:** A, the full-backup box unchanged (EN-D5).
+- **The owner's corner note:** the notice's rounded corners are `border-radius: 16px` on `NotificationManager.vue`'s own `.card`, no `@nulo/design` token. That card renders every notice in the popup and onboarding (profile creation failed, profile import failed, this one, onboarding's import completed with errors), so squaring it is not this plan's change; the program routes it. Firefox's passkey window has no rounded card.
+- **Dropped or rejected:** OA-1 options A (built first, as the recommendation) and C; a credential check on the id branch (moot under EN-D2).
+- **Lessons:** none promoted. The two gotchas (the integration fake derives one master for every credential; `waitForHash` matches the whole hash, query included) are local to this plan's tests and capture, in [lessons/phase-0.md](lessons/phase-0.md); `lessons.md` sits at 8133 of its 8192 B budget.
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # exists-notice-1: a passkey whose profile is already here gets its own refusal and its own words
 
@@ -58,8 +71,9 @@ Audit round 1: Codex (gpt-6.1-sol, high) and Opus (Plan), both `conditional appr
 
 ## UI impact
 
-- **The popup's and onboarding's notice for an existing passkey profile** (`NotificationManager`, `notification-description`): today "Profile import failed / … This authenticator may not be supported … / Note: Windows Hello … / OK"; after, OA-1's recommendation. The lane brief's record: "Build your recommended option. The PR opens as a **draft** and stays one until the owner signs; its body lists the options and quotes no sign-off."
-- **The Firefox passkey window after that import** (`passkey-window`, `data-state="step-exists"`): today "Couldn't / import the passkey / Close this window and try again from Nulo."; after, OA-1's window words, under the same record.
+- **The popup's and onboarding's notice for an existing passkey profile** (`NotificationManager`, `notification-description`): today "Profile import failed / … This authenticator may not be supported … / Note: Windows Hello … / OK"; after, OA-1 option B (`screenshots/exists-shipped-*.png`).
+- **The Firefox passkey window after that import** (`passkey-window`, `data-state="step-exists"`): today "Couldn't / import the passkey / Close this window and try again from Nulo."; after, option B's window words (`screenshots/window-shipped-*.png`).
+- **Sign-off.** The arc first shipped option A as a draft under the lane brief's record ("Build your recommended option. The PR opens as a **draft** and stays one until the owner signs; its body lists the options and quotes no sign-off."). The owner signed on 2026-10-20 (10:09Z): "P71-07 (OA-1): B, notice titled "Passkey already in use": "“Daily” already uses this passkey in this wallet. Click the profile name on the lock screen and choose “Daily”." Button OK. Firefox's window: "Passkey already in use"; "This passkey already has a profile in this wallet. Close this window, open Nulo and choose it on the lock screen." Your nameless form of B from OWNER-ASKS.md stands for the fallback." Their note: "That dialog has rounded corners: on Nulo if I'm not wrong there are NO rounded corners. But other than that the screenshot looks great." OA-2 stays A.
 - **Unchanged:** every other passkey import failure, a reserved or unreadable clash, the full-backup box (F4), the window's other states. No accessibility change: the window state reuses `step-failed`'s alert dialog, the notice its button.
 
 ## Security & Adversarial Considerations
@@ -72,7 +86,7 @@ Audit round 1: Codex (gpt-6.1-sol, high) and Opus (Plan), both `conditional appr
 
 - **Facts.** (1) S1 at `service.ts:2083`, S2 at `:2166`, S3 at `:2495`; S2 and S3 run before S1 today. (2) `REBUILT_AS` keeps the concrete class; an unlisted code rebuilds as a base `WalletError` (`errors.ts:613-662`; `errors.test.ts:370-387`). (3) Both shells wire the same notice (`popup/pages/import.vue:139`, `onboarding/pages/import.vue:113`). (4) PATH B learns `"done" | "failed"` only (`passkey/spec.ts:64`; `service.integration.test.ts:1154-1162`). (5) F4 flattens to `restoreError` (`service.ts:2465-2472`) and shows it (`full-backup-restore.ts:102-110`). (6) `contains` reads keys, `get` decodes (`entity_storage.ts:176-186`).
 - **Inferences.** Onboarding reaches the refusal when the same passkey is imported twice (Back after an import, or a second tab); the profile may be open or locked by then, since S1 reads stored rows, not sessions. #743 edits other hunks of `service.ts`, `service.integration.test.ts`, `onboarding/pages/import.vue` and its test, and `passkey-toolbar-panel.test.ts`: textual merges expected.
-- **Asks.** OA-1 (the words; onboarding shows the same ones) and OA-2 (F4). The arc ships OA-1's recommendation as a draft and OA-2's "unchanged".
+- **Asks.** OA-1 (the words; onboarding shows the same ones) and OA-2 (F4). The arc shipped OA-1's recommendation (A) as a draft and OA-2's "unchanged"; the owner signed OA-1 B and OA-2 A (P71-07, § UI impact).
 
 ## Phase 1: the typed refusal and both surfaces (arc 1) — ✓
 
@@ -82,13 +96,13 @@ Change map: § Architecture, plus the tests below. Commit after each step.
 2. Change S1 and the call order. `service.integration.test.ts`: (a) the same passkey imported again rejects with `PasskeyProfileExistsError` naming the first profile (the realistic path, through S1); (b) the "(i)" case asserts the class; (c) one `test.each` over a reserved id (the failed-purge setup), an unreadable row, and a readable row under the same id holding another credential: refused with today's plain error, the stored rows unchanged (read raw, since `getProfiles` hides an unreadable row); a fresh import writing its row stays the success control; (d) a passkey restore over the existing profile returns `restoreError === "Passkey profile already exists"`; (e) PATH B: `:1155`'s outcomes become `["done", "exists"]`. `passkey/service.test.ts`'s popup-return loop gains `"exists"` (no return); `"done"` stays its control.
 3. Change the composable, the notice and both shells. `profile-flow-notices.test.ts` pins the exists notice (named and nameless) and today's notice for a plain `Error`, exactly. New `popup/pages/import.passkey-notice.test.ts`: mount `import.vue` with the real `useProfileImportFlow`, a real `createPinia()` and `NotificationManager` under one host attached to `document.body`; mock `@/utils/core`, `browser-surface`, `onboarding-tab` and `vue-router`; stub `PasskeyCeremonyDialog` and emit its `resolve`; `importPasskey` rejects with `walletErrorFromPayload(new PasskeyProfileExistsError(undefined, { existingProfileName: "Daily" }).toPayload())`; read the notice in `document.body`. Its control rejects with `new Error("Passkey profile already exists")` and reads today's notice. `onboarding/pages/import.test.ts`: `handleImportPasskey` with the typed rejection creates the exists notice.
 4. Change the window and its copy. `popup/windows/passkey/index.test.ts`: an `"exists"` outcome shows `step-exists`, its words and Close only; the `step-failed` cases stay as controls. `tests/e2e/passkey-toolbar-panel.test.ts:386` waits for `data-state="step-exists"`; its deleted-profile success half stays.
-5. Take the pictures (OA-1): Chrome popup and Firefox window, one build per option.
+5. Take the pictures (OA-1): Chrome popup and Firefox window, one build per option; after the sign-off, the shipped words from a build of the branch.
 
 **Validation gate.** From the worktree root: `bun run audit:vue` and `bun run test:all`. Then, armed builds first: `cd apps/extension && NULO_E2E_BROWSER=firefox bun run test:e2e -- tests/e2e/passkey-toolbar-panel.test.ts --retry=0` (the touched file, Firefox-only) and `bun run test:e2e -- tests/e2e/passkey-paths.test.ts --retry=0` (Chrome passkey import). Pass: every command exits 0; with the new class kept and the behaviour reverted (service, notice, window), (a), (e), the page test's typed case and the window case go red on assertions, while (c) stays green; typing the id clash instead turns (c) red; no timeout, retry or snapshot changed; the touched e2e file's Firefox wall-clock is recorded before and after.
 
 ## Delivery
 
-One arc, one PR, base `dev`, branch `exists-notice-1-a1` off `origin/dev`, opened as a **draft** after the Codex loop converges (OA-1 is unsigned). Title: `fix(passkey): an import of a passkey already in this wallet says so` (67 chars). Body: what and why, the gates with outcomes, the Firefox file's wall-clock before and after, OA-1's options with the pictures, no sign-off quoted, `Closes #914`. No label at creation; add `e2e:extension-smoke` only if the path filter skips smoke. The close-out (Outcome, lessons, `git mv` to `archive/`) lands as the PR's final commits after the owner signs and the orchestrator says so.
+One arc, one PR, base `dev`, branch `exists-notice-1-a1` off `origin/dev`, opened as a **draft** after the Codex loop converges (OA-1 was unsigned; the orchestrator takes it out of draft after the sign-off). Title: `fix(passkey): an import of a passkey already in this wallet says so` (67 chars). Body: what and why, the gates with outcomes, the Firefox file's wall-clock before and after, OA-1's options with the pictures, no sign-off quoted, `Closes #914`. No label at creation; add `e2e:extension-smoke` only if the path filter skips smoke. The close-out (Outcome, lessons, `git mv` to `archive/`) lands as the PR's final commits after the owner signs.
 
 ## Post-implementation
 
