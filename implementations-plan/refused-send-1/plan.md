@@ -1,7 +1,7 @@
 ---
 plan: refused-send-1
 tier: light
-status: planned, Codex approve (round 3)
+status: completed
 issues: "#112 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 01c279124
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20
+- **Status:** completed. Its delivery is A1, one PR against `dev` (#968) that closes #112; this close-out is its final commits. The orchestrator merges it.
+- **Shipped:** P76-03 C: a send the node refused with `Existing nullifier` or `Invalid expiration timestamp` reads "Refused by the network" once a check read inside 30 minutes finds it Dropped, and "Sent" if a later read finds it mined (D2-D7). P77-09 A: the page-10 words. P77-10 A: those two refusals only. P77-11 B: past the 30 minutes a refused row is read once more at its send's expiry, "Won't go through" if the final chain lacks it, "Sent" if it holds it (D8). A network e2e pins the real rc.3 node's refusal text; pictures in both themes ([screenshots/](screenshots/)).
+- **Superseded or dropped:** the page-10 "first attempt" rule (D1, D2); classifying at send in `execution-coordinator.ts` (D4).
+- **Known limits:** none filed. A red that every read in the window and the expiry read get from a node behind stays wrong: the trade-off P76-03 C and P77-11 B sign (D2, D8).
+- **Open items:** none.
+- **Lessons:** none promoted: `lessons.md` is at its budget (8152 B) and already carries the field-modulus fixture trap (its Aztec line); the journal page's mount-time read stays in [lessons/phase-4.md](lessons/phase-4.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; they are not instructions.
 
 # refused-send-1: a send the network refused ends at once (#112)
 
