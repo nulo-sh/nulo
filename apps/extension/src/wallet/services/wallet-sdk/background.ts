@@ -88,6 +88,8 @@ import { createSessionBaton } from "./session-baton"
 import { chainInfoToChainId, handleSessionEstablished } from "./session-established"
 import { wireSessionTeardown } from "./session-revocation"
 import { wireTabLifecycle } from "./tab-lifecycle"
+import { wireRestartPreparation } from "./restart-preparation"
+import type { TrackedWindowPort } from "@/wallet/services/window-manager/restart-ended-windows"
 import { bindLiveSession, type LiveSession } from "./live-session"
 import { MAX_PENDING_PER_SESSION, type VerificationHold, wireVerificationHold } from "./verification-hold"
 import { SessionHolders } from "./session-holders"
@@ -123,7 +125,7 @@ const SESSION_NO_LONGER_VALID = "Session no longer valid — reconnect"
 export function initWalletSdkHandler(
 	services: ServiceCollection,
 	logger: ILogger,
-	ports: { windows: WindowPort; clock: ClockPort },
+	ports: { windows: TrackedWindowPort; clock: ClockPort },
 ): BackgroundConnectionHandler {
 	const deps = resolveSdkDeps(services, logger)
 	const state = createSdkHandlerState(ports)
@@ -185,6 +187,7 @@ export function initWalletSdkHandler(
 		logger,
 	})
 	wireDiscoveryDrain(deps, state)
+	wireRestartPreparation({ profileService: deps.profileService, handler, endSession, windows: ports.windows, logger })
 
 	// Tab lifecycle (close + cross-origin navigation → session termination)
 	// lives in `tab-lifecycle.ts`; it MUST stay registered before

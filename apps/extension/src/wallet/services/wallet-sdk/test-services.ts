@@ -82,6 +82,7 @@ export function fakeSdkServices(
 					onActiveProfileChanged,
 					getActiveProfile,
 					getDeletionState: () => ({ capture: () => 0 }),
+					setRestartPreparation: () => {},
 					captureExecutionFence: async () => {
 						const profile = await getActiveProfile()
 						if (!profile) throw new Error("Wallet locked")

@@ -1,7 +1,8 @@
 import { describe, expect, test, vi } from "vitest"
-import type { ExtensionContextInfo, RuntimePort } from "@nulo/wallet-core/ports"
+import type { ExtensionContextInfo, RuntimePort, WindowPort } from "@nulo/wallet-core/ports"
+import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import type { ILogger } from "@/wallet/logger"
-import { closeRestartEndedTabs, isRestartEndedUrl } from "./restart-ended-windows"
+import { closeRestartEndedTabs, isRestartEndedUrl, trackOpenWindows } from "./restart-ended-windows"
 
 const BASE = "chrome-extension://wallet/"
 const POPUP = `${BASE}src/popup/index.html`
@@ -96,5 +97,65 @@ describe("closeRestartEndedTabs", () => {
 		const closeTab = vi.fn(async () => {})
 		await expect(closeRestartEndedTabs(runtimeWith(getContexts), { closeTab }, logger())).resolves.toBeUndefined()
 		expect(closeTab).not.toHaveBeenCalled()
+	})
+})
+
+describe("trackOpenWindows", () => {
+	const at = (route: string) => `${POPUP}#/windows/${route}?requestId=0x01`
+	const tracked = () => {
+		const fake = new FakeBrowserApi().windows as WindowPort & { creates: unknown[]; navigates: unknown[] }
+		const removed: number[] = []
+		fake.onRemoved((id) => removed.push(id))
+		return { fake, removed, windows: trackOpenWindows(fake, POPUP) }
+	}
+
+	test("delegates to the adapter unchanged", async () => {
+		const { fake, windows } = tracked()
+		const created = await windows.create({ url: at("discover"), width: 1, height: 1 })
+		await windows.navigate(created.id as number, at("verify"))
+		expect(fake.creates).toEqual([{ url: at("discover"), width: 1, height: 1 }])
+		expect(fake.navigates).toEqual([{ windowId: created.id, url: at("verify") }])
+		await expect(windows.update(999, { focused: true })).rejects.toThrow("No window with id: 999.")
+	})
+
+	test("closes the windows opened or navigated onto a restart-ended route, and no other", async () => {
+		const { removed, windows } = tracked()
+		const check = await windows.create({ url: at("discover") })
+		await windows.navigate(check.id as number, at("verify"))
+		const capabilities = await windows.create({ url: at("capabilities") })
+		await windows.create({ url: at("execute") })
+		await windows.create({ url: `${POPUP}#/windows/passkey` })
+		windows.closeRestartEnded()
+		await Promise.resolve()
+		expect(removed.sort()).toEqual([check.id, capabilities.id].sort())
+	})
+
+	test("forgets a window once it closes", async () => {
+		const { fake, removed, windows } = tracked()
+		const discover = await windows.create({ url: at("discover") })
+		await fake.remove(discover.id as number)
+		removed.length = 0
+		windows.closeRestartEnded()
+		await Promise.resolve()
+		expect(removed).toEqual([])
+	})
+
+	test("fires every removal and returns while they are pending; a refused one stops none", async () => {
+		const calls: number[] = []
+		let nextId = 1
+		const port = {
+			create: async () => ({ id: nextId++ }),
+			onRemoved: () => () => {},
+			remove: (id: number) => {
+				calls.push(id)
+				if (id === 1) throw new Error(`${POPUP}#/windows/discover?requestId=0x01`)
+				if (id === 2) return Promise.reject(new Error("No window with id: 2."))
+				return new Promise<void>(() => {})
+			},
+		} as unknown as WindowPort
+		const windows = trackOpenWindows(port, POPUP)
+		for (const route of ["discover", "verify", "capabilities"]) await windows.create({ url: at(route) })
+		expect(windows.closeRestartEnded()).toBeUndefined()
+		expect(calls).toEqual([1, 2, 3])
 	})
 })

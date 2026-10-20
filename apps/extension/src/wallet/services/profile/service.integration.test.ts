@@ -3182,10 +3182,41 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			const { api, service } = await makeService()
 			await service.createProfile("P", "pass1234")
 			const reload = vi.spyOn(api.runtime, "reload")
+			const prepare = vi.fn()
+			service.setRestartPreparation(prepare)
 
 			await service.lockActiveProfile()
 			expect(await service.getActiveProfile()).toBeUndefined()
 			expect(reload).not.toHaveBeenCalled()
+			expect(prepare).not.toHaveBeenCalled()
+		}, 30_000)
+
+		test("a lock that cannot be saved runs the restart's preparation, then restarts, in one turn", async () => {
+			const { api, service } = await makeService()
+			await service.createProfile("P", "pass1234")
+			const events: string[] = []
+			vi.spyOn(api.runtime, "reload").mockImplementation(() => void events.push("reload"))
+			service.setRestartPreparation(() => {
+				events.push("prepare")
+				queueMicrotask(() => events.push("a microtask the preparation queued"))
+			})
+
+			vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("session remove failed"))
+			await expect(service.lockActiveProfile()).rejects.toThrow(/did not persist/)
+			expect(events).toEqual(["prepare", "reload", "a microtask the preparation queued"])
+		}, 30_000)
+
+		test("a preparation that throws still restarts", async () => {
+			const { api, service } = await makeService()
+			await service.createProfile("P", "pass1234")
+			const reload = vi.spyOn(api.runtime, "reload")
+			service.setRestartPreparation(() => {
+				throw new Error("preparation failed")
+			})
+
+			vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("session remove failed"))
+			await expect(service.lockActiveProfile()).rejects.toThrow(/did not persist/)
+			expect(reload).toHaveBeenCalledTimes(1)
 		}, 30_000)
 
 		test("a restarted worker whose lock cannot be saved announces the lock, then restarts", async () => {

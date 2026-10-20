@@ -60,3 +60,43 @@ export async function closeRestartEndedTabs(runtime: RuntimePort, windows: Pick<
 		failed,
 	})
 }
+
+/** The background's window port, remembering each window it opened with the URL it opened or last
+ *  navigated it to: what the window is for, whatever its page's router shows by now. */
+export interface TrackedWindowPort extends WindowPort {
+	/** Fires `remove` for every remembered window on a restart-ended route and returns at once. */
+	closeRestartEnded(): void
+}
+
+/** Every method delegates to `windows` itself, so the adapter's own state holds and its results
+ *  and failures pass through unchanged. A window is forgotten when it closes. */
+export function trackOpenWindows(windows: WindowPort, popupPageUrl: string): TrackedWindowPort {
+	const opened = new Map<number, string>()
+	windows.onRemoved((windowId) => opened.delete(windowId))
+	const removeQuietly = (windowId: number): void => {
+		try {
+			windows.remove(windowId).catch(() => undefined)
+		} catch {
+			// A removal that throws at once ends only itself; the browser's error can quote the URL.
+		}
+	}
+	return {
+		create: async (options) => {
+			const created = await windows.create(options)
+			if (created.id !== undefined) opened.set(created.id, options.url)
+			return created
+		},
+		onRemoved: (listener) => windows.onRemoved(listener),
+		remove: (windowId) => windows.remove(windowId),
+		closeTab: (tabId) => windows.closeTab(tabId),
+		update: (windowId, options) => windows.update(windowId, options),
+		navigate: async (windowId, url) => {
+			await windows.navigate(windowId, url)
+			if (opened.has(windowId)) opened.set(windowId, url)
+		},
+		getLastFocused: () => windows.getLastFocused(),
+		closeRestartEnded: () => {
+			for (const [windowId, url] of opened) if (isRestartEndedUrl(url, popupPageUrl)) removeQuietly(windowId)
+		},
+	}
+}
