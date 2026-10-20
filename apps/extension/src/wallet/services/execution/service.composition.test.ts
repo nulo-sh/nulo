@@ -52,7 +52,7 @@ import {
 	TooManyPendingError,
 	UnsupportedMethodError,
 } from "@nulo/extension-messaging/errors"
-import { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { OperationJournalService, type OperationRecord } from "@/wallet/services/operation-journal/service"
 import { SEND_CHECK_TICK_MS, SendCheck } from "@/wallet/services/operation-journal/send-check"
 import { TaskService } from "@/wallet/services/task/service"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
@@ -1268,20 +1268,10 @@ describe("ExecutionService composition — a dApp send names its call before sim
 })
 
 describe("ExecutionService composition — a send whose answer was lost is checked on the network", () => {
-	test("sendTx reached the node, its answer did not: the row fails from submitting, then the check reads it sent", async () => {
-		const h = await makeHarness()
-		const hash = `0x${"1e".repeat(32)}`
-		h.toTx.mockResolvedValueOnce(provenTx(hash))
-		h.sendTx.mockRejectedValueOnce(new TypeError("fetch failed"))
-		const blockHash = `0x${"0b".repeat(32)}`
-		const getTxReceipt = vi.fn(async (_hash: { toString(): string }) => ({
-			txHash: hash,
-			status: "proven",
-			executionResult: "success",
-			transactionFee: 1234n,
-			blockHash: BlockHash.fromString(blockHash),
-			blockNumber: 42,
-		}))
+	type Harness = Awaited<ReturnType<typeof makeHarness>>
+
+	/** A running send check over the harness's journal, reading receipts from `getTxReceipt`. */
+	async function startCheck(h: Harness, getTxReceipt: (hash: { toString(): string }) => Promise<unknown>) {
 		const network = { getSingleAttemptNodeForUrl: vi.fn(async (_url: string) => ({ getTxReceipt }) as never) }
 		const balances = { refreshAccountBalances: vi.fn(async (_account: string) => {}) }
 		const clock = new MockClock(Date.now())
@@ -1294,7 +1284,13 @@ describe("ExecutionService composition — a send whose answer was lost is check
 			clock,
 		})
 		await check.start()
+		return { check, network, balances, clock }
+	}
 
+	/** A transfer whose `sendTx` throws `error`, run to its failed row. */
+	async function sendFailing(h: Harness, hash: string, error: Error) {
+		h.toTx.mockResolvedValueOnce(provenTx(hash))
+		h.sendTx.mockRejectedValueOnce(error)
 		const p = h.service
 			.executeTransfer(
 				h.req.networkId,
@@ -1310,9 +1306,7 @@ describe("ExecutionService composition — a send whose answer was lost is check
 			.catch((e) => e)
 		await waitFor(() => h.ctrl.entered)
 		h.ctrl.release()
-		expect(await p).toStrictEqual(recorded(h, expect.any(TypeError)))
-
-		expect(h.sendTx).toHaveBeenCalledTimes(1)
+		expect(await p).toStrictEqual(recorded(h, expect.any(error.constructor)))
 		const failed = await h.journal.getOperation(h.getJournalId())
 		expect(failed?.progress).toEqual({
 			stage: "failed",
@@ -1321,6 +1315,31 @@ describe("ExecutionService composition — a send whose answer was lost is check
 			submittedEndpointUrl: "http://fake",
 			expiry: RECORDED_EXPIRY,
 		})
+		return failed
+	}
+
+	/** As the SDK client throws a node's per-call JSON-RPC error: an HTTP 200, so never retried itself. */
+	const nodeRefusal = (message: string) => new Error(message, { cause: { code: -32702, message } })
+	const dropped = (hash: string) => ({ txHash: hash, status: "dropped" })
+	const minedAt = (hash: string, blockHash: string) => ({
+		txHash: hash,
+		status: "proven",
+		executionResult: "success",
+		transactionFee: 1234n,
+		blockHash: BlockHash.fromString(blockHash),
+		blockNumber: 42,
+	})
+	const cardOf = (op: OperationRecord | undefined) => op && buildJournalTerminalCardProps(op, { tokenById: () => undefined, tokens: [] })
+
+	test("sendTx reached the node, its answer did not: the row fails from submitting, then the check reads it sent", async () => {
+		const h = await makeHarness()
+		const hash = `0x${"1e".repeat(32)}`
+		const blockHash = `0x${"0b".repeat(32)}`
+		const getTxReceipt = vi.fn(async (_hash: { toString(): string }) => minedAt(hash, blockHash))
+		const { check, network, balances, clock } = await startCheck(h, getTxReceipt)
+
+		const failed = await sendFailing(h, hash, new TypeError("fetch failed"))
+		expect(h.sendTx).toHaveBeenCalledTimes(1)
 
 		clock.advance(SEND_CHECK_TICK_MS)
 		await waitFor(() => balances.refreshAccountBalances.mock.calls.length > 0)
@@ -1329,47 +1348,58 @@ describe("ExecutionService composition — a send whose answer was lost is check
 		expect(getTxReceipt.mock.calls[0]?.[0].toString()).toBe(hash)
 		const answered = await h.journal.getOperation(h.getJournalId())
 		expect(answered?.progress).toEqual({ ...failed?.progress, check: "sent", inclusion: { block: 42, hash: blockHash } })
-		const card = answered && buildJournalTerminalCardProps(answered, { tokenById: () => undefined, tokens: [] })
-		expect(card).toMatchObject({ state: "sent", subtitle: "Sent", color: "green" })
+		expect(cardOf(answered)).toMatchObject({ state: "sent", subtitle: "Sent", color: "green" })
 		expect(balances.refreshAccountBalances).toHaveBeenCalledWith(h.req.accountAddress)
 		expect(h.sendTx).toHaveBeenCalledTimes(1)
 		check.stop()
 	})
 
-	test("a sendTx the node refused reads 'Not confirmed yet' too: a retried POST can come back refused after an accepted attempt", async () => {
+	test("an existing-nullifier refusal the network holds none of reads refused, then sent once it shows up mined", async () => {
+		const h = await makeHarness()
+		const hash = `0x${"2e".repeat(32)}`
+		const blockHash = `0x${"0c".repeat(32)}`
+		const getTxReceipt = vi.fn(async (_hash: { toString(): string }): Promise<unknown> => dropped(hash))
+		const { check, balances, clock } = await startCheck(h, getTxReceipt)
+		let latest: OperationRecord | undefined
+		h.journal.onOperationUpdated.add((op) => {
+			latest = op
+		})
+
+		const failed = await sendFailing(h, hash, nodeRefusal("Invalid tx: Existing nullifier"))
+		expect(failed && sendOutcome(failed)).toBe("checking")
+
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(() => latest?.progress.stage === "failed" && latest.progress.check === "refused")
+		const refused = await h.journal.getOperation(h.getJournalId())
+		expect(cardOf(refused)).toMatchObject({ state: "failed", subtitle: "Refused by the network", color: "red" })
+		expect(balances.refreshAccountBalances).not.toHaveBeenCalled()
+
+		getTxReceipt.mockResolvedValue(minedAt(hash, blockHash))
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(() => balances.refreshAccountBalances.mock.calls.length > 0)
+		const landed = await h.journal.getOperation(h.getJournalId())
+		expect(landed?.progress).toEqual({ ...failed?.progress, check: "sent", inclusion: { block: 42, hash: blockHash } })
+		expect(cardOf(landed)).toMatchObject({ state: "sent", subtitle: "Sent", color: "green" })
+		expect(h.sendTx).toHaveBeenCalledTimes(1)
+		check.stop()
+	})
+
+	test("a fee refusal reads 'Not confirmed yet' after a Dropped read: a lagging node can refuse a send another took", async () => {
 		const h = await makeHarness()
 		const hash = `0x${"2f".repeat(32)}`
-		h.toTx.mockResolvedValueOnce(provenTx(hash))
-		// As the SDK client throws a node's per-call JSON-RPC error: an HTTP 200, so never retried itself.
-		const refusal = "Invalid tx: Insufficient fee payer balance"
-		h.sendTx.mockRejectedValueOnce(new Error(refusal, { cause: { code: -32702, message: refusal } }))
+		const getTxReceipt = vi.fn(async (_hash: { toString(): string }): Promise<unknown> => dropped(hash))
+		const { check, clock } = await startCheck(h, getTxReceipt)
 
-		const p = h.service
-			.executeTransfer(
-				h.req.networkId,
-				h.req.accountAddress,
-				h.req.tokenId,
-				h.req.tokenContract,
-				h.req.transferType,
-				h.req.recipientAddress,
-				h.req.amount,
-				h.req.feeSettings,
-				h.estimateId,
-			)
-			.catch((e) => e)
-		await waitFor(() => h.ctrl.entered)
-		h.ctrl.release()
-		expect(await p).toStrictEqual(recorded(h, expect.any(Error)))
+		await sendFailing(h, hash, nodeRefusal("Invalid tx: Insufficient fee payer balance"))
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(() => getTxReceipt.mock.calls.length > 0)
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(() => getTxReceipt.mock.calls.length > 1)
 
-		const failed = await h.journal.getOperation(h.getJournalId())
-		expect(failed?.progress).toEqual({
-			stage: "failed",
-			from: "submitting",
-			txHash: hash,
-			submittedEndpointUrl: "http://fake",
-			expiry: RECORDED_EXPIRY,
-		})
-		expect(failed && sendOutcome(failed)).toBe("checking")
+		const read = await h.journal.getOperation(h.getJournalId())
+		expect(read?.progress).not.toHaveProperty("check")
+		expect(read && sendOutcome(read)).toBe("checking")
+		check.stop()
 	})
 })
 
