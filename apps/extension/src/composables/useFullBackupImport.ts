@@ -116,7 +116,7 @@ const PASSKEY_BACKUP_UNCHECKED = {
 	kind: "rejected",
 	title: "Backup cannot be restored",
 	message:
-		"This passkey backup is from an older version or was changed, so it cannot be restored. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
+		"This passkey backup is too old or was changed. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
 } as const
 
 /** The restore reads `type` and `name` as the wallet wrote them; `id` is replaced by the service

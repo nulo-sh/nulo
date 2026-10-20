@@ -295,7 +295,7 @@ describe("onboarding import", () => {
 		await vi.waitFor(() => expect(w.find('[data-testid="import-full-backup-error"]').exists()).toBe(true))
 
 		expect(w.get('[data-testid="import-full-backup-error"]').text()).toBe(
-			"ErrorBackup cannot be restoredThis passkey backup is from an older version or was changed, so it cannot be restored. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
+			"ErrorBackup cannot be restoredThis passkey backup is too old or was changed. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
 		)
 		expect(ceremony).not.toHaveBeenCalled()
 	})

@@ -2301,7 +2301,7 @@ describe("useFullBackupImport — passkey backup", () => {
 	/** The refusal's words, pinned: changing them is the owner's UI decision. */
 	const UNCHECKED_REFUSAL = [
 		"Backup cannot be restored",
-		"This passkey backup is from an older version or was changed, so it cannot be restored. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
+		"This passkey backup is too old or was changed. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
 	] as const
 
 	/** The body edited after export, its checksum recomputed and its MAC kept. */

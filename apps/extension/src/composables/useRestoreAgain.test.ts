@@ -227,6 +227,26 @@ describe("useRestoreAgain: refusals change nothing", () => {
 		expect(store.get(KEY)).toEqual(before)
 	})
 
+	test("a passkey body with no check, even the one the reminder names, shows the import's words", async () => {
+		const body = await buildBackup({ data: { profile: { id: "src", name: "Daily", type: "passkey" } } })
+		await armRestoreOutcome("p1", body.checksum, ["N1", "N2"])
+		const { opts } = makeOpts()
+		const page = useRestoreAgain(opts)
+		await page.start()
+		page.selectedBackup.value = { name: "b.json", backup: body, kind: "plain", profileType: "passkey" }
+		const before = structuredClone(store.get(KEY))
+
+		await page.restoreBackup()
+
+		expect(opts.fillError).toHaveBeenCalledWith(
+			"full_backup",
+			"Backup cannot be restored",
+			"This passkey backup is too old or was changed. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
+		)
+		expect(accountStateClient.restore).not.toHaveBeenCalled()
+		expect(store.get(KEY)).toEqual(before)
+	})
+
 	test("a tampered body shows the integrity message", async () => {
 		const { page, opts, original } = await open()
 		const before = structuredClone(store.get(KEY))
