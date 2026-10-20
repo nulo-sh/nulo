@@ -4508,13 +4508,14 @@ describe("ProfileService — a passkey whose profile is already here", () => {
 
 	test("importing it again refuses with the typed error naming that profile, and adds no profile", async () => {
 		const { service } = await makeService()
+		await service.createProfile("Main", "password123")
 		const daily = await service.createPasskeyProfile("Daily", fakeCredentialData("cred-daily", "uh-daily"))
 		await service.lockActiveProfile()
 
 		const err = await service.importPasskey("Again", fakeCredentialData("cred-daily", daily.id)).catch((e: unknown) => e)
 		expect(err).toBeInstanceOf(PasskeyProfileExistsError)
 		expect((err as PasskeyProfileExistsError).details).toEqual({ existingProfileName: "Daily" })
-		expect((await service.getProfiles()).map((p) => p.name)).toEqual(["Daily"])
+		expect((await service.getProfiles()).map((p) => p.name).sort()).toEqual(["Daily", "Main"])
 	})
 
 	// Only a readable, live row can be chosen from the profile list, so only it is named; every

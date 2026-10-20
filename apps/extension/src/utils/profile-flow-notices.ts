@@ -16,7 +16,6 @@ export function createFailedNotice(isPasskey: boolean): NotificationItem {
 	}
 }
 
-/** The notice for a failed passkey import: its own words when the passkey's profile is already here. */
 export function passkeyImportFailedNotice(err: unknown): NotificationItem {
 	if (err instanceof PasskeyProfileExistsError) return passkeyProfileExistsNotice(err)
 	return {

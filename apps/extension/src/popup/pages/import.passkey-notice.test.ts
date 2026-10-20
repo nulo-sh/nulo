@@ -42,7 +42,6 @@ function mountPopup() {
 	return page
 }
 
-/** Import → Passkey, with the in-page passkey prompt answered. */
 async function importWithPasskey(page: VueWrapper): Promise<void> {
 	await flushPromises()
 	page.findComponent(ImportMethodPicker).vm.$emit("passkey")

@@ -74,7 +74,7 @@ Audit round 1: Codex (gpt-6.1-sol, high) and Opus (Plan), both `conditional appr
 - **Inferences.** Onboarding reaches the refusal when the same passkey is imported twice (Back after an import, or a second tab); the profile may be open or locked by then, since S1 reads stored rows, not sessions. #743 edits other hunks of `service.ts`, `service.integration.test.ts`, `onboarding/pages/import.vue` and its test, and `passkey-toolbar-panel.test.ts`: textual merges expected.
 - **Asks.** OA-1 (the words; onboarding shows the same ones) and OA-2 (F4). The arc ships OA-1's recommendation as a draft and OA-2's "unchanged".
 
-## Phase 1: the typed refusal and both surfaces (arc 1) — ☐
+## Phase 1: the typed refusal and both surfaces (arc 1) — ✓
 
 Change map: § Architecture, plus the tests below. Commit after each step.
 
@@ -99,6 +99,7 @@ Per `implementations-plan/README.md` § Post-implementation standard at `eb0dd17
 - **Round 1, Codex** (`conditional approve`): unreadable or non-matching occupancy must not get the typed notice (accepted, EN-D2); the page test must resolve the ceremony and render the notice (accepted, step 3); pin reserved precedence, the same-message plain control and `"exists"` with no popup return (accepted, steps 2-3); correct the security claim and citations, name `audit:vue` and the e2e timing (accepted). Rejected: a credential check on the id branch (moot under EN-D2).
 - **Round 1, Opus** (`conditional approve`): the same unreadable-row finding (accepted); the page test's Pinia, teleport and dialog (accepted); OA-1's window lacks the Firefox note in the failed tone (accepted, fixed); pin `"exists"` in the popup-return loop (accepted); refresh three code docs (accepted); a required parameter and a guarded name (accepted). Onboarding's lock-screen wording went to OA-1.
 - **Final fresh Codex pass** (`conditional approve`): the red/green gate could not fail on (c) as written (accepted: keep the class, revert the behaviour); id-clash wording needs "when no credential match exists" (accepted); onboarding's profile may be locked, not open (accepted, Inferences and OA-1); add a readable row holding another credential to (c) (accepted). Reorder confirmed safe: both orders refuse `I ∨ C` before any write, under the same lock, independent of `allowDuplicate`. Resumed on the fixes: `approve`, no new regression.
+- **Fix loop, round 1** (Codex session `01a15736-35e9-74b2-9f11-5caae22d0dab`, gpt-6.1-sol high, over `git diff origin/dev...HEAD`): 0 material; two narration comments (`profile-flow-notices.ts`, the page test's helper), removed. **Opus diff review** beside it: clean; nit taken: test (a) holds a second profile so it proves the matched row is the one named; nit declined: `notifyImportFailed`'s doc tail states why the parameter exists.
 
 ## Seeds
 
