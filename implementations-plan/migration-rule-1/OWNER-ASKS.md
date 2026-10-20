@@ -13,12 +13,17 @@ A1 and A3 depend on none of these. A2 ships OA-1's A until the owner answers. A4
   - **C:** title as A; message "This passkey backup is from an older version or was changed, so it cannot be restored. Choose Passkey to restore your wallet, then add back your contacts, imported accounts, networks and tokens."
   - **D:** title as A; message "This passkey backup is too old or was changed. Choose Passkey to restore your wallet, then add your contacts and imported accounts again."
 - **The box shows three lines of the message.** `ImportFullBackupForm.vue` clamps the message at three lines and ends it with "…"; the whole text reaches only the clipboard, by tapping the box. At 400 px, A and C are cut after "then add your" and "then add back", so the person never reads what to add again. D fits in three lines. Lifting the clamp shows A whole (one more line), a layout change every refusal in that box would share.
-- **Pictures** (popup Import page, 400×600, Chrome; A is what ships, the others are mockups of the same box):
+- **Pictures** (popup Import page, 400×600, Chrome, a backup of a profile named Daily, the box in `dev`'s colours; A is what ships, the others are mockups of the same box):
   - A: [light](screenshots/oa1-A-light-chrome.png), [dark](screenshots/oa1-A-dark-chrome.png)
   - C: [light](screenshots/oa1-C-light-chrome.png), [dark](screenshots/oa1-C-dark-chrome.png)
   - D: [light](screenshots/oa1-D-light-chrome.png), [dark](screenshots/oa1-D-dark-chrome.png)
   - A with the clamp lifted: [light](screenshots/oa1-A-unclamped-light-chrome.png), [dark](screenshots/oa1-A-unclamped-dark-chrome.png)
-- **Restore again.** The same words show on the restore-again page, which has no Passkey choice: there they point at the import page's.
+- **The imported accounts' keys are in the refused file.** A passkey backup carries them sealed under the passkey (`imported-keys-dek-sealed`). "Add your imported accounts again" assumes the person kept each key elsewhere; for one who did not, the refused file was the only copy.
+- **Restore again needs its own words (OA-1R).** Restore again runs inside the profile a backup restored and checks the file with the same validator, so a passkey file with no check gets these words there too, though following them fails: importing a passkey that already has a profile is refused ("Passkey profile already exists"). Restore again shipped in 0.31.0, and its record survives the update, so a passkey profile restored in 0.31.0 with a network left to retry holds a record only its own unchecked file matches, and that file is refused (before this arc too, with "Incompatible backup", whose advice fails as well). Restore again never asks for the passkey and accepts only the body whose checksum its record names.
+  - **R-a (ships now):** the import's words, as above.
+  - **R-b:** keep "Incompatible backup" and its words on that page.
+  - **R-c:** accept there an unchecked passkey body whose checksum the record names, so the retry works again. A behaviour change to a security check: its own plan if chosen.
+  - **Recommendation:** R-c if the owner wants 0.31.0 restores to finish; else R-b, which at least changes nothing there.
 - **Recommendation.** D: the only words that show the whole way back without changing the box, and they name the choice on the import page ("Passkey") and the two things P62-05 names. A with the clamp lifted if the owner wants A's fuller first sentence.
 
 ## OA-2: the update-failed screen once real migrations exist
