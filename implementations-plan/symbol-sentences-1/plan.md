@@ -1,7 +1,7 @@
 ---
 plan: symbol-sentences-1
 tier: light (the lane brief's call; one Codex audit round-trip plus one Opus Plan lens)
-status: planned, Codex approve; waiting on P75-01 (page 75, unsigned); arc 1 starts only on the orchestrator's resume with the pick
+status: arc 1 in progress on P75-01 D (branch symbol-sentences-1-a1)
 issues: "#949 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -22,17 +22,17 @@ One arc, one PR against `dev`, no stack, `Closes #949`. Recon: [recon.md](recon.
 ## Outcome & Quality Bar
 
 - **For whom:** a person who holds a token whose contract returned an empty symbol or a symbol of spaces, and who meets it on Send, on the token page, on a transaction page or on the Allow sheet.
-- **Excellent:** each of the eleven sentences and the unit switch read as the owner's pick and words say (under C: whole sentences, no sentence that starts with a space, ends on "for" or holds "pin :"; the switch by the page-72 label rule). Every non-blank symbol, every amount slot and every test pin for a normal symbol reads as today.
-- **Good enough:** glyphs that draw nothing but are not whitespace stay #931 (closed known limit); the transaction banner's second line ("This token not found in your token list") stays unless the owner's note rewords it.
+- **Excellent:** each of the eleven sentences and the unit switch read in the owner's words: whole sentences, none that starts with a space, ends on "for" or holds "pin :", and a switch that reads "Token / USD". Every non-blank symbol, every amount slot and every test pin for a normal symbol reads as today.
+- **Good enough:** glyphs that draw nothing but are not whitespace stay #931 (closed known limit); the transaction banner's second line ("This token not found in your token list") stays: the owner added no words.
 
-## Decision (pending) and UI impact
+## Decision (owner, quoted) and UI impact
 
-- **P75-01** (page 75, unsigned at planning): A leave it; B the dash inside the sentences; C (recommended) a noun per sentence and the dash on the unit switch; D a noun everywhere, the switch included. **Assumption: C, with the page's proposed words.** The PR quotes the owner's pick and note; the note's words replace the proposals below verbatim. A: arc 1 is D1, D4 and their tests only (the list item is a label, signed by P72-05 C), and its PR closes #949 as the owner's call.
-- **UI impact under C**, "before → after" for a blank symbol (`""` or spaces; see D3 for the switch). Non-blank symbols unchanged.
+- **P75-01, option D** (decision page 75, 2026-10-20, recorded on #949): "A noun everywhere, the unit switch included ("Token / USD")." No note: the eleven words proposed on the page's pictures stand as the owner's words. D is option C (a noun per sentence) with site 4, the unit switch, worded "Token / USD" instead of the dash. The options not picked were A (leave the gaps), B (the dash inside the sentences) and C (the dash on the switch). This is the sign-off for every line below.
+- **UI impact**, "before → after" for a blank symbol (`""` or spaces). Non-blank symbols unchanged.
   1. Send clamp hint: "supports 6 decimals" → "Token supports 6 decimals".
   2. Send rate line, in both modes while the field is empty: "1 ≈ $1.00" → "1 token ≈ $1.00".
   3. Send switch hover text, USD mode: "Type in" → "Type in token".
-  4. Send switch label: "/ USD" → "— / USD" for spaces; `""` keeps "Token / USD" (OA-1; what ships now).
+  4. Send switch label: "/ USD" → "Token / USD" (`""` already reads so).
   5. Token page, no activity: "Send or receive to see activity here." → "Send or receive this token to see activity here."
   6. Token page, Home is full: "…to pin : USDC, EURC, GBPC" → "…to pin this token: USDC, EURC, GBPC".
   7. Transaction page banner title: "is missing" → "This token is missing" (also for a restored record whose symbol is not text).
@@ -40,10 +40,8 @@ One arc, one PR against `dev`, no stack, `Closes #949`. Recon: [recon.md](recon.
   9. Allow sheet body: "You received **** from a contract…" → "You received a token from a contract you haven't seen before." (no bold).
   10. Allow snack: "Now showing receives for" → "Now showing receives for this token".
   11. Block snack: "Hiding receives from" → "Hiding receives from this token".
-  - Every option: a blank pinned symbol in the Home-is-full list, an empty item (", EURC, GBPC") → "—, EURC, GBPC" (a label, page-72 rule; page 75 states it).
+  - A blank pinned symbol in the Home-is-full list, an empty item (", EURC, GBPC") → "—, EURC, GBPC" (a label, page-72 rule; page 75 states it).
   - Unchanged: every amount slot (Send's balance corner and USD-mode derived amount, the tx page's hero), every non-blank sentence.
-- **Branch B:** the same sites read "—" in place of the symbol ("— is missing", "Allow —?", "1 — ≈ $1.00", "— / USD"); no new words; `""` keeps the word sites 1, 3 and 4 show today (OA-1).
-- **Branch D:** C, with site 4 reading "Token / USD" for a blank symbol.
 
 ## Assumptions
 
@@ -58,33 +56,32 @@ One arc, one PR against `dev`, no stack, `Closes #949`. Recon: [recon.md](recon.
 
 **Claims checked.** #949's five places and the pictures lane's eleven sentences hold at this base, line for line. The pictures report left open whether the list refuses a symbol of spaces: it accepts one (Fact 3), so page 75's "a blank one reaches them only through a contract added by hand" holds for `""` only; nothing in this plan depends on it. The report's B line "one edit at `IncomingTrustPopup.vue:49` covers the title, the body and both snacks" holds.
 
-**Inferences.** I1: "blank" is #932's rule (JS whitespace after the strip); glyphs that draw nothing stay #931. I2: under C the switch keeps "Token" for `""` (D3).
+**Inferences.** I1: "blank" is #932's rule (JS whitespace after the strip); glyphs that draw nothing stay #931. I2: under D a symbol of spaces and `""` read the same word at every site, so OA-1 (the `""` split C would have made on the switch) is moot.
 
-**Asks.** P75-01, on page 75 already. OA-1 (OWNER-ASKS.md): `""` against spaces on the switch under C, and at sites 1, 3, 4 under B; what ships now is D3.
+**Asks.** None open: P75-01 is answered (D), and OA-1 is moot under D (OWNER-ASKS.md).
 
 ## Architecture & Implementation
 
-- **D1, one predicate, under every option.** `utils/string.ts` exports `isBlank(s: string | null | undefined): boolean` (`stripWireControl(s ?? "").trim() === ""`), and `dashIfBlank = (s) => (isBlank(s) ? "—" : (s as string))`, same outputs as today. `isBlank` gets "Absent, or only whitespace once the wire sanitizer's strip has run."; `dashIfBlank` keeps its contract: "The empty-value \"—\" for a blank name, title or label; any other value exactly as given." *Rejected:* a fallback-taking helper (`orIfBlank(s, word)`): a second helper the brief rules out, and it cannot carry sites 7 and 9, whose sentences change shape, not only a word.
-- **D2, words at each site (C).** Each component decides once and keeps its words in its template:
+- **D1, one predicate.** `utils/string.ts` exports `isBlank(s: string | null | undefined): boolean` (`stripWireControl(s ?? "").trim() === ""`), and `dashIfBlank = (s) => (isBlank(s) ? "—" : (s as string))`, same outputs as today. `isBlank` gets "Absent, or only whitespace once the wire sanitizer's strip has run."; `dashIfBlank` keeps its contract: "The empty-value \"—\" for a blank name, title or label; any other value exactly as given." *Rejected:* a fallback-taking helper (`orIfBlank(s, word)`): a second helper the brief rules out, and it cannot carry sites 7 and 9, whose sentences change shape, not only a word.
+- **D2, words at each site.** Each component decides once and keeps its words in its template:
   - `AmountCard.vue`: `const symbolBlank = computed(() => isBlank(props.token?.symbol))`; site 1 `symbolBlank ? "Token" : token.symbol`; site 2 `symbolBlank.value ? "token" : props.token.symbol`; site 3 `symbolBlank ? 'token' : token.symbol`.
   - `RecentActivityView.vue:917`: `isBlank(token.symbol) ? "this token" : token.symbol`.
   - `tokens/[id].vue:159`: `isBlank(subject.symbol) ? "this token" : sanitizeWireString(subject.symbol, 32)`.
   - `tx/[id].vue`: `transferSymbol` becomes `missingTitle`: `"This token is missing"` when `isBlank(sym)`, else the template literal of today's title, where `sym` is today's `displaySymbol(...)`.
   - `IncomingTrustPopup.vue`: `tokenSymbol` unchanged (`sanitizeWireString(raw ?? "Token", 32)`); `symbolBlank` = `isBlank(tokenSymbol)`; `subject` = `symbolBlank ? "this token" : tokenSymbol`, used by the title and both snacks; the body keeps one sentence: `<strong v-if="!symbolBlank">{{ tokenSymbol }}</strong><template v-else>a token</template>`. An absent symbol reads "Token" as today (Fact 4).
-- **D3, the switch label (site 4) under C:** `dashIfBlank(token?.symbol || "Token")`. Token-dash-2's D3 (the page-72 rule as shipped): a fallback that catches `""` stays, the dash covers what renders blank. D: `symbolBlank ? "Token" : token.symbol`. *Rejected:* `dashIfBlank(token?.symbol)`, which turns today's "Token / USD" for `""` into "— / USD", a change no pick names. The predecessor left the switch to #949, so OA-1 puts the split to the owner; D3 ships until the owner answers.
-- **D4, the pinned list, every option:** `symbolOf` maps to `dashIfBlank(sanitizeWireString(t.symbol, 32))`.
+- **D3, the switch label (site 4), P75-01 D:** `symbolBlank ? "Token" : token.symbol`, the word `""` already reads. (Under C it would have been `dashIfBlank(token?.symbol || "Token")`, keeping "Token" for `""`: OA-1, now moot.)
+- **D4, the pinned list** (a label, the page-72 rule, as page 75 states): `symbolOf` maps to `dashIfBlank(sanitizeWireString(t.symbol, 32))`.
 - **D5, accessibility** (the owner's 2026-10-19 delegation): the noun and the dash are plain text in the existing elements; no ARIA, focus or Tab change.
 - **D6, tests.** Each sentence gets one case fed the wire-shaped blank `"   "` (the tx page also keeps its non-text case), red on the base. Text is read with `.text()`, `attributes("title")`, the confirm's `description` or the toast spy's `label` (the decision mock resolves `true`). Normal-symbol controls: the existing pins (the Allow body at `IncomingTrustPopup.test.ts:266`), plus new ones where none exists (the switch title, the Allow title, the tx banner "TST is missing"). The blank cases also assert that the amount slots keep the raw symbol (Send's balance corner, the tx hero), read with `element.textContent`, since VTU's `.text()` trims. No e2e scenario: each sentence is one template or script expression that a component test renders, and no e2e reads these sentences.
-- **Branch B:** D1 as above. Site 1 `dashIfBlank(token.symbol || "Token")`, site 2 `dashIfBlank(props.token?.symbol ?? "token")`, site 3 `dashIfBlank(token?.symbol || 'token')`, site 4 as D3; `dashIfBlank(token.symbol)` at `RecentActivityView.vue:917`; `dashIfBlank(sanitizeWireString(subject.symbol, 32))` at `tokens/[id].vue:159`; `transferSymbol` = `dashIfBlank(displaySymbol(…))`; `tokenSymbol` = `dashIfBlank(sanitizeWireString(raw ?? "Token", 32))` (title, body, snacks); D4 as above.
 
 ## Phase 1: the predicate, the sentences, the tests (#949)
 
-Assumptions: Facts 1-7; I1, I2. The steps below are option C's, with page 75's proposed words; the owner's words from the resume message replace them. Under B or D, each edit and assertion takes that option's reading (§ Decision, § Architecture). Under A, run only D1 and D4 with the `isBlank` describe and the pinned-list case, and picture only `token-home-full-list`. Checks of unchanged behaviour may already pass on the base.
+Assumptions: Facts 1-7; I1, I2. Words: page 75's, which the owner kept (P75-01 D). Checks of unchanged behaviour may already pass on the base.
 
 0. Base pictures for the two states the pictures lane did not take: build armed at the base (phase 2 step 2's command), run the spec of phase 2 step 3 in its `today` mode for `token-home-full-list` and `incoming-block-toast` only, asserting today's readings.
 1. Tests first, red on the base; record each red in `lessons/phase-1.md`:
    - `utils/string.test.ts`: move `fromField` to file scope; a `describe("isBlank")` asserts true for each of `dashIfBlank`'s blank classes and `undefined`/`null`, and false for its non-blank values.
-   - `AmountCard.test.ts`: blank clamp hint `toBe("Token supports 6 decimals")`; blank rate line `toBe("1 token ≈ $1.00")`; blank switch text `"—/USD"` after whitespace removal, and `""` still `"Token/USD"`; switch `title` in USD mode `"Type in token"`, with a `cUSD` control; the balance corner's `textContent` keeps the raw `"   "`.
+   - `AmountCard.test.ts`: blank clamp hint `toBe("Token supports 6 decimals")`; blank rate line `toBe("1 token ≈ $1.00")`; blank switch text `"Token/USD"` after whitespace removal; switch `title` in USD mode `"Type in token"`, with a `cUSD` control; the balance corner's `textContent` keeps the raw `"   "`.
    - `RecentActivityView.test.ts`: blank → `toContain("Send or receive this token to see activity here.")`.
    - `tokens/[id].test.ts`: blank subject → the description with "to pin this token:"; a blank pinned token → "—" in the list.
    - `tx/[id].test.ts:126`: `"This token is missing"` for the non-text symbol; a `"   "` case reads the same and its hero's `textContent` keeps the raw symbol; a `TST` control reads `"TST is missing"`.
@@ -118,7 +115,7 @@ In this order, since `audit:vue`'s build replaces the armed build:
 
 ## Delivery
 
-Branch `symbol-sentences-1-a1` from this plan's commit. No PR before the pre-delivery gate passes and the Codex loop converges. `gh pr create --base dev --draft`, no labels; it stays a draft until its body quotes the pick. Title under C (74): `fix(ui): a blank token symbol inside a sentence reads as a noun, not a gap`; under B (77): `fix(ui): a blank token symbol inside a sentence shows the empty-value dash`. Body: what changed and why; P75-01 quoted with the owner's note as the sign-off; D3 in one sentence; D5 as an accessibility call under the owner's 2026-10-19 delegation; every picture beside today's, light and dark; the validation runs; no e2e scenario added, so no suite wall-clock moves; `Closes #949`; `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Then `gh pr checks <n> --watch`.
+Branch `symbol-sentences-1-a1` from this plan's commit. No PR before the pre-delivery gate passes and the Codex loop converges. `gh pr create --base dev --draft`, no labels, with the pick quoted; `gh pr ready` after the close-out commits. Title (74): `fix(ui): a blank token symbol inside a sentence reads as a noun, not a gap`. Body: what changed and why; P75-01 D quoted by id and text as the sign-off; D5 as an accessibility call under the owner's 2026-10-19 delegation; every picture beside today's, light and dark; the validation runs; no e2e scenario added, so no suite wall-clock moves; `Closes #949`; `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Then `gh pr checks <n> --watch`.
 
 ## Post-implementation
 
@@ -137,7 +134,7 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 | Opus 5.5 Plan lens | conditional approve (O1-O8) | O1 under A the list dash never ships: accepted, A runs D1 and D4. O2 = C6. O3 Fact 4's `{}` shows in the closing frames; the clamp pin is `:165-170`: accepted, and it confirms C4. O4 = C1. O5 `dashIfBlank` keeps its own TSDoc, `isBlank` gets a `describe`: accepted. O6 the rate line shows in both modes: accepted. O7 = C2. O8 one sentence for the Allow body, a template literal on the tx page: accepted. Security: a non-string symbol would throw in `isBlank`, unsupported conditions, recorded. |
 | Codex, same session resumed twice over the revision | conditional approve (C7, C8), then **approve** | C7 OWNER-ASKS.md still said A runs no arc: fixed. C8 phase 1 required C's edits and reds under every pick: scoped to the picked option. Every earlier fix verified; no regression. |
 
-**Decision ledger.** The legs agreed on every point but one. Codex (C2) keeps D1 under every option, as the brief says; Opus (O7) found dropping it under B sensible if recorded. Taken: D1 everywhere, since the brief names it and it costs one export. Unresolved: none. Open for the owner: P75-01 and OA-1.
+**Decision ledger.** The legs agreed on every point but one. Codex (C2) keeps D1 under every option, as the brief says; Opus (O7) found dropping it under B sensible if recorded. Taken: D1 everywhere, since the brief names it and it costs one export. Unresolved: none. Open for the owner: none (P75-01 answered D on 2026-10-20; OA-1 moot under D).
 
 ## Seeds
 

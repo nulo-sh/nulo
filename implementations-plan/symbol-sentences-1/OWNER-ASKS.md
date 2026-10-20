@@ -1,8 +1,10 @@
 # symbol-sentences-1: owner asks
 
-The lane waits on **P75-01** (page 75, "A blank token symbol inside a sentence"), already with the owner: A leave it, B the dash inside the sentences, C a noun per sentence and the dash on the unit switch (recommended), D a noun everywhere. The owner may reword any of the eleven sentences in the page's note. Arc 1 starts only when the orchestrator resumes the lane with the pick and the owner's words quoted; its PR stays a draft until its body quotes them. Under A, arc 1 ships only the dash in the Home-is-full list of pinned symbols (a label, under the page-72 pick) and the shared blank check, and its PR closes #949 as the owner's call.
+**P75-01 answered** (decision page 75, 2026-10-20, recorded on #949): option D, "A noun everywhere, the unit switch included ("Token / USD")." No note, so the eleven words proposed on the page stand. Arc 1 ships it.
 
-## OA-1: an empty symbol against a symbol of spaces, where a label already shows a word
+## OA-1: an empty symbol against a symbol of spaces, where a label already shows a word (moot under D)
+
+- **Resolution:** D gives `""` and a symbol of spaces the same word at every site, the switch included ("Token / USD"), so the split this ask described does not arise. No answer needed.
 
 - **Surface:** Send's amount card, for a priced token. The unit switch under C; under B also the clamp hint and the switch's hover text.
 - **What happens today:** a symbol that is exactly empty (`""`) already reads "Token / USD", "Token supports 6 decimals" and "Type in token", because those three places fall back to a word for `""`. A symbol of spaces gets no fallback and reads "/ USD", "supports 6 decimals", "Type in".
