@@ -1,7 +1,7 @@
 ---
 plan: backup-preflight-1
 tier: light
-status: planned, Codex approve; arc 1 in progress
+status: arc 1 in review
 issues: "#934 (arc 1, Closes)"
 driver: claude-code
 claude_model: opus
@@ -105,6 +105,8 @@ None. The "Incompatible backup" notice and every remaining reason it shows stay 
 - Opus 2, plausible: `importOf` used `data: {}`, so a migration reading a required slice stopped at the absent read and the loop proved only "not refused" → the probe seeds `emptyBackup()` (`stored-shapes/baseline.ts`, now exported; one line, clear of #938's hunks) and asserts the exact kind for every backup-facing migration.
 - Opus 3, needs unsupported conditions: a ref aliasing a block-listed root's rows now passes the preflight → I2 qualified; known limit at close-out; no code change.
 - Opus 4: two test names claimed more than they checked → renamed.
+
+**Post-implementation round 2** (Codex, resumed): `FINDINGS: 0`; converged. Final head: `lint`, `typecheck:all`, `test:all` (every workspace), `check:plans` exit 0.
 
 ## Delivery
 
