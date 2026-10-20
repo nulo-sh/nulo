@@ -1,0 +1,3 @@
+# Phase 1: the rule, its unit and Home tests, the skill line
+
+- **Red proof** (2026-10-20): with `git show f5b7fd5ad:apps/extension/src/utils/get-started.ts` in place, `bun --bun vitest run src/utils/get-started.test.ts src/popup/pages/general.test.ts` fails exactly 5 of 48: the pure cases "a funded password wallet keeps the phrase as the card's step 1", "a later password profile … no banner, funded or not", "no card once every listed step is done; an unsaved phrase keeps it up", and the Home cells "a funded first password wallet … counts of 4" and "a later password profile … no banner once funded". On the branch: 48 of 48 pass.
