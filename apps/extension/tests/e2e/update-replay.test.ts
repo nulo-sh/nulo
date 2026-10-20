@@ -18,14 +18,25 @@
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import { BACKUP_MAC_FIELD } from "@/utils/full-backup-helpers"
 import { BROWSER } from "./fixtures/browser"
-import { type ExtensionContext, clickByTestId, openPopup, test, waitForHash } from "./fixtures/extension"
+import { type ExtensionContext, clickByTestId, launchExtension, openPopup, test, waitForHash } from "./fixtures/extension"
 import { contactRow, ensureUnlocked, navigateByHash, waitForToast } from "./fixtures/helpers"
-import { inPlaceUpdate, readLocalStorage, type UpdateBuilds, updateBuilds, writeLocalStorage } from "./fixtures/update/in-place"
-import { type Recording, readRecording } from "./fixtures/update/recording"
+import { registerPasskeyProfile, setupPasskeyVirtualAuth } from "./fixtures/passkey"
+import {
+	inPlaceUpdate,
+	readLocalStorage,
+	type UpdateBuilds,
+	updateBuilds,
+	updateCandidate,
+	writeLocalStorage,
+} from "./fixtures/update/in-place"
+import { type PinnedBackup, type Recording, readRecording, writePinnedBackup } from "./fixtures/update/recording"
 import { unreadRows } from "./fixtures/update/stored-rows"
 import { BARRIERS, missingFamilies, shownOverlays, updateProblems } from "./fixtures/update/verify"
 import { exportImportedAccountBody, previewImport } from "./helpers/account-io"
+import { downloadPlainPasskeyBackup, exportBackupContent } from "./helpers/backup-export"
+import { backupProblems } from "@/wallet/storage/stored-shapes/backups"
 import {
 	PREVIOUS_TESTNET_CHAIN_ID,
 	type StoredAccount,
@@ -64,6 +75,15 @@ function builds(): UpdateBuilds {
 	const pair = updateBuilds(BROWSER)
 	if (!pair) throw new Error("unreachable: skipIf guards")
 	return pair
+}
+
+/** What the updated wallet exports must import into this build; `NULO_E2E_BACKUP_RECORD=1` on
+ *  Chrome also writes it as the stored-shape guard's pinned 1.0.0 backup. */
+async function expectBackupImports(envelope: unknown, name: PinnedBackup): Promise<void> {
+	expect(await backupProblems(envelope)).toEqual([])
+	if (process.env.NULO_E2E_BACKUP_RECORD !== "1") return
+	const pin = writePinnedBackup(name, BROWSER, envelope)
+	console.log(`[update-replay] wrote stored-shapes/backups/${name}.json; pin it in PINNED_BACKUPS: ${pin}`)
 }
 
 const recordedTestnet = (recording: Recording): number => {
@@ -236,6 +256,7 @@ describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 				if (chain === CHAIN_IDS.TESTNET) await opensWithoutTakeover(ctx, page, recording, before)
 				else await throughTheReset(ctx, page, recording, chain, true)
 				await page.close()
+				await expectBackupImports(await exportBackupContent(ctx), "password")
 			},
 		})
 	})
@@ -256,5 +277,24 @@ describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 				await page.close()
 			},
 		})
+	})
+
+	test("a passkey profile on the candidate exports a full backup that imports with its passkey check", {
+		timeout: 300_000,
+		retry: 0,
+	}, async () => {
+		const ctx = await launchExtension({ extensionPath: updateCandidate(BROWSER), cspRecorder: false })
+		try {
+			const page = await openPopup(ctx)
+			await setupPasskeyVirtualAuth(ctx.browser, page)
+			await registerPasskeyProfile(page)
+			await navigateByHash(page, "#/popup/settings/security/export/full", 15_000)
+			await clickByTestId(page, "agree-continue-btn")
+			const envelope = JSON.parse(await downloadPlainPasskeyBackup(page)) as Record<string, unknown>
+			expect(typeof envelope[BACKUP_MAC_FIELD]).toBe("string")
+			await expectBackupImports(envelope, "passkey")
+		} finally {
+			await ctx.close()
+		}
 	})
 })

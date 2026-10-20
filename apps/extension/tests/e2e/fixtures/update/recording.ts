@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs"
+import { createHash } from "node:crypto"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { FIXTURE_PREFIX } from "./stored-rows"
@@ -27,4 +28,18 @@ export function writeRecording(tag: string, browser: string, entries: Record<str
 export function readRecording(tag: string): Recording | undefined {
 	const file = recordingPath(tag)
 	return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Recording) : undefined
+}
+
+export type PinnedBackup = "password" | "passkey"
+
+const BACKUPS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../src/wallet/storage/stored-shapes/backups")
+
+/** Writes `envelope` as the pinned 1.0.0 backup `name` that the stored-shape guard's R5 imports, and
+ *  returns the pin to add beside it. Made from Chrome, as a recording is. */
+export function writePinnedBackup(name: PinnedBackup, browser: string, envelope: unknown): string {
+	if (browser !== "chrome") throw new Error(`a pinned backup is made from Chrome, not ${browser}`)
+	mkdirSync(BACKUPS_DIR, { recursive: true })
+	const text = `${JSON.stringify(envelope, null, "\t")}\n`
+	writeFileSync(path.join(BACKUPS_DIR, `${name}.json`), text)
+	return createHash("sha256").update(text).digest("hex")
 }
