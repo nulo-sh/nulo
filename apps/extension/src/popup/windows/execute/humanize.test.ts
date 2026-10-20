@@ -1,5 +1,7 @@
+import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { describe, expect, it } from "vitest"
-import { humanizeOperationKind } from "./humanize"
+import { getNameDescriptor } from "@/wallet/services/token/functions/descriptors"
+import { humanizeOperationKind, safeWire, safeWireOrDash } from "./humanize"
 
 describe("humanizeOperationKind", () => {
 	it("strips aztec_ prefix and splits camelCase", () => {
@@ -43,5 +45,37 @@ describe("humanizeOperationKind", () => {
 
 	it("handles a kind without a prefix or underscore", () => {
 		expect(humanizeOperationKind("foobar")).toBe("Foobar")
+	})
+})
+
+describe("safeWireOrDash", () => {
+	/** What the wallet's token read returns for a name field holding `text`'s UTF-8 bytes after a zero byte. */
+	const fromField = (text: string): string => {
+		const field = Buffer.alloc(32)
+		Buffer.from(text, "utf-8").copy(field, 1)
+		return getNameDescriptor.unpackResult!(0, [Fr.fromBuffer(field)]) as string
+	}
+	const ZWSP = String.fromCodePoint(0x200b)
+	const NBSP = String.fromCodePoint(0xa0)
+	const IDEOGRAPHIC_SPACE = String.fromCodePoint(0x3000)
+
+	it("reads a value that is empty or whitespace once the sanitizer strips it as the empty-value dash", () => {
+		const blanks = ["", "   ", "\t\n", ZWSP, `${NBSP}${IDEOGRAPHIC_SPACE}`].map(fromField)
+		expect(blanks.slice(0, 2)).toEqual(["", "   "])
+		for (const value of blanks) expect(safeWireOrDash(value, 64), JSON.stringify(value)).toBe("—")
+		expect(safeWireOrDash(undefined, 64)).toBe("—")
+	})
+
+	it("shows any other value as safeWire does", () => {
+		expect(safeWireOrDash(fromField("USDC"), 32)).toBe("USDC")
+		expect(safeWireOrDash(fromField(`${ZWSP}USDC`), 32)).toBe("USDC")
+		expect(safeWireOrDash(fromField(" A "), 32)).toBe(" A ")
+	})
+
+	it("decides blank before the length cap", () => {
+		const long = "W".repeat(70)
+		expect(safeWireOrDash(long, 64)).toBe(safeWire(long, 64))
+		expect(safeWireOrDash(long, 64)).toBe(`${"W".repeat(64)}…`)
+		expect(safeWireOrDash(" ".repeat(70), 64)).toBe("—")
 	})
 })
