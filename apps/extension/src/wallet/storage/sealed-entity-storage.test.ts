@@ -147,6 +147,22 @@ describe("SealedEntityStorage", () => {
 		expect(await store().get("c-1")).toEqual(contact("c-1", "p"))
 	})
 
+	test("a prepared write whose profile's keys went before its commit lands nothing", async () => {
+		const write = await store().prepare("c-1", contact("c-1", "p"))
+		keys.drop("p")
+
+		await expect(write.commit()).rejects.toBeInstanceOf(WalletLockedError)
+		expect(await raw(area)).toEqual({})
+	})
+
+	test("a stored value that is not a string is never served, as no delete path could remove it", async () => {
+		await area.set({ [`${ROOT}@c-1`]: [JSON.stringify(contact("c-1", "p"))] })
+
+		expect(await store().get("c-1")).toBeUndefined()
+		expect(await store().getValues()).toEqual([])
+		expectRefusal("not-a-string", "c-1")
+	})
+
 	describe("sealLegacy", () => {
 		const unlocked = <R>(fn: () => Promise<R>) => fn()
 
@@ -226,21 +242,26 @@ describe("SealedEntityStorage", () => {
 	})
 
 	describe("rawRowsOf", () => {
-		test("opens the profile's rows, keeps its plaintext ones, and names the ones it cannot open", async () => {
+		test("opens the profile's rows, keeps its plaintext ones, and names apart the ones it has no keys for and the ones its keys refuse", async () => {
 			await store().set("c-1", contact("c-1", "p"))
 			await legacy(area, contact("c-2", "p"))
 			await store().set("c-3", contact("c-3", "q"))
-			const own = await store().rawRowsOf("p")
-			expect(own).toEqual({
+			await area.set({ [`${ROOT}@c-4`]: (await raw(area))[`${ROOT}@c-1`] })
+			expect(await store().rawRowsOf("p")).toEqual({
 				rows: [
 					{ storageId: "c-1", row: contact("c-1", "p") },
 					{ storageId: "c-2", row: contact("c-2", "p") },
 				],
-				unopened: [],
+				unopened: ["c-4"],
+				keyless: [],
 			})
 
 			keys.drop("p")
-			expect(await store().rawRowsOf("p")).toEqual({ rows: [{ storageId: "c-2", row: contact("c-2", "p") }], unopened: ["c-1"] })
+			expect(await store().rawRowsOf("p")).toEqual({
+				rows: [{ storageId: "c-2", row: contact("c-2", "p") }],
+				unopened: [],
+				keyless: ["c-1", "c-4"],
+			})
 		})
 	})
 

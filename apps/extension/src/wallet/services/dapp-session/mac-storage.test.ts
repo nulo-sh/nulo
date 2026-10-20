@@ -49,7 +49,7 @@ describe("DappSessionMacStorage.rowsForProfile (profile-deletion cascade)", () =
 		const { rows } = await store.rowsForProfile("gone")
 		expect(rows.map((r) => r.storageId)).toEqual(["s-gone"])
 		await store.delete(rows[0]?.storageId ?? "")
-		expect(await store.rowsForProfile("gone")).toEqual({ rows: [], unopened: [] }) // physically purged
+		expect(await store.rowsForProfile("gone")).toEqual({ rows: [], unopened: [], keyless: [] }) // physically purged
 	})
 
 	test("names a profile's sealed rows it cannot open, so a delete by profile still removes them", async () => {
@@ -58,7 +58,7 @@ describe("DappSessionMacStorage.rowsForProfile (profile-deletion cascade)", () =
 		rowKeys.drop("gone") // a fresh worker that never opened the profile
 
 		expect(await store.getValues()).toEqual([])
-		expect(await store.rowsForProfile("gone")).toEqual({ rows: [], unopened: ["s-gone"] })
+		expect(await store.rowsForProfile("gone")).toEqual({ rows: [], unopened: [], keyless: ["s-gone"] })
 	})
 
 	test("(gap 1) finds a SCHEMA-INVALID row that the codec keeps-but-hides", async () => {
@@ -83,6 +83,6 @@ describe("DappSessionMacStorage.rowsForProfile (profile-deletion cascade)", () =
 		expect(rows.map((r) => r.storageId)).toEqual(["s1"])
 		expect(unopened).toEqual(["alias"])
 		for (const id of [...rows.map((r) => r.storageId), ...unopened]) await store.delete(id)
-		expect(await store.rowsForProfile("gone")).toEqual({ rows: [], unopened: [] }) // alias removed too
+		expect(await store.rowsForProfile("gone")).toEqual({ rows: [], unopened: [], keyless: [] }) // alias removed too
 	})
 })

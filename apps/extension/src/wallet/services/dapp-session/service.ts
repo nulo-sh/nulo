@@ -419,15 +419,16 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		return await this.lock.withLock(async () => {
 			this.emit("onVerificationRefused", { origin, chainId, profileId })
 			try {
-				const { rows: all, unopened } = await this.storage.rowsForProfile(profileId)
+				const { rows: all, keyless } = await this.storage.rowsForProfile(profileId)
 				const rows = all.filter(({ row }) => row.dappMetadata?.url === origin && row.chainId === chainId)
 				await purgeRows(
 					rows,
 					({ storageId }) => this.storage.delete(storageId),
 					({ storageId, row }) => this.emit("onDappSessionDeleted", { ...row, id: storageId }),
 				)
-				// With the keys held, a row that does not open is tampered and never served.
-				if (unopened.length > 0 && !this.profileService.rowKeys(profileId)) throw new Error("sealed rows without their key")
+				// Decided by the scan, not by the keys now: an unlock during the deletes would make an
+				// unread row look tampered. A row the held keys refused is tampered and never served.
+				if (keyless.length > 0) throw new Error("sealed rows without their key")
 				return rows.length > 0 ? "revoked" : "absent"
 			} catch (err) {
 				// No delete event will follow, and an establishment that read the row before the lock
@@ -510,7 +511,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 			// re-import. `rowsForProfile` returns the true `storageId` per row; delete
 			// by it (not the self-reported id) and emit per successful delete so a
 			// live wallet-SDK channel is torn down even on a partial failure.
-			const { rows, unopened } = await this.storage.rowsForProfile(profileId)
+			const { rows, unopened, keyless } = await this.storage.rowsForProfile(profileId)
 			await purgeRows(
 				rows,
 				({ storageId }) => {
@@ -520,7 +521,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 				({ row }) => this.emit("onDappSessionDeleted", row),
 			)
 			// A row that did not open was never served by this worker, so no channel holds it.
-			for (const storageId of unopened) await this.storage.delete(storageId)
+			for (const storageId of [...unopened, ...keyless]) await this.storage.delete(storageId)
 		})
 	}
 }

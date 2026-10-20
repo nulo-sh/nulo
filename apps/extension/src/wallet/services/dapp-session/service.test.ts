@@ -22,7 +22,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import { recordWrites } from "../storage-write-log"
 import { AccessLevel, DappSessionService } from "./service"
 import { RecoveryModeError, SessionEndedError } from "@nulo/extension-messaging/errors"
-import { asImportedKeysDek, asMasterSecretBytes, deriveDappSessionMacKey, deriveRowKeys, type RowKeys } from "@nulo/wallet-crypto"
+import { asImportedKeysDek, asMasterSecretBytes, deriveDappSessionMacKey, deriveRowKeys, type RowKeys, sealRow } from "@nulo/wallet-crypto"
 import { signDappSession } from "./integrity"
 import type { CapabilityDecision, DappSession, GrantedCapabilityRecord } from "./spec"
 
@@ -64,6 +64,7 @@ function makeProfileStub(rowKeys: Map<string, RowKeys>) {
 			return realMacKey(profileId)
 		}),
 		rowKeys: (profileId: string) => rowKeys.get(profileId),
+		keyring: rowKeys,
 		onRowKeysReady: new EventHandler<string>(),
 		async start() {},
 	}
@@ -638,6 +639,23 @@ describe("refuseVerification", () => {
 		expect(await svc.service.refuseVerification(TUPLE)).toBe("revoked")
 		expect(await svc.stored()).toEqual([`${ROW_ROOT}@other-app`, `${ROW_ROOT}@other-chain`, `${ROW_ROOT}@p2-row`])
 		expect(svc.deleted.map((row) => row.id).sort()).toEqual(["moved", "replacement"])
+	})
+
+	test("sealed rows the scan held no key for answer unavailable, even when an unlock lands during the deletes", async () => {
+		const svc = await makeLockAwareService()
+		const p1Keys = svc.profileStub.keyring.get("p1")
+		if (!p1Keys) throw new Error("p1 is unlocked")
+		const { mac: _drop, ...signable } = { ...rowFor("p1"), id: "sealed" }
+		const sealedKey = `${ROW_ROOT}@sealed`
+		const text = JSON.stringify({ ...signable, mac: await signDappSession(await realMacKey("p1"), signable) })
+		const sealed = await sealRow(p1Keys, text, { root: ROW_ROOT, storageKey: sealedKey, profileId: "p1" })
+		await svc.browserApi.storage.local.set({ [sealedKey]: JSON.stringify({ profileId: "p1", sealed }) })
+		await plantRowSignedBy(svc.browserApi, rowFor("p1"), "p1")
+		svc.profileStub.keyring.delete("p1")
+		svc.service.onDappSessionDeleted.add(() => svc.profileStub.keyring.set("p1", p1Keys))
+
+		expect(await svc.service.refuseVerification(TUPLE)).toBe("unavailable")
+		expect(await svc.stored()).toEqual([sealedKey])
 	})
 
 	test.each([

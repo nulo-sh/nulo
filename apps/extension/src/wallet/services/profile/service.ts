@@ -354,17 +354,19 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		this.rowKeyring.drop(profileId)
 	}
 
-	/** Derives `profile`'s row keys unless its id is reserved by a deletion. Caller MUST hold the
-	 *  facade lock; the master stays caller-owned. */
+	/** Derives `profile`'s row keys unless its id is reserved by a deletion; throws when a deletion
+	 *  of it ran during the derivation. Caller MUST hold the facade lock; the master stays
+	 *  caller-owned. */
 	private async fillRowKeysHoldingLock(profile: Profile, master: MasterSecretBytes): Promise<void> {
 		const epoch = this.deletionState.capture(profile.id)
 		if (this.deletionState.isReserved(profile.id)) return
 		const filled = await this.rowKeyring.fill(profile.id, profile.pxeGeneration, master)
 		// A deletion that ran during the derivation (a force-released lock) dropped this id's keys
-		// before these landed: none may outlive it.
+		// before these landed: none may outlive it, and the open or commit that asked must stop, as
+		// it does for a deletion it sees itself.
 		if (!this.deletionState.isCurrent(profile.id, epoch)) {
 			this.dropRowKeys(profile.id)
-			return
+			throw new Error("Invalid profile id")
 		}
 		if (filled) this.unannouncedRowKeys.add(profile.id)
 	}

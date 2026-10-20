@@ -74,15 +74,18 @@ export class DappSessionMacStorage {
 	 *     `id`; a valid row copied to a different storage key (alias) would not be
 	 *     removed and would re-verify after a same-secret re-import.
 	 *
-	 * Deletion needs no authorization proof. `unopened` names the profile's sealed rows that did not
-	 * open (no row keys in this worker, or tampered): their fields cannot be read, but their
-	 * envelope still names the profile, so a delete by profile alone removes them too.
+	 * Deletion needs no authorization proof. `keyless` names the profile's sealed rows the scan had
+	 * no row keys for, `unopened` the ones its keys refused (tampered): their fields cannot be read,
+	 * but their envelope still names the profile, so a delete by profile alone removes them too.
 	 */
-	public async rowsForProfile(profileId: string): Promise<{ rows: Array<{ storageId: string; row: DappSession }>; unopened: string[] }> {
-		const { rows, unopened } = await this.inner.rawRowsOf(profileId)
+	public async rowsForProfile(
+		profileId: string,
+	): Promise<{ rows: Array<{ storageId: string; row: DappSession }>; unopened: string[]; keyless: string[] }> {
+		const { rows, unopened, keyless } = await this.inner.rawRowsOf(profileId)
 		return {
 			rows: rows.filter(({ row }) => typeof row === "object" && row !== null) as Array<{ storageId: string; row: DappSession }>,
 			unopened,
+			keyless,
 		}
 	}
 

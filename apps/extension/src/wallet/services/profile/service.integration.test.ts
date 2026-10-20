@@ -71,6 +71,7 @@ import { feePicksKey, pinnedTokensKey, profileUiKeys, sendFeePicksKey } from "@/
 import { recordWrites } from "../storage-write-log"
 import { PROFILE_TOMBSTONE_ROOT, type Tombstone } from "./tombstone-repository"
 import { WalletLockedError } from "./wallet-locked-error"
+import { RowKeyring } from "./row-keyring"
 import { fromBase64, getMnemonic, toBase64 } from "@nulo/wallet-core/utils"
 import { BUFFER_BINDINGS, withBuffer } from "../../../../tests/helpers/shipped-buffer"
 import { deriveMasterFromMnemonic, openRow, sealRow } from "@nulo/wallet-crypto"
@@ -4583,17 +4584,40 @@ describe("row keys — held for the worker's lifetime, never for a dead incarnat
 		await expect(openRow(reborn, sealed, BINDING)).rejects.toThrow()
 	}, 30_000)
 
-	test("a delete racing an open leaves no keys behind, whichever lands first", async () => {
+	test("a deletion that lands while an open derives the row keys stops the open and keeps no keys", async () => {
 		const { service } = await makeService()
-		service.setDeletionDelegate({
-			snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }),
-			runFor: async (id) => service.dropRowKeys(id),
-		})
 		const p = await service.createProfile("P", "pass1234")
 		await service.lockActiveProfile()
+		service.dropRowKeys(p.id)
+		const fill = RowKeyring.prototype.fill
+		let release = () => {}
+		const held = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		let reached = () => {}
+		const deriving = new Promise<void>((resolve) => {
+			reached = resolve
+		})
+		vi.spyOn(RowKeyring.prototype, "fill").mockImplementationOnce(async function (this: RowKeyring, ...args) {
+			reached()
+			await held
+			return fill.apply(this, args)
+		})
+		const announced: string[] = []
+		service.onRowKeysReady.add((id) => announced.push(id))
 
-		await Promise.allSettled([service.unlockProfile(p.id, "pass1234"), service.deleteProfile(p.id)])
+		const opening = service.unlockProfile(p.id, "pass1234")
+		await deriving
+		// What a whole deletion that a force-released facade lock let through leaves behind: a newer
+		// epoch, and the id released again.
+		service.getDeletionState().beginDeletion(p.id)
+		service.getDeletionState().release(p.id)
+		release()
+		await expect(opening).rejects.toThrow("Invalid profile id")
 		expect(service.rowKeys(p.id)).toBeUndefined()
+		expect(await service.getActiveProfile()).toBeUndefined()
+		expect(announced).toEqual([])
+		vi.restoreAllMocks()
 	}, 30_000)
 
 	test("a worker that restores the session holds its keys, and a handler that subscribes late gets them on replay", async () => {

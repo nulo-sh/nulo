@@ -104,12 +104,20 @@ export class SealedEntityStorage<T> {
 		if (!this.options.keyed) {
 			const storageKey = this.prefix + id
 			const items = { [storageKey]: await this.envelope(keys, owner, storageKey, text) }
-			return { items, commit: () => this.area.set(items) }
+			return { items, commit: () => this.whileHeld(owner, keys, () => this.area.set(items)) }
 		}
 		const storageKey = this.prefix + (await this.physicalId(id, owner, keys))
 		const items = { [storageKey]: await this.envelope(keys, owner, storageKey, JSON.stringify({ k: id, r: text })) }
 		const legacyTwin = (await this.legacyOwner(id)) === owner ? [this.prefix + id] : []
-		return { items, commit: () => this.commitWithRemovals(items, legacyTwin) }
+		return { items, commit: () => this.whileHeld(owner, keys, () => this.commitWithRemovals(items, legacyTwin)) }
+	}
+
+	/** Dispatches a prepared write only while its profile still holds the keys it was sealed under,
+	 *  checked synchronously, so a write that outlived the profile's deletion never lands behind the
+	 *  deletion's keyless sweep. */
+	private whileHeld(owner: string, keys: RowKeys, write: () => Promise<void>): Promise<void> {
+		if (this.keysFor(owner) !== keys) return Promise.reject(new WalletLockedError())
+		return write()
 	}
 
 	public async set(id: string, row: T): Promise<void> {
@@ -164,12 +172,16 @@ export class SealedEntityStorage<T> {
 	/**
 	 * Every row of `profileId` with its storage id, sealed rows opened, for a maintenance delete
 	 * that filters on a row field. The rows are parsed JSON with no codec, as a raw enumeration
-	 * yields them, so a codec-invalid row of the profile is still found. `unopened` names the
-	 * profile's sealed rows that did not open: such a caller cannot read their fields.
+	 * yields them, so a codec-invalid row of the profile is still found. The profile's sealed rows
+	 * whose fields such a caller cannot read come apart: `keyless` when the scan found no keys for
+	 * the profile, so which of them match is unknown; `unopened` when the keys refused them.
 	 */
-	public async rawRowsOf(profileId: string): Promise<{ rows: Array<{ storageId: string; row: unknown }>; unopened: string[] }> {
+	public async rawRowsOf(
+		profileId: string,
+	): Promise<{ rows: Array<{ storageId: string; row: unknown }>; unopened: string[]; keyless: string[] }> {
 		const rows: Array<{ storageId: string; row: unknown }> = []
 		const unopened: string[] = []
+		const keyless: string[] = []
 		for (const [key, storageId, raw] of prefixedEntries(await this.area.get(), this.prefix)) {
 			const parsed = tryParse(raw)
 			if (!parsed.ok) continue
@@ -179,11 +191,15 @@ export class SealedEntityStorage<T> {
 				continue
 			}
 			if (envelope.profileId !== profileId) continue
+			if (!this.keysFor(profileId)) {
+				keyless.push(storageId)
+				continue
+			}
 			const opened = await this.open(key, envelope)
 			if (opened) rows.push({ storageId, row: opened.inner })
 			else unopened.push(storageId)
 		}
-		return { rows, unopened }
+		return { rows, unopened, keyless }
 	}
 
 	/**
@@ -276,11 +292,19 @@ export class SealedEntityStorage<T> {
 		const parsed = tryParse(raw)
 		const envelope = parsed.ok ? parseEnvelope(parsed.value) : undefined
 		if (!envelope) {
-			// The codec's own path, which logs a malformed value with no payload.
-			const row = parsed.ok ? this.inner.decodeParsed(key, parsed.value) : this.inner.decodeStored(key, raw)
+			if (!parsed.ok) {
+				// The codec's own path logs a malformed string with no payload. A value that is not a
+				// string is refused too: no delete or conversion path reads one, so none could remove it.
+				if (typeof raw === "string") this.inner.decodeStored(key, raw)
+				else
+					console.warn(
+						`SealedEntityStorage[${this.root}]: row ${this.inner.describeKey(key)} — not-a-string — KEEPING (not deleting)`,
+					)
+				return undefined
+			}
+			const row = this.inner.decodeParsed(key, parsed.value)
 			if (row === undefined) return undefined
-			const owner = parsed.ok ? this.ownerOf(parsed.value, storageId) : undefined
-			return { located: { storageId, naturalId: storageId, owner, sealed: false }, row }
+			return { located: { storageId, naturalId: storageId, owner: this.ownerOf(parsed.value, storageId), sealed: false }, row }
 		}
 		const opened = await this.open(key, envelope)
 		if (!opened) return undefined
