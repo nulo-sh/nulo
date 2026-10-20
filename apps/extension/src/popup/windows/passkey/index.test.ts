@@ -195,9 +195,9 @@ describe("the passkey window", () => {
 
 		expect(windowState(wrapper)).toBe("step-exists")
 		expect(wrapper.find('[role="alertdialog"]').exists()).toBe(true)
-		expect(wrapper.findAll("h1 span").map((line) => line.text())).toEqual(["Profile", "already added"])
+		expect(wrapper.findAll("h1 span").map((line) => line.text())).toEqual(["Passkey", "already in use"])
 		expect(byTestId(wrapper, "passkey-window-error").text()).toBe(
-			"This passkey already has a profile in this wallet. Close this window and choose it from your profiles in Nulo.",
+			"This passkey already has a profile in this wallet. Close this window, open Nulo and choose it on the lock screen.",
 		)
 		expect(byTestId(wrapper, "passkey-window-retry").exists()).toBe(false)
 		await byTestId(wrapper, "passkey-window-close").trigger("click")

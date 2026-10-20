@@ -262,7 +262,7 @@ describe("onboarding import", () => {
 
 		const { useNotificationStore } = await import("@/stores/notification.store")
 		expect(useNotificationStore().create).toHaveBeenCalledExactlyOnceWith(
-			expect.objectContaining({ payload: expect.objectContaining({ title: "Profile already added" }) }),
+			expect.objectContaining({ payload: expect.objectContaining({ title: "Passkey already in use" }) }),
 		)
 	})
 })

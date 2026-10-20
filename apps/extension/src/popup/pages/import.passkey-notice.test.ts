@@ -75,7 +75,7 @@ describe("popup import — a passkey whose profile is already here", () => {
 
 		expect(profileApi.importPasskey).toHaveBeenCalledOnce()
 		expect(shownNotice()).toBe(
-			"“Daily” already uses this passkey in this wallet. Choose “Daily” from your profiles instead of importing it again.",
+			"“Daily” already uses this passkey in this wallet. Click the profile name on the lock screen and choose “Daily”.",
 		)
 	})
 

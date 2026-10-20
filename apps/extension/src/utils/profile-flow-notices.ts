@@ -37,11 +37,11 @@ function passkeyProfileExistsNotice(err: PasskeyProfileExistsError): Notificatio
 	return {
 		type: "warning",
 		payload: {
-			title: "Profile already added",
+			title: "Passkey already in use",
 			description:
 				typeof name === "string" && name !== ""
-					? `“${name}” already uses this passkey in this wallet. Choose “${name}” from your profiles instead of importing it again.`
-					: "This passkey already has a profile in this wallet. Choose it from your profiles instead of importing it again.",
+					? `“${name}” already uses this passkey in this wallet. Click the profile name on the lock screen and choose “${name}”.`
+					: "This passkey already has a profile in this wallet. Click the profile name on the lock screen and choose it.",
 			confirmText: "OK",
 			onConfirm: () => {},
 		},

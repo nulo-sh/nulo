@@ -52,9 +52,9 @@ describe("profile-flow notices", () => {
 		expect(passkeyImportFailedNotice(err)).toStrictEqual({
 			type: "warning",
 			payload: {
-				title: "Profile already added",
+				title: "Passkey already in use",
 				description:
-					"“Daily” already uses this passkey in this wallet. Choose “Daily” from your profiles instead of importing it again.",
+					"“Daily” already uses this passkey in this wallet. Click the profile name on the lock screen and choose “Daily”.",
 				confirmText: "OK",
 				onConfirm: expect.any(Function),
 			},
@@ -66,7 +66,7 @@ describe("profile-flow notices", () => {
 		(details) => {
 			const err = walletErrorFromPayload({ code: PasskeyProfileExistsError.CODE, message: "Passkey profile already exists", details })
 			expect(passkeyImportFailedNotice(err).payload.description).toBe(
-				"This passkey already has a profile in this wallet. Choose it from your profiles instead of importing it again.",
+				"This passkey already has a profile in this wallet. Click the profile name on the lock screen and choose it.",
 			)
 		},
 	)
