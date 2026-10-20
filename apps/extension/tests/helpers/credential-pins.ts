@@ -2,6 +2,7 @@ import { Icon } from "@nulo/design"
 import type { VueWrapper } from "@vue/test-utils"
 import { flushPromises } from "@vue/test-utils"
 import { expect } from "vitest"
+import { sendEvent } from "./send-event"
 
 /** A password visibility toggle and the fields it masks, by testid. */
 export interface MaskToggleCase {
@@ -46,12 +47,12 @@ export async function expectMaskToggle(w: VueWrapper, c: MaskToggleCase): Promis
 	masked()
 	const othersBefore = types(w, others)
 
-	btn.click()
-	btn.click()
+	sendEvent(btn, "click")
+	sendEvent(btn, "click")
 	await flushPromises()
 	masked()
 
-	btn.click()
+	sendEvent(btn, "click")
 	await flushPromises()
 	expect(types(w, c.drives)).toEqual(c.drives.map(() => "text"))
 	expect(types(w, others)).toEqual(othersBefore)
@@ -59,7 +60,7 @@ export async function expectMaskToggle(w: VueWrapper, c: MaskToggleCase): Promis
 	expect(glyph()).toBe("eye-off")
 	expect(document.activeElement).toBe(nativeInput(w, c.field))
 
-	btn.click()
+	sendEvent(btn, "click")
 	await flushPromises()
 	masked()
 	expect(types(w, others)).toEqual(othersBefore)
@@ -82,16 +83,16 @@ export function pasteInto(input: HTMLInputElement, text: string): boolean {
 	return ev.defaultPrevented
 }
 
-/** Sets a native input's value and dispatches its `input` event, synchronously. */
+/** Sets a native input's value and sends its `input` event through `sendEvent`, synchronously. */
 export function typeNow(input: HTMLInputElement, value: string): void {
 	input.value = value
-	input.dispatchEvent(new Event("input", { bubbles: true }))
+	sendEvent(input, "input")
 }
 
-/** A keydown Enter on `el`, synchronously; `init` sets `repeat`, `isComposing` or `keyCode`. */
+/** A keydown Enter sent to `el` through `sendEvent`, synchronously; `init` sets `repeat`, `isComposing` or `keyCode`. */
 export function enterOn(el: Element, init: KeyboardEventInit = {}): KeyboardEvent {
-	const ev = new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true, ...init })
-	el.dispatchEvent(ev)
+	const ev = sendEvent(el, "keydown", { key: "Enter", keyCode: 13, ...init })
+	if (!(ev instanceof KeyboardEvent)) throw new Error("Enter sent to a disabled control")
 	return ev
 }
 

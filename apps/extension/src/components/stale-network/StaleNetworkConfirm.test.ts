@@ -4,9 +4,10 @@
  * RESET answers once per opening.
  */
 import { flushPromises, mount } from "@vue/test-utils"
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, type MockInstance, test, vi } from "vitest"
 import { nextTick, ref } from "vue"
 import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
+import { sendEvent } from "../../../tests/helpers/send-event"
 
 type Options = Record<string, unknown>
 const traps: Array<{ options: Options }> = []
@@ -70,11 +71,17 @@ function lines(root: Element): string[] {
 const q = (testid: string) => document.querySelector<HTMLElement>(`[data-testid="${testid}"]`)
 const qa = (testid: string) => [...document.querySelectorAll<HTMLElement>(`[data-testid="${testid}"]`)]
 
+let clock: MockInstance<() => number>
 beforeEach(() => {
 	traps.length = 0
 	document.body.innerHTML = '<div id="popup"></div>'
+	// A still clock puts every press in its render's millisecond, where a raw click reaches only the
+	// first Vue listener on its path, Popup's capture listener: a press that skips `sendEvent` fails
+	// every run, not one CI run in many.
+	clock = vi.spyOn(Date, "now").mockReturnValue(Date.now())
 })
 afterEach(() => {
+	clock.mockRestore()
 	document.body.innerHTML = ""
 })
 
@@ -143,10 +150,10 @@ describe("StaleNetworkConfirm", () => {
 	test("CANCEL, either close area and Escape cancel; CANCEL takes the first focus", async () => {
 		const wrapper = await open()
 		expect(traps.at(-1)?.options.initialFocus).toBe("[data-testid='stale-confirm-cancel']")
-		q("stale-confirm-cancel")!.click()
+		sendEvent(q("stale-confirm-cancel")!, "click")
 		const card = q("stale-confirm")!
-		;(card.previousElementSibling as HTMLElement).click()
-		;(card.nextElementSibling as HTMLElement).click()
+		sendEvent(card.previousElementSibling!, "click")
+		sendEvent(card.nextElementSibling!, "click")
 		const onEscape = traps.at(-1)?.options.escapeDeactivates as (e: KeyboardEvent) => boolean
 		onEscape(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }))
 		expect(wrapper.emitted("onClose")).toHaveLength(4)
@@ -159,13 +166,14 @@ describe("StaleNetworkConfirm", () => {
 		const repeat = new KeyboardEvent("keydown", { key: "Enter", repeat: true, cancelable: true, bubbles: true })
 		submit.dispatchEvent(repeat)
 		expect(repeat.defaultPrevented).toBe(true)
-		submit.click()
-		submit.click()
+		// Both land before the render that disables RESET, so only the latch can refuse the second.
+		sendEvent(submit, "click")
+		expect(sendEvent(submit, "click")).toBeDefined()
 		expect(wrapper.emitted("confirm")).toHaveLength(1)
 		await wrapper.setProps({ show: false })
 		await wrapper.setProps({ show: true })
 		await flushPromises()
-		q("stale-confirm-submit")!.click()
+		sendEvent(q("stale-confirm-submit")!, "click")
 		expect(wrapper.emitted("confirm")).toHaveLength(2)
 	})
 })

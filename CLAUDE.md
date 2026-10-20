@@ -265,6 +265,7 @@ Service-bound visual components (Header, AddressDisplay, GlobalLoader, Notificat
 - Mount via `@vue/test-utils`'s `mount`; stub auto-registered children (`Spinner`, `Icon`, etc.) via `global.stubs`.
 - For store consumers, `createTestingPinia()` from `@pinia/testing`.
 - `tests/vitest.setup.ts` stubs `chrome` before every test with working `runtime` ports and message listeners, but `storage` is an empty object: a test whose code reads or writes storage stubs `chrome` itself (`vi.stubGlobal`).
+- Send a user event through `trigger` or `sendEvent` (`tests/helpers/send-event.ts`), never a raw `click()` or `dispatchEvent`, when it must reach a Vue listener that is not the first on its path: a `Popup`'s or `Tooltip`'s capture listener comes first inside them, and so does the target's own when an ancestor also listens. Vue drops a raw event at every later listener attached in its millisecond, so such a test passes or fails by the clock.
 
 **Coverage minimums:**
 
