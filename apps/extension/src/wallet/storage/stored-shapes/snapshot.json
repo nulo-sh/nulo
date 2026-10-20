@@ -1526,6 +1526,13 @@
 					"schema": {
 						"$schema": "https://json-schema.org/draft/2020-12/schema",
 						"properties": {
+							"announce": {
+								"items": {
+									"enum": ["mainnet", "testnet", "devnet", "local", "custom"],
+									"type": "string"
+								},
+								"type": "array"
+							},
 							"offered": {
 								"items": {
 									"enum": ["mainnet", "testnet", "devnet", "local", "custom"],
@@ -3513,6 +3520,7 @@
 					"networkId": "9e21b7f0"
 				},
 				"networkSeeded.full": {
+					"announce": ["mainnet"],
 					"offered": ["custom", "devnet", "local", "mainnet", "testnet"]
 				},
 				"networkSeeded.minimal": {

@@ -247,50 +247,6 @@
 			"why": "screen copy from copy.ts, reached only through the name of `newAddresses` (the address-change screen's strings); no identifier renders here"
 		},
 		{
-			"file": "apps/extension/src/components/stale-network/StaleNetworkTakeover.vue",
-			"expression": "content.eyebrow.text",
-			"branch": "content",
-			"ordinal": 0,
-			"role": "none",
-			"selector": "",
-			"surface": "overlay:StaleNetworkTakeover",
-			"state": "",
-			"why": "screen copy from copy.ts, reached only through the name of `newAddresses` (the address-change screen's strings); no identifier renders here"
-		},
-		{
-			"file": "apps/extension/src/components/stale-network/StaleNetworkTakeover.vue",
-			"expression": "line.text",
-			"branch": "content && content.box",
-			"ordinal": 0,
-			"role": "none",
-			"selector": "",
-			"surface": "overlay:StaleNetworkTakeover",
-			"state": "",
-			"why": "screen copy from copy.ts, reached only through the name of `newAddresses` (the address-change screen's strings); no identifier renders here"
-		},
-		{
-			"file": "apps/extension/src/components/stale-network/StaleNetworkTakeover.vue",
-			"expression": "content.primary.text",
-			"branch": "content",
-			"ordinal": 0,
-			"role": "none",
-			"selector": "",
-			"surface": "overlay:StaleNetworkTakeover",
-			"state": "",
-			"why": "screen copy from copy.ts, reached only through the name of `newAddresses` (the address-change screen's strings); no identifier renders here"
-		},
-		{
-			"file": "apps/extension/src/components/stale-network/StaleNetworkTakeover.vue",
-			"expression": "action.text",
-			"branch": "content",
-			"ordinal": 0,
-			"role": "none",
-			"selector": "",
-			"surface": "overlay:StaleNetworkTakeover",
-			"state": "",
-			"why": "screen copy from copy.ts, reached only through the name of `newAddresses` (the address-change screen's strings); no identifier renders here"
-		},
-		{
 			"file": "apps/extension/src/components/LegalAcceptanceSheet.vue",
 			"expression": "termsVersion",
 			"branch": "visible",

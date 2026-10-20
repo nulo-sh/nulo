@@ -28,16 +28,21 @@ export interface TakeoverInput {
 /** A dApp window keeps its own flow: the takeover never covers it and a reset never routes it. */
 export const isDappWindow = (routeName: string | undefined): boolean => routeName?.startsWith("windows-") ?? false
 
+/** A route no full-screen surface covers: before a session, and in a dApp window. */
+export const isUncovered = (route: TakeoverRoute): boolean => isDappWindow(route.name) || PRE_SESSION.has(route.name ?? "")
+/** A route an idle full-screen surface yields to. */
+export const yieldsTo = (route: TakeoverRoute): boolean => YIELDING.some((r) => r.test(route.path))
+
 /** The view the takeover renders, or null when the route shows. A run covers every route but the
  *  pre-session ones and the dApp windows; an idle stale network yields to {@link YIELDING}, and one
  *  that resets by itself shows nothing. */
 export function takeoverView(input: TakeoverInput): StaleNetworkView | null {
 	const { route } = input
-	if (!input.logined || isDappWindow(route.name) || PRE_SESSION.has(route.name ?? "")) return null
+	if (!input.logined || isUncovered(route)) return null
 	if (input.running) return input.running
 	const { stale } = input
 	if (!stale || stale.networkId !== input.networkId || runsUnattended(stale)) return null
-	if (YIELDING.some((r) => r.test(route.path))) return null
+	if (yieldsTo(route)) return null
 	return stale
 }
 

@@ -872,6 +872,8 @@ export const firefoxDriver: BrowserDriver = {
 	pxeHostState: (page) => evaluateInBackgroundPage<PxeHostState>(page.browser(), PXE_HOST_STATE),
 	closePxeHost: async () => {},
 	stopBackground,
+	allowSelfRestart: async () => {},
+	backgroundOrigin: (browser) => backgroundTimeOrigin(browser),
 	backgroundAlive: async (browser) => (await backgroundTimeOrigin(browser)) !== undefined,
 	evaluateInBackground: (browser, _extensionId, body) => evaluateInBackgroundPage(browser, inPageRealm(body)),
 	// Firefox reports a closed window as a missing browsing context, per command.

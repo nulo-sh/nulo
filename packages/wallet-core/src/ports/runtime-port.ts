@@ -53,6 +53,9 @@ export interface RuntimePort {
 	 */
 	readonly lastError: { message: string } | undefined
 
+	/** Restart the extension. Every extension context ends, and both browsers start `storage.session` empty. */
+	reload(): void
+
 	/** Set the URL opened when the user uninstalls the extension. */
 	setUninstallURL(url: string): Promise<void>
 

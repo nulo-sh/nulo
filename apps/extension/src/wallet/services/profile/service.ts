@@ -2,7 +2,7 @@
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { toRestoreError } from "@/utils/restore-error"
-import type { BrowserApi, StorageArea } from "@nulo/wallet-core/ports"
+import type { BrowserApi, RuntimePort, StorageArea } from "@nulo/wallet-core/ports"
 import { feePicksKey, profileImportedKey, profileNotFirstKey, profileUiKeys, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { applyFeePickUpdate, type FeePickUpdate, parseFeePickUpdate } from "@/utils/fee-picks"
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
@@ -14,6 +14,7 @@ import {
 	AccountAddressInconsistencyError,
 	DuplicateWalletError,
 	InvalidPasswordError,
+	PasskeyProfileExistsError,
 	ProfileIdConflictError,
 	RecoveryModeError,
 	RestoreTornError,
@@ -273,11 +274,13 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	/** Restore-in-progress markers (torn-import detection at the unlock gate). */
 	private readonly restorePending: RestorePendingRepository
 	private readonly local: StorageArea
+	private readonly runtime: RuntimePort
 
 	public constructor(config: IConfig, logger: ILogger, browserApi: BrowserApi) {
 		super(PROFILE_SERVICE_NAME, logger)
 		this.repo = new ProfileRepository(browserApi)
 		this.local = browserApi.storage.local
+		this.runtime = browserApi.runtime
 		this.tombstones = new TombstoneRepository(this.local)
 		this.integrityBlocked = new AccountIntegrityBlockedRepository(this.local)
 		this.integrityStamps = new AccountIntegrityVerifiedStampRepository(this.local)
@@ -936,7 +939,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			recovery.finish?.("done")
 			return result
 		} catch (err) {
-			recovery.finish?.("failed")
+			recovery.finish?.(err instanceof PasskeyProfileExistsError ? "exists" : "failed")
 			throw err
 		}
 	}
@@ -950,12 +953,18 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// An explicit lock also ends every pending restore, before the close can fail: a
 			// stashed restore secret must not outlive the user's intent to lock.
 			this.sweepStalePendingRestore(Number.POSITIVE_INFINITY)
-			const emitted = await this.sessionManager.close()
+			const { emitted, recordKept } = await this.sessionManager.close()
 			// A restarted worker holds no in-memory session, so `close()` emits
 			// nothing. Memory is locked either way, and the popups that route on this
 			// event would stay rendered as authenticated, so it fires before the
 			// read-back below can throw, unless a successor's session is published by now.
 			if (!emitted && this.sessionHandle() === undefined) this.emit("onActiveProfileChanged", undefined)
+			// A lock leaves no session record for the next worker to restore: when every delete
+			// fails, a restart clears it, as both browsers start `storage.session` empty.
+			if (recordKept && this.sessionHandle() === undefined) {
+				this.logger.log(this.name, LogLevel.Error, "lock could not be saved; restarting the wallet")
+				this.runtime.reload()
+			}
 			// Post-close read-back: `close()` is memory-first and swallows a
 			// storage-delete failure (so clearLockAlarm always runs), but an
 			// explicit lock that leaves the persisted bearer alive would silently
@@ -2099,14 +2108,15 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 * Same-credential passkey duplicate is a HARD reject (the
 	 * userHandle check alone is not structural — WebAuthn may omit the userHandle, and restore
 	 * mints a fresh id then). Same credential ⇒ same PRF ⇒ same master: a pure footgun with no
-	 * legitimate use, unlike the warned same-phrase case.
+	 * legitimate use, unlike the warned same-phrase case. Typed, and runs before the id check:
+	 * only a live, readable row can be chosen from the profile list, so only it is named.
 	 */
 	private async assertNotDuplicateCredential(credentialId: string): Promise<void> {
-		const clash = (await this.repo.getAll()).some(
+		const clash = (await this.repo.getAll()).find(
 			(p) => !this.deletionState.isReserved(p.id) && p.type === "passkey" && p.credentialId === credentialId,
 		)
 		if (clash) {
-			throw new Error("Passkey profile already exists")
+			throw new PasskeyProfileExistsError(undefined, { existingProfileName: clash.name })
 		}
 	}
 
@@ -2185,12 +2195,13 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		try {
 			const dekSealed = await sealDekUnderWrapKey(dekWrapKey, dek)
 			return await this.runExclusive(async () => {
+				// Same-credential duplicate is a HARD reject regardless of userHandle presence
+				// (the userHandle check below is not structural — WebAuthn may omit it).
+				await this.assertNotDuplicateCredential(credentialId)
+				// A reserved or unreadable row, or another credential under this id: refused, untyped.
 				if (userHandle && ((await this.repo.contains(userHandle)) || this.deletionState.isReserved(userHandle))) {
 					throw new Error("Passkey profile already exists")
 				}
-				// Same-credential duplicate is a HARD reject regardless of userHandle presence
-				// (the userHandle check above is not structural — WebAuthn may omit it).
-				await this.assertNotDuplicateCredential(credentialId)
 				// Same-phrase-class (same-master) duplicate is the WARNED path.
 				const walletFingerprint = await this.assertNotDuplicateWallet(secret, allowDuplicate)
 
@@ -2517,12 +2528,12 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	): Promise<ProfileInfo> {
 		const { name, recovery, sourceDek, destinationDek, dekSealed, initialId, allowDuplicate } = input
 		let id = initialId
-		if (id && ((await this.repo.contains(id)) || this.deletionState.isReserved(id))) {
-			throw new Error("Passkey profile already exists")
-		}
 		// Same-credential duplicate is a HARD reject even when the userHandle is
 		// absent (restore would otherwise mint a fresh id for the same credential).
 		await this.assertNotDuplicateCredential(recovery.credentialId)
+		if (id && ((await this.repo.contains(id)) || this.deletionState.isReserved(id))) {
+			throw new Error("Passkey profile already exists")
+		}
 		// Same-master duplicate (theoretical cross-type case) is the WARNED path.
 		const walletFingerprint = await this.assertNotDuplicateWallet(recovery.secret, allowDuplicate)
 

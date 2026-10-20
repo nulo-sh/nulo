@@ -1,8 +1,10 @@
 import { mount } from "@vue/test-utils"
 import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
+import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { describe, expect, test, vi } from "vitest"
 import { trimAddress } from "@/utils/string"
+import { getNameDescriptor } from "@/wallet/services/token/functions/descriptors"
 import OperationCard from "./OperationCard.vue"
 
 const mounts = vi.hoisted(() => ({ count: 0 }))
@@ -184,6 +186,15 @@ describe("windows/execute/OperationCard — a token add", () => {
 	test("a name that differs from its symbol reads plainly, and decimals as a number", () => {
 		const w = mountTokenAdd({ tokenMetadata: { symbol: "TST", name: "TestToken", decimals: 18 } })
 		expect(VALUES.map((id) => w.get(`[data-testid='${id}']`).text())).toEqual(["TST", "TestToken", "18"])
+	})
+
+	test("an empty name and a blank symbol read as the empty-value dash", () => {
+		const name = getNameDescriptor.unpackResult!(0, [Fr.ZERO]) as string
+		const w = mountTokenAdd({ tokenMetadata: { symbol: ` ${String.fromCodePoint(0xa0)}`, name, decimals: 18 } })
+		const values = VALUES.map((id) => w.get(`[data-testid='${id}']`))
+		expect(values.map((value) => value.text())).toEqual(["—", "—", "18"])
+		expect(values[1]!.attributes("variant")).toBe("name")
+		expect(w.get("[data-testid='register-token-address']").attributes("data-address")).toBe(token)
 	})
 
 	test("a token whose details cannot be read points the person at Reject, since Confirm stays off", () => {
