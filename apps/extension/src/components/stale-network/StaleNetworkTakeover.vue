@@ -1,19 +1,19 @@
 <script setup lang="ts">
 /** Vendor */
-import type { GlyphName, TextColorName } from "@nulo/design"
 import type { PropType } from "vue"
 
 /** Components */
+import TakeoverLayout from "@/components/composite/TakeoverLayout.vue"
 import StaleNetworkConfirm from "./StaleNetworkConfirm.vue"
 
 /** Composables */
 import { useLockWallet } from "@/composables/useLockWallet"
 import { useNetworkActivation } from "@/composables/useNetworkActivation"
-import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { exportsHeld, neverOpened, STALE_NETWORK_KEY } from "@/composables/useStaleNetwork"
 
 /** Utils */
 import { managers } from "@/utils/core"
+import type { TakeoverAction as Action, TakeoverContent as Content, TakeoverLine as BoxLine } from "@/components/composite/takeover"
 import { type TakeoverScreen, takeoverScreen } from "@/popup/stale-takeover"
 import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
 import * as copy from "./copy"
@@ -43,28 +43,6 @@ const confirming = ref(false)
 const screen = computed(() =>
 	takeoverScreen(props.view, stale.running.value?.networkId === props.view.networkId, stale.nodeDown.value === props.view.networkId),
 )
-
-type Mark = "check" | "cross" | "swap"
-type BoxLine = { text: string; mark?: Mark; number?: number; testid?: string }
-/** `guarded`: a start, disabled while one is starting, in whichever slot it sits. The primary always is. */
-type Action = { text: string; testid: string; action: () => unknown; guarded?: boolean }
-type Content = {
-	eyebrow: { icon: GlyphName; text: string }
-	title: string
-	body: string
-	notice?: string
-	box?: { label?: string; lines: BoxLine[] }
-	note?: string
-	primary: Action
-	secondary?: Action
-	tertiary?: Action
-}
-
-const MARKS: Record<Mark, { icon: GlyphName; color: TextColorName }> = {
-	check: { icon: "check", color: "primary" },
-	cross: { icon: "close", color: "orange" },
-	swap: { icon: "swap", color: "txt-warning" },
-}
 
 const openNetworks = () => router.push("/popup/settings/networks")
 const openExport = () => router.push("/popup/settings/security/export/account")
@@ -181,7 +159,6 @@ function cause(view: StaleNetworkView): Content {
 }
 
 const content = computed(() => SCREENS[screen.value]?.(props.view))
-const outlined = computed(() => [content.value?.secondary, content.value?.tertiary].filter((a): a is Action => a !== undefined))
 /** A1 with the node line runs one line longer, so its gaps tighten to keep the buttons' margin. */
 const density = computed(() => {
 	if (props.view.switchToSeedNode && content.value?.box?.label) return "dense_tight"
@@ -248,144 +225,26 @@ onBeforeUnmount(() => {
 		<span :class="$style.note">{{ copy.progress(view.name).footer }}</span>
 	</Flex>
 
-	<Flex v-else-if="content" direction="column" :class="$style.screen" data-testid="stale-network-takeover" :data-screen="screen">
-		<div :class="$style.top_bar">
-			<button type="button" :class="$style.chip" data-testid="stale-network-chip" @click="openNetworks">
-				{{ copy.chipLabel(view.name) }}<span :class="$style.chip_square" />
-			</button>
-			<button type="button" :class="$style.chip" data-testid="stale-network-lock" aria-label="Lock wallet" @click="lock">
-				<Icon name="lock" :size="12" aria-hidden="true" />LOCK
-			</button>
-		</div>
-
-		<div :class="[$style.content, density && $style[density]]">
-			<div :class="$style.eyebrow">
-				<Icon :name="content.eyebrow.icon" :size="16" color="txt-warning" aria-hidden="true" />
-				<span :class="$style.eyebrow_text">{{ content.eyebrow.text }}</span>
-			</div>
-			<h1 :class="$style.title" data-testid="stale-network-title">{{ content.title }}</h1>
-			<p :class="$style.body">{{ content.body }}</p>
-			<div v-if="content.notice" :class="$style.notice" data-testid="stale-network-notice">{{ content.notice }}</div>
-			<div v-if="content.box" :class="$style.box" data-testid="stale-network-box">
-				<span v-if="content.box.label" :class="$style.box_label">{{ content.box.label }}</span>
-				<div v-for="line in content.box.lines" :key="line.text" :class="$style.line" :data-testid="line.testid">
-					<span v-if="line.number" :class="$style.number">{{ line.number }}</span>
-					<Icon v-else-if="line.mark" :name="MARKS[line.mark].icon" :size="14" :color="MARKS[line.mark].color" :class="$style.mark" aria-hidden="true" />
-					<span>{{ line.text }}</span>
-				</div>
-			</div>
-			<span v-if="content.note" :class="$style.note" data-testid="stale-network-note">{{ content.note }}</span>
-		</div>
-
-		<div :class="[$style.actions, density === 'dense_notice' && $style.actions_notice]">
-			<button
-				type="button"
-				:class="$style.primary"
-				:data-testid="content.primary.testid"
-				:disabled="stale.starting.value"
-				@keydown="refuseRepeatEnter"
-				@click="content.primary.action"
-			>
-				{{ content.primary.text }}
-			</button>
-			<button
-				v-for="action in outlined"
-				:key="action.testid"
-				type="button"
-				:class="$style.secondary"
-				:data-testid="action.testid"
-				:disabled="action.guarded && stale.starting.value"
-				@keydown="action.guarded && refuseRepeatEnter($event)"
-				@click="action.action"
-			>
-				{{ action.text }}
-			</button>
-		</div>
-
+	<TakeoverLayout
+		v-else-if="content"
+		:content="content"
+		:chip="copy.chipLabel(view.name)"
+		flagged
+		:busy="stale.starting.value"
+		:density="density"
+		testid-prefix="stale-network"
+		:data-screen="screen"
+		@chip="openNetworks"
+		@lock="lock"
+	>
 		<StaleNetworkConfirm :show="confirming" :view="view" @onClose="confirming = false" @confirm="confirmReset" />
-	</Flex>
+	</TakeoverLayout>
 </template>
 
 <style module>
-.screen {
-	flex: 1;
-	min-height: 0;
-	background: var(--app-bg);
-}
-
-.top_bar {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	padding: 14px 16px;
-	border-bottom: 1px solid var(--hairline-strong);
-}
-
-.chip {
-	composes: type--label-section from global;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	max-width: 60%;
-	padding: 7px 10px;
-	color: var(--txt-primary);
-	background: transparent;
-	border: 1px solid var(--nulo-outline);
-	cursor: pointer;
-}
-
-.chip:focus-visible,
-.primary:focus-visible,
-.secondary:focus-visible {
-	outline: 2px solid var(--nulo-accent);
-	outline-offset: 2px;
-}
-
-.chip_square {
-	flex: none;
-	width: 7px;
-	height: 7px;
-	background: var(--yellow);
-}
-
-.content {
-	flex: 1;
-	min-height: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 14px;
-	padding: 22px 20px 0;
-	overflow-y: auto;
-}
-
-.content.dense_notice {
-	gap: 13px;
-	padding-top: 20px;
-}
-
-.content.dense_tight {
-	gap: 11px;
-	padding-top: 18px;
-}
-
-.eyebrow {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-
 .eyebrow_text {
 	composes: type--meta from global;
 	color: var(--txt-secondary);
-}
-
-.title {
-	composes: type--row-title from global;
-	margin: 0;
-	font-size: 26px;
-	line-height: 1.15;
-	color: var(--txt-primary);
-	overflow-wrap: anywhere;
 }
 
 .title_progress {
@@ -403,92 +262,9 @@ onBeforeUnmount(() => {
 	color: var(--txt-body);
 }
 
-.notice {
-	composes: type--body from global;
-	padding: 10px 12px;
-	line-height: 1.45;
-	color: var(--txt-warning);
-	background: color-mix(in srgb, var(--yellow) 7%, transparent);
-	border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent);
-}
-
-.box {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	padding: 14px;
-	background: var(--card-bg);
-	border: 1px solid var(--border);
-}
-
-.dense_tight .box {
-	gap: 8px;
-	padding: 12px 14px;
-}
-
-.box_label {
-	composes: type--meta from global;
-	color: var(--txt-secondary);
-}
-
-.line {
-	composes: type--body from global;
-	display: flex;
-	align-items: flex-start;
-	gap: 10px;
-	line-height: 1.45;
-	color: var(--txt-primary);
-}
-
-.mark {
-	margin-top: 2px;
-}
-
-.number {
-	composes: type--meta from global;
-	flex: none;
-	width: 14px;
-	text-align: center;
-	color: var(--txt-warning);
-}
-
 .note {
 	composes: type--body from global;
 	color: var(--txt-secondary);
-}
-
-.actions {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	padding: 16px 20px 20px;
-}
-
-.actions_notice {
-	padding-top: 14px;
-}
-
-.primary {
-	composes: type--button from global;
-	height: 48px;
-	cursor: pointer;
-	color: var(--txt-inverse);
-	background: var(--nulo-accent);
-	border: 0;
-}
-
-.primary:disabled {
-	cursor: default;
-	opacity: 0.6;
-}
-
-.secondary {
-	composes: type--button from global;
-	height: 48px;
-	cursor: pointer;
-	color: var(--txt-primary);
-	background: transparent;
-	border: 1px solid var(--nulo-outline);
 }
 
 .progress {

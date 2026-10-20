@@ -192,6 +192,18 @@ export interface BrowserDriver {
 	 * Rejects by name when no background runs, or when it outlives the call.
 	 */
 	stopBackground(browser: Browser, extensionId: string): Promise<void>
+	/**
+	 * Let the extension restart itself (`runtime.reload()`) and come back, as a store install does.
+	 * Chrome checks an unpacked extension again when it reloads and, with developer mode off,
+	 * leaves it disabled; Firefox reloads a temporary add-on in place.
+	 */
+	allowSelfRestart(browser: Browser): Promise<void>
+	/**
+	 * The running background's `performance.timeOrigin`, or undefined while none runs; a newer value
+	 * is a new instance. After a restart Chrome can list the dead worker's target beside its
+	 * successor's, and attaching to the dead one never answers.
+	 */
+	backgroundOrigin(browser: Browser, extensionId: string): Promise<number | undefined>
 	/** Whether a background instance runs right now. Both browsers reap an idle one. */
 	backgroundAlive(browser: Browser, extensionId: string): Promise<boolean>
 	/**
@@ -297,7 +309,14 @@ export const pxeHostState = (page: Page): Promise<PxeHostState> => driver.pxeHos
 export const closePxeHost = (page: Page): Promise<void> => driver.closePxeHost(page)
 export const stopBackground = (owner: BackgroundOwner): Promise<void> =>
 	standing.whileReleased(owner.browser, () => driver.stopBackground(owner.browser, owner.extensionId))
+export const allowSelfRestart = (browser: Browser): Promise<void> => driver.allowSelfRestart(browser)
+export const backgroundOrigin = (owner: BackgroundOwner): Promise<number | undefined> =>
+	driver.backgroundOrigin(owner.browser, owner.extensionId)
 export const backgroundAlive = (owner: BackgroundOwner): Promise<boolean> => driver.backgroundAlive(owner.browser, owner.extensionId)
+/** Runs `run`, which ends the background, with the launch's interceptions let go as `stopBackground`
+ *  does, and re-arms them after it for the background that replaces it. */
+export const withInterceptionsReleased = <T>(owner: BackgroundOwner, run: () => Promise<T>): Promise<T> =>
+	standing.whileReleased(owner.browser, run)
 /** Stops a live background; false, with a warning, when the browser already stopped it. A failed
  *  kill still throws. */
 export const stopBackgroundIfAlive = async (owner: BackgroundOwner): Promise<boolean> => {

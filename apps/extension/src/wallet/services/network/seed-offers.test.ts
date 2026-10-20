@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { KINDS_SEEDED_BEFORE_RECORD, seedsToOffer } from "./seed-offers"
+import { KINDS_SEEDED_BEFORE_RECORD, normalizeSeedOffers, sameSeedOffers, seedsToOffer } from "./seed-offers"
 import { DEFAULT_SEEDS, type DefaultSeed } from "./seeds"
 import type { ChainKind } from "./spec"
 
@@ -56,6 +56,31 @@ describe("seedsToOffer", () => {
 
 	test("a corrupt record on a profile with rows adds and records nothing", () => {
 		expect(seedsToOffer(SEEDS, { kind: "corrupt" }, [{ kind: "testnet", chainId: 100 }])).toBeNull()
+	})
+
+	test("a profile with networks announces a seed added to it and one a row of its kind holds, and keeps the record's", () => {
+		const added = seedsToOffer(SEEDS, absent, [{ kind: "testnet", chainId: 100 }])
+		expect(added?.announce).toEqual(["mainnet"])
+		const held = seedsToOffer(SEEDS, { kind: "valid", value: { offered: ["testnet"], announce: ["mainnet"] } }, [
+			{ kind: "testnet", chainId: 100 },
+			{ kind: "local", chainId: 999 },
+		])
+		expect(held?.announce).toEqual(["local", "mainnet"])
+	})
+
+	test("a custom row on a seed's chain announces nothing, and neither does an empty profile", () => {
+		const custom = seedsToOffer(SEEDS, absent, [
+			{ kind: "testnet", chainId: 100 },
+			{ kind: "custom", chainId: 200 },
+		])
+		expect(custom?.announce).toEqual([])
+		expect(seedsToOffer(SEEDS, { kind: "valid", value: { offered: [], announce: ["mainnet"] } }, [])?.announce).toEqual([])
+	})
+
+	test("a record is stored sorted, deduplicated, and with no announce key while it names nothing", () => {
+		expect(normalizeSeedOffers({ offered: ["testnet", "local", "testnet"], announce: [] })).toEqual({ offered: ["local", "testnet"] })
+		expect(sameSeedOffers({ offered: ["testnet", "local"] }, { offered: ["local", "testnet"], announce: [] })).toBe(true)
+		expect(sameSeedOffers({ offered: ["local"] }, { offered: ["local"], announce: ["mainnet"] })).toBe(false)
 	})
 
 	test("pins: the pre-record kinds, and one seed per kind and per chain", () => {
