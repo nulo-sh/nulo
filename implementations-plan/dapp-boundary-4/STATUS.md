@@ -9,3 +9,4 @@
 - 2026-10-20 Phase 4 gate pass: dispatcher.test.ts 277/277 (reachability pins unchanged); view-executor.test.ts 32/32, the five metadata cases red against the base copy; lint 0; typecheck:all 0.
 - 2026-10-20 Phase 5 gate pass: only SECURITY.md changed; test:ci-gating 640/640.
 - 2026-10-20 Phase 6: test:all red once on the type-roles producer digest of dispatcher.ts; re-attested (no new action-carrying or window-bound operation) and re-pinned; inventory.test.ts 10/10.
+- 2026-10-20 Phase 6 gate pass on the final head: lint 0, typecheck:all 0, test:all 0, test:ci-gating 640/640; Chrome 6 files green, Firefox 4 files green, retry 0. Arc review: Codex approve (round 2), Opus conditional approve, applied. PR next.

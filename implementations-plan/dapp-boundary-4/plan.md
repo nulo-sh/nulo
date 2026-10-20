@@ -1,7 +1,7 @@
 ---
 plan: dapp-boundary-4
 tier: mid
-status: planned, final Codex pass approve; arc 1 in progress
+status: planned, final Codex pass approve; arc 1 in review
 issues: none open; #966 and #967 are closed known limits the arc 1 PR references
 driver: claude-code
 claude_model: opus
@@ -162,7 +162,7 @@ Every gate runs from the worktree root and also runs `bun run lint` and `bun run
 - In `SECURITY.md` § Storage privacy, add one sentence. It says each dApp-session row carries a MAC keyed from the profile's keys, which stops a forged row and a row replayed under another id or profile. It does not stop a writer with storage access from putting back an earlier authentic row of the same key (#967). In the content-script note, name a Firefox content script as such a writer, pointing at that sentence.
 - **Gate:** `git diff --stat` shows only `SECURITY.md` for this phase; `bun run test:ci-gating` exits 0.
 
-### Phase 6: arc gate
+### Phase 6: arc gate ✓
 
 - **Commands:** `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run test:ci-gating`. Then two network runs through `agent.sh`, one at a time in this worktree:
   - Chrome: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/contracts-getMetadata.test.ts tests/e2e/network/contracts-getClassMetadata.test.ts tests/e2e/network/batch-mixed.test.ts tests/e2e/network/contracts-register.test.ts tests/e2e/network/public-events-capability.test.ts tests/e2e/network/incoming-public-transfers.test.ts`
