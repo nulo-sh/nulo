@@ -1,7 +1,7 @@
 ---
 plan: capture-hang-1
 tier: light
-status: arc 1 implemented, gate green, Codex loop converged; PR pending
+status: completed; #908 in review
 issues: "#885 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 24399338
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** completed. #908 closes #885; its merge into `dev` closes the plan.
+- **Shipped:** `connect-verify-mismatch`'s reconnect case brings the wallet tab to the front before its settings steps and the playground back before its disconnect; `shotSend` refuses a page that is not shown, in capture mode only, before any wait or capture; `shotSend` and `settleThemeTransitions` live in the leaf `fixtures/shots.ts`, re-exported from `send-page.ts` (D6); a three-case unit test; the README rows, the `chrome.ts` flag comment and the e2e skill's `NULO_E2E_SHOT_DIR` row.
+- **Dropped:** `shotSend` fronting the page itself, Chrome windows instead of tabs, and an always-on guard (trade-offs, D2, D3).
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted to `lessons.md`, which is at its 8 KiB budget; the gotcha (a hidden Chrome tab draws no frame, and its capture can hang) lives in the e2e skill's env-var table, its home per CLAUDE.md's routing table.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # capture-hang-1: photograph only a page that is shown
 
