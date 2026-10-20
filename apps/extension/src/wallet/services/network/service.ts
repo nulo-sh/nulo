@@ -18,7 +18,8 @@ import { requireOwnedRow } from "@/wallet/services/require-owned-row"
 import { nextRandomId, randomIdNotIn } from "@/wallet/services/id-allocators"
 import { purgeMalformedRows } from "@/wallet/services/purge-rows"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
-import { EntityStorage } from "@/wallet/storage"
+import type { EntityStorage } from "@/wallet/storage"
+import { entityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { EventHandler, isLoopbackHost } from "@nulo/wallet-core/utils"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
@@ -49,12 +50,12 @@ import {
 	type NetworkEndpoint,
 	type NetworkInfo,
 	NETWORK_SERVICE_NAME,
-	NETWORK_STORAGE_ROOT,
 	NetworkMethodSchemas,
 	networkInfoFrom,
 	NodeStatus,
-	NetworkRowSchema,
 	primaryEndpointUrl,
+	ACTIVE_NETWORK_STORAGE_ROOT,
+	decodeActiveNetworkId,
 } from "./spec"
 
 export * from "./spec"
@@ -65,8 +66,7 @@ export { LOCAL_NETWORK_RPC_URL } from "./seeds"
  * which left it to UI / chrome.storage.local). UI reads via
  * `getActiveNetwork()`. Stored as a single value per profile.
  */
-const ACTIVE_KEY_PREFIX = "nulo:core:active-network@"
-const activeKey = (profileId: string) => `${ACTIVE_KEY_PREFIX}${profileId}`
+const activeKey = (profileId: string) => `${ACTIVE_NETWORK_STORAGE_ROOT}@${profileId}`
 
 /**
  * Strict RPC-URL equality that tolerates trailing-slash and casing differences
@@ -240,7 +240,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		nodeFactory?: NodeFactory,
 	) {
 		super(NETWORK_SERVICE_NAME, logger)
-		this.storage = new EntityStorage<Network>(NETWORK_STORAGE_ROOT, browserApi.storage.local, (raw) => NetworkRowSchema.parse(raw))
+		this.storage = entityStorage("networks", browserApi.storage.local)
 		this.staleNetworks = new StaleNetworkRepository(browserApi.storage.local)
 		// Watchdog DISABLED: deleteNetwork legitimately holds this lock across
 		// purgeChain → clearChainState, which rides the 30-minute prove-tx
@@ -1336,8 +1336,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	private async _readActive(profileId: string): Promise<string | undefined> {
 		const r = await this.browserApi.storage.local.get(activeKey(profileId))
-		const raw = r[activeKey(profileId)]
-		return typeof raw === "string" ? raw : undefined
+		return decodeActiveNetworkId(r[activeKey(profileId)])
 	}
 
 	private async _writeActive(profileId: string, networkId: string): Promise<void> {

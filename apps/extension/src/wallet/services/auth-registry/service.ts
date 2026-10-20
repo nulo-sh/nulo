@@ -23,15 +23,14 @@ import type { WrappedTask } from "@/wallet/services/task/wrapped-task"
 import { TaskService, RevokeAuthwitsContent, StepContent } from "@/wallet/services/task/service"
 import { TransactionService, OriginType } from "@/wallet/services/transaction/service"
 import { type Tx, TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
-import { EntityStorage } from "@/wallet/storage"
+import type { EntityStorage } from "@/wallet/storage"
+import { entityStorage } from "@/wallet/storage/stores"
 import { array_max, Lock, sleep } from "@/wallet/utils"
 import { getAuthRegistryAddress, isAuthRegistryEnabled, isAuthwitConsumable } from "@/wallet/utils/auth-registry"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import {
-	AUTH_REGISTRY_ENABLED_STORAGE_ROOT,
 	AUTH_REGISTRY_SERVICE_NAME,
-	AUTH_REGISTRY_STORAGE_ROOT,
 	type Authwit,
 	type AuthwitRegistryScope,
 	authwitStatusRowId,
@@ -40,7 +39,6 @@ import {
 	MAX_TRACKED_AUTHWITS_PER_ACCOUNT,
 	type Methods,
 	AuthwitSchema,
-	AuthwitStatusSchema,
 	parseAuthwitStatusRowId,
 	type SendStarted,
 } from "./spec"
@@ -121,18 +119,8 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		// storage key from the row's embedded id — so a raw-storage row copied under a foreign
 		// key (id aliasing) would make revoke/delete/reconcile operate on the wrong row. The
 		// id/key guard hides such rows at read time; honest rows always agree.
-		this.authwits = new EntityStorage<Authwit>(
-			AUTH_REGISTRY_STORAGE_ROOT,
-			browserApi.storage.local,
-			(raw) => AuthwitSchema.parse(raw),
-			{
-				requireKeyIdentityMatch: true,
-				keyIdentityMode: "numeric",
-			},
-		)
-		this.statuses = new EntityStorage<boolean>(AUTH_REGISTRY_ENABLED_STORAGE_ROOT, browserApi.storage.local, (raw) =>
-			AuthwitStatusSchema.parse(raw),
-		)
+		this.authwits = entityStorage("authRegistry", browserApi.storage.local)
+		this.statuses = entityStorage("authRegistryEnabled", browserApi.storage.local)
 	}
 
 	/** An unknown speed level is refused before the method runs; fee math never reads one. */

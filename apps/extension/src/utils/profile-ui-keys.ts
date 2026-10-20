@@ -5,10 +5,15 @@
  * that id is adopted again never reaches the new profile; a write after the adoption does.
  */
 
-const PINNED_TOKENS_PREFIX = "nulo:ui:pinnedTokens@"
-const FEE_PICKS_PREFIX = "nulo:ui:feePaymentMethods@"
-const SEND_FEE_PICKS_PREFIX = "nulo:ui:sendFeePaymentMethods@"
-const RESTORE_OUTCOME_PREFIX = "nulo:ui:restoreOutcome@"
+export const PINNED_TOKENS_ROOT = "nulo:ui:pinnedTokens"
+export const FEE_PICKS_ROOT = "nulo:ui:feePaymentMethods"
+export const SEND_FEE_PICKS_ROOT = "nulo:ui:sendFeePaymentMethods"
+export const RESTORE_OUTCOME_ROOT = "nulo:ui:restoreOutcome"
+
+const PINNED_TOKENS_PREFIX = `${PINNED_TOKENS_ROOT}@`
+const FEE_PICKS_PREFIX = `${FEE_PICKS_ROOT}@`
+const SEND_FEE_PICKS_PREFIX = `${SEND_FEE_PICKS_ROOT}@`
+const RESTORE_OUTCOME_PREFIX = `${RESTORE_OUTCOME_ROOT}@`
 
 /** Each prefix ends in `@`, so a key is its prefix followed by one whole profile id. */
 export const PROFILE_UI_KEY_PREFIXES: readonly string[] = [

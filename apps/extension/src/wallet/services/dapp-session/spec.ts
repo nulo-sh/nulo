@@ -10,6 +10,9 @@ import {
 
 export const DAPP_SESSION_SERVICE_NAME = "dapp-session"
 
+/** EntityStorage root for dApp session rows. Frozen: renaming detaches every connected session. */
+export const DAPP_SESSION_STORAGE_ROOT = "nulo:core:dappSessions"
+
 /**
  * Capability + scope types + AccessLevel + DappPermissions live in
  * `@nulo/wallet-bridge` (they belong to the wallet-sdk dispatcher layer,
@@ -92,8 +95,10 @@ export const DappSessionSchema: z.ZodType<DappSession> = z.object({
 	 *  delete each row that carries it. */
 	trustedVerification: z.boolean().optional(),
 	accountAliases: z.record(z.string(), z.string()).optional(),
-	capabilityGrants: z.array(z.custom<GrantedCapabilityRecord>(tolerantRecord)).optional(),
-	capabilityRejections: z.array(z.custom<RejectedCapabilityRecord>(tolerantRecord)).optional(),
+	capabilityGrants: z.array(z.custom<GrantedCapabilityRecord>(tolerantRecord).describe("any non-null object, kept as stored")).optional(),
+	capabilityRejections: z
+		.array(z.custom<RejectedCapabilityRecord>(tolerantRecord).describe("any non-null object, kept as stored"))
+		.optional(),
 	authorizationsWithoutAsking: z.object({ broad: z.boolean() }).strict().optional(),
 	// The per-row integrity tag. Written by `DappSessionMacStorage`, which
 	// wraps this store — the schema MUST carry it so the boundary codec doesn't
