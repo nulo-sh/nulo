@@ -145,7 +145,7 @@ const RESTART_BUDGET_MS = 30_000
  * before it, is closed, as both browsers close every extension page when the extension unloads, and
  * a background newer than the one that ran before `restart` runs. A background restart alone
  * closes no page, so it never satisfies this. The launch's interceptions are let go before the
- * restart and re-armed once the pages close, so the successor starts under them.
+ * restart and re-armed once the pages close, before the wait for the successor.
  */
 export async function waitForExtensionRestart(owner: BackgroundOwner, openPage: Page, restart: () => Promise<void>): Promise<void> {
 	const before = await backgroundOrigin(owner)
