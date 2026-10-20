@@ -23,7 +23,7 @@ post_implementation_hardening: not scheduled
 - **Dispositions:** the brief's "transaction and receipt pages' titles" did not hold (neither title carries the symbol; the transaction page's banner is a sentence); its "settings and token pages have no colocated tests" did not hold (each got a case). C3's owner ask was declined on D3's argument; the final Codex pass agreed.
 - **Known limits:** none new; #931 still covers glyphs that draw nothing.
 - **Open items:** #949 (OA-1, `owner-decision`: a blank symbol inside a sentence, and Send's unit toggle).
-- **Lessons:** one line promoted to `lessons.md` (a long Bash call is moved to the background and then stopped).
+- **Lessons:** none promoted: `lessons.md` sits at its budget after another plan's promotion; the harness note (a long Bash call is moved to the background, then stopped) stays in `lessons/phase-3.md`.
 - **Size:** about 175 lines against the light target of 150: the 13-site change map and five audit rows.
 - **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
