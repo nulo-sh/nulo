@@ -12,7 +12,11 @@
  * Testnet is the stand-in node, so it holds only what a person can hold there without one: derived
  * and imported accounts. Everything that needs a chain lives on a network added on the run's sandbox.
  *
- * Runtime: estimated 6 min on Chrome, 9 min on Firefox.
+ * Not populated: fee picks, pinned tokens, the auth registry, a deleted profile, a restore, and the
+ * token list and prices (the egress guard blocks both).
+ *
+ * Runtime: estimated 6 min on Chrome, 9 min on Firefox; measured 162 s and 186 s, the release's real
+ * proof of the account's deployment included.
  */
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
@@ -237,7 +241,7 @@ async function expectAccounts(page: Page, names: readonly string[]): Promise<voi
 }
 
 async function verify(ctx: ExtensionContext, populated: Populated): Promise<void> {
-	expect(await updateProblems(populated.before, await readLocalStorage(ctx))).toEqual([])
+	expect(await updateProblems(populated.before, await readLocalStorage(ctx), { balancesAsserted: true })).toEqual([])
 
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/auth", 30_000)
@@ -269,7 +273,7 @@ async function verify(ctx: ExtensionContext, populated: Populated): Promise<void
 	expect(await shownOverlays(page)).toEqual([])
 	await page.close()
 
-	expect(await updateProblems(populated.before, await readLocalStorage(ctx))).toEqual([])
+	expect(await updateProblems(populated.before, await readLocalStorage(ctx), { balancesAsserted: true })).toEqual([])
 }
 
 test.skipIf(!process.env.NULO_E2E_UPDATE_FROM || !aztecConfig)(

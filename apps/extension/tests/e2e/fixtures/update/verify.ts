@@ -58,16 +58,22 @@ const QUEUES: ReadonlySet<StoredShapeName> = new Set<StoredShapeName>(["incoming
 
 /**
  * Why `after`, the storage a build booted over `before`, does not still hold and read `before`: a
- * key the update lost (a drained queue row is not lost), a refusal the boot wrote, or a row of
- * `after` that does not read under this build's registry. Empty when it does.
+ * key the update lost, a refusal the boot wrote, or a row of `after` that does not read under this
+ * build's registry. Empty when it does. A drained queue row counts as lost unless
+ * `balancesAsserted`: the caller asserts every balance such a row would refresh, so a row dropped
+ * before its refresh shows there as a stale balance.
  */
-export async function updateProblems(before: Record<string, unknown>, after: Record<string, unknown>): Promise<string[]> {
+export async function updateProblems(
+	before: Record<string, unknown>,
+	after: Record<string, unknown>,
+	opts: { balancesAsserted?: true } = {},
+): Promise<string[]> {
+	const drained = (key: string) => {
+		const name = shapeOfKey(key)
+		return opts.balancesAsserted === true && name !== undefined && QUEUES.has(name)
+	}
 	const lost = Object.keys(before)
-		.filter((key) => !key.startsWith(FIXTURE_PREFIX) && !(key in after))
-		.filter((key) => {
-			const name = shapeOfKey(key)
-			return name === undefined || !QUEUES.has(name)
-		})
+		.filter((key) => !key.startsWith(FIXTURE_PREFIX) && !(key in after) && !drained(key))
 		.map((key) => `${key}: lost in the update`)
 	const refused = Object.keys(after)
 		.filter((key) => {

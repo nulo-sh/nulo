@@ -25,10 +25,9 @@ describe("updateProblems", () => {
 		expect(await updateProblems(stored, stored)).toEqual([])
 	})
 
-	test("names a lost key, a refusal the boot wrote, an unclaimed key and a row its read refuses, not a drained queue row", async () => {
+	test("names a lost key, a refusal the boot wrote, an unclaimed key and a row its read refuses", async () => {
 		const { held: before, refusals } = await storedGoldens("minimal")
-		const outbox = Object.keys(before).find((key) => key.startsWith("nulo:core:incoming-balance-outbox@"))
-		expect(outbox).toBeDefined()
+		const outbox = Object.keys(before).find((key) => key.startsWith("nulo:core:incoming-balance-outbox@")) as string
 		const blocked = "nulo:core:account-integrity-blocked@b04e6d18"
 		const after: Record<string, unknown> = {
 			...before,
@@ -37,12 +36,18 @@ describe("updateProblems", () => {
 			"nulo:unknown": 1,
 		}
 		delete after["nulo:core:profiles@b04e6d18"]
-		delete after[outbox as string]
-		expect(await updateProblems(before, after)).toEqual([
-			"nulo:core:profiles@b04e6d18: lost in the update",
+		delete after[outbox]
+		const others = [
 			"nulo:core:account-integrity-blocked@b04e6d18: the boot refused what it found",
 			"nulo:core:accounts@x: the accounts read returns nothing",
 			"nulo:unknown: no registered shape claims it",
+		]
+		const lost = (keys: string[]) => keys.sort().map((key) => `${key}: lost in the update`)
+		expect(await updateProblems(before, after)).toEqual([...lost([outbox, "nulo:core:profiles@b04e6d18"]), ...others])
+		// A drained outbox row is excused only where the caller asserts the balances it refreshes.
+		expect(await updateProblems(before, after, { balancesAsserted: true })).toEqual([
+			...lost(["nulo:core:profiles@b04e6d18"]),
+			...others,
 		])
 	})
 })
