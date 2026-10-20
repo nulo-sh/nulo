@@ -209,7 +209,7 @@ describe("SessionManager", () => {
 			expect(emits.at(-1)).toBeUndefined()
 			expect(dek.every((b) => b === 0)).toBe(true)
 			gate.resolve()
-			await closing
+			await expect(closing).resolves.toEqual({ emitted: true, recordKept: false })
 
 			expect(remove).toHaveBeenCalledTimes(2)
 			expect(SESSION_STORAGE_ROOT in (await api.storage.session.get(SESSION_STORAGE_ROOT))).toBe(false)
@@ -218,15 +218,18 @@ describe("SessionManager", () => {
 			await expect(restarted.getActive()).resolves.toBeUndefined()
 		})
 
-		test("close(): a delete that keeps failing is attempted twice; memory stays locked and the lock alarm is cleared", async () => {
+		test("close(): a delete that keeps failing is attempted twice and the record reported kept; memory stays locked and the lock alarm is cleared", async () => {
 			const { api, manager } = setup()
 			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
 			const { fakeBrowser } = await import("@webext-core/fake-browser")
 			expect(await fakeBrowser.alarms.get(SESSION_TTL_ALARM_NAME)).toBeDefined()
 			const remove = vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("storage remove failed"))
+			// Every close but the person's lock (expiry, integrity, deletion) ends here: none restarts.
+			const reload = vi.spyOn(api.runtime, "reload")
 
-			await manager.close()
+			await expect(manager.close()).resolves.toEqual({ emitted: true, recordKept: true })
 
+			expect(reload).not.toHaveBeenCalled()
 			expect(remove).toHaveBeenCalledTimes(2)
 			expect(manager.isActive("pid")).toBe(false)
 			await expect(manager.getActive()).resolves.toBeUndefined()
@@ -334,7 +337,7 @@ describe("SessionManager", () => {
 
 		test("is a no-op (no emit) when already closed", async () => {
 			const { emits, manager } = setup()
-			await expect(manager.close()).resolves.toBe(false)
+			await expect(manager.close()).resolves.toEqual({ emitted: false, recordKept: false })
 			expect(emits).toEqual([])
 		})
 
@@ -342,7 +345,7 @@ describe("SessionManager", () => {
 			const { emits, manager } = setup()
 			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
 			emits.length = 0
-			await expect(manager.close()).resolves.toBe(true)
+			await expect(manager.close()).resolves.toEqual({ emitted: true, recordKept: false })
 			expect(emits).toEqual([undefined])
 		})
 
@@ -353,7 +356,7 @@ describe("SessionManager", () => {
 			const { api } = setup()
 			await seedSession(api, { profile: "pid", since: Date.now(), lockedAt: Date.now() + 60_000 })
 			const { emits, manager } = setupFromExistingApi(api)
-			await expect(manager.close()).resolves.toBe(false)
+			await expect(manager.close()).resolves.toEqual({ emitted: false, recordKept: false })
 			expect(emits).toEqual([])
 			const raw = await api.storage.session.get(SESSION_STORAGE_ROOT)
 			expect(SESSION_STORAGE_ROOT in raw).toBe(false)

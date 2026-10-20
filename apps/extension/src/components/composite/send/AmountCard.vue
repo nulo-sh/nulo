@@ -24,6 +24,8 @@ const props = defineProps({
 	liveQuote: { type: Object, required: false, default: null },
 	/** Proxy ticker for honest labeling (e.g. "USDC" → `≈ $12.34 via USDC`). */
 	proxyTicker: { type: String, required: false, default: null },
+	/** The page's amount gate found the amount above a balance it read; the card only draws it. */
+	exceedsBalance: { type: Boolean, default: false },
 })
 
 /** Token amount string — ALWAYS the value that validates + sends, in both
@@ -50,6 +52,7 @@ let commaPoint = false
 /** The text the card last wrote or the page last set: the prior text of the next edit. */
 let lastText = String(model.value ?? "")
 
+const overBalanceId = useId()
 const inputEl = useTemplateRef("inputEl")
 const fieldRuler = useTemplateRef("fieldRuler")
 const amountRow = useTemplateRef("amountRow")
@@ -435,6 +438,8 @@ const handleFiatBalanceAction = (divisor) => {
 						@blur="handleFiatBlur"
 						:disabled="!tokenBalanceByType"
 						placeholder="0.00"
+						:aria-invalid="exceedsBalance"
+						:aria-describedby="exceedsBalance ? overBalanceId : undefined"
 						data-testid="send-amount-fiat-input"
 						:class="[$style.input_field, $style.field_type]"
 						:style="{ '--hero-scale': fieldScale }"
@@ -448,6 +453,8 @@ const handleFiatBalanceAction = (divisor) => {
 						@blur="handleAmountBlur"
 						:disabled="!tokenBalanceByType"
 						placeholder="0.00"
+						:aria-invalid="exceedsBalance"
+						:aria-describedby="exceedsBalance ? overBalanceId : undefined"
 						data-testid="send-amount-input"
 						:class="[$style.input_field, $style.field_type]"
 						:style="{ '--hero-scale': fieldScale }"
@@ -521,6 +528,18 @@ const handleFiatBalanceAction = (divisor) => {
 			<span v-else-if="wasClamped && tokenDecimals !== undefined" :class="$style.clamp_hint" data-testid="send-amount-clamp-hint">
 				{{ token.symbol || "Token" }} supports {{ tokenDecimals }} decimal{{ tokenDecimals === 1 ? "" : "s" }}
 			</span>
+			<!-- Last, so a hint keeps its place; an alert, so the line is heard as it appears. -->
+			<Text
+				v-if="exceedsBalance"
+				:id="overBalanceId"
+				variant="body"
+				color="txt-danger"
+				role="alert"
+				:class="$style.over_balance"
+				data-testid="send-amount-over-balance"
+			>
+				More than your balance
+			</Text>
 		</Flex>
 	</Flex>
 </template>
@@ -636,6 +655,10 @@ const handleFiatBalanceAction = (divisor) => {
 .clamp_hint {
 	composes: type--meta from global;
 	color: var(--nulo-secondary);
+	padding-top: 4px;
+}
+
+.over_balance {
 	padding-top: 4px;
 }
 
