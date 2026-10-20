@@ -1,6 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { defineComponent, h, nextTick, ref } from "vue"
+import { sendEvent } from "../../../tests/helpers/send-event"
 
 type Options = Record<string, unknown>
 type FakeTrap = {
@@ -245,7 +246,9 @@ describe("Popup", () => {
 		press(inside, "mousedown", 2)
 		press(inside, "click", 2)
 		expect(clicks).toEqual([0, 1, 2])
-		press(closeArea, "click", 1)
+		// The close area's own listener comes after the sheet's, so a raw click in this render's
+		// millisecond would never reach it.
+		sendEvent(closeArea!, "click")
 		expect(w.emitted("onClose")).toEqual([[]])
 		w.unmount()
 	})

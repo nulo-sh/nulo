@@ -184,7 +184,7 @@
 	--json-bool: #1e754f;
 
 	--log-background: #f5f5f7;
-	--log-warn-color: #c38700;
+	--log-warn-color: var(--txt-warning);
 	--log-warn-background: #fff8e1;
 	--log-error-color: var(--txt-danger);
 	--log-error-background: #ffebee;
