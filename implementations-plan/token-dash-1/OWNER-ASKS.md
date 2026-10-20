@@ -9,4 +9,4 @@
   - B. The same dash wherever the stored name or symbol shows, in a later lane with its own pictures.
 - **Recommendation:** A. Activity and Send rows put the symbol after the amount, so a dash there ("1.5 —") would read as an unknown amount, the meaning the dash already has on Home and in Send.
 - **What ships now:** A. Only the Register token card changes.
-- **Blocks arc 1:** no.
+- **Blocks arc 1:** no. Filed as #932 (`owner-decision`).

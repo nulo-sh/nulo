@@ -1,7 +1,7 @@
 ---
 plan: token-dash-1
 tier: light (the lane brief's call; one Codex audit round-trip plus one Opus Plan lens, then a fresh Codex pass)
-status: planned (final Codex approve)
+status: closed (arc 1 delivered in one PR against dev; the merge closes the plan)
 issues: "#897 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 817cce9d
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** closed. One arc, #930 against `dev` from `token-dash-1-a1`; the merge that lands it closes the plan.
+- **Shipped:** #897 by P70-09 B. `safeWireOrDash` beside `safeWire` returns the empty-value "—" when nothing but whitespace survives the sanitizer's strip, judged before the length cap; the Register token card's Symbol and Name values use it. The network e2e's read-symbol check is exact (`toBe("TST")`). The tests landed with the change; four pictures in `screenshots/`.
+- **Dispositions:** the brief's "never a second copy" of the dash did not hold (no shared dash exists); the inline literal stands (D2). The stored token's other surfaces stay as they are; OA-1 is #932 for the owner.
+- **Known limits:** #931 (glyphs that draw nothing but are not whitespace still read blank).
+- **Open items:** #932 (OA-1, `owner-decision`).
+- **Lessons:** nothing new in `lessons.md` (8,133 of 8,192 bytes): the load timeouts of two static scans under `audit:vue` are recorded in `lessons/phase-2.md`.
+- **Size:** about 140 lines against the light target of 150.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # token-dash-1: the empty-value dash for a blank token name or symbol on the Register token card
 
