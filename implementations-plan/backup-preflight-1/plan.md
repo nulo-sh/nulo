@@ -47,7 +47,7 @@ The fix deletes the uncovered gate. The rule, stated once at the preflight: lack
 
 **Alternative not taken (D1)**: skip a migration only when its whole footprint is unsliced, and keep refusing a mixed one. It adds a predicate, and it still refuses a backup for a ref that cannot hold a backup row, which breaks the invariant above.
 
-### Phase 1: The tests, red on the base
+### Phase 1: The tests, red on the base ✓
 
 - `backup-migrator.test.ts`, replacing `:149-165` with:
   - (a) a `defineRowMapMigration` v2 with an `addDefault` on `NETWORK_STORAGE_ROOT` and on the value key `TOKEN_PRICES_STORAGE_KEY`, from v1: `{ kind: "migrated", from: 1, to: 2 }`, and `data` equals `v1Data()`.
@@ -58,7 +58,7 @@ The fix deletes the uncovered gate. The rule, stated once at the preflight: lack
 - `footprint-coverage.test.ts`: move the loop body into a local `blocksImport(m)` returning `!isBackupSafeMigration(m) || touchesBlocked`. Delete `unmapped` and `coveredValueKeys`; keep `coveredRoots`. Add one test over scratch migrations, never registered in `realMigrations`: a row-map on `NETWORK_STORAGE_ROOT` (asserted absent from `coveredRoots`), the same refs as `defineMigration`, and a row-map on each blocked root. For each, assert `blocksImport` (false, true, true) and the exact kind the real import returns, `migrateBackupData({ data: {}, backupSchemaVersion: 1, migrations: [m] })`: `migrated` for the row-map on networks, `incompatible` for the others, with the result as the message. In the ack loop, also assert for every backup-facing migration that the same probe is `incompatible` exactly when `blocksImport` holds (an absent required read is `failed` there by design) (D3). Rewrite the header's rule sentence. Keep every hunk off lines 21-34 (F6).
 - **Gate**: `bun run --cwd apps/extension test -- src/wallet/services/backup/`. Pass: exactly (a), (d), the two changed pins and the new coverage test fail, each on today's "no backup slice maps to" refusal; all else passes. Record the run in `lessons/phase-1.md`. Layers: unit.
 
-### Phase 2: The fix, docs, full gate
+### Phase 2: The fix, docs, full gate ✓
 
 - `backup-migrator.ts`: the change above. Remove the `BACKUP_SLICE_REGISTRY` import if unused. Every remaining reason string stays byte-identical.
 - Docs: the `backup-migrator.ts` and `footprint-coverage.test.ts` rows of `backup/README.md` (`:11-12`); "registry coverage" at `ARCHITECTURE.md:129`. Leave `CLAUDE.md` (D5).
