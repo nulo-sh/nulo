@@ -11,6 +11,16 @@ base: origin/dev a51ebd220 (#907 merged)
 issues: "#926"
 ---
 
+## Outcome
+
+- **Date**: 2026-10-20
+- **Status**: completed; arc 1 delivered as one PR against `dev` (`Closes #926`), in review.
+- **Shipped**: after a crash, the boot closes the tab of each connect, capabilities and check window a predecessor left (`apps/extension/src/wallet/services/window-manager/restart-ended-windows.ts`, before the migration gate); before the lock's restart, in the reload's own turn and awaiting nothing, the wallet-sdk ends every live session and removes the connection windows a `WindowPort` tracker remembers by their opening or navigation URL (`wallet-sdk/restart-preparation.ts`, `ProfileService.setRestartPreparation`). E2E: `restart-closes-check-window` (Chrome), `lock-restart-reconnect` extended (both browsers).
+- **Known limits**: #941 (a window being created at the restart), #942 (after a crash, a request window showing the lock screen), #943 (a failed sweep leaves #924's case), each closed as not planned with its reopening condition.
+- **Open items**: #939 (send, sign, fee and notice windows: OA-1, owner decision), #940 (the wallet's own popup windows after the lock's restart on Chrome, owner decision).
+- **Dropped or superseded**: the first draft's awaited, bounded notice (superseded by D3); the planned `lessons.md` promotion went to the `chrome-extension-debug` skill (§ Restarts) instead, since `lessons.md` sits at its 8 KiB budget and the facts are that skill's domain; the "no row deleted" unit row became a booted-handler row (`background.restart-preparation.test.ts`).
+- **Seeds retired**: the `/goal` and `/loop` seeds below are retired with this block.
+
 # restart-notify-1: close the windows a restart ends, and tell apps before the lock's restart
 
 When the wallet's background restarts, every dApp request it held is gone, but the windows that show those requests stay, and connected apps are not told. This plan closes the connection windows a restart ended: on the next boot after a crash, and right before the lock's own restart. It also ends every app's session in that same last moment, so an app that listens shows the disconnect at once. One arc, one PR against `dev`, `Closes #926`.

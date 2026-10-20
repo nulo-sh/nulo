@@ -53,6 +53,19 @@ The logger captures service worker logs that are otherwise not directly visible.
 | Logger | `#/windows/logger` |
 | Developer Settings | `#/popup/settings/developer` |
 
+## Restarts
+
+- `runtime.reload()` ends every extension page on both browsers, but on Chrome a page in a popup
+  window (a dApp request window, the logs viewer) turns its window into a Chrome New Tab page that
+  stays, and no extension context lists it afterwards. Only the background about to reload can
+  close it: a `windows.remove` fired in the reload's own turn lands (6/6, 2026-10-20). Firefox
+  closes the window.
+- Without the `tabs` permission, `chrome.windows.getAll({ populate: true })` returns tabs with no
+  URL; `runtime.getContexts({ contextTypes: ["TAB"] })` lists the extension's own pages with their
+  URL (hash route included), `windowId` and `tabId` on both browsers.
+- `new URL(...).origin` is `"null"` for `chrome-extension:` and `moz-extension:`: compare
+  `protocol` and `host` to tell two extensions apart.
+
 ## Firefox
 
 Playwright cannot load extensions into Firefox. The e2e suite drives it as a hybrid: geckodriver
