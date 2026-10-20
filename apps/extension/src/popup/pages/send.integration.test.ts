@@ -305,6 +305,8 @@ function balanceUpdated() {
 }
 
 const submittedFee = () => (mocks.executeTransfer.mock.calls[0]?.[7] as { paymentMethod: unknown } | undefined)?.paymentMethod
+/** The submitted estimate id, queued cap and shown fee, in their positions. */
+const submittedFigures = () => mocks.executeTransfer.mock.calls[0]?.slice(8)
 
 beforeEach(() => {
 	document.body.innerHTML = '<div id="popup"></div>'
@@ -371,6 +373,9 @@ describe.each(SWEEP)("send page with the real fee card — %s, %s origin", (fund
 		} else {
 			expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
 			expect(submittedFee()).toMatchObject(fee)
+			// Only a fee the person pays (Fee Juice, or the PrivateFPC `p1`) is held to the figure shown.
+			const ownFee = fee.kind === "fj" || fee.fpcId === "p1"
+			expect(submittedFigures()).toEqual([undefined, undefined, ownFee ? LANDED.maxFee : undefined])
 			expect(sheetOpen(w)).toBe(false)
 		}
 		w.unmount()
@@ -575,6 +580,21 @@ describe("send page with the real fee card — transitions", () => {
 		w.unmount()
 	})
 
+	test("a send the person pays that was not queued carries its estimate id and the fee the estimate showed", async () => {
+		vi.useFakeTimers()
+		mocks.estimateTransferFee.mockResolvedValue({ ...LANDED, estimateId: "est-9" })
+		const { w } = await mountSend(FUNDING["public Fee Juice only"])
+		await fillForm(w)
+		await estimateLands()
+		await submit(w).trigger("click")
+		vi.advanceTimersByTime(REVIEW_ARM_MS)
+		await nextTick()
+		await w.get('[data-testid="send-review-submit"]').trigger("click")
+		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
+		expect(submittedFigures()).toEqual(["est-9", undefined, LANDED.maxFee])
+		w.unmount()
+	})
+
 	test("an account switch while the sheet is open closes it, and its send event then sends nothing", async () => {
 		vi.useFakeTimers()
 		const { w, appStore } = await mountSend(FUNDING["public Fee Juice only"])
@@ -776,6 +796,7 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		const args = mocks.executeTransfer.mock.calls[0] as unknown[]
 		expect(args[8]).toBeUndefined()
 		expect(args[9]).toBe("4472280000000000000")
+		expect(args[10]).toBeUndefined()
 		w.unmount()
 	})
 
@@ -797,6 +818,7 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		expect(args[7]).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
 		expect(args[8]).toBeUndefined()
 		expect(args[9]).toBeUndefined()
+		expect(args[10]).toBeUndefined()
 		w.unmount()
 	})
 
