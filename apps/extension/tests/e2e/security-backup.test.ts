@@ -1,38 +1,102 @@
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { TEST_PASSWORD } from "./fixtures/constants"
+import { waitForNewTab } from "./fixtures/browser"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
 import { navigateByHash, revealSeedPhrase } from "./fixtures/helpers"
+import { createAndActivateProfile } from "./fixtures/profiles"
 import { shotSend } from "./fixtures/send-page"
+import { getStartedRows, waitForHomeReminders } from "./fixtures/tokens"
 import { downloadEncryptedBackup, openEncryptedBackup } from "./helpers/backup-export"
 import { FULL_BACKUP_V2_TAG } from "@/utils/full-backup-helpers"
 
+/** Windows' classic scrollbar; headless browsers draw none, so the probe takes its width out itself. */
+const CLASSIC_SCROLLBAR_PX = 17
+
+/**
+ * At the popup's 360 px, with a classic scrollbar taking its width from the page, puts the longest
+ * BIP39 word (eight letters) in every cell and returns each cell it runs past. The word role is
+ * monospace, so every eight-letter word is the list's widest; the probe refuses to answer if it is not.
+ */
+async function widestWordOverruns(page: Page, scrollbarPx: number): Promise<string[]> {
+	return page.evaluate((scrollbar: number) => {
+		const words = [...document.querySelectorAll<HTMLElement>('[data-testid="reveal-content-word"]')]
+		const shown = words.map((word) => word.textContent)
+		const width = (word: HTMLElement, text: string) => {
+			word.textContent = text
+			return word.getBoundingClientRect().width
+		}
+		if (Math.abs(width(words[0], "iiiiiiii") - width(words[0], "wwwwwwww")) > 0.1) return ["the word role is not monospace"]
+		let scroller = words[0].parentElement
+		while (scroller && getComputedStyle(scroller).scrollbarGutter !== "stable") scroller = scroller.parentElement
+		if (!scroller) return ["no scroller reserves a scrollbar gutter"]
+		const drawn = scroller.offsetWidth - scroller.clientWidth
+		const padding = scroller.style.paddingRight
+		scroller.style.paddingRight = `calc(${getComputedStyle(scroller).paddingRight} + ${Math.max(0, scrollbar - drawn)}px)`
+		const overruns = words.flatMap((word, i) => {
+			word.textContent = "abstract"
+			const past = word.getBoundingClientRect().right - (word.parentElement as HTMLElement).getBoundingClientRect().right
+			return past > 0.5 ? [`cell ${i + 1} by ${past.toFixed(1)} px`] : []
+		})
+		scroller.style.paddingRight = padding
+		words.forEach((word, i) => {
+			word.textContent = shown[i]
+		})
+		return overruns
+	}, scrollbarPx)
+}
+
 const PASSWORD = TEST_PASSWORD
 
-/** Read the value of the input inside the reveal-content container. */
-const readRevealedValue = (page: Page) =>
-	page.evaluate(() => {
-		const scope = document.querySelector('[data-testid="reveal-content"]')
-		const input = scope?.querySelector("input") as HTMLInputElement | null
-		return input?.value ?? null
-	})
+const sel = (testid: string) => `[data-testid="${testid}"]`
 
-test("seed phrase reveal returns 24 word-like tokens", async ({ registeredExtension }) => {
+test("Home's steps are checked as they are done: How Aztec works opens its page, and the seed reveal checks the phrase step", async ({
+	registeredExtension,
+}) => {
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
+	await page.waitForSelector(sel("get-started-phrase"), { visible: true, timeout: 30_000 })
+	expect(await page.$(sel("get-started-aztec"))).not.toBeNull()
+	expect(await page.$(sel("backup-reminder-banner"))).toBeNull()
 
-	await revealSeedPhrase(page, PASSWORD)
+	// The flag is written before the tab opens; the tab still opens after that wait.
+	const tab = await waitForNewTab(registeredExtension.browser, () => clickByTestId(page, "get-started-aztec"), 10_000)
+	await tab.close()
+	await page.waitForSelector(`${sel("get-started-aztec")}[data-done="true"]`, { timeout: 10_000 })
 
-	// Input is type=password by default, but its `.value` is still readable.
-	const phrase = await readRevealedValue(page)
-	expect(phrase).toBeTruthy()
-	const tokens = (phrase as string).trim().split(/\s+/)
+	const tokens = await revealSeedPhrase(page, PASSWORD)
 	expect(tokens.length).toBe(24)
 	for (const token of tokens) expect(token).toMatch(/^[a-z]+$/)
+	expect(await widestWordOverruns(page, CLASSIC_SCROLLBAR_PX)).toEqual([])
+
+	await navigateByHash(page, "#/popup/general")
+	await waitForHomeReminders(page)
+	expect(await getStartedRows(page)).toEqual([
+		"get-started-phrase done",
+		"get-started-aztec done",
+		"get-started-feeJuice",
+		"get-started-presto",
+	])
+	expect(await page.$eval(sel("get-started-count"), (el) => el.textContent)).toBe("2 of 4 done")
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 30_000)
+
+test("a later password profile's Home asks only for its own phrase", async ({ registeredExtensionPerTest }) => {
+	const page = await openPopup(registeredExtensionPerTest)
+	await waitForHash(page, "#/popup/general")
+	await waitForHomeReminders(page)
+	expect(await page.$(sel("get-started-aztec"))).not.toBeNull()
+
+	await createAndActivateProfile(page, "Later", PASSWORD)
+	await waitForHomeReminders(page)
+	expect(await getStartedRows(page)).toEqual(["get-started-phrase"])
+	expect(await page.$(sel("get-started-hide"))).toBeNull()
+
+	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
+	expect(registeredExtensionPerTest.pageErrors).toEqual([])
+}, 60_000)
 
 test("a password profile's full backup downloads only once it is encrypted", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)

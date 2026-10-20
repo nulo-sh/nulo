@@ -1,57 +1,45 @@
-/**
- * Coverage for the 6-cell onboarding step indicator. Pins each load-bearing
- * fact about the visual + a11y contract so a future renumber doesn't drift
- * silently:
- *   - 6 cells in fixed order (Terms → Setup → Aztec → Fees → Speed → Done)
- *   - `:current` prop selects which cell gets `aria-current="step"`
- *   - past / active / future state across the full range (1..6)
- *   - the nav element carries the document a11y label
- */
-
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 
+import type { OnboardingPath, OnboardingStep } from "../steps"
 import StepIndicator from "./StepIndicator.vue"
 
-describe("StepIndicator — 6-cell onboarding progress", () => {
-	test("renders 6 cells, Terms first, so accepting reads as step one of the sequence", () => {
-		const wrapper = mount(StepIndicator, { props: { current: 1 } })
-		const cells = wrapper.findAll("nav > div").map((cell) => cell.text())
-		expect(cells).toEqual(["01Terms", "02Setup", "03Aztec", "04Fees", "05Speed", "06Done"])
+const row = (current: OnboardingStep, path: OnboardingPath) => mount(StepIndicator, { props: { current, path } })
+const texts = (current: OnboardingStep, path: OnboardingPath) =>
+	row(current, path)
+		.findAll("nav > div")
+		.map((cell) => cell.text())
+const currents = (current: OnboardingStep, path: OnboardingPath) =>
+	row(current, path)
+		.findAll("nav > div")
+		.map((cell) => cell.attributes("aria-current"))
+
+describe("StepIndicator", () => {
+	test("a password wallet's path has four cells, Terms first and the phrase third", () => {
+		expect(texts("terms", "password")).toEqual(["01Terms", "02Create", "03Phrase", "04Ready"])
 	})
 
-	test("current=1 (Terms) — only the first cell is aria-current", () => {
-		const wrapper = mount(StepIndicator, { props: { current: 1 } })
-		const cells = wrapper.findAll("nav > div")
-		expect(cells[0].attributes("aria-current")).toBe("step")
-		for (let i = 1; i < cells.length; i++) {
-			expect(cells[i].attributes("aria-current")).toBeUndefined()
-		}
+	test("a passkey wallet's path has three cells, numbered with no gap where the phrase would be", () => {
+		expect(texts("ready", "passkey")).toEqual(["01Terms", "02Create", "03Ready"])
 	})
 
-	test("current=4 (Fees) — only the fourth cell is aria-current", () => {
-		const wrapper = mount(StepIndicator, { props: { current: 4 } })
-		const cells = wrapper.findAll("nav > div")
-		expect(cells.map((cell) => cell.attributes("aria-current"))).toEqual([
-			undefined,
-			undefined,
-			undefined,
-			"step",
-			undefined,
-			undefined,
-		])
+	test("an import's path has three cells, and its second reads Import", () => {
+		expect(texts("wallet", "import")).toEqual(["01Terms", "02Import", "03Ready"])
 	})
 
-	test("current=6 (Done) — only the last cell is aria-current", () => {
-		const wrapper = mount(StepIndicator, { props: { current: 6 } })
-		const cells = wrapper.findAll("nav > div")
-		expect(cells[5].attributes("aria-current")).toBe("step")
-		expect(cells[4].attributes("aria-current")).toBeUndefined()
+	test("the count follows the path, so choosing Password grows the row by the phrase cell", async () => {
+		const wrapper = row("wallet", "passkey")
+		expect(wrapper.findAll("nav > div")).toHaveLength(3)
+		await wrapper.setProps({ path: "password" })
+		expect(wrapper.findAll("nav > div").map((cell) => cell.text())).toEqual(["01Terms", "02Create", "03Phrase", "04Ready"])
+	})
+
+	test("only the current step's cell is aria-current, on either length", () => {
+		expect(currents("phrase", "password")).toEqual([undefined, undefined, "step", undefined])
+		expect(currents("ready", "import")).toEqual([undefined, undefined, "step"])
 	})
 
 	test("nav element carries the a11y label", () => {
-		const wrapper = mount(StepIndicator, { props: { current: 1 } })
-		const nav = wrapper.find("nav")
-		expect(nav.attributes("aria-label")).toBe("Onboarding progress")
+		expect(row("terms", "passkey").find("nav").attributes("aria-label")).toBe("Onboarding progress")
 	})
 })

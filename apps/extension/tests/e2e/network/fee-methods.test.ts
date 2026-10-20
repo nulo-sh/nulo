@@ -1,11 +1,15 @@
 import { inject, expect } from "vitest"
+import { getStartedFeeJuiceHeldKey } from "@/utils/profile-ui-keys"
 import { test, openPopup, waitForHash, replaceInputValue, clickByTestId } from "../fixtures/extension"
 import {
 	fillSendForm,
+	getStartedRows,
+	readSessionRow,
 	refreshBalances,
 	sendTransfer,
 	selectFeeMethod,
 	setActiveSendType,
+	waitForHomeReminders,
 	waitForToast,
 	waitForTxConfirmation,
 } from "../fixtures/helpers"
@@ -349,6 +353,17 @@ test.skipIf(!hasConfig)(
 		{
 			const page = await openPopup(feeJuiceReadyExtension)
 			await waitForHash(page, "#/popup/general")
+			// The fixture's minted tokens raise the banner, which takes the phrase row's place.
+			await waitForHomeReminders(page)
+			expect(await getStartedRows(page)).toEqual(["get-started-aztec", "get-started-feeJuice done", "get-started-presto"])
+			// Home records the held Fee Juice for the profile.
+			const profileId = (await readSessionRow(page))?.profile
+			if (!profileId) throw new Error("no unlocked profile")
+			await page.waitForFunction(
+				async (key: string) => (await chrome.storage.local.get(key))[key] === true,
+				{ timeout: 10_000, polling: 100 },
+				getStartedFeeJuiceHeldKey(profileId),
+			)
 			await refreshBalances(page)
 			await openSend(page)
 			await setActiveSendType(page, "send-from-type", "private")

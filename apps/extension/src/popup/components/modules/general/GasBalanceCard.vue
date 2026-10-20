@@ -15,7 +15,7 @@ import { tokenAmountToUsdMicro, formatUsdMicro } from "@/wallet/services/price/c
 
 /** Stores */
 import { useAppStore } from "@/stores/app.store"
-import { useBalancesStore } from "@/stores/balances.store"
+import { selectedBalanceScope, useBalancesStore } from "@/stores/balances.store"
 const appStore = useAppStore()
 const balancesStore = useBalancesStore()
 
@@ -23,16 +23,7 @@ const balancesStore = useBalancesStore()
  *  refresh), no backoff retry — exactly its pre-store traffic. */
 const CARD_CAPS = { legs: ["gas"], retry: false, txRefresh: true, peek: true }
 
-const scope = computed(() =>
-	appStore.profile?.id && appStore.network?.id && appStore.account?.address
-		? {
-				profileId: appStore.profile.id,
-				networkId: appStore.network.id,
-				chainId: appStore.network.chainId,
-				accountAddress: appStore.account.address,
-			}
-		: null,
-)
+const scope = computed(() => selectedBalanceScope(appStore))
 const entry = computed(() => (scope.value ? balancesStore.entry(scope.value) : undefined))
 const gas = computed(() => entry.value?.gas)
 

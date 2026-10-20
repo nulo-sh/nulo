@@ -2,7 +2,7 @@
 /** The create-profile page's Method section, around the shared roving tablist. */
 import AuthMethodTabs from "@/components/composite/AuthMethodTabs.vue"
 
-const type = defineModel("type", { type: String, default: "password" })
+const type = defineModel("type", { type: String, default: "passkey" })
 </script>
 
 <template>
