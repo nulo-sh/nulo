@@ -36,7 +36,7 @@ const GIT_CONFIG = [
 	"user.email=fixture@example.invalid",
 ]
 /** `release-integrity.test.ts`'s runner pattern without the installs, plus a spawn's `"bun", "x"` arguments. */
-const RUNNER = /\bbunx\b|\bbun\s+(-\S+\s+)*(x|create)\s|\bnpx\b|(execPath|"bun"),\s*\[?"(x|create)"/
+const RUNNER = /\bbunx\b|\bbun\s+(-\S+\s+)*(x|create)\s|\bnpx\b|(execPath|"bun"),\s*(\[\s*)?"(x|create)"/
 
 interface Fixture {
 	dir: string
@@ -189,6 +189,7 @@ describe("runners", () => {
 			'spawnSync("bun", ["x", "biome"])',
 			'spawnSync(process.execPath, ["x", "biome"])',
 			'Bun.spawnSync(["bun", "x", "biome"])',
+			'spawnSync(process.execPath, [\n\t"x",\n\t"biome",\n])',
 		]
 		const launchers = ["bun --no-install ./node_modules/.bin/biome check", 'spawnSync(process.execPath, ["--no-install", BIOME])']
 		expect(runners.filter((text) => !RUNNER.test(text))).toEqual([])
