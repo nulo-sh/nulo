@@ -46,6 +46,7 @@ describe("plan tree gate", () => {
 		const paths = [...createCtx({ cwd: ROOT }).tracked]
 		const res = spawnSync("git", ["-c", "core.attributesFile=/dev/null", "check-attr", "--cached", "--stdin", "-z", "merge"], {
 			cwd: ROOT,
+			env: { ...process.env, GIT_ATTR_NOSYSTEM: "1" },
 			input: `${paths.join("\0")}\0`,
 			encoding: "utf8",
 			maxBuffer: 64 * 1024 * 1024,
