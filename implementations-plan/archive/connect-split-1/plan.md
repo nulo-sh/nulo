@@ -25,7 +25,9 @@ standard: implementations-plan/README.md § Post-implementation standard, read a
 
 # connect-split-1: Allow closes the connect window; the emoji check opens its own
 
-One arc, one PR against `dev`, `Closes #859`. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md).
+**Superseded in part (D9, D10, 2026-10-20).** The bridge (`ConnectBridge`, `BRIDGE_MS`), the quality bar's bridge timings (items 1 and 2), I1, and the bridge's change-map rows, tests and gates below record the arc as first built; the owner's decision replaced them, and the Outcome block and D9/D10 state what ships.
+
+One arc, one PR against `dev`, `Closes #859` (and #884, D10). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md).
 
 The owner, 2026-10-19, on #859: "I think sadly, we need to go back to “splitting” the concerns between those two pop-ups; although the two-stepper looks awesome, it’s not really “compatible” with how it might work in the wild." Allow answers the discovery and its window closes; the check opens its own window when the page starts the key exchange, as a remembered app's reconnection already does (#631).
 
@@ -165,7 +167,7 @@ Attacker: a web page, or a script on one, that sends discoveries and key exchang
 - **Window stacking.** The connect window closes at Allow and holds no slot (D9). Checks: 2 per origin, 8 in all (D8).
 - **Focus theft.** The check opens without a gesture; nothing inside is focused and no Enter or Escape at the document answers it (F6). Pinned in component tests and J1.
 - **Weakened behaviour.** A late exchange used to land on a visible expired page; now it ends silently, and so does every refusal after Allow, the window being gone (#927). No capability, account or signature results (F4).
-- **The not-connected line** (D10) reads a field establishment writes before it opens the check, so a row shows it from the Allow until a key exchange reaches establishment; a refused establishment leaves it. It grants nothing and reads nothing new: no stored data, no new message.
+- **The not-connected line** (D10) reads a field establishment writes before it opens the check, so a row shows it from the Allow until a key exchange reaches establishment. Refusals known before the write (no session row, a profile mismatch, a stale approval, no reserved slot) leave it; a session ended after the write (a race with teardown, or its window failing to open) clears it with no check shown. A check closed unanswered leaves it cleared, though the app's calls still wait for They match. It grants nothing and reads nothing new: no stored data, no new message.
 - **Logging, privilege, supply chain.** No new log line, permission, dependency or cryptography; `navigate`'s `tabs.query` and `tabs.update` leave.
 
 ## UI impact
@@ -208,6 +210,8 @@ The owner signed OA-1 to OA-3 and #884's option on 2026-10-20; the PR body quote
 **Implementation review, round 3** (Codex, resumed; the last): `conditional approve (Chrome and Firefox smoke suites pass; required base/head wall-clock comparisons are recorded)`, with no material finding left; the conditions are evidence, recorded in the PR.
 
 **Implementation review, comment audit** (Codex, resumed, with the standard's two verbatim rules the earlier prompts left out): `conditional approve (apply the comment corrections above; previous validation conditions remain unchanged)`, no behavioral finding. Applied, with judgement: claims the code cannot hold (a frame never painted, a polled grid time) corrected, restatements deleted, the bridge and reservation contracts tightened; comments trimmed from base text kept as they stand; the controls keep their label.
+
+**Owner rework, round 1** (Codex fresh, gpt-6.1-sol, high, session `01a158f1`; one Opus 5.5 diff review beside it), over the commits after the merge of `dev`. Codex: `conditional approve (with conditions: close the post-Allow profile-switch gap; restore the specified row copy; correct stale bridge documentation)`. Opus: `conditional approve (with conditions: finding 1 fixed, or the plan's claim corrected; finding 3 fixed)`. Accepted: the reserved-slot check moves above the hash write, so an exchange with no slot leaves its row not connected (test, with its success control); the row's line gets its own testid and J2 reads both lines by testid; a J2 guard that only added a way to fail goes; the pending-Allow test regains its disabled and loading assertions; stale comments, one log line and a test helper's name follow the close at Allow; the bridge passages above are marked superseded. Not acted on: an A → B → A profile switch during the admission wait meets the base's predicate unchanged, known limit #771; the row's words are the orchestrator's recorded call on #884 (Codex was sent a draft of them); writing the hash at They match instead of at establishment (Opus) would change D10's signal, so the PR states what the line means for the owner instead.
 
 ## Delivery
 

@@ -153,11 +153,14 @@ export async function handleSessionEstablished(
 			)
 			return false
 		}
+		// A window without a reserved slot would be one the origin's budget never counted: admission
+		// at discovery is the only place the cap is enforced, so fail closed.
+		if (!reservation) throw new Error("verify window has no reserved slot")
 		// A row no key exchange has reached was allowed but never connected: its check reads as a
 		// first connection's. Read before the write below gives it a hash.
 		const firstCheck = isNewConnection || dappSession.verificationHash === undefined
-		// Persist for the settings/reconnect view (informational). The verify window
-		// does NOT rely on this — it gets the per-session snapshot via its URL.
+		// The row's hash is what Settings reads as connected, so a refusal known before it is written
+		// comes above. The verify window reads its own snapshot from its URL.
 		await deps.dappSessionService.setVerificationHash(dappSession.id, session.verificationHash)
 		// Second liveness gate: the await above is itself a window the
 		// switch-teardown can land in — a session confirmed dead here must not
@@ -183,9 +186,6 @@ export async function handleSessionEstablished(
 		deps.stampSessionProfile(session.sessionId, dappSession.profileId)
 		stamped = true
 
-		// A window without a reserved slot would be one the origin's budget never counted:
-		// admission at discovery is the only place the cap is enforced, so fail closed.
-		if (!reservation) throw new Error("verify window has no reserved slot")
 		const url = verifyWindowUrl(dappSession.id, session.verificationHash, !firstCheck)
 		await openVerifyWindow(url, session.sessionId, reservation, deps)
 		established = true

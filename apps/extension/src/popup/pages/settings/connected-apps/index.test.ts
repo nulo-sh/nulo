@@ -96,7 +96,7 @@ describe("Settings › Connected apps — session delete reducer", () => {
 })
 
 describe("Settings › Connected apps — a row no connection reached", () => {
-	const NOT_CONNECTED = '[data-testid="connected-app-not-connected"]'
+	const NOT_CONNECTED = '[data-testid="connected-app-row-not-connected"]'
 
 	test("reads as allowed and not connected yet; a row a connection reached shows its grants instead (control)", async () => {
 		const w = await mountPage([

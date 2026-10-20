@@ -475,7 +475,7 @@ describe("discover popup — Allow closes the window once the wallet has the ans
 	// biome-ignore lint/suspicious/noExplicitAny: chrome runtime stub for tests
 	const windowsRemove = () => (globalThis as any).chrome.windows.remove as ReturnType<typeof vi.fn>
 
-	test("an Allow the wallet has not answered keeps the window, Allow spinning and Deny disabled; its answer closes it", async () => {
+	test("an Allow the wallet has not answered keeps the window, Allow spinning and disabled, Deny disabled, the strip loading; its answer closes it", async () => {
 		const answer = deferred<undefined>()
 		resolveInteractionMock.mockReturnValueOnce(answer.promise)
 		const w = await ready()
@@ -483,7 +483,9 @@ describe("discover popup — Allow closes the window once the wallet has the ans
 		await flushPromises()
 		expect(windowsRemove()).not.toHaveBeenCalled()
 		expect(allow(w).attributes("data-loading")).toBe("true")
+		expect(isDisabled(allow(w))).toBe(true)
 		expect(isDisabled(deny(w))).toBe(true)
+		expect(w.find('[data-testid="status-strip"]').attributes("data-status")).toBe("loading")
 
 		answer.resolve(undefined)
 		await approving

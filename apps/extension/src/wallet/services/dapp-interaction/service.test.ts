@@ -963,7 +963,7 @@ describe("DappInteractionService — a connect window closes with its answer", (
 	const METADATA = { name: "dapp.example", url: "https://dapp.example" }
 
 	/** A real WindowManager on a fake browser: `open` starts an interaction and waits for its window. */
-	function handOverHarness() {
+	function windowHarness() {
 		const api = new FakeBrowserApi()
 		api.reset()
 		vi.mocked(chrome.runtime.getURL).mockImplementation((path) => `chrome-extension://nulo/${path}`)
@@ -986,7 +986,7 @@ describe("DappInteractionService — a connect window closes with its answer", (
 	}
 
 	test("an approved discovery settles with the approval alone, never the page's values, and closes its window", async () => {
-		const h = handOverHarness()
+		const h = windowHarness()
 		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
 		await h.dapp.resolveInteraction(w.id, { approved: true, windowId: 999, extra: "https://evil.example" } as DiscoveryResult)
@@ -1001,7 +1001,7 @@ describe("DappInteractionService — a connect window closes with its answer", (
 	})
 
 	test("a discovery answer other than approved: true is a denial and closes the window", async () => {
-		const h = handOverHarness()
+		const h = windowHarness()
 		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
 		await h.dapp.resolveInteraction(w.id, { approved: "yes", windowId: 999 } as unknown as DiscoveryResult)
@@ -1011,7 +1011,7 @@ describe("DappInteractionService — a connect window closes with its answer", (
 	})
 
 	test("a denied discovery settles and closes the window", async () => {
-		const h = handOverHarness()
+		const h = windowHarness()
 		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
 		await h.dapp.resolveInteraction(w.id, { approved: false })
@@ -1025,7 +1025,7 @@ describe("DappInteractionService — a connect window closes with its answer", (
 		["capabilities", capabilityPayload, { approved: true }],
 		["execute", emptyPayload, [{ status: "ok", result: "0x01" }]],
 	])("a %s window answered through resolveInteraction settles with that answer and closes", async (kind, payload, answer) => {
-		const h = handOverHarness()
+		const h = windowHarness()
 		const w = await h.open(() => h.interaction.call(h.dapp, kind, payload))
 
 		await h.dapp.resolveInteraction(w.id, answer as never)

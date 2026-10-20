@@ -5,8 +5,8 @@
  * hash is passed per-session via the window URL, not read from the shared row.
  * The callback is fail-closed — any failure terminates the session and leaves a new
  * connection's pending-verification marker a tombstone; only a successful establishment spends it.
- * The check opens against the slot admission reserved at discovery, in the connect window
- * waiting on it or in a window of its own, and the slot is held until that window is removed.
+ * The check opens in a window of its own against the slot admission reserved at discovery, and the
+ * slot is held until that window is removed.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { deferred } from "@nulo/wallet-core/utils"
@@ -155,6 +155,7 @@ describe("handleSessionEstablished — verify-window reservation", () => {
 	test("opens against the held reservation and keeps the slot until that window is removed", async () => {
 		const { deps, gate, reservation, endSession } = makeDeps()
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(true)
+		expect(deps.dappSessionService.setVerificationHash).toHaveBeenCalledWith("dapp-1", makeSession().verificationHash)
 		expect(reservation.status).toBe("opened")
 		expect(gate.windowsHeld(ORIGIN)).toBe(1)
 		endSession()
@@ -163,10 +164,11 @@ describe("handleSessionEstablished — verify-window reservation", () => {
 		expect(gate.windowsHeld(ORIGIN)).toBe(0)
 	})
 
-	test("a window that needs opening without a reservation terminates the session", async () => {
+	test("a window that needs opening without a reservation terminates the session and leaves the row unconnected", async () => {
 		const { deps, terminate, create } = makeDeps({ reservations: { reservation: () => undefined } })
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
 		expect(create).not.toHaveBeenCalled()
+		expect(deps.dappSessionService.setVerificationHash).not.toHaveBeenCalled()
 		expect(terminate).toHaveBeenCalledWith("sess-1")
 	})
 

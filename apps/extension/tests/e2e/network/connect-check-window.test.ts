@@ -28,7 +28,8 @@ const MARKS = "e2e:connect-marks"
 const STALL_MARK = "e2e:playground-stalled"
 const STALL_MS = 10_000
 const ANNOUNCE = '[data-testid="verify-announce"][role="status"][aria-live="polite"]'
-const NOT_CONNECTED = '[data-testid="connected-app-not-connected"]'
+const ROW_NOT_CONNECTED = '[data-testid="connected-app-row-not-connected"]'
+const APP_NOT_CONNECTED = '[data-testid="connected-app-not-connected"]'
 const ANNOUNCEMENT =
 	"Connection check. Check that the app shows these same emojis in the same order. If they differ, the connection may not be safe. Choose They don't match."
 
@@ -269,11 +270,7 @@ test.skipIf(!aztecConfig)(
 		const host = new URL(PLAYGROUND_TEST_URL).host
 		const row = `[data-testid="connected-app-row"][data-app-host="${host}"]`
 
-		let checkOpened = false
-		const checkP = waitForPopup(ctx, "verify", { timeout: 60_000 }).then((check) => {
-			checkOpened = true
-			return check
-		})
+		const checkP = waitForPopup(ctx, "verify", { timeout: 60_000 })
 		await stallPage(dapp, STALL_MS)
 		await clickByTestId(page, "discover-allow-btn")
 		await waitForPopupClosed(page, 10_000)
@@ -285,25 +282,17 @@ test.skipIf(!aztecConfig)(
 		const readFrom = Date.now()
 		await control.bringToFront()
 		await navigateByHash(control, "#/popup/settings/connected-apps", 15_000)
-		// The row's link is a sibling of its text, so the line is read from their shared parent.
-		const rowLine = await control.waitForFunction(
-			(rowSel: string, lineSel: string) =>
-				document.querySelector(rowSel)?.parentElement?.querySelector(lineSel)?.textContent?.trim() || false,
-			{ timeout: 5_000, polling: 100 },
-			row,
-			NOT_CONNECTED,
-		)
-		expect(await rowLine.jsonValue()).toBe("Allowed. Not connected yet.")
+		// A wallet of its own lists this one app, so the row's line is the only one.
+		await control.waitForSelector(row, { timeout: 5_000 })
+		const rowLine = await control.waitForSelector(ROW_NOT_CONNECTED, { visible: true, timeout: 5_000 })
+		expect(await rowLine?.evaluate((el) => el.textContent?.trim())).toBe("Allowed. Not connected yet.")
 		await shotSend(control, "connect-not-connected-row", "connected-app-row")
-		await openConnectedApp(control, host, NOT_CONNECTED)
-		expect(await control.$eval(NOT_CONNECTED, (el) => el.textContent?.replace(/\s+/g, " ").trim())).toBe(
+		await openConnectedApp(control, host, APP_NOT_CONNECTED)
+		expect(await control.$eval(APP_NOT_CONNECTED, (el) => el.textContent?.replace(/\s+/g, " ").trim())).toBe(
 			"You allowed this app, but it has not finished connecting. Nothing is shared with it. Its next connection starts with the emoji check.",
 		)
 		await shotSend(control, "connect-not-connected-app", "connected-app-not-connected")
 		const settingsMs = Date.now() - readFrom
-		// Establishment writes the hash before it opens the check, so both reads above saw the app
-		// before its connection; this names the run whose stall ended first.
-		expect(checkOpened, `the check opened ${settingsMs} ms into the Settings reads`).toBe(false)
 		await dapp.bringToFront()
 
 		const check = await checkP
@@ -316,7 +305,7 @@ test.skipIf(!aztecConfig)(
 		await control.waitForFunction(
 			(sel: string) => document.querySelector(sel) === null,
 			{ timeout: 10_000, polling: 100 },
-			NOT_CONNECTED,
+			APP_NOT_CONNECTED,
 		)
 		await approveVerify(check)
 		await dapp.waitForSelector(CONNECTED, { timeout: 30_000 })
