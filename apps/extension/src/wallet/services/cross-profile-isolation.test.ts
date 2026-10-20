@@ -37,6 +37,8 @@ import type { TokenBalanceRaw } from "./token-balance/spec"
 import { TransactionService } from "./transaction/service"
 import { ExecutionService } from "./execution/service"
 import type { BackgroundTickerPort } from "@nulo/wallet-core/ports"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import type { RowKeysSource } from "@/wallet/storage/sealed-entity-storage"
 
 /**
  * Minimal ProfileService fake (golden reference: contact/service.test.ts). Carries
@@ -47,6 +49,8 @@ class FakeProfileService implements IService {
 	public static readonly name = PROFILE_SERVICE_NAME
 	public readonly name = PROFILE_SERVICE_NAME
 	public readonly onProfileDeleted = new EventHandler<ProfileInfo>()
+	public readonly onRowKeysReady = new EventHandler<string>()
+	public rowKeys: RowKeysSource = () => undefined
 	public readonly onActiveProfileChanged = new EventHandler<ProfileInfo | undefined>()
 	private active: ProfileInfo | undefined
 	// Shared with TransactionService for the execution fence — no deletion is
@@ -118,6 +122,7 @@ describe("cross-profile isolation (standing gate)", () => {
 
 		beforeEach(async () => {
 			profile = new FakeProfileService()
+			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
 			const services = new ServiceCollection()
 			services.add(profile)
@@ -153,6 +158,7 @@ describe("cross-profile isolation (standing gate)", () => {
 
 		beforeEach(async () => {
 			profile = new FakeProfileService()
+			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
 			const services = new ServiceCollection()
 			services.add(profile)
@@ -218,6 +224,7 @@ describe("cross-profile isolation (standing gate)", () => {
 
 		beforeEach(async () => {
 			profile = new FakeProfileService()
+			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
 			seedRepo = new BalanceRepository(api)
 			const services = new ServiceCollection()
@@ -275,6 +282,7 @@ describe("cross-profile isolation (standing gate)", () => {
 
 		beforeEach(async () => {
 			profile = new FakeProfileService()
+			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
 			const services = new ServiceCollection()
 			services.add(profile)
@@ -303,6 +311,7 @@ describe("cross-profile isolation (standing gate)", () => {
 
 		beforeEach(async () => {
 			profile = new FakeProfileService()
+			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
 			const services = new ServiceCollection()
 			services.add(profile)
@@ -333,6 +342,7 @@ describe("cross-profile isolation (standing gate)", () => {
 
 		beforeEach(async () => {
 			profile = new FakeProfileService()
+			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
 			accountPurgeSubs = []
 			chainPurgeSubs = []
@@ -520,6 +530,7 @@ describe("cross-profile isolation (standing gate)", () => {
 		beforeEach(async () => {
 			chainPurgeSubs.length = 0
 			profile = new FakeProfileService()
+			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
 			const services = new ServiceCollection()
 			services.add(profile)

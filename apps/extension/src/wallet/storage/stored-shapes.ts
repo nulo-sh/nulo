@@ -41,7 +41,7 @@ import {
 import { decodeSeedMarkers } from "@/wallet/services/token/seeder"
 import { decodeTokenListState } from "@/wallet/services/token-list/service"
 import { SCHEMA_BLOCKED_KEY, SCHEMA_DEGRADED_KEY, SCHEMA_RETRY_REQUESTED_KEY } from "./migrations"
-import { type CodecStoreName, type KeyIdentityOptions, STORES, type StoreName } from "./stores"
+import { type CodecStoreName, type KeyIdentityOptions, type SealedStoreName, STORES, type StoreName } from "./stores"
 
 /** How a stored value is read: `json` is a `JSON.stringify` string, `structured` an object or bare
  *  value written as is. The migration engine stages json only. */
@@ -63,18 +63,22 @@ export type StoredShape = {
 	authenticated?: true
 	/** The migration engine's and the boot gate's own state, which no migration can cover. */
 	engine?: true
+	/** Each row is a row-seal envelope over a row `schema` reads: only an unlocked profile's keys
+	 *  open it, so the pre-unlock migration engine can never cover it. */
+	sealed?: true
 }
 
 const root = (r: string): StorageRef => ({ kind: "root", root: r })
 const value = (key: string): StorageRef => ({ kind: "value", key })
 
-function fromStore(name: CodecStoreName): StoredShape {
+function fromStore(name: CodecStoreName | SealedStoreName): StoredShape {
 	const { ref, schema, ...rest } = STORES[name]
 	const options = "options" in rest ? rest.options : undefined
-	return { ref, encoding: "json", schema, read: "codec", ...(options ? { options } : {}) }
+	const sealed = "sealed" in rest && rest.sealed === true
+	return { ref, encoding: "json", schema, read: "codec", ...(options ? { options } : {}), ...(sealed ? { sealed: true as const } : {}) }
 }
 
-function described(name: Exclude<StoreName, CodecStoreName>, schema: z.ZodType, read: StoredDecoder): StoredShape {
+function described(name: Exclude<StoreName, CodecStoreName | SealedStoreName>, schema: z.ZodType, read: StoredDecoder): StoredShape {
 	const store = STORES[name]
 	const options = "options" in store ? store.options : undefined
 	return { ref: store.ref, encoding: "json", schema, read, ...(options ? { options } : {}) }

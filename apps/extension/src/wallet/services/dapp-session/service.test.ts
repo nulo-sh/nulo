@@ -22,7 +22,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import { recordWrites } from "../storage-write-log"
 import { AccessLevel, DappSessionService } from "./service"
 import { RecoveryModeError, SessionEndedError } from "@nulo/extension-messaging/errors"
-import { asImportedKeysDek, asMasterSecretBytes, deriveDappSessionMacKey } from "@nulo/wallet-crypto"
+import { asImportedKeysDek, asMasterSecretBytes, deriveDappSessionMacKey, deriveRowKeys, type RowKeys } from "@nulo/wallet-crypto"
 import { signDappSession } from "./integrity"
 import type { CapabilityDecision, DappSession, GrantedCapabilityRecord } from "./spec"
 
@@ -40,7 +40,13 @@ const realMacKey = (profileId: string) =>
 		asImportedKeysDek(new Uint8Array(32).fill(DEK_BY_PROFILE[profileId] ?? 0x33) as Uint8Array<ArrayBuffer>),
 	)
 
-function makeProfileStub() {
+/** Row keys as a worker that opened every listed profile holds them: master-only, so same-phrase
+ *  siblings derive them alike apart from the profile binding. */
+async function rowKeysOf(...profileIds: string[]): Promise<Map<string, RowKeys>> {
+	return new Map(await Promise.all(profileIds.map(async (id) => [id, await deriveRowKeys(SHARED_MASTER, id, `gen-${id}`)] as const)))
+}
+
+function makeProfileStub(rowKeys: Map<string, RowKeys>) {
 	const deletionState = new ProfileDeletionState()
 	return {
 		name: PROFILE_SERVICE_NAME,
@@ -57,6 +63,8 @@ function makeProfileStub() {
 			if (recoveryProfiles.has(profileId)) throw new RecoveryModeError()
 			return realMacKey(profileId)
 		}),
+		rowKeys: (profileId: string) => rowKeys.get(profileId),
+		onRowKeysReady: new EventHandler<string>(),
 		async start() {},
 	}
 }
@@ -71,7 +79,7 @@ async function makeService(): Promise<{
 	browserApi.reset()
 	const service = new DappSessionService(logger, browserApi)
 	const collection = new ServiceCollection()
-	const profileStub = makeProfileStub()
+	const profileStub = makeProfileStub(await rowKeysOf("p1", "p2", "p2-own"))
 	collection.add(profileStub as never)
 	collection.add(service)
 	await collection.start()
@@ -548,7 +556,7 @@ describe("the authorizations consent", () => {
 		await svc.applyCapabilityDecision(id, decision({ grantRecords: projected, approvedTypes: ["contracts", "simulation"] }))
 		const reader = new DappSessionService(new LoggerStore(new ConfigStore()), browserApi)
 		const collection = new ServiceCollection()
-		collection.add(makeProfileStub() as never)
+		collection.add(makeProfileStub(await rowKeysOf("p1", "p2", "p2-own")) as never)
 		collection.add(reader)
 		await collection.start()
 		const row = await reader.getDappSession(id)
@@ -673,7 +681,7 @@ describe("purgeForChain", () => {
 		const browserApi = new FakeBrowserApi()
 		browserApi.reset()
 		const collection = new ServiceCollection()
-		collection.add(makeProfileStub() as never)
+		collection.add(makeProfileStub(await rowKeysOf("p1", "p2", "p2-own")) as never)
 		const service = new DappSessionService(logger, browserApi)
 		collection.add(service)
 		await collection.start()

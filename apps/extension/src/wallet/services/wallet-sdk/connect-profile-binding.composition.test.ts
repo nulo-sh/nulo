@@ -49,6 +49,7 @@ import { recordWrites } from "@/wallet/services/storage-write-log"
 import { initWalletSdkHandler } from "./background"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN, fakeSdkServices } from "./test-services"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 
 const ROW_ROOT = "nulo:core:dappSessions@"
 /** The connect window the Allow hands over to show the emoji check. */
@@ -68,6 +69,7 @@ async function harness(fenceProfile: string) {
 			getActiveProfile,
 			onProfileDeleted: new EventHandler(),
 			deriveDappSessionMacKey: async () => macKey,
+			...(await rowKeysForEveryProfile()),
 			getDeletionState: () => deletionState,
 			captureExecutionFence: async () => ({ profileId: fenceProfile, epoch: deletionState.capture(fenceProfile) }),
 		}),

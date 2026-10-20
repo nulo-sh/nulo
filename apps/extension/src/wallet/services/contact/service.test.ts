@@ -19,6 +19,8 @@ import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import { recordWrites } from "../storage-write-log"
 import { getInitials } from "@/utils"
 import { ContactService } from "./service"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import type { RowKeysSource } from "@/wallet/storage/sealed-entity-storage"
 
 /**
  * Minimal ProfileService fake — satisfies the subset of the real surface that
@@ -30,6 +32,8 @@ class FakeProfileService implements IService {
 	public static readonly name = PROFILE_SERVICE_NAME
 	public readonly name = PROFILE_SERVICE_NAME
 	public readonly onProfileDeleted = new EventHandler<ProfileInfo>()
+	public readonly onRowKeysReady = new EventHandler<string>()
+	public rowKeys: RowKeysSource = () => undefined
 	private readonly deletionState = new ProfileDeletionState()
 	private active: ProfileInfo | undefined
 	/** The live session's serial; every `setActiveProfile` ends the session, as a lock and unlock do. */
@@ -92,6 +96,7 @@ describe("ContactService (port-migrated)", () => {
 		api = new FakeBrowserApi()
 		api.reset()
 		profile = new FakeProfileService()
+		profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 		profile.setActiveProfile(profileA)
 		logger = new LoggerStore(new ConfigStore())
 
@@ -133,14 +138,17 @@ describe("ContactService (port-migrated)", () => {
 			expect(c.profileId).toBe(profileA.id)
 			expect(c.abbr).toBe("AL")
 
-			// Inspect the underlying storage to prove the write reached the port,
-			// not just in-memory state on the service instance.
+			// Inspect the underlying storage to prove the write reached the port, sealed: the envelope
+			// names the profile and holds neither the name nor the address.
 			const entries = await api.storage.local.get(null)
 			const key = `nulo:core:contacts@${c.id}`
 			expect(key in entries).toBe(true)
 			const stored = JSON.parse(entries[key] as string)
-			expect(stored.id).toBe(c.id)
-			expect(stored.name).toBe("Alice")
+			expect(Object.keys(stored).sort()).toEqual(["profileId", "sealed"])
+			expect(stored.profileId).toBe(profileA.id)
+			expect(entries[key]).not.toContain("Alice")
+			expect(entries[key]).not.toContain("0xaaaa")
+			expect(await contactService.getContact(c.id)).toEqual(c)
 		})
 
 		test("emits onContactAdded", async () => {

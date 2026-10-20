@@ -73,7 +73,7 @@ import { PROFILE_TOMBSTONE_ROOT, type Tombstone } from "./tombstone-repository"
 import { WalletLockedError } from "./wallet-locked-error"
 import { fromBase64, getMnemonic, toBase64 } from "@nulo/wallet-core/utils"
 import { BUFFER_BINDINGS, withBuffer } from "../../../../tests/helpers/shipped-buffer"
-import { deriveMasterFromMnemonic } from "@nulo/wallet-crypto"
+import { deriveMasterFromMnemonic, openRow, sealRow } from "@nulo/wallet-crypto"
 
 /** Recovery words for a deterministic 32-byte entropy fill (the v2 restore pairing check
  *  requires entropy whose words actually derive the master). */
@@ -3862,12 +3862,28 @@ describe("dApp-session rows under same-phrase SIBLINGS — the real ProfileServi
 		expect(JSON.parse(authentic).profileId).toBe(p1.id)
 
 		// The forgery: a sibling holding the SAME master builds a p2-targeted row and signs it with
-		// ITS key (master shared, DEK not) — p1's real derivation stands in for the attacker's. A
-		// master-only derivation would make this tag verify under p2; the DEK-keyed one must not.
-		const authenticRow = JSON.parse(authentic) as Record<string, unknown> & { mac: string }
+		// ITS key (master shared, DEK not) — p1's real derivation stands in for the attacker's. The
+		// row seal is master-only, so the sibling opens p1's row and seals the forgery for p2 (the
+		// keyring's keys stand in for its derivation): only the DEK-keyed MAC is out of its reach.
+		const keysOf = (id: string) => {
+			const keys = profiles.rowKeys(id)
+			if (!keys) throw new Error(`no row keys for ${id}`)
+			return keys
+		}
+		const root = "nulo:core:dappSessions"
+		const sealedText = (JSON.parse(authentic) as { sealed: string }).sealed
+		const authenticRow = JSON.parse(await openRow(keysOf(p1.id), sealedText, { root, storageKey: key, profileId: p1.id })) as Record<
+			string,
+			unknown
+		> & { mac: string }
 		const { mac: _authenticMac, ...forgedBody } = { ...authenticRow, profileId: p2.id }
 		const forgedMac = await signDappSession(await profiles.deriveDappSessionMacKey(p1.id), forgedBody as never)
-		await api.storage.local.set({ [key]: JSON.stringify({ ...forgedBody, mac: forgedMac }) })
+		const forged = await sealRow(keysOf(p2.id), JSON.stringify({ ...forgedBody, mac: forgedMac }), {
+			root,
+			storageKey: key,
+			profileId: p2.id,
+		})
+		await api.storage.local.set({ [key]: JSON.stringify({ profileId: p2.id, sealed: forged }) })
 		await profiles.lockActiveProfile()
 		await profiles.unlockProfile(p2.id, "pass1234")
 		expect(await sessions.getDappSessions()).toEqual([])
@@ -4497,4 +4513,85 @@ describe("byte codecs: export encoders and the lenient decodes of stored and res
 		},
 		30_000,
 	)
+})
+
+describe("row keys — held for the worker's lifetime, never for a dead incarnation", () => {
+	const BINDING = { root: "nulo:core:contacts", storageKey: "nulo:core:contacts@c-1", profileId: "abc12345" }
+
+	test("unlock fills them once; lock, switch and a password change keep the same keys", async () => {
+		const { service } = await makeService()
+		const announced: string[] = []
+		service.onRowKeysReady.add((id) => announced.push(id))
+		const a = await service.createProfile("A", "pass1234")
+		const keys = service.rowKeys(a.id)
+		expect(keys).toBeDefined()
+
+		const b = await service.createProfile("B", "pass1234")
+		await service.lockActiveProfile()
+		expect(service.rowKeys(a.id)).toBe(keys)
+		expect(service.rowKeys(b.id)).toBeDefined()
+		await service.unlockProfile(a.id, "pass1234")
+		await service.changeProfilePassword(a.id, "pass1234", "newpass1")
+		expect(service.rowKeys(a.id)).toBe(keys)
+		expect(announced).toEqual([a.id, b.id])
+	}, 30_000)
+
+	test("the integrity check sees them; a refused open keeps none it derived; recovery mode keeps them", async () => {
+		const { api, service } = await makeService()
+		const p = await service.createProfile("P", "pass1234")
+		const { service: restarted } = await makeServiceFromExistingApi(api, { strict: true })
+		expect(restarted.rowKeys(p.id)).toBeUndefined()
+
+		const seen: boolean[] = []
+		let refuse = true
+		restarted.setIntegrityDelegate({
+			verifyBeforeSessionOpen: async (id: string) => {
+				seen.push(restarted.rowKeys(id) !== undefined)
+				if (refuse) throw new AccountAddressInconsistencyError()
+			},
+		})
+		await expect(restarted.unlockProfile(p.id, "pass1234")).rejects.toBeInstanceOf(AccountAddressInconsistencyError)
+		expect(restarted.rowKeys(p.id)).toBeUndefined()
+
+		refuse = false
+		await writeRawRow(api, p.id, { ...(await readRawRow(api, p.id)), dekSealed: "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" })
+		await restarted.unlockProfile(p.id, "pass1234")
+		expect(restarted.isRecoveryMode(p.id)).toBe(true)
+		expect(restarted.rowKeys(p.id)).toBeDefined()
+		expect(seen).toEqual([true, true])
+	}, 30_000)
+
+	test("a restore holds them before its finalize; a later incarnation of the same id never opens the dead one's rows", async () => {
+		const { service } = await makeService()
+		service.setDeletionDelegate({
+			snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }),
+			runFor: async (id) => service.dropRowKeys(id),
+		})
+		const first = await service.restore({ id: "abc12345", name: "P", type: "password" }, await restoreSecretFor(11), "pass1234")
+		const keys = service.rowKeys(first.id)
+		if (!keys) throw new Error("a restore commit fills the row keys")
+		const sealed = await sealRow(keys, "row", BINDING)
+		await service.finalizeRestore(first.id, "pass1234")
+		expect(service.rowKeys(first.id)).toBe(keys)
+
+		await service.deleteProfile(first.id)
+		expect(service.rowKeys(first.id)).toBeUndefined()
+		const again = await service.restore({ id: "abc12345", name: "P", type: "password" }, await restoreSecretFor(11), "pass1234")
+		expect(again.id).toBe(first.id)
+		const reborn = service.rowKeys(again.id)
+		if (!reborn) throw new Error("a restore commit fills the row keys")
+		await expect(openRow(reborn, sealed, BINDING)).rejects.toThrow()
+	}, 30_000)
+
+	test("a worker that restores the session holds its keys, and a handler that subscribes late gets them on replay", async () => {
+		const { api, service } = await makeService()
+		const p = await service.createProfile("P", "pass1234")
+		const { service: restarted } = await makeServiceFromExistingApi(api)
+		expect(restarted.rowKeys(p.id)).toBeDefined()
+
+		const late: string[] = []
+		restarted.onRowKeysReady.add((id) => late.push(id))
+		restarted.replayRowKeysReady()
+		expect(late).toEqual([p.id])
+	}, 30_000)
 })

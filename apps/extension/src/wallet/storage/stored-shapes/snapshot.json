@@ -277,6 +277,7 @@
 					},
 					"encoding": "json",
 					"read": "codec",
+					"sealed": true,
 					"schema": {
 						"$schema": "https://json-schema.org/draft/2020-12/schema",
 						"properties": {
@@ -308,6 +309,7 @@
 					"encoding": "json",
 					"read": "codec",
 					"authenticated": true,
+					"sealed": true,
 					"schema": {
 						"$schema": "https://json-schema.org/draft/2020-12/schema",
 						"properties": {
@@ -2739,6 +2741,13 @@
 					"name": "B",
 					"profileId": "b04e6d18"
 				},
+				"contacts.sealed": {
+					"abbr": "CR",
+					"address": "0x2c1f7e4a9b3d5c6e8f0a1b2c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e4f5a6",
+					"id": "5e7c2a90",
+					"name": "Carla Ruiz",
+					"profileId": "3f9a2c71"
+				},
 				"fpcs.full": {
 					"address": "0x150ae560f32c87bec863666832fb11f4ed1c7f4e32f075302eba569bc6bacde2",
 					"chainId": 3415328944,
@@ -2831,6 +2840,69 @@
 						}
 					],
 					"profileId": "b04e6d18"
+				},
+				"dappSessions.sealed": {
+					"accountAliases": {
+						"aztec:3415328944:0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458": "Main"
+					},
+					"accounts": ["aztec:3415328944:0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458"],
+					"authorizationsWithoutAsking": {
+						"broad": false
+					},
+					"capabilityGrants": [
+						{
+							"capability": {
+								"accounts": [
+									{
+										"alias": "Main",
+										"item": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458"
+									}
+								],
+								"canCreateAuthWit": true,
+								"canGet": true,
+								"type": "accounts"
+							},
+							"grantedAt": 1790640000000
+						},
+						{
+							"capability": {
+								"scope": [
+									{
+										"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+										"function": "transfer_private_to_private"
+									}
+								],
+								"type": "transaction"
+							},
+							"grantedAt": 1790640000000
+						}
+					],
+					"capabilityRejections": [
+						{
+							"capabilityType": "data",
+							"rejectedAt": 1790640000000
+						}
+					],
+					"chainId": "3415328944",
+					"confirmationLevel": 5,
+					"dappMetadata": {
+						"description": "Swap private tokens on Aztec",
+						"logo": "https://app.example.org/logo.png",
+						"name": "Token Swap",
+						"url": "https://app.example.org"
+					},
+					"expiry": 1791244800000,
+					"id": "6a1d0c7e3b5f49a28c0e1d7f6b3a5c9e2d4f6a8b0c1e3d5f7a9b2c4d6e8f0a1b",
+					"mac": "uHGZ4FIZ2d8K3etnVWUWiEqn7gRRc7AMEJVH+POAw80=",
+					"permissions": [
+						{
+							"events": ["accountsChanged"],
+							"methods": ["aztec_sendTx", "aztec_simulateTx"]
+						}
+					],
+					"profileId": "3f9a2c71",
+					"trustedVerification": true,
+					"verificationHash": "e6161f0f41e6b00bb212e8c0c1f09ea29ffbf7915704bbe88698fcc657ccf690"
 				},
 				"journal.full": {
 					"accountAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
