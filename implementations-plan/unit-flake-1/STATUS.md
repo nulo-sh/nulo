@@ -10,3 +10,4 @@
 - 2026-10-20: audit r3 (Codex resume): approve. Plan committed.
 - 2026-10-20: arc 1 phase 1 on 88bcd2ca: lint, typecheck:all, test (14295, base count), test:all exit 0; negative control 5/5 red; 200/200 after; quantized sweep 9 red, all Date-arithmetic, none of the 24; probe leaves RowTarget sends and Popup.test.ts:238 (kept raw by design).
 - 2026-10-20: Codex loop: r1 approve (1 nit), Opus diff approve (3 low), fixed in e5e9169e; r2 approve, converged.
+- 2026-10-20: merged origin/dev (8012546e); final head: lint, typecheck:all, test:all, check:plans exit 0; probe on the merged suite: no new exposure.
