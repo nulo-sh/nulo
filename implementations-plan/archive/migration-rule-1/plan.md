@@ -221,7 +221,7 @@ Each gate also runs `bun run lint` and `bun run typecheck:all` (exit 0), and `bu
 
 ## Post-implementation
 
-The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `60fde7e7`. Specific to this plan:
+The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `60fde7e7`. Specific to this plan:
 - **While implementing:** comments to CLAUDE.md § Code-comment style; attempts in `lessons/phase-N.md`; `agent-worktree status migration-rule-1 "<arc> phase N green: <next>"` at each gate; three failures on one step stops the arc.
 - **Review loop, per arc:** `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol` over `git diff origin/dev...HEAD`, with this plan, the ledger, the arc map ("arc N of 4: A1 registry and guard, A2 refusal, A3 update harness, A4 flip"), the adversarial ask and the standard's two rules verbatim; `resume-codex.sh` until a round has no new material finding, hard stop at three rounds. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) beside round 1. The arcs are not stacked, so no cross-arc pass; A4's prompt also asks for drift across the merged arcs.
 - **Delivery:** as above, then `gh pr checks <n> --watch` once; a known flake one rerun, breakage a fix and the loop again. Never merge.
