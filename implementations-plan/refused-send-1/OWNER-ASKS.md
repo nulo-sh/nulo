@@ -45,7 +45,7 @@ The gap: a check can reach a node that is behind, which reports nothing. The row
 
 **Surface:** Home's and History's row and the transaction page, for a refused send.
 
-**What can happen:** the checks stop 30 minutes after the refusal and run only while the wallet is open and unlocked. If the red was wrong (the send went through on another node) and no check reached an up-to-date node in those 30 minutes, the row keeps reading "Refused by the network" for good. Typical case: the person closes the wallet seconds after the refusal and comes back later. It needs a wrong red first (OA-1's gap); how often that happens is not measured.
+**What could happen under A, as first built:** the checks stop 30 minutes after the refusal and run only while the wallet is open and unlocked. If the red was wrong (the send went through on another node) and no check reached an up-to-date node in those 30 minutes, the row keeps reading "Refused by the network" for good. Typical case: the person closes the wallet seconds after the refusal and comes back later. It needs a wrong red first (OA-1's gap); how often that happens is not measured.
 
 **Options:**
 - **A. As built.** The checks end at 30 minutes, as the wallet already does for a send it marked dropped.
@@ -53,6 +53,6 @@ The gap: a check can reach a node that is behind, which reports nothing. The row
 
 **Recommendation:** B. It corrects most wrong reds that A would keep, and its "Won't go through" wording tells the person it is now safe to send again. It reuses a check the wallet already runs for unconfirmed sends.
 
-**What ships now:** A.
+**Shipped before the answer:** A.
 
 **Answer: P77-11 B**, "One more check at the send's expiry: 'Won't go through' if absent, 'Sent' if included." Built in this arc (plan phase 6, D8): a refused row past its 30 minutes reads the final chain at the send's expiry through the unconfirmed path's check, with no new stored state.

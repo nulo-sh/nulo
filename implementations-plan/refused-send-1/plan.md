@@ -105,6 +105,8 @@ Steps 2-5 of [`implementations-plan/README.md` § Post-implementation standard](
 
 ## Audit verdicts
 
+**Code review, round 3 (2026-10-20).** Codex resumed on P77-11 B (`63cd6a8ba`): `approve`, no code finding; one low on OA-3's tense, adopted ([lessons/phase-6.md](lessons/phase-6.md)).
+
 **Code review, round 2 (2026-10-20).** Codex resumed on the fixes: `approve`, no new findings; the loop converged.
 
 **Code review, round 1 (2026-10-20).** Codex `approve` (two comment lows) and the Opus review `approve` (six lows: comments, two test titles, a duplicate alias, three classifier rows); all adopted ([lessons/phase-5.md](lessons/phase-5.md)).
