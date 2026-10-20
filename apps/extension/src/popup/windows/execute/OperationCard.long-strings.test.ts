@@ -181,21 +181,27 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 		expect(declarationsOf(".item_body", undefined, styleSource("SendTxSummary.vue"))).toMatchObject(WRAPS)
 	})
 
-	test("a registered token's 31-character symbol and its row may shrink and break inside the card", () => {
+	test("a registered token's 31-character symbol and 64-character name break inside their value column", () => {
 		const symbol = "W".repeat(31)
+		const name = "W".repeat(64)
 		const w = mount(OperationCard, {
 			props: {
 				op: { ...base, kind: "register_token", address: TOKEN } as never,
 				index: 0,
-				tokenMetadata: { symbol, name: "Wide Token", decimals: 18 },
+				tokenMetadata: { symbol, name, decimals: 18 },
 			},
 			global: { stubs },
 		})
-		const value = w.find('[data-testid="register-token-symbol"]')
-		expect(value.text()).toBe(symbol)
-		expect(value.classes()).toContain(CARD.token_meta)
-		expect(value.element.parentElement?.classList.contains(CARD.token_meta)).toBe(true)
-		expect(declarationsOf(".token_meta")).toMatchObject(WRAPS)
+		for (const [id, text] of [
+			["register-token-symbol", symbol],
+			["register-token-name", name],
+		] as const) {
+			const value = w.get(`[data-testid="${id}"]`)
+			expect(value.text(), id).toBe(text)
+			expect(value.element.parentElement?.classList.contains(CARD.prop), id).toBe(true)
+			expect(value.element.parentElement?.lastElementChild, id).toBe(value.element)
+		}
+		expect(declarationsOf(".prop", "> :last-child")).toMatchObject(WRAPS)
 	})
 })
 

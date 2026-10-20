@@ -144,7 +144,7 @@ describe("network-unavailable window", () => {
 
 		await w.find('[data-testid="network-unavailable-close-btn"]').trigger("click")
 
-		expect(rejectMock).toHaveBeenCalledTimes(1)
+		expect(rejectMock).toHaveBeenCalledExactlyOnceWith("Closed", "reject")
 		expect(windowsRemoveMock).toHaveBeenCalledWith(42)
 		expect(resolveInteractionMock).not.toHaveBeenCalled()
 	})
@@ -153,9 +153,10 @@ describe("network-unavailable window", () => {
 		await factory()
 
 		const event = pressEscape()
+		await flushPromises()
 
 		expect(event.defaultPrevented).toBe(true)
-		expect(rejectMock).toHaveBeenCalledTimes(1)
+		expect(rejectMock).toHaveBeenCalledExactlyOnceWith("Closed", "reject")
 		expect(windowsRemoveMock).toHaveBeenCalledWith(42)
 		expect(resolveInteractionMock).not.toHaveBeenCalled()
 	})

@@ -57,7 +57,7 @@ export const AuthwitSchema: z.ZodType<Authwit> = z.object({
 	chainId: z.number(),
 	account: z.string(),
 	hash: z.string(),
-	content: z.custom<AuthwitContent>((v) => typeof v === "object" && v !== null),
+	content: z.custom<AuthwitContent>((v) => typeof v === "object" && v !== null).describe("any non-null object, kept as stored"),
 	pending: z.boolean().optional(),
 	txHash: z.string().optional(),
 })

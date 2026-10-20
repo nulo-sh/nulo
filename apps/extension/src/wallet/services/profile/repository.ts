@@ -15,13 +15,10 @@
  */
 
 import type { BrowserApi } from "@nulo/wallet-core/ports"
-import { EntityStorage } from "@/wallet/storage"
+import type { EntityStorage } from "@/wallet/storage"
+import { entityStorage } from "@/wallet/storage/stores"
 import { nextRandomId } from "@/wallet/services/id-allocators"
 import type { Profile } from "./spec"
-
-/** Storage root for profile records. Frozen: renaming detaches every
- *  wallet on disk from its profile metadata. */
-export const PROFILE_STORAGE_ROOT = "nulo:core:profiles"
 
 /** Length in hex characters of generated profile ids. 8 hex chars ≈
  *  32 bits — collisions are astronomically unlikely for wallet-scale
@@ -43,8 +40,7 @@ export class ProfileRepository {
 		// Profile rows are the auth-critical root: every sealed-slot/MAC/fingerprint decision
 		// trusts the row fetched BY id. The key-identity guard hides any raw-storage row whose
 		// embedded id disagrees with its storage key, closing the embedded-id transplant bypass.
-		const guard = { requireKeyIdentityMatch: true } as const
-		this.storage = new EntityStorage<Profile>(PROFILE_STORAGE_ROOT, browserApi.storage.local, undefined, guard)
+		this.storage = entityStorage<Profile>("profiles", browserApi.storage.local)
 	}
 
 	/** Returns the profile with the given id, or `undefined`. */

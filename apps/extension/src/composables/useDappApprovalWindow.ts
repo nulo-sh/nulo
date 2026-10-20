@@ -10,6 +10,8 @@
  * - `closeWindow(true)` and `completeInteraction()` remove the `beforeunload` listener, so a decided
  *   interaction is never rejected again on unload; `closeWindow()` with no argument leaves it, so an
  *   overlay dismiss delivers the rejection through the unload event.
+ * - Every rejection names the window's end: the unload `close`, the profile guard `lock` or
+ *   `switch`, the window's own Reject `reject`.
  * - The listener is added after `init()` resolves, including when init fails internally (every
  *   window's init swallows its errors into `setError`), so a half-loaded window still rejects on
  *   close. A rejecting `init` would skip the registration.
@@ -24,6 +26,10 @@ import { useRouter } from "vue-router"
 import { useAppStore } from "@/stores/app.store"
 import { closeCurrentWindow } from "@/utils/close-current-window"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
+import type { WindowEnd } from "@/wallet/services/dapp-interaction/client"
+
+/** How long a window waits for the wallet to take its end: a wedged worker must not hold it open. */
+export const END_ACK_TIMEOUT_MS = 3_000
 
 export type DappWindowError = { title: string; tooltip: string; type: string }
 
@@ -41,7 +47,7 @@ export interface UseDappApprovalWindowOptions {
 	 * The window-local reject. Bound to `beforeunload` and to the
 	 * active-profile-change guard; guard divergences stay in the window.
 	 */
-	reject: () => void
+	reject: (end: WindowEnd) => void
 	/** The window's active profile (set inside init) — the profile-change guard compares against it. */
 	profile: Ref<ProfileInfo | undefined>
 	isInteractionCancelled: Ref<boolean>
@@ -54,6 +60,9 @@ export interface UseDappApprovalWindowResult {
 	/** The unmount-hook body. The window calls this from its own unmount hook. */
 	dispose: () => void
 	closeWindow: (interactionCompleted?: boolean) => void
+	/** Sends the window's end and closes the window once the wallet has taken it, the send failed, or
+	 *  {@link END_ACK_TIMEOUT_MS} passed. No unload repeats the end. */
+	endAndClose: (send: () => Promise<unknown>) => Promise<void>
 	/** The interaction is decided: an unload no longer rejects it, and the window stays open. */
 	completeInteraction: () => void
 	/** Register on the profile service's `onActiveProfileChanged` (pre-mount, as before). */
@@ -88,7 +97,7 @@ export function useDappApprovalWindow(options: UseDappApprovalWindowOptions): Us
 	const router = useRouter()
 
 	// One stable identity: every removal must target the exact registered listener.
-	const onBeforeUnload = () => options.reject()
+	const onBeforeUnload = () => options.reject("close")
 
 	const processingError = ref<DappWindowError | undefined>()
 	function setError(title: string, tooltip: string = title, type: string = "error") {
@@ -111,8 +120,25 @@ export function useDappApprovalWindow(options: UseDappApprovalWindowOptions): Us
 		closeCurrentWindow()
 	}
 
+	const endAndClose = async (send: () => Promise<unknown>) => {
+		completeInteraction()
+		let timer: ReturnType<typeof setTimeout> | undefined
+		const bound = new Promise<void>((resolve) => {
+			timer = setTimeout(resolve, END_ACK_TIMEOUT_MS)
+		})
+		try {
+			await Promise.race([send(), bound])
+		} catch {
+			// A refused send still closes: the close then ends the request.
+		} finally {
+			clearTimeout(timer)
+		}
+		closeCurrentWindow()
+	}
+
 	const onActiveProfileChanged = (profile?: ProfileInfo) => {
-		if (!profile || profile.id !== options.profile.value?.id) options.reject()
+		if (!profile) options.reject("lock")
+		else if (profile.id !== options.profile.value?.id) options.reject("switch")
 	}
 
 	const start = async () => {
@@ -135,5 +161,16 @@ export function useDappApprovalWindow(options: UseDappApprovalWindowOptions): Us
 		window.removeEventListener("beforeunload", onBeforeUnload)
 	}
 
-	return { start, dispose, closeWindow, completeInteraction, onActiveProfileChanged, stripStatus, processingError, setError, clearError }
+	return {
+		start,
+		dispose,
+		closeWindow,
+		endAndClose,
+		completeInteraction,
+		onActiveProfileChanged,
+		stripStatus,
+		processingError,
+		setError,
+		clearError,
+	}
 }

@@ -1,0 +1,24 @@
+# Phase 2 (A1) · emitter, snapshot, goldens, guard
+
+- **zod's `.describe()` clones.** `z.toJSONSchema`'s `override` visits the undescribed original as the clone's `_zod.parent`, so "an unlabelled node throws" must skip parents of a visited clone; a wrapper's label (`.catch().describe()`) and the inner custom's both land on the emitted node (`emit.ts`).
+- **Value keys collide in one store.** A `full` and a `minimal` golden of one value key (config, prices, token list, legal, the UI scalars) overwrote each other when a stamp's goldens shared one memory store, so the minimal one decoded the full one's row. `decodeGoldens` now splits a stamp's goldens into rounds with no shared key (found by the goldens author).
+- **Raw repositories add rules to their codec.** A tombstone's `profileId` must equal its key; a reset notice is withheld while its network's journal exists. `readStored` reads raw rows through the repositories (`RAW_REPOSITORY_READS`), not `decodeRow`; the notice goldens name a network other than the journal goldens' (a finished reset).
+- **Not covered:** a service-level row filter beyond its store (the account service's `rowMatchesKey`) is outside the snapshot; the goldens are honest rows, so R3 does not exercise it.
+- **Writer round trips:** every described key's writer is driven for real (14 tests); the scalar UI keys (`uiActiveAccount`, `uiLastActiveProfile`, `onboardingCompleted`) and `schemaRetryRequested`, `uiLoggerWindowId` are held by type and by the scan, their writers being inline literal sets.
+- **Gate.** `bun run baseline:storage` twice: `snapshot.json` `ddfa3a77…`, `goldens.json` `81510970…`, equal both runs (after the review fixes, `txs.full` gained `ambiguous`: `d5d7ca6a…` / `b3720937…`, equal both runs). Scratch edits, each reverted (tree clean after):
+  - a required `nickname` on `ContactSchema`: R1 red (shapes; live and backup decodes); after `baseline:storage`, R3 red ("every row … still stored", "each one decodes to a value");
+  - `name` truncated by a transform: R1 and R3 red (live and backup);
+  - `zzDemo: z.string().default("x")` on `DappSessionSchema`, regenerated: R3 red, the MAC wrapper dropping every session golden;
+  - `entityStorage` built with no codec: `stores.test.ts` red ("reads a row through its registered codec");
+  - frozen with stamp 0's pin: green; an optional `nickname` with no flag, refused naming both ways out; with `--additive`, stamp 1 appended and, with its pin added, green; stamp 0 hand-edited (`zod`), R4 red; stamp 1's additive mark removed by hand, R2 and R4 red.
+- **Scripts typecheck reaches the services.** The generator imports the registry, so `tsconfig.scripts.json` now compiles the logger and needs `src/types/console.d.ts`; a store-construction edit also moves the type-roles inventory's digest of `auth-registry/service.ts` (re-attested: its producer hits and evidence are unchanged).
+- **Opus diff review, beside Codex r1: conditional approve.** Ten findings, 1–9 applied (plan D22), 10 recorded as limits. Verified before fixing: the emitter fixes by a failing test each (`.trim()`, `z.coerce`, a bare node beside its described copy, both orders); the restricted-write refusal by a test; the full/minimal check found one real gap (`txs.full` lacked `ambiguous`).
+- **Codex r1 (gpt-6.1-sol, high): reject, six P2 and one comment nit; all verified, all fixed** (plan D23). Each had a red test or scratch edit before its fix:
+  - input-mode JSON Schema drops a pipe's validating output side: `.pipe(z.string().max(100))` on a transform passed R1–R4;
+  - a backup round lacking a required slice made the backup migrator refuse the first migration reading it;
+  - the full/minimal check (D22) and the factory and footprint samples judged pinned goldens by today's schema, which no post-freeze additive or required-field step could satisfy;
+  - `canonical` assigned keys, so an own `__proto__` key vanished from every pin;
+  - an outer `.describe()` cleared the flag of an undescribed node it wraps (zod copies the wrapped node's output into the wrapper before its override runs); my first per-node fix keyed flags by `WeakMap.size`, which is undefined, and a test caught it;
+  - the scan let a template extend a registered root without `@`.
+- **Codex r2: reject, one P2, fixed.** A pipe inherits its input side's emitted output (zod's ref flattening), so recording `x-pipe-out` as one value let the outer pipe of a chain overwrite the inner one's: `.pipe(min(1))` and `.pipe(min(10))` before a `.pipe(max(100))` emitted the same. It is now a list, earliest first. Codex verified every r1 fix, and that reading `stored` before `readStored` keeps the reset notice (taken on read) as a sample.
+- **Codex r3: approve, no new findings.** Verified the pipe list across wrappers, described clones and nested output pipes.

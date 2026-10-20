@@ -142,6 +142,12 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 		expect(describeFeePaymentMethod(popupSend(SPONSOR))).toBe("Sponsored")
 	})
 
+	test("a popup Send that records the person's pick reads the same as one that does not", () => {
+		expect(describeFeePaymentMethod({ ...popupSend(PRIVATE_FPC_ADDRESS), feeChoice: "wallet" })).toBe("Private Fee Juice")
+		expect(describeFeePaymentMethod({ ...popupSend(), feeChoice: "wallet" })).toBe("Sponsored")
+		expect(describeFeePaymentMethod({ ...popupSend(SPONSOR), feeChoice: "wallet" })).toBe("Sponsored")
+	})
+
 	test("a recorded fee call outranks the spender: the auth registry's own send, which keeps its pay_fee call", () => {
 		const revoke = [call(PRIVATE_FPC_ADDRESS, "pay_fee"), call(field(1n), "set_authorized", [field(0xa17n), false])]
 		expect(describeFeePaymentMethod({ ...popupSend(), calls: revoke })).toBe("Private Fee Juice")
@@ -152,5 +158,58 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 			"Set by Foo",
 		)
 		expect(describeFeePaymentMethod({ ...popupSend(PRIVATE_FPC_ADDRESS), origin: undefined })).toBe("External FPC")
+	})
+
+	describe("who chose the fee", () => {
+		const { PREEXISTING_FEE_JUICE: FJ, FEE_JUICE_WITH_CLAIM: FJWC, EXTERNAL } = AccountFeePaymentMethodOptions
+		const FEE_JUICE = `0x${"05".padStart(64, "0")}`
+		const FOO = { type: OriginType.DAPP, name: "Foo" }
+		const row = (
+			feeChoice: string,
+			feePaymentMethod: number,
+			calls: ReturnType<typeof call>[] = [],
+			origin: { type: number; name?: string } = FOO,
+		) => ({
+			feeChoice,
+			feePaymentMethod,
+			calls: [...calls, APP_CALL],
+			origin,
+		})
+
+		test.each([
+			["you, Fee Juice", row("wallet", FJ), "Public Fee Juice"],
+			["you, Fee Juice with claim", row("wallet", FJWC), "Public Fee Juice (with claim)"],
+			["you, the PrivateFPC's pay_fee", row("wallet", EXTERNAL, [call(PRIVATE_FPC_ADDRESS, "pay_fee")]), "Private Fee Juice"],
+			["you, a sponsor you picked", row("wallet", EXTERNAL, [call(SPONSOR, "sponsor_unconditionally")]), "Sponsored"],
+			["you, another fee contract", row("wallet", EXTERNAL, [call(APP, "fee_entrypoint_private")]), "External FPC"],
+			[
+				"the app, the PrivateFPC's pay_fee",
+				row("app", EXTERNAL, [call(PRIVATE_FPC_ADDRESS, "pay_fee")]),
+				"Private Fee Juice, set by Foo",
+			],
+			[
+				"the app, the PrivateFPC's mint_and_pay_fee after its claim",
+				row("app", EXTERNAL, [call(FEE_JUICE, "claim"), call(PRIVATE_FPC_ADDRESS, "mint_and_pay_fee")]),
+				"Private Fee Juice, set by Foo",
+			],
+			[
+				"the app, the protocol sponsor",
+				row("app_protocol_sponsor", EXTERNAL, [call(SPONSOR, "sponsor_unconditionally")]),
+				"Sponsored, set by Foo",
+			],
+			[
+				"the app, a sponsor-named call on its own contract",
+				row("app", EXTERNAL, [call(APP, "sponsor_unconditionally")]),
+				"Set by Foo",
+			],
+			["the app, its own pay_fee", row("app", EXTERNAL, [call(APP, "pay_fee")]), "Set by Foo"],
+			["the app, a claim to the account", row("app", FJWC), "Public Fee Juice (with claim), set by Foo"],
+			["the app, Fee Juice", row("app", FJ), "Set by Foo"],
+			["the app, an unknown method", row("app", 7), "Unknown (7)"],
+			["the app, unnamed", row("app_protocol_sponsor", EXTERNAL, [], { type: OriginType.DAPP }), "Sponsored, set by the app"],
+			["an unknown chooser reads as today", row("bogus", EXTERNAL, [call(APP, "fee_entrypoint_private")]), "Set by Foo"],
+		])("%s", (_case, tx, label) => {
+			expect(describeFeePaymentMethod(tx)).toBe(label)
+		})
 	})
 })

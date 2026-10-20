@@ -14,12 +14,14 @@
  * 3. NON-FORGEABLE BRAND — `backupSafe` membership is factory-private and the
  *    branded migration is deep-frozen; brand-then-mutate is impossible.
  */
-import { describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test } from "vitest"
 import { defineMigration, type Migration, Migrator, SCHEMA_VERSION_KEY } from "@nulo/wallet-core/migration"
 import { MemoryStorageArea } from "@nulo/wallet-core/storage"
 import { backupMigrationFixture } from "@/e2e/backup-migration-fixture"
 import { backupMigrations, migrations, realMigrations } from "@/wallet/storage/migrations"
 import { CONTACT_STORAGE_ROOT, ContactSchema } from "@/wallet/services/contact/spec"
+import { STORED_SHAPES, type StoredShape } from "@/wallet/storage/stored-shapes"
+import { committedBaseline, decodeGoldens } from "@/wallet/storage/stored-shapes/baseline"
 import type { z } from "zod"
 import { BACKUP_BLOCKED_ROOTS, BACKUP_SLICE_REGISTRY } from "./backup-migration-registry"
 import { applyRowTransform, defineRowMapMigration, isBackupSafeMigration, rowMapDefOf, type RowMapTransform } from "./row-map-migration"
@@ -152,14 +154,36 @@ describe("metamorphic guardrail: per-row output invariant under subset × permut
 	// the old→new path here (only the author's before/after fixtures know the
 	// old shape — see template.ts step 7), but a `drop`/`retype` of a required
 	// field breaks a CURRENT-shape row too, which we CAN catch: apply each
-	// migration to a schema-valid current row and assert it stays valid. The
-	// map forces a sample when a future migration targets a new root.
-	const SCHEMA_SAMPLES: Record<string, { schema: z.ZodType<unknown>; valid: Record<string, unknown> }> = {
-		[CONTACT_STORAGE_ROOT]: {
-			schema: ContactSchema as unknown as z.ZodType<unknown>,
-			valid: { id: "c1", profileId: "p1", name: "Alice", address: "0xabc", abbr: "A" },
-		},
-	}
+	// migration to a schema-valid current row and assert it stays valid. Every
+	// codec root of the stored-shape registry supplies its `full` golden as the
+	// migrations leave it, so a migration of any root has a current-shape sample.
+	let SCHEMA_SAMPLES: Record<string, { schema: z.ZodType<unknown>; valid: Record<string, unknown> }> = {}
+	beforeAll(async () => {
+		const { snapshot, goldens } = committedBaseline()
+		const { stored } = await decodeGoldens(goldens, snapshot.stamps, realMigrations)
+		SCHEMA_SAMPLES = Object.fromEntries(
+			goldens
+				.filter((golden) => golden.id === `${golden.shape}.full`)
+				.flatMap((golden) => {
+					const shape: StoredShape = STORED_SHAPES[golden.shape]
+					if (shape.read !== "codec" || shape.ref.kind !== "root") return []
+					return [
+						[
+							shape.ref.root,
+							{ schema: shape.schema as z.ZodType<unknown>, valid: stored[golden.id] as Record<string, unknown> },
+						],
+					]
+				}),
+		)
+	})
+
+	test("every codec root of the stored-shape registry has a schema sample", () => {
+		const roots = Object.values(STORED_SHAPES as Record<string, StoredShape>).flatMap((shape) =>
+			shape.read === "codec" && shape.ref.kind === "root" ? [shape.ref.root] : [],
+		)
+		expect(Object.keys(SCHEMA_SAMPLES).sort()).toEqual(roots.sort())
+		for (const [root, sample] of Object.entries(SCHEMA_SAMPLES)) expect(sample.schema.safeParse(sample.valid).success, root).toBe(true)
+	})
 
 	test("every backup-safe migration keeps a schema-valid row valid (no dropped/retyped required field)", () => {
 		for (const m of covered) {

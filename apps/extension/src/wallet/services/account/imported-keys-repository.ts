@@ -1,13 +1,7 @@
-import { EntityStorage } from "@/wallet/storage"
+import type { EntityStorage } from "@/wallet/storage"
+import { entityStorage } from "@/wallet/storage/stores"
 import type { StorageArea } from "@nulo/wallet-core/ports"
-import {
-	IMPORTED_KEYS_STORAGE_ROOT,
-	ImportedAccountKeySchema,
-	accountRowId,
-	accountRowIdOf,
-	parseAccountRowId,
-	type ImportedAccountKey,
-} from "./spec"
+import { accountRowId, accountRowIdOf, parseAccountRowId, type ImportedAccountKey } from "./spec"
 
 /**
  * Storage for imported accounts' encrypted signing keys, 1:1 with the `Account` rows they belong
@@ -18,9 +12,7 @@ export class ImportedKeysRepository {
 	private readonly storage: EntityStorage<ImportedAccountKey>
 
 	public constructor(storage: StorageArea) {
-		this.storage = new EntityStorage<ImportedAccountKey>(IMPORTED_KEYS_STORAGE_ROOT, storage, (raw) =>
-			ImportedAccountKeySchema.parse(raw),
-		)
+		this.storage = entityStorage("importedAccountKeys", storage)
 	}
 
 	public async get(profileId: string, chainId: number, address: string): Promise<ImportedAccountKey | undefined> {

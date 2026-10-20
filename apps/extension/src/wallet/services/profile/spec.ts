@@ -14,6 +14,10 @@ import type { FeePickUpdate } from "@/utils/fee-picks"
 
 export const PROFILE_SERVICE_NAME = "profile"
 
+/** Storage root for profile records. Frozen: renaming detaches every
+ *  wallet on disk from its profile metadata. */
+export const PROFILE_STORAGE_ROOT = "nulo:core:profiles"
+
 export type ProfileType = "password" | "passkey"
 
 /** An {@link ExecutionFence} a popup holds across several RPCs. Serials and deletion epochs restart

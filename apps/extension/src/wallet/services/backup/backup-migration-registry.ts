@@ -40,7 +40,7 @@ import { CONTACT_SERVICE_NAME, CONTACT_STORAGE_ROOT } from "@/wallet/services/co
 import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import type { Network } from "@/wallet/services/network/spec"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
-import { PROFILE_STORAGE_ROOT } from "@/wallet/services/profile/repository"
+import { PROFILE_STORAGE_ROOT } from "@/wallet/services/profile/spec"
 import type { TokenBalanceRaw } from "@/wallet/services/token-balance/spec"
 import { TOKEN_BALANCE_SERVICE_NAME, TOKEN_BALANCE_STORAGE_ROOT } from "@/wallet/services/token-balance/spec"
 import type { Token } from "@/wallet/services/token/spec"
@@ -48,7 +48,7 @@ import { TOKEN_SERVICE_NAME, TOKEN_STORAGE_ROOT } from "@/wallet/services/token/
 import type { Tx } from "@/wallet/services/transaction/spec"
 import { TRANSACTION_SERVICE_NAME, TRANSACTION_STORAGE_ROOT } from "@/wallet/services/transaction/spec"
 import { CONFIG_SERVICE_NAME } from "@/wallet/services/config/spec"
-import { CONFIG_STORAGE_KEY } from "@/wallet/config/store"
+import { CONFIG_STORAGE_KEY } from "@/wallet/config/config"
 import { BASELINE_VERSION } from "@/wallet/storage/migrations"
 
 // ── Version metadata (export + import share this single source) ─────────────
