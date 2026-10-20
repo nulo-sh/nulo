@@ -1,2 +1,7 @@
 #!/bin/sh
-bunx commitlint --edit "$1"
+# Runs only the tools this worktree installed; without them it stops rather than look anywhere else.
+if [ ! -f node_modules/.bin/commitlint ]; then
+	echo 'commit-msg: commitlint is not installed in this worktree. Run bun install first.' >&2
+	exit 1
+fi
+exec bun --no-install ./node_modules/.bin/commitlint --edit "$1"
