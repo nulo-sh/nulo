@@ -8,3 +8,5 @@
 - 2026-10-19 deep step 3: contradiction check done. Codex INCONSISTENT (11 findings), Opus CONSISTENT-WITH-FIXES (17); all adopted, no ledger flips; D20-D27 added, OA-4 added.
 - 2026-10-19 deep step 4: double audit done. Codex CONDITIONAL APPROVE (8; 7 adopted, 1 rejected), Opus CONDITIONAL APPROVE (11; all adopted). UI keys left the lane (D26); OA-4 retired.
 - 2026-10-19 deep step 5: final fresh Codex pass: CONDITIONAL APPROVE (3 conditions, adopted), then APPROVE on re-read. Plan ready for the orchestrator; OA-1..OA-4 open.
+- 2026-10-20 A1 P1: fixed-IV vectors (`5ef932ba`), then the frame and the row seal (`2eea38db`).
+- 2026-10-20 A1 P2/P3: keyring, sealed store, keyless sweep, contacts and dApp sessions sealed (`8dee1b86`); composition and smoke e2e green on Chrome and Firefox; the list-load gate holds (`lessons/phase-1.md`).

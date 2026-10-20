@@ -265,7 +265,7 @@ Path notation:
 
 ### Future shape changes and #865 (D12)
 
-- **#865's model, as built** on `migration-rule-1-a1` (unmerged at planning time):
+- **#865's model, as merged** (#890; the deviations A1 met are in `lessons/phase-1.md`):
   - `StoredEncoding` is `"json" | "structured"`;
   - an encoding change is a downgrade, even under an additive stamp (`downgradeOf` in `stored-shapes/baseline.ts`);
   - the golden writer distinguishes only json from structured (`wire`);
@@ -273,13 +273,13 @@ Path notation:
   - structured, engine and authenticated shapes are `restricted`: no migration may cover or write them.
   - Cited by symbol: the branch moves (line numbers shifted between `92987f9c` and `1ef0245a`).
 - **This lane's registration:**
-  - A sealed root keeps `encoding: "json"`, since the envelope is a JSON string, and gains a `sealed: true` flag with its inner schema. The stored schema becomes `Envelope | LegacyRow`.
+  - A sealed root keeps `encoding: "json"`, since the envelope is a JSON string, and gains a `sealed: true` flag, declared once in `STORES` and copied into the registry. The recorded schema stays the inner codec's: the envelope is the store's wire form, not a shape a writer produces.
   - A1 adapts #865's baseline:
     - the golden writer seals sealed shapes with V12's fixed keys, and the reader opens them through the store;
     - the authenticated path composes the MAC and the seal for `dappSessions`, which keeps `authenticated`;
     - `downgradeOf` refuses dropping `sealed`;
     - `restricted` gains `sealed`. That is the "no pre-unlock migration over a sealed root" rule, in #865's own guard rather than a second one.
-  - Each arc then re-stamps with `bun run baseline:storage -- --additive "sealed envelope; plaintext rows still read and are sealed at the profile's next unlock"`. Old plaintext goldens decode to the same values through the dual read, so #865's preservation check (`preservationProblems`) holds.
+  - Each arc then re-stamps with `bun run baseline:storage -- --additive "sealed envelope; plaintext rows still read and are sealed at the profile's next unlock"` once #865's stamps are frozen; while `PINNED_STAMPS` is empty the generator rewrites stamp 0 with no mark. Old plaintext goldens decode to the same values through the dual read, so #865's preservation check (`preservationProblems`) holds.
   - #865 seeds every historical golden through the current shape's `wire`. A `sealed` flag must not reach that path: historical goldens keep their original plaintext wire form, and sealed goldens are a separate set with fixed keys and physical keys. Then breaking the legacy reader fails the frozen plaintext corpus.
   - If #865 merged in a different form, A1 adapts to the merged form and records the deviation here.
 - **The `nulo:ui:*` keys stay out of the boundary** (D2): `migrationProblems` forbids removing a shape without a migration, `restricted` forbids any migration over a structured one, and `stored-shapes.writers.test.ts` holds each entry to its live writer. This lane does not loosen any of the three.
@@ -318,12 +318,13 @@ Path notation:
 - **Maintenance enumeration.** `rowsForProfile` returns raw rows today (`mac-storage.ts:75-80`), and the refusal and chain purge filter them by origin and chain (`S/dapp-session/service.ts:405-427,475-487`). Raw envelopes carry neither field. So:
   - `rowsForProfile` opens with the row keys and skips the MAC check, keeping each row's storage key for the delete. A deletion needs no authorization proof; normal reads still need one.
   - `purgeForProfile` (`S/dapp-session/service.ts:489-507`) matches envelopes by `profileId` with no key, as today's raw predicate does, so deleting a locked profile from a fresh worker completes.
-  - Only the origin and chain filters (the refusal and the chain purge) need the row key. With none, they return `unavailable` and the caller reports it, never a false "nothing to delete". After a lock the keys are still present (D6).
+  - Only the origin and chain filters (the refusal and the chain purge) need the row key. With none, the refusal returns `unavailable` and the caller reports it, never a false "nothing to delete". After a lock the keys are still present (D6). The chain purge's one caller, the network reset, runs under a live run fence, so its profile's keys are held and an unopened row there is tampered: never served, it is left alone (A1).
 
 ### Test seams (D15)
 
 - **Unit:** `wallet/storage/sealed-entity-storage.testing.ts` gives services fixed row keys. About 35 test files that seed rows raw keep working through the dual read; only the tests that assert sealed bytes use the helper.
-- **E2E read seam:** `nulo:e2e:sealed-dump` (`src/e2e/sealed-dump.ts`), built only into e2e builds, follows the csp-report message pattern (`src/e2e/csp-report.ts:21-23`). It answers a root name with `{ storageKey, naturalId, row }[]` for the open profile, read through the store.
+- **E2E reads (as built in A1):** no seam. The readers of a sealed root call the owning service's own RPC through `callService` (`tests/e2e/fixtures/session.ts`), which needs no build flag and also runs against release artifacts. The seam below stays the fallback for a root with no read RPC; A2 decides for the journal readers.
+- **E2E read seam (fallback, not built):** `nulo:e2e:sealed-dump` (`src/e2e/sealed-dump.ts`), built only into e2e builds, follows the csp-report message pattern (`src/e2e/csp-report.ts:21-23`). It answers a root name with `{ storageKey, naturalId, row }[]` for the open profile, read through the store.
   - The physical key lets a read-modify-write helper remove a sealed original and write a plaintext replacement, which the dual read serves. So no write channel is needed.
   - `.github/workflows/_build-extension.yml:142`'s production marker list gains `nulo:e2e:sealed-dump`.
   - 26 network specs read `nulo:journal@` raw through `tests/e2e/fixtures/journal.ts` (`:45-60` and five more scans), and `fixtures/journal-page.ts:35-41` does too. A2 moves both to the seam. A spec that read the journal after a worker restart unlocks first; the A2 PR lists each one.
