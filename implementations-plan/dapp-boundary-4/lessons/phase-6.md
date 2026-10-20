@@ -1,0 +1,3 @@
+# Phase 6: arc gate and review loop
+
+- `test:all` first run: one red, `apps/extension/scripts/type-roles/inventory.test.ts` › "an unreachable branch's producer set, producer files and evidence are as pinned". Three producer attestations (`action_operations`, `add_public_authwit`, `execute_window`) pin `packages/wallet-bridge/src/dispatcher.ts` by a whitespace-collapsed digest, so any edit reopens them. Re-attested: the change only adds `sessionAccounts` to the metadata network operation, which runs through `executeOperations` with no window and carries no action; the producer hits and evidence still match. Re-pinned the three digests (one value). Any later edit to `dispatcher.ts` re-pins again.
