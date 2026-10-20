@@ -285,8 +285,15 @@ test.skipIf(!aztecConfig)(
 		const readFrom = Date.now()
 		await control.bringToFront()
 		await navigateByHash(control, "#/popup/settings/connected-apps", 15_000)
-		await control.waitForSelector(`${row} ${NOT_CONNECTED}`, { visible: true, timeout: 5_000 })
-		expect(await control.$eval(`${row} ${NOT_CONNECTED}`, (el) => el.textContent?.trim())).toBe("Allowed. Not connected yet.")
+		// The row's link is a sibling of its text, so the line is read from their shared parent.
+		const rowLine = await control.waitForFunction(
+			(rowSel: string, lineSel: string) =>
+				document.querySelector(rowSel)?.parentElement?.querySelector(lineSel)?.textContent?.trim() || false,
+			{ timeout: 5_000, polling: 100 },
+			row,
+			NOT_CONNECTED,
+		)
+		expect(await rowLine.jsonValue()).toBe("Allowed. Not connected yet.")
 		await shotSend(control, "connect-not-connected-row", "connected-app-row")
 		await openConnectedApp(control, host, NOT_CONNECTED)
 		expect(await control.$eval(NOT_CONNECTED, (el) => el.textContent?.replace(/\s+/g, " ").trim())).toBe(

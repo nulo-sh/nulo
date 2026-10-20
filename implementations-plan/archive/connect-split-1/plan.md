@@ -13,13 +13,13 @@ standard: implementations-plan/README.md § Post-implementation standard, read a
 
 ## Outcome
 
-- **Date:** 2026-10-19.
-- **Status:** completed. #886 closes #859, a draft until the owner signs OA-1 to OA-3; its merge into `dev` closes the plan.
-- **Shipped:** Allow answers the discovery and its connect window closes; `ConnectBridge` keeps the window, by identity-guarded holds, until the check's own window exists or `BRIDGE_MS` after the approval; the check opens in its own window when the dApp starts its exchange, as a reconnection's does; the `standby` reservation, the expired page, the step bar and `WindowPort.navigate` are gone; admission is the base's (D8); a fresh-document approval-filter pin; two connect journeys measured on both browsers at retry 0.
-- **Owner asks:** OA-1, OA-2 and OA-3 ship as recommended (A), awaiting sign-off; OA-4 ships B (D8).
-- **Dropped:** D5's per-tab cap (superseded by D8); outline B and navigate-in-place (D3); `focused: false` (D4); a playground Discover button (D6); a navigation watcher (D7).
-- **Known limits:** #883 (D8, OA-4); navigation after the exchange stays #606's, commented (D7).
-- **Open items:** #884 (OA-2's note); #885 (a capture-mode hang that predates the plan); #849 took one Firefox occurrence.
+- **Date:** 2026-10-19; reworked 2026-10-20 on the owner's decision.
+- **Status:** completed. #886 closes #859 and #884, a draft until the orchestrator takes it out; its merge into `dev` closes the plan.
+- **Shipped:** Allow answers the discovery and closes its connect window at once (D9); the check opens in its own window when the dApp starts its exchange, as a reconnection's does; closing a window after Allow never cancels; a refusal after Allow answers only the app (#927). A saved app no connection has reached reads "Allowed. Not connected yet." in Connected apps, its page says so, and its next check reads as a first connection's, from the verification hash establishment already writes, with no stored data added (D10). The `standby` reservation, the expired page, the step bar and `WindowPort.navigate` are gone; admission is the base's (D8); a fresh-document approval-filter pin; two connect journeys measured on both browsers at retry 0.
+- **Owner asks:** OA-1 A, OA-2 B, OA-3 C (the owner, 2026-10-20); OA-2's note B (#884); OA-4 B (D8).
+- **Dropped:** `ConnectBridge`, its `BRIDGE_MS` wait and the "Connecting on <chain>" state (D9, superseding D3); D5's per-tab cap (superseded by D8); outline B's navigate-in-place (D3); `focused: false` (D4); a playground Discover button (D6); a navigation watcher (D7).
+- **Known limits:** #883 (D8, OA-4); #927 (a refusal after Allow shows nothing in the wallet, D9); navigation after the exchange stays #606's, commented (D7).
+- **Open items:** #885 (a capture-mode hang that predates the plan); #849 took one Firefox occurrence.
 - **Lessons:** one promoted: a PR conflicting with `dev` gets no `pull_request` run, folded into the merge-ref line. To keep the budget, the Confirm-enables entry moved to the `e2e-testing` skill, which also took this plan's e2e gotchas.
 - **Seeds retired:** the `/goal` and `/loop` seeds below.
 
@@ -162,17 +162,19 @@ Attacker: a web page, or a script on one, that sends discoveries and key exchang
 
 - **The check opens only for an Allow** (Excellent 3): no reservation, no window (F4); one window per reservation; the marker binds the Allow's profile and tab; F5 binds the exchange to the discovery's tab and document origin. **A navigation voids an unused Allow**: the old document's port dies with it; an approval landing after the navigation reaches no page, because the new document's approval filter holds no id it did not forward (F5); and an exchange from another origin is dropped on arrival. The one way through is a later document of the *allowed* origin that sends a discovery reusing the earlier document's request id, which the sdk then records afresh for that tab (`background_connection_handler.ts:257-268`): the allowed app connecting itself, still behind the emoji check, so no boundary is crossed (plausible but unverified; unchanged from the base). Tests: the filter and transport pins stay, plus one filter case: a fresh filter drops an approval for an id an earlier instance forwarded. Code comments state these as invariants.
 - **Navigation after the exchange.** An exchange that passed F5, then a navigation while establishment awaits, can still open a check for a session whose page is gone: the transport checks on arrival, and on Chrome `tabs.onUpdated` sees no URL for an ordinary origin (Firefox delivers it, `session-tabNavigate.test.ts:158`). Unchanged from the base (the standby path navigated the same way), harmless to answer, and #606's "a check can outlive its session"; closing it needs a document-liveness lifecycle (D7). Comment on #606 at close-out.
-- **Window stacking.** The bridge holds no slot; it lasts the admission wait (≤ the 55 s cut-off), then `BRIDGE_MS`, or establishment's own awaits once pinned; one per Allow, and Allows are capped by the popup caps (4 per origin, 32 in all). Checks: 2 per origin, 8 in all (D8).
+- **Window stacking.** The connect window closes at Allow and holds no slot (D9). Checks: 2 per origin, 8 in all (D8).
 - **Focus theft.** The check opens without a gesture; nothing inside is focused and no Enter or Escape at the document answers it (F6). Pinned in component tests and J1.
-- **Weakened behaviour.** A late exchange used to land on a visible expired page; now it ends silently. No capability, account or signature results (F4).
+- **Weakened behaviour.** A late exchange used to land on a visible expired page; now it ends silently, and so does every refusal after Allow, the window being gone (#927). No capability, account or signature results (F4).
+- **The not-connected line** (D10) reads a field establishment writes before it opens the check, so a row shows it from the Allow until a key exchange reaches establishment; a refused establishment leaves it. It grants nothing and reads nothing new: no stored data, no new message.
 - **Logging, privilege, supply chain.** No new log line, permission, dependency or cryptography; `navigate`'s `tabs.query` and `tabs.update` leave.
 
 ## UI impact
 
-- **Discover window** (OA-1, OA-2, OA-3): the two-segment bar leaves; after Allow the window keeps its present "Connecting on <chain>" look until the check window opens over it, or `BRIDGE_MS` after the approval with no exchange begun, then closes; the "Connection request expired" page goes. No new line.
-- **Verify window** (OA-1): opens as its own window for a new connection, as a reconnection's does; the bar leaves; same copy.
+- **Discover window** (OA-1 A, OA-2 B, OA-3 C): the two-segment bar leaves; Allow closes the window as soon as the wallet has the answer, with no "Connecting on <chain>" state; the "Connection request expired" page goes. No new line.
+- **Verify window** (OA-1 A): opens as its own window for a new connection, as a reconnection's does; the bar leaves; same copy. A saved app no connection has reached gets "Connection established", not "Reconnected" (D10).
+- **Connected apps** (#884 B): a row no connection has reached reads "Allowed. Not connected yet." in place of its grants; its page opens with "You allowed this app, but it has not finished connecting. Nothing is shared with it. Its next connection starts with the emoji check." Both go once a connection reaches establishment.
 
-The decision quoted above covers the split. The PR stays a draft until the owner signs OA-1 to OA-3.
+The owner signed OA-1 to OA-3 and #884's option on 2026-10-20; the PR body quotes the picks and notes.
 
 ## Decision ledger
 
@@ -180,12 +182,14 @@ The decision quoted above covers the split. The PR stays a draft until the owner
 |---|---|---|---|
 | D1 | Verify reservations lose `standby`; the connect window is never a slot | `attach` with a short expiry | both agree |
 | D2 | An Allow's validity is unchanged | anchoring it to the Allow time (a second reservation deadline) | both agree |
-| D3 | The bridge, pinned when establishment calls back, closed after the check window exists | outline B, settle-and-close at Allow; navigate in place (one window, against the split) | round 1: Codex B, Opus A; round 2: Codex A, subject to OA-2 |
+| D3 | Superseded by D9. The bridge, pinned when establishment calls back, closed after the check window exists | outline B, settle-and-close at Allow; navigate in place (one window, against the split) | round 1: Codex B, Opus A; round 2: Codex A, subject to OA-2 |
 | D4 | The check window opens as a reconnection's | `focused: false` (Firefox ignores it) | both agree |
 | D5 | Superseded by D8. Ships a per-tab cap of one check, its FIFO collateral disclosed; the origin cap stays 2 | known limit (one per Allow, two per origin); per-tab queues (a scheduler change) | both asked to surface it: OA-4; Codex round 2 named the collateral and its tests |
 | D6 | J2 stalls the playground with `stallPage` | a playground Discover button (four files and a README for one test) | Opus |
 | D7 | No document-liveness tracking for a navigation after the exchange; a comment on #606 | a navigation watcher (the `tabs` permission or a content-script handshake) | Codex withdrew C1 in round 2 |
 | D8 | No per-tab cap: admission stays the base's, and the stacking limit is a closed `known-limit` issue | D5's cap (an unused Allow blocks the tab's saved-row reconnection); a cap keyed on (tab, origin) that supersedes an unstarted reservation (it can kill a twin's exchange); a cap at window creation (a refusal, or a second queue with its own lifecycle) | implementation review: Opus's finding; Codex consulted, `DECISION: B` |
+| D9 | Allow closes the connect window at once; `ConnectBridge` and `BRIDGE_MS` go; closing after Allow never cancels; a refusal after Allow answers only the app, a closed `known-limit` issue (#927) | D3's bridge; a notice window or toast for a refusal after Allow (a new surface the decision ruled out) | the owner, 2026-10-20: OA-2 B, OA-3 C |
+| D10 | "Not connected yet" is a row with no `verificationHash`, which establishment writes before it opens the check; that read also makes the row's next check a first connection's | a stored connected flag or timestamp (new data) | the owner, 2026-10-20: #884 B; the words the orchestrator's, on the owner's note |
 
 ## Audit verdicts
 

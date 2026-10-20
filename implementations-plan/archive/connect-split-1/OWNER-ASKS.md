@@ -1,6 +1,6 @@
 # connect-split-1 owner asks
 
-The owner's decision on #859 (2026-10-19) covers the split itself: Allow answers the discovery and its window closes; the emoji check opens its own window when the page starts the key exchange. The arc ships each ask's "what ships now" form in a draft PR; the PR leaves draft only after the owner signs OA-1 to OA-3 (OA-4 is the orchestrator's first). Pictures: base and head, light and dark, Chrome, in the PR body.
+The owner's decision on #859 (2026-10-19) covers the split itself: Allow answers the discovery and its window closes; the emoji check opens its own window when the page starts the key exchange. The arc shipped each ask's "what ships now" form in a draft PR; the owner signed OA-1 to OA-3 and OA-2's note on 2026-10-20, and #886 ships the picks below (OA-4 is the orchestrator's). Pictures: base and head, light and dark, Chrome (and Firefox's connect window), in the PR body.
 
 ## OA-1: the two windows after the split (sign-off)
 
@@ -13,6 +13,8 @@ The owner's decision on #859 (2026-10-19) covers the split itself: Allow answers
 **Options.** A: ship as above (recommended: it is the decision, with nothing added). B: keep a step indicator in one or both windows (the owner picks what it shows; the lane brief removes it unless the owner picks otherwise).
 
 **Pictures.** Discover before Allow, base vs head; verify for a new connection, base vs head; each light and dark.
+
+**Owner, 2026-10-20: A.** "Ship them as built: no step bar; the check opens in a window of its own." Shipped as above.
 
 ## OA-2: after Allow, when no check follows yet
 
@@ -30,6 +32,10 @@ The owner's decision on #859 (2026-10-19) covers the split itself: Allow answers
 
 **Pictures.** Discover after Allow (the "Connecting on <chain>" state), light and dark; the PR body gives J1's and J2's measured times (Allow to check window, Allow to the discover window closing).
 
+**Owner, 2026-10-20: B**, with the note: "I understand once we click "Allow" it's up to the app developer what happens next, so I'd do B." Shipped: Allow closes the window as soon as the wallet has the answer; the "Connecting on <chain>" state and the 1.5 s wait go. A refusal after Allow (the app's checks full until the cut-off, a failed save, a profile switch, the chain losing its network) answers only the app with the refusal it got before, and the wallet shows nothing: #927, a closed known limit.
+
+**Owner, 2026-10-20, on the note: B** (#884), "Keep the row and mark it "Not connected yet" until a connection completes; its next check reads as a first one," with the note: "Maybe something more explanatory? Like "Discovery Allowed. Not connected yet"; you are better than me on these tpyes of ux copy tbh". The orchestrator set the words in the window's own vocabulary ("Discovery" is a word no screen shows; the window says "wants to connect" and the person pressed Allow). Shipped: the row reads "Allowed. Not connected yet.", and the app's page "You allowed this app, but it has not finished connecting. Nothing is shared with it. Its next connection starts with the emoji check." Both go once a connection reaches establishment, and that connection's check reads "Connection established". No stored data: the signal is the verification hash establishment already writes.
+
 ## OA-3: closing the discover window after Allow
 
 **Surface.** The discover window after Allow.
@@ -39,6 +45,8 @@ The owner's decision on #859 (2026-10-19) covers the split itself: Allow answers
 **Options.** A (recommended): as above. B: closing it at any time before the check opens cancels (the wallet also drops the reserved check). C: closing it after Allow never cancels.
 
 **Pictures.** None: no screen changes.
+
+**Owner, 2026-10-20: C.** "Closing it after Allow never cancels." With OA-2 B the window is gone at Allow; an unload after Allow rejects nothing, and the worker no longer watches the window.
 
 ## OA-4: one check window per page (for the orchestrator)
 
