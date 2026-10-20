@@ -46,6 +46,12 @@ export interface WindowPort {
 	/** Close a window by id. No-op / rejects if it is already closed. */
 	remove(windowId: number): Promise<void>
 
+	/** Close one tab by id; its window closes with its last tab. Rejects if the tab is gone. */
+	closeTab(tabId: number): Promise<void>
+
+	/** Whether the window is a popup-type window. False when it is gone; never throws. */
+	isPopup(windowId: number): Promise<boolean>
+
 	/** Focus / restore a window by id. Rejects if it is already closed. */
 	update(windowId: number, options: UpdateWindowOptions): Promise<void>
 

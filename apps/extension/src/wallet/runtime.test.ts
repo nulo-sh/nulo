@@ -197,6 +197,32 @@ describe("runtime.start() single-flight contract", () => {
 	})
 })
 
+describe("runtime boot order", () => {
+	test("the request windows a restart ended close before the migration engine runs", async () => {
+		const order: string[] = []
+		const { deps } = makeDeps()
+		Object.assign(deps.browserApi.runtime, {
+			getURL: (path: string) => `chrome-extension://wallet/${path}`,
+			getContexts: async () => [
+				{
+					contextId: "c",
+					contextType: "TAB",
+					tabId: 7,
+					documentUrl: "chrome-extension://wallet/src/popup/index.html#/windows/verify?sessionId=s",
+				},
+			],
+		})
+		;(deps.browserApi as { windows: unknown }).windows = { closeTab: async () => void order.push("closeTab") }
+		migratorImpl = async () => {
+			order.push("migrate")
+			return { kind: "noop", version: 1 }
+		}
+		bbImpl = () => Promise.reject(new Error("bb down"))
+		await expect(createWalletRuntime(deps).start()).rejects.toThrow("bb down")
+		expect(order).toEqual(["closeTab", "migrate"])
+	})
+})
+
 describe("runtime migration log lines", () => {
 	// A migration's reason can quote a malformed stored row: it is shown and persisted, never logged.
 	const REASON = 'Unexpected token in JSON at position 9: {"label":"row-sentinel"'

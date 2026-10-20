@@ -198,7 +198,7 @@ runtime env var can never arm a build-time flag.
 | `NULO_E2E_PROVERLESS=1` | `agent.sh` arms the proverless build pair |
 | `NULO_E2E_MIGRATION_FIXTURE=1` | runtime declaration that the dist carries the migration fixture |
 | `NULO_E2E_CSP_REPORT=1` | runtime declaration that the dist carries the CSP violation recorder: every launch's `close` fails on a missing record or any entry (README § CSP violations) |
-| `NULO_E2E_SHOT_DIR` | capture mode: `shotSend` writes light and dark PNGs there; CI never sets it. The shot page must be shown: Chrome's `newPage` opens a tab, which hides the tab before it, and a hidden page draws no frame, so `shotSend` refuses it; bring the page to front where the spec acts on it |
+| `NULO_E2E_SHOT_DIR` | capture mode: `shotSend` writes light and dark PNGs there; CI never sets it. The shot page must be shown: Chrome's `newPage` opens a tab, which hides the tab before it, and a hidden page draws no frame, so `shotSend` refuses it; bring the page to front where the spec acts on it. A wallet whose token arrives untrusted (a backup import) opens the first-receive sheet over Home's middle, so a frame of Home's card comes from a fixture that imports its token through the UI (`tokenReadyExtension`) |
 | `NULO_E2E_ARTIFACT_RUN=1` | smoke against a built artifact (release/nightly): guarded with the node stand-in like a source run, skips the encrypted `backup-roundtrip` spec and the armed-dist check, and provides `liveLeg`, which runs `shipped-token-list.test.ts`, the one launch that reaches the live Testnet node; set for BOTH artifact paths, never keyed on bare `EXTENSION_PATH` |
 | `EXTENSION_PATH` | smoke: load this unpacked dir instead of `dist/chrome` |
 | `NULO_E2E_DATA_ROOT` | sandbox data-dir root (default `~/.cache/nulo-e2e`) |
@@ -595,9 +595,10 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   `home-scroller[data-reminders-settled="true"]`. Its rows also push the activity list below the
   fold, so a Tab walk there scrolls, and that scroll's event arrives a frame later: a spec that
   counts scroll events lets two frames pass before it arms (`rows.test.ts`'s `armNavigationProbe`).
-  A funded password wallet shows the urgent banner
-  above the hero until its phrase is revealed; a spec that frames Home without either (store
-  captures) reveals the phrase and taps Hide through the UI.
+  A password wallet's unsaved phrase is a step of the card, funded or not; only after Hide does a
+  funded wallet show the urgent banner above the balance instead, until its phrase is revealed. A
+  spec that frames Home without either reveals the phrase and taps Hide through the UI
+  (`clearGetStarted`, `fixtures/profiles.ts`).
 - **A storage seed over a row the wallet is still writing is lost.** Adding a token trusts it, then
   `setArrivalFloor` rewrites the trust row from the state it read, so a seed written between the two
   writes is overwritten. Wait for the service's last write before seeding: `seedPendingTrust`
