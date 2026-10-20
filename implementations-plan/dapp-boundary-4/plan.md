@@ -158,7 +158,7 @@ Every gate runs from the worktree root and also runs `bun run lint` and `bun run
   - **Node failure.** The node throws an error whose message holds the address: F and B both answer not published. No logged argument holds the address.
 - **Gate:** `cd packages/wallet-bridge && bun run test src/dispatcher.test.ts`, then `cd apps/extension && bun run test src/wallet/services/execution/view-executor.test.ts`. Pass: exit 0; the reachability pins in `dispatcher.test.ts` unchanged and green.
 
-### Phase 5: the dApp-session MAC sentence
+### Phase 5: the dApp-session MAC sentence ✓
 
 - In `SECURITY.md` § Storage privacy, add one sentence. It says each dApp-session row carries a MAC keyed from the profile's keys, which stops a forged row and a row replayed under another id or profile. It does not stop a writer with storage access from putting back an earlier authentic row of the same key (#967). In the content-script note, name a Firefox content script as such a writer, pointing at that sentence.
 - **Gate:** `git diff --stat` shows only `SECURITY.md` for this phase; `bun run test:ci-gating` exits 0.

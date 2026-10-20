@@ -7,3 +7,4 @@
 - 2026-10-20 Phase 2 gate pass: aztec-runtime register-contract + artifact-class-id 15/15; extension class-id, void-conformance, real, bounds, account-state 78/78; the three new refusal cases red against the base copies; lint 0; typecheck:all 0.
 - 2026-10-20 Phase 3 gate pass: view-executor.test.ts 29/29, the three class-metadata cases red against the base copy; lint 0; typecheck:all 0.
 - 2026-10-20 Phase 4 gate pass: dispatcher.test.ts 277/277 (reachability pins unchanged); view-executor.test.ts 32/32, the five metadata cases red against the base copy; lint 0; typecheck:all 0.
+- 2026-10-20 Phase 5 gate pass: only SECURITY.md changed; test:ci-gating 640/640.
