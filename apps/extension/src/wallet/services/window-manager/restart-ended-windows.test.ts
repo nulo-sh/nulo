@@ -120,24 +120,25 @@ describe("trackOpenWindows", () => {
 
 	test("closes the windows opened or navigated onto a restart-ended route, and no other", async () => {
 		const { removed, windows } = tracked()
-		const check = await windows.create({ url: at("discover") })
-		await windows.navigate(check.id as number, at("verify"))
+		const navigatedOnto = await windows.create({ url: at("execute") })
+		await windows.navigate(navigatedOnto.id as number, at("verify"))
+		const navigatedOff = await windows.create({ url: at("discover") })
+		await windows.navigate(navigatedOff.id as number, at("execute"))
 		const capabilities = await windows.create({ url: at("capabilities") })
 		await windows.create({ url: at("execute") })
 		await windows.create({ url: `${POPUP}#/windows/passkey` })
 		windows.closeRestartEnded()
 		await Promise.resolve()
-		expect(removed.sort()).toEqual([check.id, capabilities.id].sort())
+		expect(removed.sort()).toEqual([navigatedOnto.id, capabilities.id].sort())
 	})
 
 	test("forgets a window once it closes", async () => {
-		const { fake, removed, windows } = tracked()
+		const { fake, windows } = tracked()
 		const discover = await windows.create({ url: at("discover") })
 		await fake.remove(discover.id as number)
-		removed.length = 0
+		const remove = vi.spyOn(fake, "remove")
 		windows.closeRestartEnded()
-		await Promise.resolve()
-		expect(removed).toEqual([])
+		expect(remove).not.toHaveBeenCalled()
 	})
 
 	test("fires every removal and returns while they are pending; a refused one stops none", async () => {

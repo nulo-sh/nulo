@@ -2,7 +2,7 @@ import { describe, expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { CHROME_ONLY, isFirefox, stopBackground } from "../fixtures/browser"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
-import { switchToLocalNetwork } from "../fixtures/helpers"
+import { ensureUnlocked, switchToLocalNetwork } from "../fixtures/helpers"
 import { openPlayground } from "../fixtures/playground"
 import { approveConnect, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
 import { readLivenessBaseline, waitForWorkerLiveness } from "../fixtures/session"
@@ -13,7 +13,8 @@ const hasConfig = aztecConfig !== undefined
 /**
  * The emoji check's session lives only in the background's memory, so a crash ends it and the
  * check window can only show an error. The next background closes that window as it boots, and no
- * other extension page: the popup kept open beside it stays, on its route, served by the successor.
+ * other extension page: the popup kept open beside it stays and is served by the successor, which
+ * (strict mode being the default) sends it to the unlock screen, from which it unlocks again.
  */
 describe.skipIf(isFirefox)(CHROME_ONLY.backgroundKillUnderPage, () => {
 	test("agent-runner contract: a live sandbox must be configured (no false skip)", () => {
@@ -39,9 +40,10 @@ describe.skipIf(isFirefox)(CHROME_ONLY.backgroundKillUnderPage, () => {
 			const afterKill = await readLivenessBaseline(control)
 
 			await waitForPopupClosed(check, 15_000)
-			expect(control.isClosed()).toBe(false)
-			await waitForHash(control, "#/popup/general", 5_000)
 			await waitForWorkerLiveness(control, afterKill)
+			await waitForHash(control, "#/popup/auth", 30_000)
+			await ensureUnlocked(control)
+			await waitForHash(control, "#/popup/general", 15_000)
 			await dappPage.close()
 			await control.close()
 		},

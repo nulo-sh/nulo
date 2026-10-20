@@ -6,7 +6,6 @@
 import { LogLevel, type ILogger } from "@/wallet/logger"
 import type { ExtensionContextInfo, RuntimePort, WindowPort } from "@nulo/wallet-core/ports"
 
-/** The routes whose window a restart closes: connect, capabilities and the emoji check. */
 export const RESTART_ENDED_ROUTES: ReadonlySet<string> = new Set(["discover", "capabilities", "verify"])
 
 export const POPUP_PAGE = "src/popup/index.html"
@@ -69,7 +68,7 @@ export interface TrackedWindowPort extends WindowPort {
 }
 
 /** Every method delegates to `windows` itself, so the adapter's own state holds and its results
- *  and failures pass through unchanged. A window is forgotten when it closes. */
+ *  and failures pass through unchanged. */
 export function trackOpenWindows(windows: WindowPort, popupPageUrl: string): TrackedWindowPort {
 	const opened = new Map<number, string>()
 	windows.onRemoved((windowId) => opened.delete(windowId))
@@ -92,6 +91,7 @@ export function trackOpenWindows(windows: WindowPort, popupPageUrl: string): Tra
 		update: (windowId, options) => windows.update(windowId, options),
 		navigate: async (windowId, url) => {
 			await windows.navigate(windowId, url)
+			// A window closed while its navigation was in flight stays forgotten.
 			if (opened.has(windowId)) opened.set(windowId, url)
 		},
 		getLastFocused: () => windows.getLastFocused(),

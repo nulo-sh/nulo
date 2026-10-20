@@ -217,6 +217,8 @@ What it found right: no asynchronous boundary before #907's reload and the guard
 
 **Final pass, verification (resumed): `approve`.** Both conditions satisfied; the Proportion paragraph adds no obligation; no regression found.
 
+**Implementation loop, round 1, Codex (session `01a15977…`): `approve`**, two low findings, both accepted: the crash e2e's popup assertion raced strict mode's lock on reconnect (now: heartbeat, unlock screen, unlock, Home); two comments restated code. **Opus diff review: `conditional approve`**: the same assertion; two tracker rows that could not fail; no row proved the handler's registration or that rows are kept (`background.restart-preparation.test.ts`); comment nits. All accepted; mutation checks recorded in `lessons/phase-3.md`.
+
 ## Delivery
 
 - One arc, one PR against `dev`, no stack (the orchestrator's D-orch-1). Branch `restart-notify-1-a1` from the plan commit on `origin/dev`.

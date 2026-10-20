@@ -1,11 +1,8 @@
 /**
- * The wallet-sdk's part of the turn in which the wallet restarts itself after a lock it could not
- * save. Every live session ends, so each app hears `disconnect` while this background can still
- * reach its page (on Chrome the next background reaches no content script already in a page). Then
- * every connect, capabilities and check window is removed: the restart ends their requests, and
- * Chrome would leave each one as a New Tab window. Sessions end first, so no window's removal
- * answers an app before its disconnect. Everything is fired, nothing awaited: the restart follows
- * in the same turn.
+ * Runs in the turn the wallet restarts itself after a lock it could not save, so it awaits
+ * nothing. Sessions end first, while this background can still reach each app's page (on
+ * Chrome the next one reaches no content script already open), and before any window's removal
+ * can answer an app. The windows go because Chrome would leave each as a New Tab window.
  */
 import { describeExternalId } from "@nulo/wallet-bridge"
 import { LogLevel, type ILogger } from "@/wallet/logger"
