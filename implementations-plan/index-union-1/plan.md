@@ -1,7 +1,7 @@
 ---
 plan: index-union-1
 tier: light
-status: planned, Codex approve
+status: completed (delivered in #962)
 issues: "#957"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 01c27912
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** delivered as one ready PR against `dev`, #962, which carries this close-out; its merge closes the plan and #957.
+- **Shipped:** `.gitattributes` gives `implementations-plan/archive/index.md` `merge=union`, that path only; a fixture test merges two appends clean and shows an edit beside an append refused as "listed twice"; a tree test pins `union` to that path and `unspecified` to every other; fixture git calls skip signature checks; README rule 10 and step 4.
+- **Review loop:** plan: Codex and Opus conditional approve, Codex resumed approve. Arc: Codex r1 one finding (fixed), Opus diff review folded, Codex r2 clean.
+- **Gates at the head:** lint, `typecheck:all`, `test:all`, `test:ci-gating` (640), `test:release` (341), `check:plans` 0; the merge of `origin/dev` at `7ef85e9a` was clean.
+- **Dispositions:** `index.md` stays off union (D1); no new gate rule, the guard existed (D2); no `runGit` input option (D3); the blueprint skill unedited, its rule still true (D4); GitHub's behaviour read from the next merges, #957 reopened if it ignores the attribute (D5).
+- **Known limits:** #963. **Open items:** none.
+- **Lessons:** none promoted: `lessons.md` sits at its budget, and the head-SHA fact is its line 17. The `attr.tree` transition merge is in the PR body and F5.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # index-union-1: the archive index merges by union, so close-outs stop conflicting on it
 
@@ -69,7 +81,7 @@ Out of scope: `index.md`, whose neighbouring deletions can still conflict (D1). 
 ## Security & Adversarial Considerations
 
 - **What the pin is**: a review tripwire against widening union by mistake (a `merge=union` on code keeps both sides of two conflicting edits). It is not a boundary against a hostile PR, which can edit the test in the same diff; review of `.gitattributes` and the test is that boundary. `$GIT_DIR/info/attributes` and `core.attributesFile` would override tracked attributes, but only on a runner or machine the attacker already controls. A custom driver also needs git configuration no file in the repo can set; an undefined one falls back to the 3-way text merge (probed).
-- **Residual (plausible but unverified)**: `dev` does not require an up-to-date branch. If GitHub honours union (I1), one PR edits an archive line while another appends beside it; each passes CI on its own head; the second squash-merges with a fresh union nobody tested. No close-out has ever edited an archive line (F2). Consequence: a duplicate line on `dev`; the push run only reports; each PR fails `quality-status` once its head contains the line (I2), until a one-line fix. No code, credential or user surface. Disposition (D6): a closed `known-limit` issue at close-out; reopen if an archived line is edited after its close-out, or a union duplicate reaches `dev`. A stronger fix (an up-to-date rule on `dev`, or a check of the merged tree) changes delivery for every PR and is not proposed.
+- **Residual (plausible but unverified)**: `dev` does not require an up-to-date branch. If GitHub honours union (I1), one PR edits an archive line while another appends beside it; each passes CI on its own head; the second squash-merges with a fresh union nobody tested. No close-out has ever edited an archive line (F2). Consequence: a duplicate line on `dev`; the push run only reports; each PR fails `quality-status` once its head contains the line (I2), until a one-line fix. No code, credential or user surface. Disposition (D6): a closed `known-limit` issue, #963; reopen if an archived line is edited after its close-out, or a union duplicate reaches `dev`. A stronger fix (an up-to-date rule on `dev`, or a check of the merged tree) changes delivery for every PR and is not proposed.
 - No runtime code, dependency, workflow, token or permission changes.
 
 ## Phases
