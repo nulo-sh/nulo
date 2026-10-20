@@ -20,6 +20,7 @@ import DisplayPage from "./display.vue"
 let config: {
 	getProps: ReturnType<typeof vi.fn>
 	setValue: ReturnType<typeof vi.fn>
+	isConnected: boolean
 	onUpdate: EventHandler<ConfigProp>
 	onConnected: EventHandler<void>
 	disconnect: ReturnType<typeof vi.fn>
@@ -30,6 +31,7 @@ beforeEach(() => {
 	config = {
 		getProps: vi.fn(async () => [{ key: "theme", value: "dark" }] as ConfigProp[]),
 		setValue: vi.fn(async () => undefined),
+		isConnected: true,
 		onUpdate: new EventHandler<ConfigProp>(),
 		onConnected: new EventHandler<void>(),
 		disconnect: vi.fn(),
@@ -175,6 +177,21 @@ describe("settings/display", () => {
 			expect(closeSidebar).toHaveBeenCalledTimes(1)
 			expect(config.setValue.mock.invocationCallOrder[0]).toBeLessThan(closeSidebar.mock.invocationCallOrder[0])
 			expect(open).not.toHaveBeenCalled()
+		})
+
+		test("a client still reconnecting has not posted the write, so the sidebar neither opens nor closes", async () => {
+			config.isConnected = false
+			sidePanelToggle(await mountDisplay()).vm.$emit("update:modelValue", true)
+			views = [window]
+			config.getProps.mockResolvedValueOnce([{ key: "sidePanel", value: true }] as ConfigProp[])
+			sidePanelToggle(await mountDisplay()).vm.$emit("update:modelValue", false)
+			await flushPromises()
+			expect(config.setValue.mock.calls).toEqual([
+				["sidePanel", true],
+				["sidePanel", false],
+			])
+			expect(open).not.toHaveBeenCalled()
+			expect(closeSidebar).not.toHaveBeenCalled()
 		})
 
 		test("a refused write leaves the page open with the error, though the click already opened the sidebar", async () => {

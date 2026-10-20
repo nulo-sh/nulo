@@ -49,6 +49,11 @@ export abstract class ServiceClient<
 	private ready?: Deferred<void>
 	private reconnectTimer?: ReturnType<typeof setTimeout>
 
+	/** A port that said Ready is open: a request made now is posted before the call returns. */
+	public get isConnected(): boolean {
+		return this.state === ClientState.Connected
+	}
+
 	protected constructor(service: string, logger: ILogger, name?: string, options?: { requestTimeoutMs?: number }) {
 		super(service, logger, name, { defaultTimeoutMs: options?.requestTimeoutMs ?? DEFAULT_RPC_TIMEOUT_MS, warnAfterMs: WARN_AFTER_MS })
 	}

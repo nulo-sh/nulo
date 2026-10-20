@@ -101,8 +101,9 @@ async function applySetting(key, value) {
 function toggleSetting(key, value) {
 	const written = updateSetting(key, value)
 	// Firefox opens or closes its sidebar only inside the click that asks, so neither can wait for the
-	// write; the write is already posted, so a document the change closes has sent it.
-	if (key === "sidePanel") {
+	// write. A connected client has already posted it, so a document the change closes has sent it;
+	// a client still reconnecting has not, and the page stays to finish it.
+	if (key === "sidePanel" && configService.isConnected) {
 		let change
 		if (value) change = sidebarAction()?.open()
 		else if (isFirefoxSidebar()) change = sidebarAction()?.close()

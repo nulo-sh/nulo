@@ -29,8 +29,8 @@ type SidebarAction = { open(): Promise<void>; close(): Promise<void> }
 /** This document is Firefox's sidebar, which `window.close()` leaves open. Chrome's `getViews`
  *  refuses the `sidebar` type, so it is asked only where a sidebar exists. */
 export function isFirefoxSidebar(): boolean {
-	const sidebar = { type: "sidebar" } as unknown as chrome.extension.FetchProperties
-	return sidebarAction() !== undefined && chrome.extension.getViews(sidebar).includes(window)
+	const sidebar = "sidebar" as unknown as chrome.extension.ViewType
+	return sidebarAction() !== undefined && chrome.extension.getViews({ type: sidebar }).includes(window)
 }
 
 /** A surface that keeps the wallet beside the page: Chrome's side panel or Firefox's sidebar. */

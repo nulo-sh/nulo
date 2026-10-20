@@ -795,6 +795,26 @@ describe("Ready handshake", () => {
 		expect(posted()).toBe(1)
 	})
 
+	test("`isConnected` holds from Ready until the port drops, and a request made while it holds posts before it returns", async () => {
+		portRegistry().holdReady = true
+		const client = newClient()
+		const early = client.echo("early")
+		expect(client.isConnected).toBe(false)
+
+		portRegistry().ready(SERVICE)
+		emitPortMessage(SERVICE, responseMessage(await postedRequestId(), "ok"))
+		await early
+		expect(client.isConnected).toBe(true)
+		const before = posted()
+		const now = client.echo("now").catch((e: unknown) => e)
+		expect(posted()).toBe(before + 1)
+
+		emitPortDisconnect(SERVICE)
+		expect(client.isConnected).toBe(false)
+		expect(await now).toBeInstanceOf(Error)
+		client.disconnect()
+	})
+
 	test("closes before Ready reject nothing, fire nothing, and reopen after the delay; disconnect cancels a pending reopen", async () => {
 		vi.useFakeTimers()
 		try {
