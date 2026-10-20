@@ -1,16 +1,17 @@
-import { inject } from "vitest"
+import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { allowSelfRestart, reloadExtensionPage } from "../fixtures/browser"
 import { clickByTestId, grantCapBundle, openPopup, test, waitForHash } from "../fixtures/extension"
 import { ensureUnlocked, pressHeaderLock, switchToLocalNetwork } from "../fixtures/helpers"
 import { assertPgOk, callExpectingNoPopup, openPlayground, selectPgBundle } from "../fixtures/playground"
-import { approveConnect, approveVerify, waitForPopup } from "../fixtures/popups"
+import { approveConnect, approveVerify, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
 import { refuseSessionDeletes, waitForExtensionRestart } from "../fixtures/session"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 const CONNECTED = '[data-testid="pg-status"][data-status="connected"]'
+const DISCONNECTED = '[data-testid="pg-status"][data-status="disconnected"]'
 
 const firstAccount = async (accountIds: (string | null)[]): Promise<string[]> => {
 	const address = accountIds[0]
@@ -22,6 +23,11 @@ const firstAccount = async (accountIds: (string | null)[]): Promise<string[]> =>
  * A connected app meets the wallet's restart as it meets an update: Chrome injects no content script
  * into a page already open, so the app's page loads again. Its connect then queues behind the lock
  * screen, and the unlock drains it into the remembered session's emoji check, its grants intact.
+ *
+ * Before restarting, the wallet ends every session, so the idle app shows its disconnect at once
+ * (without that, neither browser tells it within 35 s), and it closes the check window a second
+ * app left unanswered, which the lock had already sent to the unlock screen and which Chrome would
+ * otherwise leave as a New Tab window.
  */
 test.skipIf(!hasConfig)(
 	"lock-restart-reconnect — after the restart that ends a lock the wallet could not save, a reloaded app reconnects through the unlock",
@@ -39,9 +45,19 @@ test.skipIf(!hasConfig)(
 		await dappPage.waitForSelector(CONNECTED, { timeout: 20_000 })
 		await grantCapBundle(ctx, dappPage, "accounts", firstAccount)
 
+		const secondApp = await openPlayground(ctx)
+		const checkP = waitForPopup(ctx, "verify", { timeout: 30_000 })
+		await clickByTestId(secondApp, "pg-btn-connect")
+		const unansweredCheck = await checkP
+
 		await refuseSessionDeletes(ctx)
 		await ctx.checkCspViolations()
 		await waitForExtensionRestart(ctx, control, () => pressHeaderLock(control))
+
+		await dappPage.waitForSelector(DISCONNECTED, { timeout: 5_000 })
+		await waitForPopupClosed(unansweredCheck, 5_000)
+		expect(ctx.browser.targets().filter((target) => target.url().startsWith("chrome://new-tab-page"))).toEqual([])
+		await secondApp.close()
 
 		await reloadExtensionPage(dappPage)
 		await dappPage.waitForSelector('[data-testid="pg-btn-connect"]', { visible: true, timeout: 30_000 })

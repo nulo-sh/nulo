@@ -90,6 +90,7 @@ import type { BackupSelection } from "@/utils/full-backup-helpers"
 import OnboardingProfileNameField from "../components/OnboardingProfileNameField.vue"
 import { doneRoute } from "../steps"
 import Import from "./import.vue"
+import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 
 const wrappers: VueWrapper[] = []
 
@@ -118,12 +119,10 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	profileApi.getProfiles.mockResolvedValue([])
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) },
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
 	})
+	installChromeStorage({}, { persist: false })
 })
 afterEach(() => {
 	for (const w of wrappers.splice(0)) w.unmount()

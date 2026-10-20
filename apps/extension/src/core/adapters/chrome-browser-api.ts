@@ -22,6 +22,7 @@ import type {
 	BrowserApi,
 	CreatedWindow,
 	CreateWindowOptions,
+	ExtensionContextInfo,
 	UpdateWindowOptions,
 	WindowBounds,
 	MessageListener,
@@ -74,8 +75,15 @@ class ChromeStorageAdapter implements StoragePort {
 }
 
 function adaptPort(port: chrome.runtime.Port): MessagePortLike {
+	const { sender } = port
 	return {
 		name: port.name,
+		sender: sender && {
+			id: sender.id,
+			origin: sender.origin,
+			url: sender.url,
+			tab: sender.tab && { id: sender.tab.id, url: sender.tab.url, windowId: sender.tab.windowId },
+		},
 		postMessage: (message) => port.postMessage(message),
 		disconnect: () => port.disconnect(),
 		onMessage: (listener) => {
@@ -150,13 +158,10 @@ class ChromeRuntimeAdapter implements RuntimePort {
 		await chrome.runtime.setUninstallURL(url)
 	}
 
-	public async getContexts(filter: {
-		contextTypes?: string[]
-		documentUrls?: string[]
-	}): Promise<Array<{ contextId: string; contextType: string; documentUrl?: string }>> {
+	public async getContexts(filter: { contextTypes?: string[]; documentUrls?: string[] }): Promise<ExtensionContextInfo[]> {
 		// chrome.runtime.getContexts is MV3 / Chrome 116+; we rely on it for
 		// offscreen supervision. The runtime.d.ts type is looser than ours.
-		type GetContextsFn = (f: unknown) => Promise<Array<{ contextId: string; contextType: string; documentUrl?: string }>>
+		type GetContextsFn = (f: unknown) => Promise<ExtensionContextInfo[]>
 		const runtime = chrome.runtime as unknown as { getContexts?: GetContextsFn }
 		if (!runtime.getContexts) {
 			throw new Error("chrome.runtime.getContexts is unavailable; Chrome 116+ required")
@@ -196,6 +201,18 @@ class ChromeWindowsAdapter implements WindowPort {
 
 	public async remove(windowId: number): Promise<void> {
 		await chrome.windows.remove(windowId)
+	}
+
+	public async closeTab(tabId: number): Promise<void> {
+		await chrome.tabs.remove(tabId)
+	}
+
+	public async isPopup(windowId: number): Promise<boolean> {
+		try {
+			return (await chrome.windows.get(windowId)).type === "popup"
+		} catch {
+			return false
+		}
 	}
 
 	public async update(windowId: number, options: UpdateWindowOptions): Promise<void> {

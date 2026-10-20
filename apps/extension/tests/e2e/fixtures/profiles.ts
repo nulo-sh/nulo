@@ -2,6 +2,7 @@ import type { Page } from "puppeteer"
 import { defaultProfileName } from "@/utils/profile-name"
 import { clickByTestId, expectNameFieldPrefill, replaceInputValue, waitForHash } from "./dom"
 import { navigateByHash } from "./navigation"
+import { PollTimeoutError, pollUntil } from "./poll"
 import { readSessionRow, waitForSessionRow } from "./session"
 
 /** Create a profile from the lock screen's picker and land on its home screen: creating a profile
@@ -46,14 +47,17 @@ export async function readProfileNames(page: Page): Promise<string[]> {
  *  outcome, a profile lost or renamed included. */
 export async function expectNewProfileNamed(page: Page, before: readonly string[], expected: string, timeoutMs = 10_000): Promise<void> {
 	const want = [...before, expected].sort()
-	const deadline = Date.now() + timeoutMs
-	for (;;) {
-		const stored = (await readProfileNames(page)).sort()
-		if (stored.length === want.length && stored.every((name, i) => name === want[i])) return
-		if (stored.length > before.length || Date.now() > deadline)
-			throw new Error(`expected the profiles ${JSON.stringify(want)}, got ${JSON.stringify(stored)}`)
-		await new Promise((resolve) => setTimeout(resolve, 200))
-	}
+	const label = `expected the profiles ${JSON.stringify(want)}`
+	const settled = (stored: string[]) => stored.length === want.length && stored.every((name, i) => name === want[i])
+	await pollUntil(
+		async () => {
+			const stored = (await readProfileNames(page)).sort()
+			if (!settled(stored) && stored.length > before.length) throw new Error(`${label}, got ${JSON.stringify(stored)}`)
+			return stored
+		},
+		settled,
+		{ label, timeoutMs, intervalMs: 200 },
+	)
 }
 
 /** Read the active profile's display name from the reset-profile page root,
@@ -217,24 +221,31 @@ export async function waitForProfilePurged(
 	opts: { ownedRoots?: string[]; timeoutMs?: number } = {},
 ): Promise<void> {
 	const { ownedRoots = [], timeoutMs = 75_000 } = opts
-	const deadline = Date.now() + timeoutMs
-	let last: Record<string, boolean> = {}
-	while (Date.now() < deadline) {
-		last = await page.evaluate(
-			async ({ id, roots }: { id: string; roots: string[] }) => {
-				const all = await chrome.storage.local.get(null)
-				const keys = Object.keys(all)
-				const state: Record<string, boolean> = {
-					profileRow: keys.includes(`nulo:core:profiles@${id}`),
-					tombstone: keys.includes(`nulo:core:profile-tombstones@${id}`),
-				}
-				for (const r of roots) state[r] = keys.some((k) => k.startsWith(`${r}@`))
-				return state
-			},
-			{ id: profileId, roots: ownedRoots },
+	const remaining = (state: Record<string, boolean>) => Object.values(state).some(Boolean)
+	let last: Record<string, boolean>
+	try {
+		await pollUntil(
+			() =>
+				page.evaluate(
+					async ({ id, roots }: { id: string; roots: string[] }) => {
+						const all = await chrome.storage.local.get(null)
+						const keys = Object.keys(all)
+						const state: Record<string, boolean> = {
+							profileRow: keys.includes(`nulo:core:profiles@${id}`),
+							tombstone: keys.includes(`nulo:core:profile-tombstones@${id}`),
+						}
+						for (const r of roots) state[r] = keys.some((k) => k.startsWith(`${r}@`))
+						return state
+					},
+					{ id: profileId, roots: ownedRoots },
+				),
+			(state) => !remaining(state),
+			{ label: `waitForProfilePurged ${profileId}`, timeoutMs, intervalMs: 500 },
 		)
-		if (!Object.values(last).some(Boolean)) return
-		await new Promise((r) => setTimeout(r, 500))
+		return
+	} catch (error) {
+		if (!(error instanceof PollTimeoutError)) throw error
+		last = error.last as Record<string, boolean>
 	}
 	// The persisting tombstone+row combination IS the rejected-or-wedged signature.
 	// Session presence distinguishes "delete never started (still logged in,
