@@ -7,7 +7,6 @@ export const BARRIERS = ["migration-blocked", "migration-updating", "migration-d
 /** The full-screen takeover a quarantined or moved chain shows. */
 export const TAKEOVER = "stale-network-takeover"
 
-/** The testids of `ids` that `page` renders now. */
 export function shownOverlays(page: Page, ids: readonly string[] = [...BARRIERS, TAKEOVER]): Promise<string[]> {
 	return page.evaluate((all: readonly string[]) => all.filter((id) => document.querySelector(`[data-testid="${id}"]`) !== null), ids)
 }

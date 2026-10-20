@@ -98,7 +98,7 @@ export async function launchExtension(
 		live?: true
 		tokenList?: "held"
 		grantPermissionRequests?: true
-		/** A build other than the run's, a release's or an update candidate's. */
+		/** A build other than the run's: a release's or an update candidate's. */
 		extensionPath?: string
 		installInSession?: true
 		/** The build carries no CSP violation recorder, as a release build does not. */

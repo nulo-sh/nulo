@@ -121,24 +121,32 @@ cd apps/extension && bun scripts/store-art.ts
 
 `tests/e2e/network/update-in-place.test.ts` and `tests/e2e/update-replay.test.ts` are skipped
 unless `NULO_E2E_UPDATE_FROM` names a release tag, with `NULO_E2E_UPDATE_TO` the candidate. They
-install the release's zip at one fixed path, swap the candidate into that path and reinstall it in
-the running browser, as a store update does: Chrome through CDP `Extensions.loadUnpacked`, Firefox
-through the driver's temporary install. The browser reports `update` and keeps the id and the
-storage. The zip is downloaded once with `gh release download` into `.e2e-state/releases/` (or
+install the release's zip at one fixed path in the run's own `.e2e-state/update-<pid>/`, swap the
+candidate into that path and reinstall it in the running browser, as a store update does: Chrome
+through CDP `Extensions.loadUnpacked`, Firefox through the driver's temporary install. A probe the
+staged candidate imports first must record `onInstalled` reporting `update` from the release's
+version. The zip is downloaded once with `gh release download` into `.e2e-state/releases/` (or
 `NULO_E2E_RELEASE_CACHE`) and refused unless its SHA-256 equals the digest
-`fixtures/update/release.ts` pins for the tag; the release's own `SHASUMS256.txt` must agree.
+`fixtures/update/release.ts` pins for the tag; the release's own `SHASUMS256.txt` must agree. The
+candidate names the commit it was built from: a candidate from another commit, or a checkout with
+uncommitted changes a build reads, is refused, so commit before you build it.
 
 - The live scenario populates the release through its own UI: a password profile with a second and
   an imported account and two contacts on Testnet, then a network on the run's sandbox with a
-  token, a public and a private receipt and a connected playground. After the update it checks that
-  no key was lost, no barrier shows, every key is registered and read by its read code, the profile
-  unlocks, the UI reads it all and the playground's stored session still answers.
-  `NULO_E2E_UPDATE_RECORD=1` also writes the release's storage to
+  token, a public and a private receipt, a connected playground and one send from the wallet. It
+  requires every key family `HELD` names before it updates. After the update it checks that no key
+  was lost, no barrier shows, every key is registered and read by its read code, the profile
+  unlocks, the UI reads it all, the imported key opens and the playground's stored session still
+  answers. `NULO_E2E_UPDATE_RECORD=1` on Chrome also writes the release's storage to
   `fixtures/update/<tag>.storage.json`, the replay's recording.
 - The replay writes that recording into the release, offline, and updates it. While the
   candidate's Testnet seed equals the recorded one the update opens with no takeover; once it
   differs, the takeover's reset must carry every account to the new chain. Its second case moves
   the recorded Testnet rows off the seed, so the reset over release rows runs before that happens.
+  The recording's dApp session expires 7 days after it was made, and the replay refuses it from
+  then on: record again from a checkout on the release's Aztec line.
+- The live scenario needs a sandbox on the release's Aztec line, so once `dev` moves off it only
+  the replay runs.
 
 ```bash
 bash apps/extension/scripts/e2e/build-update-candidate.sh chrome   # writes .e2e-state/update-candidate/chrome

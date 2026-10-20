@@ -8,7 +8,8 @@
 # the package version the way `_build-extension.yml`'s `version_suffix` does. The suffix's digits make
 # the manifest's 4-int `version` greater than the release's, which a browser needs to report the swap
 # as an update, and the changed `__VERSION__` makes the integrity coordinator re-derive every account,
-# as a real update does. `package.json` is restored on every exit.
+# as a real update does. `package.json` is restored on every exit. The candidate names the commit it
+# was built from, and the scenarios refuse it at any other.
 set -euo pipefail
 
 BROWSER="${1:-}"
@@ -40,6 +41,16 @@ for name in $(compgen -e); do
   esac
 done
 
+# Vite reads these in production mode, so a flag in one would ship as one set in the environment would.
+for file in .env .env.local .env.production .env.production.local; do
+  if [[ -e "$EXT/$file" ]]; then
+    echo "apps/extension/$file exists: an update candidate is built as a release is, from no env file" >&2
+    exit 1
+  fi
+done
+
+SOURCE="$(cd "$EXT" && bun tests/e2e/fixtures/update/source.ts)"
+
 mkdir -p "$EXT/.e2e-state"
 BACKUP="$(mktemp "$EXT/.e2e-state/package.json.XXXXXX")"
 cp "$PKG" "$BACKUP"
@@ -59,4 +70,5 @@ SUFFIX="$SUFFIX" PKG="$PKG" bun -e "
 rm -rf "$OUT"
 mkdir -p "$OUT"
 cp -R "$EXT/dist/$BROWSER/." "$OUT/"
+printf '%s\n' "$SOURCE" >"$OUT/update-candidate.json"
 echo "[update-candidate] $BROWSER candidate at $OUT ($(bun -e "console.log(require('$OUT/manifest.json').version)"))"

@@ -6,7 +6,6 @@ import { entityStorage } from "@/wallet/storage/stores"
 /** What a launch's fixtures write for an armed build; no shipped code reads them. */
 export const FIXTURE_PREFIX = "nulo:e2e:"
 
-/** The registered shape `key` belongs to, or undefined when none claims it. */
 export function shapeOfKey(key: string): StoredShapeName | undefined {
 	for (const [name, { ref }] of Object.entries(STORED_SHAPES)) {
 		if (ref.kind === "value" ? key === ref.key : key.startsWith(`${ref.root}@`)) return name as StoredShapeName
@@ -17,9 +16,8 @@ export function shapeOfKey(key: string): StoredShapeName | undefined {
 const idOf = (key: string): string => key.slice(key.indexOf("@") + 1)
 
 /**
- * The value the wallet reads from `key`. A dApp session's MAC key lives only in the session that
- * signed it, so its row is read through the codec alone; that the session still opens is the UI's
- * to prove.
+ * The value the wallet reads from `key`. A dApp session's MAC key is derived from the unlocked
+ * profile, so its row is read through the codec alone; the scenarios prove the MAC in the UI.
  */
 async function readRow(name: StoredShapeName, entries: Record<string, unknown>, key: string, now: number): Promise<unknown> {
 	const shape = STORED_SHAPES[name]

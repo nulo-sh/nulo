@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import type { BrowserKind } from "../browser"
 import { E2E_STATE_DIR } from "../../lockfile"
@@ -56,10 +56,11 @@ function run(command: string, args: string[]): void {
 }
 
 /**
- * The unpacked `browser` build of release `tag`, downloaded once with `gh release download`, checked
- * by {@link releaseProblem} and unpacked afresh on every call, so no earlier copy is trusted.
+ * The `browser` build of release `tag`, unpacked into `into`: downloaded once with `gh release
+ * download`, checked by {@link releaseProblem}, and unpacked from the bytes checked, so neither an
+ * earlier unpacking nor a later change to the cached zip is trusted.
  */
-export function releaseBuild(tag: string, browser: BrowserKind): string {
+export function releaseBuild(tag: string, browser: BrowserKind, into: string): string {
 	const dir = path.join(releaseCache(), tag)
 	const name = releaseZipName(tag, browser)
 	const zipPath = path.join(dir, name)
@@ -81,10 +82,14 @@ export function releaseBuild(tag: string, browser: BrowserKind): string {
 			"SHASUMS256.txt",
 		])
 	}
-	const problem = releaseProblem(tag, browser, readFileSync(zipPath), readFileSync(shasumsPath, "utf8"))
+	const zip = readFileSync(zipPath)
+	const problem = releaseProblem(tag, browser, zip, readFileSync(shasumsPath, "utf8"))
 	if (problem) throw new Error(`refusing ${tag}'s ${browser} build: ${problem}`)
-	const unpacked = path.join(dir, browser)
-	rmSync(unpacked, { recursive: true, force: true })
-	run("unzip", ["-q", zipPath, "-d", unpacked])
+	rmSync(into, { recursive: true, force: true })
+	mkdirSync(into, { recursive: true })
+	const checked = path.join(into, name)
+	writeFileSync(checked, zip)
+	const unpacked = path.join(into, browser)
+	run("unzip", ["-q", checked, "-d", unpacked])
 	return unpacked
 }

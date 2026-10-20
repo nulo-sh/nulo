@@ -11,8 +11,10 @@ export type Recording = { tag: string; browser: string; entries: Record<string, 
 
 export const recordingPath = (tag: string): string => path.join(path.dirname(fileURLToPath(import.meta.url)), `${tag}.storage.json`)
 
-/** Writes `entries`, keys sorted and fixture keys left out, as `tag`'s recording. */
+/** Writes `entries`, keys sorted and fixture keys left out, as `tag`'s recording. Chrome's storage
+ *  holds JSON values only, so only its recording replays on both browsers. */
 export function writeRecording(tag: string, browser: string, entries: Record<string, unknown>): void {
+	if (browser !== "chrome") throw new Error(`a recording is made from Chrome, not ${browser}`)
 	const kept = Object.keys(entries)
 		.filter((key) => !key.startsWith(FIXTURE_PREFIX))
 		.sort()

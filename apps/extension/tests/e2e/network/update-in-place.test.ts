@@ -18,6 +18,7 @@ import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { walletChainId } from "@nulo/wallet-core/chain-id"
+import type { StoredShapeName } from "@/wallet/storage/stored-shapes"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { BROWSER } from "../fixtures/browser"
 import {
@@ -49,25 +50,63 @@ import {
 	waitForFreshBalanceRow,
 	waitForToast,
 } from "../fixtures/helpers"
-import { openPlayground } from "../fixtures/playground"
+import { openPlayground, setPgInputs, txHashOf } from "../fixtures/playground"
 import { pollUntil } from "../fixtures/poll"
-import { reconnectPlayground } from "../fixtures/send"
+import { reconnectPlayground, sendDefaultTx } from "../fixtures/send"
 import { inPlaceUpdate, readLocalStorage, updateBuilds } from "../fixtures/update/in-place"
 import { writeRecording } from "../fixtures/update/recording"
+import { shapeOfKey } from "../fixtures/update/stored-rows"
 import { BARRIERS, shownOverlays, updateProblems } from "../fixtures/update/verify"
-import { confirmImport, exportAccountBody, FIRST_ACCOUNT_NAME, gotoAccounts, previewImport } from "../helpers/account-io"
+import {
+	confirmImport,
+	exportAccountBody,
+	exportImportedAccountBody,
+	FIRST_ACCOUNT_NAME,
+	gotoAccounts,
+	previewImport,
+} from "../helpers/account-io"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 
 const D = 10n ** 18n
 const PUBLIC = 10n * D
 const PRIVATE = 25n * D
+const SENT = D
 const SANDBOX = "Sandbox"
 const TESTNET_ACCOUNTS = [FIRST_ACCOUNT_NAME, "Second", "Imported"]
 const CONTACTS = ["Alice", "Bob"]
 
+/** Every key family the populated release holds, so a step that silently writes nothing fails at
+ *  the populate, not as a check left with nothing to read. */
+const HELD: readonly StoredShapeName[] = [
+	"accountIntegrityVerified",
+	"accounts",
+	"activeNetwork",
+	"config",
+	"contacts",
+	"dappSessions",
+	"fpcs",
+	"importedAccountKeys",
+	"incomingArrivals",
+	"incomingBalanceOutbox",
+	"incomingPublicCursors",
+	"incomingTransfers",
+	"incomingTrust",
+	"journal",
+	"legalAccepted",
+	"networks",
+	"onboardingCompleted",
+	"profiles",
+	"schemaVersion",
+	"tokenBalances",
+	"tokens",
+	"txs",
+	"uiActiveAccount",
+	"uiLastActiveProfile",
+]
+
 type ChainInfo = { chainId: string; version: string }
-type Populated = { before: Record<string, unknown>; chainInfo: ChainInfo; account: string; incoming: number }
+type Populated = { before: Record<string, unknown>; chainInfo: ChainInfo; account: string; imported: string; incoming: number }
 
 function randomAddress(): string {
 	for (;;) {
@@ -90,14 +129,17 @@ async function foreignAccountFile(): Promise<string> {
 	}
 }
 
-async function populateTestnet(page: Page, accountFile: string): Promise<void> {
+/** Resolves with the imported account's address. */
+async function populateTestnet(page: Page, accountFile: string): Promise<string> {
 	await createAccount(page, "Second")
-	expect(await previewImport(page, accountFile)).toBeTruthy()
+	const imported = await previewImport(page, accountFile)
+	if (!imported) throw new Error("the release refused the foreign account file")
 	await confirmImport(page, "Imported")
 	await closeStuckPopup(page)
 	await navigateByHash(page, "#/popup/settings/contacts", 15_000)
 	await page.waitForSelector('[data-testid="contacts-new-btn"]', { visible: true, timeout: 15_000 })
 	for (const name of CONTACTS) await addContact(page, name, randomAddress())
+	return imported
 }
 
 async function sandboxChainInfo(nodeUrl: string): Promise<ChainInfo> {
@@ -160,7 +202,7 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 	await registerProfile(ctx)
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general", 30_000)
-	await populateTestnet(page, accountFile)
+	const imported = await populateTestnet(page, accountFile)
 
 	const chainInfo = await sandboxChainInfo(cfg.nodeUrl)
 	const account = await addSandboxNetwork(page, cfg.nodeUrl, chainInfo)
@@ -180,12 +222,36 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 	await page.close()
 
 	const dapp = await connectPlayground(ctx, { chainInfo })
-	await grantCapBundle(ctx, dapp, "accounts", async (ids) => {
+	await grantCapBundle(ctx, dapp, "transaction", async (ids) => {
 		if (!ids.includes(account)) throw new Error(`the capabilities window offers ${ids.join(", ")}, not ${account}`)
 		return [account]
 	})
+	await sendFromWallet(ctx, dapp, cfg, account)
 	await dapp.close()
-	return { before: await readLocalStorage(ctx), chainInfo, account, incoming }
+	const before = await readLocalStorage(ctx)
+	expect(HELD.filter((name) => !Object.keys(before).some((key) => shapeOfKey(key) === name))).toEqual([])
+	return { before, chainInfo, account, imported, incoming }
+}
+
+/** The account's first send, which deploys it and leaves the wallet's transaction row. */
+async function sendFromWallet(ctx: ExtensionContext, dapp: Page, cfg: AztecTestConfig, account: string): Promise<void> {
+	const popup = await openPopup(ctx)
+	await waitForHash(popup, "#/popup/general", 30_000)
+	const baseline = await captureBalanceBaseline(popup, account, cfg.tokenAddress)
+	await setPgInputs(dapp, { amount: SENT.toString() })
+	// The first send pays the PXE's cold start and a real proof of the account's deployment.
+	const sent = await sendDefaultTx(ctx, dapp, cfg, "update-in-place:send", { popupTimeoutMs: 180_000 })
+	const { waitForTxMined } = await import("../fixtures/aztec")
+	await waitForTxMined(cfg, txHashOf(sent.resultJson), 300_000)
+	await waitForFreshBalanceRow(popup, {
+		account,
+		tokenContract: cfg.tokenAddress,
+		expectedPublicRaw: (PUBLIC - SENT).toString(),
+		expectedPrivateRaw: PRIVATE.toString(),
+		baselineUpdatedAt: baseline,
+		timeoutMs: 180_000,
+	})
+	await popup.close()
 }
 
 async function expectAccounts(page: Page, names: readonly string[]): Promise<void> {
@@ -209,12 +275,12 @@ async function verify(ctx: ExtensionContext, populated: Populated): Promise<void
 
 	await navigateToTokenDetail(page)
 	const balances = await getTokenDetailBalances(page)
-	expect(balances.publicBalance.replace(/[,\s]/g, "")).toBe("10")
+	expect(balances.publicBalance.replace(/[,\s]/g, "")).toBe("9")
 	expect(balances.privateBalance.replace(/[,\s]/g, "")).toBe("25")
 	expect(await incomingCards(page, populated.incoming)).toBeGreaterThanOrEqual(populated.incoming)
 
 	const dapp = await openPlayground(ctx, { chainInfo: populated.chainInfo })
-	await reconnectPlayground(ctx, dapp, "accounts", "update-in-place:stored-session")
+	await reconnectPlayground(ctx, dapp, "transaction", "update-in-place:stored-session")
 	await dapp.close()
 
 	await navigateByHash(page, "#/popup/settings/networks", 15_000)
@@ -222,6 +288,8 @@ async function verify(ctx: ExtensionContext, populated: Populated): Promise<void
 	await navigateByHash(page, "#/popup/general", 15_000)
 	await switchToNetwork(page, "Testnet")
 	await expectAccounts(page, TESTNET_ACCOUNTS)
+	// The re-export preview re-derives the address from the decrypted key: only a key that opens passes.
+	expect(await previewImport(page, await exportImportedAccountBody(page, false))).toBe(populated.imported)
 	await navigateByHash(page, "#/popup/settings/contacts", 15_000)
 	for (const name of CONTACTS) await page.waitForSelector(contactRow(name), { visible: true, timeout: 15_000 })
 	expect(await shownOverlays(page)).toEqual([])
@@ -235,15 +303,15 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM || !aztecConfig)(
 	{ timeout: 900_000, retry: 0 },
 	async () => {
 		const cfg = aztecConfig as AztecTestConfig
-		const builds = updateBuilds()
+		const record = process.env.NULO_E2E_UPDATE_RECORD === "1"
+		const builds = updateBuilds(BROWSER)
 		if (!builds) throw new Error("unreachable: skipIf guards")
 		const accountFile = await foreignAccountFile()
 		await inPlaceUpdate({
-			from: builds.from,
-			to: builds.to,
+			builds,
 			populate: async (ctx) => {
 				const populated = await populate(ctx, cfg, accountFile)
-				if (process.env.NULO_E2E_UPDATE_RECORD === "1") writeRecording(builds.tag, BROWSER, populated.before)
+				if (record) writeRecording(builds.tag, BROWSER, populated.before)
 				return populated
 			},
 			verify,

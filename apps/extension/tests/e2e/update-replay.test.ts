@@ -13,15 +13,17 @@
  * key's seal binds the chain it was sealed on), so that reset names the account unmovable, which
  * the bump's own reset does not.
  *
- * Runtime: estimated 2 min per case per browser.
+ * Runtime: measured 9 to 25 s per case, Chrome and Firefox alike, with the release cached.
  */
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import { BROWSER } from "./fixtures/browser"
 import { type ExtensionContext, clickByTestId, openPopup, test, waitForHash } from "./fixtures/extension"
 import { contactRow, ensureUnlocked, navigateByHash, waitForToast } from "./fixtures/helpers"
-import { inPlaceUpdate, readLocalStorage, updateBuilds, writeLocalStorage } from "./fixtures/update/in-place"
+import { inPlaceUpdate, readLocalStorage, type UpdateBuilds, updateBuilds, writeLocalStorage } from "./fixtures/update/in-place"
 import { type Recording, readRecording } from "./fixtures/update/recording"
+import { unreadRows } from "./fixtures/update/stored-rows"
 import { BARRIERS, shownOverlays, updateProblems } from "./fixtures/update/verify"
 import { exportImportedAccountBody, previewImport } from "./helpers/account-io"
 import {
@@ -43,12 +45,23 @@ function rowsOf(entries: Record<string, unknown>, root: string): Row[] {
 		.map(([, raw]) => JSON.parse(raw as string) as Row)
 }
 
-function recordingFor(): { from: string; to: string; recording: Recording } {
-	const builds = updateBuilds()
-	if (!builds) throw new Error("unreachable: skipIf guards")
-	const recording = readRecording(builds.tag)
-	if (!recording) throw new Error(`no recording of ${builds.tag}: run the live scenario with NULO_E2E_UPDATE_RECORD=1`)
-	return { from: builds.from, to: builds.to, recording }
+function recordingFor(): Recording {
+	const tag = process.env.NULO_E2E_UPDATE_FROM as string
+	const recording = readRecording(tag)
+	if (!recording) throw new Error(`no recording of ${tag}: run the live scenario with NULO_E2E_UPDATE_RECORD=1`)
+	// The wallet drops an expired session before any check can read it.
+	for (const { expiry } of rowsOf(recording.entries, "nulo:core:dappSessions")) {
+		if ((expiry as number) < Date.now() + 600_000) {
+			throw new Error(`the recording's dApp session expires ${new Date(expiry as number).toISOString()}: record ${tag} again`)
+		}
+	}
+	return recording
+}
+
+function builds(): UpdateBuilds {
+	const pair = updateBuilds(BROWSER)
+	if (!pair) throw new Error("unreachable: skipIf guards")
+	return pair
 }
 
 const recordedTestnet = (recording: Recording): number => {
@@ -57,20 +70,55 @@ const recordedTestnet = (recording: Recording): number => {
 	return row.chainId as number
 }
 
-/** Every network row but Testnet's, as `snapshotChain` keys them. */
 const otherChains = (recording: Recording): Array<{ id: string; chainId: number }> =>
 	rowsOf(recording.entries, "nulo:core:networks")
 		.filter((network) => network.kind !== "testnet")
 		.map((network) => ({ id: network.id as string, chainId: network.chainId as number }))
 
+/** Every stored row of each network but Testnet: the rows naming its chain id, and the incoming
+ *  rows, whose keys name its network id instead. */
+function otherNetworks(page: Page, recording: Recording): Promise<Array<Record<string, unknown>>> {
+	return Promise.all(
+		otherChains(recording).map(async ({ id, chainId }) => ({
+			...(await snapshotChain(page, chainId, id)),
+			...(await page.evaluate(async (network: string) => {
+				const all = await chrome.storage.local.get(null)
+				return Object.fromEntries(
+					Object.entries(all).filter(([key]) => key.startsWith("nulo:core:incoming-") && key.includes(`|${network}|`)),
+				)
+			}, id)),
+		})),
+	)
+}
+
 const identity = ({ address, name, index, type, visible }: StoredAccount) => ({ address, name, index, type, visible })
 const derived = (rows: StoredAccount[]) => rows.filter((a) => a.type === 0).map(identity)
 const imported = (rows: StoredAccount[]) => rows.filter((a) => a.type === 1).map((a) => a.address)
 
+/** No process without root can listen here, so no build reaches whichever run now holds a port
+ *  the recording's sandbox or playground had. */
+const UNREACHABLE = "http://127.0.0.1:9"
+
+/** `entries` with every network endpoint on a loopback host moved to {@link UNREACHABLE}. */
+function offline(entries: Record<string, unknown>): Record<string, unknown> {
+	return Object.fromEntries(
+		Object.entries(entries).map(([key, raw]) => {
+			if (!key.startsWith("nulo:core:networks@") || typeof raw !== "string") return [key, raw]
+			const row = JSON.parse(raw) as { endpoints?: Array<{ rpcUrl: string }> }
+			const endpoints = row.endpoints?.map((endpoint) => {
+				const { hostname } = new URL(endpoint.rpcUrl)
+				return hostname === "localhost" || hostname === "127.0.0.1" ? { ...endpoint, rpcUrl: UNREACHABLE } : endpoint
+			})
+			return [key, JSON.stringify({ ...row, endpoints })]
+		}),
+	)
+}
+
 async function install(ctx: ExtensionContext, recording: Recording): Promise<Record<string, unknown>> {
-	await writeLocalStorage(ctx, recording.entries)
+	const entries = offline(recording.entries)
+	await writeLocalStorage(ctx, entries)
 	const before = await readLocalStorage(ctx)
-	expect(Object.keys(recording.entries).filter((key) => !(key in before))).toEqual([])
+	expect(Object.fromEntries(Object.keys(entries).map((key) => [key, before[key]]))).toEqual(entries)
 	return before
 }
 
@@ -80,8 +128,24 @@ async function openUpdated(ctx: ExtensionContext, before: Record<string, unknown
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/auth", 30_000)
 	expect(await shownOverlays(page)).toEqual([])
+	// The recording's active network is its sandbox, which is gone, and the takeover shows only for
+	// the active network.
 	await storeActiveNetwork(page, "testnet")
 	return page
+}
+
+/** The connected-apps list reads every session through its MAC, under the key the unlock derives. */
+async function expectConnectedApps(page: Page, recording: Recording): Promise<void> {
+	await navigateByHash(page, "#/popup/settings/connected-apps", 15_000)
+	for (const { dappMetadata } of rowsOf(recording.entries, "nulo:core:dappSessions")) {
+		const host = new URL((dappMetadata as { url: string }).url).host
+		await page.waitForSelector(`[data-testid="connected-app-row"][data-app-host="${host}"]`, { visible: true, timeout: 15_000 })
+	}
+}
+
+/** The re-export preview re-derives the address from the decrypted key: only a key that opens passes. */
+async function expectImportedKeyOpens(page: Page, address: string): Promise<void> {
+	expect(await previewImport(page, await exportImportedAccountBody(page, false))).toBe(address)
 }
 
 async function expectContacts(page: Page, recording: Recording): Promise<void> {
@@ -91,14 +155,18 @@ async function expectContacts(page: Page, recording: Recording): Promise<void> {
 	}
 }
 
-async function opensWithoutTakeover(page: Page, recording: Recording): Promise<void> {
+async function opensWithoutTakeover(ctx: ExtensionContext, page: Page, recording: Recording, stored: Record<string, unknown>) {
 	const chain = recordedTestnet(recording)
 	const before = await readAccounts(page, chain)
 	await ensureUnlocked(page)
 	await waitForHash(page, "#/popup/general", 30_000)
 	expect(await shownOverlays(page)).toEqual([])
 	expect((await readAccounts(page, chain)).map(identity)).toEqual(before.map(identity))
+	await expectImportedKeyOpens(page, imported(before)[0] ?? "")
+	await expectConnectedApps(page, recording)
 	await expectContacts(page, recording)
+	expect(await shownOverlays(page)).toEqual([])
+	expect(await updateProblems(stored, await readLocalStorage(ctx))).toEqual([])
 }
 
 /**
@@ -106,11 +174,11 @@ async function opensWithoutTakeover(page: Page, recording: Recording): Promise<v
  * name, index and address, the imported one too when its key opens, left nothing on `oldChain`, and
  * left every other chain's rows as they were.
  */
-async function throughTheReset(page: Page, recording: Recording, oldChain: number, importedOpens: boolean): Promise<void> {
+async function throughTheReset(ctx: ExtensionContext, page: Page, recording: Recording, oldChain: number, importedOpens: boolean) {
 	const before = await readAccounts(page, oldChain)
 	expect(derived(before)).not.toEqual([])
 	expect(imported(before)).not.toEqual([])
-	const others = await Promise.all(otherChains(recording).map(({ id, chainId }) => snapshotChain(page, chainId, id)))
+	const others = await otherNetworks(page, recording)
 
 	await ensureUnlocked(page)
 	expect(await takeoverScreen(page)).toBe("network-reset")
@@ -132,10 +200,12 @@ async function throughTheReset(page: Page, recording: Recording, oldChain: numbe
 		return Object.keys(all).filter((key) => key.startsWith("nulo:core:imported-account-keys@") && key.includes(`,${chain},`))
 	}, oldChain)
 	expect(keysLeft).toEqual([])
-	expect(await Promise.all(otherChains(recording).map(({ id, chainId }) => snapshotChain(page, chainId, id)))).toEqual(others)
-	// The re-export preview re-derives the address from the decrypted key: only a key that opens passes.
-	if (importedOpens) expect(await previewImport(page, await exportImportedAccountBody(page, false))).toBe(imported(before)[0])
+	expect(await otherNetworks(page, recording)).toEqual(others)
+	if (importedOpens) await expectImportedKeyOpens(page, imported(before)[0] ?? "")
+	await expectConnectedApps(page, recording)
 	await expectContacts(page, recording)
+	expect(await shownOverlays(page)).toEqual([])
+	expect(await unreadRows(await readLocalStorage(ctx))).toEqual([])
 }
 
 describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
@@ -143,16 +213,15 @@ describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 		timeout: 300_000,
 		retry: 0,
 	}, async () => {
-		const { from, to, recording } = recordingFor()
+		const recording = recordingFor()
 		const chain = recordedTestnet(recording)
 		await inPlaceUpdate({
-			from,
-			to,
+			builds: builds(),
 			populate: (ctx) => install(ctx, recording),
 			verify: async (ctx, before) => {
 				const page = await openUpdated(ctx, before)
-				if (chain === CHAIN_IDS.TESTNET) await opensWithoutTakeover(page, recording)
-				else await throughTheReset(page, recording, chain, true)
+				if (chain === CHAIN_IDS.TESTNET) await opensWithoutTakeover(ctx, page, recording, before)
+				else await throughTheReset(ctx, page, recording, chain, true)
 				await page.close()
 			},
 		})
@@ -162,16 +231,15 @@ describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 		timeout: 300_000,
 		retry: 0,
 	}, async ({ skip }) => {
-		const { from, to, recording } = recordingFor()
+		const recording = recordingFor()
 		if (recordedTestnet(recording) !== CHAIN_IDS.TESTNET) skip("the seed has moved: the first case resets the recording itself")
 		await inPlaceUpdate({
-			from,
-			to,
+			builds: builds(),
 			populate: (ctx) => install(ctx, recording),
 			verify: async (ctx, before) => {
 				const page = await openUpdated(ctx, before)
 				await seedStaleNetwork(page, "network-reset")
-				await throughTheReset(page, recording, PREVIOUS_TESTNET_CHAIN_ID, false)
+				await throughTheReset(ctx, page, recording, PREVIOUS_TESTNET_CHAIN_ID, false)
 				await page.close()
 			},
 		})
