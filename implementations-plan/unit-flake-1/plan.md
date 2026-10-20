@@ -1,7 +1,7 @@
 ---
 plan: unit-flake-1
 tier: light
-status: planned, Codex approve (round 3); arc 1 next
+status: arc 1 phase 1 green (88bcd2ca); Codex fix loop next
 issues: "#895 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -54,7 +54,7 @@ For a maintainer reading a red `Unit tests / Vitest`: a component test is red be
 - **A still clock in `tests/vitest.setup.ts`**: reds the 10 Date-arithmetic tests. Rejected. **A ban test on raw dispatch in test files**: most raw dispatches are first-listener and safe; a baseline for one cause. Rejected.
 - **Fix #895's file only**: leaves 23 tests with the same cause and never-happens tests that a dropped event passes vacuously. Rejected (the lane brief: fix what shares the cause).
 
-## Phase 1: send the inventory's events through `sendEvent` (branch `unit-flake-1-a1`)
+## Phase 1: send the inventory's events through `sendEvent` (branch `unit-flake-1-a1`) ✓
 
 1. Add `send-event.ts`; route the two shared helpers; run their 18 consumer files.
 2. Convert the local sites above and SettingsSearch's `key`; add the still clock to `StaleNetworkConfirm.test.ts`.
@@ -87,6 +87,7 @@ Test code and one convention line: no product, permission, storage, wire, CI or 
 - D5 CLAUDE.md gets the rule in this PR; `lessons.md`'s Vue line points at it at close-out.
 - D6 Presses on a disabled submit now send nothing, as a browser sends nothing to a control it cannot focus: `RevokeAuthwitsPopup.test.ts` :214, :233, :307, :333 and `tests/helpers/send-popup-keyboard.ts` :159, :167 (run by `RevokeAuthwitsPopup` and `ChangeAuthwitsRegistryPopup`). Each still asserts the send count, and five of them that the submit is disabled. Before, a raw keydown reached the disabled button's listeners, a path no browser takes.
 - D7 `Popup.test.ts`'s close-area click becomes `detail: 0`, since `trigger` cannot set `detail`. Popup's refusal passes 0 and 1 alike, and the same test still proves a detail-1 click passes through `inside`.
+- D8 (implementation) The gate's two literal criteria needed widening, intent unchanged: the probe also leaves `Popup.test.ts:238`, a detail-2 click Popup's own listener refuses first, kept raw by design; the quantized sweep's 10th Date-arithmetic test passed one run, as it depends on where the 1 s quantum falls. Results: [lessons/phase-1.md](lessons/phase-1.md).
 
 ## UI impact
 

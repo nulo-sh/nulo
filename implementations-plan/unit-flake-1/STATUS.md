@@ -8,3 +8,4 @@
 - 2026-10-20: audit r1: Codex conditional approve (5 findings), Opus conditional approve (7), all accepted; plan revised (sendEvent contract, enterOn for Enter sites, D6, D7, probe inlined).
 - 2026-10-20: audit r2 (Codex resume): conditional approve, 1 finding (probe DOM guard), accepted.
 - 2026-10-20: audit r3 (Codex resume): approve. Plan committed.
+- 2026-10-20: arc 1 phase 1 on 88bcd2ca: lint, typecheck:all, test (14295, base count), test:all exit 0; negative control 5/5 red; 200/200 after; quantized sweep 9 red, all Date-arithmetic, none of the 24; probe leaves RowTarget sends and Popup.test.ts:238 (kept raw by design).
