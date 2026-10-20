@@ -13,7 +13,7 @@ import type { KeyInput, Page } from "puppeteer"
 import { expect } from "vitest"
 import { extensionUrl, gotoExtensionPage, newPage, prepareClick } from "./fixtures/browser"
 import { readEditorStyles } from "./fixtures/code-editor"
-import { type ExtensionContext, test } from "./fixtures/extension"
+import { clickByTestId, type ExtensionContext, test } from "./fixtures/extension"
 import { pollUntil } from "./fixtures/poll"
 import { shotSend } from "./fixtures/send-page"
 import { pointerClick } from "./helpers/legal-drivers"
@@ -406,7 +406,7 @@ test("the search panel open at the end holds the view while lines arrive", async
 	}, HOST)
 	await logLines(page, 1)
 	expect(await page.$('[data-testid="logs-scroll-btn"]')).not.toBeNull()
-	await pointerClick(page, "logs-scroll-btn")
+	await clickByTestId(page, "logs-scroll-btn")
 	expect(await gapToEnd(page)).toBeLessThan(AT_END)
 	// A follow due at the stop lands in CodeMirror's next measure and its scroll is judged the frame
 	// after, so the hold is measured from two frames on; a move inside that span is not covered.
