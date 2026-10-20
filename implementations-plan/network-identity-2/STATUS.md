@@ -5,3 +5,4 @@
 - 2026-10-20: Codex verification r2 and r3; final verdict approve. Plan committed.
 - 2026-10-20: arc 1 phase 1 green: base build red at the new assertion on Chrome and Firefox; D3 kept.
 - 2026-10-20: arc 1 phase 2 green: pins red on the base code, then lint, typecheck:all and test:all exit 0.
+- 2026-10-20: arc 1 phase 3 green: token-list and rows e2e pass on Chrome and Firefox at retry 0; lint:actions exit 0.

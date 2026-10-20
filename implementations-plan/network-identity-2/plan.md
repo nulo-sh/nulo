@@ -97,9 +97,9 @@ Run every command from the worktree root unless the command starts with `cd`. Ph
   - Pass: the red run failed at both pins only; after the code edits everything exits 0.
   - Layers: lint, typecheck, unit, composition.
 
-### Phase 3: the arc gate, in both browsers
+### Phase 3: the arc gate, in both browsers ✓
 
-- [ ] Rebuild both armed builds (Phase 1 commands) and run, per browser, `cd apps/extension && NULO_E2E_BROWSER=$B NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/token-list.test.ts tests/e2e/rows.test.ts --retry=0`.
+- [x] Rebuild both armed builds (Phase 1 commands) and run, per browser, `cd apps/extension && NULO_E2E_BROWSER=$B NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/token-list.test.ts tests/e2e/rows.test.ts --retry=0`.
 - **Validation gate**
   - Pass: every scenario of both files passes on both browsers at retry 0; record each file's vitest duration. `bun run lint:actions` and `bun run check:plans` (after staging) exit 0.
   - Layers: e2e (smoke, Chrome and Firefox), plans gate.
