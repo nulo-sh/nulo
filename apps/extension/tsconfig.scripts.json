@@ -14,5 +14,5 @@
 		"skipLibCheck": true,
 		"paths": { "@/*": ["./src/*"] }
 	},
-	"include": ["scripts/**/*.ts", "vite.*.config.mts"]
+	"include": ["scripts/**/*.ts", "vite.*.config.mts", "src/types/console.d.ts"]
 }
