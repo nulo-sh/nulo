@@ -63,6 +63,7 @@ function fakeIO(state: FakeState) {
 	const calls: string[] = []
 	const commits: (readonly PublishFile[])[] = []
 	const bodies: string[] = []
+	const logs: string[] = []
 	const io: PublishIO = {
 		branchHead: async (branch) => state.heads?.[branch] ?? null,
 		createBranch: async (branch, sha) => void calls.push(`branch ${branch}@${sha.slice(0, 4)}`),
@@ -79,9 +80,9 @@ function fakeIO(state: FakeState) {
 			return state.number ?? 99
 		},
 		close: async (number, comment) => void calls.push(`close #${number}: ${comment}`),
-		log: () => {},
+		log: (message) => void logs.push(message),
 	}
-	return { io, calls, commits, bodies }
+	return { io, calls, commits, bodies, logs }
 }
 
 describe("open-publish-pr", () => {
@@ -111,7 +112,7 @@ describe("open-publish-pr", () => {
 		expect(calls).toEqual([])
 	})
 
-	test("counts only this repository's unmerged publish branches, never a fork's of the same name", () => {
+	test("counts only this repository's unmerged publish branches, once each, never a fork's of the same name", () => {
 		const branch = `${BRANCH_PREFIX}1760000000`
 		const pull = (number: number, ref: string, repo: string | null, state = "open", merged_at: string | null = null) => ({
 			number,
@@ -126,6 +127,7 @@ describe("open-publish-pr", () => {
 			pull(4, branch, "nulo-sh/nulo"),
 			pull(5, branch, "nulo-sh/nulo", "closed"),
 			pull(6, branch, "nulo-sh/nulo", "closed", "2026-10-15T21:29:49Z"),
+			pull(4, branch, "nulo-sh/nulo"),
 		]
 		expect(publishPrs(pulls, "nulo-sh/nulo")).toEqual([
 			{ number: 4, branch, head: "4".padStart(40, "s"), open: true },
@@ -207,7 +209,6 @@ describe("open-publish-pr", () => {
 describe("the floor reads every list at a publish PR or branch head", () => {
 	const FLOOR = 1760000000
 	const NEXT = 1780000000
-	/** `dev` serves N, which lists token 1 and flags pair 3, over a floor at `FLOOR`. */
 	const base = {
 		...servedFiles(envelopeFor(1765000000, [pair(1)], [pair(3)])),
 		[`${INPUT.baseSha}:${FLOOR_PATH}`]: floorText(FLOOR),
@@ -244,22 +245,23 @@ describe("the floor reads every list at a publish PR or branch head", () => {
 		await runPublish({ ...INPUT, envelopeText: keeps }, control.io)
 		expect(control.commits).toEqual([[{ path: ENVELOPE_PATH, text: keeps }]])
 
-		// A re-run finds PR 7 closed unmerged and reaches the same decision, so it writes nothing.
+		// Re-run: PR 7 closed, its branch gone, and no floor on this branch, so only a raise writes.
 		const branch = `${BRANCH_PREFIX}${NEXT}`
 		const head = "c".repeat(40)
 		const rerunState = {
 			...afterRun1,
 			heads: { [branch]: head },
-			files: { ...afterRun1.files, ...at(head, next), [`${head}:${FLOOR_PATH}`]: floorText(NEXT) },
+			files: { ...afterRun1.files, ...at(head, next) },
 			prs: [
 				{ ...pr7, open: false },
 				{ ...prOn(8, NEXT), head },
 			],
+			branches: [],
 		}
 		const rerun = fakeIO(rerunState)
 		expect(await runPublish({ ...INPUT, envelopeText: next }, rerun.io)).toBe(8)
-		expect(rerun.calls).toEqual([])
-		// Its own PR closed: a closed PR is never found, so the run opens a new one.
+		expect(rerun.commits).toEqual([floorCommit])
+		expect(rerun.calls.filter((call) => !call.startsWith("commit"))).toEqual([])
 		const reopened = fakeIO({
 			...rerunState,
 			prs: [
@@ -269,7 +271,7 @@ describe("the floor reads every list at a publish PR or branch head", () => {
 			number: 9,
 		})
 		expect(await runPublish({ ...INPUT, envelopeText: next }, reopened.io)).toBe(9)
-		expect(reopened.calls).toEqual([`open ${branch} "chore(token-list): publish sequence ${NEXT}"`])
+		expect(reopened.calls.at(-1)).toBe(`open ${branch} "chore(token-list): publish sequence ${NEXT}"`)
 	})
 
 	const added = (sequence: number) => envelopeFor(sequence, [pair(1), pair(2)], [pair(3)])
@@ -278,7 +280,7 @@ describe("the floor reads every list at a publish PR or branch head", () => {
 			"a PR closed earlier, read at its head with its branch gone",
 			{ prs: [prOn(7, 1770000000, false)] },
 			at(prOn(7, 0).head, added(1770000000)),
-			"the list of #7",
+			"the list of #7, closed unmerged",
 		],
 		[
 			"a publish branch with no PR",
@@ -286,12 +288,17 @@ describe("the floor reads every list at a publish PR or branch head", () => {
 			at("e".repeat(40), added(1770000000)),
 			`the list of branch \`${BRANCH_PREFIX}1770000000\``,
 		],
-		["a PR exactly at the floor", { prs: [prOn(7, FLOOR, false)] }, at(prOn(7, 0).head, added(FLOOR)), "the list of #7"],
+		[
+			"a PR exactly at the floor",
+			{ prs: [prOn(7, FLOOR, false)] },
+			at(prOn(7, 0).head, added(FLOOR)),
+			"the list of #7, closed unmerged",
+		],
 		[
 			"a list that unflagged a pair the next list flags again",
 			{ prs: [prOn(7, 1770000000, false)] },
 			at(prOn(7, 0).head, envelopeFor(1770000000, [pair(1)])),
-			"the list of #7",
+			"the list of #7, closed unmerged",
 		],
 	])("%s raises the floor", async (_name, state, files, reason) => {
 		const { io, commits, bodies, calls } = fakeIO({ ...state, files: { ...base, ...files } })
@@ -319,10 +326,11 @@ describe("the floor reads every list at a publish PR or branch head", () => {
 		["a file that is not an envelope", at(prOn(7, 0).head, "{}")],
 		["an envelope of another sequence than its branch names", at(prOn(7, 0).head, envelopeFor(1765000000, [pair(1)], [pair(3)]))],
 	])("a list in range with %s raises the floor", async (_name, files) => {
-		const { io, commits, bodies } = fakeIO({ files: { ...base, ...files }, prs: [prOn(7, 1770000000, false)] })
+		const { io, commits, bodies, logs } = fakeIO({ files: { ...base, ...files }, prs: [prOn(7, 1770000000, false)] })
 		await runPublish({ ...INPUT, envelopeText: next }, io)
 		expect(commits).toEqual([floorCommit])
-		expect(bodies[0]).toContain("- the list of #7 cannot be read\n")
+		expect(bodies[0]).toContain("- the list of #7, closed unmerged cannot be read\n")
+		expect(logs).toContain("the list of #7, closed unmerged cannot be read, so it raises the floor")
 	})
 
 	test.each([
@@ -336,7 +344,7 @@ describe("the floor reads every list at a publish PR or branch head", () => {
 		expect(floorSequence(text)).toBe(sequence)
 	})
 
-	test("the GitHub IO pages through every PR and refuses a page that is not a list", async () => {
+	test("the GitHub IO pages through every PR, refuses a page that is not a list and a write that finds nothing", async () => {
 		const pull = (number: number, ref: string) => ({
 			number,
 			state: "closed",
@@ -353,9 +361,13 @@ describe("the floor reads every list at a publish PR or branch head", () => {
 			expect(await githubIO("nulo-sh/nulo", "t").unmergedPublishPrs()).toEqual([
 				{ number: 200, branch: `${BRANCH_PREFIX}1770000000`, head: "200".padStart(40, "s"), open: false },
 			])
-			expect(urls).toHaveLength(2)
+			expect(urls.map((url) => new URL(url).search)).toEqual([
+				"?state=all&base=dev&per_page=100&page=1",
+				"?state=all&base=dev&per_page=100&page=2",
+			])
 			vi.stubGlobal("fetch", async () => Response.json({ message: "Not Found" }, { status: 404 }))
 			await expect(githubIO("nulo-sh/nulo", "t").unmergedPublishPrs()).rejects.toThrow("not a list")
+			await expect(githubIO("nulo-sh/nulo", "t").openPr("b", "t", "x")).rejects.toThrow("POST repos/nulo-sh/nulo/pulls: HTTP 404")
 		} finally {
 			vi.unstubAllGlobals()
 		}

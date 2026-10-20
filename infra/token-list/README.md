@@ -52,7 +52,8 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
    GitHub's compare view of the range is the authoritative review.
 3. Approve `sign` in the `token-list` environment.
 4. Merge the `chore(token-list): publish sequence <n>` PR the release App opens; when the list delists
-   or flags against any list the floor rule reads, it also raises the floor and its body says why. Workers Builds deploys `dev`; the nightly
+   or flags against any list the floor rule reads, or one of them cannot be read, it also raises the
+   floor and its body says why. Workers Builds deploys `dev`; the nightly
    `token-list-host-live` job checks the served list.
 
 A run whose base no longer holds the list `dev` serves fails before it opens a PR: its summary and its

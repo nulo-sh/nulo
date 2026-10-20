@@ -19,7 +19,6 @@ export interface PublishIO {
 	commit(branch: string, expectedHead: string, files: readonly PublishFile[], headline: string): Promise<void>
 	/** Publish PRs into `dev`, open or closed unmerged, with their head commit. */
 	unmergedPublishPrs(): Promise<PublishPr[]>
-	/** Every publish branch, with its head commit. */
 	publishBranches(): Promise<PublishBranch[]>
 	openPr(branch: string, title: string, body: string): Promise<number>
 	close(prNumber: number, comment: string): Promise<void>
@@ -45,7 +44,6 @@ export function envelopeMeta(text: string): { keyId: string; sequence: number; p
 	return { keyId: envelope.keyId, sequence, pairs: { tokens: pairsOf(tokens), flagged: pairsOf(flagged) } }
 }
 
-/** The sequence a publish branch names, or null unless it is canonical decimal and a safe integer. */
 function sequenceOf(branch: string): number | null {
 	const digits = branch.slice(BRANCH_PREFIX.length)
 	if (!branch.startsWith(BRANCH_PREFIX) || !/^[1-9][0-9]*$/.test(digits)) return null
@@ -55,7 +53,8 @@ function sequenceOf(branch: string): number | null {
 
 export function prBody(input: PublishInput, keyId: string, sequence: number, raisedBy: readonly string[]): string {
 	const floor = [
-		`This list sets the compiled sequence floor (\`${FLOOR_PATH}\`) to ${sequence}, so every wallet built after this merges refuses any older list:`,
+		`This list sets the compiled sequence floor (\`${FLOOR_PATH}\`) to ${sequence}, so every wallet built after this merges refuses any older list.`,
+		"The floor rises because:",
 		...raisedBy.map((reason) => `- ${reason}`),
 		"",
 		"That file runs the extension e2e lanes on this PR.",
@@ -80,9 +79,12 @@ type Pull = {
 	head: { ref: string; sha: string; repo: { full_name: string } | null }
 }
 
-/** A fork can name its branch like ours, so only this repository's branches count as publish PRs; a merged one was served. */
+/**
+ * A fork can name its branch like ours, so only this repository's branches count as publish PRs; a
+ * merged one was served. Paging newest first can repeat a PR opened mid-listing, never skip one.
+ */
 export function publishPrs(pulls: readonly Pull[], repo: string): PublishPr[] {
-	return pulls
+	return [...new Map(pulls.map((pr) => [pr.number, pr])).values()]
 		.filter((pr) => pr.head.repo?.full_name === repo && pr.head.ref.startsWith(BRANCH_PREFIX) && pr.merged_at === null)
 		.map((pr) => ({ number: pr.number, branch: pr.head.ref, head: pr.head.sha, open: pr.state === "open" }))
 }
@@ -99,15 +101,11 @@ async function servedPairs(io: PublishIO, baseSha: string): Promise<ListPairs> {
 	return served === null ? { tokens: [], flagged: [] } : envelopeMeta(served).pairs
 }
 
-/**
- * Each list a publish PR or branch carries at its head, signed from `floor` up to but not including
- * `sequence`, by head commit. Below the floor every build already refuses it; at or above `sequence`,
- * this list's floor could not.
- */
+/** The publish PR and branch heads named in `[floor, sequence)`: only those can a floor at `sequence` still retire. */
 function unservedHeads(prs: readonly PublishPr[], branches: readonly PublishBranch[], floor: number, sequence: number) {
 	const heads = new Map<string, { name: string; sequence: number }>()
 	const named = [
-		...prs.map((pr) => ({ ...pr, name: `#${pr.number}` })),
+		...prs.map((pr) => ({ ...pr, name: `#${pr.number}${pr.open ? "" : ", closed unmerged"}` })),
 		...branches.map((branch) => ({ ...branch, name: `branch \`${branch.branch}\`` })),
 	]
 	for (const { branch, head, name } of named) {
@@ -128,9 +126,9 @@ function metaOrNull(text: string | null): ReturnType<typeof envelopeMeta> | null
 type FloorRun = { baseSha: string; served: ListPairs; prs: readonly PublishPr[]; sequence: number; next: ListPairs }
 
 /**
- * Why this list raises the floor, or nothing. Every list at a publish PR's or branch's head was signed
- * even when `dev` never served it, so it counts as the served list does. A list there that cannot be
- * read, or names another sequence than its branch, counts as raising: nothing shows it would not.
+ * Why this list raises the floor, or nothing. A list at a publish PR or branch head counts as the served
+ * list does; one that cannot be read, or names another sequence than its branch, raises it, since
+ * nothing shows it would not.
  */
 async function floorRaisedBy(io: PublishIO, run: FloorRun): Promise<string[]> {
 	const { baseSha, served, prs, sequence, next } = run
@@ -183,7 +181,10 @@ export function githubIO(repo: string, token: string): PublishIO {
 			headers: { Authorization: `Bearer ${token}`, Accept: accept, "X-GitHub-Api-Version": "2022-11-28" },
 			signal: AbortSignal.timeout(60_000),
 		})
-		if (!res.ok && res.status !== 404) throw new Error(`${init.method ?? "GET"} ${path.split("?")[0]}: HTTP ${res.status}`)
+		// A 404 is an answer only to a read; a write that finds nothing failed.
+		if (!res.ok && !(res.status === 404 && (init.method ?? "GET") === "GET")) {
+			throw new Error(`${init.method ?? "GET"} ${path.split("?")[0]}: HTTP ${res.status}`)
+		}
 		return res
 	}
 	const json = async <T>(res: Promise<Response>): Promise<T> => (await res).json() as Promise<T>

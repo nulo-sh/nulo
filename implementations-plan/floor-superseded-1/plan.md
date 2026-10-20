@@ -89,7 +89,7 @@ None. The arc changes CI tooling, a GitHub PR body, a CI step summary line and d
 - `SECURITY.md` § Rollback and freeze and § The floor's writer: one clause each naming the unserved lists.
 - **Validation gate:** `bun run test:ci-gating` exit 0; `bun run lint` exit 0.
 
-### Phase 3: arc gate
+### Phase 3: arc gate ✓
 - **Commands:** `bun run lint`; `bun run typecheck:all`; `bun run --cwd infra/token-list test`; `bun run --cwd packages/token-list test`; `bun run test:ci-gating`; `bun run check:plans` after staging. No e2e: nothing a wallet runs changes.
 - **Pass criteria:** each exits 0; `git diff origin/dev --stat` touches only the files named in Phases 1-2 and this plan's directory.
 
@@ -111,6 +111,9 @@ None. The arc changes CI tooling, a GitHub PR body, a CI step summary line and d
 - **Round 1, Codex (gpt-6.1-sol high, session 01a15b98): `conditional approve`.** Accepted: (1) the invariant overstated what discovery sees: restated as PR heads and existing branches; (2) D9 needs a private disposition: sent to the owner through the orchestrator, no committed trace; (3) the fake cannot prove paging: T4 and the floor-equal and re-flag rows added, red-on-base cut to representative rows; (4) canonical suffix and floor parsing (D3); (5) D7's rationale corrected. Kept: D1 with branches, D2, D6, I1's relation.
 - **Round 1, Opus Plan leg: `conditional approve`.** Accepted: (1) a non-list page would page to the timeout: it throws, and T4 pins it; (2) find and close read open PRs only, with a T2 assertion; (3) `merged_at` marks a merged PR; (4) I1 restated as the reason merged PRs need no read; (5) negative scope text removed; (7) the fake stays stateless, T1 built from run 1's recorded writes, a re-run row added. Deferred to the owner: (6) a change to the stale-base guard (D10). Kept: D1-D3, D6, D7.
 - **Round 2, Codex resumed: `conditional approve`.** Three low conditions, accepted: recon's fake row matched the stateless decision; the title and threat model narrowed to the bounded invariant; a closed PR on the run's own branch is not found (re-run case). D10 confirmed. **Round 3: `approve`**, "No remaining conditions. Confidence: high."
+
+- **Arc 1 review, round 1, Codex (gpt-6.1-sol high, session 01a15ba9, on the arc diff): `approve`.** Three low findings, accepted: (1) `call` treated a 404 as an answer for writes too, so a failed `openPr` returned `undefined`: a 404 now passes for reads only, pinned in T4; (2) T4 did not pin `state=all`: it asserts the query; (3) comments: two that restated their names removed, the floor comment no longer claims every head list is signed, the bound comment cut to one line, three test comments removed or rewritten.
+- **Arc 1 review, Opus (general-purpose, same diff): `conditional approve`.** Accepted: (1) as Codex 2; (2) the re-run row passed whatever the re-run decided: its branch now lacks the floor, so only a raise writes; the unreadable log line asserted; (3) a PR opened mid-listing can repeat across pages: `publishPrs` dedupes by number; (5) the PR body says "The floor rises because:" and labels a closed PR "closed unmerged"; (6) README step 4 names the unreadable case. Rejected: (4) paging `matching-refs`, which documents no page parameters (Codex verified).
 
 ## Delivery
 
