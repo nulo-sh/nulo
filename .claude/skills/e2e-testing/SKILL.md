@@ -538,7 +538,9 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   `launchExtension` can seed `nulo:onboarding:completed`; the fixture closes it by the id the worker
   stores in `nulo:onboarding:tab-id` BEFORE flipping the flag (a mounted onboarding page that reads the
   flag replaces itself with a popup window and drops the id). On a fresh profile the id is required
-  within 5s and the launch fails otherwise; a reused `userDataDir` opens no tab. Onboarding specs open
+  within 5s and the launch fails otherwise. A relaunch on a reused `userDataDir` reports `install` too, on
+  both browsers (an unpacked or temporary add-on is installed anew), so it opens the tab again and the poll
+  closes it; only a swap inside the running browser reports `update` (e2e README § In-place update). Onboarding specs open
   their own tab via `openOnboarding`.
 - **Passkeys: the virtual authenticator is per FrameTreeNode**, not per browser context, and PRF
   state is not serialisable over CDP. Register, lock/unlock and reset→import are drivable in the SAME

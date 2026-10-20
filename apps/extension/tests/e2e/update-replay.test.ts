@@ -311,9 +311,10 @@ describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 			const page = await openPopup(ctx)
 			await setupPasskeyVirtualAuth(ctx.browser, page)
 			await registerPasskeyProfile(page)
+			// Before the export: on Firefox a window opened during its passkey check takes the focus WebAuthn needs.
+			const stored = await readLocalStorage(ctx)
 			await navigateByHash(page, "#/popup/settings/security/export/full", 15_000)
 			await clickByTestId(page, "agree-continue-btn")
-			const stored = await readLocalStorage(ctx)
 			const file = await downloadPlainPasskeyBackup(page)
 			expect(typeof (JSON.parse(file) as Record<string, unknown>)[BACKUP_MAC_FIELD]).toBe("string")
 			await expectBackupImports("passkey", file, stored)

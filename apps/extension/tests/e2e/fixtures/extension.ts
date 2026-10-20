@@ -284,8 +284,8 @@ async function settleLaunchedExtension(
 	// `onInstalled` opens the extension's first-run tab and stores its id in session storage. Nothing
 	// in the worker's boot awaits that open, so the id can land after liveness; on a fresh profile
 	// the install is certain, so the id is REQUIRED — a launch that cannot find it would hand the
-	// test an untracked extension page, and that is a setup failure, not a warning. A reused profile
-	// was installed by an earlier launch and opens no tab; there the poll is only a courtesy. Close
+	// test an untracked extension page, and that is a setup failure, not a warning. A relaunch on a
+	// reused profile reports `install` too and opens the tab again; there a miss does not fail it. Close
 	// the tab BEFORE marking onboarding complete: an onboarding page that mounts and reads the
 	// completed flag replaces itself with a popup window and drops the tracked id. Every e2e drives
 	// the popup flows directly; the tab-flow specs open their own tab.
