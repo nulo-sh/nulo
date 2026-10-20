@@ -25,3 +25,12 @@
 
 - `sealed-storage.test.ts`: Chrome 25–33 s, Firefox 41–60 s (estimates 60 s and 90 s).
 - Sealing 2 000 plaintext rows after unlock: Chrome 2.3–6.6 s, Firefox 8.6–16 s, under load 60–145.
+
+## Review
+
+- **Codex round 1** (`run-codex.sh … high read-only gpt-6.1-sol`, the `alejo-icloud` home, session `01a156f7`): APPROVE WITH FIXES, three medium findings, each reproduced by Codex and adopted:
+  1. a deletion completing while an open derived the row keys let the open capture the newer epoch and open the deleted profile; the fill now throws as the open does;
+  2. a prepared write stalled past the key drop could commit behind the keyless sweep; every commit now re-checks the keys synchronously;
+  3. the refusal read key presence after its deletes, so an unlock in between turned an unread grant into `revoked`; the scan now reports `keyless` rows itself.
+- **Opus review** (beside round 1): APPROVE WITH FIXES, three low findings, adopted: the refusal race (same as Codex 3); a stored non-string value served on read but invisible to every delete path, now refused; the delete-racing-open test never reached the guard, now replaced by one that holds the derivation (and was mutation-checked: it fails with the throw removed).
+- **Codex round 2** (resumed): APPROVE, no material finding; the four fixes held under its in-memory reproductions. The loop stopped at two rounds.
