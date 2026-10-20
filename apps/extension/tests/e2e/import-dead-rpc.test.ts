@@ -91,6 +91,29 @@ describe("planBatchReplies (no browser)", () => {
 	})
 })
 
+describe("startStub (no browser)", () => {
+	it("answers a held request with the node stand-in's refusal and still answers the rest", async () => {
+		const stub = await startStub((method) => (method === "ok" ? { fine: true } : undefined))
+		const post = async (method: string) => {
+			const res = await fetch(stub.url, { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method }) })
+			return { status: res.status, body: await res.json() }
+		}
+		try {
+			const held = post("hang")
+			held.catch(() => undefined)
+			await expect.poll(() => stub.methods).toContain("hang")
+			stub.refuseUnanswered()
+			expect(await held).toEqual({
+				status: 400,
+				body: { jsonrpc: "2.0", id: null, error: expect.objectContaining({ code: -32601 }) },
+			})
+			expect(await post("ok")).toEqual({ status: 200, body: { jsonrpc: "2.0", id: 1, result: { fine: true } } })
+		} finally {
+			await stub.close()
+		}
+	})
+})
+
 /** Synthetic backup with a senders-only account-state item on the LOCAL chain — the minimum
  *  registrable work that forces the chain-registration leg to dial the (rerouted) seed. */
 async function deadRpcBackup(withAccountState = true): Promise<string> {
