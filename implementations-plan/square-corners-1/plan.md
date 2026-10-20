@@ -1,7 +1,7 @@
 ---
 plan: square-corners-1
 tier: light
-status: planned, Codex approve; arc 1 next
+status: arc 1 in review; arc 2 waits on OA-1
 issues: "#928 (arc 1 refs; closed by arc 2 after OA-1)"
 driver: claude-code
 claude_model: opus
@@ -16,6 +16,7 @@ standard: implementations-plan/README.md § Post-implementation standard, read a
 # square-corners-1: the notice card goes square; the other rounded corners go to the owner
 
 Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (OA-1).
+Size: 154 lines, over the 150 target by the record of five review rounds, which nothing else restates.
 
 | Arc | Issue | Branch | PR line |
 |---|---|---|---|
@@ -27,7 +28,7 @@ Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 ## Outcome & Quality Bar
 
 - **For whom**: a person who meets a notice ("Profile import failed", "Profile creation failed", "Import completed with errors") in the popup or in onboarding; the next contributor who edits the card.
-- **Excellent**: (1) the card has four square corners in both themes, in the popup and in onboarding, and nothing else on it moves (hairline, shadow, padding, width, words); (2) a rounded corner put back in the card's source, in any spelling, fails `bun run test`.
+- **Excellent**: (1) the card has four square corners in both themes, in the popup and in onboarding, and nothing else on it moves (hairline, shadow, padding, width, words); (2) a rounded corner put back in the card's own file, in any spelling, fails `bun run test`.
 - **Good enough**: every other rounded corner stays until the owner answers OA-1; no new e2e scenario.
 
 ## Assumptions
@@ -51,8 +52,8 @@ One CSS line removed and one source pin added. No token, component, dependency o
 
 ### Phase 1: The pin ✓
 
-- Add `apps/extension/src/components/NotificationManager.test.ts`, a source test (D2). A private `roundedCorners(file, source?)` parses the SFC with `parseSource`. It returns `"<selector> { <prop>: <value> }"` for each declaration whose property matches `/(^|-)radius$/i` and whose value is not all zeros. It also returns each template element whose static or bound `style` matches `/radius/i`.
-- Tests: (a) the file yields `[]`; (b) a `test.each` of snippets, each yielding one finding: `border-radius: 16px`, `border-top-left-radius`, `border-start-end-radius`, `BORDER-RADIUS`, `-webkit-border-radius`, a static `style="border-radius:4px"`, a bound `:style="{ borderRadius: '4px' }"`; and `border-radius: 0` / `0 0` yielding `[]`; (c) non-vacuity: `declarationsOf(parsed, ".card")` holds `background`, and the template walk reaches the `font-style: italic` element. A header sentence names the blind spots: a global or shared rule, a `composes`, a style set in script or through a variable, `clip-path` rounding.
+- Add `apps/extension/src/components/NotificationManager.test.ts`, a source test (D2). A private `roundedCorners(source?)` parses the SFC with `parseSource`. It returns a finding for each declaration, in the sheet or a static inline `style`, whose property matches `/(^|-)radius$/i` and whose value is not all zeros; for each `:style` or `v-bind` spread whose expression names a radius (`/radius/i`); and for a script that names one, since a binding is not evaluated.
+- Tests: (a) the file yields `[]`; (b) a `test.each` of snippets, each yielding one finding: `border-radius: 16px`, `border-top-left-radius`, `border-start-end-radius`, `BORDER-RADIUS`, `-webkit-border-radius`, a nested `&:hover`, a static `style`, a bound `:style`, a `v-bind` spread, a script style; and four zero forms, inline included, yielding `[]`; (c) non-vacuity: `declarationsOf(parsed, ".card")` holds `background`, and the template holds `notification-description`. A header sentence names the blind spots: a global or shared rule, a `composes`, `clip-path` rounding.
 - **Gate**: `bun run --cwd apps/extension test -- src/components/NotificationManager.test.ts`. Pass: exactly one failure, (a), naming `.card { border-radius: 16px }`; (b) and (c) pass. Record it in `lessons/phase-1.md`. Layers: unit.
 
 ### Phase 2: The harness, the patch, pictures before ✓
@@ -89,7 +90,6 @@ No trust boundary moves: no dApp input, storage, message, permission, log or dep
 ## UI impact
 
 - **The notice card** (popup and onboarding; every notice): before, 16px rounded corners; after, square corners. Hairline, shadow, padding, width, words and buttons stay. Signed by P71-07's note (quoted above). Pictures: Phases 2 and 4, the popup at its real 360x600.
-- **Every other surface**: no change in arc 1. Each is in OA-1, pictured before and after.
 
 ## Decision ledger
 
@@ -127,6 +127,10 @@ No trust boundary moves: no dApp input, storage, message, permission, log or dep
 - C11: item 3 named Log actions' square menu as a `Popover`; the undrawn radii had no mapping under B → item 3 and the mapping line fixed.
 
 **Round 3** (Codex, resumed, verification): `approve`, no new material finding.
+
+**Post-implementation round 1** (diff `origin/dev...square-corners-1-a1`). Codex (gpt-6.1-sol, high, session `01a15930`) `findings: 2`; Opus 5.5 diff review `findings: 4`. All accepted and fixed:
+- Demonstrated by trace: a style built in script or a `v-bind` spread rounded the card past the pin, and an inline `0` failed it (Codex 1-2, Opus 1) → Phase 1 as written now; Opus 2: non-vacuity reaches `notification-description`, not the note's italic literal.
+- Opus 3-4: the index's count, this file's status and the helper's signature were stale → fixed. Red/green re-proved: the base card fails 1 of 16, head passes 16.
 
 ## Delivery
 

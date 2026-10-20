@@ -1,17 +1,18 @@
 /**
  * The notice card has square corners. jsdom gets no module CSS here, so the shape is pinned in the
- * card's source: no declaration in its sheet and no style in its template rounds a corner.
- * Blind spots: a global or shared rule, a `composes`, a style set in script or through a custom
- * property, `clip-path` rounding.
+ * card's file: no declaration in its sheet or inline style rounds a corner, and no binding or script
+ * names a radius. Blind spots: a global or shared rule, a `composes`, `clip-path` rounding.
  */
 import { describe, expect, test } from "vitest"
 import {
-	boundAttr,
 	declarationsOf,
+	elementByTestid,
 	enclosingRule,
+	NODE,
 	parseSource,
 	resolveSelector,
 	staticAttr,
+	type TemplateNode,
 	walkElements,
 } from "../../scripts/type-roles/source-scan"
 
@@ -21,23 +22,39 @@ const FILE = "apps/extension/src/components/NotificationManager.vue"
 const RADIUS_PROP = /(^|-)radius$/i
 const ZERO = /^0+(\.0+)?[a-z%]*$/i
 
+const rounds = (prop: string, value: string) =>
+	RADIUS_PROP.test(prop.trim()) &&
+	!value
+		.trim()
+		.split(/[\s/]+/)
+		.every((part) => ZERO.test(part))
+
+/** A binding's style is not evaluated, so any radius it names counts, as in the script. */
+function elementRounding(node: TemplateNode): string[] {
+	const found: string[] = []
+	for (const declaration of (staticAttr(node, "style") ?? "").split(";")) {
+		const at = declaration.indexOf(":")
+		if (at > 0 && rounds(declaration.slice(0, at), declaration.slice(at + 1))) found.push(`<${node.tag}> ${declaration.trim()}`)
+	}
+	for (const prop of node.props ?? []) {
+		const bindsStyle = prop.type === NODE.DIRECTIVE && prop.name === "bind" && (!prop.arg || prop.arg.content === "style")
+		if (bindsStyle && /radius/i.test(prop.exp?.content ?? "")) found.push(`<${node.tag}> ${prop.exp?.content}`)
+	}
+	return found
+}
+
 function roundedCorners(source?: string): string[] {
 	const parsed = parseSource(FILE, source)
 	const found: string[] = []
 	for (const sheet of parsed.styles) {
 		sheet.root.walkDecls((decl) => {
-			if (!RADIUS_PROP.test(decl.prop) || decl.value.split(/[\s/]+/).every((part) => ZERO.test(part))) return
+			if (!rounds(decl.prop, decl.value)) return
 			const rule = enclosingRule(decl)
 			found.push(`${rule ? resolveSelector(rule) : ""} { ${decl.prop}: ${decl.value} }`)
 		})
 	}
-	if (parsed.template) {
-		walkElements(parsed.template, (node) => {
-			for (const style of [staticAttr(node, "style"), boundAttr(node, "style")]) {
-				if (style && /radius/i.test(style)) found.push(`<${node.tag}> ${style}`)
-			}
-		})
-	}
+	for (const { content } of parsed.scripts) if (/radius/i.test(content)) found.push("<script> names a radius")
+	if (parsed.template) walkElements(parsed.template, (node) => found.push(...elementRounding(node)))
 	return found
 }
 
@@ -48,12 +65,10 @@ describe("the notice card has square corners", () => {
 		expect(roundedCorners()).toEqual([])
 	})
 
-	test("the read is not empty: the card's rule and the template's inline style are both reached", () => {
+	test("the read is not empty: it reaches the card's rule and the card's template", () => {
 		const parsed = parseSource(FILE)
 		expect(declarationsOf(parsed, ".card")).toHaveProperty("background")
-		const styles: string[] = []
-		if (parsed.template) walkElements(parsed.template, (node) => styles.push(staticAttr(node, "style") ?? ""))
-		expect(styles).toContain("font-style: italic;")
+		expect(elementByTestid(parsed, "notification-description")).toBeDefined()
 	})
 
 	test.each([
@@ -65,14 +80,18 @@ describe("the notice card has square corners", () => {
 		[sfc("<div />", ".card { &:hover { border-radius: 0 4px; } }"), ".card:hover { border-radius: 0 4px }"],
 		[sfc('<div style="border-radius: 4px" />'), "<div> border-radius: 4px"],
 		[sfc(`<div :style="{ borderRadius: '4px' }" />`), "<div> { borderRadius: '4px' }"],
+		[sfc(`<div v-bind="{ style: { borderRadius: '4px' } }" />`), "<div> { style: { borderRadius: '4px' } }"],
+		[`<script setup>const s = { borderRadius: "4px" }</script>${sfc('<div :style="s" />')}`, "<script> names a radius"],
 	])("finds the corner in %s", (source, finding) => {
 		expect(roundedCorners(source)).toEqual([finding])
 	})
 
-	test.each([".card { border-radius: 0; }", ".card { border-radius: 0 0; }", ".card { border-top-left-radius: 0px; }"])(
-		"passes %s",
-		(style) => {
-			expect(roundedCorners(sfc("<div />", style))).toEqual([])
-		},
-	)
+	test.each([
+		sfc("<div />", ".card { border-radius: 0; }"),
+		sfc("<div />", ".card { border-radius: 0 0; }"),
+		sfc("<div />", ".card { border-top-left-radius: 0px; }"),
+		sfc('<div style="border-radius: 0" />'),
+	])("passes %s", (source) => {
+		expect(roundedCorners(source)).toEqual([])
+	})
 })
