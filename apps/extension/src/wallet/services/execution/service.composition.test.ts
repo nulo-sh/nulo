@@ -42,7 +42,7 @@ import { ContactService } from "@/wallet/services/contact/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { PriceService } from "@/wallet/services/price/service"
 import { FpcService } from "@/wallet/services/fpc/service"
-import { TransactionService, TransferType } from "@/wallet/services/transaction/service"
+import { DROPPED_RESURRECTION_WINDOW_MS, TransactionService, TransferType } from "@/wallet/services/transaction/service"
 import { OriginType } from "@/wallet/services/transaction/spec"
 import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
@@ -1268,9 +1268,9 @@ describe("ExecutionService composition — a dApp send names its call before sim
 })
 
 describe("ExecutionService composition — a send whose answer was lost is checked on the network", () => {
-	/** A running send check over the harness's journal, reading receipts from `getTxReceipt`. */
-	async function startCheck(h: Harness, getTxReceipt: (hash: { toString(): string }) => Promise<unknown>) {
-		const network = { getSingleAttemptNodeForUrl: vi.fn(async (_url: string) => ({ getTxReceipt }) as never) }
+	/** A running send check over the harness's journal, reading the chain from `node`. */
+	async function startCheck(h: Harness, node: { getTxReceipt: (hash: { toString(): string }) => Promise<unknown> }) {
+		const network = { getSingleAttemptNodeForUrl: vi.fn(async (_url: string) => node as never) }
 		const balances = { refreshAccountBalances: vi.fn(async (_account: string) => {}) }
 		const clock = new MockClock(Date.now())
 		const check = new SendCheck({
@@ -1334,7 +1334,7 @@ describe("ExecutionService composition — a send whose answer was lost is check
 		const hash = `0x${"1e".repeat(32)}`
 		const blockHash = `0x${"0b".repeat(32)}`
 		const getTxReceipt = vi.fn(async (_hash: { toString(): string }) => minedAt(hash, blockHash))
-		const { check, network, balances, clock } = await startCheck(h, getTxReceipt)
+		const { check, network, balances, clock } = await startCheck(h, { getTxReceipt })
 
 		const failed = await sendFailing(h, hash, new TypeError("fetch failed"))
 		expect(h.sendTx).toHaveBeenCalledTimes(1)
@@ -1357,7 +1357,7 @@ describe("ExecutionService composition — a send whose answer was lost is check
 		const hash = `0x${"2e".repeat(32)}`
 		const blockHash = `0x${"0c".repeat(32)}`
 		const getTxReceipt = vi.fn(async (_hash: { toString(): string }): Promise<unknown> => dropped(hash))
-		const { check, balances, clock } = await startCheck(h, getTxReceipt)
+		const { check, balances, clock } = await startCheck(h, { getTxReceipt })
 		let latest: OperationRecord | undefined
 		h.journal.onOperationUpdated.add((op) => {
 			latest = op
@@ -1382,11 +1382,46 @@ describe("ExecutionService composition — a send whose answer was lost is check
 		check.stop()
 	})
 
+	test("a refusal no read corrects in its window reads 'Won't go through' once the final chain passes its expiry without it", async () => {
+		const h = await makeHarness()
+		const hash = `0x${"2d".repeat(32)}`
+		const finalized = {
+			header: BlockHeader.empty({
+				globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(9), timestamp: BigInt(RECORDED_EXPIRY.timestamp + 1) }),
+			}),
+			blockHash: BlockHash.fromString(`0x${"1f".repeat(32)}`),
+		}
+		const node = {
+			getTxReceipt: vi.fn(async (_hash: { toString(): string }): Promise<unknown> => dropped(hash)),
+			getBlockData: vi.fn(async (_tag: string) => finalized),
+			findLeavesIndexes: vi.fn(async (..._args: unknown[]) => [undefined]),
+		}
+		const { check, clock } = await startCheck(h, node)
+		let latest: OperationRecord | undefined
+		h.journal.onOperationUpdated.add((op) => {
+			latest = op
+		})
+
+		const failed = await sendFailing(h, hash, nodeRefusal("Invalid tx: Existing nullifier"))
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(() => latest?.progress.stage === "failed" && latest.progress.check === "refused")
+		expect(node.getBlockData).not.toHaveBeenCalled()
+
+		clock.setNow(clock.now() + DROPPED_RESURRECTION_WINDOW_MS)
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(() => latest?.progress.stage === "failed" && latest.progress.check === "expired")
+		const expired = await h.journal.getOperation(h.getJournalId())
+		expect(expired?.progress).toEqual({ ...failed?.progress, check: "expired" })
+		expect(cardOf(expired)).toMatchObject({ state: "failed", subtitle: "Won't go through", color: "red" })
+		expect(node.getTxReceipt).toHaveBeenCalledTimes(1)
+		check.stop()
+	})
+
 	test("a fee refusal reads 'Not confirmed yet' after a Dropped read: a lagging node can refuse a send another took", async () => {
 		const h = await makeHarness()
 		const hash = `0x${"2f".repeat(32)}`
 		const getTxReceipt = vi.fn(async (_hash: { toString(): string }): Promise<unknown> => dropped(hash))
-		const { check, clock } = await startCheck(h, getTxReceipt)
+		const { check, clock } = await startCheck(h, { getTxReceipt })
 
 		await sendFailing(h, hash, nodeRefusal("Invalid tx: Insufficient fee payer balance"))
 		clock.advance(SEND_CHECK_TICK_MS)

@@ -40,11 +40,12 @@ type Watch = {
 
 /** A row whose answer can still change: one with none yet, read against the window that starts at
  *  `since` (`refusal`: the node refused it for a reason a later block rarely lifts); a `refused`
- *  one, read in that window for a send that landed after all; an `unconfirmed` one whose expiry
- *  can still prove it went through or never will; or a mined one whose block is not yet final. */
+ *  one, read in that window for a send that landed after all, then at its expiry; an
+ *  `unconfirmed` one whose expiry can still prove it went through or never will; or a mined one
+ *  whose block is not yet final. */
 type OpenRow =
 	| { kind: "unanswered"; txHash: string; url: string | undefined; since: number; refusal: boolean }
-	| { kind: "refused"; txHash: string; url: string; since: number }
+	| { kind: "refused"; txHash: string; url: string; since: number; expiry: SendExpiry | undefined }
 	| { kind: "expiring"; txHash: string; url: string; expiry: SendExpiry }
 	| { kind: "including"; txHash: string; url: string; check: "sent" | "reverted"; inclusion: SendInclusion }
 
@@ -53,7 +54,7 @@ type Answer = { next: SendCheckState; refresh: boolean }
 
 /**
  * Records on a failed send's journal row what became of it: mined or not, then whether a mined
- * block became final or was pruned, and whether an unconfirmed send's expiry passed. A row is read
+ * block became final or was pruned, and whether an unconfirmed or refused send's expiry passed. A row is read
  * one read at a time, only on the endpoint it was sent through and only while its profile is
  * unlocked; only the answer is persisted, so a restart resumes every open row.
  */
@@ -191,8 +192,8 @@ export class SendCheck {
 		return undefined
 	}
 
-	/** Read as an unanswered row is, so a send that landed after all is still found; the window's
-	 *  end ends the watch with no further read. */
+	/** Read as an unanswered row is, so a send that landed after all is still found; past the window
+	 *  its expiry is read as an unconfirmed row's is, and with none recorded the watch ends unread. */
 	private async refusedAnswer(
 		watch: Watch,
 		row: Extract<OpenRow, { kind: "refused" }>,
@@ -200,6 +201,7 @@ export class SendCheck {
 		now: number,
 	): Promise<Answer | undefined> {
 		if (now - row.since >= DROPPED_RESURRECTION_WINDOW_MS) {
+			if (row.expiry !== undefined) return this.expiryAnswer(watch, { ...row, expiry: row.expiry }, live, now)
 			this.unwatch(watch)
 			return undefined
 		}
@@ -214,7 +216,7 @@ export class SendCheck {
 	 *  does. A nullifier that chain holds sends the read on to the row's own receipt. */
 	private async expiryAnswer(
 		watch: Watch,
-		row: Extract<OpenRow, { kind: "expiring" }>,
+		row: { txHash: string; url: string; expiry: SendExpiry },
 		live: () => boolean,
 		now: number,
 	): Promise<Answer | undefined> {
@@ -314,7 +316,7 @@ function openRow(op: OperationRecord): OpenRow | undefined {
 		return { kind: "unanswered", txHash, url, since, refusal }
 	}
 	if (url === undefined) return undefined
-	if (check === "refused") return { kind: "refused", txHash, url, since }
+	if (check === "refused") return { kind: "refused", txHash, url, since, expiry }
 	if (check === "unconfirmed" && expiry !== undefined) return { kind: "expiring", txHash, url, expiry }
 	if ((check === "sent" || check === "reverted") && inclusion !== undefined) return { kind: "including", txHash, url, check, inclusion }
 	return undefined

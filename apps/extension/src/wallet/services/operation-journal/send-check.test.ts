@@ -347,7 +347,7 @@ describe("SendCheck: a refusal a later block rarely lifts", () => {
 		expect(h.balances.refreshAccountBalances).toHaveBeenCalledWith(ACCOUNT)
 	})
 
-	test("a refused row stored past the window is unwatched at start, with no read", async () => {
+	test("a refused row with no recorded expiry, stored past the window, is unwatched at start, with no read", async () => {
 		const progress = { stage: "failed", from: "submitting", txHash: HASH, submittedEndpointUrl: URL, check: "refused" } as const
 		const h = makeHarness([failedRow({ error: EXISTING, terminalAt: T0 - DROPPED_RESURRECTION_WINDOW_MS, progress })])
 		await h.check.start()
@@ -722,6 +722,39 @@ describe("SendCheck: an expiry the finalized chain has passed", () => {
 		await h.tick(DROPPED_RECHECK_INTERVAL_MS / SEND_CHECK_TICK_MS)
 		expect(h.journal.writes).toEqual([{ id: "op-1", check: "expired" }])
 	})
+
+	test.each([
+		["absent at the finalized block", "expired", (_h: ReturnType<typeof makeHarness>) => {}],
+		[
+			"present, with a mined success receipt,",
+			"sent",
+			(h: ReturnType<typeof makeHarness>) => {
+				h.findLeavesIndexes.mockResolvedValue([{ data: 3n, l2BlockNumber: 4, l2BlockHash: finalizedAt(0).blockHash }])
+				h.getTxReceipt.mockResolvedValue(mined("proven"))
+			},
+		],
+	])(
+		"a refused row past its window is read only once its expiry passes: its nullifier %s writes %s",
+		async (_label, outcome, arrange) => {
+			const progress = {
+				stage: "failed",
+				from: "submitting",
+				txHash: HASH,
+				submittedEndpointUrl: URL,
+				expiry: EXPIRY,
+				check: "refused",
+			} as const
+			const h = makeHarness([failedRow({ terminalAt: T0 - 40 * 60_000, progress })])
+			arrange(h)
+			h.clock.setNow(EXPIRES_AT - 2 * SEND_CHECK_TICK_MS)
+			await h.check.start()
+			await h.tick()
+			expect(h.getBlockData).not.toHaveBeenCalled()
+			expect(h.getTxReceipt).not.toHaveBeenCalled()
+			await h.tick()
+			expect(h.journal.writes).toEqual([{ id: "op-1", check: outcome }])
+		},
+	)
 
 	test("a row with no recorded expiry is never read for one", async () => {
 		const h = makeHarness([unconfirmedRow(false)])

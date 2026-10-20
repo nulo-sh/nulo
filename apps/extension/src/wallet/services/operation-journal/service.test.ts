@@ -890,7 +890,7 @@ describe("a failed send's record: the carry, the answer, the predicates", () => 
 		expect((await service.getOperation(without))?.progress).toMatchObject({ check: "unconfirmed" })
 	})
 
-	test("refused is recorded bare, only on a row never answered, and gives way to a mined answer only", async () => {
+	test("refused is recorded bare, only on a row never answered, and gives way to a mined answer, or to expired with an expiry", async () => {
 		const id = await failedFromSubmitting(EXPIRY)
 		const block = { block: 5, hash: `0x${"01".repeat(32)}` }
 		const set = (expected: SendCheckState, next: SendCheckState) => service.setSendCheck(id, HASH, expected, next, live)
@@ -905,15 +905,26 @@ describe("a failed send's record: the carry, the answer, the predicates", () => 
 			expiry: EXPIRY,
 			check: "refused",
 		})
-		for (const next of [{ check: "unconfirmed" }, { check: "expired" }, { check: "refused" }, { checkSince: 1 }, {}] as const) {
-			expect(await set({ check: "refused" }, next)).toBe(false)
-		}
+		const moves = [
+			{ check: "unconfirmed" },
+			{ check: "expired", inclusion: block },
+			{ check: "refused" },
+			{ checkSince: 1 },
+			{},
+		] as const
+		for (const next of moves) expect(await set({ check: "refused" }, next)).toBe(false)
 		expect(await set({ check: "refused" }, { check: "sent", inclusion: block })).toBe(true)
 		expect((await service.getOperation(id))?.progress).toMatchObject({ check: "sent", inclusion: block })
 
 		const reverted = await failedFromSubmitting()
 		expect(await service.setSendCheck(reverted, HASH, {}, { check: "refused" }, live)).toBe(true)
+		expect(await service.setSendCheck(reverted, HASH, { check: "refused" }, { check: "expired" }, live)).toBe(false)
 		expect(await service.setSendCheck(reverted, HASH, { check: "refused" }, { check: "reverted" }, live)).toBe(true)
+
+		const expired = await failedFromSubmitting(EXPIRY)
+		expect(await service.setSendCheck(expired, HASH, {}, { check: "refused" }, live)).toBe(true)
+		expect(await service.setSendCheck(expired, HASH, { check: "refused" }, { check: "expired" }, live)).toBe(true)
+		expect((await service.getOperation(expired))?.progress).toMatchObject({ expiry: EXPIRY, check: "expired" })
 	})
 
 	test("a row whose mined answer was pruned is never refused; its window still ends unconfirmed", async () => {

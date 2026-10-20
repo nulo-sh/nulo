@@ -6,3 +6,4 @@
 - 2026-10-20 A1 phase 2: lint 0, typecheck:all 0, test 0 (14658 passed); mutations of the checkSince and fresh-clock guards each turn their test red.
 - 2026-10-20 A1 phase 4: F green; smoke send-outcome-rows Chrome + Firefox green; network wait-for-tx-mined + failed-send-check (Chrome, proverless) green.
 - 2026-10-20 A1 phase 5: audit:vue, test:all, check:plans green after merging dev; review round 1: Codex approve, Opus approve, lows adopted.
+- 2026-10-20 A1 phase 6 (P77-11 B): F green (14676 passed); mutations of the new branch and move each turn their tests red.

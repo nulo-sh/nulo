@@ -256,7 +256,8 @@ export type SendCheckState = Pick<FailedProgress, "check" | "inclusion" | "check
  * - none: `sent` or `reverted` (with the block, unless already final), or `unconfirmed`; or
  *   `refused` alone, only on a row never answered before (no `checkSince`): a row once mined
  *   proves its refusal answered a send that had landed;
- * - `refused`: `sent` or `reverted` (with the block, unless already final);
+ * - `refused`: `sent` or `reverted` (with the block, unless already final), or, on a row with a
+ *   recorded expiry, `expired`;
  * - `unconfirmed`, on a row with a recorded expiry: `expired`, or `sent` (with the block, unless
  *   already final) once its expiry nullifier is spent and its own receipt is a mined success;
  * - `sent` or `reverted` with a block not yet final: final (the block cleared), included in
@@ -269,7 +270,7 @@ export function isSendCheckMove(from: FailedProgress, to: SendCheckState): boole
 		case undefined:
 			return mined || (to.inclusion === undefined && isFirstVerdict(from, to))
 		case "refused":
-			return mined
+			return mined || (from.expiry !== undefined && to.check === "expired" && to.inclusion === undefined)
 		case "unconfirmed":
 			return from.expiry !== undefined && (to.check === "sent" || (to.check === "expired" && to.inclusion === undefined))
 		case "expired":

@@ -1,6 +1,6 @@
 # Owner asks: refused-send-1
 
-Three asks. The arc ships what each "What ships now" says and opens its PR as a draft; the orchestrator takes it out of draft once OA-1 is answered.
+Three asks, all answered on decision page 77 (2026-10-20), with no notes. Each section ends with the answer, quoted by id and text.
 
 Not asked, because a signed record answers it: the row and page look (P76-03 C, the pictures `112-row-refused` and `112-page-refused`), the row's words "Refused by the network", and the page's first sentence.
 
@@ -25,6 +25,8 @@ The gap: a check can reach a node that is behind, which reports nothing. The row
 
 **What ships now:** A, as approved on page 10.
 
+**Answer: P77-09 A**, the refused page's second sentence: "Check the details before sending it again." (as approved before). The first sentence stays as built.
+
 ## OA-2. #112: which refusals end the row at once
 
 **Surface:** Home's and History's row and the transaction page, for a send the network refused.
@@ -36,6 +38,8 @@ The gap: a check can reach a node that is behind, which reports nothing. The row
 **Option:** also end "not enough Fee Juice" (or every refusal) at once. It is faster to read, and wrong in the relay case above.
 
 **Recommendation:** keep what ships now.
+
+**Answer: P77-10 A**, "Keep the two; every other refusal keeps the 30-minute check." Nothing changes.
 
 ## OA-3. #112: a wrong red the 30 minutes do not correct
 
@@ -50,3 +54,5 @@ The gap: a check can reach a node that is behind, which reports nothing. The row
 **Recommendation:** B. It corrects most wrong reds that A would keep, and its "Won't go through" wording tells the person it is now safe to send again. It reuses a check the wallet already runs for unconfirmed sends.
 
 **What ships now:** A.
+
+**Answer: P77-11 B**, "One more check at the send's expiry: 'Won't go through' if absent, 'Sent' if included." Built in this arc (plan phase 6, D8): a refused row past its 30 minutes reads the final chain at the send's expiry through the unconfirmed path's check, with no new stored state.
