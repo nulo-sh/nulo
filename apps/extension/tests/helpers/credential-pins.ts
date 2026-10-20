@@ -83,15 +83,15 @@ export function pasteInto(input: HTMLInputElement, text: string): boolean {
 	return ev.defaultPrevented
 }
 
-/** Sets a native input's value and sends its `input` event through `sendEvent`, synchronously. */
+/** Sets a native input's value and sends its `input` event, synchronously. */
 export function typeNow(input: HTMLInputElement, value: string): void {
 	input.value = value
-	sendEvent(input, "input")
+	if (!sendEvent(input, "input")) throw new Error("input sent to a disabled field")
 }
 
-/** A keydown Enter sent to `el` through `sendEvent`, synchronously; `init` sets `repeat`, `isComposing` or `keyCode`. */
+/** A keydown Enter on `el`, synchronously; `init` sets `repeat`, `isComposing` or `keyCode`. */
 export function enterOn(el: Element, init: KeyboardEventInit = {}): KeyboardEvent {
-	const ev = sendEvent(el, "keydown", { key: "Enter", keyCode: 13, ...init })
+	const ev = sendEvent(el, "keydown", { key: "Enter", code: "Enter", keyCode: 13, ...init })
 	if (!(ev instanceof KeyboardEvent)) throw new Error("Enter sent to a disabled control")
 	return ev
 }
