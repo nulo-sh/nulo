@@ -55,6 +55,14 @@ function makeLog(opts: {
 	} as LogResult
 }
 
+type ClassIds = { originalContractClassId: Fr; currentContractClassId: Fr }
+
+/** A contract that was deployed with `original` and now runs `current`. */
+const classes = (original: Fr, current: Fr = original): ClassIds => ({
+	originalContractClassId: original,
+	currentContractClassId: current,
+})
+
 /** Fake node serving a single page of logs, with configurable checkpointed tip. */
 function makeNode(opts: {
 	page?: LogResult[]
@@ -62,9 +70,9 @@ function makeNode(opts: {
 	finalized?: number
 	onQuery?: (query: unknown) => void
 	throwOnQuery?: Error
-	contractInstance?: { currentContractClassId: Fr } | undefined
+	contractInstance?: ClassIds | undefined
 	/** Overrides `contractInstance` for the "checkpointed" anchor only (dual-anchor gate). */
-	checkpointedInstance?: { currentContractClassId: Fr } | undefined
+	checkpointedInstance?: ClassIds | undefined
 	getContractThrows?: boolean
 	/** `getBlockHashMembershipWitness` result: truthy = the queried hash IS an archive member
 	 *  (ancestor); `undefined` (default when unset & `membershipWitness` omitted) → non-member. */
@@ -419,12 +427,13 @@ describe("class gate", () => {
 
 	test("standard token (current class == bundled) → standard", async () => {
 		const bundled = await getBundledTokenClassId()
-		const node = makeNode({ contractInstance: { currentContractClassId: bundled } })
+		const node = makeNode({ contractInstance: classes(bundled) })
 		expect(await resolveTokenClassStatus(node, CONTRACT, CHECKPOINT_HASH)).toBe("standard")
 	})
 
 	test("upgraded/foreign class (current class != bundled) → non-standard (node-direct)", async () => {
-		const node = makeNode({ contractInstance: { currentContractClassId: Fr.random() } })
+		const bundled = await getBundledTokenClassId()
+		const node = makeNode({ contractInstance: classes(bundled, Fr.random()) })
 		expect(await resolveTokenClassStatus(node, CONTRACT, CHECKPOINT_HASH)).toBe("non-standard")
 	})
 
@@ -441,8 +450,8 @@ describe("class gate", () => {
 	test("standard at finalized but MALICIOUS at checkpointed → non-standard (dual-anchor)", async () => {
 		const bundled = await getBundledTokenClassId()
 		const node = makeNode({
-			contractInstance: { currentContractClassId: bundled }, // finalized: still the standard Token
-			checkpointedInstance: { currentContractClassId: Fr.random() }, // checkpointed: upgraded to a foreign class
+			contractInstance: classes(bundled), // finalized: still the standard Token
+			checkpointedInstance: classes(bundled, Fr.random()), // checkpointed: upgraded to a foreign class
 		})
 		expect(await resolveTokenClassStatus(node, CONTRACT, CHECKPOINT_HASH)).toBe("non-standard")
 	})
@@ -450,7 +459,7 @@ describe("class gate", () => {
 	test("unresolvable at checkpointed (undefined) → unresolved (fail closed at either anchor)", async () => {
 		const bundled = await getBundledTokenClassId()
 		const node = makeNode({
-			contractInstance: { currentContractClassId: bundled },
+			contractInstance: classes(bundled),
 			checkpointedInstance: undefined,
 		})
 		expect(await resolveTokenClassStatus(node, CONTRACT, CHECKPOINT_HASH)).toBe("unresolved")
@@ -459,10 +468,23 @@ describe("class gate", () => {
 	test("bundled class at BOTH anchors → standard", async () => {
 		const bundled = await getBundledTokenClassId()
 		const node = makeNode({
-			contractInstance: { currentContractClassId: bundled },
-			checkpointedInstance: { currentContractClassId: bundled },
+			contractInstance: classes(bundled),
+			checkpointedInstance: classes(bundled),
 		})
 		expect(await resolveTokenClassStatus(node, CONTRACT, CHECKPOINT_HASH)).toBe("standard")
+	})
+
+	test.each([
+		{ at: "both anchors", checkpointedOnly: false },
+		{ at: "the checkpoint only", checkpointedOnly: true },
+	])("the original class must be the bundled one too, at $at → non-standard", async ({ checkpointedOnly }) => {
+		const bundled = await getBundledTokenClassId()
+		const foreignOriginal = classes(Fr.random(), bundled)
+		const node = makeNode({
+			contractInstance: checkpointedOnly ? classes(bundled) : foreignOriginal,
+			checkpointedInstance: foreignOriginal,
+		})
+		expect(await resolveTokenClassStatus(node, CONTRACT, CHECKPOINT_HASH)).toBe("non-standard")
 	})
 })
 

@@ -119,7 +119,7 @@ None. Arc 1 changes no screen, copy or row. The orchestrator's no-ask record for
 
 Every gate runs from the worktree root and also runs `bun run lint` and `bun run typecheck:all`.
 
-### Phase 1: the class gate adds the original-class comparison
+### Phase 1: the class gate adds the original-class comparison ✓
 
 - Change `resolveTokenClassStatus` and its two docs (`packages/aztec-runtime/src/pxe/public-events.ts`).
 - In `public-events.test.ts`, give `makeNode`'s instances an `originalContractClassId`; set it to the bundled class in the existing standard cases.
