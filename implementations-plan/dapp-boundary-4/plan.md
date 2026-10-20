@@ -152,7 +152,6 @@ Every gate runs from the worktree root and also runs `bun run lint` and `bun run
 - Bridge tests (`dispatcher.test.ts`): a session holding A on this chain and C on another; the recorded op carries `sessionAccounts` equal to `[A]`, as a top-level call and as a `batch` leg.
 - Executor tests (`view-executor.test.ts`). The harness node gains `getContract`. The account fake `getAccounts` returns the hidden row B only when `all` is true, and records its arguments.
   - **Withheld.** Session {A}; the store holds A, B and a contract K. The answer for B deep-equals the answer for a fresh address F. `node.getContract` is called once for each. `getContractArtifact` is not called for either. `getAccounts` received the network row's profile id, and `getNodeForUrl` its primary URL, with `getNode` never called. Red on the base.
-  - **Empty session.** With `sessionAccounts: []`, A answers as F does.
   - **Session account.** A returns its instance and `INITIALIZED`, with `isContractPublished: false` when the node has no A. Red on the base.
   - **Control.** K returns its instance and `INITIALIZED`. With the node holding K upgraded, it returns `isContractPublished: true`, `isContractUpdated: true` and K's current class.
   - **Node failure.** The node throws an error whose message holds the address: F and B both answer not published. No logged argument holds the address.
@@ -192,6 +191,8 @@ How a dApp's registrations are admitted. The design and its options are tracked 
 
 - **Final fresh Codex pass (gpt-6.1-sol high, new session): `conditional approve`.** Accepted: (1) endpoint pinning: both metadata calls use the captured row's endpoint (D2, F5, Phase 3-4 tests); (2) Facts and recon still described baseline behaviour: rewritten as locations and intended contracts; (3) the barrel re-export (Phase 2). Also: I2's wording widened to the hit's serialization and parse; F3 says batch legs re-read the session. Fine per Codex: D3, D6, the class gate, the gate commands and e2e selection.
 - **Final pass, resumed round 2: `conditional approve`.** One condition: the D2 rewrite still narrated a failure path in committed text; reworded to the invariant. **Round 3: `approve`.** "All previously accepted conditions are satisfied. Confidence: high."
+- **Arc 1 review, round 1, Codex (gpt-6.1-sol high, session 01a15b4b, on the arc diff): `approve`.** Two low comment findings, accepted: two stale test headers corrected, two comments that restated their helpers removed. "For valid stored accounts, I found no remaining distinction in returned fields, error handling, address-bearing logs, or external read ordering beyond the acknowledged PXE hit/serialization/parse timing residual."
+- **Arc 1 review, Opus (general-purpose, same diff): `conditional approve`.** Accepted: (1) the metadata executor's doc claimed upstream parity for the instance and initialization: restated; (2) the binder's rationale named a lookup keyed on the current id, which no longer exists: restated as the invariant; (3) an executor-level pin that an artifact of the original class does not admit a different current id and registers no account; (4) a repeated read and the executor-level empty-session case (the dispatcher pins `[]`) removed. Rejected: dropping the checkpoint-only gate row, which catches a check made at one anchor only.
 
 ## Delivery
 

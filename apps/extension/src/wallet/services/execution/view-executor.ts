@@ -72,7 +72,6 @@ export interface ViewExecutorDeps {
 	logError(msg: string, ...rest: unknown[]): void
 }
 
-/** Whether `address` is one of the profile's accounts that the dApp session does not hold. */
 function isWithheldAccount(address: string, accounts: readonly { address: string }[], sessionAccounts: readonly string[]): boolean {
 	const key = address.toLowerCase()
 	const same = (other: string) => other.toLowerCase() === key
@@ -173,9 +172,9 @@ export class ViewExecutor {
 		}
 	}
 
-	/** As upstream answers it: the instance and its initialization from this wallet's store, publication
-	 *  and upgrade from the node, read for every address alike. A profile account outside the dApp
-	 *  session answers exactly as an address the wallet never registered. */
+	/** Publication and upgrade come from the node for every address, as upstream. The instance and
+	 *  `INITIALIZED` come only for a stored instance the session may see whose artifact the PXE holds:
+	 *  a profile account outside the session answers exactly as an address the wallet never registered. */
 	public async executeAztecGetContractMetadata(op: AztecGetContractMetadataOperation): Promise<{
 		instance?: ContractInstanceWithAddress
 		initializationStatus: ContractInitializationStatus

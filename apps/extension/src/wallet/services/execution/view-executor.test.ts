@@ -8,7 +8,7 @@
  *     (real signing keys never enter PXE during dApp simulateTx)
  *   - the chain-identity rebind on getChainInfo
  *   - fast-path → standard fallback routing (split null / result null)
- *   - the PXE-local-vs-best-effort metadata ladder
+ *   - the metadata answers: session-bound instances, node-sourced publication
  */
 
 import { describe, expect, test, vi } from "vitest"
@@ -342,11 +342,6 @@ describe("ViewExecutor.executeAztecGetContractMetadata", () => {
 		expect(deps.networkService.getNode).not.toHaveBeenCalled()
 	})
 
-	test("with no session account on the chain, every profile account answers as an unknown address", async () => {
-		const { read } = metadataHarness()
-		expect(await read(SESSION, [])).toEqual(await read(FRESH, []))
-	})
-
 	test("a session account returns its stored instance; publication is the node's answer", async () => {
 		const { read } = metadataHarness()
 		const meta = await read(SESSION)
@@ -372,8 +367,9 @@ describe("ViewExecutor.executeAztecGetContractMetadata", () => {
 		node.getContract.mockImplementation(async (address: AztecAddress) => {
 			throw new Error(`lookup failed for ${address.toString()}`)
 		})
-		expect(await read(HIDDEN)).toEqual(await read(FRESH))
-		expect((await read(FRESH)).isContractPublished).toBe(false)
+		const fresh = await read(FRESH)
+		expect(await read(HIDDEN)).toEqual(fresh)
+		expect(fresh.isContractPublished).toBe(false)
 		expect(JSON.stringify(vi.mocked(deps.logDebug).mock.calls)).not.toMatch(/0b0b|0c0c/)
 		expect(deps.logDebug).toHaveBeenCalled()
 	})

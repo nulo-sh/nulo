@@ -1,8 +1,8 @@
 /**
  * Both contract registrations recompute the artifact's class id and refuse a mismatch before
  * anything is registered. The recompute is real Poseidon (bb.js), so it is mocked at the module
- * boundary, as in `register-contract-void-conformance.test.ts`; the ids are `toString`-only fakes,
- * which also pins that the comparison is by string.
+ * boundary, as in `register-contract-void-conformance.test.ts`; the recomputed id is a
+ * `toString`-only fake, which also pins that the artifact comparison is by string.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { ConfigStore } from "@/wallet/config"
@@ -194,5 +194,13 @@ describe("aztec_registerContract binds the artifact to the original class", () =
 		expect(refused.message).toBe(MISMATCH)
 		expect(pxe.registerContract).not.toHaveBeenCalled()
 		expect(pxe.registerAccount).not.toHaveBeenCalled()
+	})
+
+	test("an artifact of the original class does not admit a different current class id, so no account is registered", async () => {
+		const { internals, pxe } = makeService()
+		const refused = (await rejectionOf(register(internals, classId("0xother")))) as Error
+		expect(refused.message).toBe(MISMATCH)
+		expect(pxe.registerAccount).not.toHaveBeenCalled()
+		expect(pxe.registerContract).not.toHaveBeenCalled()
 	})
 })

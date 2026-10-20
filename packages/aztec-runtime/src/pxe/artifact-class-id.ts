@@ -89,9 +89,9 @@ export async function assertArtifactClassId(artifact: ContractArtifact, expected
 
 /**
  * Throws unless `artifact` hashes to the instance's original class id, the one its address commits
- * to. The current class id must equal it: the PXE stores only the address preimage, so a differing
- * current id is either an upgrade (unsupported) or a field that would let any artifact through. A
- * recompute failure propagates, as in `assertArtifactClassId`.
+ * to. The current class id must equal it: the PXE stores only the preimage, so a differing current id
+ * would pair the address with code it does not commit to. A recompute failure propagates, as in
+ * `assertArtifactClassId`.
  */
 export async function assertInstanceArtifactClassId(instance: ContractInstanceWithAddress, artifact: ContractArtifact): Promise<void> {
 	if (!instance.currentContractClassId.equals(instance.originalContractClassId)) throw new Error(CLASS_ID_MISMATCH)

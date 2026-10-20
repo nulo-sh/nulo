@@ -57,7 +57,6 @@ function makeLog(opts: {
 
 type ClassIds = { originalContractClassId: Fr; currentContractClassId: Fr }
 
-/** A contract that was deployed with `original` and now runs `current`. */
 const classes = (original: Fr, current: Fr = original): ClassIds => ({
 	originalContractClassId: original,
 	currentContractClassId: current,
