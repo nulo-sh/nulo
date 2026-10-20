@@ -1,55 +1,85 @@
+import { Flex, Icon, Text } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
-import type { GetStartedItem } from "@/utils/get-started"
+import ItemsContainer from "@/components/ui/Settings/ItemsContainer.vue"
+import SettingItem from "@/components/ui/Settings/SettingItem.vue"
+import type { GetStartedItem, GetStartedStep } from "@/utils/get-started"
 import GetStartedCard from "./GetStartedCard.vue"
 
-const STUBS = {
-	Flex: { template: "<div><slot /></div>" },
-	SectionLabel: { template: '<span data-testid="stub-label">{{ label }}</span>', props: ["label"] },
-	ItemsContainer: { template: "<div><slot /></div>" },
-	SettingItem: {
-		template:
-			'<button type="button" :data-chevron="chevron" @click="$emit(\'click\')"><b>{{ title }}</b><i>{{ description }}</i><s>{{ value }}</s></button>',
-		props: { title: String, description: String, value: String, chevron: Boolean },
-		emits: ["click"],
-	},
-}
-const ALL: GetStartedItem[] = ["phrase", "backup", "aztec", "feeJuice", "presto"]
+/** The real rows, so a done step's missing action is the row's own inert mode, not a stub's. */
+const COMPONENTS = { Flex, Icon, Text, ItemsContainer, SettingItem }
 
-const mountCard = (items: GetStartedItem[] = ALL, canHide = true) =>
-	mount(GetStartedCard, { props: { items, canHide }, global: { stubs: STUBS } })
+const ALL: GetStartedItem[] = ["phrase", "backup", "aztec", "feeJuice", "presto"]
+const open = (...items: GetStartedItem[]): GetStartedStep[] => items.map((item) => ({ item, done: false }))
+/** `done` lists the items checked, in the order given by `items`. */
+const steps = (items: GetStartedItem[], done: GetStartedItem[] = []): GetStartedStep[] =>
+	items.map((item) => ({ item, done: done.includes(item) }))
+
+const mountCard = (list: GetStartedStep[] = open(...ALL), canHide = true) =>
+	mount(GetStartedCard, { props: { steps: list, canHide }, global: { components: COMPONENTS } })
 const row = (w: ReturnType<typeof mountCard>, item: GetStartedItem) => w.get(`[data-testid="get-started-${item}"]`)
+const mark = (w: ReturnType<typeof mountCard>, item: GetStartedItem) => row(w, item).get('[aria-hidden="true"]')
+const title = (w: ReturnType<typeof mountCard>, item: GetStartedItem) => row(w, item).get('[data-testid="setting-title"]').text()
 
 describe("general/GetStartedCard", () => {
-	test("the section is labelled Get started", () => {
+	test("the section is labelled Get started and its steps are a list", () => {
 		const w = mountCard()
 		expect(w.attributes("data-testid")).toBe("get-started")
-		expect(w.get('[data-testid="stub-label"]').text()).toBe("Get started")
+		expect(w.text()).toContain("Get started")
+		expect(w.findAll('[role="list"] [role="listitem"]').map((li) => li.attributes("data-testid"))).toEqual(
+			ALL.map((item) => `get-started-${item}`),
+		)
 	})
 
-	test("rows follow the given order, each with a chevron", () => {
-		const w = mountCard(["aztec", "phrase"])
-		expect(w.findAll("button[data-chevron]").map((b) => b.attributes("data-testid"))).toEqual([
-			"get-started-aztec",
-			"get-started-phrase",
-		])
-		expect(row(w, "aztec").attributes("data-chevron")).toBe("true")
-	})
-
-	test("each row carries the drawn copy", () => {
+	test("each open step carries the drawn copy and a chevron", () => {
 		const w = mountCard()
-		expect(row(w, "phrase").text()).toBe("Save your recovery phraseThe 24 words that restore this wallet")
-		expect(row(w, "backup").text()).toBe("Back up this walletSync your passkey or save a backup file")
-		expect(row(w, "aztec").text()).toBe("How Aztec works1 min")
-		expect(row(w, "feeJuice").text()).toBe("Get Fee Juice")
-		expect(row(w, "presto").text()).toBe("Make proofs fasterOptional")
+		expect(row(w, "phrase").text()).toBe("1Save your recovery phraseThe 24 words that restore this wallet")
+		expect(row(w, "backup").text()).toBe("2Back up this walletSync your passkey or save a backup file")
+		expect(row(w, "aztec").text()).toBe("3How Aztec works1 min")
+		expect(row(w, "feeJuice").text()).toBe("4Get Fee Juice")
+		expect(row(w, "presto").text()).toBe("5Make proofs fasterOptional")
+		for (const item of ALL) expect(row(w, item).findAll("svg"), item).toHaveLength(1)
 	})
 
-	test("a row's click names its item", async () => {
+	test("steps are numbered in the given order; the first open one is the next, filled", () => {
+		const w = mountCard(steps(["phrase", "aztec", "feeJuice", "presto"], ["phrase"]))
+		expect(["aztec", "feeJuice", "presto"].map((item) => mark(w, item as GetStartedItem).text())).toEqual(["2", "3", "4"])
+		expect(w.findAll('[aria-current="step"]').map((el) => el.attributes("data-testid"))).toEqual(["get-started-aztec"])
+		const filled = (item: GetStartedItem) =>
+			mark(w, item)
+				.classes()
+				.some((name) => /next/.test(name))
+		expect(["aztec", "feeJuice", "presto"].map((item) => filled(item as GetStartedItem))).toEqual([true, false, false])
+	})
+
+	test("a done step stays: a check in its number's place, its title struck, Done in place of the chevron, and no action", async () => {
+		const w = mountCard(steps(["phrase", "aztec", "feeJuice", "presto"], ["phrase", "aztec"]))
+		expect(row(w, "aztec").attributes("data-done")).toBe("true")
+		expect(row(w, "feeJuice").attributes("data-done")).toBe("false")
+		expect(mark(w, "aztec").text()).toBe("")
+		expect(mark(w, "aztec").find("svg").exists()).toBe(true)
+		expect(title(w, "aztec")).toBe("How Aztec works")
+		expect(row(w, "aztec").text()).toBe("How Aztec worksDone")
+		expect(row(w, "aztec").findAll("svg")).toHaveLength(1)
+		expect(row(w, "aztec").find("button").exists()).toBe(false)
+		expect(row(w, "feeJuice").find("button").exists()).toBe(true)
+		await row(w, "aztec").trigger("click")
+		expect(w.emitted("select")).toBeUndefined()
+	})
+
+	test("an open step's press names its item", async () => {
 		const w = mountCard()
-		await row(w, "feeJuice").trigger("click")
-		await row(w, "phrase").trigger("click")
+		await row(w, "feeJuice").get("button").trigger("click")
+		await row(w, "phrase").get("button").trigger("click")
 		expect(w.emitted("select")).toEqual([["feeJuice"], ["phrase"]])
+	})
+
+	test("the count sits beside Hide, as a polite status, and only when there is more than one step", () => {
+		const w = mountCard(steps(["phrase", "aztec", "feeJuice", "presto"], ["phrase", "aztec"]))
+		const count = w.get('[data-testid="get-started-count"]')
+		expect(count.text()).toBe("2 of 4 done")
+		expect(count.attributes("role")).toBe("status")
+		expect(mountCard(open("phrase"), false).find('[data-testid="get-started-count"]').exists()).toBe(false)
 	})
 
 	test("Hide shows with canHide and emits hide", async () => {
@@ -63,6 +93,6 @@ describe("general/GetStartedCard", () => {
 	})
 
 	test("no Hide without canHide", () => {
-		expect(mountCard(["phrase"], false).find('[data-testid="get-started-hide"]').exists()).toBe(false)
+		expect(mountCard(open("phrase"), false).find('[data-testid="get-started-hide"]').exists()).toBe(false)
 	})
 })

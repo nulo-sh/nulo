@@ -38,6 +38,11 @@ declare global {
   const FULL_SIZE: typeof import('../utils/hero-fit').FULL_SIZE
   const FilePickCanceledError: typeof import('../utils/files').FilePickCanceledError
   const FileTooLargeError: typeof import('../utils/files').FileTooLargeError
+  const GET_STARTED_AZTEC_OPENED_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_AZTEC_OPENED_ROOT
+  const GET_STARTED_BACKUP_SAVED_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_BACKUP_SAVED_ROOT
+  const GET_STARTED_FEE_JUICE_HELD_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_FEE_JUICE_HELD_ROOT
+  const GET_STARTED_HIDDEN_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_HIDDEN_ROOT
+  const GET_STARTED_PHRASE_SAVED_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_PHRASE_SAVED_ROOT
   const GLOSSARY: typeof import('../utils/glossary').GLOSSARY
   const GLOSSARY_SECTIONS: typeof import('../utils/glossary').GLOSSARY_SECTIONS
   const HERO_MIN_SCALE: typeof import('../utils/hero-fit').HERO_MIN_SCALE
@@ -67,6 +72,8 @@ declare global {
   const PINNED_TOKENS_MAX: typeof import('../composables/usePinnedTokens').PINNED_TOKENS_MAX
   const PINNED_TOKENS_MAX_CHAINS: typeof import('../composables/usePinnedTokens').PINNED_TOKENS_MAX_CHAINS
   const PINNED_TOKENS_ROOT: typeof import('../utils/profile-ui-keys').PINNED_TOKENS_ROOT
+  const PROFILE_IMPORTED_ROOT: typeof import('../utils/profile-ui-keys').PROFILE_IMPORTED_ROOT
+  const PROFILE_NOT_FIRST_ROOT: typeof import('../utils/profile-ui-keys').PROFILE_NOT_FIRST_ROOT
   const PROFILE_UI_KEY_PREFIXES: typeof import('../utils/profile-ui-keys').PROFILE_UI_KEY_PREFIXES
   const RECOVERY_PHRASE_WARNINGS: typeof import('../utils/recovery-phrase-warnings').RECOVERY_PHRASE_WARNINGS
   const RESTORE_OUTCOME_LEASE_MS: typeof import('../utils/restore-outcome').RESTORE_OUTCOME_LEASE_MS
@@ -729,7 +736,7 @@ declare global {
   export type { AssemblyAbortedError, BackupFileType, BackupSelection, ProcessBackupResult, BackupSource, AssembledBackup } from '../utils/full-backup-helpers'
   import('../utils/full-backup-helpers')
   // @ts-ignore
-  export type { GetStartedFlag, MarkableGetStartedFlag, GetStartedFlags, Holdings, GetStartedItem, GetStartedInput, GetStartedView } from '../utils/get-started'
+  export type { GetStartedFlag, MarkableGetStartedFlag, GetStartedFlags, Holdings, GetStartedItem, GetStartedInput, GetStartedStep, GetStartedView } from '../utils/get-started'
   import('../utils/get-started')
   // @ts-ignore
   export type { GlossaryEntry, GlossaryKey } from '../utils/glossary'
@@ -831,6 +838,11 @@ declare module 'vue' {
     readonly FULL_SIZE: UnwrapRef<typeof import('../utils/hero-fit')['FULL_SIZE']>
     readonly FilePickCanceledError: UnwrapRef<typeof import('../utils/files')['FilePickCanceledError']>
     readonly FileTooLargeError: UnwrapRef<typeof import('../utils/files')['FileTooLargeError']>
+    readonly GET_STARTED_AZTEC_OPENED_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_AZTEC_OPENED_ROOT']>
+    readonly GET_STARTED_BACKUP_SAVED_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_BACKUP_SAVED_ROOT']>
+    readonly GET_STARTED_FEE_JUICE_HELD_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_FEE_JUICE_HELD_ROOT']>
+    readonly GET_STARTED_HIDDEN_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_HIDDEN_ROOT']>
+    readonly GET_STARTED_PHRASE_SAVED_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_PHRASE_SAVED_ROOT']>
     readonly GLOSSARY: UnwrapRef<typeof import('../utils/glossary')['GLOSSARY']>
     readonly GLOSSARY_SECTIONS: UnwrapRef<typeof import('../utils/glossary')['GLOSSARY_SECTIONS']>
     readonly HERO_MIN_SCALE: UnwrapRef<typeof import('../utils/hero-fit')['HERO_MIN_SCALE']>
@@ -860,6 +872,8 @@ declare module 'vue' {
     readonly PINNED_TOKENS_MAX: UnwrapRef<typeof import('../composables/usePinnedTokens')['PINNED_TOKENS_MAX']>
     readonly PINNED_TOKENS_MAX_CHAINS: UnwrapRef<typeof import('../composables/usePinnedTokens')['PINNED_TOKENS_MAX_CHAINS']>
     readonly PINNED_TOKENS_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['PINNED_TOKENS_ROOT']>
+    readonly PROFILE_IMPORTED_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_IMPORTED_ROOT']>
+    readonly PROFILE_NOT_FIRST_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_NOT_FIRST_ROOT']>
     readonly PROFILE_UI_KEY_PREFIXES: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_UI_KEY_PREFIXES']>
     readonly RECOVERY_PHRASE_WARNINGS: UnwrapRef<typeof import('../utils/recovery-phrase-warnings')['RECOVERY_PHRASE_WARNINGS']>
     readonly RESTORE_OUTCOME_LEASE_MS: UnwrapRef<typeof import('../utils/restore-outcome')['RESTORE_OUTCOME_LEASE_MS']>

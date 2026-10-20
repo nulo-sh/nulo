@@ -85,12 +85,18 @@ export interface GetStartedInput {
 	prestoReached: boolean | undefined
 }
 
+/** A step of the card; a done step stays, checked, until every step listed is done. */
+export interface GetStartedStep {
+	item: GetStartedItem
+	done: boolean
+}
+
 export interface GetStartedView {
 	/** The urgent "Your funds have no backup" banner above the balance. */
 	banner: boolean
 	/** In the drawn order; empty means no card. */
-	items: GetStartedItem[]
-	/** Whether the card offers Hide: only items a person may dismiss count. */
+	steps: GetStartedStep[]
+	/** Whether the card offers Hide: only steps a person may dismiss count. */
 	canHide: boolean
 }
 
@@ -101,25 +107,20 @@ export function combineHoldings(a: Holdings, b: Holdings): Holdings {
 	return "none"
 }
 
-/** A password wallet's phrase reminder cannot be hidden; it moves to the banner once funded. */
-const phraseShown = (i: Ready) => i.type === "password" && !i.flags.phraseSaved
-const backupShown = (i: Ready) => i.type === "passkey" && !i.flags.backupSaved && !i.flags.hidden
-const aztecShown = (i: Ready) => !i.flags.aztecOpened && !i.flags.hidden
-const feeJuiceShown = (i: Ready) => i.feeJuice === "none" && !i.flags.feeJuiceHeld && !i.flags.hidden
-const prestoShown = (i: Ready) => !i.prestoReached && !i.flags.hidden
-
-/** Every row but the phrase; a profile created while another existed shows none of them. */
-function firstProfileItems(i: Ready): GetStartedItem[] {
-	if (i.flags.notFirst) return []
-	const items: GetStartedItem[] = []
-	if (backupShown(i)) items.push("backup")
-	if (aztecShown(i)) items.push("aztec")
-	if (feeJuiceShown(i)) items.push("feeJuice")
-	if (prestoShown(i)) items.push("presto")
-	return items
-}
-
 type Ready = GetStartedInput & { type: "password" | "passkey"; flags: GetStartedFlags; prestoReached: boolean }
+
+/** Every step but the phrase, done or not; a profile created while another existed lists none. */
+function firstProfileSteps(i: Ready): GetStartedStep[] {
+	if (i.flags.notFirst || i.flags.hidden) return []
+	const steps: GetStartedStep[] = []
+	if (i.type === "passkey") steps.push({ item: "backup", done: i.flags.backupSaved })
+	steps.push(
+		{ item: "aztec", done: i.flags.aztecOpened },
+		{ item: "feeJuice", done: i.flags.feeJuiceHeld || i.feeJuice === "some" },
+		{ item: "presto", done: i.prestoReached },
+	)
+	return steps
+}
 
 /**
  * Home's reminders for the active profile, or `null` while anything they depend on is unread:
@@ -129,17 +130,17 @@ export function getStartedView(input: GetStartedInput): GetStartedView | null {
 	const { type, flags, prestoReached, funds } = input
 	if (type === undefined || flags === undefined || prestoReached === undefined || funds === "unknown") return null
 	// A wallet the person brought in is an established one: Home asks nothing of it.
-	if (flags.imported) return { banner: false, items: [], canHide: false }
-	const ready: Ready = { ...input, type, flags, prestoReached }
-	const phrase = phraseShown(ready)
-	const banner = phrase && funds === "some"
-	const items: GetStartedItem[] = []
-	if (phrase && !banner) items.push("phrase")
-	items.push(...firstProfileItems(ready))
-	return { banner, items, canHide: items.some((item) => item !== "phrase") }
+	if (flags.imported) return { banner: false, steps: [], canHide: false }
+	// A password wallet's phrase step cannot be hidden; once funded, the banner takes it.
+	const banner = type === "password" && !flags.phraseSaved && funds === "some"
+	const steps: GetStartedStep[] = []
+	if (type === "password" && !banner) steps.push({ item: "phrase", done: flags.phraseSaved })
+	steps.push(...firstProfileSteps({ ...input, type, flags, prestoReached }))
+	if (steps.every((step) => step.done)) return { banner, steps: [], canHide: false }
+	return { banner, steps, canHide: steps.some((step) => step.item !== "phrase") }
 }
 
-/** Fee Juice from the gas slice: a failed first read claims nothing held, so the calm row shows. */
+/** Fee Juice from the gas slice: a failed first read claims nothing held, so the step stays open. */
 export function gasHoldings(gas: GasRead | undefined): Holdings {
 	const display = gas?.display
 	if (display === undefined) return gas?.status === "degraded" ? "none" : "unknown"

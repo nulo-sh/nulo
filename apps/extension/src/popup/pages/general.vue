@@ -81,7 +81,7 @@ const reminders = computed(() =>
 		prestoReached: prestoReached.value,
 	}),
 )
-// Token funds can raise the card before the gas read lands, which can still add the Fee Juice row.
+// Token funds can raise the card before the gas read lands, which can still check the Fee Juice step.
 const remindersSettled = computed(() => reminders.value !== null && feeJuice.value !== "unknown")
 
 async function readPrestoReached() {
@@ -165,8 +165,8 @@ onBeforeUnmount(() => {
 				<RecoveryModeBanner />
 				<RestoreOutcomeBanner />
 				<GetStartedCard
-					v-if="reminders?.items.length"
-					:items="reminders.items"
+					v-if="reminders?.steps.length"
+					:steps="reminders.steps"
 					:canHide="reminders.canHide"
 					@select="onGetStartedSelect"
 					@hide="getStarted.mark('hidden')"

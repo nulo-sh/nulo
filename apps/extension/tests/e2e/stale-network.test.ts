@@ -76,14 +76,14 @@ describe("stale network", () => {
 		await createAccount(page, "Savings")
 		await closeStuckPopup(page)
 		// Smoke has no node to hold Fee Juice, so the flag Home writes on its first positive read is
-		// stored directly. The reset's new chain holds none, and the row must stay away.
+		// stored directly. The reset's new chain holds none, and the step must stay done.
 		await navigateByHash(page, "#/popup/general", 15_000)
 		await waitForHomeReminders(page)
 		const profileId = (await readSessionRow(page))?.profile
 		if (!profileId) throw new Error("no unlocked profile")
 		await page.evaluate((key: string) => chrome.storage.local.set({ [key]: true }), getStartedFeeJuiceHeldKey(profileId))
-		await page.waitForSelector('[data-testid="get-started-feeJuice"]', { hidden: true, timeout: 10_000 })
-		const card = ["get-started-phrase", "get-started-aztec", "get-started-presto"]
+		await page.waitForSelector('[data-testid="get-started-feeJuice"][data-done="true"]', { timeout: 10_000 })
+		const card = ["get-started-phrase", "get-started-aztec", "get-started-feeJuice done", "get-started-presto"]
 		expect(await getStartedRows(page)).toEqual(card)
 		const before = await readAccounts(page, CHAIN_IDS.TESTNET)
 		expect(before.map((a) => [a.name, a.index])).toEqual([

@@ -118,16 +118,30 @@ describe("get started view (pure)", () => {
 	const view = (over: Partial<GetStartedInput> = {}, flags: Partial<GetStartedFlags> = {}) =>
 		getStartedView({ ...base, ...over, flags: { ...NONE, ...flags } })
 
+	/** The drawn steps, a done one marked: `["phrase done", "aztec", ...]`. */
+	const drawn = (over: Partial<GetStartedInput> = {}, flags: Partial<GetStartedFlags> = {}) =>
+		view(over, flags)?.steps.map(({ item, done }) => (done ? `${item} done` : item))
+
 	test("a new password wallet: the phrase first, then Aztec, Fee Juice and Presto, with Hide", () => {
-		expect(view()).toEqual({ banner: false, items: ["phrase", "aztec", "feeJuice", "presto"], canHide: true })
+		expect(view()).toEqual({
+			banner: false,
+			steps: [
+				{ item: "phrase", done: false },
+				{ item: "aztec", done: false },
+				{ item: "feeJuice", done: false },
+				{ item: "presto", done: false },
+			],
+			canHide: true,
+		})
 	})
 
-	test("a new passkey wallet: the backup item in the phrase's place", () => {
-		expect(view({ type: "passkey" })?.items).toEqual(["backup", "aztec", "feeJuice", "presto"])
+	test("a new passkey wallet: the backup step in the phrase's place", () => {
+		expect(drawn({ type: "passkey" })).toEqual(["backup", "aztec", "feeJuice", "presto"])
 	})
 
 	test("a funded password wallet moves the phrase to the banner", () => {
-		expect(view({ funds: "some" })).toEqual({ banner: true, items: ["aztec", "feeJuice", "presto"], canHide: true })
+		expect(view({ funds: "some" })?.banner).toBe(true)
+		expect(drawn({ funds: "some" })).toEqual(["aztec", "feeJuice", "presto"])
 	})
 
 	test("never a banner while funds are unknown: nothing shows until they are read", () => {
@@ -135,11 +149,8 @@ describe("get started view (pure)", () => {
 	})
 
 	test("never a banner for a passkey wallet, funded or not", () => {
-		expect(view({ type: "passkey", funds: "some" })).toEqual({
-			banner: false,
-			items: ["backup", "aztec", "feeJuice", "presto"],
-			canHide: true,
-		})
+		expect(view({ type: "passkey", funds: "some" })?.banner).toBe(false)
+		expect(drawn({ type: "passkey", funds: "some" })).toEqual(["backup", "aztec", "feeJuice", "presto"])
 	})
 
 	test("null until the flags, the profile type and the Presto flag are read", () => {
@@ -148,58 +159,66 @@ describe("get started view (pure)", () => {
 		expect(getStartedView({ ...base, prestoReached: undefined })).toBeNull()
 	})
 
-	test("a saved phrase clears the phrase row and the banner", () => {
-		expect(view({ funds: "some" }, { phraseSaved: true })).toEqual({
-			banner: false,
-			items: ["aztec", "feeJuice", "presto"],
-			canHide: true,
-		})
+	test("a saved phrase checks the phrase step in place and ends the banner", () => {
+		expect(view({ funds: "some" }, { phraseSaved: true })?.banner).toBe(false)
+		expect(drawn({ funds: "some" }, { phraseSaved: true })).toEqual(["phrase done", "aztec", "feeJuice", "presto"])
 	})
 
-	test("a full backup clears the passkey backup row", () => {
-		expect(view({ type: "passkey" }, { backupSaved: true })?.items).toEqual(["aztec", "feeJuice", "presto"])
+	test("a full backup checks the passkey backup step", () => {
+		expect(drawn({ type: "passkey" }, { backupSaved: true })).toEqual(["backup done", "aztec", "feeJuice", "presto"])
 	})
 
-	test("an opened Aztec page, a Fee Juice balance and a reached Presto each clear their row", () => {
-		expect(view({}, { aztecOpened: true })?.items).toEqual(["phrase", "feeJuice", "presto"])
-		expect(view({ feeJuice: "some" })?.items).toEqual(["phrase", "aztec", "presto"])
-		expect(view({ feeJuice: "unknown" })?.items).toEqual(["phrase", "aztec", "presto"])
-		expect(view({ prestoReached: true })?.items).toEqual(["phrase", "aztec", "feeJuice"])
+	test("an opened Aztec page, a Fee Juice balance and a reached Presto each check their step; an unread balance does not", () => {
+		expect(drawn({}, { aztecOpened: true })).toEqual(["phrase", "aztec done", "feeJuice", "presto"])
+		expect(drawn({ feeJuice: "some" })).toEqual(["phrase", "aztec", "feeJuice done", "presto"])
+		expect(drawn({ feeJuice: "unknown" })).toEqual(["phrase", "aztec", "feeJuice", "presto"])
+		expect(drawn({ prestoReached: true })).toEqual(["phrase", "aztec", "feeJuice", "presto done"])
 	})
 
-	test("Fee Juice once held is done for good: a later empty read, as on a new chain, leaves the rest", () => {
-		expect(view({ feeJuice: "none" }, { feeJuiceHeld: true })?.items).toEqual(["phrase", "aztec", "presto"])
-		expect(view({ type: "passkey", feeJuice: "none" }, { feeJuiceHeld: true })?.items).toEqual(["backup", "aztec", "presto"])
+	test("Fee Juice once held stays done: a later empty read, as on a new chain, does not reopen it", () => {
+		expect(drawn({ feeJuice: "none" }, { feeJuiceHeld: true })).toEqual(["phrase", "aztec", "feeJuice done", "presto"])
+		expect(drawn({ type: "passkey", feeJuice: "none" }, { feeJuiceHeld: true })).toEqual(["backup", "aztec", "feeJuice done", "presto"])
 	})
 
-	test("a hidden password card keeps only the phrase row, which cannot be hidden", () => {
-		expect(view({}, { hidden: true })).toEqual({ banner: false, items: ["phrase"], canHide: false })
-		expect(view({ funds: "some" }, { hidden: true })).toEqual({ banner: true, items: [], canHide: false })
+	test("Hide offers while a step it removes is listed, done or not", () => {
+		expect(view({}, { phraseSaved: true, aztecOpened: true })?.canHide).toBe(true)
+		expect(view({ feeJuice: "some", prestoReached: true }, { aztecOpened: true })?.canHide).toBe(true)
 	})
 
-	test("a hidden passkey card is gone, backup row included", () => {
-		expect(view({ type: "passkey" }, { hidden: true })).toEqual({ banner: false, items: [], canHide: false })
+	test("a hidden password card keeps only the phrase step, which cannot be hidden", () => {
+		expect(view({}, { hidden: true })).toEqual({ banner: false, steps: [{ item: "phrase", done: false }], canHide: false })
+		expect(view({ funds: "some" }, { hidden: true })).toEqual({ banner: true, steps: [], canHide: false })
+		expect(view({}, { hidden: true, phraseSaved: true })).toEqual({ banner: false, steps: [], canHide: false })
+	})
+
+	test("a hidden passkey card is gone, backup step included", () => {
+		expect(view({ type: "passkey" }, { hidden: true })).toEqual({ banner: false, steps: [], canHide: false })
 	})
 
 	test("an imported profile shows no card and no banner, password or passkey, funded or not", () => {
-		const nothing = { banner: false, items: [], canHide: false }
+		const nothing = { banner: false, steps: [], canHide: false }
 		expect(view({}, { imported: true })).toEqual(nothing)
 		expect(view({ funds: "some" }, { imported: true })).toEqual(nothing)
 		expect(view({ type: "passkey" }, { imported: true })).toEqual(nothing)
 	})
 
 	test("a later password profile shows its phrase alone, with no Hide, and the banner once funded", () => {
-		expect(view({}, { notFirst: true })).toEqual({ banner: false, items: ["phrase"], canHide: false })
-		expect(view({ funds: "some" }, { notFirst: true })).toEqual({ banner: true, items: [], canHide: false })
+		expect(view({}, { notFirst: true })).toEqual({ banner: false, steps: [{ item: "phrase", done: false }], canHide: false })
+		expect(view({ funds: "some" }, { notFirst: true })).toEqual({ banner: true, steps: [], canHide: false })
+		expect(view({}, { notFirst: true, phraseSaved: true })).toEqual({ banner: false, steps: [], canHide: false })
 	})
 
 	test("a later passkey profile shows no card and no banner", () => {
-		expect(view({ type: "passkey" }, { notFirst: true })).toEqual({ banner: false, items: [], canHide: false })
+		expect(view({ type: "passkey" }, { notFirst: true })).toEqual({ banner: false, steps: [], canHide: false })
 	})
 
-	test("no card once every item is done", () => {
+	test("no card once every listed step is done, the banner's phrase aside", () => {
 		const done = view({ feeJuice: "some", prestoReached: true }, { phraseSaved: true, aztecOpened: true })
-		expect(done).toEqual({ banner: false, items: [], canHide: false })
+		expect(done).toEqual({ banner: false, steps: [], canHide: false })
+		const passkey = view({ type: "passkey", prestoReached: true }, { backupSaved: true, aztecOpened: true, feeJuiceHeld: true })
+		expect(passkey).toEqual({ banner: false, steps: [], canHide: false })
+		const funded = view({ funds: "some", feeJuice: "some", prestoReached: true }, { aztecOpened: true })
+		expect(funded).toEqual({ banner: true, steps: [], canHide: false })
 	})
 })
 
