@@ -1,7 +1,7 @@
 ---
 plan: viewer-flake-1
 tier: light
-status: approved (orchestrator, 2026-10-19, two arcs); arc 1 delivered; arc 2 waits for owner ask A1
+status: closed (two arcs against dev: #902 merged; arc 2's PR a draft until the owner signs A1; the merge that lands it closes the plan)
 issues: "#849 (arc 1 refs, arc 2 closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,24 @@ base: origin/dev at ce48691e
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** closed. Two arcs against `dev`: #902 (arc 1, merged) and arc 2's PR from `viewer-flake-1-a2`, a draft until the owner signs A1. Merging it, the owner's call, closes the plan.
+- **Shipped:** #849, closed by arc 2.
+  - Arc 1 (T1, T2): the follow check reads the gap after the viewer has judged it, and the hold is measured two frames after the viewer's selection stop.
+  - Arc 2 (P1, as replanned by D12): after its dispatch, the follow sets a reference no scroll exceeds, and its own scroll event resets it. A held line's snapshot lowers it. The pin reads no geometry: the geometric pin it replaced cost +42.7% on Firefox's 500-line burst.
+  - On the shipped pin, R1b and R3 resume 0/16 per browser and R5 passes. The gate is green: Firefox 10/10 and Chrome 5/5 file runs, and the full smoke suites 2/2 and 1/1.
+- **Owner decision:** A1. The orchestrator's call is A ([#849](https://github.com/nulo-sh/nulo/issues/849#issuecomment-6279625586)), widened by D12. The owner signs on a decision page, pending at close-out.
+- **Known limits:** #919 (KL-1), #920 (KL-2, widened).
+- **Open items:** #921 (CodeMirror's stick to the end after the search panel opens, and the height correction's late landing), #922 (the search case's gap read), #923 (the `logId` deep link resumes the follow).
+- **Dispositions:**
+  - The geometric pin is superseded by D12, for its layout cost.
+  - Option (b), an update listener with an annotation, is out of proportion (D12).
+  - The never-removed `selectionchange` listener predates the plan and is harmless, so it is left.
+- **Lessons:** nothing new in `lessons.md` (8,133 of 8,192 bytes). The cost-guard point is an e2e measuring technique and went to the `e2e-testing` skill (§ Runtime budget; flake-ledger row 63).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # viewer-flake-1: the viewer's own follow no longer reads as the reader's scroll; the e2e reads what the viewer judges
 
@@ -42,16 +60,21 @@ The stop can land before CodeMirror's measure or after it. The cause is that the
 
 For a person reading a busy log and for the maintainer reading a red smoke lane:
 
-- Arc 2. Once the viewer stops the follow, its own follow still in flight no longer resumes it; a scroll down by the reader, the button or the 30 s timer still does. The exceptions are KL-2 (owner ask A1) and the F3 geometry change (an issue). R1b and R3 resume 0/16 per browser, a unit case red on base proves it, and a success control keeps the reader's scroll down resuming.
+- Arc 2. Once the viewer stops the follow, its own follow still in flight no longer resumes it; a scroll down by the reader, the button or the 30 s timer still does. The exceptions are KL-2 (owner ask A1, widened by D12) and the F3 geometry change (an issue). On the shipped pin, R1b and R3 resume 0/16 per browser and R5 passes; the unit hold rows red on base, and success controls keep the reader's scroll down resuming.
 - Arc 1, then arc 2. The two #849 cases no longer red on the three traced causes. The follow check reads what the viewer reads, and the hold is measured once the follow due at the stop has settled. No assertion is loosened, no wait on time is added, and the 1 px bound stays; it now covers the hold from two frames after the stop, not from the drag's start (D5).
 - At retry 0 under the load class, all green: 10 Firefox runs of the file and 2 full Firefox smoke suites, 5 Chrome runs and 1 full Chrome suite.
 
 ## Architecture & Implementation
 
-- **Viewer** (`apps/extension/src/components/JsonViewer/LogsViewer.vue`). After `scrollToBottom` dispatches the follow, it sets `lastScrollTop` to the scroller's largest offset (`scrollHeight - clientHeight`). The follow lands at most there, so its own scroll never reads as a move down past the reference. The reader's scroll does: the handler resets the reference on every event. The stops, the scroll handler, `holdPlace`, the timer and the `logId` target are unchanged. Nothing is dispatched. One comment sentence states the invariant. The read forces a layout CodeMirror would otherwise leave to its measure, once per followed line: Phase 1's burst control bounds its cost.
-- **Unit** (`LogsViewer.test.ts`, no stub change).
-  - New case, two rows (the follow's scroll before or after the stop): following at the end, a line grows `scrollHeight`, a selection stops the follow, and the follow's scroll to the new end fires its event. The next line is not followed. Both rows are red on base.
-  - New success control, same setup: after that event the reader scrolls up past the band, then back into it, and the next line is followed.
+- **Viewer** (`apps/extension/src/components/JsonViewer/LogsViewer.vue`), as replanned (D12).
+  - After `scrollToBottom` dispatches the follow, it sets `lastScrollTop` to `Number.POSITIVE_INFINITY`. Until the next scroll event no scroll reads as a move down, and that event's handler resets the reference to the real offset.
+  - CodeMirror's own scroll listener runs first and measures, so every follow still due has landed before the viewer reads (F1). The pin reads no geometry and forces no layout.
+  - When `holdPlace` takes a snapshot, it lowers the reference to `scrollTop`: the snapshot replaces a follow still due, whose scroll then never comes.
+  - The stops, the scroll handler, the timer and the `logId` target are unchanged. Nothing is dispatched. One comment sentence at each line states its invariant.
+- **Unit** (`LogsViewer.test.ts`, no stub change; `followingAtEnd()` comes out of `held()`).
+  - Hold rows, each red on base: following at the end, a line grows `scrollHeight`, a selection stops the follow, and the follow's scroll fires its event; the next line is not followed and the button shows. The scroll lands before or after the stop, at 618 or a fractional 618.4. A further row: a sub-pixel follow, in a document a line overflows by under a pixel.
+  - Success controls: after that event, the reader scrolls up past the band and back into it, and the next line is followed. A held line whose snapshot replaces the follow still due leaves the reader's next scroll down free.
+  - KL-2's bound, a success control: after a follow with nothing to travel, the reader's second scroll down resumes, so the pin outlives at most one scroll event. The hold rows, not this one, tell the pin from base.
   - The three "follow after a hold" cases stay unchanged.
 - **e2e** (`apps/extension/tests/e2e/viewers-csp.test.ts` only).
   - `armFollowCheck`'s latch becomes a plain `scroll` listener, added after the viewer's. It reads the gap after CodeMirror's measure and after the viewer's judgement. The button observer no longer stops the latch: a stop inside the dispatch would skip the latch's own listener, so `followedSinceArmed` stops it instead. The comment and the `scrolledAway` message drop "before the button showed".
@@ -61,6 +84,8 @@ For a person reading a busy log and for the maintainer reading a red smoke lane:
 ### Alternatives not taken
 
 - **Snapshot the place at the stop** (round 1): F3 focuses the field inside CodeMirror's update, so the dispatch throws (both legs). It also hides the line already due with no button (an owner question), reads after a trim, and trips a stale `snapshotPending`.
+- **A geometric pin** (arc 2, before D12): `scrollHeight - clientHeight`, then a pixel past it, then only with a pixel to travel. Reading the end after each followed line forced a layout, +42.7% on Firefox's burst, and a follow with under a pixel to travel escaped the pin (Codex).
+- **Lower the reference wherever CodeMirror replaces the follow** (D12, option b): an update listener and an annotation on the follow, new plumbing for one held scroll after a rare sequence.
 - **Pin `lastScrollTop` to the end at the stop** (round 2): once the 30 s timer, or a reader's scroll into the band, has resumed the follow short of the end, a stop and a scroll to the end stay held (Codex). The pin belongs where the viewer causes the scroll.
 - **Test-only fix for case A:** a test change would hide P1.
 - **No re-arm while a selection or the panel holds:** rejected in #789, since it stops a reader's scroll from resuming the follow.
@@ -87,16 +112,16 @@ Arc 1 is Phase 1, the test half; arc 2 is Phase 2, P1, once A1 is signed (the or
 
 **Validation gate.** Run `bun run lint`, `bun run typecheck:all` and `bun run test:all`, then the E2E runs. Pass: each exits 0, and every e2e run is green with the file at `6 passed`. The base viewer still carries P1, so a red may be P1's, but no red is excused. Any red fails the gate and stops the arc for the orchestrator. Its attribution comes from a traced reproduction with the probe instrumentation, recorded in `lessons/phase-1.md`. A rerun is diagnostic only and never replaces the failed run.
 
-### Phase 2 (arc 2, once A1 is signed) — the viewer's follow pins its reference
+### Phase 2 (arc 2, on the orchestrator's call on A1) — the viewer's follow pins its reference ✓
 
 1. Apply the viewer change; add the unit case and the control.
-2. Negative control, never committed: restore `LogsViewer.vue` from the arc's base, keep the tests, run the unit gate. Pass: only the new case's two rows red. Then restore the change.
+2. Negative control, never committed: restore `LogsViewer.vue` from the arc's base, keep the tests, run the unit gate. Pass: only the hold rows red (three under D12). Then restore the change.
 
 **Validation gate.** `bun run lint`; `bun run typecheck:all`; `bun run test:all`; `cd apps/extension && bun --bun vitest run src/components/JsonViewer`; the E2E runs on the arc's build. Pass: each exits 0, the control reds as stated, and every e2e run is green.
 
 ## UI impact
 
-Logs window. Today a line that lands within a frame of a selection or a search-field focus is followed, and then the follow resumes. After the fix that line is still followed, and the view then holds; lines after the stop show the button, as today. One change a person could notice, owner ask A1: a reader who scrolls down to the end within that frame stays held (KL-2).
+Logs window. Today a line that lands within a frame of a selection or a search-field focus is followed, and then the follow resumes. After the fix that line is still followed, and the view then holds; lines after the stop show the button, as today. One change a person could notice, owner ask A1: a reader who scrolls down to the end within that frame stays held, as does a reader's next scroll down after a search step or keyboard selection within a frame of a line, or after a follow with nothing to travel (KL-2, widened by D12).
 
 ## Security & Adversarial Considerations
 
@@ -118,9 +143,18 @@ The viewer reads only its own state and the scroller's geometry. It adds no inpu
 - D6 No new e2e scenario, no fixture change, the search case untouched.
 - D7 (arc 1) Every run goes through `test:e2e --retry=0`, since `agent.sh` runs only the network config.
 - D8 (arc 1) During the arc, dev's #868 added keyboard tests to this file. The gate's pass becomes every test in the file (8 at the merged head), not `6 passed`. The controls ran on the pre-merge head; `LogsViewer.vue` is identical at the merged head.
-- KL-1 (closed `known-limit` issue at close-out): lines that land between a drag's first `select.pointer` and Firefox's `selectionchange` are followed, with no bound on how many. Visible, pre-existing. Reopen on a user report.
-- KL-2 (owner ask A1; a closed `known-limit` issue at close-out if accepted): a reader who scrolls down to the new end inside the one frame between a stop and the pending follow's scroll event stays held. That scroll ends where the follow's does, so geometry cannot tell them apart; base resumes both, which is P1. A scroll down at the end moves nothing and fires no event, so the next line lands below the view with the button shown; a scroll down, the button or the 30 s timer then resumes. Tracking wheel and key input would add state and event-order duties for a sub-frame window. Reopen on a user report.
-- Out of scope, an issue at close-out each, deduplicated first:
+- D9 (arc 2) The arc is built on the orchestrator's call on A1, A, recorded on #849, before the owner signs; its PR would open as a draft until then.
+- D10 (arc 2, superseded by D12) The pin is one pixel past the rounded end: `scrollTop` can be fractional while `scrollHeight` and `clientHeight` are integers (Opus #2).
+- D11 (arc 2; its travel condition superseded by D12) The pin is set only when the follow has a pixel to travel, and `holdPlace`'s snapshot, which replaces a follow still due, lowers it to the view's place: otherwise no scroll event lowers it again (Codex round 2).
+- D12 (the orchestrator's call, 2026-10-20, on the arc 2 stop report) The pin reads no geometry: after its dispatch `scrollToBottom` sets `lastScrollTop = Number.POSITIVE_INFINITY`, and the follow's own event resets it to the real offset. `holdPlace`'s snapshot reset stays; the travel condition goes. Burst, base / the last geometric pin / no-read pin, interleaved, medians of 5 at load1 36-88: Firefox 386.0 / 551.0 (+42.7%) / 390.0 ms (+1.0%); Chrome 360.5 / 378.3 (+4.9%) / 353.1 ms (-2.1%). The residual takes option (a), KL-2 widened; option (b)'s plumbing is out of proportion for that window.
+- KL-1 (#919, a closed `known-limit` issue): lines that land between a drag's first `select.pointer` and Firefox's `selectionchange` are followed, with no bound on how many. Visible, pre-existing. Reopen on a user report.
+- KL-2 (#920, a closed `known-limit` issue; owner ask A1, the orchestrator's call A, widened by D12): a reader's scroll down stays held where the viewer cannot tell it from its own follow's. Three triggers:
+  - a scroll down to the new end inside the one frame between a stop and the pending follow's scroll event. That scroll ends where the follow's does;
+  - a scroll that replaces the pending follow and moves nothing: a search step with a query (F3 or Enter) or a keyboard selection within about 16 ms of a line, with the match or the cursor already in view. The reader's next scroll down, before another scroll event or held line, stays held;
+  - a follow with nothing to travel, then growth with no held line (a filter change). The reader's first scroll down stays held.
+
+  Base resumes in each case, which is P1. The first trigger's window is one frame; the other two start within a frame of a line or need no line at all, and the scroll they hold can come later, until another scroll event or a held line clears the pin. A scroll down at the end moves nothing and fires no event, so the next line lands below the view with the button shown; a scroll down, the button or the 30 s timer then resumes. Telling them apart means tracking input or every scroll target, which is state and plumbing for one held scroll after a rare sequence. Reopen on a user report.
+- Out of scope, an issue each (#921, #922; and #923 for `scrollToTargetLog`, Opus):
   - CodeMirror's stick to the end after F3 shrinks the scroller can still resume the follow (#616's comment). This includes a follow in flight across the F3 open.
   - The search case reads `gapToEnd < AT_END` after the focus, so a wallet line held in between reds a correct viewer (Opus #4). Base has the same exposure.
 
@@ -199,6 +233,22 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `ce48
 **Arc 1, Codex round 2** (resume): conditional approve. #1: a drag's synchronous measure can land a resumed follow before the read. Verified and accepted into D5, with no code change.
 
 **Arc 1, Codex round 3** (resume): approve. The loop has converged.
+
+**Arc 2, Codex round 1** (fresh session): approve, with two comment fixes, applied.
+
+**Arc 2, Opus diff review:** conditional approve. #2 a fractional `scrollTop` resumes: accepted (D10). #3 the height correction's undershoot: into the F3 issue. #6 `scrollToTargetLog` shares the class: an issue. #1 the A1 record: the Outcome and the PR. #4 explained; #5 pre-existing, left.
+
+**Arc 2, Codex round 2** (resume): conditional approve. #1 a no-op follow leaves the reference armed: accepted, with the snapshot path found beside it (D11).
+
+**Arc 2, Codex round 3** (resume, the hard stop): conditional approve, two findings verified, not fixed (lessons/phase-2.md). #1 a follow with under a pixel to travel still scrolls, and its event resumes a stop in its frame. #2 search navigation, or a keyboard selection, that replaces the follow leaves the reference stale until the next held line or scroll event, which widens KL-2. Together with the burst guard (+33.4% Firefox, +14.2% Chrome on the last geometric pin), the arc stops for the orchestrator.
+
+**Arc 2 replanned (D12), Codex round 1** (a fresh session): approve. Two low findings: the bound row's held line lowered the reference by itself (removed), and the comment now names the listener order it relies on.
+
+**Arc 2 replanned, Opus diff review:** conditional approve. The comment point; the "before" row ran the "after" row's path (dropped); the bound row asserted the accepted limit (it now asserts only the second scroll's resume). Verified: `Math.min` cannot reopen P1, and KL-2's three triggers are complete.
+
+**Arc 2 replanned, Codex round 2** (resume): approve, no new material finding. Converged.
+
+**Cross-arc pass, Codex** (a fresh session over the net diff from `ce48691e`). Round 1, conditional approve: A1's and KL-2's text still bound the widened triggers to a frame (fixed); the bound row cannot tell the pin from base (the claim corrected, since the hold rows do). Round 2, conditional approve: the no-op trigger has no timing bound, so both justifications drop "within a frame" (fixed). Round 3, approve.
 
 ## Seeds
 

@@ -86,6 +86,14 @@ export class NetworkServiceClient extends ServiceClient<Methods, Events> impleme
 		return this.call("getPrimaryNetwork", [])
 	}
 
+	public async getNetworkArrival(): Promise<Network | null> {
+		return this.call("getNetworkArrival", [])
+	}
+
+	public async answerNetworkArrival(networkId: string): Promise<void> {
+		return this.call("answerNetworkArrival", [networkId])
+	}
+
 	public async setActiveForProfile(profileId: string, networkId: string): Promise<string> {
 		return this.call("setActiveForProfile", [profileId, networkId])
 	}
