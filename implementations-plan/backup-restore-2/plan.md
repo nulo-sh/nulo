@@ -13,6 +13,17 @@ issues: none (tracked privately)
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** completed; delivered in #970, awaiting merge.
+- **Shipped:** A1 in #970: I1 and I2 (`9a47a8f47`), I3 (`5e2c61332`), comment fixes from review (`511a7a676`).
+- **Dropped or rejected:** the lane brief's restore-time re-derivation of derived rows (Alternative A: the in-place `nulo-v6.1` rotation makes a `nulo-v6` backup's rows restore by design); a key-against-address check at key restore (Alternative B, same rotation); `normalizeAllIds` setting the key (Alternative C, redundant with I1); a required `TxSchema.profileId` (Alternative D, a stored-shape change).
+- **Known limits:** none filed here; P4 and P5 are tracked privately.
+- **Open items:** tracked privately. OA-1 shipped as recommended; the owner's answer reaches it through the orchestrator.
+- **Lessons:** none promoted. The rotation constraint is stated where a change would meet it (`S/backup/backup-migration-registry.ts`, the epoch-5 note), and `lessons.md` is at its budget.
+- **Seeds retired:** the `/goal` and `/loop` seeds in § Seeds.
+
 # backup-restore-2: a restored transaction row belongs to the restored profile
 
 One arc, one PR against `dev`, branch `backup-restore-2-a1`. A full-backup restore binds every transaction row to the profile it creates and to one of that profile's accounts, and a row whose account the restore drops later is purged before the restore finishes. The finding is tracked privately; this plan states only the change and the invariants it keeps. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are relative to `apps/extension/src`; `S` = `wallet/services`.
