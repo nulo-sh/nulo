@@ -22,7 +22,8 @@ import { TaskService, StepContent, type WrappedTask } from "@/wallet/services/ta
 import { canonicalNumericStorageId, purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { ContractResolver, ensureRegistered } from "@/wallet/services/execution/contract-resolver"
 import { batchedViewSimulation } from "@/wallet/services/execution/helpers/batched-view-simulation"
-import { EntityStorage } from "@/wallet/storage"
+import type { EntityStorage } from "@/wallet/storage"
+import { entityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
@@ -41,7 +42,6 @@ import {
 	type SeedScope,
 	type SeedStatusSnapshot,
 	TOKEN_SERVICE_NAME,
-	TOKEN_STORAGE_ROOT,
 	TokenSchema,
 	type TokenInterface,
 	type Methods,
@@ -171,7 +171,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		this.browserApi = browserApi
 		this.seederOverrides = seederOverrides
 		this.contractResolver = new ContractResolver(logger)
-		this.tokens = new EntityStorage<Token>(TOKEN_STORAGE_ROOT, browserApi.storage.local, (raw) => TokenSchema.parse(raw))
+		this.tokens = entityStorage("tokens", browserApi.storage.local)
 	}
 
 	protected async init(services: ServiceCollection) {

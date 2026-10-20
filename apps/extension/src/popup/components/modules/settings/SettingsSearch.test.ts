@@ -1,6 +1,7 @@
 import { Flex, Icon, Input, Spinner, Text } from "@nulo/design"
-import { DOMWrapper, enableAutoUnmount, flushPromises, mount, type VueWrapper } from "@vue/test-utils"
+import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { sendEvent } from "../../../../../tests/helpers/send-event"
 import { settingsContext, settingsRouter } from "../../../../../tests/helpers/settings-rows"
 import ItemsContainer from "@/components/ui/Settings/ItemsContainer.vue"
 import SettingsSearch from "./SettingsSearch.vue"
@@ -28,24 +29,12 @@ async function mountSearch(query = "", sidePanel = true) {
 const field = (w: VueWrapper) => w.get<HTMLInputElement>('[data-testid="settings-search-input"]').element
 const results = (w: VueWrapper) => w.findAll('[data-testid^="settings-search-result-"]').map((r) => r.element as HTMLElement)
 
-/**
- * A keydown on `el`; true when no handler cancelled it. Sent through `trigger`, which stamps the
- * event past Vue's attach-time guard: a raw dispatch in the mount's millisecond reaches only the
- * first Vue listener on its path (the field's or the row link's), never the root's.
- */
+/** A keydown on `el` through `sendEvent`, since the root's listener comes after the field's or the
+ *  row link's; true when no handler cancelled it. */
 function key(el: Element, k: string, init: KeyboardEventInit = {}) {
-	let sent: Event | undefined
-	const take = (e: Event) => {
-		sent = e
-	}
-	window.addEventListener("keydown", take, { capture: true })
-	try {
-		void new DOMWrapper(el).trigger("keydown", { key: k, ...init })
-		if (!sent) throw new Error(`no keydown reached the window for ${k}`)
-		return !sent.defaultPrevented
-	} finally {
-		window.removeEventListener("keydown", take, { capture: true })
-	}
+	const sent = sendEvent(el, "keydown", { key: k, ...init })
+	if (!sent) throw new Error(`no keydown reached ${el.tagName} for ${k}`)
+	return !sent.defaultPrevented
 }
 
 describe("results", () => {
@@ -97,7 +86,7 @@ describe("results", () => {
 })
 
 describe("keys", () => {
-	// A still clock puts every raw dispatch in its mount's millisecond: a helper that skips `trigger`
+	// A still clock puts every raw dispatch in its mount's millisecond: a helper that skips `sendEvent`
 	// fails every run, not one CI run in many.
 	beforeEach(() => {
 		vi.spyOn(Date, "now").mockReturnValue(Date.now())

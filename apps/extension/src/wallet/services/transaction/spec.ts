@@ -181,13 +181,15 @@ export type Tx = {
 /** Tolerant-deep sub-schema: validates the call's contract/method/args and each transfer's from/to;
  *  `z.custom` passes the value through VERBATIM, so a field it does not check (token, type,
  *  amount, …) is never stripped, and a reader that branches on one compares it exactly. */
-const TxCallRowSchema = z.custom<TxCall>((v) => {
-	const c = v as TxCall
-	if (typeof c !== "object" || c === null) return false
-	if (typeof c.contract !== "string" || typeof c.method !== "string" || !Array.isArray(c.args)) return false
-	if (c.transfers === undefined) return true
-	return Array.isArray(c.transfers) && c.transfers.every((t) => typeof t?.from === "string" && typeof t?.to === "string")
-})
+const TxCallRowSchema = z
+	.custom<TxCall>((v) => {
+		const c = v as TxCall
+		if (typeof c !== "object" || c === null) return false
+		if (typeof c.contract !== "string" || typeof c.method !== "string" || !Array.isArray(c.args)) return false
+		if (c.transfers === undefined) return true
+		return Array.isArray(c.transfers) && c.transfers.every((t) => typeof t?.from === "string" && typeof t?.to === "string")
+	})
+	.describe("an object with string contract and method, an args array, and transfers, if present, each with string from and to")
 
 const tolerantObject = (v: unknown) => typeof v === "object" && v !== null
 
@@ -205,7 +207,7 @@ export const TxSchema: z.ZodType<Tx> = z.object({
 	// AccountFeePaymentMethodOptions is a NUMERIC enum in @aztec-labs/entrypoints —
 	// rows store 0|1|2. Number-shaped (not an enum schema) so an upstream member
 	// addition cannot false-reject stored rows. @aztec-coupled: see UPDATE.md.
-	feePaymentMethod: z.custom<AccountFeePaymentMethodOptions>((v) => typeof v === "number"),
+	feePaymentMethod: z.custom<AccountFeePaymentMethodOptions>((v) => typeof v === "number").describe("any number"),
 	hash: z.string(),
 	createdAt: z.number(),
 	updatedAt: z.number(),
@@ -214,16 +216,21 @@ export const TxSchema: z.ZodType<Tx> = z.object({
 	block: z.object({ hash: z.string(), number: z.number() }).optional(),
 	fee: z.string().optional(),
 	estimatedFee: z.string().optional(),
-	gasDetails: z.custom<TxGasDetails>(tolerantObject).optional(),
+	gasDetails: z.custom<TxGasDetails>(tolerantObject).describe("any non-null object, kept as stored").optional(),
 	feeSpender: z.string().optional(),
 	// An unknown speed reads as none rather than hiding the row: it only ever withholds a basis.
-	priorityLevel: z.custom<PriorityLevel>(isPriorityLevel).optional().catch(undefined),
+	priorityLevel: z
+		.custom<PriorityLevel>(isPriorityLevel)
+		.describe("a priority level name")
+		.optional()
+		.catch(undefined)
+		.describe("anything else reads as absent"),
 	// An unknown chooser reads as none, so the row keeps the label it had before the field existed.
-	feeChoice: z.enum(FEE_CHOICES).optional().catch(undefined),
+	feeChoice: z.enum(FEE_CHOICES).optional().catch(undefined).describe("anything else reads as absent"),
 	error: z.string().optional(),
 	awaitingFinality: z.boolean().optional(),
 	submittedEndpointUrl: z.string().optional(),
-	origin: z.custom<LocalTxOrigin>(tolerantObject),
+	origin: z.custom<LocalTxOrigin>(tolerantObject).describe("any non-null object, kept as stored"),
 	calls: z.array(TxCallRowSchema),
 })
 
