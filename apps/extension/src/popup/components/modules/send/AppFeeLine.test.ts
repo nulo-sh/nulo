@@ -35,7 +35,34 @@ describe("AppFeeLine", () => {
 			"About ~3.577824 FJ ($0.215); payment method set by Swap.",
 		)
 		const waiting = (await factory()).get('[data-testid="execute-op-app-fee-estimating"]')
-		expect(waiting.html()).toMatch(/About <i data-testid="skeleton"[^>]*><\/i>; payment method set by Swap\.(<!--v-if-->)?<\/span>$/)
+		expect(waiting.html().replaceAll("<!--v-if-->", "")).toMatch(
+			/About <i data-testid="skeleton"[^>]*><\/i>; payment method set by Swap\.<\/span>$/,
+		)
+	})
+
+	test("paid from Private Fee Juice: the person pays first, the app's method on its own line, then any priority part", async () => {
+		const mountPfj = async (feeEstimate?: Record<string, unknown>) => {
+			const w = mount(AppFeeLine, {
+				props: { feeEstimate: feeEstimate as never, privateFeeJuice: true },
+				slots: { default: "Swap" },
+				global: { stubs: STUBS },
+			})
+			await flushPromises()
+			return w
+		}
+		const landed = await mountPfj({ maxFee: "3577823500000000001", gasDetails: GAS })
+		const [first] = landed.get('[data-testid="execute-op-app-fee"]').findAll("span")
+		expect(first.text()).toBe("You pay about ~3.577824 FJ ($0.215) from Private Fee Juice")
+		expect(landed.text()).toBe("You pay about ~3.577824 FJ ($0.215) from Private Fee Juice method set by Swap")
+		const priced = await mountPfj({ maxFee: "16000000000000000", priorityFee: "4000000000000000", gasDetails: GAS })
+		expect(priced.text()).toBe(
+			"You pay about ~0.016 FJ (<$0.001) from Private Fee Juice method set by Swap. Includes a ~0.004 FJ (<$0.001) priority fee the app asked for.",
+		)
+		const waiting = (await mountPfj()).get('[data-testid="execute-op-app-fee-estimating"]')
+		expect(waiting.find('[data-testid="skeleton"]').exists()).toBe(true)
+		expect(waiting.html({ raw: true }).replaceAll("<!--v-if-->", "")).toMatch(
+			/You pay about <i data-testid="skeleton"[^>]*><\/i> from Private Fee Juice<\/span> method set by Swap<\/span>$/,
+		)
 	})
 
 	test("unmounting closes the price client and drops the quote listener it added", async () => {

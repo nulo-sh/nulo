@@ -42,7 +42,7 @@ import DetailsToggle from "./DetailsToggle.vue"
 import OperationActionRow from "./OperationActionRow.vue"
 import SendTxSummary from "./SendTxSummary.vue"
 import { humanizeOperationKind, safeWire, safeWireOrDash } from "./humanize"
-import type { FeePayerPick } from "./fee-figure"
+import { type FeePayerPick, paysFromPrivateFeeJuice } from "./fee-figure"
 import type { DraftAztecSendTxOperation, DraftSendTransactionOperation, DraftUIOperation } from "./types"
 import { type CallSurface, type CallerContext, type WireCall, authwitTitle, callSurface, rowTitle, tokenAt, wire } from "./call-surface"
 import { trimAddress } from "@/utils/string"
@@ -131,6 +131,9 @@ const sendTxCalls = (op: DraftAztecSendTxOperation): { call: WireCall; surface: 
 }
 const sendTxRows = computed(() => (props.op.kind === "aztec_sendTx" ? sendTxCalls(props.op) : []))
 const appName = computed(() => safeWire(props.dapp?.name, 64) || "the app")
+/** The app picked the method but the person pays, so the card claims nothing for the app and never
+ *  reads the fee contract's own pool as the person's. */
+const privateFeeJuice = computed(() => paysFromPrivateFeeJuice(props.op))
 
 /** Only a contract the wallet registered as a token gets the transfer/mint vocabulary. */
 const isToken = (contract: unknown): boolean => tokenAt(props.tokens, props.op.network?.chainId, contract) !== undefined
@@ -389,9 +392,9 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 				:aria-busy="isEstimating && !feeEstimate ? 'true' : undefined"
 				:class="$style.op_fee_set"
 			>
-				<Icon name="square-check" size="14" color="green" />
+				<Icon v-if="!privateFeeJuice" name="square-check" size="14" color="green" />
 				<Flex direction="column" :class="$style.fee_lines">
-					<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate">
+					<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate" :privateFeeJuice="privateFeeJuice">
 						<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
 					</AppFeeLine>
 					<Text v-else variant="body" color="secondary" height="150" data-testid="execute-op-app-legend">
@@ -403,7 +406,7 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 			<!-- Mounted with the row: a region created with its text in place may go unannounced. -->
 			<div role="status" aria-live="polite" aria-atomic="true" data-testid="execute-op-app-payer-live">
 				<Flex
-					v-if="feeEstimate?.appPayerFunding?.funded === false"
+					v-if="!privateFeeJuice && feeEstimate?.appPayerFunding?.funded === false"
 					align="start"
 					gap="6"
 					wide
@@ -414,6 +417,10 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 					<Text variant="body" color="secondary">This app's fee contract may not cover this fee right now.</Text>
 				</Flex>
 			</div>
+			<Flex v-if="privateFeeJuice" align="start" gap="6" wide :class="$style.op_fee_set" data-testid="execute-op-private-fee-notice">
+				<Icon name="info" size="14" color="secondary" aria-hidden="true" />
+				<Text variant="body" color="secondary">Your Private Fee Juice must cover this fee.</Text>
+			</Flex>
 		</template>
 
 		<FeeSettingsCard
