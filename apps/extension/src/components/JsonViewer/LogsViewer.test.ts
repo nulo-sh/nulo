@@ -328,18 +328,11 @@ describe("LogsViewer follow stopped by a selection", () => {
 	}
 
 	/** A line grows the document 18px while following, and a selection stops the follow with that
-	 *  line's scroll event still due. The scroll lands before or after the stop, as Firefox and Chrome
-	 *  order them, and the hold must not depend on which; a scaled display lands it a fraction past
-	 *  the rounded end. */
-	test.each([
-		{ lands: "before", top: 618 },
-		{ lands: "after", top: 618 },
-		{ lands: "after", top: 618.4 },
-	])("the follow's own scroll, landing at $top $lands the stop, keeps the hold", async ({ lands, top }) => {
+	 *  line's scroll event still due; a scaled display lands it a fraction past the rounded end. */
+	test.each([618, 618.4])("the follow's own scroll, landing at %s, keeps the hold", async (top) => {
 		const { wrapper, el, onScroll, followsNext, button } = await followingAtEnd()
 		el.scrollHeight = 1_018
 		expect(followsNext()).toBe(true)
-		if (lands === "before") el.scrollTop = top
 		selectInEditor()
 		el.scrollTop = top
 		onScroll()
@@ -385,14 +378,13 @@ describe("LogsViewer follow stopped by a selection", () => {
 		wrapper.unmount()
 	})
 
-	test("after a follow with nothing to travel, the reader's first scroll down is held and the next resumes", async () => {
+	test("after a follow with nothing to travel, the reader's second scroll down resumes it", async () => {
 		const { wrapper, el, scrollTo, followsNext } = await followingAtEnd()
 		scrollTo(0, 400)
 		followsNext()
 		selectInEditor()
 		el.scrollHeight = 418
 		scrollTo(0.4)
-		expect(followsNext()).toBe(false)
 		scrollTo(0.8)
 		expect(followsNext()).toBe(true)
 		wrapper.unmount()

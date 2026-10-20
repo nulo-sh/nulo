@@ -125,8 +125,9 @@ function scrollToBottom() {
 	enableAutoScroll()
 	const lastLine = view.state.doc.line(view.state.doc.lines)
 	view.dispatch({ effects: EditorView.scrollIntoView(lastLine.from, { y: "end" }) })
-	// No scroll reads as the reader moving down until the next scroll event resets this, so the
-	// follow's own landing cannot resume a stop; reading the end here would force a layout per line.
+	// The follow's own landing must not read as the reader moving down: no scroll does until the next
+	// scroll event resets this, once CodeMirror's listener, registered first, has landed every follow
+	// still due. Reading the end instead would force a layout per line.
 	lastScrollTop = Number.POSITIVE_INFINITY
 	showScrollBtn.value = false
 }
