@@ -32,7 +32,7 @@ const hasConfig = aztecConfig !== undefined
 
 const OTHER = `0x${"0a".repeat(32)}`
 const LISTED = { type: "transaction", scope: [{ contract: OTHER, function: "transfer_public_to_public" }] }
-const readHistoryCard = (page: Parameters<typeof readTerminalCard>[0], shot?: string) => readTerminalCard(page, "#/popup/activity", shot)
+const readHistoryCard = (page: Parameters<typeof readTerminalCard>[0], shot?: string) => readTerminalCard(page, "activity", shot)
 
 test.skipIf(!hasConfig)(
 	"scope-refusal — a send outside the listed scope is refused without a window and filed as not allowed",
@@ -124,7 +124,7 @@ test.skipIf(!hasConfig)(
 			status: answer.status,
 			error: answer.errorJson,
 			kind: await readErrorKind(wallet, record.id),
-			home: await readTerminalCard(wallet, "#/popup/general", "refused-binding-card"),
+			home: await readTerminalCard(wallet, "general", "refused-binding-card"),
 			detail: await readJournalDetail(wallet, record.id, "refused-binding-detail"),
 			card: await readHistoryCard(wallet),
 		}).toEqual({

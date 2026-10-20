@@ -5,7 +5,8 @@ import type { ILogger } from "@/wallet/logger"
 import { ConfigService } from "@/wallet/services/config/service"
 import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
 import { TokenListService } from "@/wallet/services/token-list/service"
-import { ValueStorage } from "@/wallet/storage"
+import type { ValueStorage } from "@/wallet/storage"
+import { valueStorage } from "@/wallet/storage/stores"
 import { flaggedKeysOf } from "@/utils/token-flag"
 import { AlarmDispatcher, EventHandler, createSerialQueue, readBodyCapped } from "@nulo/wallet-core/utils"
 import { allCoingeckoIds, getSanityBand, pricedTokensOf } from "./price-map"
@@ -29,8 +30,6 @@ export const PRICE_REFRESH_ALARM_NAME = "nulo:price:refresh"
 /** Chrome's production floor is 1 min; 3 min keeps traffic minimal while unlocked. */
 export const PRICE_REFRESH_PERIOD_MINUTES = 3
 
-const CACHE_STORAGE_KEY = "nulo:core:token-prices"
-
 const API_BASE = "https://api.coingecko.com/api/v3"
 
 /** Exponential backoff after failed fetches: 30s base, ×2 per consecutive
@@ -43,6 +42,35 @@ const BACKOFF_CAP_MS = QUOTE_TTL_MS
 const MAX_PRICE_RESPONSE_BYTES = 16 * 1024
 
 type FetchLike = (input: string, init?: { signal?: AbortSignal; headers?: Record<string, string> }) => Promise<Response>
+
+export function isValidQuote(id: string, quote: unknown, now: number): quote is PriceQuote {
+	if (!quote || typeof quote !== "object") return false
+	const q = quote as Partial<PriceQuote>
+	if (q.coingeckoId !== id) return false
+	if (typeof q.usd !== "number" || !Number.isFinite(q.usd) || q.usd <= 0) return false
+	if (typeof q.fetchedAt !== "number" || !Number.isFinite(q.fetchedAt)) return false
+	// Future-dated entries are rejected as INVALID (not merely stale):
+	// they would out-"fresh" every legitimate quote forever and win every
+	// monotonic merge, so an attacker-planted cache row could never be
+	// repaired by refreshes.
+	if (q.fetchedAt > now + MAX_CLOCK_SKEW_MS) return false
+	if (q.providerUpdatedAt !== null && (typeof q.providerUpdatedAt !== "number" || !Number.isFinite(q.providerUpdatedAt))) return false
+	const band = getSanityBand(id)
+	if (!band) return false
+	return q.usd >= band.min && q.usd <= band.max
+}
+
+/** The quotes of a stored cache that validate and are fresh at `now`; anything else reads as absent. */
+export function usableQuotes(stored: unknown, now: number): PriceState {
+	if (!stored || typeof stored !== "object") return {}
+	const usable: PriceState = {}
+	for (const [id, quote] of Object.entries(stored)) {
+		if (!isValidQuote(id, quote, now)) continue
+		if (!isQuoteFresh(quote, now)) continue
+		usable[id] = quote
+	}
+	return usable
+}
 
 /**
  * Background price feed. ONE batched CoinGecko request per refresh, always
@@ -106,7 +134,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 
 	public constructor(logger: ILogger, browserApi: BrowserApi, opts?: { fetchFn?: FetchLike; now?: () => number }) {
 		super(PRICE_SERVICE_NAME, logger)
-		this.cache = new ValueStorage<PriceState>(CACHE_STORAGE_KEY, browserApi.storage.local)
+		this.cache = valueStorage<PriceState>("tokenPrices", browserApi.storage.local)
 		this.dispatcher = new AlarmDispatcher(PRICE_REFRESH_ALARM_NAME, browserApi.alarms)
 		this.fetchFn = opts?.fetchFn ?? ((input, init) => fetch(input, init))
 		this.now = opts?.now ?? (() => Date.now())
@@ -292,32 +320,11 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		} catch {
 			return {}
 		}
-		if (!stored || typeof stored !== "object") return {}
-		const now = this.now()
-		const usable: PriceState = {}
-		for (const [id, quote] of Object.entries(stored)) {
-			if (!this.isValidQuote(id, quote)) continue
-			if (!isQuoteFresh(quote, now)) continue
-			usable[id] = quote
-		}
-		return usable
+		return usableQuotes(stored, this.now())
 	}
 
 	private isValidQuote(id: string, quote: unknown): quote is PriceQuote {
-		if (!quote || typeof quote !== "object") return false
-		const q = quote as Partial<PriceQuote>
-		if (q.coingeckoId !== id) return false
-		if (typeof q.usd !== "number" || !Number.isFinite(q.usd) || q.usd <= 0) return false
-		if (typeof q.fetchedAt !== "number" || !Number.isFinite(q.fetchedAt)) return false
-		// Future-dated entries are rejected as INVALID (not merely stale):
-		// they would out-"fresh" every legitimate quote forever and win every
-		// monotonic merge, so an attacker-planted cache row could never be
-		// repaired by refreshes.
-		if (q.fetchedAt > this.now() + MAX_CLOCK_SKEW_MS) return false
-		if (q.providerUpdatedAt !== null && (typeof q.providerUpdatedAt !== "number" || !Number.isFinite(q.providerUpdatedAt))) return false
-		const band = getSanityBand(id)
-		if (!band) return false
-		return q.usd >= band.min && q.usd <= band.max
+		return isValidQuote(id, quote, this.now())
 	}
 
 	/** Serialized refresh: concurrent callers share one in-flight request.

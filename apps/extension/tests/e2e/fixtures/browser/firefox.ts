@@ -851,6 +851,10 @@ export const firefoxDriver: BrowserDriver = {
 	credentialOutlivesPage: true,
 	ownHosts: FIREFOX_OWN_HOSTS,
 	launch,
+	// A temporary install over the installed add-on is an update to it; the UUID and storage stay.
+	reinstallExtension: async (browser, extensionPath) => {
+		await contextFor(browser).session.installAddon(extensionPath)
+	},
 	extensionUrl: (extensionId, path) => `${SCHEME}${extensionId}${path}`,
 	discoverExtensionId,
 	gotoExtensionPage,

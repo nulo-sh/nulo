@@ -2,6 +2,9 @@ import type { PinnedKey, TokenListEntry, TokenListPair } from "@nulo/token-list"
 
 export const TOKEN_LIST_SERVICE_NAME = "token-list"
 
+/** ValueStorage key of the fetcher's state: the last verified envelope and its schedule. */
+export const TOKEN_LIST_STORAGE_KEY = "nulo:core:token-list"
+
 export const TOKEN_LIST_REFRESH_ALARM_NAME = "nulo:token-list:refresh"
 
 export const TOKEN_LIST_URL = "https://tokens.nulo.sh/v1/list.json"
