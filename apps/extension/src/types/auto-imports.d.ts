@@ -280,6 +280,7 @@ declare global {
   const journalTerminalDisplay: typeof import('../utils/journal-state').journalTerminalDisplay
   const journalUpdated: typeof import('../utils/journal-mirror').journalUpdated
   const knownDecimals: typeof import('../utils/token-amount').knownDecimals
+  const leavePanelFor: typeof import('../utils/own-window').leavePanelFor
   const legalAboutRow: typeof import('../utils/legal-about').legalAboutRow
   const managers: typeof import('../utils/core').managers
   const markGetStarted: typeof import('../utils/get-started').markGetStarted
@@ -1088,6 +1089,7 @@ declare module 'vue' {
     readonly journalTerminalDisplay: UnwrapRef<typeof import('../utils/journal-state')['journalTerminalDisplay']>
     readonly journalUpdated: UnwrapRef<typeof import('../utils/journal-mirror')['journalUpdated']>
     readonly knownDecimals: UnwrapRef<typeof import('../utils/token-amount')['knownDecimals']>
+    readonly leavePanelFor: UnwrapRef<typeof import('../utils/own-window')['leavePanelFor']>
     readonly legalAboutRow: UnwrapRef<typeof import('../utils/legal-about')['legalAboutRow']>
     readonly managers: UnwrapRef<typeof import('../utils/core')['managers']>
     readonly markGetStarted: UnwrapRef<typeof import('../utils/get-started')['markGetStarted']>

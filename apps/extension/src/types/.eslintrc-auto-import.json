@@ -512,6 +512,7 @@
     "journalTerminalDisplay": true,
     "journalUpdated": true,
     "knownDecimals": true,
+    "leavePanelFor": true,
     "legalAboutRow": true,
     "managers": true,
     "markGetStarted": true,
