@@ -126,7 +126,7 @@ Every gate runs from the worktree root and also runs `bun run lint` and `bun run
 - Add one `test.each` with two rows, each answering `non-standard`: a random original with the bundled current at both anchors, and the same at the checkpoint only.
 - **Gate:** `cd packages/aztec-runtime && bun run test src/pxe/public-events.test.ts`. Pass: exit 0, and both new rows red when run against the base copy of `public-events.ts`.
 
-### Phase 2: registrations bind the current class to the original
+### Phase 2: registrations bind the current class to the original ✓
 
 - Add `assertInstanceArtifactClassId` to `artifact-class-id.ts`, re-export it from `packages/aztec-runtime/src/pxe/index.ts`, and make `assertWireArtifactClassId` call it.
 - In `PxeService.registerContract`, refuse current ≠ original before any write; resolve its own artifact by the original id.

@@ -431,6 +431,13 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		return this.withPxeWrite("registerContract", network, async (pxe) => {
 			const instance = await ContractInstanceWithAddressSchema.parseAsync(contract.instance)
 			const artifact = await ContractArtifactSchema.optional().parseAsync(contract.artifact)
+			// The PXE stores only the preimage, whose class is the original: a different current class
+			// would pair the address with code it does not commit to.
+			if (!instance.currentContractClassId.equals(instance.originalContractClassId)) {
+				throw new Error(
+					`registerContract class mismatch: current class ${instance.currentContractClassId.toString()} is not the original ${instance.originalContractClassId.toString()}`,
+				)
+			}
 			// Derive before any write: the upstream `registerContract` call itself persists the
 			// instance, so a preimage/address mismatch must be rejected while the store is untouched.
 			const derived = await computeContractAddressFromInstance(instance)
@@ -443,7 +450,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 				// A provided artifact serves only a class the wallet has no copy of: its own copy, compiled-in
 				// then stored, is the one written. Resolved on the raw PXE, since the public read would wait
 				// on this write.
-				const own = await this.artifacts.resolve(instance.currentContractClassId, (id) => pxe.getContractArtifact(id))
+				const own = await this.artifacts.resolve(instance.originalContractClassId, (id) => pxe.getContractArtifact(id))
 				await pxe.registerContractClass(own ?? artifact)
 			}
 			await pxe.registerContract(instance)
