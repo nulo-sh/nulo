@@ -1,8 +1,8 @@
 ---
 plan: onboarding-3-arc2
 tier: mid
-status: approved by the panel (2026-10-19); round 2 (the owner's answers on decision page 67) implementing
-issues: "#769 (folded from onboarding-4; this arc's PR is #743)"
+status: completed (2026-10-20); closed in #743's final commits
+issues: "#769 (folded from onboarding-4), #881, #722; this arc's PR is #743"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,24 @@ base: worktree-onboarding-3 at 3f9f958c (the build the owner tested)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20
+- **Status:** completed. Its delivery is #743, a draft against `dev` that also carries arc 1 ([archive/onboarding-3](../archive/onboarding-3/plan.md)) and onboarding-4's arc ([archive/onboarding-4](../archive/onboarding-4/plan.md), #769); this close-out is its final commits. The orchestrator takes #743 out of draft and merges it.
+- **Shipped:**
+  - P50-01 B (#769): a later profile's card shows only what it lacks.
+  - The matrix, M1 to M23, each cell pinned by a unit, Home or e2e step.
+  - P67-02 B: "Get Fee Juice" is done for good the first time the profile holds Fee Juice (`nulo:ui:getStartedFeeJuiceHeld@<id>`, written by Home).
+  - P67-03, the owner's note: a Testnet reset changes nothing on the card; no reset mark (D34). P67-04 A: no card for an import.
+  - P69-01 C (#881): the card is numbered steps. The next step's number is filled; a done step's number turns into a check and the row stays, inert, with "Done"; the count sits on the label's line; the card leaves once every listed step is done (phase 7).
+  - The seven `nulo:ui:getStarted*` and profile marks registered in the stored-shape registry, with goldens and a writer test.
+  - How Aztec works opens `https://nulo.sh/how-aztec-works`, the landing's page (#722).
+- **Superseded or dropped:** OA-17's O0 to O4, by P69-01. OA-21's Q1, Q2 and Q4 to Q6 were pictures only, drawn by a scratch spec that was never committed; no code of theirs exists.
+- **Known limits:** #867.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` is 97 B under its budget, and the one candidate (commit the regenerated auto-import files with a new `src/utils/` export, [lessons/phase-6.md](lessons/phase-6.md)) is reported by CI's build on the first push.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; they are not instructions.
 
 # onboarding-3, arc 2: the owner's second round on #743
 
@@ -36,11 +54,14 @@ Signed and folded in phase 1: **P50-01 = B** (#769): "Only what the new profile 
 The owner's rule for every page: a note supersedes or adds to the option clicked.
 
 - **Usability:** "ok, then assume #743 it's approved on usability, we just now need to pick from the get started designs."
-- **P67-01 (OA-17), how the rows sit: open.** Page note: "I don't like any tbh... "A" ends up being the best. Because the other ones don't look like tasks to go through. They become even more confusing. Can we get some more ideas in the table?" In chat: "Regarding p67-01 don't ship it -- I am asking for more options because I liked none. My notes superseed the option chosen, or they add; not saying that A should be the one." The new options are OA-21 (#881). #743 does not merge before the pick is built.
+- **P67-01 (OA-17), how the rows sit: open, then answered by P69-01 C (below).** Page note: "I don't like any tbh... "A" ends up being the best. Because the other ones don't look like tasks to go through. They become even more confusing. Can we get some more ideas in the table?" In chat: "Regarding p67-01 don't ship it -- I am asking for more options because I liked none. My notes superseed the option chosen, or they add; not saying that A should be the one." The new options are OA-21 (#881). #743 does not merge before the pick is built.
 - **P67-02 (OA-18): B**, "It leaves for good the first time the profile holds Fee Juice." Phase 6 builds it.
 - **P67-03 (OA-19), a note in place of a pick:** "I think it should show no card. We should "migrate" the user in the sense: if the user did not finish everything, then we should migrate the state of the user. If he already knew how to get gas, then, we don't show gas. If he has already backed-up the phrase on the previous testnet, then we don't ask for it on the new testnet. Same for how aztec works. Understand my point? Like, it's the same user, he hasn't forgotten all those things, nor has he lost his phrase just because Testnet resetted." Read: a reset changes nothing on the card; done stays done, open stays open. Every flag is per profile and the reset never touches the UI keys (F4), and P67-02 B removes the one row that read the network, so no reset mark is built (D34).
 - **The scope of "done"**, in chat: "Ok, let's go with your take then." The take: the phrase row counts per profile; the learning rows (How Aztec works, Get Fee Juice, Make proofs faster) count per person, shown only on the install's first created profile (P50-01 B). An accepted gap: deleting the first profile before those rows are done hides them for good. That is today's behaviour, and nothing is built for it.
 - **P67-04 (OA-20): A**, no card for imports. Nothing changes.
+
+**Decision page 69 (2026-10-20), the owner's pick with no note:**
+- **P69-01 (OA-21): C**, "Numbered steps: the next step's number is filled, a done number turns into a check and the row stays; the count sits on the label's line." It answers P67-01. Phase 7 builds it.
 
 ## Outcome & Quality Bar
 
@@ -67,40 +88,43 @@ For a person who opens Home after making or bringing in a profile, on a fresh in
 
 ## The matrix (phase 2 measures it)
 
-Rows: **P** "Save your recovery phrase", **B** "Back up this wallet", **A** "How Aztec works", **F** "Get Fee Juice", **R** "Make proofs faster"; **!** the urgent banner; **∅** no card. The defaults are: a fresh network, an empty account, nothing done, and Presto not reached. From M6 on, a row is for the install's first created profile with the card not hidden, unless it says otherwise (a later or imported profile never shows A, F or R). Evidence marked **new** lands in this arc. Test files are under `src/` unless they start with `tests/`.
+Rows: **P** "Save your recovery phrase", **B** "Back up this wallet", **A** "How Aztec works", **F** "Get Fee Juice", **R** "Make proofs faster"; **!** the urgent banner; **∅** no card. Under P69-01 C each row is a numbered step, open or checked (**✓**, inert, "Done"); the card leaves once every step it lists is checked. The defaults are: a fresh network, an empty account, nothing done, and Presto not reached. From M6 on, a row is for the install's first created profile with the card not hidden, unless it says otherwise (a later or imported profile never shows A, F or R). Evidence marked **new** landed in this arc. Test files are under `src/` unless they start with `tests/`. Lines are at the close-out head.
 
 | # | Case | Password | Passkey | Evidence |
 |---|---|---|---|---|
-| M1 | The install's first profile, created (tab or popup) | P A F R, Hide | B A F R, Hide | `utils/get-started.test.ts:121,125`; `popup/pages/general.test.ts:241`; e2e `security-backup:55`, `onboarding-tab:133` |
-| M2 | A profile created beside another | P alone | ∅ | `get-started.test.ts:191,196`; `general.test.ts:252,258`; `service.integration.test.ts:1450`; e2e `security-backup:83` |
-| M3 | Imported from a phrase, a passkey or a full backup | ∅, never ! | ∅ | `get-started.test.ts:184`; `general.test.ts:225,233`; `service.integration.test.ts:1423` (each import's call site); e2e `passkey-paths:166` (both browsers), network `hero-prices-unavailable:47` |
-| M4 | Imported, then a profile created (the owner's case) | P alone | ∅ | **new** `service.integration.test.ts:1470` |
-| M5 | First profile after every other was deleted | as M1 | as M1 | `service.integration.test.ts:1501` |
-| M6 | An account added by Settings › Accounts › Import | the profile's rows; F follows the selected account | same | **new** `general.test.ts:198` |
-| M7 | Empty account | F shows | F shows | `general.test.ts:156` |
-| M8 | Fee Juice held, or arriving after creation | F leaves at the read that sees it (I2), and the profile's flag is written; ! replaces P | F leaves | **new** `general.test.ts:149` (password), `:183` (arrival while mounted, the flag written); **new** network e2e step `fee-methods:356` (rule 2 and the stored flag on a real node) |
+| M1 | The install's first profile, created (tab or popup) | P A F R numbered 1 to 4, "0 of 4 done", Hide | B A F R, the same | `utils/get-started.test.ts:125,138`; `popup/pages/general.test.ts:155,244`; `GetStartedCard.test.ts:34,44`; e2e `security-backup:58` |
+| M2 | A profile created beside another | P alone: no count, no Hide | ∅ | `get-started.test.ts:205,211`; `general.test.ts:255,261`; `service.integration.test.ts:1469`; e2e `security-backup:86` |
+| M3 | Imported from a phrase, a passkey or a full backup | ∅, never ! | ∅ | `get-started.test.ts:198`; `general.test.ts:228,236`; `service.integration.test.ts:1436` (each import's call site); e2e `passkey-paths:166` (both browsers), network `hero-prices-unavailable:47` |
+| M4 | Imported, then a profile created (the owner's case) | P alone | ∅ | **new** `service.integration.test.ts:1489` |
+| M5 | First profile after every other was deleted | as M1 | as M1 | `service.integration.test.ts:1524` |
+| M6 | An account added by Settings › Accounts › Import | the profile's steps; F follows the selected account until the profile's flag is set | same | **new** `general.test.ts:201` |
+| M7 | Empty account | F open | F open | `general.test.ts:155` |
+| M8 | Fee Juice held, or arriving after creation | F ✓ at the read that sees it (I2), and the profile's flag is written; ! replaces P, so the steps are A F R, numbered from 1 | F ✓ | **new** `general.test.ts:148` (password), `:181` (arrival while mounted, the flag written); **new** network e2e step `fee-methods:358` (on a real node: A, F ✓, R and the stored flag) |
 | M9 | Fee Juice already there at import | as M3 | as M3 | network `hero-prices-unavailable:47` |
-| M10 | Fee Juice spent back to zero | F stays away (P67-02 B); with no tokens, P returns in place of ! | F stays away | **new** `general.test.ts:183` (passkey); `get-started.test.ts:170` (the flag); `:121,129` (P and !) |
-| M11 | Tokens only | ! replaces P; F shows | rows unchanged | `general.test.ts:141,173` |
-| M12 | A failed first Fee Juice read (a failed refresh keeps the last value) | F shows | F shows | `general.test.ts:133` (arc 1's D3: a failed read claims nothing) |
+| M10 | Fee Juice spent back to zero | F stays ✓ (P67-02 B); with no tokens, P returns open in place of ! | F stays ✓ | **new** `general.test.ts:181` (passkey); `get-started.test.ts:178` (the flag); `:125,142` (P and !) |
+| M11 | Tokens only | ! replaces P; F open | steps unchanged | `general.test.ts:140,171` |
+| M12 | A failed first Fee Juice read (a failed refresh keeps the last value) | F open | F open | `general.test.ts:133` (arc 1's D3: a failed read claims nothing) |
 | M13 | Deployed or not | no input | no input | `GetStartedInput` has no such field (typecheck) |
-| M14 | Another network or account selected | flags kept; F stays away once Home has seen any account of the profile holding Fee Juice, else it follows the selected one | same | **new** `general.test.ts:198` |
-| M15 | After a Testnet reset (takeover) | nothing changes (P67-03): done stays done, open stays open; F stays away once held | same | **new** e2e step `stale-network` S1a (the Fee Juice flag survives the real purge; P stays); the other flags by the purge's scope, the old chain's rows only (F4); `general.test.ts:198` (a new chain id is a new scope, holding none) |
+| M14 | Another network or account selected | flags kept; F stays ✓ once Home has seen any account of the profile holding Fee Juice, else it follows the selected one | same | **new** `general.test.ts:201` |
+| M15 | After a Testnet reset (takeover) | nothing changes (P67-03): ✓ stays ✓, open stays open | same | **new** e2e step `stale-network` S1a (the Fee Juice flag survives the real purge: P open, F ✓); the other flags by the purge's scope, the old chain's rows only (F4); `general.test.ts:201` (a new chain id is a new scope, holding none) |
 | M16 | A quarantined chain, or the takeover up | no Home, so no card | same | **new** e2e step `stale-network` S1a (no Home scroller under the takeover) |
-| M17 | Hide used | P alone (! once funded) | ∅ | `get-started.test.ts:175,180`; `general.test.ts:305` |
-| M18 | Phrase saved (tab or Settings) | P and ! leave | — | `get-started.test.ts:151`; e2e `onboarding-tab:113,133`, `security-backup:75` |
-| M19 | How Aztec works opened | A leaves | A leaves | `get-started.test.ts:163`; e2e `security-backup:65` |
-| M20 | Presto reached (global) | R leaves | R leaves | `general.test.ts:328` |
-| M21 | Full Backup saved | — | B leaves | `get-started.test.ts:159`; `settings/security/export/full.test.ts` |
-| M22 | Imported, nothing held | ∅ | ∅ | as M3 → **OA-20** |
+| M17 | Hide used | P alone (! once funded); no card once P is ✓ | ∅ | `get-started.test.ts:188,194`; `general.test.ts:308` |
+| M18 | Phrase saved (tab or Settings) | P ✓ in place; ! leaves | — | `get-started.test.ts:162`; e2e `onboarding-tab:134`, `security-backup:73` |
+| M19 | How Aztec works opened | A ✓ | A ✓ | `get-started.test.ts:171`; e2e `security-backup:65` |
+| M20 | Presto reached (global) | R ✓ | R ✓ | `general.test.ts:319,331` |
+| M21 | Full Backup saved | — | B ✓ | `get-started.test.ts:167`; `settings/security/export/full.test.ts` |
+| M22 | Imported, nothing held | ∅ | ∅ | as M3 (P67-04 A) |
+| M23 | Every step the card lists is ✓ | ∅; ! stays while it applies | ∅ | **new** `get-started.test.ts:215` |
 
-**Verdict per cell.** M1 ships rule 1 (the owner: "First onboard, just create passkey / password: we show everything"). M8 ships rule 2 ("check if it has fee juice to remove hte "Get fee juice""). M2 and M4 are P50-01 B. M10 and M14 are P67-02 B, M15 is P67-03 and M22 is P67-04 A. Every other cell follows a signed rule. No cell is a plain bug in the card (I1); I3 is outside it.
+**Verdict per cell.** M1 ships rule 1 (the owner: "First onboard, just create passkey / password: we show everything"). M8 ships rule 2 ("check if it has fee juice to remove hte "Get fee juice""), read under P69-01 C as F checked. M2 and M4 are P50-01 B. M10 and M14 are P67-02 B, M15 is P67-03 and M22 is P67-04 A. P69-01 C turns every "leaves" of the earlier rounds into "✓" and adds M23. Every other cell follows a signed rule. No cell is a plain bug in the card (I1); I3 is outside it.
 
 ## Architecture & Implementation
 
 The arc changes five things: (a) a merge that brings P50-01 B into #743; (b) tests that pin the matrix; (c) pictures for the asks; (d) the PR body; (e) P67-02 B. The view rule stays the single source (`getStartedView`), so every cell's test is a one-line input to it, or one Home mount through the real storage facade.
 
 **P67-02 B.** One more per-profile UI key, `nulo:ui:getStartedFeeJuiceHeld@<id>`, in `src/utils/profile-ui-keys.ts` beside the other Get started flags, so a profile deletion or a row commit removes it and no backup carries it. `feeJuiceShown` also needs the flag unset. Home writes it (`general.vue`, a watcher) when the selected account's gas read is positive and the profile's flags are read and unset: the read the row already follows, on the one screen that shows the row. Pre-production, the new key needs no migration (CLAUDE.md § Persisted-storage shape changes). The stored-shape registry of lane migration-rule-1 is not on `dev` (b6208221), so there is nothing to register.
+
+**P69-01 C.** `getStartedView` returns `steps: { item, done }[]` in the drawn order instead of the items still open. A step's done flag is the one that used to remove its row: `phraseSaved`, `backupSaved`, `aztecOpened`, `feeJuiceHeld` or a positive Fee Juice read, and `prestoReached`. Which steps are listed is unchanged: the phrase step for a password profile unless the banner takes it, and the others for the install's first created profile while the card is not hidden. When every listed step is done the view lists none, so the card leaves. `GetStartedCard` numbers the steps, fills the first open one, puts a check in a done step's place, and makes a done row inert (no handler, so `SettingItem` renders no button), with "Done" in the chevron's place. The count "n of m done" sits beside Hide when more than one step is listed.
 
 **Alternatives not taken.**
 - *The worker writes the flag on any positive gas read.* A second writer of a UI key, in a service that knows nothing of the card; the row only shows on Home, whose read decides it.
@@ -110,7 +134,7 @@ The arc changes five things: (a) a merge that brings P50-01 B into #743; (b) tes
 ## Security & Adversarial Considerations
 
 - **Threat model.** No new input, message or permission. One new per-profile storage key (P67-02 B), a reminder preference like the others. The flags stay reminder preferences, never proof of a backup. A forged flag needs a writer of `chrome.storage.local`, which already holds more than the card; a forged Fee Juice flag hides only the Fee Juice row, never a backup row.
-- **Wrong screen (the risk that matters).** For a created password profile whose phrase is unsaved, no flag but `phraseSaved` removes both the phrase row and the banner (`get-started.ts:105,135-138`). M15's step proves a Testnet reset keeps the flags. Signed behaviours, not changed here: a Settings reveal clears the reminder (`seed.vue:70`, arc 1); Hide removes a passkey profile's backup row (`get-started.ts:106`, P33-01 D); an unread input shows nothing until it lands (`:131`); a lost `imported` write shows the card, the safe side. The panel recommends no ask option that removes an open backup row. OA-19 D, which would remove it, is listed only because the owner said "nothing", and is marked not recommended.
+- **Wrong screen (the risk that matters).** For a created password profile whose phrase is unsaved, no flag but `phraseSaved` checks the phrase step or ends the banner (`getStartedView`, `get-started.ts`). Under P69-01 C a done step stays on screen, checked: a forged flag marks a step done where it used to remove the row, and a lost write leaves the step open. M15's step proves a Testnet reset keeps the flags. Signed behaviours, not changed here: a Settings reveal marks the phrase saved (`seed.vue:70`, arc 1); Hide removes a passkey profile's backup step (`firstProfileSteps`, P33-01 D); an unread input shows nothing until it lands (`getStartedView` returns `null`); a lost `imported` write shows the card, the safe side. The panel recommends no ask option that removes an open backup row. OA-19 D, which would remove it, is listed only because the owner said "nothing", and is marked not recommended.
 - **Capture spec.** It styles through `adoptedStyleSheets` or inline custom properties (an extension page's CSP refuses an injected `<style>`), never commits, and stubs `window.open`.
 - **Supply chain.** No dependency or manifest change.
 
@@ -197,6 +221,17 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
 - Pictures: the built cell, a first password profile once it has held Fee Juice and holds none (`p67-02-fee-juice-held-*`, a scratch capture on the armed Chrome build, deleted after its run). M10, M14 and M15 all draw it.
 - Gate: `F`; smoke `stale-network` and `security-backup` on Chrome and Firefox; network `fee-methods` on Chrome; the fix loop; push; the five required checks.
 
+**7. Round 3: P69-01 C, numbered steps (#881).**
+- Merge `origin/dev` (no rebase). `profile-ui-keys.ts` takes dev's exported roots plus this arc's seven; the stored-shape registry (migration-rule-1, now on `dev`) gets the seven keys as `true`-only flags, their goldens, a regenerated snapshot and a writer test.
+- Change map:
+  - `src/utils/get-started.ts`: `steps` in place of `items`; `firstProfileSteps`; the card leaves once every listed step is done (D37, D38).
+  - `src/popup/components/modules/general/GetStartedCard.vue`: the numbers, the check, the inert done row, the count, the list roles (D39, D40).
+  - `src/popup/pages/general.vue`: passes `steps`.
+- Tests: the pure view (every "leaves" case now reads "done", plus Hide over done steps and M23); the card on the real `SettingItem` (the order, the numbers, the next step, a done step's check, "Done" and missing action, the count's role, Hide); Home's cells; the e2e steps in `security-backup`, `onboarding-tab`, `stale-network` S1a and `fee-methods`, which read `data-done` on the row's testid and the count's testid (D41).
+- Red proofs, each restored after: an always-on click handler, the next step taken as the first, and the count shown for one step each fail the card's tests; dropping the Fee Juice flag from the done test fails two pure and two Home cases.
+- Pictures: the built card on the armed Chrome build (`q3-*`): a first password profile with nothing done (and scrolled), two done, the Fee Juice flag set, the phrase step alone, and a first passkey profile. A scratch spec drew them and was deleted after its run.
+- Gate: `bun run audit:vue`; the full smoke suite on Chrome and Firefox; network `fee-methods` on Chrome and Firefox; the fix loop; push; the five required checks.
+
 ## Decision ledger
 
 | # | Decision | Chosen | Rejected |
@@ -213,6 +248,11 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
 | D34 | P67-03 | no reset mark: the flags are per profile and survive the purge (F4), and B removes the one row that read the network | a reset mark (OA-19 C and D, both declined by the owner's note) |
 | D35 | OA-21 options | Q1 to Q6 (`OWNER-ASKS.md`); recommend Q3, numbered steps that turn into checks | a ring per row whose row then leaves (it never gets its check); invented copy (each drawing uses only today's titles and values, plus the counts and "Next") |
 | D36 | S1a's reset step | the Fee Juice flag stored before the lock; the rows after the reset are P, A and R | Hide before the lock (it hides F itself, so it cannot show the flag at work); a gas stub in smoke (a node fixture for one flag) |
+| D37 | Q3's model | the view lists each step with its done flag, in the drawn order; no card once every listed step is done | a progress record of its own (a second source for what the flags already say) |
+| D38 | The banner and the phrase step | the signed rule holds: a funded password wallet with its phrase unsaved gets the banner, and the phrase step leaves the list, so the steps read A F R, numbered from 1, "n of 3 done" | keeping P listed beside the banner (the phrase asked for twice, and a signed cell changed) |
+| D39 | Accessibility (the owner's delegation) | the steps are a list, so assistive tech hears each step's position and the total; the number and the check are `aria-hidden`; a done step says "Done" in words; the next step is `aria-current="step"`; the count is a polite `role="status"`, announced when it changes while Home is open | `aria-label` on the number box (a name on a generic element, which screen readers do not read reliably); a count announced on every mount |
+| D40 | The card's script | plain `<script setup>`, as most of the extension's SFCs: with `lang="ts"`, vue-tsc types the JS `SettingItem`'s slots as `{}` | typing `SettingItem`'s slots (a shared row changed for one consumer) |
+| D41 | E2E reads of a done step | `data-done` on the row's testid, and the count's own testid | text or role selectors (CLAUDE.md § testid preservation rule) |
 
 ## Audit verdicts
 
@@ -269,7 +309,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
 
 ## Delivery
 
-No new PR. The arc pushes to `worktree-onboarding-3` with plain pushes and never forces. #743 stays a draft and never merges before the owner's next build test. Its title stays as it is (81 characters). Its body gains `Closes #769`. The three sibling branches built on 3f9f958c (`structure-2-a3`, `test-infra-1-a4`, `onboarding-4-a1`) are never pushed to.
+No new PR. The arc pushes to `worktree-onboarding-3` with plain pushes and never forces. #743 stays a draft and never merges before the owner's next build test. Its title stays as it is (81 characters). Its body closes #769, #881 and #722. The three sibling branches built on 3f9f958c (`structure-2-a3`, `test-infra-1-a4`, `onboarding-4-a1`) are never pushed to.
 
 ## Post-implementation
 
@@ -277,8 +317,8 @@ No new PR. The arc pushes to `worktree-onboarding-3` with plain pushes and never
 - Step 1 is absent (`code_review: off`).
 - Step 2 is one loop over `git diff 56361a49..HEAD`, the arc's own commits after the two merges (their PRs reviewed the folded code). It runs `run-codex.sh` with gpt-6.1-sol at high, read-only. One Opus diff review runs beside round 1. Stop at three rounds.
 - Step 3 is the push and the watch above.
-- Step 4 (close-out) waits for the owner's OA-21 pick (#881) and its build. An ask still open at close-out becomes an `owner-decision` issue.
-- Round 2 runs the same loop over this round's own commits (after 55a1304d).
+- Step 4 (close-out) ships in #743's final commits, after P69-01 C is built.
+- Round 2 runs the same loop over this round's own commits (after 55a1304d). Round 3 runs it over `git diff ab74f44b..HEAD` plus the merge's own resolutions.
 
 ## Seeds
 

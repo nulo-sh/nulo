@@ -4,7 +4,7 @@ These asks come from the owner's second build test of #743 (2026-10-19). Each on
 
 Already shipped in this round, signed: **P50-01 = B** (#769). A profile created beside another shows only what it lacks. A password profile shows the phrase row alone, and a passkey profile shows no card. That covers the owner's first case: passkeys imported first, then a password profile created.
 
-**The owner's answers (2026-10-19):** OA-17 is open, with new layouts asked for (OA-21). OA-18 is B. OA-19 is the owner's note: a reset changes nothing on the card. OA-20 is A.
+**The owner's answers (2026-10-19):** OA-17 is open, with new layouts asked for (OA-21). OA-18 is B. OA-19 is the owner's note: a reset changes nothing on the card. OA-20 is A. On 2026-10-20 OA-21 is C (P69-01), which answers OA-17.
 
 ## OA-17. The padding inside the Get started rows
 
@@ -25,6 +25,8 @@ Two seeds were dropped. Moving the box outward leaves it 3 px from the popup's e
 **Recommendation: O1** (both reviewers, moderate confidence). It puts the row text on the same edges as the label, Hide and the Holdings rows. The hairlines keep the rows apart without a box. The change stays inside the card, so the Settings lists that share these rows are untouched. **What ships now: O0, today's form.**
 
 **Answered (P67-01): open.** "I don't like any tbh... "A" ends up being the best. Because the other ones don't look like tasks to go through. They become even more confusing. Can we get some more ideas in the table?" The new options are OA-21 (#881).
+
+**Answered (P69-01): C**, under OA-21.
 
 ## OA-18. "Get Fee Juice" after the account held Fee Juice
 
@@ -108,3 +110,13 @@ C and D store a per-profile mark written by the reset.
 The brief's ring before each row is drawn as a square (Q2, Q5) and a node (Q6), because the wallet has no round control. It appears only where a done row stays and gets its check.
 
 **Recommendation: Q3** (moderate confidence). It keeps A's box, which the owner rated best. Every row reads as a step, with the next one marked. Done steps stay checked, so progress shows. The count sits on the label's line, so the card gets no taller than it is today. **What ships now: today's form (OA-17's O0). #743 does not merge until this is picked and built.**
+
+**Answered (P69-01): C**, "Numbered steps: the next step's number is filled, a done number turns into a check and the row stays; the count sits on the label's line." Built (the real build, light then dark):
+
+| Cell | Light | Dark |
+|---|---|---|
+| A first password profile, nothing done | ![](screenshots/q3-password-none-done-light.png) ![](screenshots/q3-password-none-done-scrolled-light.png) | ![](screenshots/q3-password-none-done-dark.png) ![](screenshots/q3-password-none-done-scrolled-dark.png) |
+| The phrase saved and How Aztec works opened | ![](screenshots/q3-password-two-done-light.png) ![](screenshots/q3-password-two-done-scrolled-light.png) | ![](screenshots/q3-password-two-done-dark.png) ![](screenshots/q3-password-two-done-scrolled-dark.png) |
+| The profile has held Fee Juice (P67-02 B) | ![](screenshots/q3-fee-juice-held-light.png) | ![](screenshots/q3-fee-juice-held-dark.png) |
+| The phrase step alone (Hide, or a later profile): no count, no Hide | ![](screenshots/q3-phrase-alone-light.png) | ![](screenshots/q3-phrase-alone-dark.png) |
+| A first passkey profile, nothing done | ![](screenshots/q3-passkey-none-done-light.png) | ![](screenshots/q3-passkey-none-done-dark.png) |
