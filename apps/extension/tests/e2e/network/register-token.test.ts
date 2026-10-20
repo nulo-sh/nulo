@@ -63,8 +63,7 @@ test.skipIf(!hasConfig)(
 			'[data-testid="register-token-symbol"]',
 			(el: Element) => (el as HTMLElement).textContent?.trim() ?? "",
 		)
-		expect(symbol.length).toBeGreaterThan(0)
-		expect(symbol).not.toBe("—")
+		expect(symbol).toBe("TST")
 
 		// Address must always render alongside the metadata (defense against
 		// phishing tokens that return misleading name/symbol strings).
