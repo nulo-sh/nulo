@@ -284,8 +284,8 @@ test.skipIf(!aztecConfig)(
 		await navigateByHash(control, "#/popup/settings/connected-apps", 15_000)
 		// A wallet of its own lists this one app, so the row's line is the only one.
 		await control.waitForSelector(row, { timeout: 5_000 })
-		const rowLine = await control.waitForSelector(ROW_NOT_CONNECTED, { visible: true, timeout: 5_000 })
-		expect(await rowLine?.evaluate((el) => el.textContent?.trim())).toBe("Allowed. Not connected yet.")
+		await control.waitForSelector(ROW_NOT_CONNECTED, { visible: true, timeout: 5_000 })
+		expect(await control.$eval(ROW_NOT_CONNECTED, (el) => el.textContent?.trim())).toBe("Allowed. Not connected yet.")
 		await shotSend(control, "connect-not-connected-row", "connected-app-row")
 		await openConnectedApp(control, host, APP_NOT_CONNECTED)
 		expect(await control.$eval(APP_NOT_CONNECTED, (el) => el.textContent?.replace(/\s+/g, " ").trim())).toBe(
