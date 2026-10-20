@@ -1,0 +1,6 @@
+# privacy-cache-line-1 status
+
+- 2026-10-20 adopted the lane worktree at `f55b7b4e6`; recon done (1 Sonnet explorer); every lane-brief claim held.
+- 2026-10-20 plan drafted (tier light): one arc, privacy 1.2.2; no owner asks; Codex audit and Opus Plan leg next.
+- 2026-10-20 round 1: Codex conditional approve (AMO re-paste), Opus conditional approve (a § 4 item, a stale citation, four P3s); plan revised; final fresh Codex pass next.
+- 2026-10-20 final fresh Codex pass: approve. Plan committed; A1 starts under auto-continue.
