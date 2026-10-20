@@ -1074,7 +1074,8 @@
 			"shape": "networkSeeded",
 			"key": "nulo:core:network-seeded@3f9a2c71",
 			"value": {
-				"offered": ["custom", "devnet", "local", "mainnet", "testnet"]
+				"offered": ["custom", "devnet", "local", "mainnet", "testnet"],
+				"announce": ["mainnet"]
 			}
 		},
 		{
