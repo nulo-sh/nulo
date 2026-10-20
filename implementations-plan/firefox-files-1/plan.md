@@ -124,6 +124,8 @@ The lane brief's records are the whole visible budget:
 - Settings → Contacts during an export: P74-07 C, "Both: the bounded check and the card.", with A's "a working card above the list (copy is a placeholder) and Export contacts disabled while it runs."
 - Full Backup's working card (phase 3): none; the same markup and pixels.
 
+Pictures of the result, light and dark (`screenshots/`): `contacts-own-window-firefox-*.png` (the Contacts window the panel's Import contacts opens), `backup-done-chrome-*.png` and `backup-done-firefox-panel-*.png` (the done state, Close focused), `contacts-export-running-chrome-*.png` (the export's card, held 5 s by a node that never answers).
+
 ## Decision ledger
 
 | Id | Decision | Rejected | Panel |
@@ -138,6 +140,9 @@ The lane brief's records are the whole visible budget:
 | D8 | Rename the panel spec, add one step to its existing move test, record file pickers in `armPanelDeath` | a new scenario with an in-window import (repeats `contacts-import`, cannot prove I2) | Opus's trim plus Codex's no-picker assertion |
 | D9 | Hand-off at the press on all three pages | at page open for the account import and restore-again | Opus: the record's literal reading; Codex: page-open races restore-again's `start()` |
 | D10 | "Saved" on acceptance, a known limit with a reproduction attempt | a `downloads.onChanged` watch now | Codex: prefer a wording ask to a new lifecycle; Opus: the cost is one more export |
+| D11 | The PR leaves draft (`gh pr ready`) once CI starts, with OA-3's Mac check listed as pending in its body | draft until OA-3 passes (audit round 2) | the orchestrator's arc brief, which supersedes the plan; merging stays the owner's call |
+| D12 | I1 checked through the e2e driver's CDP session against the armed Chrome build | the chrome-extension-debug skill (no DevTools MCP in the implementing session) | same Chrome, same build; [lessons/phase-4.md](lessons/phase-4.md) |
+| D13 | `leavePanelFor(route)` in `own-window.ts` for the four panel hand-offs, the profile restore's included | the guard pasted on each page | implementation review, Opus Low 1 |
 
 ## Audit verdicts
 
@@ -148,6 +153,8 @@ The lane brief's records are the whole visible budget:
 **Round 2.** Codex (resumed): `conditional approve (with conditions: enforce the Mac acceptance check and restore the full network validation gates)`. Both accepted: the PR stays a draft until the owner's Firefox check (OA-3) passes on its build; phase 6 runs the full network suite on both browsers. Opus (resumed): `approve`, three Low notes, all accepted: the running card's picture is held by the capture spec alone; phase 2's failure mode is the timeout's message naming the picker; the panel record's doc and assertion labels follow the new kind.
 
 **Final pass** (fresh Codex session `01a15a70`, gpt-6.1-sol, high): `approve`, no new material finding. One Low note applied: D1's fallback "may work" rather than "works". It judged D10's known limit proportionate, D5's shared `goBack` and D9's per-page hand-off right, D6's parallel caught probes sound, and the layers economical. Approval does not authorize the pending UI choices (A1-A3, OA-1..OA-4).
+
+**Implementation review** (whole diff, `git diff origin/dev...HEAD`; [lessons/phase-6.md](lessons/phase-6.md)). Round 1: Codex (gpt-6.1-sol, high, session `01a15ab1`) `approve`, no finding; Opus 5.5 (`general-purpose`) `approve`, two Low notes, both applied (D13; the probe's log line names the probe). Round 2 (resumed, the fix commit): `approve`. Round 3 (resumed, now carrying the standard's two verbatim rules, which rounds 1 and 2 had left out): `changes requested`, three Low comment findings, all applied (the download latch's ordering stated, `StatusCard`'s header cut, three narrating comments deleted). The loop ended at its three-round stop with no material finding open.
 
 ## Delivery
 

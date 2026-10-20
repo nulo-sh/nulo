@@ -25,4 +25,14 @@ so no plan change.
 - The Chrome gate's first run failed 2 of 7 with `Connection closed` / `frame got detached`: the I1
   scratch spec ran at the same time on the same `dist/chrome`, and the smoke global setup's
   `killChromesLoading(dist)` reaped the gate's browsers. Self-inflicted; the rerun alone passed 7/7.
-  Two smoke runs of one browser never share a dist.
+  The e2e-testing skill already names the hazard (§ Hazards that mass-fail a run, "Sharding smoke on
+  one host"); it was not read first.
+
+## Focusing Close in a unit test
+
+`full.test.ts` first saw focus stay on `<body>`: vitest has no component resolver, so the page's
+`<Button>` resolved to nothing and rendered a native `<button>`, and the template ref held that
+element, whose `$el` is undefined. Production holds the wrapper's instance, whose `$el` is the
+button. Registering the real local `Button` recursed (its base is also named `Button`); a stub
+component (`Button: { template: "<button><slot /></button>" }`) gives the test the same shape as
+production.
