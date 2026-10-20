@@ -1,5 +1,14 @@
 # launch-prep-1: owner asks
 
+## Answers (decision page 69, 2026-10-20)
+
+- **P69-02: C**, "You accepted a draft of these Terms. This version is the one in effect." It
+  replaces P68-01's line B; Terms 1.1's `changes` entry is exactly this line
+  ([light](screenshots/p69-terms-line-c-light.png), [dark](screenshots/p69-terms-line-c-dark.png)).
+- **P69-03: A**, "Ship it as drawn." (the README at 1.0.0). Note: "FYI: Once we ship Mainnet though,
+  Mainnet will be default. But until then, yeah, its read perfect." Nothing changes for it now;
+  the lines naming the default network are listed for the Mainnet launch.
+
 ## Answers (decision page 68, 2026-10-19)
 
 - **OA-1 (a), P68-01: B**, "The first line only." Note: "Reads very weirdly." A2 ships "These Terms

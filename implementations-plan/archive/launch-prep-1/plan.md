@@ -16,8 +16,8 @@ post_implementation_hardening: not scheduled
 ## Outcome
 
 - **Date:** 2026-10-19.
-- **Status:** A1 merged as #888. A2 is a draft PR against `dev` carrying this close-out; it merges right before the 1.0.0 promote, after the owner's last look at the sheet's line and the banner, and that merge closes the plan.
-- **Shipped:** A1: the `BEFORE-LAUNCH.md` boxes the re-fetched evidence meets, the owner's page-62 store calls, two checks made passable, `legal/README.md`'s Mainnet line. A2: Terms 1.1, material, with one `changes` line (P68-01 B); 1.0 archived byte-exact and listed as never in effect (P68-02 A); the README banner (P68-03 A plus the preview-build bullet); § 4's live-Testnet box moved to a § 3 step before the promote (P68-04 B); the legal README's decline line; the how-aztec-works footer.
+- **Status:** A1 merged as #888. A2 is a draft PR against `dev` carrying this close-out; the owner signed the sheet's line and the banner on decision page 69 (2026-10-20), and A2 merges right before the 1.0.0 promote, which closes the plan.
+- **Shipped:** A1: the `BEFORE-LAUNCH.md` boxes the re-fetched evidence meets, the owner's page-62 store calls, two checks made passable, `legal/README.md`'s Mainnet line. A2: Terms 1.1, material, with one `changes` line (P69-02 C, replacing P68-01 B); 1.0 archived byte-exact and listed as never in effect (P68-02 A); the README banner (P68-03 A plus the preview-build bullet, as drawn: P69-03 A); § 4's live-Testnet box moved to a § 3 step before the promote (P68-04 B); the legal README's decline line; the how-aztec-works footer.
 - **Review loop:** the plan took Codex reject, Opus conditional approve, Codex conditional approve, then Codex approve. A1 took Codex clean, Opus three P3 (fixed), Codex clean. A2 took Codex one P2 (half accepted), Opus four P3 (fixed), Codex one P3 (fixed), then Codex clean.
 - **Gates at the head:** after merging `origin/dev` at `24399338`: lint, `typecheck:all`, `test:all`, `test:ci-gating`, `check:plans` exit 0. The legal-acceptance e2e ran 14/14 at retry 0 on Phase 2's code; no extension code changed after it.
 - **Deviations:** A2's commit type is `feat(legal)` (D9); no A3, both asks being signed together (D1); the how-aztec-works footer came from A2's review.
@@ -30,7 +30,7 @@ post_implementation_hardening: not scheduled
 
 # launch-prep-1: the 1.0.0 checklist's agent items that do not wait for Aztec 6.0.0
 
-Two arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1). **A1** corrects `BEFORE-LAUNCH.md` (the boxes the evidence meets, the owner's two page-62 store calls, two checks that cannot pass as written) and `legal/README.md`'s Mainnet line, and records the four known-limit dispositions; it opens ready. **A2** prepares Terms 1.1 (P62-06 A) and the README banner, with the close-out; the owner signed OA-1 to OA-4 on decision page 68; a draft until the owner's last look at the sheet's line and the banner, merged right before the 1.0.0 promote. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+Two arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1). **A1** corrects `BEFORE-LAUNCH.md` (the boxes the evidence meets, the owner's two page-62 store calls, two checks that cannot pass as written) and `legal/README.md`'s Mainnet line, and records the four known-limit dispositions; it opens ready. **A2** prepares Terms 1.1 (P62-06 A) and the README banner, with the close-out; the owner signed OA-1 to OA-4 on decision page 68 and the sheet's line and the banner on page 69; a draft, merged right before the 1.0.0 promote. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## The claims and what did not hold
 
@@ -61,11 +61,11 @@ Outsider builds older than the two fixes are AMO 0.28.0, 0.30.0, 0.30.1 and 0.30
 ## UI impact
 
 - **A1:** none. Repository documents only.
-- **A2 · the re-acceptance sheet** (popup, an install that accepted 1.0): appears once, listing 1.1's `changes`. P62-06 A, quoted from #864: "Ask once more at 1.0.0: they accepted a page marked not in effect." The words: P68-01 = B, "The first line only.", so the one line "These Terms now take effect. The version you accepted was a draft." The owner's note, "Reads very weirdly.", may mean that line too: it and two rewordings were drawn for the owner's last look before the merge (P69).
+- **A2 · the re-acceptance sheet** (popup, an install that accepted 1.0): appears once, listing 1.1's `changes`. P62-06 A, quoted from #864: "Ask once more at 1.0.0: they accepted a page marked not in effect." The words: P68-01 = B, "The first line only.", so the one line "These Terms now take effect. The version you accepted was a draft." The owner's note, "Reads very weirdly.", may mean that line too: it and two rewordings were drawn. P69-02 = C, "You accepted a draft of these Terms. This version is the one in effect.", replaces B, so the sheet lists that one line ([light](screenshots/p69-terms-line-c-light.png), [dark](screenshots/p69-terms-line-c-dark.png)).
 - **A2 · "v1.0" reads "v1.1"** wherever the version shows: the sheet's label and consent line, the hint after ticking in onboarding and the sheet (`LegalConsent.vue:31-32`), the declined page's "Terms v1.1 not accepted" (`legal/declined.vue:36`), Settings → About. Implied by P62-06 A.
 - **A2 · `nulo.sh/terms`, `/terms/v1.0/`:** P68-02 = A, "1.0 never takes effect: "Never in effect", a draft replaced by 1.1." The 1.0 row reads `Never in effect | A draft, replaced by 1.1 before it took effect.`, the version list "Version 1.0 never in effect", and the 1.1 row `«FILL» | First version in effect.`
 - **A2 · `nulo.sh/how-aztec-works`'s footer:** "preview build" → "early days", the footer `index.html` has carried since #791, on the owner's "it's not a PREVIEW" (#767).
-- **A2 · `README.md`'s banner:** P68-03 = A, the five-line banner, plus the bullet the owner's note asked for: people who used 0.31.x or an earlier preview build start fresh in 1.0, on a new recovery phrase or passkey, and move their funds (OA-2).
+- **A2 · `README.md`'s banner:** P68-03 = A, the five-line banner, plus the bullet the owner's note asked for: people who used 0.31.x or an earlier preview build start fresh in 1.0, on a new recovery phrase or passkey, and move their funds (OA-2). P69-03 = A, "Ship it as drawn." Note: "FYI: Once we ship Mainnet though, Mainnet will be default. But until then, yeah, its read perfect."
 
 ## Architecture & Implementation
 
@@ -79,7 +79,7 @@ Outsider builds older than the two fixes are AMO 0.28.0, 0.30.0, 0.30.1 and 0.30
 
 | # | Question | Decision |
 |---|---|---|
-| D1 | Arcs | A1 = docs and dispositions, ready (#888, merged); A2 = Terms 1.1, banner, close-out, draft until the owner's last look (both asks signed on page 68, so no A3) |
+| D1 | Arcs | A1 = docs and dispositions, ready (#888, merged); A2 = Terms 1.1, banner, close-out, a draft until the promote (both asks signed on page 68, the line and the banner on page 69, so no A3) |
 | D2 | #372, #684, #775 | known limits, conditions corrected; no owner ask: nothing a person sees changes and no product choice is open (Codex r1 asked for owner dispositions; rejected on the lane brief's rule) |
 | D3 | § 3's listing-URL box | open; today's fetches noted under it (Codex r1; reverses the draft's tick) |
 | D4 | rc.3 (b) | P68-04 = B: the box gives way to a § 3 step, the owner's send from the 1.0.0 candidate on the new Testnet, before the promote (A2) |
