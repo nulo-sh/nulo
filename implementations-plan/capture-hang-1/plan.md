@@ -1,7 +1,7 @@
 ---
 plan: capture-hang-1
 tier: light
-status: planned; Codex approve (round 3), awaiting the orchestrator
+status: arc 1 implemented, gate green, Codex loop converged; PR pending
 issues: "#885 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -52,7 +52,7 @@ For a maintainer who captures pictures for a popup PR:
 - **The guard runs in CI too.** Rejected (D3): CI takes no picture, so a hidden page at a `shotSend` site has no consequence there, and a required gate would go red on a precondition with no consequence, with no Firefox evidence at any shooting site.
 - **Wait for the capture with a bound, or retry it.** Rejected: a timeout or retry over a page that cannot paint (the lane's rule).
 
-## Phase 1 — show the page, refuse a hidden one
+## Phase 1 — show the page, refuse a hidden one ✓
 
 1. Take base timings first, from the base copy: case times of the file without capture mode, once per browser (Chrome on 24399338: 14.1 s and 22.6 s).
 2. Make the spec, guard, unit test and doc changes above.
@@ -66,6 +66,7 @@ For a maintainer who captures pictures for a popup PR:
 - Run the same file once without `NULO_E2E_SHOT_DIR`, on Chrome, then on Firefox. Pass: `2 passed` each. Record the case times beside the base.
 - Run capture mode once over every other file that shoots, on Chrome; record the exact file list in `lessons/phase-1.md` (`grep -rl` for `shotSend` and for `journal-page`'s shot helpers at the arc's head). Network: the 16 other network files that call `shotSend` and the 2 that call it through `journal-page.ts` (recon; one fewer once #886 deletes `connect-one-window`), in one `e2e:agent` run. Smoke: the 21 smoke files, on an armed build (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`, then `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 NULO_E2E_SHOT_DIR=<scratch> env -u EXTENSION_PATH bun run test:e2e --retry=0 <files>` from `apps/extension`). Pass: no guard refusal and no hang. A red that is not the guard is read honestly: one rerun for a known flake (the ledger in the e2e skill), a stop for anything else. A guard refusal is this issue's cause at another site: trace it, fix it the same way in that spec, list it in the PR, and rerun that file. Firefox gets no sweep: every page the suite opens there is a window; a missed site fails at once with the guard's message in a manual tool.
 - Layers: lint, typecheck, unit, smoke and network e2e (Chrome; Firefox for the touched spec).
+- **Result** (2026-10-20, head 7a68e198, retry 0): lint, `typecheck:all`, `test:all` exit 0; unit 3 passed; negative control red in 9.8 s with the guard's message; Chrome capture 3/3 and Firefox capture 1/1, six PNGs each; plain Chrome and Firefox `2 passed`; capture sweep: network 18 files (64 tests, 98 PNGs), smoke 21 files (105 passed, 1 skipped, 120 PNGs), no refusal. Case times (case 1 / case 2): base Chrome 14.1 / 22.6 s, Firefox 24.9 / 29.4 s; after Chrome 17.3 / 13.6 s, Firefox 21.2 / 20.8 s (one run each, host load 136-147). Log: [lessons/phase-1.md](lessons/phase-1.md).
 
 ## Security & Adversarial Considerations
 
@@ -84,6 +85,7 @@ Test code only: no product, permission, storage, wire or CI change. The capture 
 - D3 `shotSend` refuses a page not shown, in capture mode only.
 - D4 The regression test is the unit test (refusal, success control, CI boundary) plus the negative control; the capture runs are the proof.
 - D5 Correct the `chrome.ts` comment and README:275 that r2 contradicts; leave `wallet-pages.ts:141-144` as it is (its `bringToFront` is right).
+- D6 (deviation, the tree won) `shotSend` and `settleThemeTransitions` move to a new leaf module, `tests/e2e/fixtures/shots.ts`, and `send-page.ts` re-exports both, so no importer changes. Importing `send-page.ts` in the unit test pulled its fixture graph (`legal-drivers`, `wallet-pages`, `extension.ts`, `journal.ts`) into `tsconfig.scripts.json`'s program, which lacks the e2e `ProvidedContext` typings: `typecheck:all` failed with 33 errors in untouched files. Excluding the test from that program would loosen a gate; a re-export is the house pattern (`composables/{toast,outside}.js`). The page builds the testid selector itself in place of `send-page`'s private `sel`.
 
 ## Delivery
 
@@ -100,6 +102,10 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `2439
 **Round 2, Codex** (resume): conditional approve, 2 findings, both accepted: the gate and `/goal` now count three unit tests and the Firefox capture run; r2's capture D is confounded by C's screenshot lock, so the evidence rests on C (no flip) and r1 (after the flip), and F2 says "the same browser context".
 
 **Round 3, Codex** (resume): **approve**, high confidence; both fixes verified, no regression.
+
+**Implementation round 1** (diff 656ac563..2291972b). Codex (gpt-6.1-sol, high, session 01a1567c): conditional approve, 2 comment findings, both accepted: the `chrome.ts` comment kept two unverified claims beside r2's finding (rewritten to what the flags keep rendering and what they do not); the `shotSend` doc comment carried policy prose (trimmed). It found the move, the re-export and the guard's place behaviour-neutral. Opus diff review: approve, 2 nits accepted: the spec comment gave the dApp's fronting a reason I2 refutes (now: the rest of the case keeps its order); test 1 did not prove the refusal precedes the enter wait (it now asserts no `waitForFunction`). Fixes: 7a68e198.
+
+**Implementation round 2** (Codex resume): **approve**, no findings; the loop converged.
 
 **Round 1, Opus Plan:** conditional approve, 5 findings. #1 no Firefox capture run: accepted (as Codex #3). #2 the guard's place: accepted (first statement; browser-neutral message). #3 fake-Page details (`pretendToBeVisual`, async `evaluate`, `waitForFunction`, env and mock restore): accepted. #4 `chrome.ts:60-64` and README:275 contradict r2: accepted (D5). #5 case 2's CI conditions shift: no fix, recorded (I3). Also fixed: the title is 83 characters; "never returns" narrowed; the screenshot lock added to F2; recon's line range; the skill has an env-var table, not a focus section.
 
