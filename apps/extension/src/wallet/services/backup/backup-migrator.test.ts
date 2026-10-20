@@ -159,7 +159,7 @@ describe("backup-migrator", () => {
 		expect(res).toEqual({ kind: "migrated", from: 1, to: 2, data: v1Data() })
 	})
 
-	test("the same footprint authored imperatively still blocks import", async () => {
+	test("the same root, authored imperatively, still blocks import", async () => {
 		const networks = { kind: "root", root: NETWORK_STORAGE_ROOT } as const
 		const imperative = defineMigration({
 			version: 2,
@@ -188,7 +188,7 @@ describe("backup-migrator", () => {
 		})
 	})
 
-	test("a mixed footprint migrates its sliced root as it would alone", async () => {
+	test("a mixed footprint still migrates its sliced root", async () => {
 		const mixed = defineRowMapMigration({
 			version: 2,
 			description: "rename contact legacyName to name; add a network default",

@@ -23,7 +23,7 @@ import { CONTACT_STORAGE_ROOT, ContactSchema } from "@/wallet/services/contact/s
 import { NETWORK_STORAGE_ROOT } from "@/wallet/services/network/spec"
 import { migrateBackupData } from "./backup-migrator"
 import { STORED_SHAPES, type StoredShape } from "@/wallet/storage/stored-shapes"
-import { committedBaseline, decodeGoldens } from "@/wallet/storage/stored-shapes/baseline"
+import { committedBaseline, decodeGoldens, emptyBackup } from "@/wallet/storage/stored-shapes/baseline"
 import type { z } from "zod"
 import { BACKUP_BLOCKED_ROOTS, BACKUP_SLICE_REGISTRY } from "./backup-migration-registry"
 import { applyRowTransform, defineRowMapMigration, isBackupSafeMigration, rowMapDefOf, type RowMapTransform } from "./row-map-migration"
@@ -46,10 +46,9 @@ const backupFacing: Migration[] = [...new Set([...backupMigrations, backupMigrat
 const touchesBlocked = (m: Migration): boolean => [...m.reads, ...m.writes].some((r) => r.kind === "root" && blocked.has(r.root))
 const blocksImport = (m: Migration): boolean => !isBackupSafeMigration(m) || touchesBlocked(m)
 
-/** The real import of an empty older backup with `m` pending. A refusal of `m` itself is
- *  `incompatible`; a read of a slice the empty backup lacks is `failed`. */
+/** The real import, with `m` pending, of an older backup that carries every required slice empty. */
 const importOf = (m: Migration) =>
-	migrateBackupData({ data: {}, backupSchemaVersion: m.version - 1, migrations: [m], baselineVersion: m.version - 1 })
+	migrateBackupData({ data: emptyBackup(), backupSchemaVersion: m.version - 1, migrations: [m], baselineVersion: m.version - 1 })
 
 describe("footprint coverage (anti-drift keystone)", () => {
 	test("the live array is exactly the real migrations in unstamped builds; backup array matches", () => {
@@ -60,7 +59,7 @@ describe("footprint coverage (anti-drift keystone)", () => {
 	test("every backup-facing migration that blocks backup import is explicitly acknowledged, and the import agrees", async () => {
 		for (const m of backupFacing) {
 			const res = await importOf(m)
-			expect(res.kind === "incompatible", `migration ${m.version}: ${JSON.stringify(res)}`).toBe(blocksImport(m))
+			expect(res.kind, `migration ${m.version}: ${JSON.stringify(res)}`).toBe(blocksImport(m) ? "incompatible" : "migrated")
 			if (blocksImport(m)) {
 				expect(
 					IMPORT_BLOCKING_ACK.has(m.version),

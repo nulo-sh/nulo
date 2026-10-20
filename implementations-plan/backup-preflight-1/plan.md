@@ -37,7 +37,7 @@ Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 - F5 Three test files restate the uncovered rule: `footprint-coverage.test.ts:52-67`, `backup-migration-core.pins.test.ts:186-262`, `backup-migrator.test.ts:149-165`.
 - F6 #938 edits lines 24-36 of `footprint-coverage.test.ts`, line 20 of the backup README, line 133 of `ARCHITECTURE.md` and lines 142-146 of `CLAUDE.md`, whose line 146 says such a migration blocks import "until #934". Git conflicts on a change to the next line; one unchanged line between merges.
 
-**Inferences**: I1 While storage namespaces stay disjoint, a backup-safe migration's transform of one ref never sees another ref's rows (`up()` handles each root alone), so an unsliced ref of a mixed footprint changes nothing for its sliced refs. I2 Namespaces are disjoint today: no real root or value key contains `@` or names another root's row. Nothing refuses such a name (recon). An authored root `nulo:core:contacts@x` would match contact rows with ids `x@…` through staging's prefix read, live and in a backup alike, so both runs still apply the same transforms; denormalize refuses a changed id. Needs conditions the wallet does not support; no fix (Codex 3, Opus 1.1).
+**Inferences**: I1 While storage namespaces stay disjoint, a backup-safe migration's transform of one ref never sees another ref's rows (`up()` handles each root alone), so an unsliced ref of a mixed footprint changes nothing for its sliced refs. I2 Namespaces are disjoint today: no real root or value key contains `@` or names another root's row. Nothing refuses such a name (recon). An authored root `nulo:core:contacts@x` would match contact rows with ids `x@…` through staging's prefix read, live and in a backup alike, so both runs still apply the same transforms; denormalize refuses a changed id. The "alike" argument does not cover a name aliasing a block-listed root's rows (`nulo:core:profiles@x`): the backup run passes profile rows through while the live run transforms them. Needs conditions the wallet does not support; no fix; a closed `known-limit` issue at close-out (Codex 3, Opus 1.1, Opus post-impl 3).
 
 **Asks**: none for the owner. D1 departs from the brief's literal "whole footprint" wording; both panel legs back it, and the report and PR body flag it to the orchestrator.
 
@@ -83,7 +83,7 @@ None. The "Incompatible backup" notice and every remaining reason it shows stay 
 | D2 | The engine runs the migration over the scratch store as a no-op | drop it from the `Migrator` run | the engine needs the whole version chain; the no-op uses it unchanged |
 | D3 | `footprint-coverage` keeps its own `blocksImport` rule; exact kinds on the scratch migrations; agreement on every backup-facing one | export the preflight's predicate; the real import as the only oracle; kind-only agreement on the scratch cases | the rule stays readable where the ack list is; agreement catches a preflight refusal the rule misses, which would ship unacknowledged; exact kinds catch a `failed` regression (Codex 1, Opus 3.4) |
 | D4 | No change to `snapshot.test.ts` (R3 here, R5 in #938) | add a carve-out there | neither restates the rule; both drive the real migrator, so the fix reaches them (F4) |
-| D5 | Leave `CLAUDE.md:147` ("registry-covered footprints"); comment on #938 when this PR opens | edit it now (Codex 2) | line 147 is next to #938's 146, which must drop its "until #934" clause anyway, so the merge would conflict (F6) and the brief asks for a textual merge; #938 fixes both lines in one edit; the close-out fixes 147 if #938 merged first |
+| D5 | Leave `CLAUDE.md:147` ("registry-covered footprints"); comment on #938 when this PR opens, naming that phrase and #938's own "until #934" clause on line 146 | edit it now (Codex 2) | line 147 is next to #938's 146, which must drop its "until #934" clause anyway, so the merge would conflict (F6) and the brief asks for a textual merge; #938 fixes both lines in one edit; the close-out fixes both if #938 merged first |
 | D6 | No e2e scenario | a smoke import | nothing a browser could disagree on; the unit layer drives the real migrator; suite wall-clock unchanged |
 
 ## Audit verdicts
@@ -100,6 +100,12 @@ None. The "Incompatible backup" notice and every remaining reason it shows stay 
 
 **Round 2** (Codex, resumed, verification): `approve`, no remaining material finding; D5's fallback accepted without new evidence to reopen it.
 
+**Post-implementation round 1** (diff `origin/dev...backup-preflight-1-a1`). Codex (gpt-6.1-sol, high, session `01a159f0`): `FINDINGS: 0`. Opus 5.5 diff review: `FINDINGS: 4`, each checked against the tree:
+- Opus 1, demonstrated: #938's line 146 also cites "until #934"; D5's relay and fallback covered only line 147 → both named (D5, step 4).
+- Opus 2, plausible: `importOf` used `data: {}`, so a migration reading a required slice stopped at the absent read and the loop proved only "not refused" → the probe seeds `emptyBackup()` (`stored-shapes/baseline.ts`, now exported; one line, clear of #938's hunks) and asserts the exact kind for every backup-facing migration.
+- Opus 3, needs unsupported conditions: a ref aliasing a block-listed root's rows now passes the preflight → I2 qualified; known limit at close-out; no code change.
+- Opus 4: two test names claimed more than they checked → renamed.
+
 ## Delivery
 
 - One PR against `dev`, opened ready after Phase 2 and the Codex loop. No label at creation.
@@ -112,7 +118,7 @@ The standard is `implementations-plan/README.md` § Post-implementation standard
 - Step 1 is absent (`code_review: off`).
 - Step 2 once, after Phase 2, over `git diff origin/dev...backup-preflight-1-a1`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, then `resume-codex.sh` until a round has no material finding; hard stop at three. One Opus 5.5 diff review (`Agent`, `model: "opus"`, `general-purpose`) beside round 1.
 - Step 3: `gh pr create`, then `gh pr checks <n> --watch`. Do not merge.
-- Step 4: the close-out as the PR's final commits; merge `origin/dev` first. If #938 merged by then, fix `CLAUDE.md:147` there (D5).
+- Step 4: the close-out as the PR's final commits; merge `origin/dev` first. If #938 merged by then, fix `CLAUDE.md`'s "registry-covered footprints" and drop its "until #934" clause (D5). File I2's aliasing as a closed `known-limit` issue.
 - Step 5 after the merge: `agent-worktree done backup-preflight-1 --merged`, once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/backup-preflight-1/plan.md` succeeds.
 
 ## Seeds
