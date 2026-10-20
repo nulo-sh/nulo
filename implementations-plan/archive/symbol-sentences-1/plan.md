@@ -131,7 +131,7 @@ Branch `symbol-sentences-1-a1` from this plan's commit. No PR before the pre-del
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 05313d5e6. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 05313d5e6. Plan-specific values:
 
 - Attempts in `lessons/phase-N.md`; `agent-worktree status symbol-sentences-1 "phase N green: <next>"` at each gate; three failures on one step: stop.
 - Step 1 is absent (`code_review: off`).
