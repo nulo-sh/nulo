@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 const profileApi = vi.hoisted(() => ({
 	getProfiles: vi.fn(async () => [] as Array<{ name: string }>),
 	importMnemonic: vi.fn(async () => ({ id: "p1", name: "Main", type: "password" })),
+	importPasskey: vi.fn(async () => ({ id: "p1", name: "Main", type: "passkey" })),
 }))
 vi.mock("@/utils/core", () => ({ managers: { profile: profileApi } }))
 const bootstrap = vi.hoisted(() => ({ bootstrapActiveProfile: vi.fn(), hydrateKnownProfile: vi.fn() }))
@@ -81,6 +82,7 @@ vi.mock("@/composables/useProfileImportFlow", async (importOriginal) => {
 })
 
 import { BrutalistTitle, Flex, Input, Text } from "@nulo/design"
+import { PasskeyProfileExistsError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
 import { EncryptionKey } from "@nulo/wallet-crypto"
 import { useToast } from "@/composables/toast"
 import { enterOn, nativeInput } from "../../../tests/helpers/credential-pins"
@@ -250,6 +252,19 @@ describe("onboarding import", () => {
 
 		expect(bootstrap.bootstrapActiveProfile).toHaveBeenCalledWith({ id: "p9", name: "Imported", type: "password" })
 		expect(router.push).toHaveBeenCalledWith("/onboarding/learn")
+	})
+
+	test("a passkey whose profile is already here gets its own notice, not the authenticator one", async () => {
+		await mountImport()
+		const existing = new PasskeyProfileExistsError(undefined, { existingProfileName: "Daily" })
+		profileApi.importPasskey.mockRejectedValueOnce(walletErrorFromPayload(existing.toPayload()))
+
+		await importFlow.api!.handleImportPasskey()
+
+		const { useNotificationStore } = await import("@/stores/notification.store")
+		expect(useNotificationStore().create).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({ payload: expect.objectContaining({ title: "Passkey already in use" }) }),
+		)
 	})
 
 	test.each([
