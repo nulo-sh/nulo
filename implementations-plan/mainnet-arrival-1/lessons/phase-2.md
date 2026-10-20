@@ -57,8 +57,15 @@ Each named mutation of the new code turns its test red (each reverted after the 
   4. An inaccurate testid comment on the layout. Reworded.
   5. Capture scaffolding for OA-2's variant B. Removed: B's pictures already exist.
   6. A caught error was logged bare. It now goes under `{ error }`.
-- **Gates on the round-1 head:**
-  - `bun run test`: 868 files.
-  - Lint and typecheck exit 0.
-  - Chrome smoke at retry 0, the arrival, stale-network and legal-acceptance files: 19 tests.
-  - Firefox smoke at retry 0, the same three files: 19 tests.
+- **Gates before round 1:** `bun run test` passed 868 files; lint and typecheck exited 0; Chrome and Firefox smoke at retry 0 passed 19 tests each, in the arrival, stale-network and legal-acceptance files.
+
+## Review round 2, 2026-10-19
+
+- **Codex** (resumed): `clean`. Its words: "No new material findings." It checked each fix, and found no new storage writes, no new lock dependencies, and no drift from A1's invariants. The loop has converged.
+
+## Final gates, merged head `e9f9cb5f` (origin/dev `33c0aa17`), 2026-10-20
+
+- `bun run lint`, `typecheck:all`, `test:all` and `audit:vue` exit 0; `check:plans` reports 0 findings.
+- Smoke at retry 0 on armed builds, the arrival, stale-network and legal-acceptance files, 19 tests on each browser:
+  - Chrome: 209 s wall-clock; the arrival scenario takes 8.1 s.
+  - Firefox: 367 s wall-clock; the arrival scenario takes 17.6 s.
