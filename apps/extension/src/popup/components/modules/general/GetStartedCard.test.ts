@@ -11,7 +11,6 @@ const COMPONENTS = { Flex, Icon, Text, ItemsContainer, SettingItem }
 
 const ALL: GetStartedItem[] = ["phrase", "backup", "aztec", "feeJuice", "presto"]
 const open = (...items: GetStartedItem[]): GetStartedStep[] => items.map((item) => ({ item, done: false }))
-/** `done` lists the items checked, in the order given by `items`. */
 const steps = (items: GetStartedItem[], done: GetStartedItem[] = []): GetStartedStep[] =>
 	items.map((item) => ({ item, done: done.includes(item) }))
 
@@ -42,14 +41,16 @@ describe("general/GetStartedCard", () => {
 	})
 
 	test("steps are numbered in the given order; the first open one is the next, filled", () => {
-		const w = mountCard(steps(["phrase", "aztec", "feeJuice", "presto"], ["phrase"]))
-		expect(["aztec", "feeJuice", "presto"].map((item) => mark(w, item as GetStartedItem).text())).toEqual(["2", "3", "4"])
-		expect(w.findAll('[aria-current="step"]').map((el) => el.attributes("data-testid"))).toEqual(["get-started-aztec"])
+		const order: GetStartedItem[] = ["presto", "feeJuice", "phrase", "aztec"]
+		const w = mountCard(steps(order, ["presto"]))
+		expect(w.findAll('[role="listitem"]').map((li) => li.attributes("data-testid"))).toEqual(order.map((item) => `get-started-${item}`))
+		expect((["feeJuice", "phrase", "aztec"] as const).map((item) => mark(w, item).text())).toEqual(["2", "3", "4"])
+		expect(w.findAll('[aria-current="step"]').map((el) => el.attributes("data-testid"))).toEqual(["get-started-feeJuice"])
 		const filled = (item: GetStartedItem) =>
 			mark(w, item)
 				.classes()
 				.some((name) => /next/.test(name))
-		expect(["aztec", "feeJuice", "presto"].map((item) => filled(item as GetStartedItem))).toEqual([true, false, false])
+		expect((["feeJuice", "phrase", "aztec"] as const).map(filled)).toEqual([true, false, false])
 	})
 
 	test("a done step stays: a check in its number's place, its title struck, Done in place of the chevron, and no action", async () => {
@@ -59,10 +60,23 @@ describe("general/GetStartedCard", () => {
 		expect(mark(w, "aztec").text()).toBe("")
 		expect(mark(w, "aztec").find("svg").exists()).toBe(true)
 		expect(title(w, "aztec")).toBe("How Aztec works")
+		const struck = (item: GetStartedItem) =>
+			row(w, item)
+				.classes()
+				.some((name) => /done/.test(name))
+		expect([struck("aztec"), struck("feeJuice")]).toEqual([true, false])
 		expect(row(w, "aztec").text()).toBe("How Aztec worksDone")
 		expect(row(w, "aztec").findAll("svg")).toHaveLength(1)
 		expect(row(w, "aztec").find("button").exists()).toBe(false)
 		expect(row(w, "feeJuice").find("button").exists()).toBe(true)
+		await row(w, "aztec").trigger("click")
+		expect(w.emitted("select")).toBeUndefined()
+	})
+
+	test("a step done while the card is shown loses its action", async () => {
+		const w = mountCard(open("phrase", "aztec"))
+		await w.setProps({ steps: steps(["phrase", "aztec"], ["aztec"]) })
+		expect(row(w, "aztec").find("button").exists()).toBe(false)
 		await row(w, "aztec").trigger("click")
 		expect(w.emitted("select")).toBeUndefined()
 	})

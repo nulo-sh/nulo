@@ -29,7 +29,7 @@ post_implementation_hardening: not scheduled
   - How Aztec works opens `https://nulo.sh/how-aztec-works`, the landing's page (#722).
 - **Superseded or dropped:** OA-17's O0 to O4, by P69-01. OA-21's Q1, Q2 and Q4 to Q6 were pictures only, drawn by a scratch spec that was never committed; no code of theirs exists.
 - **Known limits:** #867.
-- **Open items:** none.
+- **Open items:** {{ISSUE}}, an `owner-decision` issue: the count and the numbers while the funded banner holds the phrase step (D38).
 - **Lessons:** none promoted. `lessons.md` is 97 B under its budget, and the one candidate (commit the regenerated auto-import files with a new `src/utils/` export, [lessons/phase-6.md](lessons/phase-6.md)) is reported by CI's build on the first push.
 - **Seeds retired:** the `/goal` and `/loop` seeds below; they are not instructions.
 
@@ -92,7 +92,7 @@ Rows: **P** "Save your recovery phrase", **B** "Back up this wallet", **A** "How
 
 | # | Case | Password | Passkey | Evidence |
 |---|---|---|---|---|
-| M1 | The install's first profile, created (tab or popup) | P A F R numbered 1 to 4, "0 of 4 done", Hide | B A F R, the same | `utils/get-started.test.ts:125,138`; `popup/pages/general.test.ts:155,244`; `GetStartedCard.test.ts:34,44`; e2e `security-backup:58` |
+| M1 | The install's first profile, created (tab or popup) | P A F R numbered 1 to 4, with the count and Hide | B A F R, the same | `utils/get-started.test.ts:125,138`; `popup/pages/general.test.ts:155,244`; `GetStartedCard.test.ts:34,44`; e2e `security-backup:58` |
 | M2 | A profile created beside another | P alone: no count, no Hide | ∅ | `get-started.test.ts:205,211`; `general.test.ts:255,261`; `service.integration.test.ts:1469`; e2e `security-backup:86` |
 | M3 | Imported from a phrase, a passkey or a full backup | ∅, never ! | ∅ | `get-started.test.ts:198`; `general.test.ts:228,236`; `service.integration.test.ts:1436` (each import's call site); e2e `passkey-paths:166` (both browsers), network `hero-prices-unavailable:47` |
 | M4 | Imported, then a profile created (the owner's case) | P alone | ∅ | **new** `service.integration.test.ts:1489` |
@@ -102,7 +102,7 @@ Rows: **P** "Save your recovery phrase", **B** "Back up this wallet", **A** "How
 | M8 | Fee Juice held, or arriving after creation | F ✓ at the read that sees it (I2), and the profile's flag is written; ! replaces P, so the steps are A F R, numbered from 1 | F ✓ | **new** `general.test.ts:148` (password), `:181` (arrival while mounted, the flag written); **new** network e2e step `fee-methods:358` (on a real node: A, F ✓, R and the stored flag) |
 | M9 | Fee Juice already there at import | as M3 | as M3 | network `hero-prices-unavailable:47` |
 | M10 | Fee Juice spent back to zero | F stays ✓ (P67-02 B); with no tokens, P returns open in place of ! | F stays ✓ | **new** `general.test.ts:181` (passkey); `get-started.test.ts:178` (the flag); `:125,142` (P and !) |
-| M11 | Tokens only | ! replaces P; F open | steps unchanged | `general.test.ts:140,171` |
+| M11 | Tokens only | ! replaces P; F open, also while the gas read is still out | steps unchanged | `general.test.ts:140,171`; `get-started.test.ts:171` (an unread read leaves F open) |
 | M12 | A failed first Fee Juice read (a failed refresh keeps the last value) | F open | F open | `general.test.ts:133` (arc 1's D3: a failed read claims nothing) |
 | M13 | Deployed or not | no input | no input | `GetStartedInput` has no such field (typecheck) |
 | M14 | Another network or account selected | flags kept; F stays ✓ once Home has seen any account of the profile holding Fee Juice, else it follows the selected one | same | **new** `general.test.ts:201` |
@@ -122,9 +122,9 @@ Rows: **P** "Save your recovery phrase", **B** "Back up this wallet", **A** "How
 
 The arc changes five things: (a) a merge that brings P50-01 B into #743; (b) tests that pin the matrix; (c) pictures for the asks; (d) the PR body; (e) P67-02 B. The view rule stays the single source (`getStartedView`), so every cell's test is a one-line input to it, or one Home mount through the real storage facade.
 
-**P67-02 B.** One more per-profile UI key, `nulo:ui:getStartedFeeJuiceHeld@<id>`, in `src/utils/profile-ui-keys.ts` beside the other Get started flags, so a profile deletion or a row commit removes it and no backup carries it. `feeJuiceShown` also needs the flag unset. Home writes it (`general.vue`, a watcher) when the selected account's gas read is positive and the profile's flags are read and unset: the read the row already follows, on the one screen that shows the row. Pre-production, the new key needs no migration (CLAUDE.md § Persisted-storage shape changes). The stored-shape registry of lane migration-rule-1 is not on `dev` (b6208221), so there is nothing to register.
+**P67-02 B.** One more per-profile UI key, `nulo:ui:getStartedFeeJuiceHeld@<id>`, in `src/utils/profile-ui-keys.ts` beside the other Get started flags, so a profile deletion or a row commit removes it and no backup carries it. `feeJuiceShown` also needs the flag unset (since P69-01 C, the flag checks the step instead). Home writes it (`general.vue`, a watcher) when the selected account's gas read is positive and the profile's flags are read and unset: the read the row already follows, on the one screen that shows the row. Pre-production, the new key needs no migration (CLAUDE.md § Persisted-storage shape changes). The stored-shape registry of lane migration-rule-1 was not on `dev` then (b6208221); phase 7 registers the key once it is.
 
-**P69-01 C.** `getStartedView` returns `steps: { item, done }[]` in the drawn order instead of the items still open. A step's done flag is the one that used to remove its row: `phraseSaved`, `backupSaved`, `aztecOpened`, `feeJuiceHeld` or a positive Fee Juice read, and `prestoReached`. Which steps are listed is unchanged: the phrase step for a password profile unless the banner takes it, and the others for the install's first created profile while the card is not hidden. When every listed step is done the view lists none, so the card leaves. `GetStartedCard` numbers the steps, fills the first open one, puts a check in a done step's place, and makes a done row inert (no handler, so `SettingItem` renders no button), with "Done" in the chevron's place. The count "n of m done" sits beside Hide when more than one step is listed.
+**P69-01 C.** `getStartedView` returns `steps: { item, done }[]` in the drawn order instead of the items still open. A step's done flag is the one that used to remove its row: `phraseSaved`, `backupSaved`, `aztecOpened`, `feeJuiceHeld` or a positive Fee Juice read, and `prestoReached`. The phrase step is listed for a password profile unless the banner takes it, and the others for the install's first created profile while the card is not hidden. Get Fee Juice is now listed while its read is out, open; before, that read left the row out. When every listed step is done the view lists none, so the card leaves. `GetStartedCard` numbers the steps, fills the first open one, puts a check in a done step's place, and makes a done row inert (no handler, so `SettingItem` renders no button), with "Done" in the chevron's place. The count "n of m done" sits beside Hide when more than one step is listed.
 
 **Alternatives not taken.**
 - *The worker writes the flag on any positive gas read.* A second writer of a UI key, in a service that knows nothing of the card; the row only shows on Home, whose read decides it.
@@ -140,7 +140,7 @@ The arc changes five things: (a) a merge that brings P50-01 B into #743; (b) tes
 
 ## Phases
 
-Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exit 0. Smoke runs from `apps/extension` against an armed build (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:<browser>`): `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 NULO_E2E_RETRY=0 bun run test:e2e tests/e2e/<file>`, and the Firefox twin under `NULO_E2E_BROWSER=firefox`. Smoke claims its own egress ports in `~/.agents/ports.md`. Network runs from the root: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<file>.test.ts`. Start a build or an e2e run only while load1 < 150. A wait is a bounded loop inside one tool call. Matrix ids (M1 to M22) stay out of test names and comments.
+Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exit 0. Smoke runs from `apps/extension` against an armed build (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:<browser>`): `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 NULO_E2E_RETRY=0 bun run test:e2e tests/e2e/<file>`, and the Firefox twin under `NULO_E2E_BROWSER=firefox`. Smoke claims its own egress ports in `~/.agents/ports.md`. Network runs from the root: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<file>.test.ts`. Start a build or an e2e run only while load1 < 150. A wait is a bounded loop inside one tool call. Matrix ids (M1 to M23) stay out of test names and comments.
 
 **1. Fold onboarding-4 and `dev`.** ✓ (2026-10-19)
 - `git merge origin/onboarding-4-a1` (9c0d5c25, clean; 8 signed commits; its archived plan kept), then `origin/dev` (56361a49, clean, 6 commits), then `bun install --frozen-lockfile`.
@@ -247,9 +247,9 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
 | D33 | P67-02 B's writer | Home, on the read the row follows | the worker on any gas read (a second writer of a UI key, in a service that knows nothing of the card) |
 | D34 | P67-03 | no reset mark: the flags are per profile and survive the purge (F4), and B removes the one row that read the network | a reset mark (OA-19 C and D, both declined by the owner's note) |
 | D35 | OA-21 options | Q1 to Q6 (`OWNER-ASKS.md`); recommend Q3, numbered steps that turn into checks | a ring per row whose row then leaves (it never gets its check); invented copy (each drawing uses only today's titles and values, plus the counts and "Next") |
-| D36 | S1a's reset step | the Fee Juice flag stored before the lock; the rows after the reset are P, A and R | Hide before the lock (it hides F itself, so it cannot show the flag at work); a gas stub in smoke (a node fixture for one flag) |
+| D36 | S1a's reset step | the Fee Juice flag stored before the lock; the rows after the reset are P, A and R (since P69-01 C: P, A, F ✓ and R) | Hide before the lock (it hides F itself, so it cannot show the flag at work); a gas stub in smoke (a node fixture for one flag) |
 | D37 | Q3's model | the view lists each step with its done flag, in the drawn order; no card once every listed step is done | a progress record of its own (a second source for what the flags already say) |
-| D38 | The banner and the phrase step | the signed rule holds: a funded password wallet with its phrase unsaved gets the banner, and the phrase step leaves the list, so the steps read A F R, numbered from 1, "n of 3 done" | keeping P listed beside the banner (the phrase asked for twice, and a signed cell changed) |
+| D38 | The banner and the phrase step (**not signed**: OA-21 told the owner the count covers the four steps the profile started with; owner-decision {{ISSUE}}) | the signed rule holds: a funded password wallet with its phrase unsaved gets the banner, and the phrase step leaves the list, so the steps read A F R, numbered from 1, "n of 3 done"; saving the phrase then brings P back as step 1, checked, and the count to "of 4" | keeping P listed beside the banner (the phrase asked for twice, and a signed cell changed) |
 | D39 | Accessibility (the owner's delegation) | the steps are a list, so assistive tech hears each step's position and the total; the number and the check are `aria-hidden`; a done step says "Done" in words; the next step is `aria-current="step"`; the count is a polite `role="status"`, announced when it changes while Home is open | `aria-label` on the number box (a name on a generic element, which screen readers do not read reliably); a count announced on every mount |
 | D40 | The card's script | plain `<script setup>`, as most of the extension's SFCs: with `lang="ts"`, vue-tsc types the JS `SettingItem`'s slots as `{}` | typing `SettingItem`'s slots (a shared row changed for one consumer) |
 | D41 | E2E reads of a done step | `data-done` on the row's testid, and the count's own testid | text or role selectors (CLAUDE.md § testid preservation rule) |
@@ -306,6 +306,17 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test`, each exi
 | A stale peek from before a reset writes the flag (I3); dust Fee Juice ends the row | both | accepted: the owner's "same user" reading; before this change dust already hid the row while held |
 
 **Round 2 fix loop, round 2** (resumed session `01a15638`, verify only): "Clean — high confidence from static inspection." The loop converged at round 2.
+
+**Round 3 fix loop, round 1** (Codex gpt-6.1-sol high, session `01a158e5`; an Opus 5.5 diff review beside it):
+
+| Finding | Source | Disposition |
+|---|---|---|
+| While the funded banner holds the phrase step, the count reads "of 3" and the steps renumber; OA-21 told the owner the count covers the four steps the profile started with | Opus, demonstrated | not changed: the owner's call, filed as {{ISSUE}}; D38 marked not signed |
+| An unread Fee Juice read now lists F open, where the row used to be absent; plan text said the listed steps were unchanged | Opus, demonstrated | kept (the step is listed for the profile; not known to be held is open); the plan, M11 and the PR body say so |
+| The order test used the canonical order, and nothing asserted the struck title; nothing pinned a step turning done while shown | both | fixed: a shuffled order, the done class asserted, a `setProps` case; the first two red-proven |
+| Stale comments (`general.vue`'s watcher, `firstProfileSteps`) and a test comment restating its line | both | fixed |
+| Plan text: the registry "absent", D36's P A R, M1's unpinned "0 of 4", "M1 to M22" | both | fixed |
+| The chevron's unnamed `role="img"` svg | Codex | not taken: inherited by every `SettingItem` row in Settings, and the card adds none |
 
 ## Delivery
 

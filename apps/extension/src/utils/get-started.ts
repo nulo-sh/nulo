@@ -109,7 +109,8 @@ export function combineHoldings(a: Holdings, b: Holdings): Holdings {
 
 type Ready = GetStartedInput & { type: "password" | "passkey"; flags: GetStartedFlags; prestoReached: boolean }
 
-/** Every step but the phrase, done or not; a profile created while another existed lists none. */
+/** Every step but the phrase, done or not; a hidden card, or a profile created while another
+ *  existed, lists none. */
 function firstProfileSteps(i: Ready): GetStartedStep[] {
 	if (i.flags.notFirst || i.flags.hidden) return []
 	const steps: GetStartedStep[] = []
