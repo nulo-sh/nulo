@@ -10,3 +10,4 @@ Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 - [mainnet-arrival-1](mainnet-arrival-1/plan.md) — A1 in review; A2 waits on OA-1 and migration-rule-1 — a default network a later build adds reaches every existing profile: the offer record and pass (A1), the arrival flow after OA-1 and the real update e2e (A2) (#875)
 - [migration-rule-1](migration-rule-1/plan.md) — A1 in review — from 1.0.0 every stored-shape change ships a migration: a registry of stored shapes and its snapshot guard, a passkey-backup refusal, a 0.31.0 in-place update test, the flip (#865)
 - [viewer-flake-1](viewer-flake-1/plan.md) — arc 1 in review, arc 2 waits for owner ask A1 — the logs viewer holds through a follow still due; viewers-csp reads what the viewer judges (#849)
+- [terminal-card-flake-1](terminal-card-flake-1/plan.md) — planned, Codex approve, A1 in progress — read the terminal card in the wait that finds it, once the router has drawn the page it names (#903)
