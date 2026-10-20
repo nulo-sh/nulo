@@ -13,6 +13,7 @@
 /** Components */
 import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
 import SecretUnlockSection from "@/components/composite/SecretUnlockSection.vue"
+import StatusCard from "@/components/composite/StatusCard.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 
 /** Services */
@@ -187,49 +188,19 @@ onBeforeUnmount(() => {
 			-->
 
 			<template v-else-if="backupStatus">
-				<!--
-				Working states (progress = bundling the backup, encrypting =
-				sealing it with a password). Previously this block rendered
-				nothing while the button below ticked through "Creating
-				Backup…" / "Encrypting…" — the page looked empty for ~1-3s.
-				This inline status card mirrors the in-page-modal vibe
-				without hijacking the screen (the modal is reserved for
-				user-driven waits like the passkey ceremony).
-
-				Wrapped in `export_section_last` so it participates in the
-				page's existing 20px vertical rhythm (matches the agreement
-				gate's section frame above).
-
-				A11y: the wrapper is announced via `role="status"` +
-				`aria-live="polite"` (same pattern as
-				TransactionAwaitingCard.vue:37), the spinner is decorative
-				(`aria-hidden`), and the heading is left as a plain span so
-				the page's existing heading hierarchy isn't fractured
-				(CollapsingHeroLayout.vue:63 uses spans for the hero, no h1).
-				-->
 				<div
 					v-if="backupStatus === 'progress' || backupStatus === 'encrypting'"
 					class="export_section_last"
 				>
-					<div
-						:class="$style.status_card"
+					<StatusCard
+						:title="backupStatus === 'encrypting' ? 'Encrypting your backup' : 'Creating your backup'"
+						:description="
+							backupStatus === 'encrypting'
+								? 'Sealing the file with your password. Only you can open it.'
+								: 'Gathering your wallet data into your backup file.'
+						"
 						data-testid="backup-status-card"
-						role="status"
-						aria-live="polite"
-						aria-atomic="true"
-					>
-						<Spinner size="28" color="--nulo-accent" aria-hidden="true" />
-						<span :class="$style.status_title">
-							{{ backupStatus === "encrypting" ? "Encrypting your backup" : "Creating your backup" }}
-						</span>
-						<p :class="$style.status_subtitle">
-							{{
-								backupStatus === "encrypting"
-									? "Sealing the file with your password. Only you can open it."
-									: "Gathering your wallet data into your backup file."
-							}}
-						</p>
-					</div>
+					/>
 				</div>
 
 				<div v-else class="export_section">
@@ -421,42 +392,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
-/* In-page status card for the working states (progress / encrypting).
-   Visual language echoes PasskeyCeremonyDialog (centered, padded, light
-   border, spinner + title + subtitle) so the wallet feels cohesive
-   across waiting moments — but inline, not as a screen-blocking modal.
-
-   Outer spacing intentionally NOT defined here — the `export_section_last`
-   wrapper class supplies the page's standard 20px vertical rhythm. We
-   only style the card interior (centered column, padded surface, border). */
-.status_card {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 14px;
-
-	padding: 32px 24px;
-
-	border: 1px solid var(--nulo-border);
-	background: var(--nulo-surface-low);
-
-	text-align: center;
-}
-
-.status_title {
-	composes: type--row-title from global;
-	font-size: 16px;
-	color: var(--txt-primary);
-}
-
-.status_subtitle {
-	composes: type--body from global;
-	line-height: 1.5;
-	color: var(--nulo-secondary);
-	margin: 0;
-	max-width: 280px;
-}
-
 .error_text {
 	composes: type--body from global;
 	color: var(--txt-danger);
