@@ -64,7 +64,7 @@ The issue's claim, "the row's condition does not follow the about:addons toggles
 
 None. No component, copy or route changes. No screenshot is needed (the brief asks for pictures only if the row changes).
 
-## Phase 1 (arc 1): pin the owner's toggles in the e2e; document them
+## Phase 1 (arc 1): pin the owner's toggles in the e2e; document them ✓
 
 Change map:
 - `apps/extension/tests/e2e/presto-host-permission.test.ts`:
