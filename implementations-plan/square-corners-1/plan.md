@@ -16,7 +16,7 @@ standard: implementations-plan/README.md § Post-implementation standard, read a
 # square-corners-1: the notice card goes square; the other rounded corners go to the owner
 
 Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (OA-1).
-Size: 154 lines, over the 150 target by the record of five review rounds, which nothing else restates.
+Size: 156 lines, over the 150 target by the record of six review rounds, which nothing else restates.
 
 | Arc | Issue | Branch | PR line |
 |---|---|---|---|
@@ -131,6 +131,8 @@ No trust boundary moves: no dApp input, storage, message, permission, log or dep
 **Post-implementation round 1** (diff `origin/dev...square-corners-1-a1`). Codex (gpt-6.1-sol, high, session `01a15930`) `findings: 2`; Opus 5.5 diff review `findings: 4`. All accepted and fixed:
 - Demonstrated by trace: a style built in script or a `v-bind` spread rounded the card past the pin, and an inline `0` failed it (Codex 1-2, Opus 1) → Phase 1 as written now; Opus 2: non-vacuity reaches `notification-description`, not the note's italic literal.
 - Opus 3-4: the index's count, this file's status and the helper's signature were stale → fixed. Red/green re-proved: the base card fails 1 of 16, head passes 16.
+
+**Post-implementation round 2** (Codex, resumed): `findings: 1`, demonstrated: the hand-split inline parser missed `border-radius/**/: 16px`, which the round-1 check caught → inline styles parse through `parseSource` as CSS; a control. Red/green: base fails 1 of 17, head passes 17.
 
 ## Delivery
 

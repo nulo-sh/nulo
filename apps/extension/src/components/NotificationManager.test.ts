@@ -22,19 +22,15 @@ const FILE = "apps/extension/src/components/NotificationManager.vue"
 const RADIUS_PROP = /(^|-)radius$/i
 const ZERO = /^0+(\.0+)?[a-z%]*$/i
 
-const rounds = (prop: string, value: string) =>
-	RADIUS_PROP.test(prop.trim()) &&
-	!value
-		.trim()
-		.split(/[\s/]+/)
-		.every((part) => ZERO.test(part))
+const rounds = (prop: string, value: string) => RADIUS_PROP.test(prop) && !value.split(/[\s/]+/).every((part) => ZERO.test(part))
 
 /** A binding's style is not evaluated, so any radius it names counts, as in the script. */
 function elementRounding(node: TemplateNode): string[] {
 	const found: string[] = []
-	for (const declaration of (staticAttr(node, "style") ?? "").split(";")) {
-		const at = declaration.indexOf(":")
-		if (at > 0 && rounds(declaration.slice(0, at), declaration.slice(at + 1))) found.push(`<${node.tag}> ${declaration.trim()}`)
+	for (const sheet of parseSource("inline.css", `x{${staticAttr(node, "style") ?? ""}}`).styles) {
+		sheet.root.walkDecls((decl) => {
+			if (rounds(decl.prop, decl.value)) found.push(`<${node.tag}> ${decl.prop}: ${decl.value}`)
+		})
 	}
 	for (const prop of node.props ?? []) {
 		const bindsStyle = prop.type === NODE.DIRECTIVE && prop.name === "bind" && (!prop.arg || prop.arg.content === "style")
@@ -79,6 +75,7 @@ describe("the notice card has square corners", () => {
 		[sfc("<div />", ".card { -webkit-border-radius: 4px; }"), ".card { -webkit-border-radius: 4px }"],
 		[sfc("<div />", ".card { &:hover { border-radius: 0 4px; } }"), ".card:hover { border-radius: 0 4px }"],
 		[sfc('<div style="border-radius: 4px" />'), "<div> border-radius: 4px"],
+		[sfc('<div style="border-radius/**/: 4px" />'), "<div> border-radius: 4px"],
 		[sfc(`<div :style="{ borderRadius: '4px' }" />`), "<div> { borderRadius: '4px' }"],
 		[sfc(`<div v-bind="{ style: { borderRadius: '4px' } }" />`), "<div> { style: { borderRadius: '4px' } }"],
 		[`<script setup>const s = { borderRadius: "4px" }</script>${sfc('<div :style="s" />')}`, "<script> names a radius"],
