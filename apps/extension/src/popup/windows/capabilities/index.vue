@@ -189,6 +189,7 @@ const windowParams = (params: CapabilityPayload["params"]): CapabilityWindowPara
 		accountsMembershipOnly: params.accountsMembershipOnly === true,
 		consent: params.authorizationsWithoutAsking,
 		networkName: chainName.value,
+		knownContracts: params.knownContracts ?? [],
 	}
 }
 

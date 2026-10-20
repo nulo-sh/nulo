@@ -494,7 +494,13 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 				chip: undefined,
 			})
 			expect(rowOf("authorizations").find('[data-testid="cap-auth-term"]').text()).toBe("authorizations")
-			expect(read("transaction")).toEqual({ title: "Every transaction", line: "", on: undefined, flagged: false, chip: undefined })
+			expect(read("transaction")).toEqual({
+				title: "Every transaction, on 1 contract",
+				line: "",
+				on: undefined,
+				flagged: false,
+				chip: undefined,
+			})
 			expect(note().exists()).toBe(false)
 			expect(confirmLabel()).toBe("Connect")
 		})
@@ -639,15 +645,43 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 		expect(await approve()).toEqual({ granted: [contractsAny] })
 	})
 
-	test("data on listed contracts: both rows On; private events switched Off keeps the address book", async () => {
-		await mountWindow(firstRequest([{ type: "data", addressBook: true, privateEvents: { contracts: [TOKEN] } }, contractsAny]))
+	test("data on a contract its calls reach: both rows On; private events switched Off keeps the address book", async () => {
+		await mountWindow(firstRequest([{ type: "data", addressBook: true, privateEvents: { contracts: [TOKEN] } }, txListed]))
 		expect(read("private-events")).toMatchObject({
-			title: "See private events from its contracts",
+			title: "See private events from 1 contract",
 			line: "Private messages its contracts sent to your accounts, like a transfer you received.",
 			on: true,
 		})
 		await toggleOf("private-events").trigger("click")
-		expect(await approve()).toEqual({ granted: [{ type: "data", addressBook: true }, contractsAny] })
+		expect(await approve()).toEqual({ granted: [{ type: "data", addressBook: true }, txListed] })
+	})
+
+	test("the reach of each row, and private events Off for a contract outside the call scope", async () => {
+		const OTHER = `0x${"2c".repeat(32)}`
+		const CLASS = `0x${"3d".repeat(32)}`
+		const events = { type: "data", privateEvents: { contracts: [TOKEN, OTHER] } }
+		const details = { type: "contracts", contracts: "*", canGetMetadata: true }
+		const classes = { type: "contractClasses", classes: [CLASS], canGetMetadata: true }
+		await mountWindow(
+			firstRequest([events, details, classes, txListed], { knownContracts: [{ address: FEE_JUICE, name: "Fee Juice" }] }),
+		)
+		expect(read("transaction").title).toBe("Every transaction, on 1 contract")
+		expect(read("private-events")).toEqual({
+			title: "See private events from 2 contracts",
+			line: "Not shared. The app may ask again later.",
+			on: false,
+			flagged: false,
+			chip: undefined,
+		})
+		expect(read("contract-details")).toEqual({
+			title: "See details of any contract in your wallet",
+			line: "",
+			on: undefined,
+			flagged: true,
+			chip: "Any contract",
+		})
+		expect(read("contract-classes").title).toMatch(/^Look up the code of 1 contract class on /)
+		expect(await approve()).toEqual({ granted: [details, classes, txListed] })
 	})
 
 	test("a Settings change after dispatch: the defaults follow the snapshot, not the session", async () => {
@@ -777,7 +811,7 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 				TOOLS_FOLDED[2],
 			])
 			expect(readHeld("private-events")).toMatchObject({
-				title: "See private events from its contracts",
+				title: "See private events from 1 contract",
 				line: "Private messages its contracts sent to your accounts, like a transfer you received.",
 			})
 			expect(await approve()).toEqual({ granted: TOOLS })
