@@ -1,0 +1,99 @@
+{
+	"wallet-version": "0.31.0-update.1",
+	"aztec-version": "6.0.0-rc.3",
+	"compat-epoch": 5,
+	"backup-schema-version": 1,
+	"master-key": "DpRnp4PuDSrzTOuLVee1Mb4dSsWsi9QzWJix8I40MlE=",
+	"imported-keys-dek-sealed": "AfpGdne5nlLfp4w2A0rTWnCWa8nCp7eqzuPFLp5Ihi7Jp9H+xUuThaHhzZ4SL/+0ABkefCLfghKX0wKmpQ==",
+	"active-chain-id": 3415328944,
+	"data": {
+		"profile": {
+			"id": "15ed22fc",
+			"name": "Main",
+			"type": "passkey"
+		},
+		"account": [
+			{
+				"profileId": "15ed22fc",
+				"chainId": 3415328944,
+				"address": "0x2e4ae4c787a81fe4648261ca1a1cdbaab0b67a9c9b9c69744b0b4a10080d9de0",
+				"index": 0,
+				"type": 0,
+				"l1ChainId": 11155111,
+				"name": "Account 1",
+				"visible": true
+			}
+		],
+		"imported-account-keys": [],
+		"transaction": [],
+		"token": [],
+		"token-balance": [],
+		"account-state": [],
+		"auth-registry": [],
+		"contact": [],
+		"config": [
+			{
+				"key": "theme",
+				"value": "system"
+			},
+			{
+				"key": "sidePanel",
+				"value": false
+			},
+			{
+				"key": "showNode",
+				"value": true
+			},
+			{
+				"key": "disableAnimations",
+				"value": false
+			},
+			{
+				"key": "sessionTtl",
+				"value": 1800000
+			},
+			{
+				"key": "strictSecurityMode",
+				"value": true
+			},
+			{
+				"key": "defaultExplorer",
+				"value": "aztecscan"
+			},
+			{
+				"key": "showFiatValues",
+				"value": true
+			},
+			{
+				"key": "privacyMode",
+				"value": false
+			},
+			{
+				"key": "incomingTransfersVisible",
+				"value": true
+			},
+			{
+				"key": "incomingDustUsdThreshold",
+				"value": 0
+			},
+			{
+				"key": "prestoReached",
+				"value": false
+			},
+			{
+				"key": "developerMode",
+				"value": false
+			},
+			{
+				"key": "debugMode",
+				"value": false
+			},
+			{
+				"key": "indicateFailures",
+				"value": false
+			}
+		]
+	},
+	"checksum": "68319cf1dbfe64b9e79e2b07433faf2ae13557f2ad8c42cf14825c43dbfb2d4b",
+	"backup-mac": "oOfzTIMhvev4TqtJ3jbnqcsAMJuWpKBEfBFEJM9SaP0="
+}

@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto"
+import { readdirSync, readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { beforeAll, describe, expect, test } from "vitest"
 import { realMigrations } from "../migrations"
 import { STORED_SHAPES, type StoredShape, type StoredShapeName } from "../stored-shapes"
@@ -7,6 +11,7 @@ import {
 	currentShapes,
 	type Decoding,
 	decodeGoldens,
+	GOLDEN_NOW,
 	type Golden,
 	isBackupSliced,
 	justify,
@@ -15,14 +20,15 @@ import {
 	schemaVersionOf,
 	zodVersion,
 } from "./baseline"
-import { PINNED_STAMPS } from "./pins"
+import { backupProblems } from "./backups"
+import { PINNED_BACKUPS, PINNED_STAMPS } from "./pins"
 
 /**
  * The stored-shape guard. Until the baseline is frozen (`pins.ts` empty) the one stamp follows the
  * code: R1 and R3 hold it fresh. Once frozen, every stamp is pinned and a change to how any stored
  * key is written or read lands only as a new stamp, justified by a registered migration or a
- * reviewed additive mark (R2), and every row an earlier build wrote still reads to the value its
- * stamp pinned (R3).
+ * reviewed additive mark (R2), every row an earlier build wrote still reads to the value its stamp
+ * pinned (R3), and every full backup 1.0.0 exported still imports (R5).
  */
 
 const { snapshot, goldens } = committedBaseline()
@@ -103,6 +109,23 @@ describe("R4 · the stamps are append-only once pinned", () => {
 			)
 		}
 	})
+})
+
+describe("R5 · a full backup 1.0.0 exported still imports", () => {
+	const dir = join(dirname(fileURLToPath(import.meta.url)), "backups")
+
+	test("every file in backups/ is pinned, and every pin names a file", () => {
+		expect(readdirSync(dir).sort()).toEqual(Object.keys(PINNED_BACKUPS).sort())
+	})
+
+	test.each(Object.keys(PINNED_BACKUPS))(
+		"%s, unchanged, imports as far as the passkey prompt and every restored row reads",
+		async (name) => {
+			const text = readFileSync(join(dir, name), "utf8")
+			expect(createHash("sha256").update(text).digest("hex"), `${name} changed after its pin`).toBe(PINNED_BACKUPS[name])
+			expect(await backupProblems(JSON.parse(text), GOLDEN_NOW)).toEqual([])
+		},
+	)
 })
 
 describe("the goldens", () => {
