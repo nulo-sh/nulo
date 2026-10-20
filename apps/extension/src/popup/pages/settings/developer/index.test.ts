@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest"
 import type { ConfigProp } from "@/wallet/config"
 import { expectOwnedRows, settingsContext, settingsRouter } from "../../../../../tests/helpers/settings-rows"
 import AdvancedSettings from "./index.vue"
+import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 
 const fakes = vi.hoisted(() => ({ config: undefined as unknown, openToast: vi.fn() }))
 vi.mock("@/wallet/services/config/client", () => ({
@@ -45,14 +46,7 @@ beforeEach(() => {
 	fakes.config = config
 	for (const fn of Object.values(windows)) fn.mockReset()
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: {
-				get: vi.fn(async () => ({})),
-				set: vi.fn(async () => undefined),
-				remove: vi.fn(async () => undefined),
-			},
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 		runtime: {
 			connect: vi.fn(),
 			getURL: (path: string) => `chrome-extension://nulo/${path}`,
@@ -60,6 +54,7 @@ beforeEach(() => {
 		},
 		windows,
 	})
+	installChromeStorage({}, { persist: false })
 })
 afterEach(() => vi.unstubAllGlobals())
 

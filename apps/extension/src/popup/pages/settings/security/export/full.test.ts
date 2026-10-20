@@ -12,6 +12,7 @@ import { useAppStore } from "@/stores/app.store"
 import { usePopupStore } from "@/stores/popup.store"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import FullExportPage from "./full.vue"
+import { installChromeStorage } from "../../../../../../tests/helpers/chrome-storage-mock"
 
 /**
  * Component pins for the export page's re-entry latch, Enter handling, error boundary, and
@@ -130,15 +131,9 @@ vi.mock("@/composables/toast.js", async (importOriginal) => ({
 	useToast: () => ({ openToast }),
 }))
 
-// The global chrome stub exposes `storage: {}` only; the app store's synced
-// refs read chrome.storage.local and subscribe to chrome.storage.onChanged,
-// so flesh the stub out (this beforeEach runs after the setup file's).
+// The app store's synced refs read chrome.storage.local and subscribe to chrome.storage.onChanged.
 beforeEach(() => {
-	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
-	if (c) {
-		c.storage.local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }
-		c.storage.onChanged = { addListener: vi.fn(), removeListener: vi.fn() }
-	}
+	installChromeStorage({}, { persist: false })
 })
 
 const router = vi.hoisted(() => ({ go: vi.fn(), push: vi.fn(), back: vi.fn() }))

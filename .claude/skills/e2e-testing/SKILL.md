@@ -327,9 +327,12 @@ file and never the run. Design files order-independent.
 so waits use `polling: 200`), `withTimeoutMessage` (turns a bare `TimeoutError` into a diagnostic
 without swallowing frame-detach or CDP-disconnect errors), `closeStuckPopup` (a `<Transition>` stuck
 mid-leave under headless rAF throttling — only after asserting the real post-mutation signal, never
-as a substitute for closing through the UI). `waitForPopup` matches a NEW `#/windows/<kind>` target by
-URL because every interaction URL carries a unique `requestId`; `callExpectingNoPopup` diffs targets
-by identity because plain popup pages change URL under a lock redirect.
+as a substitute for closing through the UI), `pollUntil` (`fixtures/poll.ts`, not a hand-rolled
+`Date.now()` deadline loop: a probe's throw fails at once, a spent budget throws `PollTimeoutError` with
+the last value, and work that moves the state on runs in `between`). `waitForPopup` matches a NEW
+`#/windows/<kind>` target by URL because every interaction URL carries a unique `requestId`;
+`callExpectingNoPopup` diffs targets by identity because plain popup pages change URL under a lock
+redirect.
 
 `clickByTestId` calls `el.click()` in the page (`fixtures/dom.ts`), which an SVG element
 does not have, so an icon-only `<Icon>` target throws inside the wait and times out: press it with

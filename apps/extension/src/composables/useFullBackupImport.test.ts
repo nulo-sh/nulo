@@ -20,11 +20,8 @@
  *    test's backup object so we hit the integrity branch only when we
  *    intentionally corrupt it.
  */
-import { setActivePinia } from "pinia"
-import { createTestingPinia } from "@pinia/testing"
 import { type Ref, ref, watch } from "vue"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { NodeStatus } from "@/wallet/services/network/spec"
 import {
 	asBase64CredentialId,
 	asBase64SecretPrf,
@@ -35,167 +32,78 @@ import {
 	type PasskeyCredentialData,
 } from "@nulo/wallet-crypto"
 import { RpcDisconnectedError, SessionEndedError, UserRejectedError } from "@nulo/extension-messaging/errors"
+import {
+	AS_SENDER,
+	accountClient,
+	accountStateClient,
+	authRegistryClient,
+	buildBackup,
+	configClient,
+	contactClient,
+	FENCE,
+	makeOpts,
+	networkClient,
+	profileClient,
+	reminder,
+	resetBackupImportHarness,
+	tokenBalanceClient,
+	tokenClient,
+	transactionClient,
+} from "../../tests/helpers/backup-import-harness"
 
 // ── Mocks ───────────────────────────────────────────────────────────────────
 
-const profileClient = {
-	restore: vi.fn(),
-	finalizeRestore: vi.fn(),
-	assertRunFence: vi.fn(),
-	deleteProfile: vi.fn(),
-	disconnect: vi.fn(),
-}
-/** The fence `finalizeRestore` hands back for the created profile. */
-const FENCE = { profileId: "new-id", epoch: 0, session: 1, incarnation: "w1" }
-const reminder = vi.hoisted(() => ({
-	arm: vi.fn(async (..._args: unknown[]): Promise<string | undefined> => "run-1"),
-	admit: vi.fn(async (..._args: unknown[]): Promise<unknown> => ({})),
-	finish: vi.fn(async (..._args: unknown[]) => undefined),
-}))
-vi.mock("@/utils/restore-outcome", () => ({
-	armRestoreOutcome: reminder.arm,
-	admitRestoreOutcome: reminder.admit,
-	finishRestoreOutcome: reminder.finish,
-}))
-const networkClient = {
-	seedDefaultsForProfile: vi.fn(),
-	setActiveForProfile: vi.fn(),
-	probeNodeStatus: vi.fn(),
-	disconnect: vi.fn(),
-}
-const accountClient = {
-	restore: vi.fn(),
-	restoreImportedKeys: vi.fn(async () => []),
-	reconcileImportedAccounts: vi.fn(async () => []),
-	disconnect: vi.fn(),
-}
-const tokenClient = {
-	restore: vi.fn(),
-	refreshRestoredTokens: vi.fn(),
-	disconnect: vi.fn(),
-}
-/** Registrable child for account-state fixtures: since the bounded
- *  chain-registration tail landed, zero-work items dial nothing and never
- *  reach the restore call — remap observability needs at least one child. */
-const AS_SENDER = { address: `0x${"ab".repeat(32)}` }
-
-function passthroughClient() {
-	return { restore: vi.fn(async (): Promise<unknown[]> => []), disconnect: vi.fn() }
-}
-let transactionClient = passthroughClient()
-let tokenBalanceClient = passthroughClient()
-let accountStateClient = passthroughClient()
-let authRegistryClient = passthroughClient()
-let contactClient = passthroughClient()
-let configClient = passthroughClient()
-
-// Vitest 4 requires `function` expressions (not arrow functions) for mocks
-// instantiated with `new`. Arrow factories error: "() => ... is not a constructor".
-vi.mock("@/wallet/services/profile/client", () => ({
-	ProfileServiceClient: vi.fn(function () {
-		return profileClient
-	}),
-}))
-vi.mock("@/wallet/services/network/client", () => ({
-	NetworkServiceClient: vi.fn(function () {
-		return networkClient
-	}),
-}))
-vi.mock("@/wallet/services/account/client", () => ({
-	AccountServiceClient: vi.fn(function () {
-		return accountClient
-	}),
-}))
-vi.mock("@/wallet/services/token/client", () => ({
-	TokenServiceClient: vi.fn(function () {
-		return tokenClient
-	}),
-}))
-vi.mock("@/wallet/services/transaction/client", () => ({
-	TransactionServiceClient: vi.fn(function () {
-		return transactionClient
-	}),
-}))
-vi.mock("@/wallet/services/token-balance/client", () => ({
-	TokenBalanceServiceClient: vi.fn(function () {
-		return tokenBalanceClient
-	}),
-}))
-vi.mock("@/wallet/services/account-state/client", () => ({
-	AccountStateServiceClient: vi.fn(function () {
-		return accountStateClient
-	}),
-}))
-vi.mock("@/wallet/services/auth-registry/client", () => ({
-	AuthRegistryServiceClient: vi.fn(function () {
-		return authRegistryClient
-	}),
-}))
-vi.mock("@/wallet/services/contact/client", () => ({
-	ContactServiceClient: vi.fn(function () {
-		return contactClient
-	}),
-}))
-vi.mock("@/wallet/services/config/client", () => ({
-	ConfigServiceClient: vi.fn(function () {
-		return configClient
-	}),
-}))
-
-// Service-name modules pull in side-effecting validators when imported
-// from the real client modules, so re-export the bare name constants (plus
-// the storage-root constants the backup-migration registry imports).
-vi.mock("@/wallet/services/account/spec", () => ({
-	ACCOUNT_SERVICE_NAME: "account",
-	ACCOUNT_STORAGE_ROOT: "nulo:core:accounts",
-	IMPORTED_KEYS_SERVICE_NAME: "imported-account-keys",
-	IMPORTED_KEYS_STORAGE_ROOT: "nulo:core:imported-account-keys",
-	accountRowId: (profileId: string, chainId: number, address: string) => JSON.stringify(["account", profileId, chainId, address]),
-	accountScopeKey: (chainId: number, address: string) => `${chainId}:${address}`,
-	DEFAULT_IMPORTED_ACCOUNT_NAME: "Imported account",
-}))
-vi.mock("@/wallet/services/account-state/spec", () => ({ ACCOUNT_STATE_SERVICE_NAME: "account-state" }))
-vi.mock("@/utils/background-liveness", () => ({
-	readLiveness: vi.fn(async () => 100),
-	awaitLivenessAdvance: vi.fn(async () => 101),
-}))
-vi.mock("@/wallet/services/auth-registry/spec", () => ({
-	AUTH_REGISTRY_SERVICE_NAME: "auth-registry",
-	AUTH_REGISTRY_STORAGE_ROOT: "nulo:core:auth-registry",
-	AUTH_REGISTRY_ENABLED_STORAGE_ROOT: "nulo:core:auth-registry-enabled",
-}))
-vi.mock("@/wallet/services/config/spec", () => ({ CONFIG_SERVICE_NAME: "config" }))
-vi.mock("@/wallet/services/contact/spec", () => ({ CONTACT_SERVICE_NAME: "contact", CONTACT_STORAGE_ROOT: "nulo:core:contacts" }))
-vi.mock("@/wallet/services/network/spec", () => ({
-	NETWORK_SERVICE_NAME: "network",
-	NETWORK_STORAGE_ROOT: "nulo:core:networks",
-	NodeStatus: { Active: 0, Inactive: 1, InvalidChain: 2 },
-}))
-vi.mock("@/wallet/services/token-balance/spec", () => ({
-	TOKEN_BALANCE_SERVICE_NAME: "token-balance",
-	TOKEN_BALANCE_STORAGE_ROOT: "nulo:core:token-balances",
-}))
-vi.mock("@/wallet/services/token/spec", () => ({ TOKEN_SERVICE_NAME: "token", TOKEN_STORAGE_ROOT: "nulo:core:tokens" }))
-vi.mock("@/wallet/services/transaction/spec", () => ({
-	TRANSACTION_SERVICE_NAME: "transaction",
-	TRANSACTION_STORAGE_ROOT: "nulo:core:txs",
-}))
-
-// A REAL pending backup-safe migration (v2, contact legacyName → name) so the
-// suite exercises the full migrate-then-restore path: `buildBackup` stamps
-// `backup-schema-version: 1`, so every restore in this file migrates 1 → 2
-// before any service restore runs.
-vi.mock("@/wallet/storage/migrations", async () => {
-	const { defineRowMapMigration } = await vi.importActual<typeof import("@/wallet/services/backup/row-map-migration")>(
-		"@/wallet/services/backup/row-map-migration",
-	)
-	const v2 = defineRowMapMigration({
-		version: 2,
-		description: "test: rename contact legacyName to name",
-		rowMaps: { "nulo:core:contacts": { rename: { legacyName: "name" } } },
-	})
-	return { BASELINE_VERSION: 1, realMigrations: [], migrations: [], backupMigrations: [v2] }
-})
+vi.mock("@/utils/restore-outcome", async () => (await import("../../tests/helpers/backup-import-harness")).restoreOutcomeModule)
+vi.mock("@/wallet/services/profile/client", async () => (await import("../../tests/helpers/backup-import-harness")).profileClientModule)
+vi.mock("@/wallet/services/network/client", async () => (await import("../../tests/helpers/backup-import-harness")).networkClientModule)
+vi.mock("@/wallet/services/account/client", async () => (await import("../../tests/helpers/backup-import-harness")).accountClientModule)
+vi.mock("@/wallet/services/token/client", async () => (await import("../../tests/helpers/backup-import-harness")).tokenClientModule)
+vi.mock(
+	"@/wallet/services/transaction/client",
+	async () => (await import("../../tests/helpers/backup-import-harness")).transactionClientModule,
+)
+vi.mock(
+	"@/wallet/services/token-balance/client",
+	async () => (await import("../../tests/helpers/backup-import-harness")).tokenBalanceClientModule,
+)
+vi.mock(
+	"@/wallet/services/account-state/client",
+	async () => (await import("../../tests/helpers/backup-import-harness")).accountStateClientModule,
+)
+vi.mock(
+	"@/wallet/services/auth-registry/client",
+	async () => (await import("../../tests/helpers/backup-import-harness")).authRegistryClientModule,
+)
+vi.mock("@/wallet/services/contact/client", async () => (await import("../../tests/helpers/backup-import-harness")).contactClientModule)
+vi.mock("@/wallet/services/config/client", async () => (await import("../../tests/helpers/backup-import-harness")).configClientModule)
+vi.mock("@/wallet/services/account/spec", async (importOriginal) =>
+	(await import("../../tests/helpers/backup-import-harness")).accountSpecModule(importOriginal),
+)
+vi.mock(
+	"@/wallet/services/account-state/spec",
+	async () => (await import("../../tests/helpers/backup-import-harness")).accountStateSpecModule,
+)
+vi.mock("@/utils/background-liveness", async () => (await import("../../tests/helpers/backup-import-harness")).livenessModule)
+vi.mock("@/wallet/services/auth-registry/spec", async (importOriginal) =>
+	(await import("../../tests/helpers/backup-import-harness")).authRegistrySpecModule(importOriginal),
+)
+vi.mock("@/wallet/services/config/spec", async () => (await import("../../tests/helpers/backup-import-harness")).configSpecModule)
+vi.mock("@/wallet/services/contact/spec", async (importOriginal) =>
+	(await import("../../tests/helpers/backup-import-harness")).contactSpecModule(importOriginal),
+)
+vi.mock("@/wallet/services/network/spec", async (importOriginal) =>
+	(await import("../../tests/helpers/backup-import-harness")).networkSpecModule(importOriginal),
+)
+vi.mock("@/wallet/services/token-balance/spec", async (importOriginal) =>
+	(await import("../../tests/helpers/backup-import-harness")).tokenBalanceSpecModule(importOriginal),
+)
+vi.mock("@/wallet/services/token/spec", async (importOriginal) =>
+	(await import("../../tests/helpers/backup-import-harness")).tokenSpecModule(importOriginal),
+)
+vi.mock("@/wallet/services/transaction/spec", async (importOriginal) =>
+	(await import("../../tests/helpers/backup-import-harness")).transactionSpecModule(importOriginal),
+)
+vi.mock("@/wallet/storage/migrations", async () => (await import("../../tests/helpers/backup-import-harness")).migrationsModule())
 
 // Imported AFTER mocks are registered.
 import {
@@ -217,49 +125,6 @@ import { ACCOUNT_STATE_SKIP_DEADLINE, ACCOUNT_STATE_SKIP_WRONG_NETWORK } from "@
 import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Build a backup payload + matching checksum so the integrity guard passes.
- *  `overrides.data` MERGES over the default slices (it must not clobber them:
- *  the mocked v2 migration reads contacts, so the default `contact: []` has to
- *  survive every override). */
-async function buildBackup(overrides: Record<string, unknown> = {}) {
-	const { data: dataOverride, ...bodyOverrides } = overrides
-	const body = {
-		"compat-epoch": 5,
-		"backup-schema-version": 1,
-		"master-key": Buffer.from(new Uint8Array(32)).toString("base64"),
-		// Epoch-4 password blobs REQUIRE the entropy field. The composable checks only
-		// presence/shape; the words↔master pairing check is service-side (mocked here).
-		entropy: Buffer.from(new Uint8Array(32).fill(1)).toString("base64"),
-		// Epoch-4 password blobs also REQUIRE the imported-keys DEK carrier (plaintext beside
-		// the plaintext master; the rewrap semantics are service-side, mocked here).
-		"imported-keys-dek": Buffer.from(new Uint8Array(32).fill(2)).toString("base64"),
-		data: {
-			profile: { id: "src-profile-id", name: "Imported", type: "password" },
-			// Schema-complete account fixture so the default path mirrors what the real services accept.
-			account: [
-				{
-					profileId: "src-profile-id",
-					chainId: 1,
-					address: "0xaaaa",
-					index: 0,
-					type: 0,
-					l1ChainId: 1,
-					name: "Account 1",
-					visible: true,
-				},
-			],
-			token: [],
-			// Present-but-empty: the mocked v2 migration READS contacts, and a
-			// missing non-optional slice a pending migration reads rejects.
-			contact: [],
-			...((dataOverride as Record<string, unknown>) ?? {}),
-		},
-		...bodyOverrides,
-	}
-	const checksum = await EncryptionKey.getHashHex(JSON.stringify(body))
-	return { ...body, checksum }
-}
 
 // biome-ignore lint/suspicious/noExplicitAny: the extracted validator takes the raw backup envelope
 const validate = (b: unknown) => validateAndMigrateBackup(b as any)
@@ -680,54 +545,9 @@ describe("relinkRestoredTokenBalances — stage 2b contract", () => {
 	})
 })
 
-interface MakeOpts {
-	password?: string
-	repeatedPassword?: string
-}
-function makeOpts(o: MakeOpts = {}) {
-	const password = ref(o.password ?? "pass1234")
-	const repeatedPassword = ref(o.repeatedPassword ?? "pass1234")
-	const fillError = vi.fn()
-	const clearError = vi.fn()
-	const pickFile = vi.fn()
-	const completeImport = vi.fn()
-	const resolveProfileName = vi.fn(async (backupName: string | null): Promise<string | null> => backupName ?? "Main")
-	const openToast = vi.fn()
-	return { password, repeatedPassword, fillError, clearError, pickFile, completeImport, resolveProfileName, openToast }
-}
-
 // ── Setup ───────────────────────────────────────────────────────────────────
 
-beforeEach(() => {
-	setActivePinia(createTestingPinia({ createSpy: vi.fn }))
-	profileClient.restore.mockReset()
-	profileClient.finalizeRestore
-		.mockReset()
-		.mockResolvedValue({ profile: { id: "new-id", name: "Imported", type: "password" }, fence: FENCE })
-	profileClient.assertRunFence.mockReset().mockResolvedValue(undefined)
-	reminder.arm.mockReset().mockResolvedValue("run-1")
-	reminder.admit.mockReset().mockResolvedValue({})
-	reminder.finish.mockReset().mockResolvedValue(undefined)
-	profileClient.deleteProfile.mockReset().mockResolvedValue(undefined)
-	profileClient.disconnect.mockReset()
-	networkClient.seedDefaultsForProfile.mockReset()
-	networkClient.setActiveForProfile.mockReset().mockResolvedValue("new-net-1")
-	networkClient.probeNodeStatus.mockReset().mockResolvedValue(NodeStatus.Active)
-	networkClient.disconnect.mockReset()
-	accountClient.restore.mockReset()
-	accountClient.reconcileImportedAccounts.mockReset().mockResolvedValue([])
-	accountClient.restoreImportedKeys.mockReset().mockResolvedValue([])
-	accountClient.disconnect.mockReset()
-	tokenClient.restore.mockReset().mockResolvedValue([])
-	tokenClient.disconnect.mockReset()
-	tokenClient.refreshRestoredTokens.mockReset().mockResolvedValue(undefined)
-	transactionClient = passthroughClient()
-	tokenBalanceClient = passthroughClient()
-	accountStateClient = passthroughClient()
-	authRegistryClient = passthroughClient()
-	contactClient = passthroughClient()
-	configClient = passthroughClient()
-})
+beforeEach(resetBackupImportHarness)
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
