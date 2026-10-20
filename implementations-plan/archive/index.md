@@ -275,6 +275,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [remediation-followups](remediation-followups/plan.md) — completed — each documented deferral of the previous remediation run as its own planned arc
 - [required-check-mismatch](required-check-mismatch/plan.md) — completed — the required aggregator jobs renamed and branch protection re-pointed at them
 - [restart-lock-truth](restart-lock-truth/plan.md) — completed — a lock after a worker restart reliably locks the popup
+- [restart-notify-1](restart-notify-1/plan.md) — completed — the connect, check and capabilities windows a restart ended close (at boot after a crash, and before the lock's restart), and apps hear their disconnect first (#926; #941–#943 known limits, #939 and #940 owner asks)
 - [restore-stage-extraction](restore-stage-extraction/plan.md) — completed — the coupling between two full-backup restore stages made an explicit value
 - [row-service-method-families](row-service-method-families/plan.md) — completed — pins first and one extraction across the token and network row services
 - [ruleset-hygiene-1](ruleset-hygiene-1/plan.md) — completed — the release runbook moves to a skill; proportion, known limits, a post-implementation standard and an e2e runtime budget
@@ -385,3 +386,5 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [e2e-flakes-2](e2e-flakes-2/plan.md) — completed — arc 1 (#813) made the balance-row reconciliation spec's gap with the worker stopped (#774); arc 2 waits for the header copy's snack to leave before the drag-select test presses About's foot (#816)
 - [square-corners-1](square-corners-1/plan.md) — completed — every rounded corner the wallet draws goes square on the owner's P71-07 and P72-01; the JSON viewer's search box reads in the light theme (#928 #937)
 - [token-dash-2](token-dash-2/plan.md) — completed — a blank token name or symbol reads as the empty-value dash wherever it names the token: Home, Send, Settings, the token page, the metadata popup, activity titles and the filter chip; amounts unchanged (#932, P72-05 C); sentences are #949
+- [test-infra-1](test-infra-1/plan.md) — completed — one source walker and TS tokenizer, one approval-window harness, one wait per test layer, shared builders (#561 #550 #540 #536)
+- [get-started-phrase-1](get-started-phrase-1/plan.md) — completed — a funded password wallet keeps its unsaved phrase in the Get started card (step 1, "of 4" on the first profile; the row alone on a later one); the banner only after Hide (#936, P73-01)

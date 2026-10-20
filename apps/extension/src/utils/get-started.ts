@@ -92,7 +92,7 @@ export interface GetStartedStep {
 }
 
 export interface GetStartedView {
-	/** The urgent "Your funds have no backup" banner above the balance. */
+	/** The urgent "Your funds have no backup" banner above the balance; only after Hide. */
 	banner: boolean
 	/** In the drawn order; empty means no card. */
 	steps: GetStartedStep[]
@@ -132,8 +132,9 @@ export function getStartedView(input: GetStartedInput): GetStartedView | null {
 	if (type === undefined || flags === undefined || prestoReached === undefined || funds === "unknown") return null
 	// A wallet the person brought in is an established one: Home asks nothing of it.
 	if (flags.imported) return { banner: false, steps: [], canHide: false }
-	// A password wallet's phrase step cannot be hidden; once funded, the banner takes it.
-	const banner = type === "password" && !flags.phraseSaved && funds === "some"
+	// A password wallet's phrase step cannot be hidden: it stays in the card, and only once Hide has
+	// put the card away does a funded wallet's phrase become the banner, so the two never show together.
+	const banner = type === "password" && !flags.phraseSaved && funds === "some" && flags.hidden
 	const steps: GetStartedStep[] = []
 	if (type === "password" && !banner) steps.push({ item: "phrase", done: flags.phraseSaved })
 	steps.push(...firstProfileSteps({ ...input, type, flags, prestoReached }))

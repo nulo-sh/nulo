@@ -91,6 +91,7 @@ function gasEntry(scope: BalanceScope) {
 	return slice === undefined ? undefined : { gas: slice }
 }
 const AZTEC_KEY = "nulo:ui:getStartedAztecOpened@p1"
+const HIDDEN = { "nulo:ui:getStartedHidden@p1": true }
 const FEE_JUICE_KEY = "nulo:ui:getStartedFeeJuiceHeld@p1"
 
 const wrappers: VueWrapper[] = []
@@ -137,19 +138,28 @@ describe("Home — the backup reminder's sources", () => {
 		expect(has(w, "backup-reminder-banner")).toBe(false)
 	})
 
-	test("token funds raise the banner before the gas read lands, but Home is not settled until it does", async () => {
+	test("on a hidden card, token funds raise the banner before the gas read lands, but Home is not settled until it does", async () => {
 		gas = { status: "fetching", version: 0 }
 		tokenHoldings = "some"
-		const w = await mountHome()
+		const w = await mountHome("password", HIDDEN)
 		expect(has(w, "backup-reminder-banner")).toBe(true)
 		expect(w.get('[data-testid="home-scroller"]').attributes("data-reminders-settled")).toBe("false")
 	})
 
-	test("Fee Juice alone is funds: a positive read raises the banner with no token, and the card checks Fee Juice", async () => {
+	test("on a hidden card, Fee Juice alone is funds: a positive read raises the banner with no token", async () => {
+		gas = FUNDED
+		const w = await mountHome("password", HIDDEN)
+		expect(has(w, "backup-reminder-banner")).toBe(true)
+		expect(has(w, "get-started")).toBe(false)
+	})
+
+	test("a funded first password wallet keeps the phrase as the card's next step, counts of 4, and shows no banner", async () => {
 		gas = FUNDED
 		const w = await mountHome()
-		expect(has(w, "backup-reminder-banner")).toBe(true)
-		expect(rows(w)).toEqual(["aztec", "feeJuice done", "presto"])
+		expect(has(w, "backup-reminder-banner")).toBe(false)
+		expect(rows(w)).toEqual(["phrase", "aztec", "feeJuice done", "presto"])
+		expect(w.get('[data-testid="get-started-count"]').text()).toBe("1 of 4 done")
+		expect(w.findAll('[aria-current="step"]').map((el) => el.attributes("data-testid"))).toEqual(["get-started-phrase"])
 	})
 
 	test("an empty wallet keeps the calm phrase row and offers Fee Juice (control)", async () => {
@@ -252,10 +262,12 @@ describe("Home — an imported profile", () => {
 describe("Home — a later profile", () => {
 	const NOT_FIRST = { "nulo:ui:profileNotFirst@p1": true }
 
-	test("a later password profile shows its phrase row alone, with no Hide", async () => {
+	test("a later password profile shows its phrase row alone, with no Hide, and no banner once funded", async () => {
 		gas = ZERO
+		tokenHoldings = "some"
 		const w = await mountHome("password", NOT_FIRST)
 		expect(w.findAll('[data-testid^="get-started-"]').map((row) => row.attributes("data-testid"))).toEqual(["get-started-phrase"])
+		expect(has(w, "backup-reminder-banner")).toBe(false)
 	})
 
 	test("a later passkey profile shows no card, and Home still settles", async () => {
@@ -300,7 +312,7 @@ describe("Home — what the reminders do", () => {
 		const calm = await mountHome()
 		await calm.get('[data-testid="get-started-phrase"]').trigger("click")
 		tokenHoldings = "some"
-		const urgent = await mountHome()
+		const urgent = await mountHome("password", HIDDEN)
 		await urgent.get('[data-testid="backup-reminder-save"]').trigger("click")
 		expect(router.push.mock.calls).toEqual([["/popup/settings/security/export/seed"], ["/popup/settings/security/export/seed"]])
 	})
