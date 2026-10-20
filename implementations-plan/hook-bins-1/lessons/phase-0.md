@@ -13,3 +13,7 @@
 - **Driver's calls after round 1:** every Opus finding taken; Codex #1-#6 taken, with D3 kept on an explicit assumption (both CI sites run after a frozen install, read-only token, and the Puppeteer change would trip all four e2e lanes) and D4 settled for the precedent over Codex's shared helper.
 - **Final pass, Codex** (fresh session 01a156bc, gpt-6.1-sol, high): conditional approve. It ran both proposed hook blocks under dash (syntax, the exact refusal line, `[ -f ]` on a dangling link, `exec`, `set -e`). Two validation fixes, both taken: private `TMPDIR`, `BUN_TMPDIR` and `BUN_INSTALL_CACHE_DIR` for the proof instead of hashing shared caches, and a pin that each hook names `bun --no-install ./node_modules/.bin/<tool>`.
 - **Final pass resumed** (verification): approve, no remaining finding.
+
+## Arc 1 notes
+
+- Biome's `files.includes` (`apps/**`, `infra/**`, `packages/**`, `scripts/**`, `vitest.base.mts`) skips a root-level `.ts`: a proof file at the root reads `Checked 0 files` and passes whatever its content. The proof's format refusal used a file under `scripts/`.

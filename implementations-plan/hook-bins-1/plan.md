@@ -79,17 +79,17 @@ Good enough: an install older than the lockfile runs what it installed. CI stays
 
 ## Phases
 
-### Phase 1: the hooks and their test
+### Phase 1: the hooks and their test ✓
 
 - Change map: `.githooks/pre-commit`, `.githooks/commit-msg`; new `scripts/ci-cd/githooks.test.ts` (refusal, run and harness rows).
 - Gate: `bun test scripts/ci-cd/githooks.test.ts` passes; with the base hooks (`git show dc94581d:.githooks/<hook>`) in the fixture, the refusal rows red. `bun run lint` and `bun run test:ci-gating` exit 0. A real commit in this worktree passes both hooks.
 
-### Phase 2: the baseline scripts, the comment and the static pin
+### Phase 2: the baseline scripts, the comment and the static pin ✓
 
 - Change map: `scripts/complexity-baseline/generate.ts`, `rescore.ts`; `apps/extension/src/wallet/services/account/contracts/nulo-account.test.ts` (comment only); the static pin in `githooks.test.ts`.
 - Gate: `bun run baseline:complexity` changes only the `generated` line of `manifest.json` (then restore it); `bun run baseline:rescore` reports no drift. The static pin reds on the base copies of F1's and F6's four lines. `bun run lint`, `bun run typecheck:all`, `bun run test:ci-gating`, `bun run test:release` exit 0.
 
-### Phase 3: CLAUDE.md and the fresh-worktree proof
+### Phase 3: CLAUDE.md and the fresh-worktree proof ✓
 
 - Change map: CLAUDE.md:50 and :54 only (#890 and `migration-rule-1` edit near 142-144, #743 near 214, `unit-flake-1` near 267).
 - Proof on a detached worktree of the arc head under `~/.cache/nulo-backlog/hook-bins-1/`, outside the clone. Raw traces stay there; the PR body carries outcomes only. Other agents share this host's Bun caches, so the proof gives its own: fresh empty `TMPDIR`, `BUN_TMPDIR` and `BUN_INSTALL_CACHE_DIR` under the proof directory.
