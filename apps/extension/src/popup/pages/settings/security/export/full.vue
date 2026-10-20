@@ -115,7 +115,6 @@ const onKeydown = (e) => {
 	}
 }
 
-/** The toolbar popup closes as a whole; any other surface leaves the page as its back arrow does. */
 const handleClose = () => {
 	if (isToolbarPopup()) window.close()
 	else void goBack(router, "/popup/settings/security/export")

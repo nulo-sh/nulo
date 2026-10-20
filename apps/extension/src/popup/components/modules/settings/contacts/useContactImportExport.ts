@@ -55,7 +55,6 @@ export function useContactImportExport(opts: UseContactImportExportOptions) {
 	return {
 		/** From the press until the file is handed to the browser or the export fails. */
 		exporting: readonly(exporting),
-		// One export at a time: a press while one runs does nothing, as the page's disabled Export shows.
 		exportContacts: async () => {
 			if (exporting.value) return
 			exporting.value = true

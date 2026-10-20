@@ -126,7 +126,6 @@ test("a password profile's full backup downloads only once it is encrypted", asy
 	const file = await downloadEncryptedBackup(page)
 	expect(file.trim().startsWith(`${FULL_BACKUP_V2_TAG}:`)).toBe(true)
 	expect((await openEncryptedBackup(file))["master-key"]).toBeTruthy()
-	// The saved file ends the run: Close takes Download's place, so a second file is not offered.
 	await page.waitForSelector(sel("backup-close-btn"), { visible: true, timeout: 10_000 })
 	expect(await page.$(sel("download-backup-btn"))).toBeNull()
 	expect(await page.$eval(sel("backup-done-banner"), (el) => el.textContent)).toContain("Saved to your downloads")

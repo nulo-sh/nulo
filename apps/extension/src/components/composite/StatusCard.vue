@@ -1,9 +1,6 @@
 <script setup>
-/**
- * The working state of a page that waits on the wallet: a spinner, what is happening and why it
- * takes a moment. A screen reader hears each change whole, without the page's heading order
- * changing. The page supplies the outer spacing.
- */
+/** A screen reader hears each change whole; the title is no heading, so the page's heading order
+ *  stays. The page supplies the outer spacing. */
 defineProps({
 	title: { type: String, required: true },
 	description: { type: String, default: "" },

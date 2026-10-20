@@ -433,8 +433,8 @@ async function runDownload(ctx: ExportCtx, isEncrypted: boolean) {
 		if (!isCurrent()) return
 		void markGetStarted(profileId, "backupSaved")
 		ctx.openToast({ kind: "success", label: "Backup downloaded successfully" })
-		// The sealed file is the run's last step: the page shows it done, and its plaintext and
-		// passwords go now rather than when the page unmounts.
+		// The sealed file is the run's last step, so its plaintext and passwords go now. The latch
+		// clears first: the discard invalidates the fence the `finally` below checks.
 		if (isEncrypted) {
 			state.backupStatus.value = "downloaded"
 			state.isDownloading.value = false
