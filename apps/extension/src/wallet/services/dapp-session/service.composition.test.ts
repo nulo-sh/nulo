@@ -54,7 +54,12 @@ async function makeHarness() {
 	const service = new DappSessionService(logger, api)
 	collection.add(service)
 	await collection.start()
-	return { service, onProfileDeleted }
+	const registrations = async (profileId: string) => {
+		const key = `nulo:core:dappRegistrations@${profileId}`
+		const raw = (await api.storage.local.get(key))[key]
+		return raw === undefined ? undefined : JSON.parse(raw as string)
+	}
+	return { service, onProfileDeleted, registrations }
 }
 
 const ORIGIN = "https://dapp.xyz"
@@ -105,6 +110,18 @@ describe("DappSessionService composition — in-process, no sandbox", () => {
 		void onProfileDeleted
 		await service.purgeForProfile("p1")
 		expect(await service.getDappSessions()).toHaveLength(0)
+	})
+})
+
+describe("an app's registration counts go with the chain's sessions and with the profile", () => {
+	test("purgeForChain clears that chain's counts; purgeForProfile clears the profile's", async () => {
+		const { service, registrations } = await makeHarness()
+		await service.admitDappRegistration(ORIGIN, "p1", 1)
+		await service.admitDappRegistration(ORIGIN, "p1", 2)
+		await service.purgeForChain("p1", 1)
+		expect(await registrations("p1")).toEqual({ "2": { total: 1, apps: { [ORIGIN]: 1 } } })
+		await service.purgeForProfile("p1")
+		expect(await registrations("p1")).toBeUndefined()
 	})
 })
 

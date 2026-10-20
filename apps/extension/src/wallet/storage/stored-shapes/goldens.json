@@ -1274,6 +1274,23 @@
 			}
 		},
 		{
+			"id": "dappRegistrations.full",
+			"stamp": 0,
+			"shape": "dappRegistrations",
+			"key": "nulo:core:dappRegistrations@3f9a2c71",
+			"value": {
+				"3415328944": { "total": 37, "apps": { "https://app.example": 32, "https://swap.example": 5 } },
+				"1": { "total": 1, "apps": { "http://localhost:5173": 1 } }
+			}
+		},
+		{
+			"id": "dappRegistrations.minimal",
+			"stamp": 0,
+			"shape": "dappRegistrations",
+			"key": "nulo:core:dappRegistrations@b04e6d18",
+			"value": { "0": { "total": 0, "apps": {} } }
+		},
+		{
 			"id": "activeNetwork.full",
 			"stamp": 0,
 			"shape": "activeNetwork",
