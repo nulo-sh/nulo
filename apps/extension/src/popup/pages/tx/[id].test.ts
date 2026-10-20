@@ -120,10 +120,23 @@ describe("the transaction page's amount", () => {
 		expect(w.find("[class*='amount_caption']").text()).toBe("Mint amount")
 	})
 
-	test("a restored transfer whose symbol is not text still shows the missing-token banner", async () => {
-		const banner = { template: "<div data-testid='missing-banner'><slot name='title' /></div>" }
+	const banner = { template: "<div data-testid='missing-banner'><slot name='title' /></div>" }
+	const bannerTitle = (w: Awaited<ReturnType<typeof mountPage>>) => w.get("[data-testid='missing-banner']").text()
+
+	test("an unlisted token's banner names its symbol", async () => {
+		const w = await mountPage(sentTransfer, Promise.resolve([]), { Banner: banner })
+		expect(bannerTitle(w)).toBe("TST is missing")
+	})
+
+	test("a restored transfer whose symbol is not text reads a noun in the missing-token banner", async () => {
 		const w = await mountPage(transferRecord(42), Promise.resolve([]), { Banner: banner })
-		expect(w.get("[data-testid='missing-banner']").text()).toBe("is missing")
+		expect(bannerTitle(w)).toBe("This token is missing")
+	})
+
+	test("a symbol of spaces reads a noun in the banner, and stays raw after the amount", async () => {
+		const w = await mountPage(transferRecord("   "), Promise.resolve([]), { Banner: banner })
+		expect(bannerTitle(w)).toBe("This token is missing")
+		expect(w.get("[class*='amount_symbol']").element.textContent).toBe("   ")
 	})
 
 	test("a dApp mint of an unlisted token renders no amount block", async () => {

@@ -29,7 +29,7 @@ import { balanceFormatted } from "@/utils/amount.js"
 import { displaySymbol, txAmount } from "@/utils/tx-amount"
 import { copyWithToast } from "@/utils/clipboard"
 import { endsSelection } from "@/utils/selection"
-import { trimAddress } from "@/utils/string"
+import { isBlank, trimAddress } from "@/utils/string"
 import {
 	getTxCategory,
 	getTxTitle,
@@ -82,7 +82,10 @@ const transferTypeLabel = computed(() => {
 	return formatTransferType(transfer.value.type)
 })
 const token = computed(() => tokens.value.find((t) => call.value?.contract === t.contract))
-const transferSymbol = computed(() => displaySymbol(transfer.value?.token?.symbol))
+const missingTitle = computed(() => {
+	const symbol = displaySymbol(transfer.value?.token?.symbol)
+	return isBlank(symbol) ? "This token is missing" : `${symbol} is missing`
+})
 
 const amount = computed(() => txAmount(tx.value?.calls, tokens.value))
 const formattedAmount = computed(() =>
@@ -204,7 +207,7 @@ onBeforeUnmount(() => {
 				:action="{ name: 'Copy token address', callback: () => handleCopy(call.contract) }"
 				wide
 			>
-				<template #title> {{ transferSymbol }} is missing </template>
+				<template #title> {{ missingTitle }} </template>
 				<template #description> This token not found in your token list </template>
 			</Banner>
 
