@@ -124,7 +124,7 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 		try {
 			return await this.networkService.probeNodeStatus(networkId, SENDER_PROBE_TIMEOUT_MS)
 		} catch (error) {
-			this.logError(`Failed to read senders on network ${networkId}`, error)
+			this.logError(`Failed to probe network ${networkId} for the contacts export`, error)
 			return undefined
 		}
 	}

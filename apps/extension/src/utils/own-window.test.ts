@@ -5,12 +5,16 @@ import {
 	captureOwnWindow,
 	closeOwnWindow,
 	followOwnRoute,
+	leavePanelFor,
 	moveToOwnWindow,
 	ownWindowRoute,
 	postAuthRoute,
 	releaseOwnWindow,
 } from "./own-window"
 import { deferred } from "@nulo/wallet-core/utils"
+
+const surface = vi.hoisted(() => ({ inPanel: false }))
+vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => surface.inPanel }))
 
 const EXPORT = "/popup/settings/security/export/full"
 const BROWSER = { left: 100, top: 50, width: 1200, height: 900, type: "normal" }
@@ -51,6 +55,7 @@ beforeEach(() => {
 		},
 	})
 	closeDocument = vi.spyOn(window, "close").mockImplementation(() => undefined)
+	surface.inPanel = false
 })
 
 afterEach(async () => {
@@ -153,6 +158,28 @@ describe("moving to an own window", () => {
 
 		expect(await moveToOwnWindow(EXPORT)).toBe(false)
 		expect(create).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("leaving Firefox's toolbar panel for a step", () => {
+	test("outside the panel the step stays, and no window is asked for", async () => {
+		expect(await leavePanelFor("/popup/settings/contacts")).toBe(false)
+		expect(create).not.toHaveBeenCalled()
+		expect(closeDocument).not.toHaveBeenCalled()
+	})
+
+	test("in the panel the route moves to its own window", async () => {
+		surface.inPanel = true
+		expect(await leavePanelFor("/popup/settings/contacts")).toBe(true)
+		expect(create.mock.calls[0]?.[0].url).toBe("moz-extension://nulo/src/popup/index.html#/popup/settings/contacts?window=own")
+		expect(closeDocument).toHaveBeenCalledTimes(1)
+	})
+
+	test("in the panel, a window that cannot open keeps the step here", async () => {
+		surface.inPanel = true
+		create.mockRejectedValue(new Error("no"))
+		expect(await leavePanelFor("/popup/restore-again")).toBe(false)
+		expect(closeDocument).not.toHaveBeenCalled()
 	})
 })
 

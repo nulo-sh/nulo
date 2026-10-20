@@ -38,6 +38,7 @@ vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => surface.nee
 vi.mock("@/utils/own-window", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils/own-window")>()),
 	moveToOwnWindow: (route: string) => surface.move(route),
+	leavePanelFor: async (route: string) => surface.needsOwnWindow() && (await surface.move(route)),
 	closeOwnWindow: () => surface.close(),
 	releaseOwnWindow: () => surface.release(),
 }))

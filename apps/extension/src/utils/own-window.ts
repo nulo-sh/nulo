@@ -10,6 +10,7 @@
  */
 import type { CreateWindowOptions } from "@nulo/wallet-core/ports"
 import type { NavigationHookAfter } from "vue-router"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { centerOn } from "@/wallet/services/window-manager/placement"
 
 /** The pages that may move to an own window, each its own flow. */
@@ -185,6 +186,13 @@ async function focusOpenWindow(flow: OwnFlow): Promise<boolean> {
 		console.debug("own window focus refused", { error })
 	})
 	return true
+}
+
+/** For a step whose OS file picker or passkey prompt would close Firefox's toolbar panel. True when
+ *  the panel moved `route` to its own window, and the page must do nothing more; false elsewhere, or
+ *  when no window opened, and the step runs where it is. */
+export async function leavePanelFor(route: string): Promise<boolean> {
+	return closesOnFocusLoss() && (await moveToOwnWindow(route))
 }
 
 /** Closes this document's window when it is an own window hosted in a popup-type window: the same

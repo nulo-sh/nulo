@@ -6,8 +6,7 @@ import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock
 
 const fakes = vi.hoisted(() => ({
 	pickBackupFile: vi.fn(async () => undefined),
-	inPanel: vi.fn(() => false),
-	moveToOwnWindow: vi.fn(async () => true),
+	leavePanelFor: vi.fn(async (_route: string) => false),
 }))
 vi.mock("@/wallet/services/profile/client", () => ({
 	ProfileServiceClient: class {
@@ -42,10 +41,9 @@ vi.mock("@/composables/useRestoreAgain", () => ({
 		dispose: vi.fn(),
 	}),
 }))
-vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: fakes.inPanel }))
 vi.mock("@/utils/own-window", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils/own-window")>()),
-	moveToOwnWindow: fakes.moveToOwnWindow,
+	leavePanelFor: fakes.leavePanelFor,
 }))
 vi.mock("vue-router", () => ({ useRouter: () => ({ replace: vi.fn() }), useRoute: () => ({ path: "/popup/restore-again", meta: {} }) }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
@@ -77,8 +75,7 @@ async function pressChooseFile() {
 
 beforeEach(() => {
 	vi.clearAllMocks()
-	fakes.inPanel.mockReturnValue(false)
-	fakes.moveToOwnWindow.mockResolvedValue(true)
+	fakes.leavePanelFor.mockResolvedValue(false)
 	installChromeStorage({}, { persist: false })
 })
 
@@ -86,24 +83,17 @@ afterEach(() => {
 	for (const w of wrappers.splice(0)) w.unmount()
 })
 
-describe("restore again — Firefox's toolbar panel", () => {
-	test("a press in the panel moves the page to its own window and opens no picker", async () => {
-		fakes.inPanel.mockReturnValue(true)
+describe("restore again — the file pick from Firefox's toolbar panel", () => {
+	test("a press the panel hands to the page's own window opens no picker", async () => {
+		fakes.leavePanelFor.mockResolvedValue(true)
 		await pressChooseFile()
-		expect(fakes.moveToOwnWindow).toHaveBeenCalledWith("/popup/restore-again")
+		expect(fakes.leavePanelFor).toHaveBeenCalledWith("/popup/restore-again")
 		expect(fakes.pickBackupFile).not.toHaveBeenCalled()
 	})
 
-	test("outside the panel the press opens the picker", async () => {
+	test("a press that stays on the page opens the picker", async () => {
 		await pressChooseFile()
-		expect(fakes.moveToOwnWindow).not.toHaveBeenCalled()
-		expect(fakes.pickBackupFile).toHaveBeenCalledTimes(1)
-	})
-
-	test("a window that cannot open leaves the pick in the panel", async () => {
-		fakes.inPanel.mockReturnValue(true)
-		fakes.moveToOwnWindow.mockResolvedValueOnce(false)
-		await pressChooseFile()
+		expect(fakes.leavePanelFor).toHaveBeenCalledWith("/popup/restore-again")
 		expect(fakes.pickBackupFile).toHaveBeenCalledTimes(1)
 	})
 })

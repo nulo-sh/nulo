@@ -19,14 +19,12 @@ const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ path: "/popup/settings/accounts/import", meta: {} }) }))
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 const surface = vi.hoisted(() => ({
-	inPanel: vi.fn(() => false),
-	moveToOwnWindow: vi.fn(async () => true),
+	leavePanelFor: vi.fn(async (_route: string) => false),
 	ownRoute: vi.fn((): string | undefined => undefined),
 }))
-vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: surface.inPanel }))
 vi.mock("@/utils/own-window", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils/own-window")>()),
-	moveToOwnWindow: surface.moveToOwnWindow,
+	leavePanelFor: surface.leavePanelFor,
 	ownWindowRoute: surface.ownRoute,
 }))
 
@@ -100,8 +98,7 @@ async function nameAndEnter(w: VueWrapper, name: string) {
 
 beforeEach(() => {
 	vi.clearAllMocks()
-	surface.inPanel.mockReturnValue(false)
-	surface.moveToOwnWindow.mockResolvedValue(true)
+	surface.leavePanelFor.mockResolvedValue(false)
 	surface.ownRoute.mockReturnValue(undefined)
 	installChromeStorage({}, { persist: false })
 })
@@ -142,23 +139,16 @@ describe("settings/accounts/import — Firefox's toolbar panel", () => {
 		await flushPromises()
 	}
 
-	test("a press in the panel moves the page to its own window and opens no picker", async () => {
-		surface.inPanel.mockReturnValue(true)
+	test("a press the panel hands to the page's own window opens no picker", async () => {
+		surface.leavePanelFor.mockResolvedValue(true)
 		await pressChooseFile(mountImport())
-		expect(surface.moveToOwnWindow).toHaveBeenCalledWith("/popup/settings/accounts/import")
+		expect(surface.leavePanelFor).toHaveBeenCalledWith("/popup/settings/accounts/import")
 		expect(pickFile).not.toHaveBeenCalled()
 	})
 
-	test("outside the panel the press opens the picker", async () => {
+	test("a press that stays on the page opens the picker", async () => {
 		await pressChooseFile(mountImport())
-		expect(surface.moveToOwnWindow).not.toHaveBeenCalled()
-		expect(pickFile).toHaveBeenCalledTimes(1)
-	})
-
-	test("a window that cannot open leaves the pick in the panel", async () => {
-		surface.inPanel.mockReturnValue(true)
-		surface.moveToOwnWindow.mockResolvedValueOnce(false)
-		await pressChooseFile(mountImport())
+		expect(surface.leavePanelFor).toHaveBeenCalledWith("/popup/settings/accounts/import")
 		expect(pickFile).toHaveBeenCalledTimes(1)
 	})
 

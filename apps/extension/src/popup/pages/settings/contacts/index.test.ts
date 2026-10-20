@@ -6,11 +6,10 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import { nextTick, ref } from "vue"
 
-const fakes = vi.hoisted(() => ({ importContacts: vi.fn(), inPanel: vi.fn(() => false), moveToOwnWindow: vi.fn(async () => true) }))
-vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: fakes.inPanel }))
+const fakes = vi.hoisted(() => ({ importContacts: vi.fn(), leavePanelFor: vi.fn(async (_route: string) => false) }))
 vi.mock("@/utils/own-window", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils/own-window")>()),
-	moveToOwnWindow: fakes.moveToOwnWindow,
+	leavePanelFor: fakes.leavePanelFor,
 }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 const page = { contacts: ref<Array<{ id: string; name: string; address: string }>>([]), exporting: ref(false) }
@@ -41,8 +40,7 @@ import ContactsPage from "./index.vue"
 beforeEach(() => {
 	installChromeStorage({}, { persist: false })
 	fakes.importContacts.mockReset()
-	fakes.inPanel.mockReset().mockReturnValue(false)
-	fakes.moveToOwnWindow.mockReset().mockResolvedValue(true)
+	fakes.leavePanelFor.mockReset().mockResolvedValue(false)
 	page.contacts.value = []
 	page.exporting.value = false
 })
@@ -87,32 +85,22 @@ describe("settings/contacts", () => {
 		expect(item().attributes("aria-disabled")).toBeUndefined()
 	})
 
-	test("in Firefox's toolbar panel, Import contacts moves to the Contacts window and starts no pick", async () => {
-		fakes.inPanel.mockReturnValue(true)
+	test("Import contacts the panel hands to the Contacts window starts no pick", async () => {
+		fakes.leavePanelFor.mockResolvedValue(true)
 		const w = await mountContacts()
 		await w.get('[data-testid="contacts-menu-import"]').trigger("click")
 		await flushPromises()
 
-		expect(fakes.moveToOwnWindow).toHaveBeenCalledWith("/popup/settings/contacts")
+		expect(fakes.leavePanelFor).toHaveBeenCalledWith("/popup/settings/contacts")
 		expect(fakes.importContacts).not.toHaveBeenCalled()
 	})
 
-	test("outside the panel, Import contacts picks the file here and opens no window", async () => {
+	test("Import contacts that stays on the page picks the file here", async () => {
 		const w = await mountContacts()
 		await w.get('[data-testid="contacts-menu-import"]').trigger("click")
 		await flushPromises()
 
-		expect(fakes.importContacts).toHaveBeenCalledTimes(1)
-		expect(fakes.moveToOwnWindow).not.toHaveBeenCalled()
-	})
-
-	test("a window the browser refuses leaves the pick in the panel", async () => {
-		fakes.inPanel.mockReturnValue(true)
-		fakes.moveToOwnWindow.mockResolvedValue(false)
-		const w = await mountContacts()
-		await w.get('[data-testid="contacts-menu-import"]').trigger("click")
-		await flushPromises()
-
+		expect(fakes.leavePanelFor).toHaveBeenCalledWith("/popup/settings/contacts")
 		expect(fakes.importContacts).toHaveBeenCalledTimes(1)
 	})
 

@@ -19,8 +19,7 @@ import { managers } from "@/utils/core"
 /** Utils */
 import { FileTooLargeError, pickFile } from "@/utils"
 import { sameStoredName } from "@/utils/account-name"
-import { closesOnFocusLoss } from "@/utils/browser-surface"
-import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
+import { OWN_WINDOW_ROUTES, leavePanelFor, ownWindowRoute } from "@/utils/own-window"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
 import { storageLocalSet } from "@/utils/storage"
 
@@ -61,10 +60,9 @@ const nameTaken = computed(() =>
 // 64 KiB string-length check, covering UTF-8-bytes vs UTF-16-units skew).
 const MAX_ACCOUNT_FILE_BYTES = 256 * 1024
 
-/** Firefox's toolbar panel dies with the file picker, so the pick moves to the wallet's own window,
- *  where a second press opens it. A window that cannot open leaves today's pick. */
+/** From Firefox's toolbar panel the pick moves to this page's own window, where a second press picks. */
 const handleChooseFile = async () => {
-	if (closesOnFocusLoss() && (await moveToOwnWindow(OWN_WINDOW_ROUTES.accountImport))) return
+	if (await leavePanelFor(OWN_WINDOW_ROUTES.accountImport)) return
 	await handlePickFile()
 }
 

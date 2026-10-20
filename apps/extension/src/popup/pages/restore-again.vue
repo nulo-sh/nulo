@@ -25,9 +25,8 @@ import { useRestoreAgain } from "@/composables/useRestoreAgain"
 
 /** Utils */
 import { restoreAgainIntroText, withNetworkNames } from "@/components/composite/import/restore-warning"
-import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { restoreCtaBlocked, showsDecryptCta, showsRestoreCta } from "@/utils/full-backup-ctas"
-import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
+import { OWN_WINDOW_ROUTES, leavePanelFor } from "@/utils/own-window"
 
 /** Stores */
 import { useAppStore } from "@/stores/app.store"
@@ -88,10 +87,9 @@ const cta = readonly({
 	isAllowedToImportBackup: isAllowedToRestore,
 })
 
-/** Firefox's toolbar panel dies with the file picker, so the pick moves to the wallet's own window,
- *  where a second press opens it. A window that cannot open leaves today's pick. */
+/** From Firefox's toolbar panel the pick moves to this page's own window, where a second press picks. */
 const handlePickFile = async () => {
-	if (closesOnFocusLoss() && (await moveToOwnWindow(OWN_WINDOW_ROUTES.restoreAgain))) return
+	if (await leavePanelFor(OWN_WINDOW_ROUTES.restoreAgain)) return
 	await pickBackupFile()
 }
 
