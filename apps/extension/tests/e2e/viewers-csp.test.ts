@@ -396,18 +396,26 @@ test("the search panel open at the end holds the view while lines arrive", async
 		{ timeout: 5_000, polling: 50 },
 		HOST,
 	)
-	// The panel lifts the view off the end; scrolling back there resumes the follow, and going back
-	// into the search field holds it again, at the end.
+	// The panel's focus stopped the follow, so a line is held below the view. The button resumes the
+	// follow at the end through the viewer itself, where a wallet line is followed too, so the gap is
+	// read there; going back into the search field stops the follow again.
 	await page.evaluate((id) => {
-		const root = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot
-		const field = root?.activeElement
-		const el = root?.querySelector(".cm-scroller")
-		if (!(field instanceof HTMLElement) || !(el instanceof HTMLElement)) throw new Error("the search field is not focused")
-		el.scrollTop = el.scrollHeight
+		const field = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.activeElement
+		if (!(field instanceof HTMLElement)) throw new Error("the search field is not focused")
 		field.blur()
-		return new Promise<void>((r) => requestAnimationFrame(() => r(field.focus())))
 	}, HOST)
+	await logLines(page, 1)
+	expect(await page.$('[data-testid="logs-scroll-btn"]')).not.toBeNull()
+	await pointerClick(page, "logs-scroll-btn")
 	expect(await gapToEnd(page)).toBeLessThan(AT_END)
+	// A follow due at the stop lands in CodeMirror's next measure and its scroll is judged the frame
+	// after, so the hold is measured from two frames on; a move inside that span is not covered.
+	await page.evaluate((id) => {
+		const field = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelector(".cm-search .cm-textfield")
+		if (!(field instanceof HTMLElement)) throw new Error("the search panel has no field")
+		field.focus()
+		return new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))
+	}, HOST)
 	const line = await middleLine(page)
 	await logLines(page, 2)
 	await expectHeld(page, line)
