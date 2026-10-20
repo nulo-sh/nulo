@@ -14,3 +14,7 @@ Codex (gpt-6.1-sol, high), session `01a15b0a-a516-7d92-a5a1-eaf2e8fcd842`: `appr
 - O3, O4: two test titles overclaimed ("after a restart too"; "no node" is a node lookup that throws, outside the read's `try`).
 - O5: a duplicate `Harness` alias in the composition test; deleted.
 - O6: three classifier rows proved nothing an exact `Set` match does not already show; trimmed (the plan's named rows stay).
+
+## Code review, round 2 (2026-10-20)
+
+Codex, same session, resumed on the fix commit: `approve`, "No new findings. Both prior fixes and the six parallel-review fixes are verified." The loop converged.
