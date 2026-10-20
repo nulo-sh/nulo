@@ -112,7 +112,7 @@ Fast gate `F`: `bun run lint && bun run typecheck:all && bun run test` (each exi
 
 ## Post-implementation
 
-Steps 2-5 of [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `01c279124`: reviewer `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus review (`general-purpose`) beside round 1; one loop over the arc's diff from `dev` after phase 5; hard stop at three rounds. Merging is the orchestrator's call.
+Steps 2-5 of [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `01c279124`: reviewer `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus review (`general-purpose`) beside round 1; one loop over the arc's diff from `dev` after phase 5; hard stop at three rounds. Merging is the orchestrator's call.
 
 ## Audit verdicts
 
