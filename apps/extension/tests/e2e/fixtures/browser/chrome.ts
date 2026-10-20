@@ -57,11 +57,9 @@ async function launch({ extensionPath, userDataDir, headless, fixedWindowSize = 
 			"--disable-setuid-sandbox",
 			// Headless Chrome's size flag overrides the dimensions `windows.create` asks for.
 			...(fixedWindowSize ? ["--window-size=400,600"] : []),
-			// Prevent Chrome from throttling background/offscreen tabs. Headless
-			// Chrome doesn't have a "focused" page, so without these flags the
-			// renderer backgrounds the tab and rAF gets throttled to ~1Hz —
-			// which freezes Vue's `<Transition>` classes mid-enter and breaks
-			// any test that depends on a popup actually rendering.
+			// Keep a shown page that is not focused rendering: without these flags Chrome
+			// backgrounds its renderer, which freezes Vue's `<Transition>` classes mid-enter.
+			// They do not make a tab behind another draw: it runs no frame until brought to front.
 			"--disable-renderer-backgrounding",
 			"--disable-backgrounding-occluded-windows",
 			"--disable-features=CalculateNativeWinOcclusion",
