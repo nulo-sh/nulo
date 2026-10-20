@@ -1,7 +1,7 @@
 ---
 plan: symbol-sentences-1
 tier: light (the lane brief's call; one Codex audit round-trip plus one Opus Plan lens)
-status: arc 1 in progress on P75-01 D (branch symbol-sentences-1-a1)
+status: closed (arc 1 delivered in one PR against dev, #958; the merge closes the plan)
 issues: "#949 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 05313d5e6
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** closed. One arc, one PR against `dev` from `symbol-sentences-1-a1` (#958); the merge that lands it closes the plan.
+- **Shipped:** #949 by P75-01 D. `isBlank` in `utils/string.ts` is the predicate `dashIfBlank` already used; the eleven sentences read a noun for a blank symbol in page 75's words (the switch "Token / USD"), a blank pinned symbol in the Home-is-full list reads "—", amount slots and non-blank symbols unchanged. A case per sentence, each red on the base; 40 pictures in `screenshots/`.
+- **Dispositions:** the plan was written on C and rewritten to D when the owner picked; OA-1 (the `""` split on the switch) is moot under D. Codex R1 (a restored transfer symbol longer than the display cap) fixed on the transaction page; not extended to the pinned list or the Allow sheet, whose stored symbols `cleanSymbol` caps on add and on restore (unsupported conditions). Page 75's "the list refuses a blank symbol" held only for `""`; nothing depends on it.
+- **Known limits:** none new; #931 still covers glyphs that draw nothing.
+- **Open items:** none.
+- **Lessons:** none promoted: `lessons.md` holds 8152 of its 8192 bytes. The harness trap (a foreground call past 600 s is moved to the background, then stopped) is in `lessons/phase-2.md`, as in token-dash-2's phase 3.
+- **Size:** about 165 lines against the light target of 150: the Outcome and five review rows.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # symbol-sentences-1: a blank token symbol inside a sentence reads as words, not a gap
 
@@ -136,6 +148,8 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 | Codex gpt-6.1-sol high, review round 1 over the arc's diff (755b490e5), session `01a15a76-1357-74e2-9094-13d40293f483` | changes requested (R1) | R1, demonstrated: a restored transaction whose transfer symbol is 33 spaces passes `TxSchema`, `displaySymbol` caps it to 32 spaces and "…", so `isBlank` fails and the banner read "… is missing". Fixed in ce45a01c6: `missingTitle` judges the raw symbol first; a 33-space case, red before the fix. Not extended to the pinned list or the Allow sheet: both read a stored token's symbol, which `cleanSymbol` caps on add and on restore (`token/service.ts:1018,1071,1081`), so a longer run is already stored ending in "…" (unsupported conditions, no change). |
 | Opus 5.5 `general-purpose` review of the same diff | approve, V1-V2 | V1 the activity empty-state test's name did not cover its blank case: renamed. V2 no test pinned the raw symbol after USD mode's derived amount: added ("≈ 2    "). It checked every site against the plan, each red against the base templates, and found no missed sentence (every other interpolation is an amount slot or already dashed). |
 | Codex, review round 2 (resume) over ce45a01c6 | **approve**, no finding | R1's fix and the two nits verified; the stored-symbol disposition settled. Loop converged. |
+
+**Deviations (arc 1).** The pick was D, not the planned C: § Decision, D3 and phase 1 were rewritten before any code. Phase 1 step 0's first Block frame caught the Allow sheet fading out; the snack frames now wait for `settled()`, and the rerun is the one kept. The review loop ran after phase 1's gate, beside phase 2's first step; R1's fix landed before the armed build, so the pictures and e2e ran on the final code. The first smoke run was stopped by the harness at its 10-minute background limit, nothing red, and rerun detached.
 
 **Decision ledger.** The legs agreed on every point but one. Codex (C2) keeps D1 under every option, as the brief says; Opus (O7) found dropping it under B sensible if recorded. Taken: D1 everywhere, since the brief names it and it costs one export. Unresolved: none. Open for the owner: none (P75-01 answered D on 2026-10-20; OA-1 moot under D).
 
