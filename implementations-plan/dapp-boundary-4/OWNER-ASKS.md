@@ -1,6 +1,6 @@
 # dapp-boundary-4: owner asks
 
-Arc 1 depends on neither ask: it changes no screen. Arc 2 waits for OA-2.
+Arc 1 depends on neither ask: it changes no screen. OA-2 is decided; arc 2 ships it.
 
 ## OA-1: what the class-lookup consent row and the Details table show
 
@@ -16,4 +16,5 @@ Arc 1 depends on neither ask: it changes no screen. Arc 2 waits for OA-2.
 
 - **Surface.** No screen.
 - **The question and its options** are tracked privately with the orchestrator and are not written here.
-- **What ships now.** Nothing: arc 1 does not depend on it.
+- **Decision, 2026-10-20: P77-03 A**, "Per-app, per-profile counters of admitted registrations; one uniform refusal once used up." The new stored state (a registry entry, its goldens, the re-stamp) is approved with it.
+- **What ships.** Arc 2: the counts, the one refusal, and the removal of the PXE-level bound (plan § Arc 2).
