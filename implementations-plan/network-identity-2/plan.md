@@ -1,7 +1,7 @@
 ---
 plan: network-identity-2
 tier: light
-status: planned, Codex approve; one PR against dev, merging is the owner's call
+status: completed; one PR against dev, merging is the owner's call
 issues: none (the PR closes nothing)
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,20 @@ base: origin/dev at ad4de50d8
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20
+- **Status:** completed. PR #969 against `dev` carries the work and this close-out; merging it is the owner's call.
+- **Shipped:** #969.
+  - The token-list and price fetches use `cache: "no-store"`; the price fetch also `credentials: "omit"` and `referrerPolicy: "no-referrer"`, and its `FetchLike` takes a `RequestInit`.
+  - The composition test and one price unit test pin the options; the smoke token-list host sends a content `ETag`, and the request loop asserts no list request sends one back. On the old fetch code that assertion failed on Chrome and Firefox alike.
+  - `ARCHITECTURE.md` names what the two requests carry.
+- **Deviations:** D3 goes past the lane sketch's "no e2e". The Firefox runs cover the two callers of the changed host, not both whole suites (Phase 3). The close-out was pushed before the first checks watch, so the one watch covers the final head.
+- **Known limits:** none.
+- **Open items:** none. OA-1 and OA-2 are not issues: the orchestrator carries them to the owner, and each ships its "what ships now" form.
+- **Lessons:** none promoted; `lessons.md` is at its budget and this arc's notes stay in `lessons/`.
+- **Seeds retired:** the `/goal` and `/loop` seeds under § Seeds.
 
 # network-identity-2: the token-list and price requests bypass the browser's HTTP cache
 
@@ -117,6 +131,7 @@ Run every command from the worktree root unless the command starts with `cd`. Ph
 
 - Codex (`01a15b22`, high) and the Opus Plan leg: both **approve with changes**; every accepted change is in this revision and in [lessons/phase-0.md](lessons/phase-0.md). D2 split the legs (above).
 - Codex verification, resumed twice: the Phase 1 fallback and the close-out push corrected, then **approve**.
+- Implementation review: Codex round 1 clean (`01a15b44`); the Opus diff review asked for comment and doc wording only (adopted); Codex round 2 clean.
 - Not taken: a raw-304 test (the generic non-`ok` branch is unchanged and covered by the 503 cases, `S/token-list/service.composition.test.ts:231,263`); `Last-Modified` in the e2e host.
 
 ## Delivery
