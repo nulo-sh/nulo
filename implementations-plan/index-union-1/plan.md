@@ -118,6 +118,10 @@ None: a git attribute, two CI-gating tests and a planning doc.
 
 **Round 1 resumed, Codex** (verification): **approve**, no remaining finding.
 
+**Arc 1, Codex r1** (gpt-6.1-sol, high, session 01a15ac8): one finding: a global `merge.verifySignatures=true` fails the fixture's unsigned merges (it also failed four existing `permalinks.test.ts` tests; reproduced). Fixed at the cause: `fixture-repo.ts`'s isolation config passes `-c merge.verifySignatures=false`.
+**Arc 1, Opus diff review:** the same finding; both halves of the merge test shown to need union (probed without the attribute under four diff algorithms). Taken: `GIT_ATTR_NOSYSTEM=1` on the pin, beside `core.attributesFile=/dev/null`. Not changed: a repo-local `info/attributes` is read by the pin on a developer machine (git has no switch; CI has none), filed with the close-out's known limit.
+**Arc 1, Codex r2** (resumed): **clean**.
+
 ## Seeds
 
 - `/goal` Phase 1 marked ✓ in implementations-plan/index-union-1/plan.md with its red/green and gate output in the transcript; the Codex loop converged (a resumed pass with no new material finding quoted); PR `chore(plans): merge the archive index by union; pin the attribute to that one file` open against `dev` with the close-out commits and `Closes #957`; `bun run test:ci-gating` and `bun run lint` exit 0.
