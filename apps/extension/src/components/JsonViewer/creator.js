@@ -5,7 +5,7 @@
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language"
 import { EditorView } from "@codemirror/view"
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: accepted at 154 lines — one declarative CodeMirror theme value; splitting selector groups only fragments a single style sheet
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: accepted at 148 lines — one declarative CodeMirror theme value; splitting selector groups only fragments a single style sheet
 export const createTheme = ({ styles }) => {
 	const theme = EditorView.theme(
 		{
@@ -23,7 +23,6 @@ export const createTheme = ({ styles }) => {
 			},
 			".cm-cursor, .cm-dropCursor": {
 				borderLeftColor: "var(--txt-tertiary)",
-				borderRadius: "5px",
 			},
 			"&.cm-focused": {
 				outline: "1px solid transparent",
@@ -92,26 +91,30 @@ export const createTheme = ({ styles }) => {
 			".cm-selectionMatch": {
 				background: "transparent",
 				outline: "1px solid var(--txt-support)",
-				borderRadius: "2px",
 			},
 			".cm-panels": {
 				background: "transparent",
 			},
+			// One theme serves both app themes and is marked dark, so CodeMirror would draw the search box
+			// for a dark page in the light theme too: its text, field, buttons and edge take app tokens.
 			".cm-panel.cm-search": {
-				background: "var(--app-background)",
-				border: "2px solid rgba(255, 255, 255, 0.05)",
-				borderRadius: "6px",
+				background: "transparent",
+				color: "var(--txt-primary)",
+				border: "2px solid var(--nulo-border)",
 			},
 			".cm-textfield": {
 				fontSize: "80%",
-				borderRadius: "3px",
-				border: "1px solid rgba(255, 255, 255, 0.1)",
+				border: "1px solid var(--nulo-surface-high)",
 			},
 			".cm-button": {
-				borderRadius: "3px",
-				background: "rgba(255, 255, 255, 0.05)",
-				border: "1px solid rgba(255, 255, 255, 0.15)",
+				borderRadius: "0",
+				background: "var(--nulo-surface-low)",
+				border: "1px solid var(--nulo-surface-highest)",
 				textTransform: "capitalize",
+				// The base theme's pressed gradient is one class more specific than this rule.
+				"&:active": {
+					background: "var(--nulo-surface-high)",
+				},
 			},
 			".cm-search label": {
 				textTransform: "capitalize",
@@ -122,7 +125,6 @@ export const createTheme = ({ styles }) => {
 			".cm-tooltip.cm-tooltip-autocomplete": {
 				background: "#18181A",
 				border: "1px solid rgba(255, 255, 255, 0.05)",
-				borderRadius: "6px",
 				padding: "6px",
 			},
 			".cm-tooltip.cm-tooltip-autocomplete > ul": {
@@ -135,7 +137,6 @@ export const createTheme = ({ styles }) => {
 			".cm-tooltip.cm-tooltip-autocomplete > ul > li": {
 				display: "flex",
 				alignItems: "center",
-				borderRadius: "4px",
 				minHeight: "26px",
 
 				padding: "0 6px",
@@ -179,7 +180,6 @@ export const createTheme = ({ styles }) => {
 			},
 			".cm-tooltip.cm-completionInfo": {
 				background: "#18181A",
-				borderRadius: "5px",
 				border: "1px solid rgba(255, 255, 255, 0.05)",
 				padding: "6px",
 				left: "102%",
@@ -197,7 +197,6 @@ export const createTheme = ({ styles }) => {
 				flexDirection: "column",
 				gap: "8px",
 				background: "#18181A",
-				borderRadius: "6px",
 				border: "2px solid rgba(255, 255, 255, 0.05)",
 				padding: "6px",
 			},
@@ -211,7 +210,6 @@ export const createTheme = ({ styles }) => {
 			},
 			".cm-diagnosticAction": {
 				background: "rgba(255, 255, 255, 0.1)",
-				borderRadius: "4px",
 				padding: "2px 4px",
 				fontSize: "12px",
 				fontWeight: 600,
@@ -262,7 +260,10 @@ export const createLoggerTheme = () => {
 			},
 			".cm-scroller::-webkit-scrollbar-thumb": {
 				backgroundColor: "var(--txt-tertiary)",
-				borderRadius: "4px",
+			},
+			// CodeMirror's own base theme rounds its buttons by 1px.
+			".cm-button": {
+				borderRadius: "0",
 			},
 			".cm-content": {
 				minHeight: "max-content",

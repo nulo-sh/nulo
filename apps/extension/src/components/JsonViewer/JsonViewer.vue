@@ -143,7 +143,6 @@ onMounted(() => {
 	background: transparent;
 	box-sizing: content-box;
 	cursor: pointer;
-	border-radius: 5px;
 
 	padding: 4px;
 
@@ -163,7 +162,6 @@ onMounted(() => {
 	background: transparent;
 	box-sizing: content-box;
 	cursor: pointer;
-	border-radius: 5px;
 
 	padding: 4px;
 
