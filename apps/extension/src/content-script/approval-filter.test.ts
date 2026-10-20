@@ -23,6 +23,17 @@ describe("createApprovalFilter", () => {
 		expect(createApprovalFilter().admits(approval("mine"))).toBe(false)
 	})
 
+	test("the next document's filter drops an approval the navigated-away document passed, and passes its own", () => {
+		const before = createApprovalFilter()
+		before.sent(request("allowed"))
+		expect(before.admits(approval("allowed"))).toBe(true)
+
+		const after = createApprovalFilter()
+		after.sent(request("fresh"))
+		expect(after.admits(approval("allowed"))).toBe(false)
+		expect(after.admits(approval("fresh"))).toBe(true)
+	})
+
 	test("the record keeps the newest request ids only", () => {
 		const filter = createApprovalFilter()
 		for (let i = 0; i <= REMEMBERED_REQUESTS; i++) filter.sent(request(`r${i}`))

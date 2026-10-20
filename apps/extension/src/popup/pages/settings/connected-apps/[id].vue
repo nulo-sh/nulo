@@ -247,6 +247,18 @@ onBeforeUnmount(() => {
 			</Flex>
 		</Flex>
 
+		<!-- Establishment writes the hash, so a row without one was allowed and never connected. -->
+		<Text
+			v-if="!session.verificationHash"
+			data-testid="connected-app-not-connected"
+			variant="body"
+			color="secondary"
+			:style="{ lineHeight: '1.4' }"
+		>
+			You allowed this app, but it has not finished connecting. Nothing is shared with it. Its next connection
+			starts with the emoji check.
+		</Text>
+
 		<!-- Shared accounts -->
 		<Flex direction="column" gap="10" wide>
 			<SectionLabel label="Shared accounts" :count="accounts.length" />

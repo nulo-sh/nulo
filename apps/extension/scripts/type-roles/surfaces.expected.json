@@ -478,16 +478,6 @@
 			"suite": "smoke"
 		},
 		{
-			"id": "windows-ConnectStepBar",
-			"name": "Routed module popup/windows/ConnectStepBar.vue",
-			"kind": "route",
-			"source": "apps/extension/src/popup/windows/ConnectStepBar.vue",
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
 			"id": "popup-activity",
 			"name": "Activity",
 			"kind": "route",

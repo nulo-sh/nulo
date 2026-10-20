@@ -40,9 +40,7 @@ const NOT_SESSION_OWNED: Record<string, string> = {
 	pendingVerification: "keyed by discovery request id; its tombstones outlive the session",
 	pendingDiscoveryPromises: "keyed by (origin, chainId)",
 	dedupeWaiters: "keyed by (origin, chainId)",
-	handedOver: "keyed by request id, until its connect window settles",
 	admission: "keyed by request id; a session's end reaches it through its own onSessionGone",
-	closeWindow: "a function, holding nothing",
 	late: "handler-lifetime references",
 }
 
