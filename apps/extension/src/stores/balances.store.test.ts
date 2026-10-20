@@ -49,7 +49,14 @@ vi.mock("@/stores/app.store", async () => {
 
 import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 import { TxStatus } from "@/wallet/services/transaction/spec"
-import { EnsureSuperseded, INIT_FETCH_TIMEOUT_MS, INIT_RETRY_BACKOFF_MS, useBalancesStore, withTimeout } from "./balances.store"
+import {
+	EnsureSuperseded,
+	INIT_FETCH_TIMEOUT_MS,
+	INIT_RETRY_BACKOFF_MS,
+	selectedBalanceScope,
+	useBalancesStore,
+	withTimeout,
+} from "./balances.store"
 
 const SCOPE_A = { profileId: "p1", networkId: "n1", chainId: 111, accountAddress: "0xacct" }
 const SCOPE_A2 = { profileId: "p1", networkId: "n1", chainId: 111, accountAddress: "0xother" }
@@ -697,5 +704,23 @@ describe("withTimeout", () => {
 		const assertion = expect(p).rejects.toThrow(/getGasBalances timed out/)
 		await vi.advanceTimersByTimeAsync(1_000)
 		await assertion
+	})
+})
+
+describe("balances store — the selected scope", () => {
+	it("is the profile, network and account the popup has selected", () => {
+		expect(selectedBalanceScope({ profile: { id: "p1" }, network: { id: "n1", chainId: 7 }, account: { address: "0xacct" } })).toEqual({
+			profileId: "p1",
+			networkId: "n1",
+			chainId: 7,
+			accountAddress: "0xacct",
+		})
+	})
+
+	it("is null until all three are set", () => {
+		const network = { id: "n1", chainId: 7 }
+		expect(selectedBalanceScope({ profile: { id: "p1" }, network, account: null })).toBeNull()
+		expect(selectedBalanceScope({ profile: null, network, account: { address: "0xacct" } })).toBeNull()
+		expect(selectedBalanceScope({ profile: { id: "p1" }, network: null, account: { address: "0xacct" } })).toBeNull()
 	})
 })

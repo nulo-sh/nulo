@@ -19,6 +19,9 @@ const { openToast } = useToast()
 const route = useRoute()
 const router = useRouter()
 
+// Create opens on Passkey, so its row starts without the phrase step.
+const path = computed(() => (parseNext(route.query.next) === "import" ? "import" : "passkey"))
+
 const busy = ref(false)
 const termsVersion = currentVersion("terms").version
 
@@ -41,7 +44,7 @@ const handleAccept = async () => {
 <template>
 	<OnboardingPage :gap="28">
 		<OnboardingBackLink testid="legal-terms-back" />
-		<StepIndicator :current="1" />
+		<StepIndicator current="terms" :path="path" />
 
 		<header :class="$style.hero" data-testid="legal-terms-page">
 			<BrutalistTitle main="Before" sub="you start" />

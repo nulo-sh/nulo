@@ -11,6 +11,7 @@ import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
 /** Utils */
 import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import type { Config } from "@/wallet/config"
+import { doneRoute } from "./steps"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -72,7 +73,9 @@ onMounted(async () => {
 
 	const active = await hydrateKnownProfile()
 	if (active) {
-		router.replace("/onboarding/learn")
+		// The first navigation awaits the Terms guard, so the reloaded route may not be known yet.
+		await router.isReady()
+		router.replace(router.currentRoute.value.path === "/onboarding/import" ? doneRoute("import") : "/onboarding/done")
 		return
 	}
 

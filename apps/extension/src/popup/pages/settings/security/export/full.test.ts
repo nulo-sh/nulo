@@ -638,3 +638,51 @@ describe("export/full.vue — a reset in progress", () => {
 		wrapper.unmount()
 	})
 })
+
+describe("export/full.vue — a saved file clears Home's backup reminder", () => {
+	const FLAG = "nulo:ui:getStartedBackupSaved@p1"
+	const storageSet = () => chrome.storage.local.set as unknown as ReturnType<typeof vi.fn>
+	const flagWrites = () => storageSet().mock.calls.filter(([items]) => FLAG in (items as Record<string, unknown>))
+	const SUCCESS = { kind: "success", label: "Backup downloaded successfully" }
+
+	async function readyToDownload() {
+		vi.spyOn(EncryptionKey, "getPasshash").mockResolvedValue(new Uint8Array(32) as never)
+		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt: async () => new Uint8Array(29) } as never)
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+		await vi.waitFor(() => expect(downloadButton(wrapper).attributes("disabled")).toBeUndefined())
+		return wrapper
+	}
+
+	it("a finished download marks the profile's backup saved", async () => {
+		const wrapper = await readyToDownload()
+		await downloadButton(wrapper).trigger("click")
+		await vi.waitFor(() => expect(flagWrites()).toEqual([[{ [FLAG]: true }]]))
+		expect(openToast).toHaveBeenCalledWith(SUCCESS)
+	})
+
+	it("a download the page left before it finished marks nothing", async () => {
+		const held = deferred<void>()
+		downloadFile.mockImplementationOnce(() => held.promise)
+		const wrapper = await readyToDownload()
+		await downloadButton(wrapper).trigger("click")
+		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+		wrapper.unmount()
+		held.resolve()
+		await flushPromises()
+		expect(flagWrites()).toEqual([])
+		expect(openToast).not.toHaveBeenCalledWith(SUCCESS)
+	})
+
+	it("a flag write that fails still reports the download", async () => {
+		vi.spyOn(console, "debug").mockImplementation(() => {})
+		const wrapper = await readyToDownload()
+		storageSet().mockImplementation(async (items: Record<string, unknown>) => {
+			if (FLAG in items) throw new Error("quota")
+		})
+		await downloadButton(wrapper).trigger("click")
+		await vi.waitFor(() => expect(flagWrites()).toHaveLength(1))
+		expect(openToast).toHaveBeenCalledWith(SUCCESS)
+	})
+})

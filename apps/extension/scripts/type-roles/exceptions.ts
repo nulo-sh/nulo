@@ -28,7 +28,6 @@ export type Override = {
 	why: string
 }
 
-const PRESTO = "apps/extension/src/onboarding/pages/presto.vue"
 const APP = "apps/extension/src/popup/app.vue"
 const BRUTALIST = "packages/design/src/ui/BrutalistTitle.vue"
 const BALANCE = "apps/extension/src/popup/components/modules/general/BalanceView.vue"
@@ -44,18 +43,6 @@ const ROLELESS_WHY = "the icon-only variants carry no role and keep their size s
 const CONTACT_ROW = "apps/extension/src/popup/components/modules/settings/contacts/ContactRow.vue"
 
 export const CARVE_OUTS: CarveOut[] = [
-	{
-		file: PRESTO,
-		rule: "face",
-		text: "--pb-font-body: var(--font-body)",
-		why: "themes the third-party <presto-banner> shadow root, which no class reaches",
-	},
-	{
-		file: PRESTO,
-		rule: "face",
-		text: "--pb-font-display: var(--font-headline)",
-		why: "themes the third-party <presto-banner> shadow root, which no class reaches",
-	},
 	{ file: APP, rule: "face", text: "font-family: sans-serif", why: "the anti-scam banner's title, styled DevTools console output" },
 	{ file: APP, rule: "face", text: "font-family: sans-serif", why: "the anti-scam banner's text, styled DevTools console output" },
 	{
