@@ -64,6 +64,7 @@ test.skipIf(!hasConfig)(
 			(el: Element) => (el as HTMLElement).textContent?.trim() ?? "",
 		)
 		expect(symbol.length).toBeGreaterThan(0)
+		expect(symbol).not.toBe("—")
 
 		// Address must always render alongside the metadata (defense against
 		// phishing tokens that return misleading name/symbol strings).

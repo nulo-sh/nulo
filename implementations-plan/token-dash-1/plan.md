@@ -58,7 +58,7 @@ One arc, one PR against `dev`, no stack, `Closes #897`. Recon: [recon.md](recon.
 - **D4, accessibility** (the owner's 2026-10-19 delegation). The dash is plain text inside the existing status region, the plain form of Fact 3. A screen reader reads "Name:" and then the dash, or skips the dash at its default punctuation level; then the row sounds as it does today. *Rejected:* `aria-hidden` on the dash with no sentence (the row would read as a bare label); the `aria-hidden` dash beside a hidden sentence such as "No name" (new copy, an owner question).
 - **D5, tests.** Unit tests of the helper and one component case (phase 1); no new e2e scenario, since the change is one template expression and the component test reads the rendered row. One e2e assertion tightens so it keeps its meaning (phase 1 step 4). *Rejected:* an e2e with an empty-name token (no sandbox token has one; it needs a scratch read override, as the pictures use, for nothing a component test misses).
 
-## Phase 1: the helper, the card and their tests (#897)
+## Phase 1: the helper, the card and their tests (#897) ✓
 
 Assumptions: Facts 1-7, I1, I2.
 
