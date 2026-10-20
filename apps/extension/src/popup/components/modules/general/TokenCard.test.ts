@@ -286,6 +286,22 @@ describe("TokenCard — hostile rows", () => {
 		expect(w.find("[data-malformed]").exists()).toBe(false)
 		expect(w.text()).toContain("7")
 	})
+
+	test("a blank symbol and an empty or blank name read as the empty-value dash; data-symbol keeps the stored symbol", async () => {
+		mockQuotes = {}
+		const blank = factory({ updatedAt: 1, publicBalance: "5" }, { symbol: "   ", name: "" })
+		const spaces = factory({ updatedAt: 1, publicBalance: "5" }, { name: "   " })
+		const plain = factory({ updatedAt: 1, publicBalance: "5" })
+		await flushPromises()
+		const symbol = blank.get('[data-testid="token-symbol"]')
+		expect([symbol.text(), symbol.attributes("data-symbol")]).toEqual(["—", "   "])
+		expect(blank.get('[data-testid="token-name"]').text()).toBe("—")
+		expect(spaces.get('[data-testid="token-name"]').text()).toBe("—")
+		expect([plain.get('[data-testid="token-symbol"]').text(), plain.get('[data-testid="token-name"]').text()]).toEqual([
+			"TST",
+			"Test Token",
+		])
+	})
 })
 
 describe("TokenCard — R5 layout (subtitle left, private/public split right)", () => {

@@ -23,6 +23,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 
 /** Utils */
 import { buildActivityRows, rowOnToken } from "@/utils/activity-rows"
+import { dashIfBlank } from "@/utils/string"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 
 /** Composables */
@@ -127,7 +128,7 @@ const filterId = computed(() => {
 // Until the scope's tokens are read, an id names nothing yet: no list and no empty state paints.
 const filterPending = computed(() => filterId.value !== undefined && !tokensLoaded.value)
 const filterToken = computed(() => (filterId.value !== undefined && tokensLoaded.value ? tokenById(filterId.value) : undefined))
-const filterSymbol = computed(() => (filterToken.value ? sanitizeWireString(filterToken.value.symbol, 32) : ""))
+const filterSymbol = computed(() => (filterToken.value ? dashIfBlank(sanitizeWireString(filterToken.value.symbol, 32)) : ""))
 const visibleRows = computed(() => {
 	if (filterPending.value) return []
 	const token = filterToken.value

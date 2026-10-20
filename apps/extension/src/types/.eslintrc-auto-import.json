@@ -395,6 +395,7 @@
     "createFailedNotice": true,
     "createRunFence": true,
     "customRef": true,
+    "dashIfBlank": true,
     "debounce": true,
     "decodeRestoreOutcome": true,
     "decompressData": true,

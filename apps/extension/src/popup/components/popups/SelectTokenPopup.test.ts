@@ -181,6 +181,17 @@ describe("SelectTokenPopup", () => {
 		])
 	})
 
+	test("a row whose symbol is blank is titled with the empty-value dash; data-symbol keeps the stored symbol", async () => {
+		const wrapper = await mountOpen([row(1, "   ", { contract: "0xblank" }), row(2, "ALPHA")])
+		const titles = wrapper
+			.findAll('[data-testid="select-token-row"]')
+			.map((el) => [el.attributes("data-symbol"), el.attributes("data-title")])
+		expect(titles).toEqual([
+			["   ", "—"],
+			["ALPHA", "ALPHA"],
+		])
+	})
+
 	test("a row on another chain is not listed", async () => {
 		const wrapper = await mountOpen([row(1, "HERE"), row(2, "ELSEWHERE", { chainId: CHAIN + 1 })])
 		expect(rowSymbols(wrapper)).toEqual(["HERE"])
