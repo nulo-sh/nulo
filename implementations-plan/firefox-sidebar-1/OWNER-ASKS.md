@@ -1,29 +1,33 @@
 # firefox-sidebar-1: owner asks
 
-The draft PR ships without an answer to any of these, and each entry says what ships now. OA-2 and OA-4 gate the PR leaving draft.
+OA-1 to OA-4 are answered (decision page 71, 2026-10-20). OA-5 is open; what ships now is stated with it, and #889 leaves draft only once it is answered.
 
-## OA-1: how a person opens the sidebar
+## OA-1: how a person opens the sidebar (answered)
 
-- **Ships now**: Firefox's own sidebar UI, its sidebar menu or the sidebar launcher, lists "Nulo V6" with its icon. Settings → Display shows no "Open as Side Panel" row on Firefox, and the toolbar button keeps opening the popup.
-- **The question**: should Settings → Display offer the row on Firefox, with the toolbar button then opening the sidebar, as it opens Chrome's side panel?
-- **Cost if yes**: Firefox has no "open on action click". The row would call `sidebarAction.open()` in its click handler, since it requires user input. The background would also take over the toolbar button (`action.onClicked`, and the popup unset while the setting is on). That adds a background listener and a second Settings behaviour on Firefox, plus a test of each.
+P71-03, B: "Add Chrome's "Open as Side Panel" row on Firefox; the toolbar button then opens the sidebar." Built in Phase 5 (#889).
 
-## OA-2: the sidebar's width
+## OA-2: the sidebar's width (answered)
 
-- **Ships now (in the draft)**: the popup's 360 px layout. Firefox opens the sidebar narrower than that: 240–252 px for its default (old) sidebar, 340 px for the revamped one. In the old sidebar about a third of the page is cut until the person widens the sidebar or scrolls: the network badge and Lock, half of Receive, the end of the balance and the Settings tab (`screenshots/sidebar-home-opening-width.png`). In the revamped one every tab fits and the page scrolls 20 px. Pictures are in the PR.
-- **Gates leaving draft**: the answer is either a layout change, which is a new plan change with pictures, or an accepted limit, filed as a closed `known-limit` issue.
-- **The question**: should the shell fit a narrower sidebar? The options are a fluid width on the Firefox sidebar only, a fluid width on every surface, or Firefox's own resizing as today.
-- **Cost if yes**: a layout change across every popup page, reviewed with pictures.
+P71-01, B: "Fit every page down to 240 px everywhere: one layout for every width; the popup looks the same." The page added that any pick also signs the sidebar off as pictured, and that the layout change is planned and shown in pictures before it ships. Built in arc 2, its own PR.
 
-## OA-3: the sidebar at install and after an update
+## OA-3: the sidebar at install (answered)
 
-- **Ships now**: `open_at_install: false`. Installing Nulo opens no sidebar, as Chrome installs no open side panel. A sidebar left open comes back after a plain Firefox restart, but not after a Nulo update or a Firefox update that resets the startup cache (Firefox re-shows an extension's sidebar there only when this key is true).
-- **The question**: open the sidebar at install, and keep it across updates, by setting the key to true?
-- **Cost if yes**: every new Firefox install opens Nulo in the sidebar beside the onboarding tab.
+P71-04, A: "As in the draft: no sidebar at install; an open one survives restarts only." No change.
 
-## OA-4: is Linux proof enough
+## OA-4: is Linux proof enough (answered)
 
-- **Ships now**: the spike and the e2e spec run on Linux (headless in CI). They prove that a passkey step started in the sidebar runs in place, and that Firefox allows WebAuthn in a focused sidebar.
-- **The question**: on a Mac, does the OS passkey prompt leave the sidebar open and the step alive? The toolbar panel's window exists because a Mac closes the panel when that prompt takes focus (Mozilla bug 2026687), and headless Linux never shows that.
-- **What would settle it**: one manual unlock with a passkey from the sidebar on a Mac, using the draft PR's build. If the sidebar dies there, the step needs the panel's window and the arc changes.
-- **Gates leaving draft**: the answer is either that Mac check, run by the owner, or an accepted limit, filed as a closed `known-limit` issue.
+P71-02, A, in chat: the owner unlocks once with a passkey from the sidebar on a Mac, using a build of #889. #889 stays a draft until that report. If the sidebar dies there, the step keeps its window and arc 1 changes.
+
+## OA-5: the first toolbar click after Firefox starts
+
+- **Ships now**: with "Open as Side Panel" on, the toolbar button opens the sidebar. Firefox keeps that choice only while it runs. After a restart with the sidebar closed, the first click opens the popup; opening it wakes the wallet, which re-applies the choice, and every click after that opens the sidebar. A sidebar left open at shutdown comes back by itself.
+- **The question**: should the wallet start with Firefox, so that the first click opens the sidebar too?
+- **Cost if yes**: the background starts at every Firefox launch, and today the whole wallet boots with it: its migrations, Barretenberg and its services. There are two ways:
+  - start it for everyone, which is simpler;
+  - start it only while the setting is on, which leans on how Firefox persists a late-registered listener and needs its own test.
+  Either is background work at browser start that today waits until the person opens Nulo.
+- **Recommendation**: keep what ships. The gap is one click per launch and only with the sidebar closed; the cost is paid at every launch.
+- **A second part, also yours**: with the setting on, the wallet can no longer open its toolbar popup by itself after onboarding's "Open wallet" or after a passkey window. Firefox opens nothing when no popup is set.
+  - **Ships now**: nothing opens; the person clicks the toolbar button, and the sidebar opens. Filed as a known limit if you accept it.
+  - **The alternative**: onboarding's "Open wallet" opens the sidebar from its own click, a change to onboarding's last step. After a passkey window nothing can open the sidebar, since that click happened elsewhere.
+  - **Recommendation**: accept what ships. The setting is off on a new install, so onboarding with it on is rare, and the passkey window opens only from the popup, which with the setting on shows only on the first click after a restart.

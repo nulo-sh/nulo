@@ -10,277 +10,363 @@ eli5_mode: skipped (orchestrator-owned)
 base: 993b3efc
 trunk: dev
 post_implementation_hardening: not scheduled
-status: arc 1 in review (#889, draft for the owner's look); close-out after the owner's answers
+status: arc 1 in review (#889, draft) with Phase 5, the Display row (P71-03 B); arc 2, the 240 px layout (P71-01 B), is its own PR
 ---
 
-# firefox-sidebar-1: a Firefox sidebar whose passkey steps run in place (#596)
+# firefox-sidebar-1: a Firefox sidebar whose passkey steps run in place (#596), and a shell that fits it
 
 #596 asks for a Firefox sidebar (`sidebar_action`) as the side panel's counterpart. The owner made it conditional (P28-08 note, 2026-10-16): "I think that if the user has side-panel enabled on Firefox, we can skip the pop-up … be sure that the "side-panel" option can be really tested. Because if it can't be tested, then let's keep as-is today." The lane brief makes that a Phase 0 spike.
 
-**The spike meets the condition** (§ Phase 0). At retry 0 the suite opens the sidebar, clicks, types and reads testids, and it proves that a passkey unlock started there runs in place with no window.
+**The spike meets the condition** (§ Phase 0). Arc 1 ships the sidebar: the popup shell Chrome's side panel loads, an e2e spec on the Firefox lane, and pictures in draft PR #889.
 
-Arc 1 ships the sidebar with three parts:
-- the popup shell Chrome's side panel loads;
-- an e2e spec on the Firefox lane;
-- pictures, in a draft PR for the owner's look.
+**The owner's answers (decision page 71, 2026-10-20)** to OA-1 to OA-4:
+- **P71-01 (OA-2), B**: "Fit every page down to 240 px everywhere: one layout for every width; the popup looks the same." The page added: "Any pick also signs the sidebar off as pictured", and "That is a layout change on every page, planned and shown to you in pictures before it ships." That is arc 2, a PR of its own: it changes every page at every width and does not depend on the sidebar.
+- **P71-02 (OA-4), A**, in chat: "ill test firefox". The owner will unlock once with a passkey from the sidebar on a Mac, using a build of #889. #889 stays a draft until that report. If the sidebar dies there, the step keeps its window and arc 1 changes.
+- **P71-03 (OA-1), B**: "Add Chrome's "Open as Side Panel" row on Firefox; the toolbar button then opens the sidebar." That is Phase 5, in #889.
+- **P71-04 (OA-3), A**: "As in the draft: no sidebar at install; an open one survives restarts only." No change.
 
-Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Every spike run and consult: [`lessons/phase-0.md`](lessons/phase-0.md).
+Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spike runs and consults: [`lessons/phase-0.md`](lessons/phase-0.md).
 
 ## Phase 0: the spike
 
 **Setup** (uncommitted):
 - **Versions**: Firefox 153.0.4 (the revision puppeteer-core 25.8.0 pins), geckodriver 0.37.1, Bun 1.4.2, Linux, at `993b3efc`.
-- **Manifest**: the Firefox manifest gains a `sidebar_action` for `src/popup/index.html` with `open_at_install: false`.
-- **Build**, with the smoke flags: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:firefox`.
-- **Run**: a scratch spec on the suite's fixtures, `cd apps/extension && NULO_E2E_BROWSER=firefox NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/<spec> --retry=0`.
-- **Opening**: `chromeScript` calls `extension.apiManager.global.sidebarActionFor(extension).open(window)`, which is what `sidebarAction.open()` runs. It then finds the document at `SidebarController.browser.contentDocument.getElementById("webext-panels-browser")`.
+- **Build and run**: the smoke flags (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:firefox`), then a scratch spec, `cd apps/extension && NULO_E2E_BROWSER=firefox NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/<spec> --retry=0`.
+- **Opening**: `chromeScript` calls `extension.apiManager.global.sidebarActionFor(extension).open(window)`, which is what `sidebarAction.open()` runs, and finds the document at `SidebarController.browser.contentDocument.getElementById("webext-panels-browser")`.
 
-**Round 0a misread the browser.** Its eleven runs found that the sidebar never took focus and that WebAuthn was refused there. The Opus leg traced why (round 1, finding 1):
-- Every read went through `chromeScript`, whose `POST /window` makes Marionette focus the selected tab's browser (`focus` defaults to true; `marionette/browser.sys.mjs` `focusWindow`).
-- The focus log shows each activation of the sidebar's remote browser undone by the next action. In run 9, `actionid 43` activates it and `44` deactivates it in favour of the tab's browser.
-- The toolbar panel kept its activation through the same calls, which hid the cause.
+**Round 0a misread the browser.** Its eleven runs found that the sidebar never took focus and that WebAuthn was refused there. The Opus leg traced why: every read went through `chromeScript`, whose `POST /window` makes Marionette focus the selected tab's browser (`marionette/browser.sys.mjs` `focusWindow`). In run 9, `actionid 43` activates the sidebar's browser and `44` deactivates it in favour of the tab's.
 
 **Round 0b** sends each input, and reads each outcome during a ceremony, with no window switch in between:
 
-| Probe | Channel | Result (0b runs 2–4, retry 0; run 1's failures are in the lessons) |
+| Probe | Channel | Result (0b runs 2–4, retry 0) |
 |---|---|---|
-| Open | `chromeScript` | Works; the page reaches `#/popup/auth` with the service ready. `getViews({ type: "sidebar" })` lists it and `popup` does not, so `passkeyNeedsOwnWindow()` is already false there. |
-| Read testids, hash, state | frame script (`evaluateViaFrameScript`) | Works. Each read moves focus to the tab (above). |
-| Address it as a Puppeteer page | WebDriver BiDi | Not possible. Its context is content, top-level and in no tab, so it has no navigable id (`NavigableManager.getBrowsingContextById`) and `script.evaluate` answers `no such frame`. Classic `/frame` has no route either: the context has no parent, and `MarionetteCommandsChild.switchToFrame` searches only children. |
-| WebAuthn | `host.focus()`, then a frame script, in one privileged script | `hasFocus()` is true, the content process's active context is the sidebar's, and `navigator.credentials.get` resolves `ok public-key`, 3 of 3 per run. |
+| Open | `chromeScript` | The page reaches `#/popup/auth` with the service ready. `getViews({ type: "sidebar" })` lists it, so `passkeyNeedsOwnWindow()` is already false there. |
+| Read testids, hash, state | frame script (`evaluateViaFrameScript`) | Works; each read moves focus to the tab. |
+| Address it as a Puppeteer page | WebDriver BiDi | Not possible: its context is in no tab, so it has no navigable id, and classic `/frame` has no route to it. |
+| WebAuthn | `host.focus()`, then a frame script, in one privileged script | `navigator.credentials.get` resolves `ok public-key`, 3 of 3 per run. |
 | Passkey unlock in place | the wallet's Continue, one chrome-context click; outcome read from a control page over BiDi | Unlocked 0.6–0.7 s after the click; no passkey window. |
-| Click | chrome-context `/actions` at the element's centre, mapped through `mozInnerScreenX/Y` | Works on Continue, a field and every nav tab inside the view. At 252 px the Settings tab is outside it (Width row); with the sidebar widened to 420 px, all four tabs work. |
-| Type | the key source of the same `/actions` payload, after the click | Works: a typed and submitted password unlocks, and the settings search shows its results. |
-| Width | none | The old sidebar (Firefox 153's default) opens 240–252 px wide, the revamped one 340 px. The shell's 360 px `min-width` overflows both. At 252 px the Settings tab sits at 273–327 px, outside the view; at 340 px it fits, and the page scrolls 20 px. Widened to 420 px, every tab is reachable. |
-| Old and revamped sidebar, headless and headful | the passkey case alone (runs 5, 6a, 6b) | The same result in all four: WebAuthn resolves 3 of 3, and the unlock runs in place with no window. |
+| Click and type | chrome-context `/actions` at the element's centre, mapped through `mozInnerScreenX/Y` | Works on buttons, fields and nav tabs inside the view. |
+| Width | none | The old sidebar (Firefox 153's default) opens 240–252 px wide, the revamped one 340 px; the shell's 360 px floor overflows both. |
+| Old and revamped sidebar, headless and headful | the passkey case (runs 5, 6a, 6b) | The same result in all four. |
 
-Runs and outputs: `lessons/phase-0.md`.
-
-**Verdict: the condition is met.** The owner asked that the side-panel option "can be really tested". On the Firefox lane, at retry 0, the suite can open a Firefox sidebar, drive it, and prove that a passkey step started there runs in place.
-
-Two rules make this hold, and the driver states both:
-- an input and the step it starts go in one `/actions` payload;
-- outcomes during a ceremony are read from a page opened beforehand, never through a privileged call.
+**Verdict: the condition is met.** Two rules make it hold, and the driver states both: an input and the step it starts go in one `/actions` payload; outcomes during a ceremony are read from a page opened beforehand.
 
 ## Outcome & Quality Bar
 
-- **For whom**: a Firefox user who keeps Nulo open in the sidebar. On a Mac, a passkey step started in the toolbar panel opens a window (#593). Started in the sidebar, it runs where they are.
+- **For whom**: a Firefox user who keeps Nulo beside their tabs. A passkey step started in the sidebar runs where they are (#593's motivation); the toolbar button can open the sidebar; every page fits the sidebar's width.
 - **Excellent**:
-  - a passkey step started in the sidebar runs in place and opens no window;
-  - the toolbar popup, its passkey window and the Chrome side panel behave exactly as before;
-  - one e2e scenario proves it at retry 0, with no raised timeout and no retry;
-  - the sidebar driver follows the panel module's shape and states its focus rule where the next spec author will read it;
-  - the draft PR carries pictures of the new surface.
-- **Good enough** for the draft: no Display row on Firefox, no width rule, no new copy (OA-1, OA-2); the sidebar does not open at install (OA-3); no Mac run (OA-4). The PR leaves draft only once the owner has answered OA-2 and OA-4 (§ Delivery).
+  - a passkey step started in the sidebar opens no window, proven at retry 0 on both sidebar kinds;
+  - with the side-panel setting on, the toolbar button opens the sidebar and no popup, proven at retry 0; with it off, the popup comes back;
+  - every popup page and window lays out at 240 px with no text cut or past its box, on both browsers, by the suite's own layout gate;
+  - at 360 px and wider every page is pixel-identical to `dev`, on both browsers and both themes;
+  - Chrome's side panel and toolbar popup behave exactly as before.
+- **Good enough**: no Mac run before the owner's (P71-02); the restart gap of § Phase 5, which the owner accepts or rejects before #889 leaves draft (OA-5); the toolbar popup the background can no longer open with the setting on (D15).
 
 ## Assumptions
 
-**Facts** (at `993b3efc`; recon has the citations)
-1. Chrome's side panel loads `src/popup/index.html` (`manifest/manifest.config.ts:32-34`). The Firefox manifest strips `sidePanel` and declares no sidebar (`manifest/manifest.firefox.config.ts:12-16`).
-2. On Firefox, a passkey step runs in its own window only when it starts in a `popup` view (`utils/browser-surface.ts`). A sidebar is a `sidebar` view (spike), so the step runs in place with no product change.
-3. Firefox 153 behaviour around the manifest key (`ext-sidebarAction.js`, `browser-sidebar.js`, `schemas/sidebar_action.json`):
-   - it titles a sidebar `default_title`, else the add-on's name ("Nulo V6", which the toolbar button already shows);
-   - without a `default_icon` it draws the generic puzzle piece, not the add-on's icons (`ExtensionParent.sys.mjs` `IconDetails`; corrected in arc 1, D7);
-   - `sidebarAction.open()` requires user input;
-   - an ordinary restart reopens a sidebar that was open;
-   - the extension shows its sidebar at install, or after its own update or a startup-cache reset, only when `open_at_install` is true.
-4. Marionette's window switch focuses the tab's browser (`focusWindow`), so every `chromeScript` call deactivates a focused sidebar (§ Phase 0).
-5. Nothing in the repository lists e2e spec files. The smoke config takes `tests/e2e/*.test.ts` (`vitest.e2e.config.ts:12`), and the Firefox smoke lane runs on any `apps/extension/**` change.
-6. `implementations-plan/lessons.md` is 8191 bytes, at its 8 KiB budget.
+**Facts** (recon has the citations)
+1. Chrome's side panel loads `src/popup/index.html` (`manifest/manifest.config.ts:32-34`); arc 1's Firefox sidebar loads the same page.
+2. On Firefox, a passkey step runs in its own window only when it starts in a `popup` view (`utils/browser-surface.ts`); a sidebar is a `sidebar` view.
+3. Firefox 153 around the manifest key: it titles a sidebar with the add-on's name; it draws a puzzle piece without `default_icon` (D7); `sidebarAction.open()` requires user input; a plain restart reopens an open sidebar; `open_at_install` alone re-shows it at install or after an update.
+4. Marionette's window switch focuses the tab's browser, so every `chromeScript` call deactivates a focused sidebar.
+5. The smoke config takes `tests/e2e/*.test.ts`, and the Firefox smoke lane runs on any `apps/extension/**` change.
+6. `implementations-plan/lessons.md` is at its 8 KiB budget.
+7. **Chrome's row** (`popup/pages/settings/display.vue:42-47, 80-98`): toggling writes `sidePanel`; on success it opens the side panel when on, and closes the page either way. `popup/app.vue:116-121` applies `setPanelBehavior` at boot and on each change, and Chrome keeps it. The row is gated on `chrome.sidePanel`, and so is Settings search (`settings/index.vue:56`).
+8. **Firefox keeps a set popup in memory only**: `PanelActionBase.globals = Object.create(this.defaults)`, and `setPopup({ popup: null })` deletes the override, so the manifest's popup returns (`ExtensionActions.sys.mjs`). A browser restart or an add-on reload restores the manifest popup.
+9. **With no popup set, a click dispatches `action.onClicked`** (`triggerClickOrPopup`), registered with `inputHandling: true` (`ext-browserAction.js`): the listener runs with the user input `sidebarAction.open()` requires. The listener is persistent, so a click wakes the event page.
+10. **At browser startup Firefox starts an event page only** when it has no persisted listener or a persisted `runtime.onStartup` listener (`ext-backgroundPage.js`). This background has persisted listeners and no `onStartup`, so it starts on its first event, and its start is the whole wallet boot (`wallet/runtime.ts`: migration, config, Barretenberg, services).
+11. **The shell's floor**: `body { width: var(--base-width); min-width: var(--base-width) }` (`popup/index.scss:18-26`), `--base-width: 360px` (`packages/design/src/base.css:68`); windows set `width: 100%` (`data-fills-window`). A toolbar popup sizes itself to its document's content width in both browsers.
+12. **The layout gate exists**: `expectLaidOut` (`tests/e2e/fixtures/type-roles.ts:524`) fails on text an ancestor cuts, or that runs past its box, with no ellipsis drawn. The seeded page sweeps in `type-roles.test.ts` (lines 731, 803, 926) run it at 360 px; `network/type-roles-windows.test.ts` runs it in the windows at 400 px.
+13. **Measured at 240 px** (scratch sweep, 45 popup routes, the floor lifted, seeded rows, Chrome 152 and Firefox 153; `lessons/phase-6.md`):
+    - every signed-in page: the header's Lock chip ends at 277 px, and the network chip shrinks to its dot;
+    - Home, History and a token's page: an activity row's state chip runs to 257 px over the amount, and its title row is cut;
+    - a transaction's page: the From/To cards run past the view with a long contact name;
+    - labels cut inside their buttons: Send's `CONFIRM TRANSACTION`, `CREATE WITH PASSWORD`, and Accounts' side-by-side `ADD ACCOUNT` / `IMPORT ACCOUNT`;
+    - by eye: `RECENT ACTIVITY` and `VIEW HISTORY` touch; an account-state record breaks a mono address over two lines (`0x1a` / `1a1…`); the logger window's toolbar overlaps its first lines;
+    - every other route lays out with nothing cut.
+    At 360 px the same sweep finds only what `dev` already has (the activity row's hash touching its explorer link by 3 px, the logger by 1 px). Not measured yet: four route states (`lessons/phase-6.md`), every window, and every surface a page opens on demand (Fact 17).
+14. **Closing the sidebar**: Firefox hides a sidebar whose page closes itself (`webext-panels.js` handles `DOMWindowClose`), but it refuses a page's own `window.close()` once that page's history has grown (`onboarding/pages/done.vue` records the same rule), and reaching Display always navigates. Measured: from Display, `window.close()` left the sidebar open while the write landed (Phase 5 run 3). `sidebarAction.close()`, like `open()`, requires user input (`sidebar_action.json`). `getViews({ type: "sidebar" })` lists the sidebar's document on Firefox; Chrome's `getViews` refuses the type.
+15. **`action.openPopup()` with no popup set opens nothing** and resolves (`ext-browserAction.js`: it opens only `if (action.getPopupUrl(...))`). The wallet calls it after onboarding's "Open wallet" and after the passkey window hands a step back (`wallet/utils/toolbar-popup.ts`).
+16. **A background death locks the wallet** under strict mode, the default (`sw-resilience.test.ts`), so the click that wakes a stopped background opens a locked sidebar.
+17. **Surfaces a page opens on demand**: the overlays under `popup/components/popups/` (25 `*Popup.vue`), dropdown menus (`components/ui/Dropdown/DropdownRoot.vue`, mounted only while open and positioned with fixed widths), the legal sheet, toasts with an action, tooltips, the logger's filters (`components/JsonViewer/LogsToolbar.vue`), and the register and restore states. A route visit sees none of them unless it opens them.
+18. **What the reviewers found in the code**: Lock's accessible name is "Lock wallet" (`components/Header.vue:245`); the network chip already ends in an ellipsis; `TransactionCardLayout` already has `wrapTrailing`, which puts the title's trailing chip on its own line (`components/composite/activity/TransactionCardLayout.vue:45, 111`); the CTA sizes live in `packages/design/src/ui/Button.vue`, which the extension's `Button` wraps; complete values that a person inspects wrap on purpose (an account-state note's hex, `popup/windows/execute/CallArguments.vue`'s arguments). `expectLaidOut` reads horizontal spans only (`fixtures/type-roles.ts:128`), so it cannot see the logger's vertical overlap.
+19. **A media query's `width` is the viewport's, scrollbar included**, so a classic scrollbar does not flip it. A zoomed 360 px popup can report a 359.x px viewport (the Opus leg).
 
 **Inferences**
-- I1: On a Mac, the OS passkey prompt over a sidebar behaves as it does over a tab: the sidebar is not a panel that closes when it loses focus. Plausible but unverified, since there is no Mac run (OA-4).
-- I2: Which sidebar a Firefox 153 user gets is not settled. The static default is the old one (`sidebar.revamp` false), and the revamped one is a person's choice or a rollout. The passkey case passes on both, headless and headful (runs 5, 6a, 6b), so the spec drives the default. The pictures show both.
-- I3: Chrome's side panel opens near 360 px wide, so the shell fits it. This comes from vendor documentation, not a measurement; Firefox's sidebar opens narrower (measured).
+- I1: On a Mac, the OS passkey prompt leaves a sidebar open (it is not a panel). Unverified; the owner checks it (P71-02).
+- I2: Which sidebar a Firefox 153 user gets is not settled, so the spec drives both (D8).
+- I3: With `max-width: 100%` in place of `min-width`, a toolbar popup still opens 360 px wide. Plausible, not proven: Chromium's autosizer also starts from minimum dimensions on a scroll-width path (the Codex leg). Phase 6 step 1 checks both real popups, settled after load and after a route change, before anything else. If either shrinks, the floor stays for a real toolbar popup (a `popup` view, as `isToolbarPanel` reads it) and only the sidebar, the side panel and windows lose it.
+- I4: The dApp windows (discover, verify, capabilities, execute, fee, network-unavailable, passkey) share the measured components; their own offenders are measured in Phase 6 on the network lane.
 
-**Asks**: in `OWNER-ASKS.md`, each with what ships now.
-
-**Issue claims**
-- #596 holds:
-  - no Firefox side panel exists (Fact 1);
-  - the e2e suite can drive one (§ Phase 0);
-  - a passkey step there runs in place (demonstrated on Linux).
-  - "A sidebar document does not close when the OS passkey prompt takes focus" is unverified (I1).
-- #593's research comment holds at `993b3efc`. Once this ships, its reopening condition "a Firefox sidebar ships" is met for the sidebar path only. The toolbar panel's window stays as decided (P28-08 C).
+**Issue claims**: #596 holds (Fact 1, § Phase 0); "the sidebar does not close under the OS prompt" is I1. #593 stays closed; its reopening condition, "a Firefox sidebar ships", is met for the sidebar path only.
 
 ## Architecture & Implementation
 
-**Product**: one manifest key. `manifest/manifest.firefox.config.ts` adds `sidebar_action: { default_panel: ManifestConfig.side_panel.default_path, default_icon: ManifestConfig.icons, open_at_install: false }` (`default_icon` added in arc 1, D7).
-- The sidebar loads exactly the page Chrome's side panel loads.
-- Firefox titles it with the add-on's name, so there is no new copy; the icon is the add-on's own (Fact 3, D7).
-- The comment on the stripped `sidePanel` names the sidebar as its Firefox counterpart.
+**Arc 1, Phases 1–4 (shipped in #889)**:
+- `manifest/manifest.firefox.config.ts` adds `sidebar_action: { default_panel: side_panel.default_path, default_icon: icons, open_at_install: false }`.
+- The e2e driver: `WebDriverSession.chromeActions`; `fixtures/browser/firefox-sidebar.ts` (`openSidebar(kind)`, `evaluateInSidebar`, `clickInSidebar`), all in the session's first window; `FIREFOX_ONLY.sidebar`; a `FIREFOX.md` row and the native-surface exception.
+- `tests/e2e/firefox-sidebar.test.ts`: per sidebar kind, a locked passkey profile unlocks from the sidebar's Continue, with no window (`watchPasskeySurface` on a control page) and exactly one `credentials.get` in the sidebar. Measured 13.1–20.7 s per scenario.
+- Pin: `src/manifest.test.ts`.
 
-Nothing else changes: the predicate already runs the step in place (Fact 2), and the Display row stays Chrome-only (OA-1).
+**Phase 5, the Display row on Firefox (P71-03 B), in #889**:
+- `utils/browser-surface.ts`:
+  - `sidebarAction()` returns Firefox's `browser.sidebarAction` (`open`, `close`), `undefined` elsewhere;
+  - `hasSidePanelSurface()` is `Boolean(chrome.sidePanel) || sidebarAction() !== undefined`;
+  - `isFirefoxSidebar()`: this document is the sidebar (Fact 14), asked only where a sidebar exists.
+- `settings/display.vue`:
+  - the row's gate becomes `hasSidePanelSurface()`; the copy stays Chrome's ("Open as Side Panel"), as P71-03 B names;
+  - in the toggle's own event, once the write is posted (D10): turning it on calls `sidebarAction().open()`; turning it off in the sidebar calls `sidebarAction().close()`, since `window.close()` cannot close it from Display (Fact 14);
+  - then, as on Chrome, the page closes once the write settles; Chrome's `chrome.sidePanel.open` stays where `chrome.sidePanel` exists;
+  - a `side-panel-toggle` testid.
+- `@nulo/extension-messaging`'s background `ServiceClient` gains `isConnected` (a port that said Ready is open, so a request posts before the call returns); `display.vue` opens or closes the sidebar only while it holds.
+- `settings/index.vue`: Settings search's context uses `hasSidePanelSurface()`. `popup/app.vue`'s comment on `setPanelBehavior` says where Firefox's wiring lives.
+- `wallet/utils/toolbar-sidebar.ts` (new), registered at module scope in `wallet/index.ts` before the runtime starts. On Firefox only (a `sidebarAction`, no `chrome.sidePanel`):
+  - `chrome.action.onClicked` calls `sidebarAction.open()` synchronously (Fact 9);
+  - `config.onUpdate` for `sidePanel` calls `chrome.action.setPopup({ popup: value ? "" : null })`. `null` restores the manifest's popup, so no path is repeated.
+  - Because Firefox keeps the popup in memory (Fact 8), every background start re-applies the stored value: the config load emits it when it differs from the default. An add-on update restarts the background at once.
+  - **The restart gap**: after a browser restart with the sidebar closed, the first click opens the popup, whose start wakes the background; later clicks open the sidebar. Closing it means starting the whole wallet at every Firefox launch (Fact 10). That is background work, so it is OA-5: this phase ships without it, and #889 leaves draft only once the owner has answered.
+  - **What the background can no longer open** (D15): with the setting on, onboarding's "Open wallet" and the passkey window's return open nothing (Fact 15); the toolbar button still opens the sidebar. A visible change, so it is asked with OA-5.
+- Chrome changes nothing: no listener, no `setPopup`, the same row. The settings-search test's no-side-surface context is renamed from `FIREFOX` to `NO_SIDE_SURFACE`.
+- **Tests**:
+  - unit:
+    - `browser-surface.test.ts`: both browsers and neither; only the sidebar's document is the sidebar, and Chrome is never asked;
+    - `client.test.ts` (`@nulo/extension-messaging`): `isConnected` holds from Ready until the port drops, and a request made while it holds posts before it returns;
+    - `display.test.ts` on Firefox:
+      - the row renders;
+      - turning it on calls `open` after the write is posted and before it settles, then closes the page after it;
+      - turning it off in the toolbar panel closes the panel and leaves the sidebar alone;
+      - turning it off in the sidebar calls `close` after the write is posted, in the same event;
+      - a client still reconnecting neither opens nor closes the sidebar;
+      - a failed write closes nothing and shows the error;
+    - `toolbar-sidebar.test.ts`:
+      - Chrome registers nothing;
+      - Firefox opens the sidebar from a click and swaps the popup on each `sidePanel` change, ignoring other keys.
+  - e2e:
+    - `settings-routes.test.ts`: Firefox now finds the row in search;
+    - a third `firefox-sidebar.test.ts` scenario, "with the side-panel setting on, the toolbar button opens the sidebar, and with it off the popup again".
+- **The e2e scenario's steps**:
+  1. Open the toolbar panel on Display and click the toggle with a real pointer (`clickInActionPopup`). Expect the sidebar open, `sidePanel` stored true (read on a control page), the panel closed, and `action.getPopup` reading `""`.
+  2. Close the sidebar (`closeSidebar`; D6 revisited) and the control page, and stop the background (`stopBackground`), so the click has to wake it.
+  3. Trigger the toolbar action as a click does (`triggerToolbarAction`: `browserActionFor(extension).triggerAction(window)`, the widget's own path). Read both surfaces as soon as either shows: the sidebar open, no panel.
+  4. The woken wallet is locked (Fact 16): unlock on a new control page; the sidebar follows. In the sidebar, open Display and turn the setting off: the sidebar closes, `sidePanel` is stored false and `action.getPopup` reads the manifest's popup.
+  5. Trigger the action again: the panel open, no sidebar.
+- **The scenario's budget**:
+  - failure mode: the setting or the click handler no longer opens the sidebar, a stale popup wins, a woken background misses the click, or the sidebar stays open after the setting turns off;
+  - no cheaper layer: the user-input rule, the popup swap, the wake and the panel exist only in Firefox;
+  - estimate 25 s; measured 19.4, 19.6 and 20.4 s (three runs at retry 0). The Firefox smoke wall-clock before and after goes in #889's body.
+- **Negative controls** (uncommitted, `lessons/phase-5.md`): with the `onClicked` listener emptied, step 3 fails reading `{ sidebar: false, popup: false }`; the build before `close()` failed at step 4's "the sidebar closing itself".
+- **Driver**: `clickWithPointer` in `firefox-frame-script.ts` takes a locator, scrolls the element into view as WebDriver's element click does, and refuses one it cannot reach. `clickInSidebar` and `clickInActionPopup` are that helper with each surface's locator; the pointer reached the panel, so no step falls back to a unit test.
 
-**e2e driver** (Firefox only, beside `firefox-action-popup.ts`):
-- `fixtures/browser/webdriver-classic.ts` gains `WebDriverSession.chromeActions(actions)`. Like `chromeScript` it holds the session exclusively; it switches to chrome context and the first window, sends `POST /actions` and `DELETE /actions`, then returns to content context.
-- `fixtures/browser/firefox-sidebar.ts` (new):
-  - `openSidebar`, `evaluateInSidebar` and `clickInSidebar(testid)` (reads the rect first, refuses an element outside the sidebar's view, then sends one pointer payload), on a `LOCATE_SIDEBAR` locator like the panel's (D6);
-  - every one of them works in the window `chromeScript` and `chromeActions` run in, the session's first browser window. The locator searches only that window, so the sidebar opened, read and clicked is one document even when a second window carries its own sidebar;
-  - its header states the two rules from the verdict;
-  - it reuses `actionPopupContext` for the session and add-on id, and `evaluateViaFrameScript`.
-- `fixtures/browser/index.ts`: `FIREFOX_ONLY.sidebar`.
-
-**e2e spec** `tests/e2e/firefox-sidebar.test.ts`, one scenario per sidebar kind (D8) under `describe.skipIf(!isFirefox)(FIREFOX_ONLY.sidebar, …)`:
-- Steps:
-  1. Register a passkey profile in a control popup (`registerPasskeyProfile`, `sessionAuthenticator`), note its session's profile, then lock it.
-  2. Open the sidebar of the named kind, wait for its lock screen, and start counting `navigator.credentials.get` calls in the sidebar page's own realm (`inPageRealm`, as `armPanelDeath` counts the panel's).
-  3. On the control page, assert there is no session row, then start `watchPasskeySurface` (`fixtures/passkey.ts`), whose `chrome.windows.onCreated` counter records every window Firefox opens, whichever API or context opens it, even one that opens and closes between two reads.
-  4. Click Continue in the sidebar (`clickInSidebar`).
-  5. Read only through the control page: `waitForSessionRow` sees the noted profile's session (the success control), and `readPasskeySurface` counts no window (the never-happens check).
-  6. Then, with the ceremony over, poll the sidebar until it reaches `#/popup/general` with its readiness markers: the session row is written before the sidebar routes (0b run 2). The sidebar's count reads exactly one `get`, so the ceremony ran in the sidebar and an unlock without one cannot pass.
-- **The recorder is validated once** (uncommitted): with `passkeyNeedsOwnWindow()` forced true, the scenario must fail at step 5 with one window counted. The run goes in `lessons/phase-2.md`.
-- **Failure mode**: a passkey step started in a Firefox sidebar opens a window, or Firefox refuses it there. That covers three regressions:
-  - a predicate that starts sending sidebars to the window;
-  - a manifest that stops declaring the sidebar;
-  - a Firefox that stops allowing WebAuthn in a focused sidebar.
-- **Why no cheaper layer**: view types and WebAuthn's focus rule exist only in a real Firefox.
-- **Estimate**: 25 s. The spike's passkey case, setup included and with three extra WebAuthn probes, measured 19.3–21.7 s headless (runs 2–4). Measured in arc 1: 15.8–20.7 s for the default sidebar, 13.1–15.4 s for the revamped one (`lessons/phase-2.md`).
-
-**Pins**: `src/manifest.test.ts` adds one case. Firefox's `sidebar_action.default_panel` equals Chrome's `side_panel.default_path`, `open_at_install` is false, and Chrome's build has no `sidebar_action`.
-
-**Docs**: `FIREFOX.md` gets two edits.
-- **A table row** saying that the sidebar is no BiDi navigable, that it is reached from privileged scope, and that a privileged call moves focus to the tab. It points at the module and the spec.
-- **One sentence under "The one rule"** naming the bounded exception both native-surface modules already use: a surface only Firefox has (the toolbar panel, the sidebar) is driven by a module of its own under `fixtures/browser/`, imported only by `FIREFOX_ONLY` specs. Chrome has no counterpart to implement, so nothing goes on the interface.
-
-**Alternatives not taken**
-- **A Display row that makes the toolbar button open the sidebar.** It needs a background `action.onClicked` and a popup swap, and it changes Settings on Firefox (OA-1).
-- **A width rule for the sidebar.** That is a layout change (OA-2).
-- **`focus: false` on `chromeScript`'s window switch.** It would change every Firefox spec's focus, and the panel spec's prompt timing rests on today's behaviour (FIREFOX.md, the panel row).
-- **Frame-script clicks through `windowUtils`.** WebDriver actions are the standard input path, and the spike proved them.
-- **Injecting a BiDi context for the sidebar.** Firefox gives it no navigable id, so no command could address it.
-- **BiDi `script.callFunction` in a `moz:scope: "chrome"` realm** (Opus r1): a privileged read that moves no focus. It would be a second privileged channel beside `chromeScript`; reading outcomes from a page opened beforehand already avoids the focus move.
+**Arc 2, the 240 px layout (P71-01 B), its own PR off `origin/dev`**:
+- **What renders narrow**:
+  - every popup route (45 files under `popup/pages/`): Firefox's sidebar opens at 240–252 px (the revamped one at 340), and Chrome's side panel can be narrowed;
+  - every surface a route opens on demand (Fact 17);
+  - the nine windows render at their window's width (dApp windows 400 px, passkey 500, viewers 900–1200), and narrow only when a person narrows one;
+  - onboarding is a tab with its own 320 px floor, never shown in a sidebar: out of scope.
+- **The inventory comes first** (Phase 6 step 2). Before any fix, `lessons/phase-6.md` holds the full map: each offender's file, the state that shows it, its fit rule and the check that holds it. A surface not measured is marked unverified there and in the PR body. A fit no rule below covers is a plan change and stops for the orchestrator.
+- **The one rule**: nothing changes at 360 px and wider.
+  - The shell's floor becomes a cap: `body { width: var(--base-width); max-width: 100% }`, unless I3 fails (then the floor stays for a real toolbar popup). Windows keep `width: 100%`.
+  - Every narrow-only rule sits under `@media (width < 359px)`, which a zoomed 360 px popup's 359.x px viewport does not match (Fact 19). The shell's floor-to-cap change is the one rule outside it, held by the real-popup checks (I3); every component rule sits inside.
+- **How each offender fits** (Facts 13, 18). These are layout calls the owner sees in pictures before it ships (P71-01's record):
+  - **Header** (every signed-in page): the Lock chip keeps its icon and drops its word; its accessible name stays "Lock wallet". The network chip keeps the ellipsis it has. `components/Header.vue`.
+  - **Activity rows** (Home, History, a token's page): the state chip moves to its own line, through `TransactionCardLayout`'s existing `wrapTrailing`, so a row grows a line; measured on every row kind the seeds make.
+  - **Section header with an action** (`RECENT ACTIVITY` / `VIEW HISTORY`): the two keep a gap and wrap when they cannot.
+  - **Buttons**:
+    - a CTA label wraps to a second line instead of being cut (`packages/design/src/ui/Button.vue`'s sizes; the label keeps its role);
+    - side-by-side pairs stack (Accounts);
+    - Send's sticky CTA keeps its place.
+  - **Values**:
+    - an identifier already shortened (`0x1a1a…f3`) never breaks: its row puts it under its label, whole (the account-state record, a transaction's details, the From/To cards);
+    - a complete value a person inspects (an account-state note's hex, a call's arguments) keeps wrapping as it does today. Nothing new is shortened.
+  - **Logger window**: its toolbar and filters wrap above the log.
+  - **Surfaces on demand and windows**: fixed by the same rules once measured; each listed in `lessons/phase-6.md` and the PR body.
+  - **Every other route** fits as it stands (Fact 13), and the gate keeps it so.
+- **Gate in the suite** (committed), inside the visits that already exist, so no page loads twice:
+  - the seeded page sweeps in `type-roles.test.ts`: after each visit's 360 px checks, the viewport moves to 240 and `expectLaidOut` runs again, with a new `expectInsideView` next to it (`scrollWidth ≤ innerWidth`, and no visible box past the view: in-flow boxes and open fixed ones such as a dropdown menu or a popover, which `DropdownRoot.vue` positions fixed; a full-screen backdrop is excluded);
+  - the windows sweep (`network/type-roles-windows.test.ts`) keeps its 400 px pass and adds 240 on the same request;
+  - the representative surfaces on demand (one overlay, one open dropdown, the legal sheet, an action toast, the logger's filters) opened in seeded journeys that already exist, and checked at 240;
+  - the logger: a targeted check that its toolbar's bottom sits above its first line;
+  - Firefox's `action-popup-layout.test.ts`: the real panel opens 360 px wide.
+  - Each hard offender's check must fail on the base before its fix (Phase 6 step 3).
+- **Proof at 360** (scratch, recorded):
+  - **The CSS diff is the main proof**: every rule the branch adds to the built CSS sits inside the media query, and no rule outside it changed.
+  - **The pixel compare backs it**: every page, surface and window at 360 on the base build and on the branch, light and dark, Chrome and Firefox. Both builds load from their own `extensionPath`, with animations off, the caret blurred, `document.fonts.ready` awaited, seeded rows, fixed times and `Date.now` pinned (`BalanceView.vue`, `TokensView.vue` and `RecentActivityView.vue` read it). A noise control (base against base) must find zero, and a positive control (a known 1 px change) must be found.
+- **Pictures**, headful under Xvfb as arc 1's were, from a build of the branch:
+  - Firefox's sidebar at 240, at 340 (the revamped sidebar's width) and at 360 (whole window, `drawSnapshot`), and Chrome's popup page at 360 and at 240, each light and dark;
+  - every page, every surface on demand the gate opens, and every window through the network lane;
+  - copies in `~/.cache/nulo-backlog/firefox-sidebar-1/shots/w240/`.
 
 ## Decision ledger
 
-- **D1, the verdict** (pass).
-  - Round 0a's "never focused" was the harness's own focus steal (Opus r1 finding 1, verified in the run-9 log and in Marionette's source).
-  - Round 0b drives the sidebar through the suite's existing privileged channels plus WebDriver pointer and key actions, Firefox's own input path.
-  - Audit trail: Codex r1 questioned 0a's rationale (now moot); Opus r1 rejected 0a; round 2 is pending.
-- **D2, the scope.**
-  - In: the manifest key, the driver, one scenario, one pin, one doc row.
-  - Out: a Display row and a width rule (both owner asks).
-  - The persistent view comes with the key at no extra cost, and the motivating behaviour needs no product code (Fact 2).
-- **D3, `open_at_install: false`.** Nothing opens without the user, as with Chrome's side panel. The cost (Fact 3): a sidebar left open does not come back by itself after a Nulo update or a startup-cache reset. A plain restart does reopen it. The choice is the owner's (OA-3).
-- **D4, the evidence.** This plan and its lessons carry it. The `FIREFOX.md` row is live documentation of a surface the suite now drives. No `lessons.md` line (Fact 6).
-- **D5, the issues.** The PR says `Closes #596`. When the PR opens, #593 gets a comment: the sidebar runs the step in place; the panel's window stays as the owner decided; #593 stays closed.
-- **D6, no `closeSidebar`** (arc 1, a deviation). No spec closes the sidebar, since the launch is torn down with it, so the module exports `openSidebar`, `evaluateInSidebar` and `clickInSidebar` only.
-- **D7, `default_icon`** (arc 1, a correction). The first pictures showed Firefox's generic puzzle piece for Nulo in the revamped launcher: with no `default_icon`, `IconDetails` falls back to its default icon, not the manifest's `icons`, so Fact 3 was wrong. The key now names the add-on's own icons, which is what § UI impact promised ("its name and icon"). The pin covers it.
-- **D8, both sidebars driven** (arc 1, from the Opus review). A launch comes up with either sidebar (Phase 0 run 7 and the first pictures got the revamped one unasked), so a spec that does not choose drives whichever it gets, and a regression in one would read as a flake. `openSidebar` takes the kind and sets `sidebar.revamp` before opening, and the scenario runs once per kind (`test.for`). The revamped sidebar is its own Firefox code path (launcher, panel header, width), which is the second scenario's failure mode; it costs 13–15 s.
+- **D1, the verdict** (pass): 0a's "never focused" was the harness's own focus steal; 0b drives the sidebar through the existing privileged channels plus WebDriver input.
+- **D2, arc 1's scope**: the key, the driver, one scenario per kind, one pin, one doc row.
+- **D3, `open_at_install: false`**: kept on P71-04 A.
+- **D4, the evidence**: this plan and its lessons; the `FIREFOX.md` row is live documentation. No `lessons.md` line (Fact 6).
+- **D5, the issues**: #889 closes #596; #593 got its comment.
+- **D6, no `closeSidebar`** (arc 1). Revisited in Phase 5: the toolbar scenario closes the sidebar before it triggers the action, so the helper lands there.
+- **D7, `default_icon`** (arc 1, a correction of Fact 3).
+- **D8, both sidebars driven** (arc 1, Opus).
+- **D9, the toolbar wiring lives in the background** (Phase 5). Firefox has no "open on action click". `setPopup` plus `onClicked` is the one path that keeps the native popup, with its mousedown preload, for every person who leaves the setting off. The popup page cannot open the sidebar: it holds no user input once it boots.
+  - **Rejected, deciding every click in `onClicked`** (no `default_popup` on Firefox): every popup open would wait for the event page, and the listener cannot read the stored setting synchronously after a wake.
+  - **Rejected, waking the background at every Firefox start** (`runtime.onStartup`): it starts the whole wallet at each launch for everyone (Fact 10). Background work goes to the owner (OA-5).
+- **D10, the write is posted, then the sidebar opens or closes, with nothing awaited between** (Phase 5). Firefox's user-input rule forces it (Facts 3, 14): neither call can wait for the write to settle. Posted means the config client was connected: its request then reaches `postMessage` before the call returns, so a document the change closes has sent it (the e2e reads the stored value after the panel and the sidebar close). A client still reconnecting has not posted it (the Codex leg), so then the sidebar neither opens nor closes: the page stays, finishes the write and closes as on Chrome, and the toolbar button follows the stored setting. If a posted write fails, the sidebar is open (or closed) with the setting unchanged, and the error shows as on any failed setting, unless the document it shows in has closed. Chrome's order is unchanged.
+- **D11, arc 2 is its own PR off `origin/dev`** (P71-01's page). It touches every page and needs nothing from #889. The plan's files live on #889's branch only, so the two PRs do not conflict; arc 2's PR links them by branch.
+- **D12, narrow-only rules sit under `@media (width < 359px)`**, and none outside it. A viewport query keys on the width, not the surface, so one layout serves the sidebar, a narrowed side panel and a narrowed window alike ("one layout for every width"). 359, not 360: a zoomed 360 px popup can report 359.x px (Fact 19). At 360 px and wider no rule changes, which the CSS diff and the pixel compare prove.
+- **D13, the gate is `expectLaidOut` plus two small checks**, run at 240 inside the visits that already exist rather than in a second pass per width (the runtime budget). `expectLaidOut` reads text cut or past its box, and every offender the scratch sweep's box checks found is one; each must fail on the base before its fix (Phase 6 step 3; unverified until then). It reads horizontal spans only (Fact 18), so `expectInsideView` catches a box past the view and the logger gets a vertical check of its own. Two findings were by eye only, labels touching and a shortened value broken over two lines; the pictures cover them.
+- **D14, the 240 px work gets an issue** of its own, filed when arc 2 opens, so its PR has something to close. #596 is the sidebar, and #889 closes it.
+- **D15, the background's `openPopup` with the setting on opens nothing** (the Opus leg, Fact 15). The background holds no user input after onboarding or a passkey window, so it cannot open the sidebar instead; the person clicks the toolbar button and the sidebar opens. Onboarding's "Open wallet" does start in a click, so the onboarding tab could open the sidebar itself, a change to onboarding's flow (the Codex leg). Both are visible, so they are the owner's, asked with OA-5. If the owner accepts what ships, it is filed as a closed `known-limit` issue that reopens if Firefox lets `action.openPopup` reach `onClicked`.
 
 ## Security & Adversarial Considerations
 
-- **New surface**: a persistent extension document that hosts every popup route, as Chrome's side panel already does.
-  - The shell already copes with a long-lived document there: auto-lock, secret timers, profile switches.
-  - `window.close()` hides the sidebar (`webext-panels.js`, `DOMWindowClose`), just as it closes Chrome's panel.
-  - dApp approvals still open their own windows (unchanged).
-- **Who can reach it**: only the user, through Firefox's sidebar UI, and the extension, since `sidebarAction.open` requires user input (Fact 3).
-  - A web page cannot open, frame or script it.
-  - The key needs no permission, so `store/listing.md`'s permission headings and the privacy table do not change.
-- **Passkey**: the ceremony in the sidebar is the wallet's ordinary in-page path, and neither the RP ID nor its host permission changes. Firefox allows it only in the focused, active sidebar, the same rule it applies to a tab.
-- **Test channels**: `chromeActions` is privileged like `chromeScript`. It exists only in the e2e fixtures, behind geckodriver's `--allow-system-access` (FIREFOX.md).
+- **The sidebar** is a persistent extension document hosting every popup route, as Chrome's side panel already does. Only the user can open it, and the extension only on user input; no page can frame or script it. The key needs no permission. dApp approvals still open their own windows.
+- **The toolbar listener** (Phase 5) acts only on the toolbar click Firefox dispatches, and opens only the add-on's own sidebar. It reads no message and carries no data. `setPopup` takes a constant or `null`, never a value from storage.
+- **Passkey**: the ceremony in the sidebar is the wallet's ordinary in-page path; Firefox allows it only in the focused, active sidebar.
+- **Layout** (arc 2): no logic changes. The risk is a regression a person would see; the CSS diff, the 360 px pixel compare and the 240 px gate are its checks. An address must never read as a different address: a shortened identifier moves under its label whole, and a complete value keeps all its characters, wrapping as today.
+- **Test channels**: `chromeActions` and `triggerToolbarAction` are privileged and exist only in the e2e fixtures, behind geckodriver's `--allow-system-access`.
 - **Supply chain, crypto**: no dependency or key change.
 
 ## UI impact
 
-- **Firefox sidebar (new surface)**. The lane brief's record: "the plan's `UI impact` line names the new Firefox surface with pictures, and quotes P28-08's condition as met by the spike. Because the surface is new, the PR opens as a draft with the pictures for the owner's look."
-  - Nulo appears in Firefox's sidebar list as "Nulo V6" (the add-on's name, which the toolbar button already shows) with the add-on's icon. Opening it shows the shell Chrome's side panel shows: the lock screen and every popup page.
+- **Firefox sidebar (new surface, arc 1)**. The lane brief: "the plan's `UI impact` line names the new Firefox surface with pictures, and quotes P28-08's condition as met by the spike. Because the surface is new, the PR opens as a draft with the pictures for the owner's look." The owner signed it off with P71-01: "Any pick also signs the sidebar off as pictured."
+  - The sidebar is listed as "Nulo V6" with the add-on's icon, and shows the shell Chrome's side panel shows.
   - A passkey step started there runs in place.
-  - **At the width Firefox opens it, the shell is clipped.** The page keeps its 360 px width and scrolls sideways. In the old sidebar (240–252 px) about a third of the page is cut until the person widens the sidebar or scrolls: the network badge and Lock, half of Receive, the end of the balance, and the Settings tab (`screenshots/sidebar-home-opening-width.png`). In the revamped sidebar (340 px) every control shows, and the page still scrolls 20 px. This is named here for the owner's look (OA-2), and the arc does not change the layout.
-  - P28-08's condition, "be sure that the "side-panel" option can be really tested", is met by the spike (§ Phase 0).
-  - Pictures, taken headful, in [`screenshots/`](screenshots/): the passkey lock screen and Home in the old sidebar at its opening width, with the clipping visible (`sidebar-lock-opening-width.png`, `sidebar-home-opening-width.png`); Home in the revamped sidebar at 340 px, with Nulo's icon in its launcher (`revamped-sidebar-home.png`); Home at 420 px, light and dark (`sidebar-home-420.png`, `sidebar-home-420-dark.png`).
-- **At install** no sidebar opens, but Firefox lists Nulo in View → Sidebar and in the sidebar's switcher. With the revamped sidebar, it also adds Nulo's icon to the launcher's tools until the person removes it (`browser-sidebar.js` `registerExtension`). This is pictured.
-- **Unchanged**: the toolbar popup and its passkey window, Settings → Display (no row on Firefox), and the Chrome side panel.
+  - Pictures in [`screenshots/`](screenshots/).
+- **Settings → Display on Firefox (Phase 5)**, P71-03 B: "Add Chrome's "Open as Side Panel" row on Firefox; the toolbar button then opens the sidebar."
+  - The row and its search entry appear on Firefox with Chrome's copy.
+  - Turning it on opens the sidebar and closes the page it was turned on in, as on Chrome. From then on the toolbar button opens the sidebar.
+  - Turning it off closes the page it was turned off in, the sidebar included, and the toolbar button opens the popup again.
+  - With it on, after onboarding's "Open wallet" or a passkey window, nothing opens by itself (D15).
+- **Every page below 360 px (arc 2)**, P71-01 B: "Fit every page down to 240 px everywhere: one layout for every width; the popup looks the same." The page added: "That is a layout change on every page, planned and shown to you in pictures before it ships."
+  - Each fit is listed under § Architecture, arc 2; the pictures in the draft PR show every page, surface and window at 240 and 360, and the revamped sidebar at 340.
+  - At 360 px and wider nothing changes, proven pixel by pixel.
+- **At install** (P71-04 A): no sidebar opens. Firefox lists Nulo in View → Sidebar and, with the revamped sidebar, in its launcher.
 
 ## Arc 1
 
-### Phase 1: the manifest key and its pin ✓
+### Phases 1–4 ✓
 
-1. Add the key and the comment (§ Architecture), and the `manifest.test.ts` case.
-2. Build Firefox with the smoke flags; `dist/firefox/manifest.json` carries the key.
+The manifest key and pin, the driver and both scenarios, the pictures, and the arc gate. Each gate's outcome is in `STATUS.md` and `lessons/phase-2.md` to `phase-4.md`.
 
-**Gate**: `cd apps/extension && bun --bun vitest run src/manifest.test.ts`, then root `bun run lint` and `bun run typecheck:all`. Pass: exit 0. Layers: lint, typecheck, unit.
+### Phase 5: the Display row on Firefox
 
-### Phase 2: the driver and the scenario ✓
+1. Merge `origin/dev` (no rebase).
+2. Add `sidebarAction()`, `hasSidePanelSurface()` and `isFirefoxSidebar()`; the row's gate, toggle and testid; the search context; `toolbar-sidebar.ts` and its registration.
+3. Add the unit tests (§ Architecture).
+4. Add the driver pieces: the shared pointer click, `clickInActionPopup`, `actionPopupShows`, `sidebarShows`, `closeSidebar` and `triggerToolbarAction`. Then add the scenario and update `settings-routes.test.ts`.
+5. With load1 under 150, rebuild the armed Firefox build and run `firefox-sidebar.test.ts` three times at retry 0, then on Chrome (skipped).
+6. Negative controls (uncommitted): the `onClicked` listener emptied must fail step 3's read; the build without `close()` must fail step 4.
+7. Once the owner answers OA-5, file D15 as the answer says.
 
-1. Add `chromeActions`, `firefox-sidebar.ts`, `FIREFOX_ONLY.sidebar`, the spec and the `FIREFOX.md` row.
-2. With load1 under 150 before each run, run the spec on Firefox three times at `--retry=0`, then on Chrome (skipped, exit 0). Record each wall-clock in `lessons/phase-2.md`.
-3. Run `passkey-toolbar-panel.test.ts` and `action-popup-layout.test.ts` on Firefox, since they share `webdriver-classic.ts`.
+**Gate**:
+- `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run check:plans`, `bun run audit:vue`;
+- step 5 at exit 0, and step 6 failing where it must;
+- the full smoke suite on Firefox and `settings-routes.test.ts` on Chrome, at retry 0;
+- the full Firefox network suite through `e2e:agent`, since the background registers a listener before it boots.
 
-**Gate**: steps 2 and 3, plus `cd apps/extension && bun --bun vitest run scripts/e2e/browser-seam.test.ts scripts/e2e/firefox-driver.test.ts`. Pass: every run exits 0. Layers: unit, smoke e2e.
+Then the Codex loop and an Opus review over the phase's diff, and a push to #889.
 
-### Phase 3: pictures ✓
+## Arc 2: every page fits down to 240 px
 
-1. A scratch spec (uncommitted), run headful under Xvfb (`HEADLESS=0 xvfb-run -a`), opens the sidebar on a registered profile and captures the browser window. For the revamped shots it sets `sidebar.revamp` before opening.
-   - In chrome scope it draws the window's own global with `drawSnapshot`, which composites remote content, so each picture shows the browser around the sidebar.
-   - It writes PNGs under `implementations-plan/firefox-sidebar-1/screenshots/`.
-2. Take the shots § UI impact lists in the light theme, plus Home in the dark theme.
+Branch `firefox-sidebar-1-a2` off `origin/dev`; one draft PR → `dev`, which leaves draft only after the owner's look at the pictures.
 
-**Gate**: every listed shot exists as a whole-window picture showing the sidebar's content, the clipping at the old sidebar's opening width, and Nulo's icon in the revamped launcher. A picture of the sidebar's document alone does not pass: it cannot show the width or the launcher. If whole-window capture fails, the phase stops and the failure goes in `lessons/phase-3.md`. Layers: none (evidence).
+### Phase 6: the shell, the inventory, the fits and the 240 px gate
 
-### Phase 4: arc gate ✓
+1. The shell's floor becomes a cap (§ Architecture). At once, check I3: Firefox's real panel (`action-popup-layout.test.ts`) and Chrome's real popup, headful under `xvfb-run` through `action.openPopup()` from a scratch spec, each settled after load and after a route change. If either opens narrower than 360, keep the floor for a real toolbar popup before going on.
+2. Finish the inventory at 240 on both browsers: the routes' unmeasured states, the surfaces on demand (Fact 17), and every window on the network lane. Write the map into `lessons/phase-6.md`.
+3. Add the checks (§ Architecture, gate) and run them on the base: each hard offender's check must fail there.
+4. Fix each offender by the rules in § Architecture, inside the media query.
+5. Run the checks again: all pass.
 
-1. From the root, in order: `bun run audit:vue`, `bun run test:all`, `bun run check:plans`.
-2. The armed builds and the full smoke suite on Chrome and on Firefox, at retry 0, because the manifest change reaches every Firefox launch.
-3. The full network suite on Firefox, `NULO_E2E_BROWSER=firefox NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent`. CLAUDE.md requires it for a fixture change, and `webdriver-classic.ts` serves every Firefox network spec.
+**Gate**:
+- the 240 px checks on both browsers at retry 0 (`type-roles.test.ts` and the journeys that open surfaces, smoke; `network/type-roles-windows.test.ts` through `e2e:agent`);
+- `action-popup-layout.test.ts` on Firefox, and the headful Chrome popup check at 360;
+- `bun run lint`, `bun run typecheck:all`.
 
-Pass: every command exits 0, with one rerun allowed for a known flake. The PR body states each browser's smoke wall-clock on `dev` at `993b3efc` (from its CI run) and on the PR's CI run. Chrome skips the new scenario, and the body says so.
+Pass: exit 0. Layers: smoke and network e2e, lint, typecheck.
+
+### Phase 7: proof that 360 is unchanged
+
+1. Diff the built CSS of `origin/dev` and the branch: every added rule inside the media query, nothing else changed.
+2. Build both with the smoke flags into their own directories, and shoot every page, surface and window at 360 on each, stabilised as § Architecture says. Use Chrome and Firefox, light and dark. The windows come from the network lane on each build.
+3. Compare pixel by pixel (scratch; `sharp` raw buffers), with the noise and positive controls first.
+
+**Gate**: the CSS diff clean; the noise control at zero and the positive control found; zero changed pixels on every pair. A difference is a regression to fix, never a mask. The counts go in `lessons/phase-7.md`.
+
+### Phase 8: pictures
+
+Headful under `xvfb-run -a -s "-screen 0 1440x1000x24"`, from a build of the branch:
+- Firefox's sidebar, set to exactly 240, 340 and 360, whole window via `drawSnapshot`;
+- Chrome's popup page at 360 and at 240;
+- each light and dark, every page, every surface the gate opens, and every window;
+- saved to `~/.cache/nulo-backlog/firefox-sidebar-1/shots/w240/`, with an index for the report's `SHOTS_READY w240` list.
+
+**Gate**: a picture for each page × width × theme × browser, with nothing cut by eye; the windows included.
+
+### Phase 9: arc gate
+
+`bun run audit:vue`, `bun run test:all`, then the full smoke suite on both browsers at retry 0, since every page's layout changed. Then the network specs that measure windows or rows on both browsers (`type-roles-windows`, the execute and capabilities window specs), and `rows.test.ts`, which moves `--base-width` at run time. CI runs the full network lanes on the PR.
+
+**Pass**: exit 0, with one rerun for a known flake. The PR body states each browser's smoke wall-clock before (the `dev` run at the base) and after.
 
 ## Issues
 
 | Issue | Arc | Phase | Closed by |
 |---|---|---|---|
-| #596 | 1 | 1-4 | `Closes #596` |
-| #593 | no arc | none | stays closed; a comment when the PR opens (D5) |
+| #596 | 1 | 1–5 | `Closes #596` (#889) |
+| #593 | none | none | stays closed; commented (D5) |
+| new (D14) | 2 | 6–9 | `Closes #<n>` (arc 2's PR) |
 
 ## Delivery
 
-- **One arc, one PR**: `firefox-sidebar-1-a1` off the plan branch (`origin/dev` plus the plan commit) → `dev`, opened **as a draft**. Title (57 chars): `feat(firefox): a sidebar where passkey steps run in place`.
-- **Body**:
+- **Arc 1** is #889, `firefox-sidebar-1-a1` → `dev`, a draft. Phase 5 lands there after its gate and Codex loop. Its body quotes P71-01 B (the sign-off), P71-02 A (pending the owner's Mac result), P71-03 B and P71-04 A, by id and text, and states OA-5 and D15. It leaves draft when the owner has reported the Mac run (P71-02) and answered OA-5, and the orchestrator moves it.
+- **Arc 2** is `firefox-sidebar-1-a2` off `origin/dev` → `dev`, opened as a draft after Phase 9 and its Codex loop. Title: `feat(ui): every page fits down to 240 px; the popup looks the same` (66 chars). The body carries:
   - the pictures;
-  - P28-08 and the lane brief's record, quoted;
-  - the spike's table in short;
-  - the scenario's failure mode and measured time, and the Firefox smoke wall-clock before and after;
-  - the validation runs;
-  - `Closes #596`;
-  - the attribution line.
-- **Opening**: after Phase 4 and the Codex loop, without labels (the smoke lanes' path filter covers `apps/extension/**`). Do not merge.
-- **Leaving draft** needs the owner's explicit sign-off on the surface after the pictures (CLAUDE.md § UI changes), quoted in the PR body, and the owner's answer to OA-2 (the clipped Settings tab at the opening width) and OA-4 (the Mac check, listed in the PR body as a check for the owner). Each answer is either a change or an accepted limit, and an accepted limit is filed as a closed `known-limit` issue. The orchestrator moves the PR out of draft.
+  - P71-01 B quoted;
+  - the fits;
+  - the pixel-compare counts;
+  - the e2e budget (the sweeps' added time per browser, smoke wall-clock before and after);
+  - `Closes #<n>`.
+  It leaves draft after the owner's look.
+- The decision page's file name and URL appear in no commit and no PR; picks are quoted by id and text.
 
 ## Post-implementation
 
 The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `993b3efc`. Specific to this plan:
-- **Reviews**: step 1 is absent (`code_review: off`). Step 2 runs once over `git diff origin/dev...HEAD` after Phase 4:
-  - `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`;
-  - prompts under `~/.cache/nulo-backlog/firefox-sidebar-1/`;
-  - hard stop at three rounds, with one Opus review alongside round 1;
-  - rounds recorded in `lessons/phase-4.md`.
-- **Approval boundary**: a Display row, a width rule, a background listener, a permission, an `open_at_install` flip or any copy is a plan change and stops for the orchestrator.
-- **Close-out**: the PR's final commits, after the owner's look, since OA answers can still change the arc:
-  - the Outcome, whose Known limits line names every OA the owner accepted as a limit, with its issue;
+- **Reviews**: step 2 runs per arc, over each arc's diff against its base:
+  - Phase 5: `git diff <head before Phase 5>..HEAD`;
+  - arc 2: `git diff origin/dev...HEAD` on its branch.
+  It uses `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. There is one Opus diff review alongside each first round, and a hard stop at three rounds. Rounds go in `lessons/phase-5.md` and `lessons/phase-9.md` and in § Audit verdicts.
+- **Approval boundary**: a background wake at startup (OA-5), a permission, an `open_at_install` flip, any copy, or a layout change outside § Architecture's fits is a plan change and stops for the orchestrator.
+- **Close-out**: #889's final commits, after the owner's Mac report:
+  - the Outcome;
   - `STATUS.md` deleted;
-  - `git mv` into `archive/` in its own commit, with the index line moved.
-- **Teardown** after the merge: slug `firefox-sidebar-1`, trunk `dev`.
+  - `git mv` into `archive/` in its own commit, the index line moved.
+  Arc 2's records (`lessons/phase-6.md` to `phase-9.md`, its audit rows) are committed on #889's branch, never on arc 2's, and #889's archive commit waits until arc 2's PR is merged or closed.
+- **Teardown** after the merges: slug `firefox-sidebar-1`, trunk `dev`.
 
 ## Audit verdicts
 
 | Round | Leg | Verdict | Accepted | Rejected |
 |---|---|---|---|---|
-| 1 (0a plan) | Codex, gpt-6.1-sol | conditional approve | D1's rationale (a `BrowserDriver` sidebar handle respects FIREFOX.md; WebDriver's own keys use the same in-process synthesis); the classic-frame row and run 11 marked inconclusive; Fact 1 narrowed; #596's body to carry the known-limit parts | none |
-| 1 (0a plan) | Opus 5.5 lens | reject | 1, the harness's focus steal (verified; it reversed the verdict); 2, run 9's log misread (rewritten); 3, a reopening condition no driver could meet (moot); 4, the proof is Linux-only (OA-4); 5, D1's reason (c) (dropped); 7, the evidence's durability (the driver and spec are now committed, the plan carries the recipe); 8, the classic-frame row overstated (reworded) | 6, `Refs` for a hand-closed issue (moot: the PR closes #596 on merge) |
-| 2 | Codex, resumed | conditional approve | 1, poll the sidebar after the session (step 6); 2, the window recorder: `watchPasskeySurface`, no session before the click, a one-off forced-window run must fail; 3, the clipping named in UI impact and owner-gated (OA-2, Delivery); 4, the native-surface exception written into FIREFOX.md; 5, OA-4 answered before the PR leaves draft, and the Known limits line names every accepted OA | none |
-| 2 | Opus 5.5 lens | conditional approve | 1, the revamped sidebar (runs 6a, 6b; I2 rewritten; pictures headful, both sidebars); 2, leaving draft needs the owner's quoted sign-off; 3, the locator held to the driver's window; 4, the 0b evidence stated as it stands (runs 1–6, the click row qualified by width); 5, the success control: the noted profile and exactly one `get` in the sidebar; 6, the install-time launcher and menu entries in UI impact, pictured; 7, OA-4 listed in the PR body; 8, the seed's command | none |
-| final | Codex, fresh session | conditional approve, then approve on resume | 1, the full Firefox network suite in Phase 4; 2, Phase 3's gate takes only whole-window pictures; 3, each browser's smoke wall-clock in the PR body | none |
-| arc 1, loop 1 | Codex, gpt-6.1-sol | approve | 1, a click mapped across different scales (the sidebar zoomed): `clickInSidebar` refuses it by name | 2, readiness markers are not testids: they are the suite's readiness convention (`fixtures/wallet-pages.ts`), not a selection |
-| arc 1, loop 1 | Opus 5.5, diff review | request changes | 1, the sidebar kind pinned and both driven (D8); 2, the lock picture retaken on a passkey profile, the password screen's button shown to be disabled, not missing; 3, folded into Codex 1; 4, `chromeActions` reports the actions' own error; 5, `openSidebar` reports a refused open and says what it waits for; 6, the context's doc, FIREFOX.md's exception wording, the manifest pin's comment | 7, the `get` counter counts calls, not successes: no retrying fallback exists, recorded as a limit of the check |
-| arc 1, loop 2 | Codex, resumed | approve | 2, `sidebarAction`'s internal `open()` returns nothing, so the rejection handler never ran: a plain try/catch now reports a throwing open | 1 needs no change: opening after `promiseInitialized` and one task follows the event loop's order, not a delay |
+| 1 (0a plan) | Codex, gpt-6.1-sol | conditional approve | D1's rationale; the classic-frame row and run 11 marked inconclusive; Fact 1 narrowed | none |
+| 1 (0a plan) | Opus 5.5 lens | reject | the harness's focus steal (reversed the verdict); run 9's log; the Linux-only proof (OA-4); the evidence's durability | `Refs` for a hand-closed issue (moot) |
+| 2 | Codex, resumed | conditional approve | poll the sidebar after the session; the window recorder and its forced-window run; the clipping owner-gated (OA-2); the native-surface exception; OA-4 before leaving draft | none |
+| 2 | Opus 5.5 lens | conditional approve | the revamped sidebar; the owner's quoted sign-off; the locator held to the driver's window; the success control (one `get`); the install-time entries pictured | none |
+| final | Codex, fresh | approve on resume | the full Firefox network suite in Phase 4; whole-window pictures only; smoke wall-clocks in the body | none |
+| arc 1, loop 1 | Codex | approve | `clickInSidebar` refuses a zoomed sidebar | readiness markers are the suite's convention, not a selection |
+| arc 1, loop 1 | Opus 5.5, diff | request changes | both kinds pinned and driven (D8); the lock picture retaken; `chromeActions` reports its own error; `openSidebar` reports a refused open | the `get` counter counts calls: no retrying fallback exists |
+| arc 1, loop 2 | Codex, resumed | approve | `open()` returns nothing, so a try/catch reports a throwing open | opening after `promiseInitialized` and one task follows the event loop's order |
+| P71 delta | Codex, gpt-6.1-sol | conditional approve | the panel toggle proven in the real panel, no unit fallback; OA-5 answered before #889 leaves draft; I3 checked on both real popups first; the inventory finished before any fix, the Button's sizes in `@nulo/design`; surfaces on demand; shortened against complete values; the logger's vertical check and a negative control per offender; the windows keep their 400 px pass | none |
+| P71 delta, round 2 | Codex, resumed | conditional approve | the open or close only once the write is posted (`isConnected`); Fact 14 states Firefox's history rule, not "a sidebar cannot close"; the shell's change named as the one rule outside the query; open fixed menus inside `expectInsideView`; D15 asked of the owner with OA-5, not called unavoidable | none |
+| P71 delta | Opus 5.5 lens | conditional approve | `getPopup` read before each trigger; both surfaces read as one opens; the click on a stopped background; D10 reworded; the `openPopup` known limit (D15); the full Firefox suites and `audit:vue` in Phase 5, the search test and `app.vue` comment; `expectInsideView`; overlays, dropdowns, toasts, sheets; `width < 359px` with nothing outside it; `wrapTrailing` reused; the CSS diff, controls and stabilised builds; 240 inside existing visits; Chrome's popup headful; arc 2's records on #889's branch; "Lock wallet"; the 340 px picture | a classic-scrollbar known limit: a media query's `width` includes the scrollbar (Fact 19), so the query reads what the popup has today |
 
 ## Seeds
 
 ```
-/goal Arc 1 of implementations-plan/firefox-sidebar-1/plan.md (Phases 1-4) marked ✓, each backed by its gate passing in the transcript; LESSONS_FILE=implementations-plan/firefox-sidebar-1/lessons/phase-N.md printed per phase; the Codex loop (gpt-6.1-sol, high) converged with a resumed pass quoting no new material finding; one draft PR from firefox-sidebar-1-a1 to dev opened after that with the pictures and Closes #596; bun run test:all and bun run lint exit 0.
+/goal Phase 5 of implementations-plan/firefox-sidebar-1/plan.md ✓ with its gate in the transcript and #889's five required checks green; arc 2 (Phases 6-9) ✓ on firefox-sidebar-1-a2 with the CSS diff clean, the 360 px pixel compare at zero and the 240 px checks green on both browsers; arc 2's draft PR open with the pictures; both Codex loops converged (gpt-6.1-sol, high).
 ```
 
 ```
-/loop 15m Drive implementations-plan/firefox-sidebar-1 forward per its plan.md and the README § Post-implementation standard at 993b3efc: reality-check plan.md and lessons/, run the next phase's gate at retry 0 with load1 under 150, decide open questions with Codex (gpt-6.1-sol, high), add no Display row, width rule or copy, never merge; stop after the draft PR's checks are green and report.
+/loop 20m Drive implementations-plan/firefox-sidebar-1 per its plan.md and the README § Post-implementation standard at 993b3efc: run the next phase's gate at retry 0 with load1 under 150, settle open questions with Codex (gpt-6.1-sol, high), add no copy, background wake or layout change outside the plan, never merge; stop when #889's required checks are green and arc 2's draft PR is open, and report.
 ```
+
