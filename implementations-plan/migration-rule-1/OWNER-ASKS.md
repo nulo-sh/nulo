@@ -23,6 +23,11 @@ A1 and A3 depend on none of these. A2 ships OA-1's A until the owner answers. A4
   - **R-a (ships now):** the import's words, as above.
   - **R-b:** keep "Incompatible backup" and its words on that page.
   - **R-c:** accept there an unchecked passkey body whose checksum the record names, so the retry works again. A behaviour change to a security check: its own plan if chosen.
+  - **Pictures** (popup at 400×600, Chrome, `dev`'s colours, a profile named Daily; the Restore again pages come from a real import that left Local Network unrestored, so its reminder names it; the page shows no profile type and reads the same for a passkey profile):
+    - R-a, live: Restore again refusing a passkey backup with no check, in the words this PR ships: [light](screenshots/oa1r-a-light-chrome.png), [dark](screenshots/oa1r-a-dark-chrome.png)
+    - R-b, mockup: the same box with today's "Incompatible backup" words written into it: [light](screenshots/oa1r-b-light-chrome.png), [dark](screenshots/oa1r-b-dark-chrome.png)
+    - R-c, live: the reminder's own backup accepted and the restore running, the network held unanswered. Under R-c the accepted file is the unchecked one, and the page reads the same. When the run ends it returns Home with a toast naming the restored networks, or offers Retry for one that did not answer: [light](screenshots/oa1r-c-light-chrome.png), [dark](screenshots/oa1r-c-dark-chrome.png)
+    - Where R-a's advice leads, live: with the passkey profile Daily installed, Import with Passkey picks the same passkey, the wallet refuses it because its profile already exists, and the person sees "Profile import failed", which names the authenticator rather than the existing profile: [light](screenshots/oa1r-exists-light-chrome.png), [dark](screenshots/oa1r-exists-dark-chrome.png)
   - **Recommendation:** R-c if the owner wants 0.31.0 restores to finish; else R-b, which at least changes nothing there.
 - **Recommendation.** D: the only words that show the whole way back without changing the box, and they name the choice on the import page ("Passkey") and the two things P62-05 names. A with the clamp lifted if the owner wants A's fuller first sentence.
 
