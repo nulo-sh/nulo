@@ -28,6 +28,7 @@ import {
 	AccountAddressInconsistencyError,
 	DuplicateWalletError,
 	InvalidPasswordError,
+	PasskeyProfileExistsError,
 	ProfileIdConflictError,
 	RestoreTornError,
 	RecoveryModeError,
@@ -1151,15 +1152,15 @@ describe("ProfileService integration", () => {
 			expect(passkeys.outcomes).toEqual(["done", "failed"])
 		}, 30_000)
 
-		test("import names the profile on the window, and reports done, then failed for the same passkey again", async () => {
+		test("import names the profile on the window, and reports done, then exists for the same passkey again", async () => {
 			const { service, passkeys } = await makeService()
 			await service.importPasskey("Imported")
 			expect(passkeys.lastDisplay).toEqual({ step: "import", profileName: "Imported" })
 			expect(passkeys.outcomes).toEqual(["done"])
 
 			await service.lockActiveProfile()
-			await expect(service.importPasskey("Again")).rejects.toThrow()
-			expect(passkeys.outcomes).toEqual(["done", "failed"])
+			await expect(service.importPasskey("Again")).rejects.toBeInstanceOf(PasskeyProfileExistsError)
+			expect(passkeys.outcomes).toEqual(["done", "exists"])
 		}, 30_000)
 	})
 
@@ -3670,7 +3671,9 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			await service.createPasskeyProfile("PK", fakeCredentialData("cred-dup", "uh-dup"))
 			await service.lockActiveProfile()
 			// importPasskey with the same credential id — even allowDuplicate can't bypass it.
-			await expect(service.importPasskey("PK2", fakeCredentialData("cred-dup", "uh-dup2"), true)).rejects.toThrow(/already exists/)
+			await expect(service.importPasskey("PK2", fakeCredentialData("cred-dup", "uh-dup2"), true)).rejects.toBeInstanceOf(
+				PasskeyProfileExistsError,
+			)
 		})
 	})
 
@@ -4528,4 +4531,87 @@ describe("byte codecs: export encoders and the lenient decodes of stored and res
 		},
 		30_000,
 	)
+})
+
+describe("ProfileService — a passkey whose profile is already here", () => {
+	const profileKey = (id: string) => `nulo:core:profiles@${id}`
+	const rawRow = async (api: FakeBrowserApi, id: string) => (await api.storage.local.get(profileKey(id)))[profileKey(id)]
+
+	test("importing it again refuses with the typed error naming that profile, and adds no profile", async () => {
+		const { service } = await makeService()
+		await service.createProfile("Main", "password123")
+		const daily = await service.createPasskeyProfile("Daily", fakeCredentialData("cred-daily", "uh-daily"))
+		await service.lockActiveProfile()
+
+		const err = await service.importPasskey("Again", fakeCredentialData("cred-daily", daily.id)).catch((e: unknown) => e)
+		expect(err).toBeInstanceOf(PasskeyProfileExistsError)
+		expect((err as PasskeyProfileExistsError).details).toEqual({ existingProfileName: "Daily" })
+		expect((await service.getProfiles()).map((p) => p.name).sort()).toEqual(["Daily", "Main"])
+	})
+
+	// Only a readable, live row can be chosen from the profile list, so only it is named; every
+	// other occupant of the id keeps the plain refusal and is never overwritten.
+	type Occupant = { id: string; credential: string }
+	test.each<[label: string, occupy: (ctx: Awaited<ReturnType<typeof makeService>>) => Promise<Occupant>]>([
+		[
+			"a reserved id (a failed purge)",
+			async ({ service }) => {
+				const p = await service.createPasskeyProfile("Gone", fakeCredentialData("cred-gone", "uh-gone"))
+				service.setDeletionDelegate({
+					snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }),
+					runFor: async () => {
+						throw new Error("purge interrupted")
+					},
+				})
+				await expect(service.deleteProfile(p.id)).rejects.toThrow(/purge interrupted/)
+				return { id: p.id, credential: "cred-gone" }
+			},
+		],
+		[
+			"an unreadable row",
+			async ({ api, service }) => {
+				const p = await service.createPasskeyProfile("Torn", fakeCredentialData("cred-torn", "uh-torn"))
+				await service.lockActiveProfile()
+				await api.storage.local.set({ [profileKey(p.id)]: "{" })
+				return { id: p.id, credential: "cred-torn" }
+			},
+		],
+		[
+			"a readable row holding another credential",
+			async ({ service }) => {
+				const p = await service.createPasskeyProfile("Other", fakeCredentialData("cred-other", "uh-other"))
+				await service.lockActiveProfile()
+				return { id: p.id, credential: "cred-new" }
+			},
+		],
+	])("%s under the passkey's id refuses untyped and keeps the stored row", async (_label, occupy) => {
+		const ctx = await makeService()
+		const { id, credential } = await occupy(ctx)
+		const before = await rawRow(ctx.api, id)
+
+		const err = await ctx.service.importPasskey("Again", fakeCredentialData(credential, id)).catch((e: unknown) => e)
+		expect(err).toBeInstanceOf(Error)
+		expect(err).not.toBeInstanceOf(PasskeyProfileExistsError)
+		expect((err as Error).message).toBe("Passkey profile already exists")
+		expect(await rawRow(ctx.api, id)).toEqual(before)
+
+		// Success control: a passkey nothing holds still imports and writes its row. The fake derives
+		// one master for every credential, so the import confirms the warned same-wallet duplicate.
+		const fresh = await ctx.service.importPasskey("Fresh", fakeCredentialData("cred-fresh", "uh-fresh"), true)
+		expect(await rawRow(ctx.api, fresh.id)).toBeDefined()
+	})
+
+	test("a passkey full-backup restore over it keeps the full-backup box's text", async () => {
+		const { service } = await makeService()
+		const daily = await service.createPasskeyProfile("Daily", fakeCredentialData("cred-daily", "uh-daily"))
+		await service.lockActiveProfile()
+
+		const out = await service.restore(
+			{ id: "ignored", name: "Daily", type: "passkey" },
+			{ type: "passkey", credentialId: asBase64CredentialId("cred-daily"), dekSealed: await fakeDekSealedFor("cred-daily") },
+			undefined,
+			fakeCredentialData("cred-daily", daily.id),
+		)
+		expect("restoreError" in out && out.restoreError).toBe("Passkey profile already exists")
+	})
 })

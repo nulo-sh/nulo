@@ -29,6 +29,10 @@ export const PASSKEY_COPY = {
 		body: "Finishing up. This window closes by itself.",
 	},
 	stepFailedBody: "Close this window and try again from Nulo.",
+	profileExists: {
+		title: ["Passkey", "already in use"],
+		body: "This passkey already has a profile in this wallet. Close this window, open Nulo and choose it on the lock screen.",
+	},
 	windowNote: "On Firefox, Nulo uses this window for passkeys.",
 } as const
 
