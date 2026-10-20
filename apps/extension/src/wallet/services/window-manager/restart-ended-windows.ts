@@ -6,7 +6,14 @@
 import { LogLevel, type ILogger } from "@/wallet/logger"
 import type { ExtensionContextInfo, RuntimePort, WindowPort } from "@nulo/wallet-core/ports"
 
-export const RESTART_ENDED_ROUTES: ReadonlySet<string> = new Set(["discover", "capabilities", "verify"])
+export const RESTART_ENDED_ROUTES: ReadonlySet<string> = new Set([
+	"discover",
+	"capabilities",
+	"verify",
+	"execute",
+	"fee",
+	"network-unavailable",
+])
 
 export const POPUP_PAGE = "src/popup/index.html"
 

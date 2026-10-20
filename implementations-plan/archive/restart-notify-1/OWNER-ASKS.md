@@ -17,6 +17,10 @@
 - **A (recommended):** close them too, as the connection windows. After a restart nothing of the request is left on screen; the app has its own error.
 - **B:** keep today's behaviour.
 
-**What ships now:** B. The arc's one route list (used after a crash and before the lock's restart) leaves out `execute`, `fee` and `network-unavailable`; A adds them (one line and one test row each), before or after the merge.
+**What the plan shipped first:** B. The arc's one route list (used after a crash and before the lock's restart) left out `execute`, `fee` and `network-unavailable`; A adds them (one line and one test row each).
 
 **Recommendation:** A. The window can no longer do anything; a "Processing error." after Confirm reads like the send failed for a reason the person can fix, and the New Tab window looks like a browser fault.
+
+**Pick: A** (P72-03, 2026-10-20): "Close them too, as the connection windows close. Nothing of the request stays on screen; the app has its own error."
+
+**Disposition:** shipped in arc 1's PR, before its merge. `execute` (Send and Sign share it), `fee` and `network-unavailable` joined `RESTART_ENDED_ROUTES`, the one list the boot sweep and the lock's tracker read, each with a test row; the PR closes #939, which tracked this ask. The after pictures (Chrome, light and dark, after a crash and after the lock's restart) are `screenshots/chrome-fixed-*.png`.

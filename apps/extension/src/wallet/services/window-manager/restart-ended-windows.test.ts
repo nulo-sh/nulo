@@ -13,6 +13,9 @@ describe("isRestartEndedUrl", () => {
 		["connect, expired", `${POPUP}#/windows/discover?requestId=0x01&expired=1`],
 		["capabilities", `${POPUP}#/windows/capabilities?requestId=0x01`],
 		["emoji check", `${POPUP}#/windows/verify?sessionId=s&verificationHash=h&isReconnect=false`],
+		["send or sign", `${POPUP}#/windows/execute?requestId=0x01`],
+		["fee question", `${POPUP}#/windows/fee?requestId=0x01`],
+		["network notice", `${POPUP}#/windows/network-unavailable?requestId=0x01`],
 		["a route with no query", `${POPUP}#/windows/verify`],
 	])("closes %s", (_name, url) => {
 		expect(isRestartEndedUrl(url, POPUP)).toBe(true)
@@ -22,9 +25,6 @@ describe("isRestartEndedUrl", () => {
 		["the popup's own page", `${POPUP}#/popup/general`],
 		["the lock screen", `${POPUP}#/popup/auth`],
 		["the onboarding page", `${BASE}src/onboarding/index.html#/windows/verify`],
-		["send", `${POPUP}#/windows/execute?requestId=0x01`],
-		["fee question", `${POPUP}#/windows/fee?requestId=0x01`],
-		["network notice", `${POPUP}#/windows/network-unavailable?requestId=0x01`],
 		["request JSON", `${POPUP}#/windows/json`],
 		["logs viewer", `${POPUP}#/windows/logger`],
 		["passkey", `${POPUP}#/windows/passkey`],
@@ -64,13 +64,14 @@ describe("closeRestartEndedTabs", () => {
 			tab(3, "execute"),
 			tab(4, "capabilities"),
 			{ ...tab(5, "x"), documentUrl: `${POPUP}#/popup/general` },
+			tab(6, "passkey"),
 		]
 		await closeRestartEndedTabs(
 			runtimeWith(async () => contexts),
 			{ closeTab: async (id) => void closed.push(id) },
 			logger(),
 		)
-		expect(closed.sort()).toEqual([1, 2, 4])
+		expect(closed.sort()).toEqual([1, 2, 3, 4])
 	})
 
 	test("a refused close neither throws nor stops the rest, and nothing logged names a URL", async () => {
@@ -121,11 +122,11 @@ describe("trackOpenWindows", () => {
 		const discover = await windows.create({ url: at("discover") })
 		const check = await windows.create({ url: at("verify") })
 		const capabilities = await windows.create({ url: at("capabilities") })
-		await windows.create({ url: at("execute") })
+		const send = await windows.create({ url: at("execute") })
 		await windows.create({ url: `${POPUP}#/windows/passkey` })
 		windows.closeRestartEnded()
 		await Promise.resolve()
-		expect(removed.sort()).toEqual([discover.id, check.id, capabilities.id].sort())
+		expect(removed.sort()).toEqual([discover.id, check.id, capabilities.id, send.id].sort())
 	})
 
 	test("forgets a window once it closes", async () => {
