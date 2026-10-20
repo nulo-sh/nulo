@@ -6,7 +6,11 @@ function wired(endSession: (sessionId: string) => void) {
 	const order: string[] = []
 	let prepare: (() => void) | undefined
 	wireRestartPreparation({
-		profileService: { setRestartPreparation: (fn) => void (prepare = fn) },
+		profileService: {
+			setRestartPreparation: (fn) => {
+				prepare = fn
+			},
+		},
 		handler: { getActiveSessions: () => [{ sessionId: "s1" }, { sessionId: "s2" }, { sessionId: "s3" }] },
 		endSession: (sessionId) => {
 			order.push(`end:${sessionId}`)
