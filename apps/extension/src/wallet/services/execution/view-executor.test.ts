@@ -299,43 +299,83 @@ describe("ViewExecutor.executeAztecGetContractClassMetadata", () => {
 })
 
 describe("ViewExecutor.executeAztecGetContractMetadata", () => {
-	test("PXE-local instance + artifact → INITIALIZED with instance attached", async () => {
-		const instance = { currentContractClassId: addr("0xclass") }
-		const { executor } = makeHarness({
+	const SESSION = `0x${"0a".repeat(32)}`
+	const HIDDEN = `0x${"0b".repeat(32)}`
+	const FRESH = `0x${"0c".repeat(32)}`
+	const CONTRACT = `0x${"0d".repeat(32)}`
+	const ids = (original: Fr, current: Fr = original) => ({ originalContractClassId: original, currentContractClassId: current })
+	const stored = (address: string) => ({ address, ...ids(new Fr(1n)) })
+
+	/** The store holds SESSION, HIDDEN (a hidden account row) and CONTRACT; FRESH is unknown. */
+	function metadataHarness(nodeHas: Record<string, unknown> = {}) {
+		const h = makeHarness({
 			pxeService: {
-				getContractInstance: vi.fn(async () => instance),
+				getContractInstance: vi.fn(async (_network: unknown, address: string) =>
+					[SESSION, HIDDEN, CONTRACT].includes(address) ? stored(address) : undefined,
+				),
 				getContractArtifact: vi.fn(async () => ({ kind: "artifact" })),
 			} as never,
+			accountService: {
+				getAccounts: vi.fn(async (_profileId: string, _chainId: number, all?: boolean) =>
+					all ? [{ address: SESSION }, { address: HIDDEN }] : [{ address: SESSION }],
+				),
+			} as never,
 		})
-		const meta = await executor.executeAztecGetContractMetadata({
-			kind: "aztec_getContractMetadata",
-			networkId: "net-1",
-			address: "0xcontract",
-		} as never)
+		h.node.getContract.mockImplementation(async (address: AztecAddress) => nodeHas[address.toString()])
+		const read = (address: string, sessionAccounts: string[] = [SESSION]) =>
+			h.executor.executeAztecGetContractMetadata({
+				kind: "aztec_getContractMetadata",
+				networkId: "net-1",
+				address,
+				sessionAccounts,
+			} as never)
+		return { ...h, read }
+	}
 
-		expect(meta.instance).toBe(instance)
-		expect(meta.initializationStatus).toBe(ContractInitializationStatus.INITIALIZED)
-		expect(meta.isContractPublished).toBe(true)
+	test("a profile account outside the session answers as an address the wallet never registered", async () => {
+		const { read, deps, node } = metadataHarness()
+		expect(await read(HIDDEN)).toEqual(await read(FRESH))
+		expect(node.getContract.mock.calls.map(([address]) => address.toString())).toEqual([HIDDEN, FRESH])
+		expect(deps.pxeService.getContractArtifact).not.toHaveBeenCalled()
+		expect(deps.accountService.getAccounts).toHaveBeenCalledWith("p1", 7, true)
+		expect(deps.networkService.getNodeForUrl).toHaveBeenCalledWith("http://primary")
+		expect(deps.networkService.getNode).not.toHaveBeenCalled()
 	})
 
-	test("not local: best-effort node lookup drives isContractPublished, instance stays undefined", async () => {
-		const getContractInstance = vi
-			.fn()
-			.mockResolvedValueOnce(undefined) // pxeOnly probe
-			.mockResolvedValueOnce({ found: true }) // nodeBestEffort probe
-		const { executor } = makeHarness({
-			pxeService: { getContractInstance, getContractArtifact: vi.fn(async () => undefined) } as never,
-		})
-		const meta = await executor.executeAztecGetContractMetadata({
-			kind: "aztec_getContractMetadata",
-			networkId: "net-1",
-			address: "0xcontract",
-		} as never)
+	test("with no session account on the chain, every profile account answers as an unknown address", async () => {
+		const { read } = metadataHarness()
+		expect(await read(SESSION, [])).toEqual(await read(FRESH, []))
+	})
 
-		expect(meta.instance).toBeUndefined()
-		expect(meta.initializationStatus).toBe(ContractInitializationStatus.UNKNOWN)
-		expect(meta.isContractPublished).toBe(true)
-		expect((getContractInstance.mock.calls[1] as unknown[])[2]).toEqual({ nodeBestEffort: true })
+	test("a session account returns its stored instance; publication is the node's answer", async () => {
+		const { read } = metadataHarness()
+		const meta = await read(SESSION)
+		expect(meta.instance).toEqual(stored(SESSION))
+		expect(meta.initializationStatus).toBe(ContractInitializationStatus.INITIALIZED)
+		expect(meta.isContractPublished).toBe(false)
+	})
+
+	test("a stored contract the node reports upgraded is published and updated", async () => {
+		const current = new Fr(2n)
+		const { read } = metadataHarness({ [CONTRACT]: ids(new Fr(1n), current) })
+		expect(await read(CONTRACT)).toEqual({
+			instance: stored(CONTRACT),
+			initializationStatus: ContractInitializationStatus.INITIALIZED,
+			isContractPublished: true,
+			isContractUpdated: true,
+			updatedContractClassId: current,
+		})
+	})
+
+	test("a node failure answers unpublished alike and logs no address", async () => {
+		const { read, deps, node } = metadataHarness()
+		node.getContract.mockImplementation(async (address: AztecAddress) => {
+			throw new Error(`lookup failed for ${address.toString()}`)
+		})
+		expect(await read(HIDDEN)).toEqual(await read(FRESH))
+		expect((await read(FRESH)).isContractPublished).toBe(false)
+		expect(JSON.stringify(vi.mocked(deps.logDebug).mock.calls)).not.toMatch(/0b0b|0c0c/)
+		expect(deps.logDebug).toHaveBeenCalled()
 	})
 })
 

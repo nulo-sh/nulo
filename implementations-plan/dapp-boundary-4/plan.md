@@ -146,7 +146,7 @@ Every gate runs from the worktree root and also runs `bun run lint` and `bun run
   - The node throws: the call rejects.
 - **Gate:** `cd apps/extension && bun run test src/wallet/services/execution/view-executor.test.ts`. Pass: exit 0.
 
-### Phase 4: a metadata read is bound to the session
+### Phase 4: a metadata read is bound to the session ✓
 
 - Add the op field and the dispatcher change; change `executeAztecGetContractMetadata` as in Architecture.
 - Bridge tests (`dispatcher.test.ts`): a session holding A on this chain and C on another; the recorded op carries `sessionAccounts` equal to `[A]`, as a top-level call and as a `batch` leg.
