@@ -74,9 +74,9 @@ One arc, one PR against `dev`. The wallet's two requests to third-party hosts, t
 
 Run every command from the worktree root unless the command starts with `cd`. Phase 1 lands in one commit with Phase 2, never alone.
 
-### Phase 1: the request loop pins no cache validator (red on the base build)
+### Phase 1: the request loop pins no cache validator (red on the base build) ✓
 
-- [ ] Change map: `apps/extension/tests/e2e/fixtures/token-list.ts` (`ListRequest` gains `ifNoneMatch`; the handler sends a content `ETag`); `apps/extension/tests/e2e/token-list.test.ts` (the loop asserts `ifNoneMatch` is undefined; the title names "a cache validator").
+- [x] Change map: `apps/extension/tests/e2e/fixtures/token-list.ts` (`ListRequest` gains `ifNoneMatch`; the handler sends a content `ETag`); `apps/extension/tests/e2e/token-list.test.ts` (the loop asserts `ifNoneMatch` is undefined; the title names "a cache validator").
 - Build both armed builds from this tree, whose fetch code is the base, and run the file on each. Firefox needs `geckodriver` and `bun x puppeteer browsers install firefox`.
 - **Validation gate**
   - Commands: `bun run lint`; `bun run typecheck:all`; then per browser `B` in `chrome`, `firefox`: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:$B`, then `cd apps/extension && NULO_E2E_BROWSER=$B NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/token-list.test.ts --retry=0`.
@@ -85,9 +85,9 @@ Run every command from the worktree root unless the command starts with `cd`. Ph
   - If both runs complete with every assertion passing (no validator sent): revert both files, record it, and drop D3. Excellent 2 is then not demonstrated; the composition and unit pins still cover Excellent 1.
   - Layers: lint, typecheck, e2e (smoke, Chrome and Firefox).
 
-### Phase 2: both fetches use `no-store`, pinned (tests first)
+### Phase 2: both fetches use `no-store`, pinned (tests first) ✓
 
-- [ ] Change map: `S/token-list/service.composition.test.ts:120` (`cache: "no-store"`); `S/price/service.test.ts`; then `S/token-list/service.ts` (`download()`); `S/price/service.ts` (`FetchLike`, the `fetchFn` call); `ARCHITECTURE.md:99-100`.
+- [x] Change map: `S/token-list/service.composition.test.ts:120` (`cache: "no-store"`); `S/price/service.test.ts`; then `S/token-list/service.ts` (`download()`); `S/price/service.ts` (`FetchLike`, the `fetchFn` call); `ARCHITECTURE.md:99-100`.
 - Tests:
   - Composition: the admission test pins `cache: "no-store"` beside the other three fields; its accepted snapshot is the success control.
   - Price, one new test in "refresh pipeline": `expect(fetchFn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer", signal: expect.any(AbortSignal) }))`; the same refresh returns the parsed quotes (the success control).

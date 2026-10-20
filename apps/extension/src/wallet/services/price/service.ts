@@ -41,7 +41,7 @@ const BACKOFF_CAP_MS = QUOTE_TTL_MS
 /** A real reply for the full id set is about 300 bytes; anything near this is not a price reply. */
 const MAX_PRICE_RESPONSE_BYTES = 16 * 1024
 
-type FetchLike = (input: string, init?: { signal?: AbortSignal; headers?: Record<string, string> }) => Promise<Response>
+type FetchLike = (input: string, init: RequestInit) => Promise<Response>
 
 export function isValidQuote(id: string, quote: unknown, now: number): quote is PriceQuote {
 	if (!quote || typeof quote !== "object") return false
@@ -370,7 +370,14 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		this.abortController = controller
 		const timeout = setTimeout(() => controller.abort(), PRICE_FETCH_TIMEOUT_MS)
 		try {
-			const response = await this.fetchFn(url, { signal: controller.signal, headers })
+			// The HTTP cache neither answers nor stores the request, so it carries no cache validator.
+			const response = await this.fetchFn(url, {
+				signal: controller.signal,
+				headers,
+				cache: "no-store",
+				credentials: "omit",
+				referrerPolicy: "no-referrer",
+			})
 			if (!response.ok) {
 				throw new Error(`price fetch failed: HTTP ${response.status}`)
 			}
