@@ -14,6 +14,7 @@ import TransactionCardLayout from "./TransactionCardLayout.vue"
 
 import { balanceFormatted } from "@/utils/amount.js"
 import { isValidDecimals } from "@/utils/token-amount"
+import { dashIfBlank } from "@/utils/string"
 
 const props = defineProps({
 	/** Token symbol — the card's title row. */
@@ -49,7 +50,7 @@ const hashSlice = computed(() => {
 
 <template>
 	<TransactionCardLayout
-		:title="tokenSymbol"
+		:title="dashIfBlank(tokenSymbol)"
 		icon="receive"
 		:amount="formattedAmount ? `+${formattedAmount}` : null"
 		:amountSymbol="tokenSymbol"

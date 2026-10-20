@@ -16,6 +16,7 @@ import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/clien
 
 /** Utils */
 import { HOME_TOKEN_ROWS, orderTokenRows } from "@/utils/token-order"
+import { dashIfBlank } from "@/utils/string"
 import { matchesQuery } from "@/utils/token-search"
 
 /** Composables */
@@ -152,7 +153,7 @@ onBeforeUnmount(() => {
 						v-for="tb in listed"
 						:key="tb.id"
 						@click="handleSelectToken(tb.token.id)"
-						:title="tb.token.symbol"
+						:title="dashIfBlank(tb.token.symbol)"
 						:icon="tb.token.id === cacheStore.activeTokenIdx ? 'square-check' : 'square'"
 						:iconFillColor="tb.token.id === cacheStore.activeTokenIdx ? 'primary' : 'tertiary'"
 						iconBgColor="transparent"

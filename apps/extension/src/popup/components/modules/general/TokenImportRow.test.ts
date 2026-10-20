@@ -33,6 +33,15 @@ describe("TokenImportRow", () => {
 		expect(w.find('[data-testid="token-import-title"]').text()).toBe("USDC")
 	})
 
+	test("in-flight: a title of spaces reads as the empty-value dash in the symbol style; an empty one keeps the address", () => {
+		const blank = mount(TokenImportRow, { props: { op: { ...baseOp, title: "   " } }, global: { stubs: STUBS } })
+		const title = blank.get('[data-testid="token-import-title"]')
+		expect(title.text()).toBe("—")
+		expect(title.classes().some((c) => c.includes("address"))).toBe(false)
+		const empty = mount(TokenImportRow, { props: { op: { ...baseOp, title: "" } }, global: { stubs: STUBS } })
+		expect(empty.get('[data-testid="token-import-title"]').text()).toBe("0x1234…5678")
+	})
+
 	test("failed: shows the square-cross icon, no spinner; subtitle falls back to error message", () => {
 		const failedOp = {
 			...baseOp,
