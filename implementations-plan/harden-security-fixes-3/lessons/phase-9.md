@@ -12,3 +12,4 @@
 | 23:5x | Smoke spec on the wallet's own restart; negative run without the refusal | green on both browsers; without the refusal it fails waiting for the pages to close |
 | 00:0x | Network spec: a connected playground after the restart | green on both browsers (proverless) after the app's page loads again; the measured tab and app behaviour went to OA-8 |
 | 00:3x | Codex R1 + Opus review: conditional approve (both) | Opus: with strict mode on (the default) the record keeps no bearer and the next start deletes it, so the smoke spec passed whether or not the store was emptied; the real-build probes had the same blind spot (only the bare-extension probe discriminated). The spec now turns strict mode off and seeds a `storage.session` key. Also: CSP checked before the restart; the queued connect's badge seen before the unlock (Codex); OA-8 qualified and completed |
+| 00:5x | Codex R2 | approve: no material point left; the loop converged |
