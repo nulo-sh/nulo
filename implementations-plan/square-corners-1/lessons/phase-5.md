@@ -1,0 +1,10 @@
+# Phase 5: arc 2, the corners and the search box
+
+- 2026-10-20, branch `square-corners-1-a2` at `origin/dev` `21eb96866` (#933 landed). `oa1-square.patch` applied clean; `creator.js` then took the search box's colours (#937, D13-D14) and the logs theme's `.cm-button` 0 (D16).
+- The edit shrank `createTheme`, an accepted function: `bun run baseline:rescore` failed with `accepted 154 → observed 146`. Re-stamped the directive to 146, `bun run baseline:complexity` rewrote the manifest's entry, rescore then passed (20 acceptances match).
+- Lint 0, `typecheck:all` 0. Commit `51cb3a3f1`, signed.
+- Before readings of the search boxes: a build with `origin/dev`'s `creator.js` restored by `git checkout 21eb96866 -- <file>` (committed head, so `git checkout HEAD -- <file>` restored it; `RESTORED_OK`). JSON search box, light: panel, labels, field text and buttons `rgb(255, 255, 255)`, edges white at 5-15%, 1.00:1 over the page. Dark: 18.56:1. The logs search box draws CodeMirror's own dark panel (`#333338`) in both themes: readable in both (D17).
+- After: armed rebuild, all eight shots passed, no element with a rounded corner on any of them in either theme. JSON search box: light labels and field 16.56:1, buttons 14.71:1 (`rgba(0, 0, 0, 0.88)` on `--nulo-surface-low`); dark 16.34:1 and 15.11:1, against 18.56:1 and 16.49:1 before; edges `--nulo-border`, `--nulo-surface-high`, `--nulo-surface-highest`.
+- The logs pictures are 1800x1400 at 2x, about 550 KB each; the eight are cropped to the toolbar and its panel (500x480) and the search bar (1100x70), through a canvas in headless Chrome (scratch tool; `Bun.Image` has no crop). The other sixteen are whole.
+- Smoke on Chrome at retry 0, armed build: `viewers-csp` 8, `import-errors-scroll` 4, `page-error-capture` 2 passed; `passkey-toolbar-panel` skipped (Firefox-only). 122 s; no scenario added or changed.
+- `bun run audit:vue` 0 (879 files, 14,470 tests); `bun run test:all` 0.

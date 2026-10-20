@@ -1,8 +1,8 @@
 ---
 plan: square-corners-1
 tier: light
-status: arc 1 in review; arc 2 waits on OA-1
-issues: "#928 (arc 1 refs; closed by arc 2 after OA-1)"
+status: arc 1 merged (#933); arc 2 in review
+issues: "#928 (arc 1 refs; arc 2 closes), #937 (arc 2 closes)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -21,7 +21,7 @@ Size: 156 lines, over the 150 target by the record of six review rounds, which n
 | Arc | Issue | Branch | PR line |
 |---|---|---|---|
 | 1 | #928, the notice card | `square-corners-1-a1` off `origin/dev`, carrying this plan | `Refs #928` |
-| 2 | #928, the rest | after OA-1 is answered; planned then | `Closes #928` |
+| 2 | #928, the rest; #937 | `square-corners-1-a2` off `origin/dev`, after #933 | `Closes #928`, `Closes #937` |
 
 **Sign-off for arc 1**, the owner's note on decision page 71 (P71-07, 2026-10-20), on the notice's pictures for #914: "That dialog has rounded corners: on Nulo if I'm not wrong there are NO rounded corners. But other than that the screenshot looks great."
 
@@ -83,6 +83,25 @@ One CSS line removed and one source pin added. No token, component, dependency o
 - Add each `after` reading to OA-1's items. Run `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/import-errors-scroll.test.ts --retry=0`. No Firefox twin: no fixture, focus, window, activation or WebAuthn path moves.
 - **Gate**: every `after` radius logs `0px`; 16 `after` PNGs; `git status --porcelain -- packages apps` is empty (index and tree); `git diff origin/dev...HEAD -- packages apps ':!apps/extension/src/components/NotificationManager.*'` is empty; `import-errors-scroll.test.ts` exits 0; `bun run audit:vue`, `bun run test:all`, and `bun run check:plans` after staging, exit 0 each. Layers: lint, typecheck, unit, component, build, e2e smoke.
 
+## Arc 2: the rest, after OA-1
+
+**Sign-off**, decision page 72 (2026-10-20):
+- **P72-01 A**: "Square all eight. Colours, borders, sizes and spacing stay; only the corners change."
+- **P72-02, struck**: "No need of adding a test for this, it's a bit too over-engineering it. if it's already implemented ok. but it sounds like too much." No guard; the arc 1 pin stays as it is.
+- **P72-04 A** (#937): "Fix it with the corners: the box's labels, buttons and edges take the app's own colours in both themes, as the dark theme reads today."
+
+### Phase 5: The change ✓
+
+- Apply `oa1-square.patch` (seven files): the eight CSS declarations, the JSON theme's drawn and undrawn radii, the logs scrollbar rule; `.cm-button` 0 in both editor themes (D16).
+- `creator.js`, the JSON search box (D13, D14): its panel's text `--txt-primary`, edge `--nulo-border`; field edge `--nulo-surface-high`; buttons `--nulo-surface-low` on `--nulo-surface-highest`; the panel's background `transparent`. No new `@nulo/design` token.
+- Re-stamp `createTheme`'s accepted line count to what `baseline:rescore` reports; regenerate the manifest.
+- **Gate**: lint, `typecheck:all`, `baseline:rescore` exit 0. Passed ([lessons/phase-5.md](lessons/phase-5.md)).
+
+### Phase 6: Pictures, readings, smoke, full gate ✓
+
+- Before readings of both search boxes from a build with `origin/dev`'s `creator.js`; then the armed build of the head and the eight shots `after`, light and dark, with each search box's colours and contrast logged.
+- **Gate**: no rounded element on any shot in either theme; the light JSON search box's labels, field and buttons at least 4.5:1; the dark one within 15% of its before readings; smoke on Chrome at retry 0 (`viewers-csp`, `import-errors-scroll`, `page-error-capture`); `bun run audit:vue`, `bun run test:all` exit 0. Passed: [lessons/phase-5.md](lessons/phase-5.md).
+
 ## Security & Adversarial Considerations
 
 No trust boundary moves: no dApp input, storage, message, permission, log or dependency. The pin reads repo sources at test time. The trust that matters is evidence provenance: the right checkout, the right bundle, a forced or seeded state labelled as such. The OA-1 patch is reversed by a trap inside the call that applies it, before any shot, and the Phase 4 gate proves no OA-1 file differs from `origin/dev`. Notices keep their words, buttons and testids.
@@ -90,6 +109,8 @@ No trust boundary moves: no dApp input, storage, message, permission, log or dep
 ## UI impact
 
 - **The notice card** (popup and onboarding; every notice): before, 16px rounded corners; after, square corners. Hairline, shadow, padding, width, words and buttons stay. Signed by P71-07's note (quoted above). Pictures: Phases 2 and 4, the popup at its real 360x600.
+- **OA-1's eight surfaces** (arc 2): before, the radii OA-1 lists; after, square. Colours, borders, sizes and spacing stay. Signed by P72-01 A.
+- **The JSON viewer's search box** (arc 2): before, in the light theme, white labels, button text and edges on the light page (1.00:1); after, the app's text, surface and border tokens in both themes, the dark one reading as before. Signed by P72-04 A.
 
 ## Decision ledger
 
@@ -106,6 +127,12 @@ No trust boundary moves: no dApp input, storage, message, permission, log or dep
 | D10 | A scratch `dapp_execute` row with `terminalAt: null` | widening `seedJournalRecord` | the helper writes terminal rows by contract; widening it serves one picture |
 | D11 | `creator.js`'s editor radii join OA-1 (item 6; undrawn ones noted) | leave them out | the owner's rule covers what a person sees; the search box and match outline are drawn |
 | D12 | The guard is its own question (Q2) | the guard bundled with A/B | keeping the corners and refusing new ones is coherent |
+| D13 | The JSON search box's colours from tokens the dark theme already matches: text `--txt-primary`, panel edge `--nulo-border`, field edge `--nulo-surface-high`, button `--nulo-surface-low` with a `--nulo-surface-highest` edge | white-alpha values per theme; a new token | the theme is marked dark for both app themes, so CodeMirror paints white text on the light page; each token is within a shade of today's dark composite, so dark reads as before (P72-04) |
+| D14 | The panel's background `transparent` | `var(--app-bg)` | it named `--app-background`, which no stylesheet defines, so it already rendered transparent |
+| D15 | No new test | a contrast or radius test | P72-02 struck tests; no existing test reads a radius or the theme's colours; the readings sit in the PR |
+| D16 | `.cm-button` 0 in the logs theme too | leave the library's 1px | P72-01 squares the search buttons; the base theme's rule is reachable from a theme rule |
+| D17 | The logs search box keeps CodeMirror's own dark panel | the JSON box's tokens | it reads in both themes (white on `#333338`); #937 names the JSON box; P72-01 keeps colours |
+| D18 | The logs pictures cropped to their corners | whole 1800x1400 shots | 550 KB each, corners lost at that size |
 
 ## Audit verdicts
 

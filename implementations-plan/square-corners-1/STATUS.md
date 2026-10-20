@@ -8,3 +8,4 @@
 - 2026-10-20 arc 1 phase 4 green: after pictures (notice and OA-1, every reading 0), import-errors-scroll 4/4, audit:vue 0, test:all 0.
 - 2026-10-20 arc 1 fix loop converged: Codex r1 2, Opus 4, r2 1, r3 clean.
 - 2026-10-20 merged origin/dev (#915, #909); popup notice pictures re-shot; final gates green.
+- 2026-10-20 arc 2 phases 5-6 green: squared, search box on tokens, 8 shots no radius, smoke 14/14, audit:vue 0, test:all 0.
