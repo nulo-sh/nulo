@@ -136,6 +136,12 @@ beforeEach(() => {
 	installChromeStorage({}, { persist: false })
 })
 
+const surface = vi.hoisted(() => ({ toolbar: false }))
+vi.mock("@/utils/browser-surface", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/utils/browser-surface")>()),
+	isToolbarPopup: () => surface.toolbar,
+}))
+
 const router = vi.hoisted(() => ({ go: vi.fn(), push: vi.fn(), back: vi.fn() }))
 vi.mock("vue-router", () => ({
 	useRouter: () => router,
@@ -176,6 +182,8 @@ function mountPage(profileName = "Test Profile") {
 						"<input data-testid='unlock-password-input' :value='modelValue' @input=\"$emit('update:modelValue', $event.target.value)\" />",
 				},
 				PasskeyCeremonyDialog: true,
+				// A component, as the wallet's Button is, so a template ref on one holds an instance.
+				Button: { template: "<button><slot /></button>" },
 				Banner: { template: "<div><slot name='title' /><slot name='description' /></div>" },
 				Flex: { template: "<div><slot /></div>" },
 				Text: { template: "<span><slot /></span>" },
@@ -227,6 +235,7 @@ const material = { masterKey: "mk", entropy: "ent", importedKeysKey: "transfer-k
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	surface.toolbar = false
 	profileClient = sliceClient()
 	accountClient = accountSliceClient()
 	transactionClient = sliceClient()
@@ -679,5 +688,64 @@ describe("export/full.vue — a saved file clears Home's backup reminder", () =>
 		await downloadButton(wrapper).trigger("click")
 		await vi.waitFor(() => expect(flagWrites()).toHaveLength(1))
 		expect(openToast).toHaveBeenCalledWith(SUCCESS)
+	})
+})
+
+describe("export/full.vue — the done state after the encrypted file", () => {
+	const closeButton = (wrapper: ReturnType<typeof mountPage>) => wrapper.find("[data-testid='backup-close-btn']")
+
+	async function downloaded() {
+		vi.spyOn(EncryptionKey, "getPasshash").mockResolvedValue(new Uint8Array(32) as never)
+		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt: async () => new Uint8Array(29) } as never)
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+		await vi.waitFor(() => expect(downloadButton(wrapper).attributes("disabled")).toBeUndefined())
+		await downloadButton(wrapper).trigger("click")
+		await vi.waitFor(() => expect(closeButton(wrapper).exists()).toBe(true))
+		await flushPromises()
+		return wrapper
+	}
+
+	it("reads saved with the password reminder, and a focused Close replaces Download", async () => {
+		const wrapper = await downloaded()
+		const banner = wrapper.get("[data-testid='backup-done-banner']").text()
+		expect(banner).toContain("Saved to your downloads")
+		expect(banner).toContain("password, as it will be required to restore your backup.")
+		expect(wrapper.find("[data-testid='download-backup-btn']").exists()).toBe(false)
+		expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(false)
+		expect(closeButton(wrapper).text()).toBe("Close")
+		expect(document.activeElement).toBe(closeButton(wrapper).element)
+		expect(downloadFile).toHaveBeenCalledTimes(1)
+	})
+
+	it("a held Enter's repeat on Close does nothing", async () => {
+		const close = vi.spyOn(window, "close").mockImplementation(() => {})
+		surface.toolbar = true
+		const wrapper = await downloaded()
+		expect(pressOn(closeButton(wrapper).element as HTMLElement, "Enter", { repeat: true })).toEqual([false])
+		await flushPromises()
+		expect(close).not.toHaveBeenCalled()
+	})
+
+	it("in the toolbar popup, Close closes the popup", async () => {
+		const close = vi.spyOn(window, "close").mockImplementation(() => {})
+		surface.toolbar = true
+		const wrapper = await downloaded()
+		await closeButton(wrapper).trigger("click")
+		await flushPromises()
+		expect(close).toHaveBeenCalledOnce()
+		expect(router.push).not.toHaveBeenCalled()
+		expect(router.back).not.toHaveBeenCalled()
+	})
+
+	it("anywhere else, Close leaves as the back arrow does", async () => {
+		const close = vi.spyOn(window, "close").mockImplementation(() => {})
+		const wrapper = await downloaded()
+		expect(window.history.length).toBe(1)
+		await closeButton(wrapper).trigger("click")
+		await flushPromises()
+		expect(router.push).toHaveBeenCalledWith("/popup/settings/security/export")
+		expect(close).not.toHaveBeenCalled()
 	})
 })

@@ -9,3 +9,4 @@
 - 2026-10-20 phase 1 gate: lint pass (0 errors), typecheck:all pass, test pass (883 files, 14,588 tests).
 - 2026-10-20 phase 2 gate: lint, typecheck, page tests pass; Firefox toolbar-panel (6/6, 177.7 s; the moved test 29.9 s at load 160, CI before 14.6 s), own-window 3/3, contacts-import 7/7, wall 397 s; Chrome contacts-import 7/7, wall 116 s; all retry 0.
 - 2026-10-20 phase 3 gate: StatusCard 10/10; export page tests pass; Chrome passkey-backup 3/3 (57 s, retry 0); the working card's capture before (dev) and after equal byte for byte in light and dark (SW paused by CDP, animations frozen).
+- 2026-10-20 phase 4 gate: composable 34/34, page 73 tests, page-back 4/4; Firefox security-backup, passkey-backup, backup-roundtrip 7/7 (145 s); Chrome 7/7 (95 s) on the rerun after a self-inflicted kill; all retry 0. I1 holds in Chrome (lessons/phase-4.md); known limit 2 not attemptable headless.

@@ -20,8 +20,9 @@ import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vu
 import { managers } from "@/utils/core"
 
 /** Utils */
-import { closesOnFocusLoss } from "@/utils/browser-surface"
+import { closesOnFocusLoss, isToolbarPopup } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
+import { goBack } from "@/utils/page-back"
 import { backupNotice } from "@/components/stale-network/copy"
 
 /** Composables */
@@ -36,6 +37,8 @@ import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
 
 const router = useRouter()
+
+const closeButton = useTemplateRef("closeButton")
 
 const {
 	password,
@@ -106,10 +109,23 @@ const onKeydown = (e) => {
 			downloadBackup(true)
 			break
 		default:
-			// "progress" / "encrypting": a run is in flight, so Enter starts nothing.
+			// "progress" / "encrypting" hold a run in flight and "downloaded" has nothing left: Enter
+			// starts nothing.
 			break
 	}
 }
+
+/** The toolbar popup closes as a whole; any other surface leaves the page as its back arrow does. */
+const handleClose = () => {
+	if (isToolbarPopup()) window.close()
+	else void goBack(router, "/popup/settings/security/export")
+}
+
+watch(backupStatus, async (status) => {
+	if (status !== "downloaded") return
+	await nextTick()
+	closeButton.value?.$el?.focus()
+})
 
 // A profile switch made elsewhere updates this page in place. A backup it holds is the previous
 // profile's, and the download rule would read the new profile's type, so the page starts over.
@@ -272,8 +288,15 @@ onBeforeUnmount(() => {
 						</template>
 					</Banner>
 
-					<Banner v-if="backupStatus === 'encrypted'" variant="done" direction="vertical">
-						<template #title> Backup is successfully encrypted </template>
+					<Banner
+						v-if="backupStatus === 'encrypted' || backupStatus === 'downloaded'"
+						variant="done"
+						direction="vertical"
+						data-testid="backup-done-banner"
+					>
+						<template #title>
+							{{ backupStatus === "downloaded" ? "Saved to your downloads" : "Backup is successfully encrypted" }}
+						</template>
 						<template #description>
 							<Text color="secondary" height="140">
 								Don't forget your
@@ -367,6 +390,17 @@ onBeforeUnmount(() => {
 					{{ backupStatus === 'encrypting' ? 'Encrypting…' : 'Protect with Password' }}
 				</Button>
 				<Button
+					v-if="backupStatus === 'downloaded'"
+					ref="closeButton"
+					@click="handleClose"
+					@keydown.enter="refuseRepeatEnter"
+					variant="cta"
+					data-testid="backup-close-btn"
+				>
+					Close
+				</Button>
+				<Button
+					v-else
 					@click="handleDownloadClick"
 					@keydown.enter="refuseRepeatEnter"
 					:disabled="!canDownload || isDownloading"

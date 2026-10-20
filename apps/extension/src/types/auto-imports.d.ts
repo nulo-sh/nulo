@@ -219,6 +219,7 @@ declare global {
   const getTransaction: typeof import('../utils/core').getTransaction
   const getTxCategory: typeof import('../utils/tx-enrichment').getTxCategory
   const getTxTitle: typeof import('../utils/tx-enrichment').getTxTitle
+  const goBack: typeof import('../utils/page-back').goBack
   const h: typeof import('vue').h
   const handleCancelOrUnconfirmed: typeof import('../utils/passkey-copy').handleCancelOrUnconfirmed
   const hasInFlightSend: typeof import('../utils/in-flight-send').hasInFlightSend
@@ -1026,6 +1027,7 @@ declare module 'vue' {
     readonly getTransaction: UnwrapRef<typeof import('../utils/core')['getTransaction']>
     readonly getTxCategory: UnwrapRef<typeof import('../utils/tx-enrichment')['getTxCategory']>
     readonly getTxTitle: UnwrapRef<typeof import('../utils/tx-enrichment')['getTxTitle']>
+    readonly goBack: UnwrapRef<typeof import('../utils/page-back')['goBack']>
     readonly h: UnwrapRef<typeof import('vue')['h']>
     readonly handleCancelOrUnconfirmed: UnwrapRef<typeof import('../utils/passkey-copy')['handleCancelOrUnconfirmed']>
     readonly hasInFlightSend: UnwrapRef<typeof import('../utils/in-flight-send')['hasInFlightSend']>

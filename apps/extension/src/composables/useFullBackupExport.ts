@@ -26,7 +26,7 @@ import { useToast } from "@/composables/toast.js"
 import { useConfirm } from "@/composables/useConfirm"
 import { useAppStore } from "@/stores/app.store"
 
-type BackupStatus = "" | "progress" | "finished" | "encrypting" | "encrypted"
+type BackupStatus = "" | "progress" | "finished" | "encrypting" | "encrypted" | "downloaded"
 type BackupClient = { backup(): Promise<unknown>; disconnect(): void }
 type NamedClient = { name: string; client: BackupClient }
 type HeldSlices = Record<string, unknown>
@@ -433,6 +433,13 @@ async function runDownload(ctx: ExportCtx, isEncrypted: boolean) {
 		if (!isCurrent()) return
 		void markGetStarted(profileId, "backupSaved")
 		ctx.openToast({ kind: "success", label: "Backup downloaded successfully" })
+		// The sealed file is the run's last step: the page shows it done, and its plaintext and
+		// passwords go now rather than when the page unmounts.
+		if (isEncrypted) {
+			state.backupStatus.value = "downloaded"
+			state.isDownloading.value = false
+			discardRun(ctx)
+		}
 	} catch (err) {
 		if (!isCurrent()) return
 		console.error("Download failed:", { error: err })

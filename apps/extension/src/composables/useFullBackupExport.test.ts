@@ -523,6 +523,40 @@ describe("useFullBackupExport — a current run", () => {
 		expect(file.entropy).toBeUndefined()
 	})
 
+	it("an accepted sealed download ends the run: done, with nothing left to download or seal", async () => {
+		const { api } = setup("password")
+		await api.handleBackup()
+		await api.handleEncrypt()
+		await api.downloadBackup(true)
+		expect(readState(api)).toMatchObject({ backupStatus: "downloaded", isDownloading: false, password: null, repeatedPassword: null })
+		expect(api.canDownload.value).toBe(false)
+		expect(m.openToast).toHaveBeenCalledWith({ kind: "success", label: "Backup downloaded successfully" })
+		for (const { kind, disconnect } of h.state.built) expect(disconnect, kind).toHaveBeenCalled()
+		expect(await probeArtifacts(api)).toEqual({ downloads: 0, sealedFrom: [null] })
+	})
+
+	it("a passkey profile's plain download leaves the page as it was", async () => {
+		const { api } = setup("passkey")
+		await api.handleBackup()
+		await api.downloadBackup(false)
+		expect(m.downloadFile).toHaveBeenCalledOnce()
+		expect(api.backupStatus.value).toBe("finished")
+		expect(api.canDownload.value).toBe(true)
+	})
+
+	it("a refused sealed download keeps the sealed file and Download", async () => {
+		const { api } = setup("password")
+		await api.handleBackup()
+		await api.handleEncrypt()
+		m.downloadFile.mockRejectedValueOnce(new Error("refused"))
+		await api.downloadBackup(true)
+		expect(api.backupStatus.value).toBe("encrypted")
+		expect(api.canDownload.value).toBe(true)
+		await api.downloadBackup(true)
+		expect(m.downloadFile.mock.calls.map(([file]) => file.data)).toEqual(["SEALED", "SEALED"])
+		expect(api.backupStatus.value).toBe("downloaded")
+	})
+
 	// A new await is a new place a run can be superseded: add its row to the table, then this count.
 	it("every await in the composable has a row above", () => {
 		const code = readFileSync(resolve(__dirname, "useFullBackupExport.ts"), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")
