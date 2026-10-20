@@ -87,6 +87,8 @@ vi.mock("@aztec-labs/protocol-contracts/fee-juice", async (importOriginal) => {
 })
 
 const ORIGIN: LocalTxOrigin = { type: OriginType.DAPP, name: "test-dapp" }
+/** The canonical SponsoredFPC's address as the harness derives it. */
+const PROTOCOL_SPONSOR = `0x${"0a".repeat(32)}`
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
 
 /** The lane's earlier-sends seams for a send that never has to wait. */
@@ -223,6 +225,7 @@ function makeHarness(
 		sequenceEpoch: vi.fn(() => 0),
 		buildAndEstimateValidated,
 		addTransaction: vi.fn(async () => ({}) as never),
+		protocolSponsorAddress: vi.fn(async () => PROTOCOL_SPONSOR),
 		recordPendingAuthwits: vi.fn(async () => {}),
 		noteSent: vi.fn(),
 		sequencer: new SendSequencer({ pendingTxs: () => [], sleep: async () => {}, now: () => 0 }),
@@ -273,6 +276,7 @@ const RECORD_FIELDS = [
 	"gasDetails",
 	"fence",
 	"networkId",
+	"feeChoice",
 ] as const
 
 /** The activity record `addTransaction` received, by field name. */
@@ -2181,6 +2185,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
+			feeChoice: "wallet",
 		})
 	})
 
@@ -2200,6 +2205,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
+			feeChoice: "wallet",
 		})
 	})
 
@@ -2234,10 +2240,11 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-1",
+			feeChoice: "wallet",
 		})
 	})
 
-	test("NO_FROM: nonce zero, external payment, the op's networkId", async () => {
+	test("NO_FROM: nonce zero, external payment, the app's fee choice, the op's networkId", async () => {
 		collectOffchainEffectsMock.mockReturnValue([])
 		const { executor, deps, built } = makeHarness()
 		await executor.executeAztecSendTx(NO_FROM({ networkId: "net-op" }), ORIGIN, undefined, undefined, FENCE)
@@ -2254,6 +2261,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
+			feeChoice: "app",
 		})
 	})
 
@@ -2287,6 +2295,59 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 		Object.assign(h.deps.coordinator, { proveAndSend })
 		await h.executor.executeAztecSendTx(noFrom ? NO_FROM() : makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
 		expect(recorded).toBe(expected)
+	})
+
+	const SPONSOR_CALL = { contract: PROTOCOL_SPONSOR, method: "sponsor_unconditionally", args: [] }
+	const EMBEDDED = { paymentMethod: { kind: "embedded" } }
+	const sendTransaction = (feeSettings: unknown) =>
+		({
+			kind: "send_transaction",
+			networkId: "net-op",
+			accountAddress: "0xacct",
+			feeSettings,
+			actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+		}) as never
+	type Harness = ReturnType<typeof makeHarness>
+
+	test.each([
+		[
+			"aztec_sendTx",
+			(h: Harness) => h.executor.executeAztecSendTx(makeAztecOp({ feeSettings: EMBEDDED }), ORIGIN, undefined, undefined, FENCE),
+		],
+		["send_transaction", (h: Harness) => h.executor.executeSendTransaction(sendTransaction(EMBEDDED), ORIGIN, undefined, FENCE)],
+		["NO_FROM", (h: Harness) => h.executor.executeAztecSendTx(NO_FROM(), ORIGIN, undefined, undefined, FENCE)],
+	])("%s: the app's own fee payment through the protocol sponsor, its address asked for before the prove", async (_kind, send) => {
+		collectOffchainEffectsMock.mockReturnValue([])
+		const h = makeHarness()
+		Object.assign(h.built, { txCalls: [{ contract: "0xc", method: "dapp_method", args: [] }, SPONSOR_CALL] })
+		let askedBeforeProve = false
+		const proveAndSend = vi.fn(async (ctx: { recordTransaction: (hash: string) => Promise<unknown> }) => {
+			askedBeforeProve = vi.mocked(h.deps.protocolSponsorAddress).mock.calls.length > 0
+			await ctx.recordTransaction("0xhash")
+			return { txHash: { toString: () => "0xhash" }, offchainOutput: {} }
+		})
+		Object.assign(h.deps.coordinator, { proveAndSend })
+		await send(h)
+		expect(h.deps.protocolSponsorAddress).toHaveBeenCalledWith(7)
+		expect(askedBeforeProve).toBe(true)
+		expect(recordedTx(h.deps).feeChoice).toBe("app_protocol_sponsor")
+	})
+
+	test("the person's pick records the wallet's and never asks for the sponsor's address, even when its calls name it", async () => {
+		const h = makeHarness()
+		Object.assign(h.built, { txCalls: [SPONSOR_CALL] })
+		await h.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
+		expect(recordedTx(h.deps).feeChoice).toBe("wallet")
+		expect(h.deps.protocolSponsorAddress).not.toHaveBeenCalled()
+	})
+
+	test("an address the wallet cannot derive still records the row, as the app's plain pick", async () => {
+		const failure = new Error("derivation failed")
+		const h = makeHarness({ protocolSponsorAddress: vi.fn(async () => Promise.reject(failure)) })
+		Object.assign(h.built, { txCalls: [SPONSOR_CALL] })
+		await h.executor.executeAztecSendTx(makeAztecOp({ feeSettings: EMBEDDED }), ORIGIN, undefined, undefined, FENCE)
+		expect(recordedTx(h.deps).feeChoice).toBe("app")
+		expect(h.deps.logDebug).toHaveBeenCalledWith("fee chooser: the protocol sponsor's address is unavailable", { error: failure })
 	})
 })
 
