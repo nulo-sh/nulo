@@ -164,7 +164,7 @@ test("Home shows one card per send; each status icon wears its status line's col
 		sel("journal-detail-category"),
 	)
 	await shotSend(page, "journal-refused", "journal-detail-state")
-	// The journal page reads its record once, when it mounts: the next record opens from History.
+	// A new id alone does not reload the journal page: the next record opens from History.
 	await navigateByHash(page, "#/popup/activity")
 	await readCards(page, 7)
 

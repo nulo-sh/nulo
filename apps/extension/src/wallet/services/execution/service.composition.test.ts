@@ -1268,8 +1268,6 @@ describe("ExecutionService composition — a dApp send names its call before sim
 })
 
 describe("ExecutionService composition — a send whose answer was lost is checked on the network", () => {
-	type Harness = Awaited<ReturnType<typeof makeHarness>>
-
 	/** A running send check over the harness's journal, reading receipts from `getTxReceipt`. */
 	async function startCheck(h: Harness, getTxReceipt: (hash: { toString(): string }) => Promise<unknown>) {
 		const network = { getSingleAttemptNodeForUrl: vi.fn(async (_url: string) => ({ getTxReceipt }) as never) }

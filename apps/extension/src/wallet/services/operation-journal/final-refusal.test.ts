@@ -10,11 +10,8 @@ describe("isFinalRefusal", () => {
 		["Invalid tx: Existing nullifier, Insufficient fee payer balance", false],
 		["Invalid tx: existing nullifier", false],
 		["Invalid tx: Insufficient fee payer balance", false],
-		["Invalid tx: Insufficient fee payer balance (required=880, available=0)", false],
-		["Invalid tx: Block header not found", false],
 		["Invalid tx: Invalid proof", false],
 		["Cannot accept tx: node has no connected peers to propagate it", false],
-		["Request to the node timed out after 60000ms", false],
 	])("%j → %s", (message, final) => {
 		expect(isFinalRefusal(message)).toBe(final)
 	})

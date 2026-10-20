@@ -284,7 +284,6 @@ export class SendCheck {
 		return moved === undefined ? undefined : { next: moved, refresh: true }
 	}
 
-	/** `undefined` when no read was made or it failed, which is never an answer. */
 	private async receiptOf(watch: Watch, txHash: string, url: string, live: () => boolean): Promise<TxReceipt | undefined> {
 		const node = await this.nodeFor(url, live)
 		if (!node) return undefined
@@ -310,7 +309,7 @@ function openRow(op: OperationRecord): OpenRow | undefined {
 	const { txHash, submittedEndpointUrl: url, check, expiry, inclusion, checkSince } = progress
 	const since = checkSince ?? op.terminalAt ?? op.updatedAt
 	if (check === undefined) {
-		// A row once mined, then pruned, proves its refusal answered a send that had landed.
+		// Mirrors `isSendCheckMove`: a write it refuses would re-read the row every tick.
 		const refusal = checkSince === undefined && isFinalRefusal(op.error?.message)
 		return { kind: "unanswered", txHash, url, since, refusal }
 	}
@@ -345,7 +344,6 @@ function verdictOf(receipt: Pick<TxReceipt, "status" | "executionResult" | "bloc
 	return { check, inclusion: { block: blockNumber, hash: blockHash.toString() } }
 }
 
-/** A status that does not parse is no read, so never Dropped. */
 function isDropped(receipt: Pick<TxReceipt, "status">): boolean {
 	try {
 		return txStatusFromReceipt(receipt.status) === TxStatus.Dropped

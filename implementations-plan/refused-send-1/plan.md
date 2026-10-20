@@ -103,6 +103,8 @@ Steps 2-5 of [`implementations-plan/README.md` § Post-implementation standard](
 
 ## Audit verdicts
 
+**Code review, round 1 (2026-10-20).** Codex `approve` (two comment lows) and the Opus review `approve` (six lows: comments, two test titles, a duplicate alias, three classifier rows); all adopted ([lessons/phase-5.md](lessons/phase-5.md)).
+
 **Round 3 (Codex resume, 2026-10-20).** `approve`: "All three round-2 conditions are addressed … No new material defects found. The bounded correction window remains an explicitly disclosed design choice."
 
 **Round 2 (Codex resume, 2026-10-20).** `conditional approve (with conditions: correct OA-3's recovery guarantee, propagate the accepted exceptions into owner-facing explanations, and specify the deadline-crossing case)`. All three verified and adopted: OA-3 B and D8 say the expiry path is one more chance, not a guarantee (`presentAnswer` records only a mined success); the prune and clock exceptions reach I1, D3, OA-1 and OA-2; `refused` needs a fresh clock reading after the read, with a deferred-receipt test.

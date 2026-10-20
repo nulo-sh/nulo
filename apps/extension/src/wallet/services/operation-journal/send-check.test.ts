@@ -318,7 +318,10 @@ describe("SendCheck: a refusal a later block rarely lifts", () => {
 
 	test.each([
 		["a read that throws", (h: ReturnType<typeof makeHarness>) => h.getTxReceipt.mockRejectedValue(new Error("fetch failed"))],
-		["no node", (h: ReturnType<typeof makeHarness>) => h.network.getSingleAttemptNodeForUrl.mockRejectedValue(new Error("refused"))],
+		[
+			"a node lookup that throws",
+			(h: ReturnType<typeof makeHarness>) => h.network.getSingleAttemptNodeForUrl.mockRejectedValue(new Error("refused")),
+		],
 		[
 			"a status that does not parse",
 			(h: ReturnType<typeof makeHarness>) => h.getTxReceipt.mockResolvedValue({ txHash: HASH, status: "gone" }),
@@ -344,7 +347,7 @@ describe("SendCheck: a refusal a later block rarely lifts", () => {
 		expect(h.balances.refreshAccountBalances).toHaveBeenCalledWith(ACCOUNT)
 	})
 
-	test("past the window a refused row's watch ends unread, after a restart too", async () => {
+	test("a refused row stored past the window is unwatched at start, with no read", async () => {
 		const progress = { stage: "failed", from: "submitting", txHash: HASH, submittedEndpointUrl: URL, check: "refused" } as const
 		const h = makeHarness([failedRow({ error: EXISTING, terminalAt: T0 - DROPPED_RESURRECTION_WINDOW_MS, progress })])
 		await h.check.start()
