@@ -1,6 +1,6 @@
 {
 	"biomeVersion": "2.5.13",
-	"generated": "2026-10-19",
+	"generated": "2026-10-20",
 	"rules": {
 		"noExcessiveCognitiveComplexity": {
 			"apps/extension/src/popup/components/modules/send/FeeSettingsCard.test.ts": 1,
@@ -145,7 +145,7 @@
 			"file": "apps/extension/src/components/JsonViewer/creator.js",
 			"rule": "noExcessiveLinesPerFunction",
 			"anchor": "export const createTheme = ({ styles }) => {",
-			"accepted": 154,
+			"accepted": 148,
 			"sentence": "one declarative CodeMirror theme value; splitting selector groups only fragments a single style sheet"
 		},
 		{

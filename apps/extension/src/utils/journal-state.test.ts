@@ -20,6 +20,7 @@ import {
 	humanizeErrorKind,
 	journalCallTitle,
 	journalCardOriginLabel,
+	journalCardTitle,
 	type JournalTerminalDisplay,
 	journalTerminalDisplay,
 	type SendOutcome,
@@ -383,6 +384,12 @@ describe("buildJournalTerminalCardProps", () => {
 			tokens: [],
 		})
 		expect(props).toMatchObject({ title: "Transfer", amount: "1.5", amountSymbol: "" })
+	})
+
+	test("a token whose symbol is only spaces titles the card with the empty-value dash and keeps the spaces beside the amount", () => {
+		const ctx = { tokenById: () => ({ symbol: "   ", decimals: 6, hasDecimals: true }), tokens: [] }
+		expect(buildJournalTerminalCardProps(transferRecord(), ctx)).toMatchObject({ title: "—", amount: "1.5", amountSymbol: "   " })
+		expect(journalCardTitle(transferRecord(), ctx)).toBe("—")
 	})
 
 	test("the transfer-type chip reads type 0 (private) and is absent without a type", () => {

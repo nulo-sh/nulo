@@ -21,6 +21,7 @@ import { type Tx, TxStatus, TxExecutionResult } from "@/wallet/services/transact
 import { STATUS_ICON_FILL } from "@/components/composite/activity/status-icon-fill"
 import { balanceFormatted } from "@/utils/amount.js"
 import { txAmount } from "@/utils/tx-amount"
+import { dashIfBlank } from "@/utils/string"
 import { knownDecimals } from "@/utils/token-amount"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { usePrices } from "@/composables/usePrices"
@@ -98,7 +99,7 @@ const txStatusAttr = computed(() => {
 })
 
 const title = computed(() => {
-	if (type.value === "transfer" && amount.value?.symbol) return amount.value.symbol
+	if (type.value === "transfer" && amount.value?.symbol) return dashIfBlank(amount.value.symbol)
 	return getTxTitle(props.tx.calls, props.tokens)
 })
 
