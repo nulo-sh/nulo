@@ -29,7 +29,7 @@ helper names `waitForText|readWhen|waitAndRead|pollFor|waitForValue`; `src` grep
 
 ## The same shape elsewhere in `tests/e2e/fixtures/`
 
-A wait, then a separate read. A change needs a written path ([implementations-plan/README.md § Proportion](../README.md#proportion)).
+A wait, then a separate read. A change needs a written path ([implementations-plan/README.md § Proportion](../../README.md#proportion)).
 
 | Fixture | Path for the read to miss or read the wrong node | Disposition |
 |---|---|---|
