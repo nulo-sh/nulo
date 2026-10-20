@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest"
+import { describe, expect, test, vi } from "vitest"
 import { ScopeViolationError } from "@nulo/extension-messaging/errors"
 import { MemoryStorageArea } from "@nulo/wallet-core/storage"
 import {
@@ -64,6 +64,16 @@ describe("RegistrationAllowance", () => {
 		const outcomes = await Promise.allSettled([allowance.admit("p1", 1, APP), allowance.admit("p1", 1, APP)])
 		expect(outcomes.map((o) => o.status).sort()).toEqual(["fulfilled", "rejected"])
 		expect((await stored())["1"].total).toBe(APP_REGISTRATIONS_PER_CHAIN)
+	})
+
+	test("a failed storage read refuses the call and keeps the stored counts", async () => {
+		const { area, spend, refusal, stored } = setup()
+		await spend(2)
+		vi.spyOn(area, "get").mockImplementationOnce(async () => {
+			throw new Error("storage unavailable")
+		})
+		expect(await refusal()).toBeInstanceOf(Error)
+		expect(await stored()).toEqual({ "1": { total: 2, apps: { [APP]: 2 } } })
 	})
 
 	test("a value that does not parse reads as no registrations; a chain's bad entry drops alone", async () => {

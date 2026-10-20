@@ -1,7 +1,8 @@
 /**
  * Composition test: a dApp's `registerSender` through the REAL wallet-sdk dispatcher, the REAL
  * ExecutionService and the REAL DappSessionService and its registration counts, over fake storage
- * and a PXE client that only records its writes. No sandbox, PXE, bb or browser
+ * and a PXE client typed against the real one that only records `registerSender` calls; it lives in
+ * this `*.test.ts`, so it never reaches a bundle. No sandbox, PXE, bb or browser
  * (`apps/extension/tests/COMPOSITION-TESTS.md`).
  */
 import { describe, expect, test, vi } from "vitest"
@@ -58,8 +59,15 @@ async function makeHarness() {
 	const deletionState = new ProfileDeletionState()
 	const captureExecutionFence = async (): Promise<ExecutionFence> => ({ profileId: "p1", epoch: deletionState.capture("p1"), session: 1 })
 	const macKey = await crypto.subtle.generateKey({ name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"])
-	const registerSender = vi.fn(async (_network: unknown, address: string) => address)
-	const pxeClient = { onProvePhase: { add: () => {} }, registerSender } as unknown as PxeServiceClient
+	const registerSender = vi.fn<PxeServiceClient["registerSender"]>(async (_network, address) => address)
+	const recording: Pick<PxeServiceClient, "registerSender"> = { registerSender }
+	const pxeClient = { ...recording, onProvePhase: { add: () => {} } } as unknown as PxeServiceClient
+	/** Holds the executor's network lookup, the await before a registration is admitted. */
+	let networkHeld: Promise<void> = Promise.resolve()
+	const getNetwork = vi.fn(async () => {
+		await networkHeld
+		return NETWORK
+	})
 
 	const collection = new ServiceCollection()
 	collection.add(
@@ -73,7 +81,7 @@ async function makeHarness() {
 			onActiveProfileChanged: new EventHandler<unknown>(),
 		}),
 	)
-	collection.add(svc(NetworkService.name, { getNetwork: async () => NETWORK }))
+	collection.add(svc(NetworkService.name, { getNetwork }))
 	collection.add(svc(AccountService.name, {}))
 	collection.add(svc(TransactionService.name, { onTransactionUpdated: { add: () => {} } }))
 	collection.add(svc(TokenService.name, {}))
@@ -114,7 +122,18 @@ async function makeHarness() {
 		const key = "nulo:core:dappRegistrations@p1"
 		return JSON.parse((await api.storage.local.get(key))[key] as string)
 	}
-	return { connect, registerSender, counts }
+	const holdNetwork = () => {
+		let release = () => {}
+		networkHeld = new Promise((resolve) => {
+			release = resolve
+		})
+		return release
+	}
+	const deleteProfile = async () => {
+		deletionState.beginDeletion("p1")
+		await sessions.purgeForProfile("p1")
+	}
+	return { connect, registerSender, counts, holdNetwork, getNetwork, deleteProfile, api }
 }
 
 const refusalOf = (call: Promise<unknown>) =>
@@ -140,5 +159,21 @@ describe("a dApp's registrations through the dispatcher spend its app's count", 
 		expect(await counts()).toEqual({
 			[NETWORK.chainId]: { total: APP_REGISTRATIONS_PER_CHAIN + 1, apps: { [APP_A]: APP_REGISTRATIONS_PER_CHAIN, [APP_B]: 1 } },
 		})
+	})
+
+	test("a registration its profile's deletion overtook counts nothing and writes nothing", async () => {
+		const { connect, registerSender, holdNetwork, getNetwork, deleteProfile, api } = await makeHarness()
+		const a = await connect(APP_A)
+		const release = holdNetwork()
+		const call = a.register(addressAt(0)).then(
+			() => "admitted",
+			() => "refused",
+		)
+		await vi.waitFor(() => expect(getNetwork).toHaveBeenCalled())
+		await deleteProfile()
+		release()
+		expect(await call).toBe("refused")
+		expect(registerSender).not.toHaveBeenCalled()
+		expect(await api.storage.local.get("nulo:core:dappRegistrations@p1")).toEqual({})
 	})
 })

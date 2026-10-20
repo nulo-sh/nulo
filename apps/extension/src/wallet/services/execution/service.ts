@@ -163,6 +163,9 @@ const BROADCASTING_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set(["s
 /** The operations that run under the authorizing session's fence. The wallet-sdk dispatcher sends
  *  a dApp's reads, registrations and simulations with none, and those never read one; its
  *  silently-covered authwit arrives under the wire handler's admission fence. */
+/** The app a dApp registration is counted against, and the session it was captured under. */
+type Registrant = { origin: string; fence: ExecutionFence }
+
 const FENCED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set([
 	"send_transaction",
 	"aztec_sendTx",
@@ -1022,13 +1025,13 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 				return this.viewExecutor.executeAztecGetChainInfo(operation)
 			}
 			case "aztec_registerSender": {
-				return this.executeAztecRegisterSender(operation, origin)
+				return this.executeAztecRegisterSender(operation, await this.registrant(origin, authorizedFence))
 			}
 			case "aztec_getAddressBook": {
 				return this.viewExecutor.executeAztecGetAddressBook(operation)
 			}
 			case "aztec_registerContract": {
-				return this.executeAztecRegisterContract(operation, origin)
+				return this.executeAztecRegisterContract(operation, await this.registrant(origin, authorizedFence))
 			}
 			case "aztec_simulateTx": {
 				return this.viewExecutor.executeAztecSimulateTx(operation)
@@ -1192,18 +1195,25 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 
 	// Aztec.js interface:
 
-	/** A dApp's registration spends one of its app's on the profile's chain before anything is written
-	 *  (`dapp-session/registration-allowance.ts`); the person's own is not counted. The app is the origin
-	 *  the wallet-sdk dispatcher stamps, the only builder of the two registration kinds. */
-	private async admitDappRegistration(origin: LocalTxOrigin, network: Network): Promise<void> {
-		if (origin.type !== OriginType.DAPP) return
+	/** The app a dApp registration is counted against, and the session it runs under, captured before
+	 *  the executor's first await. The app is the origin the wallet-sdk dispatcher stamps, the only
+	 *  builder of the two registration kinds; the person's own registrations are not counted. */
+	private async registrant(origin: LocalTxOrigin, authorizedFence?: ExecutionFence): Promise<Registrant | undefined> {
+		if (origin.type !== OriginType.DAPP) return undefined
 		if (!origin.name) throw new Error("a dApp registration needs the app's origin")
-		await this.dappSessionService.admitDappRegistration(origin.name, network.profileId, network.chainId)
+		return { origin: origin.name, fence: authorizedFence ?? (await this.captureFence()) }
 	}
 
-	private async executeAztecRegisterSender(op: AztecRegisterSenderOperation, origin: LocalTxOrigin): Promise<AztecAddress> {
+	/** Before anything is written (`dapp-session/registration-allowance.ts`). */
+	private async admitDappRegistration(registrant: Registrant | undefined, network: Network): Promise<void> {
+		if (!registrant) return
+		if (registrant.fence.profileId !== network.profileId) throw new SessionEndedError()
+		await this.dappSessionService.admitDappRegistration(registrant.origin, registrant.fence, network.chainId)
+	}
+
+	private async executeAztecRegisterSender(op: AztecRegisterSenderOperation, registrant?: Registrant): Promise<AztecAddress> {
 		const network = await this.networkService.getNetwork(op.networkId)
-		await this.admitDappRegistration(origin, network)
+		await this.admitDappRegistration(registrant, network)
 		return this.pxeService.registerSender(networkInfoFrom(network), op.address)
 	}
 
@@ -1211,7 +1221,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	// `registerContract(): Promise<void>`, and the dApp-side proxy validates the
 	// response with z.void() — any non-undefined result rejects the whole call
 	// on the dApp even though registration succeeded wallet-side.
-	private async executeAztecRegisterContract(op: AztecRegisterContractOperation, origin: LocalTxOrigin): Promise<void> {
+	private async executeAztecRegisterContract(op: AztecRegisterContractOperation, registrant?: Registrant): Promise<void> {
 		const instance = await ContractInstanceWithAddressSchema.parseAsync(op.instance)
 		const network = await this.networkService.getNetwork(op.networkId)
 
@@ -1259,7 +1269,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 
 		// Admitted before the account, so a refused keyed call registers neither the account nor the contract.
 		if (op.secretKey && account) {
-			await this.admitDappRegistration(origin, network)
+			await this.admitDappRegistration(registrant, network)
 			await this.pxeService.registerAccount(networkInfoFrom(network), op.secretKey, account.partialAddress)
 		}
 

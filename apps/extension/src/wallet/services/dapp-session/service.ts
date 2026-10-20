@@ -122,11 +122,12 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 	}
 
-	/** Spends one of the app's registrations on the profile's chain, or throws the scope refusal once
-	 *  its share or the chain's total is used up (`registration-allowance.ts`). Not an RPC method. */
-	public async admitDappRegistration(origin: string, profileId: string, chainId: number): Promise<void> {
+	/** `RegistrationAllowance.admit` under the fence's profile; a fence a deletion overtook writes
+	 *  nothing. Not an RPC method. */
+	public async admitDappRegistration(origin: string, fence: ExecutionFence, chainId: number): Promise<void> {
 		await this.ensureInitialized()
-		await this.registrations.admit(profileId, chainId, origin)
+		const deletion = this.profileService.getDeletionState()
+		await this.registrations.admit(fence.profileId, chainId, origin, () => deletion.assertCurrent(fence.profileId, fence.epoch))
 	}
 
 	public async getDappSessions(): Promise<DappSession[]> {

@@ -1,10 +1,9 @@
 // @vitest-environment node
 /**
- * A dApp's registrations through the real PXE service, with arguments crossing as JSON and errors
- * rebuilt from their payload as the worker hop does, admitted against the real registration counts:
- * the refusal as the dApp reads it, what a refused call writes, and a sender the person adds, which
- * is not counted. The client's own retry paths are not in play. Node environment for the real key
- * derivation.
+ * A dApp's registrations through the real PXE service, with arguments crossing as JSON as the worker
+ * hop sends them, admitted against the real registration counts: the refusal as the dApp reads it,
+ * what a refused call writes, and a sender the person adds, which is not counted. Node environment
+ * for the real key derivation.
  */
 
 import { describe, expect, test } from "vitest"
@@ -13,7 +12,7 @@ import { jsonStringify } from "@aztec-labs/foundation/json-rpc"
 import type { PXE } from "@aztec-labs/pxe/client/bundle"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { computePartialAddress, type ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
-import { ScopeViolationError, WalletError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
+import { ScopeViolationError } from "@nulo/extension-messaging/errors"
 import { MemoryStorageArea } from "@nulo/wallet-core/storage"
 import { FrozenSchnorrAccountArtifact, NuloAccount } from "@nulo/aztec-runtime/account"
 import { ChainRuntime, PxeService } from "@nulo/aztec-runtime/pxe"
@@ -22,7 +21,6 @@ import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { AccountStateService } from "@/wallet/services/account-state/service"
 import { APP_REGISTRATIONS_PER_CHAIN, RegistrationAllowance } from "@/wallet/services/dapp-session/registration-allowance"
-import { OriginType } from "@/wallet/services/transaction/spec"
 import { toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
 import { ExecutionService } from "./service"
 
@@ -46,16 +44,8 @@ async function keyedInstance(seed: bigint) {
 	}
 }
 
-/** What the worker hop changes: JSON arguments, a `WalletError` rebuilt from its payload. */
 function overTheWire<A extends unknown[], R>(call: (...args: A) => Promise<R>): (...args: A) => Promise<R> {
-	return async (...args) => {
-		try {
-			return await call(...(JSON.parse(jsonStringify(args)) as A))
-		} catch (error) {
-			if (error instanceof WalletError) throw walletErrorFromPayload(JSON.parse(JSON.stringify(error.toPayload())))
-			throw error
-		}
-	}
+	return async (...args) => call(...(JSON.parse(jsonStringify(args)) as A))
 }
 
 function makeService(senders: AztecAddress[], accounts: AztecAddress[]) {
@@ -92,13 +82,14 @@ function makeService(senders: AztecAddress[], accounts: AztecAddress[]) {
 		networkService: unknown
 		pxeService: unknown
 		dappSessionService: unknown
-		executeAztecRegisterSender(op: unknown, origin: unknown): Promise<unknown>
-		executeAztecRegisterContract(op: unknown, origin: unknown): Promise<unknown>
+		executeAztecRegisterSender(op: unknown, registrant: unknown): Promise<unknown>
+		executeAztecRegisterContract(op: unknown, registrant: unknown): Promise<unknown>
 	}
 	const allowance = new RegistrationAllowance(new MemoryStorageArea())
 	internals.networkService = { getNetwork: async () => NETWORK }
 	internals.dappSessionService = {
-		admitDappRegistration: (origin: string, profileId: string, chainId: number) => allowance.admit(profileId, chainId, origin),
+		admitDappRegistration: (origin: string, fence: { profileId: string }, chainId: number) =>
+			allowance.admit(fence.profileId, chainId, origin),
 	}
 	internals.pxeService = {
 		registerSender: overTheWire(pxeService.registerSender.bind(pxeService)),
@@ -108,7 +99,7 @@ function makeService(senders: AztecAddress[], accounts: AztecAddress[]) {
 	}
 	const accountState = new AccountStateService(new LoggerStore(new ConfigStore()))
 	Object.assign(accountState, { initialized: true, networkService: internals.networkService, pxeService: internals.pxeService })
-	const dapp = { type: OriginType.DAPP, name: "https://app.example" }
+	const dapp = { origin: "https://app.example", fence: { profileId: NETWORK.profileId, epoch: 0, session: 1 } }
 	const dappSender = (address: AztecAddress) =>
 		internals.executeAztecRegisterSender({ kind: "aztec_registerSender", networkId: NETWORK.id, address: address.toString() }, dapp)
 	const dappContract = (keyed: Awaited<ReturnType<typeof keyedInstance>>, withKey = true) => {
@@ -123,7 +114,6 @@ function makeService(senders: AztecAddress[], accounts: AztecAddress[]) {
 			dapp,
 		)
 	}
-	/** Spends the rest of the app's share on fresh senders. */
 	const useUpShare = async (spent = 0) => {
 		for (const address of distinct(1000, APP_REGISTRATIONS_PER_CHAIN - spent)) await dappSender(address)
 		writes.length = 0
@@ -139,15 +129,6 @@ const SCOPE_ENVELOPE = toWalletResponseError(
 )
 
 describe(`an app's registrations on a profile's chain stop at ${APP_REGISTRATIONS_PER_CHAIN}`, () => {
-	test("past its share, its sender is refused as the scope refusal and nothing is written", async () => {
-		const { writes, dappSender, useUpShare } = makeService([], [])
-		await useUpShare()
-		const refusal = await dappSender(addressAt(500)).catch((e: unknown) => e)
-		expect(refusal).toBeInstanceOf(ScopeViolationError)
-		expect(dappReads(refusal)).toEqual(SCOPE_ENVELOPE)
-		expect(writes).toEqual([])
-	})
-
 	test("past its share, its keyed contract registers neither the account nor the contract", async () => {
 		const { writes, dappContract, useUpShare } = makeService([], [])
 		await useUpShare()

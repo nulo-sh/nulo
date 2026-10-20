@@ -116,8 +116,9 @@ describe("DappSessionService composition — in-process, no sandbox", () => {
 describe("an app's registration counts go with the chain's sessions and with the profile", () => {
 	test("purgeForChain clears that chain's counts; purgeForProfile clears the profile's", async () => {
 		const { service, registrations } = await makeHarness()
-		await service.admitDappRegistration(ORIGIN, "p1", 1)
-		await service.admitDappRegistration(ORIGIN, "p1", 2)
+		const fence = { profileId: "p1", epoch: 0, session: 1 }
+		await service.admitDappRegistration(ORIGIN, fence, 1)
+		await service.admitDappRegistration(ORIGIN, fence, 2)
 		await service.purgeForChain("p1", 1)
 		expect(await registrations("p1")).toEqual({ "2": { total: 1, apps: { [ORIGIN]: 1 } } })
 		await service.purgeForProfile("p1")

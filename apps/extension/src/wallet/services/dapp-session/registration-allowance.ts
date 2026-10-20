@@ -4,7 +4,6 @@ import { z } from "zod"
 import { valueStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 
-/** The most registrations one app may make on a profile's chain. */
 export const APP_REGISTRATIONS_PER_CHAIN = 32
 
 /**
@@ -45,9 +44,11 @@ export class RegistrationAllowance {
 	public constructor(private readonly area: MinimalStorageArea) {}
 
 	/** Spends one of `origin`'s registrations on the chain, or refuses, writing nothing, once the app's
-	 *  share or the chain's total is used up. */
-	public admit(profileId: string, chainId: number, origin: string): Promise<void> {
+	 *  share or the chain's total is used up. `assertLive` runs under the lock `purgeProfile` takes, so
+	 *  a call it refuses cannot write after the purge. */
+	public admit(profileId: string, chainId: number, origin: string, assertLive: () => void = () => {}): Promise<void> {
 		return this.lock.withLock(async () => {
+			assertLive()
 			const counts = await this.read(profileId)
 			const chain = counts[String(chainId)] ?? { total: 0, apps: {} }
 			const used = Object.hasOwn(chain.apps, origin) ? chain.apps[origin] : 0
@@ -74,11 +75,13 @@ export class RegistrationAllowance {
 		return this.lock.withLock(() => this.store(profileId).delete())
 	}
 
+	/** Malformed JSON reads as none; a failed storage read propagates, so it never resets the counts. */
 	private async read(profileId: string): Promise<RegistrationCounts> {
 		try {
 			return decodeRegistrationCounts(await this.store(profileId).get())
-		} catch {
-			return {}
+		} catch (error) {
+			if (error instanceof SyntaxError) return {}
+			throw error
 		}
 	}
 

@@ -35,7 +35,6 @@ vi.mock("@aztec-labs/stdlib/contract", async (importOriginal) => {
 	}
 })
 
-import { OriginType } from "@/wallet/services/transaction/spec"
 import { ExecutionService } from "./service"
 
 const ADDRESS = `0x${"0".repeat(60)}1234`
@@ -54,7 +53,7 @@ const instance = (current = classId("0xclass")) => ({
 	originalContractClassId: ORIGINAL,
 })
 
-const DAPP = { type: OriginType.DAPP, name: "https://app.example" }
+const DAPP = { origin: "https://app.example", fence: { profileId: "p1", epoch: 0, session: 1 } }
 
 function makeService() {
 	const pxe = {
@@ -70,7 +69,7 @@ function makeService() {
 		pxeService: unknown
 		executeRegisterContract(op: unknown): Promise<unknown>
 		dappSessionService: unknown
-		executeAztecRegisterContract(op: unknown, origin: unknown): Promise<unknown>
+		executeAztecRegisterContract(op: unknown, registrant: unknown): Promise<unknown>
 	}
 	internals.networkService = { getNetwork: async () => NETWORK }
 	internals.pxeService = pxe
