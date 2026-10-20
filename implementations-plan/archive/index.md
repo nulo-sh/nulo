@@ -369,3 +369,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [log-warn-contrast-1](log-warn-contrast-1/plan.md) — completed — the logs window's light WARN lines take `--txt-warning`, 5.42:1 on their tint, gated in both themes (#887); known limits #900 #901
 - [capture-hang-1](capture-hang-1/plan.md) — completed — capture mode shows the wallet tab before its shot and refuses a page that is not shown (#885)
 - [hook-bins-1](hook-bins-1/plan.md) — completed — the git hooks run the worktree's installed Biome and commitlint on Bun and refuse before `bun install`; the baseline scripts run the installed Biome; a CI-gating test pins both (#910)
+- [terminal-card-flake-1](terminal-card-flake-1/plan.md) — completed — `readTerminalCard` reads the card in the wait that finds it, once the router has drawn the page it names; the wait had met the departing page's card (#903)
