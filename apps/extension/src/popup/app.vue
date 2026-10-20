@@ -114,7 +114,7 @@ const settingHandlers = {
 		root.classList.toggle("noanimations", Boolean(value))
 	},
 	sidePanel(value) {
-		// Chrome-only API: Firefox has no side panel.
+		// Firefox has no `sidePanel`: its toolbar button is pointed at the sidebar by the background.
 		chrome.sidePanel?.setPanelBehavior({
 			openPanelOnActionClick: Boolean(value),
 		})

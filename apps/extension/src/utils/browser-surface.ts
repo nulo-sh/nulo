@@ -16,3 +16,24 @@ export function passkeyNeedsOwnWindow(): boolean {
 function isToolbarPanel(): boolean {
 	return chrome.extension.getViews({ type: "popup" }).includes(window)
 }
+
+/** Firefox's sidebar (the manifest's `sidebar_action`), which opens or closes only inside a user
+ *  input; Chrome has none. Read off `globalThis`: the build would import the WebExtension polyfill
+ *  for a bare `browser`, which the wallet never loads. */
+export function sidebarAction(): SidebarAction | undefined {
+	return (globalThis as { browser?: { sidebarAction?: SidebarAction } }).browser?.sidebarAction
+}
+
+type SidebarAction = { open(): Promise<void>; close(): Promise<void> }
+
+/** This document is Firefox's sidebar, which `window.close()` leaves open. Chrome's `getViews`
+ *  refuses the `sidebar` type, so it is asked only where a sidebar exists. */
+export function isFirefoxSidebar(): boolean {
+	const sidebar = { type: "sidebar" } as unknown as chrome.extension.FetchProperties
+	return sidebarAction() !== undefined && chrome.extension.getViews(sidebar).includes(window)
+}
+
+/** A surface that keeps the wallet beside the page: Chrome's side panel or Firefox's sidebar. */
+export function hasSidePanelSurface(): boolean {
+	return Boolean(chrome.sidePanel) || sidebarAction() !== undefined
+}

@@ -13,6 +13,7 @@ import { Dropdown } from "@/components/ui/Dropdown"
 import SettingControlRow from "@/components/ui/Settings/SettingControlRow.vue"
 
 /** Utils */
+import { hasSidePanelSurface, isFirefoxSidebar, sidebarAction } from "@/utils/browser-surface"
 import { settingsRow } from "@/utils/settings-search"
 import { defaultConfig as makeDefaultConfig } from "@/wallet/config"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
@@ -36,11 +37,10 @@ const isAnimationsDisabled = ref(defaultConfig.disableAnimations)
 const isIncomingTransfersVisible = ref(defaultConfig.incomingTransfersVisible)
 // D8 dust filter — a NUMBER, not a toggle, so it lives outside the `settings` toggle map.
 const dustThreshold = ref(String(defaultConfig.incomingDustUsdThreshold))
-const TOGGLE_TESTIDS = { disableAnimations: "animations-toggle", showNode: "show-network-name-toggle" }
+const TOGGLE_TESTIDS = { sidePanel: "side-panel-toggle", disableAnimations: "animations-toggle", showNode: "show-network-name-toggle" }
 const settings = {
 	theme: { ...settingsRow("display-theme"), model: theme },
-	// Chrome-only: Firefox has no side panel, so the row is not offered there.
-	...(chrome.sidePanel
+	...(hasSidePanelSurface()
 		? {
 				sidePanel: { ...settingsRow("display-side-panel"), model: isSidePanelEnabled },
 			}
@@ -83,7 +83,7 @@ async function applySetting(key, value) {
 
 	switch (key) {
 		case "sidePanel":
-			if (value) {
+			if (value && chrome.sidePanel) {
 				const currentWindow = await chrome.windows.getCurrent()
 				chrome.sidePanel.open({
 					windowId: currentWindow.id,
@@ -96,6 +96,19 @@ async function applySetting(key, value) {
 		default:
 			break
 	}
+}
+
+function toggleSetting(key, value) {
+	const written = updateSetting(key, value)
+	// Firefox opens or closes its sidebar only inside the click that asks, so neither can wait for the
+	// write; the write is already posted, so a document the change closes has sent it.
+	if (key === "sidePanel") {
+		let change
+		if (value) change = sidebarAction()?.open()
+		else if (isFirefoxSidebar()) change = sidebarAction()?.close()
+		change?.catch(() => console.debug("[display] Firefox did not open or close the sidebar"))
+	}
+	return written
 }
 
 function onDisplayUpdate(setting) {
@@ -181,7 +194,7 @@ onBeforeUnmount(() => {
 				v-settings-row="settings[sk].id"
 			>
 				<Toggle
-					@update:modelValue="updateSetting(sk, $event)"
+					@update:modelValue="toggleSetting(sk, $event)"
 					:modelValue="settings[sk].model.value"
 					:data-testid="TOGGLE_TESTIDS[sk] || null"
 				/>

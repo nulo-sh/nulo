@@ -1,6 +1,6 @@
 import type { Browser } from "puppeteer"
 import { actionPopupContext } from "./firefox"
-import { evaluateViaFrameScript } from "./firefox-frame-script"
+import { clickWithPointer, evaluateViaFrameScript } from "./firefox-frame-script"
 
 /**
  * Firefox's sidebar (`sidebar_action`) holds its document in a content browser that belongs to no
@@ -77,41 +77,27 @@ export async function evaluateInSidebar<T>(browser: Browser, body: string): Prom
 	}
 }
 
-/**
- * Clicks the centre of the element with `testid` with a real pointer, which also gives the sidebar
- * focus. An element outside the sidebar's view is refused: no person could click it there. The
- * sidebar's coordinates are mapped onto its window's, which holds only while both share one scale.
- */
+/** Clicks `testid` in the open sidebar with a real pointer, which also gives the sidebar focus (`clickWithPointer`). */
 export async function clickInSidebar(browser: Browser, testid: string): Promise<void> {
+	const { session, addonId } = actionPopupContext(browser)
+	try {
+		await clickWithPointer(session, { addonId, locate: LOCATE_SIDEBAR, missing: "the sidebar is not open" }, testid)
+	} catch (err) {
+		throw new Error(`clickInSidebar: ${err instanceof Error ? err.message : String(err)}`)
+	}
+}
+
+/** Whether this window's sidebar shows the add-on's page. */
+export async function sidebarShows(browser: Browser): Promise<boolean> {
+	const { session, addonId } = actionPopupContext(browser)
+	return session.chromeScript<boolean>(
+		`const [addonId, done] = arguments; done(!!(function () { ${LOCATE_SIDEBAR} })()?.browsingContext?.currentWindowGlobal);`,
+		[addonId],
+	)
+}
+
+/** Closes this window's sidebar, as its close button does. */
+export async function closeSidebar(browser: Browser): Promise<void> {
 	const { session } = actionPopupContext(browser)
-	const target = await evaluateInSidebar<{ x: number; y: number; scale: number; inView: boolean } | null>(
-		browser,
-		`const el = content.document.querySelector(${JSON.stringify(`[data-testid="${testid}"]`)});
-		if (!el) return null;
-		const rect = el.getBoundingClientRect();
-		const x = rect.left + rect.width / 2;
-		const y = rect.top + rect.height / 2;
-		return { x: content.mozInnerScreenX + x, y: content.mozInnerScreenY + y, scale: content.devicePixelRatio, inView: x >= 0 && y >= 0 && x < content.innerWidth && y < content.innerHeight };`,
-	)
-	if (!target) throw new Error(`clickInSidebar: no ${testid} in the sidebar`)
-	if (!target.inView) throw new Error(`clickInSidebar: ${testid} is outside the sidebar's view`)
-	const origin = await session.chromeScript<{ x: number; y: number; scale: number }>(
-		`const [done] = arguments; done({ x: window.mozInnerScreenX, y: window.mozInnerScreenY, scale: window.devicePixelRatio });`,
-	)
-	if (origin.scale !== target.scale)
-		throw new Error(
-			`clickInSidebar: the sidebar is zoomed (scale ${target.scale}, its window ${origin.scale}), so the click would miss`,
-		)
-	await session.chromeActions([
-		{
-			type: "pointer",
-			id: "mouse",
-			parameters: { pointerType: "mouse" },
-			actions: [
-				{ type: "pointerMove", x: Math.round(target.x - origin.x), y: Math.round(target.y - origin.y), origin: "viewport" },
-				{ type: "pointerDown", button: 0 },
-				{ type: "pointerUp", button: 0 },
-			],
-		},
-	])
+	await session.chromeScript<null>(`const [done] = arguments; window.SidebarController.hide(); done(null);`)
 }

@@ -3,19 +3,80 @@
  * under the OS passkey prompt, so a passkey step started there runs in place. The ceremony needs the
  * sidebar focused, and any privileged read would take that focus: until the session lands, outcomes
  * are read from a control page opened beforehand. Both sidebars Firefox draws are driven, since a
- * profile may come up with either.
+ * profile may come up with either. With "Open as Side Panel" on, the toolbar button opens the
+ * sidebar instead of the popup.
  */
-import type { Browser } from "puppeteer"
+import type { Browser, Page } from "puppeteer"
 import { describe, expect } from "vitest"
-import { FIREFOX_ONLY, isFirefox } from "./fixtures/browser"
+import { FIREFOX_ONLY, isFirefox, stopBackground } from "./fixtures/browser"
 import { inPageRealm, sessionAuthenticator } from "./fixtures/browser/firefox"
-import { clickInSidebar, evaluateInSidebar, openSidebar, type SidebarKind } from "./fixtures/browser/firefox-sidebar"
+import { CONFIG_STORAGE_KEY } from "@/wallet/config/config"
+import {
+	actionPopupShows,
+	clickInActionPopup,
+	evaluateInActionPopup,
+	openActionPopup,
+	triggerToolbarAction,
+} from "./fixtures/browser/firefox-action-popup"
+import {
+	clickInSidebar,
+	closeSidebar,
+	evaluateInSidebar,
+	openSidebar,
+	type SidebarKind,
+	sidebarShows,
+} from "./fixtures/browser/firefox-sidebar"
+import { ensureUnlocked } from "./fixtures/auth"
 import { clickByTestId, openPopup, test, waitForHash } from "./fixtures/extension"
 import { readPasskeySurface, registerPasskeyProfile, watchPasskeySurface } from "./fixtures/passkey"
 import { pollUntil } from "./fixtures/poll"
 import { readSessionRow, waitForSessionRow } from "./fixtures/session"
 
 const GETS = "__nuloE2eCredentialGets"
+const DISPLAY = "#/popup/settings/display"
+const TOGGLE = "side-panel-toggle"
+
+/** The side-panel setting as the worker stored it. */
+const storedSidePanel = (control: Page) =>
+	control.evaluate(async (key: string) => {
+		const raw = (await chrome.storage.local.get(key))[key]
+		return typeof raw === "string" ? (JSON.parse(raw) as { sidePanel?: boolean }).sidePanel : undefined
+	}, CONFIG_STORAGE_KEY)
+
+const until = <T>(read: () => Promise<T>, done: (value: T) => boolean, label: string) =>
+	pollUntil(read, done, { label, timeoutMs: 15_000, intervalMs: 250 })
+
+/** The popup Firefox's toolbar button opens: `""` for none, so the click goes to the background. */
+const toolbarPopup = (control: Page) => control.evaluate(() => chrome.action.getPopup({}))
+const MANIFEST_POPUP = "/src/popup/index.html#/popup/general"
+
+/** What the toolbar button opened: both surfaces, read as soon as either shows. */
+const toolbarOpened = (browser: Browser) =>
+	until(
+		async () => ({ sidebar: await sidebarShows(browser), popup: await actionPopupShows(browser) }),
+		(shown) => shown.sidebar || shown.popup,
+		"a surface the toolbar button opened",
+	)
+
+type Evaluate = <T>(body: string) => Promise<T>
+
+/** Opens Display in a document reached by frame script: once its services answer, since a page still
+ *  starting routes itself to Home, and from its own realm, as the app's links do. */
+async function openDisplay(evaluate: Evaluate, where: string): Promise<void> {
+	const ready = `return !!content.document.querySelector('[data-session-checked="true"]') && !!content.document.querySelector('[data-service-ready="true"]');`
+	await until(
+		() => evaluate<boolean>(ready).catch(() => false),
+		(on) => on,
+		`${where} ready`,
+	)
+	await evaluate(inPageRealm(`location.hash = ${JSON.stringify(DISPLAY)}; return true;`))
+	const row = `return !!content.document.querySelector('[data-testid="${TOGGLE}"]');`
+	await until(
+		() => evaluate<boolean>(row).catch(() => false),
+		(shown) => shown,
+		`the side-panel row in ${where}`,
+	)
+}
 
 /** On `hash` with the session checked and the services ready, so its controls answer. */
 const sidebarOn = (browser: Browser, hash: string) =>
@@ -70,4 +131,66 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.sidebar, () => {
 			}
 		},
 	)
+
+	test("with the side-panel setting on, the toolbar button opens the sidebar, and with it off the popup again", async ({
+		registeredExtensionPerTest: ctx,
+	}) => {
+		const { browser } = ctx
+		let control = await openPopup(ctx)
+
+		await openActionPopup(browser)
+		await openDisplay((body) => evaluateInActionPopup(browser, body), "the toolbar panel")
+		await clickInActionPopup(browser, TOGGLE)
+		await until(
+			() => sidebarShows(browser),
+			(open) => open,
+			"the sidebar the row opened",
+		)
+		await until(
+			() => storedSidePanel(control),
+			(on) => on === true,
+			"the setting stored on",
+		)
+		await until(
+			() => actionPopupShows(browser),
+			(open) => !open,
+			"the toolbar panel closing once stored",
+		)
+		await until(
+			() => toolbarPopup(control),
+			(popup) => popup === "",
+			"the toolbar popup cleared",
+		)
+
+		// Firefox keeps the cleared popup while it runs, not the background: the click has to wake one.
+		await closeSidebar(browser)
+		await control.close()
+		await stopBackground(ctx)
+		await triggerToolbarAction(browser)
+		expect(await toolbarOpened(browser)).toEqual({ sidebar: true, popup: false })
+
+		// A background that died locks the wallet; the sidebar follows the unlock.
+		control = await openPopup(ctx)
+		await ensureUnlocked(control)
+		await openDisplay((body) => evaluateInSidebar(browser, body), "the sidebar")
+		await clickInSidebar(browser, TOGGLE)
+		await until(
+			() => sidebarShows(browser),
+			(open) => !open,
+			"the sidebar closing itself as the row turns off",
+		)
+		await until(
+			() => storedSidePanel(control),
+			(on) => on === false,
+			"the setting stored off",
+		)
+		await until(
+			() => toolbarPopup(control),
+			(popup) => popup.endsWith(MANIFEST_POPUP),
+			"the manifest's toolbar popup back",
+		)
+
+		await triggerToolbarAction(browser)
+		expect(await toolbarOpened(browser)).toEqual({ sidebar: false, popup: true })
+	})
 })
