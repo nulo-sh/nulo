@@ -140,7 +140,7 @@ Single arc on branch `token-dash-2-a1`, created from this plan's commit on `work
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 21eb96866. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 21eb96866. Plan-specific values:
 
 - Attempts in `lessons/phase-N.md`; `agent-worktree status token-dash-2 "phase N green: <next>"` at each gate; three failures on one step: stop.
 - Step 1 is absent (`code_review: off`).
