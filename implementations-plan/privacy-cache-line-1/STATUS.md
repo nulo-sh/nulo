@@ -4,3 +4,4 @@
 - 2026-10-20 plan drafted (tier light): one arc, privacy 1.2.2; no owner asks; Codex audit and Opus Plan leg next.
 - 2026-10-20 round 1: Codex conditional approve (AMO re-paste), Opus conditional approve (a § 4 item, a stale citation, four P3s); plan revised; final fresh Codex pass next.
 - 2026-10-20 final fresh Codex pass: approve. Plan committed; A1 starts under auto-continue.
+- 2026-10-20 A1 phase 1 gate: pass (legal, landing, lint, typecheck:all, test, test:all on one load retry, smoke legal-acceptance 14/14 Chrome).
