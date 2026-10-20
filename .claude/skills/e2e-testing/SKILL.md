@@ -592,10 +592,10 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   `home-scroller[data-reminders-settled="true"]`. Its rows also push the activity list below the
   fold, so a Tab walk there scrolls, and that scroll's event arrives a frame later: a spec that
   counts scroll events lets two frames pass before it arms (`rows.test.ts`'s `armNavigationProbe`).
-  A password wallet's unsaved phrase is a step of the
-  card, funded or not; only after Hide does a funded wallet show the urgent banner above the hero
-  instead, until its phrase is revealed. A spec that frames Home without either reveals the phrase
-  and taps Hide through the UI (`clearGetStarted`, `fixtures/profiles.ts`).
+  A password wallet's unsaved phrase is a step of the card, funded or not; only after Hide does a
+  funded wallet show the urgent banner above the balance instead, until its phrase is revealed. A
+  spec that frames Home without either reveals the phrase and taps Hide through the UI
+  (`clearGetStarted`, `fixtures/profiles.ts`).
 - **A storage seed over a row the wallet is still writing is lost.** Adding a token trusts it, then
   `setArrivalFloor` rewrites the trust row from the state it read, so a seed written between the two
   writes is overwritten. Wait for the service's last write before seeding: `seedPendingTrust`

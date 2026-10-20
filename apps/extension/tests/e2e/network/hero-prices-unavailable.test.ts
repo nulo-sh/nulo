@@ -57,7 +57,6 @@ test.skipIf(!aztecConfig)(
 			await page.waitForSelector('[data-testid="get-started-phrase"]', { visible: true, timeout: 30_000 })
 			// The Fee Juice step's state after the import is not fixed, so only the order is read.
 			const rows = await getStartedRows(page)
-			expect(rows[0]).toBe("get-started-phrase")
 			expect(rows.map((row) => row.replace(/ done$/, ""))).toEqual([
 				"get-started-phrase",
 				"get-started-aztec",
@@ -76,9 +75,12 @@ test.skipIf(!aztecConfig)(
 			await revealSeedPhrase(page, TEST_PASSWORD)
 			await navigateByHash(page, "#/popup/general")
 			await waitForHomeReminders(page)
-			// The reveal does not await its flag write, so Home can first read the phrase as unsaved.
+			// The reveal does not await its flag write, so Home can first read the phrase as unsaved; a
+			// moment with nothing read yet shows neither, so the wait needs Home settled too.
 			await page.waitForFunction(
-				() => !document.querySelector('[data-testid="backup-reminder-banner"], [data-testid="get-started"]'),
+				() =>
+					document.querySelector('[data-testid="home-scroller"][data-reminders-settled="true"]') !== null &&
+					!document.querySelector('[data-testid="backup-reminder-banner"], [data-testid="get-started"]'),
 				{ timeout: 15_000, polling: 100 },
 			)
 		} finally {

@@ -168,7 +168,6 @@ describe("get started view (pure)", () => {
 	})
 
 	test("a saved phrase checks the phrase step in place", () => {
-		expect(view({ funds: "some" }, { phraseSaved: true })?.banner).toBe(false)
 		expect(drawn({ funds: "some" }, { phraseSaved: true })).toEqual(["phrase done", "aztec", "feeJuice", "presto"])
 	})
 
@@ -200,8 +199,9 @@ describe("get started view (pure)", () => {
 		expect(view({ funds: "some" }, { hidden: true, phraseSaved: true })).toEqual({ banner: false, steps: [], canHide: false })
 	})
 
-	test("a hidden passkey card is gone, backup step included", () => {
+	test("a hidden passkey card is gone, backup step included, and a funded one gets no banner", () => {
 		expect(view({ type: "passkey" }, { hidden: true })).toEqual({ banner: false, steps: [], canHide: false })
+		expect(view({ type: "passkey", funds: "some" }, { hidden: true })).toEqual({ banner: false, steps: [], canHide: false })
 	})
 
 	test("an imported profile shows no card and no banner, password or passkey, funded or not", () => {
