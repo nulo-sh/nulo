@@ -381,10 +381,10 @@ describe("TransactionService.restore — deletion fence (threaded profileId)", (
 	})
 
 	test("every restored row is stored under the restored profile, whatever profile id the backup row names", async () => {
-		const restored = await service.restore([mkTx("0xnone"), Object.assign(mkTx("0xother"), { profileId: "p2" })], "p1")
+		const restored = await service.restore([mkTx("0xnone"), Object.assign(mkTx("0xother"), { profileId: "p2", ambiguous: true })], "p1")
 		expect(restored.map((r) => r.restoreError)).toEqual([undefined, undefined])
 		expect((await service.getTransaction("0xnone")).profileId).toBe("p1")
-		expect((await service.getTransaction("0xother")).profileId).toBe("p1")
+		expect(await service.getTransaction("0xother")).toMatchObject({ profileId: "p1", ambiguous: true })
 	})
 
 	test("a row naming no account of the restored profile is refused and not stored; an owned row beside it is", async () => {

@@ -100,7 +100,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	private readonly droppedStreaks = new Map<string, number>()
 	// Resurrection watch: txs marked Dropped THIS session, re-checked at a slow
 	// cadence until the window expires. Deliberately never re-armed from storage
-	// on init — same reasoning as D16 in `restore`: a restored/aged row's
+	// on init — same reasoning as `restore`'s refusal of a Pending row: a restored/aged row's
 	// `submittedEndpointUrl` must not get the sync worker dialing it again.
 	private readonly droppedWatch = new Map<string, Tx>()
 	private readonly droppedNextCheckAt = new Map<string, number>()
@@ -130,23 +130,12 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		// epoch is still current before writing (D13).
 		this.deletionState = this.profileService.getDeletionState()
 
-		// Tx cleanup on network/profile deletion flows through `onAccountDeleted`
-		// ONLY — it is account-scoped (= profile-accurate). A chain-purge
-		// subscriber that filtered by chainId alone was REMOVED: it over-purged
-		// EVERY profile's txs on a shared chain (tx rows carry no profileId), and
-		// it was redundant — `NetworkService.purgeChain` already cascades account
-		// deletion via `AccountService`'s own chain-purge subscriber, which emits
-		// `onAccountDeleted` per account. See
-		// implementations-plan/archive/backup-restore-corruption-fix/plan.md.
-		//
-		// This `onAccountDeleted` sub stays for the standalone `deleteNetwork`
-		// chain-purge path (best-effort). PROFILE deletion no longer relies on it:
-		// the ProfileDeletionCoordinator now calls the AWAITED `purgeForAccounts`
-		// directly with the tombstone's address snapshot, and the worker's write is
-		// fenced (see `updateTx`) so a mid-poll tx can't resurrect.
+		// Tx cleanup is account-scoped, never chain-wide: a chainId-only purge would erase every
+		// profile's rows on a shared chain. `deleteNetwork` reaches it through `onAccountDeleted`
+		// (best-effort), profile deletion through the coordinator's awaited `purgeForAccounts`, and
+		// `reconcileImportedAccounts` through the awaited subscriber below, so a restore that drops a
+		// keyless account has purged its rows before the import finalizes.
 		this.accountService.onAccountDeleted.add(this.onAccountDeleted)
-		// Awaited before `reconcileImportedAccounts` deletes a keyless account, so a restore that
-		// drops one has purged its rows before the import finalizes.
 		this.accountService.registerAccountPurgeSubscriber(async (profileId, scopes) => {
 			for (const { chainId, address } of scopes) await this.purgeForAccounts([address], profileId, chainId)
 		})
@@ -619,20 +608,12 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			// records them as `restoreError` with the identical message; the throw
 			// also guarantees the row is never written / never added to `this.pending`.
 			return await restoreRows(txs, async (tx) => {
-				// Never restore a Pending tx. `submittedEndpointUrl` is
-				// backup-controlled and `updateTx` dials it (or, when absent, the
-				// ACTIVE profile's node) — the sync worker would leak an
-				// attacker-chosen hash to the wrong RPC. Pending is transient sync
-				// state that re-derives on the next real submission. Drop-and-record;
-				// NEVER write it (a written Pending row is re-armed by the init scan)
-				// and NEVER add it to `this.pending`.
+				// Never restore a Pending tx: the init scan re-arms a stored one, and the sync worker then
+				// dials its backup-controlled `submittedEndpointUrl` (or the active profile's node).
 				if (tx.status === TxStatus.Pending) {
 					throw new Error("restored pending transaction rejected")
 				}
-				// Create-only. `EntityStorage.set` is an upsert on the
-				// profile-shared txs root keyed by `hash`; a crafted hash equal to a
-				// victim's tx would overwrite (erase) it. A restore must never
-				// overwrite an existing tx.
+				// Create-only: `EntityStorage.set` upserts by `hash` on a root every profile shares.
 				if (await this.txs.contains(tx.hash)) {
 					throw new Error("transaction already exists (hash collision)")
 				}

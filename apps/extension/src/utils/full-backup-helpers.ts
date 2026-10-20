@@ -465,12 +465,8 @@ function collectAccountStateErrors(data: unknown[]): unknown[] | null {
 }
 
 /**
- * Rewrite `idKey` to `newId` on every row that carries it, ignoring its current
- * value. For a single-valued key like `profileId`: a full backup is exactly one
- * profile's data, so every child row must bind to the created profile — this
- * normalizes any hostile foreign `profileId` a crafted backup smuggled onto a
- * child row. A row without the key keeps none; a store whose schema makes the
- * key optional binds it in its own restore.
+ * Rewrite `idKey` to `newId` on every row that carries it, whatever its value: a full backup is
+ * one profile's data. A row without the key stays without it; the owning store binds it on restore.
  */
 export function normalizeAllIds(data: Record<string, unknown>, idKey: string, newId: string): void {
 	for (const key of Object.keys(data)) {
