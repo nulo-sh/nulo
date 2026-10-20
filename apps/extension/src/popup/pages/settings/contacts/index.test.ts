@@ -13,9 +13,10 @@ vi.mock("@/utils/own-window", async (importOriginal) => ({
 	moveToOwnWindow: fakes.moveToOwnWindow,
 }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
-vi.mock("@/composables/useEntityCrud", () => ({ useEntityCrud: () => ({ entities: ref([]) }) }))
+const page = { contacts: ref<Array<{ id: string; name: string; address: string }>>([]), exporting: ref(false) }
+vi.mock("@/composables/useEntityCrud", () => ({ useEntityCrud: () => ({ entities: page.contacts }) }))
 vi.mock("@/popup/components/modules/settings/contacts/useContactImportExport", () => ({
-	useContactImportExport: () => ({ importContacts: fakes.importContacts, exportContacts: vi.fn() }),
+	useContactImportExport: () => ({ importContacts: fakes.importContacts, exportContacts: vi.fn(), exporting: page.exporting }),
 }))
 vi.mock("@/wallet/services/contact/client", () => ({
 	ContactServiceClient: vi.fn(function () {
@@ -42,6 +43,8 @@ beforeEach(() => {
 	fakes.importContacts.mockReset()
 	fakes.inPanel.mockReset().mockReturnValue(false)
 	fakes.moveToOwnWindow.mockReset().mockResolvedValue(true)
+	page.contacts.value = []
+	page.exporting.value = false
 })
 
 async function mountContacts() {
@@ -57,6 +60,7 @@ async function mountContacts() {
 				ListStatusMessage: true,
 				Button: true,
 				ItemsContainer: true,
+				Spinner: true,
 			},
 		},
 	})
@@ -110,5 +114,26 @@ describe("settings/contacts", () => {
 		await flushPromises()
 
 		expect(fakes.importContacts).toHaveBeenCalledTimes(1)
+	})
+
+	test("while an export runs, its card shows above the list and Export contacts is disabled", async () => {
+		page.contacts.value = [{ id: "c1", name: "Ana", address: `0x${"01".repeat(32)}` }]
+		const w = await mountContacts()
+		const item = () => w.get('[data-testid="contacts-menu-export"]')
+		const card = () => w.find('[data-testid="contacts-export-status-card"]')
+		expect(item().attributes("aria-disabled")).toBeUndefined()
+		expect(card().exists()).toBe(false)
+
+		page.exporting.value = true
+		await nextTick()
+		expect(item().attributes("aria-disabled")).toBe("true")
+		expect(card().text()).toBe("Exporting your contactsGathering your contacts into a file.")
+		const label = w.get("section-label-stub").element
+		expect(card().element.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+		page.exporting.value = false
+		await nextTick()
+		expect(card().exists()).toBe(false)
+		expect(item().attributes("aria-disabled")).toBeUndefined()
 	})
 })

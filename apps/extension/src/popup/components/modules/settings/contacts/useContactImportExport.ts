@@ -1,5 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
-import { type Ref, toRaw, watch } from "vue"
+import { type Ref, readonly, ref, toRaw, watch } from "vue"
 import { useToast } from "@/composables/toast"
 import { FilePickCanceledError, FileTooLargeError, downloadFile, pickFile, profileFileNameSegment } from "@/utils"
 import {
@@ -51,8 +51,20 @@ export function useContactImportExport(opts: UseContactImportExportOptions) {
 		cacheStore: useCacheStore(),
 		popupStore: usePopupStore(),
 	}
+	const exporting = ref(false)
 	return {
-		exportContacts: () => exportContacts(deps),
+		/** From the press until the file is handed to the browser or the export fails. */
+		exporting: readonly(exporting),
+		// One export at a time: a press while one runs does nothing, as the page's disabled Export shows.
+		exportContacts: async () => {
+			if (exporting.value) return
+			exporting.value = true
+			try {
+				await exportContacts(deps)
+			} finally {
+				exporting.value = false
+			}
+		},
 		// One import per window, so its one selection slot has one owner; the menu's disabled item is
 		// this rule's visible part.
 		importContacts: () => (deps.appStore.contactImports.size > 0 ? Promise.resolve() : importContacts(deps)),

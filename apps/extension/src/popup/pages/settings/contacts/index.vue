@@ -10,6 +10,7 @@
 <script setup>
 /** Components */
 import { Dropdown } from "@/components/ui/Dropdown"
+import StatusCard from "@/components/composite/StatusCard.vue"
 import ContactRow from "@/popup/components/modules/settings/contacts/ContactRow.vue"
 
 /** Services */
@@ -112,7 +113,7 @@ accountStateService.onSenderAdded.add(onSenderAdded)
 accountStateService.onSenderDeleted.add(onSenderDeleted)
 watch(() => appStore.network?.id, syncSenders)
 
-const { exportContacts, importContacts } = useContactImportExport({ contacts, accountStateService })
+const { exporting, exportContacts, importContacts } = useContactImportExport({ contacts, accountStateService })
 
 /** Firefox's toolbar panel dies with the file picker, so its import moves to the wallet's own window,
  *  where a second press opens the picker. A window that cannot open leaves today's pick. */
@@ -167,7 +168,7 @@ onBeforeUnmount(() => {
 							Import contacts
 						</Flex>
 					</DropdownItem>
-					<DropdownItem @click="exportContacts" :disabled="!contacts.length" data-testid="contacts-menu-export">
+					<DropdownItem @click="exportContacts" :disabled="!contacts.length || exporting" data-testid="contacts-menu-export">
 						<Flex align="center" gap="8">
 							<Icon name="download" size="14" color="secondary" />
 							Export contacts
@@ -176,6 +177,13 @@ onBeforeUnmount(() => {
 				</template>
 			</Dropdown>
 		</template>
+
+		<StatusCard
+			v-if="exporting"
+			title="Exporting your contacts"
+			description="Gathering your contacts into a file."
+			data-testid="contacts-export-status-card"
+		/>
 
 		<SectionLabel label="Contacts" :count="sortedContacts.length" />
 

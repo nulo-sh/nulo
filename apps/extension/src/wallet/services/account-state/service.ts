@@ -34,6 +34,10 @@ import { isPxeProvidedAddress, isPxeProvidedContract } from "./pxe-provided"
 
 export * from "./spec"
 
+/** How long the contacts export waits on each network's node before it treats that network as
+ *  having no senders. */
+export const SENDER_PROBE_TIMEOUT_MS = 5_000
+
 export class AccountStateService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"getAccounts",
@@ -83,13 +87,13 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 		)
 	}
 
-	/** Union of registered sender addresses across every network in the
-	 *  active profile that reports `Active` node status. Networks whose
-	 *  status check or `getSenders` call fails are silently skipped —
-	 *  same precedent as `backup()` so we don't block export on a
-	 *  partially-degraded multi-chain setup. Used by the contacts export
-	 *  to mark which contacts are senders without per-network attribution
-	 *  (the import side resolves against the active network only). */
+	/** Union of registered sender addresses across every network in the active profile whose node
+	 *  answers `Active` within {@link SENDER_PROBE_TIMEOUT_MS}. Every network is probed at once, so
+	 *  the status wait costs one limit however many there are; a probe or `getSenders` that fails
+	 *  skips only its network, whose contacts then export as non-senders, as `backup()` skips a
+	 *  degraded network. A PXE that has to build behind an answering node is not bounded. Used by
+	 *  the contacts export to mark which contacts are senders without per-network attribution (the
+	 *  import side resolves against the active network only). */
 	public async getSendersAcrossActiveNetworks(): Promise<string[]> {
 		await this.ensureInitialized()
 		const networks = await this.networkService.getNetworks()
@@ -102,18 +106,27 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 			return true
 		})
 
+		const statuses = await Promise.all(uniqueNetworks.map((n) => this.probeForSenders(n.id)))
 		const union = new Set<string>()
-		for (const n of uniqueNetworks) {
+		for (const [i, n] of uniqueNetworks.entries()) {
+			if (statuses[i] !== NodeStatus.Active) continue
 			try {
-				if ((await this.networkService.getNodeStatus(n.id)) !== NodeStatus.Active) continue
-				const senders = await this.getSenders(n.id)
-				for (const addr of senders) union.add(addr)
+				for (const addr of await this.getSenders(n.id)) union.add(addr)
 			} catch (error) {
 				this.logError(`Failed to read senders on network ${n.id}`, error)
-				// Skip this network — don't block the export.
 			}
 		}
 		return [...union]
+	}
+
+	/** A probe that throws reads as not Active, so it skips its network instead of the export. */
+	private async probeForSenders(networkId: string): Promise<NodeStatus | undefined> {
+		try {
+			return await this.networkService.probeNodeStatus(networkId, SENDER_PROBE_TIMEOUT_MS)
+		} catch (error) {
+			this.logError(`Failed to read senders on network ${networkId}`, error)
+			return undefined
+		}
 	}
 
 	public async addSender(networkId: string, address: string, fence?: RunFence | null): Promise<string> {
