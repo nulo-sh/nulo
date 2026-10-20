@@ -1,8 +1,8 @@
 ---
 plan: viewer-followups-1
 tier: light
-status: planned, Codex approve, awaiting the orchestrator; code waits until viewer-flake-1's arc 2 (#925) is on dev
-issues: "#921, #922, #923 (one arc; #923's pin waits on owner ask A1)"
+status: closed (one arc against dev; the merge that lands it closes the plan)
+issues: "#921, #922, #923 (one arc)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -15,9 +15,33 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** closed. One arc, its PR against `dev` from `worktree-viewer-followups-1`. Merging it, the owner's call, closes the plan.
+- **Shipped:**
+  - #923 and #923-B: the logs deep link opens at its log under a burst and holds there. `scrollToTargetLog` sets the pending-snapshot flag and the pin after its dispatch. Its offset counts line breaks as the editor does (D7).
+  - #922: the search case reads its gap while the view follows, reaching the end through the scroll-to-end button (D2, D8).
+  - #921: closed as not reproduced, with its evidence and a reopening condition, no code (D1).
+  - Evidence (lessons/phase-1.md, lessons/phase-2.md):
+    - Four unit rows, each red on the old code. Both negative controls red one row each.
+    - The browser probe passed 8/8 per test on both browsers, and red on the old viewer on both.
+    - `viewers-csp`: Firefox 10/10 and Chrome 5/5. Both mutation controls red the search case.
+    - One full smoke suite per browser, green.
+    - The burst medians: -13.2% on Firefox, +5.0% on Chrome.
+- **Owner decision:** A1, pick A (P71-08), quoted in the PR.
+- **Known limits:** #929 (A1's residual: a deep link to a log that needs no scroll leaves the reader's first scroll down held).
+- **Open items:** none.
+- **Dispositions:**
+  - The plan's comment-only route for #920 is superseded by #929 (D9).
+  - Security's promise to re-run the probe on a CodeMirror bump is replaced by the stated gap.
+  - Opus's alternative to `.cm-search .cm-textfield` is rejected (Audit verdicts).
+- **Lessons:** none promoted. The CodeMirror ordering is stated at the code it guards, the e2e rule is the `e2e-testing` flake ledger's row 64, and `lessons.md` is at its budget.
+- **Seeds:** the `/goal` and `/loop` seeds below are retired.
+
 # viewer-followups-1: the deep link holds on its log; the search case reads its gap while following
 
-One arc, one PR against `dev` (§ Delivery). Recon: [recon.md](recon.md). Reproductions, probes and consults: [lessons/phase-0.md](lessons/phase-0.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (A1). Over the light target (about 200 lines): four findings with their evidence, the gates and probe the audit added, and A1's branches.
+One arc, one PR against `dev` (§ Delivery). Recon: [recon.md](recon.md). Reproductions, probes and consults: [lessons/phase-0.md](lessons/phase-0.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (A1). Over the light target (about 235 lines): four findings with their evidence, the gates and probe the audit added, A1's branches, and the arc's Outcome and review rounds.
 
 ## Findings
 
@@ -85,7 +109,7 @@ For a person who opens the logs from a failure, and for the maintainer reading t
 - Smoke runs go through `test:e2e`, which claims its own ports in `~/.agents/ports.md` (`agent.sh` runs only the network config). From `apps/extension`: `NULO_E2E_BROWSER=firefox NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 env -u EXTENSION_PATH bun run test:e2e --retry=0 <file>`. For Chrome, drop `NULO_E2E_BROWSER`.
 - The Phase 1 probe lives outside the repository, in `~/.cache/nulo-backlog/viewer-followups-1/`: `vf-probe.test.ts` (it asserts) and `probe-hooks.patch`, which only exposes the window's logs so the probe can find a log's id. Neither is ever committed.
 
-### Phase 1 — the deep link opens at its log and holds there (#923-B; #923 on A1 = A)
+### Phase 1 — the deep link opens at its log and holds there (#923-B; #923 on A1 = A) ✓
 
 1. Add the #923-B row and, on A1 = A, the two #923 rows. Run them on arc 2's viewer: only the rows marked "reds on arc 2" red.
 2. Apply the #923-B lines and, on A1 = A, the pin. Run the gate.
@@ -100,7 +124,7 @@ For a person who opens the logs from a failure, and for the maintainer reading t
 - Each exits 0, and the controls and the probe pass as stated.
 - `git diff <base> -- apps/extension/src/components/JsonViewer/LogsViewer.vue` touches `scrollToTargetLog` only.
 
-### Phase 2 — the search case reads its gap while following (#922)
+### Phase 2 — the search case reads its gap while following (#922) ✓
 
 1. Run `tests/e2e/viewers-csp.test.ts` three times per browser on the Phase 1 head, before the edit. Record the file's wall-clock and the search case's own duration. A red here is #922's known defect on the old case: record it with its gap, and do not count it as a candidate regression.
 2. Apply the e2e change.
@@ -126,7 +150,7 @@ For a person who opens the logs from a failure, and for the maintainer reading t
 
 ## Security & Adversarial Considerations
 
-The viewer reads only its own state and the scroller's geometry; the change adds no input, message, storage, permission or log line. `logId` is an untrusted numeric selector: parsed with `+` and matched with `===` against loaded log ids, so an unknown id scrolls nowhere, as today. A page that can make the wallet log lines can no longer time one to defeat the deep link (#923-B); a flood past the cap still trims the failure log away. The fix trusts two CodeMirror 6.43.9 behaviours (F2, F4) that no committed browser test covers: the comment names them, and a CodeMirror bump re-runs the Phase 1 probe. The test change loosens nothing: the same gap and hold assertions run, at moments the viewer's rule fixes.
+The viewer reads only its own state and the scroller's geometry; the change adds no input, message, storage, permission or log line. `logId` is an untrusted numeric selector: parsed with `+` and matched with `===` against loaded log ids, so an unknown id scrolls nowhere, as today. A page that can make the wallet log lines can no longer time one to defeat the deep link (#923-B); a flood past the cap still trims the failure log away. The fix trusts two CodeMirror 6.43.9 behaviours (F2, F4). The comment names both, but no committed browser test covers them (D6): a CodeMirror bump that changed either would still pass the unit rows, which model them. The test change loosens nothing: the same gap and hold assertions run, at moments the viewer's rule fixes.
 
 ## Assumptions
 
@@ -151,6 +175,10 @@ The viewer reads only its own state and the scroller's geometry; the change adds
 - D4 #923-B is folded into this arc: same function, same consequence, demonstrated, two lines on an existing flag, one row. The implementer adds it to #923 by a comment, so `Closes #923` covers it.
 - D5 The pin's residual is owner ask A1 with the recommendation A, and the arc ships without the pin until it is answered. The residual is one missed resume: after it, lines stay held until the reader resumes or the 30 s timer runs out. If the answer is not in by the arc's start, the PR says `Refs #923`, and #923 stays open with a comment.
 - D6 No new e2e scenario. The unit rows reproduce #923 and #923-B, and the probes cover the browser paths.
+- D7 (review round 1, Opus) The target's offset is measured on the editor's own text. `formatLogs(prefix).length + 1` counted an earlier log's CRLF as two characters where CodeMirror stores one. The selection landed past the log's start, and once past the document's end the dispatch threw before the follow stopped. This was already on dev, in the same function. A new row red (72 for 71). The fix uses the conversion `droppedPrefixLength` already uses, and Codex round 2 found it proportionate. `formatLogs` lost its last caller and is removed.
+- D8 (review round 1, Opus) The button is pressed with `clickByTestId`, not `pointerClick` (Phase 2 step 2, F6). The e2e README keeps `pointerClick` for "nothing covers this control", and the open search panel draws over the button's lower edge.
+- D9 A1's residual is its own closed known limit, #929, with a pointer comment on #920, rather than only a comment there. Both legs read it as beyond KL-2.
+- D10 The burst guard runs viewer-flake-1's own measure, its B1 probe, from a scratch copy outside the repository.
 
 ## Delivery
 
@@ -190,6 +218,15 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `817c
   - The manifest claim is dropped, and the phase-0 conclusion on #921 is qualified.
   - Confirmed: both mutation controls trace to their named assertions, and shipping #923-B and #922 without the pin is coherent.
 - **Round 3, Codex** (resume): approve, no new material finding. The loop has converged.
+
+Post-implementation, over the arc's diff against `e6a68cd5` (lessons/phase-2.md):
+
+- **Round 1, Codex** (gpt-6.1-sol, high, a fresh session): approve, no finding. It traced the flag against the measure loop and found no supported path past A1. The first start of this round lacked the standard's two verbatim rules, so it was stopped before it answered and rerun with them.
+- **Round 1, Opus diff review:** conditional approve.
+  - Accepted: the comment now names the measure ordering (F4); row 1 no longer depends on the pin; `measure()` consumes its reads; D8; D7; #929's wording ("after the window's first measure").
+  - The promise in Security to re-run the probe on a CodeMirror bump is replaced by the stated gap.
+  - Rejected: dropping `.cm-search .cm-textfield`. It is within CLAUDE.md's CodeMirror selector exception, and Codex agreed.
+- **Round 2, Codex** (resume): approve, no new material finding. It confirmed the offset for every line-break form CodeMirror splits on, the in-page click through Vue's handler, and the controls' independence. The loop has converged.
 
 ## Seeds
 
