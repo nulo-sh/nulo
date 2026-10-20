@@ -271,6 +271,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [remediation-followups](remediation-followups/plan.md) — completed — each documented deferral of the previous remediation run as its own planned arc
 - [required-check-mismatch](required-check-mismatch/plan.md) — completed — the required aggregator jobs renamed and branch protection re-pointed at them
 - [restart-lock-truth](restart-lock-truth/plan.md) — completed — a lock after a worker restart reliably locks the popup
+- [restart-notify-1](restart-notify-1/plan.md) — completed — the connect, check and capabilities windows a restart ended close (at boot after a crash, and before the lock's restart), and apps hear their disconnect first (#926; #941–#943 known limits, #939 and #940 owner asks)
 - [restore-stage-extraction](restore-stage-extraction/plan.md) — completed — the coupling between two full-backup restore stages made an explicit value
 - [row-service-method-families](row-service-method-families/plan.md) — completed — pins first and one extraction across the token and network row services
 - [ruleset-hygiene-1](ruleset-hygiene-1/plan.md) — completed — the release runbook moves to a skill; proportion, known limits, a post-implementation standard and an e2e runtime budget

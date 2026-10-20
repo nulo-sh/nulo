@@ -241,7 +241,7 @@ What it found right: no asynchronous boundary before #907's reload and the guard
 
 ## Post-implementation
 
-The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `a51ebd220`. Plan-specific values:
+The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `a51ebd220`. Plan-specific values:
 
 1. No `/code-review` (`code_review: off`).
 2. Codex loop, single arc, after Phase 3 is green, over `git diff origin/dev...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; the prompt carries the plan, the ledger, the adversarial ask and the two verbatim rules from the standard. One Opus `general-purpose` diff review beside round 1. Hard stop at three rounds, then report.
