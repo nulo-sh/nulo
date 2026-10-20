@@ -12,17 +12,18 @@ import type { ExecutionFence, ProfileDeletionState } from "@/wallet/services/pro
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { StepContent, type WrappedTask } from "@/wallet/services/task/service"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
-import { EntityStorage } from "@/wallet/storage"
+import type { EntityStorage } from "@/wallet/storage"
+import { entityStorage } from "@/wallet/storage/stores"
 import { Lock, sleep } from "@/wallet/utils"
 import type { PriorityLevel } from "@nulo/wallet-bridge"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import {
+	type FeeChoice,
 	type Tx,
 	type TxGasDetails,
 	TRANSACTION_SERVICE_NAME,
-	TRANSACTION_STORAGE_ROOT,
 	type LocalTxOrigin,
 	type TxCall,
 	TxStatus,
@@ -74,6 +75,8 @@ export type AddTransactionInput = {
 	feeSpender?: string
 	/** See {@link Tx.priorityLevel}. */
 	priorityLevel?: PriorityLevel
+	/** See {@link Tx.feeChoice}. */
+	feeChoice?: FeeChoice
 	fence?: ExecutionFence
 	/** Owning network row id. Together with the fence's profile this is the
 	 *  row's activity scope — without it, two profiles holding the same
@@ -115,7 +118,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 
 	public constructor(logger: ILogger, browserApi: BrowserApi) {
 		super(TRANSACTION_SERVICE_NAME, logger)
-		this.txs = new EntityStorage<Tx>(TRANSACTION_STORAGE_ROOT, browserApi.storage.local, (raw) => TxSchema.parse(raw))
+		this.txs = entityStorage("txs", browserApi.storage.local)
 	}
 
 	protected async init(services: ServiceCollection) {
@@ -192,6 +195,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			gasDetails,
 			feeSpender,
 			priorityLevel,
+			feeChoice,
 			fence,
 			networkId,
 		} = input
@@ -239,6 +243,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 				gasDetails,
 				...(feeSpender ? { feeSpender } : {}),
 				...(priorityLevel ? { priorityLevel } : {}),
+				...(feeChoice ? { feeChoice } : {}),
 				submittedEndpointUrl,
 			}
 			await this.txs.set(tx.hash, tx)

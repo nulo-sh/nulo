@@ -33,7 +33,7 @@ import { GROUP_LABELS, GROUP_ORDER } from "./permission-rows"
 /** Services */
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
 import type { DappMetadata } from "@/wallet/services/dapp-session/client"
-import { type CapabilityPayload, DappInteractionServiceClient } from "@/wallet/services/dapp-interaction/client"
+import { type CapabilityPayload, DappInteractionServiceClient, type WindowEnd } from "@/wallet/services/dapp-interaction/client"
 import { type Capability, effectiveGrants } from "@nulo/wallet-bridge"
 
 /** Composables */
@@ -122,6 +122,7 @@ const {
 	start: startWindow,
 	dispose: disposeWindow,
 	closeWindow,
+	endAndClose,
 	onActiveProfileChanged,
 	stripStatus,
 	processingError,
@@ -140,7 +141,7 @@ const {
 		interactionService.disconnect()
 	},
 	init: () => init(),
-	reject: () => reject(),
+	reject: (end) => reject(end),
 })
 
 const init = async () => {
@@ -332,10 +333,9 @@ const approve = async () => {
 // `reject` stays unconditional: the approval-window shell also fires it on `beforeunload` and on a
 // lock or profile change, and a lock landing mid-switch must still reject the pending request.
 // Only the footer's buttons are held while a switch runs.
-const reject = async () => {
+const reject = async (end: WindowEnd) => {
 	if (isInteractionCancelled.value) return
-	rejectViaInteractionService("User rejected")
-	closeWindow(true)
+	await endAndClose(() => rejectViaInteractionService("User rejected", end))
 }
 
 const { activate: activateNetwork } = useNetworkActivation({
@@ -458,7 +458,7 @@ onUnmounted(disposeWindow)
 			:confirm-label="confirmWord"
 			:confirm-loading="isLoading"
 			:confirm-disabled="isLoading || isSwitching || processingError?.type === 'error' || !initComplete"
-			@reject="reject"
+			@reject="reject('reject')"
 			@approve="approve"
 		/>
 

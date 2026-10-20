@@ -201,7 +201,7 @@ const collapsingLabel = "Import Account"
 				</ItemsContainer>
 				<Flex v-if="error" align="center" gap="6" data-testid="import-account-error">
 					<Icon name="warning" size="12" color="red" />
-					<Text variant="body" color="red" height="140">{{ error }}</Text>
+					<Text variant="body" color="txt-danger" height="140">{{ error }}</Text>
 				</Flex>
 			</div>
 
@@ -267,7 +267,7 @@ const collapsingLabel = "Import Account"
 				</Flex>
 				<Flex v-if="error" align="center" gap="6" data-testid="import-account-error">
 					<Icon name="warning" size="12" color="red" />
-					<Text variant="body" color="red" height="140">{{ error }}</Text>
+					<Text variant="body" color="txt-danger" height="140">{{ error }}</Text>
 				</Flex>
 			</div>
 		</template>

@@ -838,7 +838,7 @@ describe("IncomingTransferService — trust transitions", () => {
 		expect(added).not.toHaveBeenCalled()
 	})
 
-	test("setTrustReject sets state=blocked + does NOT flip hidden records visible", async () => {
+	test("setTrustReject sets state=blocked and deletes the hidden records", async () => {
 		const { service } = await bootService({ token: makeTokenStub([tokenA]) })
 		seedNote({
 			uniqueNoteHash: "k",
@@ -859,7 +859,7 @@ describe("IncomingTransferService — trust transitions", () => {
 		})
 		await service.setTrustReject("p1", "n1", tokenA.contract)
 		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("blocked")
-		expect(records.get("note:p1|n1|k")?.hidden).toBe(true)
+		expect(records.has("note:p1|n1|k")).toBe(false)
 	})
 })
 
@@ -3460,7 +3460,7 @@ async function drain(service: unknown): Promise<void> {
 }
 
 describe("IncomingTransferService — balance-refresh outbox (write-side)", () => {
-	test("outbox written regardless of trust state (a BLOCKED receipt still marks the balance dirty)", async () => {
+	test("a public receipt of a blocked contract stores no record and marks no balance dirty", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
 		trust.set(trustKey("p1", "n1", tokenA.contract), {
@@ -3474,8 +3474,8 @@ describe("IncomingTransferService — balance-refresh outbox (write-side)", () =
 
 		await scanPublic(service)
 
-		expect(records.get("pub:p1|n1|0xblocked|0")?.hidden).toBe(true)
-		expect(outboxFor()).toBeDefined()
+		expect(records.has("pub:p1|n1|0xblocked|0")).toBe(false)
+		expect(outboxFor()).toBeUndefined()
 	})
 
 	test("coalescing: N receipts for one (account, token) → ONE outbox row", async () => {
@@ -5511,7 +5511,7 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		},
 	)
 
-	test("an Allow displaced in its visibility read leaves a successor Reject's block and the receipts hidden", async () => {
+	test("an Allow displaced in its visibility read leaves a successor Reject's block, which deleted the receipts", async () => {
 		const f = await bootArrivals(100)
 		seedPending()
 		const receipts = [receipt(1, 40, { hidden: true }), receipt(2, 41, { hidden: true })]
@@ -5532,7 +5532,7 @@ describe("IncomingTransferService — a trust write lands only in its session an
 			vi.useRealTimers()
 		}
 		expect(trust.get(key())?.state).toBe("blocked")
-		expect(hiddenOf(receipts)).toEqual([true, true])
+		expect(receipts.map((r) => records.has(r.id))).toEqual([false, false])
 	})
 
 	test("an Allow the watchdog displaced writes nothing, and the next popup open prompts again", async () => {

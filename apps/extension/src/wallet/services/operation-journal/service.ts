@@ -9,7 +9,8 @@ import type { ILogger } from "@/wallet/logger"
 import { NetworkService } from "@/wallet/services/network/service"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
-import { EntityStorage } from "@/wallet/storage"
+import type { EntityStorage } from "@/wallet/storage"
+import { entityStorage } from "@/wallet/storage/stores"
 import { nextRandomId } from "@/wallet/services/id-allocators"
 import {
 	type Events,
@@ -22,7 +23,6 @@ import {
 	type OperationFilter,
 	OperationJournalMethodSchemas,
 	type OperationRecord,
-	OperationRecordSchema,
 	type SendCheckState,
 	isSendCheckMove,
 } from "./spec"
@@ -101,9 +101,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		// (users expect to keep it). The reaper's boot-sweep still marks
 		// surviving non-terminal records as failed on SW restart — same
 		// behavior as before, just the durability layer changed.
-		this.storage = new EntityStorage<OperationRecord>("nulo:journal", browserApi.storage.local, (raw) =>
-			OperationRecordSchema.parse(raw),
-		)
+		this.storage = entityStorage("journal", browserApi.storage.local)
 		// Instantiated in the constructor (not as a field initializer) so the
 		// logger reference is guaranteed to be the same instance the base
 		// Service stores on `this`. See class field comment above for the

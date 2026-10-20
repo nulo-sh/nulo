@@ -224,7 +224,7 @@ describe("useDappInteractionPayload", () => {
 		scope.stop()
 	})
 
-	it("reject() forwards to interactionService.rejectInteraction", async () => {
+	it("reject() forwards the reason and the window's end, and settles with the wallet's answer", async () => {
 		service.__getInteractionPayload.mockResolvedValue({
 			params: { dappMetadata: { name: "Foo", url: "https://foo.com" }, extra: 1 },
 		})
@@ -237,8 +237,16 @@ describe("useDappInteractionPayload", () => {
 			}),
 		)!
 		await result.load()
-		result.reject("nope")
-		expect(service.__rejectInteraction).toHaveBeenCalledWith("req-6", "nope")
+		let answer!: () => void
+		service.__rejectInteraction.mockReturnValue(new Promise<void>((r) => (answer = r)))
+		let settled = false
+		const pending = result.reject("nope", "lock").then(() => (settled = true))
+		expect(service.__rejectInteraction).toHaveBeenCalledWith("req-6", "nope", "lock")
+		await Promise.resolve()
+		expect(settled).toBe(false)
+		answer()
+		await pending
+		expect(settled).toBe(true)
 		scope.stop()
 	})
 
@@ -256,7 +264,7 @@ describe("useDappInteractionPayload", () => {
 		)!
 		await result.load()
 		service.onInteractionCancelled.invoke("req-7")
-		result.reject("late")
+		await result.reject("late", "close")
 		expect(service.__rejectInteraction).not.toHaveBeenCalled()
 		scope.stop()
 	})
@@ -270,7 +278,7 @@ describe("useDappInteractionPayload", () => {
 				dappOf: (p) => p.params.dappMetadata,
 			}),
 		)!
-		result.reject("early")
+		void result.reject("early", "reject")
 		expect(service.__rejectInteraction).not.toHaveBeenCalled()
 		scope.stop()
 	})

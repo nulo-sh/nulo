@@ -290,6 +290,6 @@ onBeforeUnmount(() => {
 
 .error {
 	composes: type--body from global;
-	color: var(--red);
+	color: var(--txt-danger);
 }
 </style>

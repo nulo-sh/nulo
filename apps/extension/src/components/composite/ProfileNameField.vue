@@ -31,7 +31,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 			@input="(event) => emit('input', event)"
 		/>
 	</div>
-	<Text v-if="error" variant="body" color="red" height="150" role="alert">
+	<Text v-if="error" variant="body" color="txt-danger" height="150" role="alert">
 		{{ error }}
 	</Text>
 </template>

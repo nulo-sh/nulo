@@ -90,8 +90,7 @@ describe("change password — Enter does what the focused control says", () => {
 
 	test("(preservation) Enter in the repeat field changes the password once", async () => {
 		const w = await mountWithValidFields()
-		const field = w.get('[data-testid="new-password-repeat-input"] input').element
-		field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
+		enterOn(w.get('[data-testid="new-password-repeat-input"] input').element)
 		await flushPromises()
 		expect(profileClient.changeProfilePassword).toHaveBeenCalledTimes(1)
 	})
