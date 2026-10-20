@@ -162,6 +162,7 @@ declare global {
   const createFailedNotice: typeof import('../utils/profile-flow-notices').createFailedNotice
   const createRunFence: typeof import('../composables/runFence').createRunFence
   const customRef: typeof import('vue').customRef
+  const dashIfBlank: typeof import('../utils/string').dashIfBlank
   const debounce: typeof import('../utils/general').debounce
   const decodeRestoreOutcome: typeof import('../utils/restore-outcome').decodeRestoreOutcome
   const decompressData: typeof import('../utils/files').decompressData
@@ -967,6 +968,7 @@ declare module 'vue' {
     readonly createFailedNotice: UnwrapRef<typeof import('../utils/profile-flow-notices')['createFailedNotice']>
     readonly createRunFence: UnwrapRef<typeof import('../composables/runFence')['createRunFence']>
     readonly customRef: UnwrapRef<typeof import('vue')['customRef']>
+    readonly dashIfBlank: UnwrapRef<typeof import('../utils/string')['dashIfBlank']>
     readonly debounce: UnwrapRef<typeof import('../utils/general')['debounce']>
     readonly decodeRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['decodeRestoreOutcome']>
     readonly decompressData: UnwrapRef<typeof import('../utils/files')['decompressData']>

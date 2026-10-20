@@ -655,6 +655,13 @@ describe("pages/activity — opened from a token page", () => {
 		w.unmount()
 	})
 
+	test("the chip of a token whose symbol is blank reads the empty-value dash", async () => {
+		H.getTokens.mockResolvedValue([{ ...USDC, symbol: "   " }, EURC])
+		const w = await openHistory("/popup/activity?token=1")
+		expect(w.get('[data-testid="activity-token-filter-symbol"]').text()).toBe("—")
+		w.unmount()
+	})
+
 	test("the chip names the token without its control characters; clearing it shows everything and focuses the title", async () => {
 		H.getTokens.mockResolvedValue([{ ...USDC, symbol: "\u202EUS\u200BDC" }, EURC])
 		const w = await openHistory("/popup/activity?token=1")

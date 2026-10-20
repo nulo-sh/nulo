@@ -261,3 +261,12 @@ describe("the To row of a send that named its recipient", () => {
 		expect(row(w, "recipient").text()).toBe("0x0909…0909")
 	})
 })
+
+describe("the journal page's title", () => {
+	test("a send is titled with its token's symbol, or the empty-value dash for a blank one", async () => {
+		const title = async () => (await mountPage(failedSend())).get("sub-page-header-stub").attributes("title")
+		expect(await title()).toBe("TST")
+		mocks.tokens = [{ id: 7, symbol: "   ", decimals: 0, hasDecimals: true }]
+		expect(await title()).toBe("—")
+	})
+})

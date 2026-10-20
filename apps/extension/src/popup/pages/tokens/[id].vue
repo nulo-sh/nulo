@@ -34,6 +34,7 @@ const { requestConfirm } = useConfirm()
 
 /** Utils */
 import { copyWithToast } from "@/utils/clipboard"
+import { dashIfBlank } from "@/utils/string"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 
 /** Store */
@@ -220,7 +221,7 @@ onBeforeUnmount(() => {
 	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper">
 		<div :class="$style.hero" data-testid="token-hero">
 			<SubPageHeader
-				:title="token?.symbol || ''"
+				:title="token ? dashIfBlank(token.symbol) : ''"
 				:backTo="'/popup/general'"
 				leadingIcon="holdings"
 			>
