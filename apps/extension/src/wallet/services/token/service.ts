@@ -22,7 +22,8 @@ import { TaskService, StepContent, type WrappedTask } from "@/wallet/services/ta
 import { canonicalNumericStorageId, purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { ContractResolver, ensureRegistered } from "@/wallet/services/execution/contract-resolver"
 import { batchedViewSimulation } from "@/wallet/services/execution/helpers/batched-view-simulation"
-import { EntityStorage } from "@/wallet/storage"
+import type { EntityStorage } from "@/wallet/storage"
+import { entityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
@@ -41,7 +42,6 @@ import {
 	type SeedScope,
 	type SeedStatusSnapshot,
 	TOKEN_SERVICE_NAME,
-	TOKEN_STORAGE_ROOT,
 	TokenSchema,
 	type TokenInterface,
 	type Methods,
@@ -171,7 +171,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		this.browserApi = browserApi
 		this.seederOverrides = seederOverrides
 		this.contractResolver = new ContractResolver(logger)
-		this.tokens = new EntityStorage<Token>(TOKEN_STORAGE_ROOT, browserApi.storage.local, (raw) => TokenSchema.parse(raw))
+		this.tokens = entityStorage("tokens", browserApi.storage.local)
 	}
 
 	protected async init(services: ServiceCollection) {
@@ -935,7 +935,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		await Promise.all(rows.map((row) => this.refreshRestoredToken(fence, row, deadlineAt)))
 	}
 
-	/** The row's own class is the backup's claim, so the read takes no pin from it. */
+	/** Unpinned: a restored row holds no class, so its class comes from this read alone. */
 	private async refreshRestoredToken(fence: RunFence, row: Token, deadlineAt: number): Promise<void> {
 		const read = await settleBy(this.readChainToken(fence, row), deadlineAt)
 		if (read.kind !== "read") {
@@ -1013,8 +1013,9 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		// `chainId: "1:"` would otherwise "succeed", have a balance
 		// relinked to it, then be rejected by the read codec — leaving an
 		// orphaned balance. Parsing here records it as a restoreError instead.
-		const parsed = TokenSchema.parse({ ...token, id })
-		const row = { ...parsed, name: cleanName(parsed.name), symbol: cleanSymbol(parsed.symbol) }
+		// A backup's class is only its claim; the row holds none until the refresh reads one from the chain.
+		const { classId: _claimed, ...parsed } = TokenSchema.parse({ ...token, id })
+		const row: Token = { ...parsed, name: cleanName(parsed.name), symbol: cleanSymbol(parsed.symbol) }
 		assertRestoreEpoch(deletion, epochs, row.profileId)
 		// The chain sweep is LOCKLESS (see clearChainState), so a purge can
 		// interleave this batch despite the token lock — a row written after

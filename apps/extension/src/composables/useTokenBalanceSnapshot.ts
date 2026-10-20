@@ -6,13 +6,9 @@ import type { TokenBalanceInfo, TokenBalanceServiceClient } from "@/wallet/servi
 /** `loading` and `unavailable` both mean "not known yet": only `loaded` may say the list is empty. */
 export type TokenBalanceSnapshotState = "loading" | "unavailable" | "loaded"
 
-/** How live events land; each default is the snapshot's own rule. */
 interface TokenBalanceEventRules {
-	/** An in-scope add for a listed id keeps the listed row (the default) or replaces it; `append`
-	 *  lists every add for the active account as it comes, from any chain and for a listed id too. */
-	added?: "keep" | "replace" | "append"
-	/** An in-scope update for an unseen id is listed at once rather than at the next read. */
-	insertUnseenUpdated?: boolean
+	/** An in-scope add for a listed id keeps the listed row (the default) or replaces it. */
+	added?: "keep" | "replace"
 }
 
 interface TokenBalanceSnapshotDeps<T> extends TokenBalanceEventRules {
@@ -28,8 +24,6 @@ interface TokenBalanceSnapshotDeps<T> extends TokenBalanceEventRules {
 	/** Applied to each row a read or an event lists; an update that replaces a listed row writes it
 	 *  as received. */
 	mapRow?: (row: TokenBalanceInfo) => T
-	/** An in-scope event during a run makes it read again rather than land (the default). */
-	refetchWhenDirty?: boolean
 }
 
 /** A rejected snapshot is retried once on a timer; after that a reconnect or a scope change retries. */
@@ -49,24 +43,18 @@ function tokenBalanceEvents<T>(
 	/** The default keeps a listed row: an add carries its row as created, and where deletes are
 	 *  applied the listed row is that row or a newer one. */
 	function onBalanceAdded(tb: TokenBalanceInfo) {
-		const inScope = inActiveScope(tb)
-		if (inScope) markDirty()
-		if (rules.added === "append") {
-			if (tb.account === live.account?.address) rows.value.push(mapped(tb))
-			return
-		}
-		if (!inScope) return
+		if (!inActiveScope(tb)) return
+		markDirty()
 		const idx = indexOf(tb.id)
 		if (idx === -1) rows.value.push(mapped(tb))
 		else if (rules.added === "replace") rows.value[idx] = mapped(tb)
 	}
 
+	/** An unseen id waits for the next read. */
 	function onBalanceUpdated(tb: TokenBalanceInfo) {
-		const inScope = inActiveScope(tb)
-		if (inScope) markDirty()
+		if (inActiveScope(tb)) markDirty()
 		const idx = indexOf(tb.id)
 		if (idx !== -1) rows.value[idx] = tb as T
-		else if (inScope && rules.insertUnseenUpdated) rows.value.push(mapped(tb))
 	}
 
 	function onBalanceDeleted(tb: TokenBalanceInfo) {
@@ -79,8 +67,8 @@ function tokenBalanceEvents<T>(
 
 /**
  * The active account's token-balance rows on the active chain, fetched latest-wins. A snapshot in
- * flight is older than any in-scope event that lands meanwhile: by default the event marks it
- * dirty and the run refetches instead of overwriting the event. A rejection never reads as an empty
+ * flight is older than any in-scope event that lands meanwhile: the event marks it dirty and the
+ * run refetches instead of overwriting the event. A rejection never reads as an empty
  * list, and a refetch within a scope keeps the rows already shown; clearing them on a scope change
  * is the parent's. The parent subscribes the returned handlers and calls `dispose()` before it
  * disconnects the client.
@@ -131,7 +119,7 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalance
 			return
 		}
 		if (superseded()) return
-		if (dirty && deps.refetchWhenDirty !== false) return fetchTokenBalances()
+		if (dirty) return fetchTokenBalances()
 		land(fetched, chainId)
 	}
 

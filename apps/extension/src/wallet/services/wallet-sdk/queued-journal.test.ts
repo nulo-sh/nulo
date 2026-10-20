@@ -18,8 +18,17 @@ import {
 	UserRejectedError,
 } from "@nulo/extension-messaging/errors"
 import { NoUsableAccountError } from "@nulo/wallet-bridge"
+import type { FunctionAbi } from "@aztec-labs/stdlib/abi"
 import { LogLevel } from "@/wallet/logger"
+import {
+	AUTHWIT_CALL_BINDING,
+	CALL_BINDING,
+	assertSelectorBinding,
+	type SelectorBindingPolicy,
+} from "@/wallet/services/execution/contract-resolver"
 import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
+import { WindowEndedError } from "@/wallet/services/dapp-interaction/window-end"
+import { WINDOW_CLOSED_BY_USER } from "@/wallet/services/window-manager/window-manager"
 import {
 	MAX_QUEUED_GLOBAL,
 	MAX_QUEUED_PER_SESSION,
@@ -226,6 +235,29 @@ describe("tryCreateQueuedJournal", () => {
 		expect((await journal.getOperation(long as string))?.title).toBe(`transfer${"f".repeat(56)}…`)
 	})
 
+	test("the primary call's contract and argument count ride the record; a hostile `to` or `args` leaves out the call alone", async () => {
+		const { deps, journal } = makeDeps()
+		const token = `0x${"0d".repeat(32)}`
+		const message = (calls: unknown) => ({ messageId: "m", type: "sendTx", args: [{ calls }, {}] }) as unknown as WalletMessage
+		const read = async (calls: unknown) =>
+			journal.getOperation((await tryCreateQueuedJournal(message(calls), makeSession(), deps)) as string)
+		const fee = { name: "sponsor_unconditionally", to: `0x${"0f".repeat(32)}`, args: [] }
+		expect(await read([fee, { name: "transfer_in_public", to: token, args: ["1", "2", "3", "4"] }])).toMatchObject({
+			title: "transfer_in_public",
+			call: { contract: token, argCount: 4 },
+		})
+		for (const hostile of [
+			{ to: { toString: token }, args: [] },
+			{ to: `0x${"a".repeat(998)}`, args: [] },
+			{ to: token, args: "1,2,3,4" },
+			{ to: token, args: new Array(70_000).fill("0") },
+		]) {
+			const rec = await read([{ name: "transfer_in_public", ...hostile }])
+			expect(rec).toMatchObject({ title: "transfer_in_public", progress: { stage: "queued" } })
+			expect(rec?.call).toBeUndefined()
+		}
+	})
+
 	test("falls back to 'Transaction' title when calls have no method names", async () => {
 		const { deps, journal } = makeDeps()
 		const message = {
@@ -350,6 +382,16 @@ describe("tryCreateQueuedJournal — record account", () => {
 	})
 })
 
+/** The refusal a call whose selector resolves to `transfer_public_to_public` but claims another name meets. */
+function bindingRefusal(policy: SelectorBindingPolicy): Error {
+	try {
+		assertSelectorBinding({ name: "transfer_public_to_public" } as FunctionAbi, { name: "balance_of_public" }, policy)
+	} catch (error) {
+		return error as Error
+	}
+	throw new Error("the binding held")
+}
+
 describe("failQueuedForError — CAS against a concurrent claim", () => {
 	const refusal = new ScopeViolationError("Scope violation: sendTx call not permitted by granted transaction scope")
 
@@ -370,8 +412,8 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 		expect({ stage: rec?.progress.stage, title: rec?.title }).toEqual({ stage: "pending", title: "drip_to_public" })
 	})
 
-	// A refusal before the person saw anything is retitled; a popup_bound row keeps the title the
-	// person saw in the approval window.
+	// A refusal before the person saw anything is retitled; a row its window ended without a refusal
+	// keeps the title the person saw in the approval window, and a lock reads as every lock does.
 	test.each([
 		["a Terms refusal", "terms_refused", new TermsAcceptanceRequiredError(), "Transaction"],
 		["a scope refusal", "scope_refused", refusal, "Transaction"],
@@ -381,6 +423,8 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 			new AuthRegistryRefusalError("Scope violation: sendTx call targets an authorization registry grant function"),
 			"Transaction",
 		],
+		["a call-binding refusal", "scope_refused", bindingRefusal(CALL_BINDING), "transfer_public_to_public"],
+		["an authorization's call-binding refusal", "scope_refused", bindingRefusal(AUTHWIT_CALL_BINDING), "Transaction"],
 		["a missing grant", "scope_refused", new CapabilityNotGrantedError("transaction"), "Transaction"],
 		["a schema refusal", "malformed_request", InvalidWalletArgumentsError.forMethod("sendTx"), "Transaction"],
 		["an ended session", "session_ended", new SessionEndedError(), "Transaction"],
@@ -392,7 +436,11 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 			new NoUsableAccountError("No authorized accounts found for this dApp session"),
 			"Transaction",
 		],
-		["the person rejecting the approval", "popup_bound", new UserRejectedError(), "drip_to_public"],
+		["the window's Reject", "user_rejected", new WindowEndedError("User rejected", "reject"), "drip_to_public"],
+		["the window's X", "user_rejected", new WindowEndedError("User rejected", "close"), "drip_to_public"],
+		["a lock with the window open", "session_ended", new WindowEndedError("User rejected", "lock"), "Transaction"],
+		["a profile switch with the window open", "popup_bound", new WindowEndedError("User rejected", "switch"), "drip_to_public"],
+		["a Reject that names no end", "popup_bound", new UserRejectedError(), "drip_to_public"],
 		["the approval window closing", "popup_bound", new JobCancelledError(), "drip_to_public"],
 		["any other failure", "popup_bound", new Error("session gone"), "drip_to_public"],
 		// Classified by class, never by text: a bare error carrying the lock's words stays unclassified.
@@ -410,6 +458,18 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 		})
 	})
 
+	test("the window's close reaching the wallet before its end reads as the person's X", async () => {
+		const { deps, journal } = makeDeps()
+		const id = await tryCreateQueuedJournal(makeSendTxMessage(), makeSession(), deps)
+		await failQueuedForError(journal, id as string, WINDOW_CLOSED_BY_USER, deps.logger)
+		const rec = await journal.getOperation(id as string)
+		expect({ kind: rec?.error?.kind, message: rec?.error?.message, title: rec?.title }).toEqual({
+			kind: "user_rejected",
+			message: WINDOW_CLOSED_BY_USER,
+			title: "drip_to_public",
+		})
+	})
+
 	test("a refused record that execution already failed and retitled keeps that title", async () => {
 		const { deps, journal } = makeDeps()
 		const id = (await tryCreateQueuedJournal(makeSendTxMessage(), makeSession(), deps)) as string
@@ -418,7 +478,7 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 			id,
 			{ stage: "failed" },
 			{ kind: "scope_refused", message: "x", normalizedRaw: null },
-			"transfer_in_public",
+			{ title: "transfer_in_public" },
 		)
 		// The rebuilt error then reaches the ingress, which finds the record already terminal.
 		await failQueuedForError(journal, id, new Error("Scope violation"), deps.logger)

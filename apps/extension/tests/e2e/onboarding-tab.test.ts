@@ -127,11 +127,11 @@ describe("onboarding tab", () => {
 		// A toolbar popup in headless Chrome is beyond what a test can find.
 		if (isFirefox) await waitForOpenPanel(control)
 
-		// "I saved it" reached Home: its card opens without the phrase row.
+		// "I saved it" reached Home: its card opens with the phrase step checked.
 		const popup = await openPopup(extension)
 		await waitForHash(popup, "#/popup/general", 15_000)
 		await popup.waitForSelector('[data-testid="get-started-aztec"]', { visible: true, timeout: 30_000 })
-		expect(await popup.$('[data-testid="get-started-phrase"]')).toBeNull()
+		expect(await popup.$eval('[data-testid="get-started-phrase"]', (el) => el.getAttribute("data-done"))).toBe("true")
 
 		// The step showed the wallet's own words: Settings reveals the same ones.
 		expect(await revealSeedPhrase(popup, TEST_PASSWORD)).toEqual(words)

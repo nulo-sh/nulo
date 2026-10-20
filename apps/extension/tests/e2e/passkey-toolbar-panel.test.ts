@@ -330,6 +330,11 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 				await refuseInWindow(auth),
 			)
 			expect((await readProfileNames(control)).sort()).toEqual(["Main", "Profile 2"])
+			// The service marks the profile made beside another, whichever window ran its passkey step.
+			const marked = await control.evaluate(async () =>
+				Object.entries(await chrome.storage.local.get(null)).filter(([key]) => key.startsWith("nulo:ui:profileNotFirst@")),
+			)
+			expect(marked).toEqual([[`nulo:ui:profileNotFirst@${created.profile}`, true]])
 
 			// The popup comes back by itself once the window is done.
 			await panelOn(browser, "#/popup/general")
@@ -383,7 +388,7 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await withDyingPanel(browser, async (death) => {
 				await clickInPanel(browser, "import-option-passkey")
 				const win = await openedWindow(ctx, before, "#/windows/passkey")
-				await win.waitForSelector('[data-testid="passkey-window"][data-state="step-failed"]', { timeout: 60_000 })
+				await win.waitForSelector('[data-testid="passkey-window"][data-state="step-exists"]', { timeout: 60_000 })
 				await win.waitForSelector(sel("passkey-window-error"), { visible: true, timeout: 5_000 })
 				const record = await death.record()
 				expect(record.calls, "WebAuthn calls made in the panel").toEqual([])

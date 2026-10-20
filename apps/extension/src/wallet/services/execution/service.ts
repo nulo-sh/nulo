@@ -48,6 +48,7 @@ import {
 	ContractNotRegisteredError,
 	InvalidWalletArgumentsError,
 	JobCancelledError,
+	PxeTaggingSourcesFullError,
 	ScopeViolationError,
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
@@ -112,7 +113,7 @@ import { type ArtifactLookup, decodeCallForDisplay, decodeGrantForDisplay } from
 import { getViewSimulationDeps } from "./helpers/get-view-simulation-deps"
 import { AuthwitDiscoverer } from "./authwit-discoverer"
 import { TxRequestBuilder } from "./tx-request-builder"
-import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee/fee-strategy"
+import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps, OnBuilt } from "./fee/fee-strategy"
 import { appPriorityOf } from "./fee/fee-strategy"
 import { buildFeeStrategies } from "./fee/build-fee-strategies"
 import { ExecutionCoordinator } from "./execution-coordinator"
@@ -131,6 +132,9 @@ export interface InteractionOperationSource {
 	askFeeAgain(question: FeeQuestion): Promise<boolean>
 	materializeStoredDraft(interactionId: string, index: number): Promise<DraftOperation>
 	materializeQuestionDraft(interactionId: string): Promise<DraftOperation>
+	/** Keeps a refusal an estimate or preview of the request met; a request no longer stored keeps nothing. */
+	recordRefusal(interactionId: string, refusal: ScopeViolationError): void
+	refusalOf(interactionId: string): ScopeViolationError | undefined
 }
 
 /** Default PXE-client factory: the real RPC-backed client. Exported so the
@@ -164,6 +168,25 @@ const FENCED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set([
 	"register_token",
 	"aztec_createAuthWit",
 ])
+
+/**
+ * The most distinct senders and accounts a dApp may grow one chain's PXE to: every one is a tagging
+ * secret on each sync. The person's own count toward it and are never refused by it. A policy figure,
+ * twice the senders a backup carries per network, not a measured threshold.
+ */
+export const DAPP_TAGGING_SOURCES_BOUND = 128
+
+const TAGGING_SOURCES_FULL_REFUSAL = "Scope violation: registration past the network's tagging-source bound"
+
+/** A dApp reads a full chain as a scope refusal, the constant envelope that names nothing. */
+async function refuseFullTaggingSources<T>(register: () => Promise<T>): Promise<T> {
+	try {
+		return await register()
+	} catch (error) {
+		if (error instanceof PxeTaggingSourcesFullError) throw new ScopeViolationError(TAGGING_SOURCES_FULL_REFUSAL)
+		throw error
+	}
+}
 
 /** `tokenContract` as a transfer request carries it, or the refusal of `method`'s arguments. */
 function tokenContractKey(method: string, tokenContract: unknown): string {
@@ -469,20 +492,21 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	private wireDappSendAndViewExecutors(): void {
 		const estimateWithDiscovery = new DiscoveryAwareEstimator({
 			authwit: this.authwit,
-			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal),
-			buildAndEstimateFolded: (op, feeSettings, fence, probe, parentTask, signal) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, probe),
-			buildForDiscovery: async (op, method, fence) => {
+			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt),
+			buildAndEstimateFolded: (op, feeSettings, fence, probe, parentTask, signal, onBuilt) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, probe, undefined, onBuilt),
+			buildForDiscovery: async (op, method, fence, onBuilt) => {
 				const sendOp = op as SendTransactionOperation
 				// An app's private call may read its gas settings, so discovery simulates with its priority too.
-				const { txRequest, node, pxe, account, network } = await this.txBuilder.buildStandard(
+				const { txRequest, node, pxe, account, network, txCalls } = await this.txBuilder.buildStandard(
 					sendOp,
 					fence,
 					method,
 					undefined,
 					appPriorityOf(sendOp.fee),
 				)
+				await onBuilt?.(txCalls)
 				return { txRequest, node, pxe, account, network }
 			},
 		})
@@ -513,7 +537,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 					this.lane.claimOrCreateJournal(networkId, accountAddress, origin, calls, hooks, reuseController, fence),
 				beginJournal: (networkId, accountAddress, origin, calls, fence) =>
 					this.lane.beginJournal(networkId, accountAddress, origin, calls, fence),
-				markJournal: (journalId, progress, error, failedTitle) => this.lane.markJournal(journalId, progress, error, failedTitle),
+				recordBuiltCall: (journalId, txCalls) => this.lane.recordBuiltCall(journalId, txCalls),
+				markJournal: (journalId, progress, error, retitle) => this.lane.markJournal(journalId, progress, error, retitle),
 				commitJournal: (journalId, progress) => this.lane.commitJournal(journalId, progress),
 				parkSlot: (release, networkId, queuedJournalId, fence, preController, originKey, wait) =>
 					this.lane.parkSlot(release, networkId, queuedJournalId, fence, preController, originKey, wait),
@@ -525,9 +550,10 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			},
 			sequencer: this.sendSequencer,
 			chainTip: this.chainTipGate,
-			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal),
+			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt),
 			addTransaction: (...args) => this.transactionService.addTransaction(...args),
+			protocolSponsorAddress: async (chainId) => (await this.fpcService.getOrComputeProtocolAddresses(chainId)).sponsored,
 			recordPendingAuthwits: (...args) => this.authRegistryService.recordPendingAuthwits(...args),
 			noteSent: (chainId, account, txHash, calls) =>
 				this.sendSequencer.externalSent({ chainId, account }, txHash, recordedTxKeys({ account, calls })),
@@ -768,10 +794,12 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		flowKey?: string,
 	): Promise<TransferFeeEstimate> {
 		await this.ensureInitialized()
-		const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
-		return this.withEstimateAdmission(estimateToken, flowKey ?? "op", (signal) =>
-			this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index }),
-		)
+		return this.refusalBound(interactionId, async () => {
+			const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
+			return this.withEstimateAdmission(estimateToken, flowKey ?? "op", (signal) =>
+				this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index }),
+			)
+		})
 	}
 
 	public async previewOperationAuthwits(
@@ -781,10 +809,28 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		flowKey?: string,
 	): Promise<OperationAuthwitPreview> {
 		await this.ensureInitialized()
-		const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index)
-		return this.withEstimateAdmission(estimateToken, flowKey ?? "op", (signal) =>
-			this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal),
-		)
+		return this.refusalBound(interactionId, async () => {
+			const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index)
+			return this.withEstimateAdmission(estimateToken, flowKey ?? "op", (signal) =>
+				this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal),
+			)
+		})
+	}
+
+	/** A refusal is the request's, not one attempt's: the attempt that met it may be one the window
+	 *  already dropped as superseded, so every attempt answers the first one recorded, the window
+	 *  and the dApp's answer agreeing on it. */
+	private async refusalBound<T>(interactionId: string, run: () => Promise<T>): Promise<T> {
+		const source = this.interactionOperations()
+		const recorded = source.refusalOf(interactionId)
+		if (recorded) throw recorded
+		try {
+			return await run()
+		} catch (error) {
+			if (!(error instanceof ScopeViolationError)) throw error
+			source.recordRefusal(interactionId, error)
+			throw source.refusalOf(interactionId) ?? error
+		}
 	}
 
 	/** The window's answer reaches the send as exactly the figure it asked; any other end, a window
@@ -1164,7 +1210,9 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 
 	private async executeAztecRegisterSender(op: AztecRegisterSenderOperation): Promise<AztecAddress> {
 		const network = await this.networkService.getNetwork(op.networkId)
-		return this.pxeService.registerSender(networkInfoFrom(network), op.address)
+		return refuseFullTaggingSources(() =>
+			this.pxeService.registerSender(networkInfoFrom(network), op.address, DAPP_TAGGING_SOURCES_BOUND),
+		)
 	}
 
 	// Resolves to void: the 5.0.1 wallet-sdk WalletSchema declares
@@ -1205,20 +1253,27 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		await assertArtifactClassId(artifact, instance.currentContractClassId)
 
 		// A secret key registers the instance's own account or nothing: one that derives another
-		// address would add an account the dApp's contract grant never named.
+		// address or other keys would add an account the dApp's contract grant never named, or one
+		// whose contract the PXE then refuses.
 		const account = op.secretKey
 			? await CompleteAddress.fromSecretKeyAndPartialAddress(
 					await Fr.schema.parseAsync(op.secretKey),
 					await computePartialAddress(instance),
 				)
 			: undefined
-		if (account && !account.address.equals(instance.address)) throw InvalidWalletArgumentsError.forMethod("registerContract")
+		if (account && !(account.address.equals(instance.address) && account.publicKeys.equals(instance.publicKeys))) {
+			throw InvalidWalletArgumentsError.forMethod("registerContract")
+		}
+
+		// The account first: a refusal at the tagging-source bound leaves the contract unregistered.
+		if (op.secretKey && account) {
+			const { secretKey } = op
+			await refuseFullTaggingSources(() =>
+				this.pxeService.registerAccount(networkInfoFrom(network), secretKey, account.partialAddress, DAPP_TAGGING_SOURCES_BOUND),
+			)
+		}
 
 		await this.pxeService.registerContract(networkInfoFrom(network), { instance, artifact })
-
-		if (op.secretKey && account) {
-			await this.pxeService.registerAccount(networkInfoFrom(network), op.secretKey, account.partialAddress)
-		}
 	}
 
 	public async executeAztecCreateAuthWit(op: AztecCreateAuthWitOperation, authorizedFence?: ExecutionFence): Promise<AuthWitness> {
@@ -1316,6 +1371,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		signal?: AbortSignal,
 		probe?: DiscoveryProbe,
 		fpc?: Fpc,
+		onBuilt?: OnBuilt,
 	): Promise<FeeEstimate> {
 		// Clone the op + its actions array. fjwc / fpc branches mutate
 		// `op.actions` (unshift / splice) to prepend fee payloads; leaking
@@ -1338,6 +1394,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			signal,
 			probe,
 			fpc,
+			onBuilt,
 		}
 		return strategy.buildAndEstimate(ctx)
 	}

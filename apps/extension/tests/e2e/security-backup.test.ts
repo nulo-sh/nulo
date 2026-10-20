@@ -4,7 +4,9 @@ import { TEST_PASSWORD } from "./fixtures/constants"
 import { waitForNewTab } from "./fixtures/browser"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
 import { navigateByHash, revealSeedPhrase } from "./fixtures/helpers"
+import { createAndActivateProfile } from "./fixtures/profiles"
 import { shotSend } from "./fixtures/send-page"
+import { getStartedRows, waitForHomeReminders } from "./fixtures/tokens"
 import { downloadEncryptedBackup, openEncryptedBackup } from "./helpers/backup-export"
 import { FULL_BACKUP_V2_TAG } from "@/utils/full-backup-helpers"
 
@@ -47,10 +49,8 @@ async function widestWordOverruns(page: Page, scrollbarPx: number): Promise<stri
 const PASSWORD = TEST_PASSWORD
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
-const waitForGone = (page: Page, testid: string) =>
-	page.waitForFunction((s: string) => !document.querySelector(s), { timeout: 10_000, polling: 100 }, sel(testid))
 
-test("Home's reminders clear as they are done: How Aztec works opens its page, and the seed reveal clears only the phrase row", async ({
+test("Home's steps are checked as they are done: How Aztec works opens its page, and the seed reveal checks the phrase step", async ({
 	registeredExtension,
 }) => {
 	const page = await openPopup(registeredExtension)
@@ -62,7 +62,7 @@ test("Home's reminders clear as they are done: How Aztec works opens its page, a
 	// The flag is written before the tab opens; the tab still opens after that wait.
 	const tab = await waitForNewTab(registeredExtension.browser, () => clickByTestId(page, "get-started-aztec"), 10_000)
 	await tab.close()
-	await waitForGone(page, "get-started-aztec")
+	await page.waitForSelector(`${sel("get-started-aztec")}[data-done="true"]`, { timeout: 10_000 })
 
 	const tokens = await revealSeedPhrase(page, PASSWORD)
 	expect(tokens.length).toBe(24)
@@ -70,13 +70,33 @@ test("Home's reminders clear as they are done: How Aztec works opens its page, a
 	expect(await widestWordOverruns(page, CLASSIC_SCROLLBAR_PX)).toEqual([])
 
 	await navigateByHash(page, "#/popup/general")
-	await page.waitForSelector(sel("get-started"), { visible: true, timeout: 30_000 })
-	expect(await page.$(sel("get-started-phrase"))).toBeNull()
-	expect(await page.$(sel("get-started-presto"))).not.toBeNull()
+	await waitForHomeReminders(page)
+	expect(await getStartedRows(page)).toEqual([
+		"get-started-phrase done",
+		"get-started-aztec done",
+		"get-started-feeJuice",
+		"get-started-presto",
+	])
+	expect(await page.$eval(sel("get-started-count"), (el) => el.textContent)).toBe("2 of 4 done")
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 30_000)
+
+test("a later password profile's Home asks only for its own phrase", async ({ registeredExtensionPerTest }) => {
+	const page = await openPopup(registeredExtensionPerTest)
+	await waitForHash(page, "#/popup/general")
+	await waitForHomeReminders(page)
+	expect(await page.$(sel("get-started-aztec"))).not.toBeNull()
+
+	await createAndActivateProfile(page, "Later", PASSWORD)
+	await waitForHomeReminders(page)
+	expect(await getStartedRows(page)).toEqual(["get-started-phrase"])
+	expect(await page.$(sel("get-started-hide"))).toBeNull()
+
+	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
+	expect(registeredExtensionPerTest.pageErrors).toEqual([])
+}, 60_000)
 
 test("a password profile's full backup downloads only once it is encrypted", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)

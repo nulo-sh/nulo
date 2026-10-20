@@ -166,9 +166,18 @@ and a session with a simulation grant learns the account it ran as from any
 simulation's results.
 
 The same envelope answers a call whose selector does not run the function its
-name claims. That check runs at execution, so this refusal can come after the
-approval window, and no wider manifest fixes it: the call itself must name the
-function its selector runs.
+name claims. That check runs when the approval window estimates the fee or
+previews the authorizations, and again at execution, so this refusal comes
+after the window opens: the window then offers only Reject, and Reject or
+closing the window answers this envelope. No wider manifest fixes it: the call
+itself must name the function its selector runs.
+
+`registerSender`, and `registerContract` with a secret key, add a sender or an
+account to the chain's PXE. Apps may grow a chain's distinct senders and
+accounts, the person's own included, to 128; past that, a registration of an
+address the chain does not hold yet answers this envelope and writes nothing,
+neither the account nor its contract. No wider manifest fixes it. A keyless
+`registerContract` adds no sender or account and is never refused for this.
 
 The authorization registry's grant functions (`set_authorized`, `set_reject_all`,
 `set_authorized_private`) answer only the wallet's own authorization action, so
@@ -177,7 +186,8 @@ indexes and can revoke. No grant, a wildcard included, admits a `sendTx` call to
 by selector, never by name) or a `createAuthWit` intent whose call or consumer
 is the registry; both are refused before any window. A transaction whose own
 contracts ask the account to authorize the registry is refused before the
-wallet signs that authorization. These refusals keep the scope refusal's code with their own
+wallet signs that authorization, while the window estimates or previews it,
+and Reject or closing the window answers its envelope. These refusals keep the scope refusal's code with their own
 text:
 
 ```jsonc

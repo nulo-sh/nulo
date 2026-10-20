@@ -37,8 +37,7 @@ test("reset profile wipes state and routes to register", async ({ registeredExte
 // Only the production PXE makes the boot, sync and op node calls a purge drains, so only a browser
 // proves no retry of theirs still holds it. Same 15 s purge budget as the reachable case. Both
 // protocol FPC rows are stored behind the launch's stand-in, whose 400 ends a discovery at once,
-// before the node refuses: a discovery still retrying holds the FPC lock the purge takes before it
-// stops PXE retries, and this test does not measure that wait.
+// before the node refuses, so the purge drains the PXE's own calls and no discovery registration.
 test("reset purges within the same budget while the node refuses connections", async ({ registeredExtensionPerTest: ctx }) => {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general")

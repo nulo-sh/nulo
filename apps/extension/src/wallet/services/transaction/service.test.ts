@@ -20,7 +20,7 @@ import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/pro
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { svc } from "../composition-harness"
 import { TaskService } from "@/wallet/services/task/service"
-import { TransactionService, TxConfirmationTimeoutError } from "./service"
+import { type FeeChoice, TransactionService, TxConfirmationTimeoutError } from "./service"
 
 const ACCOUNT = "0xacc"
 
@@ -70,7 +70,14 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 		vi.useRealTimers()
 	})
 
-	const add = (hash: string, fence?: ExecutionFence, networkId?: string, feeSpender?: string, priorityLevel?: "urgent") =>
+	const add = (
+		hash: string,
+		fence?: ExecutionFence,
+		networkId?: string,
+		feeSpender?: string,
+		priorityLevel?: "urgent",
+		feeChoice?: FeeChoice,
+	) =>
 		service.addTransaction({
 			origin: { type: 0 } as never,
 			chainId: 1,
@@ -84,6 +91,7 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 			gasDetails: undefined,
 			feeSpender,
 			priorityLevel,
+			feeChoice,
 			fence,
 			networkId,
 		})
@@ -165,6 +173,14 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 		expect(pending.find((tx) => tx.hash === "0xpaid")).toMatchObject({ feeSpender: "0xF", priorityLevel: "urgent" })
 		expect(pending.find((tx) => tx.hash === "0xplain")).not.toHaveProperty("feeSpender")
 		expect(pending.find((tx) => tx.hash === "0xplain")).not.toHaveProperty("priorityLevel")
+	})
+
+	test("the fee chooser is stored with its row; a row written without one carries none", async () => {
+		const fence = { profileId: "p1", epoch: deletionState.capture("p1"), session: 1 }
+		await add("0xchosen", fence, "net-1", undefined, undefined, "app_protocol_sponsor")
+		await add("0xplain", fence, "net-1")
+		expect((await service.getTransaction("0xchosen")).feeChoice).toBe("app_protocol_sponsor")
+		expect(await service.getTransaction("0xplain")).not.toHaveProperty("feeChoice")
 	})
 
 	test("stamps the owning profile and network so history can be scoped", async () => {
@@ -333,6 +349,21 @@ describe("TransactionService.restore — deletion fence (threaded profileId)", (
 			await expect(service.restore([mkTx("0xh1")], bad as never)).rejects.toThrow(/^restore requires the created profile id$/)
 		}
 		await expect(service.getTransaction("0xh1")).rejects.toThrow()
+	})
+
+	test("a restored row keeps its fee chooser; an older row carries none, and a bogus one is dropped with the row kept", async () => {
+		const restored = await service.restore(
+			[
+				Object.assign(mkTx("0xchosen"), { feeChoice: "app_protocol_sponsor" }),
+				mkTx("0xolder"),
+				Object.assign(mkTx("0xbogus"), { feeChoice: "sponsored" }),
+			],
+			"p1",
+		)
+		expect(restored.map((r) => r.restoreError)).toEqual([undefined, undefined, undefined])
+		expect((await service.getTransaction("0xchosen")).feeChoice).toBe("app_protocol_sponsor")
+		expect(await service.getTransaction("0xolder")).not.toHaveProperty("feeChoice")
+		expect(await service.getTransaction("0xbogus")).not.toHaveProperty("feeChoice")
 	})
 
 	test("positive control: no deletion → both rows land", async () => {

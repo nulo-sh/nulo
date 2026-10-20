@@ -40,7 +40,7 @@ import {
 	journalTerminalDisplay,
 	sanitizeJournalSubtitle,
 } from "@/utils/journal-state"
-import { humanizeMethodName } from "@/utils/tx-enrichment"
+import { callTitle } from "@/utils/tx-enrichment"
 import { buildIncomingCardProps } from "@/utils/received-display"
 import {
 	buildCancelHandler,
@@ -185,9 +185,10 @@ const executingProgressTitle = computed(() => {
 	}
 	// Dapp path: title is the method name only — the dApp identity rides
 	// in the secondary-row chip (originLabel) so the title position stays
-	// stable across the lifecycle into the settled card.
+	// stable across the lifecycle into the settled card. The task names no
+	// contract, so a movement name reads as its contract spells it.
 	const method = executingTask.value.content?.primaryMethod
-	if (method) return humanizeMethodName(method)
+	if (method) return callTitle(method, undefined, false)
 	return "Transaction"
 })
 const executingProgressSubtitle = computed(() => {
@@ -244,9 +245,6 @@ const journal = useJournalMirror({
 	onSnapshot: () => clearExecutingTaskIfRecentTerminalMatch(),
 })
 const journalOps = journal.rows
-/** A snapshot that fails while the port stays up has no reconnect to retry it. */
-const JOURNAL_RETRY_MS = 2_000
-let journalRetry
 
 /** Third source for the activity-row merge: incoming-receive records from
  *  trusted fungible-token contracts. Filtered at the service layer
@@ -461,7 +459,7 @@ async function sendReask() {
  *  shared helper deliberately omits `id` so other consumers (e.g.
  *  TransactionsList) don't carry an unused attr through fallthrough. */
 function journalTerminalCardProps(op) {
-	const props = buildJournalTerminalCardProps(op, { tokenById })
+	const props = buildJournalTerminalCardProps(op, { tokenById, tokens: tokens.value })
 	if (!props) return null
 	return { id: op.id, ...props }
 }
@@ -612,19 +610,9 @@ async function readJournalSnapshot() {
  * `subscribeWithSnapshot`). The durable-job reaper is what generates those
  * terminal transitions during SW down windows.
  */
-async function resnapshotJournal(isCurrent = journal.begin()) {
-	try {
-		// Generation guard (not captured-equality): equality re-validates on
-		// A→B→A, letting the ABA run's stale snapshot land. Every trigger is a
-		// run on the shared scope fence — a standalone call (mount, reconnect,
-		// journal event) begins its own run; the scope watcher passes ITS run
-		// so the clear + both reloads share one supersede unit.
-		await journal.resnapshot(isCurrent)
-	} catch {
-		if (!isCurrent()) return
-		clearTimeout(journalRetry)
-		journalRetry = setTimeout(() => isCurrent() && resnapshotJournal(isCurrent), JOURNAL_RETRY_MS)
-	}
+function resnapshotJournal(isCurrent = journal.begin()) {
+	// A refused read is the mirror's to retry, on this run.
+	return journal.resnapshot(isCurrent).catch(() => undefined)
 }
 journalService.onConnected.add(resnapshotJournal)
 
@@ -826,7 +814,6 @@ onBeforeUnmount(() => {
 	syncHealth.dispose()
 	scopedTokens.dispose()
 	journal.dispose()
-	clearTimeout(journalRetry)
 })
 </script>
 
@@ -868,7 +855,7 @@ onBeforeUnmount(() => {
 			<TransactionAwaitingCard
 				v-for="op in renderedInFlightOps"
 				:key="`awaiting:${op.id}`"
-				:title="journalCardTitle(op, tokenById)"
+				:title="journalCardTitle(op, { tokenById, tokens })"
 				:subtitle="awaitingSubtitleFor(op)"
 				:reaskLine="reaskLineFor(op)"
 				:icon="journalCardIcon(op)"

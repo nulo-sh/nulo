@@ -1,21 +1,23 @@
 /**
  * The logs window's editor under `style-src` without `'unsafe-inline'`: its styles reach it in its
  * shadow root, new lines are followed, and a selection or focus inside the root holds the view where
- * it rests while lines arrive, a line that trims the log included; the toolbar's more menu opens, and
+ * it rests while lines arrive, a line that trims the log included; the toolbar's three triggers are Tab
+ * stops that Enter and Space open and Escape closes, focus back on each; the more menu opens, and
  * its Clear empties the log, which keeps taking lines. The launch's CSP recorder fails the
  * file on a blocked style. The wallet logs its own lines into the window at any time, so a test waits
- * for its own lines by a nonce, and reads a hold off where a shown line lands and off the viewer's
- * scroll-to-end button.
+ * for its own lines by a nonce. A hold is read off where a shown line lands, measured once the follow
+ * pending at the viewer's stop has landed, and off the viewer's scroll-to-end button.
  */
 import { randomUUID } from "node:crypto"
-import type { Page } from "puppeteer"
+import type { KeyInput, Page } from "puppeteer"
 import { expect } from "vitest"
 import { extensionUrl, gotoExtensionPage, newPage, prepareClick } from "./fixtures/browser"
 import { readEditorStyles } from "./fixtures/code-editor"
-import { clickByTestId, type ExtensionContext, test } from "./fixtures/extension"
-import { openDropdown } from "./fixtures/helpers"
+import { type ExtensionContext, test } from "./fixtures/extension"
 import { pollUntil } from "./fixtures/poll"
 import { shotSend } from "./fixtures/send-page"
+import { pointerClick } from "./helpers/legal-drivers"
+import { focusRing, pressEscape, SPACE, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
 const HOST = "logs-editor"
 /** Under one line's height: the follow's scroll to the end, give or take CodeMirror's margin. */
@@ -97,7 +99,7 @@ async function logLines(page: Page, count: number, timeoutMs = 10_000): Promise<
 /**
  * Arms the follow check before the step that should stop the follow, so a wallet line landing after
  * that step is seen too. Latched: CodeMirror's stick to the end scrolls the view back, which hides
- * the button again. A scroll away from the end before the first show is recorded and refused.
+ * the button again. A scroll that leaves the view away from its end is recorded and refused.
  */
 async function armFollowCheck(page: Page): Promise<void> {
 	const shownAlready = await page.evaluate(
@@ -109,20 +111,20 @@ async function armFollowCheck(page: Page): Promise<void> {
 			const onScroll = () => {
 				if (el.scrollHeight - el.scrollTop - el.clientHeight >= away) latch.scrolledAway = true
 			}
+			// Never stops the latch: Vue renders the button between the scroll's listeners, and removing
+			// the latch's listener there skips it in that same dispatch.
 			const observer = new MutationObserver((records) => {
-				const added = records.some(({ addedNodes }) =>
+				latch.shown ||= records.some(({ addedNodes }) =>
 					[...addedNodes].some((node) => node instanceof Element && (node.matches(button) || node.querySelector(button))),
 				)
-				if (!added) return
-				latch.shown = true
-				latch.stop()
 			})
 			latch.stop = () => {
 				observer.disconnect()
-				el.removeEventListener("scroll", onScroll, { capture: true })
+				el.removeEventListener("scroll", onScroll)
 			}
-			// Capture runs before the viewer's own listener, whose button can stop the latch mid-dispatch.
-			el.addEventListener("scroll", onScroll, { capture: true })
+			// Added after the viewer's listener, so it reads the gap the viewer judges, once CodeMirror's
+			// own listener has measured in the event and landed a follow still due.
+			el.addEventListener("scroll", onScroll)
 			observer.observe(document.body, { childList: true, subtree: true })
 			;(window as unknown as { __followCheck?: typeof latch }).__followCheck = latch
 			return document.querySelector(button) !== null
@@ -142,7 +144,7 @@ async function followedSinceArmed(page: Page): Promise<boolean> {
 		latch.stop()
 		return { shown: latch.shown, scrolledAway: latch.scrolledAway }
 	})
-	expect(scrolledAway, "the view scrolled away from its end before the button showed").toBe(false)
+	expect(scrolledAway, "the view scrolled away from its end").toBe(false)
 	return !shown
 }
 
@@ -229,47 +231,69 @@ function lineTop(page: Page, text: string): Promise<number | null> {
 }
 
 /** The view held: `line` sits where it was, within a pixel, and the scroll-to-end button shows. */
-async function expectHeld(page: Page, line: ShownLine): Promise<void> {
+async function expectHeld(page: Page, line: Pick<ShownLine, "text" | "top">): Promise<void> {
 	const top = await lineTop(page, line.text)
 	expect(top, line.text).not.toBeNull()
 	expect(Math.abs((top ?? Number.NaN) - line.top), line.text).toBeLessThanOrEqual(1)
 	expect(await page.$('[data-testid="logs-scroll-btn"]')).not.toBeNull()
 }
 
-/** Drags across part of `line`, leaving it selected. */
-async function selectAcross(page: Page, line: ShownLine): Promise<void> {
+/**
+ * Drags across part of `line`, leaving it selected, and returns it where it rests once the follow
+ * pending at the viewer's stop has landed: the hold is measured from there.
+ */
+async function selectAcross(page: Page, line: ShownLine): Promise<Pick<ShownLine, "text" | "top">> {
 	// The viewer stops its follow on `selectionchange`, which Firefox dispatches in a later task: the
 	// drag is done once a change that shows the selection has run its listeners, the viewer's first.
-	await page.evaluate((id) => {
-		const root = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot as
-			| (ShadowRoot & { getSelection?: () => Selection | null })
-			| null
-			| undefined
-		;(window as unknown as { __selectionSeen?: Promise<void> }).__selectionSeen = new Promise((resolve, reject) => {
-			const onChange = () => {
-				const selection = root?.getSelection ? root.getSelection() : document.getSelection()
-				if (!selection || selection.isCollapsed) return
-				document.removeEventListener("selectionchange", onChange)
-				resolve()
-			}
-			document.addEventListener("selectionchange", onChange)
-			setTimeout(() => reject(new Error("no selectionchange showed the drag's selection")), 10_000)
-		})
-	}, HOST)
+	// A follow pending at that change lands in CodeMirror's next measure, and its scroll is judged
+	// the frame after, so the line is read two frames on.
+	await page.evaluate(
+		(id, text) => {
+			const root = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot as
+				| (ShadowRoot & { getSelection?: () => Selection | null })
+				| null
+				| undefined
+			;(window as unknown as { __selectionSeen?: Promise<number | null> }).__selectionSeen = new Promise((resolve, reject) => {
+				let seen = false
+				const onChange = () => {
+					const selection = root?.getSelection ? root.getSelection() : document.getSelection()
+					if (!selection || selection.isCollapsed) return
+					seen = true
+					document.removeEventListener("selectionchange", onChange)
+					requestAnimationFrame(() =>
+						requestAnimationFrame(() => {
+							const view = root?.querySelector(".cm-scroller")?.getBoundingClientRect()
+							const shown = [...(root?.querySelectorAll(".cm-line") ?? [])].find((el) => el.textContent === text)
+							resolve(view && shown ? shown.getBoundingClientRect().top - view.top : null)
+						}),
+					)
+				}
+				document.addEventListener("selectionchange", onChange)
+				setTimeout(() => {
+					const why = seen ? "no two frames ran after the drag's selection" : "no selectionchange showed the drag's selection"
+					reject(new Error(why))
+				}, 10_000)
+			})
+		},
+		HOST,
+		line.text,
+	)
 	await prepareClick(page)
 	await page.mouse.move(line.left, line.y)
 	await page.mouse.down()
 	await page.mouse.move(line.right, line.y, { steps: 5 })
 	await page.mouse.up()
-	const selected = await page.evaluate(async (id) => {
-		await (window as unknown as { __selectionSeen?: Promise<void> }).__selectionSeen
+	const { selected, top } = await page.evaluate(async (id) => {
+		const top = await (window as unknown as { __selectionSeen?: Promise<number | null> }).__selectionSeen
 		const root = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot as
 			| (ShadowRoot & { getSelection?: () => Selection | null })
 			| null
 			| undefined
-		return (root?.getSelection ? root.getSelection() : document.getSelection())?.toString() ?? ""
+		return { selected: (root?.getSelection ? root.getSelection() : document.getSelection())?.toString() ?? "", top }
 	}, HOST)
 	expect(selected.length).toBeGreaterThan(0)
+	expect(top, `${line.text} once the selection stopped the follow`).not.toBeNull()
+	return { text: line.text, top: top ?? Number.NaN }
 }
 
 async function openLogs(ctx: ExtensionContext): Promise<Page> {
@@ -352,8 +376,7 @@ test("with nothing selected and the search panel closed, new lines are followed"
 
 test("a selection at the end holds the view while lines arrive", async ({ registeredExtension: ctx }) => {
 	const page = await filledLogs(ctx)
-	const line = await middleLine(page)
-	await selectAcross(page, line)
+	const line = await selectAcross(page, await middleLine(page))
 	await logLines(page, 2)
 	await expectHeld(page, line)
 	await page.close()
@@ -395,8 +418,7 @@ test("a selection at the end holds the view through the line that trims the log,
 	registeredExtension: ctx,
 }) => {
 	const page = await cappedLogs(ctx)
-	const line = await middleLine(page)
-	await selectAcross(page, line)
+	const line = await selectAcross(page, await middleLine(page))
 	// The trim restores the view one line off the end, inside the band a scroll to the end resumes in.
 	await logTrimming(page, 1)
 	await expectHeld(page, line)
@@ -425,6 +447,128 @@ async function waitForShownLine(page: Page, text: string, shown: boolean): Promi
 	)
 }
 
+const sel = (testid: string) => `[data-testid="${testid}"]`
+const OPEN_KEYS: KeyInput[] = ["Enter", SPACE]
+
+const INSET = "-2px"
+
+async function expectAccentRing(page: Page, testid: string, offset = "2px"): Promise<void> {
+	await waitForFocus(page, testid)
+	expect(await focusRing(page, testid)).toEqual({ ring: `solid 2px ${offset}`, color: await tokenColor(page, "--nulo-accent") })
+}
+
+async function tabStep(page: Page, testid: string, back = false, offset = "2px"): Promise<void> {
+	if (back) await page.keyboard.down("Shift")
+	await page.keyboard.press("Tab")
+	if (back) await page.keyboard.up("Shift")
+	await expectAccentRing(page, testid, offset)
+}
+
+async function pressToggle(page: Page, key: KeyInput, testid: string, pressed: "true" | "false"): Promise<void> {
+	await page.keyboard.press(key)
+	await page.waitForFunction(
+		(s: string, v: string) => document.querySelector(s)?.getAttribute("aria-pressed") === v,
+		{ timeout: 5_000, polling: 50 },
+		sel(testid),
+		pressed,
+	)
+}
+
+const panelGone = (page: Page, kind: string) => page.waitForSelector(sel(`logs-filter-${kind}-panel`), { hidden: true, timeout: 5_000 })
+
+async function openAndEscape(page: Page, key: KeyInput, opened: string, focusInside: () => Promise<void>): Promise<void> {
+	await page.keyboard.press(key)
+	await page.waitForSelector(sel(opened), { visible: true, timeout: 5_000 })
+	await focusInside()
+	expect(await pressEscape(page)).toBe(true)
+	await page.waitForSelector(sel(opened), { hidden: true, timeout: 5_000 })
+}
+
+test("the toolbar's Source, Level and more are Tab stops in that order, ringed, that Enter and Space open and Escape closes back onto them", async ({
+	registeredExtension: ctx,
+}) => {
+	const page = await openLogs(ctx)
+	await tabTo(page, "logs-filter-source")
+	await expectAccentRing(page, "logs-filter-source")
+	await tabStep(page, "logs-filter-level")
+	await tabStep(page, "logs-more-trigger")
+
+	// The menu's trap sets no first focus, so ArrowDown moves it in: the hand-back below is real.
+	for (const key of OPEN_KEYS) {
+		await openAndEscape(page, key, "logs-export-csv", async () => {
+			await page.keyboard.press("ArrowDown")
+			await waitForFocus(page, "logs-export-csv")
+		})
+		await expectAccentRing(page, "logs-more-trigger")
+	}
+
+	// Each panel takes focus as it opens, so the Escape must hand it back.
+	await tabStep(page, "logs-filter-level", true)
+	for (const key of OPEN_KEYS) {
+		await openAndEscape(page, key, "logs-filter-level-panel", () => waitForFocus(page, "logs-filter-level-all"))
+		await expectAccentRing(page, "logs-filter-level")
+	}
+
+	await tabStep(page, "logs-filter-source", true)
+	for (const key of OPEN_KEYS) {
+		await openAndEscape(page, key, "logs-filter-source-panel", () => waitForFocus(page, "logs-filter-source-panel"))
+		await expectAccentRing(page, "logs-filter-source")
+	}
+
+	await tabStep(page, "logs-filter-level")
+	await shotSend(page, "logs-toolbar-focus", "logs-filter-level")
+	await page.close()
+})
+
+test("each filter row is a ringed Tab stop that Space and Enter toggle, and Tab past either edge closes its panel onto the next control or its trigger", async ({
+	registeredExtension: ctx,
+}) => {
+	const page = await openLogs(ctx)
+	await tabTo(page, "logs-filter-level")
+	await page.keyboard.press("Enter")
+	await expectAccentRing(page, "logs-filter-level-all", INSET)
+	await pressToggle(page, SPACE, "logs-filter-level-all", "false")
+	await pressToggle(page, "Enter", "logs-filter-level-all", "true")
+	await tabStep(page, "logs-filter-level-item-DEBUG", false, INSET)
+	await pressToggle(page, SPACE, "logs-filter-level-item-DEBUG", "false")
+	await pressToggle(page, SPACE, "logs-filter-level-item-DEBUG", "true")
+	for (const level of ["INFO", "WARN", "ERROR"]) await tabStep(page, `logs-filter-level-item-${level}`, false, INSET)
+	await tabStep(page, "logs-more-trigger")
+	await panelGone(page, "level")
+
+	await tabStep(page, "logs-filter-level", true)
+	await page.keyboard.press("Enter")
+	await waitForFocus(page, "logs-filter-level-all")
+	await tabStep(page, "logs-filter-level", true)
+	await panelGone(page, "level")
+
+	await tabStep(page, "logs-filter-source", true)
+	await page.keyboard.press("Enter")
+	await waitForFocus(page, "logs-filter-source-panel")
+	await page.keyboard.type("pxe")
+	await page.waitForSelector(sel("logs-filter-source-item-pxe-client"), { visible: true, timeout: 5_000 })
+	await tabStep(page, "logs-filter-source-item-pxe", false, INSET)
+	await tabStep(page, "logs-filter-source-item-pxe-client", false, INSET)
+	await tabStep(page, "logs-filter-level")
+	await panelGone(page, "source")
+	// The close cleared the search, so Select All is back, and Tab from the field reaches it
+	// with no stop between.
+	await tabStep(page, "logs-filter-source", true)
+	await page.keyboard.press("Enter")
+	await waitForFocus(page, "logs-filter-source-panel")
+	await tabStep(page, "logs-filter-source-all", false, INSET)
+	expect(await pressEscape(page)).toBe(true)
+	await panelGone(page, "source")
+
+	// A clicked button takes focus on Linux, where this suite runs, so a pointer open moves focus in, unringed.
+	await pointerClick(page, "logs-filter-level")
+	await waitForFocus(page, "logs-filter-level-all")
+	expect((await focusRing(page, "logs-filter-level-all")).ring).toMatch(/^none /)
+	expect(await pressEscape(page)).toBe(true)
+	await panelGone(page, "level")
+	await page.close()
+})
+
 test("the more menu offers the CSV export and Clear logs, which empties the log and keeps it live", async ({
 	registeredExtension: ctx,
 }) => {
@@ -436,12 +580,15 @@ test("the more menu offers the CSV export and Clear logs, which empties the log 
 	await waitForShownLine(page, marker, true)
 	const line = await lineHeight(page)
 
-	await openDropdown(page, "logs-more-trigger")
-	await page.waitForSelector('[data-testid="logs-export-csv"]', { visible: true, timeout: 5_000 })
-	await page.waitForSelector('[data-testid="logs-clear"]', { visible: true, timeout: 5_000 })
+	await pointerClick(page, "logs-more-trigger")
+	await page.waitForSelector(sel("logs-export-csv"), { visible: true, timeout: 5_000 })
+	await page.waitForSelector(sel("logs-clear"), { visible: true, timeout: 5_000 })
 	await shotSend(page, "logs-more-menu", "logs-more-trigger")
 
-	await clickByTestId(page, "logs-clear")
+	await pointerClick(page, "logs-clear")
+	// The menu's trap hands focus back on a timer; a pointer's focus draws no ring.
+	await waitForFocus(page, "logs-more-trigger")
+	expect((await focusRing(page, "logs-more-trigger")).ring).toMatch(/^none /)
 	// Later lines alone can push the marker out of the rendered range. A cleared log floors at the
 	// window's height, under 100 lines.
 	await settle(page, 0, 100 * line)

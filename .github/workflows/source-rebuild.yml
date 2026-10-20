@@ -83,7 +83,7 @@ jobs:
           grep -E " nulo-firefox-${VERSION}\.zip$" SHASUMS256.txt | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/reference"
           unzip -q "nulo-firefox-${VERSION}.zip" -d "$RUNNER_TEMP/reference"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reference
           path: ${{ runner.temp }}/reference
@@ -123,7 +123,7 @@ jobs:
           cd "$RUNNER_TEMP/src/nulo-${VERSION}"
           /usr/bin/time -v apps/extension/scripts/source-rebuild.sh "$VERSION" 2> "$RUNNER_TEMP/time.txt"
           grep -E "Maximum resident|Elapsed" "$RUNNER_TEMP/time.txt" | tee -a "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rebuild-x64
           path: ${{ runner.temp }}/src/nulo-${{ needs.target.outputs.version }}/apps/extension/dist/firefox
@@ -152,7 +152,7 @@ jobs:
           cd "$RUNNER_TEMP/src/nulo-${VERSION}"
           /usr/bin/time -v apps/extension/scripts/source-rebuild.sh "$VERSION" 2> "$RUNNER_TEMP/time.txt"
           grep -E "Maximum resident|Elapsed" "$RUNNER_TEMP/time.txt" | tee -a "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rebuild-arm64
           path: ${{ runner.temp }}/src/nulo-${{ needs.target.outputs.version }}/apps/extension/dist/firefox
@@ -172,15 +172,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ inputs.tag != '' && 'reference' || 'extension-firefox' }}
           path: ${{ runner.temp }}/reference
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: rebuild-x64
           path: ${{ runner.temp }}/rebuild-x64
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: rebuild-arm64
           path: ${{ runner.temp }}/rebuild-arm64

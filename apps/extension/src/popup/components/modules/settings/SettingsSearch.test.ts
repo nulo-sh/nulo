@@ -1,6 +1,7 @@
 import { Flex, Icon, Input, Spinner, Text } from "@nulo/design"
 import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from "@vue/test-utils"
-import { afterEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { sendEvent } from "../../../../../tests/helpers/send-event"
 import { settingsContext, settingsRouter } from "../../../../../tests/helpers/settings-rows"
 import ItemsContainer from "@/components/ui/Settings/ItemsContainer.vue"
 import SettingsSearch from "./SettingsSearch.vue"
@@ -28,9 +29,13 @@ async function mountSearch(query = "", sidePanel = true) {
 const field = (w: VueWrapper) => w.get<HTMLInputElement>('[data-testid="settings-search-input"]').element
 const results = (w: VueWrapper) => w.findAll('[data-testid^="settings-search-result-"]').map((r) => r.element as HTMLElement)
 
-/** A keydown on `el` as a browser sends it; true when no handler cancelled it. */
-const key = (el: Element, k: string, init: KeyboardEventInit = {}) =>
-	el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...init }))
+/** A keydown on `el` through `sendEvent`, since the root's listener comes after the field's or the
+ *  row link's; true when no handler cancelled it. */
+function key(el: Element, k: string, init: KeyboardEventInit = {}) {
+	const sent = sendEvent(el, "keydown", { key: k, ...init })
+	if (!sent) throw new Error(`no keydown reached ${el.tagName} for ${k}`)
+	return !sent.defaultPrevented
+}
 
 describe("results", () => {
 	test('"ation" shows the Display caption over Disable animations, then Theme, each opening its row', async () => {
@@ -81,6 +86,15 @@ describe("results", () => {
 })
 
 describe("keys", () => {
+	// A still clock puts every raw dispatch in its mount's millisecond: a helper that skips `sendEvent`
+	// fails every run, not one CI run in many.
+	beforeEach(() => {
+		vi.spyOn(Date, "now").mockReturnValue(Date.now())
+	})
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
 	test("ArrowDown walks from the field through the results and wraps to the field", async () => {
 		const { w } = await mountSearch("ation")
 		field(w).focus()

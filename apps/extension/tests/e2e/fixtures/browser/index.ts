@@ -21,6 +21,9 @@ export interface LaunchOptions {
 	 *  answer. Chrome ignores it: its `permissions.remove` refuses a required host permission, so no
 	 *  spec there reaches a withheld one to grant. */
 	grantPermissionRequests?: true
+	/** Install through the browser's own install call, not at launch, so `reinstallExtension` can
+	 *  swap the build in place. Firefox always installs so; Chrome then loads it over CDP. */
+	installInSession?: true
 }
 
 export interface LaunchedBrowser {
@@ -49,6 +52,12 @@ export interface ArmedInterception {
 	 *  however the scenario itself came out. */
 	failures: () => Promise<string[]>
 	stop: () => Promise<void>
+}
+
+export interface HeldInterception extends ArmedInterception {
+	/** Whether the launch's own interception is armed now: false while a kill or a spec's interception
+	 *  has the origin, while it re-arms, after a failed re-arm and after `stop()`. */
+	holding: () => boolean
 }
 
 /**
@@ -168,6 +177,13 @@ export interface BrowserDriver {
 	 */
 	pxeHostState(page: Page): Promise<PxeHostState>
 	/**
+	 * From an open extension page, close the document hosting the PXE where it outlives the
+	 * background: Chrome's offscreen document, whose clients reconnect to a stopped worker and so wake
+	 * it within a second. Firefox's frame is the background page's own and ends with it. Rejects on
+	 * Chrome when no offscreen document is open.
+	 */
+	closePxeHost(page: Page): Promise<void>
+	/**
 	 * End the extension's background — Chrome's service worker, Firefox's event page — and resolve
 	 * once THAT instance is gone; every other extension page and `storage.session` stay. Chrome starts
 	 * a successor within milliseconds, Firefox only on the add-on's next event, so a caller that needs
@@ -176,6 +192,18 @@ export interface BrowserDriver {
 	 * Rejects by name when no background runs, or when it outlives the call.
 	 */
 	stopBackground(browser: Browser, extensionId: string): Promise<void>
+	/**
+	 * Let the extension restart itself (`runtime.reload()`) and come back, as a store install does.
+	 * Chrome checks an unpacked extension again when it reloads and, with developer mode off,
+	 * leaves it disabled; Firefox reloads a temporary add-on in place.
+	 */
+	allowSelfRestart(browser: Browser): Promise<void>
+	/**
+	 * The running background's `performance.timeOrigin`, or undefined while none runs; a newer value
+	 * is a new instance. After a restart Chrome can list the dead worker's target beside its
+	 * successor's, and attaching to the dead one never answers.
+	 */
+	backgroundOrigin(browser: Browser, extensionId: string): Promise<number | undefined>
 	/** Whether a background instance runs right now. Both browsers reap an idle one. */
 	backgroundAlive(browser: Browser, extensionId: string): Promise<boolean>
 	/**
@@ -184,6 +212,14 @@ export interface BrowserDriver {
 	 * background runs, or with the message `body` throws.
 	 */
 	evaluateInBackground<T>(browser: Browser, extensionId: string, body: string): Promise<T>
+	/**
+	 * Install `extensionPath` again in the running browser, over the build installed from it, which
+	 * the browser treats as an update: `runtime.onInstalled` reason `update`, the same id and storage.
+	 * Closing and relaunching over a replaced directory reports `install` on both browsers instead.
+	 * Chrome needs a launch with `installInSession`: under `--load-extension` its reload blocks the
+	 * extension.
+	 */
+	reinstallExtension(browser: Browser, extensionPath: string): Promise<void>
 	/**
 	 * How this driver's protocol words "the window went away under the call", beyond the CDP
 	 * phrases the fixtures already match. An approval window closes itself on the click that
@@ -232,6 +268,8 @@ export interface BackgroundOwner {
 
 export const extensionUrl = (extensionId: string, path: string): string => driver.extensionUrl(extensionId, path)
 export const launchBrowser = (opts: LaunchOptions): Promise<LaunchedBrowser> => driver.launch(opts)
+export const reinstallExtension = (browser: Browser, extensionPath: string): Promise<void> =>
+	driver.reinstallExtension(browser, extensionPath)
 export const newPage = (browser: Browser): Promise<Page> => driver.newPage(browser)
 export const discoverExtensionId = (browser: Browser): Promise<string> => driver.discoverExtensionId(browser)
 export const gotoExtensionPage = (page: Page, url: string): Promise<void> => driver.gotoExtensionPage(page, url)
@@ -257,7 +295,7 @@ export const holdRpcInterception = (
 	extensionId: string,
 	fromOrigin: string,
 	mode: RpcInterception,
-): Promise<ArmedInterception> => standing.hold(browser, extensionId, fromOrigin, mode)
+): Promise<HeldInterception> => standing.hold(browser, extensionId, fromOrigin, mode)
 export const openScratchPage = (browser: Browser, extensionId: string): Promise<Page> => driver.openScratchPage(browser, extensionId)
 export const prepareClick = (page: Page): Promise<void> => driver.prepareClick(page)
 export const prepareKeys = (page: Page): Promise<void> => driver.prepareKeys(page)
@@ -267,9 +305,17 @@ export const virtualAuthenticator = (browser: Browser, anchorPage: Page): Promis
 	driver.virtualAuthenticator(browser, anchorPage)
 export const holdNextCredentialGet = (page: Page): Promise<void> => driver.holdNextCredentialGet(page)
 export const pxeHostState = (page: Page): Promise<PxeHostState> => driver.pxeHostState(page)
+export const closePxeHost = (page: Page): Promise<void> => driver.closePxeHost(page)
 export const stopBackground = (owner: BackgroundOwner): Promise<void> =>
 	standing.whileReleased(owner.browser, () => driver.stopBackground(owner.browser, owner.extensionId))
+export const allowSelfRestart = (browser: Browser): Promise<void> => driver.allowSelfRestart(browser)
+export const backgroundOrigin = (owner: BackgroundOwner): Promise<number | undefined> =>
+	driver.backgroundOrigin(owner.browser, owner.extensionId)
 export const backgroundAlive = (owner: BackgroundOwner): Promise<boolean> => driver.backgroundAlive(owner.browser, owner.extensionId)
+/** Runs `run`, which ends the background, with the launch's interceptions let go as `stopBackground`
+ *  does, and re-arms them after it for the background that replaces it. */
+export const withInterceptionsReleased = <T>(owner: BackgroundOwner, run: () => Promise<T>): Promise<T> =>
+	standing.whileReleased(owner.browser, run)
 /** Stops a live background; false, with a warning, when the browser already stopped it. A failed
  *  kill still throws. */
 export const stopBackgroundIfAlive = async (owner: BackgroundOwner): Promise<boolean> => {

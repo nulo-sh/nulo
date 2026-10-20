@@ -202,6 +202,39 @@ describe("OperationCard — the vocabulary reading", () => {
 	})
 })
 
+describe("OperationCard — the label mark on a registered token's call", () => {
+	const P2P = sel("transfer_private_to_private", 4)
+	const reversed = sendTx([{ name: "transfer_private_to_private", to: TOKEN, selector: P2P, args: [TO, OWNER, field(5n), field(0n)] }])
+	const decodes = {
+		decodedCalls: [
+			decoded("transfer_private_to_private", [
+				{ name: "to", value: { kind: "address", value: TO } },
+				{ name: "from", value: { kind: "address", value: OWNER } },
+				{ name: "amount", value: { kind: "integer", value: "5" } },
+				{ name: "_nonce", value: { kind: "field", value: field(0n) } },
+			]),
+		],
+	}
+
+	test("parameter names that do not fit the standard roles carry the mark, above the rows", async () => {
+		const w = await mountCard(reversed, decodes)
+		const block = one(w, "execute-op-decoded-args")
+		expect(one(w, "execute-op-labels-warning").text()).toBe("Labels from the contract")
+		expect(one(w, "execute-op-labels-reason").text()).toBe(
+			"These names come from the contract, not from Nulo. Check the addresses and amount before approving.",
+		)
+		const order = block.findAll("[data-testid]").map((el) => el.attributes("data-testid"))
+		expect(order.indexOf("execute-op-labels-warning")).toBeLessThan(order.indexOf("execute-op-decoded-param"))
+		expect(all(w, "execute-op-decoded-param").map((p) => p.attributes("data-param"))).toEqual(["to", "from", "amount", "_nonce"])
+	})
+
+	test("the same rows on a contract the wallet has not registered carry none (control)", async () => {
+		const w = await mountCard(reversed, { ...decodes, tokens: [] })
+		expect(all(w, "execute-op-decoded-param")).toHaveLength(4)
+		expect(one(w, "execute-op-labels-warning").exists()).toBe(false)
+	})
+})
+
 describe("OperationCard — the ABI decode and the raw fallback", () => {
 	const claimArgs = [TO, field(5_000_000n), field(7n), field(1n)]
 	const claim = { name: "claim_lie", to: TOKEN, selector: "0x11223344", args: claimArgs }
@@ -232,6 +265,7 @@ describe("OperationCard — the ABI decode and the raw fallback", () => {
 		expect(params[2]!.find("[title]").attributes("title")).toBe(field(7n))
 		expect(params[3]!.text()).toContain("true")
 		expect(one(w, "execute-op-unverified-args").exists()).toBe(false)
+		expect(one(w, "execute-op-labels-warning").exists()).toBe(false)
 	})
 
 	test("while the wallet is still decoding, the card says so and shows no field", async () => {

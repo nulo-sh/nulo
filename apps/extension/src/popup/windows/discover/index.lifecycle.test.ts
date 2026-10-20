@@ -31,7 +31,6 @@ vi.mock(
 	"@/composables/useDappInteractionPayload",
 	async () => (await import("../../../../tests/helpers/approval-window-harness")).payloadModule,
 )
-vi.mock("@/composables/useDappHostname", async () => (await import("../../../../tests/helpers/approval-window-harness")).hostnameModule)
 vi.mock(
 	"@/wallet/services/profile/client",
 	async () => (await import("../../../../tests/helpers/approval-window-harness")).profileClientModule,
@@ -85,7 +84,7 @@ const STUBS = {
 	DappStatusStrip: { template: '<div data-testid="status-strip" />', props: ["accountName", "networkName", "status"] },
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" />',
-		props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel", "hostnameTestId", "nameTestId"],
+		props: ["dapp", "actionLabel", "hostnameTestId", "nameTestId"],
 	},
 	DappCancelledOverlay: {
 		props: ["message"],
@@ -99,7 +98,7 @@ import Discover from "./index.vue"
 
 const factory = () => mount(Discover, { global: { stubs: STUBS } })
 
-type DiscoverVm = { reject: () => Promise<void>; closeWindow: (interactionCompleted?: boolean) => void }
+type DiscoverVm = { reject: (end: "reject") => Promise<void>; closeWindow: (interactionCompleted?: boolean) => void }
 
 describe("discover window — shell lifecycle frozen oracle", () => {
 	test("A1: onMounted eager-connects exactly profile → interaction, in order", async () => {
@@ -175,12 +174,12 @@ describe("discover window — shell lifecycle frozen oracle", () => {
 		expect(beforeunloadRemoves()).toBe(0)
 	})
 
-	test("B8: window-local reject() = composable reject THEN closeWindow(true) — order pinned", async () => {
+	test("B8: window-local reject() detaches the unload listener, sends its end, THEN closes — order pinned", async () => {
 		w = factory()
 		await completeInit()
 		callLog.length = 0
-		await (w.vm as unknown as DiscoverVm).reject()
-		expect(callLog).toEqual(["composableReject:User rejected", "removeEventListener:beforeunload", "windows.remove"])
+		await (w.vm as unknown as DiscoverVm).reject("reject")
+		expect(callLog).toEqual(["removeEventListener:beforeunload", "composableReject:User rejected:reject", "windows.remove"])
 	})
 
 	test("B9 (DIVERGENCE): reject() with NO requestId is a COMPLETE no-op — discover bails where capabilities proceeds", async () => {
@@ -191,7 +190,7 @@ describe("discover window — shell lifecycle frozen oracle", () => {
 		w = factory()
 		await flushPromises()
 		expect(approval.requestId.value).toBeUndefined()
-		await (w.vm as unknown as DiscoverVm).reject()
+		await (w.vm as unknown as DiscoverVm).reject("reject")
 		expect(rejectViaInteractionServiceMock).not.toHaveBeenCalled()
 		expect(beforeunloadRemoves()).toBe(0)
 		expect(windowsRemoveMock).not.toHaveBeenCalled()
@@ -239,29 +238,14 @@ describe("discover window — after a resolved Allow", () => {
 		return (w.vm as unknown as { approve: () => Promise<void> }).approve()
 	}
 
-	test("the beforeunload listener is removed and the window is not closed: it shows the emoji check next", async () => {
+	test("the beforeunload listener is removed, then the window closes, and its unload rejects nothing", async () => {
 		w = factory()
 		await completeInit()
 		callLog.length = 0
 		await approve()
 		await flushPromises()
-		expect(callLog).toEqual(["removeEventListener:beforeunload"])
+		expect(callLog).toEqual(["removeEventListener:beforeunload", "windows.remove"])
 		window.dispatchEvent(new Event("beforeunload"))
 		expect(rejectViaInteractionServiceMock).not.toHaveBeenCalled()
-	})
-
-	test.each([
-		["a profile switch", { id: "p-other" }],
-		["a lock", undefined],
-	])("%s while it connects closes the window", async (_, next) => {
-		w = factory()
-		const handler = onActiveProfileChangedAddMock.mock.calls[0][0] as (p?: { id: string }) => void
-		await completeInit({ id: "p1" })
-		await approve()
-		await flushPromises()
-		expect(windowsRemoveMock).not.toHaveBeenCalled()
-		handler(next)
-		await flushPromises()
-		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
 	})
 })

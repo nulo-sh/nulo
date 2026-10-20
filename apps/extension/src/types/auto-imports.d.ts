@@ -24,23 +24,30 @@ declare global {
   const CONTACT_NAME_MAX: typeof import('../utils/contact-name').CONTACT_NAME_MAX
   const DAPP_LABEL: typeof import('../utils/tx-enrichment').DAPP_LABEL
   const DECRYPTION_FAILED: typeof import('../composables/useFullBackupImport').DECRYPTION_FAILED
+  const END_ACK_TIMEOUT_MS: typeof import('../composables/useDappApprovalWindow').END_ACK_TIMEOUT_MS
   const EffectScope: typeof import('vue').EffectScope
   const EnsureSuperseded: typeof import('../stores/balances.store').EnsureSuperseded
   const EstimateRequeue: typeof import('../utils/estimate-when-clear').EstimateRequeue
   const FEE_DECIMALS: typeof import('../utils/fee-estimation').FEE_DECIMALS
   const FEE_JUICE_DECIMALS: typeof import('../utils/fee-estimation').FEE_JUICE_DECIMALS
   const FEE_METHODS: typeof import('../utils/tx-enrichment').FEE_METHODS
+  const FEE_PICKS_ROOT: typeof import('../utils/profile-ui-keys').FEE_PICKS_ROOT
   const FEE_READOUT_UNIT: typeof import('../utils/fee-estimation').FEE_READOUT_UNIT
   const FIRST_PROFILE_NAME: typeof import('../utils/profile-name').FIRST_PROFILE_NAME
   const FULL_BACKUP_V2_TAG: typeof import('../utils/full-backup-helpers').FULL_BACKUP_V2_TAG
   const FULL_SIZE: typeof import('../utils/hero-fit').FULL_SIZE
   const FilePickCanceledError: typeof import('../utils/files').FilePickCanceledError
   const FileTooLargeError: typeof import('../utils/files').FileTooLargeError
+  const GET_STARTED_AZTEC_OPENED_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_AZTEC_OPENED_ROOT
+  const GET_STARTED_BACKUP_SAVED_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_BACKUP_SAVED_ROOT
+  const GET_STARTED_FEE_JUICE_HELD_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_FEE_JUICE_HELD_ROOT
+  const GET_STARTED_HIDDEN_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_HIDDEN_ROOT
+  const GET_STARTED_PHRASE_SAVED_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_PHRASE_SAVED_ROOT
   const GLOSSARY: typeof import('../utils/glossary').GLOSSARY
   const GLOSSARY_SECTIONS: typeof import('../utils/glossary').GLOSSARY_SECTIONS
   const HERO_MIN_SCALE: typeof import('../utils/hero-fit').HERO_MIN_SCALE
   const HOME_TOKEN_ROWS: typeof import('../utils/token-order').HOME_TOKEN_ROWS
-  const HOSTNAME_WARNING: typeof import('../composables/useDappHostname').HOSTNAME_WARNING
+  const HOSTNAME_WARNING: typeof import('../composables/useDappOrigin').HOSTNAME_WARNING
   const HOW_AZTEC_WORKS_URL: typeof import('../utils/get-started').HOW_AZTEC_WORKS_URL
   const IMPORT_ACTIVATION_TIMEOUT_MS: typeof import('../composables/completeImportWithRecovery').IMPORT_ACTIVATION_TIMEOUT_MS
   const IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS: typeof import('../composables/importChainSync').IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS
@@ -50,6 +57,7 @@ declare global {
   const INIT_FETCH_TIMEOUT_MS: typeof import('../stores/balances.store').INIT_FETCH_TIMEOUT_MS
   const INIT_RETRY_BACKOFF_MS: typeof import('../stores/balances.store').INIT_RETRY_BACKOFF_MS
   const INTEGRITY_FAILED: typeof import('../composables/full-backup-restore').INTEGRITY_FAILED
+  const LAST_ACTIVE_PROFILE_KEY: typeof import('../utils/lastActiveProfile').LAST_ACTIVE_PROFILE_KEY
   const LEGAL_DECLINED_PATH: typeof import('../utils/legal-sheet').LEGAL_DECLINED_PATH
   const LEGAL_DISMISSED_KEY: typeof import('../utils/legal-sheet').LEGAL_DISMISSED_KEY
   const LOCAL_L1_CHAIN_ID: typeof import('../utils/chain-ids').LOCAL_L1_CHAIN_ID
@@ -59,15 +67,21 @@ declare global {
   const MAX_CONTACT_IMPORT_ROWS: typeof import('../utils/contacts-export-format').MAX_CONTACT_IMPORT_ROWS
   const MAX_DECIMALS: typeof import('../utils/token-amount').MAX_DECIMALS
   const MINT_SIGNATURES: typeof import('../utils/token-transfer-vocabulary').MINT_SIGNATURES
+  const NETWORK_ARRIVAL_KEY: typeof import('../composables/useNetworkArrival').NETWORK_ARRIVAL_KEY
   const OWN_WINDOW_ROUTES: typeof import('../utils/own-window').OWN_WINDOW_ROUTES
   const PASSKEY_COPY: typeof import('../utils/passkey-copy').PASSKEY_COPY
   const PINNED_TOKENS_MAX: typeof import('../composables/usePinnedTokens').PINNED_TOKENS_MAX
   const PINNED_TOKENS_MAX_CHAINS: typeof import('../composables/usePinnedTokens').PINNED_TOKENS_MAX_CHAINS
+  const PINNED_TOKENS_ROOT: typeof import('../utils/profile-ui-keys').PINNED_TOKENS_ROOT
+  const PROFILE_IMPORTED_ROOT: typeof import('../utils/profile-ui-keys').PROFILE_IMPORTED_ROOT
+  const PROFILE_NOT_FIRST_ROOT: typeof import('../utils/profile-ui-keys').PROFILE_NOT_FIRST_ROOT
   const PROFILE_UI_KEY_PREFIXES: typeof import('../utils/profile-ui-keys').PROFILE_UI_KEY_PREFIXES
   const RECOVERY_PHRASE_WARNINGS: typeof import('../utils/recovery-phrase-warnings').RECOVERY_PHRASE_WARNINGS
   const RESTORE_OUTCOME_LEASE_MS: typeof import('../utils/restore-outcome').RESTORE_OUTCOME_LEASE_MS
+  const RESTORE_OUTCOME_ROOT: typeof import('../utils/profile-ui-keys').RESTORE_OUTCOME_ROOT
   const REVIEW_ARM_MS: typeof import('../composables/useSendReview').REVIEW_ARM_MS
   const SEED_STATUS_RETRY_MS: typeof import('../composables/useSeedStatus').SEED_STATUS_RETRY_MS
+  const SEND_FEE_PICKS_ROOT: typeof import('../utils/profile-ui-keys').SEND_FEE_PICKS_ROOT
   const SETTINGS_ROWS: typeof import('../utils/settings-search').SETTINGS_ROWS
   const SETTING_UPDATE_FAILED: typeof import('../composables/useSettingUpdate').SETTING_UPDATE_FAILED
   const SNACK_GAP: typeof import('../composables/snackInset').SNACK_GAP
@@ -149,6 +163,7 @@ declare global {
   const createRunFence: typeof import('../composables/runFence').createRunFence
   const customRef: typeof import('vue').customRef
   const debounce: typeof import('../utils/general').debounce
+  const decodeRestoreOutcome: typeof import('../utils/restore-outcome').decodeRestoreOutcome
   const decompressData: typeof import('../utils/files').decompressData
   const defaultProfileName: typeof import('../utils/profile-name').defaultProfileName
   const defineAsyncComponent: typeof import('vue').defineAsyncComponent
@@ -193,6 +208,7 @@ declare global {
   const getPrimaryCall: typeof import('../utils/tx-enrichment').getPrimaryCall
   const getStartedAztecOpenedKey: typeof import('../utils/profile-ui-keys').getStartedAztecOpenedKey
   const getStartedBackupSavedKey: typeof import('../utils/profile-ui-keys').getStartedBackupSavedKey
+  const getStartedFeeJuiceHeldKey: typeof import('../utils/profile-ui-keys').getStartedFeeJuiceHeldKey
   const getStartedHiddenKey: typeof import('../utils/profile-ui-keys').getStartedHiddenKey
   const getStartedKeys: typeof import('../utils/get-started').getStartedKeys
   const getStartedPhraseSavedKey: typeof import('../utils/profile-ui-keys').getStartedPhraseSavedKey
@@ -248,7 +264,9 @@ declare global {
   const isValidAztecAddress: typeof import('../utils/aztec-address').isValidAztecAddress
   const isValidDecimals: typeof import('../utils/token-amount').isValidDecimals
   const isValidHex: typeof import('../utils/string').isValidHex
+  const isValidatedTokenClass: typeof import('../utils/token-class').isValidatedTokenClass
   const journalAdded: typeof import('../utils/journal-mirror').journalAdded
+  const journalCallTitle: typeof import('../utils/journal-state').journalCallTitle
   const journalCardIcon: typeof import('../utils/journal-state').journalCardIcon
   const journalCardOriginLabel: typeof import('../utils/journal-state').journalCardOriginLabel
   const journalCardTitle: typeof import('../utils/journal-state').journalCardTitle
@@ -311,7 +329,7 @@ declare global {
   const pickFile: typeof import('../utils/files').pickFile
   const pickPrimaryIndex: typeof import('../utils/primary-method').pickPrimaryIndex
   const pickPrimaryMethod: typeof import('../utils/tx-enrichment').pickPrimaryMethod
-  const pickPrimaryWireMethod: typeof import('../utils/primary-method').pickPrimaryWireMethod
+  const pickPrimaryWireCall: typeof import('../utils/primary-method').pickPrimaryWireCall
   const pinScopeOf: typeof import('../composables/usePinnedTokens').pinScopeOf
   const pinnedTokensKey: typeof import('../utils/profile-ui-keys').pinnedTokensKey
   const plainMethodName: typeof import('../utils/tx-enrichment').plainMethodName
@@ -322,6 +340,7 @@ declare global {
   const pricesUnavailable: typeof import('../utils/token-aggregate').pricesUnavailable
   const profileFileNameSegment: typeof import('../utils/files').profileFileNameSegment
   const profileImportedKey: typeof import('../utils/profile-ui-keys').profileImportedKey
+  const profileNotFirstKey: typeof import('../utils/profile-ui-keys').profileNotFirstKey
   const profileTypeLabel: typeof import('../utils/settings-labels').profileTypeLabel
   const profileUiKeys: typeof import('../utils/profile-ui-keys').profileUiKeys
   const projectArgument: typeof import('../utils/transfer-intent').projectArgument
@@ -334,6 +353,7 @@ declare global {
   const readGetStarted: typeof import('../utils/get-started').readGetStarted
   const readLiveness: typeof import('../utils/background-liveness').readLiveness
   const readRestoreOutcome: typeof import('../utils/restore-outcome').readRestoreOutcome
+  const readSendPicks: typeof import('../utils/fee-picks').readSendPicks
   const readSendSlots: typeof import('../utils/fee-picks').readSendSlots
   const readonly: typeof import('vue').readonly
   const receivedLabel: typeof import('../utils/received-display').receivedLabel
@@ -451,8 +471,8 @@ declare global {
   const useCssModule: typeof import('vue').useCssModule
   const useCssVars: typeof import('vue').useCssVars
   const useDappApprovalWindow: typeof import('../composables/useDappApprovalWindow').useDappApprovalWindow
-  const useDappHostname: typeof import('../composables/useDappHostname').useDappHostname
   const useDappInteractionPayload: typeof import('../composables/useDappInteractionPayload').useDappInteractionPayload
+  const useDappOrigin: typeof import('../composables/useDappOrigin').useDappOrigin
   const useEntityCrud: typeof import('../composables/useEntityCrud').useEntityCrud
   const useEvent: typeof import('../composables/outside.js').useEvent
   const useFeeEstimation: typeof import('../composables/useFeeEstimation').useFeeEstimation
@@ -474,6 +494,7 @@ declare global {
   const useLockWallet: typeof import('../composables/useLockWallet').useLockWallet
   const useModel: typeof import('vue').useModel
   const useNetworkActivation: typeof import('../composables/useNetworkActivation').useNetworkActivation
+  const useNetworkArrival: typeof import('../composables/useNetworkArrival').useNetworkArrival
   const useNotificationStore: typeof import('../stores/notification.store').useNotificationStore
   const useOutside: typeof import('../composables/outside.js').useOutside
   const usePasskeyCeremony: typeof import('../composables/usePasskeyCeremony').usePasskeyCeremony
@@ -606,6 +627,9 @@ declare global {
   export type { UseNetworkActivationOptions } from '../composables/useNetworkActivation'
   import('../composables/useNetworkActivation')
   // @ts-ignore
+  export type { UseNetworkArrivalOptions, NetworkArrivalState } from '../composables/useNetworkArrival'
+  import('../composables/useNetworkArrival')
+  // @ts-ignore
   export type { PinMap, PinScope, PinResult, UsePinnedTokensDeps } from '../composables/usePinnedTokens'
   import('../composables/usePinnedTokens')
   // @ts-ignore
@@ -717,7 +741,7 @@ declare global {
   export type { AssemblyAbortedError, BackupFileType, BackupSelection, ProcessBackupResult, BackupSource, AssembledBackup } from '../utils/full-backup-helpers'
   import('../utils/full-backup-helpers')
   // @ts-ignore
-  export type { GetStartedFlag, MarkableGetStartedFlag, GetStartedFlags, Holdings, GetStartedItem, GetStartedInput, GetStartedView } from '../utils/get-started'
+  export type { GetStartedFlag, MarkableGetStartedFlag, GetStartedFlags, Holdings, GetStartedItem, GetStartedInput, GetStartedStep, GetStartedView } from '../utils/get-started'
   import('../utils/get-started')
   // @ts-ignore
   export type { GlossaryEntry, GlossaryKey } from '../utils/glossary'
@@ -732,7 +756,7 @@ declare global {
   export type { InFlightScope } from '../utils/in-flight-send'
   import('../utils/in-flight-send')
   // @ts-ignore
-  export type { JournalRow, JournalPlace, JournalAddRules } from '../utils/journal-mirror'
+  export type { JournalRow, JournalPlace } from '../utils/journal-mirror'
   import('../utils/journal-mirror')
   // @ts-ignore
   export type { JournalTerminalVisualState, JournalTerminalDisplay, SendOutcome, CategoricalFailureLabel, TokenForCardProps, JournalTerminalCardCtx, JournalTerminalCardProps } from '../utils/journal-state'
@@ -805,23 +829,30 @@ declare module 'vue' {
     readonly CONTACT_NAME_MAX: UnwrapRef<typeof import('../utils/contact-name')['CONTACT_NAME_MAX']>
     readonly DAPP_LABEL: UnwrapRef<typeof import('../utils/tx-enrichment')['DAPP_LABEL']>
     readonly DECRYPTION_FAILED: UnwrapRef<typeof import('../composables/useFullBackupImport')['DECRYPTION_FAILED']>
+    readonly END_ACK_TIMEOUT_MS: UnwrapRef<typeof import('../composables/useDappApprovalWindow')['END_ACK_TIMEOUT_MS']>
     readonly EffectScope: UnwrapRef<typeof import('vue')['EffectScope']>
     readonly EnsureSuperseded: UnwrapRef<typeof import('../stores/balances.store')['EnsureSuperseded']>
     readonly EstimateRequeue: UnwrapRef<typeof import('../utils/estimate-when-clear')['EstimateRequeue']>
     readonly FEE_DECIMALS: UnwrapRef<typeof import('../utils/fee-estimation')['FEE_DECIMALS']>
     readonly FEE_JUICE_DECIMALS: UnwrapRef<typeof import('../utils/fee-estimation')['FEE_JUICE_DECIMALS']>
     readonly FEE_METHODS: UnwrapRef<typeof import('../utils/tx-enrichment')['FEE_METHODS']>
+    readonly FEE_PICKS_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['FEE_PICKS_ROOT']>
     readonly FEE_READOUT_UNIT: UnwrapRef<typeof import('../utils/fee-estimation')['FEE_READOUT_UNIT']>
     readonly FIRST_PROFILE_NAME: UnwrapRef<typeof import('../utils/profile-name')['FIRST_PROFILE_NAME']>
     readonly FULL_BACKUP_V2_TAG: UnwrapRef<typeof import('../utils/full-backup-helpers')['FULL_BACKUP_V2_TAG']>
     readonly FULL_SIZE: UnwrapRef<typeof import('../utils/hero-fit')['FULL_SIZE']>
     readonly FilePickCanceledError: UnwrapRef<typeof import('../utils/files')['FilePickCanceledError']>
     readonly FileTooLargeError: UnwrapRef<typeof import('../utils/files')['FileTooLargeError']>
+    readonly GET_STARTED_AZTEC_OPENED_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_AZTEC_OPENED_ROOT']>
+    readonly GET_STARTED_BACKUP_SAVED_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_BACKUP_SAVED_ROOT']>
+    readonly GET_STARTED_FEE_JUICE_HELD_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_FEE_JUICE_HELD_ROOT']>
+    readonly GET_STARTED_HIDDEN_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_HIDDEN_ROOT']>
+    readonly GET_STARTED_PHRASE_SAVED_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_PHRASE_SAVED_ROOT']>
     readonly GLOSSARY: UnwrapRef<typeof import('../utils/glossary')['GLOSSARY']>
     readonly GLOSSARY_SECTIONS: UnwrapRef<typeof import('../utils/glossary')['GLOSSARY_SECTIONS']>
     readonly HERO_MIN_SCALE: UnwrapRef<typeof import('../utils/hero-fit')['HERO_MIN_SCALE']>
     readonly HOME_TOKEN_ROWS: UnwrapRef<typeof import('../utils/token-order')['HOME_TOKEN_ROWS']>
-    readonly HOSTNAME_WARNING: UnwrapRef<typeof import('../composables/useDappHostname')['HOSTNAME_WARNING']>
+    readonly HOSTNAME_WARNING: UnwrapRef<typeof import('../composables/useDappOrigin')['HOSTNAME_WARNING']>
     readonly HOW_AZTEC_WORKS_URL: UnwrapRef<typeof import('../utils/get-started')['HOW_AZTEC_WORKS_URL']>
     readonly IMPORT_ACTIVATION_TIMEOUT_MS: UnwrapRef<typeof import('../composables/completeImportWithRecovery')['IMPORT_ACTIVATION_TIMEOUT_MS']>
     readonly IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS: UnwrapRef<typeof import('../composables/importChainSync')['IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS']>
@@ -831,6 +862,7 @@ declare module 'vue' {
     readonly INIT_FETCH_TIMEOUT_MS: UnwrapRef<typeof import('../stores/balances.store')['INIT_FETCH_TIMEOUT_MS']>
     readonly INIT_RETRY_BACKOFF_MS: UnwrapRef<typeof import('../stores/balances.store')['INIT_RETRY_BACKOFF_MS']>
     readonly INTEGRITY_FAILED: UnwrapRef<typeof import('../composables/full-backup-restore')['INTEGRITY_FAILED']>
+    readonly LAST_ACTIVE_PROFILE_KEY: UnwrapRef<typeof import('../utils/lastActiveProfile')['LAST_ACTIVE_PROFILE_KEY']>
     readonly LEGAL_DECLINED_PATH: UnwrapRef<typeof import('../utils/legal-sheet')['LEGAL_DECLINED_PATH']>
     readonly LEGAL_DISMISSED_KEY: UnwrapRef<typeof import('../utils/legal-sheet')['LEGAL_DISMISSED_KEY']>
     readonly LOCAL_L1_CHAIN_ID: UnwrapRef<typeof import('../utils/chain-ids')['LOCAL_L1_CHAIN_ID']>
@@ -840,15 +872,21 @@ declare module 'vue' {
     readonly MAX_CONTACT_IMPORT_ROWS: UnwrapRef<typeof import('../utils/contacts-export-format')['MAX_CONTACT_IMPORT_ROWS']>
     readonly MAX_DECIMALS: UnwrapRef<typeof import('../utils/token-amount')['MAX_DECIMALS']>
     readonly MINT_SIGNATURES: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['MINT_SIGNATURES']>
+    readonly NETWORK_ARRIVAL_KEY: UnwrapRef<typeof import('../composables/useNetworkArrival')['NETWORK_ARRIVAL_KEY']>
     readonly OWN_WINDOW_ROUTES: UnwrapRef<typeof import('../utils/own-window')['OWN_WINDOW_ROUTES']>
     readonly PASSKEY_COPY: UnwrapRef<typeof import('../utils/passkey-copy')['PASSKEY_COPY']>
     readonly PINNED_TOKENS_MAX: UnwrapRef<typeof import('../composables/usePinnedTokens')['PINNED_TOKENS_MAX']>
     readonly PINNED_TOKENS_MAX_CHAINS: UnwrapRef<typeof import('../composables/usePinnedTokens')['PINNED_TOKENS_MAX_CHAINS']>
+    readonly PINNED_TOKENS_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['PINNED_TOKENS_ROOT']>
+    readonly PROFILE_IMPORTED_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_IMPORTED_ROOT']>
+    readonly PROFILE_NOT_FIRST_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_NOT_FIRST_ROOT']>
     readonly PROFILE_UI_KEY_PREFIXES: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_UI_KEY_PREFIXES']>
     readonly RECOVERY_PHRASE_WARNINGS: UnwrapRef<typeof import('../utils/recovery-phrase-warnings')['RECOVERY_PHRASE_WARNINGS']>
     readonly RESTORE_OUTCOME_LEASE_MS: UnwrapRef<typeof import('../utils/restore-outcome')['RESTORE_OUTCOME_LEASE_MS']>
+    readonly RESTORE_OUTCOME_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['RESTORE_OUTCOME_ROOT']>
     readonly REVIEW_ARM_MS: UnwrapRef<typeof import('../composables/useSendReview')['REVIEW_ARM_MS']>
     readonly SEED_STATUS_RETRY_MS: UnwrapRef<typeof import('../composables/useSeedStatus')['SEED_STATUS_RETRY_MS']>
+    readonly SEND_FEE_PICKS_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['SEND_FEE_PICKS_ROOT']>
     readonly SETTINGS_ROWS: UnwrapRef<typeof import('../utils/settings-search')['SETTINGS_ROWS']>
     readonly SETTING_UPDATE_FAILED: UnwrapRef<typeof import('../composables/useSettingUpdate')['SETTING_UPDATE_FAILED']>
     readonly SNACK_GAP: UnwrapRef<typeof import('../composables/snackInset')['SNACK_GAP']>
@@ -930,6 +968,7 @@ declare module 'vue' {
     readonly createRunFence: UnwrapRef<typeof import('../composables/runFence')['createRunFence']>
     readonly customRef: UnwrapRef<typeof import('vue')['customRef']>
     readonly debounce: UnwrapRef<typeof import('../utils/general')['debounce']>
+    readonly decodeRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['decodeRestoreOutcome']>
     readonly decompressData: UnwrapRef<typeof import('../utils/files')['decompressData']>
     readonly defaultProfileName: UnwrapRef<typeof import('../utils/profile-name')['defaultProfileName']>
     readonly defineAsyncComponent: UnwrapRef<typeof import('vue')['defineAsyncComponent']>
@@ -974,6 +1013,7 @@ declare module 'vue' {
     readonly getPrimaryCall: UnwrapRef<typeof import('../utils/tx-enrichment')['getPrimaryCall']>
     readonly getStartedAztecOpenedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedAztecOpenedKey']>
     readonly getStartedBackupSavedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedBackupSavedKey']>
+    readonly getStartedFeeJuiceHeldKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedFeeJuiceHeldKey']>
     readonly getStartedHiddenKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedHiddenKey']>
     readonly getStartedKeys: UnwrapRef<typeof import('../utils/get-started')['getStartedKeys']>
     readonly getStartedPhraseSavedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedPhraseSavedKey']>
@@ -1029,7 +1069,9 @@ declare module 'vue' {
     readonly isValidAztecAddress: UnwrapRef<typeof import('../utils/aztec-address')['isValidAztecAddress']>
     readonly isValidDecimals: UnwrapRef<typeof import('../utils/token-amount')['isValidDecimals']>
     readonly isValidHex: UnwrapRef<typeof import('../utils/string')['isValidHex']>
+    readonly isValidatedTokenClass: UnwrapRef<typeof import('../utils/token-class')['isValidatedTokenClass']>
     readonly journalAdded: UnwrapRef<typeof import('../utils/journal-mirror')['journalAdded']>
+    readonly journalCallTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCallTitle']>
     readonly journalCardIcon: UnwrapRef<typeof import('../utils/journal-state')['journalCardIcon']>
     readonly journalCardOriginLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardOriginLabel']>
     readonly journalCardTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCardTitle']>
@@ -1092,7 +1134,7 @@ declare module 'vue' {
     readonly pickFile: UnwrapRef<typeof import('../utils/files')['pickFile']>
     readonly pickPrimaryIndex: UnwrapRef<typeof import('../utils/primary-method')['pickPrimaryIndex']>
     readonly pickPrimaryMethod: UnwrapRef<typeof import('../utils/tx-enrichment')['pickPrimaryMethod']>
-    readonly pickPrimaryWireMethod: UnwrapRef<typeof import('../utils/primary-method')['pickPrimaryWireMethod']>
+    readonly pickPrimaryWireCall: UnwrapRef<typeof import('../utils/primary-method')['pickPrimaryWireCall']>
     readonly pinScopeOf: UnwrapRef<typeof import('../composables/usePinnedTokens')['pinScopeOf']>
     readonly pinnedTokensKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['pinnedTokensKey']>
     readonly plainMethodName: UnwrapRef<typeof import('../utils/tx-enrichment')['plainMethodName']>
@@ -1103,6 +1145,7 @@ declare module 'vue' {
     readonly pricesUnavailable: UnwrapRef<typeof import('../utils/token-aggregate')['pricesUnavailable']>
     readonly profileFileNameSegment: UnwrapRef<typeof import('../utils/files')['profileFileNameSegment']>
     readonly profileImportedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileImportedKey']>
+    readonly profileNotFirstKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileNotFirstKey']>
     readonly profileTypeLabel: UnwrapRef<typeof import('../utils/settings-labels')['profileTypeLabel']>
     readonly profileUiKeys: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileUiKeys']>
     readonly projectArgument: UnwrapRef<typeof import('../utils/transfer-intent')['projectArgument']>
@@ -1115,6 +1158,7 @@ declare module 'vue' {
     readonly readGetStarted: UnwrapRef<typeof import('../utils/get-started')['readGetStarted']>
     readonly readLiveness: UnwrapRef<typeof import('../utils/background-liveness')['readLiveness']>
     readonly readRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['readRestoreOutcome']>
+    readonly readSendPicks: UnwrapRef<typeof import('../utils/fee-picks')['readSendPicks']>
     readonly readSendSlots: UnwrapRef<typeof import('../utils/fee-picks')['readSendSlots']>
     readonly readonly: UnwrapRef<typeof import('vue')['readonly']>
     readonly receivedLabel: UnwrapRef<typeof import('../utils/received-display')['receivedLabel']>
@@ -1232,8 +1276,8 @@ declare module 'vue' {
     readonly useCssModule: UnwrapRef<typeof import('vue')['useCssModule']>
     readonly useCssVars: UnwrapRef<typeof import('vue')['useCssVars']>
     readonly useDappApprovalWindow: UnwrapRef<typeof import('../composables/useDappApprovalWindow')['useDappApprovalWindow']>
-    readonly useDappHostname: UnwrapRef<typeof import('../composables/useDappHostname')['useDappHostname']>
     readonly useDappInteractionPayload: UnwrapRef<typeof import('../composables/useDappInteractionPayload')['useDappInteractionPayload']>
+    readonly useDappOrigin: UnwrapRef<typeof import('../composables/useDappOrigin')['useDappOrigin']>
     readonly useEntityCrud: UnwrapRef<typeof import('../composables/useEntityCrud')['useEntityCrud']>
     readonly useEvent: UnwrapRef<typeof import('../composables/outside.js')['useEvent']>
     readonly useFeeEstimation: UnwrapRef<typeof import('../composables/useFeeEstimation')['useFeeEstimation']>
@@ -1255,6 +1299,7 @@ declare module 'vue' {
     readonly useLockWallet: UnwrapRef<typeof import('../composables/useLockWallet')['useLockWallet']>
     readonly useModel: UnwrapRef<typeof import('vue')['useModel']>
     readonly useNetworkActivation: UnwrapRef<typeof import('../composables/useNetworkActivation')['useNetworkActivation']>
+    readonly useNetworkArrival: UnwrapRef<typeof import('../composables/useNetworkArrival')['useNetworkArrival']>
     readonly useNotificationStore: UnwrapRef<typeof import('../stores/notification.store')['useNotificationStore']>
     readonly useOutside: UnwrapRef<typeof import('../composables/outside.js')['useOutside']>
     readonly usePasskeyCeremony: UnwrapRef<typeof import('../composables/usePasskeyCeremony')['usePasskeyCeremony']>

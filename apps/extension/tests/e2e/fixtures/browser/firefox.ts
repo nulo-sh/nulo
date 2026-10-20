@@ -850,6 +850,10 @@ export const firefoxDriver: BrowserDriver = {
 	credentialOutlivesPage: true,
 	ownHosts: FIREFOX_OWN_HOSTS,
 	launch,
+	// A temporary install over the installed add-on is an update to it; the UUID and storage stay.
+	reinstallExtension: async (browser, extensionPath) => {
+		await contextFor(browser).session.installAddon(extensionPath)
+	},
 	extensionUrl: (extensionId, path) => `${SCHEME}${extensionId}${path}`,
 	discoverExtensionId,
 	gotoExtensionPage,
@@ -866,7 +870,10 @@ export const firefoxDriver: BrowserDriver = {
 	virtualAuthenticator: sessionAuthenticator,
 	holdNextCredentialGet,
 	pxeHostState: (page) => evaluateInBackgroundPage<PxeHostState>(page.browser(), PXE_HOST_STATE),
+	closePxeHost: async () => {},
 	stopBackground,
+	allowSelfRestart: async () => {},
+	backgroundOrigin: (browser) => backgroundTimeOrigin(browser),
 	backgroundAlive: async (browser) => (await backgroundTimeOrigin(browser)) !== undefined,
 	evaluateInBackground: (browser, _extensionId, body) => evaluateInBackgroundPage(browser, inPageRealm(body)),
 	// Firefox reports a closed window as a missing browsing context, per command.

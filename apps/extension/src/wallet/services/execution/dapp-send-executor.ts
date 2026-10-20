@@ -35,18 +35,20 @@
 import { type InteractionWaitOptions, type SendReturn, extractOffchainOutput } from "@aztec-labs/aztec.js/contracts"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import type { FunctionCall } from "@aztec-labs/stdlib/abi"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { collectOffchainEffects, type TxProvingResult } from "@aztec-labs/stdlib/tx"
 import { liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { type JobError, type JobProgress, JobCancelledSentinel, type QueuedFeeReask } from "@nulo/wallet-core/jobs"
 import { markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
 import { feeDisplay } from "@/utils/fee-estimation"
-import { pickPrimaryMethod, pickPrimaryWireMethod } from "@/utils/primary-method"
+import { pickPrimaryIndex, pickPrimaryWireCall } from "@/utils/primary-method"
+import { type JournalCallCarrier, type JournalRetitle, journalCallOf } from "@/wallet/services/operation-journal/spec"
 import { findPrimaryEndpoint, primaryEndpointUrl } from "@/wallet/services/network/spec"
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { WrappedTask } from "@/wallet/services/task/service"
 import type { AddTransactionInput, LocalTxOrigin, TransactionService, Tx } from "@/wallet/services/transaction/service"
-import { OriginType } from "@/wallet/services/transaction/spec"
+import { type FeeChoice, OriginType } from "@/wallet/services/transaction/spec"
 import type { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import type { Network } from "@/wallet/services/network/service"
 import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
@@ -66,7 +68,7 @@ import type { QueuedFeeAnswers } from "./queued-fee-cap"
 import { MAX_WAIT_MS, type SendSequencer, type SequenceScope, type SequenceTicket } from "./send-sequencer"
 import { probeAppPayerFunding, probeOwnFeeJuice, probeSponsorFunding } from "./sponsor-funding"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
-import { type FeeEstimate, finalizeGasLimits, suggestGasLimits } from "./fee/fee-strategy"
+import { type FeeEstimate, finalizeGasLimits, type OnBuilt, suggestGasLimits } from "./fee/fee-strategy"
 import type { OperationPlanner } from "./operation-planner"
 import type {
 	Action,
@@ -86,19 +88,20 @@ import type { TxRequestBuilder } from "./tx-request-builder"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import { getEstimatedFee, getGasDetails, priorityFeeOf } from "./tx-fee-details"
 import { detectEmbeddedFeePayment } from "./utils/fee-detection"
+import { type FeeChooser, feeChoiceOf, feeChooserOf } from "./fee-choice"
 
-/** Project an `Action[]` (a discriminated union with non-call variants like
- *  `AddCapsuleAction`) into the carrier shape `pickPrimaryMethod` expects.
- *  Inlined here rather than in `primary-method.ts` because that helper is
- *  layer-agnostic — importing `Action` from the execution spec would invert
+/** The primary call of an `Action[]` (a discriminated union with non-call variants like
+ *  `AddCapsuleAction`), as the journal records it. Inlined here rather than in `primary-method.ts`
+ *  because that helper is layer-agnostic — importing `Action` from the execution spec would invert
  *  the dependency direction. */
-function pickActionMethod(actions: readonly Action[] | undefined): string | undefined {
-	const carriers: Array<{ method?: string; name?: string }> = []
-	for (const action of actions ?? []) {
-		if (action.kind === "call") carriers.push({ method: action.method })
-		else if (action.kind === "encoded_call") carriers.push({ name: action.name ?? action.selector })
-	}
-	return pickPrimaryMethod(carriers)
+function primaryActionCalls(actions: readonly Action[] | undefined): JournalCallCarrier[] | undefined {
+	const calls = (actions ?? []).filter((a) => a.kind === "call" || a.kind === "encoded_call")
+	const index = pickPrimaryIndex(calls.map((a) => ({ method: a.kind === "call" ? a.method : (a.name ?? a.selector) })))
+	const primary = index === undefined ? undefined : calls[index]
+	if (primary?.kind === "call") return [{ method: primary.method, call: journalCallOf(primary.contract, primary.args) }]
+	if (primary?.kind === "encoded_call")
+		return [{ method: primary.name ?? primary.selector, call: journalCallOf(primary.to, primary.args) }]
+	return undefined
 }
 
 /** Execution-lane subset the dApp-send flows depend on: the FIFO slot,
@@ -117,7 +120,7 @@ export interface DappSendExecutorLane {
 		networkId: string,
 		accountAddress: string,
 		origin: LocalTxOrigin,
-		calls: { method?: string }[] | undefined,
+		calls: JournalCallCarrier[] | undefined,
 		hooks: ExecutionHooks | undefined,
 		reuseController: AbortController | undefined,
 		fence: ExecutionFence,
@@ -126,10 +129,11 @@ export interface DappSendExecutorLane {
 		networkId: string,
 		accountAddress: string,
 		origin: LocalTxOrigin,
-		calls?: { method?: string }[],
+		calls?: JournalCallCarrier[],
 		fence?: ExecutionFence,
 	): Promise<string | undefined>
-	markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null, failedTitle?: string): Promise<void>
+	recordBuiltCall(journalId: string | undefined, txCalls: Tx["calls"]): Promise<void>
+	markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null, retitle?: JournalRetitle): Promise<void>
 	commitJournal(journalId: string | undefined, progress: JobProgress): Promise<void>
 	parkSlot(
 		release: ExecutionMutexRelease,
@@ -168,6 +172,7 @@ interface SentTx {
 	fence: ExecutionFence
 	networkId: AddTransactionInput["networkId"]
 	pendingPublicAuthwits: Parameters<DappSendExecutorDeps["recordPendingAuthwits"]>[1]
+	feeChosenBy: FeeChooser
 }
 
 export interface DappSendExecutorDeps {
@@ -205,10 +210,14 @@ export interface DappSendExecutorDeps {
 		fence: ExecutionFence,
 		parentTask?: WrappedTask,
 		signal?: AbortSignal,
+		onBuilt?: OnBuilt,
 	): Promise<FeeEstimate>
 	/** Mirrors `TransactionService.addTransaction` — indexed type keeps the
 	 *  seam in sync with the source signature. */
 	addTransaction: TransactionService["addTransaction"]
+	/** The canonical SponsoredFPC's address on `chainId`, derived by the wallet, never read from a
+	 *  row; `undefined` when there is none to compare against. */
+	protocolSponsorAddress(chainId: number): Promise<string | undefined>
 	/** Mirrors `AuthRegistryService.recordPendingAuthwits` — records the build's
 	 *  public authwits at the post-send tail as pending, tx-linked rows. */
 	recordPendingAuthwits: AuthRegistryService["recordPendingAuthwits"]
@@ -230,6 +239,8 @@ interface SlotRun {
 	controller: AbortController | undefined
 	checkCancelled: () => void
 	markJournal: (patch: JobProgress) => Promise<void>
+	/** Names the record by the build's primary call; called after every build. */
+	recordCall: (txCalls: Tx["calls"]) => Promise<void>
 	commitSubmitting: ProveAndSendContext["commitSubmitting"]
 	/** Gives the slot back while `wait` runs, then takes it again behind the account's earlier sends,
 	 *  the record claimed back to `pending`. */
@@ -273,6 +284,7 @@ type StandardRun = {
 	fence: ExecutionFence
 	parentTask: WrappedTask | undefined
 	checkCancelled: () => void
+	recordCall: SlotRun["recordCall"]
 	preview: PreviewLookup | undefined
 	approval: OperationApprovalEnvelope | undefined
 }
@@ -324,7 +336,7 @@ export class DappSendExecutor {
 			// AFTER `acquireSlot` — computing it earlier would delay our FIFO
 			// enqueue (letting a later request overtake) and move any throw out
 			// of the acquire-protected try. Evaluated below, inside the try.
-			getCalls: () => { method?: string }[] | undefined
+			getCalls: () => JournalCallCarrier[] | undefined
 			/** The dApp's `additionalScopes`, a thunk for the same reason as `getCalls`. */
 			getAdditionalScopes: () => unknown
 		},
@@ -366,6 +378,7 @@ export class DappSendExecutor {
 				controller,
 				checkCancelled,
 				markJournal: (patch) => this.deps.lane.markJournal(journalId, patch),
+				recordCall: (txCalls) => this.deps.lane.recordBuiltCall(journalId, txCalls),
 				commitSubmitting: (patch) => this.deps.lane.commitJournal(journalId, { stage: "submitting", ...patch }),
 				park: async (wait) => {
 					const own = journalId
@@ -750,6 +763,7 @@ export class DappSendExecutor {
 	 *  ordering is explicit. Recording here (not at build) is what keeps estimate/reject from leaking a
 	 *  grant; the rows land `pending` and are reconciled by the tx's on-chain outcome. */
 	private sentTxRecorder(sent: SentTx): (hash: string) => Promise<void> {
+		const feeChoice = this.feeChoiceFor(sent.feeChosenBy, sent.network.chainId, sent.txCalls)
 		return async (hash) => {
 			const account = sent.account.address.toString()
 			await this.deps.addTransaction({
@@ -765,6 +779,7 @@ export class DappSendExecutor {
 				gasDetails: getGasDetails(sent.txRequest),
 				fence: sent.fence,
 				networkId: sent.networkId,
+				feeChoice: await feeChoice,
 			})
 			if (sent.pendingPublicAuthwits.length > 0) {
 				// Scoped to the SENDING tx's (profileId, chainId, account); the profile is the fence's.
@@ -775,6 +790,19 @@ export class DappSendExecutor {
 				)
 			}
 		}
+	}
+
+	/** Started before the prove to overlap the derivation. Never rejects: an address the wallet cannot
+	 *  derive leaves the app's plain pick, which is never wrong. */
+	private async feeChoiceFor(by: FeeChooser, chainId: number, calls: SentTx["txCalls"]): Promise<FeeChoice> {
+		if (by === "wallet") return "wallet"
+		let sponsor: string | undefined
+		try {
+			sponsor = await this.deps.protocolSponsorAddress(chainId)
+		} catch (error) {
+			this.deps.logDebug("fee chooser: the protocol sponsor's address is unavailable", { error })
+		}
+		return feeChoiceOf(by, calls, sponsor)
 	}
 
 	public async executeSendTransaction(
@@ -801,7 +829,6 @@ export class DappSendExecutor {
 		// created inside claimOrCreateJournal (identical shape to the prior
 		// beginJournal); the primary-method calls are a thunk so they read after
 		// acquireSlot. hooks (esp. originKey) bucket the slot per-origin.
-		const primaryMethod = pickActionMethod(op.actions)
 		return this.runInSlot(
 			{
 				networkId: op.networkId,
@@ -809,7 +836,7 @@ export class DappSendExecutor {
 				origin,
 				hooks,
 				fence,
-				getCalls: () => (primaryMethod ? [{ method: primaryMethod }] : undefined),
+				getCalls: () => primaryActionCalls(op.actions),
 				getAdditionalScopes: () => undefined,
 			},
 			async (ctx) => {
@@ -822,7 +849,7 @@ export class DappSendExecutor {
 
 				let ceiling = approval?.feeCeiling
 				for (;;) {
-					const pass = await this.sendTransactionPass(op, fence, parentTask, approval, ceiling)
+					const pass = await this.sendTransactionPass(op, fence, parentTask, approval, ceiling, ctx)
 					if ("built" in pass) return this.proveSendTransaction(op, origin, parentTask, fence, ctx, pass.built)
 					ceiling = await this.askAboutFee(ctx, approval, pass.over)
 				}
@@ -837,8 +864,9 @@ export class DappSendExecutor {
 		parentTask: WrappedTask | undefined,
 		approval: OperationApprovalEnvelope | undefined,
 		ceiling: string | undefined,
+		ctx: SlotRun,
 	): Promise<{ built: FeeEstimate } | { over: OverCeiling }> {
-		const built = await this.deps.buildAndEstimateValidated(op, op.feeSettings, fence, parentTask)
+		const built = await this.deps.buildAndEstimateValidated(op, op.feeSettings, fence, parentTask, undefined, ctx.recordCall)
 		const reask = overCeiling(approval, ceiling, built)
 		return reask ? { over: { reask } } : { built }
 	}
@@ -881,6 +909,7 @@ export class DappSendExecutor {
 				fence,
 				networkId: op.networkId,
 				pendingPublicAuthwits,
+				feeChosenBy: feeChooserOf(op.feeSettings),
 			}),
 		})
 		return txHash.toString()
@@ -988,7 +1017,16 @@ export class DappSendExecutor {
 				const identity = fingerprintInputFor(op, op.feeSettings, fee, actions)
 				// Pop the snapshot before any reuse, and keep that one lookup to reconcile every build after.
 				const preview = approval ? this.takeStandardPreview(approval, fingerprintOperation(identity)) : undefined
-				const run: StandardRun = { op, identity, fence, parentTask, checkCancelled: ctx.checkCancelled, preview, approval }
+				const run: StandardRun = {
+					op,
+					identity,
+					fence,
+					parentTask,
+					checkCancelled: ctx.checkCancelled,
+					recordCall: ctx.recordCall,
+					preview,
+					approval,
+				}
 				let reuseId = preview?.kind === "found" ? approval?.estimateId : undefined
 				let ceiling = approval?.feeCeiling
 				let stashId: string | undefined
@@ -1016,7 +1054,7 @@ export class DappSendExecutor {
 	): Promise<{ built: StandardBuild } | { over: OverCeiling }> {
 		const { op, identity, fence, parentTask, checkCancelled, preview, approval } = run
 		const before = await this.reuseSnapshot(op.networkId, op.accountAddress)
-		const built = await this.resolveStandardBuild(op, identity, reuseId, fence, parentTask, checkCancelled)
+		const built = await this.resolveStandardBuild(op, identity, reuseId, fence, parentTask, checkCancelled, run.recordCall)
 		if (preview) assertWithinPreview(preview, built.discoveredHashes)
 		checkCancelled()
 		const reask = overCeiling(approval, ceiling, built)
@@ -1081,6 +1119,7 @@ export class DappSendExecutor {
 				fence,
 				networkId: op.networkId,
 				pendingPublicAuthwits,
+				feeChosenBy: feeChooserOf(op.feeSettings),
 			}),
 		})
 
@@ -1107,6 +1146,7 @@ export class DappSendExecutor {
 		fence: ExecutionFence,
 		parentTask: WrappedTask | undefined,
 		checkCancelled: () => void,
+		onBuilt: OnBuilt,
 	): Promise<StandardBuild> {
 		const { actions, fee } = identity
 		const reused = estimateId ? await this.deps.operationEstimateReuse.tryConsume(estimateId, identity, fence) : undefined
@@ -1121,6 +1161,8 @@ export class DappSendExecutor {
 			const account = await this.deps.getAccountContract(fence.profileId, network.chainId, op.accountAddress)
 			// The lookup reads whichever session is live: re-check the fence before its keys are used.
 			fenceChecks(this.deps, fence).assertLive()
+			// The estimate's build ran outside this send, so its calls name the record only now.
+			await onBuilt(reused.txCalls)
 			return {
 				txRequest: reused.txRequest,
 				node,
@@ -1148,10 +1190,21 @@ export class DappSendExecutor {
 				op.feeSettings,
 				fence,
 				parentTask,
+				undefined,
+				onBuilt,
 			)
 			return { ...built, discoveredHashes: [] }
 		}
-		const { built, discovered } = await this.deps.estimateWithDiscovery.estimate(op, actions, fee, op.feeSettings, fence, parentTask)
+		const { built, discovered } = await this.deps.estimateWithDiscovery.estimate(
+			op,
+			actions,
+			fee,
+			op.feeSettings,
+			fence,
+			parentTask,
+			undefined,
+			onBuilt,
+		)
 		if (discovered.length) {
 			this.deps.logDebug(`[executeAztecSendTx] Discovered ${discovered.length} auth witness(es) via offchain effects`)
 		}
@@ -1195,11 +1248,12 @@ export class DappSendExecutor {
 				getCalls: () => primaryMethodCalls(op),
 				getAdditionalScopes: () => op.opts?.additionalScopes,
 			},
-			async ({ checkCancelled, markJournal, commitSubmitting, journalId, leaveLine }) => {
+			async ({ checkCancelled, markJournal, recordCall, commitSubmitting, journalId, leaveLine }) => {
 				await markJournal({ stage: "simulating" })
 
 				const prepared = await this.prepareNoFrom(op, fence, parentTask)
 				const { txRequest, node, pxe, account, network, txCalls, txsLimits, feeOpts, scopesWithAccount } = prepared
+				await recordCall(txCalls)
 
 				await this.addDiscoveredNoFromAuthwits(prepared, approval, noFromFingerprint(op))
 
@@ -1213,6 +1267,8 @@ export class DappSendExecutor {
 				)
 				await finalizeGasLimits(node, txRequest, simulatedTx, { gasPadding: 1, customLimits: feeOpts, feeMultiplier: 1, txsLimits })
 				const submittedEndpointUrl = primaryEndpointUrl(network)
+				// The request carries its own fee payment, so the choice is always the app's.
+				const feeChoice = this.feeChoiceFor("app", network.chainId, txCalls)
 				leaveLine()
 
 				// Prove with account in scope
@@ -1230,7 +1286,7 @@ export class DappSendExecutor {
 					submittedEndpointUrl,
 					onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
 					wantOffchainOutput: offchainOutputOf,
-					recordTransaction: (hash) =>
+					recordTransaction: async (hash) =>
 						this.deps.addTransaction({
 							origin,
 							chainId: network.chainId,
@@ -1244,6 +1300,7 @@ export class DappSendExecutor {
 							gasDetails: getGasDetails(txRequest),
 							fence,
 							networkId: op.networkId,
+							feeChoice: await feeChoice,
 						}),
 				})
 
@@ -1357,9 +1414,11 @@ function spendAccounts(account: string, additionalScopes: unknown): string[] {
 
 /** The shared picker, not the raw first call: it skips a leading self-pay fee payload, so the proving
  *  title and the settled record's agree. */
-function primaryMethodCalls(op: AztecSendTxOperation): { method: string }[] | undefined {
-	const primaryMethod = pickPrimaryWireMethod(op.exec?.calls)
-	return primaryMethod ? [{ method: primaryMethod }] : undefined
+function primaryMethodCalls(op: AztecSendTxOperation): JournalCallCarrier[] | undefined {
+	const primary = pickPrimaryWireCall(op.exec?.calls)
+	if (!primary) return undefined
+	const { to, args } = primary.call as Partial<Pick<FunctionCall, "to" | "args">>
+	return [{ method: primary.name, call: journalCallOf(to?.toString(), args) }]
 }
 
 function offchainOutputOf(provedTx: TxProvingResult) {

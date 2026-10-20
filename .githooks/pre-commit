@@ -1,5 +1,10 @@
 #!/bin/sh
 set -e
-bunx biome check --staged --no-errors-on-unmatched
+# Git starts hooks at the worktree root. Biome must come from that worktree's install; before it exists, refuse.
+if [ ! -f node_modules/.bin/biome ]; then
+	echo 'pre-commit: Biome is not installed in this worktree. Run bun install first.' >&2
+	exit 1
+fi
+bun --no-install ./node_modules/.bin/biome check --staged --no-errors-on-unmatched
 ./scripts/check-no-local-paths.sh
 bun scripts/complexity-baseline/check.ts --staged

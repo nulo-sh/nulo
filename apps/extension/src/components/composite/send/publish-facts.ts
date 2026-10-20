@@ -69,6 +69,9 @@ export const PAID_BY = {
 /** Spoken in place of a hand-added contract's fee, which is drawn as "—". */
 export const UNVOUCHED_FEE_SENTENCE = "Nulo can't tell what this fee contract charges you."
 
+/** Under the strip for a token whose class Nulo has not validated: the strip's words assume its code. */
+export const TOKEN_CAVEAT = "Nulo can't check this token's contract. What a send publishes depends on its code."
+
 /** The fee row while an earlier send holds the transfer's chain state. */
 export const QUEUED_FEE_COPY = "Queued behind your previous send"
 

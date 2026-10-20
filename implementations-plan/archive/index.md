@@ -2,6 +2,7 @@
 
 Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — one-line hook`. Each is a short record of what was decided and why, never a task list.
 
+- [a11y-errors-1](a11y-errors-1/plan.md) — completed — every error and refusal text from `--red` to `--txt-danger`, and a source guard that refuses red text
 - [accelerator-server-ci](accelerator-server-ci/plan.md) — completed — native `bb` proving in the network e2e CI through the vendor's headless prover server
 - [accessibility-1](accessibility-1/plan.md) — completed — Send by keyboard, Home's links, focus rings, titles read once, the emoji check announced, two contrast fixes
 - [account-artifact-freeze](account-artifact-freeze/plan.md) — completed — account addresses frozen per extension major: vendored artifact, frozen descriptor, execution canary
@@ -46,6 +47,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [chrome-store-launch](chrome-store-launch/plan.md) — completed — every Chrome and Firefox store-submission input built inside the repository
 - [ci-cd](ci-cd/plan.md) — completed — CI bring-up: two long-lived branches with change-detected gates
 - [ci-dedupe-1](ci-dedupe-1/plan.md) — completed — one reusable network lane workflow holds the partition and seeds (#537); a store dispatch smokes the published zips it ships (#527)
+- [ci-e2e-hygiene-1](ci-e2e-hygiene-1/plan.md) — completed — four e2e reds fixed in test code (#749 #630 #612 #643); the network suite behind the egress guard, CI artifacts taken by id, jscpd from the lockfile (#620 #555)
 - [ci-followups](ci-followups/plan.md) — completed — no Bun auto-install in jobs that install nothing, the move-approval label read live, the Docker Bun pins in the runbook
 - [ci-followups-2](ci-followups-2/plan.md) — completed — nightly's Firefox jobs and both send-chaos runs gate the nightly release (#220), two fixed chaos seeds gate every network PR, chaos jobs asserted like canaries
 - [ci-followups-3](ci-followups-3/plan.md) — completed — a draft release keeps its tag through every edit (#309), a malformed chaos seed is refused (#305), release's opt-in network run replays the PR chaos seeds (#306)
@@ -62,6 +64,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [composition-test-rollout](composition-test-rollout/plan.md) — completed — composition tests behind one shared minimal PXE seam, where they pay
 - [connect-chain-mismatch](connect-chain-mismatch/plan.md) — completed — connecting on another chain derives that chain's default account on demand
 - [connect-window](connect-window/plan.md) — completed — after Allow the connect window becomes the emoji check instead of opening a second window
+- [consent-display-1](consent-display-1/plan.md) — completed — the consent windows name the full origin and discovery admits secure origins only; a dApp's token add stores what its window showed, token text cleaned; "About" on the app-set fee; Send's caveat for a token outside the bundled classes; the label mark on a registered token's call
 - [contacts-export-uxr](contacts-export-uxr/plan.md) — abandoned — a proposed rework of the contacts export, never carried out
 - [contacts-import-1](contacts-import-1/plan.md) — completed — a closed file chooser settles the pick (#45), a contacts import pinned to the session its rows were shown in (#43)
 - [contacts-rename-export-senders](contacts-rename-export-senders/plan.md) — completed — senders renamed to contacts, with the sender flag kept across export and import
@@ -150,6 +153,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [followups-6](followups-6/plan.md) — completed — every smoke run behind the egress guard with one declared live spec for the shipped token list (#317); a fixed log category for an unparseable PXE stamp (#315)
 - [followups-p15](followups-p15/plan.md) — completed — decision page 15: dead log rows, sponsor and import name checks, the PXE stamp row, two refusals, Unconfirmed to Sent, unknown-decimals figure and order, the move label
 - [forms-and-contacts](forms-and-contacts/plan.md) — completed — a contacts import a lock cannot break, counted on one snack, one at a time; one message at a name cap, a darker red, shared detail links, motion stops, trimmed names, the logger gate
+- [fpc-discovery-1](fpc-discovery-1/plan.md) — completed — protocol FPC discovery registers outside the FPC lock, so a reset never waits on it; a liveness mark fences chain purges (#553)
 - [frontend-ux-fixes](frontend-ux-fixes/plan.md) — completed — six reported UX fixes in one batch, ordered by risk
 - [furthering-non-network-e2e](furthering-non-network-e2e/plan.md) — completed — the fast non-network e2e suite grown in seven mergeable steps
 - [fuzz-runner](fuzz-runner/plan.md) — completed — the balances-store fuzz test refactored instead of accepting its suppressions
@@ -164,6 +168,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [harden-quality-fixes-3](harden-quality-fixes-3/plan.md) — completed — the e2e fixture layer acyclic and split by concern behind a barrel, one owner per fixture flow, the canaries' shared choreography (#544 #546 #539)
 - [harden-security-fixes-1](harden-security-fixes-1/plan.md) — completed — replies under a byte budget, backup slices row-limited, discovery and key exchange admitted only from their source, dApp call titles cleaned, the wallet's class copy first, dependency logs at `warn`, the publish summary one list back
 - [harden-security-fixes-2](harden-security-fixes-2/plan.md) — completed — passkey backups bound to their passkey, restored tokens read from the chain, the approved dApp fee as a ceiling (#416), grant arguments decoded, call arguments read only when they encode back
+- [harden-security-fixes-3](harden-security-fixes-3/plan.md) — completed — a bound on the tagging sources a dApp adds to a chain, refused requests capped, a blocked token's scans stopped, a lock saved twice and the wallet restarted when it cannot be, the token-list summary's caveat (#661)
 - [harden-security-prerelease](harden-security-prerelease/plan.md) — completed — a security audit's verified findings fixed before the first release, in four batches
 - [hardening-2](hardening-2/plan.md) — completed — every dApp call parsed against the wallet schema, an object-keyed artifact cache, storage fences and a CSP floor
 - [harness-fixtures](harness-fixtures/plan.md) — completed — six complexity suppressions in the e2e harness removed by refactoring
@@ -193,6 +198,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [key-model-v2](key-model-v2/plan.md) — completed — the second-generation key model, one coordinated break before the first shipped build
 - [key-model-v2-hardening](key-model-v2-hardening/plan.md) — completed — four hardening deliverables on top of the second-generation key model
 - [keyboard-guards](keyboard-guards/plan.md) — completed — each page's Enter shortcut answers only its own fields and refuses repeats
+- [landing-explainer-1](landing-explainer-1/plan.md) — completed — the How Aztec works page at nulo.sh/how-aztec-works: three cards, each a narrated clip over its text version
 - [landing-store-buttons](landing-store-buttons/plan.md) — completed — install buttons go to the browser's store; the landing stops reading GitHub releases
 - [layout-polish](layout-polish/plan.md) — completed — the popup built to the drawings, with the remaining differences decided from pictures
 - [legal-terms](legal-terms/plan.md) — completed — Terms and Privacy Policy, an on-device acceptance record, and third-party notices
@@ -211,12 +217,15 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [nulo-v6](nulo-v6/plan.md) — completed — the dependency line and the chain identity moved to Aztec V6 as Nulo V6
 - [on-camera-landing](on-camera-landing/plan.md) — completed — the landing replaced with a character-drawn CCTV-style feed
 - [onboarding-3](onboarding-3/plan.md) — completed — the fast-lane tab, the recovery phrase step and Home's Get started card (#588 #585 #581 #636); held for the owner's build test
+- [onboarding-3-arc2](onboarding-3-arc2/plan.md) — completed — the owner's later rounds on #743: P50-01 B folded in, the Get started matrix pinned, Fee Juice done for good once held, and the card as numbered steps (#769 #881); #936 asks the owner about the funded-banner count
+- [onboarding-4](onboarding-4/plan.md) — completed — a later profile's Get started card shows only its own backup: the phrase row for a password profile, nothing for a passkey one (#769); held on #743
 - [onboarding-fees-history-arc](onboarding-fees-history-arc/plan.md) — completed — onboarding, fees and history changes in one risk-ordered change
 - [onboarding-tab](onboarding-tab/plan.md) — completed — first-time onboarding moved from the popup into a dedicated extension tab
 - [onboarding-width-unification](onboarding-width-unification/plan.md) — completed — one onboarding page width through a single layout component
 - [origin-guard-truth](origin-guard-truth/plan.md) — completed — whether the cross-origin session guard is live, settled and pinned by a test
 - [owned-client-teardown](owned-client-teardown/plan.md) — completed — documents share one logger client instead of a private logger per service client
 - [owner-feedback-1](owner-feedback-1/plan.md) — completed — the owner's 2026-10-18 feedback: a Send's fee method, the fee units dropped, the compact title at once on Back, a fixed token hero, the landing's early-days line, the incoming chip's wrap, the app-set fee sentence (#760 #761 #762 #765 #767 #763 #766)
+- [p42-followups-1](p42-followups-1/plan.md) — completed — six page-42 picks: the fee window's two-line Confirm, two restore rows, Holdings' skeleton, call words in Activity and the window (#805); a dApp call's journal record names its call, so it reads as it will settle (#734 #719)
 - [p46-ui-1](p46-ui-1/plan.md) — completed — the four page-46 picks: a Pending chip on an unproven grant, the header chips at 11 px, three 13 px wraps made room for (#698 #651 #652 #653)
 - [package-extraction](package-extraction/plan.md) — completed — the extension monolith cut into workspace packages in dependency order
 - [parallel-e2e-isolation](parallel-e2e-isolation/plan.md) — completed — parallel network e2e runs from sibling worktrees own their ports, processes and state
@@ -277,6 +286,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [self-pay-setup-fix](self-pay-setup-fix/plan.md) — completed — simulate and profile run as the account the dApp named
 - [send-amount-exact](send-amount-exact/plan.md) — completed — every amount path on the Send page made exact
 - [send-fee-privacy-notice](send-fee-privacy-notice/plan.md) — completed — the Send fee source follows the transfer's privacy and says so where it cannot
+- [send-fees-3](send-fees-3/plan.md) — completed — Send's fee card: the cap's refusal reads as an app's, You pay reads as it will while the read runs, a failed read's line hides under another account's read (#799, P54-02 to P54-04)
 - [send-fees-ux](send-fees-ux/plan.md) — completed — the sponsor forms' "Already added", "Refused before sending" for a capped app send, the app-set fee legend kept while estimating, a sponsored send queued behind an earlier one, and Send's fee card drawn as a skeleton while it reads balances
 - [send-fixes-1](send-fixes-1/plan.md) — completed — start finishes on a custom node that does not answer, a paused reset's imported accounts export as account files, the re-ask button reads Send (#498 #710; #112 held for the owner)
 - [send-followups-1](send-followups-1/plan.md) — completed — the queued cap from a like send (#412), a row for a long USD line (#408), the fee card without its dead override path (#406)
@@ -315,6 +325,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [ui-followups-p18](ui-followups-p18/plan.md) — completed — the last outline-grey text moved to secondary (#363), store art regenerated after the owner signed it (#364), the tx fee row's hover fade removed
 - [ui-leftovers-1](ui-leftovers-1/plan.md) — completed — decision page 35's six picks: a display-only token hero, a selectable header address, the in-flight dApp chip, Holdings' unavailable state, 6 s action toasts, a large dApp transfer's app chip under its direction
 - [ui-leftovers-2](ui-leftovers-2/plan.md) — completed — decision page 39's two picks: a nameless dApp keeps its chip when its call ends, and Holdings' total waits for the first price answer
+- [unit-flake-1](unit-flake-1/plan.md) — completed — unit-test events sent past Vue's attach-time guard: #895's reopen press and 23 tests with the same cause; one `sendEvent` helper and a CLAUDE.md rule (#895)
 - [unserved-chain-connect](unserved-chain-connect/plan.md) — completed — a connection to a chain the profile has no network for is refused, and the wallet says so
 - [ux-cleanup-arc](ux-cleanup-arc/plan.md) — completed in part — five small fixes for user-facing rough edges
 - [ux-feedback](ux-feedback/plan.md) — completed — a user-testing proposal built as five batches on one stack
@@ -344,4 +355,29 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [fees-card-mode-1](fees-card-mode-1/plan.md) — completed — one fee card handed Send's or the app windows' rule book: verdicts, snapshot and two rule books as composables, template untouched (#513)
 - [service-structure-1](service-structure-1/plan.md) — completed — five page-37 refactors in four arcs: the import waiter, discovery and session holders out of `background.ts`, the balance outbox class, named fee and message parameters and one operation-trait table (#521 #545 #547 #549 #560)
 - [fee-call-match-1](fee-call-match-1/plan.md) — completed — the Fee method row reads "Private Fee Juice" only for the PrivateFPC's `pay_fee`, so an app's own fee contract reads "Set by {app}" (#796, in part; the sponsor half is OA-1)
+- [hygiene-3](hygiene-3/plan.md) — completed — the rest of #735 (profile-flow notices, Developer's shared plumbing), the held-Escape flake fixed at its cause (#797) and the countdown Close on the design Button, pixel-identical (#517); OA-1 open as #831
+- [ui-dedupe-1](ui-dedupe-1/plan.md) — completed — six page-37 dedupes in seven arcs: the export run object and config restore through `restoreRows`, the pre-OPFS IndexedDB layer retired, one `updateSetting`, one balance and one journal mirror, the balance lists on Home's rules (#541 #518 #519 #520 #548); #517 delivered by #833; OA-3 (#839) and OA-2 (#840) open with the owner
+- [egress-guard-2](egress-guard-2/plan.md) — completed — the guard's close fails on a Testnet-node request that reaches it while the stand-in holds the origin (#836), the guard docs match the code (#835); #846 a known limit
+- [execute-window-2](execute-window-2/plan.md) — completed — the execute window states a dApp send Nulo refuses while it estimates, in the fee's place with only Reject, and Reject or closing the window answers the dApp with that refusal (#758, P42-15 C); #777 drawn for the owner; #104 #106 deferred
+- [popup-fixes-1](popup-fixes-1/plan.md) — completed — eight popup issues in two arcs: the logs menu opens and the recovery phrase button reads Reveal (#773 #770), three shipped fixes closed (#582 #584 #586), #593 a known limit; Send and Receive keyboard buttons and the ghost rows the loaded height (#626 #786, on OA-1 A and OA-2 A)
+- [store-art-2](store-art-2/plan.md) — completed — the store captures and listing screenshots regenerated after Home's fixed hero, the type scale and the Tabler glyphs (#627); held for the owner's signature of the new set (OA-1, OA-2)
+- [ui-dedupe-2](ui-dedupe-2/plan.md) — completed — the five list rules on Home's, the held Holdings row with them (#839); a dropped backup export stops before its keys (#840)
+- [ui-polish-4](ui-polish-4/plan.md) — completed — the logs toolbar on native buttons with Escape handing focus back, its menu items in one role, the recovery Close on the design button's look, Holdings' error line without a false total (#810 #823 #831 #825)
+- [copy-polish-1](copy-polish-1/plan.md) — completed — the failed token preview's warning points at Reject and sits left-aligned, fixed at the card's layout rule with the opaque authorization warning (#803); the restore warning's account-file clause (#746 OA-2)
+- [send-estimate-1](send-estimate-1/plan.md) — completed — a balance that makes the typed amount sendable asks for its fee, on either side (#856); the fee row on a balance drop ships as today (#863)
+- [execute-window-3](execute-window-3/plan.md) — completed — the advice once after the calls and none on a refused request (#776, P52-01 F); an unreadable authorization flagged at rest (#777, P58-05 B); #854
+- [logs-keyboard-1](logs-keyboard-1/plan.md) — completed — the logs filter panels from the keyboard: native toggle rows with an inset ring, the popover's Tab order stitched after its trigger, a panel closed when focus leaves it (#851); known limit #866
+- [egress-flake-1](egress-flake-1/plan.md) — completed — a reply to a paused request its worker's stop cancelled (`Invalid InterceptionId`) is no interception failure (#857)
+- [tx-record-1](tx-record-1/plan.md) — completed — a dApp send's failed estimate keeps its class (#820); a send ended in its approval window reads how it ended, Reject and the X "You rejected", a lock as a lock (#828, P60-02 B); a transaction records who chose its fee and the Fee method row names it (#821); #871 #872 known limits
+- [token-dash-1](token-dash-1/plan.md) — completed — the Register token card shows the empty-value dash for a blank token name or symbol (#897, P70-09 B; #931 a known limit, #932 an owner ask)
+- [token-skeleton-1](token-skeleton-1/plan.md) — completed — the Register token card as labelled Symbol, Name and Decimals rows with grey bars while it reads (#850, P66-02 B; #897 open, #898 a known limit)
+- [log-warn-contrast-1](log-warn-contrast-1/plan.md) — completed — the logs window's light WARN lines take `--txt-warning`, 5.42:1 on their tint, gated in both themes (#887); known limits #900 #901
+- [capture-hang-1](capture-hang-1/plan.md) — completed — capture mode shows the wallet tab before its shot and refuses a page that is not shown (#885)
+- [hook-bins-1](hook-bins-1/plan.md) — completed — the git hooks run the worktree's installed Biome and commitlint on Bun and refuse before `bun install`; the baseline scripts run the installed Biome; a CI-gating test pins both (#910)
+- [terminal-card-flake-1](terminal-card-flake-1/plan.md) — completed — `readTerminalCard` reads the card in the wait that finds it, once the router has drawn the page it names; the wait had met the departing page's card (#903)
+- [stalled-retry-flake-1](stalled-retry-flake-1/plan.md) — completed — the stalled-network stub refuses its held calls with the stand-in's 400; a reset was undone by the browser's re-send (#911); known limits #917 #918
+- [viewer-flake-1](viewer-flake-1/plan.md) — completed — the logs viewer's own follow scroll no longer resumes a stopped follow, with a pin that reads no geometry; viewers-csp reads the follow and the hold where the viewer judges (#849); known limits #919 #920
+- [ui-picks-1](ui-picks-1/plan.md) — completed — Send says "More than your balance" under an amount over a read balance (#870, P64-02 B) and clears its fee row when the balance falls below it (#863); the restore warning names Developer Mode (#746)
+- [exists-notice-1](exists-notice-1/plan.md) — completed — a passkey whose profile is already here gets a typed refusal and the owner's words in the popup, onboarding and Firefox's passkey window (#914)
+- [connect-split-1](connect-split-1/plan.md) — completed — Allow closes the connect window at once and the emoji check opens its own when the dApp starts its exchange (#859); an app allowed but never connected reads "Not connected yet" and its next check as a first one (#884); admission as today (known limit #883); a refusal after Allow shows nothing in the wallet (known limit #927)
 - [structure-2](structure-2/plan.md) — completed — one settings control row, detail hero line, explorer name and hero observer (#735, with #817); an Allow's row bound to its profile (#680); Presto's onboarding leftovers and style hash removed (#730); #750 mapped, no split

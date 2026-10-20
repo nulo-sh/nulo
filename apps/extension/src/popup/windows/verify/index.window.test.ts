@@ -1,7 +1,7 @@
 /**
  * The trust-confirmation window's own lifecycle and anti-phishing display, over wire-shaped rows:
  * `dappMetadata` as the worker writes it (a sanitized dApp name, the tab's serialized origin), a
- * 64-hex verification hash and CAIP accounts. The identity block is the real one, so the hostname
+ * 64-hex verification hash and CAIP accounts. The identity block is the real one, so the origin
  * and its warning are read as rendered. A new connection and a remembered app's reconnect show the
  * same check with the same two answers.
  */
@@ -139,23 +139,21 @@ afterEach(() => {
 	vi.clearAllMocks()
 })
 
-describe("windows/verify — the hostname the user is asked to trust", () => {
+describe("windows/verify — the origin the user is asked to trust", () => {
 	test.each([
-		["https://dapp.example:8443", "dapp.example", false],
-		["http://[::1]:5173", "[::1]", false],
-		["https://xn--exmple-cua.com", "xn--exmple-cua.com", true],
-		["https://dapp.example.evil.example", "dapp.example.evil.example", false],
+		["https://dapp.example:8443", "https://dapp.example:8443", false],
+		["http://[::1]:5173", "http://[::1]:5173", false],
+		["https://xn--exmple-cua.com", "https://xn--exmple-cua.com", true],
+		["https://dapp.example.evil.example", "https://dapp.example.evil.example", false],
 		["null", "null", false],
 		["unknown", "unknown", false],
-		["https://dapp.example@evil.example", "evil.example", false],
-	])("%s renders %s, warning %s", async (url, hostname, warned) => {
+		["https://dapp.example@evil.example", "https://evil.example", false],
+	])("%s renders %s, warning %s", async (url, origin, warned) => {
 		sessionRow = row(url)
 		const w = mountVerify()
 		await flushPromises()
 		const block = w.findComponent(DappIdentityBlock)
-		expect(block.props("hostname")).toBe(hostname)
-		expect(block.props("hostnameSuspicious")).toBe(warned)
-		expect(block.text()).toContain(hostname)
+		expect(block.text()).toContain(origin)
 		expect(block.find('[data-testid="dapp-hostname-warning"]').exists()).toBe(warned)
 		for (const part of ["‮", "​", "⁦"]) expect(block.text()).not.toContain(part)
 	})
@@ -175,7 +173,6 @@ describe.each(["false", "true"])("windows/verify — the check with isReconnect=
 		expect(w.find('[data-testid="verify-mismatch-btn"]').exists()).toBe(true)
 		expect(w.find('[data-testid="verify-confirm-btn"]').exists()).toBe(true)
 		expect(w.find('[data-testid="verify-always-trust-toggle"]').exists()).toBe(false)
-		expect(w.find('[data-testid="connect-step-bar"]').exists()).toBe(isReconnect === "false")
 	})
 
 	test("They match reports the URL's hash, not the row's, then closes the window", async () => {

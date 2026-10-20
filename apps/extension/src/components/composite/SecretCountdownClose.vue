@@ -2,14 +2,14 @@
 <script setup>
 /**
  * Close button with optional countdown progress overlay + "Disable
- * auto-close" ghost link. Used by the recovery-phrase export page
- * after the secret is revealed; the absolutely-positioned progress bar
- * is the reason the underlying element stays a raw `<button>` rather
- * than the `<Button>` primitive.
+ * auto-close" ghost link.
  *
  * The page owns the countdown state (`useSecretCountdown` composable);
  * this composite is purely the visual treatment.
  */
+/** Components */
+import Button from "@/components/ui/Button.vue"
+
 defineProps({
 	/** Display label like "2:00". Empty string hides the suffix. */
 	countdownLabel: { type: String, default: "" },
@@ -27,7 +27,7 @@ const emit = defineEmits(["close", "disableAutoClose"])
 
 <template>
 	<Flex direction="column" gap="8">
-		<button @click="emit('close')" :class="[$style.cta, $style.cta_outline]" data-testid="close-btn">
+		<Button variant="cta_outline" data-testid="close-btn" @click="emit('close')">
 			<span :class="$style.close_label">
 				Close<span v-if="!autoCloseDisabled && countdownLabel"> · {{ countdownLabel }}</span>
 			</span>
@@ -36,7 +36,7 @@ const emit = defineEmits(["close", "disableAutoClose"])
 				:class="$style.progress_bar"
 				:style="{ animationDuration: `${progressDurationMs}ms` }"
 			/>
-		</button>
+		</Button>
 
 		<button
 			v-if="!autoCloseDisabled"
@@ -50,55 +50,6 @@ const emit = defineEmits(["close", "disableAutoClose"])
 </template>
 
 <style module>
-.cta {
-	composes: type--button from global;
-	position: relative;
-	width: 100%;
-	border: none;
-
-	background: var(--nulo-accent);
-	color: var(--txt-inverse);
-
-	padding: 20px 0;
-	cursor: pointer;
-
-	transition: all 0.2s var(--bezier);
-
-	&:hover {
-		background: #fff;
-	}
-
-	&:active {
-		background: var(--txt-primary);
-		color: var(--app-bg);
-		transition: none;
-	}
-
-	&:disabled {
-		opacity: 0.3;
-		pointer-events: none;
-	}
-
-	&:focus-visible {
-		outline: 2px dotted var(--nulo-accent);
-		outline-offset: 2px;
-	}
-}
-
-.cta_outline {
-	overflow: hidden;
-
-	background: transparent;
-	color: var(--nulo-secondary);
-	border: 1px solid var(--nulo-outline);
-
-	&:hover {
-		background: var(--nulo-surface-low);
-		color: var(--txt-primary);
-		border-color: var(--nulo-secondary);
-	}
-}
-
 .close_label {
 	position: relative;
 	z-index: 1;

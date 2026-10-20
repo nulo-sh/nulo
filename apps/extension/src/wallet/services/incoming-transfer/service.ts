@@ -175,9 +175,9 @@ function trustedRow(stored: IncomingTrustRecord, floor: { arrivalFloor: number |
  *   unknown → first note → pending (hidden, popup prompts)
  *   pending → all queued records stay hidden until user resolves
  *   Allow → trusted; queued records visible, emit Added for each
- *   Reject → blocked; queued records stay hidden silently
+ *   Reject → blocked; neither arm scans the contract, queued records are deleted
  *   trusted → subsequent records insert visible
- *   blocked → subsequent records insert hidden (silent)
+ *   blocked → left only by a token delete or a wipe
  *
  * Late-delete reconciliation: when `TransactionService.onTransactionAdded`
  * fires, any existing record whose txHash matches is deleted — closes the
@@ -762,9 +762,10 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	}
 
 	/** The Allow's reads, or undefined to refuse: for a token no longer registered, or a trust row that
-	 *  is missing or `unknown`. A prompt exists only for a `pending` row, and only a wipe deletes the
-	 *  row or a token delete resets it, so writing `trusted` then would put trust back into a cleared
-	 *  scope. The floor covers the accepted history, on every account of the profile. */
+	 *  is missing, `unknown` or `blocked`. A prompt exists only for a `pending` row, and only a wipe
+	 *  deletes the row or a token delete resets it, so writing `trusted` then would put trust back into
+	 *  a cleared scope. Block stopped the scans and deleted what they stored, so only a token delete
+	 *  leaves it. The floor covers the accepted history, on every account of the profile. */
 	private async readAcceptanceLocked(
 		profileId: string,
 		networkId: string,
@@ -774,34 +775,63 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	): Promise<{ trust: IncomingTrustRecord; unhidden: IncomingTransferRecord[]; visible: boolean } | undefined> {
 		if (!(await this.isTokenStillRegistered(profileId, networkId, contract))) return undefined
 		const stored = await this.repo.getTrust(profileId, networkId, contract)
-		if (!stored || stored.state === "unknown") return undefined
+		if (!stored || stored.state === "unknown" || stored.state === "blocked") return undefined
 		const hidden = (await this.repo.listByContract(profileId, networkId, contract)).filter((r) => r.hidden)
 		const visible = await this.isVisibilityEnabled()
 		const floor = nextArrivalFloor(stored, { tip, lowerBound: maxBlock(hidden), epochMoved: this.serviceEpoch !== epochAtTip })
 		return { trust: trustedRow(stored, floor), unhidden: hidden.map((r) => ({ ...r, hidden: false })), visible }
 	}
 
+	/** Blocks the contract: neither arm scans it again, and the records it stored hidden are deleted.
+	 *  The token stays registered, so its outbox rows stay for the balance refreshes they carry. */
 	public async setTrustReject(profileId: string, networkId: string, contract: string): Promise<boolean> {
 		await this.ensureInitialized()
 		const trustFence = await this.captureTrustFence(profileId)
 		if (!trustFence) return false
-		return this.withServiceLock(async (isCurrent) => {
-			if (!(await this.isTokenStillRegistered(profileId, networkId, contract))) return false
-			// Hidden records stay hidden. No event emission — silent rejection.
-			return this._setTrustStateLocked(profileId, networkId, contract, "blocked", trustFence(isCurrent).live)
-		})
+		try {
+			return await this.withDeleterLock(async (isCurrent) => {
+				// Bumped before the section's first await: a scan past its reads, or a rebuild that read the
+				// trust before this section, stands down instead of storing or scheduling for the contract.
+				this.bumpServiceEpoch()
+				const network = await this.registeredTokenNetwork(profileId, networkId, contract)
+				if (!network) return false
+				if (!(await this._setTrustStateLocked(profileId, networkId, contract, "blocked", trustFence(isCurrent).live))) return false
+				await this.stopContractScansLocked(profileId, network, contract)
+				await this.deleteHiddenRecordsLocked(profileId, networkId, contract)
+				return true
+			})
+		} finally {
+			// The bump orphaned every scheduler, so the set is rebuilt whether the section refused, threw or
+			// blocked.
+			await this.rebuildAfterDelete()
+		}
+	}
+
+	/** Deletes the contract's hidden records, with no balance refresh: each was counted when stored.
+	 *  Caller holds the service lock. */
+	private async deleteHiddenRecordsLocked(profileId: string, networkId: string, contract: string): Promise<void> {
+		for (const record of await this.repo.listByContract(profileId, networkId, contract)) {
+			if (!record.hidden) continue
+			await this.repo.deleteRecord(record.id)
+			this.noteStrikes.delete(record.id)
+			this.emit("onIncomingTransferDeleted", record)
+		}
 	}
 
 	private async isTokenStillRegistered(profileId: string, networkId: string, contract: string): Promise<boolean> {
+		return (await this.registeredTokenNetwork(profileId, networkId, contract)) !== undefined
+	}
+
+	private async registeredTokenNetwork(profileId: string, networkId: string, contract: string): Promise<Network | undefined> {
 		try {
 			const network = await this.networkService.getNetwork(networkId)
 			const tokens = await this.tokenService.getTokensRaw(profileId)
-			return findToken(tokens, contract, network.chainId) !== undefined
+			return findToken(tokens, contract, network.chainId) !== undefined ? network : undefined
 		} catch {
-			// On any lookup failure, fail CLOSED (return false) — refusing
+			// On any lookup failure, fail CLOSED (undefined) — refusing
 			// a trust flip is safer than honoring one on a contract whose
 			// registration we couldn't verify.
-			return false
+			return undefined
 		}
 	}
 
@@ -1037,11 +1067,17 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (!profile) return { noteDescriptors, publicDescriptors }
 		const networks = await this.networkService.getNetworks()
 		const tokens = await this.tokenService.getTokensRaw(profile.id)
+		const blocked = new Set(
+			(await this.repo.listTrust())
+				.filter((t) => t.profileId === profile.id && t.state === "blocked")
+				.map((t) => `${t.networkId}|${t.contract}`),
+		)
 		for (const network of networks) {
-			const tokensForNet = tokens.filter((t) => t.chainId === network.chainId)
-			if (tokensForNet.length === 0) continue
+			const contracts = new Set(
+				tokens.filter((t) => t.chainId === network.chainId && !blocked.has(`${network.id}|${t.contract}`)).map((t) => t.contract),
+			)
+			if (contracts.size === 0) continue
 			const accounts = await this.accountService.getAccounts(profile.id, network.chainId)
-			const contracts = new Set(tokensForNet.map((t) => t.contract))
 			for (const account of accounts) {
 				noteDescriptors.push({
 					profileId: profile.id,
@@ -1308,6 +1344,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			// the watchdog lets in can finish at any await here: the registration read catches the first,
 			// and each write reads `isCurrent` after its last await, which catches the second.
 			if (!(await this.isTokenStillRegistered(profileId, network.id, token.contract))) return
+			// A Block answered after this token was stored is the later decision, and the add keeps it.
+			if (current?.state === "blocked") return
 			// A row already trusted takes no trust write, so its session is read here instead.
 			const trusted =
 				current?.state === "trusted"
@@ -1341,15 +1379,11 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			this.bumpServiceEpoch()
 			// Scheduler teardown + row mutations both inside the lock so a
 			// concurrent scan can't slip a row in between teardown + wipe.
-			await this.detachTokenSchedulersLocked(profileId, network, token.contract)
-			// Public arm teardown: stop the stream + DELETE the cursor row (re-add re-indexes public
-			// history from `startBlock`, preserving the note arm's remove/re-add parity) + drop the
-			// cached class gate.
-			this.stopPublicScheduler(network.id, token.contract)
+			await this.stopContractScansLocked(profileId, network, token.contract)
+			// DELETE the cursor row (re-add re-indexes public history from `startBlock`, preserving the
+			// note arm's remove/re-add parity) + drop the cached class gate.
 			await this.repo.deleteCursor(profileId, network.id, token.contract)
 			this.classGateCache.delete(`${profileId}|${network.id}|${token.contract}`)
-			const episodeKey = scanEpisodeKey(profileId, network.id, token.contract)
-			this.dropEpisodes((key) => key === episodeKey)
 			await this.wipeContractRecordsLocked(profileId, network.id, token.contract)
 		})
 		await this.rebuildAfterDelete()
@@ -1364,6 +1398,15 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		} catch (error) {
 			this.logWarn("scheduler rebuild after a delete failed", { error })
 		}
+	}
+
+	/** Both arms stop scanning `contract` and its scan episode ends. Caller holds the service lock and
+	 *  has bumped the epoch. */
+	private async stopContractScansLocked(profileId: string, network: Network, contract: string): Promise<void> {
+		await this.detachTokenSchedulersLocked(profileId, network, contract)
+		this.stopPublicScheduler(network.id, contract)
+		const episodeKey = scanEpisodeKey(profileId, network.id, contract)
+		this.dropEpisodes((key) => key === episodeKey)
 	}
 
 	/** Remove `contract` from every affected note scheduler; stop schedulers left empty.
@@ -1747,7 +1790,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (amountRaw === null) return
 
 		const trustState = await this.resolveReceiptTrust(ctx, token, amountRaw, fence)
-		if (trustState === undefined || !fenced()) return
+		if (trustState === undefined || trustState === "blocked" || !fenced()) return
 		await this.commitDiscoveredNote(ctx, note, token, amountRaw, trustState, fenced)
 	}
 
@@ -1788,7 +1831,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	}
 
 	/** The outbox row is written before the record: a discovered note changed the chain balance
-	 *  whatever its trust or display state. */
+	 *  whether its record is shown or hidden. A blocked contract stores neither. */
 	private async commitDiscoveredNote(
 		ctx: NoteScanContext,
 		note: RawNote,
@@ -1816,7 +1859,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (trustState === "trusted" && (await this.isVisibilityEnabled()) && fenced()) {
 			this.emit("onIncomingTransferAdded", record)
 		}
-		// pending / blocked: record persisted hidden, no Added emit.
+		// pending: record persisted hidden, no Added emit.
 	}
 
 	/** Visibility check used by both initial-load (`getIncomingTransfers`)
@@ -2390,18 +2433,11 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const canonicalByHeight = new Map<number, string>()
 		for (const [height, hash] of seen) canonicalByHeight.set(height, hash)
 
-		await this.withDeleterLock(async () => {
-			if (this.serviceEpoch !== epochAtStart) return
-			const records = await this.repo.listByContract(profileId, networkId, contract)
-			for (const record of records) {
-				if (!orphanedByReconciliation(record, marker, canonicalByHeight)) continue
-				// Enqueue the balance refresh BEFORE deleting (delete-first would lose the refresh on MV3
-				// suspension), never driven by the recipient filter.
-				if (record.tokenId !== undefined) await this.outbox.markDirty(profileId, networkId, record.accountAddress, record.tokenId)
-				await this.repo.deleteRecord(record.id)
-				this.emit("onIncomingTransferDeleted", record)
-			}
-		})
+		const orphaned = (record: IncomingTransferRecord) => orphanedByReconciliation(record, marker, canonicalByHeight)
+		const swept = await this.withDeleterLock((isCurrent) =>
+			this.deleteOrphansLocked(profileId, networkId, contract, orphaned, () => this.serviceEpoch === epochAtStart && isCurrent()),
+		)
+		if (!swept) return false
 
 		// Clear the marker + advance the anchor to `upperBoundHash` so the next forward scan doesn't
 		// re-throw on a stale referenceBlock (which would loop reconciliation).
@@ -2426,6 +2462,29 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			},
 			epochAtStart,
 		)
+	}
+
+	/** Deletes the contract's orphaned receipts, each after its balance refresh is enqueued
+	 *  (delete-first would lose the refresh on MV3 suspension). `fenced` is read after every await: a
+	 *  Block or a wipe that a lock handoff lets in bumps the epoch, and the handoff alone ends the
+	 *  ticket. False once it refused, and the caller keeps its marker for the next tick. */
+	private async deleteOrphansLocked(
+		profileId: string,
+		networkId: string,
+		contract: string,
+		orphaned: (record: IncomingTransferRecord) => boolean,
+		fenced: () => boolean,
+	): Promise<boolean> {
+		if (!fenced()) return false
+		for (const record of await this.repo.listByContract(profileId, networkId, contract)) {
+			if (!orphaned(record)) continue
+			if (!fenced()) return false
+			if (record.tokenId !== undefined) await this.outbox.markDirty(profileId, networkId, record.accountAddress, record.tokenId)
+			if (!fenced()) return false
+			await this.repo.deleteRecord(record.id)
+			this.emit("onIncomingTransferDeleted", record)
+		}
+		return fenced()
 	}
 
 	/** False at the first `revoked` commit, and the caller keeps its page marker or reconciliation
@@ -2496,6 +2555,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const scope = { profileId, networkId, accountAddress: ctx.accountAddress, contract }
 		const trustState = await this.resolveReceiptTrust(scope, token, ev.amountRaw, fence)
 		if (trustState === undefined || !fenced()) return "revoked"
+		if (trustState === "blocked") return "processed"
 		return this.commitPublicRecord(ctx, ev, token, trustState, fenced)
 	}
 
@@ -2533,7 +2593,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 	/** Write-side: the outbox row is written BEFORE the record (ordering +
 	 *  idempotent replay substitute for a multi-key transaction).
-	 *  Trust-independent — a hidden receipt still changed the chain balance. A
+	 *  Written for a hidden receipt too: it still changed the chain balance. A
 	 *  wipe admitted during the dirty-mark's await must not land the record AFTER
 	 *  the purge enumerated rows; aborting there leaves dirty-without-record,
 	 *  which the outbox ordering already tolerates (the drain heals it). */

@@ -31,7 +31,9 @@ const routerPush = vi.fn()
 vi.mock("vue-router", () => ({ useRouter: () => ({ push: routerPush }), useRoute: () => ({ meta: {} }) }))
 
 import { BrutalistTitle, Flex, Icon, Input, Text } from "@nulo/design"
+import { enterOn } from "../../../tests/helpers/credential-pins"
 import { pressOn } from "../../../tests/helpers/press-key"
+import { sendEvent } from "../../../tests/helpers/send-event"
 import OnboardingBackLink from "../components/OnboardingBackLink.vue"
 import OnboardingProfileNameField from "../components/OnboardingProfileNameField.vue"
 import OnboardingSkipLink from "../components/OnboardingSkipLink.vue"
@@ -120,8 +122,8 @@ describe("onboarding create — the method tablist", () => {
 	type Method = "password" | "passkey"
 	const tab = (w: VueWrapper, method: Method) => w.get(`[data-testid="onboarding-method-${method}"]`)
 	const press = (key: string) => {
-		const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
-		document.activeElement?.dispatchEvent(event)
+		const event = document.activeElement && sendEvent(document.activeElement, "keydown", { key })
+		if (!event) throw new Error(`no ${key} reached the focused control`)
 		return event
 	}
 	const macrotask = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -236,8 +238,7 @@ describe("onboarding create — Enter does what the focused control says, with a
 	test("a repeat Enter in the confirm field is cancelled, so the form cannot submit on it", async () => {
 		const w = await mountWithValidPair()
 		const field = w.get('[data-testid="onboarding-password-confirm"] input').element
-		const repeat = new KeyboardEvent("keydown", { key: "Enter", repeat: true, bubbles: true, cancelable: true })
-		expect(field.dispatchEvent(repeat)).toBe(false)
+		expect(enterOn(field, { repeat: true }).defaultPrevented).toBe(true)
 	})
 })
 

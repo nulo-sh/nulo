@@ -4,8 +4,10 @@ import {
 	DuplicateInitializationError,
 	ScopeViolationError,
 	SessionEndedError,
+	TooManyPendingError,
 } from "@nulo/extension-messaging/errors"
-import { refusalTitleOf } from "./contract-resolver"
+import type { JournalRetitle } from "@/wallet/services/operation-journal/spec"
+import { refusalOf } from "./contract-resolver"
 
 /**
  * Shared catch-arm disposition for the three dapp-send pipelines
@@ -24,20 +26,20 @@ import { refusalTitleOf } from "./contract-resolver"
  * a local `markJournal` closure over `transitionJournal` with a `"transfer"`
  * context) — but it shares {@link failureKind}. A scope refusal is mapped here, not in
  * `failureKind`: only a dApp's call can exceed a grant, and a first-party Send record must never
- * read as one. A call-binding refusal retitles the record with what the call really runs.
+ * read as one. A call-binding refusal renames the record to what the refused call really runs.
  */
 export function markFailedUnlessCancelled(
 	error: unknown,
 	journalId: string | undefined,
 	lane: {
-		markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null, failedTitle?: string): Promise<void>
+		markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null, retitle?: JournalRetitle): Promise<void>
 	},
 ): Promise<void> {
 	if (error instanceof JobCancelledSentinel) {
 		throw error
 	}
 	const kind = error instanceof ScopeViolationError ? scopeRefusalKind(error) : failureKind(error, "dapp_execute")
-	return lane.markJournal(journalId, { stage: "failed" }, normalizeError(error, kind), refusalTitleOf(error))
+	return lane.markJournal(journalId, { stage: "failed" }, normalizeError(error, kind), refusalOf(error))
 }
 
 function scopeRefusalKind(error: ScopeViolationError): JobErrorKind {
@@ -50,5 +52,6 @@ function scopeRefusalKind(error: ScopeViolationError): JobErrorKind {
 export function failureKind(error: unknown, fallback: JobErrorKind): JobErrorKind {
 	if (error instanceof DuplicateInitializationError) return "duplicate_initialization"
 	if (error instanceof SessionEndedError) return "session_ended"
+	if (error instanceof TooManyPendingError) return "too_many_pending"
 	return fallback
 }

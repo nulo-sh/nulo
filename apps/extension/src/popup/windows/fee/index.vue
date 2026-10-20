@@ -32,11 +32,10 @@ import { NetworkServiceClient } from "@/wallet/services/network/client"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { type DecodedCall, type DecodedGrant, ExecutionServiceClient } from "@/wallet/services/execution/client"
 import { type TokenInfo, TokenServiceClient } from "@/wallet/services/token/client"
-import { DappInteractionServiceClient, type FeeQuestionPayload } from "@/wallet/services/dapp-interaction/client"
+import { DappInteractionServiceClient, type FeeQuestionPayload, type WindowEnd } from "@/wallet/services/dapp-interaction/client"
 
 /** Composables */
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
-import { useDappHostname } from "@/composables/useDappHostname"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 
 /** Store */
@@ -76,12 +75,11 @@ const {
 	dappOf: (p) => p.session.dappMetadata,
 })
 
-const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHostname(dapp)
-
 const {
 	start: startWindow,
 	dispose: disposeWindow,
 	closeWindow,
+	endAndClose,
 	onActiveProfileChanged,
 	stripStatus,
 	processingError,
@@ -102,7 +100,7 @@ const {
 		tokenService.disconnect()
 	},
 	init: () => init(),
-	reject: () => reject(),
+	reject: (end) => reject(end),
 })
 
 const question = computed(() => payload.value?.feeQuestion)
@@ -208,10 +206,9 @@ const accept = async () => {
 	}
 }
 
-const reject = async () => {
+const reject = async (end: WindowEnd) => {
 	if (isInteractionCancelled.value || !requestId.value) return
-	rejectViaInteractionService("User rejected")
-	closeWindow(true)
+	await endAndClose(() => rejectViaInteractionService("User rejected", end))
 }
 
 const signerAccounts = computed(() => (operation.value ? uniqueSignerAccounts([operation.value]) : []))
@@ -241,8 +238,6 @@ onUnmounted(() => {
 		<Flex direction="column" :class="$style.scroll_area">
 			<DappIdentityBlock
 				:dapp="dapp ?? undefined"
-				:hostname="dappHostname"
-				:hostnameSuspicious="hostnameHasNonAscii"
 				hostnameTestId="fee-hostname"
 				actionLabel="wants to execute the following"
 			/>
@@ -299,7 +294,7 @@ onUnmounted(() => {
 			:confirm-disabled="
 				processingError?.type === 'error' || !operation || !question || grantsPending || grantRefusal !== undefined || isInteractionCancelled
 			"
-			@reject="reject"
+			@reject="reject('reject')"
 			@approve="accept"
 		/>
 

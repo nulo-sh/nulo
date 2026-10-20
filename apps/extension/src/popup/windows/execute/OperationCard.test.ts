@@ -1,8 +1,10 @@
 import { mount } from "@vue/test-utils"
 import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
+import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { describe, expect, test, vi } from "vitest"
 import { trimAddress } from "@/utils/string"
+import { getNameDescriptor } from "@/wallet/services/token/functions/descriptors"
 import OperationCard from "./OperationCard.vue"
 
 const mounts = vi.hoisted(() => ({ count: 0 }))
@@ -129,5 +131,80 @@ describe("windows/execute/OperationCard — action rows", () => {
 		const sent = mountCard(authwitOp("send_transaction"))
 		expect(sent.find("[data-testid='execute-authwit-args']").exists()).toBe(false)
 		expect(sent.find("[data-testid='execute-grant-args']").exists()).toBe(true)
+	})
+})
+
+describe("windows/execute/OperationCard — a token add", () => {
+	const token = `0x${"0c".repeat(32)}`
+	const ROWS = ["register-token-symbol-row", "register-token-name-row", "register-token-decimals-row"]
+	const VALUES = ["register-token-symbol", "register-token-name", "register-token-decimals"]
+	const mountTokenAdd = (props: Record<string, unknown>) =>
+		mount(OperationCard, {
+			props: {
+				op: { kind: "register_token", account: { name: "Owner", address: "0xacct" }, address: token } as never,
+				index: 0,
+				...props,
+			},
+			global: {
+				stubs: {
+					...stubs,
+					Skeleton: {
+						props: ["width", "height"],
+						template: `<span data-testid="stub-skeleton" :data-width="width" :data-height="height" />`,
+					},
+				},
+			},
+		})
+
+	test("the details read as three labelled rows with bars, then the same rows hold the values", async () => {
+		const w = mountTokenAdd({ tokenMetadataLoading: true, tokenMetadata: { symbol: "USDC", name: "USDC", decimals: 6 } })
+		const details = w.get("[data-testid='register-token-details']")
+		expect(details.attributes("role")).toBe("status")
+		expect(details.attributes("aria-busy")).toBe("true")
+		const rows = ROWS.map((id) => w.get(`[data-testid='${id}']`))
+		expect([...details.element.children].map((row) => row.getAttribute("data-testid"))).toEqual(ROWS)
+		expect(rows.map((row) => row.element.firstElementChild?.textContent)).toEqual(["Symbol:", "Name:", "Decimals:"])
+		const bars = rows.map((row) => row.get("[data-testid='stub-skeleton']"))
+		expect(bars.map((bar) => [bar.attributes("data-width"), bar.attributes("data-height")])).toEqual([
+			["40", "12"],
+			["84", "12"],
+			["20", "12"],
+		])
+		for (const id of VALUES) expect(w.find(`[data-testid='${id}']`).exists(), id).toBe(false)
+		expect(w.text()).not.toContain("Loading")
+		expect(w.get("[data-testid='register-token-address']").attributes("data-address")).toBe(token)
+
+		await w.setProps({ tokenMetadataLoading: false })
+		for (const [i, row] of rows.entries()) expect(w.get(`[data-testid='${ROWS[i]}']`).element).toBe(row.element)
+		const values = VALUES.map((id) => w.get(`[data-testid='${id}']`))
+		expect(values.map((value) => value.text())).toEqual(["USDC", "USDC", "6"])
+		expect(values.map((value) => value.attributes("variant"))).toEqual(["name", "name", "name"])
+		expect(w.find("[data-testid='stub-skeleton']").exists()).toBe(false)
+		expect(w.get("[data-testid='register-token-details']").attributes("aria-busy")).toBeUndefined()
+	})
+
+	test("a name that differs from its symbol reads plainly, and decimals as a number", () => {
+		const w = mountTokenAdd({ tokenMetadata: { symbol: "TST", name: "TestToken", decimals: 18 } })
+		expect(VALUES.map((id) => w.get(`[data-testid='${id}']`).text())).toEqual(["TST", "TestToken", "18"])
+	})
+
+	test("an empty name and a blank symbol read as the empty-value dash", () => {
+		const name = getNameDescriptor.unpackResult!(0, [Fr.ZERO]) as string
+		const w = mountTokenAdd({ tokenMetadata: { symbol: ` ${String.fromCodePoint(0xa0)}`, name, decimals: 18 } })
+		const values = VALUES.map((id) => w.get(`[data-testid='${id}']`))
+		expect(values.map((value) => value.text())).toEqual(["—", "—", "18"])
+		expect(values[1]!.attributes("variant")).toBe("name")
+		expect(w.get("[data-testid='register-token-address']").attributes("data-address")).toBe(token)
+	})
+
+	test("a token whose details cannot be read points the person at Reject, since Confirm stays off", () => {
+		const w = mountTokenAdd({ tokenMetadataError: "read failed" })
+		const lines = w.get("[data-testid='register-token-meta-error']").element.parentElement?.children ?? []
+		expect([...lines].map((line) => line.textContent?.trim())).toEqual([
+			"Couldn't resolve token metadata",
+			"Reject this request and ask the app to add the token again.",
+		])
+		expect(w.find("[data-testid='register-token-details']").exists()).toBe(false)
+		expect(w.get("[data-testid='register-token-address']").attributes("data-address")).toBe(token)
 	})
 })

@@ -75,12 +75,11 @@ const reason = computed(() => (isFailed.value ? "Couldn't set up" : "Couldn't ve
 
 .reason {
 	composes: type--caption from global;
-	color: var(--red);
+	color: var(--txt-danger);
 }
 
-/* The landed row's balance column: an `amount-row` line, the 2px gap and a `meta` line. */
 .loading_block {
-	min-height: 37px;
+	composes: loading_block from "./token-row.module.css";
 }
 
 .retry {

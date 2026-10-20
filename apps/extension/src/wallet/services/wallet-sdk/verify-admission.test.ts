@@ -23,24 +23,11 @@ const clock = {
 	clearTimeout: (h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>),
 }
 
-const EXPIRED_PAGE = "chrome-extension://nulo/src/popup/index.html#/windows/discover?requestId=w1&expired=1"
-
 /** `releaseOnServe` gives each served slot back unopened, which refunds no token, so only the rate
  *  is under test. */
-function harness({ navigation = async () => {}, releaseOnServe = false } = {}) {
-	const closed: number[] = []
+function harness({ releaseOnServe = false } = {}) {
 	const releasedIds: string[] = []
-	const navigated: Array<[number, string]> = []
-	const tombstoned: string[] = []
-	const gate = new VerifyAdmissionGate(clock, {
-		closeWindow: (windowId) => closed.push(windowId),
-		navigateWindow: (windowId, url) => {
-			navigated.push([windowId, url])
-			return navigation()
-		},
-		expired: (id) => tombstoned.push(id),
-		released: (id) => releasedIds.push(id),
-	})
+	const gate = new VerifyAdmissionGate(clock, { released: (id) => releasedIds.push(id) })
 	const served: string[] = []
 	const expired: string[] = []
 	const reservations = new Map<string, WindowReservation>()
@@ -54,7 +41,7 @@ function harness({ navigation = async () => {}, releaseOnServe = false } = {}) {
 			},
 			() => expired.push(id),
 		)
-	return { gate, served, expired, reservations, admit, closed, releasedIds, navigated, tombstoned }
+	return { gate, served, expired, reservations, admit, releasedIds }
 }
 
 beforeEach(() => vi.useFakeTimers())
@@ -256,211 +243,38 @@ describe("VerifyAdmissionGate — verify-window capacity", () => {
 	})
 })
 
-describe("VerifyAdmissionGate — a connect window on standby", () => {
+describe("WindowReservation — release", () => {
 	const noToken = { consumesToken: false }
 
-	test("an attached window holds its slot until it is removed, and the gate never closes it", () => {
-		const { gate, admit, served, reservations, closed, releasedIds } = harness()
-		admit("w1", noToken)
-		admit("w2", noToken)
-		admit("w3", noToken)
-		const w1 = reservations.get("w1")!
-		expect(w1.attach(41)).toBe(true)
-		expect(w1.status).toBe("standby")
-		expect(gate.windowsHeld(ORIGIN)).toBe(VERIFY_WINDOWS_PER_ORIGIN)
-		expect(served).toEqual(["w1", "w2"])
-		gate.windowRemoved(41)
-		expect(w1.status).toBe("released")
-		expect(served).toEqual(["w1", "w2", "w3"])
-		expect(releasedIds).toEqual(["w1"])
-		expect(closed).toEqual([])
-	})
-
-	test("a window removed before its attach fails the attach and frees the slot", () => {
-		const { gate, admit, reservations, closed, releasedIds } = harness()
-		admit("w1", noToken)
-		// Closed while its Allow waited for a slot: no reservation knew the id, so the gate buffered it.
-		gate.windowRemoved(41)
-		const w1 = reservations.get("w1")!
-		expect(w1.attach(41)).toBe(false)
-		expect(w1.status).toBe("released")
-		expect(gate.windowsHeld(ORIGIN)).toBe(0)
-		expect(releasedIds).toEqual(["w1"])
-		expect(closed).toEqual([])
-	})
-
-	test("attach binds only an unstarted slot", () => {
-		const { admit, reservations } = harness()
-		admit("w1", noToken)
-		const w1 = reservations.get("w1")!
-		w1.markInFlight()
-		expect(w1.attach(41)).toBe(false)
-		expect(w1.status).toBe("in-flight")
-	})
-
-	type Exit = (gate: VerifyAdmissionGate, w1: WindowReservation) => void
-	const expire: Exit = () => vi.advanceTimersByTime(55_000 + RESERVATION_GRACE_MS + 1)
-	// A session that went away or an establishment that failed is not an expiry: no expired page.
-	const exits: Array<[string, Exit, string | undefined]> = [
-		["cancel", (gate, w1) => gate.onSessionGone(w1.id), EXPIRED_PAGE],
-		["releaseIfUnstarted", (_, w1) => void w1.releaseIfUnstarted(), EXPIRED_PAGE],
-		["expiry of a window with no expired page", expire, undefined],
-	]
-
-	test.each(exits)("%s on a standby slot closes its window once and holds the slot until the removal", (_, exit, page) => {
-		const { gate, admit, served, reservations, closed, releasedIds, navigated } = harness()
-		admit("w1", noToken)
-		admit("w2", noToken)
-		admit("w3", { ...noToken, deadline: Date.now() + 200_000 })
-		const w1 = reservations.get("w1")!
-		w1.attach(41, page)
-		// In flight, w2 is never timer-reclaimed: only w1 can free a slot for w3.
-		reservations.get("w2")!.markInFlight()
-		exit(gate, w1)
-		expect(navigated).toEqual([])
-		expect(closed).toEqual([41])
-		expect(w1.status).toBe("closing")
-		expect(served).toEqual(["w1", "w2"])
-		expect(gate.windowsHeld(ORIGIN)).toBe(VERIFY_WINDOWS_PER_ORIGIN)
-		exit(gate, w1)
-		expect(closed).toEqual([41])
-		expect(releasedIds).toEqual([])
-		gate.windowRemoved(41)
-		expect(served).toEqual(["w1", "w2", "w3"])
-		expect(releasedIds).toEqual(["w1"])
-	})
-
-	/** w1 attached with its expired page, w2 in flight (never timer-reclaimed), w3 queued behind both. */
-	const expiring = (navigation?: () => Promise<void>) => {
-		const h = harness({ navigation })
-		h.admit("w1", noToken)
-		h.admit("w2", noToken)
-		h.admit("w3", { ...noToken, deadline: Date.now() + 200_000 })
-		const w1 = h.reservations.get("w1")!
-		w1.attach(41, EXPIRED_PAGE)
-		h.reservations.get("w2")!.markInFlight()
-		return { ...h, w1 }
-	}
-
-	test("expiry shows the expired page in the window, tombstones the id at once and keeps the slot until the removal", async () => {
-		const { gate, w1, served, closed, releasedIds, navigated, tombstoned } = expiring()
-		expire(gate, w1)
-		await vi.advanceTimersByTimeAsync(0)
-		expect(navigated).toEqual([[41, EXPIRED_PAGE]])
-		expect(tombstoned).toEqual(["w1"])
-		expect(w1.status).toBe("closing")
-		expect(closed).toEqual([])
-		expect(gate.windowsHeld(ORIGIN)).toBe(VERIFY_WINDOWS_PER_ORIGIN)
-		expect(gate.hasTimer).toBe(true)
-		await vi.advanceTimersByTimeAsync(200_000)
-		expect(navigated).toHaveLength(1)
-		expect(served).toEqual(["w1", "w2"])
-		expect(releasedIds).toEqual([])
-		gate.windowRemoved(41)
-		expect(releasedIds).toEqual(["w1"])
-		expect(closed).toEqual([])
-	})
-
-	test("a window that cannot load its expired page is closed, and its removal frees the slot", async () => {
-		const { gate, w1, served, closed, releasedIds } = expiring(() => Promise.reject(new Error("No tab with id")))
-		expire(gate, w1)
-		await vi.advanceTimersByTimeAsync(0)
-		expect(closed).toEqual([41])
-		expect(releasedIds).toEqual([])
-		gate.windowRemoved(41)
-		expect(served).toEqual(["w1", "w2", "w3"])
-		expect(releasedIds).toEqual(["w1"])
-	})
-
-	test("an establishment after the expiry claims no window and opens none", () => {
-		const { gate, w1 } = expiring()
-		expire(gate, w1)
-		expect(w1.claimStandby()).toBeUndefined()
-		expect(w1.markInFlight()).toBe(false)
-		expect(w1.status).toBe("closing")
-	})
-
-	test("a request that expires while still queued has no window: nothing is shown or closed", async () => {
-		const { gate, admit, expired, closed, navigated, tombstoned, reservations } = harness()
-		admit("w1", noToken)
-		admit("w2", noToken)
-		admit("w3", { ...noToken, deadline: Date.now() + 1_000 })
-		reservations.get("w1")!.attach(41, EXPIRED_PAGE)
-		reservations.get("w2")!.attach(42, EXPIRED_PAGE)
-		await vi.advanceTimersByTimeAsync(1_001)
-		expect(expired).toEqual(["w3"])
-		expect(navigated).toEqual([])
-		expect(closed).toEqual([])
-		expect(tombstoned).toEqual([])
-		expect(gate.queued(ORIGIN)).toBe(0)
-	})
-
-	test("claimStandby hands the window over once, and markInFlight refuses a standby slot", () => {
-		const { admit, reservations } = harness()
-		admit("w1", noToken)
-		const w1 = reservations.get("w1")!
-		expect(w1.claimStandby()).toBeUndefined()
-		w1.attach(41)
-		expect(w1.markInFlight()).toBe(false)
-		expect(w1.claimStandby()).toBe(41)
-		expect(w1.status).toBe("in-flight")
-		expect(w1.claimStandby()).toBeUndefined()
-		expect(w1.adopt(41)).toBe("live")
-		expect(w1.status).toBe("opened")
-	})
-
-	test("a claimed window removed before its adoption frees the slot, and the adoption aborts", () => {
-		const { gate, admit, reservations, releasedIds } = harness()
-		admit("w1", noToken)
-		const w1 = reservations.get("w1")!
-		w1.attach(41)
-		w1.claimStandby()
-		gate.windowRemoved(41)
-		expect(w1.status).toBe("released")
-		expect(gate.windowsHeld(ORIGIN)).toBe(0)
-		expect(w1.adopt(41)).toBe("abort")
-		expect(releasedIds).toEqual(["w1"])
-	})
-
-	test("abandoned is false while unstarted or standby, and true once closing or released", () => {
+	test("abandoned is false while unstarted, in flight or opened, and true once released", () => {
 		const { gate, admit, reservations } = harness()
 		admit("w1", noToken)
-		admit("w2", noToken)
 		const w1 = reservations.get("w1")!
 		expect(w1.abandoned).toBe(false)
-		w1.attach(41)
+		w1.markInFlight()
 		expect(w1.abandoned).toBe(false)
-		w1.releaseIfUnstarted()
-		expect(w1.abandoned).toBe(true)
+		w1.adopt(41)
+		expect(w1.abandoned).toBe(false)
 		gate.windowRemoved(41)
 		expect(w1.abandoned).toBe(true)
-		const w2 = reservations.get("w2")!
-		w2.releaseIfUnstarted()
-		expect(w2.abandoned).toBe(true)
 	})
 
 	test("released(id) fires once per release, from every state that can release", () => {
 		const { gate, admit, reservations, releasedIds } = harness()
-		const ids = ["unstarted", "gone", "standby", "closing", "failed", "opened", "claimed", "expired"]
+		const ids = ["unstarted", "gone", "failed", "opened", "cancelled", "expired"]
 		// One origin each, so no slot cap interferes.
 		for (const id of ids) admit(id, { ...noToken, origin: `https://${id}.example` })
 		const r = (id: string) => reservations.get(id)!
 		r("unstarted").releaseIfUnstarted()
-		gate.windowRemoved(40)
-		r("gone").attach(40)
-		r("standby").attach(41)
-		gate.windowRemoved(41)
-		r("closing").attach(42)
-		r("closing").cancel()
-		gate.windowRemoved(42)
+		r("gone").cancel()
 		r("failed").markInFlight()
 		r("failed").creationFailed()
 		r("opened").markInFlight()
 		r("opened").adopt(43)
 		gate.windowRemoved(43)
-		r("claimed").attach(44)
-		r("claimed").claimStandby()
-		r("claimed").adopt(44)
+		r("cancelled").markInFlight()
+		r("cancelled").cancel()
+		r("cancelled").adopt(44)
 		gate.windowRemoved(44)
 		vi.advanceTimersByTime(55_000 + RESERVATION_GRACE_MS + 1)
 		for (const id of ids) {
@@ -468,7 +282,7 @@ describe("VerifyAdmissionGate — a connect window on standby", () => {
 			r(id).cancel()
 			r(id).creationFailed()
 		}
-		for (const windowId of [40, 41, 42, 43, 44]) gate.windowRemoved(windowId)
+		for (const windowId of [43, 44]) gate.windowRemoved(windowId)
 		expect(releasedIds).toEqual(ids)
 	})
 })

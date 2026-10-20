@@ -45,8 +45,8 @@ const password = ref()
 const isWrongPassword = ref(false)
 const words = ref([])
 // Not template state: a pointer double-click must decrypt the phrase once, with nothing re-rendered.
-let isRetrieving = false
-const retrieveFence = createRunFence()
+let isRevealing = false
+const revealFence = createRunFence()
 
 const handleClose = () => {
 	words.value = []
@@ -60,10 +60,10 @@ const handleStart = () => {
 }
 
 const handleUnlock = async () => {
-	if (!password.value || isRetrieving) return
+	if (!password.value || isRevealing) return
 
-	isRetrieving = true
-	const isCurrent = retrieveFence.begin()
+	isRevealing = true
+	const isCurrent = revealFence.begin()
 	// The words belong to the profile asked for, even if another becomes active during the read.
 	const profileId = appStore.profile.id
 	try {
@@ -77,7 +77,7 @@ const handleUnlock = async () => {
 	} catch (error) {
 		if (isCurrent()) isWrongPassword.value = true
 	} finally {
-		isRetrieving = false
+		isRevealing = false
 	}
 }
 
@@ -92,7 +92,7 @@ const onKeydown = (e) => {
 }
 
 onBeforeUnmount(() => {
-	retrieveFence.invalidate()
+	revealFence.invalidate()
 	// The clipboard scrub timer deliberately outlives the page (useSecretClipboardCopy says why).
 	words.value = []
 })

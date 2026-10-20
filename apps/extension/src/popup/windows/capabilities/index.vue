@@ -33,13 +33,12 @@ import { GROUP_LABELS, GROUP_ORDER } from "./permission-rows"
 /** Services */
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
 import type { DappMetadata } from "@/wallet/services/dapp-session/client"
-import { type CapabilityPayload, DappInteractionServiceClient } from "@/wallet/services/dapp-interaction/client"
+import { type CapabilityPayload, DappInteractionServiceClient, type WindowEnd } from "@/wallet/services/dapp-interaction/client"
 import { type Capability, effectiveGrants } from "@nulo/wallet-bridge"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
-import { useDappHostname } from "@/composables/useDappHostname"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 import { useNetworkActivation } from "@/composables/useNetworkActivation"
 
@@ -117,14 +116,13 @@ const {
 	dappOf: (p) => p.session.dappMetadata as UIDappMetadata,
 })
 
-const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHostname(dapp)
-
 // init/reject/services are referenced lazily (thunks): they are declared below
 // and only invoked by start()/dispose()/the guard at runtime.
 const {
 	start: startWindow,
 	dispose: disposeWindow,
 	closeWindow,
+	endAndClose,
 	onActiveProfileChanged,
 	stripStatus,
 	processingError,
@@ -143,7 +141,7 @@ const {
 		interactionService.disconnect()
 	},
 	init: () => init(),
-	reject: () => reject(),
+	reject: (end) => reject(end),
 })
 
 const init = async () => {
@@ -335,10 +333,9 @@ const approve = async () => {
 // `reject` stays unconditional: the approval-window shell also fires it on `beforeunload` and on a
 // lock or profile change, and a lock landing mid-switch must still reject the pending request.
 // Only the footer's buttons are held while a switch runs.
-const reject = async () => {
+const reject = async (end: WindowEnd) => {
 	if (isInteractionCancelled.value) return
-	rejectViaInteractionService("User rejected")
-	closeWindow(true)
+	await endAndClose(() => rejectViaInteractionService("User rejected", end))
 }
 
 const { activate: activateNetwork } = useNetworkActivation({
@@ -376,8 +373,6 @@ onUnmounted(disposeWindow)
 		<Flex direction="column" data-testid="cap-scroll-area" :class="$style.scroll_area">
 			<DappIdentityBlock
 				:dapp="dapp"
-				:hostname="dappHostname"
-				:hostnameSuspicious="hostnameHasNonAscii"
 				hostnameTestId="capabilities-hostname"
 				:actionLabel="asksForMore ? `wants more permissions on ${chainName}` : `wants to connect on ${chainName}`"
 			/>
@@ -463,7 +458,7 @@ onUnmounted(disposeWindow)
 			:confirm-label="confirmWord"
 			:confirm-loading="isLoading"
 			:confirm-disabled="isLoading || isSwitching || processingError?.type === 'error' || !initComplete"
-			@reject="reject"
+			@reject="reject('reject')"
 			@approve="approve"
 		/>
 
