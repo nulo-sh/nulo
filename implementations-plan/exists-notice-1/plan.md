@@ -1,7 +1,7 @@
 ---
 plan: exists-notice-1
 tier: light
-status: planned, final Codex approve; arc 1 builds OA-1 A as a draft (auto-continue)
+status: arc 1 in review as a draft (OA-1 unsigned)
 issues: "#914 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
