@@ -307,6 +307,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [storage-migration-backup](storage-migration-backup/plan.md) — completed — imported backups migrate through the same migrations as live storage
 - [storage-migration-framework](storage-migration-framework/plan.md) — completed — persisted storage shapes transformed in place on update, never wiped
 - [storage-privacy-1](storage-privacy-1/plan.md) — completed — note receipts keyed by their unique note hash; `storage.local` for trusted contexts only (#660)
+- [structure-2](structure-2/plan.md) — completed — one settings control row, detail hero line, explorer name and hero observer (#735, with #817); an Allow's row bound to its profile (#680); Presto's onboarding leftovers and style hash removed (#730); #750 mapped, no split
 - [supply-chain-release](supply-chain-release/plan.md) — completed — release zips attested and published through a draft, a pinned CI toolchain, an import-free content script, a blocking audit gate (#21 #12 #22 #20)
 - [sw-wallet-protocol](sw-wallet-protocol/plan.md) — completed — the service-worker boot and wallet protocol path under the complexity budget
 - [testers-fixes-1](testers-fixes-1/plan.md) — completed — selectable text, the toolbar sentence, back keeps scroll, 2 s success toasts, a display-only Home hero (#580 #581 #582 #584 #586)
