@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
-import { hasSidePanelSurface, isFirefox, isFirefoxSidebar, passkeyNeedsOwnWindow, sidebarAction } from "./browser-surface"
+import {
+	hasSidePanelSurface,
+	isFirefox,
+	isFirefoxSidebar,
+	passkeyNeedsOwnWindow,
+	pointToolbarAtSidebar,
+	sidebarAction,
+} from "./browser-surface"
 
 function stubBrowser({ firefox, views }: { firefox: boolean; views?: () => Window[] }) {
 	const getViews = vi.fn(views ?? (() => []))
@@ -48,6 +55,22 @@ describe("browser surface", () => {
 		vi.stubGlobal("browser", { sidebarAction: sidebar })
 		expect(sidebarAction()).toBe(sidebar)
 		expect(hasSidePanelSurface()).toBe(true)
+	})
+
+	it("the toolbar button points at Firefox's sidebar or its manifest popup, and Chrome keeps its popup", async () => {
+		const setPopup = vi.fn(async () => undefined)
+		stubBrowser({ firefox: false })
+		Object.assign(chrome, { sidePanel: {}, action: { setPopup } })
+		vi.stubGlobal("browser", undefined)
+		await pointToolbarAtSidebar(true)
+		expect(setPopup).not.toHaveBeenCalled()
+
+		stubBrowser({ firefox: true })
+		Object.assign(chrome, { action: { setPopup } })
+		vi.stubGlobal("browser", { sidebarAction: { open: vi.fn(), close: vi.fn(), toggle: vi.fn() } })
+		await pointToolbarAtSidebar(true)
+		await pointToolbarAtSidebar(false)
+		expect(setPopup.mock.calls).toEqual([[{ popup: "" }], [{ popup: null }]])
 	})
 
 	it("only Firefox's sidebar document is the sidebar, and Chrome, which refuses the type, is never asked", () => {

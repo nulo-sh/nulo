@@ -24,7 +24,20 @@ export function sidebarAction(): SidebarAction | undefined {
 	return (globalThis as { browser?: { sidebarAction?: SidebarAction } }).browser?.sidebarAction
 }
 
-type SidebarAction = { open(): Promise<void>; close(): Promise<void> }
+type SidebarAction = { open(): Promise<void>; close(): Promise<void>; toggle(): Promise<void> }
+
+/** Firefox's `action.setPopup`, which also takes `null`: the manifest's popup back. */
+type SetPopup = (details: { popup: string | null }) => Promise<void>
+
+/**
+ * Points Firefox's toolbar button at its sidebar, or back at the manifest's popup; Chrome keeps its
+ * popup. With no popup set, a click reaches `action.onClicked`. Firefox keeps the choice only while
+ * it runs, so every start of the background and of a shell page applies the stored setting again.
+ */
+export async function pointToolbarAtSidebar(on: boolean): Promise<void> {
+	if (!sidebarAction() || chrome.sidePanel) return
+	await (chrome.action.setPopup as unknown as SetPopup)({ popup: on ? "" : null })
+}
 
 /** This document is Firefox's sidebar, which `window.close()` leaves open. Chrome's `getViews`
  *  refuses the `sidebar` type, so it is asked only where a sidebar exists. */

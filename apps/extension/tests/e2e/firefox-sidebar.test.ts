@@ -8,7 +8,7 @@
  */
 import type { Browser, Page } from "puppeteer"
 import { describe, expect } from "vitest"
-import { FIREFOX_ONLY, isFirefox, stopBackground } from "./fixtures/browser"
+import { extensionUrl, FIREFOX_ONLY, gotoExtensionPage, isFirefox, newPage, stopBackground } from "./fixtures/browser"
 import { inPageRealm, sessionAuthenticator } from "./fixtures/browser/firefox"
 import { CONFIG_STORAGE_KEY } from "@/wallet/config/config"
 import {
@@ -17,6 +17,7 @@ import {
 	evaluateInActionPopup,
 	openActionPopup,
 	triggerToolbarAction,
+	waitForOpenPanel,
 } from "./fixtures/browser/firefox-action-popup"
 import {
 	clickInSidebar,
@@ -24,6 +25,7 @@ import {
 	evaluateInSidebar,
 	openSidebar,
 	type SidebarKind,
+	setSidebarKind,
 	sidebarShows,
 } from "./fixtures/browser/firefox-sidebar"
 import { ensureUnlocked } from "./fixtures/auth"
@@ -132,65 +134,106 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.sidebar, () => {
 		},
 	)
 
-	test("with the side-panel setting on, the toolbar button opens the sidebar, and with it off the popup again", async ({
-		registeredExtensionPerTest: ctx,
-	}) => {
-		const { browser } = ctx
-		let control = await openPopup(ctx)
+	test.for(["default", "revamped"] satisfies SidebarKind[])(
+		"in the %s sidebar, with the side-panel setting on the toolbar button toggles the sidebar, and with it off opens the popup",
+		async (kind, { registeredExtensionPerTest: ctx }) => {
+			const { browser } = ctx
+			await setSidebarKind(browser, kind)
+			let control = await openPopup(ctx)
 
-		await openActionPopup(browser)
-		await openDisplay((body) => evaluateInActionPopup(browser, body), "the toolbar panel")
-		await clickInActionPopup(browser, TOGGLE)
-		await until(
-			() => sidebarShows(browser),
-			(open) => open,
-			"the sidebar the row opened",
-		)
-		await until(
-			() => storedSidePanel(control),
-			(on) => on === true,
-			"the setting stored on",
-		)
-		await until(
-			() => actionPopupShows(browser),
-			(open) => !open,
-			"the toolbar panel closing once stored",
-		)
-		await until(
-			() => toolbarPopup(control),
-			(popup) => popup === "",
-			"the toolbar popup cleared",
-		)
+			await openActionPopup(browser)
+			await openDisplay((body) => evaluateInActionPopup(browser, body), "the toolbar panel")
+			await clickInActionPopup(browser, TOGGLE)
+			await until(
+				() => sidebarShows(browser),
+				(open) => open,
+				"the sidebar the row opened",
+			)
+			await until(
+				() => storedSidePanel(control),
+				(on) => on === true,
+				"the setting stored on",
+			)
+			await until(
+				() => actionPopupShows(browser),
+				(open) => !open,
+				"the toolbar panel closing once stored",
+			)
+			await until(
+				() => toolbarPopup(control),
+				(popup) => popup === "",
+				"the toolbar popup cleared",
+			)
 
-		// Firefox keeps the cleared popup while it runs, not the background: the click has to wake one.
-		await closeSidebar(browser)
-		await control.close()
-		await stopBackground(ctx)
-		await triggerToolbarAction(browser)
-		expect(await toolbarOpened(browser)).toEqual({ sidebar: true, popup: false })
+			// Firefox keeps the cleared popup while it runs, not the background: the click has to wake one.
+			await closeSidebar(browser)
+			await control.close()
+			await stopBackground(ctx)
+			await triggerToolbarAction(browser)
+			expect(await toolbarOpened(browser)).toEqual({ sidebar: true, popup: false })
+			await triggerToolbarAction(browser)
+			await until(
+				() => sidebarShows(browser),
+				(open) => !open,
+				"the sidebar a second click closed",
+			)
+			expect(await actionPopupShows(browser)).toBe(false)
 
-		// A background that died locks the wallet; the sidebar follows the unlock.
-		control = await openPopup(ctx)
-		await ensureUnlocked(control)
-		await openDisplay((body) => evaluateInSidebar(browser, body), "the sidebar")
-		await clickInSidebar(browser, TOGGLE)
-		await until(
-			() => sidebarShows(browser),
-			(open) => !open,
-			"the sidebar closing itself as the row turns off",
-		)
-		await until(
-			() => storedSidePanel(control),
-			(on) => on === false,
-			"the setting stored off",
-		)
-		await until(
-			() => toolbarPopup(control),
-			(popup) => popup.endsWith(MANIFEST_POPUP),
-			"the manifest's toolbar popup back",
-		)
+			// Onboarding's Open wallet has the background open its popup, with the setting on as after a
+			// restored backup: Firefox opens none while the button points at the sidebar, so the manifest's
+			// comes back first, and the popup's boot points the button at the sidebar again. A background
+			// that died locks the wallet, and pages follow the unlock.
+			control = await openPopup(ctx)
+			await ensureUnlocked(control)
+			// With onboarding not yet complete, the shell routes a known profile to Learn and stays.
+			await control.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": false }))
+			const onboarding = await newPage(browser)
+			await gotoExtensionPage(onboarding, extensionUrl(ctx.extensionId, "/src/onboarding/index.html"))
+			await waitForHash(onboarding, "#/onboarding/learn", 10_000)
+			// Alone in its window, the page stays, and the background opens the panel over it.
+			await onboarding.evaluate(async () => {
+				const { id } = await chrome.windows.getCurrent()
+				if ((await chrome.tabs.query({ windowId: id })).length > 1)
+					await chrome.windows.create({ tabId: (await chrome.tabs.getCurrent())?.id, focused: true })
+				window.location.hash = "#/onboarding/done"
+			})
+			await waitForHash(onboarding, "#/onboarding/done", 10_000)
+			await clickByTestId(onboarding, "onboarding-done-open")
+			await waitForOpenPanel(control)
+			await until(
+				() => toolbarPopup(control),
+				(popup) => popup === "",
+				"the popup pointing the button at the sidebar again",
+			)
+			await onboarding.close()
+			await until(
+				() => control.evaluate(() => chrome.extension.getViews({ type: "popup" }).length),
+				(panels) => panels === 0,
+				"the panel closing with its window",
+			)
+			await triggerToolbarAction(browser)
+			expect(await toolbarOpened(browser)).toEqual({ sidebar: true, popup: false })
 
-		await triggerToolbarAction(browser)
-		expect(await toolbarOpened(browser)).toEqual({ sidebar: false, popup: true })
-	})
+			await openDisplay((body) => evaluateInSidebar(browser, body), "the sidebar")
+			await clickInSidebar(browser, TOGGLE)
+			await until(
+				() => sidebarShows(browser),
+				(open) => !open,
+				"the sidebar closing itself as the row turns off",
+			)
+			await until(
+				() => storedSidePanel(control),
+				(on) => on === false,
+				"the setting stored off",
+			)
+			await until(
+				() => toolbarPopup(control),
+				(popup) => popup.endsWith(MANIFEST_POPUP),
+				"the manifest's toolbar popup back",
+			)
+
+			await triggerToolbarAction(browser)
+			expect(await toolbarOpened(browser)).toEqual({ sidebar: false, popup: true })
+		},
+	)
 })

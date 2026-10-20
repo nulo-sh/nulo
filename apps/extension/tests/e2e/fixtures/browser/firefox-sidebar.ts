@@ -1,6 +1,7 @@
 import type { Browser } from "puppeteer"
 import { actionPopupContext } from "./firefox"
 import { clickWithPointer, evaluateViaFrameScript } from "./firefox-frame-script"
+import { pollUntil } from "../poll"
 
 /**
  * Firefox's sidebar (`sidebar_action`) holds its document in a content browser that belongs to no
@@ -30,17 +31,38 @@ const LOCATE_SIDEBAR = `
 export type SidebarKind = "default" | "revamped"
 
 /**
+ * Makes Firefox draw the sidebar `kind` names, and resolves once its rebuild is done. A launch may
+ * come up with either, and a spec that does not choose would drive whichever it got.
+ */
+export async function setSidebarKind(browser: Browser, kind: SidebarKind): Promise<void> {
+	const { session } = actionPopupContext(browser)
+	const set = await session.chromeScript<string>(
+		`
+		const [revamped, done] = arguments;
+		const controller = window.SidebarController;
+		// The pref's observer rebuilds the sidebar in a continuation queued behind the controller's
+		// initialisation, so the kind holds once that and one task more have run.
+		Services.prefs.setBoolPref("sidebar.revamp", revamped);
+		controller.promiseInitialized.then(() =>
+			window.setTimeout(() => done(controller.sidebarRevampEnabled === revamped ? "set" : "the sidebar kind did not switch"), 0),
+		);
+		`,
+		[kind === "revamped"],
+	)
+	if (set !== "set") throw new Error(`setSidebarKind: ${set}`)
+}
+
+/**
  * Opens the add-on's sidebar, as `sidebarAction.open()` does, in the sidebar `kind` names, and resolves
- * once the add-on's page is the sidebar's document. The kind is set every time: a launch may come up
- * with either, and a spec that does not choose would drive whichever it got.
+ * once the add-on's page is the sidebar's document.
  */
 export async function openSidebar(browser: Browser, kind: SidebarKind): Promise<void> {
+	await setSidebarKind(browser, kind)
 	const { session, addonId } = actionPopupContext(browser)
 	const opened = await session.chromeScript<string>(
 		`
-		const [addonId, revamped, done] = arguments;
+		const [addonId, done] = arguments;
 		const sidebar = () => { ${LOCATE_SIDEBAR} };
-		const controller = window.SidebarController;
 		const { extension } = WebExtensionPolicy.getByID(addonId);
 		const started = Date.now();
 		const poll = () => {
@@ -48,21 +70,14 @@ export async function openSidebar(browser: Browser, kind: SidebarKind): Promise<
 			if (Date.now() - started > 15000) return done("the sidebar never opened");
 			window.setTimeout(poll, 100);
 		};
-		const open = () => {
-			if (controller.sidebarRevampEnabled !== revamped) return done("the sidebar kind did not switch");
-			try {
-				extension.apiManager.global.sidebarActionFor(extension).open(window);
-			} catch (err) {
-				return done("open failed: " + err);
-			}
-			poll();
-		};
-		// The pref's observer rebuilds the sidebar in a continuation queued behind the controller's
-		// initialisation, so the open waits for that and one task more, after which the rebuild is done.
-		Services.prefs.setBoolPref("sidebar.revamp", revamped);
-		controller.promiseInitialized.then(() => window.setTimeout(open, 0));
+		try {
+			extension.apiManager.global.sidebarActionFor(extension).open(window);
+		} catch (err) {
+			return done("open failed: " + err);
+		}
+		poll();
 		`,
-		[addonId, kind === "revamped"],
+		[addonId],
 	)
 	if (opened !== "open") throw new Error(`openSidebar: ${opened}`)
 }
@@ -96,8 +111,13 @@ export async function sidebarShows(browser: Browser): Promise<boolean> {
 	)
 }
 
-/** Closes this window's sidebar, as its close button does. */
+/** Closes this window's sidebar, as its close button does, and resolves once it shows nothing. */
 export async function closeSidebar(browser: Browser): Promise<void> {
 	const { session } = actionPopupContext(browser)
 	await session.chromeScript<null>(`const [done] = arguments; window.SidebarController.hide(); done(null);`)
+	await pollUntil(
+		() => sidebarShows(browser),
+		(open) => !open,
+		{ label: "closeSidebar: the sidebar closing", timeoutMs: 10_000, intervalMs: 100 },
+	)
 }

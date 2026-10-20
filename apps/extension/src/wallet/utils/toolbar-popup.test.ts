@@ -51,6 +51,15 @@ describe("onboarding's Open wallet", () => {
 		return kept ? answer : undefined
 	}
 
+	test("on Firefox, the manifest's popup comes back before the open, since none opens while the button points at the sidebar", async () => {
+		const setPopup = vi.fn(async () => undefined)
+		Object.assign(chrome.action, { setPopup })
+		vi.stubGlobal("browser", { sidebarAction: { open: vi.fn(), close: vi.fn(), toggle: vi.fn() } })
+		await ask({ id: "nulo", url: ONBOARDING, tab: { id: 7, windowId: 3 } as chrome.tabs.Tab })
+		expect(setPopup).toHaveBeenCalledExactlyOnceWith({ popup: null })
+		expect(setPopup.mock.invocationCallOrder[0]).toBeLessThan(openPopup.mock.invocationCallOrder[0])
+	})
+
 	test("closes the onboarding tab, then opens the popup in its window", async () => {
 		const answer = await ask({ id: "nulo", url: ONBOARDING, tab: { id: 7, windowId: 3 } as chrome.tabs.Tab })
 		expect(answer).toEqual({ ok: true })

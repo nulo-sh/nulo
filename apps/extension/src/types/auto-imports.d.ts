@@ -317,6 +317,7 @@ declare global {
   const plainMethodName: typeof import('../utils/tx-enrichment').plainMethodName
   const planImportWrites: typeof import('../utils/contact-import-rows').planImportWrites
   const planRestoreAgain: typeof import('../composables/full-backup-restore').planRestoreAgain
+  const pointToolbarAtSidebar: typeof import('../utils/browser-surface').pointToolbarAtSidebar
   const postAuthRoute: typeof import('../utils/own-window').postAuthRoute
   const preflightNetworkConnectivity: typeof import('../composables/importPreflight').preflightNetworkConnectivity
   const pricesUnavailable: typeof import('../utils/token-aggregate').pricesUnavailable
@@ -1097,6 +1098,7 @@ declare module 'vue' {
     readonly plainMethodName: UnwrapRef<typeof import('../utils/tx-enrichment')['plainMethodName']>
     readonly planImportWrites: UnwrapRef<typeof import('../utils/contact-import-rows')['planImportWrites']>
     readonly planRestoreAgain: UnwrapRef<typeof import('../composables/full-backup-restore')['planRestoreAgain']>
+    readonly pointToolbarAtSidebar: UnwrapRef<typeof import('../utils/browser-surface')['pointToolbarAtSidebar']>
     readonly postAuthRoute: UnwrapRef<typeof import('../utils/own-window')['postAuthRoute']>
     readonly preflightNetworkConnectivity: UnwrapRef<typeof import('../composables/importPreflight')['preflightNetworkConnectivity']>
     readonly pricesUnavailable: UnwrapRef<typeof import('../utils/token-aggregate')['pricesUnavailable']>

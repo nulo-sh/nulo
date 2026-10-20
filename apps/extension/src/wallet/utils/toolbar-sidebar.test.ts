@@ -5,7 +5,7 @@ import { registerToolbarSidebar } from "./toolbar-sidebar"
 
 let clicked: (() => void) | undefined
 let setPopup: ReturnType<typeof vi.fn>
-let open: ReturnType<typeof vi.fn>
+let toggle: ReturnType<typeof vi.fn>
 let onUpdate: EventHandler<ConfigProp>
 
 function stubBrowser({ firefox }: { firefox: boolean }) {
@@ -13,13 +13,13 @@ function stubBrowser({ firefox }: { firefox: boolean }) {
 		...(firefox ? {} : { sidePanel: {} }),
 		action: { onClicked: { addListener: (listener: () => void) => (clicked = listener) }, setPopup },
 	})
-	vi.stubGlobal("browser", firefox ? { sidebarAction: { open } } : undefined)
+	vi.stubGlobal("browser", firefox ? { sidebarAction: { toggle } } : undefined)
 }
 
 beforeEach(() => {
 	clicked = undefined
 	setPopup = vi.fn(async () => undefined)
-	open = vi.fn(async () => undefined)
+	toggle = vi.fn(async () => undefined)
 	onUpdate = new EventHandler<ConfigProp>()
 })
 
@@ -41,11 +41,11 @@ describe("registerToolbarSidebar", () => {
 		expect(setPopup.mock.calls).toEqual([[{ popup: "" }], [{ popup: null }]])
 	})
 
-	test("on Firefox a toolbar click opens the sidebar inside the click's own listener", () => {
+	test("on Firefox a toolbar click toggles the sidebar inside the click's own listener, as Chrome's button toggles its panel", () => {
 		stubBrowser({ firefox: true })
 		registerToolbarSidebar({ onUpdate })
-		expect(open).not.toHaveBeenCalled()
+		expect(toggle).not.toHaveBeenCalled()
 		clicked?.()
-		expect(open).toHaveBeenCalledTimes(1)
+		expect(toggle).toHaveBeenCalledTimes(1)
 	})
 })

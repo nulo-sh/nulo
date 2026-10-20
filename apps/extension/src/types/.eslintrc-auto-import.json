@@ -542,6 +542,7 @@
     "plainMethodName": true,
     "planImportWrites": true,
     "planRestoreAgain": true,
+    "pointToolbarAtSidebar": true,
     "postAuthRoute": true,
     "preflightNetworkConnectivity": true,
     "pricesUnavailable": true,

@@ -1,4 +1,4 @@
-import type { Browser } from "puppeteer"
+import type { Browser, Page } from "puppeteer"
 import { actionPopupContext, inPageRealm } from "./firefox"
 import { clickWithPointer, evaluateViaFrameScript } from "./firefox-frame-script"
 
@@ -8,6 +8,18 @@ import { clickWithPointer, evaluateViaFrameScript } from "./firefox-frame-script
  * a layout that only breaks inside a panel went unseen. These reach it the way Firefox's own tests
  * do: from the browser's privileged scope, and into the panel with a frame script.
  */
+
+/** Resolves once a panel is open in any window, read from another extension page, which moves no
+ *  focus as reading inside the panel would. Firefox loads the popup's document before the panel
+ *  opens, and only the open panel gives it focus. */
+export const waitForOpenPanel = (control: Page) =>
+	control.waitForFunction(
+		() => {
+			const views = chrome.extension.getViews({ type: "popup" })
+			return views.length === 1 && views[0].document.hasFocus()
+		},
+		{ timeout: 10_000, polling: 100 },
+	)
 
 /**
  * Privileged source, run with `addonId`, that returns this add-on's panel browser while its panel is
