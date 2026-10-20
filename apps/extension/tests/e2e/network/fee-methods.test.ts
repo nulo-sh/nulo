@@ -353,9 +353,15 @@ test.skipIf(!hasConfig)(
 		{
 			const page = await openPopup(feeJuiceReadyExtension)
 			await waitForHash(page, "#/popup/general")
-			// The fixture's minted tokens raise the banner, which takes the phrase row's place.
+			// The fixture's minted tokens fund the wallet, and its card still asks for the phrase first.
 			await waitForHomeReminders(page)
-			expect(await getStartedRows(page)).toEqual(["get-started-aztec", "get-started-feeJuice done", "get-started-presto"])
+			expect(await getStartedRows(page)).toEqual([
+				"get-started-phrase",
+				"get-started-aztec",
+				"get-started-feeJuice done",
+				"get-started-presto",
+			])
+			expect(await page.$('[data-testid="backup-reminder-banner"]')).toBeNull()
 			// Home records the held Fee Juice for the profile.
 			const profileId = (await readSessionRow(page))?.profile
 			if (!profileId) throw new Error("no unlocked profile")
