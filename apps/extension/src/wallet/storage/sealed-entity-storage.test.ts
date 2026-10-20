@@ -182,6 +182,21 @@ describe("SealedEntityStorage", () => {
 			expect(await store().get("c-1")).toEqual(newer)
 		})
 
+		test("a row deleted or sealed by a writer during the pass is never brought back or overwritten", async () => {
+			await legacy(area, contact("c-1", "p"))
+			await legacy(area, contact("c-2", "p"))
+			const newer = contact("c-2", "p", "renamed")
+			const writers = async <R>(fn: () => Promise<R>) => {
+				await store().delete("c-1")
+				await store().set("c-2", newer)
+				return fn()
+			}
+
+			expect(await store().sealLegacy("p", writers)).toBe(0)
+			expect(Object.keys(await raw(area))).toEqual([`${ROOT}@c-2`])
+			expect(await store().get("c-2")).toEqual(newer)
+		})
+
 		test("a pass whose profile's keys go mid-pass writes nothing more", async () => {
 			await legacy(area, contact("c-1", "p"))
 			const deletedFirst = async <R>(fn: () => Promise<R>) => {

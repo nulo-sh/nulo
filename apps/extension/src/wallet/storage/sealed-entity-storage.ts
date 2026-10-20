@@ -262,13 +262,12 @@ export class SealedEntityStorage<T> {
 		return key in stored ? this.decode(key, stored[key]) : undefined
 	}
 
+	/** Opens every row at once: WebCrypto pipelines concurrent decryptions, and one await per row
+	 *  costs a full round trip each (Firefox: about 0.1 ms a row). */
 	private async readAll(): Promise<Array<{ located: Located; row: T }>> {
-		const out: Array<{ located: Located; row: T }> = []
-		for (const [key, , raw] of prefixedEntries(await this.area.get(), this.prefix)) {
-			const read = await this.decode(key, raw)
-			if (read) out.push(read)
-		}
-		return out
+		const entries = prefixedEntries(await this.area.get(), this.prefix)
+		const reads = await Promise.all(entries.map(([key, , raw]) => this.decode(key, raw)))
+		return reads.filter((read) => read !== undefined)
 	}
 
 	/** One stored value, through the envelope when it is one, else through the plain codec. */

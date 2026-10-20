@@ -4583,6 +4583,19 @@ describe("row keys — held for the worker's lifetime, never for a dead incarnat
 		await expect(openRow(reborn, sealed, BINDING)).rejects.toThrow()
 	}, 30_000)
 
+	test("a delete racing an open leaves no keys behind, whichever lands first", async () => {
+		const { service } = await makeService()
+		service.setDeletionDelegate({
+			snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }),
+			runFor: async (id) => service.dropRowKeys(id),
+		})
+		const p = await service.createProfile("P", "pass1234")
+		await service.lockActiveProfile()
+
+		await Promise.allSettled([service.unlockProfile(p.id, "pass1234"), service.deleteProfile(p.id)])
+		expect(service.rowKeys(p.id)).toBeUndefined()
+	}, 30_000)
+
 	test("a worker that restores the session holds its keys, and a handler that subscribes late gets them on replay", async () => {
 		const { api, service } = await makeService()
 		const p = await service.createProfile("P", "pass1234")
