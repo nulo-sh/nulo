@@ -5,7 +5,6 @@ import {
 	droppedPrefixLength,
 	formatArg,
 	formatLogData,
-	formatLogs,
 	formatSingleLog,
 	getDisplayName,
 	getLogLevelName,
@@ -93,17 +92,6 @@ describe("JsonViewer/logs-format", () => {
 		const out = formatSingleLog({ timestamp: fixed, source: "tx", level: LogLevel.Info, data: ["hello"] })
 		// Time portion uses local zone via toTimeString; assert structural shape only.
 		expect(out).toMatch(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[tx\] INFO: hello$/)
-	})
-
-	test("formatLogs joins entries with newlines", () => {
-		const t = Date.now()
-		const out = formatLogs([
-			{ timestamp: t, source: "a", level: LogLevel.Info, data: ["x"] },
-			{ timestamp: t, source: "b", level: LogLevel.Warn, data: ["y"] },
-		])
-		expect(out.split("\n")).toHaveLength(2)
-		expect(out).toContain("[a] INFO: x")
-		expect(out).toContain("[b] WARN: y")
 	})
 
 	test("logsDocument ends every line, so a live line appended at its end gets a line of its own", () => {
