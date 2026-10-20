@@ -11,3 +11,4 @@
 - 2026-10-20 Phase 3 network e2e, Chrome, retry 0: restart-closes-check-window (15.7 s), lock-restart-reconnect (27.0 s), inflight-call-background-death, connect-verify-mismatch pass.
 - 2026-10-20 Phase 3 network e2e, Firefox, retry 0: lock-restart-reconnect (33.1 s), inflight-call-background-death, connect-verify-mismatch pass; restart-closes-check-window skips by `CHROME_ONLY.backgroundKillUnderPage`.
 - 2026-10-20 Phase 3 smoke, retry 0, armed builds: extension-restart + sw-resilience pass on Chrome (11/11) and Firefox (6 pass, 5 Chrome-only skips).
+- 2026-10-20 Codex loop: round 1 approve (2 low, applied) with the Opus diff review's conditional approve (applied); round 2 approve. Converged.
