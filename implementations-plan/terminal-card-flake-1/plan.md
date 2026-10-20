@@ -1,7 +1,7 @@
 ---
 plan: terminal-card-flake-1
 tier: light
-status: planned, Codex approve (round 3)
+status: A1 implemented, gate green, PR pending
 issues: "#903 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -56,7 +56,7 @@ It returns `{ title, subtitle }` read from that card (`activity-title`, `tx-term
 - **A page-root testid on History**: a product change for a test; `activity-feed-root` is already shared by History and Home's widget. Rejected.
 - **Keep the hash parameter and derive the tab**: the parameter would accept hashes the gate cannot serve. Chosen: the tab union.
 
-## Phase 1 — one scoped read
+## Phase 1 — one scoped read ✓
 
 1. Rewrite `readTerminalCard` and its comment as above; update the four call sites.
 2. Add the skill bullet and the ledger row (the next free number on the branch; the close-out renumbers it after merging `origin/dev`).
@@ -109,6 +109,8 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `44bc
 **Round 2, Codex** (resume): conditional approve, 2 findings. #1 case (b)'s 1,400 ms floor was itself a timing assumption: accepted (the card returns only after two counted predicate queries saw it absent). #2 the base sensitivity run needs a criterion: accepted (up to three runs; none failing is recorded as inconclusive). It confirmed the `pushState` hold and the case (c) check.
 
 **Round 3, Codex** (resume): **approve**, high confidence; both round-2 fixes verified, no new finding.
+
+**Implementation rounds 1-2** (diff 3a072beb..591dd4f8; log: [lessons/phase-1.md](lessons/phase-1.md)). Round 1, Codex (gpt-6.1-sol, high, session 01a156bb): conditional approve, one low finding (ledger row 61 stated the CI sequence as established), fixed. Opus diff review: approve, two doc nits (W1 is 6-33 ms; the skill bullet's no-transition precondition), fixed in 591dd4f8. Round 2 (resume): no remaining finding; the loop converged. Gate: lint, `typecheck:all`, `test:all` exit 0; probe (a), (b), (c) green on Chrome and Firefox; base sensitivity met; certification 10/10 plain and 20/20 pinned; the three network specs at retry 0, 4/4 on Chrome and on Firefox.
 
 ## Seeds
 
