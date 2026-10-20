@@ -3,3 +3,5 @@
 - 2026-10-20 22:40Z Codex round 2 conditional approve; conditions applied; round 3 approve
 - 2026-10-20 21:40Z arc1 phase 1 gate green: lint 0, typecheck:all 0, tx + cross-profile tests 88/88; (a) and (b) red on the base service.ts
 - 2026-10-20 22:15Z arc1 phase 2 gate: lint 0, test 0 (14648 passed), test:all 0; typecheck:all red once (spread of `as never` fixtures in the new test), fixed with an object cast, then lint 0, typecheck:all 0, the file 24/24; (c) and (d) red on the base service.ts
+- 2026-10-20 22:45Z arc1 review loop converged: Codex R1 and R2 no new material findings; Opus diff review no bugs; fixes in 511a7a676
+- 2026-10-20 23:30Z arc1 final head 511a7a676: lint 0, typecheck:all 0, test 0, test:all 0, smoke + network e2e green on Chrome (Firefox green at the same head earlier)

@@ -81,10 +81,11 @@ Control flow (order unchanged): profile restore → networks → `AccountService
 - Tests (`S/cross-profile-isolation.test.ts`, real `AccountService` and `TransactionService`, a keyless imported account): (c) with the tx store's delete held behind a gate, `reconcileImportedAccounts` does not resolve and the account row stays until the gate opens; then the profile's tx row for the scope is gone, while the same address's row under another profile and the profile's row on another chain stay (red at the base, which resolves before the gate opens); (d) a rejected tx delete rejects the reconcile and the account row stays.
 - **Validation gate**: `bun run lint && bun run typecheck:all && bun run test && bun run test:all`. Pass: exit 0, and (c) and (d) fail against the base copy.
 
-## Phase 3: a person's own backup still round-trips
+## Phase 3: a person's own backup still round-trips ✓
 
-- Run each at retry 0 through `agent.sh` (`NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent <file>`): `tests/e2e/backup-roundtrip.test.ts`, `tests/e2e/backup-imported-account.test.ts`, `tests/e2e/network/backup-migration-roundtrip.test.ts`, `tests/e2e/network/backup-restore-integrity.test.ts` (it restores doctored tx rows through real storage); then all four with `NULO_E2E_BROWSER=firefox`. No new scenario.
-- **Validation gate**: eight green runs; each file's wall-clock per browser against a base run at `ad4de50d8`, in `lessons/phase-3.md`. `bun run check:plans` green after staging.
+- Run at retry 0, Chrome then Firefox (`NULO_E2E_BROWSER`): the smoke files `tests/e2e/backup-roundtrip.test.ts` and `tests/e2e/backup-imported-account.test.ts` with `bun run test:e2e -- <files> --retry=0` after the armed smoke build; the network files `tests/e2e/network/backup-migration-roundtrip.test.ts` and `tests/e2e/network/backup-restore-integrity.test.ts` (it restores doctored tx rows through real storage) with `NULO_E2E_PROVERLESS=1 bun run e2e:agent <files> --retry=0`. No new scenario.
+- Deviations: `agent.sh` runs only the network config, so the smoke files take the smoke command; the network files run proverless, as CI's network lanes do. No base run: no scenario is added or changed, so the README's before-and-after applies to none.
+- **Validation gate**: every run green; each file's wall-clock per browser in `lessons/phase-3.md`. `bun run check:plans` green after staging.
 
 ## Decisions
 
@@ -95,6 +96,11 @@ Control flow (order unchanged): profile restore → networks → `AccountService
 - **P5** An existing residual in the tx purge's shared-ownership rule, reported to the orchestrator. It concerns unscoped rows, which restores before this fix can have stored; after it, no restore or live writer stores one. Codex round 2 corrected the draft's label for it.
 - **P6 (round 2, Codex: conditional approve).** Conditions: state the purge-failure behaviour (I3, done); hold test (c) behind a gate and add the rejection case (d) (done); relabel P5 (done). Codex agrees P4 stays out of this arc.
 - **P7 (round 3, Codex, resumed verification): approve.** "All three conditions are addressed in the revised plan … No new regression or blocking finding."
+
+**Audit verdicts (implementation)**
+
+- **R1, Codex: no new material findings; Opus diff review: no bugs.** Accepted: stale init comment and long guard comments rewritten, the dangling `D16` reference fixed, a kept `ambiguous` flag pinned in test (a) (`511a7a676`). Rejected: a separate malformed-row test (the fee-chooser test already fails without the codec). Deviation kept: the collision test pins the collision message instead of naming the profile's own account. Details: [lessons/phase-4.md](lessons/phase-4.md).
+- **R2, Codex (resumed): no new material findings.** Converged.
 
 ## Delivery
 
