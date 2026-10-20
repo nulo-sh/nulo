@@ -4,7 +4,7 @@
 
 Your note on P71-07: "on Nulo if I'm not wrong there are NO rounded corners." Arc 1 squares the notice card, the one you saw. Eight more things have rounded corners today. Each is a literal in the wallet's own files, except one editor-library default in item 6; `@nulo/design` has no radius token.
 
-- **Surfaces** (pictures: before and after, light and dark, from a real build, in the arc 1 report as `SHOTS_READY oa1`; the radius each picture reads is added here then):
+- **Surfaces** (pictures: before and after, light and dark, from a real build, in the arc 1 report as `SHOTS_READY oa1`):
   1. **The logs and JSON windows' frame** (`window-shell.module.css`, 8px): the bordered box around the viewer.
   2. **The logs window's toolbar buttons** (`LogsToolbar.vue`, 6px): Source, Level and the Log actions (⋯) button.
   3. **The Source and Level filter panels** (`Popover.vue` in `@nulo/design`, 10px). Only the logs window uses it; the Log actions menu is a different, square one.
@@ -13,6 +13,7 @@ Your note on P71-07: "on Nulo if I'm not wrong there are NO rounded corners." Ar
   6. **The search boxes** (Ctrl/Cmd-F): in the JSON viewer the box is 6px and its field and buttons 3px (`creator.js`); in the logs window the buttons are 1px, the editor library's own default. Also **the outline on other matches of a selected word** in the JSON viewer (2px).
   7. **The focus ring on an awaiting transaction's Focus and Cancel buttons** (`TransactionAwaitingCard.vue`, 4px): visible when the button has keyboard focus. The buttons themselves are square.
   8. **The RETRY button** on the "wallet could not start" banner (`popup/app.vue`, 4px): seen only when the wallet fails to start. Its picture is a forced state: the banner as it renders, set from the page, since the capture cannot make the wallet fail.
+- **Readings** (computed in Chrome, both themes, from the two builds): before, every value above as listed; after squaring, no element on any pictured screen has a rounded corner. The search box's three checkboxes are the browser's own and keep their look under every answer.
 - **Q1, the corners**:
   - **A (recommended)**: square all eight. Same colours, borders, sizes and spacing; only the corners change. This matches your note.
   - **B**: square only the numbers you name; the rest keep their corners.

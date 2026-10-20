@@ -75,7 +75,7 @@ One CSS line removed and one source pin added. No token, component, dependency o
 - `NotificationManager.vue`: delete `border-radius: 16px;` from `.card` (D1).
 - **Gate**: `bun run --cwd apps/extension test -- src/components/NotificationManager.test.ts`; `bun run lint`; `bun run typecheck:all`. Pass: exit 0 each; `git diff --stat origin/dev...HEAD` shows code only in the `.vue` and its test. Layers: lint, typecheck, unit.
 
-### Phase 4: Pictures after, smoke, full gate ☐
+### Phase 4: Pictures after, smoke, full gate ✓
 
 - Rebuild; run the two notice shots with `SHOT_STATE=after`. Copy the eight notice PNGs to `implementations-plan/square-corners-1/screenshots/` (D4).
 - In one tool call: `git apply` the patch under a `trap` that runs `git apply -R` on exit, build, and let the trap reverse it. Then `git diff --quiet` must pass. Shoot the six `oa1-*` shots with `SHOT_STATE=after` from that bundle. Rebuild the arc head.
