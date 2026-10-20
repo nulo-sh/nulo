@@ -1,7 +1,7 @@
 ---
 plan: unit-flake-1
 tier: light
-status: arc 1 green, Codex loop converged; PR next
+status: completed
 issues: "#895 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,15 @@ base: origin/dev at 4aa9d1ab
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20. **Status:** completed.
+- **Shipped:** #906 (arc 1, closes #895): `sendEvent` over test-utils' `trigger`; the shared helpers and 10 test files send through it every test event the sweep found reaching a second Vue listener, never-happens tests included; a still clock pins #895's test; one CLAUDE.md bullet.
+- **Dispositions:** native capture listeners in Popup and Tooltip (outline B) and a fix of #895's file alone (outline C), rejected (D1, D3). `lessons.md`'s raw-event clause retired: the CLAUDE.md bullet supersedes it. The reproduction technique (load widens a same-millisecond gap; freeze or quantize `Date.now`) stays in [lessons/phase-0.md](lessons/phase-0.md), as `lessons.md` is at its budget.
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` below; never run them.
 
 # unit-flake-1: send unit-test events past Vue's attach-time guard
 
