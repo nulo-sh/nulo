@@ -13,6 +13,7 @@ import type {
 } from "@nulo/wallet-bridge"
 import type { QueuedFeePayer } from "@nulo/wallet-core/jobs"
 import type { ScopeViolationError } from "@nulo/extension-messaging/errors"
+import type { WindowEnd } from "./window-end"
 
 /** Protocol-shape types (`ExecutionParams`, `ExecutionResult`,
  *  `CapabilityParams`, `CapabilityResult`, all `OperationRequest`
@@ -20,6 +21,7 @@ import type { ScopeViolationError } from "@nulo/extension-messaging/errors"
  *  Re-exported here so extension consumers can keep importing them via
  *  this path. */
 export type { OperationApprovalDelta, ShownTokenMetadata } from "./approval-delta"
+export type { WindowEnd } from "./window-end"
 export type {
 	AztecCreateAuthWitRequest,
 	AztecExecuteUtilityRequest,
@@ -119,11 +121,6 @@ export type DiscoveryResult = {
 	approved: boolean
 }
 
-/** What `discover()` resolves with: the page's answer plus, for an approval, the window the
- *  connection flow now owns and `expiredUrl`, the same page marked expired, which the window shows
- *  if the connection is never established. Both are set by the service, never by the page. */
-export type DiscoveryOutcome = DiscoveryResult & { windowId?: number; expiredUrl?: string }
-
 /** A discovery for a chain the profile has no network for. Its window only informs: it can be
  *  dismissed, never resolved, so nothing it answers approves a connection. */
 export type NetworkUnavailablePayload = {
@@ -168,7 +165,9 @@ export type Methods = {
 	 */
 	approveInteraction(id: string, deltas: OperationApprovalDelta[]): void
 	resolveInteraction(id: string, result: ExecutionResult | CapabilityResult | DiscoveryResult | FeeQuestionResult): void
-	rejectInteraction(id: string, reason: string): void
+	/** Ends a live interaction before any approval. `end` names how its window ended; one this
+	 *  service does not know rejects as an unnamed Reject. */
+	rejectInteraction(id: string, reason: string, end: WindowEnd): void
 	/** Replay read for popups that mount after the cancel broadcast fired. */
 	isInteractionCancelled(id: string): boolean
 	/** Bring the approval popup of the live interaction for `journalId` to the

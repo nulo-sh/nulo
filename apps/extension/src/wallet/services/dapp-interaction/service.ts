@@ -42,6 +42,7 @@ import {
 	refuseUnknownPriorities,
 } from "@nulo/wallet-bridge"
 import { assertSilentExecutable, materializeRequest, type MaterializeDeps } from "./materialize"
+import { isWindowEnd, WindowEndedError } from "./window-end"
 import { knownContracts } from "./known-contracts"
 import { applyFeeSelection, isShownTokenMetadata, type OperationApprovalDelta } from "./approval-delta"
 import {
@@ -56,7 +57,6 @@ import {
 	type DiscoveryPayload,
 	type DiscoveryParams,
 	type DiscoveryResult,
-	type DiscoveryOutcome,
 	type InteractionPayload,
 	type NetworkUnavailableParams,
 	type NetworkUnavailablePayload,
@@ -291,21 +291,16 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		// with settle if it arrives first.
 		this.windowManager.detach(interactionRequest.handleId)
 		if (isDiscoveryPayload(interactionRequest.payload)) {
-			this.settleDiscovery(interactionRequest.handleId, id, result)
+			this.settleDiscovery(interactionRequest.handleId, result)
 			return
 		}
 		this.windowManager.settle(interactionRequest.handleId, result)
 	}
 
-	/** An approved connect window stays open to show the emoji check, and its id comes from the
-	 *  handle, never the page. Any other answer is a denial and closes the window. */
-	private settleDiscovery(handleId: string, id: string, result: unknown): void {
-		if ((result as Partial<DiscoveryResult> | null | undefined)?.approved === true) {
-			const expiredUrl = `${windowUrl("discover", id)}&expired=1`
-			this.windowManager.handOver(handleId, (windowId): DiscoveryOutcome => ({ approved: true, windowId, expiredUrl }))
-			return
-		}
-		this.windowManager.settle<DiscoveryOutcome>(handleId, { approved: false })
+	/** Either answer closes the connect window, and only `approved` crosses from the page. */
+	private settleDiscovery(handleId: string, result: unknown): void {
+		const approved = (result as Partial<DiscoveryResult> | null | undefined)?.approved === true
+		this.windowManager.settle<DiscoveryResult>(handleId, { approved })
 	}
 
 	/** Keeps the first refusal an estimate or preview of a still-pending request met. */
@@ -318,7 +313,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		return this.storage.get(id)?.refusal
 	}
 
-	public async rejectInteraction(id: string, reason: string): Promise<void> {
+	public async rejectInteraction(id: string, reason: string, end?: unknown): Promise<void> {
 		const interactionRequest = this.storage.get(id)
 		if (!interactionRequest) {
 			return
@@ -326,8 +321,10 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		this.storage.delete(id)
 		// Typed so the dApp sees EIP-1193 4001 / USER_REJECTED. `reason` is
 		// popup-authored and forwarded verbatim to the dApp — never route a
-		// dApp-influenced string here.
-		this.windowManager.cancel(interactionRequest.handleId, new UserRejectedError(reason))
+		// dApp-influenced string here. The window closes only after this returns, so its close cannot
+		// reach the request first.
+		const rejection = isWindowEnd(end) ? new WindowEndedError(reason, end) : new UserRejectedError(reason)
+		this.windowManager.cancel(interactionRequest.handleId, rejection)
 	}
 
 	private async executeAndResolve(
@@ -575,9 +572,9 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		return (await this.interaction("capabilities", payload, cancellationToken)) as CapabilityResult
 	}
 
-	public async discover(params: DiscoveryParams, cancellationToken?: string): Promise<DiscoveryOutcome> {
+	public async discover(params: DiscoveryParams, cancellationToken?: string): Promise<DiscoveryResult> {
 		const payload: DiscoveryPayload = { params }
-		return (await this.interaction("discover", payload, cancellationToken)) as DiscoveryOutcome
+		return (await this.interaction("discover", payload, cancellationToken)) as DiscoveryResult
 	}
 
 	/** Show the notice for a discovery whose chain the profile has no network for. Settles, never

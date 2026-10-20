@@ -3,7 +3,7 @@ import { defineMigration, Migrator, SCHEMA_VERSION_KEY } from "@nulo/wallet-core
 import { MemoryStorageArea } from "@nulo/wallet-core/storage"
 import { ACCOUNT_STORAGE_ROOT } from "@/wallet/services/account/spec"
 import { CONTACT_STORAGE_ROOT } from "@/wallet/services/contact/spec"
-import { PROFILE_STORAGE_ROOT } from "@/wallet/services/profile/repository"
+import { PROFILE_STORAGE_ROOT } from "@/wallet/services/profile/spec"
 import { migrateBackupData, maxBackupSchemaVersion } from "./backup-migrator"
 import { defineRowMapMigration } from "./row-map-migration"
 

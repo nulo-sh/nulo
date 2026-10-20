@@ -81,7 +81,7 @@ const reminders = computed(() =>
 		prestoReached: prestoReached.value,
 	}),
 )
-// Token funds can raise the card before the gas read lands, which can still add the Fee Juice row.
+// Token funds can raise the card before the gas read lands, which can still check the Fee Juice step.
 const remindersSettled = computed(() => reminders.value !== null && feeJuice.value !== "unknown")
 
 async function readPrestoReached() {
@@ -127,6 +127,14 @@ watch(
 	() => [appStore.profile?.id, appStore.network?.chainId],
 	() => void seed.refresh(),
 )
+// The first read that finds Fee Juice checks the step for the profile: a spend, another account or
+// a new chain never reopens it.
+watch(
+	() => feeJuice.value === "some" && getStarted.flags.value?.feeJuiceHeld === false,
+	(held) => {
+		if (held) void getStarted.mark("feeJuiceHeld")
+	},
+)
 onBeforeMount(() => void prestoRead.read())
 onMounted(() => void seed.refresh())
 onBeforeUnmount(() => {
@@ -157,8 +165,8 @@ onBeforeUnmount(() => {
 				<RecoveryModeBanner />
 				<RestoreOutcomeBanner />
 				<GetStartedCard
-					v-if="reminders?.items.length"
-					:items="reminders.items"
+					v-if="reminders?.steps.length"
+					:steps="reminders.steps"
 					:canHide="reminders.canHide"
 					@select="onGetStartedSelect"
 					@hide="getStarted.mark('hidden')"

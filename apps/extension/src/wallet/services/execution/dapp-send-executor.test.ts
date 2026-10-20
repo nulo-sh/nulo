@@ -87,6 +87,8 @@ vi.mock("@aztec-labs/protocol-contracts/fee-juice", async (importOriginal) => {
 })
 
 const ORIGIN: LocalTxOrigin = { type: OriginType.DAPP, name: "test-dapp" }
+/** The canonical SponsoredFPC's address as the harness derives it. */
+const PROTOCOL_SPONSOR = `0x${"0a".repeat(32)}`
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
 
 /** The lane's earlier-sends seams for a send that never has to wait. */
@@ -171,8 +173,14 @@ function makeHarness(
 	const authwit = overrides.authwit ?? {
 		discoverPrivateAuthwits: vi.fn(async () => ({ actions: [] as unknown[], discovered: [] as unknown[] })),
 	}
-	const buildAndEstimateValidated = overrides.buildAndEstimateValidated ?? vi.fn(async () => built as never)
-	const buildAndEstimateFolded = overrides.buildAndEstimateFolded ?? vi.fn(async () => built as never)
+	// As the real pipelines do, the last build hands its calls to the hook a send passes.
+	const handOver = (at: number) =>
+		vi.fn(async (...args: unknown[]) => {
+			await (args[at] as ((txCalls: unknown) => Promise<void>) | undefined)?.(built.txCalls)
+			return built as never
+		})
+	const buildAndEstimateValidated = overrides.buildAndEstimateValidated ?? handOver(5)
+	const buildAndEstimateFolded = overrides.buildAndEstimateFolded ?? handOver(6)
 	const estimateWithDiscovery = new DiscoveryAwareEstimator({
 		authwit: authwit as never,
 		buildAndEstimateValidated: buildAndEstimateValidated as never,
@@ -217,6 +225,7 @@ function makeHarness(
 		sequenceEpoch: vi.fn(() => 0),
 		buildAndEstimateValidated,
 		addTransaction: vi.fn(async () => ({}) as never),
+		protocolSponsorAddress: vi.fn(async () => PROTOCOL_SPONSOR),
 		recordPendingAuthwits: vi.fn(async () => {}),
 		noteSent: vi.fn(),
 		sequencer: new SendSequencer({ pendingTxs: () => [], sleep: async () => {}, now: () => 0 }),
@@ -267,6 +276,7 @@ const RECORD_FIELDS = [
 	"gasDetails",
 	"fence",
 	"networkId",
+	"feeChoice",
 ] as const
 
 /** The activity record `addTransaction` received, by field name. */
@@ -1545,6 +1555,7 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 				probe.collected.push({ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: `mh:ih:${tag}` } })
 				probe.discovered.push(record(tag))
 			}
+			await (args[6] as ((txCalls: unknown) => Promise<void>) | undefined)?.((built as { txCalls: unknown }).txCalls)
 			return built
 		})
 	const harnessDiscovering = (tags: string[], overrides: Parameters<typeof makeHarness>[0] = {}) => {
@@ -2174,6 +2185,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
+			feeChoice: "wallet",
 		})
 	})
 
@@ -2193,6 +2205,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
+			feeChoice: "wallet",
 		})
 	})
 
@@ -2227,10 +2240,11 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-1",
+			feeChoice: "wallet",
 		})
 	})
 
-	test("NO_FROM: nonce zero, external payment, the op's networkId", async () => {
+	test("NO_FROM: nonce zero, external payment, the app's fee choice, the op's networkId", async () => {
 		collectOffchainEffectsMock.mockReturnValue([])
 		const { executor, deps, built } = makeHarness()
 		await executor.executeAztecSendTx(NO_FROM({ networkId: "net-op" }), ORIGIN, undefined, undefined, FENCE)
@@ -2247,6 +2261,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
+			feeChoice: "app",
 		})
 	})
 
@@ -2285,6 +2300,59 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 		Object.assign(h.deps.coordinator, { proveAndSend })
 		await h.executor.executeAztecSendTx(noFrom ? NO_FROM() : makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
 		expect(recorded).toBe(expected)
+	})
+
+	const SPONSOR_CALL = { contract: PROTOCOL_SPONSOR, method: "sponsor_unconditionally", args: [] }
+	const EMBEDDED = { paymentMethod: { kind: "embedded" } }
+	const sendTransaction = (feeSettings: unknown) =>
+		({
+			kind: "send_transaction",
+			networkId: "net-op",
+			accountAddress: "0xacct",
+			feeSettings,
+			actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+		}) as never
+	type Harness = ReturnType<typeof makeHarness>
+
+	test.each([
+		[
+			"aztec_sendTx",
+			(h: Harness) => h.executor.executeAztecSendTx(makeAztecOp({ feeSettings: EMBEDDED }), ORIGIN, undefined, undefined, FENCE),
+		],
+		["send_transaction", (h: Harness) => h.executor.executeSendTransaction(sendTransaction(EMBEDDED), ORIGIN, undefined, FENCE)],
+		["NO_FROM", (h: Harness) => h.executor.executeAztecSendTx(NO_FROM(), ORIGIN, undefined, undefined, FENCE)],
+	])("%s: the app's own fee payment through the protocol sponsor, its address asked for before the prove", async (_kind, send) => {
+		collectOffchainEffectsMock.mockReturnValue([])
+		const h = makeHarness()
+		Object.assign(h.built, { txCalls: [{ contract: "0xc", method: "dapp_method", args: [] }, SPONSOR_CALL] })
+		let askedBeforeProve = false
+		const proveAndSend = vi.fn(async (ctx: { recordTransaction: (hash: string) => Promise<unknown> }) => {
+			askedBeforeProve = vi.mocked(h.deps.protocolSponsorAddress).mock.calls.length > 0
+			await ctx.recordTransaction("0xhash")
+			return { txHash: { toString: () => "0xhash" }, offchainOutput: {} }
+		})
+		Object.assign(h.deps.coordinator, { proveAndSend })
+		await send(h)
+		expect(h.deps.protocolSponsorAddress).toHaveBeenCalledWith(7)
+		expect(askedBeforeProve).toBe(true)
+		expect(recordedTx(h.deps).feeChoice).toBe("app_protocol_sponsor")
+	})
+
+	test("the person's pick records the wallet's and never asks for the sponsor's address, even when its calls name it", async () => {
+		const h = makeHarness()
+		Object.assign(h.built, { txCalls: [SPONSOR_CALL] })
+		await h.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
+		expect(recordedTx(h.deps).feeChoice).toBe("wallet")
+		expect(h.deps.protocolSponsorAddress).not.toHaveBeenCalled()
+	})
+
+	test("an address the wallet cannot derive still records the row, as the app's plain pick", async () => {
+		const failure = new Error("derivation failed")
+		const h = makeHarness({ protocolSponsorAddress: vi.fn(async () => Promise.reject(failure)) })
+		Object.assign(h.built, { txCalls: [SPONSOR_CALL] })
+		await h.executor.executeAztecSendTx(makeAztecOp({ feeSettings: EMBEDDED }), ORIGIN, undefined, undefined, FENCE)
+		expect(recordedTx(h.deps).feeChoice).toBe("app")
+		expect(h.deps.logDebug).toHaveBeenCalledWith("fee chooser: the protocol sponsor's address is unavailable", { error: failure })
 	})
 })
 
@@ -2569,6 +2637,66 @@ describe("DappSendExecutor: every build names its record before the send", () =>
 		const record = deps.lane.recordBuiltCall as ReturnType<typeof vi.fn>
 		expect(record.mock.calls).toEqual([["j1", reuse ? reusedCalls : built.txCalls]])
 		expect(record.mock.invocationCallOrder[0]).toBeLessThan(proveAndSend.mock.invocationCallOrder[0])
+	})
+})
+
+describe("DappSendExecutor: a send whose simulation fails keeps the call its build named", () => {
+	const builtCalls = [{ contract: "0xc", method: "transfer_public_to_public", args: [], classId: "0x0c1a55" }]
+	const simulationFailure = new Error("Assertion failed: balance too low")
+	/** A pipeline that builds, hands the build's calls to the hook at argument `at`, then fails simulating. */
+	const failsAfterBuild = (at: number) =>
+		vi.fn(async (...args: unknown[]) => {
+			await (args[at] as ((txCalls: unknown) => Promise<void>) | undefined)?.(builtCalls)
+			throw simulationFailure
+		})
+	const embeddedPlanner = {
+		processAztecJsPayload: vi.fn(async () => ({
+			actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+			feePaymentMethod: undefined,
+			feeOptions: { embeddedFeePayment: "fpc" },
+		})),
+	} as never
+	const sendTransaction = {
+		kind: "send_transaction",
+		networkId: "net-1",
+		accountAddress: "0xacct",
+		feeSettings: { paymentMethod: { kind: "fj" } },
+		actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+	} as never
+	const paths: Array<[string, Parameters<typeof makeHarness>[0], (executor: DappSendExecutor) => Promise<unknown>]> = [
+		[
+			"a fresh standard build",
+			{ buildAndEstimateFolded: failsAfterBuild(6) },
+			(executor) => executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE),
+		],
+		[
+			"an embedded build",
+			{ planner: embeddedPlanner, buildAndEstimateValidated: failsAfterBuild(5) },
+			(executor) =>
+				executor.executeAztecSendTx(
+					makeAztecOp({ feeSettings: { paymentMethod: { kind: "embedded" } } }),
+					ORIGIN,
+					undefined,
+					undefined,
+					FENCE,
+				),
+		],
+		[
+			"send_transaction",
+			{ buildAndEstimateValidated: failsAfterBuild(5) },
+			(executor) => executor.executeSendTransaction(sendTransaction, ORIGIN, undefined, FENCE),
+		],
+	]
+
+	test.each(paths)("%s: the record is named before it is failed", async (_label, overrides, send) => {
+		const { executor, deps } = makeHarness(overrides)
+		expect(await send(executor).catch((error: unknown) => error)).toBe(simulationFailure)
+		const record = deps.lane.recordBuiltCall as ReturnType<typeof vi.fn>
+		const mark = deps.lane.markJournal as ReturnType<typeof vi.fn>
+		expect(record.mock.calls).toEqual([["j1", builtCalls]])
+		const failedAt = mark.mock.calls.findIndex(([, patch]) => (patch as { stage?: string }).stage === "failed")
+		expect(failedAt).toBeGreaterThanOrEqual(0)
+		expect(record.mock.invocationCallOrder[0]).toBeLessThan(mark.mock.invocationCallOrder[failedAt] ?? 0)
 	})
 })
 

@@ -18,7 +18,7 @@ Counted sites are guessed turn loops (`for (…) await Promise.resolve()` and th
 
 | file | sites | moved | kept | tests |
 |---|---|---|---|---|
-| `background.connect-window` | 121 | 56 | 65 | 58 = 58 |
+| `background.connect-window` | 115 | 41 | 74 | 64 = 64 |
 | `background.admission` | 28 | 11 | 17 | 12 = 12 |
 | `background.origin-admission` | 5 | 0 | 5 | 6 = 6 |
 | `background.reset-wait` | 4 | 0 | 4 | 4 = 4 |
@@ -28,7 +28,7 @@ Counted sites are guessed turn loops (`for (…) await Promise.resolve()` and th
 | `useArrivals` | 65 | 11 | 54 | 64 = 64 |
 | `dapp-send-executor` (the `addTransaction` test) | 2 | 1 | 1 | 161 = 161 |
 
-Of 270 drains, 86 moved and 184 stay. A kept site whose block has a positive read too keeps the awaited boundary before its drain, so the positive is ordered by its cause.
+Of 264 drains, 71 moved and 193 stay (connect-window counted on its text after #886 rewrote its connect half; the plan's ledger has the merge). A kept site whose block has a positive read too keeps the awaited boundary before its drain, so the positive is ordered by its cause.
 
 - **The rule that decided most sites.** A discovery run or a send's handling settles when its refusal, queueing or approval is decided, so a "never" read after it misses an effect a regression defers past the decision; the old drain catches a deferral within its turns. The first pass moved such reads onto the run and was wrong there: the fresh cross-arc review demonstrated it in memory (a ten-reaction deferral passed the new reads and failed the old), and a scan of every moved drain put the drain back wherever a negative read (`.not.`, an empty list, `toHaveBeenCalledTimes`, `false`, `undefined`, `0`) follows the boundary: 49 sites, after 2 restored by hand. An exact list is a negative too (nothing else ran): 26 more came back where one, or a negative the scan missed, follows the boundary. Drains deleted before an action, not a read, stay deleted: a deferral past them lands inside the next read's drain or fails the next action.
 - **Proofs.** Each file and boundary kind has a production mutation that delays the cause past the old drain (64 to 400 turns): old red, new green; every other moved positive site has a one-line argument why its boundary cannot settle before the cause. Every moved negative site had a mutation firing the forbidden effect one to ten turns after its decision, and the new test failed wherever the old one did; a one-to-ten-turn probe placed at the decision point does not test a deferral past the run's settling, which is why the rule above put 77 drains back. Logs under `~/.cache/nulo-backlog/test-infra-1/arc4/w{1,2,3}/`.

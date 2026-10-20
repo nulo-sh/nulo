@@ -4,7 +4,7 @@
  *  auth.vue's onMounted, and the router's guard. */
 import { storageLocalGet, storageLocalSet } from "@/utils/storage"
 
-const LAST_ACTIVE_PROFILE_KEY = "nulo:ui:lastActiveProfile"
+export const LAST_ACTIVE_PROFILE_KEY = "nulo:ui:lastActiveProfile"
 
 export async function getLastActiveProfileId(): Promise<string | undefined> {
 	const result = await storageLocalGet(LAST_ACTIVE_PROFILE_KEY)

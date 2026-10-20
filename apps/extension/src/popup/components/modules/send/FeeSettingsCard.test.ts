@@ -128,8 +128,9 @@ const STUBS = {
 	},
 	FeeMethodRow: { props: ["pending"], template: '<div data-testid="fee-method-row" :data-pending="String(pending)" />' },
 	FeeCostReadout: {
-		props: ["estimate", "isEstimating", "payer", "pending"],
-		template: '<div data-testid="fee-cost-readout" :data-payer="payer" :data-pending="String(pending)" />',
+		props: ["estimate", "isEstimating", "payer", "pending", "amountTyped"],
+		template:
+			'<div data-testid="fee-cost-readout" :data-payer="payer" :data-pending="String(pending)" :data-amount-typed="String(amountTyped)" />',
 	},
 	FeePriorityRow: {
 		props: ["modelValue"],
@@ -2274,6 +2275,19 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			expect(pendingOf(w)).toEqual(["false", "false", "false"])
 		})
 
+		test("the readout hears whether Send's amount field holds an amount while the read runs", async () => {
+			const gas = deferred<unknown>()
+			mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
+			mocks.getGasBalances.mockReturnValue(gas.promise)
+			const w = mountSend()
+			const readout = () => w.get('[data-testid="fee-cost-readout"]')
+			expect([readout().attributes("data-pending"), readout().attributes("data-amount-typed")]).toEqual(["true", "false"])
+			await w.setProps({ amountTyped: true })
+			expect(readout().attributes("data-amount-typed")).toBe("true")
+			gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: HELD })
+			await flushPromises()
+		})
+
 		test("a read that holds or an init that throws leaves no bar: the trigger asks for a method", async () => {
 			mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
 			mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: null, privateFeeJuice: null })
@@ -2314,6 +2328,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 				await w.setProps({ account: accountB })
 				await flushPromises()
 				expect(pendingOf(w)).toEqual(["true", "true", "true"])
+				expect(degradedText(w)).toBeNull()
 
 				gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: HELD })
 				await flushPromises()
@@ -2321,6 +2336,62 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 				expect(degradedText(w)).toBeNull()
 				expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "p1" } })
 			} finally {
+				logged.mockRestore()
+			}
+		})
+
+		test("after a failed read, the next account's failed read brings its own line back", async () => {
+			const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+			let w: ReturnType<typeof mount> | undefined
+			try {
+				const gas = deferred<unknown>()
+				mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
+				mocks.getGasBalances.mockRejectedValueOnce(new Error("boom")).mockReturnValueOnce(gas.promise)
+				w = mountSend()
+				await flushPromises()
+				expect(degradedText(w)).toBe("Couldn't load fee data. Retrying in the background.")
+
+				await w.setProps({ account: accountB })
+				await flushPromises()
+				expect(degradedText(w)).toBeNull()
+				gas.reject(new Error("boom again"))
+				await flushPromises()
+				expect(w.get('[data-testid="fee-method-selector"]').attributes("data-pending")).toBe("false")
+				expect(degradedText(w)).toBe("Couldn't load fee data. Retrying in the background.")
+
+				storageGate = deferred<void>()
+				await w.setProps({ account })
+				await flushPromises()
+				expect(degradedText(w)).toBeNull()
+				storageGate.reject(new Error("storage unavailable"))
+				await flushPromises()
+				expect(degradedText(w)).toBe("Couldn't load fee data. Close and reopen to try again.")
+			} finally {
+				// A degraded identity arms the store's retry timer: unmounting releases it.
+				w?.unmount()
+				logged.mockRestore()
+			}
+		})
+
+		test("a committed account's failed read keeps its line while the same account reads again", async () => {
+			const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+			let w: ReturnType<typeof mount> | undefined
+			try {
+				const gas = deferred<unknown>()
+				mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
+				mocks.getGasBalances.mockRejectedValueOnce(new Error("boom")).mockReturnValue(gas.promise)
+				w = mountSend()
+				await flushPromises()
+				expect(degradedText(w)).toBe("Couldn't load fee data. Retrying in the background.")
+
+				await w.setProps({ account: { ...account } })
+				await flushPromises()
+				expect(mocks.getGasBalances).toHaveBeenCalledTimes(2)
+				expect(degradedText(w)).toBe("Couldn't load fee data. Retrying in the background.")
+				gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: HELD })
+				await flushPromises()
+			} finally {
+				w?.unmount()
 				logged.mockRestore()
 			}
 		})

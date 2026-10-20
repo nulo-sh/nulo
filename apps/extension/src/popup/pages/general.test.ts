@@ -4,9 +4,10 @@
  */
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
+import { activityScopeKey } from "@nulo/wallet-core/activity"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
-import { defineComponent, h } from "vue"
+import { defineComponent, h, reactive } from "vue"
 
 const router = vi.hoisted(() => ({ push: vi.fn() }))
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({}) }))
@@ -40,13 +41,15 @@ vi.mock("@/wallet/services/config/client", () => ({
 		}
 	}),
 }))
+/** The selected scope's gas slice at mount; later changes go through `gasByScope`. */
 let gas: unknown
 vi.mock("@/stores/balances.store", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/stores/balances.store")>()),
-	useBalancesStore: () => ({ entry: () => (gas === undefined ? undefined : { gas }) }),
+	useBalancesStore: () => ({ entry: gasEntry }),
 }))
 
 import { useAppStore } from "@/stores/app.store"
+import type { BalanceScope } from "@/stores/balances.store"
 import { HOW_AZTEC_WORKS_URL } from "@/utils/get-started"
 import { type ChromeStorageMock, installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 import General from "./general.vue"
@@ -78,7 +81,17 @@ const STUBS = {
 }
 
 const ZERO = { status: "ready", display: { publicFeeJuice: "0", privateFeeJuice: null }, version: 1 }
+const FUNDED = { status: "ready", display: { publicFeeJuice: "5", privateFeeJuice: null }, version: 1 }
+const HOME_SCOPE: BalanceScope = { profileId: "p1", networkId: "n1", chainId: 1, accountAddress: "0xacct" }
+
+/** Reactive as the store's entries are, so a mounted Home sees a slice change. */
+const gasByScope = reactive(new Map<string, unknown>())
+function gasEntry(scope: BalanceScope) {
+	const slice = gasByScope.get(activityScopeKey(scope))
+	return slice === undefined ? undefined : { gas: slice }
+}
 const AZTEC_KEY = "nulo:ui:getStartedAztecOpened@p1"
+const FEE_JUICE_KEY = "nulo:ui:getStartedFeeJuiceHeld@p1"
 
 const wrappers: VueWrapper[] = []
 let storage: ChromeStorageMock
@@ -91,6 +104,7 @@ async function mountHome(type: "password" | "passkey" = "password", stored: Reco
 	appStore.profile = { id: "p1", type } as never
 	appStore.network = { id: "n1", chainId: 1 } as never
 	appStore.account = { address: "0xacct" } as never
+	if (gas !== undefined) gasByScope.set(activityScopeKey(HOME_SCOPE), gas)
 	const wrapper = mount(General, { global: { plugins: [pinia], stubs: STUBS, provide: {} } })
 	wrappers.push(wrapper)
 	await flushPromises()
@@ -98,11 +112,17 @@ async function mountHome(type: "password" | "passkey" = "password", stored: Reco
 }
 
 const has = (w: VueWrapper, testId: string) => w.find(`[data-testid="${testId}"]`).exists()
+/** The card's steps in order, a done one marked: `["phrase", "aztec done", ...]`. */
+const rows = (w: VueWrapper) =>
+	w
+		.findAll('[data-testid="get-started"] [data-done]')
+		.map((el) => `${el.attributes("data-testid")?.replace("get-started-", "")}${el.attributes("data-done") === "true" ? " done" : ""}`)
 
 afterEach(() => {
 	for (const w of wrappers.splice(0)) w.unmount()
 	tokenHoldings = "none"
 	gas = undefined
+	gasByScope.clear()
 	prestoReached = false
 	prestoReadFailures = 0
 	vi.restoreAllMocks()
@@ -113,8 +133,7 @@ describe("Home — the backup reminder's sources", () => {
 	test("a first gas read that failed reads as empty: the calm card shows, offering Fee Juice", async () => {
 		gas = { status: "degraded", version: 1 }
 		const w = await mountHome()
-		expect(has(w, "get-started-phrase")).toBe(true)
-		expect(has(w, "get-started-feeJuice")).toBe(true)
+		expect(rows(w)).toEqual(["phrase", "aztec", "feeJuice", "presto"])
 		expect(has(w, "backup-reminder-banner")).toBe(false)
 	})
 
@@ -126,18 +145,18 @@ describe("Home — the backup reminder's sources", () => {
 		expect(w.get('[data-testid="home-scroller"]').attributes("data-reminders-settled")).toBe("false")
 	})
 
-	test("Fee Juice alone is funds: a positive read raises the banner with no token", async () => {
-		gas = { status: "ready", display: { publicFeeJuice: "5", privateFeeJuice: null }, version: 1 }
+	test("Fee Juice alone is funds: a positive read raises the banner with no token, and the card checks Fee Juice", async () => {
+		gas = FUNDED
 		const w = await mountHome()
 		expect(has(w, "backup-reminder-banner")).toBe(true)
+		expect(rows(w)).toEqual(["aztec", "feeJuice done", "presto"])
 	})
 
 	test("an empty wallet keeps the calm phrase row and offers Fee Juice (control)", async () => {
 		gas = ZERO
 		const w = await mountHome()
 		expect(has(w, "backup-reminder-banner")).toBe(false)
-		expect(has(w, "get-started-phrase")).toBe(true)
-		expect(has(w, "get-started-feeJuice")).toBe(true)
+		expect(rows(w)).toEqual(["phrase", "aztec", "feeJuice", "presto"])
 		expect(w.get('[data-testid="home-scroller"]').attributes("data-reminders-settled")).toBe("true")
 	})
 
@@ -154,7 +173,52 @@ describe("Home — the backup reminder's sources", () => {
 		tokenHoldings = "some"
 		const w = await mountHome("passkey")
 		expect(has(w, "backup-reminder-banner")).toBe(false)
-		expect(has(w, "get-started-backup")).toBe(true)
+		expect(rows(w)).toEqual(["backup", "aztec", "feeJuice", "presto"])
+	})
+})
+
+describe("Home — Get Fee Juice stays done once the profile holds Fee Juice", () => {
+	test("Fee Juice arriving while Home is open writes the profile's flag once, and a spend back to zero keeps the step done", async () => {
+		gas = { status: "fetching", version: 0 }
+		const w = await mountHome("passkey")
+		expect(storage.set).not.toHaveBeenCalled()
+		gasByScope.set(activityScopeKey(HOME_SCOPE), ZERO)
+		await flushPromises()
+		expect(rows(w)).toEqual(["backup", "aztec", "feeJuice", "presto"])
+		expect(storage.set).not.toHaveBeenCalled()
+		gasByScope.set(activityScopeKey(HOME_SCOPE), FUNDED)
+		await flushPromises()
+		expect(storage.set).toHaveBeenCalledWith({ [FEE_JUICE_KEY]: true })
+		storage.fire({ [FEE_JUICE_KEY]: { newValue: true } })
+		gasByScope.set(activityScopeKey(HOME_SCOPE), ZERO)
+		await flushPromises()
+		expect(rows(w)).toEqual(["backup", "aztec", "feeJuice done", "presto"])
+		gasByScope.set(activityScopeKey(HOME_SCOPE), FUNDED)
+		await flushPromises()
+		expect(storage.set).toHaveBeenCalledTimes(1)
+	})
+
+	test("after one account held it, another account and a reset's new chain holding none keep the step done; the phrase stays open", async () => {
+		gas = ZERO
+		const w = await mountHome("password", { [AZTEC_KEY]: true })
+		const app = useAppStore()
+		expect(rows(w)).toEqual(["phrase", "aztec done", "feeJuice", "presto"])
+		const savings = { ...HOME_SCOPE, accountAddress: "0xsavings" }
+		gasByScope.set(activityScopeKey(savings), FUNDED)
+		app.account = { address: savings.accountAddress } as never
+		await flushPromises()
+		expect(storage.data[FEE_JUICE_KEY]).toBe(true)
+		storage.fire({ [FEE_JUICE_KEY]: { newValue: true } })
+		app.account = { address: HOME_SCOPE.accountAddress } as never
+		await flushPromises()
+		expect(rows(w)).toEqual(["phrase", "aztec done", "feeJuice done", "presto"])
+		// A network whose chain id moved, as after a Testnet reset, is a scope with no read yet.
+		app.network = { id: "n1", chainId: 2 } as never
+		await flushPromises()
+		expect(has(w, "get-started")).toBe(false)
+		gasByScope.set(activityScopeKey({ ...HOME_SCOPE, chainId: 2 }), ZERO)
+		await flushPromises()
+		expect(rows(w)).toEqual(["phrase", "aztec done", "feeJuice done", "presto"])
 	})
 })
 
@@ -182,6 +246,23 @@ describe("Home — an imported profile", () => {
 		const w = await mountHome(type)
 		expect(has(w, "get-started")).toBe(true)
 		expect(has(w, "get-started-aztec")).toBe(true)
+	})
+})
+
+describe("Home — a later profile", () => {
+	const NOT_FIRST = { "nulo:ui:profileNotFirst@p1": true }
+
+	test("a later password profile shows its phrase row alone, with no Hide", async () => {
+		gas = ZERO
+		const w = await mountHome("password", NOT_FIRST)
+		expect(w.findAll('[data-testid^="get-started-"]').map((row) => row.attributes("data-testid"))).toEqual(["get-started-phrase"])
+	})
+
+	test("a later passkey profile shows no card, and Home still settles", async () => {
+		gas = ZERO
+		const w = await mountHome("passkey", NOT_FIRST)
+		expect(has(w, "get-started")).toBe(false)
+		expect(w.get('[data-testid="home-scroller"]').attributes("data-reminders-settled")).toBe("true")
 	})
 })
 
@@ -235,23 +316,22 @@ describe("Home — what the reminders do", () => {
 		expect(w.findAll('[data-testid^="get-started-"]').map((el) => el.attributes("data-testid"))).toEqual(["get-started-phrase"])
 	})
 
-	test("a failed Presto read shows the row, and a reconnect reads it again", async () => {
+	test("a failed Presto read leaves the step open, and a reconnect reads it again", async () => {
 		gas = ZERO
 		prestoReached = true
 		prestoReadFailures = 1
 		vi.spyOn(console, "debug").mockImplementation(() => {})
 		const w = await mountHome()
-		expect(has(w, "get-started-presto")).toBe(true)
+		expect(rows(w)).toEqual(["phrase", "aztec", "feeJuice", "presto"])
 		configEvents.connected.invoke(undefined)
 		await flushPromises()
-		expect(has(w, "get-started-presto")).toBe(false)
+		expect(rows(w)).toEqual(["phrase", "aztec", "feeJuice", "presto done"])
 	})
 
-	test("a Presto already reached leaves its row out", async () => {
+	test("a Presto already reached checks its step", async () => {
 		gas = ZERO
 		prestoReached = true
 		const w = await mountHome()
-		expect(has(w, "get-started-presto")).toBe(false)
-		expect(has(w, "get-started-aztec")).toBe(true)
+		expect(rows(w)).toEqual(["phrase", "aztec", "feeJuice", "presto done"])
 	})
 })

@@ -245,9 +245,6 @@ const journal = useJournalMirror({
 	onSnapshot: () => clearExecutingTaskIfRecentTerminalMatch(),
 })
 const journalOps = journal.rows
-/** A snapshot that fails while the port stays up has no reconnect to retry it. */
-const JOURNAL_RETRY_MS = 2_000
-let journalRetry
 
 /** Third source for the activity-row merge: incoming-receive records from
  *  trusted fungible-token contracts. Filtered at the service layer
@@ -613,19 +610,9 @@ async function readJournalSnapshot() {
  * `subscribeWithSnapshot`). The durable-job reaper is what generates those
  * terminal transitions during SW down windows.
  */
-async function resnapshotJournal(isCurrent = journal.begin()) {
-	try {
-		// Generation guard (not captured-equality): equality re-validates on
-		// A→B→A, letting the ABA run's stale snapshot land. Every trigger is a
-		// run on the shared scope fence — a standalone call (mount, reconnect,
-		// journal event) begins its own run; the scope watcher passes ITS run
-		// so the clear + both reloads share one supersede unit.
-		await journal.resnapshot(isCurrent)
-	} catch {
-		if (!isCurrent()) return
-		clearTimeout(journalRetry)
-		journalRetry = setTimeout(() => isCurrent() && resnapshotJournal(isCurrent), JOURNAL_RETRY_MS)
-	}
+function resnapshotJournal(isCurrent = journal.begin()) {
+	// A refused read is the mirror's to retry, on this run.
+	return journal.resnapshot(isCurrent).catch(() => undefined)
 }
 journalService.onConnected.add(resnapshotJournal)
 
@@ -827,7 +814,6 @@ onBeforeUnmount(() => {
 	syncHealth.dispose()
 	scopedTokens.dispose()
 	journal.dispose()
-	clearTimeout(journalRetry)
 })
 </script>
 

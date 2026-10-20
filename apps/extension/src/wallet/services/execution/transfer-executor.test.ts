@@ -19,6 +19,7 @@ import {
 	OperationNotRecordedError,
 	RpcTimeoutError,
 	SessionEndedError,
+	TooManyPendingError,
 } from "@nulo/extension-messaging/errors"
 import { IllegalTransitionError, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { TaskStatus } from "@/wallet/services/task/service"
@@ -191,6 +192,7 @@ const RECORD_FIELDS = [
 	"networkId",
 	"feeSpender",
 	"priorityLevel",
+	"feeChoice",
 ] as const
 
 /** The activity record `addTransaction` received, by field name. */
@@ -350,6 +352,20 @@ describe("TransferExecutor.execute", () => {
 			{ stage: "failed" },
 			expect.objectContaining({ kind: "transfer", message: expect.stringContaining("Insufficient fee payer balance") }),
 		)
+	})
+
+	test("the waiting-sends cap refusing the slot: journal → failed as too_many_pending, nothing built or sent", async () => {
+		const refusal = new TooManyPendingError()
+		const { executor, deps, proveAndSend } = makeHarness()
+		vi.mocked(deps.lane.acquireTransferSlot).mockRejectedValueOnce(refusal)
+		await expect(executor.execute(makeReq(), undefined, FENCE)).rejects.toStrictEqual(new JournaledRejection(refusal, "j1"))
+		expect(deps.transitionJournal).toHaveBeenCalledWith(
+			"j1",
+			{ stage: "failed" },
+			expect.objectContaining({ kind: "too_many_pending" }),
+		)
+		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
+		expect(proveAndSend).not.toHaveBeenCalled()
 	})
 
 	test("submitting is committed on the record with the primary endpoint, and a refused write rejects", async () => {
@@ -789,6 +805,7 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			networkId: "net-built",
 			feeSpender: undefined,
 			priorityLevel: "normal",
+			feeChoice: "wallet",
 		})
 	})
 
@@ -835,6 +852,7 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			networkId: "net-live",
 			feeSpender: undefined,
 			priorityLevel: "normal",
+			feeChoice: "wallet",
 		})
 	})
 })

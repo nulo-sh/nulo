@@ -50,11 +50,9 @@ import {
 	shownToast,
 } from "./helpers/contacts"
 import { shotSend } from "./fixtures/send-page"
-import { pressEscape } from "./helpers/pointer-probes"
+import { pressEscape, SPACE } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
-/** Puppeteer's BiDi keyboard (Firefox) knows the space bar only by its key value. */
-const SPACE = " "
 
 // Wire-shaped: 0x + 64 hex, each the x coordinate of a Grumpkin point.
 const ADDR = {

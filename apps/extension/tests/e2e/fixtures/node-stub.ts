@@ -11,6 +11,12 @@ import type { HeldNode } from "./egress-guard"
 
 const REFUSAL = JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32601, message: "no node answers a guarded e2e run" } })
 
+/** The stand-in's answer: the node client ends the call on it at once, and a browser, having a reply,
+ *  re-sends nothing. */
+export function refuseNodeCall(res: ServerResponse): void {
+	res.writeHead(400, { "Content-Type": "application/json" }).end(REFUSAL)
+}
+
 export interface NodeStub {
 	url: string
 	/** Requests answered so far. */
@@ -23,7 +29,7 @@ export async function startNodeStub(): Promise<NodeStub> {
 	const handle = (req: IncomingMessage, res: ServerResponse) => {
 		requests++
 		req.resume()
-		req.on("end", () => res.writeHead(400, { "Content-Type": "application/json" }).end(REFUSAL))
+		req.on("end", () => refuseNodeCall(res))
 	}
 	const { server, port, release } = await listenClaimed<Server>(() => createServer(handle), "egress-node-stub")
 	let stopping: Promise<void> | undefined

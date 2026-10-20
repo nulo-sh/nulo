@@ -1,9 +1,10 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup lang="ts">
 /** Vendor */
-import { nextTick, reactive, ref, watch } from "vue"
+import { nextTick, onBeforeUnmount, reactive, ref, watch } from "vue"
 
 /** Composables */
+import { isComposing } from "../composables/keys"
 import { useOutside } from "../composables/outside"
 
 /** Components */
@@ -48,19 +49,73 @@ const triggerEl = ref<HTMLElement>()
 const cardEl = ref<HTMLElement>()
 
 const popoverStyles = reactive<Record<string, string>>({})
+/** The trigger's control focused when the panel opened, read before the content mounts and takes focus. */
+let opener: HTMLElement | null = null
 
 const onClose = () => {
 	emit("onClose")
 }
 
+/** The controls Tab walks, in DOM order. A panel holds no hidden control: one at an edge would hide
+ *  that edge from the hand-off below. */
+function tabbables(root: Element | undefined): HTMLElement[] {
+	if (!root) return []
+	const all = root.querySelectorAll<HTMLElement>("button, input, select, textarea, a[href], [tabindex]")
+	return [...all].filter((el) => el.tabIndex >= 0 && !el.matches(":disabled"))
+}
+
+/** Any open from a focused trigger, a pointer's included: a screen reader's activation may carry
+ *  no keyboard modality. */
+function focusIn() {
+	const card = cardEl.value
+	if (opener && card && !card.contains(document.activeElement)) tabbables(card)[0]?.focus()
+}
+
+/** The teleported panel keeps the Tab order it would have right after its trigger: past its last
+ *  control focus returns to the trigger and the browser's own Tab goes on from there; before its
+ *  first, it closes back onto the trigger. */
+function onTab(e: KeyboardEvent) {
+	const active = document.activeElement
+	if (!(active instanceof HTMLElement) || !cardEl.value?.contains(active)) return
+	const controls = tabbables(cardEl.value)
+	const anchor = opener ?? tabbables(triggerEl.value)[0]
+	if (active !== (e.shiftKey ? controls[0] : controls.at(-1)) || !anchor?.isConnected) return
+	if (e.shiftKey) e.preventDefault()
+	anchor.focus()
+	onClose()
+}
+
+/** `focusin`, not `focusout`: a window blur or a press on no control moves focus nowhere, and must
+ *  not close. */
+const onFocusin = (e: FocusEvent) => {
+	const target = e.target
+	if (target instanceof Node && !triggerEl.value?.contains(target) && !cardEl.value?.contains(target)) onClose()
+}
+
+/** A closed panel stays in the DOM for its leave; inert keeps a held Tab or a click off it. */
+const onBeforeLeave = (el: Element) => {
+	el.setAttribute("inert", "")
+}
+
 const onKeydown = (e: KeyboardEvent) => {
-	if (e.code === "Escape") onClose()
+	if (e.key === "Tab" && !isComposing(e)) {
+		onTab(e)
+		return
+	}
+	if (e.code !== "Escape") return
+	e.preventDefault()
+	// Only a key, and only from inside the panel, hands focus back: a pointer close from the
+	// autofocused content would carry the ring there.
+	if (cardEl.value?.contains(document.activeElement) && opener?.isConnected) opener.focus()
+	onClose()
 }
 
 watch(
 	() => props.open,
 	() => {
 		if (props.open) {
+			const focused = document.activeElement
+			opener = focused instanceof HTMLElement && triggerEl.value?.contains(focused) ? focused : null
 			const triggerRect = (triggerEl.value as HTMLElement).getBoundingClientRect()
 
 			popoverStyles.top = `${triggerRect.y + triggerRect.height + 8}px`
@@ -75,17 +130,30 @@ watch(
 
 			document.addEventListener("scroll", onClose)
 			document.addEventListener("keydown", onKeydown)
+			document.addEventListener("focusin", onFocusin)
 
 			nextTick(() => {
 				removeOutside = useOutside(cardEl.value, onClose)
+				focusIn()
 			})
 		} else {
+			opener = null
+			// Listeners first: the pinned call below can throw.
 			document.removeEventListener("scroll", onClose)
 			document.removeEventListener("keydown", onKeydown)
+			document.removeEventListener("focusin", onFocusin)
 			;(removeOutside as () => void)()
 		}
 	},
 )
+
+// A listener left behind would mark every later Escape handled.
+onBeforeUnmount(() => {
+	document.removeEventListener("scroll", onClose)
+	document.removeEventListener("keydown", onKeydown)
+	document.removeEventListener("focusin", onFocusin)
+	removeOutside?.()
+})
 </script>
 
 <template>
@@ -97,7 +165,7 @@ watch(
 		<teleport :to="teleportTo">
 			<div v-if="open" :class="$style.canvas" />
 
-			<Transition name="fastfade">
+			<Transition name="fastfade" @before-leave="onBeforeLeave">
 				<div v-if="open" :style="popoverStyles" :class="$style.popover">
 					<div ref="cardEl" :style="{ width: `${width}px`, height: `${height}px` }" :class="$style.card">
 						<slot name="content" />

@@ -475,6 +475,7 @@ export class TransferExecutor {
 			networkId: network.id,
 			feeSpender,
 			priorityLevel: speedOf(req.feeSettings),
+			feeChoice: "wallet",
 		})
 	}
 

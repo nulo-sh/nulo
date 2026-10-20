@@ -1,0 +1,1605 @@
+{
+	"goldens": [
+		{
+			"id": "accounts.full",
+			"stamp": 0,
+			"shape": "accounts",
+			"key": "nulo:core:accounts@[\"account\",\"3f9a2c71\",3415328944,\"0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458\"]",
+			"value": {
+				"profileId": "3f9a2c71",
+				"chainId": 3415328944,
+				"address": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+				"index": 0,
+				"type": 0,
+				"l1ChainId": 11155111,
+				"name": "Account 1",
+				"visible": true
+			}
+		},
+		{
+			"id": "accounts.minimal",
+			"stamp": 0,
+			"shape": "accounts",
+			"key": "nulo:core:accounts@[\"account\",\"b04e6d18\",0,\"0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab\"]",
+			"value": {
+				"profileId": "b04e6d18",
+				"chainId": 0,
+				"address": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+				"index": 0,
+				"type": 1,
+				"l1ChainId": 31337,
+				"name": "Imported account",
+				"visible": false
+			}
+		},
+		{
+			"id": "importedAccountKeys.full",
+			"stamp": 0,
+			"shape": "importedAccountKeys",
+			"key": "nulo:core:imported-account-keys@[\"account\",\"3f9a2c71\",3415328944,\"0x1b3dc854e29f6ccfd0b81a0ce8b7f94835d125b1ae7cfcbfa7bc655f84b0adab\"]",
+			"value": {
+				"profileId": "3f9a2c71",
+				"chainId": 3415328944,
+				"address": "0x1b3dc854e29f6ccfd0b81a0ce8b7f94835d125b1ae7cfcbfa7bc655f84b0adab",
+				"encryptedSigningKey": "/pKuId03MpvBePn/eiUFLvq2ESAOua+KIkWETNZAXb96Wi5sNlmuxQDbNMCFuOhMS6r/F1Hfi6jYU9dS"
+			}
+		},
+		{
+			"id": "importedAccountKeys.minimal",
+			"stamp": 0,
+			"shape": "importedAccountKeys",
+			"key": "nulo:core:imported-account-keys@[\"account\",\"b04e6d18\",0,\"0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab\"]",
+			"value": {
+				"profileId": "b04e6d18",
+				"chainId": 0,
+				"address": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+				"encryptedSigningKey": "WFHibwYNWPVZcnNHmlxkLpUH/tqtzsb5Y/PmW7YJd189Qxeg+3nZgap1XJQAyyurZgK4oLMHMUKlSIR1"
+			}
+		},
+		{
+			"id": "authRegistry.full",
+			"stamp": 0,
+			"shape": "authRegistry",
+			"key": "nulo:core:auth-registry@1",
+			"value": {
+				"id": 1,
+				"profileId": "3f9a2c71",
+				"chainId": 3415328944,
+				"account": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+				"hash": "0x14c7bce20483e7becc9096c2fd67d491f78f55c1f2b2550920e5277f6efc07d2",
+				"content": {
+					"kind": "call",
+					"caller": "0x150ae560f32c87bec863666832fb11f4ed1c7f4e32f075302eba569bc6bacde2",
+					"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+					"method": "transfer_public_to_public",
+					"args": [
+						"0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+						"0x150ae560f32c87bec863666832fb11f4ed1c7f4e32f075302eba569bc6bacde2",
+						"500000",
+						"0x1cf60d2dfe8a4dd72e7bba7d0c3cf8c57c4214ec5e5a8a0a50efdd121d46c34c"
+					]
+				},
+				"pending": true,
+				"txHash": "0x1e7856fa5a2c93d6d59178501de0e375df21c059af29c56d8dfcc93f21dc6767"
+			}
+		},
+		{
+			"id": "authRegistry.minimal",
+			"stamp": 0,
+			"shape": "authRegistry",
+			"key": "nulo:core:auth-registry@2",
+			"value": {
+				"id": 2,
+				"profileId": "b04e6d18",
+				"chainId": 0,
+				"account": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+				"hash": "0x2664e4b35adf78a10ec5db6b3e0ad6ccfeab37d2280977c16bd20f13c4487ec7",
+				"content": {
+					"kind": "message_hash",
+					"messageHash": "0x165c57a428b35001a444fcb2a2208921f604eedb2f41d0cfc64c93a85ccb95cd"
+				}
+			}
+		},
+		{
+			"id": "authRegistryEnabled.full",
+			"stamp": 0,
+			"shape": "authRegistryEnabled",
+			"key": "nulo:core:auth-registry-enabled@[\"authwit-status\",\"3f9a2c71\",3415328944,\"0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458\"]",
+			"value": false
+		},
+		{
+			"id": "authRegistryEnabled.minimal",
+			"stamp": 0,
+			"shape": "authRegistryEnabled",
+			"key": "nulo:core:auth-registry-enabled@[\"authwit-status\",\"b04e6d18\",0,\"0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab\"]",
+			"value": false
+		},
+		{
+			"id": "contacts.full",
+			"stamp": 0,
+			"shape": "contacts",
+			"key": "nulo:core:contacts@9d3e7a10",
+			"value": {
+				"id": "9d3e7a10",
+				"profileId": "3f9a2c71",
+				"name": "Alice Moreno",
+				"address": "0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+				"abbr": "AM"
+			}
+		},
+		{
+			"id": "contacts.minimal",
+			"stamp": 0,
+			"shape": "contacts",
+			"key": "nulo:core:contacts@1c84f2b5",
+			"value": {
+				"id": "1c84f2b5",
+				"profileId": "b04e6d18",
+				"name": "B",
+				"address": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+				"abbr": "B"
+			}
+		},
+		{
+			"id": "fpcs.full",
+			"stamp": 0,
+			"shape": "fpcs",
+			"key": "nulo:core:fpcs@2b6c9e41",
+			"value": {
+				"id": "2b6c9e41",
+				"profileId": "3f9a2c71",
+				"chainId": 3415328944,
+				"type": 1,
+				"address": "0x150ae560f32c87bec863666832fb11f4ed1c7f4e32f075302eba569bc6bacde2",
+				"name": "Sponsored FPC"
+			}
+		},
+		{
+			"id": "fpcs.minimal",
+			"stamp": 0,
+			"shape": "fpcs",
+			"key": "nulo:core:fpcs@8f05d3a7",
+			"value": {
+				"id": "8f05d3a7",
+				"profileId": "b04e6d18",
+				"chainId": 0,
+				"type": 2,
+				"address": "0x261442f769babc690b9ceed102d19aa02a7f2f9d49e1fc8c94e5b877071e630c"
+			}
+		},
+		{
+			"id": "dappSessions.full",
+			"stamp": 0,
+			"shape": "dappSessions",
+			"key": "nulo:core:dappSessions@39433e6db4c616cb4812acd668a9698a6025fd16666375fa309cd05c5c23c75b",
+			"value": {
+				"id": "39433e6db4c616cb4812acd668a9698a6025fd16666375fa309cd05c5c23c75b",
+				"profileId": "3f9a2c71",
+				"chainId": "3415328944",
+				"dappMetadata": {
+					"name": "Token Swap",
+					"description": "Swap private tokens on Aztec",
+					"logo": "https://app.example.org/logo.png",
+					"url": "https://app.example.org"
+				},
+				"permissions": [
+					{
+						"methods": ["aztec_sendTx", "aztec_simulateTx"],
+						"events": ["accountsChanged"]
+					}
+				],
+				"accounts": ["aztec:3415328944:0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458"],
+				"confirmationLevel": 5,
+				"expiry": 1791244800000,
+				"verificationHash": "e6161f0f41e6b00bb212e8c0c1f09ea29ffbf7915704bbe88698fcc657ccf690",
+				"trustedVerification": true,
+				"accountAliases": {
+					"aztec:3415328944:0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458": "Main"
+				},
+				"capabilityGrants": [
+					{
+						"capability": {
+							"type": "accounts",
+							"canGet": true,
+							"canCreateAuthWit": true,
+							"accounts": [
+								{
+									"alias": "Main",
+									"item": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458"
+								}
+							]
+						},
+						"grantedAt": 1790640000000
+					},
+					{
+						"capability": {
+							"type": "transaction",
+							"scope": [
+								{
+									"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+									"function": "transfer_private_to_private"
+								}
+							]
+						},
+						"grantedAt": 1790640000000
+					}
+				],
+				"capabilityRejections": [
+					{
+						"capabilityType": "data",
+						"rejectedAt": 1790640000000
+					}
+				],
+				"authorizationsWithoutAsking": {
+					"broad": false
+				},
+				"mac": "S6n5OWoFU0lSkFm17GAbAbosnApT0gvgVYEcrhUEvoU="
+			}
+		},
+		{
+			"id": "dappSessions.minimal",
+			"stamp": 0,
+			"shape": "dappSessions",
+			"key": "nulo:core:dappSessions@4b007a791fa627a5c644c6d97280276311b6e25ba7869a8435bcac437d935905",
+			"value": {
+				"id": "4b007a791fa627a5c644c6d97280276311b6e25ba7869a8435bcac437d935905",
+				"profileId": "b04e6d18",
+				"chainId": "0",
+				"dappMetadata": {},
+				"permissions": [
+					{
+						"methods": []
+					}
+				],
+				"accounts": [],
+				"confirmationLevel": 5,
+				"expiry": 1791331200000,
+				"mac": "90b2lvjrZm2kMI/REpK1oqo+gN5oVbQUM/DCnRZj/oc="
+			}
+		},
+		{
+			"id": "journal.full",
+			"stamp": 0,
+			"shape": "journal",
+			"key": "nulo:journal@ec3486c835814251",
+			"value": {
+				"id": "ec3486c835814251",
+				"kind": "dapp_execute",
+				"origin": "dapp",
+				"profileId": "3f9a2c71",
+				"sessionId": "39433e6db4c616cb4812acd668a9698a6025fd16666375fa309cd05c5c23c75b",
+				"progress": {
+					"stage": "failed",
+					"from": "submitting",
+					"txHash": "0x0125856d7c1793f7a77241d1dcdc4c8fc375ee15405b2b60e00b789ce3e3dc79",
+					"submittedEndpointUrl": "https://aztec-testnet.example.org",
+					"expiry": {
+						"timestamp": 1790805600,
+						"nullifier": "0x2698e9456e61875133340d4eea1d0b3e493be648417235c94cb3358ce6d77f51"
+					},
+					"check": "reverted",
+					"inclusion": {
+						"block": 81234,
+						"hash": "0x15248642522e44f73a1a28d8b5e924a945f6146130b0c232e4f19e9f93e7814b"
+					},
+					"checkSince": 1790802000000
+				},
+				"error": {
+					"kind": "dapp_execute",
+					"message": "Transaction reverted in app logic",
+					"normalizedRaw": "{\"name\":\"Error\",\"message\":\"Transaction reverted in app logic\"}"
+				},
+				"terminalAt": 1790802000000,
+				"attempts": 1,
+				"createdAt": 1790798400000,
+				"updatedAt": 1790802000000,
+				"accountAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+				"networkId": "e41b9d02",
+				"tokenId": 1,
+				"title": "Transfer USDC",
+				"subtitle": "app.example.org",
+				"amountRaw": "1250000",
+				"recipientAddress": "0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+				"contractAddress": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+				"transferType": 0,
+				"call": {
+					"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+					"argCount": 4,
+					"classId": "0x0f4760c9595980d657422b564cb908f54fcf0aff11a8f0b7803c25c5a96852ef"
+				}
+			}
+		},
+		{
+			"id": "journal.queued",
+			"stamp": 0,
+			"shape": "journal",
+			"key": "nulo:journal@4ab1ef61fba6b2a3",
+			"value": {
+				"id": "4ab1ef61fba6b2a3",
+				"kind": "dapp_execute",
+				"origin": "dapp",
+				"profileId": "3f9a2c71",
+				"sessionId": "39433e6db4c616cb4812acd668a9698a6025fd16666375fa309cd05c5c23c75b",
+				"progress": {
+					"stage": "queued",
+					"reask": {
+						"fee": "4210000000000",
+						"cap": "8420000000000",
+						"payer": {
+							"type": "fpc",
+							"fpcId": "2b6c9e41",
+							"isProtocol": false
+						}
+					}
+				},
+				"error": null,
+				"terminalAt": null,
+				"attempts": 0,
+				"createdAt": 1790812500000,
+				"updatedAt": 1790812500000
+			}
+		},
+		{
+			"id": "journal.minimal",
+			"stamp": 0,
+			"shape": "journal",
+			"key": "nulo:journal@e2afe39e34ff7c79",
+			"value": {
+				"id": "e2afe39e34ff7c79",
+				"kind": "token_import",
+				"origin": "seed",
+				"profileId": "b04e6d18",
+				"progress": {
+					"stage": "pending"
+				},
+				"error": null,
+				"terminalAt": null,
+				"attempts": 0,
+				"createdAt": 1790812200000,
+				"updatedAt": 1790812200000
+			}
+		},
+		{
+			"id": "networks.full",
+			"stamp": 0,
+			"shape": "networks",
+			"key": "nulo:core:networks@e41b9d02",
+			"value": {
+				"id": "e41b9d02",
+				"profileId": "3f9a2c71",
+				"chainId": 3415328944,
+				"l1ChainId": 11155111,
+				"name": "Testnet",
+				"primaryEndpointId": "6d1a0f93",
+				"endpoints": [
+					{
+						"id": "6d1a0f93",
+						"rpcUrl": "https://aztec-testnet.example.org",
+						"label": "dRPC"
+					},
+					{
+						"id": "a07e52c4",
+						"rpcUrl": "https://rpc.testnet.example.net/aztec"
+					}
+				],
+				"kind": "testnet"
+			}
+		},
+		{
+			"id": "networks.minimal",
+			"stamp": 0,
+			"shape": "networks",
+			"key": "nulo:core:networks@5a7f03c6",
+			"value": {
+				"id": "5a7f03c6",
+				"profileId": "b04e6d18",
+				"chainId": 0,
+				"l1ChainId": 31337,
+				"name": "Local Network",
+				"primaryEndpointId": "f3b8264e",
+				"endpoints": [
+					{
+						"id": "f3b8264e",
+						"rpcUrl": "http://localhost:8080"
+					}
+				]
+			}
+		},
+		{
+			"id": "tokens.full",
+			"stamp": 0,
+			"shape": "tokens",
+			"key": "nulo:core:tokens@1",
+			"value": {
+				"id": 1,
+				"profileId": "3f9a2c71",
+				"chainId": 3415328944,
+				"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+				"classId": "0x0f4760c9595980d657422b564cb908f54fcf0aff11a8f0b7803c25c5a96852ef",
+				"name": "Test USDC",
+				"symbol": "USDC",
+				"decimals": 6,
+				"getNameFn": {
+					"name": "public_get_name",
+					"impl": 0
+				},
+				"getSymbolFn": {
+					"name": "public_get_symbol",
+					"impl": 0
+				},
+				"getDecimalsFn": {
+					"name": "public_get_decimals",
+					"impl": 0
+				},
+				"balanceOfPublicFn": {
+					"name": "balance_of_public",
+					"impl": 0
+				},
+				"balanceOfPrivateFn": {
+					"name": "balance_of_private",
+					"impl": 0
+				},
+				"transferPublicFn": {
+					"name": "transfer_public_to_public",
+					"impl": 0
+				},
+				"transferPrivateFn": {
+					"name": "transfer_private_to_private",
+					"impl": 1
+				},
+				"transferPublicToPrivateFn": {
+					"name": "transfer_public_to_private",
+					"impl": 0
+				},
+				"transferPrivateToPublicFn": {
+					"name": "transfer_private_to_public",
+					"impl": 0
+				}
+			}
+		},
+		{
+			"id": "tokens.minimal",
+			"stamp": 0,
+			"shape": "tokens",
+			"key": "nulo:core:tokens@2",
+			"value": {
+				"id": 2,
+				"profileId": "b04e6d18",
+				"chainId": 0,
+				"contract": "0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311",
+				"name": "Local Token",
+				"symbol": "LTK",
+				"decimals": 18
+			}
+		},
+		{
+			"id": "tokenBalances.full",
+			"stamp": 0,
+			"shape": "tokenBalances",
+			"key": "nulo:core:token-balances@1",
+			"value": {
+				"id": 1,
+				"token": 1,
+				"account": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+				"profileId": "3f9a2c71",
+				"chainId": 3415328944,
+				"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+				"publicBalance": "1250000000",
+				"privateBalance": "48000000",
+				"updatedAt": 1790811600000,
+				"syncFailure": {
+					"at": 1790812680000,
+					"message": "Simulation failed: node returned 503"
+				}
+			}
+		},
+		{
+			"id": "tokenBalances.minimal",
+			"stamp": 0,
+			"shape": "tokenBalances",
+			"key": "nulo:core:token-balances@2",
+			"value": {
+				"id": 2,
+				"token": 2,
+				"account": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+				"profileId": "b04e6d18",
+				"chainId": 0,
+				"contract": "0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311",
+				"updatedAt": 1790811000000
+			}
+		},
+		{
+			"id": "txs.full",
+			"stamp": 0,
+			"shape": "txs",
+			"key": "nulo:core:txs@0x1b48092039e7b1f8a06a2cde8e04795ac717c768dc978beb530582591864d920",
+			"value": {
+				"chainId": 3415328944,
+				"profileId": "3f9a2c71",
+				"networkId": "e41b9d02",
+				"account": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+				"nonce": "0x030b39a27b74f15a25cf7a35a696f06ac52688a59ed0acd33f1940d7ca09a8fd",
+				"feePaymentMethod": 2,
+				"hash": "0x1b48092039e7b1f8a06a2cde8e04795ac717c768dc978beb530582591864d920",
+				"createdAt": 1790791200000,
+				"updatedAt": 1790794800000,
+				"status": 4,
+				"executionResult": 1,
+				"block": {
+					"hash": "0x099c9d518185c0ab773663034e0ded91c5d444b33d9ecbe36f9c1cb4392f694f",
+					"number": 81190
+				},
+				"fee": "3120000000000",
+				"estimatedFee": "4210000000000",
+				"gasDetails": {
+					"l2GasLimit": 6540000,
+					"daGasLimit": 786432,
+					"teardownL2GasLimit": 1000000,
+					"teardownDaGasLimit": 131072,
+					"feePerL2Gas": "1250000",
+					"feePerDaGas": "0"
+				},
+				"feeSpender": "0x261442f769babc690b9ceed102d19aa02a7f2f9d49e1fc8c94e5b877071e630c",
+				"priorityLevel": "fast",
+				"error": "Assertion failed: Balance too low 'subtracted > 0'",
+				"awaitingFinality": true,
+				"submittedEndpointUrl": "https://aztec-testnet.example.org",
+				"origin": {
+					"type": 1,
+					"name": "https://app.example.org"
+				},
+				"calls": [
+					{
+						"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+						"method": "transfer_private_to_private",
+						"args": [
+							"0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+							"0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+							"1250000",
+							"0x0000000000000000000000000000000000000000000000000000000000000000"
+						],
+						"classId": "0x0f4760c9595980d657422b564cb908f54fcf0aff11a8f0b7803c25c5a96852ef",
+						"transfers": [
+							{
+								"token": {
+									"name": "Test USDC",
+									"symbol": "USDC",
+									"decimals": 6
+								},
+								"type": 0,
+								"from": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+								"to": "0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+								"amount": "1250000"
+							}
+						]
+					}
+				],
+				"ambiguous": false,
+				"feeChoice": "app"
+			}
+		},
+		{
+			"id": "txs.minimal",
+			"stamp": 0,
+			"shape": "txs",
+			"key": "nulo:core:txs@0x01303ffd0da7a6f97b6fcd6204c1ad598aa00c759035cb533df1703918717fc3",
+			"value": {
+				"chainId": 0,
+				"account": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+				"nonce": "0x2657ae4740b0403ade0553f98a7869ff9f596a47cf80b7d8006cd0dcca9fa2f3",
+				"feePaymentMethod": 0,
+				"hash": "0x01303ffd0da7a6f97b6fcd6204c1ad598aa00c759035cb533df1703918717fc3",
+				"createdAt": 1790809800000,
+				"updatedAt": 1790809800000,
+				"status": 0,
+				"origin": {
+					"type": 0
+				},
+				"calls": []
+			}
+		},
+		{
+			"id": "txs.ambiguous",
+			"stamp": 0,
+			"shape": "txs",
+			"key": "nulo:core:txs@0x042db31f5f3cc445e6446bda6a256777ab3b2eba7674d7599116ffda88a7057a",
+			"value": {
+				"chainId": 3415328944,
+				"ambiguous": true,
+				"account": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+				"nonce": "0x0765270e183a847a3203724076161d748d6dbe83625ce23295eb7b6dd2bcf311",
+				"feePaymentMethod": 0,
+				"hash": "0x042db31f5f3cc445e6446bda6a256777ab3b2eba7674d7599116ffda88a7057a",
+				"createdAt": 1790035200000,
+				"updatedAt": 1790035200000,
+				"status": 5,
+				"executionResult": 0,
+				"block": {
+					"hash": "0x14b943e2c57af6c31c46c8b4d3d82974729669c80484bb9e817e401cf8230d2f",
+					"number": 64002
+				},
+				"origin": {
+					"type": 0
+				},
+				"calls": [
+					{
+						"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+						"method": "transfer_public_to_public",
+						"args": [
+							"0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+							"0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+							"10",
+							"0x00"
+						]
+					}
+				]
+			}
+		},
+		{
+			"id": "incomingTransfers.full",
+			"stamp": 0,
+			"shape": "incomingTransfers",
+			"key": "nulo:core:incoming-transfers@note:3f9a2c71|e41b9d02|0x062756421d9c1dc3f7cfb1683bcd51d19a1d1dc20eefcfbb24c5ee3b3f5b23ed",
+			"value": {
+				"kind": "note",
+				"id": "note:3f9a2c71|e41b9d02|0x062756421d9c1dc3f7cfb1683bcd51d19a1d1dc20eefcfbb24c5ee3b3f5b23ed",
+				"profileId": "3f9a2c71",
+				"networkId": "e41b9d02",
+				"accountAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+				"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+				"tokenId": 1,
+				"owner": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+				"amountRaw": "2500000",
+				"noteHash": "0x278e98263523cba17a972720cfea824c83d968e733b60580a51a3be8e50404a1",
+				"txHash": "0x0893ab99a5fca101b805ca85fcdfda2141c26e8a2afff6af9be0ecb9442262ca",
+				"l2BlockNumber": 81201,
+				"txIndexInBlock": 3,
+				"indexInTx": 0,
+				"hidden": false,
+				"discoveredAt": 1790807400000,
+				"blockTimestamp": 1790807100,
+				"settled": true
+			}
+		},
+		{
+			"id": "incomingTransfers.public",
+			"stamp": 0,
+			"shape": "incomingTransfers",
+			"key": "nulo:core:incoming-transfers@pub:3f9a2c71|e41b9d02|0x089d23a6d23f6d6186ea1a0a01c464ca35f1f12634be0129dbd6b876b1ef0966|2",
+			"value": {
+				"kind": "public-event",
+				"id": "pub:3f9a2c71|e41b9d02|0x089d23a6d23f6d6186ea1a0a01c464ca35f1f12634be0129dbd6b876b1ef0966|2",
+				"from": "0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+				"blockHash": "0x0f05dc4049174c88aa37a7401fcecf93272c8b6ef6b86f64a734e0a008bb7e6a",
+				"profileId": "3f9a2c71",
+				"networkId": "e41b9d02",
+				"accountAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+				"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+				"tokenId": 1,
+				"amountRaw": "700000",
+				"txHash": "0x089d23a6d23f6d6186ea1a0a01c464ca35f1f12634be0129dbd6b876b1ef0966",
+				"l2BlockNumber": 81215,
+				"txIndexInBlock": 1,
+				"indexInTx": 2,
+				"hidden": false,
+				"discoveredAt": 1790808600000,
+				"blockTimestamp": 1790808480
+			}
+		},
+		{
+			"id": "incomingTransfers.minimal",
+			"stamp": 0,
+			"shape": "incomingTransfers",
+			"key": "nulo:core:incoming-transfers@note:b04e6d18|5a7f03c6|0x141a6b04cfb11c041d95f9cc6b6ec68c5827feca3c04af1302289267ef97e51e",
+			"value": {
+				"kind": "note",
+				"id": "note:b04e6d18|5a7f03c6|0x141a6b04cfb11c041d95f9cc6b6ec68c5827feca3c04af1302289267ef97e51e",
+				"profileId": "b04e6d18",
+				"networkId": "5a7f03c6",
+				"accountAddress": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+				"contract": "0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311",
+				"owner": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+				"amountRaw": "1000000000000000000",
+				"noteHash": "0x01166f132845369283aca273ab3064a30f52847d24d9cc10a74c3345bcfa62d4",
+				"txHash": "0x1500d52e2aa73fe3b23fa795e9b35a7b9fe412a81a659fe5cbe7290da422d9d5",
+				"l2BlockNumber": 17,
+				"txIndexInBlock": 0,
+				"indexInTx": 1,
+				"hidden": true,
+				"discoveredAt": 1790810400000
+			}
+		},
+		{
+			"id": "incomingTrust.full",
+			"stamp": 0,
+			"shape": "incomingTrust",
+			"key": "nulo:core:incoming-trust@3f9a2c71|e41b9d02|0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+			"value": {
+				"profileId": "3f9a2c71",
+				"networkId": "e41b9d02",
+				"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+				"state": "trusted",
+				"updatedAt": 1790640000000,
+				"arrivalFloor": 81000,
+				"arrivalFloorPending": true
+			}
+		},
+		{
+			"id": "incomingTrust.minimal",
+			"stamp": 0,
+			"shape": "incomingTrust",
+			"key": "nulo:core:incoming-trust@b04e6d18|5a7f03c6|0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311",
+			"value": {
+				"profileId": "b04e6d18",
+				"networkId": "5a7f03c6",
+				"contract": "0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311",
+				"state": "unknown",
+				"updatedAt": 1790726400000
+			}
+		},
+		{
+			"id": "incomingPublicCursors.full",
+			"stamp": 0,
+			"shape": "incomingPublicCursors",
+			"key": "nulo:core:incoming-public-cursors@3f9a2c71|e41b9d02|0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+			"value": {
+				"cursor": {
+					"blockNumber": 81215,
+					"txIndexWithinBlock": 1,
+					"logIndexWithinTx": 2
+				},
+				"lastSyncedBlockHash": "0x018aa5f9ddceb3f37cc8434910c8fb594004fc0028edab2c491db33a00bd87b2",
+				"lastScanFinalized": 81180,
+				"startBlock": 80500,
+				"pendingPage": {
+					"fromCursor": {
+						"blockNumber": 81215,
+						"txIndexWithinBlock": 1,
+						"logIndexWithinTx": 2
+					},
+					"toScannedThrough": {
+						"blockNumber": 81240,
+						"txIndexWithinBlock": 0,
+						"logIndexWithinTx": 0
+					},
+					"upperHash": "0x0fa952dd49e27b38cac2b3409a15bc2d7f722775d2af8fd65d3bf58499dc1f0f"
+				},
+				"reconciling": {
+					"lowerBound": 81180,
+					"upperBound": 81240,
+					"upperBoundHash": "0x0678338a7bbb3068de813a95f06924bee11614e25cac7a203bd3fffd4f411a07",
+					"progress": {
+						"blockNumber": 81200,
+						"txIndexWithinBlock": 4,
+						"logIndexWithinTx": 1
+					},
+					"seen": [
+						[81190, "0x17b04333e091fede5c7413c471b6a2e810b456e2c5d2d4c6785cbfbedd78f737"],
+						[81200, "0x2bc4584b9ba896acfe83ff80723d0ff13b546602b35ecc0405334463c99cf17b"]
+					]
+				},
+				"backfill": {
+					"low": 79000,
+					"high": 80500,
+					"position": {
+						"blockNumber": 79850,
+						"txIndexWithinBlock": 2,
+						"logIndexWithinTx": 0
+					}
+				}
+			}
+		},
+		{
+			"id": "incomingPublicCursors.minimal",
+			"stamp": 0,
+			"shape": "incomingPublicCursors",
+			"key": "nulo:core:incoming-public-cursors@b04e6d18|5a7f03c6|0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311",
+			"value": {
+				"cursor": null,
+				"lastSyncedBlockHash": null,
+				"lastScanFinalized": null,
+				"startBlock": 0
+			}
+		},
+		{
+			"id": "incomingBalanceOutbox.full",
+			"stamp": 0,
+			"shape": "incomingBalanceOutbox",
+			"key": "nulo:core:incoming-balance-outbox@3f9a2c71|e41b9d02|0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458|1",
+			"value": {
+				"dirtyAt": 1790812620000,
+				"pendingTaskId": "a3f09c2e"
+			}
+		},
+		{
+			"id": "incomingBalanceOutbox.minimal",
+			"stamp": 0,
+			"shape": "incomingBalanceOutbox",
+			"key": "nulo:core:incoming-balance-outbox@b04e6d18|5a7f03c6|0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab|2",
+			"value": {
+				"dirtyAt": 1790812320000
+			}
+		},
+		{
+			"id": "incomingArrivals.full",
+			"stamp": 0,
+			"shape": "incomingArrivals",
+			"key": "nulo:core:incoming-arrivals@3f9a2c71|e41b9d02|0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+			"value": {
+				"sinceBlock": 81000,
+				"played": [
+					["pub:3f9a2c71|e41b9d02|0x089d23a6d23f6d6186ea1a0a01c464ca35f1f12634be0129dbd6b876b1ef0966|2", 81215],
+					["note:3f9a2c71|e41b9d02|0x062756421d9c1dc3f7cfb1683bcd51d19a1d1dc20eefcfbb24c5ee3b3f5b23ed", 81201]
+				]
+			}
+		},
+		{
+			"id": "incomingArrivals.minimal",
+			"stamp": 0,
+			"shape": "incomingArrivals",
+			"key": "nulo:core:incoming-arrivals@b04e6d18|5a7f03c6|0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+			"value": {
+				"sinceBlock": 0,
+				"played": []
+			}
+		},
+		{
+			"id": "profileTombstones.full",
+			"stamp": 0,
+			"shape": "profileTombstones",
+			"key": "nulo:core:profile-tombstones@d2a6f480",
+			"value": {
+				"profileId": "d2a6f480",
+				"addresses": [
+					"0x2f5c81b33f9f8996a498cf0602d9dbdf555de6d7d1bdf4eefa9d33c92fb6974d",
+					"0x29c18b9adb0fbb85f71b2c3338d6a0d9b23e89dd0701cbb7f369d5739c855f48"
+				],
+				"tokenIds": [3, 4],
+				"networkIds": ["7e3d10b2", "c58a96f1"],
+				"epoch": 2,
+				"pxeGeneration": "ca950a9ae2fe52cd08298e3afe6d1af7"
+			}
+		},
+		{
+			"id": "profileTombstones.minimal",
+			"stamp": 0,
+			"shape": "profileTombstones",
+			"key": "nulo:core:profile-tombstones@61e0b3c9",
+			"value": {
+				"profileId": "61e0b3c9",
+				"addresses": [],
+				"tokenIds": [],
+				"networkIds": [],
+				"epoch": 1,
+				"pxeGeneration": "9b4c9a35e75e998d74f6c6bf14c4a9c1"
+			}
+		},
+		{
+			"id": "restorePending.full",
+			"stamp": 0,
+			"shape": "restorePending",
+			"key": "nulo:core:restore-pending@3f9a2c71",
+			"value": {
+				"profileId": "3f9a2c71",
+				"pxeGeneration": "00f35de084b327c18ba1a12f94295965",
+				"at": 1790812560000
+			}
+		},
+		{
+			"id": "restorePending.minimal",
+			"stamp": 0,
+			"shape": "restorePending",
+			"key": "nulo:core:restore-pending@b04e6d18",
+			"value": {
+				"profileId": "b04e6d18",
+				"pxeGeneration": "47cba0c40e105ae8afcff8685dea0e3a",
+				"at": 1790812440000
+			}
+		},
+		{
+			"id": "accountIntegrityBlocked.full",
+			"stamp": 0,
+			"shape": "accountIntegrityBlocked",
+			"key": "nulo:core:account-integrity-blocked@3f9a2c71",
+			"value": {
+				"profileId": "3f9a2c71",
+				"chainId": 3415328944,
+				"accountIndex": 0,
+				"storedAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+				"derivedAddress": "0x19a08f9d12d1b4825a476e8843264b88ebc6ad907be8c302467e25e0ee8c9e38",
+				"regimeId": "nulo-v6.1",
+				"walletVersion": "0.31.0",
+				"detectedAt": 1790811900000
+			}
+		},
+		{
+			"id": "accountIntegrityBlocked.minimal",
+			"stamp": 0,
+			"shape": "accountIntegrityBlocked",
+			"key": "nulo:core:account-integrity-blocked@b04e6d18",
+			"value": {
+				"profileId": "b04e6d18",
+				"chainId": 0,
+				"accountIndex": 1,
+				"storedAddress": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+				"derivedAddress": "0x1c241160282a5dc317c392130671b7d7f41af146973e7fb540cbca60278e202b",
+				"regimeId": "nulo-v6.1",
+				"walletVersion": "0.31.0",
+				"detectedAt": 1790811300000
+			}
+		},
+		{
+			"id": "accountIntegrityVerified.full",
+			"stamp": 0,
+			"shape": "accountIntegrityVerified",
+			"key": "nulo:core:account-integrity-verified@3f9a2c71",
+			"value": {
+				"walletVersion": "0.31.0",
+				"accountSetDigest": "[\"3415328944:11155111:0:0:0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458\",\"3415328944:11155111:0:1:0x1b3dc854e29f6ccfd0b81a0ce8b7f94835d125b1ae7cfcbfa7bc655f84b0adab\"]"
+			}
+		},
+		{
+			"id": "accountIntegrityVerified.minimal",
+			"stamp": 0,
+			"shape": "accountIntegrityVerified",
+			"key": "nulo:core:account-integrity-verified@b04e6d18",
+			"value": {
+				"walletVersion": "0.31.0",
+				"accountSetDigest": "[\"0:31337:0:1:0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab\"]"
+			}
+		},
+		{
+			"id": "staleNetworks.full",
+			"stamp": 0,
+			"shape": "staleNetworks",
+			"key": "nulo:core:stale-networks@3f9a2c71",
+			"value": {
+				"profileId": "3f9a2c71",
+				"accountSetDigest": "[\"3415328944:11155111:0:0:0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458\",\"3415328944:11155111:0:1:0x1b3dc854e29f6ccfd0b81a0ce8b7f94835d125b1ae7cfcbfa7bc655f84b0adab\"]",
+				"entries": [
+					{
+						"networkId": "e41b9d02",
+						"chainId": 3415328944,
+						"networkReset": true,
+						"addressesMoved": false
+					},
+					{
+						"networkId": "0c9d4e7b",
+						"chainId": 2286515393,
+						"networkReset": false,
+						"addressesMoved": true
+					}
+				]
+			}
+		},
+		{
+			"id": "staleNetworks.minimal",
+			"stamp": 0,
+			"shape": "staleNetworks",
+			"key": "nulo:core:stale-networks@b04e6d18",
+			"value": {
+				"profileId": "b04e6d18",
+				"accountSetDigest": "[\"0:31337:0:1:0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab\"]",
+				"entries": []
+			}
+		},
+		{
+			"id": "networkReset.full",
+			"stamp": 0,
+			"shape": "networkReset",
+			"key": "nulo:core:network-reset@3f9a2c71",
+			"value": {
+				"profileId": "3f9a2c71",
+				"networkId": "e41b9d02",
+				"fromChainId": 2286515393,
+				"toChainId": 3415328944,
+				"l1ChainId": 11155111,
+				"cause": {
+					"networkReset": true,
+					"addressesMoved": false
+				},
+				"purged": true,
+				"switchToSeedNode": false,
+				"probedEndpoint": {
+					"id": "6d1a0f93",
+					"url": "https://aztec-testnet.example.org"
+				},
+				"accounts": [
+					{
+						"type": 0,
+						"index": 0,
+						"name": "Account 1",
+						"visible": true,
+						"oldAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+						"done": true
+					},
+					{
+						"type": 1,
+						"index": 0,
+						"name": "Imported account",
+						"visible": true,
+						"oldAddress": "0x1b3dc854e29f6ccfd0b81a0ce8b7f94835d125b1ae7cfcbfa7bc655f84b0adab",
+						"newAddress": "0x0f307ab7b60312124c0a0ccefe654b1a25d0ae005fe7ea342fd89883fb686f27",
+						"encryptedSigningKey": "2k9f6TppTd4BDO/RYNTfEJ+KLgZYT85LWqGJTz11llYUQ40vUa26iTK5O+8/v4DrOCsoMBcgUN+Fa1CC",
+						"done": false
+					}
+				],
+				"unmovable": ["Old imported"]
+			}
+		},
+		{
+			"id": "networkReset.minimal",
+			"stamp": 0,
+			"shape": "networkReset",
+			"key": "nulo:core:network-reset@b04e6d18",
+			"value": {
+				"profileId": "b04e6d18",
+				"networkId": "5a7f03c6",
+				"fromChainId": 1,
+				"toChainId": 0,
+				"l1ChainId": 31337,
+				"cause": {
+					"networkReset": false,
+					"addressesMoved": true
+				},
+				"purged": false,
+				"switchToSeedNode": true,
+				"probedEndpoint": null,
+				"accounts": []
+			}
+		},
+		{
+			"id": "networkResetDone.full",
+			"stamp": 0,
+			"shape": "networkResetDone",
+			"key": "nulo:core:network-reset-done@3f9a2c71",
+			"value": {
+				"networkId": "c3d8a614",
+				"addressesMoved": true
+			}
+		},
+		{
+			"id": "networkResetDone.minimal",
+			"stamp": 0,
+			"shape": "networkResetDone",
+			"key": "nulo:core:network-reset-done@b04e6d18",
+			"value": {
+				"networkId": "9e21b7f0",
+				"addressesMoved": false
+			}
+		},
+		{
+			"id": "networkSeeded.full",
+			"stamp": 0,
+			"shape": "networkSeeded",
+			"key": "nulo:core:network-seeded@3f9a2c71",
+			"value": {
+				"offered": ["custom", "devnet", "local", "mainnet", "testnet"],
+				"announce": ["mainnet"]
+			}
+		},
+		{
+			"id": "networkSeeded.minimal",
+			"stamp": 0,
+			"shape": "networkSeeded",
+			"key": "nulo:core:network-seeded@b04e6d18",
+			"value": {
+				"offered": []
+			}
+		},
+		{
+			"id": "profiles.full",
+			"stamp": 0,
+			"shape": "profiles",
+			"key": "nulo:core:profiles@3f9a2c71",
+			"value": {
+				"id": "3f9a2c71",
+				"name": "Main wallet",
+				"type": "password",
+				"pxeGeneration": "8a65ccadefc61f00bf915652b0f0f552",
+				"dekSealed": "LOsyobbwKxTww4CuZ8N6+nFigEl5PcGsKPd/5Cwr9shUgPAspwMM9qqcYJefWVEixLkjFk3ATudEbMOK",
+				"walletFingerprint": "25079caaa352dc46871988e43e5868b109ccba56023c5f805f674f02806bb6d7",
+				"guard": "AfSh8AOo3nhq5JLTTb5PZJX5J+Q9dfrQ58Q3suOdj8tM5DsN7LvyC4UyNDZYIuOtwJNKNObH3G4ZOgpX",
+				"secret": "5DYWNr/qVwDTA48rXvCpT87cTmixf4RPrANGVjXboz9hi5RJCIF7RA3y3NVDOz/4c+WbrHZNykK2Cg/W6OxA/tgBJz6MSmmLJ3Aea8KszI4riN3VDOiV926XJ3A=",
+				"entropy": "UCWtCDABfCstVgvZoS9ciLYrMBdvf4GgK8Wh8b338rO7XkD8XC+zO8H2o11T39TeovhCvHXSf7Aasrav",
+				"envelopeMac": "YMMHg5xeUleK3BiR01I6JM1D2dU0utQ4fVYyxHCZ/bE="
+			}
+		},
+		{
+			"id": "profiles.minimal",
+			"stamp": 0,
+			"shape": "profiles",
+			"key": "nulo:core:profiles@b04e6d18",
+			"value": {
+				"id": "b04e6d18",
+				"name": "B",
+				"type": "password",
+				"pxeGeneration": "6ed03791c094f9127b5188be57e2d499",
+				"dekSealed": "Ov4A+hdBzT56IClOIuti+oA2QPIMrLExqjlbjBrZD4EkitGRBMQrrNOO28htkVV46GUWd/+ur2u7QHJI",
+				"walletFingerprint": "fe40100014c8ac7f3d3ed249f0adb10964acd7c802259eeb6d064762bd659e64",
+				"guard": "uYd+jDnsDV0c2Ewbdgm1htMCTmgCrtUYLol3h1vXblfWRANsOBQvuigsDndWCmwxGq6SThz7BmCnShF/",
+				"secret": "b9phqn7907gBl9pA2tkVDUyCQqO5Pth1oBWwO2LmYWiFxem06RejXxnBqOzgRzXkC4tRzx7xABmFbefyiUpnfhmS/VL3ggWT2CgdYGl1GqqcuFZFLAwa5u/rXAs=",
+				"entropy": "j99SHK2o3AIr7VBuKAILRFWDPJPZDhTi8FrjVN2jo1npj8ldpZZVXOYQRB6WsVu/Pi0yzd6H0OEjal9X",
+				"envelopeMac": "0zx/00y8xy8/Imq64lnAt9vAZWsPZCH75zjG+juVJhY="
+			}
+		},
+		{
+			"id": "profiles.passkey",
+			"stamp": 0,
+			"shape": "profiles",
+			"key": "nulo:core:profiles@7c21e5a9",
+			"value": {
+				"id": "7c21e5a9",
+				"name": "Passkey wallet",
+				"type": "passkey",
+				"pxeGeneration": "f5382119f54b54ed8f4c08fdc8abba56",
+				"dekSealed": "50cc5hVkUrrclMF4Z7/2Mo4Jp5Q32CQ9EDQBHApYWAlZ+gifZty85k4CRn9iJOuRobYJpWO34KSf8/1X",
+				"walletFingerprint": "5c64e73b17ad2a3ac10531f196eb5cc7024f7ee52539170182e0a31853e7cea5",
+				"credentialId": "6_sXxtADI41nWQx4GrZaoBdYZnouHc_zbDplcQ4xpZM"
+			}
+		},
+		{
+			"id": "config.minimal",
+			"stamp": 0,
+			"shape": "config",
+			"key": "nulo:config",
+			"value": {}
+		},
+		{
+			"id": "config.full",
+			"stamp": 0,
+			"shape": "config",
+			"key": "nulo:config",
+			"value": {
+				"theme": "dark",
+				"sidePanel": true,
+				"showNode": false,
+				"disableAnimations": true,
+				"sessionTtl": 3600000,
+				"strictSecurityMode": false,
+				"defaultExplorer": null,
+				"showFiatValues": false,
+				"privacyMode": true,
+				"incomingTransfersVisible": false,
+				"incomingDustUsdThreshold": 2.5,
+				"prestoReached": true,
+				"developerMode": true,
+				"debugMode": true,
+				"indicateFailures": true
+			}
+		},
+		{
+			"id": "tokenPrices.minimal",
+			"stamp": 0,
+			"shape": "tokenPrices",
+			"key": "nulo:core:token-prices",
+			"value": {
+				"usd-coin": {
+					"coingeckoId": "usd-coin",
+					"usd": 0.9998,
+					"fetchedAt": 1790812620000,
+					"providerUpdatedAt": null
+				}
+			}
+		},
+		{
+			"id": "tokenPrices.full",
+			"stamp": 0,
+			"shape": "tokenPrices",
+			"key": "nulo:core:token-prices",
+			"value": {
+				"aztec": {
+					"coingeckoId": "aztec",
+					"usd": 0.0147,
+					"fetchedAt": 1790812620000,
+					"providerUpdatedAt": 1790812560000
+				},
+				"euro-coin": {
+					"coingeckoId": "euro-coin",
+					"usd": 1.0832,
+					"fetchedAt": 1790812620000,
+					"providerUpdatedAt": 1790812500000
+				},
+				"tether": {
+					"coingeckoId": "tether",
+					"usd": 1.0001,
+					"fetchedAt": 1790812620000,
+					"providerUpdatedAt": null
+				},
+				"usd-coin": {
+					"coingeckoId": "usd-coin",
+					"usd": 0.9998,
+					"fetchedAt": 1790812620000,
+					"providerUpdatedAt": 1790812560000
+				}
+			}
+		},
+		{
+			"id": "tokenList.minimal",
+			"stamp": 0,
+			"shape": "tokenList",
+			"key": "nulo:core:token-list",
+			"value": {
+				"failures": 2
+			}
+		},
+		{
+			"id": "tokenList.full",
+			"stamp": 0,
+			"shape": "tokenList",
+			"key": "nulo:core:token-list",
+			"value": {
+				"envelope": "{\"format\":\"nulo-token-list-envelope/1\",\"keyId\":\"nulo-prod-1\",\"payload\":\"EtpvBh7frCoFXNg7gkjkms3jIhHJZY4Jxg16B-jNnoY1TClFyaXrAehUseY3-h1cPHsOPpJWd996J5ptGRxaAYDTfW5HntmbhLspITtfh9BAljHmySitTTEMjI0nehHT7Uc2-klO3-ieFz1daIzS9hYMdjv1CNGgRTbJwBmPX69-JY9cFRy2a3LxcxIlsbaFv_7d94N7IN80hHooV8Rmyt3i6ubNRI9zdFFSRyDuu1lihDQUjtKPNEJrUMQj_tEEDm4rBLUvYLRmygZOuuYyq4cnwumYXQzI43i2ZDoPYNwiEkOAxv6Z2Qu0is_bIkapHcqj7YyxZNAQWK5xPrSA_lxZQctaJ51lHSWKVOWWph5AoVDnXVCGgGA923yuuz5eONgDtN7jWG5CArKV0Xmdj_zg4ejB_W5QPluSyKljKy1YxW4FkpNqEsCZNioshsjO4UbOOPyv_sRED0SoMnccatvgBPQwNSAgSuzpcB3b9EYKXV-OkYm_LsYYFfHaAGtbtiG_z2JFAjY7cfXfxaZMkrIhVyY84IsfZwmPN8zN0_DY3Hog\",\"signature\":\"6XmHo2VutcQogv_dqXVYNfBOEXK7ljf9MkZI3xpUtwblo-0ULOTDjjEwDzP3AtFq3-yFCZWezKaljpOcBf_2xw\"}",
+				"lastSuccessAt": 1790791200000,
+				"nextAttemptAt": 1790881200000,
+				"failures": 0
+			}
+		},
+		{
+			"id": "tokenSeeded.full",
+			"stamp": 0,
+			"shape": "tokenSeeded",
+			"key": "nulo:core:token-seeded@3f9a2c71",
+			"value": {
+				"3415328944:0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0": {
+					"attempts": 1,
+					"outcome": "seeded",
+					"observedDecimals": 6,
+					"verifiedPins": "0x0f4760c9595980d657422b564cb908f54fcf0aff11a8f0b7803c25c5a96852ef|USDC|6"
+				},
+				"3415328944:0x2b7da434d23aef0d7d6c6e047d0d84da781b9411b668830263dff380812fc75d": {
+					"attempts": 3,
+					"cappedAtVersion": "0.31.0+14",
+					"nextAttemptAt": 1790811600000
+				},
+				"3415328944:0x01a4f2b9fafbaed65d7937f9a8dc197654c827d5c61c61bd471d49f48e83c6b0": {
+					"attempts": 1,
+					"rejectedAtVersion": "0.31.0+14"
+				},
+				"3415328944:0x252d6f4bd1dd457c99e92d84dbc15960240d64d77590ebb52243229320cb510e": {
+					"attempts": 0,
+					"outcome": "deleted"
+				}
+			}
+		},
+		{
+			"id": "tokenSeeded.minimal",
+			"stamp": 0,
+			"shape": "tokenSeeded",
+			"key": "nulo:core:token-seeded@b04e6d18",
+			"value": {
+				"0:0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311": {
+					"attempts": 1
+				}
+			}
+		},
+		{
+			"id": "activeNetwork.full",
+			"stamp": 0,
+			"shape": "activeNetwork",
+			"key": "nulo:core:active-network@3f9a2c71",
+			"value": "e41b9d02"
+		},
+		{
+			"id": "activeNetwork.minimal",
+			"stamp": 0,
+			"shape": "activeNetwork",
+			"key": "nulo:core:active-network@b04e6d18",
+			"value": "5a7f03c6"
+		},
+		{
+			"id": "legalAccepted.minimal",
+			"stamp": 0,
+			"shape": "legalAccepted",
+			"key": "nulo:legal:accepted",
+			"value": {
+				"termsVersion": "1.0",
+				"privacyVersionShown": "1.2.1",
+				"acceptedAt": 1790640000000,
+				"surface": "onboarding",
+				"history": [
+					{
+						"termsVersion": "1.0",
+						"privacyVersionShown": "1.2.1",
+						"acceptedAt": 1790640000000,
+						"surface": "onboarding"
+					}
+				]
+			}
+		},
+		{
+			"id": "legalAccepted.full",
+			"stamp": 0,
+			"shape": "legalAccepted",
+			"key": "nulo:legal:accepted",
+			"value": {
+				"termsVersion": "1.0",
+				"privacyVersionShown": "1.2.1",
+				"acceptedAt": 1790726400000,
+				"surface": "popup",
+				"history": [
+					{
+						"termsVersion": "1.0",
+						"privacyVersionShown": "1.1",
+						"acceptedAt": 1789084800000,
+						"surface": "onboarding"
+					},
+					{
+						"termsVersion": "1.0",
+						"privacyVersionShown": "1.2.1",
+						"acceptedAt": 1790726400000,
+						"surface": "popup"
+					}
+				]
+			}
+		},
+		{
+			"id": "uiActiveAccount.minimal",
+			"stamp": 0,
+			"shape": "uiActiveAccount",
+			"key": "nulo:ui:activeAccount",
+			"value": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab"
+		},
+		{
+			"id": "uiActiveAccount.full",
+			"stamp": 0,
+			"shape": "uiActiveAccount",
+			"key": "nulo:ui:activeAccount",
+			"value": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458"
+		},
+		{
+			"id": "uiLastActiveProfile.minimal",
+			"stamp": 0,
+			"shape": "uiLastActiveProfile",
+			"key": "nulo:ui:lastActiveProfile",
+			"value": "b04e6d18"
+		},
+		{
+			"id": "uiLastActiveProfile.full",
+			"stamp": 0,
+			"shape": "uiLastActiveProfile",
+			"key": "nulo:ui:lastActiveProfile",
+			"value": "3f9a2c71"
+		},
+		{
+			"id": "uiLoggerWindowId.minimal",
+			"stamp": 0,
+			"shape": "uiLoggerWindowId",
+			"key": "nulo:ui:loggerWindowId",
+			"value": 12
+		},
+		{
+			"id": "uiLoggerWindowId.full",
+			"stamp": 0,
+			"shape": "uiLoggerWindowId",
+			"key": "nulo:ui:loggerWindowId",
+			"value": 1847
+		},
+		{
+			"id": "onboardingCompleted.minimal",
+			"stamp": 0,
+			"shape": "onboardingCompleted",
+			"key": "nulo:onboarding:completed",
+			"value": false
+		},
+		{
+			"id": "onboardingCompleted.full",
+			"stamp": 0,
+			"shape": "onboardingCompleted",
+			"key": "nulo:onboarding:completed",
+			"value": true
+		},
+		{
+			"id": "uiPinnedTokens.full",
+			"stamp": 0,
+			"shape": "uiPinnedTokens",
+			"key": "nulo:ui:pinnedTokens@3f9a2c71",
+			"value": {
+				"0": ["0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311"],
+				"3415328944": [
+					"0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+					"0x2b7da434d23aef0d7d6c6e047d0d84da781b9411b668830263dff380812fc75d"
+				]
+			}
+		},
+		{
+			"id": "uiPinnedTokens.minimal",
+			"stamp": 0,
+			"shape": "uiPinnedTokens",
+			"key": "nulo:ui:pinnedTokens@b04e6d18",
+			"value": {
+				"0": ["0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311"]
+			}
+		},
+		{
+			"id": "uiFeePicks.full",
+			"stamp": 0,
+			"shape": "uiFeePicks",
+			"key": "nulo:ui:feePaymentMethods@3f9a2c71",
+			"value": {
+				"0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458": {
+					"type": "fpc",
+					"title": "Sponsored",
+					"subtitle": "FPC",
+					"fpc": {
+						"id": "2b6c9e41",
+						"isProtocol": true
+					}
+				},
+				"0x1b3dc854e29f6ccfd0b81a0ce8b7f94835d125b1ae7cfcbfa7bc655f84b0adab": {
+					"type": "private_fpc",
+					"fpc": {
+						"id": "8f05d3a7",
+						"isProtocol": false
+					}
+				}
+			}
+		},
+		{
+			"id": "uiFeePicks.minimal",
+			"stamp": 0,
+			"shape": "uiFeePicks",
+			"key": "nulo:ui:feePaymentMethods@b04e6d18",
+			"value": {
+				"0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab": {
+					"type": "fj"
+				}
+			}
+		},
+		{
+			"id": "uiSendFeePicks.full",
+			"stamp": 0,
+			"shape": "uiSendFeePicks",
+			"key": "nulo:ui:sendFeePaymentMethods@3f9a2c71",
+			"value": {
+				"0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458": {
+					"private": {
+						"type": "fpc",
+						"fpc": {
+							"id": "2b6c9e41",
+							"name": "Sponsored FPC"
+						}
+					},
+					"public": {
+						"type": "fj"
+					}
+				}
+			}
+		},
+		{
+			"id": "uiSendFeePicks.minimal",
+			"stamp": 0,
+			"shape": "uiSendFeePicks",
+			"key": "nulo:ui:sendFeePaymentMethods@b04e6d18",
+			"value": {
+				"0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab": {
+					"public": {
+						"type": "private_fpc"
+					}
+				}
+			}
+		},
+		{
+			"id": "uiRestoreOutcome.full",
+			"stamp": 0,
+			"shape": "uiRestoreOutcome",
+			"key": "nulo:ui:restoreOutcome@3f9a2c71",
+			"value": {
+				"run": "ed36c1c573262b4406f4c7e18d4d8c06",
+				"backup": "30e76e214c6e366e226b77b64a46ccb89e70e6d787dbf51bbb89be4202372e41",
+				"networkIds": ["e41b9d02", "0c9d4e7b"],
+				"leaseUntil": 1790812830000
+			}
+		},
+		{
+			"id": "uiRestoreOutcome.minimal",
+			"stamp": 0,
+			"shape": "uiRestoreOutcome",
+			"key": "nulo:ui:restoreOutcome@b04e6d18",
+			"value": {
+				"run": "ba1187dd7a33daae4a32df860ad3a287",
+				"backup": "e5abbc9c85809fe09190a54ed124ee0adaa1d05c0460152268fdb2f94a88a381",
+				"networkIds": ["5a7f03c6"],
+				"leaseUntil": 0
+			}
+		},
+		{
+			"id": "uiGetStartedPhraseSaved.full",
+			"stamp": 0,
+			"shape": "uiGetStartedPhraseSaved",
+			"key": "nulo:ui:getStartedPhraseSaved@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedPhraseSaved.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedPhraseSaved",
+			"key": "nulo:ui:getStartedPhraseSaved@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedBackupSaved.full",
+			"stamp": 0,
+			"shape": "uiGetStartedBackupSaved",
+			"key": "nulo:ui:getStartedBackupSaved@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedBackupSaved.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedBackupSaved",
+			"key": "nulo:ui:getStartedBackupSaved@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedAztecOpened.full",
+			"stamp": 0,
+			"shape": "uiGetStartedAztecOpened",
+			"key": "nulo:ui:getStartedAztecOpened@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedAztecOpened.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedAztecOpened",
+			"key": "nulo:ui:getStartedAztecOpened@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedHidden.full",
+			"stamp": 0,
+			"shape": "uiGetStartedHidden",
+			"key": "nulo:ui:getStartedHidden@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedHidden.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedHidden",
+			"key": "nulo:ui:getStartedHidden@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedFeeJuiceHeld.full",
+			"stamp": 0,
+			"shape": "uiGetStartedFeeJuiceHeld",
+			"key": "nulo:ui:getStartedFeeJuiceHeld@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedFeeJuiceHeld.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedFeeJuiceHeld",
+			"key": "nulo:ui:getStartedFeeJuiceHeld@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiProfileImported.full",
+			"stamp": 0,
+			"shape": "uiProfileImported",
+			"key": "nulo:ui:profileImported@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiProfileImported.minimal",
+			"stamp": 0,
+			"shape": "uiProfileImported",
+			"key": "nulo:ui:profileImported@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiProfileNotFirst.full",
+			"stamp": 0,
+			"shape": "uiProfileNotFirst",
+			"key": "nulo:ui:profileNotFirst@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiProfileNotFirst.minimal",
+			"stamp": 0,
+			"shape": "uiProfileNotFirst",
+			"key": "nulo:ui:profileNotFirst@b04e6d18",
+			"value": true
+		}
+	]
+}

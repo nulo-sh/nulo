@@ -175,7 +175,7 @@ const STUBS = {
 		`,
 	},
 	SectionLabel: { template: "<div />" },
-	OperationCard: { template: '<div><slot name="fee" /></div>' },
+	OperationCard: { props: ["refused"], template: '<div><slot name="fee" /></div>' },
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" />',
@@ -194,7 +194,7 @@ import Execute from "./index.vue"
 const factory = () => mount(Execute, { global: { stubs: STUBS } })
 
 type ExecVm = {
-	reject: () => Promise<void>
+	reject: (end: "reject" | "close" | "lock" | "switch") => Promise<void>
 	approve: () => Promise<void>
 	closeWindow: (interactionCompleted?: boolean) => void
 	isWrongProfile: boolean
@@ -277,12 +277,12 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		expect(executionServiceConnectMock).not.toHaveBeenCalled()
 	})
 
-	test("B8: window-local reject() = composable reject THEN closeWindow(true) — order pinned", async () => {
+	test("B8: window-local reject() detaches the unload listener, sends its end, THEN closes — order pinned", async () => {
 		w = factory()
 		await completeInit()
 		callLog.length = 0
-		await (w.vm as unknown as ExecVm).reject()
-		expect(callLog).toEqual(["composableReject:User rejected", "removeEventListener:beforeunload", "windows.remove"])
+		await (w.vm as unknown as ExecVm).reject("reject")
+		expect(callLog).toEqual(["removeEventListener:beforeunload", "composableReject:User rejected:reject", "windows.remove"])
 	})
 
 	test("B9-mirror: reject() with NO requestId is fully inert (the guard capabilities lacks)", async () => {
@@ -292,7 +292,7 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		w = factory()
 		await flushPromises()
 		expect(approval.requestId.value).toBeUndefined()
-		await (w.vm as unknown as ExecVm).reject()
+		await (w.vm as unknown as ExecVm).reject("reject")
 		expect(rejectViaInteractionServiceMock).not.toHaveBeenCalled()
 		expect(beforeunloadRemoves()).toBe(0)
 		expect(windowsRemoveMock).not.toHaveBeenCalled()
@@ -309,9 +309,10 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		expect(windowsRemoveMock).not.toHaveBeenCalled()
 		handler({ id: "p-other" })
 		await flushPromises()
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledTimes(1)
+		expect(rejectViaInteractionServiceMock).toHaveBeenLastCalledWith("User rejected", "switch")
 		handler(undefined)
 		await flushPromises()
+		expect(rejectViaInteractionServiceMock).toHaveBeenLastCalledWith("User rejected", "lock")
 		expect(rejectViaInteractionServiceMock).toHaveBeenCalledTimes(2)
 	})
 
@@ -353,22 +354,31 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		expect(net.disconnect).toHaveBeenCalledTimes(1)
 	})
 
-	test("D14: wrong-profile rejection is delivered on dismiss → unload, not inline", async () => {
+	test("D14: the wrong-profile notice's OK ends the request as the switch, and closes once the wallet has it", async () => {
 		approval.payloadToLoad = wrongProfilePayload()
 		w = factory()
 		await completeInit({ id: "p1" })
 		// No rejection has happened yet — the overlay is just showing.
 		expect(rejectViaInteractionServiceMock).not.toHaveBeenCalled()
 		callLog.length = 0
-		// OK on the overlay → closeWindow() with NO arg → listener stays attached.
 		await w.find('[data-testid="dapp-cancelled-overlay"]').trigger("click")
-		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
-		expect(beforeunloadRemoves()).toBe(0)
-		// The real window would now unload; the still-attached handler delivers
-		// the rejection (requestId was set by load() before the profile check).
+		await flushPromises()
+		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected", "switch")
+		expect(callLog).toEqual(["removeEventListener:beforeunload", "composableReject:User rejected:switch", "windows.remove"])
+	})
+
+	test("D14-lock: closing another profile's request, with no profile active, ends it as the lock", async () => {
+		approval.payloadToLoad = wrongProfilePayload()
+		w = factory()
+		await flushPromises()
+		approval.resolveProfile?.(undefined)
+		await flushPromises()
+		approval.resolveLoad?.()
+		await flushPromises()
+		// The window's X: the still-attached unload handler names the lock, not the person's close.
 		window.dispatchEvent(new Event("beforeunload"))
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledWith("User rejected")
-		expect(callLog).toEqual(["windows.remove", "composableReject:User rejected", "removeEventListener:beforeunload", "windows.remove"])
+		await flushPromises()
+		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected", "lock")
 	})
 })
 
@@ -1186,16 +1196,20 @@ describe("execute window — a request the wallet refused", () => {
 		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
 		await flushPromises()
 		toastMocks.openToast.mockClear()
+		const refused = () => w!.findComponent(STUBS.OperationCard).props("refused")
+		expect(refused()).toBe(false)
 		return {
 			vm,
+			refused,
 			notice: () => w!.find('[data-testid="execute-op-refusal"]'),
 			confirm: () => w!.find('[data-testid="execute-confirm-btn"]'),
 		}
 	}
 
-	async function expectRefused(kind: "registry" | "call", { vm, notice, confirm }: Awaited<ReturnType<typeof opened>>) {
+	async function expectRefused(kind: "registry" | "call", { vm, refused, notice, confirm }: Awaited<ReturnType<typeof opened>>) {
 		await flushPromises()
 		expect(notice().attributes()).toMatchObject({ "data-kind": kind, role: "alert" })
+		expect(refused()).toBe(true)
 		expect(w!.find('[data-testid="execute-op-refusal-title"]').text()).toBe("Nulo won't send this")
 		expect(w!.find('[data-testid="execute-op-refusal-reason"]').text()).toBe(REASON[kind])
 		expect(toastMocks.openToast).not.toHaveBeenCalled()
@@ -1205,7 +1219,7 @@ describe("execute window — a request the wallet refused", () => {
 		await vm.approve()
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 		await w!.find('[data-testid="execute-reject-btn"]').trigger("click")
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected")
+		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected", "reject")
 	}
 
 	test.each([
@@ -1231,11 +1245,12 @@ describe("execute window — a request the wallet refused", () => {
 	})
 
 	test("any other estimate failure keeps today's toast and Confirm", async () => {
-		const { notice, confirm } = await opened()
+		const { refused, notice, confirm } = await opened()
 		feeMapInstances[0]!.opts.onError?.(0, new Error("node down"))
 		await flushPromises()
 		expect(toastMocks.openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't estimate fee. Try again." })
 		expect(notice().exists()).toBe(false)
+		expect(refused()).toBe(false)
 		expect(confirm().attributes("disabled")).toBeUndefined()
 	})
 })

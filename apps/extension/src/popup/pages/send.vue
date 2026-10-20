@@ -167,7 +167,6 @@ const balances = useTokenBalanceSnapshot({
 	live: appStore,
 	rows: tokenBalances,
 	state: balancesState,
-	added: "append",
 })
 tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
 tokenBalanceService.onTokenBalanceUpdated.add(balances.onBalanceUpdated)
@@ -250,6 +249,14 @@ const amountValidation = computed(() =>
 		balanceRaw: balanceRaw.value,
 	}),
 )
+
+/** The line under the amount names only a balance the wallet read: a row never synced holds a zero
+ *  placeholder, which the token card draws as loading. */
+const exceedsBalance = computed(() => amountValidation.value.reason === "exceedsBalance" && tokenBalance.value?.updatedAt !== 0)
+
+/** The estimate watch's source for validity, a boolean: `amountValidation` is a new object on every
+ *  balance recompute, and a deep watch runs on any change it subscribes to, so only a flip re-asks. */
+const amountSendable = computed(() => amountValidation.value.valid)
 
 /** C3 live pricing. The card freezes a session quote when fiat mode starts;
  *  the SUBMIT GATE lives here (this page owns handleSend) and fails closed. */
@@ -576,11 +583,44 @@ watch(
 	{ deep: true },
 )
 
+function requestEstimate() {
+	// An estimate simulates against the node: no work for a send the wall would refuse.
+	if (!legal.isCurrent.value) {
+		cancelFeeEstimate()
+		return
+	}
+	// NB: transferType can be 0 (TransferType.Private enum) which is falsy — check against undefined explicitly
+	// or Private → Private is silently dropped here before estimation.
+	if (!isValidAddress.value || transferType.value === undefined || !feeSettings.value) {
+		cancelFeeEstimate()
+		return
+	}
+	if (!amountValidation.value.valid) {
+		cancelFeeEstimate()
+		return
+	}
+
+	// New input asks a new question: it is queued only once the wallet says so again.
+	clearQueued()
+	scheduleFeeEstimate({
+		networkId: appStore.network.id,
+		accountAddress: appStore.account.address,
+		tokenId: activeToken.value.id,
+		tokenContract: activeToken.value.contract,
+		transferType: transferType.value,
+		destination: searchTerm.value,
+		amount: amountValidation.value.integerized,
+		settings: feeSettings.value,
+	})
+}
+
 // Every input the estimate is asked with is a source here, so a landed estimate is always the
-// current input's: each change re-asks (clearing the result) or cancels.
+// current input's: each change re-asks (clearing the result) or cancels. A balance that starts or
+// stops covering the amount counts as a change.
 watch(
 	[
 		amountTerm,
+		amountSendable,
 		searchTerm,
 		selectedSendType,
 		selectedReceiverType,
@@ -591,36 +631,7 @@ watch(
 		() => appStore.network?.id,
 		() => appStore.account?.address,
 	],
-	() => {
-		// An estimate simulates against the node: no work for a send the wall would refuse.
-		if (!legal.isCurrent.value) {
-			cancelFeeEstimate()
-			return
-		}
-		// NB: transferType can be 0 (TransferType.Private enum) which is falsy — check against undefined explicitly
-		// or Private → Private is silently dropped here before estimation.
-		if (!isValidAddress.value || transferType.value === undefined || !feeSettings.value) {
-			cancelFeeEstimate()
-			return
-		}
-		if (!amountValidation.value.valid) {
-			cancelFeeEstimate()
-			return
-		}
-
-		// New input asks a new question: it is queued only once the wallet says so again.
-		clearQueued()
-		scheduleFeeEstimate({
-			networkId: appStore.network.id,
-			accountAddress: appStore.account.address,
-			tokenId: activeToken.value.id,
-			tokenContract: activeToken.value.contract,
-			transferType: transferType.value,
-			destination: searchTerm.value,
-			amount: amountValidation.value.integerized,
-			settings: feeSettings.value,
-		})
-	},
+	requestEstimate,
 	{ deep: true },
 )
 
@@ -815,6 +826,7 @@ onBeforeUnmount(() => {
 						:balanceRawByType="balanceRaw ?? null"
 						:liveQuote
 						:proxyTicker
+						:exceedsBalance
 					/>
 					<Flex v-if="fiatNeedsRequote" align="center" gap="6" :class="$style.requote_notice">
 						<Icon name="warning" size="12" color="tertiary" />
@@ -837,6 +849,7 @@ onBeforeUnmount(() => {
 						:isEstimating="isEstimating"
 						:isQueued="feeQueued"
 						:queuedCap="queueCap"
+						:amountTyped="Boolean(amountTerm)"
 						:originPrivacy="selectedSendType"
 						:payerNoticeShape="facts.noticeShape"
 						:txShape="feeTxShape"

@@ -333,10 +333,8 @@ async function runBackup(ctx: ExportCtx) {
 	state.backupStatus.value = "progress"
 	try {
 		const opened = await openRun(ctx, isCurrent)
-		if (opened === "handled") return
+		if (opened === "handled" || !isCurrent()) return
 
-		// Unchecked since `openRun`: a run dropped here still builds its clients and requests its keys,
-		// and the check after the export drops them.
 		run.clients = buildBackupServices()
 		ctx.activeRun = run
 		const accountClient = run.clients.find(({ name }) => name === ACCOUNT_SERVICE_NAME)!.client as unknown as AccountServiceClient

@@ -10,6 +10,9 @@ export const TOKEN_SERVICE_NAME = "token"
  *  renaming detaches every existing row; the backup-migration registry pins it. */
 export const TOKEN_STORAGE_ROOT = "nulo:core:tokens"
 
+/** Per-profile ValueStorage root of the default-token seeder's markers (`${root}@${profileId}`). */
+export const TOKEN_SEEDED_STORAGE_ROOT = "nulo:core:token-seeded"
+
 export type Token = {
 	id: number
 	profileId: string

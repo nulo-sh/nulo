@@ -80,9 +80,9 @@ An e2e run, smoke or network, opens no HTTP, HTTPS or WebSocket connection to a 
 
 - **The guard**, which the browser sends every request for an outside host to: Chrome through `--proxy-server`, `--proxy-bypass-list=<-loopback>;localhost;127.0.0.1;[::1]` (without `<-loopback>`, Chrome sends link-local addresses direct) and resolver rules that resolve no outside name; Firefox through a `data:` PAC with no `DIRECT` after the proxy and `network.proxy.failover_direct: false`. It answers `403`, records the host and port (never a path, so a provider key in a URL is never stored), and keeps one count per `host:port`: Firefox retries each refusal in bursts.
 - **The canary**, which only a direct path reaches: `egress-canary.test` resolves to loopback for a direct connection only. Once the launch settles, an extension page requests it over HTTPS (HTTPS because the extension's `connect-src` allows plain HTTP only to `localhost` and `127.0.0.1`); the guard must record it and the canary must count nothing, or the launch fails before any test runs.
-- **The stand-in node** (`fixtures/node-stub.ts`), armed in every launch but the live spec's once the canary has proven the routing: the browser's interception (`holdRpcInterception`) sends every request for the Testnet node's origin to a third loopback listener, which answers HTTP 400 with a JSON-RPC error. The node client stops at a 4xx with a readable body; refused, it retries each call for about six seconds, and smoke's resets, profile deletions, settings pages and passkey imports ran out their waits on it. A spec that arms its own `interceptRpc` on that origin, to prove the offline case (`send-fee-privacy`, `contacts-import`), replaces the stand-in until its `stop()`. `stopBackground` also lets go of it for the kill and re-arms it after: on Chrome, a DevTools session attached to the stopping service worker keeps its host for the successor, which then never starts clean (`sw-resilience`'s lock and liveness waits time out). Chrome's interception attaches every target but a page, because detaching a page's DevTools session clears its WebAuthn virtual authenticators, which a passkey spec's anchor popup keeps across that kill.
+- **The stand-in node** (`fixtures/node-stub.ts`), armed in every launch but the live spec's once the canary has proven the routing: the browser's interception (`holdRpcInterception`) sends every request for the Testnet node's origin to a third loopback listener, which answers HTTP 400 with a JSON-RPC error. The node client stops at a 4xx with a readable body; refused, it retries each call for about six seconds, and smoke's resets, profile deletions, settings pages and passkey imports ran out their waits on it. A spec that arms its own `interceptRpc` on that origin, to prove the offline case (`send-fee-privacy`, `contacts-import`), replaces the stand-in until its `stop()`. `stopBackground` also lets go of it for the kill and re-arms it after, as `waitForExtensionRestart` does for an extension restart: on Chrome, a DevTools session attached to the stopping service worker keeps its host for the successor, which then never starts clean (`sw-resilience`'s lock and liveness waits time out). Chrome's interception attaches every target but a page, because detaching a page's DevTools session clears its WebAuthn virtual authenticators, which a passkey spec's anchor popup keeps across that kill.
 
-`close` reads the stand-in's interception failures, runs the CSP check, closes the browser, stops the listeners and then fails the launch, naming the file, on a canary connection, on any host that no list declares, on an arm or reply the stand-in's interception failed or a spec's interception left unstopped, or on a node request that reached the guard while the stand-in held its origin. From the stand-in's arm until `close` begins, the guard counts each request for the node's host that arrives while the launch's interception holds the origin: no armed interception paused it, so a target the interception does not cover dialed the node, and the spec ran against a refused node instead of the stand-in. Before the arm, during a `stopBackground` and while a spec's own interception has the origin, a node request is refused and passes. The count follows the harness's record of the hold, not the browser's: a request issued just before an arm took effect can still be counted, and a missed one that lands just after a release or the close began goes uncounted. Neither edge has a tolerance. `tests/e2e/egress-guard.test.ts`, in both the smoke and the network selection and failing on a run whose setup did not arm the guard, proves the routing on each browser: from the background (HTTPS refused, loopback direct, the Testnet node answered by the stand-in's 400) and from an ordinary page the spec serves on loopback (plain HTTP and WebSocket refused, IPv6 loopback direct, link-local refused), then stops the guard and shows that neither falls back to a direct path. Its second launch proves the held count: a page's node request fails that launch's close on Chrome, whose interception attaches no page, and gets the stand-in's 400 on Firefox, whose observer sees every channel.
+`close` reads the stand-in's interception failures, runs the CSP check, closes the browser, stops the listeners and then fails the launch, naming the file, on a canary connection, on any host that no list declares, on an arm or reply the stand-in's interception failed or a spec's interception left unstopped, or on a node request that reached the guard while the stand-in held its origin. From the stand-in's arm until `close` begins, the guard counts each request for the node's host that arrives while the launch's interception holds the origin: no armed interception paused it, so a target the interception does not cover dialed the node, and the spec ran against a refused node instead of the stand-in. Before the arm, during a `stopBackground` or an extension restart, and while a spec's own interception has the origin, a node request is refused and passes. The count follows the harness's record of the hold, not the browser's: a request issued just before an arm took effect can still be counted, and a missed one that lands just after a release or the close began goes uncounted. Neither edge has a tolerance. `tests/e2e/egress-guard.test.ts`, in both the smoke and the network selection and failing on a run whose setup did not arm the guard, proves the routing on each browser: from the background (HTTPS refused, loopback direct, the Testnet node answered by the stand-in's 400) and from an ordinary page the spec serves on loopback (plain HTTP and WebSocket refused, IPv6 loopback direct, link-local refused), then stops the guard and shows that neither falls back to a direct path. Its second launch proves the held count: a page's node request fails that launch's close on Chrome, whose interception attaches no page, and gets the stand-in's 400 on Firefox, whose observer sees every channel.
 
 What an e2e build does instead of each outside host:
 
@@ -116,6 +116,49 @@ no frame shows a proof:
 STORE_CAPTURES=1 NULO_E2E_PROVERLESS=1 bun run e2e:agent tests/e2e/network/store-captures.test.ts
 cd apps/extension && bun scripts/store-art.ts
 ```
+
+### In-place update (opt-in)
+
+`tests/e2e/network/update-in-place.test.ts` and `tests/e2e/update-replay.test.ts` are skipped
+unless `NULO_E2E_UPDATE_FROM` names a release tag, with `NULO_E2E_UPDATE_TO` the candidate. They
+install the release's zip at one fixed path in the run's own `.e2e-state/update-<pid>/`, swap the
+candidate into that path and reinstall it in the running browser, as a store update does: Chrome
+through CDP `Extensions.loadUnpacked`, Firefox through the driver's temporary install. A probe the
+staged candidate imports first must record `onInstalled` reporting `update` from the release's
+version. The zip is downloaded once with `gh release download` into `.e2e-state/releases/` (or
+`NULO_E2E_RELEASE_CACHE`) and refused unless its SHA-256 equals the digest
+`fixtures/update/release.ts` pins for the tag; the release's own `SHASUMS256.txt` must agree. The
+candidate names the commit it was built from: a candidate from another commit, or a checkout with
+uncommitted changes a build reads, is refused, so commit before you build it.
+
+- The live scenario populates the release through its own UI: a password profile with a second and
+  an imported account and two contacts on Testnet, then a network on the run's sandbox with a
+  token, a public and a private receipt, a connected playground and one send from the wallet. It
+  requires every key family `HELD` names before it updates. After the update it checks that no key
+  was lost, no barrier shows, every key is registered and read by its read code, the profile
+  unlocks, the UI reads it all, the imported key opens and the playground's stored session still
+  answers. `NULO_E2E_UPDATE_RECORD=1` on Chrome also writes the release's storage to
+  `fixtures/update/<tag>.storage.json`, the replay's recording.
+- The replay writes that recording into the release, offline, and updates it. While the
+  candidate's Testnet seed equals the recorded one the update opens with no takeover; once it
+  differs, the takeover's reset must carry every account to the new chain. Its second case moves
+  the recorded Testnet rows off the seed, so the reset over release rows runs before that happens.
+  The recording's dApp session expires 7 days after it was made, and the replay refuses it from
+  then on: record again from a checkout on the release's Aztec line.
+- The live scenario needs a sandbox on the release's Aztec line, so once `dev` moves off it only
+  the replay runs.
+
+```bash
+bash apps/extension/scripts/e2e/build-update-candidate.sh chrome   # writes .e2e-state/update-candidate/chrome
+NULO_E2E_RETRY=0 NULO_E2E_UPDATE_FROM=v0.31.0 NULO_E2E_UPDATE_TO=$PWD/apps/extension/.e2e-state/update-candidate/chrome \
+  NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/update-in-place.test.ts
+cd apps/extension && NULO_E2E_ARTIFACT_RUN=1 NULO_E2E_UPDATE_FROM=v0.31.0 \
+  NULO_E2E_UPDATE_TO=$PWD/.e2e-state/update-candidate/chrome bun run test:e2e -- tests/e2e/update-replay.test.ts --retry=0
+```
+
+On Firefox, set `NULO_E2E_BROWSER=firefox` and pass the firefox candidate. The candidate script
+builds into `dist/<browser>` before copying it out, so rebuild the armed smoke build before a
+source smoke run.
 
 ## Running multiple agents in parallel
 
@@ -271,9 +314,9 @@ Feature helpers, exported through `fixtures/helpers.ts` (all `data-testid`-drive
 | `readSessionRow` / `waitForSessionRow` / `peekSession` / `setSessionTtlMs(page, ms)` | Session state without navigating (a navigation refreshes the session): the persisted row's `profile`/`since`/`lockedAt`, the profile service's own expiry check, and a millisecond auto-lock TTL through the config service. |
 | `readSendRecords` / `waitForSendRecord(page, match)` (`fixtures/journal.ts`) | Every profile's `transfer` and `dapp_execute` journal records with their stage and `enteredProveAt` — the anchor for proof-gate timing. |
 | `sendTransfer(page, { …, expect })` + `fillSendForm(page, { amount, destination })` | Drives a whole send. `expect` (`"send"` \| `"review"`) is the caller's claim about the footer: a send the fee card gates (the account's own Fee Juice under a private origin) goes through the review sheet, anything else at once — the other offer throws. Every call site states it. |
-| `openSend` / `readSendView` / `waitForFee` / `waitForTag` / `submitSend` / `openReviewFromStrip` / `readReview` / `waitForReviewReady` / `shotSend` (`fixtures/send-page.ts`) | The Send page's publish surface: the strip's cells, the fee-source tag and the footer's action read together — `assertPublishInvariant` refuses a page where they disagree — plus the review sheet's rows, the hit-tested clicks on "Review send" / "Send now" / the strip, and both-theme screenshots under `NULO_E2E_SHOT_DIR`. |
+| `openSend` / `readSendView` / `waitForFee` / `waitForTag` / `submitSend` / `openReviewFromStrip` / `readReview` / `waitForReviewReady` / `shotSend` (`fixtures/send-page.ts`) | The Send page's publish surface: the strip's cells, the fee-source tag and the footer's action read together — `assertPublishInvariant` refuses a page where they disagree — plus the review sheet's rows, the hit-tested clicks on "Review send" / "Send now" / the strip, and both-theme screenshots under `NULO_E2E_SHOT_DIR`, which refuse a page that is not shown (a hidden page draws no frame, and its capture can hang). |
 
-Anti-throttle Chrome flags live in `launchExtension` (`extension.ts`):
+Anti-throttle Chrome flags live in the Chrome driver (`fixtures/browser/chrome.ts`):
 
 ```
 --disable-renderer-backgrounding
@@ -297,6 +340,7 @@ The network suite is a required PR gate at retry 0 (`extension-network-e2e-statu
 | Forks, Firefox | Yes | inherit the run marker; a dead run's forks are stopped by `e2e:reap` and the next run's setup, its Firefox launches by the next Firefox launch or `e2e:reap` |
 | Wallet build artifact | Yes | `dist/chrome/` lives inside the worktree |
 | Chrome user-data-dir | Yes | Puppeteer creates a fresh `/tmp` dir per `launch()` |
+| Update scenarios' Chrome | Yes | launched over a pipe with no `--load-extension`, so the path sweep below never sees it; a pipe-launched Chrome exits when its run dies. Its profile, the release cache and the candidates live in `.e2e-state/` |
 | Chrome orphan cleanup | Yes | `pkill -f "chrome.*--load-extension=$EXTENSION_PATH"`, path-scoped, at every run's setup and teardown, and in `e2e:reap` while no run of the worktree is live (Chrome shows no marker) |
 | `.test-config.json` | Yes | per worktree |
 | `.e2e-state/` lockfile | Yes | per worktree |

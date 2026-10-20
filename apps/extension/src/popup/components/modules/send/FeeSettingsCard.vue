@@ -73,6 +73,8 @@ const props = defineProps({
 	fallsBack: { type: Boolean, default: false },
 	/** `{ basis, cap }` in base units while the page offers to queue the send against a cap. */
 	queuedCap: { type: Object, default: null },
+	/** Send's amount field holds an amount; read only while the card reads what can pay. */
+	amountTyped: { type: Boolean, default: false },
 })
 
 const settings = defineModel()
@@ -321,9 +323,10 @@ const PRIVATE_GAS_UNCHECKED = "Couldn't check your private gas. Pick a fee sourc
 /** The info row's text. A hold with a healthy store is a read that came back without a balance —
  *  nothing is retrying, so the row never promises a retry: a private origin says what to do, and a
  *  public origin leaves the trigger's own "select a method" prompt to speak. The sponsor's notice
- *  speaks for a hold it caused. */
+ *  speaks for a hold it caused. On Send, a failure's line waits out any read the bars stand for,
+ *  and returns if that read fails. */
 const statusNotice = computed(() => {
-	if (failure.value) return failure.value === "init" ? FEE_INIT_FAILED : FEE_DATA_UNAVAILABLE
+	if (failure.value && !readPending.value) return failure.value === "init" ? FEE_INIT_FAILED : FEE_DATA_UNAVAILABLE
 	if (sponsorShort.value) return ""
 	return held.value && props.originPrivacy === "private" ? PRIVATE_GAS_UNCHECKED : ""
 })
@@ -465,6 +468,7 @@ onBeforeUnmount(() => {
 		<FeeCostReadout
 			v-if="showsCostRows"
 			:pending="readPending"
+			:amountTyped="amountTyped"
 			:estimate="estimatedFeeDisplay"
 			:isEstimating="isEstimating"
 			:isQueued="isQueued"

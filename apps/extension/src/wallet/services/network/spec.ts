@@ -8,6 +8,11 @@ export const NETWORK_SERVICE_NAME = "network"
  *  renaming detaches every existing row; the backup-migration registry pins it. */
 export const NETWORK_STORAGE_ROOT = "nulo:core:networks"
 
+/** Per-profile key root of the active network id, stored as a bare string (`${root}@${profileId}`). */
+export const ACTIVE_NETWORK_STORAGE_ROOT = "nulo:core:active-network"
+
+export const decodeActiveNetworkId = (raw: unknown): string | undefined => (typeof raw === "string" ? raw : undefined)
+
 export enum NodeStatus {
 	Active,
 	Inactive,
@@ -226,6 +231,14 @@ export const NetworkMethodSchemas = {
 		params: z.tuple([]),
 		result: NetworkSchema.nullable(),
 	},
+	getNetworkArrival: {
+		params: z.tuple([]),
+		result: NetworkSchema.nullable(),
+	},
+	answerNetworkArrival: {
+		params: z.tuple([z.string().min(1)]),
+		result: z.void(),
+	},
 	setActiveForProfile: {
 		params: z.tuple([z.string().min(1), z.string().min(1)]),
 		result: z.string(),
@@ -303,6 +316,14 @@ export type Methods = {
 	 * `DEFAULT_SEEDS` (a hardcoded `kind` check in the composable would break the e2e flag).
 	 */
 	getPrimaryNetwork(): Network | null
+	/**
+	 * A default network a later build added to this profile after it had networks, until the person
+	 * answers its arrival; null when there is none. Answered by {@link answerNetworkArrival} or by
+	 * making that network active.
+	 */
+	getNetworkArrival(): Network | null
+	/** Answers the arrival of `networkId` without switching to it; a network not announced is a no-op. */
+	answerNetworkArrival(networkId: string): void
 	/**
 	 * Writes the active-network pointer for a SPECIFIC profile without requiring it to be the active
 	 * session — used by full-backup import to restore the user's active-network selection BEFORE

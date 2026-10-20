@@ -64,8 +64,10 @@ const loadInteractionPayloadMock = vi.fn(
 			}
 		}),
 )
-export const rejectViaInteractionServiceMock = vi.fn((reason: string) => {
-	callLog.push(`composableReject:${reason}`)
+/** Resolves at once, as the wallet taking the window's end. */
+export const rejectViaInteractionServiceMock = vi.fn((reason: string, end?: string) => {
+	callLog.push(`composableReject:${reason}:${end}`)
+	return Promise.resolve()
 })
 export const getActiveProfileMock = vi.fn(
 	() =>

@@ -16,7 +16,7 @@ const hasConfig = aztecConfig !== undefined
 
 /**
  * A dApp that asks to connect while the wallet is locked: the discovery queues (no window while
- * locked), the unlock drains it into the connect window, and the session that opens serves every
+ * locked), the unlock drains it into a connect window, and the session that opens serves every
  * method the app uses, from the same page and from a reloaded one. Run for a password unlock and a
  * passkey unlock, which open the session through different paths.
  */

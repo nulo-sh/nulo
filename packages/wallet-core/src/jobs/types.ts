@@ -126,14 +126,14 @@ export type JobProgress =
  * autocomplete + the runtime drift guard, NOT for compiler exhaustiveness.
  *
  * Producers: `normalizeError(…, "transfer" | "dapp_execute" | "prover" | "network" | "unknown")`,
- * `popup_bound`, `scope_refused`, `registry_refused`, `malformed_request`, `terms_refused` and
- * `wallet_refused` (wallet-sdk; `scope_refused` and `registry_refused` also from execution's
- * `markFailedUnlessCancelled`, `terms_refused` also from the dApp interaction service),
- * `too_many_pending` (execution's waiting-sends cap), the reaper
+ * `popup_bound`, `user_rejected`, `scope_refused`, `registry_refused`, `malformed_request`,
+ * `terms_refused`, `session_ended` and `wallet_refused` (wallet-sdk; `scope_refused` and
+ * `registry_refused` also from execution's `markFailedUnlessCancelled`, `terms_refused` also from the
+ * dApp interaction service), `too_many_pending` (execution's waiting-sends cap), the reaper
  * (`sw_restart_post_prove` | `stuck_proving` | `stuck_queued` | `stale_on_resume`),
  * and `classifyTokenImportError` (`network_unreachable` | `contract_invalid` |
- * `metadata_fetch` | `unknown`). `user_rejected` | `network` | `simulation` are
- * switched-on / documented but not all produced on HEAD.
+ * `metadata_fetch` | `unknown`). `network` | `simulation` are switched-on / documented but not all
+ * produced on HEAD.
  */
 export type KnownJobErrorKind =
 	| "user_rejected"

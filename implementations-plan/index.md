@@ -2,7 +2,9 @@
 
 Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 
-- [landing-explainer-1](landing-explainer-1/plan.md) — arc 1 merged; arc 2 (clips) in progress — the How Aztec works page at nulo.sh/how-aztec-works: text versions now, the three clips after the owner approves the scripts and picks the tool (OA-1 to OA-4)
 - [structure-2](structure-2/plan.md) — planned, final Codex approve, awaiting the orchestrator — one settings control row, detail hero line and hero observer (#735, after OA-1); the Allow bound to its profile (#680); Presto's onboarding leftovers (#730); #750 mapped, no split
-- [popup-fixes-1](popup-fixes-1/plan.md) — planned, final Codex approve, arc 1 in progress — the logs menu and the Reveal verb, three shipped fixes closed, #593 a known limit (#773 #770 #582 #584 #586 #593, arc 1); keyboard Send and Receive and the ghost rows wait on OA-1 and OA-2 (#626 #786, arc 2)
 - [e2e-flakes-2](e2e-flakes-2/plan.md) — arc 2 in review — arc 1 (#813) made the balance-row reconciliation spec's gap with the worker stopped (#774); arc 2 waits for the header copy's snack to leave before the drag-select test presses About's foot (#816)
+- [launch-prep-1](launch-prep-1/plan.md) — planned, Codex approve, A1 in review — the 1.0.0 checklist boxes the stores meet and the Mainnet line (A1); four known-limit dispositions; Terms 1.1 and the README banner after the owner signs (A2) (#864)
+- [mainnet-arrival-1](mainnet-arrival-1/plan.md) — A1 in review; A2 waits on OA-1 and migration-rule-1 — a default network a later build adds reaches every existing profile: the offer record and pass (A1), the arrival flow after OA-1 and the real update e2e (A2) (#875)
+- [migration-rule-1](migration-rule-1/plan.md) — A1 merged, A3 in review — from 1.0.0 every stored-shape change ships a migration: a registry of stored shapes and its snapshot guard, a passkey-backup refusal, a 0.31.0 in-place update test, the flip (#865)
+- [square-corners-1](square-corners-1/plan.md) — arc 1 in review; arc 2 waits on OA-1 — the notice card goes square on the owner's P71-07 note (arc 1); the eight other rounded surfaces and a guard are OA-1 (#928)

@@ -60,8 +60,9 @@ export type PasskeyRequest = PasskeyDisplay &
 		  }
 	)
 
-/** How the step behind a resolved request ended, as the step itself reported it. */
-export type PasskeyStepOutcome = "done" | "failed"
+/** How the step behind a resolved request ended, as the step itself reported it: `"exists"` is an
+ *  import refused because a profile here already holds the passkey. */
+export type PasskeyStepOutcome = "done" | "failed" | "exists"
 
 export type Methods = {
 	/**

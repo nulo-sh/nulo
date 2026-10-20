@@ -27,7 +27,7 @@ import { NetworkService } from "@/wallet/services/network/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { TokenService } from "@/wallet/services/token/service"
-import { WindowManager } from "@/wallet/services/window-manager/window-manager"
+import { WINDOW_CLOSED_BY_USER, WindowManager } from "@/wallet/services/window-manager/window-manager"
 import { describe, expect, test, vi } from "vitest"
 import {
 	AuthRegistryRefusalError,
@@ -40,6 +40,7 @@ import { FakeBrowserApi, MockClock } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { DappInteractionService } from "./service"
+import { WINDOW_ENDS, WindowEndedError } from "./window-end"
 import type { CapabilityPayload, DappInteraction, DiscoveryResult, ExecutionHooks, OperationRequest } from "./spec"
 import { TEST_LIST_ENTRIES, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 import { seedsFromList } from "@/wallet/services/token/default-tokens"
@@ -641,7 +642,8 @@ async function windowHarness(session: typeof SESSION = SESSION) {
 		return { outcome, windowId, id }
 	}
 	const closeByUser = (windowId: number) => (api.windows as unknown as { closeByUser: (id: number) => void }).closeByUser(windowId)
-	return { dapp, clock, executeOperations, getActiveProfile, creates, storage, open, closeByUser }
+	const removes = vi.spyOn(api.windows, "remove")
+	return { dapp, clock, executeOperations, getActiveProfile, creates, removes, storage, open, closeByUser }
 }
 
 describe("DappInteractionService — a confirmation window never falls back to signing", () => {
@@ -705,6 +707,40 @@ describe("DappInteractionService — a confirmation window never falls back to s
 	})
 })
 
+describe("DappInteractionService — the window's named end", () => {
+	test.each(WINDOW_ENDS)("an end taken before the close (%s) ends the request with it and the wallet removes the window", async (end) => {
+		const h = await windowHarness()
+		const window = await h.open()
+		await h.dapp.rejectInteraction(window.id, "User rejected", end)
+		h.closeByUser(window.windowId)
+		await expect.poll(() => window.outcome.settled).toBe(true)
+		expect(window.outcome.err).toBeInstanceOf(WindowEndedError)
+		expect(window.outcome.err).toBeInstanceOf(UserRejectedError)
+		expect((window.outcome.err as WindowEndedError).end).toBe(end)
+		expect(h.removes).toHaveBeenCalledWith(window.windowId)
+	})
+
+	test("a close that reaches the wallet first ends the request as the close, and the late end changes nothing", async () => {
+		const h = await windowHarness()
+		const window = await h.open()
+		h.closeByUser(window.windowId)
+		await expect.poll(() => window.outcome.settled).toBe(true)
+		await h.dapp.rejectInteraction(window.id, "User rejected", "lock")
+		await flush()
+		expect(window.outcome.err).toBe(WINDOW_CLOSED_BY_USER)
+		expect(h.removes).not.toHaveBeenCalled()
+	})
+
+	test("an end the wallet does not know rejects as a Reject that names none", async () => {
+		const h = await windowHarness()
+		const window = await h.open()
+		await h.dapp.rejectInteraction(window.id, "User rejected", "approve")
+		await expect.poll(() => window.outcome.settled).toBe(true)
+		expect(window.outcome.err).toBeInstanceOf(UserRejectedError)
+		expect(window.outcome.err).not.toBeInstanceOf(WindowEndedError)
+	})
+})
+
 describe("DappInteractionService — a request an estimate refused ends as that refusal", () => {
 	const registry = () =>
 		new AuthRegistryRefusalError("Scope violation: a transaction's authorization request targets the authorization registry")
@@ -719,9 +755,9 @@ describe("DappInteractionService — a request an estimate refused ends as that 
 		h.dapp.recordRefusal(rejected.id, registryRefusal)
 		h.dapp.recordRefusal(closed.id, bindingRefusal)
 
-		await h.dapp.rejectInteraction(rejected.id, "User rejected")
+		await h.dapp.rejectInteraction(rejected.id, "User rejected", "reject")
 		h.closeByUser(closed.windowId)
-		await h.dapp.rejectInteraction(plain.id, "User rejected")
+		await h.dapp.rejectInteraction(plain.id, "User rejected", "reject")
 		await expect.poll(() => [rejected, closed, plain].every((w) => w.outcome.settled)).toBe(true)
 
 		expect(rejected.outcome.err).toBe(registryRefusal)
@@ -741,7 +777,17 @@ describe("DappInteractionService — a request an estimate refused ends as that 
 		expect(h.executeOperations).not.toHaveBeenCalled()
 		expect(h.storage.has(window.id)).toBe(true)
 
-		await h.dapp.rejectInteraction(window.id, "User rejected")
+		await h.dapp.rejectInteraction(window.id, "User rejected", "reject")
+		await expect.poll(() => window.outcome.settled).toBe(true)
+		expect(window.outcome.err).toBe(refusal)
+	})
+
+	test.each(["close", "lock", "switch"] as const)("a refused request ended by a %s still ends as its refusal", async (end) => {
+		const h = await windowHarness()
+		const window = await h.open()
+		const refusal = binding()
+		h.dapp.recordRefusal(window.id, refusal)
+		await h.dapp.rejectInteraction(window.id, "User rejected", end)
 		await expect.poll(() => window.outcome.settled).toBe(true)
 		expect(window.outcome.err).toBe(refusal)
 	})
@@ -913,11 +959,11 @@ describe("DappInteractionService — the capability window's known contracts", (
 	})
 })
 
-describe("DappInteractionService — an approved connect window is handed to the connection", () => {
+describe("DappInteractionService — a connect window closes with its answer", () => {
 	const METADATA = { name: "dapp.example", url: "https://dapp.example" }
 
 	/** A real WindowManager on a fake browser: `open` starts an interaction and waits for its window. */
-	function handOverHarness() {
+	function windowHarness() {
 		const api = new FakeBrowserApi()
 		api.reset()
 		vi.mocked(chrome.runtime.getURL).mockImplementation((path) => `chrome-extension://nulo/${path}`)
@@ -939,23 +985,23 @@ describe("DappInteractionService — an approved connect window is handed to the
 		return { dapp, clock, removes, open, interaction, closeByUser }
 	}
 
-	test("an approved discovery resolves with the handle's window id and its own page marked expired, never the page's values, and the window stays open", async () => {
-		const h = handOverHarness()
+	test("an approved discovery settles with the approval alone, never the page's values, and closes its window", async () => {
+		const h = windowHarness()
 		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
-		await h.dapp.resolveInteraction(w.id, { approved: true, windowId: 999, expiredUrl: "https://evil.example" } as DiscoveryResult)
+		await h.dapp.resolveInteraction(w.id, { approved: true, windowId: 999, extra: "https://evil.example" } as DiscoveryResult)
 
 		expect(w.url).toContain(`#/windows/discover?requestId=${w.id}`)
-		await expect(w.pending).resolves.toEqual({ approved: true, windowId: w.windowId, expiredUrl: `${w.url}&expired=1` })
-		expect(w.windowId).not.toBe(999)
-		// Nothing watches the window now: its later close and the old timeout settle nothing.
+		await expect(w.pending).resolves.toEqual({ approved: true })
+		expect(h.removes).toHaveBeenCalledWith(w.windowId)
+		// The page's own close lands after the answer: it takes nothing back.
 		h.closeByUser(w.windowId)
 		h.clock.advance(10 * 60 * 1000)
-		expect(h.removes).not.toHaveBeenCalled()
+		await expect(w.pending).resolves.toEqual({ approved: true })
 	})
 
 	test("a discovery answer other than approved: true is a denial and closes the window", async () => {
-		const h = handOverHarness()
+		const h = windowHarness()
 		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
 		await h.dapp.resolveInteraction(w.id, { approved: "yes", windowId: 999 } as unknown as DiscoveryResult)
@@ -965,7 +1011,7 @@ describe("DappInteractionService — an approved connect window is handed to the
 	})
 
 	test("a denied discovery settles and closes the window", async () => {
-		const h = handOverHarness()
+		const h = windowHarness()
 		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
 		await h.dapp.resolveInteraction(w.id, { approved: false })
@@ -979,7 +1025,7 @@ describe("DappInteractionService — an approved connect window is handed to the
 		["capabilities", capabilityPayload, { approved: true }],
 		["execute", emptyPayload, [{ status: "ok", result: "0x01" }]],
 	])("a %s window answered through resolveInteraction settles with that answer and closes", async (kind, payload, answer) => {
-		const h = handOverHarness()
+		const h = windowHarness()
 		const w = await h.open(() => h.interaction.call(h.dapp, kind, payload))
 
 		await h.dapp.resolveInteraction(w.id, answer as never)

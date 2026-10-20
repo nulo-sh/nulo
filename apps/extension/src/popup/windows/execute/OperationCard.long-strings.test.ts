@@ -181,21 +181,62 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 		expect(declarationsOf(".item_body", undefined, styleSource("SendTxSummary.vue"))).toMatchObject(WRAPS)
 	})
 
-	test("a registered token's 31-character symbol and its row may shrink and break inside the card", () => {
+	test("a registered token's 31-character symbol and 64-character name break inside their value column", () => {
 		const symbol = "W".repeat(31)
+		const name = "W".repeat(64)
 		const w = mount(OperationCard, {
 			props: {
 				op: { ...base, kind: "register_token", address: TOKEN } as never,
 				index: 0,
-				tokenMetadata: { symbol, name: "Wide Token", decimals: 18 },
+				tokenMetadata: { symbol, name, decimals: 18 },
 			},
 			global: { stubs },
 		})
-		const value = w.find('[data-testid="register-token-symbol"]')
-		expect(value.text()).toBe(symbol)
-		expect(value.classes()).toContain(CARD.token_meta)
-		expect(value.element.parentElement?.classList.contains(CARD.token_meta)).toBe(true)
-		expect(declarationsOf(".token_meta")).toMatchObject(WRAPS)
+		for (const [id, text] of [
+			["register-token-symbol", symbol],
+			["register-token-name", name],
+		] as const) {
+			const value = w.get(`[data-testid="${id}"]`)
+			expect(value.text(), id).toBe(text)
+			expect(value.element.parentElement?.classList.contains(CARD.prop), id).toBe(true)
+			expect(value.element.parentElement?.lastElementChild, id).toBe(value.element)
+		}
+		expect(declarationsOf(".prop", "> :last-child")).toMatchObject(WRAPS)
+	})
+})
+
+describe("OperationCard — a warning has no label, so it stays out of the right-aligned value column", () => {
+	const inValueRow = (el: Element) => el.closest(`.${CARD.prop}`) !== null
+
+	test("a token whose details cannot be read: both lines sit in a full-width block; the address stays a value", () => {
+		const w = mountCard({ ...base, kind: "register_token", address: TOKEN }, { tokenMetadataError: "read failed" })
+		const block = w.get('[data-testid="register-token-meta-error"]').element.parentElement
+		expect(block?.classList.contains(CARD.group)).toBe(true)
+		expect(block?.children).toHaveLength(2)
+		for (const line of block?.children ?? []) expect(inValueRow(line)).toBe(false)
+		expect(inValueRow(w.get('[data-testid="register-token-address"]').element)).toBe(true)
+	})
+
+	test("an opaque authorization's warning sits in a full-width block; its inner hash stays a value", () => {
+		const w = mountCard({ ...base, kind: "aztec_createAuthWit", messageHashOrIntent: { consumer: TOKEN, innerHash: FIELD } })
+		const warning = w.get('[data-testid="execute-authwit-opaque-warning"]').element
+		expect(warning.parentElement?.classList.contains(CARD.group)).toBe(true)
+		expect(inValueRow(warning)).toBe(false)
+		expect(inValueRow(w.get('[data-testid="execute-authwit-inner-hash-value"]').element)).toBe(true)
+	})
+
+	test("only a prop row's direct last child aligns right; the full-width block sets no alignment", () => {
+		const aligned: string[] = []
+		CARD_STYLE.walkDecls("text-align", (decl) => {
+			const chain: string[] = []
+			for (let node = decl.parent; node?.type === "rule"; node = node.parent) chain.unshift((node as Rule).selector)
+			if (chain[0]?.startsWith(".prop")) aligned.push(chain.join(" "))
+		})
+		expect(aligned).toEqual([".prop > :last-child"])
+		expect(declarationsOf(".prop", "> :last-child")).toMatchObject({ "text-align": "right" })
+		const group = declarationsOf(".group")
+		expect(group).toMatchObject({ width: "100%" })
+		expect(group).not.toHaveProperty("text-align")
 	})
 })
 

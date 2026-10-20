@@ -386,6 +386,61 @@ describe("probe fold", () => {
 	})
 })
 
+/** Hands `ctx` a hook and returns, in call order, every build, hook call and simulation. */
+function hook(h: ReturnType<typeof harness>) {
+	const onBuilt = vi.fn(async (_txCalls: unknown) => {})
+	h.ctx.onBuilt = onBuilt
+	const events = () =>
+		[
+			...h.buildStandard.mock.invocationCallOrder.map((n) => [n, "build"] as const),
+			...onBuilt.mock.invocationCallOrder.map((n) => [n, "hook"] as const),
+			...h.simulateTxTask.mock.invocationCallOrder.map((n) => [n, "sim"] as const),
+		]
+			.sort((a, b) => a[0] - b[0])
+			.map(([, tag]) => tag)
+	return { onBuilt, events }
+}
+
+/** Every build is followed at once by the hook, given that build's own calls. */
+function expectEveryBuildHooked(h: ReturnType<typeof harness>, { onBuilt, events }: ReturnType<typeof hook>) {
+	const log = events()
+	expect(log.flatMap((tag, i) => (tag === "build" ? [log[i + 1]] : []))).toEqual(h.builds.map(() => "hook"))
+	expect(onBuilt.mock.calls.length).toBe(h.builds.length)
+	for (const [i, [txCalls]] of onBuilt.mock.calls.entries()) expect(txCalls).toBe(h.builds[i]?.txCalls)
+}
+
+describe("the build hook", () => {
+	test.each(PATHS)("%s: each build's calls reach the hook before anything simulates them", async (path) => {
+		const h = harness(path)
+		const hooked = hook(h)
+		await h.strategy.buildAndEstimate(h.ctx)
+		expect(h.builds.length).toBeGreaterThan(0)
+		expectEveryBuildHooked(h, hooked)
+	})
+
+	test.each(FOLD_MATRIX)(
+		"$path, $cell: under a probe, every rebuild is hooked too, the choreography unchanged",
+		async ({ path, cell, methods, sims }) => {
+			const h = harness(path, foldOpts(cell))
+			const hooked = hook(h)
+			await h.strategy.buildAndEstimate(h.ctx)
+			expect(h.buildStandard.mock.calls.map((c) => c[2])).toEqual(methods)
+			expectSimOpts(h, sims)
+			expectEveryBuildHooked(h, hooked)
+		},
+	)
+
+	test.each(PATHS)("%s: a simulation that rejects has already handed its build's calls over", async (path) => {
+		const h = harness(path)
+		const { onBuilt } = hook(h)
+		const boom = new Error("Assertion failed: balance too low")
+		h.simulateTxTask.mockRejectedValueOnce(boom)
+		expect(await rejectionOf(h.strategy.buildAndEstimate(h.ctx))).toBe(boom)
+		expect(onBuilt).toHaveBeenCalledTimes(1)
+		expect(onBuilt.mock.calls[0]?.[0]).toBe(h.builds[0]?.txCalls)
+	})
+})
+
 describe("committed fees for an explicit multiplier", () => {
 	test.each(["fj", "fjwc"] as PathName[])("%s: finalize commits the node min × 3", async (path) => {
 		const h = harness(path)

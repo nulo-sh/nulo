@@ -34,6 +34,12 @@ bun run gen:tokens
 on divergence — modeled on the repo's other generated-artifact pins). Per-theme VALUES live in
 `src/base.css`.
 
+Error and refusal text is `txt-danger`: 4.5:1 in both themes on the page, a row, a card, a window
+footer and, as `--log-error-color`, a log line's tint (`src/theme-contrast.test.ts`), though not on
+`--nulo-surface-highest`. `--red` reads 3.56:1 on
+the light page, so `red` paints glyphs, fills, borders and large text. The extension's
+`src/utils/red-text-ban.test.ts` refuses other text in `--red`.
+
 ## Type roles
 
 A face, letter spacing or upper case comes only from a **type role**: one of the 24 records of
@@ -130,7 +136,7 @@ declare these (the extension declares all of them in its `popup`/`onboarding` ap
 
 - **`Tooltip`** → teleports to the `teleportTo` prop (default `#tooltip`) and clamps its text to
   `calc(var(--base-width) - 40px)`, so the host must also define a `--base-width` CSS var.
-- **`Popover`** → teleports to `teleportTo` (default `#popover`).
+- **`Popover`** → teleports to `teleportTo` (default `#popover`). Its panel keeps the Tab order of a panel placed right after its trigger: opened from the focused trigger it takes focus, Tab past its last control goes on from the trigger, Shift+Tab before its first closes back onto it, and focus leaving both closes it. Its controls are found by a selector blind to visibility, so a panel holds no hidden control.
 - **`ToastManagerBase`** → teleports to `teleportTo` (default `#toast`).
 
 A missing root means the teleported content silently fails to mount (it is NOT a no-op fallback).

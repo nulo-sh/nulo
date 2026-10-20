@@ -1183,6 +1183,90 @@ describe("ExecutionService composition — a refused dApp call is titled by what
 	}, 15_000)
 })
 
+describe("ExecutionService composition — a dApp send names its call before simulating it", () => {
+	const CLASS_ID = AztecAddress.fromNumberUnsafe(0xc1a55).toString()
+	const builtCall = { contract: TOKEN_CONTRACT, method: "transfer_public_to_public", args: [], classId: CLASS_ID }
+	const simulationFailure = new Error("Assertion failed: balance too low")
+	/** An authwit the app attached itself: it keeps the send off the folded route, so discovery builds first. */
+	const attachedAuthwit = { kind: "add_private_authwit", content: { kind: "message_hash", messageHash: CLASS_ID } }
+
+	/** The real `fj` route over a build that resolves `builtCall`, every simulation of it rejecting. */
+	function failSimulationAfterBuild(h: Harness, actions: unknown[] = []) {
+		const internals = h.service as unknown as {
+			planner: OperationPlanner
+			txBuilder: { buildStandard: (...args: unknown[]) => Promise<unknown> }
+			coordinator: { simulateTxTask: (...args: unknown[]) => Promise<unknown> }
+			dappSendExecutor: { estimateOperationFee: (op: unknown, feeSettings: unknown) => Promise<unknown> }
+		}
+		vi.spyOn(internals.planner, "processAztecJsPayload").mockResolvedValue({ actions, feeOptions: undefined } as never)
+		vi.spyOn(internals.txBuilder, "buildStandard").mockImplementation(async () => ({
+			txRequest: { origin: ACCOUNT },
+			account: { address: ACCOUNT },
+			pxe: { simulateTx: async () => Promise.reject(simulationFailure) },
+			node: {},
+			network: NETWORK,
+			txCalls: [builtCall],
+		}))
+		vi.spyOn(internals.coordinator, "simulateTxTask").mockRejectedValue(simulationFailure)
+		return internals
+	}
+
+	test.each([
+		["the strategy's", []],
+		["discovery's", [attachedAuthwit]],
+	])(
+		"%s simulation rejects: the record fails with the built call, class included",
+		async (_route, actions) => {
+			const h = await makeHarness()
+			const internals = failSimulationAfterBuild(h, actions)
+			const fence = await h.captureExecutionFence()
+			const queued = await h.journal.createOperation({
+				kind: "dapp_execute",
+				origin: "dapp",
+				profileId: "p1",
+				sessionId: "sess-1",
+				title: "transfer_public_to_public",
+				initialStage: { stage: "queued" },
+			})
+			const send = { ...(dappSend() as object), feeSettings: { paymentMethod: { kind: "fj" } }, opts: { from: ACCOUNT } } as never
+
+			const [result] = await h.service.executeOperations(
+				[send],
+				DAPP_ORIGIN,
+				undefined,
+				{ queuedJournalId: queued.id },
+				undefined,
+				fence,
+			)
+
+			const record = await h.journal.getOperation(queued.id)
+			expect({ status: result.status, stage: record?.progress.stage, title: record?.title, call: record?.call }).toEqual({
+				status: "failed",
+				stage: "failed",
+				title: "transfer_public_to_public",
+				call: { contract: TOKEN_CONTRACT, argCount: 0, classId: CLASS_ID },
+			})
+			expect(internals.txBuilder.buildStandard).toHaveBeenCalledTimes(1)
+		},
+		15_000,
+	)
+
+	test("the window's estimate over the same build writes no record", async () => {
+		const h = await makeHarness()
+		const internals = failSimulationAfterBuild(h)
+		const record = vi.spyOn(h.lane, "recordBuiltCall")
+		const send = { ...(dappSend() as object), feeSettings: { paymentMethod: { kind: "fj" } }, opts: { from: ACCOUNT } } as never
+
+		const outcome = await internals.dappSendExecutor
+			.estimateOperationFee(send, { paymentMethod: { kind: "fj" } })
+			.catch((e: unknown) => e)
+
+		expect(outcome).toBe(simulationFailure)
+		expect(internals.txBuilder.buildStandard).toHaveBeenCalledTimes(1)
+		expect(record).not.toHaveBeenCalled()
+	}, 15_000)
+})
+
 describe("ExecutionService composition — a send whose answer was lost is checked on the network", () => {
 	test("sendTx reached the node, its answer did not: the row fails from submitting, then the check reads it sent", async () => {
 		const h = await makeHarness()

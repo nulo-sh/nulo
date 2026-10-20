@@ -44,9 +44,8 @@ test.skipIf(!hasConfig)(
 		const shown = await check.evaluate(async () => ({
 			window: (await chrome.windows.getCurrent()).id,
 			isReconnect: new URLSearchParams(location.hash.split("?")[1]).get("isReconnect"),
-			stepBar: document.querySelector('[data-testid="connect-step-bar"]') !== null,
 		}))
-		expect(shown).toEqual({ window: expect.any(Number), isReconnect: "true", stepBar: false })
+		expect(shown).toEqual({ window: expect.any(Number), isReconnect: "true" })
 
 		await approveVerify(check)
 		await dappPage.waitForSelector(CONNECTED, { timeout: 20_000 })
