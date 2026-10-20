@@ -24,7 +24,7 @@ post_implementation_hardening: not scheduled
 - **Lessons:** in the owning skill (`.claude/skills/e2e-testing/SKILL.md`, the bullet and row 61); nothing promoted to `lessons.md`.
 - **Known limits:** none.
 - **Open items:** none.
-- **Seeds:** the `/goal` and `/loop` seeds below are retired; never run them.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # terminal-card-flake-1: read the terminal card once the page it names has rendered
 
