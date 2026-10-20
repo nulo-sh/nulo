@@ -117,6 +117,41 @@ STORE_CAPTURES=1 NULO_E2E_PROVERLESS=1 bun run e2e:agent tests/e2e/network/store
 cd apps/extension && bun scripts/store-art.ts
 ```
 
+### In-place update (opt-in)
+
+`tests/e2e/network/update-in-place.test.ts` and `tests/e2e/update-replay.test.ts` are skipped
+unless `NULO_E2E_UPDATE_FROM` names a release tag, with `NULO_E2E_UPDATE_TO` the candidate. They
+install the release's zip at one fixed path, swap the candidate into that path and reinstall it in
+the running browser, as a store update does: Chrome through CDP `Extensions.loadUnpacked`, Firefox
+through the driver's temporary install. The browser reports `update` and keeps the id and the
+storage. The zip is downloaded once with `gh release download` into `.e2e-state/releases/` (or
+`NULO_E2E_RELEASE_CACHE`) and refused unless its SHA-256 equals the digest
+`fixtures/update/release.ts` pins for the tag; the release's own `SHASUMS256.txt` must agree.
+
+- The live scenario populates the release through its own UI: a password profile with a second and
+  an imported account and two contacts on Testnet, then a network on the run's sandbox with a
+  token, a public and a private receipt and a connected playground. After the update it checks that
+  no key was lost, no barrier shows, every key is registered and read by its read code, the profile
+  unlocks, the UI reads it all and the playground's stored session still answers.
+  `NULO_E2E_UPDATE_RECORD=1` also writes the release's storage to
+  `fixtures/update/<tag>.storage.json`, the replay's recording.
+- The replay writes that recording into the release, offline, and updates it. While the
+  candidate's Testnet seed equals the recorded one the update opens with no takeover; once it
+  differs, the takeover's reset must carry every account to the new chain. Its second case moves
+  the recorded Testnet rows off the seed, so the reset over release rows runs before that happens.
+
+```bash
+bash apps/extension/scripts/e2e/build-update-candidate.sh chrome   # writes .e2e-state/update-candidate/chrome
+NULO_E2E_RETRY=0 NULO_E2E_UPDATE_FROM=v0.31.0 NULO_E2E_UPDATE_TO=$PWD/apps/extension/.e2e-state/update-candidate/chrome \
+  NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/update-in-place.test.ts
+cd apps/extension && NULO_E2E_ARTIFACT_RUN=1 NULO_E2E_UPDATE_FROM=v0.31.0 \
+  NULO_E2E_UPDATE_TO=$PWD/.e2e-state/update-candidate/chrome bun run test:e2e -- tests/e2e/update-replay.test.ts --retry=0
+```
+
+On Firefox, set `NULO_E2E_BROWSER=firefox` and pass the firefox candidate. The candidate script
+builds into `dist/<browser>` before copying it out, so rebuild the armed smoke build before a
+source smoke run.
+
 ## Running multiple agents in parallel
 
 Open one terminal per worktree and run `bun run e2e:agent` in each. Each run claims its own ports in the host registry and owns its own anvil + aztec + playground:
@@ -296,6 +331,7 @@ The network suite is a required PR gate at retry 0 (`extension-network-e2e-statu
 | Forks, Firefox | Yes | inherit the run marker; a dead run's forks are stopped by `e2e:reap` and the next run's setup, its Firefox launches by the next Firefox launch or `e2e:reap` |
 | Wallet build artifact | Yes | `dist/chrome/` lives inside the worktree |
 | Chrome user-data-dir | Yes | Puppeteer creates a fresh `/tmp` dir per `launch()` |
+| Update scenarios' Chrome | Yes | launched over a pipe with no `--load-extension`, so the path sweep below never sees it; a pipe-launched Chrome exits when its run dies. Its profile, the release cache and the candidates live in `.e2e-state/` |
 | Chrome orphan cleanup | Yes | `pkill -f "chrome.*--load-extension=$EXTENSION_PATH"`, path-scoped, at every run's setup and teardown, and in `e2e:reap` while no run of the worktree is live (Chrome shows no marker) |
 | `.test-config.json` | Yes | per worktree |
 | `.e2e-state/` lockfile | Yes | per worktree |

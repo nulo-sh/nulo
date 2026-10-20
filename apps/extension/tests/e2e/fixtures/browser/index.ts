@@ -21,6 +21,9 @@ export interface LaunchOptions {
 	 *  answer. Chrome ignores it: its `permissions.remove` refuses a required host permission, so no
 	 *  spec there reaches a withheld one to grant. */
 	grantPermissionRequests?: true
+	/** Install through the browser's own install call, not at launch, so `reinstallExtension` can
+	 *  swap the build in place. Firefox always installs so; Chrome then loads it over CDP. */
+	installInSession?: true
 }
 
 export interface LaunchedBrowser {
@@ -198,6 +201,14 @@ export interface BrowserDriver {
 	 */
 	evaluateInBackground<T>(browser: Browser, extensionId: string, body: string): Promise<T>
 	/**
+	 * Install `extensionPath` again in the running browser, over the build installed from it, which
+	 * the browser treats as an update: `runtime.onInstalled` reason `update`, the same id and storage.
+	 * Closing and relaunching over a replaced directory reports `install` on both browsers instead.
+	 * Chrome needs a launch with `installInSession`: under `--load-extension` its reload blocks the
+	 * extension.
+	 */
+	reinstallExtension(browser: Browser, extensionPath: string): Promise<void>
+	/**
 	 * How this driver's protocol words "the window went away under the call", beyond the CDP
 	 * phrases the fixtures already match. An approval window closes itself on the click that
 	 * resolves it, so that error is the expected end of a click there, not a failure.
@@ -245,6 +256,8 @@ export interface BackgroundOwner {
 
 export const extensionUrl = (extensionId: string, path: string): string => driver.extensionUrl(extensionId, path)
 export const launchBrowser = (opts: LaunchOptions): Promise<LaunchedBrowser> => driver.launch(opts)
+export const reinstallExtension = (browser: Browser, extensionPath: string): Promise<void> =>
+	driver.reinstallExtension(browser, extensionPath)
 export const newPage = (browser: Browser): Promise<Page> => driver.newPage(browser)
 export const discoverExtensionId = (browser: Browser): Promise<string> => driver.discoverExtensionId(browser)
 export const gotoExtensionPage = (page: Page, url: string): Promise<void> => driver.gotoExtensionPage(page, url)

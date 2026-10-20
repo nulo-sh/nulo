@@ -98,10 +98,16 @@ export async function launchExtension(
 		live?: true
 		tokenList?: "held"
 		grantPermissionRequests?: true
+		/** A build other than the run's, a release's or an update candidate's. */
+		extensionPath?: string
+		installInSession?: true
+		/** The build carries no CSP violation recorder, as a release build does not. */
+		cspRecorder?: false
 	} = {},
 ): Promise<ExtensionContext> {
-	const { userDataDir, waitForLiveness = true, fixedWindowSize, grantPermissionRequests } = opts
-	const extensionPath = inject("extensionPath")
+	const { userDataDir, waitForLiveness = true, fixedWindowSize, grantPermissionRequests, installInSession } = opts
+	const extensionPath = opts.extensionPath ?? inject("extensionPath")
+	const cspArmed = CSP_REPORT_ARMED && opts.cspRecorder !== false
 	// Read before Chrome writes the profile: `onInstalled` fires with reason "install" — the only
 	// reason that opens the first-run tab — exactly when the profile has never held the extension.
 	// A caller's freshly created empty `userDataDir` is therefore a fresh install, not a reuse.
@@ -110,7 +116,7 @@ export async function launchExtension(
 	// HEADLESS=0 flips to windowed mode for local debugging.
 	const headless: boolean = process.env.HEADLESS !== "0"
 	const launch = (egress?: { guardPort: number; liveHosts?: readonly string[] }) =>
-		launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize, egress, grantPermissionRequests })
+		launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize, egress, grantPermissionRequests, installInSession })
 	const settle = (browser: Browser) =>
 		settleLaunchedExtension(browser, {
 			freshProfile,
@@ -122,12 +128,12 @@ export async function launchExtension(
 		throw new Error("a live launch reaches the live Testnet node and list host, which only an artifact run's live spec may do")
 	}
 	const directHosts = [...CRS_HOSTS, ...(opts.live ? [LIVE_NODE_HOST, LIVE_LIST_HOST] : [])]
-	if (guardArmed(inject("egressGuard"))) return launchBehindEgressGuard(launch, settle, directHosts)
+	if (guardArmed(inject("egressGuard"))) return launchBehindEgressGuard(launch, settle, directHosts, cspArmed)
 
 	const { browser, close: closeBrowser } = await launch()
 	try {
 		const extensionId = await settle(browser)
-		return { browser, extensionId, consoleErrors: [], pageErrors: [], ...cspLatch(browser, extensionId, closeBrowser) }
+		return { browser, extensionId, consoleErrors: [], pageErrors: [], ...cspLatch(browser, extensionId, closeBrowser, cspArmed) }
 	} catch (err) {
 		// Nothing else holds this launch yet; an escaping error would strand its browser.
 		await closeBrowser().catch(() => {})
@@ -141,8 +147,9 @@ function cspLatch(
 	browser: Browser,
 	extensionId: string,
 	closeBrowser: () => Promise<void>,
+	armed: boolean,
 ): Pick<ExtensionContext, "close" | "checkCspViolations"> {
-	let checked = !CSP_REPORT_ARMED
+	let checked = !armed
 	const read = () => readCspViolations(browser, extensionId)
 	return {
 		checkCspViolations: async () => {
@@ -162,6 +169,7 @@ async function launchBehindEgressGuard(
 	launch: (egress: { guardPort: number; liveHosts?: readonly string[] }) => Promise<LaunchedBrowser>,
 	settle: (browser: Browser) => Promise<string>,
 	directHosts: readonly string[],
+	cspArmed: boolean,
 ): Promise<ExtensionContext> {
 	const guarded = await ownGuardedLaunch({
 		label: launchLabel(),
@@ -173,7 +181,7 @@ async function launchBehindEgressGuard(
 		},
 		settle,
 		probeCanary: fireCanary,
-		wrapClose: (closeBrowser, browser, extensionId) => cspLatch(browser, extensionId, closeBrowser),
+		wrapClose: (closeBrowser, browser, extensionId) => cspLatch(browser, extensionId, closeBrowser, cspArmed),
 		holdNode: directHosts.includes(LIVE_NODE_HOST)
 			? undefined
 			: (browser, extensionId) => holdNodeStub(browser, extensionId, TESTNET_RPC_URL),
@@ -381,7 +389,7 @@ export async function registerProfile(ctx: ExtensionContext): Promise<void> {
 
 /**
  * Drive the wallet-sdk handshake through the local @nulo/playground page:
- *   1) Open the playground (?test=1 disables HMR + persistence)
+ *   1) Open the playground (?test=1 disables HMR + persistence), on `opts.chainInfo`'s chain if given
  *   2) Click `pg-btn-connect` — fires `WalletManager.getAvailableWallets`
  *   3) Approve at `/windows/discover` (testid `discover-allow-btn`)
  *   4) After ECDH key exchange, approve the emoji check the same window shows
@@ -393,7 +401,7 @@ export async function registerProfile(ctx: ExtensionContext): Promise<void> {
  * Exported alongside `registerProfile` so a cold-shard warm-up tap
  * can perform the same setup without going through the fixture pipeline.
  */
-export async function connectPlayground(ctx: ExtensionContext): Promise<Page> {
+export async function connectPlayground(ctx: ExtensionContext, opts: Parameters<typeof openPlayground>[1] = {}): Promise<Page> {
 	// Internal phase-tag so the outer `[dappConnectedExtensionPerTest:connectPlayground]`
 	// error tells us WHICH step inside this function fails. Without this we
 	// only know "30s timeout somewhere in here" — useless for triage.
@@ -406,7 +414,7 @@ export async function connectPlayground(ctx: ExtensionContext): Promise<Page> {
 		}
 	}
 
-	const dappPage = await step("openPlayground", () => openPlayground(ctx))
+	const dappPage = await step("openPlayground", () => openPlayground(ctx, opts))
 
 	// Set up popup listeners BEFORE the click so we don't miss the events.
 	const discoverP = waitForPopup(ctx, "discover", { timeout: 30_000 })
