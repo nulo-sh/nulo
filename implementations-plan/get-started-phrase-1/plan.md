@@ -74,7 +74,7 @@ One arc, one PR against `dev`, ready (the pick is signed). It closes #936 on the
 
 ## Phases (arc A1, branch `get-started-phrase-1-a1` from this plan's commit on `origin/dev`)
 
-**Phase 1 — the rule, its unit and Home tests, the skill line.**
+**Phase 1 — the rule, its unit and Home tests, the skill line.** ✓ 2026-10-20: red proof 5 of 48 on the base, 48 of 48 on the branch; lint, `typecheck:all`, `test:all`, `audit:vue` exit 0; smoke 13 of 13 at retry 0 on the armed build ([lessons/phase-1.md](lessons/phase-1.md)).
 - `get-started.ts`: the rule and comments above.
 - `get-started.test.ts`: `:142` → "a funded password wallet keeps the phrase as the card's step 1, with no banner" (`toEqual` P A F R open, `canHide: true`, `banner: false`); `:162` title loses "and ends the banner"; `:188` adds hidden, funded and saved → nothing; `:205` → a funded later profile keeps its row alone (`banner: false`, P open, `canHide: false`), retitled; `:215` funded case → P open plus A F R done, `canHide: true`, no banner, retitled.
 - `general.test.ts`: `:140` and `:148` mount with `nulo:ui:getStartedHidden@p1`, keep their banner and settle assertions, `:148` drops its row check, both retitled; a new cell after `:155` per D4; `:255` adds token funds and asserts no banner; `:298`'s urgent mount adds the hidden flag.
