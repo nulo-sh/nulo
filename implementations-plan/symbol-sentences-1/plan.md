@@ -92,7 +92,7 @@ Assumptions: Facts 1-7; I1, I2. Words: page 75's, which the owner kept (P75-01 D
 
 **Gate.** `bun run lint && bun run typecheck:all && bun run test && bun run test:all`, then `bun run build`. Pass: exit 0; each red recorded; after the commit `git status --porcelain apps/extension/src/types` is empty.
 
-## Phase 2: pictures, then the pre-delivery gate
+## Phase 2: pictures, then the pre-delivery gate ✓
 
 In this order, since `audit:vue`'s build replaces the armed build:
 
