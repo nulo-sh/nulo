@@ -1503,10 +1503,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// Fail FAST on a pre-fence row (no persisted pxeGeneration): proceeding
 			// would half-execute — the tombstone write drops the undefined field, its
 			// own schema then can't parse it, and the PXE clear throws AFTER the row
-			// is deleted, wedging the id forever. Pre-production stance: no
-			// migrations; a stale dev install reinstalls.
+			// is deleted, wedging the id forever. Every released build writes the field, so no
+			// migration adds it.
 			if (!profile.pxeGeneration) {
-				throw new Error("profile predates the pxe-generation fence — reinstall the extension (pre-production, no migration)")
+				throw new Error("profile predates the pxe-generation fence, which every released build writes")
 			}
 			const rows = await delegate.snapshot(id)
 			const snapshot = { ...rows, pxeGeneration: profile.pxeGeneration }

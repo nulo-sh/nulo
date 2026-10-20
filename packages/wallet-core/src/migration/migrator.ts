@@ -233,7 +233,7 @@ export class Migrator {
 			if (LEGACY_VERSION_KEY in all) {
 				return {
 					kind: "needs-recovery",
-					reason: `legacy "${LEGACY_VERSION_KEY}" present without a schema version — reinstall for a clean dev state`,
+					reason: `legacy "${LEGACY_VERSION_KEY}" present without a schema version: only pre-release builds wrote it`,
 					retryable: false,
 				}
 			}

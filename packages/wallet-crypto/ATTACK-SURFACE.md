@@ -122,7 +122,9 @@ strength of the profile's password; see the known limit below for older files.
   unencrypted.** A password change rewraps the DEK and never rotates it, so whoever can open such a
   file and later reads the source profile's storage can open imported-key rows created after the
   export. Since v0.31.0 the file is always encrypted under the profile's password and carries a key
-  made for that backup alone. Accepted while the wallet has no production users (known limit #709).
+  made for that backup alone. Kept as a known limit at 1.0.0 (#709): such files still restore,
+  only pre-release builds made them, and the limit reopens only if one is known to have left the
+  owner's machines.
 - **This is a custom derivation scheme.** It is built entirely from standard primitives — PBKDF2,
   HMAC-SHA512, HKDF, AES-256-GCM, SHA-256 — with no hand-rolled cryptography, and the primitives
   are pinned against published test vectors (all 24 official BIP-39 vectors, RFC 5869 A.1 for

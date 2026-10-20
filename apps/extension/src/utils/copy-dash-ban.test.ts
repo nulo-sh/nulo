@@ -80,11 +80,6 @@ const REVIEWED: Reviewed[] = [
 	},
 	{
 		file: "apps/extension/src/wallet/services/profile/service.ts",
-		text: "profile predates the pxe-generation fence — reinstall the extension (pre-production, no migration)",
-		why: "stale dev install",
-	},
-	{
-		file: "apps/extension/src/wallet/services/profile/service.ts",
 		text: "Profile integrity check failed — this profile cannot produce a trustworthy backup",
 		why: "export shows constant copy",
 	},

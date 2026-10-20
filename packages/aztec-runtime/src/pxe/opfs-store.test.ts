@@ -43,9 +43,9 @@ describe("opfs-store upstream pins", () => {
 	it("PXE_DATA_SCHEMA_VERSION_PIN matches the installed @aztec-labs/pxe (drift tripwire)", () => {
 		// Upstream does not export the constant; the injected-store path must stamp the SAME
 		// schema version the PXE writes with, or a future upstream bump would strand every
-		// store on a stale stamp (or wipe on every open). A pin mismatch here means: bump the
-		// PIN consciously alongside the @aztec upgrade — the wipe-on-mismatch is upstream's
-		// designed reset semantics, scoped per-chain by our injection.
+		// store on a stale stamp. A pin mismatch here means upstream moved its store schema: every
+		// store stamped with the old one refuses to open, so a version-only bump that moves it is
+		// held, and only a network reset, which purges the reset chain's store, may carry it.
 		const source = readFileSync(resolvePackageFile("@aztec-labs/pxe", "dest/storage/metadata.js"), "utf8")
 		const match = source.match(/PXE_DATA_SCHEMA_VERSION\s*=\s*(\d+)/)
 		expect(match).not.toBeNull()
