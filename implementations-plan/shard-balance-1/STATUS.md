@@ -6,3 +6,4 @@
 - 2026-10-20 round 1: Codex conditional approve (6 findings, all adopted; measurement re-run on one first-attempt run per branch); Opus lens pending.
 - 2026-10-20 round 1: Opus conditional approve (9 findings: 8 adopted, 1 in a cheaper form).
 - 2026-10-20 round 2: Codex approve (1 low wording fix adopted). Plan approved by the panel; auto-continue into A1.
+- 2026-10-20 A1 phase 2 green: e2e-timings tests 10/10, e2e:timings wrote the record (6/6/6/7 runs; 67/67/121/121 files), lint, typecheck:all, test:ci-gating 650/650.
