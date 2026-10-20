@@ -29,3 +29,5 @@
   `origin/dev` merged (the plan index conflicted, as expected: dev still listed this plan as
   active). Legal 60 and landing 80 tests, armed Chrome build, legal-acceptance 14/14 at retry 0
   (208 s); the sheet shot with C in both themes lists that one line only.
+- 2026-10-20 Codex r4 (resumed `01a15635`): clean. At the head: lint, `typecheck:all`,
+  `test:all`, `test:ci-gating`, `check:plans` exit 0.

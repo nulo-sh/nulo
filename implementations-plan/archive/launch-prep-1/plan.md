@@ -18,8 +18,8 @@ post_implementation_hardening: not scheduled
 - **Date:** 2026-10-19.
 - **Status:** A1 merged as #888. A2 is a draft PR against `dev` carrying this close-out; the owner signed the sheet's line and the banner on decision page 69 (2026-10-20), and A2 merges right before the 1.0.0 promote, which closes the plan.
 - **Shipped:** A1: the `BEFORE-LAUNCH.md` boxes the re-fetched evidence meets, the owner's page-62 store calls, two checks made passable, `legal/README.md`'s Mainnet line. A2: Terms 1.1, material, with one `changes` line (P69-02 C, replacing P68-01 B); 1.0 archived byte-exact and listed as never in effect (P68-02 A); the README banner (P68-03 A plus the preview-build bullet, as drawn: P69-03 A); § 4's live-Testnet box moved to a § 3 step before the promote (P68-04 B); the legal README's decline line; the how-aztec-works footer.
-- **Review loop:** the plan took Codex reject, Opus conditional approve, Codex conditional approve, then Codex approve. A1 took Codex clean, Opus three P3 (fixed), Codex clean. A2 took Codex one P2 (half accepted), Opus four P3 (fixed), Codex one P3 (fixed), then Codex clean.
-- **Gates at the head:** after merging `origin/dev` at `24399338`: lint, `typecheck:all`, `test:all`, `test:ci-gating`, `check:plans` exit 0. The legal-acceptance e2e ran 14/14 at retry 0 on Phase 2's code; no extension code changed after it.
+- **Review loop:** the plan took Codex reject, Opus conditional approve, Codex conditional approve, then Codex approve. A1 took Codex clean, Opus three P3 (fixed), Codex clean. A2 took Codex one P2 (half accepted), Opus four P3 (fixed), Codex one P3 (fixed), then Codex clean; after page 69, Codex clean again.
+- **Gates at the head:** after merging `origin/dev` at `817cce9d`: lint, `typecheck:all`, `test:all`, `test:ci-gating`, `check:plans` exit 0; with line C, the legal and landing tests and the legal-acceptance e2e (14/14 at retry 0) on the armed Chrome build.
 - **Deviations:** A2's commit type is `feat(legal)` (D9); no A3, both asks being signed together (D1); the how-aztec-works footer came from A2's review.
 - **Dispositions:** #372, #385, #684 and #775 stay closed known limits with corrected conditions (§ Dispositions), posted by the orchestrator; the owner accepted #385's window by name (P68-05 A).
 - **Dropped:** owner dispositions for #372, #684 and #775 (D2); trimming #385's row (A2 Codex r1).
@@ -145,6 +145,7 @@ No `Closes`: #864 closes at the release (lane brief); the four known limits stay
 - **A2 Codex r1** (gpt-6.1-sol, high, session `01a15635`; also the cross-arc pass): **findings**, one P2: the #385 condition kept in the plan records, and D5's "no other file names it" false. Accepted the false sentence (D5 and the asks reworded). Rejected the removal: #385 is a public, closed known-limit issue, not an advisory, and its disposition is posted from the row.
 - **A2 Opus review**: **findings**, four P3: `legal/README.md`'s decline line omitted the token-list gate; `nulo.sh/how-aztec-works`'s footer still read "preview build"; the banner tick cited a signature the new bullet lacks; D5. All fixed.
 - **A2 Codex r2** (resumed `01a15635`): one P3, "is posted on #385" while unposted; fixed. **r3**: **clean**.
+- **A2 Codex r4** (resumed `01a15635`, over the page-69 line, the records and the `dev` merge): **clean**.
 
 ## Seeds
 
