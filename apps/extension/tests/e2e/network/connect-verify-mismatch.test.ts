@@ -74,12 +74,16 @@ test.skipIf(!hasConfig)(
 		await approveVerify(await approveConnect(ctx, await discoverP))
 		await dapp.waitForSelector(CONNECTED, { timeout: 20_000 })
 
-		// The app's page shows the last connection's grid.
+		// The app's page shows the last connection's grid. On Chrome the playground's tab hides the
+		// wallet's, and a hidden tab draws no frame to photograph; the dApp is fronted again after, so
+		// the rest of the case runs in the order it always has.
+		await wallet.bringToFront()
 		await listConnectedApps(wallet)
 		await clickByTestId(wallet, "connected-app-row")
 		await wallet.waitForSelector('[data-testid="connected-app-verification"]', { visible: true, timeout: 15_000 })
 		await shotSend(wallet, "verify-mismatch-settings-row", "connected-app-verification")
 
+		await dapp.bringToFront()
 		await clickByTestId(dapp, "pg-btn-disconnect")
 		await dapp.waitForSelector(DISCONNECTED, { timeout: 10_000 })
 		await listConnectedApps(wallet)

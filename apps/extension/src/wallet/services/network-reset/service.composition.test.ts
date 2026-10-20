@@ -99,7 +99,8 @@ function holdAt(at: RestoreGateHoldPoint): Hold {
 	return hold
 }
 
-async function harness(hold?: Hold) {
+/** `balances: "real"` runs the real balance service, whose refreshes drain the incoming outbox. */
+async function harness(hold?: Hold, opts: { balances?: "real" } = {}) {
 	const api = new FakeBrowserApi()
 	api.reset()
 	const logger = () => new LoggerStore(new ConfigStore())
@@ -147,7 +148,11 @@ async function harness(hold?: Hold) {
 	services.add(svc(TaskService.name, { startNewTask: () => task, getTaskSync: () => ({ status: 0 }) }))
 	services.add(svc(NoteService.name, { getNotesRaw: async () => [], getBlockTimestamp: async () => undefined }))
 	services.add(svc(ConfigService.name, { getValue: async () => undefined }))
-	services.add(svc(TokenBalanceService.name, { requestBalanceRefresh: async () => ({ busy: true }) }))
+	services.add(
+		opts.balances === "real"
+			? new TokenBalanceService(logger(), api, { subscribe: () => ({ cancel: () => {} }) } as never)
+			: svc(TokenBalanceService.name, { requestBalanceRefresh: async () => ({ busy: true }) }),
+	)
 	services.add(svc(PriceService.name, { getQuotes: async () => ({}) }))
 	services.add(svc(ACCOUNT_INTEGRITY_COORDINATOR_NAME, { bootVerification: Promise.resolve() }))
 	const reset = new NetworkResetService(logger(), api, {
@@ -216,6 +221,9 @@ async function seedChain(h: H, networkId: string, chainId: number, l1ChainId: nu
 		await h.sessions.addDappSession({ url: `https://dapp${n}.example` }, [], [address], AccessLevel.Transactions, String(chainId), "p1")
 		const repo = new IncomingTransferRepository(h.api)
 		await repo.setTrust("p1", networkId, CONTRACT, "pending")
+		await repo.setCursor("p1", networkId, CONTRACT, { cursor: null, lastSyncedBlockHash: null, lastScanFinalized: null, startBlock: 0 })
+		await repo.setOutbox("p1", networkId, address, n, { dirtyAt: 1 })
+		await repo.setArrivalRow("p1", networkId, address, { sinceBlock: 0, played: [[`note:${n}`, 1]] })
 		await repo.upsertRecord({
 			kind: "note",
 			id: noteRecordId("p1", networkId, `0x${n.toString(16).padStart(64, "0")}`),
@@ -338,7 +346,12 @@ describe("a stale network reset through the real service graph", () => {
 		await expect(ended).resolves.toMatchObject({ completed: { addressesMoved: false } })
 
 		const after = await snapshot(h)
-		expect(stale.filter((k) => k in after)).toEqual([])
+		// An arrival row is keyed by network id and address, which the reset keeps: the re-created
+		// account's watch writes a fresh baseline under the same key, with none of the old chain's receipts.
+		const arrivals = stale.filter((k) => k.startsWith("nulo:core:incoming-arrivals@"))
+		expect(arrivals).toHaveLength(1)
+		expect(stale.filter((k) => k in after && !arrivals.includes(k))).toEqual([])
+		for (const k of arrivals) expect(JSON.parse(after[k] as string)).toMatchObject({ played: [] })
 		expect(Object.fromEntries(local.map((k) => [k, after[k]]))).toEqual(Object.fromEntries(local.map((k) => [k, before[k]])))
 		expect(h.pxeClears).toEqual([["p1", OLD]])
 
@@ -378,6 +391,31 @@ describe("a stale network reset through the real service graph", () => {
 		await expect(ended).resolves.toMatchObject({ completed: { addressesMoved: false } })
 		expect((await h.account.getAccounts("p1", LOCAL)).map((a) => a.address)).toEqual([derived(LOCAL_L1_CHAIN_ID, 0)])
 		expect(await h.network.isChainLive("p1", NEW)).toBe(true)
+	})
+
+	test("purges the old chain's token balances through the balance service and keeps the other chain's", async () => {
+		const h = await harness(undefined, { balances: "real" })
+		await twoChains(h)
+		const balance = (id: number, chainId: number, l1ChainId: number) => ({
+			[`nulo:core:token-balances@${id}`]: JSON.stringify({
+				id,
+				token: id,
+				account: derived(l1ChainId, 0),
+				profileId: "p1",
+				chainId,
+				contract: CONTRACT,
+				publicBalance: "7",
+				updatedAt: 1,
+			}),
+		})
+		await h.api.storage.local.set({ ...balance(1, OLD, L1), ...balance(2, LOCAL, LOCAL_L1_CHAIN_ID) })
+
+		const { ended } = await startReset(h)
+		await expect(ended).resolves.toMatchObject({ completed: { addressesMoved: false } })
+		// The balances follow their token's deletion event, which the reset does not await.
+		await vi.waitFor(async () => expect((await snapshot(h))["nulo:core:token-balances@1"]).toBeUndefined())
+		const kept = (await snapshot(h))["nulo:core:token-balances@2"]
+		expect(JSON.parse(kept as string)).toMatchObject({ token: 2, chainId: LOCAL, account: derived(LOCAL_L1_CHAIN_ID, 0) })
 	})
 
 	test("deleting a network keeps its dApp sessions: only a reset deletes them, and the next connect drops these", async () => {
