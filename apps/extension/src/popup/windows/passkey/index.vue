@@ -13,8 +13,9 @@
  * PATH B — the passkey window the background opens for a step started in Firefox's toolbar panel,
  * which closes when the OS prompt takes focus. It runs the same `runPasskeyCeremony` as the
  * in-page dialog (PATH A), hands the result to the background, and stays open until the step it
- * started has ended: `waiting` → `finishing` → closed, or `failed` (the prompt failed; Try again)
- * or `step-failed` (the step failed after the prompt, or the request is gone).
+ * started has ended: `waiting` → `finishing` → closed, or `failed` (the prompt failed; Try again),
+ * `step-failed` (the step failed after the prompt, or the request is gone) or `step-exists` (an
+ * import whose passkey already has a profile here).
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue"
 import { PasskeyServiceClient } from "@/wallet/services/passkey/client"
@@ -24,7 +25,7 @@ import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 import { classifyPasskeyFailure, PASSKEY_COPY, type PasskeyTitle, passkeyTag, stepFailedTitle } from "@/utils/passkey-copy"
 import PasskeyScreen from "@/components/composite/PasskeyScreen.vue"
 
-type WindowState = "waiting" | "finishing" | "failed" | "step-failed"
+type WindowState = "waiting" | "finishing" | "failed" | "step-failed" | "step-exists"
 
 const route = useRoute()
 
@@ -36,18 +37,21 @@ const request = shallowRef<PasskeyRequest>()
 const unconfirmed = shallowRef<PasskeyUnconfirmedError>()
 
 const tag = computed(() => (request.value ? passkeyTag(request.value.step, request.value.profileName) : ""))
-const tone = computed(() => (state.value === "step-failed" ? "failed" : state.value))
-const isFailure = computed(() => state.value === "failed" || state.value === "step-failed")
+const isStepEnd = computed(() => state.value === "step-failed" || state.value === "step-exists")
+const tone = computed(() => (isStepEnd.value ? "failed" : state.value))
+const isFailure = computed(() => state.value === "failed" || isStepEnd.value)
 const title = computed<PasskeyTitle>(() => {
 	if (state.value === "finishing") return PASSKEY_COPY.finishing.title
 	if (state.value === "failed") return PASSKEY_COPY.failed.title
 	if (state.value === "step-failed") return stepFailedTitle(windowStep(request.value))
+	if (state.value === "step-exists") return PASSKEY_COPY.profileExists.title
 	return PASSKEY_COPY.waiting.title
 })
 const body = computed(() => {
 	if (state.value === "finishing") return PASSKEY_COPY.finishing.body
 	if (state.value === "failed") return unconfirmed.value ? PASSKEY_COPY.failed.unconfirmedBody : PASSKEY_COPY.failed.body
 	if (state.value === "step-failed") return PASSKEY_COPY.stepFailedBody
+	if (state.value === "step-exists") return PASSKEY_COPY.profileExists.body
 	return PASSKEY_COPY.waiting.body
 })
 
@@ -91,7 +95,7 @@ async function finishStep(id: string, data: PasskeyCredentialData): Promise<void
 	state.value = "finishing"
 	const outcome = await passkey.resolvePasskeyRequest(id, data).catch(() => "failed" as const)
 	if (outcome === "done") window.close()
-	else state.value = "step-failed"
+	else state.value = outcome === "exists" ? "step-exists" : "step-failed"
 }
 
 /** One attempt at a time: Try again does nothing while a prompt or the step's end is in flight. */

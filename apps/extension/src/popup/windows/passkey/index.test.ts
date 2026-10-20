@@ -186,6 +186,25 @@ describe("the passkey window", () => {
 		expect(ceremony.run).toHaveBeenCalledTimes(1)
 	})
 
+	test("an import whose passkey already has a profile here says so, offers no Try again, and Close only closes", async () => {
+		client.getPendingRequest.mockResolvedValue({ mode: "get", step: "import", profileName: "Profile 2" })
+		ceremony.run.mockResolvedValue(DATA)
+		client.resolvePasskeyRequest.mockResolvedValue("exists")
+		const wrapper = mountWindow()
+		await flushPromises()
+
+		expect(windowState(wrapper)).toBe("step-exists")
+		expect(wrapper.find('[role="alertdialog"]').exists()).toBe(true)
+		expect(wrapper.findAll("h1 span").map((line) => line.text())).toEqual(["Profile", "already added"])
+		expect(byTestId(wrapper, "passkey-window-error").text()).toBe(
+			"This passkey already has a profile in this wallet. Close this window and choose it from your profiles in Nulo.",
+		)
+		expect(byTestId(wrapper, "passkey-window-retry").exists()).toBe(false)
+		await byTestId(wrapper, "passkey-window-close").trigger("click")
+		expect(client.rejectPasskeyRequest).not.toHaveBeenCalled()
+		expect(closeWindow).toHaveBeenCalledTimes(1)
+	})
+
 	test("a step that failed after the passkey names what failed, and Close only closes", async () => {
 		ceremony.run.mockResolvedValue(DATA)
 		client.resolvePasskeyRequest.mockResolvedValue("failed")
