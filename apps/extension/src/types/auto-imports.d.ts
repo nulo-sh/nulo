@@ -141,6 +141,7 @@ declare global {
   const clearRestoreOutcome: typeof import('../utils/restore-outcome').clearRestoreOutcome
   const closeCurrentWindow: typeof import('../utils/close-current-window').closeCurrentWindow
   const closeOwnWindow: typeof import('../utils/own-window').closeOwnWindow
+  const closesOnFocusLoss: typeof import('../utils/browser-surface').closesOnFocusLoss
   const coalesce: typeof import('../utils/coalesce').coalesce
   const collectRestoreErrors: typeof import('../utils/full-backup-helpers').collectRestoreErrors
   const combineHoldings: typeof import('../utils/get-started').combineHoldings
@@ -260,6 +261,7 @@ declare global {
   const isServiceReady: typeof import('../utils/core').isServiceReady
   const isSettingsRowVisible: typeof import('../utils/settings-search').isSettingsRowVisible
   const isShallow: typeof import('vue').isShallow
+  const isToolbarPopup: typeof import('../utils/browser-surface').isToolbarPopup
   const isUnknownParsedRow: typeof import('../utils/token-amount').isUnknownParsedRow
   const isUnknownRow: typeof import('../utils/token-amount').isUnknownRow
   const isValidAztecAddress: typeof import('../utils/aztec-address').isValidAztecAddress
@@ -324,7 +326,6 @@ declare global {
   const passkeyBackupAuthenticator: typeof import('../utils/full-backup-helpers').passkeyBackupAuthenticator
   const passkeyFailureCopy: typeof import('../utils/passkey-copy').passkeyFailureCopy
   const passkeyImportFailedNotice: typeof import('../utils/profile-flow-notices').passkeyImportFailedNotice
-  const closesOnFocusLoss: typeof import('../utils/browser-surface').closesOnFocusLoss
   const passkeyTag: typeof import('../utils/passkey-copy').passkeyTag
   const persistThemeHint: typeof import('../utils/general').persistThemeHint
   const pickFile: typeof import('../utils/files').pickFile
@@ -947,6 +948,7 @@ declare module 'vue' {
     readonly clearRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['clearRestoreOutcome']>
     readonly closeCurrentWindow: UnwrapRef<typeof import('../utils/close-current-window')['closeCurrentWindow']>
     readonly closeOwnWindow: UnwrapRef<typeof import('../utils/own-window')['closeOwnWindow']>
+    readonly closesOnFocusLoss: UnwrapRef<typeof import('../utils/browser-surface')['closesOnFocusLoss']>
     readonly coalesce: UnwrapRef<typeof import('../utils/coalesce')['coalesce']>
     readonly collectRestoreErrors: UnwrapRef<typeof import('../utils/full-backup-helpers')['collectRestoreErrors']>
     readonly combineHoldings: UnwrapRef<typeof import('../utils/get-started')['combineHoldings']>
@@ -1066,6 +1068,7 @@ declare module 'vue' {
     readonly isServiceReady: UnwrapRef<typeof import('../utils/core')['isServiceReady']>
     readonly isSettingsRowVisible: UnwrapRef<typeof import('../utils/settings-search')['isSettingsRowVisible']>
     readonly isShallow: UnwrapRef<typeof import('vue')['isShallow']>
+    readonly isToolbarPopup: UnwrapRef<typeof import('../utils/browser-surface')['isToolbarPopup']>
     readonly isUnknownParsedRow: UnwrapRef<typeof import('../utils/token-amount')['isUnknownParsedRow']>
     readonly isUnknownRow: UnwrapRef<typeof import('../utils/token-amount')['isUnknownRow']>
     readonly isValidAztecAddress: UnwrapRef<typeof import('../utils/aztec-address')['isValidAztecAddress']>
@@ -1130,7 +1133,6 @@ declare module 'vue' {
     readonly passkeyBackupAuthenticator: UnwrapRef<typeof import('../utils/full-backup-helpers')['passkeyBackupAuthenticator']>
     readonly passkeyFailureCopy: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyFailureCopy']>
     readonly passkeyImportFailedNotice: UnwrapRef<typeof import('../utils/profile-flow-notices')['passkeyImportFailedNotice']>
-    readonly closesOnFocusLoss: UnwrapRef<typeof import('../utils/browser-surface')['closesOnFocusLoss']>
     readonly passkeyTag: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyTag']>
     readonly persistThemeHint: UnwrapRef<typeof import('../utils/general')['persistThemeHint']>
     readonly pickFile: UnwrapRef<typeof import('../utils/files')['pickFile']>

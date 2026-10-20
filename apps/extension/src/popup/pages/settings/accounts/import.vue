@@ -19,6 +19,8 @@ import { managers } from "@/utils/core"
 /** Utils */
 import { FileTooLargeError, pickFile } from "@/utils"
 import { sameStoredName } from "@/utils/account-name"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
+import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
 import { storageLocalSet } from "@/utils/storage"
 
@@ -58,6 +60,13 @@ const nameTaken = computed(() =>
 // Coarse pre-read byte gate (×4 headroom over the service's authoritative
 // 64 KiB string-length check, covering UTF-8-bytes vs UTF-16-units skew).
 const MAX_ACCOUNT_FILE_BYTES = 256 * 1024
+
+/** Firefox's toolbar panel dies with the file picker, so the pick moves to the wallet's own window,
+ *  where a second press opens it. A window that cannot open leaves today's pick. */
+const handleChooseFile = async () => {
+	if (closesOnFocusLoss() && (await moveToOwnWindow(OWN_WINDOW_ROUTES.accountImport))) return
+	await handlePickFile()
+}
 
 const handlePickFile = async () => {
 	const gen = generation
@@ -132,8 +141,9 @@ const handleConfirmImport = async () => {
 		if (isStale()) return
 		openToast({ kind: "success", label: "Account imported" })
 		// History-aware return (the SubPageHeader back arrow is history-first): a push would leave
-		// this page one Back away from the account list it just finished with.
-		if (window.history.length > 1) router.back()
+		// this page one Back away from the account list it just finished with. An own window has no
+		// list behind it, only the lock screen it may have opened on.
+		if (ownWindowRoute() === undefined && window.history.length > 1) router.back()
 		else router.replace("/popup/settings/accounts")
 	} catch (err) {
 		if (isStale()) return
@@ -191,7 +201,7 @@ const collapsingLabel = "Import Account"
 				<span class="export_section_label type--label-section">Account file</span>
 				<ItemsContainer flat>
 					<SettingItem
-						@click="handlePickFile"
+						@click="handleChooseFile"
 						title="Choose an account file"
 						:description="fileName || 'Select a .json or .txt file'"
 						chevron

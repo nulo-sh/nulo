@@ -329,4 +329,4 @@ test("passkey full-backup: in-session round-trip (register → reset → import 
 }, 120_000)
 
 // A real passkey export → reset → import round trip: the passkey row of
-// `network/import-handshake-note-matrix.test.ts`, and `passkey-toolbar-panel.test.ts` on Firefox.
+// `network/import-handshake-note-matrix.test.ts`, and `toolbar-panel.test.ts` on Firefox.

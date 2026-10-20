@@ -18,7 +18,9 @@ import { ContactServiceClient } from "@/wallet/services/contact/client"
 
 /** Utils */
 import { stringCompare } from "@/utils"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { copyWithToast } from "@/utils/clipboard"
+import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -112,6 +114,13 @@ watch(() => appStore.network?.id, syncSenders)
 
 const { exportContacts, importContacts } = useContactImportExport({ contacts, accountStateService })
 
+/** Firefox's toolbar panel dies with the file picker, so its import moves to the wallet's own window,
+ *  where a second press opens the picker. A window that cannot open leaves today's pick. */
+const handleImportContacts = async () => {
+	if (closesOnFocusLoss() && (await moveToOwnWindow(OWN_WINDOW_ROUTES.contacts))) return
+	await importContacts()
+}
+
 const handleCopyContactAddress = (contact) => {
 	void copyWithToast(contact.address, openToast, "Address is copied")
 }
@@ -152,7 +161,7 @@ onBeforeUnmount(() => {
 				</button>
 
 				<template #popup>
-					<DropdownItem @click="importContacts" :disabled="appStore.contactImports.size > 0" data-testid="contacts-menu-import">
+					<DropdownItem @click="handleImportContacts" :disabled="appStore.contactImports.size > 0" data-testid="contacts-menu-import">
 						<Flex align="center" gap="8">
 							<Icon name="upload" size="14" color="secondary" />
 							Import contacts

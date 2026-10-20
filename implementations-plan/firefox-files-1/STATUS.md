@@ -7,3 +7,4 @@
 - 2026-10-20 final fresh Codex pass: approve. Plan committed; awaiting the orchestrator and the page-74 picks.
 - 2026-10-20 page 74 signed: P74-05 A, P74-06 B, P74-07 C, the planned options; no re-plan, no delta round. Arc 1 on firefox-files-1-a1 off dev @ 284543d5.
 - 2026-10-20 phase 1 gate: lint pass (0 errors), typecheck:all pass, test pass (883 files, 14,588 tests).
+- 2026-10-20 phase 2 gate: lint, typecheck, page tests pass; Firefox toolbar-panel (6/6, 177.7 s; the moved test 29.9 s at load 160, CI before 14.6 s), own-window 3/3, contacts-import 7/7, wall 397 s; Chrome contacts-import 7/7, wall 116 s; all retry 0.
