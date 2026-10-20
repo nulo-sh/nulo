@@ -307,7 +307,14 @@ describe("TransactionService.restore — deletion fence (threaded profileId)", (
 		deletionState = new ProfileDeletionState()
 		const services = new ServiceCollection()
 		services.add(svc(PROFILE_SERVICE_NAME, { getActiveProfile: async () => ({ id: "p1" }), getDeletionState: () => deletionState }))
-		services.add(svc(ACCOUNT_SERVICE_NAME, { onAccountDeleted: new EventHandler() }))
+		services.add(
+			svc(ACCOUNT_SERVICE_NAME, {
+				onAccountDeleted: new EventHandler(),
+				// p1 holds 0xa on chain 1 only; p2 holds 0xb.
+				getAccountsRaw: async (profileId: string) =>
+					profileId === "p1" ? [{ profileId, chainId: 1, address: "0xa" }] : [{ profileId, chainId: 1, address: "0xb" }],
+			}),
+		)
 		services.add(svc(NETWORK_SERVICE_NAME, {}))
 		service = new TransactionService(new LoggerStore(new ConfigStore()), api)
 		services.add(service)
@@ -369,6 +376,28 @@ describe("TransactionService.restore — deletion fence (threaded profileId)", (
 	test("positive control: no deletion → both rows land", async () => {
 		const restored = await service.restore([mkTx("0xh1"), mkTx("0xh2")], "p1")
 		expect(restored.every((r) => r.restoreError === undefined)).toBe(true)
+	})
+
+	test("every restored row is stored under the restored profile, whatever profile id the backup row names", async () => {
+		const restored = await service.restore([mkTx("0xnone"), Object.assign(mkTx("0xother"), { profileId: "p2" })], "p1")
+		expect(restored.map((r) => r.restoreError)).toEqual([undefined, undefined])
+		expect((await service.getTransaction("0xnone")).profileId).toBe("p1")
+		expect((await service.getTransaction("0xother")).profileId).toBe("p1")
+	})
+
+	test("a row naming no account of the restored profile is refused and not stored; an owned row beside it is", async () => {
+		const restored = await service.restore(
+			[Object.assign(mkTx("0xforeign"), { account: "0xb" }), Object.assign(mkTx("0xotherchain"), { chainId: 2 }), mkTx("0xowned")],
+			"p1",
+		)
+		expect(restored.map((r) => r.restoreError)).toEqual([
+			"transaction names no account of the restored profile",
+			"transaction names no account of the restored profile",
+			undefined,
+		])
+		await expect(service.getTransaction("0xforeign")).rejects.toThrow()
+		await expect(service.getTransaction("0xotherchain")).rejects.toThrow()
+		expect((await service.getTransaction("0xowned")).account).toBe("0xa")
 	})
 })
 

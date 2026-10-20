@@ -6,6 +6,7 @@ import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import type { ILogger } from "@/wallet/logger"
 import { AccountService, type Account } from "@/wallet/services/account/service"
+import { accountScopeKey } from "@/wallet/services/account/spec"
 import { NetworkService } from "@/wallet/services/network/service"
 import { ProfileService } from "@/wallet/services/profile/service"
 import type { ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
@@ -606,11 +607,14 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		const epochs = captureRestoreEpochs(deletion, [profileId])
 
 		return await this.lock.withLock(async () => {
-			// The two guard rejections THROW (not push-and-continue) so restoreRows
+			// Every restored row binds to the restored profile and one of its accounts, whatever the
+			// backup claims.
+			const owned = new Set((await this.accountService.getAccountsRaw(profileId)).map((a) => accountScopeKey(a.chainId, a.address)))
+			// The guard rejections THROW (not push-and-continue) so restoreRows
 			// records them as `restoreError` with the identical message; the throw
 			// also guarantees the row is never written / never added to `this.pending`.
 			return await restoreRows(txs, async (tx) => {
-				// D16: never restore a Pending tx. `submittedEndpointUrl` is
+				// Never restore a Pending tx. `submittedEndpointUrl` is
 				// backup-controlled and `updateTx` dials it (or, when absent, the
 				// ACTIVE profile's node) — the sync worker would leak an
 				// attacker-chosen hash to the wrong RPC. Pending is transient sync
@@ -620,16 +624,19 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 				if (tx.status === TxStatus.Pending) {
 					throw new Error("restored pending transaction rejected")
 				}
-				// B: create-only. `EntityStorage.set` is an upsert on the
+				// Create-only. `EntityStorage.set` is an upsert on the
 				// profile-shared txs root keyed by `hash`; a crafted hash equal to a
 				// victim's tx would overwrite (erase) it. A restore must never
 				// overwrite an existing tx.
 				if (await this.txs.contains(tx.hash)) {
 					throw new Error("transaction already exists (hash collision)")
 				}
-				// H: validate + canonicalize the persisted shape (mirror the read
+				// Validate + canonicalize the persisted shape (mirror the read
 				// codec) so a malformed row is recorded, not written + codec-hidden.
-				const row = unmarked(TxSchema.parse(tx))
+				const row = unmarked(TxSchema.parse({ ...tx, profileId }))
+				if (!owned.has(accountScopeKey(row.chainId, row.account))) {
+					throw new Error("transaction names no account of the restored profile")
+				}
 				assertRestoreEpoch(deletion, epochs, profileId)
 				await this.txs.set(row.hash, row)
 				return row

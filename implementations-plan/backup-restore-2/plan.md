@@ -67,7 +67,7 @@ Control flow (order unchanged): profile restore → networks → `AccountService
 - **What stays as designed**: a derived or imported row that does not derive under this build is caught at session open (quarantine or withhold) or at use, never at restore (Alternatives A, B).
 - **Secrets, crypto, supply chain, least privilege**: none touched. No log line carries an address (the logging policy).
 
-## Phase 1: transaction rows bind to the restored profile and its accounts (I1, I2)
+## Phase 1: transaction rows bind to the restored profile and its accounts (I1, I2) ✓
 
 - Change `restore` in `S/transaction/service.ts`.
 - Add a `getAccountsRaw` stub to the tx restore tests (`S/transaction/service.test.ts`, `service.finality.test.ts`). Make the collision case in `S/cross-profile-isolation.test.ts` name the restoring profile's own account, and assert the collision message.
