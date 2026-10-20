@@ -110,6 +110,20 @@ describe("modules/activity/TransactionCard (settled)", () => {
 		expect(icon.attributes("data-color")).toBe(fill)
 	})
 
+	test("a transfer of a blank symbol is titled with the empty-value dash; its amount keeps the symbol as stored", () => {
+		const [call] = dappTransferTx.calls
+		const blankTx = {
+			...dappTransferTx,
+			calls: [{ ...call, transfers: [{ ...call.transfers[0], token: { name: "", symbol: "   ", decimals: 6 } }] }],
+		}
+		const read = (tx: Record<string, unknown>) => {
+			const layout = mountCard(tx).findComponent(STUBS.TransactionCardLayout)
+			return [layout.props("title"), layout.props("amountSymbol")]
+		}
+		expect(read(blankTx)).toEqual(["—", "   "])
+		expect(read(dappTransferTx)).toEqual(["USDC", "USDC"])
+	})
+
 	test("dApp-initiated transfer renders BOTH transferTypeLabel and originLabel chips (regression pin)", () => {
 		const w = mountCard(dappTransferTx)
 		// transferTypeLabel from call.transfers[0].type

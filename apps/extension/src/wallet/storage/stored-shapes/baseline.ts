@@ -301,7 +301,7 @@ export const isBackupSliced = (golden: Golden): boolean => !golden.sealed && sli
 
 /** A full backup carries every required slice, so one a store holds no golden of is carried empty,
  *  as a migration reading it requires. */
-const emptyBackup = (): Record<string, unknown[]> =>
+export const emptyBackup = (): Record<string, unknown[]> =>
 	Object.fromEntries(
 		Object.entries(BACKUP_SLICE_REGISTRY)
 			.filter(([, slice]) => (slice.kind === "root" && !slice.optional) || slice.kind === "value-projection")

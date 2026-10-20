@@ -1528,6 +1528,13 @@
 					"schema": {
 						"$schema": "https://json-schema.org/draft/2020-12/schema",
 						"properties": {
+							"announce": {
+								"items": {
+									"enum": ["mainnet", "testnet", "devnet", "local", "custom"],
+									"type": "string"
+								},
+								"type": "array"
+							},
 							"offered": {
 								"items": {
 									"enum": ["mainnet", "testnet", "devnet", "local", "custom"],
@@ -2499,6 +2506,71 @@
 						"type": "object"
 					}
 				},
+				"uiGetStartedAztecOpened": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:getStartedAztecOpened"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"const": true,
+						"type": "boolean"
+					}
+				},
+				"uiGetStartedBackupSaved": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:getStartedBackupSaved"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"const": true,
+						"type": "boolean"
+					}
+				},
+				"uiGetStartedFeeJuiceHeld": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:getStartedFeeJuiceHeld"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"const": true,
+						"type": "boolean"
+					}
+				},
+				"uiGetStartedHidden": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:getStartedHidden"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"const": true,
+						"type": "boolean"
+					}
+				},
+				"uiGetStartedPhraseSaved": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:getStartedPhraseSaved"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"const": true,
+						"type": "boolean"
+					}
+				},
 				"uiLastActiveProfile": {
 					"ref": {
 						"kind": "value",
@@ -2549,6 +2621,32 @@
 							"type": "string"
 						},
 						"type": "object"
+					}
+				},
+				"uiProfileImported": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:profileImported"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"const": true,
+						"type": "boolean"
+					}
+				},
+				"uiProfileNotFirst": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:profileNotFirst"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"const": true,
+						"type": "boolean"
 					}
 				},
 				"uiRestoreOutcome": {
@@ -3494,6 +3592,7 @@
 					"networkId": "9e21b7f0"
 				},
 				"networkSeeded.full": {
+					"announce": ["mainnet"],
 					"offered": ["custom", "devnet", "local", "mainnet", "testnet"]
 				},
 				"networkSeeded.minimal": {
@@ -3672,6 +3771,20 @@
 					"networkIds": ["5a7f03c6"],
 					"run": "ba1187dd7a33daae4a32df860ad3a287"
 				},
+				"uiGetStartedPhraseSaved.full": true,
+				"uiGetStartedPhraseSaved.minimal": true,
+				"uiGetStartedBackupSaved.full": true,
+				"uiGetStartedBackupSaved.minimal": true,
+				"uiGetStartedAztecOpened.full": true,
+				"uiGetStartedAztecOpened.minimal": true,
+				"uiGetStartedHidden.full": true,
+				"uiGetStartedHidden.minimal": true,
+				"uiGetStartedFeeJuiceHeld.full": true,
+				"uiGetStartedFeeJuiceHeld.minimal": true,
+				"uiProfileImported.full": true,
+				"uiProfileImported.minimal": true,
+				"uiProfileNotFirst.full": true,
+				"uiProfileNotFirst.minimal": true,
 				"config.full": {
 					"debugMode": true,
 					"defaultExplorer": null,

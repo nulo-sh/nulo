@@ -25,7 +25,18 @@ import type { z } from "zod"
 import { type PinMap, usePinnedTokens } from "@/composables/usePinnedTokens"
 import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
 import type { AppPick, SendSlots } from "@/utils/fee-picks"
-import { feePicksKey, pinnedTokensKey, restoreOutcomeKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
+import { markGetStarted } from "@/utils/get-started"
+import {
+	feePicksKey,
+	getStartedAztecOpenedKey,
+	getStartedBackupSavedKey,
+	getStartedFeeJuiceHeldKey,
+	getStartedHiddenKey,
+	getStartedPhraseSavedKey,
+	pinnedTokensKey,
+	restoreOutcomeKey,
+	sendFeePicksKey,
+} from "@/utils/profile-ui-keys"
 import { armRestoreOutcome, type RestoreOutcome } from "@/utils/restore-outcome"
 import { ServiceCollection } from "@/wallet/base"
 import { CONFIG_STORAGE_KEY, type Config, ConfigSchema, ConfigStore } from "@/wallet/config"
@@ -397,6 +408,22 @@ describe("what each writer stores parses back to itself", () => {
 		const raw = local.data.get(restoreOutcomeKey("p1"))
 		expect(raw).toMatchObject({ run, networkIds: ["net-1", "net-2"] })
 		expectDescribed("uiRestoreOutcome", raw)
+	})
+
+	test("the Get started flags: markGetStarted", async () => {
+		const local = stubChromeStorage()
+		const marks = [
+			["phraseSaved", "uiGetStartedPhraseSaved", getStartedPhraseSavedKey],
+			["backupSaved", "uiGetStartedBackupSaved", getStartedBackupSavedKey],
+			["aztecOpened", "uiGetStartedAztecOpened", getStartedAztecOpenedKey],
+			["hidden", "uiGetStartedHidden", getStartedHiddenKey],
+			["feeJuiceHeld", "uiGetStartedFeeJuiceHeld", getStartedFeeJuiceHeldKey],
+		] as const
+		for (const [flag, name, keyOf] of marks) {
+			await markGetStarted("p1", flag)
+			expect(keyOf("p1")).toBe(`${(STORED_SHAPES[name].ref as { root: string }).root}@p1`)
+			expectDescribed(name, local.data.get(keyOf("p1")))
+		}
 	})
 
 	test("schemaVersion, schemaRunning, schemaBackup, schemaAttempts: Migrator journal, mid-run and after a failed restore", async () => {

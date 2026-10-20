@@ -174,3 +174,18 @@ describe("Settings › Connected app › its row deleted elsewhere", () => {
 		expect(mocks.routerGo).toHaveBeenCalledWith(-1)
 	})
 })
+
+describe("Settings › Connected app › a row no connection reached", () => {
+	const NOT_CONNECTED = '[data-testid="connected-app-not-connected"]'
+
+	test("says it was allowed and is not connected; the hash a connection writes takes the line away", async () => {
+		const w = await mountPage(session([]))
+		expect(w.find(NOT_CONNECTED).text().replace(/\s+/g, " ")).toBe(
+			"You allowed this app, but it has not finished connecting. Nothing is shared with it. Its next connection starts with the emoji check.",
+		)
+
+		mocks.updated[0]({ ...session([]), verificationHash: "ab".repeat(32) })
+		await flushPromises()
+		expect(w.find(NOT_CONNECTED).exists()).toBe(false)
+	})
+})

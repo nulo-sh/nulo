@@ -270,6 +270,13 @@ describe("token page — the balance stays while the activity scrolls", () => {
 		H.getToken.mockResolvedValue(tok(1, "AAA"))
 	})
 
+	test("the header is titled with the token's symbol, or the empty-value dash for a blank one", async () => {
+		const title = async () => (await mountPage()).findComponent(STUBS.SubPageHeader).attributes("title")
+		expect(await title()).toBe("AAA")
+		H.getToken.mockResolvedValue({ ...tok(1, "AAA"), symbol: "   " })
+		expect(await title()).toBe("—")
+	})
+
 	test("the shadow under the hero shows once the activity has scrolled and leaves when it is back at the top", async () => {
 		const wrapper = await mountPage()
 		const scroller = wrapper.get('[data-testid="token-scroller"]')

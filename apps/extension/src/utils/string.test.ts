@@ -1,5 +1,7 @@
+import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { describe, expect, test } from "vitest"
-import { getInitials, trimAddress } from "./string"
+import { getNameDescriptor } from "@/wallet/services/token/functions/descriptors"
+import { dashIfBlank, getInitials, trimAddress } from "./string"
 
 describe("trimAddress", () => {
 	const ADDR = "0x1234567890abcdef1234567890abcdef12345678"
@@ -57,5 +59,32 @@ describe("getInitials", () => {
 
 	test("whitespace-only → empty", () => {
 		expect(getInitials("   ")).toBe("")
+	})
+})
+
+describe("dashIfBlank", () => {
+	/** What the wallet's token read returns for a name field holding `text`'s UTF-8 bytes after a zero byte. */
+	const fromField = (text: string): string => {
+		const field = Buffer.alloc(32)
+		Buffer.from(text, "utf-8").copy(field, 1)
+		return getNameDescriptor.unpackResult!(0, [Fr.fromBuffer(field)]) as string
+	}
+	const ZWSP = String.fromCodePoint(0x200b)
+	const NBSP = String.fromCodePoint(0xa0)
+	const IDEOGRAPHIC_SPACE = String.fromCodePoint(0x3000)
+
+	test("reads a value that is empty or whitespace once the sanitizer strips it as the empty-value dash", () => {
+		const blanks = ["", "   ", "\t\n", ZWSP, `${NBSP}${IDEOGRAPHIC_SPACE}`].map(fromField)
+		expect(blanks.slice(0, 2)).toEqual(["", "   "])
+		for (const value of blanks) expect(dashIfBlank(value), JSON.stringify(value)).toBe("—")
+		expect(dashIfBlank(undefined)).toBe("—")
+		expect(dashIfBlank(null)).toBe("—")
+	})
+
+	test("returns any other value exactly as given, neither trimmed nor stripped", () => {
+		expect(dashIfBlank(fromField("USDC"))).toBe("USDC")
+		expect(dashIfBlank(" A ")).toBe(" A ")
+		expect(dashIfBlank(`${ZWSP}USDC`)).toBe(`${ZWSP}USDC`)
+		expect(dashIfBlank("—")).toBe("—")
 	})
 })

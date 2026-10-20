@@ -112,7 +112,6 @@ const cancel = async () => {
 
 	width: 90%;
 	padding: 24px;
-	border-radius: 16px;
 
     transition: transform 0.3s ease, opacity 0.3s ease;
 }
