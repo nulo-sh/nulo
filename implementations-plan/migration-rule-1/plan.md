@@ -17,7 +17,7 @@ post_implementation_hardening: not scheduled
 
 Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1), each a draft until decision page 62 is signed. **A1** registers every stored shape and lands the snapshot guard before the flip (phases 1, 2). **A2** gives a passkey backup with no passkey check its own refusal (phase 5, OA-1). **A3** builds the in-place update harness, updates a populated 0.31.0 install on both browsers, and records that install (phase 4). **A4** flips the rule, last, right before the 1.0.0 promote (phase 3), and closes the plan. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are relative to `apps/extension/src` unless they start with `apps/`, `packages/`, `scripts/`, `.claude/`, `implementations-plan/` or a root file name; `S` = `wallet/services`.
 
-## The owner's answers (decision page 62, 2026-10-19, unsigned)
+## The owner's answers (decision page 62, signed 2026-10-19)
 
 - **P62-02 A**: "At the 1.0.0 promote: the shapes 1.0.0 stores are the baseline, and every later change ships a migration."
 - **P62-03 A**: "Before the promote, update a populated 0.31.0 install to 1.0.0 through the reset on both browsers, and fix what breaks."

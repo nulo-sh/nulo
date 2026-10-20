@@ -13,7 +13,7 @@
  * key's seal binds the chain it was sealed on), so that reset names the account unmovable, which
  * the bump's own reset does not.
  *
- * Runtime: measured 9 to 25 s per case, Chrome and Firefox alike, with the release cached.
+ * Runtime: estimated 2 min per case per browser; measured 9 to 34 s, with the release cached.
  */
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"

@@ -15,8 +15,8 @@
  * Not populated: fee picks, pinned tokens, the auth registry, a deleted profile, a restore, and the
  * token list and prices (the egress guard blocks both).
  *
- * Runtime: estimated 6 min on Chrome, 9 min on Firefox; measured 162 s and 186 s, the release's real
- * proof of the account's deployment included.
+ * Runtime: estimated 6 min on Chrome, 9 min on Firefox; measured 102 to 162 s and 182 to 186 s, the
+ * release's real proof of the account's deployment included.
  */
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
