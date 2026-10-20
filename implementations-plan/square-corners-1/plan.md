@@ -55,7 +55,7 @@ One CSS line removed and one source pin added. No token, component, dependency o
 - Tests: (a) the file yields `[]`; (b) a `test.each` of snippets, each yielding one finding: `border-radius: 16px`, `border-top-left-radius`, `border-start-end-radius`, `BORDER-RADIUS`, `-webkit-border-radius`, a static `style="border-radius:4px"`, a bound `:style="{ borderRadius: '4px' }"`; and `border-radius: 0` / `0 0` yielding `[]`; (c) non-vacuity: `declarationsOf(parsed, ".card")` holds `background`, and the template walk reaches the `font-style: italic` element. A header sentence names the blind spots: a global or shared rule, a `composes`, a style set in script or through a variable, `clip-path` rounding.
 - **Gate**: `bun run --cwd apps/extension test -- src/components/NotificationManager.test.ts`. Pass: exactly one failure, (a), naming `.card { border-radius: 16px }`; (b) and (c) pass. Record it in `lessons/phase-1.md`. Layers: unit.
 
-### Phase 2: The harness, the patch, pictures before ☐
+### Phase 2: The harness, the patch, pictures before ✓
 
 - **Warning**: before each build or run, wait until `/proc/loadavg`'s first field is under 150, polling inside one tool call.
 - Write the scratch harness in `~/.cache/nulo-backlog/square-corners-1/capture/`, adapted from `~/.cache/nulo-backlog/exists-notice-1/capture/`. Retarget every root and import to this worktree. Never copy it into the repo. Each shot sets `theme` on `<html>`, waits on `settleThemeTransitions` (`tests/e2e/fixtures/shots.ts:7`), shoots at `deviceScaleFactor: 2`, and logs the target's computed `border-radius`:
@@ -70,7 +70,7 @@ One CSS line removed and one source pin added. No token, component, dependency o
 - Build the armed Chrome bundle: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`. Run the spec with `SHOT_STATE=before NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1`, retry 0.
 - **Gate**: exit 0; 16 PNGs (`<shot>-before-{light,dark}.png`); each logged radius matches recon; `git apply --check` passes on the patch and its `--numstat` names exactly the seven files of recon's tables; `git status --porcelain` lists only this plan's files. A missing picture fails the gate. After three failures on one route, reassess it with Codex; never drop the picture.
 
-### Phase 3: The change ☐
+### Phase 3: The change ✓
 
 - `NotificationManager.vue`: delete `border-radius: 16px;` from `.card` (D1).
 - **Gate**: `bun run --cwd apps/extension test -- src/components/NotificationManager.test.ts`; `bun run lint`; `bun run typecheck:all`. Pass: exit 0 each; `git diff --stat origin/dev...HEAD` shows code only in the `.vue` and its test. Layers: lint, typecheck, unit.
