@@ -641,7 +641,6 @@ onBeforeUnmount(() => {
 	line-height: inherit;
 	background: transparent;
 	border: 1px solid currentColor;
-	border-radius: 4px;
 	cursor: pointer;
 }
 </style>

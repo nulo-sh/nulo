@@ -170,7 +170,6 @@ const filteredKeys = (kind, filters, search) => {
 	padding: 6px 8px;
 	background-color: var(--dropdown-bg);
 	border: 1px solid var(--nulo-border);
-	border-radius: 6px;
 
 	color: var(--txt-secondary);
 	font: inherit;
@@ -219,7 +218,6 @@ const filteredKeys = (kind, filters, search) => {
 	user-select: none;
 	padding: 6px 8px;
 	background-color: var(--dropdown-bg);
-	border-radius: 4px;
 
 	color: var(--txt-secondary);
 
