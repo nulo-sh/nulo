@@ -76,7 +76,7 @@ So no copy on the arrival may read as if pressing a button creates something on 
 
 ### The record and #865
 
-The key is a new `chrome.storage.local` root. migration-rule-1's A1 (its registry `X/wallet/storage/stored-shapes.ts` and the scan over `nulo:` literals) is not on `dev`. Whichever lands second registers it: if A1 of this lane lands first, migration-rule-1's scan finds the literal and its registry takes the entry (`read: "codec"`, `encoding: "json"`, the schema exported from `seed-offers.ts`); the record is a raw repository on `decodeRow`, as their plan registers the others (D13). If theirs lands first, A1 here adds the entry, adds a `full` and a `minimal` golden, and runs `bun run baseline:storage` (before the freeze: the one stamp is rewritten; after it: `-- --additive "new per-profile key; no earlier rows"`). A2's `announce` is an optional field: additive after the freeze. Nothing here bypasses the guard; the record is never migrated for pre-1.0.0 history (P62-02).
+The key is a new `chrome.storage.local` root. When this was planned, migration-rule-1's A1 (its registry `X/wallet/storage/stored-shapes.ts` and the scan over `nulo:` literals) was not on `dev`; it landed as #890 with the entry, and A2's registration is D25. The rule was: whichever lands second registers it: if A1 of this lane lands first, migration-rule-1's scan finds the literal and its registry takes the entry (`read: "codec"`, `encoding: "json"`, the schema exported from `seed-offers.ts`); the record is a raw repository on `decodeRow`, as their plan registers the others (D13). If theirs lands first, A1 here adds the entry, adds a `full` and a `minimal` golden, and runs `bun run baseline:storage` (before the freeze: the one stamp is rewritten; after it: `-- --additive "new per-profile key; no earlier rows"`). A2's `announce` is an optional field: additive after the freeze. Nothing here bypasses the guard; the record is never migrated for pre-1.0.0 history (P62-02).
 
 ### Phase 2 (A2) · the arrival (the owner's D)
 
@@ -89,7 +89,7 @@ The key is a new `chrome.storage.local` root. migration-rule-1's A1 (its registr
 - **Accessibility, the panel's calls under the owner's 2026-10-19 delegation (D21).** No focus move on mount, as the takeover: the arrival appears right after an Enter (unlock, the Terms sheet's Continue), and a focused Switch would take that key's auto-repeat. Native buttons with the layout's 2 px accent ring on `:focus-visible`; the primary refuses a repeat or composing Enter; no document-level Enter; the lock button keeps its `aria-label`.
 - **Copy.** `X/components/network-arrival/copy.ts`, variant A of OA-2; the component test writes it out as the normative copy.
 - **Known limit #904.** A second open surface (popup beside the side panel) keeps an answered arrival until it reopens; a press there is harmless (the answer is idempotent, the switch lands on the same network). The guarded activation already accepts the same for cross-window switches (`X/utils/guarded-network-activation.ts`).
-- **#865.** migration-rule-1's stored-shape registry is not on `dev`; whichever lands second registers `announce` as an optional, additive field of `nulo:core:network-seeded`.
+- **#865 (D25).** migration-rule-1's registry landed first (#890): `networkSeeded: rawRow(SEED_OFFERS_ROOT, SeedOffersSchema)` reads the schema `seed-offers.ts` exports, so `announce` needs no registry edit. Before the freeze `bun run baseline:storage` (no flag; `propose` ignores `--additive` while `pins.ts` is empty) rewrites stamp 0 with `announce` optional and `required` unchanged; the full golden carries `announce`, the minimal one keeps A1's `{"offered": []}`. After the freeze the same change would take `-- --additive`.
 
 ### Phase 3 (A3) · the real update, Chrome and Firefox
 
@@ -142,6 +142,7 @@ The Mainnet seed itself lands only on a build whose Aztec 6.0.0 execution canari
 | D22 | E2E | one smoke scenario, both browsers: the shell's boot wiring (Terms first, shows again at an unanswered reopen, stays answered) no cheaper layer runs; second surface's stale arrival a known limit (#904) | justified; record runtimes | reopen leg only if cheap |
 | D23 | A2 review r1 | refresh on the network list and gate on it (a deleted or renamed arrival network); "Not now" leaves the route before it dismisses; dead import, two comments, `{ error }`, OA-2 variant scaffolding removed | 1 medium, 1 low, fixed | same medium + 5 low, fixed |
 | D24 | A2 review r2 (Codex, resumed) | **clean**: "No new material findings." Loop converged | clean | — |
+| D25 | `announce` in the stored-shape registry (#890 landed first) | no registry edit (the entry reads `SeedOffersSchema`); full golden carries `announce`; `bun run baseline:storage` rewrites stamp 0 before the freeze, sums stable on a rerun | r3 **clean**: "No material findings." | — |
 
 ## Security & Adversarial Considerations
 

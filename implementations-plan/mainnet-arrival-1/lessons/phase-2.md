@@ -69,3 +69,9 @@ Each named mutation of the new code turns its test red (each reverted after the 
 - Smoke at retry 0 on armed builds, the arrival, stale-network and legal-acceptance files, 19 tests on each browser:
   - Chrome: 209 s wall-clock; the arrival scenario takes 8.1 s.
   - Firefox: 367 s wall-clock; the arrival scenario takes 17.6 s.
+
+## The stored-shape registration, 2026-10-20
+
+- migration-rule-1's registry landed on dev first (#890). Its entry for the record reads the schema `seed-offers.ts` exports, so after the merge only R1 went red, on `networkSeeded`.
+- Before the freeze `propose` rewrites the one stamp and never reads `--additive`, so the generator ran with no flag. The full golden had to gain `announce` (the guard requires a full golden to hold every property); the minimal one keeps A1's shape. With `announce` taken out of the full golden, R3 and the full-golden check go red.
+- **Codex** (resumed, r3): `clean`. It checked the stamp against the codec, both goldens through `readSeedOffers`, and the writes after the merge: every record write still goes through `writeSeedOffers`.
