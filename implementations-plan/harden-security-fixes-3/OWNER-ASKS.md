@@ -1,8 +1,8 @@
 # Owner asks: harden-security-fixes-3
 
-Seven asks. Each ask names the surface, what it does today, the options, the recommendation and what ships now. Arc 3 builds an option only on its pick; "what ships now" is the state without a pick. Pictures of both states come with arc 3's PR, before merge.
+Eight asks. Each ask names the surface, what it does today, the options, the recommendation and what ships now. Arc 3 builds an option only on its pick; "what ships now" is the state without a pick. Pictures of both states come with arc 3's PR, before merge.
 
-The owner answered OA-1 to OA-6 on decision page 65 (P65-01 to P65-06, 2026-10-19); each pick is quoted under its ask. OA-7 came out of OA-4's design pass and is open.
+The owner answered OA-1 to OA-6 on decision page 65 (P65-01 to P65-06, 2026-10-19) and OA-7 on decision page 68 (P68-06, 2026-10-19); each pick is quoted under its ask. OA-7 came out of OA-4's design pass. OA-8 came out of OA-7's tests and is open.
 
 ## OA-1: an app's `claim` call titled "Claim Fee Juice" on another contract (Phase 4)
 
@@ -81,3 +81,16 @@ The owner answered OA-1 to OA-6 on decision page 65 (P65-01 to P65-06, 2026-10-1
 - **Pictures** (Chrome, light and dark; `screenshots/`). Today and A: `oa7-lock-today-light-chrome.png`, `oa7-lock-today-dark-chrome.png` (with A this is the screen the next popup opens on). B: `oa7-lock-b-light-chrome.png`, `oa7-lock-b-dark-chrome.png`, a mockup of the line over today's screen.
 - **Tests with A.** The restart runs only when both attempts fail on a lock the person asked for, and never after a lock that saved (control). Before A is built, an e2e on Chrome and Firefox proves an extension restart empties the session store the lock lives in; then the same e2e proves the popup reopens on the lock screen, an open Nulo tab shows it, and a connected app reconnects. Building A is a recovery policy, so it is its own approved plan change.
 - **Tests with B.** A lock whose save fails shows the line; a lock that saves shows nothing (control).
+- **Pick (P68-06): A.** "The wallet restarts itself after the second failure; the next popup opens on the lock screen." No note. Built in arc 4 (Phase 9, HS3-D13), after its e2e showed both browsers empty the session store on a restart. The same e2e measured two differences from the text above: an open Nulo tab closes rather than reloading, and a connected app reconnects once its page loads again. OA-8.
+
+## OA-8: what the restart does to an open Nulo tab and a connected app (Phase 9, from OA-7's tests)
+
+- **Surface.** An open Nulo tab, and an app connected to the wallet, when OA-7's restart runs. It runs only after a lock whose save was refused twice.
+- **OA-7 said.** "an open Nulo tab reloads onto the lock screen, and connected apps reconnect as they do after an update."
+- **Measured** (Chrome 152 and Firefox 153, e2e at retry 0). Both browsers close every Nulo page on a restart, the popup and any Nulo tab, rather than reloading it; the next one opened shows the lock screen. With the app's page loaded again, its connect waits behind the lock screen, and the unlock reconnects it through its emoji check with its grants kept.
+- **Read in the source, not measured.** A connected app is not told of the restart: the wallet sends no disconnect, and the SDK notices a silent wallet only while a call is pending. On Chrome the page keeps a script the restart cut off, since Chrome injects none into a page already open, so nothing answers the app until its page loads again; Chrome does the same to an open app on any update of the wallet. Firefox injects the script again, and the app still has to connect again.
+- **Option A (recommended).** Keep it as measured. Nothing more is built.
+- **Option B.** After the restart the wallet reopens the Nulo tabs it closed, on the lock screen. It needs a record of the open Nulo pages written before the restart and read after it: new stored state and a recovery step, a plan change of its own.
+- **Option C.** Before restarting, the wallet tells each connected app it is disconnecting (the SDK's disconnect message), so an app that listens shows it at once. The app still reconnects only after its page loads again. A message the wallet must send and wait on before every such restart: a plan change of its own.
+- **What ships now.** A. The arc-4 PR stays a draft until this answer.
+- **Pictures.** None new: the screen the next popup opens on is OA-7's `oa7-lock-today-light-chrome.png` and `oa7-lock-today-dark-chrome.png`.

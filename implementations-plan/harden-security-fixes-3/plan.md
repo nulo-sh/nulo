@@ -1,7 +1,7 @@
 ---
 plan: harden-security-fixes-3
 tier: mid
-status: arc 1 merged (#869); arc 2 in review; arc 3 on the owner's picks
+status: arcs 1-3 merged (#869, #873, #891); arc 4 (OA-7 A) in review; the close-out on OA-8's answer
 issues: "#661 (closed known limit; its SECURITY.md caveat lands in arc 1)"
 driver: claude-code
 claude_model: opus
@@ -19,14 +19,14 @@ post_implementation_hardening: not scheduled
 
 This plan carries the lane's code and document changes. Other items are settled outside it. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
-Four arcs, one PR each against `dev`, no stack (the orchestrator's D-orch-1). Arcs 2 and 3 are independent; arc 4 carries the close-out.
+Four arcs, one PR each against `dev`, no stack (the orchestrator's D-orch-1). Arcs 2 and 3 are independent; arc 4 builds OA-7 A, and the close-out follows OA-8's answer.
 
 | Arc | Ships | Waits for |
 |---|---|---|
 | 1 | Phase 1: the token-list signer-code caveat in `SECURITY.md` | nothing |
 | 2 | Phase 3: a bound on the tagging sources a dApp adds to a chain's PXE. Phase 2 (OA-6) when picked by then | nothing for Phase 3 (#860 merged at 2a5960da); Phase 2 test-infra-1 arc 4 |
 | 3 | Phases 4-8: OA-1 to OA-5, and Phase 2 if picked after arc 2; a pick of "keep" drops its phase. Built: Phases 5, 7 (its invisible part) and 8 | the picks; Phase 6 after #854. Phase 8 waited on test-infra-1 arc 4; the orchestrator's arc-3 brief started it first, so its tests live in the composition file and it moves only three scenario pins |
-| 4 | OA-7's build, if picked, and the close-out | OA-7's pick |
+| 4 | Phase 9: OA-7 A (P68-06). The close-out moves after OA-8's answer, which arc 4's tests raised | OA-7's pick (2026-10-19) |
 
 ## Outcome & Quality Bar
 
@@ -86,6 +86,7 @@ Four arcs, one PR each against `dev`, no stack (the orchestrator's D-orch-1). Ar
 | 2 | `execution/dapp-send-executor.ts`, `dapp-send-executor.test.ts` (its post-send record test moves); composition tests with the real coordinator in a new `execution/dapp-send-authwit-record.composition.test.ts` |
 | 3 | `packages/extension-messaging/src/errors.ts` (one class and its table entry), `packages/aztec-runtime/src/pxe/{service,client,spec}.ts`, `execution/service.ts`, `packages/wallet-bridge/README.md` (the dApp contract); tests `packages/aztec-runtime/src/pxe/tagging-source-bound.test.ts`, `execution/register-bounds.test.ts`, and the account-first order in `execution/register-contract-account.real.test.ts` and `service.class-id.test.ts` (HS3-D7, HS3-D8) |
 | 4-8 | per OWNER-ASKS.md |
+| 9 | `packages/wallet-core/src/ports/runtime-port.ts` and both adapters (`reload`), `profile/session-manager.ts` (`close()` reports `recordKept`), `profile/service.ts` (`lockActiveProfile`); e2e `extension-restart.test.ts`, `network/lock-restart-reconnect.test.ts`, the drivers' `allowSelfRestart` and `backgroundOrigin`, `fixtures/session.ts` (HS3-D13, HS3-D14) |
 
 ## Security & Adversarial Considerations
 
@@ -93,6 +94,7 @@ Four arcs, one PR each against `dev`, no stack (the orchestrator's D-orch-1). Ar
 - **Trust boundary.** Only the dApp handlers pass the bound; Settings, contacts import, own accounts and restore never do. The refusal's dApp text is the constant scope envelope.
 - **Fail closed.** Phase 2: a failed authorization record stops the broadcast. Phase 3: a failed count refuses.
 - **Logging.** Refusals log a fixed category at `debug`; no address, hash or argument (CLAUDE.md § Logging policy).
+- **Phase 9's restart.** Only `lockActiveProfile`, the person's lock, restarts, and only when both deletes are refused; a dApp or content script cannot reach that RPC (the trusted service port). No loop: startup never locks, and the restarted wallet starts locked. A restart ends in-flight work as a browser exit does (Codex design consult).
 - **Supply chain, crypto, least privilege.** No dependency, key or permission change.
 
 ## Phases
@@ -131,12 +133,25 @@ Picks (decision page 65, quoted in OWNER-ASKS.md): Phase 4 (OA-1), Phase 6 (OA-3
 - **Phase 7 (OA-4)** — the invisible part, done (HS3-D10): `SessionManager.close()` attempts the delete twice inside its artifact section; `lockActiveProfile` announces the lock before its read-back. Tests: the manager locks memory before the delete settles and attempts it once more; a delete that keeps failing is attempted twice and still clears the alarm; a first failure does not let the second attempt reach a successor's row (`session-manager.fence.test.ts`); a restarted worker's lock that cannot be confirmed still announces itself. The visible part is OA-7.
 - **Phase 8 (OA-5)** — done (HS3-D11). Composition tests in `incoming-transfer/service.composition.test.ts`: after Block neither arm reads the token, the allowed token reads on, and a delete and re-add resumes both; a rebuild that read the trust before Block schedules no read; Block deletes the hidden receipts and keeps the trust; an in-flight note scan stores nothing; a scan of a blocked token stores no receipt or balance mark; an Allow after Block is refused. Three scenario pins move to the signed behaviour.
 
+### Phase 9 — the wallet restarts after a lock it could not save (arc 4, OA-7 A) — done
+
+Pick P68-06 (2026-10-19): A, no note. Built in the order OWNER-ASKS.md set:
+
+1. The e2e first (`3c5b9425`): an extension restart closes every extension page and starts `storage.session` empty, on Chrome and Firefox; the next popup is on the lock screen. Firefox 153's source agrees: `runtime.reload()` re-installs a temporary add-on, or disables and enables an installed one, and `storage.session` is a map per Extension instance.
+2. The restart (`10aa05b6`, HS3-D13): `RuntimePort.reload()`; `SessionManager.close()` returns `{ emitted, recordKept }`, `recordKept` only when both delete attempts were refused; `lockActiveProfile` restarts on it after announcing the lock, while no successor session is published, and keeps the read-back that rejects the RPC. Tests: 0, 1 and 2 refused deletes restart 0, 0 and 1 times with the read-back failing in every row; a lock that saves restarts nothing (control); a restarted worker announces the lock before it restarts; `close()` never restarts.
+3. The same e2e then drives the wallet's own restart (`d718f40f`): the background refuses every delete of the record, the header lock is pressed, the popup and a second Nulo tab close, and the next popup opens locked; without the refusal it fails waiting for the pages to close. A network e2e reconnects a connected playground after the restart.
+
+**Measured against OA-7's text** (both browsers): an open Nulo tab closes rather than reloading onto the lock screen, and a connected app reconnects once its page loads again, through the unlock and its emoji check (that the app is not told is read in the source). OA-8 asks the owner to confirm it.
+
+**Validation gate:** the fast layers, the pre-PR gate, `test:all`; smoke and network e2e at retry 0 on both browsers (smoke Chrome 9.9 s, Firefox 13.7 s; network Chrome 16.6 s, Firefox 21.4 s).
+
 ## UI impact
 
 - Arc 1: none (a document).
 - Phase 2: OA-6 (when a transaction's authorizations appear on the Authorizations page). Ships only on the owner's pick.
 - Phase 3: none in the wallet; a dApp past the bound reads the existing refusal.
-- Phases 4-8: OA-1 to OA-5, each only on the owner's pick. Arc 3: OA-2 (refused requests leave Activity past 50, P65-02) and OA-5 (a blocked token's hidden receipts are deleted and its balance refreshes only when re-read, P65-05); no screen's layout or copy changes. OA-4's visible part is OA-7, open.
+- Phases 4-8: OA-1 to OA-5, each only on the owner's pick. Arc 3: OA-2 (refused requests leave Activity past 50, P65-02) and OA-5 (a blocked token's hidden receipts are deleted and its balance refreshes only when re-read, P65-05); no screen's layout or copy changes. OA-4's visible part is OA-7.
+- Phase 9 (OA-7 A, P68-06): after a lock whose save is refused twice, the popup and every open Nulo tab close, and the next one opens on today's lock screen (`screenshots/oa7-lock-today-*.png`). No screen's layout or copy changes. The tab closing and the app reconnecting on reload are OA-8.
 
 ## Decision ledger
 
@@ -153,6 +168,8 @@ Picks (decision page 65, quoted in OWNER-ASKS.md): Phase 4 (OA-1), Phase 6 (OA-3
 | HS3-D10 | OA-4: `SessionManager.close()` attempts the delete twice, back to back, inside its artifact section; `lockActiveProfile` announces the lock before its read-back, and only while no session is published; restore is unchanged; what remains when both attempts fail is OA-7 | the retry sits beside the failing call and covers every close; inside the artifact section no attempt reaches a successor's row; no backoff, since a `storage.session` removal has no quota or throttling path; memory is locked either way, so the announcement does not wait on the read-back (Codex design consult) | Try again (repeats a save that failed twice); overwriting the row (the same failing call); an alarm retry (an independent lifecycle with durable intent: a plan change); a revocation marker read by restore (new persisted state) |
 | HS3-D11 | OA-5: Block runs in a deleter-locked section that bumps the epoch at entry, stops both arms, deletes the hidden records and keeps the shown ones and the outbox rows, then rebuilds whatever the section's outcome; rebuilds skip blocked contracts; a receipt section that reads `blocked` writes nothing; an Allow on a blocked row is refused, and an add that resolves after a Block keeps it; the reconciler's orphan sweep reads its fence after every await | the bump makes a scan past its reads, or a rebuild that read the old trust, stand down, as a token delete does; the in-lock trust read covers a lock handoff; the outbox rows carry balance refreshes of a token still registered; with the receipts deleted and the cursor kept, an Allow from blocked would resume with public history missing, so only a token delete leaves blocked, and a re-add re-reads from `startBlock` | the commit check alone (a stale rebuild re-installs the scans); deleting the cursor on Block |
 | HS3-D12 | OA-2: a record refused before sending is a refusal kind (`scope_refused`, `registry_refused`, `malformed_request`, `terms_refused`, `wallet_refused`, `too_many_pending`) on a record `wasNeverSent` holds for | the kinds Activity reads as "Nothing was sent"; `session_ended` and `popup_bound` can follow a claim and stay uncapped | `wasNeverSent` alone (it holds for simulation and proving failures, which read as failed sends) |
+| HS3-D13 | OA-7 A: the restart's trigger is `recordKept` (both deletes refused), its owner `lockActiveProfile`, its order announce, restart, read-back; the restart is immediate | the owner's words, "after the second failure"; the read-back fails closed on a read error, so keyed on it the wallet would restart after a lock that saved; only the person's lock restarts, while expiry, integrity and deletion closes share `close()`; nothing confirms a port message's delivery, so a delay buys nothing and opens a window for a successor (Codex design consult) | the read-back as trigger; the restart inside `SessionManager.close()`; a deferred restart |
+| HS3-D14 | The e2e drives a real restart: Chrome's developer mode goes on through `chrome://extensions` (`allowSelfRestart`), and the background's identity is read from every listed worker (`backgroundOrigin`) | with developer mode off Chrome leaves an unpacked extension disabled after a reload (`unsupportedDeveloperExtension`), which a store install never meets; after a restart Chrome can list the dead worker's target, and attaching to it never answers | seeding the profile's `Preferences` (needs an owned profile directory per launch); a relaunch in place of the restart, as `migration.test.ts` does (a cold boot, not a restart) |
 | HS3-D9 | The count stays over distinct addresses; the PXE comment states that an address held as both a sender and an account counts once and costs two secrets | the orchestrator's instruction (count distinct addresses) and the approved invariant; the cost stays bounded at twice the figure | counting both lists' lengths (Opus arc 2 review): a change of the approved count, left to the orchestrator |
 
 ## Review verdicts
@@ -168,14 +185,16 @@ Picks (decision page 65, quoted in OWNER-ASKS.md): Phase 4 (OA-1), Phase 6 (OA-3
 | Arc 2 Codex R2 | approve | every fix verified; no regression | none |
 | Arc 3 Codex R1, Opus | reject; conditional approve | an add delayed on its tip read wrote `trusted` over a Block; the lock announcement could follow a successor's session; a reconciler displaced by a handoff marked a balance after Block returned; a throw in Block's teardown skipped the rebuild; the bump moved to the section's entry; tests pin `wasNeverSent`, shown receipts and outbox rows kept, the stale rebuild resumed at Block's first await, the delete and re-add with the token really gone; stale docs (`ARCHITECTURE.md`, the trust-machine comment); OA-7's A conditional on its browser tests | the same teardown order in `onTokenDeleted` (older than this arc); a pin tying the refusal kinds to Activity's copy (the copy also says "Nothing was sent" for failures that are not refusals; the kinds are type-checked instead) |
 | Arc 3 Codex R2 | approve | every R1 fix verified at its cause, the bump at entry and the `finally` rebuild included; no regression | none |
+| Arc 4 Codex design consult | approve (trigger, owner, order) | `recordKept` over the read-back; the restart stays in `lockActiveProfile`; immediate, with the read-back kept; the 0/1/2 matrix with the read-back failing; `close()` never restarts | an adapter delegation unit test (the e2e drives the real `chrome.runtime.reload`) |
 
 ## Delivery
 
 - Arc 1: `harden-security-fixes-3-a1` off `origin/dev`, carrying this plan and Phase 1. Title: `docs(security): the token-list summary is informational; the compare view is the review`.
 - Arc 2: `harden-security-fixes-3-a2` off `origin/dev` after its waits. Title: `fix(pxe): bound the tagging sources a dapp adds to a chain` (plus the Phase 2 words if OA-6 is picked by then).
 - Arc 3: `harden-security-fixes-3-a3` off `origin/dev` after the picks. Title: `feat(wallet): cap refused requests, stop a blocked token's scans, save a lock twice`.
-- Arc 4, after OA-7's pick: its build if any, and the close-out.
-- Each PR: no label at creation; body with what changed and why, the gates with outcomes, e2e wall-clock unchanged (no scenario added). No `Closes` line: the lane closes no open issue. Commits signed, `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Arc 4: `harden-security-fixes-3-a4` off `origin/dev` after OA-7's pick, a draft PR. Title: `feat(wallet): restart the wallet when a lock cannot be saved`. Its body states each browser's suite wall-clock before and after (two scenarios added).
+- The close-out, after OA-8's answer: in arc 4 if answered before it merges, else its own arc.
+- Each PR: no label at creation; body with what changed and why, the gates with outcomes, e2e wall-clock unchanged in arcs 1-3 (no scenario added). No `Closes` line: the lane closes no open issue. Commits signed, `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
 ## Post-implementation
 
@@ -184,11 +203,11 @@ Cite `implementations-plan/README.md` § Post-implementation standard at f214e5c
 - Step 1 is absent (`code_review: off`).
 - Step 2 per arc at its boundary: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed per round until no new material point, hard stop at three rounds. Each prompt carries the arc table above, the adversarial ask and the two verbatim rules. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) runs beside round 1. Record rounds under Review verdicts and in `lessons/phase-N.md`.
 - Step 3: `gh pr create` per arc; `gh pr checks <n> --watch`; one rerun for a known flake.
-- Step 4, in arc 4 (after OA-7's pick): merge `origin/dev` and read `index.md` and `lessons.md`; Outcome block; lessons promotion; `STATUS.md` deleted; `git mv` into `archive/` in its own commit; index line moved.
+- Step 4, after OA-8's answer: merge `origin/dev` and read `index.md` and `lessons.md`; Outcome block; lessons promotion; `STATUS.md` deleted; `git mv` into `archive/` in its own commit; index line moved.
 - Step 5: after the close-out merges, `agent-worktree done harden-security-fixes-3 --merged`. The orchestrator notices the merge.
 - Three failures on one step end the arc as `ARC_FAILED`.
 
 ## Seeds
 
 - `/goal`: "Implement arc N of implementations-plan/harden-security-fixes-3/plan.md in its worktree: phases in order, each gate green before the next, then the Post-implementation loop and the arc's PR. Stop at a red gate three times."
-- `/loop`: "Check the arc's PR checks and its waits (#860, test-infra-1 arc 4, #854, the owner's picks on OA-1 to OA-6, then OA-7); start the next arc when its waits clear; stop when the close-out merges."
+- `/loop`: "Check the arc's PR checks and its waits (#860, test-infra-1 arc 4, #854, the owner's picks on OA-1 to OA-6, then OA-7, then OA-8); start the next arc when its waits clear; stop when the close-out merges."

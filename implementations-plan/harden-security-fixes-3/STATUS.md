@@ -17,3 +17,7 @@
 - 2026-10-19 20:5x arc 3 Codex R1 reject + Opus conditional approve; round 1 fixed (late add keeps Block, displaced sweep fenced, announcement guard, Block bump at entry + finally rebuild).
 - 2026-10-19 21:0x arc 3 Codex R2 approve: converged. Network e2e retry 0: Chrome 11/11, Firefox 11/11.
 - 2026-10-19 22:0x arc 3 final head (origin/dev merged): lint, typecheck:all, the pre-PR gate, test:all, Chrome smoke green. OA-7 open; arc 4 waits on it.
+- 2026-10-19 22:3x arc 4: P68-06 (OA-7 A) received; branch off origin/dev 3c09ea58; Chrome's reload under the harness needs developer mode.
+- 2026-10-19 23:2x arc 4 step 1 committed: an extension restart empties `storage.session`, Chrome and Firefox green.
+- 2026-10-19 23:4x arc 4 step 2 committed after the Codex design consult: the restart on two refused deletes of a person's lock.
+- 2026-10-20 00:0x arc 4 step 3 committed: smoke and network e2e green on both browsers; OA-8 raised (an open Nulo tab closes; an app reconnects after its page loads again).

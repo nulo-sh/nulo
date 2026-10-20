@@ -486,6 +486,14 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   its click. `readLivenessBaseline` throws unless the read is a finite positive value: a failed
   read turned into 0 would let any retained timestamp satisfy the gate. Read from an extension page
   (`chrome.storage` is undefined on the playground).
+- **An extension restart is not a worker restart.** `runtime.reload()` closes every extension page
+  and starts `chrome.storage.session` empty, on both browsers. A spec that drives one calls
+  `allowSelfRestart` first (with developer mode off Chrome leaves an unpacked extension disabled
+  after a reload, and every extension URL fails with `ERR_BLOCKED_BY_CLIENT`) and waits with
+  `waitForExtensionRestart`, which needs an open extension page to close. Chrome can then list the
+  dead worker's target beside its successor's, and an attach to the dead one never answers:
+  `backgroundOrigin` reads every listed worker, while `evaluateInBackground` takes the first
+  (`extension-restart.test.ts`, FIREFOX.md's restart row).
 - **Read `chrome.storage` from an extension page**, never through a session on the worker target:
   that attachment is exactly what parks the worker's DevTools host across a restart (§3), and a page
   outlives the worker. `openPopup`, or the blank popup inside `launchExtension`.
