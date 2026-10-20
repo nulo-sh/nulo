@@ -82,9 +82,10 @@ const transferTypeLabel = computed(() => {
 	return formatTransferType(transfer.value.type)
 })
 const token = computed(() => tokens.value.find((t) => call.value?.contract === t.contract))
+// Blank is judged before `displaySymbol`'s cap, which ends a long run of spaces in "…".
 const missingTitle = computed(() => {
-	const symbol = displaySymbol(transfer.value?.token?.symbol)
-	return isBlank(symbol) ? "This token is missing" : `${symbol} is missing`
+	const symbol = transfer.value?.token?.symbol
+	return typeof symbol !== "string" || isBlank(symbol) ? "This token is missing" : `${displaySymbol(symbol)} is missing`
 })
 
 const amount = computed(() => txAmount(tx.value?.calls, tokens.value))

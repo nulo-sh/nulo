@@ -139,6 +139,11 @@ describe("the transaction page's amount", () => {
 		expect(w.get("[class*='amount_symbol']").element.textContent).toBe("   ")
 	})
 
+	test("a run of spaces longer than the cap still reads a noun in the banner", async () => {
+		const w = await mountPage(transferRecord(" ".repeat(33)), Promise.resolve([]), { Banner: banner })
+		expect(bannerTitle(w)).toBe("This token is missing")
+	})
+
 	test("a dApp mint of an unlisted token renders no amount block", async () => {
 		const w = await mountPage(dappMint, Promise.resolve([]))
 		expect(amountBlock(w).exists()).toBe(false)

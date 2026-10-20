@@ -438,6 +438,11 @@ describe("composite/AmountCard — a symbol of spaces reads as a noun", () => {
 		expect(w.find("[data-testid='send-amount-derived']").text()).toBe("1 token ≈ $1.00")
 		expect(w.find("[data-testid='send-amount-fiat-toggle']").attributes("title")).toBe("Type in token")
 	})
+
+	test("in USD mode the derived amount keeps the raw symbol after its amount", () => {
+		const w = mountCard({ token: BLANK, liveQuote: QUOTE, modelValue: "2", fiatMode: true, fiatGuard: GUARD })
+		expect(w.find("[data-testid='send-amount-derived']").element.textContent).toBe("≈ 2    ")
+	})
 })
 
 describe("composite/AmountCard — code-review fixes", () => {
