@@ -5,3 +5,4 @@
 - Rebuilt the arc head; `import-errors-scroll.test.ts` on Chrome at retry 0: 4 passed, 95 s wall-clock (no scenario added or changed). `bun run audit:vue` 0 (218 s; 878 files, 14,437 tests). `bun run test:all` 0 (179 s).
 - Fix loop round 1: Codex (session `01a15930`) 2 findings, Opus diff review 4; all fixed (plan.md § Audit verdicts). Red/green on the reworked pin: base card from `origin/dev` 1 failed of 16, naming `.card { border-radius: 16px }`; head 16 passed.
 - Fix loop round 2: Codex 1 finding (a comment inside an inline property name), fixed by parsing inline styles as CSS. Red/green: base 1 failed of 17, head 17 passed.
+- Fix loop round 3: Codex `clean`; converged.

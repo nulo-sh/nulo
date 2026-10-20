@@ -132,7 +132,7 @@ No trust boundary moves: no dApp input, storage, message, permission, log or dep
 - Demonstrated by trace: a style built in script or a `v-bind` spread rounded the card past the pin, and an inline `0` failed it (Codex 1-2, Opus 1) → Phase 1 as written now; Opus 2: non-vacuity reaches `notification-description`, not the note's italic literal.
 - Opus 3-4: the index's count, this file's status and the helper's signature were stale → fixed. Red/green re-proved: the base card fails 1 of 16, head passes 16.
 
-**Post-implementation round 2** (Codex, resumed): `findings: 1`, demonstrated: the hand-split inline parser missed `border-radius/**/: 16px`, which the round-1 check caught → inline styles parse through `parseSource` as CSS; a control. Red/green: base fails 1 of 17, head passes 17.
+**Post-implementation round 2** (Codex, resumed): `findings: 1`, demonstrated: the hand-split inline parser missed `border-radius/**/: 16px`, which the round-1 check caught → inline styles parse through `parseSource` as CSS; a control. Red/green: base fails 1 of 17, head passes 17. **Round 3** (resumed): `clean`; converged.
 
 ## Delivery
 
