@@ -1,7 +1,7 @@
 ---
 plan: floor-superseded-1
 tier: light
-status: planned, Codex approve; arc 1 next
+status: planned, Codex approve; arc 1 in review
 issues: none (the owner's pick P77-06 B is the record; no issue to close)
 driver: claude-code
 claude_model: opus
@@ -118,7 +118,7 @@ None. The arc changes CI tooling, a GitHub PR body, a CI step summary line and d
 
 ## Delivery
 
-- **Arc 1** = Phases 1-3, one PR against `dev` (the orchestrator's D-orch-1: no stack), ready, not a draft. Title: `fix(token-list): the floor rule also reads lists of publish PRs closed unmerged`. Body: what changed and the invariant it keeps; the owner's pick quoted by id and text ("P77-06 B: Evaluate the floor rule against superseded envelopes too."); the validation runs; no `Closes` line. No label: the change touches no e2e path.
+- **Arc 1** = Phases 1-3, one PR against `dev` (the orchestrator's D-orch-1: no stack), ready, not a draft. Title: `fix(token-list): the floor rule also reads the lists at publish pr and branch heads` (83 characters, lower case for commitlint's `subject-case`). Body: what changed and the invariant it keeps; the owner's pick quoted by id and text ("P77-06 B: Evaluate the floor rule against superseded envelopes too."); the validation runs; no `Closes` line. No label: the change touches no e2e path.
 - **Parallelism:** none.
 
 ## Post-implementation
