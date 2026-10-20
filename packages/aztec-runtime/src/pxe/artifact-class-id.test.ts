@@ -7,7 +7,7 @@ import { type ContractInstanceWithAddress, getContractClassFromArtifact } from "
 import { describe, expect, test } from "vitest"
 import { FrozenSchnorrAccountArtifact } from "../account/frozen-artifact"
 import { NuloAccount } from "../account/nulo-account"
-import { assertWireArtifactClassId } from "./artifact-class-id"
+import { assertInstanceArtifactClassId, assertWireArtifactClassId } from "./artifact-class-id"
 
 const MISMATCH = "Contract artifact doesn't match instance's current class id"
 const seed = Fr.fromHexString("0x0000000000000000000000000000000000000000000000000000000000000002")
@@ -67,4 +67,25 @@ describe("assertWireArtifactClassId", () => {
 		},
 		60_000,
 	)
+})
+
+describe("assertInstanceArtifactClassId", () => {
+	const parsedPair = async () => {
+		const account = await NuloAccount.new(seed, { log: () => {} }, "account")
+		return {
+			instance: (account as unknown as { instance: ContractInstanceWithAddress }).instance,
+			artifact: FrozenSchnorrAccountArtifact,
+		}
+	}
+
+	test("a parsed instance and its own parsed artifact pass", async () => {
+		const { instance, artifact } = await parsedPair()
+		await expect(assertInstanceArtifactClassId(instance, artifact)).resolves.toBeUndefined()
+	}, 60_000)
+
+	test("a current class id other than the original is refused with the fixed text", async () => {
+		const { instance, artifact } = await parsedPair()
+		const otherClass = { ...instance, currentContractClassId: new Fr(7n) }
+		await expect(assertInstanceArtifactClassId(otherClass, artifact)).rejects.toThrow(MISMATCH)
+	}, 60_000)
 })

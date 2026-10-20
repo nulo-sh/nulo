@@ -20,7 +20,7 @@ import { dataFieldsCovered, projectKnownCapability, ungrantedAccounts, unwrapOpe
 import type { Capability, DataCapability, GrantedCapabilityRecord, RejectedCapabilityRecord } from "./capabilities"
 import type { CapabilityParams, CapabilityResult } from "./dapp-interaction-protocol"
 import { authorizationsEffective } from "./method-scope-checkers"
-import type { Operation } from "./operation"
+import type { AztecGetContractMetadataOperation, Operation } from "./operation"
 import type { OperationResult } from "./operation-result"
 import type {
 	CapabilityDecision,
@@ -3303,6 +3303,39 @@ describe("dispatcher — grantPublicAuthwit reachability + routing", () => {
 				ctx,
 			),
 		).rejects.toThrow(/[Ss]cope/)
+	})
+})
+
+describe("dispatcher — the metadata op carries the session's accounts", () => {
+	const HELD = wireAddress("0a")
+	const ELSEWHERE = wireAddress("0d")
+	const CONTRACT = wireAddress("0b")
+	const GRANTS = [{ capability: { type: "contracts", contracts: "*", canGetMetadata: true }, grantedAt: 1 }] as GrantedCapabilityRecord[]
+
+	function harness(accounts: string[]) {
+		const { writer } = makeSessionWriter(makeSession({ capabilityGrants: GRANTS, accounts }))
+		const ops: Operation[] = []
+		const execution: IExecutionRunner = {
+			executeOperations: async (batch) => {
+				ops.push(...batch)
+				return [{ status: "ok", result: {} }]
+			},
+		}
+		const dispatcher = makeDispatcher({ execution, sessionWriter: writer })
+		return { dispatch: (method: string, args: unknown[]) => dispatcher.dispatch(method, args, ctx), ops }
+	}
+
+	test("this chain's session accounts only, as a top-level call and as a batch leg", async () => {
+		const h = harness([`aztec:0:${HELD}`, `aztec:1:${ELSEWHERE}`])
+		await h.dispatch("getContractMetadata", [CONTRACT])
+		await h.dispatch("batch", [[{ name: "getContractMetadata", args: [CONTRACT] }]])
+		expect(h.ops.map((op) => (op as AztecGetContractMetadataOperation).sessionAccounts)).toEqual([[HELD], [HELD]])
+	})
+
+	test("a session with no account on this chain carries none", async () => {
+		const h = harness([`aztec:1:${ELSEWHERE}`])
+		await h.dispatch("getContractMetadata", [CONTRACT])
+		expect((h.ops[0] as AztecGetContractMetadataOperation).sessionAccounts).toEqual([])
 	})
 })
 
