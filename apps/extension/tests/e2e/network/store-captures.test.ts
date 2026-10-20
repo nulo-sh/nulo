@@ -9,7 +9,8 @@
  * row is renamed out of the way, since network names are unique. The wallet holds only USD Coin
  * and Fee Juice: the harness token is never imported, and no harness transaction touches the
  * captured account. USD Coin is priced at $1 by the seeded quote, with the price host refused, so a
- * live quote cannot move the totals.
+ * live quote cannot move the totals. The wallet arrives by phrase import, so Home shows no Get
+ * started card and frames as an established user's does.
  */
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
@@ -44,6 +45,7 @@ import {
 	setTheme,
 	switchToLocalNetwork,
 	waitForFreshBalanceRow,
+	waitForHomeReminders,
 	waitForHomeTotal,
 	waitForToast,
 	waitForTokenCardAmount,
@@ -319,6 +321,9 @@ function clearAmountLine(): Fit {
 async function captureHome(page: Page): Promise<void> {
 	await seedUsdQuoteAndReload(page)
 	await waitForHomeTotal(page)
+	await waitForHomeReminders(page)
+	expect(await page.$('[data-testid="get-started"]'), "the card in the Home frame").toBeNull()
+	expect(await page.$('[data-testid="backup-reminder-banner"]'), "the banner in the Home frame").toBeNull()
 	await page.waitForFunction(() => document.querySelector('[data-testid="balance-amount"]')?.textContent?.trim() === "$1,250.00", {
 		timeout: 30_000,
 		polling: 250,

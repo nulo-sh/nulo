@@ -176,7 +176,7 @@ describe("ImportFullBackupForm", () => {
 			global: { stubs },
 		})
 		expect(wrapper.get("[data-testid=import-full-backup-warning]").text()).toContain(
-			"Profile import completed with some errors. The imported account “Savings” was not restored. Add the network with chain ID 1337 to restore it, or import it again from its account file. You can review the details or continue.",
+			"Profile import completed with some errors. The imported account “Savings” was not restored. Add the network with chain ID 1337 to restore it, or import it again from its account file. Turn on Developer Mode in Settings to add a network. You can review the details or continue.",
 		)
 	})
 

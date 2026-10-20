@@ -22,7 +22,7 @@ import {
 	waitForHash,
 	waitForServiceReady,
 } from "./fixtures/extension"
-import { ensureUnlocked, lockWallet, navigateByHash, waitForLockScreen, waitForToast } from "./fixtures/helpers"
+import { ensureUnlocked, lockWallet, navigateByHash, readRecoveryWords, waitForLockScreen, waitForToast } from "./fixtures/helpers"
 import { setupPasskeyVirtualAuth } from "./fixtures/passkey"
 import { exportAccountBody, FIRST_ACCOUNT_NAME } from "./helpers/account-io"
 import { downloadEncryptedBackup, downloadPlainPasskeyBackup, openEncryptedBackup } from "./helpers/backup-export"
@@ -69,10 +69,13 @@ describe("onboarding: the Terms gate", () => {
 		expect(record?.history).toHaveLength(1)
 
 		await expectNoNameField(page, "onboarding-create-page", "onboarding-name-input")
+		await clickByTestId(page, "onboarding-method-password")
 		await replaceInputValue(page, '[data-testid="onboarding-password-input"]', TEST_PASSWORD)
 		await replaceInputValue(page, '[data-testid="onboarding-password-confirm"]', TEST_PASSWORD)
 		await clickByTestId(page, "onboarding-submit-create")
-		await waitForHash(page, "#/onboarding/learn", 30_000)
+		await page.waitForSelector('[data-testid="onboarding-phrase-later"]', { visible: true, timeout: 30_000 })
+		await clickByTestId(page, "onboarding-phrase-later")
+		await waitForHash(page, "#/onboarding/done", 10_000)
 
 		expect(extension.pageErrors).toEqual([])
 		await page.close()
@@ -80,7 +83,7 @@ describe("onboarding: the Terms gate", () => {
 
 	test("S2 the gate cannot be skipped by jumping to a later step", async ({ freshExtensionPerTest: extension }) => {
 		const page = await openOnboarding(extension, { legal: "missing" })
-		for (const step of ["create", "import", "learn", "fees", "presto", "done"]) {
+		for (const step of ["create", "import", "done"]) {
 			await page.evaluate((hash) => {
 				window.location.hash = hash
 			}, `#/onboarding/${step}`)
@@ -123,8 +126,7 @@ async function revealSeedPhrase(page: Page): Promise<string> {
 	await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 10_000 })
 	await replaceInputValue(page, '[data-testid="unlock-password-input"]', TEST_PASSWORD)
 	await pointerClick(page, "unlock-submit-btn")
-	await page.waitForSelector('[data-testid="reveal-content"] input', { visible: true, timeout: 15_000 })
-	return page.$eval('[data-testid="reveal-content"] input', (el) => (el as HTMLInputElement).value)
+	return (await readRecoveryWords(page)).join(" ")
 }
 
 /**

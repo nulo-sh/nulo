@@ -14,9 +14,10 @@ import TransactionCardLayout from "./TransactionCardLayout.vue"
 
 import { balanceFormatted } from "@/utils/amount.js"
 import { isValidDecimals } from "@/utils/token-amount"
+import { dashIfBlank } from "@/utils/string"
 
 const props = defineProps({
-	/** Token symbol — the card's title row. */
+	/** Token symbol: the title, dashed when blank, and the amount's unit, as given. */
 	tokenSymbol: { type: String, default: "Token" },
 	/** Raw u128 amount (stringified decimal) from the note's `value` field. */
 	amountRaw: { type: String, required: true },
@@ -49,7 +50,7 @@ const hashSlice = computed(() => {
 
 <template>
 	<TransactionCardLayout
-		:title="tokenSymbol"
+		:title="dashIfBlank(tokenSymbol)"
 		icon="receive"
 		:amount="formattedAmount ? `+${formattedAmount}` : null"
 		:amountSymbol="tokenSymbol"

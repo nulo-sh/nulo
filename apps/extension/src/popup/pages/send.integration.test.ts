@@ -170,7 +170,17 @@ const STUBS = {
 	},
 	AmountCard: {
 		template: '<input data-testid="stub-amount" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
-		props: ["modelValue", "fiatMode", "fiatGuard", "token", "tokenBalanceByType", "balanceRawByType", "liveQuote", "proxyTicker"],
+		props: [
+			"modelValue",
+			"fiatMode",
+			"fiatGuard",
+			"token",
+			"tokenBalanceByType",
+			"balanceRawByType",
+			"liveQuote",
+			"proxyTicker",
+			"exceedsBalance",
+		],
 		emits: ["update:modelValue", "update:fiatMode", "update:fiatGuard"],
 		methods: { refreezeQuote() {} },
 	},
@@ -240,7 +250,10 @@ async function estimateLands() {
 	await flushPromises()
 }
 
-async function mountSend(funding: Funding, opts: { storage?: Record<string, unknown>; holdGas?: boolean; realTokenCard?: boolean } = {}) {
+async function mountSend(
+	funding: Funding,
+	opts: { storage?: Record<string, unknown>; holdGas?: boolean; realTokenCard?: boolean; realFeeRow?: boolean } = {},
+) {
 	vi.useFakeTimers()
 	installChromeStorage(opts.storage ?? funding.storage ?? {})
 	mocks.getFpcs.mockResolvedValue(funding.fpcs)
@@ -259,7 +272,7 @@ async function mountSend(funding: Funding, opts: { storage?: Record<string, unkn
 		attachTo: document.body,
 		global: {
 			plugins: [pinia],
-			stubs: opts.realTokenCard ? { ...STUBS, SelectTokenCard: false } : STUBS,
+			stubs: { ...STUBS, ...(opts.realTokenCard && { SelectTokenCard: false }), ...(opts.realFeeRow && { FeeCostReadout: false }) },
 		},
 	})
 	await flushPromises()
@@ -291,6 +304,13 @@ function settled(w: W) {
 	expect(action === "review").toBe(you === "exposed")
 	expect(tag(w).exists()).toBe(you === "exposed")
 	return { action, you, to: strip(w).attributes("data-to"), amount: strip(w).attributes("data-amount") }
+}
+
+function balanceUpdated() {
+	const client = vi.mocked(TokenBalanceServiceClient).mock.results.at(-1)?.value as unknown as {
+		onTokenBalanceUpdated: EventHandler<unknown>
+	}
+	return client.onTokenBalanceUpdated
 }
 
 const submittedFee = () => (mocks.executeTransfer.mock.calls[0]?.[7] as { paymentMethod: unknown } | undefined)?.paymentMethod
@@ -902,15 +922,31 @@ describe("send page — Confirm waits for the current input's estimate", () => {
 		expect(mocks.estimateTransferFee).not.toHaveBeenCalled()
 		expect(sendDisabled(w)).toBe(true)
 
-		const balances = vi.mocked(TokenBalanceServiceClient).mock.results.at(-1)?.value as unknown as {
-			onTokenBalanceUpdated: EventHandler<unknown>
-		}
-		balances.onTokenBalanceUpdated.invoke({ ...BALANCE, privateBalance: "10000000", updatedAt: 2 })
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "10000000", updatedAt: 2 })
 		await flushPromises()
 		await estimateLands()
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
 		expect(mocks.estimateTransferFee.mock.calls[0]?.[6]).toBe(6_000_000n)
 		expect(sendDisabled(w)).toBe(false)
+		w.unmount()
+	})
+
+	test("the fee row reads the same hint for an amount typed over the balance and for a landed amount the balance falls below", async () => {
+		const { w } = await mountSend(FUNDING["no gas, a sponsor"], { realFeeRow: true })
+		const row = () => w.getComponent({ name: "FeeCostReadout" })
+		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		await w.get('[data-testid="stub-amount"]').setValue("6")
+		await estimateLands()
+		expect(row().text()).toBe("Fee estimated after simulation")
+
+		await w.get('[data-testid="stub-amount"]').setValue("1.5")
+		await estimateLands()
+		expect(row().find('[data-testid="fee-estimate"]').exists()).toBe(true)
+
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "1000000", updatedAt: 2 })
+		await flushPromises()
+		expect(row().find('[data-testid="fee-estimate"]').exists()).toBe(false)
+		expect(row().text()).toBe("Fee estimated after simulation")
 		w.unmount()
 	})
 

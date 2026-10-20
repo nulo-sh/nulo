@@ -12,9 +12,7 @@
  *    only see changes in their area.
  * 3. chrome.alarms requires the "alarms" permission in the manifest.
  *    Instantiation is fine without it; method calls will throw.
- * 4. chrome.windows works without a permission declaration, and so do the
- *    tabs.query and tabs.update that `navigate` uses: without "tabs" a queried
- *    tab only lacks its url and title.
+ * 4. chrome.windows works without a permission declaration.
  */
 
 import type {
@@ -144,6 +142,10 @@ class ChromeRuntimeAdapter implements RuntimePort {
 		return { message: err.message ?? "unknown error" }
 	}
 
+	public reload(): void {
+		chrome.runtime.reload()
+	}
+
 	public async setUninstallURL(url: string): Promise<void> {
 		await chrome.runtime.setUninstallURL(url)
 	}
@@ -198,12 +200,6 @@ class ChromeWindowsAdapter implements WindowPort {
 
 	public async update(windowId: number, options: UpdateWindowOptions): Promise<void> {
 		await chrome.windows.update(windowId, options)
-	}
-
-	public async navigate(windowId: number, url: string): Promise<void> {
-		const [tab] = await chrome.tabs.query({ windowId })
-		if (tab?.id === undefined) throw new Error("window has no tab")
-		await chrome.tabs.update(tab.id, { url })
 	}
 
 	public async getLastFocused(): Promise<WindowBounds | undefined> {

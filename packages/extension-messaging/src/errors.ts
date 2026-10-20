@@ -576,6 +576,19 @@ export class DuplicateWalletError extends WalletError {
 }
 
 /**
+ * A live, readable passkey profile on this device already holds the credential being imported or
+ * restored: a hard refusal, never a warned duplicate. `details.existingProfileName` names that
+ * profile for the notice; the error NEVER carries key material, the credential id or the user handle.
+ */
+export class PasskeyProfileExistsError extends WalletError {
+	public static readonly CODE = "PASSKEY_PROFILE_EXISTS"
+
+	public constructor(message = "Passkey profile already exists", details?: { existingProfileName?: string }) {
+		super(PasskeyProfileExistsError.CODE, message, details, "PasskeyProfileExistsError")
+	}
+}
+
+/**
  * The active session opened WITHOUT its imported-keys DEK (the sealed slot or the envelope MAC
  * failed at unlock): the profile is in recovery mode — its PXE store key and dApp-session MAC key
  * take `HKDF(master ‖ dek)` and cannot be derived, so chain data and dApp sessions are unavailable
@@ -625,6 +638,7 @@ const REBUILT_AS = [
 	RecoveryModeError,
 	ProfileIdConflictError,
 	DuplicateWalletError,
+	PasskeyProfileExistsError,
 	DuplicateInitializationError,
 	UnsupportedMethodError,
 	InvalidWalletArgumentsError,

@@ -2,6 +2,7 @@ import type { Page } from "puppeteer"
 import { TEST_PASSWORD } from "./constants"
 import { clickByTestId, clickSelector, replaceInputValue, waitForHash, withTimeoutMessage } from "./dom"
 import { navigateByHash } from "./navigation"
+import { acceptConfirmPopup } from "./widgets"
 
 /** Lock the wallet via the Header lock button, then wait for the lock screen.
  *
@@ -12,6 +13,12 @@ import { navigateByHash } from "./navigation"
  *  sends the lock without awaiting it; the background's lock event then routes the popup to
  *  `/popup/auth`. */
 export async function lockWallet(page: Page): Promise<void> {
+	await pressHeaderLock(page)
+	await waitForLockScreen(page)
+}
+
+/** Press the Header lock button; resolves once the click is dispatched, not once the wallet locks. */
+export async function pressHeaderLock(page: Page): Promise<void> {
 	// Wait for the lock control to be mounted BEFORE clicking — a bare
 	// `querySelector(...)?.click()` silently no-ops if the header hasn't
 	// (re)mounted yet (e.g. right after a `router.back()`).
@@ -19,7 +26,6 @@ export async function lockWallet(page: Page): Promise<void> {
 	await page.evaluate(() => {
 		;(document.querySelector('[data-testid="header-lock"]') as HTMLElement)?.click()
 	})
-	await waitForLockScreen(page)
 }
 
 /** A confirm dialog's copy, as rendered. */
@@ -357,4 +363,38 @@ export async function changePassword(page: Page, oldPwd: string, newPwd: string)
 export async function openForgotPasswordFromAuth(page: Page): Promise<void> {
 	await clickByTestId(page, "auth-reset")
 	await page.waitForSelector('[data-testid="forgot-reset-btn"]', { visible: true, timeout: 5_000 })
+}
+
+/**
+ * Turns strict mode off through Settings → Lock and its confirmation, asserting the flag flipped, then
+ * locks and unlocks so the next session persists its bearer. Hash navigation, not the nav tab:
+ * clicking through the shell races the routing an unlock is still finishing.
+ */
+export async function optOutOfStrictMode(page: Page): Promise<void> {
+	await navigateByHash(page, "#/popup/settings/lock")
+	await page.waitForSelector('[data-testid="strict-security-toggle"]', { visible: true, timeout: 10_000 })
+	await clickByTestId(page, "strict-security-toggle")
+	await acceptConfirmPopup(page)
+	await withTimeoutMessage(
+		page.waitForFunction(
+			() => document.querySelector('[data-testid="strict-security-toggle"]')?.getAttribute("data-toggle-active") === "false",
+			{ timeout: 10_000, polling: 200 },
+		),
+		async () => {
+			const seen = await page
+				.evaluate(
+					() =>
+						document.querySelector('[data-testid="strict-security-toggle"]')?.getAttribute("data-toggle-active") ?? "<absent>",
+				)
+				.catch(() => "<unreadable>")
+			return `strict-security-toggle never flipped off (still ${seen}) — the opt-out this test depends on did not happen`
+		},
+	)
+	await navigateByHash(page, "#/popup/general")
+
+	await lockWallet(page)
+	await page.waitForSelector('[data-testid="auth-password-input"]', { visible: true, timeout: 10_000 })
+	await replaceInputValue(page, '[data-testid="auth-password-input"]', TEST_PASSWORD)
+	await clickByTestId(page, "auth-submit")
+	await waitForHash(page, "#/popup/general", 10_000)
 }

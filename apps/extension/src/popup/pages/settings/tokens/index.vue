@@ -14,7 +14,7 @@
 import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Utils */
-import { stringCompare } from "@/utils/string"
+import { dashIfBlank, stringCompare } from "@/utils/string"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -79,8 +79,8 @@ onBeforeUnmount(() => {
 		<ItemsContainer v-if="tokens.length">
 			<SettingItem
 				v-for="token in tokens"
-				:title="token.symbol"
-				:description="token.name"
+				:title="dashIfBlank(token.symbol)"
+				:description="dashIfBlank(token.name)"
 				raw
 				data-testid="token-row"
 			>

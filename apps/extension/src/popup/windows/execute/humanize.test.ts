@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { humanizeOperationKind } from "./humanize"
+import { humanizeOperationKind, safeWire, safeWireOrDash } from "./humanize"
 
 describe("humanizeOperationKind", () => {
 	it("strips aztec_ prefix and splits camelCase", () => {
@@ -43,5 +43,20 @@ describe("humanizeOperationKind", () => {
 
 	it("handles a kind without a prefix or underscore", () => {
 		expect(humanizeOperationKind("foobar")).toBe("Foobar")
+	})
+})
+
+describe("safeWireOrDash", () => {
+	it("shows any other value as safeWire does", () => {
+		expect(safeWireOrDash("USDC", 32)).toBe("USDC")
+		expect(safeWireOrDash(`${String.fromCodePoint(0x200b)}USDC`, 32)).toBe("USDC")
+		expect(safeWireOrDash(" A ", 32)).toBe(" A ")
+	})
+
+	it("decides blank before the length cap", () => {
+		const long = "W".repeat(70)
+		expect(safeWireOrDash(long, 64)).toBe(safeWire(long, 64))
+		expect(safeWireOrDash(long, 64)).toBe(`${"W".repeat(64)}…`)
+		expect(safeWireOrDash(" ".repeat(70), 64)).toBe("—")
 	})
 })

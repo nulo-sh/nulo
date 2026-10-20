@@ -1,24 +1,15 @@
-import type { Browser, Page } from "puppeteer"
+import type { Browser } from "puppeteer"
 import { describe, expect } from "vitest"
 import { SCHEMA_VERSION_KEY } from "@nulo/wallet-core/migration"
 import { MIGRATION_FIXTURE_HOLD_KEY } from "@/e2e/migration-fixture"
 import { extensionUrl, gotoExtensionPage, isFirefox, newPage, stopBackground } from "./fixtures/browser"
 import { TEST_PASSWORD } from "./fixtures/constants"
+import { test, openPopup, waitForHash, clickByTestId, recordPageErrors, replaceInputValue, waitForServiceReady } from "./fixtures/extension"
 import {
-	test,
-	openPopup,
-	waitForHash,
-	clickByTestId,
-	recordPageErrors,
-	replaceInputValue,
-	waitForServiceReady,
-	withTimeoutMessage,
-} from "./fixtures/extension"
-import {
-	acceptConfirmPopup,
 	ensureUnlocked,
 	lockWallet,
 	navigateByHash,
+	optOutOfStrictMode,
 	readLivenessBaseline,
 	waitForWorkerLiveness,
 } from "./fixtures/helpers"
@@ -33,40 +24,6 @@ async function closeExtensionPages(browser: Browser): Promise<void> {
 	for (const p of await browser.pages()) {
 		if (/^(chrome|moz)-extension:\/\//.test(p.url())) await p.close().catch(() => {})
 	}
-}
-
-/**
- * Turns strict mode off through Settings → Lock and its confirmation, asserting the flag flipped, then
- * locks and unlocks so the next session persists its bearer. Hash navigation, not the nav tab:
- * clicking through the shell races the routing an unlock is still finishing.
- */
-async function optOutOfStrictMode(page: Page): Promise<void> {
-	await navigateByHash(page, "#/popup/settings/lock")
-	await page.waitForSelector(STRICT_TOGGLE, { visible: true, timeout: 10_000 })
-	await clickByTestId(page, "strict-security-toggle")
-	await acceptConfirmPopup(page)
-	await withTimeoutMessage(
-		page.waitForFunction(
-			() => document.querySelector('[data-testid="strict-security-toggle"]')?.getAttribute("data-toggle-active") === "false",
-			{ timeout: 10_000, polling: 200 },
-		),
-		async () => {
-			const seen = await page
-				.evaluate(
-					() =>
-						document.querySelector('[data-testid="strict-security-toggle"]')?.getAttribute("data-toggle-active") ?? "<absent>",
-				)
-				.catch(() => "<unreadable>")
-			return `strict-security-toggle never flipped off (still ${seen}) — the opt-out this test depends on did not happen`
-		},
-	)
-	await navigateByHash(page, "#/popup/general")
-
-	await lockWallet(page)
-	await page.waitForSelector('[data-testid="auth-password-input"]', { visible: true, timeout: 10_000 })
-	await replaceInputValue(page, '[data-testid="auth-password-input"]', TEST_PASSWORD)
-	await clickByTestId(page, "auth-submit")
-	await waitForHash(page, "#/popup/general", 10_000)
 }
 
 // A background death — Chrome recycling its idle worker, Firefox ending its event page — and the

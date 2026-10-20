@@ -25,6 +25,7 @@ import { expect } from "vitest"
 import type { Page } from "puppeteer"
 import { clickByTestId, expectNoNameField, openPopup, waitForHash, test, waitForServiceReady } from "./fixtures/extension"
 import { confirmProfileReset } from "./fixtures/helpers"
+import { waitForHomeReminders } from "./fixtures/tokens"
 import { readPasskeySurface, registerPasskeyProfile, setupPasskeyVirtualAuth, watchPasskeySurface } from "./fixtures/passkey"
 
 /** Read the active account address from chrome.storage.local. The wallet
@@ -160,6 +161,9 @@ test("register → reset profile → import via passkey discovery → same addre
 
 		const addressAfter = await readActiveAccount(page)
 		expect(addressAfter).toBe(addressBefore)
+		// The person brought this wallet in, so Home asks nothing of it.
+		await waitForHomeReminders(page)
+		expect(await page.$('[data-testid="get-started"]')).toBeNull()
 
 		// Same benign-error filter as lock+unlock — reset closes the SW
 		// session, in-flight ServiceClients reject with "Client disconnected".
