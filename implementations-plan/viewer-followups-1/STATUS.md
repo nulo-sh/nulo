@@ -1,0 +1,5 @@
+- 2026-10-20 phase 0: briefs read; reproductions on arc 2's viewer: #923 and #922 demonstrated, #921 does not reproduce (P1, fixed by #925); #923-B found beside #923.
+- 2026-10-20 plan drafted (light); audit next.
+- 2026-10-20 audit round 1: Codex conditional approve; Opus conditional approve. Both: D5 is an owner ask (A1); gates, controls and wording fixed; fix-build probes pass (P923 0/16, pump 0/16).
+- 2026-10-20 audit round 2: Codex conditional approve; A1 matrix, executable asserting probe (green on the change, red on arc 2), before-run reds scoped.
+- 2026-10-20 audit round 3: Codex approve; plan committed, awaiting the orchestrator (#925 on dev; A1 for the pin).
