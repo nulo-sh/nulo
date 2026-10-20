@@ -121,10 +121,6 @@ export type DiscoveryResult = {
 	approved: boolean
 }
 
-/** What `discover()` resolves with: the page's answer plus, for an approval, the window the
- *  connection flow now owns, set by the service, never by the page. */
-export type DiscoveryOutcome = DiscoveryResult & { windowId?: number }
-
 /** A discovery for a chain the profile has no network for. Its window only informs: it can be
  *  dismissed, never resolved, so nothing it answers approves a connection. */
 export type NetworkUnavailablePayload = {

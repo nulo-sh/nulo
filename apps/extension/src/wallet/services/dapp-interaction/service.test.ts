@@ -959,7 +959,7 @@ describe("DappInteractionService — the capability window's known contracts", (
 	})
 })
 
-describe("DappInteractionService — an approved connect window is handed to the connection", () => {
+describe("DappInteractionService — a connect window closes with its answer", () => {
 	const METADATA = { name: "dapp.example", url: "https://dapp.example" }
 
 	/** A real WindowManager on a fake browser: `open` starts an interaction and waits for its window. */
@@ -985,19 +985,19 @@ describe("DappInteractionService — an approved connect window is handed to the
 		return { dapp, clock, removes, open, interaction, closeByUser }
 	}
 
-	test("an approved discovery resolves with the handle's window id, never the page's values, and the window stays open", async () => {
+	test("an approved discovery settles with the approval alone, never the page's values, and closes its window", async () => {
 		const h = handOverHarness()
 		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
 		await h.dapp.resolveInteraction(w.id, { approved: true, windowId: 999, extra: "https://evil.example" } as DiscoveryResult)
 
 		expect(w.url).toContain(`#/windows/discover?requestId=${w.id}`)
-		await expect(w.pending).resolves.toEqual({ approved: true, windowId: w.windowId })
-		expect(w.windowId).not.toBe(999)
-		// Nothing watches the window now: its later close and the old timeout settle nothing.
+		await expect(w.pending).resolves.toEqual({ approved: true })
+		expect(h.removes).toHaveBeenCalledWith(w.windowId)
+		// The page's own close lands after the answer: it takes nothing back.
 		h.closeByUser(w.windowId)
 		h.clock.advance(10 * 60 * 1000)
-		expect(h.removes).not.toHaveBeenCalled()
+		await expect(w.pending).resolves.toEqual({ approved: true })
 	})
 
 	test("a discovery answer other than approved: true is a denial and closes the window", async () => {

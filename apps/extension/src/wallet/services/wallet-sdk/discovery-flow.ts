@@ -16,7 +16,6 @@ import { describeExternalId, DISCOVERY_STALE_MS, type DiscoveryQueue, isDiscover
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import { deferred } from "@nulo/wallet-core/utils"
 import { admitAsync, type VerifyAdmissionGate, type WindowReservation } from "./verify-admission"
-import type { BridgeHold, ConnectBridge } from "./connect-bridge"
 import { approveOrRollbackDiscoverySession, rollBackDiscoverySession } from "./discovery-approval"
 import { isSecureDappOrigin } from "./dapp-origin"
 import type { PendingVerificationEntry } from "./pending-verification"
@@ -57,7 +56,6 @@ export type DiscoveryDeps = {
 	resetRun: ResetRunGate
 	admission: VerifyAdmissionGate
 	dedupeWaiters: Map<string, number>
-	bridge: ConnectBridge
 	switchEpoch: ProfileSwitchEpoch
 	logger: ILogger
 }
@@ -365,7 +363,7 @@ function checkDiscoveryPopupCaps(discovery: PendingDiscovery, deps: DiscoveryDep
 /** New dApp → show discovery popup (Allow/Deny), then persist + approve. The
  *  dedupe registration, the durable writes and the `finally` release are one
  *  unit: no await separates registering the popup promise from creating it.
- *  Closing the connect window before the approval lands cancels the Allow. */
+ *  An Allow closes the connect window, so what follows it answers only the app. */
 async function runDiscoveryPopup(
 	discovery: PendingDiscovery,
 	chainId: string,
@@ -380,8 +378,6 @@ async function runDiscoveryPopup(
 	// discoveries can await it.
 	const { promise: popupPromise, resolve: resolvePopup } = deferred()
 	pendingDiscoveryPromises.set(dedupeKey, { kind: "connect", profileId, settled: popupPromise })
-	let hold: BridgeHold | undefined
-	let approved = false
 
 	try {
 		const result = await deps.dappInteractionService.discover(params, discovery.requestId)
@@ -390,9 +386,6 @@ async function runDiscoveryPopup(
 			logger.log("wallet-sdk", LogLevel.Info, `Discovery denied: request ${describeExternalId(discovery.requestId)}`)
 			return
 		}
-		if (result.windowId !== undefined) hold = deps.bridge.hold(discovery.requestId, discovery.tabId, result.windowId)
-		const held = hold
-		const windowOpen = () => held === undefined || deps.bridge.isOpen(held)
 
 		// The user may have taken longer than the dApp's 60s window to
 		// click Allow. Reject BEFORE the durable DappSession write so we never
@@ -404,15 +397,8 @@ async function runDiscoveryPopup(
 		// that is still queued for its slot.
 		const admitted = await admitVerifyWindow(discovery, deps)
 		if (rejectIfNotAdmitted(discovery, deps, admitted)) return
-		if (!windowOpen()) {
-			admitted.releaseIfUnstarted()
-			rejectThrottled(discovery, deps, "its connect window closed while waiting for a verify-window slot")
-			return
-		}
-		approved = await persistAndApprove(discovery, chainId, params, profileId, admitted, windowOpen, deps)
+		await persistAndApprove(discovery, chainId, params, profileId, admitted, deps)
 	} finally {
-		if (hold && approved) deps.bridge.arm(hold)
-		else if (hold) deps.bridge.end(hold)
 		resolvePopup()
 		pendingDiscoveryPromises.delete(dedupeKey)
 	}
@@ -483,17 +469,16 @@ async function dropStaleSession(session: DappSession, entryEpoch: number, deps: 
 	}
 }
 
-/** Write the approved session and approve the discovery. `true` hands the window reservation to
- *  the session; every other exit releases it. */
+/** Write the approved session and approve the discovery. The window reservation is owned by the
+ *  session only once the approval lands; every other exit gives it back. */
 async function persistAndApprove(
 	discovery: PendingDiscovery,
 	chainId: string,
 	params: DiscoveryParams,
 	profileId: string,
 	reservation: WindowReservation,
-	windowOpen: () => boolean,
 	deps: DiscoveryDeps,
-): Promise<boolean> {
+): Promise<void> {
 	const { handler, dappSessionService, logger } = deps
 	const deleteSession = (id: string) => dappSessionService.deleteDappSession(id)
 	let approved = false
@@ -503,7 +488,7 @@ async function persistAndApprove(
 		// Read before the profile check, which must stay the last await ahead of the write.
 		if (!(await deps.networkService.servesLiveChain(profileId, Number(chainId)))) {
 			rejectThrottled(discovery, deps, "its chain lost its network while the connect window was open")
-			return false
+			return
 		}
 		// The Allow was given under `profileId`. A switch during the admission wait is refused here,
 		// before any write; one landing between this read and `addDappSession`'s fence capture is
@@ -511,9 +496,9 @@ async function persistAndApprove(
 		const active = await deps.profileService.getActiveProfile()
 		if (active?.id !== profileId) {
 			rejectThrottled(discovery, deps, "profile changed while waiting for a verify-window slot")
-			return false
+			return
 		}
-		if (rejectIfExpired(discovery, deps)) return false
+		if (rejectIfExpired(discovery, deps)) return
 
 		// User approved — create a DappSession with empty accounts.
 		// Accounts will be shared later via the getAccounts authorization
@@ -545,7 +530,7 @@ async function persistAndApprove(
 			discovery,
 			sessionId: newSession.id,
 			approverProfileId: newSession.profileId,
-			attemptOpen: () => !reservation.abandoned && windowOpen(),
+			attemptOpen: () => !reservation.abandoned,
 			rowAwaited: () => (deps.dedupeWaiters.get(dedupeKeyOf(discovery.origin, chainId)) ?? 0) > 0,
 			approveDiscovery: (id) => handler.approveDiscovery(id),
 			rejectDiscovery: (id) => handler.rejectDiscovery(id),
@@ -560,7 +545,6 @@ async function persistAndApprove(
 				`Discovery approved: request ${describeExternalId(discovery.requestId)} chain=${chainId}`,
 			)
 		}
-		return approved
 	} finally {
 		if (!approved) reservation.releaseIfUnstarted()
 	}

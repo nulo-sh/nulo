@@ -33,7 +33,6 @@ const isLoading = ref(false)
 // so no one approves a session whose hostname, logo and name they have not seen. Deny needs only the
 // request id: an early reject is harmless.
 const isReady = ref(false)
-const isApproved = ref(false)
 
 const interactionService = new DappInteractionServiceClient()
 
@@ -55,7 +54,7 @@ const {
 const chainName = computed(() =>
 	payload.value ? resolveDappChain(payload.value.params.chainId, appStore.networks, appStore.network?.chainId).name : "this network",
 )
-const actionLabel = computed(() => (isApproved.value ? `Connecting on ${chainName.value}` : `wants to connect on ${chainName.value}`))
+const actionLabel = computed(() => `wants to connect on ${chainName.value}`)
 
 // init/reject/services are referenced lazily (thunks): they are declared below
 // and only invoked by start()/dispose()/the guard at runtime.
@@ -64,7 +63,6 @@ const {
 	dispose: disposeWindow,
 	closeWindow,
 	endAndClose,
-	completeInteraction,
 	onActiveProfileChanged,
 	stripStatus,
 	processingError,
@@ -107,10 +105,7 @@ const approve = async () => {
 	try {
 		isLoading.value = true
 		await interactionService.resolveInteraction(requestId.value, { approved: true })
-		isApproved.value = true
-		// After an Allow the worker owns this window, by the id the service's handle holds, and closes
-		// it; the page stays loading until then.
-		completeInteraction()
+		closeWindow(true)
 	} catch (error) {
 		isLoading.value = false
 		if (error instanceof JobCancelledError) {

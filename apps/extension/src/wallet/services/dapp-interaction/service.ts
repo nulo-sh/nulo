@@ -57,7 +57,6 @@ import {
 	type DiscoveryPayload,
 	type DiscoveryParams,
 	type DiscoveryResult,
-	type DiscoveryOutcome,
 	type InteractionPayload,
 	type NetworkUnavailableParams,
 	type NetworkUnavailablePayload,
@@ -298,14 +297,10 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		this.windowManager.settle(interactionRequest.handleId, result)
 	}
 
-	/** An approved connect window stays open until the connection flow closes it, and its id comes
-	 *  from the handle, never the page. Any other answer is a denial and closes the window. */
+	/** Either answer closes the connect window, and only `approved` crosses from the page. */
 	private settleDiscovery(handleId: string, result: unknown): void {
-		if ((result as Partial<DiscoveryResult> | null | undefined)?.approved === true) {
-			this.windowManager.handOver(handleId, (windowId): DiscoveryOutcome => ({ approved: true, windowId }))
-			return
-		}
-		this.windowManager.settle<DiscoveryOutcome>(handleId, { approved: false })
+		const approved = (result as Partial<DiscoveryResult> | null | undefined)?.approved === true
+		this.windowManager.settle<DiscoveryResult>(handleId, { approved })
 	}
 
 	/** Keeps the first refusal an estimate or preview of a still-pending request met. */
@@ -577,9 +572,9 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		return (await this.interaction("capabilities", payload, cancellationToken)) as CapabilityResult
 	}
 
-	public async discover(params: DiscoveryParams, cancellationToken?: string): Promise<DiscoveryOutcome> {
+	public async discover(params: DiscoveryParams, cancellationToken?: string): Promise<DiscoveryResult> {
 		const payload: DiscoveryPayload = { params }
-		return (await this.interaction("discover", payload, cancellationToken)) as DiscoveryOutcome
+		return (await this.interaction("discover", payload, cancellationToken)) as DiscoveryResult
 	}
 
 	/** Show the notice for a discovery whose chain the profile has no network for. Settles, never

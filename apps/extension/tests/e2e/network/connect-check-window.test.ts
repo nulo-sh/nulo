@@ -2,13 +2,14 @@ import { hashToEmoji } from "@aztec-labs/wallet-sdk/crypto"
 import type { ConsoleMessage, Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { BRIDGE_MS } from "@/wallet/services/wallet-sdk/connect-bridge"
 import { BROWSER, prepareKeys } from "../fixtures/browser"
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
 import { switchToLocalNetwork } from "../fixtures/helpers"
-import { openPlayground, selectPgBundle, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { navigateByHash } from "../fixtures/navigation"
+import { openPlayground, PLAYGROUND_TEST_URL, selectPgBundle, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import {
 	approveVerify,
+	openConnectedApp,
 	recordWindowChanges,
 	rejectCapabilities,
 	waitForPopup,
@@ -27,6 +28,7 @@ const MARKS = "e2e:connect-marks"
 const STALL_MARK = "e2e:playground-stalled"
 const STALL_MS = 10_000
 const ANNOUNCE = '[data-testid="verify-announce"][role="status"][aria-live="polite"]'
+const NOT_CONNECTED = '[data-testid="connected-app-not-connected"]'
 const ANNOUNCEMENT =
 	"Connection check. Check that the app shows these same emojis in the same order. If they differ, the connection may not be safe. Choose They don't match."
 
@@ -158,36 +160,11 @@ async function openConnect(ctx: ExtensionContext) {
 	return { control, dapp, page, connectWindow, changes, marks }
 }
 
-/** The connect page after Allow in both themes (`NULO_E2E_SHOT_DIR`), taken before the bridge's
- *  timer closes it; finished animations keep the two shots alike. */
-async function shotConnecting(page: Page): Promise<void> {
-	const dir = process.env.NULO_E2E_SHOT_DIR
-	if (!dir) return
-	await page.waitForFunction(
-		(sel: string) => document.querySelector(sel)?.textContent?.trim().startsWith("Connecting on") ?? false,
-		{ timeout: 1_000, polling: 20 },
-		ACTION,
-	)
-	const theme = await page.evaluate(() => document.documentElement.getAttribute("theme"))
-	await page.screenshot({ path: `${dir}/connect-connecting.png` })
-	await page.evaluate((was: string | null) => {
-		document.documentElement.setAttribute("theme", was === "dark" ? "light" : "dark")
-		// The extension's CSP refuses an injected stylesheet, so the theme's transitions are run to
-		// their end instead; a looping animation has no end and is left as it is.
-		for (const animation of document.getAnimations()) {
-			try {
-				animation.finish()
-			} catch {}
-		}
-	}, theme)
-	await page.screenshot({ path: `${dir}/connect-connecting-${theme === "dark" ? "light" : "dark"}.png` })
-}
-
 const popupsOpen = (control: Page) =>
 	control.evaluate(async () => (await chrome.windows.getAll({ windowTypes: ["popup"] })).filter((w) => w.type === "popup").length)
 
 test.skipIf(!aztecConfig)(
-	"a dApp that connects at once: Allow closes the connect window once the check opens in its own, focused, answering no key until a press",
+	"a dApp that connects at once: Allow closes the connect window, and the check opens in its own, focused, answering no key until a press",
 	{ timeout: 180_000 },
 	async ({ localNetworkExtension: ctx }) => {
 		const { dapp, page, connectWindow, changes, marks } = await openConnect(ctx)
@@ -276,33 +253,51 @@ test.skipIf(!aztecConfig)(
 		const lines = (await marks()).filter((m) => m.mark.startsWith("line:")).map((m) => m.mark.slice(5))
 		const times = timeline(await marks(), await changes(), connectWindow, focus.window, shown)
 		console.log(`[connect-check-window] ${BROWSER} at once: ${JSON.stringify({ ...times, lines })}`)
-		// Window events order the check's creation before the connect window's removal; they cannot
-		// prove no frame painted between.
 		expect(times.checkCreated).not.toBeNull()
 		expect(times.connectRemoved).not.toBeNull()
-		expect(times.checkCreated as number).toBeLessThanOrEqual(times.connectRemoved as number)
-		expect(times.checkCreated as number).toBeLessThan(BRIDGE_MS / 3)
 		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
 	},
 )
 
 test.skipIf(!aztecConfig)(
-	"a dApp that starts its check late: the connect window closes after Allow, and the check opens later in its own",
+	"a dApp that starts its check late: Allow closes the connect window, Settings lists the app as not connected until its check opens in its own",
 	{ timeout: 150_000 },
 	// A wallet of its own: the other test's remembered connection would make this one a reconnection.
 	async ({ registeredExtensionPerTest: ctx }) => {
 		const { control, dapp, page, connectWindow, changes, marks } = await openConnect(ctx)
+		const host = new URL(PLAYGROUND_TEST_URL).host
+		const row = `[data-testid="connected-app-row"][data-app-host="${host}"]`
 
-		const checkP = waitForPopup(ctx, "verify", { timeout: 60_000 })
+		let checkOpened = false
+		const checkP = waitForPopup(ctx, "verify", { timeout: 60_000 }).then((check) => {
+			checkOpened = true
+			return check
+		})
 		await stallPage(dapp, STALL_MS)
 		await clickByTestId(page, "discover-allow-btn")
-		await shotConnecting(page)
 		await waitForPopupClosed(page, 10_000)
 
 		// Before the late check, a gap with no wallet window open.
 		expect((await changes()).filter((c) => c.change === "created").map((c) => c.id)).toEqual([connectWindow])
 		expect(await popupsOpen(control)).toBe(0)
+
+		const readFrom = Date.now()
+		await control.bringToFront()
+		await navigateByHash(control, "#/popup/settings/connected-apps", 15_000)
+		await control.waitForSelector(`${row} ${NOT_CONNECTED}`, { visible: true, timeout: 5_000 })
+		expect(await control.$eval(`${row} ${NOT_CONNECTED}`, (el) => el.textContent?.trim())).toBe("Allowed. Not connected yet.")
+		await shotSend(control, "connect-not-connected-row", "connected-app-row")
+		await openConnectedApp(control, host, NOT_CONNECTED)
+		expect(await control.$eval(NOT_CONNECTED, (el) => el.textContent?.replace(/\s+/g, " ").trim())).toBe(
+			"You allowed this app, but it has not finished connecting. Nothing is shared with it. Its next connection starts with the emoji check.",
+		)
+		await shotSend(control, "connect-not-connected-app", "connected-app-not-connected")
+		const settingsMs = Date.now() - readFrom
+		// Establishment writes the hash before it opens the check, so both reads above saw the app
+		// before its connection; this names the run whose stall ended first.
+		expect(checkOpened, `the check opened ${settingsMs} ms into the Settings reads`).toBe(false)
+		await dapp.bringToFront()
 
 		const check = await checkP
 		const shown = await checkShown(check)
@@ -311,15 +306,19 @@ test.skipIf(!aztecConfig)(
 			action: document.querySelector('[data-testid="verify-action"]')?.textContent?.trim() ?? null,
 		}))
 		expect(read.action).toBe("Connection established")
+		await control.waitForFunction(
+			(sel: string) => document.querySelector(sel) === null,
+			{ timeout: 10_000, polling: 100 },
+			NOT_CONNECTED,
+		)
 		await approveVerify(check)
 		await dapp.waitForSelector(CONNECTED, { timeout: 30_000 })
 
 		const lines = (await marks()).filter((m) => m.mark.startsWith("line:")).map((m) => m.mark.slice(5))
-		expect(lines).toEqual(["wants to connect on Local Network", "Connecting on Local Network"])
+		expect(lines).toEqual(["wants to connect on Local Network"])
 		expect((await changes()).filter((c) => c.change === "created").map((c) => c.id)).toEqual([connectWindow, read.window])
-		console.log(
-			`[connect-check-window] ${BROWSER} late: ${JSON.stringify(timeline(await marks(), await changes(), connectWindow, read.window, shown))}`,
-		)
+		const times = timeline(await marks(), await changes(), connectWindow, read.window, shown)
+		console.log(`[connect-check-window] ${BROWSER} late: ${JSON.stringify({ ...times, settingsMs })}`)
 		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
 	},

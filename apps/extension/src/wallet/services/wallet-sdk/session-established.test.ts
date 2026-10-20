@@ -526,9 +526,15 @@ describe("handleSessionEstablished — a new connection's failed check", () => {
 })
 
 describe("handleSessionEstablished — the check on every connection", () => {
-	/** A remembered row, with or without a stored `trustedVerification: true`. */
-	const remembered = (trustedVerification: boolean) => ({
-		tryGetDappSessionByOriginAndChain: vi.fn().mockResolvedValue({ id: "dapp-1", profileId: "prof-A", trustedVerification }),
+	/** A remembered row an earlier connection reached, or one none did (no `verificationHash`), with
+	 *  or without a stored `trustedVerification: true`. */
+	const remembered = (trustedVerification: boolean, reached = true) => ({
+		tryGetDappSessionByOriginAndChain: vi.fn().mockResolvedValue({
+			id: "dapp-1",
+			profileId: "prof-A",
+			trustedVerification,
+			...(reached ? { verificationHash: "a".repeat(64) } : {}),
+		}),
 		setVerificationHash: vi.fn().mockResolvedValue(undefined),
 	})
 
@@ -536,6 +542,7 @@ describe("handleSessionEstablished — the check on every connection", () => {
 		["a new connection", () => makeDeps({ pendingVerification: new Map([["sess-1", marker()]]) }), "false"],
 		["a reconnect", () => makeDeps({ dappSessionService: remembered(false) }), "true"],
 		["a reconnect whose row stores trustedVerification: true", () => makeDeps({ dappSessionService: remembered(true) }), "true"],
+		["a reconnect to a row no connection reached", () => makeDeps({ dappSessionService: remembered(false, false) }), "false"],
 	])("%s shows the check", async (_, made, isReconnect) => {
 		const { deps, create, terminate } = made()
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(true)

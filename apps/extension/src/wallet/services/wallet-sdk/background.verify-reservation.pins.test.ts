@@ -91,13 +91,14 @@ const logger = {
 	},
 } as never
 
-/** Boots the handler; the connect popup answers when the test resolves it, with `windowId` if given. */
-function boot(windowId?: number) {
+/** Boots the handler; the connect popup answers when the test resolves it. Any window the worker
+ *  removes is recorded among the effects. */
+function boot() {
 	const popup = deferred<void>()
 	const { services, rows } = fakeSdkServices({
 		popup: async () => {
 			await popup.promise
-			return { approved: true, ...(windowId === undefined ? {} : { windowId }) }
+			return { approved: true }
 		},
 		served: () => {
 			at("servesChain")
@@ -140,8 +141,8 @@ function boot(windowId?: number) {
 }
 
 /** A fresh handshake plus a duplicate parked on its popup, then the Allow. */
-async function freshWithDuplicate(windowId?: number) {
-	const env = boot(windowId)
+async function freshWithDuplicate() {
+	const env = boot()
 	env.discover("fresh")
 	await flush()
 	env.discover("dup")
@@ -184,13 +185,13 @@ describe("the fresh connection's own admission (runDiscoveryPopup)", () => {
 	test.each([
 		["rejected", "verify-window queue full"],
 		["expired", "expired while queued"],
-	] as const)("%s: refused and logged, the connect window closed, the duplicate released, nothing written", async (outcome, why) => {
+	] as const)("%s: refused and logged, the duplicate released, nothing written, no window touched", async (outcome, why) => {
 		outcomes = [outcome]
-		const { rows } = await freshWithDuplicate(5)
+		const { rows } = await freshWithDuplicate()
 		expect(admitAsync).toHaveBeenCalledTimes(1)
 		expect(admitAsync.mock.calls[0][1]).toEqual(request("fresh"))
 		expect(logs.filter((l) => l.startsWith("2:"))).toEqual([`2:Discovery rejected (${why}): request ${describeExternalId("fresh")}`])
-		expect(effects).toEqual(["reject:fresh@1", "log:2@1", "closeWindow:5@1", "duplicate:lookup@2", "reject:dup@3", "log:1@3"])
+		expect(effects).toEqual(["reject:fresh@1", "log:2@1", "duplicate:lookup@2", "reject:dup@3", "log:1@3"])
 		expect(rows.size).toBe(0)
 	})
 

@@ -45,7 +45,10 @@ function parsedField(value: unknown): bigint | undefined {
  *  without the full SDK handler. */
 export interface SessionEstablishedDeps {
 	dappSessionService: {
-		tryGetDappSessionByOriginAndChain(origin: string, chainId: string): Promise<{ id: string; profileId: string } | undefined>
+		tryGetDappSessionByOriginAndChain(
+			origin: string,
+			chainId: string,
+		): Promise<{ id: string; profileId: string; verificationHash?: string } | undefined>
 		setVerificationHash(sessionId: string, verificationHash: string): Promise<unknown>
 	}
 	/** Ends this very session object; a same-id successor is never ended. */
@@ -150,6 +153,9 @@ export async function handleSessionEstablished(
 			)
 			return false
 		}
+		// A row no key exchange has reached was allowed but never connected: its check reads as a
+		// first connection's. Read before the write below gives it a hash.
+		const firstCheck = isNewConnection || dappSession.verificationHash === undefined
 		// Persist for the settings/reconnect view (informational). The verify window
 		// does NOT rely on this — it gets the per-session snapshot via its URL.
 		await deps.dappSessionService.setVerificationHash(dappSession.id, session.verificationHash)
@@ -180,7 +186,7 @@ export async function handleSessionEstablished(
 		// A window without a reserved slot would be one the origin's budget never counted:
 		// admission at discovery is the only place the cap is enforced, so fail closed.
 		if (!reservation) throw new Error("verify window has no reserved slot")
-		const url = verifyWindowUrl(dappSession.id, session.verificationHash, !isNewConnection)
+		const url = verifyWindowUrl(dappSession.id, session.verificationHash, !firstCheck)
 		await openVerifyWindow(url, session.sessionId, reservation, deps)
 		established = true
 		return true

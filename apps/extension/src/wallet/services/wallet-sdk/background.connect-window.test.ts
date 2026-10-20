@@ -1,8 +1,8 @@
 /**
- * The connect window through the SDK handler's callbacks: an Allow hands its window to a bridge,
- * which closes it once the emoji check opens in a window of its own, or when no check follows. Tab
- * lifecycle runs for real over a `chrome.tabs` stub that captures its listeners. The handler keeps
- * one `ActiveSession` object per live session id, as upstream does: a re-key replaces it.
+ * A connection through the SDK handler's callbacks, from the Allow, which closes its connect window
+ * (the interaction service's part, not modelled here), to the emoji check, which opens in a window of
+ * its own. Tab lifecycle runs for real over a `chrome.tabs` stub that captures its listeners. The
+ * handler keeps one `ActiveSession` object per live session id, as upstream does: a re-key replaces it.
  */
 import { createHash } from "node:crypto"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
@@ -88,7 +88,6 @@ import { approveOrRollbackDiscoverySession } from "./discovery-approval"
 import type { PendingVerificationEntry } from "./pending-verification"
 import { chainInfoToChainId } from "./session-established"
 import { RESERVATION_GRACE_MS, VerifyAdmissionGate } from "./verify-admission"
-import { BRIDGE_MS } from "./connect-bridge"
 import { fakeSdkPorts } from "./test-ports"
 import { SESSION_INVALID_ERROR } from "./error-envelope"
 import { MAX_PENDING_PER_SESSION } from "./verification-hold"
@@ -99,6 +98,9 @@ const noopLogger = { log: () => {} } as never
 const tabRemoved: Array<(tabId: number) => void> = []
 const admit = vi.spyOn(VerifyAdmissionGate.prototype, "admit")
 const dispatch = vi.spyOn(WalletSdkDispatcher.prototype, "dispatch")
+
+/** The hash a remembered row kept from the connection that last reached it. */
+const PRIOR_HASH = createHash("sha256").update("an earlier connection").digest("hex")
 
 /** A wire-shaped verification hash, fresh for each key exchange of `requestId`. */
 const keyExchanges = new Map<string, number>()
@@ -212,7 +214,7 @@ function boot(
 	opts: { setCapabilityGrants?: () => Promise<unknown>; setVerificationHash?: () => Promise<unknown>; legal?: () => Promise<void> } = {},
 ) {
 	const windows = fakeWindows()
-	const popups = new Map<string, (answer: { approved: boolean; windowId?: number }) => void>()
+	const popups = new Map<string, (answer: { approved: boolean }) => void>()
 	const asked = new Map<string, unknown>()
 	const journal = fakeJournal()
 	let activeProfile: { id: string } | undefined = { id: "p1" }
@@ -244,11 +246,8 @@ function boot(
 		discovered.set(requestId, { origin: discovery.origin, chainInfo: discovery.chainInfo })
 		captured?.onPendingDiscovery(discovery)
 	}
-	/** The person clicks Allow in `requestId`'s connect window, which the browser knows as `windowId`. */
-	const allow = (requestId: string, windowId: number) => {
-		windows.open.add(windowId)
-		popups.get(requestId)?.({ approved: true, windowId })
-	}
+	/** The person clicks Allow in `requestId`'s connect window. */
+	const allow = (requestId: string) => popups.get(requestId)?.({ approved: true })
 	/** The SDK finished key exchange for `requestId`, under a fresh session object and hash. */
 	const establish = async (requestId: string, over: Record<string, unknown> = {}) => {
 		await captured?.onSessionEstablished(keyExchange(requestId, over))
@@ -365,23 +364,22 @@ describe("the connect window before Allow", () => {
 	})
 })
 
-async function approvedIn(h: ReturnType<typeof boot>, requestId: string, windowId: number, over: Record<string, unknown> = {}) {
+async function approvedIn(h: ReturnType<typeof boot>, requestId: string, over: Record<string, unknown> = {}) {
 	h.discover(requestId, over)
 	await flush()
-	h.allow(requestId, windowId)
+	h.allow(requestId)
 	await flush()
 }
 
-describe("the connect window after Allow", () => {
-	test("an approved connection keeps its connect window, holds an unstarted slot and creates no window", async () => {
+describe("an Allow", () => {
+	test("is approved at once, holding an unstarted slot and creating no window until its key exchange", async () => {
 		const h = boot()
-		await approvedIn(h, "f1", 41)
+		await approvedIn(h, "f1")
 
 		expect(approved()).toEqual(["f1"])
 		expect(gate().reservation("f1")?.status).toBe("unstarted")
 		expect(markers().get("f1")?.tabId).toBe(7)
 		expect(h.windows.created).toEqual([])
-		expect(h.windows.removed).toEqual([])
 	})
 
 	test.each<[string, (h: ReturnType<typeof boot>) => Promise<void>]>([
@@ -409,27 +407,25 @@ describe("the connect window after Allow", () => {
 				h.setProfile({ id: "p2" })
 			},
 		],
-	])("an Allow %s is rejected, its window closed at once and no window opened", async (_name, arrange) => {
+	])("%s is refused to the app, and no window opens", async (_name, arrange) => {
 		const h = boot()
 		await arrange(h)
-		h.allow("f1", 41)
+		h.allow("f1")
 		await flush()
 
 		expect(rejected()).toEqual(["f1"])
 		expect(approved()).toEqual([])
-		expect(h.windows.removed).toEqual([41])
 		// The cutoff refuses before any admission, so no gate may exist yet.
 		expect(admit.mock.calls.length === 0 ? 0 : gate().windowsHeld(ORIGIN)).toBe(0)
 		await h.establish("f1")
 		expect(h.windows.created).toEqual([])
 	})
 
-	test("an approval that does not land closes the window and leaves no marker and no row", async () => {
+	test("whose approval does not land leaves no marker and no row", async () => {
 		const h = boot()
 		approveReturns = false
-		await approvedIn(h, "f1", 41)
+		await approvedIn(h, "f1")
 
-		expect(h.windows.removed).toEqual([41])
 		expect(markers().has("f1")).toBe(false)
 		expect(gate().windowsHeld(ORIGIN)).toBe(0)
 		expect(h.rows.size).toBe(0)
@@ -441,9 +437,9 @@ describe("the connect window after Allow", () => {
 		await flush()
 		h.discover("twin", { tabId: 8 })
 		await flush()
-		// The SDK no longer holds f1's request, while its connect window stays open.
+		// The SDK no longer holds f1's request.
 		droppedTabs.add(7)
-		h.allow("f1", 41)
+		h.allow("f1")
 		await flush()
 
 		expect(approved()).toEqual(["f1", "twin"])
@@ -456,7 +452,7 @@ describe("the connect window after Allow", () => {
 		const h = boot({ setCapabilityGrants: () => grants.promise })
 		h.discover("f1")
 		await flush()
-		h.allow("f1", 41)
+		h.allow("f1")
 		await flush()
 		expect(h.rows.size).toBe(1)
 
@@ -489,44 +485,21 @@ describe("the connect window after Allow", () => {
 
 	test("a grant write that fails deletes the row it followed and refuses the discovery", async () => {
 		const h = boot({ setCapabilityGrants: () => Promise.reject(new Error("write failed")) })
-		await approvedIn(h, "f1", 41)
+		await approvedIn(h, "f1")
 
 		expect(rejected()).toEqual(["f1"])
 		expect(approved()).toEqual([])
 		expect(h.rows.size).toBe(0)
-		expect(h.windows.removed).toEqual([41])
 	})
 
-	test.each([
-		["closed", true],
-		["left open (control)", false],
-	])("a connect window %s while the approval's writes run", async (_name, closed) => {
-		const grants = deferred<undefined>()
-		const h = boot({ setCapabilityGrants: () => grants.promise })
-		await approvedIn(h, "f1", 41)
-		expect(h.rows.size).toBe(1)
-
-		if (closed) h.windows.closeByUser(41)
-		await flush()
-		grants.resolve(undefined)
-		await flush()
-
-		expect(rejected()).toEqual(closed ? ["f1"] : [])
-		expect(approved()).toEqual(closed ? [] : ["f1"])
-		expect(h.rows.size).toBe(closed ? 0 : 1)
-		expect(markers().has("f1")).toBe(!closed)
-		expect(h.windows.removed).toEqual([])
-	})
-
-	test("the dApp's tab closing after the approval closes the window and deletes the marker", async () => {
+	test("whose dApp tab closes after the approval loses its marker and its slot", async () => {
 		const h = boot()
-		await approvedIn(h, "f1", 41)
+		await approvedIn(h, "f1")
 		expect(markers().has("f1")).toBe(true)
 
 		h.closeTab(7)
 		await flush()
 
-		expect(h.windows.removed).toEqual([41])
 		expect(markers().has("f1")).toBe(false)
 		expect(gate().windowsHeld(ORIGIN)).toBe(0)
 	})
@@ -538,13 +511,13 @@ describe("an Allow while the origin's two verification slots are held", () => {
 		h.discover("f1", chain(1))
 		h.discover("f2", { ...chain(2), tabId: 8 })
 		await flush()
-		h.allow("f1", 41)
-		h.allow("f2", 42)
+		h.allow("f1")
+		h.allow("f2")
 		await flush()
 		expect(approved()).toEqual(["f1", "f2"])
 		h.discover("f3", { ...chain(3), tabId: 9, ...third })
 		await flush()
-		h.allow("f3", 43)
+		h.allow("f3")
 		await flush()
 		return h
 	}
@@ -555,7 +528,7 @@ describe("an Allow while the origin's two verification slots are held", () => {
 		await flush()
 	}
 
-	test("keeps its window open while queued, and is approved when a slot frees", async () => {
+	test("waits with no window, and is approved when a slot frees", async () => {
 		const h = await thirdAllowQueued()
 		expect(approved()).toEqual(["f1", "f2"])
 		expect(gate().queued(ORIGIN)).toBe(1)
@@ -564,69 +537,49 @@ describe("an Allow while the origin's two verification slots are held", () => {
 
 		expect(approved()).toEqual(["f1", "f2", "f3"])
 		expect(gate().reservation("f3")?.status).toBe("unstarted")
-		expect(h.windows.open.has(43)).toBe(true)
 	})
 
-	test("is rejected and its window closed when its discovery expires in the queue", async () => {
+	test("is refused to the app when its discovery expires in the queue", async () => {
 		const h = await thirdAllowQueued()
 		await vi.advanceTimersByTimeAsync(DISCOVERY_STALE_MS + 1)
 
 		expect(rejected()).toEqual(["f3"])
 		expect(approved()).toEqual(["f1", "f2"])
-		expect(h.windows.removed).toEqual([41, 42, 43])
-	})
-
-	test("whose window is closed while queued is refused when a slot frees, and writes no row", async () => {
-		const h = await thirdAllowQueued()
-		h.windows.closeByUser(43)
-		await flush()
-		await freeASlot(h)
-
-		expect(rejected()).toEqual(["f3"])
-		expect(approved()).toEqual(["f1", "f2"])
 		expect(h.rows.size).toBe(2)
-		expect(gate().windowsHeld(ORIGIN)).toBe(1)
 	})
 
-	test("whose dApp tab closes while it is queued has its window closed at once", async () => {
+	test("whose dApp tab closes while it is queued leaves no row, no marker and no slot once one frees", async () => {
 		const h = await thirdAllowQueued()
 		h.closeTab(9)
 		await flush()
-		expect(h.windows.removed).toEqual([43])
 
 		await freeASlot(h)
-		expect(rejected()).toEqual(["f3"])
-		expect(approved()).toEqual(["f1", "f2"])
+		expect(h.rows.size).toBe(2)
+		expect(markers().has("f3")).toBe(false)
+		expect(gate().windowsHeld(ORIGIN)).toBe(1)
 	})
 })
 
 describe("an approved connection whose key exchange does not follow at once", () => {
-	test("loses its connect window BRIDGE_MS after the approval, keeps its slot until the reservation expires, and opens no window when it establishes late", async () => {
+	test("keeps its slot until the reservation expires, and opens no window when it establishes after", async () => {
 		const h = boot()
-		await approvedIn(h, "f1", 41)
+		await approvedIn(h, "f1")
 
-		await vi.advanceTimersByTimeAsync(BRIDGE_MS - 1)
-		expect(h.windows.removed).toEqual([])
-		await vi.advanceTimersByTimeAsync(1)
-		expect(h.windows.removed).toEqual([41])
+		await vi.advanceTimersByTimeAsync(DISCOVERY_STALE_MS)
 		expect(gate().windowsHeld(ORIGIN)).toBe(1)
 		expect(markers().get("f1")?.cancelled).toBeUndefined()
-
-		await vi.advanceTimersByTimeAsync(DISCOVERY_STALE_MS + RESERVATION_GRACE_MS)
+		await vi.advanceTimersByTimeAsync(RESERVATION_GRACE_MS + 1)
 		expect(markers().get("f1")?.cancelled).toBe(true)
 		expect(gate().windowsHeld(ORIGIN)).toBe(0)
 
 		await h.establish("f1")
 		expect(terminated()).toEqual(["f1"])
 		expect(h.windows.created).toEqual([])
-		expect(h.windows.removed).toEqual([41])
 	})
 
 	test("a page that lists wallets again after an Allow it never used is answered at once from the saved row", async () => {
 		const h = boot()
-		await approvedIn(h, "f1", 41)
-		await vi.advanceTimersByTimeAsync(BRIDGE_MS)
-		expect(h.windows.removed).toEqual([41])
+		await approvedIn(h, "f1")
 
 		h.discover("again")
 		await flush()
@@ -634,22 +587,22 @@ describe("an approved connection whose key exchange does not follow at once", ()
 		expect(gate().windowsHeld(ORIGIN)).toBe(2)
 	})
 
-	test("an exchange after BRIDGE_MS but within the Allow's validity opens the check in its own window", async () => {
+	test("an exchange seconds later, within the Allow's validity, opens the check in its own window", async () => {
 		const h = boot()
-		await approvedIn(h, "f1", 41)
-		await vi.advanceTimersByTimeAsync(BRIDGE_MS)
+		await approvedIn(h, "f1")
+		await vi.advanceTimersByTimeAsync(10_000)
 
 		await h.establish("f1")
 		await flush()
 
-		expect(h.windows.events).toEqual(["remove:41", "create:100"])
+		expect(h.windows.events).toEqual(["create:100"])
 		expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("f1")}&isReconnect=false`)
 		expect(terminated()).toEqual([])
 	})
 
-	test("an attempt whose slot expired never establishes, while a reconnect beside it shows its own check", async () => {
+	test("an attempt whose slot expired never establishes, while a discovery the row answers shows its own check, as a first one", async () => {
 		const h = boot()
-		await approvedIn(h, "f1", 41)
+		await approvedIn(h, "f1")
 		await vi.advanceTimersByTimeAsync(DISCOVERY_STALE_MS + RESERVATION_GRACE_MS + 1)
 		expect(markers().get("f1")?.cancelled).toBe(true)
 
@@ -657,7 +610,7 @@ describe("an approved connection whose key exchange does not follow at once", ()
 		await flush()
 		await h.establish("r2")
 		expect(h.windows.created).toHaveLength(1)
-		expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("r2")}&isReconnect=true`)
+		expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("r2")}&isReconnect=false`)
 
 		await h.establish("f1")
 		await h.establish("f1")
@@ -672,7 +625,7 @@ describe("a deleted row while an approved handshake is not stamped yet", () => {
 		["the approving profile's row ends it and tombstones its marker", "p1", ["f1"]],
 	])("%s", async (_name, profileId, ended) => {
 		const h = boot()
-		await approvedIn(h, "f1", 41)
+		await approvedIn(h, "f1")
 		// Key exchange is done, so the SDK lists the session; establishment has not stamped it.
 		keyExchange("f1")
 
@@ -684,41 +637,28 @@ describe("a deleted row while an approved handshake is not stamped yet", () => {
 })
 
 describe("establishment opens the check in a window of its own", () => {
-	test("the check window is created before the connect window closes", async () => {
+	test("an exchange at once opens the check as a first connection, and its marker is spent", async () => {
 		const h = boot()
-		await approvedIn(h, "f1", 41)
+		await approvedIn(h, "f1")
 		await h.establish("f1")
 		await flush()
 
-		expect(h.windows.events).toEqual(["create:100", "remove:41"])
+		expect(h.windows.events).toEqual(["create:100"])
 		expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("f1")}&isReconnect=false`)
 		expect(terminated()).toEqual([])
 		expect(markers().has("f1")).toBe(false)
 	})
 
-	test("an exchange just before BRIDGE_MS keeps the connect window while the check window is slow to come", async () => {
-		const h = boot()
-		await approvedIn(h, "f1", 41)
-		await vi.advanceTimersByTimeAsync(BRIDGE_MS - 1)
-		const creation = deferred<void>()
-		h.windows.holdNextCreation(creation.promise)
-		const establishing = h.establish("f1")
-		await vi.advanceTimersByTimeAsync(BRIDGE_MS * 4)
-		expect(h.windows.removed).toEqual([])
-
-		creation.resolve()
-		await establishing
-		await flush()
-		expect(h.windows.events).toEqual(["create:100", "remove:41"])
-		expect(terminated()).toEqual([])
-	})
-
-	test("a remembered app's reconnection creates its check window and closes none (control)", async () => {
+	test.each([
+		["a row an earlier connection reached reads as a reconnection", PRIOR_HASH, true],
+		["a row allowed but never connected reads as a first connection", undefined, false],
+	])("the check answered from a saved row: %s", async (_name, verificationHash, isReconnect) => {
 		const h = boot()
 		h.rows.set(`${ORIGIN}|${chainInfoToChainId(chain(1))}`, {
 			id: "row-1",
 			profileId: "p1",
 			chainId: String(chainInfoToChainId(chain(1))),
+			verificationHash,
 		})
 		h.discover("r1")
 		await flush()
@@ -726,33 +666,19 @@ describe("establishment opens the check in a window of its own", () => {
 		await flush()
 
 		expect(h.windows.events).toEqual(["create:100"])
-		expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("r1")}&isReconnect=true`)
-	})
-
-	test("a connect window closed after the approval leaves the attempt alive: its exchange opens one check window", async () => {
-		const h = boot()
-		await approvedIn(h, "f1", 41)
-		h.windows.closeByUser(41)
-		await flush()
-		await h.establish("f1")
-		await flush()
-
-		expect(terminated()).toEqual([])
-		expect(sessions.has("f1")).toBe(true)
-		expect(h.windows.events).toEqual(["create:100"])
-		expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("f1")}&isReconnect=false`)
-		expect(h.rows.size).toBe(1)
+		expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("r1")}&isReconnect=${isReconnect}`)
+		expect(h.rows.get(`${ORIGIN}|${chainInfoToChainId(chain(1))}`)?.verificationHash).toBe(hashOf("r1"))
 	})
 
 	test("two origins connecting at once, established in reverse order, each get their own grid in their own window", async () => {
 		const h = boot()
-		await approvedIn(h, "a1", 41)
-		await approvedIn(h, "b1", 42, { origin: OTHER_ORIGIN, tabId: 8 })
+		await approvedIn(h, "a1")
+		await approvedIn(h, "b1", { origin: OTHER_ORIGIN, tabId: 8 })
 		await h.establish("b1", { origin: OTHER_ORIGIN })
 		await h.establish("a1")
 		await flush()
 
-		expect(h.windows.events).toEqual(["create:100", "remove:42", "create:101", "remove:41"])
+		expect(h.windows.events).toEqual(["create:100", "create:101"])
 		expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("b1")}`)
 		expect(h.windows.created[1].url).toContain(`verificationHash=${hashOf("a1")}`)
 		expect(terminated()).toEqual([])
@@ -764,21 +690,21 @@ describe("establishment opens the check in a window of its own", () => {
 		await flush()
 		h.discover("twin")
 		await flush()
-		h.allow("f1", 41)
+		h.allow("f1")
 		await flush()
 		expect(approved()).toEqual(["f1", "twin"])
 
 		await h.establish("f1")
 		await h.establish("twin")
 		await flush()
-		expect(h.windows.events).toEqual(["create:100", "remove:41", "create:101"])
+		expect(h.windows.events).toEqual(["create:100", "create:101"])
 		expect(h.windows.created[1].url).toContain(`verificationHash=${hashOf("twin")}&isReconnect=true`)
 		expect(terminated()).toEqual([])
 	})
 
-	test("an establishment that ended while it read the anchor never closes the window of an Allow that reused its id", async () => {
+	test("an establishment that ended while it read the anchor opens no window, and the Allow that reused its id still connects", async () => {
 		const h = boot()
-		await approvedIn(h, "f1", 41)
+		await approvedIn(h, "f1")
 		const anchor = deferred<undefined>()
 		h.windows.holdNextAnchor(anchor.promise)
 		const establishing = h.establish("f1")
@@ -786,33 +712,33 @@ describe("establishment opens the check in a window of its own", () => {
 		h.handler.terminateSession("f1")
 		await flush()
 		// Another chain forces a fresh Allow despite the saved row; the page reuses the id.
-		await approvedIn(h, "f1", 42, chain(2))
+		await approvedIn(h, "f1", chain(2))
 		expect(approved()).toEqual(["f1", "f1"])
-		expect(h.windows.removed).toEqual([41])
 
 		anchor.resolve(undefined)
 		await establishing
 		await flush()
-		expect(h.windows.removed).toEqual([41])
 		expect(h.windows.created).toEqual([])
-		// Control: the later Allow's bridge closes its own window.
-		await vi.advanceTimersByTimeAsync(BRIDGE_MS)
-		expect(h.windows.removed).toEqual([41, 42])
+		// Control: the later Allow's own exchange opens its check.
+		await h.establish("f1", chain(2))
+		await flush()
+		expect(h.windows.created).toHaveLength(1)
+		expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("f1")}&isReconnect=false`)
 	})
 
-	test("two exchanges on one id that overlap open no window: the session ends and the connect window closes", async () => {
+	test("two exchanges on one id that overlap open no window: the session ends", async () => {
 		const h = boot()
-		await approvedIn(h, "f1", 41)
+		await approvedIn(h, "f1")
 		await Promise.allSettled([h.establish("f1"), h.establish("f1")])
 		await flush()
 
-		expect(h.windows.events).toEqual(["remove:41"])
+		expect(h.windows.events).toEqual([])
 		expect(terminated()).toEqual(["f1"])
 	})
 
 	test("a re-exchange while the check shows opens no second window", async () => {
 		const h = boot()
-		await approvedIn(h, "f1", 41)
+		await approvedIn(h, "f1")
 		await h.establish("f1")
 		await flush()
 		expect(h.windows.created).toHaveLength(1)
@@ -829,7 +755,7 @@ describe("establishment opens the check in a window of its own", () => {
 		const h = boot()
 		h.discover("f1")
 		await flush()
-		if (allowed) h.allow("f1", 41)
+		if (allowed) h.allow("f1")
 		await flush()
 		await h.establish("f1")
 		await flush()
@@ -839,7 +765,7 @@ describe("establishment opens the check in a window of its own", () => {
 	})
 
 	async function sendTxWhileOpening(h: ReturnType<typeof boot>, settle: (creation: ReturnType<typeof deferred<void>>) => void) {
-		await approvedIn(h, "f1", 41)
+		await approvedIn(h, "f1")
 		Object.assign([...h.rows.values()][0], {
 			accounts: [`aztec:1:${FAKE_SENDER}`],
 			capabilityGrants: [{ capability: { type: "transaction", scope: "*" } }],
@@ -893,7 +819,6 @@ describe("establishment opens the check in a window of its own", () => {
 		expect(terminated()).toEqual(["f1"])
 		expect(dispatch).not.toHaveBeenCalled()
 		expect(h.journal.createOperation).not.toHaveBeenCalled()
-		expect(h.windows.removed).toEqual([41])
 	})
 })
 
@@ -907,6 +832,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			chainId: CHAIN,
 			accounts: [`aztec:${CHAIN}:${FAKE_SENDER}`],
 			capabilityGrants: [{ capability: { type: "transaction", scope: "*" } as { type: string } }],
+			verificationHash: PRIOR_HASH,
 		}
 		h.rows.set(`${ORIGIN}|${CHAIN}`, row)
 		return row
@@ -1017,7 +943,7 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		const h = boot()
 		h.discover("f1")
 		await flush()
-		h.allow("f1", 41)
+		h.allow("f1")
 		await flush()
 		const establishing = h.establish("f1")
 		markers().set("f1", { ...markers().get("f1")! })

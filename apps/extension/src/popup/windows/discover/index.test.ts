@@ -28,6 +28,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
+import { deferred } from "@nulo/wallet-core/utils"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { ref } from "vue"
 
@@ -430,13 +431,6 @@ describe("discover popup — the line under the app names the app's network", ()
 		expect(w.get('[data-testid="status-strip"]').attributes("data-network")).toBe("TestNet")
 	})
 
-	test("an accepted Allow reads as connecting on the app's chain", async () => {
-		const w = await ready()
-		await approve(w)
-		await flushPromises()
-		expect(actionLine(w)).toBe("Connecting on Devnet")
-	})
-
 	test("a failed Allow keeps the request line", async () => {
 		resolveInteractionMock.mockRejectedValueOnce(new Error("boom"))
 		const w = await ready()
@@ -466,7 +460,7 @@ describe("discover popup — the revoke line", () => {
 	})
 })
 
-describe("discover popup — after Allow the window waits for the worker to close it", () => {
+describe("discover popup — Allow closes the window once the wallet has the answer", () => {
 	/** Mounted with init complete, so Allow is enabled. */
 	const ready = async () => {
 		const w = factory()
@@ -481,32 +475,21 @@ describe("discover popup — after Allow the window waits for the worker to clos
 	// biome-ignore lint/suspicious/noExplicitAny: chrome runtime stub for tests
 	const windowsRemove = () => (globalThis as any).chrome.windows.remove as ReturnType<typeof vi.fn>
 
-	test("a resolved Allow keeps the window open, Allow spinning and disabled, Deny disabled, the strip loading", async () => {
+	test("an Allow the wallet has not answered keeps the window, Allow spinning and Deny disabled; its answer closes it", async () => {
+		const answer = deferred<undefined>()
+		resolveInteractionMock.mockReturnValueOnce(answer.promise)
 		const w = await ready()
-		await approve(w)
+		const approving = approve(w)
 		await flushPromises()
 		expect(windowsRemove()).not.toHaveBeenCalled()
 		expect(allow(w).attributes("data-loading")).toBe("true")
-		expect(isDisabled(allow(w))).toBe(true)
 		expect(isDisabled(deny(w))).toBe(true)
-		expect(w.find('[data-testid="status-strip"]').attributes("data-status")).toBe("loading")
-	})
 
-	test("an accepted Allow never closes the window itself, however long it waits, nor on unmount", async () => {
-		vi.useFakeTimers()
-		try {
-			const w = await ready()
-			await approve(w)
-			await flushPromises()
-			await vi.advanceTimersByTimeAsync(10 * 60_000)
-			expect(windowsRemove()).not.toHaveBeenCalled()
-			expect(w.get('[data-testid="identity-block"]').attributes("data-action")).toBe("Connecting on Devnet")
-			w.unmount()
-			expect(windowsRemove()).not.toHaveBeenCalled()
-			expect(rejectViaInteractionServiceMock).not.toHaveBeenCalled()
-		} finally {
-			vi.useRealTimers()
-		}
+		answer.resolve(undefined)
+		await approving
+		await flushPromises()
+		expect(windowsRemove()).toHaveBeenCalledWith(42)
+		expect(rejectViaInteractionServiceMock).not.toHaveBeenCalled()
 	})
 
 	test("Deny before Allow closes the window (control)", async () => {
