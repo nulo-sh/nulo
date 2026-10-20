@@ -10,28 +10,18 @@
  *   identical to the old `array_max(map(+)) + 1` on every legitimate store.
  */
 
-import { EntityStorage } from "@/wallet/storage"
+import type { EntityStorage } from "@/wallet/storage"
+import { entityStorage } from "@/wallet/storage/stores"
 import { type NumericIdBatch, nextNumericId, numericIdBatch } from "@/wallet/services/id-allocators"
 import { purgeMalformedRows } from "@/wallet/services/purge-rows"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
-import { TOKEN_BALANCE_STORAGE_ROOT, TokenBalanceRawSchema, type TokenBalanceRaw } from "./spec"
+import type { TokenBalanceRaw } from "./spec"
 
 export class BalanceRepository {
 	private readonly storage: EntityStorage<TokenBalanceRaw>
 
 	public constructor(browserApi: BrowserApi) {
-		this.storage = new EntityStorage<TokenBalanceRaw>(
-			TOKEN_BALANCE_STORAGE_ROOT,
-			browserApi.storage.local,
-			(raw) => TokenBalanceRawSchema.parse(raw),
-			// Balance ids are minted `max+1` over the key space and every identity
-			// decision downstream trusts the embedded `id`, so a row whose key and
-			// `id` disagree must not be served. `keyIdentityMode` is NOT optional
-			// here: the default "string" mode requires a string id, which would
-			// reject every (numeric) balance row while `getKeys()` still saw their
-			// physical keys — a blank assets view plus unbounded reallocation.
-			{ requireKeyIdentityMatch: true, keyIdentityMode: "numeric" },
-		)
+		this.storage = entityStorage("tokenBalances", browserApi.storage.local)
 	}
 
 	public async get(id: number): Promise<TokenBalanceRaw | undefined> {
