@@ -11,15 +11,11 @@ import { FIXTURE_PREFIX } from "./stored-rows"
 
 export type UpdateBuilds = { tag: string; from: string; to: string }
 
-let checkedCandidate: string | undefined
-
 /**
  * The candidate `build-update-candidate.sh` wrote, which `NULO_E2E_UPDATE_TO` names. Throws when
- * it is missing or was built from another commit than the checkout's. Checked once per run, so a
- * fixture the run itself writes does not refuse it.
+ * it is missing or was built from another commit than the checkout's.
  */
 export function updateCandidate(browser: BrowserKind): string {
-	if (checkedCandidate) return checkedCandidate
 	const to = process.env.NULO_E2E_UPDATE_TO
 	if (!to || !existsSync(path.join(to, "manifest.json"))) {
 		throw new Error(`NULO_E2E_UPDATE_TO must name a ${browser} candidate from scripts/e2e/build-update-candidate.sh`)
@@ -30,7 +26,6 @@ export function updateCandidate(browser: BrowserKind): string {
 	if (commit !== head) {
 		throw new Error(`the candidate at ${to} was built from ${commit ?? "an unknown commit"}, not ${head}: build it again`)
 	}
-	checkedCandidate = to
 	return to
 }
 

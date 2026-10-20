@@ -2,8 +2,8 @@ import type { Pin } from "./baseline"
 
 /**
  * One pin per stamp of `snapshot.json`, added by hand from the line `bun run baseline:storage`
- * prints. Stamp 0 is the baseline 1.0.0 stores; with a pin present the stamps are append-only. A pin
- * is never edited or removed.
+ * prints. Stamp 0 is the baseline 1.0.0 stores; the stamps are append-only, and a pin is never
+ * edited or removed.
  */
 export const PINNED_STAMPS: readonly Pin[] = [
 	{
@@ -13,11 +13,12 @@ export const PINNED_STAMPS: readonly Pin[] = [
 ]
 
 /**
- * The SHA-256 of each full backup in `backups/`, exported by the 1.0.0 candidate after it updated
- * a 0.31.0 install (the update replay, `NULO_E2E_BACKUP_RECORD=1`): a password profile's, opened,
- * and a passkey profile's, with its passkey check. Every later build imports both. Never edited.
+ * The SHA-256 of each file in `backups/`: a full backup's content as a candidate of `dev` wrote it
+ * at the freeze (`wallet-version` 0.31.0-update.1, Aztec 6.0.0-rc.3), recorded by the update replay
+ * (`NULO_E2E_BACKUP_RECORD=1`). `password.txt` is the updated 0.31.0 profile's, encrypted under the
+ * e2e test password; `passkey.json` a fresh passkey profile's, with its passkey check. Never edited.
  */
 export const PINNED_BACKUPS: Readonly<Record<string, string>> = {
-	"password.json": "7281caca631e7d9acccb4ec41af8d1cb6dec0f38e5c2d32d11b208b25cd576d1",
-	"passkey.json": "3bca08b93626bf839974220d1627a1b78f3e4253fcf5f5aa18c1063ccbd4cf7b",
+	"password.txt": "f735236f1517e26ad6d1f698978d8e15ffa14b5b780c8a620e9e4a406a3ee456",
+	"passkey.json": "325307d1c5155721438095a723add78f086a8b588383e1cc9284cd7078a0e2a9",
 }

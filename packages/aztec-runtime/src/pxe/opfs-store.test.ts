@@ -44,8 +44,8 @@ describe("opfs-store upstream pins", () => {
 		// Upstream does not export the constant; the injected-store path must stamp the SAME
 		// schema version the PXE writes with, or a future upstream bump would strand every
 		// store on a stale stamp. A pin mismatch here means upstream moved its store schema: every
-		// store stamped with the old one refuses to open, so a version-only bump that moves it is
-		// held, and only a network reset, which purges the reset chain's store, may carry it.
+		// chain's store stamped with the old one refuses to open, and a reset purges only its own
+		// chain's, so a bump that moves it is held.
 		const source = readFileSync(resolvePackageFile("@aztec-labs/pxe", "dest/storage/metadata.js"), "utf8")
 		const match = source.match(/PXE_DATA_SCHEMA_VERSION\s*=\s*(\d+)/)
 		expect(match).not.toBeNull()

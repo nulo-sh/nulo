@@ -160,7 +160,7 @@ the deliberate alternative — never a casual fix.
 
 ## Branch A — bump-only (no reset, detectors green)
 
-**Hold a bump that moves the PXE store schema.** `packages/aztec-runtime/src/pxe/opfs-store.test.ts` fails when the installed `@aztec-labs/pxe` moves `PXE_DATA_SCHEMA_VERSION`; every PXE store stamped with the old version then refuses to open, so the wallet loses every chain's PXE state with no way back but a reset. Hold the line, or ship the move with a network reset (Branch B), which purges the reset chain's store.
+**Hold a bump that moves the PXE store schema.** `packages/aztec-runtime/src/pxe/opfs-store.test.ts` fails when the installed `@aztec-labs/pxe` moves `PXE_DATA_SCHEMA_VERSION`; every chain's PXE store stamped with the old version then refuses to open, and a network reset (Branch B) purges only the chain it resets, so the Local Network's and every added network's stay stranded. Hold the line: moving the pin needs a plan that treats every chain's store, and the owner's decision.
 
 Normal delivery: `test:all` + `lint` + the builds (`bun run build:chrome`, `bun run build:firefox`, `bun run --cwd apps/playground build`, `bun run --cwd apps/landing build`) + **both prover-ON execution canaries (above)** → PR labeled **`e2e:extension-network` + `e2e:extension-smoke`** (forces both suites — the dep diff warrants it) → all three required checks green → merge. Done.
 

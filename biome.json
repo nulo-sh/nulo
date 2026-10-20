@@ -15,7 +15,8 @@
 			"!**/target",
 			"!**/*.svg",
 			"!**/apps/extension/src/types",
-			"!**/packages/aztec-runtime/src/account/artifacts"
+			"!**/packages/aztec-runtime/src/account/artifacts",
+			"!**/apps/extension/src/wallet/storage/stored-shapes/backups"
 		]
 	},
 	"formatter": {

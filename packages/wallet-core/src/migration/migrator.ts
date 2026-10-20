@@ -63,7 +63,7 @@ export const SCHEMA_ATTEMPTS_KEY = "nulo:schema:attempts"
  *  scratch read-back) must filter it out of user data. */
 export const SCHEMA_RESERVED_PREFIX = "nulo:schema:"
 const RESERVED_PREFIX = SCHEMA_RESERVED_PREFIX
-/** The forked-app's legacy wipe marker, written only by pre-release builds. Its presence without a
+/** The forked app's legacy wipe marker, which no Nulo build writes. Its presence without a
  *  schema version is positive evidence of a non-fresh install the engine cannot place → fail closed. */
 export const LEGACY_VERSION_KEY = "nulo:core:storage-version"
 
@@ -233,7 +233,7 @@ export class Migrator {
 			if (LEGACY_VERSION_KEY in all) {
 				return {
 					kind: "needs-recovery",
-					reason: `legacy "${LEGACY_VERSION_KEY}" present without a schema version: only pre-release builds wrote it`,
+					reason: `legacy "${LEGACY_VERSION_KEY}" present without a schema version: no Nulo build writes it`,
 					retryable: false,
 				}
 			}

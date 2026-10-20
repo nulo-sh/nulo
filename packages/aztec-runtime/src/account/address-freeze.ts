@@ -13,10 +13,8 @@
  *   backup, or exported artifact MAY be redefined in place, in one reviewed commit that updates
  *   this record, its paired test, and this rules text together. The carve-out is a WINDOW, not a
  *   counter: it closes permanently at the major's first shipped build, which is its first
- *   store-published one (V6's closed at 0.31.0). Exercised twice inside the V5 pre-launch window, owner-ratified both
- *   times: the KDF v1→v2 baseline redefinition (`implementations-plan/key-model-v2/`) and the
- *   passkey-branch spec extension + 512-bit reduce (`implementations-plan/key-model-v2-hardening/`
- *   — this also rotated every digest-embedding account-export file; none existed outside e2e).
+ *   store-published one (V6's had closed by 0.30.2, which both stores served). V5 used it twice,
+ *   owner-ratified: the KDF v1→v2 baseline and the passkey-branch spec extension.
  * - Each build binds at compile time to exactly one regime constant (`V6_REGIME` in Nulo V6): the
  *   last entry. Binding an earlier entry is the forbidden act.
  * - Rotation appends an entry, only on the owner's recorded decision, with the artifact re-vendored

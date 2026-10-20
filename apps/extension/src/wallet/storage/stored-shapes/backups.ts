@@ -3,10 +3,10 @@ import { normalizeBackupData } from "@/wallet/services/backup/backup-migration-r
 import { unreadRows } from "./reads"
 
 /**
- * Why `envelope`, a full backup's content as its file holds it (opened, when it was encrypted),
- * would not import into this build as far as the passkey prompt: the validator's refusal, migrated
- * slices that do not restore to storage rows, or a restored row that does not read. Empty when it
- * would.
+ * Why `envelope`, a full backup's content (opened, when it was encrypted), would not validate,
+ * migrate and read in this build: the import's refusal, migrated slices that do not restore to
+ * storage rows, or a restored row its registered read code returns nothing for. Empty when it
+ * would. It stops before each service's `restore()` and its own checks.
  */
 export async function backupProblems(envelope: unknown, now = Date.now()): Promise<string[]> {
 	const validated = await validateAndMigrateBackup(envelope as FullBackupEnvelope)

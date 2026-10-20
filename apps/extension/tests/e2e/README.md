@@ -145,11 +145,12 @@ uncommitted changes a build reads, is refused, so commit before you build it.
   the recorded Testnet rows off the seed, so the reset over release rows runs before that happens.
   The recording's dApp session expires 7 days after it was made, and the replay refuses it from
   then on: record again from a checkout on the release's Aztec line.
-- The replay also exports two full backups from the candidate, the updated password profile's and
-  a fresh passkey profile's, and checks each imports as far as the passkey prompt with every
-  restored row read. `NULO_E2E_BACKUP_RECORD=1` on Chrome writes them to
-  `src/wallet/storage/stored-shapes/backups/` and prints their pins: the stored-shape guard's R5
-  imports those files in every later build, so they are made once, from 1.0.0's candidate.
+- The replay also exports two full backups from the candidate, the updated password profile's
+  (encrypted) and a fresh passkey profile's, and checks each carries every row storage held, then
+  validates, migrates and reads it. `NULO_E2E_BACKUP_RECORD=1` on Chrome writes them under
+  `.e2e-state/pinned-backups/` with their SHA-256. The stored-shape guard's R5 opens the copies in
+  `src/wallet/storage/stored-shapes/backups/`, taken from there once at the freeze and never
+  replaced.
 - The live scenario needs a sandbox on the release's Aztec line, so once `dev` moves off it only
   the replay runs.
 

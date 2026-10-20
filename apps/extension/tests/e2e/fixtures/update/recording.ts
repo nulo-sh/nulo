@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { E2E_STATE_DIR } from "../../lockfile"
 import { FIXTURE_PREFIX } from "./stored-rows"
 
 /**
@@ -32,14 +33,15 @@ export function readRecording(tag: string): Recording | undefined {
 
 export type PinnedBackup = "password" | "passkey"
 
-const BACKUPS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../src/wallet/storage/stored-shapes/backups")
-
-/** Writes `envelope` as the pinned 1.0.0 backup `name` that the stored-shape guard's R5 imports, and
- *  returns the pin to add beside it. Made from Chrome, as a recording is. */
-export function writePinnedBackup(name: PinnedBackup, browser: string, envelope: unknown): string {
+/** Writes `file`, a full backup's content as the candidate wrote it (gunzipped), under the
+ *  checkout's e2e state, and returns its path and SHA-256. Copying it into `stored-shapes/backups/` and pinning it is done by
+ *  hand: a pinned backup is never replaced. Made from Chrome, as a recording is. */
+export function writePinnedBackup(name: PinnedBackup, browser: string, file: string): { path: string; pin: string } {
 	if (browser !== "chrome") throw new Error(`a pinned backup is made from Chrome, not ${browser}`)
-	mkdirSync(BACKUPS_DIR, { recursive: true })
-	const text = `${JSON.stringify(envelope, null, "\t")}\n`
-	writeFileSync(path.join(BACKUPS_DIR, `${name}.json`), text)
-	return createHash("sha256").update(text).digest("hex")
+	const dir = path.join(E2E_STATE_DIR, "pinned-backups")
+	mkdirSync(dir, { recursive: true })
+	// The wallet names an encrypted backup `.txt` and a plain one `.json`.
+	const written = path.join(dir, `${name}.${name === "password" ? "txt" : "json"}`)
+	writeFileSync(written, file)
+	return { path: written, pin: createHash("sha256").update(file).digest("hex") }
 }
