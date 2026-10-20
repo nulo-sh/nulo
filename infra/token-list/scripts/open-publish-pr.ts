@@ -81,7 +81,7 @@ type Pull = {
 
 /**
  * A fork can name its branch like ours, so only this repository's branches count as publish PRs; a
- * merged one was served. Paging newest first can repeat a PR opened mid-listing, never skip one.
+ * merged one was served. New PRs can shift page boundaries and repeat entries.
  */
 export function publishPrs(pulls: readonly Pull[], repo: string): PublishPr[] {
 	return [...new Map(pulls.map((pr) => [pr.number, pr])).values()]

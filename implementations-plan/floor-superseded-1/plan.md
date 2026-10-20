@@ -114,6 +114,7 @@ None. The arc changes CI tooling, a GitHub PR body, a CI step summary line and d
 
 - **Arc 1 review, round 1, Codex (gpt-6.1-sol high, session 01a15ba9, on the arc diff): `approve`.** Three low findings, accepted: (1) `call` treated a 404 as an answer for writes too, so a failed `openPr` returned `undefined`: a 404 now passes for reads only, pinned in T4; (2) T4 did not pin `state=all`: it asserts the query; (3) comments: two that restated their names removed, the floor comment no longer claims every head list is signed, the bound comment cut to one line, three test comments removed or rewritten.
 - **Arc 1 review, Opus (general-purpose, same diff): `conditional approve`.** Accepted: (1) as Codex 2; (2) the re-run row passed whatever the re-run decided: its branch now lacks the floor, so only a raise writes; the unreadable log line asserted; (3) a PR opened mid-listing can repeat across pages: `publishPrs` dedupes by number; (5) the PR body says "The floor rises because:" and labels a closed PR "closed unmerged"; (6) README step 4 names the unreadable case. Rejected: (4) paging `matching-refs`, which documents no page parameters (Codex verified).
+- **Arc 1 review, round 2, Codex resumed: `approve`.** One low finding, accepted: the paging comment overstated the guarantee (a PR opened mid-listing can be missed; publish PRs open only after this run's listing).
 
 ## Delivery
 
