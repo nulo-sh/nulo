@@ -1,7 +1,8 @@
 import { MemoryStorageArea } from "@nulo/wallet-core/storage"
 import { STORED_SHAPES, type StoredShapeName } from "@/wallet/storage/stored-shapes"
 import { readStored } from "@/wallet/storage/stored-shapes/baseline"
-import { entityStorage } from "@/wallet/storage/stores"
+import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
+import { type SealedStoreName, sealedEntityStorage } from "@/wallet/storage/stores"
 
 /** What a launch's fixtures write for an armed build; no shipped code reads them. */
 export const FIXTURE_PREFIX = "nulo:e2e:"
@@ -15,9 +16,21 @@ export function shapeOfKey(key: string): StoredShapeName | undefined {
 
 const idOf = (key: string): string => key.slice(key.indexOf("@") + 1)
 
+function envelopeOf(raw: unknown): unknown {
+	if (typeof raw !== "string") return undefined
+	try {
+		return parseEnvelope(JSON.parse(raw))
+	} catch {
+		return undefined
+	}
+}
+
 /**
- * The value the wallet reads from `key`. A dApp session's MAC key is derived from the unlocked
- * profile, so its row is read through the codec alone; the scenarios prove the MAC in the UI.
+ * The value the wallet reads from `key`. A sealed row opens only under its unlocked profile's row
+ * keys, which Node never holds, so it reads here when it is an envelope, and the scenarios open it
+ * in the UI; a row of a sealed root still plaintext reads through the codec, as the dual read
+ * serves it. A dApp session's MAC key is derived from the unlocked profile too, so its MAC is
+ * proven in the UI as well.
  */
 async function readRow(name: StoredShapeName, entries: Record<string, unknown>, key: string, now: number): Promise<unknown> {
 	const shape = STORED_SHAPES[name]
@@ -27,7 +40,8 @@ async function readRow(name: StoredShapeName, entries: Record<string, unknown>, 
 	}
 	// A read may delete what it refuses, so each one gets its own copy of the area.
 	const area = new MemoryStorageArea().seed(structuredClone(entries))
-	if ("authenticated" in shape) return entityStorage("dappSessions", area).get(idOf(key))
+	if ("sealed" in shape)
+		return envelopeOf(entries[key]) ?? sealedEntityStorage(name as SealedStoreName, area, () => undefined).get(idOf(key))
 	return readStored(name, area, key, now)
 }
 
