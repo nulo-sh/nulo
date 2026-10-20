@@ -45,8 +45,9 @@ export interface UseProfileImportFlowOptions {
 	completeImport: (profile: unknown) => Promise<void> | void
 	/** Per-shell restore-error surface (popup = data-viewer overlay; onboarding = notification). */
 	showErrorLog: (errors: Record<string, unknown[]>, networks: RestoreErrorNetworks) => void
-	/** Per-shell passkey-import failure notification (page owns `notificationStore.create`). */
-	notifyImportFailed: () => void
+	/** Per-shell passkey-import failure notification (page owns `notificationStore.create`); gets the
+	 *  failure so a profile already here reads as itself. */
+	notifyImportFailed: (err: unknown) => void
 	/** The page's toast: the copy-error affordance, and a passkey prompt that was not confirmed. */
 	openToast: (toast: ToastOptions) => void
 }
@@ -210,7 +211,7 @@ function createImportHandlers(deps: ImportHandlerDeps) {
 			await deps.completeImport(profile)
 		} catch (err) {
 			if (handleCancelOrUnconfirmed(err, deps.openToast)) return
-			deps.notifyImportFailed()
+			deps.notifyImportFailed(err)
 			console.error("Failed to import profile:", err)
 		} finally {
 			deps.isImporting.value = false

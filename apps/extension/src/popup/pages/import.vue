@@ -136,7 +136,7 @@ const {
 		cacheStore.viewerData = withNetworkNames(errors, byNetworkId)
 		popupStore.open("data_viewer")
 	},
-	notifyImportFailed: () => notificationStore.create(passkeyImportFailedNotice()),
+	notifyImportFailed: (err) => notificationStore.create(passkeyImportFailedNotice(err)),
 	openToast,
 })
 
