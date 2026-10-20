@@ -1,7 +1,7 @@
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { describe, expect, test } from "vitest"
 import { getNameDescriptor } from "@/wallet/services/token/functions/descriptors"
-import { dashIfBlank, getInitials, trimAddress } from "./string"
+import { dashIfBlank, getInitials, isBlank, trimAddress } from "./string"
 
 describe("trimAddress", () => {
 	const ADDR = "0x1234567890abcdef1234567890abcdef12345678"
@@ -62,19 +62,32 @@ describe("getInitials", () => {
 	})
 })
 
-describe("dashIfBlank", () => {
-	/** What the wallet's token read returns for a name field holding `text`'s UTF-8 bytes after a zero byte. */
-	const fromField = (text: string): string => {
-		const field = Buffer.alloc(32)
-		Buffer.from(text, "utf-8").copy(field, 1)
-		return getNameDescriptor.unpackResult!(0, [Fr.fromBuffer(field)]) as string
-	}
-	const ZWSP = String.fromCodePoint(0x200b)
-	const NBSP = String.fromCodePoint(0xa0)
-	const IDEOGRAPHIC_SPACE = String.fromCodePoint(0x3000)
+/** What the wallet's token read returns for a name field holding `text`'s UTF-8 bytes after a zero byte. */
+const fromField = (text: string): string => {
+	const field = Buffer.alloc(32)
+	Buffer.from(text, "utf-8").copy(field, 1)
+	return getNameDescriptor.unpackResult!(0, [Fr.fromBuffer(field)]) as string
+}
+const ZWSP = String.fromCodePoint(0x200b)
+const NBSP = String.fromCodePoint(0xa0)
+const IDEOGRAPHIC_SPACE = String.fromCodePoint(0x3000)
+const blankFields = () => ["", "   ", "\t\n", ZWSP, `${NBSP}${IDEOGRAPHIC_SPACE}`].map(fromField)
 
+describe("isBlank", () => {
+	test("holds for a value that is absent, or empty or whitespace once the sanitizer strips it", () => {
+		for (const value of blankFields()) expect(isBlank(value), JSON.stringify(value)).toBe(true)
+		expect(isBlank(undefined)).toBe(true)
+		expect(isBlank(null)).toBe(true)
+	})
+
+	test("fails for any other value", () => {
+		for (const value of [fromField("USDC"), " A ", `${ZWSP}USDC`, "—"]) expect(isBlank(value), JSON.stringify(value)).toBe(false)
+	})
+})
+
+describe("dashIfBlank", () => {
 	test("reads a value that is empty or whitespace once the sanitizer strips it as the empty-value dash", () => {
-		const blanks = ["", "   ", "\t\n", ZWSP, `${NBSP}${IDEOGRAPHIC_SPACE}`].map(fromField)
+		const blanks = blankFields()
 		expect(blanks.slice(0, 2)).toEqual(["", "   "])
 		for (const value of blanks) expect(dashIfBlank(value), JSON.stringify(value)).toBe("—")
 		expect(dashIfBlank(undefined)).toBe("—")

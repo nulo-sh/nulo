@@ -471,6 +471,7 @@
     "isActiveScopeRow": true,
     "isAmountAboveDustThreshold": true,
     "isApprovedSendInFlight": true,
+    "isBlank": true,
     "isComposing": true,
     "isEmptyContactName": true,
     "isFirefox": true,

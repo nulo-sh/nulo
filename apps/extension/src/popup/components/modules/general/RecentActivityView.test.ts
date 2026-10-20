@@ -701,7 +701,7 @@ describe("RecentActivityView — one feed block for token and account views", ()
 		expect(awaitingCards(w)[0].props("backend")).toBe("presto")
 	})
 
-	test("empty states: a token feed says NOTHING HERE YET with the symbol, an account feed renders nothing", async () => {
+	test("empty states: a token feed says NOTHING HERE YET with the symbol, or this token for a blank one; an account feed renders nothing", async () => {
 		const withToken = mountFeed({ token: TOKEN })
 		await flushPromises()
 		expect(withToken.text()).toContain("NOTHING HERE YET")
@@ -710,6 +710,9 @@ describe("RecentActivityView — one feed block for token and account views", ()
 		await flushPromises()
 		expect(root(withoutToken).exists()).toBe(false)
 		expect(withoutToken.text()).not.toContain("NOTHING HERE YET")
+		const blank = mountFeed({ token: { ...TOKEN, symbol: "   " } })
+		await flushPromises()
+		expect(blank.text()).toContain("Send or receive this token to see activity here.")
 	})
 
 	test("a token-presence flip remounts the feed root", async () => {
