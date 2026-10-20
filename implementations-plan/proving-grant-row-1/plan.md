@@ -120,6 +120,8 @@ The standard is `implementations-plan/README.md` § Post-implementation standard
 | 1 | Codex gpt-6.1-sol high, session `01a15a1b-b313-7052-aa72-31b73c7dce8a` | CHANGES (1, 2, 4) | All accepted. (1) F3 is a temporal settle, not proof of "granted". (2) The OA-1 warning was too broad. (4) OA-1 had to tell "panel closed" from "grant lost". The minor points were accepted too (lessons/phase-0.md, consult 1). |
 | 1 | Opus 5.5 Plan agent | CHANGES (7, all text) | All accepted. The fixes cover the boundary wording, the three `onFirstAllowed` paths, the narrow benefit of (b), the (B) disposition, the title length, the CI envelopes, the OA-1 order, the base spec on the mutated build, and one comment each in the composable and `manifest.test.ts`. None rejected (consult 2). |
 | 2 | Codex, same session, resumed | **APPROVE** | Two wording nits were folded in: the paragraph on a failed first read, and the (B) close path. Codex rated the src comment proportionate, and (B) coherent with README § Where open work lives. |
+| Arc 1, round 1 | Codex gpt-6.1-sol high, session `01a15a38-ac4d-7881-89b3-00baf59be198` | **CLEAN** | Codex found the settle sound, the success control in place, and the comments accurate. |
+| Arc 1, round 1 | Opus 5.5 general-purpose | FINDINGS 2 | Both accepted. (1) The `manifest.test.ts` comment could be read as "while all-sites is on"; reworded. (2) The spec's `getAll` contains-all-sites assertion was dropped. It added only brittleness, because the held-true and held-false pair already proves coverage. This departs from the Phase 1 change map. |
 
 Decision ledger:
 - D1: the outcome is (c), with no product change (evidence: § Finding).

@@ -12,3 +12,10 @@ All runs on headless Firefox 153.0.4, with the armed build, at retry 0. Host loa
   - On the same build the base spec from f73ce69d6 stayed green (14.9 s): the old file cannot see the regression.
   - The edit was reverted and the build rebuilt clean.
 - **Chrome**: the file is `describe.skipIf(!isFirefox)`, so it is not run there.
+
+## Post-implementation loop
+
+- **Codex round 1** (gpt-6.1-sol, high, session `01a15a38-ac4d-7881-89b3-00baf59be198`): CLEAN.
+- **Opus review**: 2 findings, both accepted.
+  - The `manifest.test.ts:208` wording now reads "only by switching off all-sites access too".
+  - The spec dropped `granted` contains `*://*/*`. Firefox may list content-script matches differently. The `held` true/false pair already proves what covered loopback.

@@ -63,7 +63,6 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.permissionRequest, () => {
 			const loopbackOff = await withhold(extension, LOOPBACK)
 			expect(loopbackOff.held).toBe(true)
 			expect(loopbackOff.granted.filter((origin) => LOOPBACK.includes(origin))).toEqual([])
-			expect(loopbackOff.granted).toContain(ALL_SITES)
 			await navigateToSettings(page, "proving")
 			await page.waitForSelector(statusCard("idle"), { visible: true, timeout: 10_000 })
 			expect(await readPage(page)).toEqual({ row: false, card: true, get: true })
