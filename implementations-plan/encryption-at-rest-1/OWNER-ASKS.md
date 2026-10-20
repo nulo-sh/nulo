@@ -1,6 +1,6 @@
 # Owner asks: encryption-at-rest-1
 
-The plan is [plan.md](plan.md). Four asks. Each one says what ships if you do not answer. The arcs land in order, A1 first. A1 waits for OA-4 and A4 waits for OA-3; OA-1 and OA-2 block nothing.
+The plan is [plan.md](plan.md). Five asks. Each one says what ships if you do not answer. The arcs land in order, A1 first. A1 waits for OA-4 and OA-5, and A4 waits for OA-3; OA-1 and OA-2 block nothing.
 
 ## What changes for a person
 
@@ -88,6 +88,19 @@ Nothing is granted by accident: the next time that app connects, the emoji check
 - **B. Ask for something else.** For example, the wallet could ask you to unlock first and then finish the refusal. That needs new screens and a design.
 
 Ships without an answer: A1 can be built and reviewed, but it does not merge until you pick, and the later arcs follow it.
+
+## OA-5. A very long contacts list opens a little slower on Firefox (A1 waits for this)
+
+The plan's rule: if a list opens more than 50 ms (a twentieth of a second) slower than today, the work stops until you decide. We timed the contacts list with 2,000 contacts, far more than most people keep.
+
+- **Chrome:** no difference we can measure.
+- **Firefox:** about 40 to 70 ms slower, on top of the 150 to 180 ms it takes today. Firefox takes about 20 to 35 millionths of a second to unlock each encrypted row, and with 2,000 rows that adds up. The browser's own memory clean-up adds pauses of 100 to 400 ms to both versions, so single timings swing from 12 to 250 ms slower.
+- **With 50 contacts** the difference is one or two milliseconds on either browser.
+
+- **A. Accept.** Only Firefox pays, only with thousands of contacts, and the list still opens in under a third of a second. *(Recommended.)*
+- **B. Make it faster first.** The wallet would keep the unlocked contacts in memory after the first read, so later reads skip the work. That copy must be wiped on every path that wipes the keys, which is new state for a security review, so it would be a later lane.
+
+Ships without an answer: A1 can be built and reviewed, but it does not merge until you pick.
 
 ## Pictures to take (for the orchestrator's shots run)
 

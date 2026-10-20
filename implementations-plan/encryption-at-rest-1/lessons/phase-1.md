@@ -19,12 +19,14 @@
   1. Rows opened one `await` at a time: 211 → 404 ms (+193). `readAll` now opens all rows with one `Promise.all`.
   2. Sampled right after unlock, then after rendering 2 001 rows: Firefox +53, +105, +111 ms; Chrome +57, +65 ms. The two samples came from pages in different states (one with one row, one with 2 001).
   3. Both samples from a freshly opened popup, after one unmeasured read: Chrome +42, +28 ms; Firefox −6, −26, −36 ms (load 100–145). The gate holds on both. The remaining spread is page and host noise, larger than the sealing cost at 2 000 rows.
+  4. Low-load samples (load 35–65) put Firefox over the gate: +132 and +225 ms. Two causes. The sealed sample ran with a second popup open with 2 001 rows rendered (Firefox runs it in the event page's process), while the plaintext sample's popup held one row. Both samples now close it first. And the reads spike to 300–640 ms around the fifth to seventh read in every series, plaintext and sealed alike, on both browsers (GC), so a median of 5 lands on the spike some runs and not others. With the popup closed, Firefox's median of 5 measured +12, +250, +54 and +25 ms; the reads before the spike +40 to +70 ms; a median of 9 +5 and +29 ms. Chrome: +23 and +78 ms at a median of 5, −25 and −7 ms at a median of 9. Profiling found nothing per row beyond the WebCrypto call: Firefox pays about 20–35 µs a decrypt. The gate does not hold consistently on Firefox, so it stops for the owner (OA-5); the metric stays the plan's median of 5.
 - **Chrome smoke red once** in `navigateToSettings`'s 5 s post-click hash wait, right after unlock with a 2 001-row page to mount. The spec now navigates by hash there.
 
 ## Measured
 
 - `sealed-storage.test.ts`: Chrome 25–33 s, Firefox 41–60 s (estimates 60 s and 90 s).
-- Sealing 2 000 plaintext rows after unlock: Chrome 2.3–6.6 s, Firefox 8.6–16 s, under load 60–145.
+- Sealing 2 000 plaintext rows after unlock: Chrome 2.3–6.6 s, Firefox 7.0–16 s, under load 35–145.
+- Full smoke at retry 0, local: Chrome 59 files passed, 7 skipped, 1 747 s; Firefox 62 passed, 4 skipped, 2 498 s.
 
 ## Review
 

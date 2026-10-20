@@ -9,4 +9,5 @@
 - 2026-10-19 deep step 4: double audit done. Codex CONDITIONAL APPROVE (8; 7 adopted, 1 rejected), Opus CONDITIONAL APPROVE (11; all adopted). UI keys left the lane (D26); OA-4 retired.
 - 2026-10-19 deep step 5: final fresh Codex pass: CONDITIONAL APPROVE (3 conditions, adopted), then APPROVE on re-read. Plan ready for the orchestrator; OA-1..OA-4 open.
 - 2026-10-20 A1 P1: fixed-IV vectors (`5ef932ba`), then the frame and the row seal (`2eea38db`).
-- 2026-10-20 A1 P2/P3: keyring, sealed store, keyless sweep, contacts and dApp sessions sealed (`8dee1b86`); composition and smoke e2e green on Chrome and Firefox; the list-load gate holds (`lessons/phase-1.md`).
+- 2026-10-20 A1 P2/P3: keyring, sealed store, keyless sweep, contacts and dApp sessions sealed (`8dee1b86`); composition and smoke e2e green on Chrome and Firefox.
+- 2026-10-20 A1 review: Codex r1 three medium findings and Opus three low, all fixed (`498a9646`); Codex r2 APPROVE. Full smoke green at retry 0 on both browsers. The list-load gate holds on Chrome and not consistently on Firefox (+40 to +70 ms at 2 000 rows): OA-5 opened; A1 waits for OA-4 and OA-5 (`lessons/phase-1.md`).
