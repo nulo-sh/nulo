@@ -118,17 +118,17 @@ describe("send-amount/validateSendAmount", () => {
 		})
 	})
 
-	test("returns exceedsBalance when balance is undefined (not loaded)", () => {
+	test("returns balanceUnknown when balance is undefined (not loaded)", () => {
 		expect(validateSendAmount({ input: "1.5", tokenDecimals: 6, balanceRaw: undefined })).toEqual({
 			valid: false,
-			reason: "exceedsBalance",
+			reason: "balanceUnknown",
 		})
 	})
 
-	test("returns exceedsBalance when balance is non-numeric (defensive)", () => {
+	test("returns balanceUnknown when balance is non-numeric (defensive)", () => {
 		expect(validateSendAmount({ input: "1.5", tokenDecimals: 6, balanceRaw: "abc" })).toEqual({
 			valid: false,
-			reason: "exceedsBalance",
+			reason: "balanceUnknown",
 		})
 	})
 

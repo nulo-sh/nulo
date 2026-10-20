@@ -34,7 +34,7 @@ function heldAccountsText(held: readonly HeldAccount[]): string {
 	const one = held.length === 1
 	const it = one ? "it" : "them"
 	const file = one ? "its account file" : "their account files"
-	return `${subject} ${one ? "was" : "were"} not restored. Add ${network} to restore ${it}, or import ${it} again from ${file}.`
+	return `${subject} ${one ? "was" : "were"} not restored. Add ${network} to restore ${it}, or import ${it} again from ${file}. Turn on Developer Mode in Settings to add a network.`
 }
 
 /** Home's reminder of the networks a restore left behind. */

@@ -383,7 +383,7 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await withDyingPanel(browser, async (death) => {
 				await clickInPanel(browser, "import-option-passkey")
 				const win = await openedWindow(ctx, before, "#/windows/passkey")
-				await win.waitForSelector('[data-testid="passkey-window"][data-state="step-failed"]', { timeout: 60_000 })
+				await win.waitForSelector('[data-testid="passkey-window"][data-state="step-exists"]', { timeout: 60_000 })
 				await win.waitForSelector(sel("passkey-window-error"), { visible: true, timeout: 5_000 })
 				const record = await death.record()
 				expect(record.calls, "WebAuthn calls made in the panel").toEqual([])

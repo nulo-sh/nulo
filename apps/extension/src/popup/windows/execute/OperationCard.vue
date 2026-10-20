@@ -41,7 +41,7 @@ import CallArguments from "./CallArguments.vue"
 import DetailsToggle from "./DetailsToggle.vue"
 import OperationActionRow from "./OperationActionRow.vue"
 import SendTxSummary from "./SendTxSummary.vue"
-import { humanizeOperationKind, safeWire } from "./humanize"
+import { humanizeOperationKind, safeWire, safeWireOrDash } from "./humanize"
 import type { FeePayerPick } from "./fee-figure"
 import type { DraftAztecSendTxOperation, DraftSendTransactionOperation, DraftUIOperation } from "./types"
 import { type CallSurface, type CallerContext, type WireCall, authwitTitle, callSurface, rowTitle, tokenAt, wire } from "./call-surface"
@@ -471,14 +471,14 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 					<Text variant="label-section" color="secondary">Symbol:</Text>
 					<Skeleton v-if="tokenMetadataLoading" :width="40" :height="12" />
 					<Text v-else-if="tokenMetadata" variant="name" color="primary" :class="$style.name_size" data-testid="register-token-symbol">
-						{{ safeWire(tokenMetadata.symbol, 32) }}
+						{{ safeWireOrDash(tokenMetadata.symbol, 32) }}
 					</Text>
 				</Flex>
 				<Flex :class="$style.prop" data-testid="register-token-name-row">
 					<Text variant="label-section" color="secondary">Name:</Text>
 					<Skeleton v-if="tokenMetadataLoading" :width="84" :height="12" />
 					<Text v-else-if="tokenMetadata" variant="name" color="primary" :class="$style.name_size" data-testid="register-token-name">
-						{{ safeWire(tokenMetadata.name, 64) }}
+						{{ safeWireOrDash(tokenMetadata.name, 64) }}
 					</Text>
 				</Flex>
 				<Flex :class="$style.prop" data-testid="register-token-decimals-row">

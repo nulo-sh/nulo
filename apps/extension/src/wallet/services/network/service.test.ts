@@ -1676,6 +1676,131 @@ describe("NetworkService — a default network a later build adds", () => {
 		expect(await extraRows(h)).toEqual([])
 		expect(classifyChains(await h.service.getNetworksRaw("p1"), accounts)).toEqual(before)
 	})
+
+	describe("the arrival of the new default", () => {
+		const record = (h: Harness) => JSON.parse(h.local.store.get(OFFERS_KEY) as string) as { offered: string[]; announce?: string[] }
+		const kindRow = (id: string, kind: "mainnet" | "custom") => ({
+			id,
+			profileId: "p1",
+			chainId: EXTRA.chainId,
+			l1ChainId: EXTRA.l1ChainId,
+			name: id,
+			kind,
+			primaryEndpointId: `${id}-ep0`,
+			endpoints: [{ id: `${id}-ep0`, rpcUrl: "https://rpc.row.example/" }],
+		})
+
+		test("is announced when the open adds the default to a profile that had networks, and shows until answered", async () => {
+			const h = setupServiceWithStorage({})
+			await seededByEarlierBuild(h)
+			await h.service.getOrInitNetworks()
+			const [extra] = await extraRows(h)
+
+			expect(record(h).announce).toEqual(["mainnet"])
+			expect((await h.service.getNetworkArrival())?.id).toBe(extra!.id)
+			await h.service.getOrInitNetworks()
+			expect((await h.service.getNetworkArrival())?.id).toBe(extra!.id)
+		})
+
+		test("a new profile and a restored one announce nothing", async () => {
+			DEFAULT_SEEDS.push(EXTRA)
+			const h = setupServiceWithStorage({})
+			await h.service.getOrInitNetworks()
+			expect(await extraRows(h)).toHaveLength(1)
+			expect(await h.service.getNetworkArrival()).toBeNull()
+
+			const internals = h.service as unknown as { profileService: { getProfiles: () => Promise<unknown[]> } }
+			internals.profileService.getProfiles = async () => [{ id: "p2", name: "p2", type: "password" }]
+			await h.service.seedDefaultsForProfile("p2")
+			expect(JSON.parse(h.local.store.get(seedOffersKey("p2")) as string)).toEqual({ offered: ["local", "mainnet", "testnet"] })
+		})
+
+		test("a row of the default an interrupted open left is announced", async () => {
+			const h = setupServiceWithStorage({})
+			await seededByEarlierBuild(h)
+			h.local.store.set("nulo:core:networks@left", JSON.stringify(kindRow("left", "mainnet")))
+			await h.service.getOrInitNetworks()
+			expect((await extraRows(h)).map((n) => n.id)).toEqual(["left"])
+			expect((await h.service.getNetworkArrival())?.id).toBe("left")
+		})
+
+		test("a custom network on the default's chain is the person's own: offered, never announced", async () => {
+			const h = setupServiceWithStorage({})
+			await seededByEarlierBuild(h)
+			h.local.store.set("nulo:core:networks@cm", JSON.stringify(kindRow("cm", "custom")))
+			await h.service.getOrInitNetworks()
+			expect(record(h)).toEqual({ offered: ["local", "mainnet", "testnet"] })
+			expect(await h.service.getNetworkArrival()).toBeNull()
+		})
+
+		test("staying answers it for good: the record is the offer alone, and a second answer writes nothing", async () => {
+			const h = setupServiceWithStorage({})
+			await seededByEarlierBuild(h)
+			await h.service.getOrInitNetworks()
+			const [extra] = await extraRows(h)
+
+			await h.service.answerNetworkArrival(extra!.id)
+
+			expect(h.local.store.get(OFFERS_KEY)).toBe(JSON.stringify({ offered: ["local", "mainnet", "testnet"] }))
+			expect(await h.service.getNetworkArrival()).toBeNull()
+			await h.service.getOrInitNetworks()
+			expect(await h.service.getNetworkArrival()).toBeNull()
+			const writes = recordWrites(h.local as unknown as BrowserApi["storage"]["local"], "nulo:")
+			await h.service.answerNetworkArrival(extra!.id)
+			writes.restore()
+			expect(writes.log).toEqual([])
+		})
+
+		test("a switch to it from another network answers it; re-asserting it, or reaching it from a missing pointer, does not", async () => {
+			const activeKey = "nulo:core:active-network@p1"
+			const h = setupServiceWithStorage({})
+			await seededByEarlierBuild(h)
+			await h.service.getOrInitNetworks()
+			const [extra] = await extraRows(h)
+
+			h.local.store.set(activeKey, extra!.id)
+			await h.service.setActiveNetwork(extra!.id)
+			h.local.store.set(activeKey, "gone")
+			await h.service.setActiveNetwork(extra!.id)
+			h.local.store.delete(activeKey)
+			await h.service.setActiveNetwork(extra!.id)
+			expect(record(h).announce).toEqual(["mainnet"])
+
+			const testnet = (await h.service.getNetworksRaw("p1")).find((n) => n.kind === "testnet")!
+			await h.service.setActiveNetwork(testnet.id)
+			expect(record(h).announce).toEqual(["mainnet"])
+			await h.service.setActiveNetwork(extra!.id)
+			expect(record(h)).toEqual({ offered: ["local", "mainnet", "testnet"] })
+		})
+
+		test("a corrupt record shows no arrival, and answering it leaves its bytes", async () => {
+			const h = setupServiceWithStorage({})
+			await seededByEarlierBuild(h)
+			await h.service.getOrInitNetworks()
+			const [extra] = await extraRows(h)
+			h.local.store.set(OFFERS_KEY, "{not json")
+
+			expect(await h.service.getNetworkArrival()).toBeNull()
+			await h.service.answerNetworkArrival(extra!.id)
+			expect(h.local.store.get(OFFERS_KEY)).toBe("{not json")
+		})
+
+		test("a deletion landing while the answer is written rejects it and restores the announcement", async () => {
+			const h = setupServiceWithStorage({})
+			await seededByEarlierBuild(h)
+			await h.service.getOrInitNetworks()
+			const [extra] = await extraRows(h)
+			const announced = h.local.store.get(OFFERS_KEY)
+			const writes = recordWrites(h.local as unknown as BrowserApi["storage"]["local"], OFFERS_KEY, () => {
+				h.deletionState.beginDeletion("p1")
+				h.deletionState.release("p1")
+			})
+
+			await expect(h.service.answerNetworkArrival(extra!.id)).rejects.toThrow(/^profile p1 deleted$/)
+			writes.restore()
+			expect(h.local.store.get(OFFERS_KEY)).toBe(announced)
+		})
+	})
 })
 
 describe("NetworkService — this build's defaults on an existing profile", () => {

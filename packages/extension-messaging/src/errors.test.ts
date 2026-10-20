@@ -21,6 +21,7 @@ import {
 	JobCancelledError,
 	OperationNotRecordedError,
 	OwnAccountIntentRefusalError,
+	PasskeyProfileExistsError,
 	ProfileIdConflictError,
 	PxeStaleAnchorError,
 	PxeStoreKeyMissingError,
@@ -321,6 +322,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			code: "DUPLICATE_WALLET",
 			rebuild: pass,
 		},
+		{
+			ctor: PasskeyProfileExistsError,
+			make: () => new PasskeyProfileExistsError(undefined, { existingProfileName: "Daily" }),
+			name: "PasskeyProfileExistsError",
+			code: "PASSKEY_PROFILE_EXISTS",
+			rebuild: pass,
+		},
 		{ ctor: RecoveryModeError, make: () => new RecoveryModeError(), name: "RecoveryModeError", code: "RECOVERY_MODE", rebuild: pass },
 		{
 			ctor: ImportedAccountUnusableError,
@@ -408,6 +416,7 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			() => new ProfileIdConflictError(),
 			"Profile id was claimed during WebAuthn prompt; retry with a new id.",
 		],
+		["PasskeyProfileExistsError", () => new PasskeyProfileExistsError(), "Passkey profile already exists"],
 	])("%s keeps its default message", (_name, make, message) => {
 		expect(make().message).toBe(message)
 	})

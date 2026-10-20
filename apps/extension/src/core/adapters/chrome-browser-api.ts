@@ -142,6 +142,10 @@ class ChromeRuntimeAdapter implements RuntimePort {
 		return { message: err.message ?? "unknown error" }
 	}
 
+	public reload(): void {
+		chrome.runtime.reload()
+	}
+
 	public async setUninstallURL(url: string): Promise<void> {
 		await chrome.runtime.setUninstallURL(url)
 	}
