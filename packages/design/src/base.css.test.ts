@@ -19,7 +19,8 @@ test("base.css content is pinned (edits must be deliberate + visually re-verifie
 	// declared once (`:root, [theme="dark"]`), its hairline and scrim tokens at their literals' values,
 	// its --txt-danger lighter than --red so it reads 4.5:1 on a pressed row, and --btn-destructive
 	// darker than --red so the red buttons' label reads AA; `--log-error-color` is `--txt-danger` in both
-	// themes, AA on the line's tint; `nav` stays out of the control rule because
-	// the landing's is text; line 1 carries the Apache-2.0 §4(b) header.
-	expect(hash).toBe("c95b2f2f8511c22e8439ec0f91899d8b9e3e0f03b672233561bcb8a0cde0e1f9")
+	// themes, AA on the line's tint, and the light `--log-warn-color` is `--txt-warning`, AA on its tint;
+	// `nav` stays out of the control rule because the landing's is text; line 1 carries the
+	// Apache-2.0 §4(b) header.
+	expect(hash).toBe("600b7672f8f74bf4ab2719f039a40fcccfdb28f595307fb7ff4f7c84611ff046")
 })
