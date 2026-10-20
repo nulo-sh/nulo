@@ -48,11 +48,11 @@ export function nodeInfoResult(l1ChainId: number, rollupVersion: number): Record
 export interface StubServer {
 	url: string
 	methods: string[]
-	/** Answers every request the stub holds with the node stand-in's refusal; later ones are held
-	 *  again. A browser sends at most six requests at once to one host over HTTP/1.1 and each held one
-	 *  keeps its connection, so later calls queue unsent once six hang. A reset frees none: the browser
-	 *  re-sends a request whose connection closes before any reply (Firefox any, Chrome one on a reused
-	 *  connection), and the stub holds the copy. */
+	/** Answers every request the stub holds with the node stand-in's refusal; later unanswerable ones
+	 *  are held again. A browser sends at most six requests at once to one host over HTTP/1.1 and each
+	 *  held one keeps its connection, so later calls queue unsent once six hang. A reset is no release:
+	 *  a browser re-sends at once a request whose connection closes before any reply (Chrome when that
+	 *  connection carried an earlier one, Firefox more often), and the stub holds the copy. */
 	refuseUnanswered: () => void
 	close: () => Promise<void>
 }
