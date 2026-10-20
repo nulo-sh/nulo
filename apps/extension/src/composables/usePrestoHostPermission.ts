@@ -55,6 +55,7 @@ export function usePrestoHostPermission(callbacks: PrestoHostPermissionCallbacks
 		const isCurrent = fence.begin()
 		let granted: boolean
 		try {
+			// Firefox's all-sites grant covers loopback even when the loopback entries are switched off.
 			granted = await chrome.permissions.contains({ origins })
 		} catch (error) {
 			if (disposed || !isCurrent()) return
