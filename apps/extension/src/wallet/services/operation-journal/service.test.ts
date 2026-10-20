@@ -890,6 +890,42 @@ describe("a failed send's record: the carry, the answer, the predicates", () => 
 		expect((await service.getOperation(without))?.progress).toMatchObject({ check: "unconfirmed" })
 	})
 
+	test("refused is recorded bare, only on a row never answered, and gives way to a mined answer only", async () => {
+		const id = await failedFromSubmitting(EXPIRY)
+		const block = { block: 5, hash: `0x${"01".repeat(32)}` }
+		const set = (expected: SendCheckState, next: SendCheckState) => service.setSendCheck(id, HASH, expected, next, live)
+		expect(await set({}, { check: "refused", inclusion: block })).toBe(false)
+		expect(await set({}, { check: "refused", checkSince: 1 })).toBe(false)
+		expect(await set({}, { check: "refused" })).toBe(true)
+		expect((await service.getOperation(id))?.progress).toEqual({
+			stage: "failed",
+			from: "submitting",
+			txHash: HASH,
+			submittedEndpointUrl: URL,
+			expiry: EXPIRY,
+			check: "refused",
+		})
+		for (const next of [{ check: "unconfirmed" }, { check: "expired" }, { check: "refused" }, { checkSince: 1 }, {}] as const) {
+			expect(await set({ check: "refused" }, next)).toBe(false)
+		}
+		expect(await set({ check: "refused" }, { check: "sent", inclusion: block })).toBe(true)
+		expect((await service.getOperation(id))?.progress).toMatchObject({ check: "sent", inclusion: block })
+
+		const reverted = await failedFromSubmitting()
+		expect(await service.setSendCheck(reverted, HASH, {}, { check: "refused" }, live)).toBe(true)
+		expect(await service.setSendCheck(reverted, HASH, { check: "refused" }, { check: "reverted" }, live)).toBe(true)
+	})
+
+	test("a row whose mined answer was pruned is never refused; its window still ends unconfirmed", async () => {
+		const id = await failedFromSubmitting()
+		const block = { block: 5, hash: `0x${"01".repeat(32)}` }
+		const set = (expected: SendCheckState, next: SendCheckState) => service.setSendCheck(id, HASH, expected, next, live)
+		expect(await set({}, { check: "sent", inclusion: block })).toBe(true)
+		expect(await set({ check: "sent", inclusion: block }, { checkSince: 1_234 })).toBe(true)
+		expect(await set({}, { check: "refused" })).toBe(false)
+		expect(await set({}, { check: "unconfirmed" })).toBe(true)
+	})
+
 	test("a mined answer's block moves only to final, another block or pruned, each over the block the caller read", async () => {
 		const id = await failedFromSubmitting()
 		const first = { block: 5, hash: `0x${"01".repeat(32)}` }
