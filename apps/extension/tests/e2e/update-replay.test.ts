@@ -24,7 +24,7 @@ import { contactRow, ensureUnlocked, navigateByHash, waitForToast } from "./fixt
 import { inPlaceUpdate, readLocalStorage, type UpdateBuilds, updateBuilds, writeLocalStorage } from "./fixtures/update/in-place"
 import { type Recording, readRecording } from "./fixtures/update/recording"
 import { unreadRows } from "./fixtures/update/stored-rows"
-import { BARRIERS, shownOverlays, updateProblems } from "./fixtures/update/verify"
+import { BARRIERS, missingFamilies, shownOverlays, updateProblems } from "./fixtures/update/verify"
 import { exportImportedAccountBody, previewImport } from "./helpers/account-io"
 import {
 	PREVIOUS_TESTNET_CHAIN_ID,
@@ -49,6 +49,8 @@ function recordingFor(): Recording {
 	const tag = process.env.NULO_E2E_UPDATE_FROM as string
 	const recording = readRecording(tag)
 	if (!recording) throw new Error(`no recording of ${tag}: run the live scenario with NULO_E2E_UPDATE_RECORD=1`)
+	const missing = missingFamilies(recording.entries)
+	if (missing.length > 0) throw new Error(`the recording of ${tag} holds no ${missing.join(", ")}: record it again`)
 	// The wallet drops an expired session before any check can read it.
 	for (const { expiry } of rowsOf(recording.entries, "nulo:core:dappSessions")) {
 		if ((expiry as number) < Date.now() + 600_000) {

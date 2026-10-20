@@ -22,14 +22,52 @@ export const REFUSALS: ReadonlySet<StoredShapeName> = new Set<StoredShapeName>([
 	"networkReset",
 ])
 
+/** Every key family a populated release holds, so a populate step that silently writes nothing, or
+ *  a recording made before it, fails at once rather than as a check left with nothing to read. */
+export const HELD: readonly StoredShapeName[] = [
+	"accountIntegrityVerified",
+	"accounts",
+	"activeNetwork",
+	"config",
+	"contacts",
+	"dappSessions",
+	"fpcs",
+	"importedAccountKeys",
+	"incomingArrivals",
+	"incomingPublicCursors",
+	"incomingTransfers",
+	"incomingTrust",
+	"journal",
+	"legalAccepted",
+	"networks",
+	"onboardingCompleted",
+	"profiles",
+	"schemaVersion",
+	"tokenBalances",
+	"tokens",
+	"txs",
+	"uiActiveAccount",
+	"uiLastActiveProfile",
+]
+
+export const missingFamilies = (entries: Record<string, unknown>): StoredShapeName[] =>
+	HELD.filter((name) => !Object.keys(entries).some((key) => shapeOfKey(key) === name))
+
+/** Queues a running wallet drains: a row is deleted once its balance refresh succeeds. */
+const QUEUES: ReadonlySet<StoredShapeName> = new Set<StoredShapeName>(["incomingBalanceOutbox"])
+
 /**
  * Why `after`, the storage a build booted over `before`, does not still hold and read `before`: a
- * key the update lost, a refusal the boot wrote, or a row of `after` that does not read under this
- * build's registry. Empty when it does.
+ * key the update lost (a drained queue row is not lost), a refusal the boot wrote, or a row of
+ * `after` that does not read under this build's registry. Empty when it does.
  */
 export async function updateProblems(before: Record<string, unknown>, after: Record<string, unknown>): Promise<string[]> {
 	const lost = Object.keys(before)
 		.filter((key) => !key.startsWith(FIXTURE_PREFIX) && !(key in after))
+		.filter((key) => {
+			const name = shapeOfKey(key)
+			return name === undefined || !QUEUES.has(name)
+		})
 		.map((key) => `${key}: lost in the update`)
 	const refused = Object.keys(after)
 		.filter((key) => {

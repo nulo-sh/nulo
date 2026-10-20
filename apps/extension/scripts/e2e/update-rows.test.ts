@@ -25,8 +25,10 @@ describe("updateProblems", () => {
 		expect(await updateProblems(stored, stored)).toEqual([])
 	})
 
-	test("names a lost key, a refusal the boot wrote, an unclaimed key and a row its read refuses", async () => {
+	test("names a lost key, a refusal the boot wrote, an unclaimed key and a row its read refuses, not a drained queue row", async () => {
 		const { held: before, refusals } = await storedGoldens("minimal")
+		const outbox = Object.keys(before).find((key) => key.startsWith("nulo:core:incoming-balance-outbox@"))
+		expect(outbox).toBeDefined()
 		const blocked = "nulo:core:account-integrity-blocked@b04e6d18"
 		const after: Record<string, unknown> = {
 			...before,
@@ -35,6 +37,7 @@ describe("updateProblems", () => {
 			"nulo:unknown": 1,
 		}
 		delete after["nulo:core:profiles@b04e6d18"]
+		delete after[outbox as string]
 		expect(await updateProblems(before, after)).toEqual([
 			"nulo:core:profiles@b04e6d18: lost in the update",
 			"nulo:core:account-integrity-blocked@b04e6d18: the boot refused what it found",

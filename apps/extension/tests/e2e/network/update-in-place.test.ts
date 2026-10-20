@@ -18,7 +18,6 @@ import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { walletChainId } from "@nulo/wallet-core/chain-id"
-import type { StoredShapeName } from "@/wallet/storage/stored-shapes"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { BROWSER } from "../fixtures/browser"
 import {
@@ -52,11 +51,10 @@ import {
 } from "../fixtures/helpers"
 import { openPlayground, setPgInputs, txHashOf } from "../fixtures/playground"
 import { pollUntil } from "../fixtures/poll"
-import { reconnectPlayground, sendDefaultTx } from "../fixtures/send"
+import { reconnectPlayground, runApprovedPgCall } from "../fixtures/send"
 import { inPlaceUpdate, readLocalStorage, updateBuilds } from "../fixtures/update/in-place"
 import { writeRecording } from "../fixtures/update/recording"
-import { shapeOfKey } from "../fixtures/update/stored-rows"
-import { BARRIERS, shownOverlays, updateProblems } from "../fixtures/update/verify"
+import { BARRIERS, missingFamilies, shownOverlays, updateProblems } from "../fixtures/update/verify"
 import {
 	confirmImport,
 	exportAccountBody,
@@ -75,35 +73,6 @@ const SENT = D
 const SANDBOX = "Sandbox"
 const TESTNET_ACCOUNTS = [FIRST_ACCOUNT_NAME, "Second", "Imported"]
 const CONTACTS = ["Alice", "Bob"]
-
-/** Every key family the populated release holds, so a step that silently writes nothing fails at
- *  the populate, not as a check left with nothing to read. */
-const HELD: readonly StoredShapeName[] = [
-	"accountIntegrityVerified",
-	"accounts",
-	"activeNetwork",
-	"config",
-	"contacts",
-	"dappSessions",
-	"fpcs",
-	"importedAccountKeys",
-	"incomingArrivals",
-	"incomingBalanceOutbox",
-	"incomingPublicCursors",
-	"incomingTransfers",
-	"incomingTrust",
-	"journal",
-	"legalAccepted",
-	"networks",
-	"onboardingCompleted",
-	"profiles",
-	"schemaVersion",
-	"tokenBalances",
-	"tokens",
-	"txs",
-	"uiActiveAccount",
-	"uiLastActiveProfile",
-]
 
 type ChainInfo = { chainId: string; version: string }
 type Populated = { before: Record<string, unknown>; chainInfo: ChainInfo; account: string; imported: string; incoming: number }
@@ -229,7 +198,7 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 	await sendFromWallet(ctx, dapp, cfg, account)
 	await dapp.close()
 	const before = await readLocalStorage(ctx)
-	expect(HELD.filter((name) => !Object.keys(before).some((key) => shapeOfKey(key) === name))).toEqual([])
+	expect(missingFamilies(before)).toEqual([])
 	return { before, chainInfo, account, imported, incoming }
 }
 
@@ -238,9 +207,14 @@ async function sendFromWallet(ctx: ExtensionContext, dapp: Page, cfg: AztecTestC
 	const popup = await openPopup(ctx)
 	await waitForHash(popup, "#/popup/general", 30_000)
 	const baseline = await captureBalanceBaseline(popup, account, cfg.tokenAddress)
-	await setPgInputs(dapp, { amount: SENT.toString() })
+	await setPgInputs(dapp, { tokenAddress: cfg.tokenAddress, recipient: cfg.minterAddress, amount: SENT.toString() })
 	// The first send pays the PXE's cold start and a real proof of the account's deployment.
-	const sent = await sendDefaultTx(ctx, dapp, cfg, "update-in-place:send", { popupTimeoutMs: 180_000 })
+	const sent = await runApprovedPgCall(ctx, dapp, {
+		button: "sendTx-default",
+		method: "sendTx",
+		label: "update-in-place:send",
+		popupTimeoutMs: 180_000,
+	})
 	const { waitForTxMined } = await import("../fixtures/aztec")
 	await waitForTxMined(cfg, txHashOf(sent.resultJson), 300_000)
 	await waitForFreshBalanceRow(popup, {
