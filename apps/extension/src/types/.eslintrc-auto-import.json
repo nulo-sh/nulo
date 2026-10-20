@@ -200,7 +200,6 @@
     "PrestoDetailRow": true,
     "PrestoHostPermissionCallbacks": true,
     "PrestoInfo": true,
-    "PrestoSurface": true,
     "PrestoTone": true,
     "PrestoUiState": true,
     "PriceMapping": true,

@@ -37,7 +37,6 @@ describe("usePrestoStatus", () => {
 		const client = fakeClient()
 		const s = run(client)
 		expect(s.state.value).toEqual({ kind: "idle" })
-		expect(s.bannerStatus.value).toBeNull()
 		const p = s.detect()
 		expect(s.state.value).toEqual({ kind: "detecting" })
 		client.pending[0].resolve(available)
@@ -65,16 +64,6 @@ describe("usePrestoStatus", () => {
 		s.scope.stop()
 	})
 
-	test("bannerStatus mirrors the raw status the probe returned", async () => {
-		const client = fakeClient()
-		const s = run(client)
-		const p = s.detect()
-		client.pending[0].resolve({ available: false, reason: "offline" })
-		await p
-		expect(s.bannerStatus.value).toEqual({ available: false, reason: "offline" })
-		s.scope.stop()
-	})
-
 	test("forceRefresh passes through to the client; the default is false", async () => {
 		const client = fakeClient()
 		const s = run(client)
@@ -96,7 +85,6 @@ describe("usePrestoStatus", () => {
 		client.pending[0].resolve(available)
 		await p
 		expect(s.state.value).toEqual({ kind: "detecting" })
-		expect(s.bannerStatus.value).toBeNull()
 		s.scope.stop()
 	})
 
