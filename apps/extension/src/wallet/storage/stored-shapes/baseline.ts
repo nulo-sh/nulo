@@ -13,6 +13,7 @@ import { z } from "zod"
 import { DummyLogger } from "@/wallet/logger/utils"
 import { BACKUP_SLICE_REGISTRY, normalizeBackupData } from "@/wallet/services/backup/backup-migration-registry"
 import { migrateBackupData } from "@/wallet/services/backup/backup-migrator"
+import { IMPORT_BLOCKING_ACK } from "@/wallet/services/backup/import-blocking-ack"
 import { signDappSession } from "@/wallet/services/dapp-session/integrity"
 import { DappSessionMacStorage } from "@/wallet/services/dapp-session/mac-storage"
 import type { DappSession } from "@/wallet/services/dapp-session/spec"
@@ -272,9 +273,31 @@ function backupData(goldens: readonly Golden[]): Record<string, unknown[]> {
 	return data
 }
 
+/** The migration in `ack` that refuses every backup exported at `version` on purpose, if any: the
+ *  lowest acknowledged one above it, which the import names. */
+export function acknowledgedBlock(
+	version: number,
+	migrations: readonly Migration[],
+	ack: ReadonlySet<number> = IMPORT_BLOCKING_ACK,
+): number | undefined {
+	const blocking = migrations.map((m) => m.version).filter((v) => v > version && ack.has(v))
+	return blocking.length > 0 ? Math.min(...blocking) : undefined
+}
+
+/** A backup-sliced golden's backup decoding when an acknowledged migration refuses its stamp's backups. */
+export const REFUSED_BY_ACK = "refused by an acknowledged import-blocking migration"
+
 /** The same goldens as a full backup's slices, through the backup-import migrator and back. */
-async function decodeBackup(goldens: readonly Golden[], version: number, migrations: Migration[]): Promise<Decoded> {
+async function decodeBackup(
+	goldens: readonly Golden[],
+	version: number,
+	migrations: Migration[],
+	ack: ReadonlySet<number>,
+): Promise<Decoded> {
 	const migrated = await migrateBackupData({ data: backupData(goldens), backupSchemaVersion: version, migrations })
+	const block = acknowledgedBlock(version, migrations, ack)
+	if (block !== undefined && migrated.kind === "incompatible" && migrated.reason.includes(`migration ${block} `))
+		return Object.fromEntries(goldens.filter(isBackupSliced).map((golden) => [golden.id, REFUSED_BY_ACK]))
 	if (migrated.kind !== "noop" && migrated.kind !== "migrated")
 		throw new Error(`the backup migrator refused goldens at v${version}: ${JSON.stringify(migrated)}`)
 	const normalized = normalizeBackupData(migrated.data)
@@ -294,6 +317,7 @@ export async function decodeGoldens(
 	goldens: readonly Golden[],
 	stamps: readonly Pick<Stamp, "version">[],
 	migrations: Migration[],
+	ack: ReadonlySet<number> = IMPORT_BLOCKING_ACK,
 ): Promise<Decoding> {
 	const out: Decoding = { live: {}, backup: {}, keys: {}, stored: {} }
 	for (const [index, stamp] of stamps.entries()) {
@@ -302,7 +326,7 @@ export async function decodeGoldens(
 			Object.assign(out.live, live.decoded)
 			Object.assign(out.stored, live.stored)
 			out.keys[index] = [...new Set([...(out.keys[index] ?? []), ...live.keys])].sort()
-			Object.assign(out.backup, await decodeBackup(round, stamp.version, migrations))
+			Object.assign(out.backup, await decodeBackup(round, stamp.version, migrations, ack))
 		}
 	}
 	return out

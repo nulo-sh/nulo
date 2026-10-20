@@ -8,9 +8,11 @@ import {
 	committedBaseline,
 	type Golden,
 	decodeGoldens,
+	isBackupSliced,
 	justify,
 	preservationProblems,
 	propose,
+	REFUSED_BY_ACK,
 	type ShapeRecord,
 	type Stamp,
 	currentShapes,
@@ -227,6 +229,22 @@ describe("preservationProblems", () => {
 })
 
 describe("decodeGoldens", () => {
+	test("an acknowledged import-blocking migration refuses each backup-sliced golden; an unacknowledged one throws", async () => {
+		const goldens = committedBaseline().goldens.filter((golden) => golden.stamp === 0)
+		const imperative = migrationOver(2, CONTACT_STORAGE_ROOT)
+		const decoding = await decodeGoldens(goldens, [{ version: 1 }], [imperative], new Set([2]))
+		const sliced = goldens.filter(isBackupSliced).map((golden) => golden.id)
+		expect(sliced.length).toBeGreaterThan(0)
+		expect(sliced.map((id) => decoding.backup[id])).toEqual(sliced.map(() => REFUSED_BY_ACK))
+		expect(decoding.live["contacts.full"]).toBeDefined()
+		await expect(decodeGoldens(goldens, [{ version: 1 }], [imperative], new Set())).rejects.toThrow(
+			"the backup migrator refused goldens at v1",
+		)
+		await expect(decodeGoldens(goldens, [{ version: 1 }], [imperative], new Set([3]))).rejects.toThrow(
+			"the backup migrator refused goldens at v1",
+		)
+	})
+
 	test("a migration reading a backup slice decodes every golden, though one store holds only some of them", async () => {
 		const reads = defineRowMapMigration({
 			version: 2,

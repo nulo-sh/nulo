@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, test } from "vitest"
 import { realMigrations } from "../migrations"
 import { STORED_SHAPES, type StoredShape, type StoredShapeName } from "../stored-shapes"
 import {
+	acknowledgedBlock,
 	changedShapes,
 	committedBaseline,
 	currentShapes,
@@ -17,12 +18,12 @@ import {
 	justify,
 	pinOf,
 	preservationProblems,
+	REFUSED_BY_ACK,
 	schemaVersionOf,
 	zodVersion,
 } from "./baseline"
 import { openFullBackupText } from "@/utils/full-backup-helpers"
 import { BACKUP_SCHEMA_VERSION_FIELD } from "@/wallet/services/backup/backup-migration-registry"
-import { IMPORT_BLOCKING_ACK } from "@/wallet/services/backup/import-blocking-ack"
 import { backupProblems } from "./backups"
 import { PINNED_BACKUPS, PINNED_STAMPS } from "./pins"
 
@@ -67,6 +68,7 @@ describe("R3 · every golden still reads to the value its stamp pinned", () => {
 
 	test("through a full backup's import migrator, for every backup-sliced golden", () => {
 		for (const golden of goldens.filter(isBackupSliced)) {
+			if (decoding.backup[golden.id] === REFUSED_BY_ACK) continue
 			expect(decoding.backup[golden.id], `golden ${golden.id} through a backup`).toEqual(lastStamp().expected[golden.id])
 		}
 	})
@@ -125,15 +127,14 @@ describe("R5 · the full backups pinned at the freeze still validate, migrate an
 		expect(createHash("sha256").update(text).digest("hex"), `${name} changed after its pin`).toBe(PINNED_BACKUPS[name])
 		const envelope = JSON.parse(name === "password.txt" ? await openFullBackupText(text, PASSWORD) : text) as Record<string, unknown>
 		const problems = await backupProblems(envelope, GOLDEN_NOW)
-		// An acknowledged import-blocking migration refuses every older backup on purpose.
-		const blocking = [...IMPORT_BLOCKING_ACK].filter((version) => version > Number(envelope[BACKUP_SCHEMA_VERSION_FIELD]))
-		if (blocking.length === 0) {
+		const block = acknowledgedBlock(Number(envelope[BACKUP_SCHEMA_VERSION_FIELD]), realMigrations)
+		if (block === undefined) {
 			expect(problems).toEqual([])
 			return
 		}
 		expect(problems).toHaveLength(1)
 		expect(problems[0]).toContain("refused: Incompatible backup: ")
-		expect(problems[0]).toContain(`migration ${Math.min(...blocking)} `)
+		expect(problems[0]).toContain(`migration ${block} `)
 	})
 })
 
