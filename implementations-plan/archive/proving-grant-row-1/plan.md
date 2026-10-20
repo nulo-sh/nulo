@@ -148,5 +148,5 @@ Both reviewers agreed on every item.
 
 ## Seeds (not run; orchestrator-owned)
 
-- `/goal Phase 1 of implementations-plan/proving-grant-row-1/plan.md is ✓ with its gate quoted, the Codex loop converged (a resumed pass reports no new material finding), and the draft PR exists (gh pr view output), with bun run test and bun run lint exit 0 in the transcript.`
-- `/loop 15m Drive implementations-plan/proving-grant-row-1 forward: read plan.md and lessons/, run the next pending step's gate, decide with /codex at high (gpt-6.1-sol), never merge, stop when the draft PR is green.`
+- `/goal Phase 1 of implementations-plan/archive/proving-grant-row-1/plan.md is ✓ with its gate quoted, the Codex loop converged (a resumed pass reports no new material finding), and the draft PR exists (gh pr view output), with bun run test and bun run lint exit 0 in the transcript.`
+- `/loop 15m Drive implementations-plan/archive/proving-grant-row-1 forward: read plan.md and lessons/, run the next pending step's gate, decide with /codex at high (gpt-6.1-sol), never merge, stop when the draft PR is green.`
