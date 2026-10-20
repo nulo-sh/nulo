@@ -1,7 +1,8 @@
 /**
  * The second question a send asks when its build came out above the fee the person agreed to: the
- * queued Send-page send held to its cap, and the dApp send held to the figure its approval window
- * showed. The send is neither proved nor broadcast until the person accepts the new figure.
+ * Send-page send held to the cap or the estimate it showed, and the dApp send held to the figure its
+ * approval window showed. The send is neither proved nor broadcast until the person accepts the new
+ * figure.
  */
 
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
@@ -17,14 +18,24 @@ import { isPrivateFpc } from "@/wallet/services/fpc/private-fpc-address"
 import { FpcType, type FpcIdentitySnapshot } from "@/wallet/services/fpc/spec"
 import type { QueuedFeeAnswers } from "./queued-fee-cap"
 
-/** A rise a dApp send takes without asking: at most `percent` of the approved figure, or under one
- *  unit of the fee readout, so a question's "Was" and "Now" never print alike. */
+/** A rise a send held to a figure it showed as an estimate takes without asking: at most `percent`
+ *  of that figure, or under one unit of the fee readout, so a question's "Was" and "Now" never print
+ *  alike. */
 export const FEE_RISE_ASKS = { percent: 10n, atLeast: FEE_READOUT_UNIT } as const
 
 /** Whether a build's `fee` is far enough above the approved `ceiling` to ask again; a fall never asks. */
 export function feeRiseAsks(fee: string, ceiling: string): boolean {
 	const rise = BigInt(fee) - BigInt(ceiling)
 	return rise >= FEE_RISE_ASKS.atLeast && rise * 100n > BigInt(ceiling) * FEE_RISE_ASKS.percent
+}
+
+/** The figure a Send-page send was confirmed under: a queued send's cap, which the page calls the
+ *  most it charges, or the estimate it showed, which a build may pass by {@link FEE_RISE_ASKS}. */
+export type SendFeeFigure = { readonly fee: string; readonly rule: "cap" | "estimate" }
+
+/** Whether a build's `fee` must ask the person again before it is proved. */
+export function figureAsks(fee: string, figure: SendFeeFigure): boolean {
+	return figure.rule === "cap" ? BigInt(fee) > BigInt(figure.fee) : feeRiseAsks(fee, figure.fee)
 }
 
 /**

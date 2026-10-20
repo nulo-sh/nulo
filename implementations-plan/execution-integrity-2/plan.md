@@ -138,7 +138,7 @@ No stored shape, no message wire type beyond the new optional argument, no new c
 
 **Asks**: none open. P77-02 A is the only visible change; OWNER-ASKS.md says none.
 
-## Phase 1 · the worker holds every person-paid Send to its figure
+## Phase 1 · the worker holds every person-paid Send to its figure ✓
 
 Steps:
 1. Add `SendFeeFigure` and `figureAsks` to `X/fee-reask.ts`. Update the header and the `FEE_RISE_ASKS` TSDoc.
@@ -156,8 +156,8 @@ Tests that land here:
 - `service.composition.test.ts`, new describe "a Send held to the estimate it showed asks again above it". It uses a Fee Juice request and a stashed entry whose fee clears one readout unit.
   - The send's build is more than 10% above `shownFee`: the record asks `{ fee, cap: shownFee, payer: { type: "fj", isProtocol: false } }`, and `proveTx` and `sendTx` are never called.
   - Control: a build exactly 10% (and at least one readout unit) above `shownFee`: proved and sent once, never `queued`. A build in that band asks under the cap rule, so this control fails if the service maps `shownFee` to the wrong rule.
-  - Refused classes, one test each, nothing journaled: a malformed `shownFee`; `feeCap` and `shownFee` together.
   - A Fee Juice send with neither figure ends `failed` before proving.
+- `service.estimate-queue.test.ts`, the existing facade describe of `executeTransfer`'s fee arguments (deviation: the boundary's refusals already live there, one layer cheaper than composition). Refused classes, nothing run: a malformed figure in either position; `feeCap` and `shownFee` together. Control: a cap maps to the cap rule, a shown fee to the estimate rule.
 
 **Validation gate**
 - Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/wallet/services/execution`; `bun run test`.

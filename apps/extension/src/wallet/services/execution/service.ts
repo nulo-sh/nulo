@@ -97,6 +97,7 @@ import { ChainTipGate } from "./chain-tip-gate"
 import { recordedTxKeys } from "./transfer-sequence-keys"
 import { coerceAmount } from "./coerce-amount"
 import { OperationPlanner, type TransferRequest } from "./operation-planner"
+import type { SendFeeFigure } from "./fee-reask"
 import { type QueuedFeeCap, QueuedFeeAnswers, queuedFeeBasis, queuedFeeCap, sendShapeOf } from "./queued-fee-cap"
 import { TransferEstimateReuse } from "./transfer-estimate-reuse"
 import { type ChainIdentity, type EstimateReuseDeps, feeMultiplierFor } from "./estimate-reuse-shared"
@@ -193,6 +194,16 @@ function tokenContractKey(method: string, tokenContract: unknown): string {
 	const key = typeof tokenContract === "string" ? fieldAddressKey(tokenContract) : undefined
 	if (key === undefined) throw InvalidWalletArgumentsError.forMethod(method)
 	return key
+}
+
+/** The one figure a transfer is held to, from at most one of its two fee arguments. */
+function sendFeeFigureOf(feeCap: string | undefined, shownFee: string | undefined): SendFeeFigure | undefined {
+	const figure: SendFeeFigure | undefined =
+		feeCap !== undefined ? { fee: feeCap, rule: "cap" } : shownFee !== undefined ? { fee: shownFee, rule: "estimate" } : undefined
+	if ((feeCap !== undefined && shownFee !== undefined) || (figure && !isFeeAmount(figure.fee))) {
+		throw InvalidWalletArgumentsError.forMethod("executeTransfer")
+	}
+	return figure
 }
 
 /** The popup's fee settings: one per transfer or estimate, one per broadcasting operation. */
@@ -625,9 +636,10 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		feeSettings: FeeSettings,
 		precomputedEstimateId?: string,
 		feeCap?: string,
+		shownFee?: string,
 	): Promise<string> {
 		await this.ensureInitialized()
-		if (feeCap !== undefined && !isFeeAmount(feeCap)) throw InvalidWalletArgumentsError.forMethod("executeTransfer")
+		const figure = sendFeeFigureOf(feeCap, shownFee)
 		const contract = tokenContractKey("executeTransfer", tokenContract)
 		// Early refusal only — the wall is in the coordinator. This spares the user a proof.
 		await this.legal.assertCurrent()
@@ -637,7 +649,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			{ networkId, accountAddress, tokenId, tokenContract: contract, transferType, recipientAddress, amount, feeSettings },
 			precomputedEstimateId,
 			fence,
-			feeCap,
+			figure,
 		)
 	}
 
