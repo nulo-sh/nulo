@@ -13,7 +13,12 @@
  * key's seal binds the chain it was sealed on), so that reset names the account unmovable, which
  * the bump's own reset does not.
  *
- * Runtime: estimated 2 min per case per browser; measured 9 to 34 s, with the release cached.
+ * The first case also exports the updated profile's full backup, and the third registers a passkey
+ * profile on the candidate and exports its backup, passkey check included. Failure mode: a backup
+ * the candidate writes does not import into it. The stored-shape guard's R5 reads only the pinned
+ * files; only here does a real export, and a real passkey ceremony, make one.
+ *
+ * Runtime: estimated 2 min per case per browser; measured 9 to 38 s, with the release cached.
  */
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
