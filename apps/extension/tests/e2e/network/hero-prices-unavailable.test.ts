@@ -67,7 +67,6 @@ test.skipIf(!aztecConfig)(
 			expect(await page.$eval('[data-testid="get-started-phrase"]', (el) => el.getAttribute("aria-current"))).toBe("step")
 			expect(await page.$eval('[data-testid="get-started-count"]', (el) => el.textContent)).toMatch(/^\d of 4 done$/)
 			expect(await page.$('[data-testid="backup-reminder-banner"]')).toBeNull()
-			await shotSend(page, "home-get-started-phrase", "get-started")
 
 			await clickByTestId(page, "get-started-hide")
 			await page.waitForSelector('[data-testid="backup-reminder-banner"]', { visible: true, timeout: 30_000 })
@@ -82,7 +81,6 @@ test.skipIf(!aztecConfig)(
 				() => !document.querySelector('[data-testid="backup-reminder-banner"], [data-testid="get-started"]'),
 				{ timeout: 15_000, polling: 100 },
 			)
-			await shotSend(page, "home-phrase-saved", "home-hero")
 		} finally {
 			await ctx?.close()
 		}
