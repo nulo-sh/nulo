@@ -26,13 +26,7 @@ import type { Migration, StorageRef } from "@nulo/wallet-core/migration"
 import { Migrator, SCHEMA_VERSION_KEY } from "@nulo/wallet-core/migration"
 import { MemoryStorageArea } from "@nulo/wallet-core/storage"
 import { backupMigrations, realMigrations } from "@/wallet/storage/migrations"
-import {
-	BACKUP_BLOCKED_ROOTS,
-	BACKUP_SCHEMA_BASELINE,
-	BACKUP_SLICE_REGISTRY,
-	denormalizeBackupData,
-	normalizeBackupData,
-} from "./backup-migration-registry"
+import { BACKUP_BLOCKED_ROOTS, BACKUP_SCHEMA_BASELINE, denormalizeBackupData, normalizeBackupData } from "./backup-migration-registry"
 import { isBackupSafeMigration } from "./row-map-migration"
 
 /** Mirrors `MigrationResult`, specialized for the backup path:
@@ -120,45 +114,25 @@ export async function migrateBackupData(opts: MigrateBackupOptions): Promise<Bac
  *     backup — an imperative `defineMigration` in range blocks import;
  *  2. block-listed roots (`profile`, `auth-registry-enabled`) block import —
  *     their live state is not representable in a backup;
- *  3. every footprint ref must be registry-covered (a migration over a root
- *     no slice maps to cannot be replayed here);
- *  4. a read of a NON-optional slice the blob doesn't carry rejects (an
- *     optional absent slice already normalized as empty). */
+ *  3. a read of a NON-optional slice the blob doesn't carry rejects (an
+ *     optional absent slice already normalized as empty).
+ *  A ref no slice maps to refuses nothing: the scratch store holds only sliced
+ *  keys, so a migration cannot touch a backup's rows through it. */
 function preflightPending(pending: Migration[], absentRequired: StorageRef[]): BackupMigrationResult | undefined {
-	// Built afresh on every preflight — the registry is only TypeScript-readonly,
-	// so a module-level cache would freeze a mutated registry's FIRST shape.
-	const index = buildCoverageIndex()
 	const absentRoots = new Set(absentRequired.filter((r) => r.kind === "root").map((r) => r.root))
 	const absentKeys = new Set(absentRequired.filter((r) => r.kind === "value").map((r) => r.key))
 
 	for (const m of pending) {
-		const rejection = preflightMigrationRefs(m, index, absentRoots, absentKeys)
+		const rejection = preflightMigrationRefs(m, absentRoots, absentKeys)
 		if (rejection) return rejection
 	}
 	return undefined
 }
 
-interface CoverageIndex {
-	readonly coveredRoots: ReadonlySet<string>
-	readonly coveredValueKeys: ReadonlySet<string>
-	readonly blocked: ReadonlySet<string>
-}
-
-function buildCoverageIndex(): CoverageIndex {
-	const coveredRoots = new Set<string>()
-	const coveredValueKeys = new Set<string>()
-	for (const desc of Object.values(BACKUP_SLICE_REGISTRY)) {
-		if (desc.kind === "root") coveredRoots.add(desc.root)
-		if (desc.kind === "value-projection") coveredValueKeys.add(desc.key)
-	}
-	return { coveredRoots, coveredValueKeys, blocked: new Set(BACKUP_BLOCKED_ROOTS) }
-}
-
-/** One migration's gates, in reject-oracle order: brand → blocked → uncovered
- *  (reads-then-writes ref order) → absent-required read. */
+/** One migration's gates, in reject-oracle order: brand → blocked (reads-then-writes
+ *  ref order) → absent-required read. */
 function preflightMigrationRefs(
 	m: Migration,
-	index: CoverageIndex,
 	absentRoots: ReadonlySet<string>,
 	absentKeys: ReadonlySet<string>,
 ): BackupMigrationResult | undefined {
@@ -169,8 +143,12 @@ function preflightMigrationRefs(
 		}
 	}
 	for (const ref of [...m.reads, ...m.writes]) {
-		const rejection = rejectBlockedOrUncoveredRef(m.version, ref, index)
-		if (rejection) return rejection
+		if (ref.kind === "root" && BACKUP_BLOCKED_ROOTS.includes(ref.root)) {
+			return {
+				kind: "incompatible",
+				reason: `migration ${m.version} touches "${ref.root}", which backups cannot represent — re-export a fresh backup from a current wallet`,
+			}
+		}
 	}
 	for (const ref of m.reads) {
 		const missing = ref.kind === "root" ? absentRoots.has(ref.root) : absentKeys.has(ref.key)
@@ -178,21 +156,6 @@ function preflightMigrationRefs(
 			const target = ref.kind === "root" ? ref.root : ref.key
 			return { kind: "failed", reason: `backup is missing a required slice for "${target}" that migration ${m.version} reads` }
 		}
-	}
-	return undefined
-}
-
-function rejectBlockedOrUncoveredRef(version: number, ref: StorageRef, index: CoverageIndex): BackupMigrationResult | undefined {
-	if (ref.kind === "root" && index.blocked.has(ref.root)) {
-		return {
-			kind: "incompatible",
-			reason: `migration ${version} touches "${ref.root}", which backups cannot represent — re-export a fresh backup from a current wallet`,
-		}
-	}
-	const covered = ref.kind === "root" ? index.coveredRoots.has(ref.root) : index.coveredValueKeys.has(ref.key)
-	if (!covered) {
-		const target = ref.kind === "root" ? ref.root : ref.key
-		return { kind: "incompatible", reason: `migration ${version} touches "${target}", which no backup slice maps to` }
 	}
 	return undefined
 }
