@@ -18,7 +18,7 @@ post_implementation_hardening: not scheduled
 ## Outcome
 
 - **Date:** 2026-10-20
-- **Status:** completed. Its delivery is #743, a draft against `dev` that also carries arc 1 ([archive/onboarding-3](../archive/onboarding-3/plan.md)) and onboarding-4's arc ([archive/onboarding-4](../archive/onboarding-4/plan.md), #769); this close-out is its final commits. The orchestrator takes #743 out of draft and merges it.
+- **Status:** completed. Its delivery is #743, a draft against `dev` that also carries arc 1 ([archive/onboarding-3](../onboarding-3/plan.md)) and onboarding-4's arc ([archive/onboarding-4](../onboarding-4/plan.md), #769); this close-out is its final commits. The orchestrator takes #743 out of draft and merges it.
 - **Shipped:**
   - P50-01 B (#769): a later profile's card shows only what it lacks.
   - The matrix, M1 to M23, each cell pinned by a unit, Home or e2e step.
@@ -35,7 +35,7 @@ post_implementation_hardening: not scheduled
 
 # onboarding-3, arc 2: the owner's second round on #743
 
-The addendum to [the arc 1 plan](../archive/onboarding-3/plan.md). It is a separate directory because that plan is archived. The arc's work stays on #743 (branch `worktree-onboarding-3`, a draft held for the owner's build test). Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are relative to `apps/extension/` unless they start with `implementations-plan/` or `packages/`.
+The addendum to [the arc 1 plan](../onboarding-3/plan.md). It is a separate directory because that plan is archived. The arc's work stays on #743 (branch `worktree-onboarding-3`, a draft held for the owner's build test). Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are relative to `apps/extension/` unless they start with `implementations-plan/` or `packages/`.
 
 ## The owner's words (2026-10-19, build test of 3f9f958c)
 
@@ -328,7 +328,7 @@ No new PR. The arc pushes to `worktree-onboarding-3` with plain pushes and never
 
 ## Post-implementation
 
-[`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard), at `dev` f214e5cb, with these values:
+[`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard), at `dev` f214e5cb, with these values:
 - Step 1 is absent (`code_review: off`).
 - Step 2 is one loop over `git diff 56361a49..HEAD`, the arc's own commits after the two merges (their PRs reviewed the folded code). It runs `run-codex.sh` with gpt-6.1-sol at high, read-only. One Opus diff review runs beside round 1. Stop at three rounds.
 - Step 3 is the push and the watch above.

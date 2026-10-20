@@ -1,6 +1,6 @@
 # Owner asks: onboarding-3, arc 2
 
-These asks come from the owner's second build test of #743 (2026-10-19). Each one is a visible choice that no signed rule settles. Each has a "what ships now" line, and the arc builds that line. The pictures show Chrome at the popup's real size, 360×600, in light and dark. A picture captioned **mockup** is the real Home, changed in the browser through its live styles. Nothing in a mockup is built. The numbering continues after [arc 1's asks](../archive/onboarding-3/OWNER-ASKS.md) (OA-1 to OA-16).
+These asks come from the owner's second build test of #743 (2026-10-19). Each one is a visible choice that no signed rule settles. Each has a "what ships now" line, and the arc builds that line. The pictures show Chrome at the popup's real size, 360×600, in light and dark. A picture captioned **mockup** is the real Home, changed in the browser through its live styles. Nothing in a mockup is built. The numbering continues after [arc 1's asks](../onboarding-3/OWNER-ASKS.md) (OA-1 to OA-16).
 
 Already shipped in this round, signed: **P50-01 = B** (#769). A profile created beside another shows only what it lacks. A password profile shows the phrase row alone, and a passkey profile shows no card. That covers the owner's first case: passkeys imported first, then a password profile created.
 
