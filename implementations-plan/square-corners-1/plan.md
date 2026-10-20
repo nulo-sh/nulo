@@ -1,7 +1,7 @@
 ---
 plan: square-corners-1
 tier: light
-status: arc 1 merged (#933); arc 2 in review
+status: completed (arc 1 #933; arc 2's PR carries this close-out)
 issues: "#928 (arc 1 refs; arc 2 closes), #937 (arc 2 closes)"
 driver: claude-code
 claude_model: opus
@@ -13,10 +13,20 @@ base: dev @ e6a68cd5
 standard: implementations-plan/README.md § Post-implementation standard, read at e6a68cd5
 ---
 
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** delivered in two PRs against `dev`: arc 1, #933 (merged as `21eb96866`), and arc 2's, which carries this close-out; its merge closes the plan.
+- **Shipped:** no rounded corner on any surface OA-1 lists: the notice card (P71-07), the logs and JSON windows' frame, the logs toolbar buttons, filter panels and their rows, the JSON viewer's copy and full-screen icons, both search boxes (the logs one through a 0 over CodeMirror's 1px), the selection-match outline, the awaiting card's focus ring and RETRY (P72-01 A); the radii declared but never drawn in those files. The JSON viewer's search box takes `--txt-primary`, `--nulo-border`, `--nulo-surface-*` in both themes, pressed buttons included (P72-04 A, #937). Circles stay round. A source pin keeps the notice card square.
+- **Dropped or rejected:** OA-1 Q2's tree-wide guard (struck, P72-02); options B and C; a test for #937's colours (D15); the logs search box's colours (D17). The search box's checkboxes keep Chrome's native look, as OA-1 said.
+- **Lessons:** one promoted to `lessons.md` (CodeMirror's base theme follows the editor's `dark` flag; its state rules outrank a theme's).
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
+
 # square-corners-1: the notice card goes square; the other rounded corners go to the owner
 
 Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (OA-1).
-Size: 156 lines, over the 150 target by the record of six review rounds, which nothing else restates.
 
 | Arc | Issue | Branch | PR line |
 |---|---|---|---|
@@ -161,7 +171,7 @@ No trust boundary moves: no dApp input, storage, message, permission, log or dep
 
 **Post-implementation round 2** (Codex, resumed): `findings: 1`, demonstrated: the hand-split inline parser missed `border-radius/**/: 16px`, which the round-1 check caught → inline styles parse through `parseSource` as CSS; a control. Red/green: base fails 1 of 17, head passes 17. **Round 3** (resumed): `clean`; converged.
 
-**Arc 2, post-implementation round 1** (diff `origin/dev...square-corners-1-a2`; Codex gpt-6.1-sol, high, session `01a159b5`): `findings: 1`, demonstrated from the base theme's source: CodeMirror's `&dark .cm-button:active` gradient outranks the theme's `.cm-button`, so a pressed button would put the new dark text on a dark gradient in the light theme → an `&:active` background of `--nulo-surface-high` (light 13.62:1, dark 12.62:1). Codex confirmed the corners, the circles, D13, D14 and the re-stamp, and backed D15 (no test).
+**Arc 2, post-implementation round 1** (diff `origin/dev...square-corners-1-a2`; Codex gpt-6.1-sol, high, session `01a159b5`): `findings: 1`, demonstrated from the base theme's source: CodeMirror's `&dark .cm-button:active` gradient outranks the theme's `.cm-button`, so a pressed button would put the new dark text on a dark gradient in the light theme → an `&:active` background of `--nulo-surface-high` (light 13.62:1, dark 12.62:1). Codex confirmed the corners, the circles, D13, D14 and the re-stamp, and backed D15 (no test). **Round 2** (resumed): `clean`; converged.
 
 ## Delivery
 
