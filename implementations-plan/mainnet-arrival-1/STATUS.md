@@ -11,3 +11,5 @@
 - 2026-10-19 A1 Codex r2 1 low (comment) fixed; r3 clean. Loop converged; e2e gates next.
 - 2026-10-19 A1 phase 1 gate: smoke e2e (4 files, 21 tests, retry 0, 128 s) and network e2e (2 files, 6 tests, retry 0, 121 s), Chrome, pass; `bun run test` and `typecheck:all` on head exit 0. PR next.
 - 2026-10-19 `test:all` on head exit 0; Codex r2/r3 recorded (D15); phase 1 ticked.
+- 2026-10-19 A2 (phase 2, owner's D, P66-01) started on `mainnet-arrival-1-a2` off origin/dev `ab5442d7`; arcs split A2/A3 (D-orch-2). Design consult: Codex request-changes, Opus sound-with-fixes; D16-D22. Code + unit tests in; Chrome smoke of the new file green at retry 0 (9.2 s); OA-2 screenshots written.
+- 2026-10-20 A2 review: Codex r1 1 medium + 1 low, Opus 1 medium + 5 low, all fixed (D23); Codex r2 clean (D24). Final gates on merged head e9f9cb5f green: lint, typecheck:all, test:all, audit:vue, check:plans; smoke Chrome + Firefox 19/19 at retry 0. Draft PR next.
