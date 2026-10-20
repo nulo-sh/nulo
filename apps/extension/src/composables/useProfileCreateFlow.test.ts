@@ -50,8 +50,13 @@ beforeEach(() => {
 })
 
 describe("useProfileCreateFlow", () => {
+	test("both create pages open on Passkey", () => {
+		expect(makeFlow().flow.authMethod.value).toBe("passkey")
+	})
+
 	test("password create happy path creates + activates once", async () => {
 		const { flow, opts } = makeFlow()
+		flow.authMethod.value = "password"
 		flow.profileName.value = "MyProfile"
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
@@ -87,6 +92,7 @@ describe("useProfileCreateFlow", () => {
 
 	test("latch: two synchronous submits create only once", async () => {
 		const { flow, opts } = makeFlow()
+		flow.authMethod.value = "password"
 		flow.profileName.value = "MyProfile"
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
@@ -97,6 +103,7 @@ describe("useProfileCreateFlow", () => {
 
 	test("a first profile shows no name field and is created as Main", async () => {
 		const { flow } = makeFlow()
+		flow.authMethod.value = "password"
 		await flushPromises()
 		expect(flow.nameFieldState.value).toBe("hidden")
 		flow.password.value = "password123"
@@ -123,6 +130,7 @@ describe("useProfileCreateFlow", () => {
 
 	test("a rejected profile read releases the latch and notifies; a retry creates", async () => {
 		const { flow, opts } = makeFlow()
+		flow.authMethod.value = "password"
 		await flushPromises()
 		profileApi.getProfiles.mockRejectedValueOnce(new Error("worker gone"))
 		flow.password.value = "password123"
@@ -171,6 +179,7 @@ describe("useProfileCreateFlow", () => {
 	test("password create failure notifies with isPasskey=false", async () => {
 		profileApi.createProfile.mockRejectedValueOnce(new Error("boom"))
 		const { flow, opts } = makeFlow()
+		flow.authMethod.value = "password"
 		flow.profileName.value = "MyProfile"
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"

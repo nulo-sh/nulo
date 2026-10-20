@@ -451,38 +451,11 @@
 			"suite": "smoke"
 		},
 		{
-			"id": "onboarding-presto",
-			"name": "Onboarding: Presto",
-			"kind": "route",
-			"source": "apps/extension/src/onboarding/pages/presto.vue",
-			"reach": "#/onboarding/presto",
-			"states": ["default"],
-			"suite": "smoke"
-		},
-		{
-			"id": "onboarding-learn",
-			"name": "Onboarding: learn",
-			"kind": "route",
-			"source": "apps/extension/src/onboarding/pages/learn.vue",
-			"reach": "#/onboarding/learn",
-			"states": ["default"],
-			"suite": "smoke"
-		},
-		{
 			"id": "onboarding-import",
 			"name": "Onboarding: import",
 			"kind": "route",
 			"source": "apps/extension/src/onboarding/pages/import.vue",
 			"reach": "#/onboarding/import",
-			"states": ["default"],
-			"suite": "smoke"
-		},
-		{
-			"id": "onboarding-fees",
-			"name": "Onboarding: fees",
-			"kind": "route",
-			"source": "apps/extension/src/onboarding/pages/fees.vue",
-			"reach": "#/onboarding/fees",
 			"states": ["default"],
 			"suite": "smoke"
 		},
@@ -503,16 +476,6 @@
 			"reach": "#/onboarding/create",
 			"states": ["default"],
 			"suite": "smoke"
-		},
-		{
-			"id": "windows-ConnectStepBar",
-			"name": "Routed module popup/windows/ConnectStepBar.vue",
-			"kind": "route",
-			"source": "apps/extension/src/popup/windows/ConnectStepBar.vue",
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
 		},
 		{
 			"id": "popup-activity",

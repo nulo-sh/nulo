@@ -218,8 +218,8 @@ async function walkToPendingSend(ctx: PlacementContext, config: AztecTestConfig)
 	const discover = await openedBy(ctx, "discover", a.page, () => clickByTestId(a.page, "pg-btn-connect"))
 	const connectWindow = (await expectTopRightOf(ctx, "discover", discover, a.id)).outer.id
 	const check = await approveConnect(ctx, discover, () => finalClick(discover, "discover-allow-btn"))
-	const shown = await expectTopRightOf(ctx, "the emoji check in the connect window", check, a.id)
-	expect(shown.outer.id, "the check stays in the connect window").toBe(connectWindow)
+	const shown = await expectTopRightOf(ctx, "the emoji check of a new connection", check, a.id)
+	expect(shown.outer.id, "the check opens in a window of its own").not.toBe(connectWindow)
 	await finalClick(check, "verify-confirm-btn")
 	await a.page.waitForSelector('[data-testid="pg-status"][data-status="connected"]', { timeout: 30_000 })
 

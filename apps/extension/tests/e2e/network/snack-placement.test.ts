@@ -14,9 +14,11 @@ import {
 	spendPublicAuthwit,
 	waitForTxMined,
 } from "../fixtures/aztec"
+import { TEST_PASSWORD } from "../fixtures/constants"
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
 import {
 	captureBalanceBaseline,
+	clearGetStarted,
 	enterSendForm,
 	fillSendForm,
 	importToken,
@@ -561,6 +563,11 @@ test.skipIf(!hasConfig)(
 		const ctx = dappConnectedExtensionWithTransactionCap
 		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
+		// Where Home rests, the Get started card would hold the awaiting row below the fold.
+		const setup = await openPopup(ctx)
+		await waitForHash(setup, "#/popup/general", 30_000)
+		await clearGetStarted(setup, TEST_PASSWORD)
+		await setup.close()
 		const page = await balanceDrainedBehindTheWallet(ctx, estimateOnSend)
 		await confirmDrainedSend(page)
 		await waitForHash(page, "#/popup/general", 10_000)

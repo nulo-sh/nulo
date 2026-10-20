@@ -17,7 +17,7 @@ import { type ILogger, LogLevel } from "@nulo/wallet-core/logger"
  * verification is scheduled, and the discovery is rejected — so an
  * approved-but-unreachable, or unverified-yet-live, session is not handed to a
  * dApp that has stopped listening. An attempt abandoned during the writes (its
- * connect window closed) is rolled back the same way. One the SDK no longer
+ * window slot given back) is rolled back the same way. One the SDK no longer
  * waits for loses its row too, unless another discovery of the app waits on
  * this window to connect on it.
  *
