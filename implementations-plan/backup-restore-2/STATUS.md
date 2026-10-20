@@ -2,3 +2,4 @@
 - 2026-10-20 22:20Z panel round 1: Codex conditional approve, Opus reject; restore-time derivation dropped (in-place v6.1 rotation), awaited tx purge added
 - 2026-10-20 22:40Z Codex round 2 conditional approve; conditions applied; round 3 approve
 - 2026-10-20 21:40Z arc1 phase 1 gate green: lint 0, typecheck:all 0, tx + cross-profile tests 88/88; (a) and (b) red on the base service.ts
+- 2026-10-20 22:15Z arc1 phase 2 gate: lint 0, test 0 (14648 passed), test:all 0; typecheck:all red once (spread of `as never` fixtures in the new test), fixed with an object cast, then lint 0, typecheck:all 0, the file 24/24; (c) and (d) red on the base service.ts

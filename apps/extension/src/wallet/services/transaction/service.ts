@@ -145,6 +145,11 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		// directly with the tombstone's address snapshot, and the worker's write is
 		// fenced (see `updateTx`) so a mid-poll tx can't resurrect.
 		this.accountService.onAccountDeleted.add(this.onAccountDeleted)
+		// Awaited before `reconcileImportedAccounts` deletes a keyless account, so a restore that
+		// drops one has purged its rows before the import finalizes.
+		this.accountService.registerAccountPurgeSubscriber(async (profileId, scopes) => {
+			for (const { chainId, address } of scopes) await this.purgeForAccounts([address], profileId, chainId)
+		})
 
 		// Only Pending rows and rows carrying the finality marker are re-armed: a restored row's
 		// `submittedEndpointUrl` is backup-controlled, so the worker never dials it for a row it did

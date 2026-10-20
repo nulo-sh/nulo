@@ -36,6 +36,7 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 		services.add(
 			svc(ACCOUNT_SERVICE_NAME, {
 				onAccountDeleted: new EventHandler(),
+				registerAccountPurgeSubscriber: () => {},
 				// The account exists ONLY for profile p1 (a purged/re-owned account
 				// resolves to undefined here).
 				getAccount: async (profileId: string, _chainId: number, address: string) =>
@@ -310,6 +311,7 @@ describe("TransactionService.restore — deletion fence (threaded profileId)", (
 		services.add(
 			svc(ACCOUNT_SERVICE_NAME, {
 				onAccountDeleted: new EventHandler(),
+				registerAccountPurgeSubscriber: () => {},
 				// p1 holds 0xa on chain 1 only; p2 holds 0xb.
 				getAccountsRaw: async (profileId: string) =>
 					profileId === "p1" ? [{ profileId, chainId: 1, address: "0xa" }] : [{ profileId, chainId: 1, address: "0xb" }],
@@ -413,7 +415,7 @@ describe("TransactionService.waitForTx — bounded wait", () => {
 		services.add(
 			svc(PROFILE_SERVICE_NAME, { getActiveProfile: async () => undefined, getDeletionState: () => new ProfileDeletionState() }),
 		)
-		services.add(svc(ACCOUNT_SERVICE_NAME, { onAccountDeleted: new EventHandler() }))
+		services.add(svc(ACCOUNT_SERVICE_NAME, { onAccountDeleted: new EventHandler(), registerAccountPurgeSubscriber: () => {} }))
 		services.add(svc(NETWORK_SERVICE_NAME, {}))
 		service = new TransactionService(new LoggerStore(new ConfigStore()), api)
 		services.add(service)

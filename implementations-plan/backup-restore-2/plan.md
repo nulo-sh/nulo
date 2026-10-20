@@ -74,7 +74,7 @@ Control flow (order unchanged): profile restore → networks → `AccountService
 - Tests (`S/transaction/service.test.ts`): (a) a row with no `profileId` and a row naming another profile id, both naming the restored profile's account, are stored with the threaded id (red at the base); (b) a row naming an address the profile does not hold, and a row naming its address on a chain where it holds none, are refused with the account message and not stored, beside a stored control row.
 - **Validation gate**: `bun run lint && bun run typecheck:all && bun run --cwd apps/extension test src/wallet/services/transaction src/wallet/services/cross-profile-isolation.test.ts`. Pass: exit 0, and (a) and (b) fail against the base copy of `service.ts`.
 
-## Phase 2: a dropped account takes its restored rows with it (I3)
+## Phase 2: a dropped account takes its restored rows with it (I3) ✓
 
 - Register the subscriber in `TransactionService.init`.
 - Add `registerAccountPurgeSubscriber` to the account fakes of the tx service tests.
