@@ -1,7 +1,7 @@
 ---
 plan: hook-bins-1
 tier: light
-status: planned, final Codex approve (2026-10-20); arc 1 under auto-continue
+status: completed (delivered in #910)
 issues: "none public (tracked privately)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at dc94581d
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** delivered as one ready PR against `dev`, #910, which carries this close-out; its merge closes the plan.
+- **Shipped:** both hooks check `./node_modules/.bin/<tool>` first and refuse with one fixed line before `bun install`, else run `bun --no-install ./node_modules/.bin/<tool>`; `generate.ts` and `rescore.ts` run the installed Biome by path; a manual-command comment names the Aztec CLI wallet without a runner; `scripts/ci-cd/githooks.test.ts` pins the hooks' behaviour and the runner ban; CLAUDE.md:50 and :54. No public issue (tracked privately).
+- **Review loop:** the plan took Codex and Opus conditional approves, then a fresh Codex conditional approve and approve; the arc's diff took Codex findings (comments), Opus findings (minor), one Codex gap at round 2 and clean at round 3.
+- **Gates at the head:** lint, `typecheck:all`, `test:all`, `test:ci-gating` (638), `test:release` (341) and `check:plans` 0 after merging `origin/dev` at `93ce1e4e`; the fresh-worktree proof in [lessons/phase-3.md](lessons/phase-3.md).
+- **Dispositions:** `pr-quick.yml`'s commitlint and `setup-puppeteer`'s Firefox download keep their runner (D3: after a frozen install, from the declaring directory); FIREFOX.md's pinned `web-ext` check stays a deliberate manual fetch; Bun's runtime module resolution stays out of scope (not a runner; the probe saw no fetch).
+- **Known limits:** none. **Open items:** none.
+- **Lessons:** none promoted: `lessons.md` sits at its 8 KiB budget, and F4 now lives in CLAUDE.md § Working in this repo. The Biome `files.includes` trap for a root-level proof file is in [lessons/phase-0.md](lessons/phase-0.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # hook-bins-1: the git hooks run the worktree's installed Biome and commitlint, and refuse before `bun install`
 
