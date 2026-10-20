@@ -54,10 +54,9 @@ export default {
 			// `http://[::1]:*` source; the form refuses it. Firefox checks `downloads.download` of a
 			// blob URL against this.
 			"connect-src 'self' blob: https: http://localhost:* http://127.0.0.1:*",
-			// The one inline stylesheet a page may carry is the Presto banner's shadow-root `<style>`, one
-			// constant for every variant and theme; `src/manifest.test.ts` re-hashes it from the
-			// installed package. The viewers' CodeMirror adopts its sheets into their shadow roots.
-			"style-src 'self' 'sha256-C0kfQfSj0nK8EHJVnIUHaTi2TjSzbRaDjpU61ugGI9o='",
+			// No page carries an inline stylesheet: the viewers' CodeMirror adopts its sheets into their
+			// shadow roots.
+			"style-src 'self'",
 		].join("; "),
 	},
 	cross_origin_embedder_policy: {
