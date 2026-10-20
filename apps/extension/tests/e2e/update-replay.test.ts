@@ -101,17 +101,28 @@ const imported = (rows: StoredAccount[]) => rows.filter((a) => a.type === 1).map
  *  the recording's sandbox or playground had. */
 const UNREACHABLE = "http://127.0.0.1:9"
 
-/** `entries` with every network endpoint on a loopback host moved to {@link UNREACHABLE}. */
+const offlineUrl = (url: string): string => {
+	const { hostname } = new URL(url)
+	return hostname === "localhost" || hostname === "127.0.0.1" ? UNREACHABLE : url
+}
+
+/** `entries` with every loopback URL a build dials moved to {@link UNREACHABLE}: each network
+ *  endpoint, and the endpoint a transaction was sent to, which the finality watch reads. */
 function offline(entries: Record<string, unknown>): Record<string, unknown> {
 	return Object.fromEntries(
 		Object.entries(entries).map(([key, raw]) => {
-			if (!key.startsWith("nulo:core:networks@") || typeof raw !== "string") return [key, raw]
-			const row = JSON.parse(raw) as { endpoints?: Array<{ rpcUrl: string }> }
-			const endpoints = row.endpoints?.map((endpoint) => {
-				const { hostname } = new URL(endpoint.rpcUrl)
-				return hostname === "localhost" || hostname === "127.0.0.1" ? { ...endpoint, rpcUrl: UNREACHABLE } : endpoint
-			})
-			return [key, JSON.stringify({ ...row, endpoints })]
+			if (typeof raw !== "string") return [key, raw]
+			if (key.startsWith("nulo:core:networks@")) {
+				const row = JSON.parse(raw) as { endpoints?: Array<{ rpcUrl: string }> }
+				const endpoints = row.endpoints?.map((endpoint) => ({ ...endpoint, rpcUrl: offlineUrl(endpoint.rpcUrl) }))
+				return [key, JSON.stringify({ ...row, endpoints })]
+			}
+			if (key.startsWith("nulo:core:txs@")) {
+				const row = JSON.parse(raw) as { submittedEndpointUrl?: string }
+				const sent = row.submittedEndpointUrl
+				return [key, JSON.stringify(sent ? { ...row, submittedEndpointUrl: offlineUrl(sent) } : row)]
+			}
+			return [key, raw]
 		}),
 	)
 }
