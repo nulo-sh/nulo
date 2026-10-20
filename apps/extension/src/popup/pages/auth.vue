@@ -23,7 +23,7 @@ import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { InvalidPasswordError, RestoreTornError, UserRejectedError } from "@nulo/extension-messaging/errors"
 import { getLastActiveProfileId, setLastActiveProfileId } from "@/utils/lastActiveProfile"
-import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { postAuthRoute } from "@/utils/own-window"
 import { PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
 import { initTransactionService, managers, refreshBalances } from "@/utils/core"
@@ -111,7 +111,7 @@ const advancePastAuth = async () => {
  *  across the awaits. */
 const unlockActiveProfile = async () => {
 	if (isPasskeyProfile.value) {
-		if (passkeyNeedsOwnWindow()) return managers.profile.unlockPasskeyProfile(appStore.profile.id)
+		if (closesOnFocusLoss()) return managers.profile.unlockPasskeyProfile(appStore.profile.id)
 		const credentialId = await managers.profile.getPasskeyCredentialId(appStore.profile.id)
 		const credData = await runCeremony({ mode: "get", credentialId, step: "unlock", profileName: appStore.profile.name })
 		return managers.profile.unlockPasskeyProfile(appStore.profile.id, credData)

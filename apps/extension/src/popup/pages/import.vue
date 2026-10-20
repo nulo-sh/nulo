@@ -19,7 +19,7 @@ import { useToast } from "@/composables/toast"
 import { awaitProfileActivation } from "@/composables/unlockWait"
 
 /** Utils */
-import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { OWN_WINDOW_ROUTES, closeOwnWindow, moveToOwnWindow, releaseOwnWindow } from "@/utils/own-window"
 import { passkeyImportFailedNotice } from "@/utils/profile-flow-notices"
@@ -148,7 +148,7 @@ if (typeof route.query.name === "string") profileName.value = route.query.name
 /** Firefox's toolbar panel closes under a passkey prompt, and a backup's kind is unknown until its
  *  file is read, so a Full Backup restore there moves to its own window. A failed move stays here. */
 const selectImportOption = async (option) => {
-	if (option === "full_backup" && passkeyNeedsOwnWindow() && (await moveToOwnWindow(ownWindowRestoreRoute()))) return
+	if (option === "full_backup" && closesOnFocusLoss() && (await moveToOwnWindow(ownWindowRestoreRoute()))) return
 	selectedImportOption.value = option
 }
 

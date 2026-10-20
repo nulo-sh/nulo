@@ -556,7 +556,7 @@
     "passkeyBackupAuthenticator": true,
     "passkeyFailureCopy": true,
     "passkeyImportFailedNotice": true,
-    "passkeyNeedsOwnWindow": true,
+    "closesOnFocusLoss": true,
     "passkeyTag": true,
     "persistThemeHint": true,
     "pickFile": true,

@@ -13,7 +13,7 @@ standard: implementations-plan/README.md § Post-implementation standard, read a
 
 # firefox-files-1: file pickers leave Firefox's toolbar panel, the full backup says it is saved, the contacts export shows its wait
 
-One arc, one PR against `dev`, `Closes #160`, opened as a draft until the owner's three picks (page 74: P74-05, P74-06, P74-07) are quoted in its body. The plan is built on the recommended options as working assumptions (A1-A3); each names what changes under the other options, so a pick switches phases, not the plan. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks beyond the page: [OWNER-ASKS.md](OWNER-ASKS.md). Gate log: `STATUS.md`.
+One arc, one PR against `dev`, `Closes #160`, with the owner's three picks (page 74: P74-05 A, P74-06 B, P74-07 C, § Assumptions) quoted in its body; they are the options the plan was built on. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks beyond the page: [OWNER-ASKS.md](OWNER-ASKS.md). Gate log: `STATUS.md`.
 
 ## Outcome & Quality Bar
 
@@ -41,11 +41,11 @@ One arc, one PR against `dev`, `Closes #160`, opened as a draft until the owner'
 - I2 A press in the own window opens the picker on Firefox: a normal top-level document with user activation, and the 50 ms timer of F3 runs inside it. Headless Firefox cannot show it (FIREFOX.md); the owner's Mac check (OA-3) is the proof.
 - I3 With the probe, an unreachable network costs nothing when refused and 5 s when silent; a live, bound network costs its `getSenders`. Measured in phase 5 in `contacts-import` (both networks refused) and `network/senders-advanced` (a live, bound network).
 
-**Asks** (the owner's picks; the page's options are the alternatives):
-- A1 P74-05, where a file import runs on Firefox's toolbar panel. **Working assumption: A**, the own window (phases 1, 2). Under **B** (the sidebar, #889): phases 1 and 2 drop; the panel's entries would refuse with a hint to the sidebar, new copy (an owner ask), and #889 must land first; this arc ships without it. Under **C**: phases 1 and 2 drop; #160's import part closes as decided.
-- A2 P74-06, the full backup after its download. **Working assumption: B**, the done state (phase 4). Under **A** (close by itself): phase 4 becomes "after a current run's accepted encrypted download, do what Close does"; no card text, no Close button. Under **C**: phase 4 drops.
-- A3 P74-07, the contacts export's wait. **Working assumption: C**, both (phases 3, 5). Under **A**: phase 5 keeps the card and drops the probe. Under **B**: phase 5 keeps the probe; phase 3 and the card drop. Under **D**: phases 3 and 5 drop.
-- A4 → OA-1, OA-2, OA-3, OA-4 ([OWNER-ASKS.md](OWNER-ASKS.md)): what the page's records do not settle. Each ships its "what ships now" form, which keeps today's behaviour.
+**Decisions** (decision page 74, 2026-10-20, recorded on #160; each is the option the plan was built on, so no phase changed):
+- A1 **P74-05**, where a file import runs on Firefox's toolbar panel: option A, "The wallet's own window: on Firefox's toolbar panel, Import contacts opens Contacts in the 380x660 window and you press Import contacts once more there. The same hand-off for the account-file import and a password profile's full-backup restore from the panel, the other file pickers." (phases 1, 2)
+- A2 **P74-06**, the full backup page after its download: option B, "A done state: the card reads "Saved to your downloads" with the password reminder, and one Close button replaces Download Backup; a second download is no longer offered." (phase 4)
+- A3 **P74-07**, the contacts export's wait: option C, "Both: the bounded check and the card." (phases 3, 5)
+- A4 → OA-1, OA-2, OA-3, OA-4 ([OWNER-ASKS.md](OWNER-ASKS.md)): what the page's records do not settle, unanswered. Each ships its "what ships now" form, which keeps today's behaviour.
 
 ## Architecture & Implementation
 

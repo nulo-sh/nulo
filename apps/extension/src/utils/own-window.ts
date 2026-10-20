@@ -1,8 +1,9 @@
 /**
- * An own window: Firefox's toolbar panel closes when a passkey prompt takes focus, so the two pages
- * that run their passkey step in the page (Full Backup export and restore) reopen themselves in a
- * popup-sized window first. The document records once, at boot, that it was opened as one; the guard,
- * the lock screen and the import page rewrite the route later, so nothing reads the current route.
+ * An own window: Firefox's toolbar panel closes when a passkey prompt or a file picker takes focus,
+ * so a page that opens either (Full Backup export and restore, the contacts and account-file imports,
+ * Restore again) reopens itself in a popup-sized window first. The document records once, at boot,
+ * that it was opened as one; the guard, the lock screen and the import page rewrite the route later,
+ * so nothing reads the current route.
  *
  * One window per flow: the window stores its own id in `chrome.storage.session`, since the panel that
  * opened it is gone by the time it could, and a later start from the panel focuses that window.
@@ -11,8 +12,14 @@ import type { CreateWindowOptions } from "@nulo/wallet-core/ports"
 import type { NavigationHookAfter } from "vue-router"
 import { centerOn } from "@/wallet/services/window-manager/placement"
 
-/** The two pages that may move to an own window. */
-export const OWN_WINDOW_ROUTES = { export: "/popup/settings/security/export/full", import: "/popup/import" } as const
+/** The pages that may move to an own window, each its own flow. */
+export const OWN_WINDOW_ROUTES = {
+	export: "/popup/settings/security/export/full",
+	import: "/popup/import",
+	contacts: "/popup/settings/contacts",
+	accountImport: "/popup/settings/accounts/import",
+	restoreAgain: "/popup/restore-again",
+} as const
 const MARKER = "window"
 const MARKER_VALUE = "own"
 const WIDTH = 380
@@ -34,7 +41,7 @@ function flowOf(route: string): OwnFlow | undefined {
 }
 
 /** Called once in `popup/index.ts`, before the router exists: the document is an own window when its
- *  first URL is one of the two own-window routes and carries `window=own`. */
+ *  first URL is one of the own-window routes and carries `window=own`. */
 export function captureOwnWindow(hash: string): void {
 	const path = hash.replace(/^#/, "")
 	const queryStart = path.indexOf("?")

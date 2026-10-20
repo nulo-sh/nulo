@@ -75,6 +75,16 @@ describe("own window identity", () => {
 		expect(ownWindowRoute()).toBe("/popup/import?option=full_backup&name=Alice")
 	})
 
+	test.each([
+		["contacts", "/popup/settings/contacts"],
+		["account import", "/popup/settings/accounts/import"],
+		["restore again", "/popup/restore-again"],
+	])("a marked %s URL is an own window that returns to its page after auth, not Home", (_name, route) => {
+		captureOwnWindow(`#${route}?window=own`)
+		expect(ownWindowRoute()).toBe(route)
+		expect(postAuthRoute()).toBe(route)
+	})
+
 	test("an unmarked URL, another marker value or any other route is not", () => {
 		for (const hash of [`#${EXPORT}`, `#${EXPORT}?window=tab`, "#/popup/general?window=own", "#/windows/passkey?window=own"]) {
 			captureOwnWindow(hash)
@@ -206,6 +216,15 @@ describe("one own window per flow", () => {
 		expect(await moveToOwnWindow("/popup/import?option=full_backup")).toBe(true)
 		expect(update).not.toHaveBeenCalled()
 		expect(create).toHaveBeenCalledTimes(1)
+	})
+
+	test("a second contacts import focuses the contacts window, under its own key", async () => {
+		session.set("nulo:own-window:contacts", 12)
+		getWindow.mockResolvedValue({ id: 12, type: "popup" })
+
+		expect(await moveToOwnWindow("/popup/settings/contacts")).toBe(true)
+		expect(update).toHaveBeenCalledWith(12, FOCUS)
+		expect(create).not.toHaveBeenCalled()
 	})
 
 	test("a storage read that rejects still opens a window", async () => {
