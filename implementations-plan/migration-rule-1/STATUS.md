@@ -14,3 +14,4 @@
 - 2026-10-19 A2 phase 5 built: the unchecked-passkey refusal ships OA-1 A; shots taken, the three-line clamp found and put to the owner in OA-1 (D added); gates and the review loop next.
 - 2026-10-20 A2 review loop closed: Codex r1 approve (one P3) → r2 approve; Opus conditional approve, all applied (D-A2-3, OA-1R); shots retaken; Chrome smoke green at retry 0; Firefox smoke next.
 - 2026-10-20 A2 gates green after merging origin/dev (#890 on dev): audit:vue, test:all, the import smoke files on both browsers at retry 0; draft PR next.
+- 2026-10-20 A2: page 70 signed (P70-11 D, P70-13 A); merged origin/dev, D's words on all three pages with their pins, fit measured on both browsers, shots in OA-1; gates green; Codex loop next.

@@ -24,6 +24,11 @@ Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1),
 - **P62-04 A**: "A snapshot of every stored schema in CI; a change needs a migration or a reviewed additive mark." The owner asked for "the most professional, and durable approach ... integrating and leveraging the migrations helpers".
 - **P62-05 A** (the orchestrator's call on the owner's stated lean): "Refuse them, with a message that says how to come back: import the passkey, then re-add contacts and imported accounts."
 
+## The owner's answers on A2's asks (decision page 70, signed 2026-10-20)
+
+- **P70-11 D** (OA-1): title as A ("Backup cannot be restored"); message "This passkey backup is too old or was changed. Choose Passkey to restore your wallet, then add your contacts and imported accounts again."
+- **P70-13 A** (OA-1R): "The import's words, whichever you pick for them, on this page too. What the draft ships now; their advice cannot work here."
+
 ## #865, the lane brief, and what did not hold
 
 - **#865 demonstrated**: `registry.test.ts` checks only registered migrations; nothing compares a stored shape before and after a change. Holds at `60fde7e7`.
@@ -40,7 +45,7 @@ Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1),
 
 ## UI impact
 
-- **A2 · the full-backup import's refusal of a passkey backup with no `backup-mac`** (`ImportFullBackupForm.vue`, testid `import-full-backup-error`, on the popup import, onboarding import and restore-again pages). P62-05 A, quoted above. Before: "Incompatible backup" / "This backup was created by an incompatible wallet version and cannot be imported. Re-export a backup from a current version of the wallet." After: OA-1's words; OA-1 A ships until the owner answers. No other refusal changes.
+- **A2 · the full-backup import's refusal of a passkey backup with no `backup-mac`** (`ImportFullBackupForm.vue`, testid `import-full-backup-error`, on the popup import, onboarding import and restore-again pages). P62-05 A, quoted above. Before: "Incompatible backup" / "This backup was created by an incompatible wallet version and cannot be imported. Re-export a backup from a current version of the wallet." After, on all three pages (P70-11 D, P70-13 A): "Backup cannot be restored" / "This passkey backup is too old or was changed. Choose Passkey to restore your wallet, then add your contacts and imported accounts again." It fits the box's three lines at 400 px on Chrome and Firefox. No other refusal changes.
 - **A4**: none. The pxe-generation fence's error and the legacy-marker reason lose their "reinstall" advice; no released install can reach either (recon). `MigrationBarrier.vue` keeps its copy until OA-2 is answered.
 - **A1, A3**: none.
 
@@ -73,10 +78,10 @@ Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1),
 
 ### Phase 5 (A2) · the unchecked passkey backup's refusal
 
-`validateAndMigrateBackup` (`composables/useFullBackupImport.ts`) returns a new `PASSKEY_BACKUP_UNCHECKED` (OA-1's title and message) instead of the shared `INCOMPATIBLE_BACKUP`; the compat-epoch refusal keeps its copy. Reached before any passkey prompt for a plain file and, for an encrypted one, after its password decrypt. The copy says what the wallet can check (the file carries no passkey check), never its age: a current file with its MAC removed reaches the same branch.
+`validateAndMigrateBackup` (`composables/useFullBackupImport.ts`) returns a new `PASSKEY_BACKUP_UNCHECKED` (P70-11 D's title and message) instead of the shared `INCOMPATIBLE_BACKUP`; the compat-epoch refusal keeps its copy. Reached before any passkey prompt for a plain file and, for an encrypted one, after its password decrypt. The copy says what the wallet can check (the file carries no passkey check), never its age: a current file with its MAC removed reaches the same branch.
 
-- **Result (A2).** One branch changes, a module-private constant like `INCOMPATIBLE_BACKUP`; `validateAndMigrateBackup` serves all three surfaces, so restore-again shows the same words, whose advice fails there (OA-1R). Tests: the composable's no-MAC and non-string-MAC rows, a file in the exporter's own shape (field order, pretty-printed, Testnet rows) picked from disk with and without its check, the encrypted twin, a retired-epoch passkey body keeping the incompatible words, the password control; and on the onboarding page with the real composables, the box's text and no ceremony, beside a with-check control that reaches it. No e2e (D-A2-1).
-- **Found while shooting OA-1.** The box clamps the message at three lines (`ImportFullBackupForm.vue`), so A ships cut after "then add your" at 400 px; OA-1 now offers D (fits) and A with the clamp lifted. A ships until the owner answers.
+- **Result (A2).** One branch changes, a module-private constant like `INCOMPATIBLE_BACKUP`; `validateAndMigrateBackup` serves all three surfaces, so restore-again shows the same words, whose advice fails there (OA-1R; the owner kept them, P70-13 A). Tests: the composable's no-MAC and non-string-MAC rows, a file in the exporter's own shape (field order, pretty-printed, Testnet rows) picked from disk with and without its check, the encrypted twin, a retired-epoch passkey body keeping the incompatible words, the password control; and on the onboarding page with the real composables, the box's text and no ceremony, beside a with-check control that reaches it; on restore-again, the reminder's own body without its check gets the same words and changes nothing. No e2e (D-A2-1).
+- **Found while shooting OA-1.** The box clamps the message at three lines (`ImportFullBackupForm.vue`), so A ships cut after "then add your" at 400 px; OA-1 offered D (fits) and A with the clamp lifted. The owner chose D (P70-11), measured unclamped in three lines on both browsers, on the import and restore-again pages.
 
 ### Phase 4 (A3) · the in-place update harness and the 0.31.0 update
 
@@ -136,6 +141,7 @@ Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1),
 | D-A2-1 | A2: an e2e for the refusal? | none: the onboarding page test drives the real composables into the real form and shows the box and no ceremony; the existing smoke (`backup-migration`) already proves the page renders a validation refusal | — | — |
 | D-A2-2 | A2: restore-again's words | the same refusal (one validator for three pages) until the owner answers OA-1R: the advice fails there (a passkey that already has a profile is refused), as "Incompatible backup"'s did | approve | finding: advice fails there; ask the owner |
 | D-A2-3 | A2 review r1 (Codex approve, one P3; Opus conditional approve) | applied: the constant made module-private (no auto-import global), the branch comment states the invariant, a test name and a fixture comment corrected, OA-1's restore-again and imported-keys facts, the shots retaken with a neutral profile name on `dev`'s colours | approve | conditional approve |
+| D-A2-4 | A2: the owner's answers (P70-11 D, P70-13 A) | D's title and message on the one refusal, so popup import, onboarding import and restore-again read the same; pins in the composable, onboarding page and restore-again tests; D fits three lines at 400 px on Chrome and Firefox (both pages, both themes) | — | — |
 
 ## Security & Adversarial Considerations
 
@@ -150,7 +156,7 @@ Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1),
 
 - **Facts.** Every recon table row (file:line in [recon.md](recon.md)); `realMigrations` is empty and `BASELINE_VERSION = 1` at `60fde7e7` and `v0.31.0`; the engine reads JSON strings only (`staging.ts:27`); `__VERSION__` comes from `package.json` (`apps/extension/vite.shared.ts:54`), dev is at 0.31.0; the coordinator re-derives on a version change (`coordinator.ts:84-125`); 0.31.0 bundles Aztec `6.0.0-rc.3`; `override` sees `catch`, `custom` and refinement checks on zod 4.4.3 (Opus probe).
 - **Inferences.** (I2) Firefox keeps an add-on's storage and reports `update` when the temporary add-on at P changes bytes on one profile (A3 step 1, run first; else stop and report at once, before A1's PR). (I3) The 0.31.0 UI's testids match the current helpers for the population steps (A3 adapts a step to the tag's testids where not). (I4) The 6.0.0 bump moves Testnet's chain id. (I5) A3's live run lands before the 6.0.0 bump; if the bump lands first, the live scenario runs on the last rc.3 commit of `dev` (`git worktree` at that SHA) and the recording is made there.
-- **Asks** (working assumption in brackets): OA-1 [A]; OA-2 [unchanged until answered; must be answered before the first real migration ships]; OA-3 [A: #709 reopened, the line restated].
+- **Asks** (working assumption in brackets): OA-1 [answered: P70-11 D, P70-13 A]; OA-2 [unchanged until answered; must be answered before the first real migration ships]; OA-3 [A: #709 reopened, the line restated].
 
 ## Phases and gates
 
@@ -165,7 +171,7 @@ Each gate also runs `bun run lint` and `bun run typecheck:all` (exit 0), and `bu
 - Gate: `bun run baseline:storage`, record `sha256sum` of `snapshot.json` and `goldens.json`, run it again, the sums equal; `bun run test`, `bun run test:all` exit 0. Pass, each shown once on a scratch edit and reverted: an added required field reds R1, then after `baseline:storage` reds R3; a truncating transform on a golden's text reds R3; a `.default` added to `DappSessionSchema` reds R3 through the MAC wrapper; a factory handed another schema reds its control test; with one pin added locally, an unmarked change reds R2, a hand-edited stamp reds R4, and an optional field with `--additive` passes.
 
 ### Phase 5 (A2) · the passkey refusal
-- Gate: `cd apps/extension && bun --bun vitest run src/composables/useFullBackupImport src/onboarding/pages/import.test.ts` exit 0 (a MAC-less passkey body gets OA-1's copy with no ceremony call; a wrong epoch keeps `INCOMPATIBLE_BACKUP`; a MAC-carrying body reaches the ceremony), each new refusal row red with the branch reverted (shown once in [lessons/phase-5.md](lessons/phase-5.md)); `bun run audit:vue`, `bun run test:all`; the smoke suite at retry 0 on Chrome and Firefox (armed builds); the screenshots in OA-1 and the PR.
+- Gate: `cd apps/extension && bun --bun vitest run src/composables/useFullBackupImport src/composables/useRestoreAgain src/onboarding/pages/import.test.ts` exit 0 (a MAC-less passkey body gets P70-11 D's copy with no ceremony call; a wrong epoch keeps `INCOMPATIBLE_BACKUP`; a MAC-carrying body reaches the ceremony), each new refusal row red with the branch reverted (shown once in [lessons/phase-5.md](lessons/phase-5.md)); `bun run audit:vue`, `bun run test:all`; the smoke suite at retry 0 on Chrome and Firefox (armed builds); the screenshots in OA-1 and the PR.
 
 ### Phase 4 (A3) · harness, update, recording
 - Steps: (1) the mechanism on both browsers; (2) `releaseBuild` with a tampered-digest refusal test; (3) the live scenario and its recording; (4) the replay scenario; (5) fixes; (6) e2e README section, the release skill's promote step.
