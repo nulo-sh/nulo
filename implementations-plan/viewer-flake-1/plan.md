@@ -1,7 +1,7 @@
 ---
 plan: viewer-flake-1
 tier: light
-status: approved (orchestrator, 2026-10-19, two arcs); arc 1 delivered (#902); arc 2 replanned (orchestrator, 2026-10-20, D12), in review
+status: closed (two arcs against dev: #902 merged; arc 2's PR a draft until the owner signs A1; the merge that lands it closes the plan)
 issues: "#849 (arc 1 refs, arc 2 closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,24 @@ base: origin/dev at ce48691e
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** closed. Two arcs against `dev`: #902 (arc 1, merged) and arc 2's PR from `viewer-flake-1-a2`, a draft until the owner signs A1. Merging it, the owner's call, closes the plan.
+- **Shipped:** #849, closed by arc 2.
+  - Arc 1 (T1, T2): the follow check reads the gap after the viewer has judged it, and the hold is measured two frames after the viewer's selection stop.
+  - Arc 2 (P1, as replanned by D12): after its dispatch, the follow sets a reference no scroll exceeds, and its own scroll event resets it. A held line's snapshot lowers it. The pin reads no geometry: the geometric pin it replaced cost +42.7% on Firefox's 500-line burst.
+  - On the shipped pin, R1b and R3 resume 0/16 per browser and R5 passes. The gate is green: Firefox 10/10 and Chrome 5/5 file runs, and the full smoke suites 2/2 and 1/1.
+- **Owner decision:** A1. The orchestrator's call is A ([#849](https://github.com/nulo-sh/nulo/issues/849#issuecomment-6279625586)), widened by D12. The owner signs on a decision page, pending at close-out.
+- **Known limits:** #919 (KL-1), #920 (KL-2, widened).
+- **Open items:** #921 (CodeMirror's stick to the end after the search panel opens, and the height correction's late landing), #922 (the search case's gap read), #923 (the `logId` deep link resumes the follow).
+- **Dispositions:**
+  - The geometric pin is superseded by D12, for its layout cost.
+  - Option (b), an update listener with an annotation, is out of proportion (D12).
+  - The never-removed `selectionchange` listener predates the plan and is harmless, so it is left.
+- **Lessons:** nothing new in `lessons.md` (8,133 of 8,192 bytes). The cost-guard point is an e2e measuring technique and went to the `e2e-testing` skill (§ Runtime budget; flake-ledger row 63).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # viewer-flake-1: the viewer's own follow no longer reads as the reader's scroll; the e2e reads what the viewer judges
 
@@ -129,14 +147,14 @@ The viewer reads only its own state and the scroller's geometry. It adds no inpu
 - D10 (arc 2, superseded by D12) The pin is one pixel past the rounded end: `scrollTop` can be fractional while `scrollHeight` and `clientHeight` are integers (Opus #2).
 - D11 (arc 2; its travel condition superseded by D12) The pin is set only when the follow has a pixel to travel, and `holdPlace`'s snapshot, which replaces a follow still due, lowers it to the view's place: otherwise no scroll event lowers it again (Codex round 2).
 - D12 (the orchestrator's call, 2026-10-20, on the arc 2 stop report) The pin reads no geometry: after its dispatch `scrollToBottom` sets `lastScrollTop = Number.POSITIVE_INFINITY`, and the follow's own event resets it to the real offset. `holdPlace`'s snapshot reset stays; the travel condition goes. Burst, base / the last geometric pin / no-read pin, interleaved, medians of 5 at load1 36-88: Firefox 386.0 / 551.0 (+42.7%) / 390.0 ms (+1.0%); Chrome 360.5 / 378.3 (+4.9%) / 353.1 ms (-2.1%). The residual takes option (a), KL-2 widened; option (b)'s plumbing is out of proportion for that window.
-- KL-1 (closed `known-limit` issue at close-out): lines that land between a drag's first `select.pointer` and Firefox's `selectionchange` are followed, with no bound on how many. Visible, pre-existing. Reopen on a user report.
-- KL-2 (owner ask A1, the orchestrator's call A, widened by D12; a closed `known-limit` issue at close-out): a reader's scroll down stays held where the viewer cannot tell it from its own follow's. Three triggers:
+- KL-1 (#919, a closed `known-limit` issue): lines that land between a drag's first `select.pointer` and Firefox's `selectionchange` are followed, with no bound on how many. Visible, pre-existing. Reopen on a user report.
+- KL-2 (#920, a closed `known-limit` issue; owner ask A1, the orchestrator's call A, widened by D12): a reader's scroll down stays held where the viewer cannot tell it from its own follow's. Three triggers:
   - a scroll down to the new end inside the one frame between a stop and the pending follow's scroll event. That scroll ends where the follow's does;
   - a scroll that replaces the pending follow and moves nothing: a search step with a query (F3 or Enter) or a keyboard selection within about 16 ms of a line, with the match or the cursor already in view. The reader's next scroll down, before another scroll event or held line, stays held;
   - a follow with nothing to travel, then growth with no held line (a filter change). The reader's first scroll down stays held.
 
   Base resumes in each case, which is P1. The first trigger's window is one frame; the other two start within a frame of a line or need no line at all, and the scroll they hold can come later, until another scroll event or a held line clears the pin. A scroll down at the end moves nothing and fires no event, so the next line lands below the view with the button shown; a scroll down, the button or the 30 s timer then resumes. Telling them apart means tracking input or every scroll target, which is state and plumbing for one held scroll after a rare sequence. Reopen on a user report.
-- Out of scope, an issue at close-out each, deduplicated first:
+- Out of scope, an issue each (#921, #922; and #923 for `scrollToTargetLog`, Opus):
   - CodeMirror's stick to the end after F3 shrinks the scroller can still resume the follow (#616's comment). This includes a follow in flight across the F3 open.
   - The search case reads `gapToEnd < AT_END` after the focus, so a wallet line held in between reds a correct viewer (Opus #4). Base has the same exposure.
 
