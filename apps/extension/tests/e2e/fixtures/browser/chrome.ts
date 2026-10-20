@@ -44,15 +44,29 @@ export function egressGuardArgs(guardPort: number, liveHosts: readonly string[] 
 	]
 }
 
-async function launch({ extensionPath, userDataDir, headless, fixedWindowSize = true, egress }: LaunchOptions): Promise<LaunchedBrowser> {
+/** Browsers launched to load their extension over CDP, the only ones `reinstallExtension` may swap. */
+const installedInSession = new WeakSet<Browser>()
+
+async function launch({
+	extensionPath,
+	userDataDir,
+	headless,
+	fixedWindowSize = true,
+	egress,
+	installInSession,
+}: LaunchOptions): Promise<LaunchedBrowser> {
 	// Headless `true` supports MV3 extensions — offscreen documents, the service worker,
 	// `chrome.storage` and `chrome.runtime.Port` all work.
 	const browser = await puppeteer.launch({
 		headless,
 		...(userDataDir ? { userDataDir } : {}),
+		// CDP's `Extensions.loadUnpacked` answers only over a pipe, behind the unsafe-debugging switch,
+		// and an extension it loads is not restored at the next launch.
+		...(installInSession ? { pipe: true, enableExtensions: true } : { ignoreDefaultArgs: ["--disable-extensions"] }),
 		args: [
-			`--disable-extensions-except=${extensionPath}`,
-			`--load-extension=${extensionPath}`,
+			...(installInSession
+				? ["--enable-unsafe-extension-debugging"]
+				: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]),
 			"--no-sandbox",
 			"--disable-setuid-sandbox",
 			// Headless Chrome's size flag overrides the dimensions `windows.create` asks for.
@@ -68,15 +82,28 @@ async function launch({ extensionPath, userDataDir, headless, fixedWindowSize = 
 			"--disable-features=AutofillServerCommunication",
 			...(egress ? egressGuardArgs(egress.guardPort, egress.liveHosts) : []),
 		],
-		ignoreDefaultArgs: ["--disable-extensions"],
 		// The default 180s is not enough for a cold first run: argon2 unlock plus the bb.js wasm
 		// boot can hold a CDP reply past it while the worker pool has the host under memory
 		// pressure, and the call then times out on work that did complete.
 		protocolTimeout: 300_000,
 	})
+	if (installInSession) {
+		try {
+			await browser.installExtension(extensionPath)
+		} catch (err) {
+			await browser.close().catch(() => {})
+			throw err
+		}
+		installedInSession.add(browser)
+	}
 	// Chrome owns nothing outside its own process tree, so closing the browser is the whole
 	// teardown. A driver that also owns a WebDriver process reaps it here instead.
 	return { browser, close: () => browser.close() }
+}
+
+async function reinstallExtension(browser: Browser, extensionPath: string): Promise<void> {
+	if (!installedInSession.has(browser)) throw new Error("reinstallExtension needs a Chrome launch with installInSession")
+	await browser.installExtension(extensionPath)
 }
 
 const STOP_WORKER_BUDGET_MS = 15_000
@@ -233,6 +260,7 @@ export const chromeDriver: BrowserDriver = {
 	credentialOutlivesPage: false,
 	ownHosts: CHROME_OWN_HOSTS,
 	launch,
+	reinstallExtension,
 	extensionUrl: (extensionId, path) => `${SCHEME}${extensionId}${path}`,
 	newPage: (browser) => browser.newPage(),
 	discoverExtensionId,
