@@ -103,7 +103,7 @@ describe("closeRestartEndedTabs", () => {
 describe("trackOpenWindows", () => {
 	const at = (route: string) => `${POPUP}#/windows/${route}?requestId=0x01`
 	const tracked = () => {
-		const fake = new FakeBrowserApi().windows as WindowPort & { creates: unknown[]; navigates: unknown[] }
+		const fake = new FakeBrowserApi().windows as WindowPort & { creates: unknown[] }
 		const removed: number[] = []
 		fake.onRemoved((id) => removed.push(id))
 		return { fake, removed, windows: trackOpenWindows(fake, POPUP) }
@@ -111,25 +111,21 @@ describe("trackOpenWindows", () => {
 
 	test("delegates to the adapter unchanged", async () => {
 		const { fake, windows } = tracked()
-		const created = await windows.create({ url: at("discover"), width: 1, height: 1 })
-		await windows.navigate(created.id as number, at("verify"))
+		await windows.create({ url: at("discover"), width: 1, height: 1 })
 		expect(fake.creates).toEqual([{ url: at("discover"), width: 1, height: 1 }])
-		expect(fake.navigates).toEqual([{ windowId: created.id, url: at("verify") }])
 		await expect(windows.update(999, { focused: true })).rejects.toThrow("No window with id: 999.")
 	})
 
-	test("closes the windows opened or navigated onto a restart-ended route, and no other", async () => {
+	test("closes the windows opened on a restart-ended route, and no other", async () => {
 		const { removed, windows } = tracked()
-		const navigatedOnto = await windows.create({ url: at("execute") })
-		await windows.navigate(navigatedOnto.id as number, at("verify"))
-		const navigatedOff = await windows.create({ url: at("discover") })
-		await windows.navigate(navigatedOff.id as number, at("execute"))
+		const discover = await windows.create({ url: at("discover") })
+		const check = await windows.create({ url: at("verify") })
 		const capabilities = await windows.create({ url: at("capabilities") })
 		await windows.create({ url: at("execute") })
 		await windows.create({ url: `${POPUP}#/windows/passkey` })
 		windows.closeRestartEnded()
 		await Promise.resolve()
-		expect(removed.sort()).toEqual([navigatedOnto.id, capabilities.id].sort())
+		expect(removed.sort()).toEqual([discover.id, check.id, capabilities.id].sort())
 	})
 
 	test("forgets a window once it closes", async () => {

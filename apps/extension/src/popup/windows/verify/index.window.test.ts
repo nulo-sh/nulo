@@ -173,7 +173,6 @@ describe.each(["false", "true"])("windows/verify — the check with isReconnect=
 		expect(w.find('[data-testid="verify-mismatch-btn"]').exists()).toBe(true)
 		expect(w.find('[data-testid="verify-confirm-btn"]').exists()).toBe(true)
 		expect(w.find('[data-testid="verify-always-trust-toggle"]').exists()).toBe(false)
-		expect(w.find('[data-testid="connect-step-bar"]').exists()).toBe(isReconnect === "false")
 	})
 
 	test("They match reports the URL's hash, not the row's, then closes the window", async () => {

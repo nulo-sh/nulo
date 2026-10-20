@@ -213,8 +213,6 @@ class FakeWindowsAdapter implements WindowPort {
 	public readonly creates: CreateWindowOptions[] = []
 	/** Test-only: every `update` call, in order. */
 	public readonly updates: Array<{ windowId: number; options: UpdateWindowOptions }> = []
-	/** Test-only: every `navigate` call on a live window, in order. */
-	public readonly navigates: Array<{ windowId: number; url: string }> = []
 	/** Test-only: what `getLastFocused` returns. */
 	public lastFocused: WindowBounds | undefined
 	/** Test-only: every `closeTab` call, in order. The fake models no tabs, so no window closes. */
@@ -230,11 +228,6 @@ class FakeWindowsAdapter implements WindowPort {
 	public async update(windowId: number, options: UpdateWindowOptions): Promise<void> {
 		if (!this.live.has(windowId)) throw new Error(`No window with id: ${windowId}.`)
 		this.updates.push({ windowId, options })
-	}
-
-	public async navigate(windowId: number, url: string): Promise<void> {
-		if (!this.live.has(windowId)) throw new Error(`No window with id: ${windowId}.`)
-		this.navigates.push({ windowId, url })
 	}
 
 	public async getLastFocused(): Promise<WindowBounds | undefined> {
@@ -268,7 +261,6 @@ class FakeWindowsAdapter implements WindowPort {
 		this.removedListeners.items.length = 0
 		this.creates.length = 0
 		this.updates.length = 0
-		this.navigates.length = 0
 		this.closedTabs.length = 0
 		this.lastFocused = undefined
 	}

@@ -486,6 +486,9 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
 
 ### Product couplings the harness respects
 
+- **A change to when a window's Confirm enables reaches every e2e that presses it**, refusals
+  included (`authwit-lifecycle`, `scope-refusal`): run those before the PR
+  (`implementations-plan/archive/harden-security-fixes-2/lessons/phase-6.md`).
 - **Worker readiness is the heartbeat**, not the target: `browser.waitForTarget(service_worker)`
   means Chrome registered the script; `launchExtension` waits for `nulo:liveness` in
   `chrome.storage.session` (30s). After a restart, gate with `waitForWorkerLiveness(page, afterTs)`
@@ -591,6 +594,12 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
 From `implementations-plan/archive/self-pay-setup-fix/`; `network/selfpay-phase.test.ts` is
 the pattern.
 
+- **`pg-status` reads `connected` once keys are exchanged**, before the emoji check is answered.
+  Prove a check unanswered by its page still open on its grid (either answer closes it).
+- **A first connection needs a wallet with no saved row for the playground.** On the file-scoped
+  `localNetworkExtension` a later test's Connect is answered as a reconnection and opens no connect
+  window: take `registeredExtensionPerTest`, then `switchToLocalNetwork`
+  (`implementations-plan/archive/connect-split-1/lessons/phase-3.md`).
 - **The playground keeps every input across requests.** A button reads whatever an earlier request
   left in its inputs, so a grant after `consumeAuthwit` asks under that request's owner and opens no
   window. Each request sets, or clears with `""`, every input an earlier request in its test
@@ -632,6 +641,10 @@ the pattern.
 
 ### Harness behaviours that look like product bugs
 
+- **The extension pages' CSP refuses `page.addStyleTag`** (`style-src-elem`; the CSP record then
+  fails the launch). To stop a theme flip's transitions before a quick shot, `finish()` each of
+  `document.getAnimations()`; a looping one throws and is left alone. A popup's `document.body` can
+  still be null when `waitForPopup` resolves: observe `document.documentElement`.
 - **A mouse drag can select nothing.** Chrome 152 starts no selection from a press between a
   glyph's middle and about half a pixel right of it, and a drag of one single move leaves a bare
   caret: press a quarter in from a character's outer edge and move in steps

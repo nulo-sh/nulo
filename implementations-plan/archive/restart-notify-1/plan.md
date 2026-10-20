@@ -19,6 +19,7 @@ issues: "#926"
 - **Known limits**: #941 (a window being created at the restart), #942 (after a crash, a request window showing the lock screen), #943 (a failed sweep leaves #924's case), each closed as not planned with its reopening condition.
 - **Open items**: #939 (send, sign, fee and notice windows: OA-1, owner decision), #940 (the wallet's own popup windows after the lock's restart on Chrome, owner decision).
 - **Dropped or superseded**: the first draft's awaited, bounded notice (superseded by D3); the planned `lessons.md` promotion went to the `chrome-extension-debug` skill (§ Restarts) instead, since `lessons.md` sits at its 8 KiB budget and the facts are that skill's domain; the "no row deleted" unit row became a booted-handler row (`background.restart-preparation.test.ts`).
+- **Deviation**: #886 merged first, removing `WindowPort.navigate`; the tracker's navigation path went with it, as the change map foresaw, and the tracker now keys each window on its creation URL.
 - **Seeds retired**: the `/goal` and `/loop` seeds below are retired with this block.
 
 # restart-notify-1: close the windows a restart ends, and tell apps before the lock's restart

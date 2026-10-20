@@ -11,7 +11,6 @@ export function fakeSdkPorts(over: Partial<WindowPort> = {}): { windows: Tracked
 				remove: async () => {},
 				closeTab: async () => {},
 				update: async () => {},
-				navigate: async () => {},
 				getLastFocused: async () => undefined,
 				...over,
 			},
