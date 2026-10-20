@@ -15,7 +15,7 @@ post_implementation_hardening: not scheduled
 
 # encryption-at-rest-1: seal each profile's rows in `chrome.storage.local` under a key only an unlocked profile derives
 
-Four arcs. Each is one PR against `dev`, not stacked (the orchestrator's D-orch-1), and all land after the 1.0.0 promote and after #865's registry (its A1) and freeze (its A4) are on `dev`.
+Four arcs. Each is one PR against `dev`, not stacked (the orchestrator's D-orch-1), and each lands after #865's registry (its A1) and freeze (its A4, #938) are on `dev`. A1 lands inside 1.0.0 (P74-01, under Outcome), and the 1.0.0 promote waits for it; A2 to A4 land after the promote.
 
 - **A1** builds the sealing layer and proves it end to end on contacts and dApp sessions.
 - **A2** seals history (the journal and transactions), including the writes that land after a lock.
@@ -59,7 +59,7 @@ Path notation:
 - **Excellent:**
   1. Once a profile's conversion completes (it starts in the background at the profile's first unlock on the new build), a test scan of raw `chrome.storage.local` finds none of that profile's contact names, account names, addresses, amounts, origins, tx hashes or note hashes in any key or value of a sealed root, on Chrome and Firefox. The scan covers all of `chrome.storage.local`, minus a reviewed allowlist of the plaintext roots in the boundary table. The allowlist is per field where a record mixes kinds: the `accountSetDigest` fields of the verified stamp and the stale-network record are scanned, never exempt. Two exceptions, both disclosed: legacy tx rows with no `profileId` whose owner cannot be established now (KL-6), and the blocked record and reset journal while they stand.
   2. A sealed row moved to another key, root, profile or profile incarnation reads as absent, stays stored, and logs one fixed category with no content.
-  3. No screen changes, except the rare refusal case under OA-4. History keeps "Stopped when the wallet locked" across a lock and across a worker restart. Recovery mode reads what it reads today. A full backup made before or after this release restores.
+  3. No screen changes, except the rare refusal case under OA-4 (accepted, P74-02), which #944 removes once it lands. History keeps "Stopped when the wallet locked" across a lock and across a worker restart. Recovery mode reads what it reads today. A full backup made before or after this release restores.
   4. A crash at any point of a profile's conversion loses no row, and the next unlock finishes it.
   5. The privacy policy stops saying these rows are stored without encryption, and the store listing says "encrypted" where it is true, in the arc that makes it true (OA-3).
 - **Good enough** (each listed in Security § What stays visible or in the Known limits table):
@@ -68,6 +68,10 @@ Path notation:
   - a same-phrase sibling profile can derive the row keys;
   - a profile not opened since the update stays plaintext until it is opened;
   - the `nulo:ui:*` preference keys stay plaintext (KL-12).
+- **Owner decisions** (decision page 74, 2026-10-20, recorded on #522):
+  - **P74-01, when A1 lands: A.** "In 1.0.0: #924 lands after #938, after your own build test and one green nightly soak; the promote waits for it." It replaces the merge bar's "after the 1.0.0 promote" for A1 only. To the owner's question about people on an earlier 0.3x build: no uninstall or reinstall. Their rows still read, the first unlock on the new build seals them in the background, an in-place update keeps the data (the update replay), and old backups restore.
+  - **P74-02 = OA-4, refusing an app right after the wallet restarted: A, accept** (the orchestrator's call, which the owner delegated). The case is only "They don't match" on the emoji-check window after a background restart. The Allow window is not affected: it answers a request a restart ends, and it reads and deletes no saved connection. #944 closes the connect and emoji-check windows at every background restart, so once it lands that press cannot happen. What remains is an app listed in Connected apps until the person removes it or it reconnects and passes the check, and nothing is granted meanwhile.
+  - **P74-03 = OA-5, a very long contacts list opens a little slower on Firefox: A.** "Accept: only Firefox pays, only with thousands of contacts, and the list still opens in under a third of a second."
 
 ## UI impact
 
@@ -76,7 +80,7 @@ Path notation:
 - **Text that changes, asked (OA-3):** `legal/privacy.md:69-72` says these rows are "stored without application-level encryption". The store listing's account-address row (`apps/extension/store/listing.md:51`) and its storage line (`:69`) can say "encrypted" once it is true. A4 does not merge until the owner signs the new wording and picks the version bump.
   - Any privacy version bump, patch included, shows the existing "Privacy Policy updated" line under Settings → About's Privacy Policy row (`popup/pages/settings/about.vue:127`, `utils/legal-about.ts` `isOlder`) until the policy is opened. The manifest's `changes` entry is the owner's text. No component changes.
 - **Not changed, asked (OA-1):** profile names stay readable on the lock screen and the picker. "A. Keep" ships.
-- **Changed in one rare case, asked (OA-4), A1 waits for it:** "They don't match" on the emoji-check window, pressed after the background restarted while the window was open. Today the refusal deletes the app's remembered grants and the window closes. After A1 there is no row key, so the refusal returns `unavailable`. The window then stays open and shows its existing message, "The connection ended, but this app could not be removed. Remove it in Settings, Connected apps." (`popup/windows/verify/index.vue:109,251`). The grants stay until removed there, and the next connect shows the emoji check again (KL-11).
+- **Changed in one rare case, accepted (OA-4, P74-02 A; #944 removes it once it lands):** "They don't match" on the emoji-check window, pressed after the background restarted while the window was open. Today the refusal deletes the app's remembered grants and the window closes. After A1 there is no row key, so the refusal returns `unavailable`. The window then stays open and shows its existing message, "The connection ended, but this app could not be removed. Remove it in Settings, Connected apps." (`popup/windows/verify/index.vue:109,251`). The grants stay until removed there, and the next connect shows the emoji check again (KL-11).
 - **Not changed, by design:** the recovery-mode banner (`popup/components/modules/general/RecoveryModeBanner.vue:11-12`). Recovery mode holds the master and reads every sealed root except dApp sessions, as today (D4).
 
 ## Architecture & Implementation
@@ -510,7 +514,7 @@ Sources: M = main draft, C = Codex draft, O = Opus draft.
   - (I2) #865's A1 and A4 are on `dev` before A1 here starts. If not, A1 waits.
   - (I3) No 1.0.x writer creates a tx row without `profileId` except `restore()` of an older backup (both production writers pass a fence: `S/execution/dapp-send-executor.ts:763-776`, `transfer-executor.ts:448`).
   - (I4) tx-record-1's `feeChoice` lands before A2; A2 seals whatever shape is on `dev`.
-- **Asks** (working assumption in brackets): OA-1 [A, keep names]; OA-2 [approve the posture]; OA-3 [the wording drafted in OWNER-ASKS, patch bump]; OA-4 [A, accept].
+- **Asks** (working assumption in brackets): OA-1 [A, keep names]; OA-2 [approve the posture]; OA-3 [the wording drafted in OWNER-ASKS, patch bump]; OA-4 [A, accept], answered A (P74-02); OA-5 [A, accept], answered A (P74-03).
 
 ## Phases and gates
 
@@ -693,12 +697,13 @@ Every gate runs `bun run lint` and `bun run typecheck:all` (exit 0), `bun run te
 
 | Arc | PR title (≤ 93 chars) | Issue line |
 |---|---|---|
-| A1 | `feat(storage): seal contacts and dapp sessions at rest under a per-profile key` | `Refs #522`; waits for OA-4 |
+| A1 | `feat(storage): seal contacts and dapp sessions at rest under a per-profile key` | `Refs #522`; OA-4 and OA-5 answered A (P74-02, P74-03) |
 | A2 | `feat(storage): seal the journal and transaction history at rest` | `Refs #522` |
 | A3 | `feat(storage): seal balances, authorizations and incoming receipts at rest` | `Refs #522` |
 | A4 | `feat(storage): seal accounts, tokens, networks and fee payers at rest` | `Closes #522` |
 
-- **Order:** strictly A1 → A2 → A3 → A4. A1 waits for OA-4 and A4 for OA-3, each signed and quoted in its PR body. Each branches from `dev` after the previous one merges; none is stacked.
+- **Order:** strictly A1 → A2 → A3 → A4. A1's asks are answered (P74-02, P74-03) and A4 waits for OA-3, each quoted in its PR body. Each branches from `dev` after the previous one merges; none is stacked.
+- **A1's landing (P74-01 A):** inside 1.0.0, after #938 (the stored-shape freeze), after the owner's own build test and after one green nightly soak; the 1.0.0 promote waits for it. Once #938 is on `dev`, A1 merges `dev` and re-stamps with `bun run baseline:storage -- --additive "<why every stored row still reads>"`, adds the pin it prints, then reruns the update replay on both browsers.
 - **Issues:** #522 is closed by A4. #523 is reopened and closed by A1, its reopening condition met.
 - **Filed at close-out, open:**
   - the unlock-time migration pass with its #865 acceptance path, triggered by the first non-codec change of a sealed root or a crypto rotation;
@@ -738,7 +743,7 @@ Each is filed as a closed `known-limit` issue at close-out, with its reopening c
 | KL-7 | Old plaintext pages remain in browser storage files until compaction | plausible but unverified | a disk scan shows them after compaction |
 | KL-9 | A rollback to a 1.0.x build hides every sealed row until the newer build returns | demonstrated | a rollback release is planned |
 | KL-10 | A profile not opened since the update stays plaintext | demonstrated | a way to convert without the password exists |
-| KL-11 | A "They don't match" refusal made after the background restarted while the check page was open finds no row key, reports `unavailable`, and leaves the app's remembered grants; the next connect still shows the emoji check, so nothing is granted silently (OA-4) | demonstrated, needs a background restart with the check page open | a user report, or the refusal gains a keyless path that needs no origin filter |
+| KL-11 | A "They don't match" refusal made after the background restarted while the check page was open finds no row key, reports `unavailable`, and leaves the app's remembered grants; the next connect still shows the emoji check, so nothing is granted silently (OA-4) | demonstrated, needs a background restart with the check page open | a user report, or the refusal gains a keyless path that needs no origin filter. Accepted (P74-02 A); #944 closes the check window at every background restart, which removes the path once it lands |
 | KL-12 | The `nulo:ui:*` keys stay plaintext: pinned token contracts, fee-payer picks, the last-selected account address | demonstrated | #865 gains a reviewed retirement path for a structured shape (the follow-up issue) |
 
 ## Seeds

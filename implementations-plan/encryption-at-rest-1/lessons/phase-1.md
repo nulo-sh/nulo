@@ -36,3 +36,8 @@
   3. the refusal read key presence after its deletes, so an unlock in between turned an unread grant into `revoked`; the scan now reports `keyless` rows itself.
 - **Opus review** (beside round 1): APPROVE WITH FIXES, three low findings, adopted: the refusal race (same as Codex 3); a stored non-string value served on read but invisible to every delete path, now refused; the delete-racing-open test never reached the guard, now replaced by one that holds the derivation (and was mutation-checked: it fails with the throw removed).
 - **Codex round 2** (resumed): APPROVE, no material finding; the four fixes held under its in-memory reproductions. The loop stopped at two rounds.
+- **Codex on the merge of 16 `dev` commits** (`ae50812e`, fresh session `01a15a5f`): APPROVE, no material finding. The two hand-resolved conflicts in `profile/service.ts` put the restore commits' row-key fill before `dev`'s best-effort imported-profile flag, so a fill that throws on a racing deletion leaves no flag. It also weighed the reload on a lock that cannot be saved, the reordered passkey duplicate checks, the new-network arrival rows, the backup-migration change and the connect window.
+
+## Owner decisions
+
+- Decision page 74 (2026-10-20): A1 lands inside 1.0.0 after #938, the owner's build test and one green nightly soak (P74-01 A); OA-4 accepted (P74-02 A); OA-5 accepted (P74-03 A). Quoted in `plan.md` § Outcome and `OWNER-ASKS.md`.

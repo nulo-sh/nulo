@@ -1,6 +1,8 @@
 # Owner asks: encryption-at-rest-1
 
-The plan is [plan.md](plan.md). Five asks. Each one says what ships if you do not answer. The arcs land in order, A1 first. A1 waits for OA-4 and OA-5, and A4 waits for OA-3; OA-1 and OA-2 block nothing.
+The plan is [plan.md](plan.md). Five asks. Each one says what ships if you do not answer. The arcs land in order, A1 first. OA-4 and OA-5 are answered (decision page 74, 2026-10-20), so A1 waits on no ask; A4 waits for OA-3; OA-1 and OA-2 block nothing.
+
+**When A1 lands, answered (P74-01): A.** "In 1.0.0: #924 lands after #938, after your own build test and one green nightly soak; the promote waits for it." Your question about people on an earlier 0.3x build: nobody needs to uninstall or reinstall. Their saved data still reads after the update. The first unlock on the new build encrypts it in the background. An existing install updates in place with its data, which the update test proves, and old backups still restore.
 
 ## What changes for a person
 
@@ -73,7 +75,10 @@ The "what changed" line (proposed): "Contacts, history, balances, accounts, toke
 
 Ships without an answer: A1-A3. A4 does not merge until you sign the wording and pick A or B.
 
-## OA-4. Refusing an app right after the wallet restarted (A1 waits for this)
+## OA-4. Refusing an app right after the wallet restarted (answered: A)
+
+**Answered (P74-02): A, accept.** You left it to the orchestrator, with this question: "Quick question: does this happen when the wallet restarted when the "Allow" pop-up was on? I'm trying to understand if the user should really go to Settings to remove it, or if we are being overly conservative damaginc UX." The answer: not with Allow. The Allow window answers a request that a restart ends, and it neither reads nor removes a saved connection. The case is only "They don't match" on the emoji-check window after a restart. #944 closes the connect and emoji-check windows at every background restart, so once it lands that press cannot happen. What remains is an app listed in Connected apps until the person removes it, or until it reconnects and passes the check. Nothing is granted meanwhile.
+
 
 When an app connects, the wallet can show an emoji check: "Do these match?". Pressing "They don't match" today forgets that app and closes the window.
 
@@ -89,7 +94,10 @@ Nothing is granted by accident: the next time that app connects, the emoji check
 
 Ships without an answer: A1 can be built and reviewed, but it does not merge until you pick, and the later arcs follow it.
 
-## OA-5. A very long contacts list opens a little slower on Firefox (A1 waits for this)
+## OA-5. A very long contacts list opens a little slower on Firefox (answered: A)
+
+**Answered (P74-03): A.** "Accept: only Firefox pays, only with thousands of contacts, and the list still opens in under a third of a second."
+
 
 The plan's rule: if a list opens more than 50 ms (a twentieth of a second) slower than today, the work stops until you decide. We timed the contacts list with 2,000 contacts, far more than most people keep.
 
