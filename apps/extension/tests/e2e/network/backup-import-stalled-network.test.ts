@@ -191,8 +191,8 @@ test.skipIf(!hasConfig)(
 			await page.bringToFront()
 
 			// Testnet still hangs, so the Retry runs out of time again and leaves the same one row. The
-			// first pass's hung calls go first, or the Retry's identity probe can queue behind them.
-			stub.dropUnanswered()
+			// first pass's held calls are refused first, or the Retry's identity probe can queue behind them.
+			stub.refuseUnanswered()
 			expect(await retryOnce(page)).toEqual({ label: "Retrying…", continueDisabled: true, viewErrorsDisabled: true })
 			expectOnlyStalledDeadline(await readViewedErrorLog(page), testnetId)
 

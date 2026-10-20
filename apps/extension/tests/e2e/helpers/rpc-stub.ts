@@ -2,10 +2,11 @@
  * A JSON-RPC stub for specs that reroute a seed's endpoint through `interceptRpc`'s `redirect`:
  * it binds an OS-assigned port (parallel-agent safe) and logs every method it receives; `answer`
  * decides which methods get a reply, and every other request blackholes (accepted, never
- * answered).
+ * answered) until `refuseUnanswered`.
  */
-import { createServer, type Server } from "node:http"
+import { createServer, type Server, type ServerResponse } from "node:http"
 import type { AddressInfo, Socket } from "node:net"
+import { refuseNodeCall } from "../fixtures/node-stub"
 
 const ZERO_ETH = `0x${"00".repeat(20)}`
 const ZERO_AZTEC = `0x${"00".repeat(32)}`
@@ -47,10 +48,12 @@ export function nodeInfoResult(l1ChainId: number, rollupVersion: number): Record
 export interface StubServer {
 	url: string
 	methods: string[]
-	/** Resets every connection that holds an unanswered request. Chrome sends at most six requests
-	 *  at once to one host over HTTP/1.1, and each blackholed one keeps its connection, so later
-	 *  calls to this stub queue unsent once six hang. */
-	dropUnanswered: () => void
+	/** Answers every request the stub holds with the node stand-in's refusal; later ones are held
+	 *  again. A browser sends at most six requests at once to one host over HTTP/1.1 and each held one
+	 *  keeps its connection, so later calls queue unsent once six hang. A reset frees none: the browser
+	 *  re-sends a request whose connection closes before any reply (Firefox any, Chrome one on a reused
+	 *  connection), and the stub holds the copy. */
+	refuseUnanswered: () => void
 	close: () => Promise<void>
 }
 
@@ -89,7 +92,7 @@ export function startStub(answer: (method: string) => unknown | undefined): Prom
 	return new Promise((resolve) => {
 		const methods: string[] = []
 		const sockets = new Set<Socket>()
-		const unanswered = new Set<Socket>()
+		const held = new Set<ServerResponse>()
 		const server: Server = createServer((req, res) => {
 			let body = ""
 			req.on("data", (c) => {
@@ -98,7 +101,8 @@ export function startStub(answer: (method: string) => unknown | undefined): Prom
 			req.on("end", () => {
 				const plan = planBatchReplies(body, answer, methods)
 				if (plan.kind !== "replies") {
-					unanswered.add(req.socket)
+					held.add(res)
+					res.on("close", () => held.delete(res))
 					return
 				}
 				res.setHeader("content-type", "application/json")
@@ -107,18 +111,18 @@ export function startStub(answer: (method: string) => unknown | undefined): Prom
 		})
 		server.on("connection", (s) => {
 			sockets.add(s)
-			s.on("close", () => {
-				sockets.delete(s)
-				unanswered.delete(s)
-			})
+			s.on("close", () => sockets.delete(s))
 		})
 		server.listen(0, "127.0.0.1", () => {
 			const port = (server.address() as AddressInfo).port
 			resolve({
 				url: `http://127.0.0.1:${port}`,
 				methods,
-				dropUnanswered: () => {
-					for (const s of unanswered) s.destroy()
+				refuseUnanswered: () => {
+					for (const res of held) {
+						held.delete(res)
+						refuseNodeCall(res)
+					}
 				},
 				close: () =>
 					new Promise<void>((r) => {
