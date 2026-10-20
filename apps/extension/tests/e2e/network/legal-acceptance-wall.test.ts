@@ -72,7 +72,7 @@ test.skipIf(!hasConfig)(
 		expect({
 			kind: await readErrorKind(wallet, refusedRow.id),
 			detail: await readJournalDetail(wallet, refusedRow.id, "refused-terms-detail"),
-			card: await readTerminalCard(wallet, "#/popup/activity", "refused-terms-card"),
+			card: await readTerminalCard(wallet, "activity", "refused-terms-card"),
 		}).toEqual({
 			kind: "terms_refused",
 			detail: {

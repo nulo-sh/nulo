@@ -10,6 +10,8 @@ import { clickByTestId } from "./dom"
 import type { FeeMethodSubtitle } from "./transfers"
 import { settleClosedPopup } from "./popup-leave"
 
+export { settleThemeTransitions, shotSend } from "./shots"
+
 export type SendAction = "send" | "review"
 export type Visibility = "hidden" | "public" | "exposed" | "unknown"
 
@@ -205,47 +207,4 @@ export async function readSendInputs(page: Page): Promise<{ amount: string; dest
 			destination: card?.getAttribute("data-address") ?? field?.querySelector("input")?.value ?? "",
 		}
 	})
-}
-
-/** Waits, at most 1 s and never throwing, for the CSS transitions a theme flip started: sheets and
- *  buttons fade their colours over 0.2 s, and a shot taken mid-fade reads washed out. Only transitions
- *  count, so an endless spinner animation cannot hold it. */
-export async function settleThemeTransitions(page: Page): Promise<void> {
-	await page
-		.evaluate(() => {
-			const ends = document.getAnimations().flatMap((a) => (a instanceof CSSTransition ? [a.finished.catch(() => undefined)] : []))
-			return Promise.race([Promise.all(ends), new Promise((r) => setTimeout(r, 1_000))])
-		})
-		.catch(() => undefined)
-}
-
-/** Opt-in capture of the popup (`NULO_E2E_SHOT_DIR`), both themes: a popup-surface change ships with a
- *  picture of it, and a colour token that only reads well on one theme is what a row count never sees. */
-export async function shotSend(page: Page, name: string, focus = "send-publish-strip"): Promise<void> {
-	const dir = process.env.NULO_E2E_SHOT_DIR
-	if (!dir) return
-	await page.evaluate((s: string) => document.querySelector(s)?.scrollIntoView({ block: "center" }), sel(focus))
-	// A popup still entering is drawn part-way through its fade; a shot of it ghosts the page beneath.
-	await page
-		.waitForFunction(
-			() =>
-				![...document.querySelectorAll("#popup *, [class*='dark_bg'i]")].some((el) => /enter/.test(el.getAttribute("class") ?? "")),
-			{ timeout: 3_000, polling: 100 },
-		)
-		.catch(() => undefined)
-	await page.screenshot({ path: `${dir}/${name}.png` as `${string}.png` })
-	const flipped = await page.evaluate(() => {
-		const root = document.documentElement
-		const was = root.getAttribute("theme")
-		root.setAttribute("theme", was === "dark" ? "light" : "dark")
-		return was
-	})
-	await settleThemeTransitions(page)
-	await page.screenshot({ path: `${dir}/${name}-${flipped === "dark" ? "light" : "dark"}.png` as `${string}.png` })
-	await page.evaluate((was: string | null) => {
-		if (was === null) document.documentElement.removeAttribute("theme")
-		else document.documentElement.setAttribute("theme", was)
-	}, flipped)
-	// A caller's next shot can follow at once; it must not catch the restore mid-fade.
-	await settleThemeTransitions(page)
 }
