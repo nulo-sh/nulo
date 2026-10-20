@@ -19,7 +19,7 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 			version: "1.1",
 			effective: null,
 			material: true,
-			changes: ["These Terms now take effect. The version you accepted was a draft."],
+			changes: ["You accepted a draft of these Terms. This version is the one in effect."],
 		},
 	],
 	privacy: [
