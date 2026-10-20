@@ -28,7 +28,7 @@ const {
 } = usePrestoHostPermission({ onFirstAllowed: start, onGranted: check })
 
 const lastProve = ref(null)
-const copy = computed(() => copyFor(state.value, lastProve.value, "settings"))
+const copy = computed(() => copyFor(state.value, lastProve.value))
 const rows = computed(() => detailRowsFor(state.value))
 const diagnosis = computed(() => (state.value.kind === "secure-connection-unavailable" ? state.value.diagnosis : undefined))
 

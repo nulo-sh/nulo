@@ -307,6 +307,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [storage-migration-backup](storage-migration-backup/plan.md) — completed — imported backups migrate through the same migrations as live storage
 - [storage-migration-framework](storage-migration-framework/plan.md) — completed — persisted storage shapes transformed in place on update, never wiped
 - [storage-privacy-1](storage-privacy-1/plan.md) — completed — note receipts keyed by their unique note hash; `storage.local` for trusted contexts only (#660)
+- [structure-2](structure-2/plan.md) — completed — one settings control row, detail hero line, explorer name and hero observer (#735, with #817); an Allow's row bound to its profile (#680); Presto's onboarding leftovers and style hash removed (#730); #750 mapped, no split
 - [supply-chain-release](supply-chain-release/plan.md) — completed — release zips attested and published through a draft, a pinned CI toolchain, an import-free content script, a blocking audit gate (#21 #12 #22 #20)
 - [sw-wallet-protocol](sw-wallet-protocol/plan.md) — completed — the service-worker boot and wallet protocol path under the complexity budget
 - [testers-fixes-1](testers-fixes-1/plan.md) — completed — selectable text, the toolbar sentence, back keeps scroll, 2 s success toasts, a display-only Home hero (#580 #581 #582 #584 #586)
@@ -384,4 +385,5 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [e2e-flakes-2](e2e-flakes-2/plan.md) — completed — arc 1 (#813) made the balance-row reconciliation spec's gap with the worker stopped (#774); arc 2 waits for the header copy's snack to leave before the drag-select test presses About's foot (#816)
 - [square-corners-1](square-corners-1/plan.md) — completed — every rounded corner the wallet draws goes square on the owner's P71-07 and P72-01; the JSON viewer's search box reads in the light theme (#928 #937)
 - [token-dash-2](token-dash-2/plan.md) — completed — a blank token name or symbol reads as the empty-value dash wherever it names the token: Home, Send, Settings, the token page, the metadata popup, activity titles and the filter chip; amounts unchanged (#932, P72-05 C); sentences are #949
+- [test-infra-1](test-infra-1/plan.md) — completed — one source walker and TS tokenizer, one approval-window harness, one wait per test layer, shared builders (#561 #550 #540 #536)
 - [viewer-followups-1](viewer-followups-1/plan.md) — completed — the logs deep link opens at its log under a burst and holds there, its offset counting line breaks as the editor does; viewers-csp's search case reads its gap while following (#923 #922); #921 closed as not reproduced; known limit #929

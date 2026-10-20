@@ -11,6 +11,18 @@ base: dev @ 18d29f23
 standard: implementations-plan/README.md § Post-implementation standard, read at 175d8268
 ---
 
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** closed by the merge into `dev` of arc 3's PR, opened after #743 landed, which closes #730; arc 1 (#779) closed #750, arc 2 (#772) closed #680, and hygiene-3's #817 closed #735.
+- **Shipped:** one settings control row with the shared row plumbing and failure label (Privacy, Display, Lock), one detail hero line and explorer name, one hero observer, and #750's map with its one false comment rewritten (arc 1, #779; #750 closed on P47-05 with the map); an Allow's session row bound to the profile it was given under, refused before any id is allocated (#680, arc 2, #772); the onboarding Presto step's leftovers removed: `copyFor`'s onboarding surface, `bannerStatus`, the `presto-` custom-element option and the banner's style hash, so `style-src` is `'self'`, with the store reviewer notes corrected, Settings › Proving pixel-identical to the base (#730, arc 3). #735's notices and Developer plumbing shipped in #817 on arc 1's pieces (D15).
+- **Owner asks:** OA-1 answered A (P47-04).
+- **Known limits:** #771.
+- **Open items:** none.
+- **Dropped:** phases 6 and 7 from arc 3 (delivered by #817, D15); the #750 public-arm split (no split pays at HEAD; § #750 names when it pays).
+- **Lessons:** none promoted. `lessons.md` is at its 8 KiB budget, and the one cross-task gotcha, that a base-vs-head DOM diff renumbers Vue `useId` values, replaces the run's random ids and captures while the header's poll sits still (D12), stays in [lessons/phase-4.md](lessons/phase-4.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+
 # structure-2: four families shared once, the IncomingTransferService map, one binding fix, one removal
 
 Four issues, three arcs, each one PR against `dev`, not stacked (D-orch-1). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (OA-1, the #735 pick). Gate log: `STATUS.md`.
@@ -148,13 +160,13 @@ Tests: the reproducer, plus its success control (both answers p1: one row under 
 
 Phases 6 and 7 use arc 1's `.control_title` and widened composable. Recheck at the base: each #730 piece still has no reader; each notice pair is byte-identical. If a release gate lags far behind the others, the orchestrator re-scopes the arc at release; the plan adds no fourth PR.
 
-### Phase 6: profile-flow notices (#735)
+### Phase 6: profile-flow notices (#735) ✓ (shipped by #817, D15)
 Files: `utils/profile-flow-notices{,.test}.ts`, `onboarding/pages/{create,import}.vue`, `popup/pages/profile/new.vue`, `popup/pages/import.vue`. Tests: 3 cases pin each payload's exact copy (password create, passkey create, import).
 
-### Phase 7: Developer plumbing (#735)
+### Phase 7: Developer plumbing (#735) ✓ (shipped by #817, D15)
 Developer's `onSettingUpdate` and land use the composable, in the setup order above; V1-V3 titles compose `.control_title`; the markup stays. Files: `popup/pages/settings/developer/index.vue`. Tests: the page suite, unchanged.
 
-### Phase 8: Presto's onboarding leftovers (#730)
+### Phase 8: Presto's onboarding leftovers (#730) ✓
 Files: `utils/presto-ui-state{,.test}.ts`, `popup/pages/settings/proving.vue`, `composables/usePrestoStatus{,.test}.ts`, `apps/extension/vite.config.ts`, `apps/extension/manifest/manifest.config.ts`, `src/manifest.test.ts`, and `scripts/type-roles/{exceptions.ts,surfaces.expected.json}` and `store/listing.md` if the recheck names them. Tests: a case that pins only deleted code goes with it, listed in the PR body; the pinned CSP string becomes `style-src 'self'`; the settings copy cases stay unchanged.
 
 ### Arc 3 validation gate
@@ -197,6 +209,9 @@ The lane brief's no-ask record says "none"; nothing here goes beyond it.
 | D12 | Arc 1 deviation: the rendered-identity DOM comparison also renumbers Vue `useId` values by first appearance and replaces the run's random profile and network ids; captures wait for the header's health poll to sit still. A base-vs-base control is identical under the same rules | comparing raw ids (a base-vs-base run differs on them) | implementer, [lessons/phase-4.md](lessons/phase-4.md) |
 | D13 | Arc 1 deviations from the spawn: branch `structure-2-a1`, not `worktree-structure-2`; #750 closes with arc 1 (owner pick P47-05), where D7 kept it open | D7's open issue | owner (P47-05), orchestrator |
 | D14 | Arc 1 review: `useHeroVisible`'s "nothing after unmount" case, which only tested its fake, became two cases with two pages mounted at once | keeping a case that cannot fail alone | Codex and Opus round 1 |
+| D15 | Arc 3 base recheck: hygiene-3 arc 1 (#817) shipped phases 6 and 7 (`createFailedNotice`, `passkeyImportFailedNotice`; Developer on `onSettingUpdate`, `landSettings` and `.control_title`) and closed #735, so arc 3 builds phase 8 alone, on `structure-2-a3` stacked on #743's head (the spawn), and its PR closes #730 and refers to #735 | rebuilding what #817 shipped; branching off `dev` before #743 merges | implementer, orchestrator spawn |
+| D16 | Arc 3 test identity: the two mixed `copyFor` cases keep their surface-free assertions under titles that no longer name the deleted surface ("available → Presto connected, Re-test, go tone"; "permission-blocked → Nulo's compact title and three steps, Retry"); the onboarding assertions go | dropping the available case's tone and retry pins with its onboarding line; a title that names a deleted surface | implementer, [lessons/phase-8.md](lessons/phase-8.md) |
+| D17 | Arc 3: `store/listing.md`'s reviewer notes drop the banner element as an `innerHTML` source: the armed Chrome build's banners chunk carries no `innerHTML` and no custom element; Vue's runtime is the only source | keeping a reviewer note the bundle contradicts | the plan's recheck |
 
 ## Audit verdicts
 
@@ -212,11 +227,16 @@ The lane brief's no-ask record says "none"; nothing here goes beyond it.
 
 **Arc 2, post-implementation** (diff `9470d4e9..structure-2-a2`). Codex round 1 (gpt-6.1-sol, high, session `01a14f10`): `clean`. Opus 5.5 diff review beside it: `approve`, four notes. Accepted: the `persistAndApprove` comment overclaimed (a switch after the fence capture is not refused; it is now scoped to the read-to-capture window); the reproducer now hands over a connect window, which the refusal closes and the success control keeps. Not acted on: an A→B→A switch during a queued admission binds the Allow to the window's profile, pre-existing and within the plan's definition, filed as known limit #771; a dedupe waiter released by the refusal can reconnect on the active profile's own row, the existing known limit #681. Codex round 2 (resumed): `clean`, both fixes verified, both notes out of scope.
 
+**Arc 3, post-implementation** (diff `bcee404d..structure-2-a3`). Codex round 1 (gpt-6.1-sol, high, session `01a153c8`): `conditional approve` pending the armed CSP smoke; two Low comment findings, both accepted (the `copyFor` comment named its caller; `manifest.chrome.config.ts` still explained the directive swap by a hash that no longer exists). Opus 5.5 diff review beside it: `approve`; the same stale clause, and the retitled available case had loosened `toEqual` to `toMatchObject` (accepted: exact shape restored). Not acted on: `PrestoStatusCard.test.ts`'s fixtures carry sample copy the app no longer produces (props, no reader of the deleted code); the explicit `null` beside `copyFor`'s state (the named edit only drops `"settings"`).
+
+
+**Cross-arc pass** (fresh Codex session `01a153df`, gpt-6.1-sol high, over arcs 1-3 and #817): no cross-arc functional defect; seams, the #680 boundary and arc 3's removals verified. Two Low comment findings, both rejected as nitpicks: `useSettingUpdate`'s TSDoc (each clause is a consumer-visible guarantee, the contract CLAUDE.md asks a public TSDoc to state) and `explorerDisplayName`'s one-line TSDoc (its "None included" is the contract that a None pick still labels "explorer").
+
 ## Delivery
 
 - Arc 1: `refactor(ui): one settings control row, detail hero line and hero observer` (74 characters). Body: `Refs #735`, `Closes #750` (P47-05) with the map's permalink, the identity tables, each browser's smoke wall-clock (no e2e scenario added).
 - Arc 2: `fix(connect): bind an allow's session row to the profile it was given under` (75). `Closes #680`.
-- Arc 3: `refactor: profile-flow notices, developer rows, presto onboarding leftovers` (75). `Closes #735`, `Closes #730`.
+- Arc 3: `refactor(presto): drop the onboarding step's copy surface, banner status and style hash` (87), stacked on #743. `Closes #730`; #735 is already closed by #817 (D15). Its PR also carries the close-out.
 - Open each PR without labels; add `e2e:extension-smoke` or `e2e:extension-network` only when the path filter would skip a suite the arc needs.
 - At arc 1's PR, comment on #750 with the verdict, this plan's section and the reopening condition; the PR closes it (P47-05).
 - Arcs 2 and 3 are disjoint and may run at once; arc 1's phases share pages and run in order.

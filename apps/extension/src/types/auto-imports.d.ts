@@ -772,7 +772,7 @@ declare global {
   export type { PasskeyTitle, WindowStep, PasskeyFailure } from '../utils/passkey-copy'
   import('../utils/passkey-copy')
   // @ts-ignore
-  export type { PrestoInfo, PrestoUiState, PrestoTone, PrestoCopy, PrestoSurface, PrestoDetailRow } from '../utils/presto-ui-state'
+  export type { PrestoInfo, PrestoUiState, PrestoTone, PrestoCopy, PrestoDetailRow } from '../utils/presto-ui-state'
   import('../utils/presto-ui-state')
   // @ts-ignore
   export type { MethodCarrier } from '../utils/primary-method'
