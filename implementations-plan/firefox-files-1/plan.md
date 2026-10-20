@@ -1,6 +1,9 @@
 ---
 plan: firefox-files-1
 tier: mid
+status: closed (one arc against dev, #964; the merge that lands it closes the plan)
+issues: "#160"
+trunk: dev
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -11,9 +14,25 @@ base: dev @ f5b7fd5a (rechecked at 05313d5e: no planned file moved)
 standard: implementations-plan/README.md § Post-implementation standard, read at 175d8268
 ---
 
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** closed. One arc, #964 against `dev` from `firefox-files-1-a1`, out of draft per the orchestrator's brief (D11). Merging it, the owner's call, closes the plan and #160.
+- **Owner decisions:** P74-05 A, P74-06 B, P74-07 C, quoted in § Assumptions and the PR; each the option the plan was built on.
+- **Shipped:**
+  - P74-05 A: from Firefox's toolbar panel, Import contacts, Import account's file choice and Restore again's file choice reopen their page in the wallet's own window, where a second press picks. One guard, `leavePanelFor(route)`, serves them and the existing profile restore (D13). `closesOnFocusLoss` replaces `passkeyNeedsOwnWindow`. `armPanelDeath` records a file picker opened in the panel, and `toolbar-panel.test.ts` (renamed) drives the contacts hand-off.
+  - P74-06 B: an accepted encrypted Full Backup reads "Saved to your downloads" over the reminder, with one focused Close in Download's place; the run's secrets go at that moment. Close shuts the toolbar popup, else acts as the back arrow through the shared `goBack`. I1 checked in Chrome (D12).
+  - P74-07 C: the contacts export probes every network at once with a 5 s limit, shows `StatusCard` above the list and disables Export while it runs. A refused network's export fell from 12.05 s to about 0.2 s (I3).
+  - Evidence: lessons/phase-2.md through lessons/phase-6.md, and the PR's checks.
+- **Known limits:** #960 (a PXE built behind an answering node is not bounded by the probe), #961 ("Saved to your downloads" rests on the browser accepting the file).
+- **Open items:** none in the repo. OA-1, OA-2 and OA-4 ship their "what ships now" form; OA-3, the owner's Mac check, is listed as pending in #964.
+- **Dispositions:** D11 replaces the plan's draft-until-OA-3; the chrome-extension-debug route for I1 is replaced by the driver's CDP session (D12); the known limit 2 reproduction was not attemptable headless (lessons/phase-4.md).
+- **Lessons:** none promoted. The smoke-run collision is already the e2e-testing skill's ("Sharding smoke on one host"), the `Button` stub is `lessons.md`'s Vue line, and `lessons.md` is at its budget.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
+
 # firefox-files-1: file pickers leave Firefox's toolbar panel, the full backup says it is saved, the contacts export shows its wait
 
-One arc, one PR against `dev`, `Closes #160`, with the owner's three picks (page 74: P74-05 A, P74-06 B, P74-07 C, § Assumptions) quoted in its body; they are the options the plan was built on. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks beyond the page: [OWNER-ASKS.md](OWNER-ASKS.md). Gate log: `STATUS.md`.
+One arc, one PR against `dev`, `Closes #160`, with the owner's three picks (page 74: P74-05 A, P74-06 B, P74-07 C, § Assumptions) quoted in its body; they are the options the plan was built on. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks beyond the page: [OWNER-ASKS.md](OWNER-ASKS.md). Gate log: [lessons/phase-6.md](lessons/phase-6.md).
 
 ## Outcome & Quality Bar
 
@@ -80,31 +99,31 @@ A refused move falls through to today's pick: on a Mac the panel dies as today, 
 
 Every gate also runs the fast layers: `bun run lint`, `bun run typecheck:all`, `bun run test` (pass: exit 0). Smoke e2e runs at retry 0: `cd apps/extension && NULO_E2E_RETRY=0 bun run test:e2e <file>`; Firefox: the armed `build:firefox` and env FIREFOX.md names, then `NULO_E2E_BROWSER=firefox` on the same command. Network: `cd <worktree> && NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/<file>.test.ts`.
 
-### Phase 1: one predicate, three own-window routes
+### Phase 1 ✓: one predicate, three own-window routes
 Files: `utils/browser-surface{,.test}.ts`, `utils/own-window{,.test}.ts`, the five F1 callers and the test files that mock the predicate (`useProfileCreateFlow`, `useProfileImportFlow`, `onboarding/pages/create`, `auth`, `import`, `import.passkey-notice`, `full-passkey.pins`), the regenerated auto-import files.
 Tests: `isToolbarPopup` true on a popup view and false outside one; `closesOnFocusLoss` keeps today's four cases; `test.each` over the three new routes: a marked boot is an own window and `postAuthRoute()` returns its route (the report's Home landing); a second `moveToOwnWindow(contacts)` focuses the registered window.
 Gate: the fast layers. Pass: the renamed cases pass with their assertions unchanged.
 
-### Phase 2: the three hand-offs
+### Phase 2 ✓: the three hand-offs
 Files: `settings/contacts/index{,.test}.{vue,ts}`, `settings/accounts/import{,.test}.{vue,ts}`, `restore-again.vue` and a new `restore-again.test.ts`; `tests/e2e/fixtures/browser/firefox-action-popup.ts` and FIREFOX.md's panel row; `tests/e2e/passkey-toolbar-panel.test.ts`, moved by `git mv` to `toolbar-panel.test.ts`, with its eight references (FIREFOX.md, the e2e-testing skill twice, four spec headers, PRF-NON-PORTABLE.md).
 Tests: per page, a press in the panel moves and starts no picker; outside it, the pick runs; a refused move falls through to the pick; the account import in an own window replaces to Accounts. `armPanelDeath` also records a file input's `click` or `showPicker` in the panel (kind `file`), as the OS picker would take focus; `PanelDeathRecord.calls`' doc and the four assertion messages that say "WebAuthn calls" are reworded in the same commit. E2E: in the panel test that already moves export and restore, one more step: press Import contacts in the dying panel; the window lands on `#/popup/settings/contacts?window=own`, the panel is gone, and the record holds no call. Failure mode: the panel starts the picker in itself and dies with it on a Mac; only a real panel shows the Contacts route opening the window, and with the record a regression's timeout message names the picker. The in-window import is `contacts-import`'s, on the driver's seam. Estimate +10 s.
 Gate: the fast layers; Firefox `toolbar-panel.test.ts`, `own-window.test.ts`, `contacts-import.test.ts`; Chrome `contacts-import.test.ts`. Pass: exit 0 at retry 0; the test's runtime before and after.
 
-### Phase 3: the working card, shared
+### Phase 3 ✓: the working card, shared
 Files: `components/composite/StatusCard{,.test}.{vue,ts}`, `export/full.vue`. Tests: CLAUDE.md's ten for an L3 composite (title; description shown and absent; `role`, `aria-live`, `aria-atomic`; the spinner's size, colour and `aria-hidden`; the testid; the two type roles; reactive text); `full.test.ts` unchanged.
 Gate: the fast layers; Chrome `passkey-backup.test.ts` (it watches `backup-status-card` and its texts); the card's capture in both themes before and after equal. Pass: exit 0; equal pairs.
 
-### Phase 4: the full backup's done state
+### Phase 4 ✓: the full backup's done state
 Files: `composables/useFullBackupExport{,.test}.ts` (`SENTINELS` covers the new status), `export/full{,.test}.{vue,ts}`, `full-passkey.pins.test.ts`, `components/ui/SubPageHeader.vue`, `utils/page-back{,.test}.ts`, `tests/e2e/security-backup.test.ts`.
 Tests: the composable: `downloaded` only after the current run's accepted encrypted download; a plain passkey download keeps `finished` and Download; a refused download keeps the status and Download; a download superseded by a profile switch publishes nothing; after `downloaded` the artifacts and passwords are gone and a second `downloadBackup` writes nothing. The page: the swap (title, reminder, Close in place of Download, Close focused, a repeat Enter refused); Close in the toolbar popup calls `window.close()`, elsewhere `goBack`. `goBack`: own window, history, `backTo`, Home, in that order. E2E: `security-backup` asserts the done state after `downloadEncryptedBackup` (Close shown, Download gone) and moves its shot to it. Manual: I1 in Chrome's real action popup and side panel.
 Gate: the fast layers; Chrome and Firefox `security-backup`, `passkey-backup`, `backup-roundtrip`. Pass: exit 0 at retry 0; I1 recorded.
 
-### Phase 5: the contacts export, bounded and shown
+### Phase 5 ✓: the contacts export, bounded and shown
 Files: `wallet/services/account-state/service{,.test}.ts` (`FakeNetworkService` gains `probeNodeStatus`), `useContactImportExport{,.test}.ts` and the three sibling suites' mocks, `settings/contacts/index{,.test}.{vue,ts}`.
 Tests: the service: every network is probed with the limit and none waits on another; `getNodeStatus` is never called (a per-test spy that never answers; `backup()`'s tests keep the fake as is); two probes that answer at the limit finish in one limit (fake timers); Inactive, InvalidChain and a throwing probe each skip only their network; an Active one's senders join. The composable: `exporting` true until the download settles, false after a success and a failure; a stalled sender read keeps it true and a second press downloads nothing. The page: the card and the disabled Export while `exporting`.
 Gate: the fast layers; `bun run test:all`; Chrome and Firefox `contacts-import.test.ts` and network `senders-advanced.test.ts`, each export's time recorded (I3). Pass: exit 0 at retry 0.
 
-### Phase 6: arc gate and pictures
+### Phase 6 ✓: arc gate and pictures
 `bun run audit:vue`; `bun run test:all`; the full smoke suite and the full network suite (`bun run e2e:agent`, one run at a time) on Chrome and Firefox, each wall-clock recorded; `bun run check:plans` after staging. Pictures, light and dark: the own window on Contacts after the hand-off (Firefox); the done state (Chrome popup 360x600, Firefox panel); the running card (Chrome popup, held by the capture spec alone, for example a page-realm stub of the sender read; no hook in shipped code). The shots lane's specs (`~/.cache/nulo-backlog/shots-p74/specs/`) show how the panel is drawn. Pass: all exit 0; pictures attached to the PR.
 
 ## Security & Adversarial Considerations
