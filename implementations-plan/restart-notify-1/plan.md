@@ -142,7 +142,7 @@ Line budgets: `bootRuntime` is at 74 of 80 non-blank lines and `initWalletSdkHan
 
 ## Phases (arc A1)
 
-### Phase 1 — the rule and the boot sweep
+### Phase 1 — the rule and the boot sweep ✓
 
 1. Widen `getContexts?`'s result with `windowId?` and `tabId?`; add `WindowPort.closeTab`; follow in the Chrome adapter and the fake.
 2. Add `restart-ended-windows.ts`: `RESTART_ENDED_ROUTES`, `isRestartEndedUrl`, `closeRestartEndedTabs`.
@@ -151,7 +151,7 @@ Line budgets: `bootRuntime` is at 74 of 80 non-blank lines and `initWalletSdkHan
 
 **Validation gate.** `bun run lint && bun run typecheck:all && bun run test` exit 0; the new test file green. Layers: lint, typecheck, unit.
 
-### Phase 2 — the preparation before the lock's restart
+### Phase 2 — the preparation before the lock's restart ✓
 
 1. `trackOpenWindows` in `restart-ended-windows.ts`; `runtime.ts` passes one tracker to `WindowManager` and to `initWalletSdkHandler`.
 2. `ProfileService.setRestartPreparation`; the guarded call right before `reload()`.
@@ -160,7 +160,7 @@ Line budgets: `bootRuntime` is at 74 of 80 non-blank lines and `initWalletSdkHan
 
 **Validation gate.** `bun run lint && bun run typecheck:all && bun run test && bun run test:all` exit 0. Layers: lint, typecheck, unit, integration.
 
-### Phase 3 — e2e and docs
+### Phase 3 — e2e and docs ✓
 
 1. New `network/restart-closes-check-window.test.ts`, under `describe.skipIf(isFirefox)(CHROME_ONLY.backgroundKillUnderPage, …)`: Firefox does not end an event page under an open extension page (`tests/e2e/FIREFOX.md`), which this scenario needs. Failure mode: the check window outlives the crash that ended its session. Why e2e: a real worker death, the real `getContexts` shapes and a successor woken by the window's own port. Steps: connect the playground to the check; keep the control popup open; clear alarms; `stopBackground`; assert the check window closes within 15 s and the control popup is still open and answers (the successor serves its next read). Estimated 40 s.
 2. Extend `network/lock-restart-reconnect.test.ts`: before the restart, a second playground page connects up to an unanswered emoji check, whose window stays open. After `waitForExtensionRestart`: the first app (connected, idle) reads `pg-status` disconnected within 5 s, which only the preparation's notice can do (spike: not told at +35 s on either browser); the check window is closed, and on Chrome no New Tab page is open. Then the existing reload and reconnect. Failure mode: the app is not told, or the routed check window survives as a New Tab window. Both browsers; estimated +20 s each.
