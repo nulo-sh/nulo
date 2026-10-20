@@ -11,3 +11,9 @@
 - 2026-10-19 18:5x arc 2 Codex R1 conditional (gates) + Opus approve, fixes taken; Codex R2 approve: converged.
 - 2026-10-19 19:0x arc 2 network e2e retry 0: data-registerSender, contracts-register, senders-advanced: Chrome and Firefox green.
 - 2026-10-19 19:1x arc 2 final head (origin/dev merged): lint, typecheck:all, the pre-PR gate, test:all green.
+- 2026-10-19 19:2x arc 3: picks P65-01 to P65-06 received; branch off origin/dev 2f591ddd; OA-2, OA-5 and OA-4's invisible part.
+- 2026-10-19 19:5x arc 3: OA-2 committed; OA-4 Codex design consult: one reattempt inside close(), announcement before the read-back; committed.
+- 2026-10-19 20:1x arc 3: OA-5 committed; OA-7 drafted in OWNER-ASKS.md; plan ledger HS3-D10 to D12.
+- 2026-10-19 20:5x arc 3 Codex R1 reject + Opus conditional approve; round 1 fixed (late add keeps Block, displaced sweep fenced, announcement guard, Block bump at entry + finally rebuild).
+- 2026-10-19 21:0x arc 3 Codex R2 approve: converged. Network e2e retry 0: Chrome 11/11, Firefox 11/11.
+- 2026-10-19 22:0x arc 3 final head (origin/dev merged): lint, typecheck:all, the pre-PR gate, test:all, Chrome smoke green. OA-7 open; arc 4 waits on it.

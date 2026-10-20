@@ -190,9 +190,9 @@ test.skipIf(!hasConfig)(
 			expectOnlyStalledDeadline(firstLog, testnetId)
 			await page.bringToFront()
 
-			// Testnet still hangs, so the Retry runs out of time again and leaves the same one row. The
-			// first pass's hung calls go first, or the Retry's identity probe can queue behind them.
-			stub.dropUnanswered()
+			// Testnet still hangs, so the Retry runs out of time again and leaves the same one row.
+			// Refuse the first pass's held calls before it, or its identity probe can queue behind them.
+			stub.refuseUnanswered()
 			expect(await retryOnce(page)).toEqual({ label: "Retrying…", continueDisabled: true, viewErrorsDisabled: true })
 			expectOnlyStalledDeadline(await readViewedErrorLog(page), testnetId)
 

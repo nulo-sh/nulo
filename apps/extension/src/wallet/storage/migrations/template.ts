@@ -39,10 +39,17 @@
  *      or `retype`ing a schema-REQUIRED field, and — when a release ADDS a new
  *      required field — failing to `addDefault` it (old rows won't have it).
  *      Your colocated test MUST assert `Schema.parse(migratedRow)` succeeds
- *      for every before→after fixture. (There is no automatic gate that a
- *      migration's old→new output matches the schema — only your test.)
- *   8. Import it into `index.ts`'s `realMigrations` array.
- *   9. Add a colocated `*.test.ts` with before→after fixtures.
+ *      for every before→after fixture. The stored-shape guard
+ *      (`stored-shapes/snapshot.test.ts`, R3) also runs the real engine over
+ *      every frozen golden row and reads each back through its service's read
+ *      path, so an output the codec hides fails CI there too.
+ *   8. Import it into `index.ts`'s `realMigrations` array, then run
+ *      `bun run baseline:storage`: it appends the stamp this migration
+ *      justifies and the decoded value of every golden after it; review that
+ *      diff, and add the pin it prints to `stored-shapes/pins.ts`.
+ *   9. Add a colocated `*.test.ts` with before→after fixtures. R3 holds every
+ *      older golden to the expectations the generator wrote, so a value your
+ *      migration changes by accident shows in the stamp's diff.
  *
  * `breaking` defaults to `true` (the new code REQUIRES this shape; a failed
  * migration blocks with recovery). Set `false` ONLY if the code genuinely
