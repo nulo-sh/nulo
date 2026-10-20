@@ -60,7 +60,7 @@ Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spi
   - every popup page and window lays out at 240 px with no text cut or past its box, on both browsers, by the suite's own layout gate;
   - at 360 px and wider every page is pixel-identical to `dev`, on both browsers and both themes;
   - Chrome's side panel and toolbar popup behave exactly as before.
-- **Good enough**: no Mac run before the owner's (P71-02); the restart gap of § Phase 5, which the owner accepts or rejects before #889 leaves draft (OA-5); the toolbar popup the background can no longer open with the setting on (D15).
+- **Good enough**: no Mac run before the owner's (P71-02); the restart gap of § Phase 5, which the owner accepts or rejects before #889 leaves draft (OA-5).
 
 ## Assumptions
 
@@ -86,7 +86,7 @@ Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spi
     - every other route lays out with nothing cut.
     At 360 px the same sweep finds only what `dev` already has (the activity row's hash touching its explorer link by 3 px, the logger by 1 px). Not measured yet: four route states (`lessons/phase-6.md`), every window, and every surface a page opens on demand (Fact 17).
 14. **Closing the sidebar**: Firefox hides a sidebar whose page closes itself (`webext-panels.js` handles `DOMWindowClose`), but it refuses a page's own `window.close()` once that page's history has grown (`onboarding/pages/done.vue` records the same rule), and reaching Display always navigates. Measured: from Display, `window.close()` left the sidebar open while the write landed (Phase 5 run 3). `sidebarAction.close()`, like `open()`, requires user input (`sidebar_action.json`). `getViews({ type: "sidebar" })` lists the sidebar's document on Firefox; Chrome's `getViews` refuses the type.
-15. **`action.openPopup()` with no popup set opens nothing** and resolves (`ext-browserAction.js`: it opens only `if (action.getPopupUrl(...))`). The wallet calls it after onboarding's "Open wallet" and after the passkey window hands a step back (`wallet/utils/toolbar-popup.ts`).
+15. **`action.openPopup()` with no popup set opens nothing** and resolves (`ext-browserAction.js`: it opens only `if (action.getPopupUrl(...))`), and it reads the URL again later, in the view's `onViewShowing`, after the call has returned. The wallet calls it after onboarding's "Open wallet" and after the passkey window hands a step back (`wallet/utils/toolbar-popup.ts`). A full-backup restore copies `sidePanel`, so onboarding can run with the setting on.
 16. **A background death locks the wallet** under strict mode, the default (`sw-resilience.test.ts`), so the click that wakes a stopped background opens a locked sidebar.
 17. **Surfaces a page opens on demand**: the overlays under `popup/components/popups/` (25 `*Popup.vue`), dropdown menus (`components/ui/Dropdown/DropdownRoot.vue`, mounted only while open and positioned with fixed widths), the legal sheet, toasts with an action, tooltips, the logger's filters (`components/JsonViewer/LogsToolbar.vue`), and the register and restore states. A route visit sees none of them unless it opens them.
 18. **What the reviewers found in the code**: Lock's accessible name is "Lock wallet" (`components/Header.vue:245`); the network chip already ends in an ellipsis; `TransactionCardLayout` already has `wrapTrailing`, which puts the title's trailing chip on its own line (`components/composite/activity/TransactionCardLayout.vue:45, 111`); the CTA sizes live in `packages/design/src/ui/Button.vue`, which the extension's `Button` wraps; complete values that a person inspects wrap on purpose (an account-state note's hex, `popup/windows/execute/CallArguments.vue`'s arguments). `expectLaidOut` reads horizontal spans only (`fixtures/type-roles.ts:128`), so it cannot see the logger's vertical overlap.
@@ -110,7 +110,8 @@ Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spi
 
 **Phase 5, the Display row on Firefox (P71-03 B), in #889**:
 - `utils/browser-surface.ts`:
-  - `sidebarAction()` returns Firefox's `browser.sidebarAction` (`open`, `close`), `undefined` elsewhere;
+  - `sidebarAction()` returns Firefox's `browser.sidebarAction` (`open`, `close`, `toggle`), `undefined` elsewhere;
+  - `pointToolbarAtSidebar(on)`: on Firefox, `action.setPopup({ popup: on ? "" : null })`; Chrome keeps its popup. `null` restores the manifest's popup, so no path is repeated;
   - `hasSidePanelSurface()` is `Boolean(chrome.sidePanel) || sidebarAction() !== undefined`;
   - `isFirefoxSidebar()`: this document is the sidebar (Fact 14), asked only where a sidebar exists.
 - `settings/display.vue`:
@@ -118,14 +119,16 @@ Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spi
   - in the toggle's own event, once the write is posted (D10): turning it on calls `sidebarAction().open()`; turning it off in the sidebar calls `sidebarAction().close()`, since `window.close()` cannot close it from Display (Fact 14);
   - then, as on Chrome, the page closes once the write settles; Chrome's `chrome.sidePanel.open` stays where `chrome.sidePanel` exists;
   - a `side-panel-toggle` testid.
-- `@nulo/extension-messaging`'s background `ServiceClient` gains `isConnected` (a port that said Ready is open, so a request posts before the call returns); `display.vue` opens or closes the sidebar only while it holds.
-- `settings/index.vue`: Settings search's context uses `hasSidePanelSurface()`. `popup/app.vue`'s comment on `setPanelBehavior` says where Firefox's wiring lives.
+- `@nulo/extension-messaging`'s background `ServiceClient` gains `isConnected` (a port that said Ready is open, so a request posts before the call returns); `display.vue` opens or closes the sidebar only while it holds. A port whose `postMessage` throws stops reading as connected at once, and the client drops it as on `onDisconnect` once that request has failed.
+- `settings/index.vue`: Settings search's context uses `hasSidePanelSurface()`.
+- `popup/app.vue`: the `sidePanel` handler, which already applies Chrome's `setPanelBehavior` at every shell boot and on each change, also calls `pointToolbarAtSidebar`. So every popup, sidebar or window page points the button as the stored setting says when it boots.
 - `wallet/utils/toolbar-sidebar.ts` (new), registered at module scope in `wallet/index.ts` before the runtime starts. On Firefox only (a `sidebarAction`, no `chrome.sidePanel`):
-  - `chrome.action.onClicked` calls `sidebarAction.open()` synchronously (Fact 9);
-  - `config.onUpdate` for `sidePanel` calls `chrome.action.setPopup({ popup: value ? "" : null })`. `null` restores the manifest's popup, so no path is repeated.
+  - `chrome.action.onClicked` calls `sidebarAction.toggle()` synchronously (Fact 9): a second click closes the sidebar, as Chrome's `openPanelOnActionClick` toggles its panel;
+  - `config.onUpdate` for `sidePanel` calls `pointToolbarAtSidebar(value)`.
   - Because Firefox keeps the popup in memory (Fact 8), every background start re-applies the stored value: the config load emits it when it differs from the default. An add-on update restarts the background at once.
   - **The restart gap**: after a browser restart with the sidebar closed, the first click opens the popup, whose start wakes the background; later clicks open the sidebar. Closing it means starting the whole wallet at every Firefox launch (Fact 10). That is background work, so it is OA-5: this phase ships without it, and #889 leaves draft only once the owner has answered.
-  - **What the background can no longer open** (D15): with the setting on, onboarding's "Open wallet" and the passkey window's return open nothing (Fact 15); the toolbar button still opens the sidebar. A visible change, so it is asked with OA-5.
+  - **The popup the background opens itself** (D15): `openToolbarPopup`, after onboarding's "Open wallet" and the passkey window's return, first calls `pointToolbarAtSidebar(false)`, since Firefox opens nothing while no popup is set (Fact 15). The popup then points the button at the sidebar again as it boots (`app.vue`), so the popup opens as it does on Chrome. If Firefox refuses the open, the next toolbar click opens the popup and repairs it the same way.
+  - **Self-repair**: a `setPopup` that failed, or a background that died between storing the setting and applying it, is repaired by the next shell page's boot. The load-time emit fires only for a value that differs from the default, and the shell boot covers what it misses.
 - Chrome changes nothing: no listener, no `setPopup`, the same row. The settings-search test's no-side-surface context is renamed from `FIREFOX` to `NO_SIDE_SURFACE`.
 - **Tests**:
   - unit:
@@ -140,21 +143,24 @@ Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spi
       - a failed write closes nothing and shows the error;
     - `toolbar-sidebar.test.ts`:
       - Chrome registers nothing;
-      - Firefox opens the sidebar from a click and swaps the popup on each `sidePanel` change, ignoring other keys.
+      - Firefox toggles the sidebar from a click and swaps the popup on each `sidePanel` change, ignoring other keys;
+    - `toolbar-popup.test.ts`: on Firefox the manifest's popup comes back before `openPopup`;
+    - `browser-surface.test.ts`: `pointToolbarAtSidebar` sets `""` or `null` on Firefox and nothing on Chrome;
   - e2e:
     - `settings-routes.test.ts`: Firefox now finds the row in search;
-    - a third `firefox-sidebar.test.ts` scenario, "with the side-panel setting on, the toolbar button opens the sidebar, and with it off the popup again".
-- **The e2e scenario's steps**:
+    - a `firefox-sidebar.test.ts` scenario per sidebar kind: "in the %s sidebar, with the side-panel setting on the toolbar button toggles the sidebar, and with it off opens the popup".
+- **The e2e scenario's steps**, on the sidebar kind the scenario names (`setSidebarKind`):
   1. Open the toolbar panel on Display and click the toggle with a real pointer (`clickInActionPopup`). Expect the sidebar open, `sidePanel` stored true (read on a control page), the panel closed, and `action.getPopup` reading `""`.
-  2. Close the sidebar (`closeSidebar`; D6 revisited) and the control page, and stop the background (`stopBackground`), so the click has to wake it.
-  3. Trigger the toolbar action as a click does (`triggerToolbarAction`: `browserActionFor(extension).triggerAction(window)`, the widget's own path). Read both surfaces as soon as either shows: the sidebar open, no panel.
-  4. The woken wallet is locked (Fact 16): unlock on a new control page; the sidebar follows. In the sidebar, open Display and turn the setting off: the sidebar closes, `sidePanel` is stored false and `action.getPopup` reads the manifest's popup.
-  5. Trigger the action again: the panel open, no sidebar.
+  2. Close the sidebar (`closeSidebar`, which resolves only once it shows nothing; D6 revisited) and the control page, and stop the background (`stopBackground`), so the click has to wake it.
+  3. Trigger the toolbar action as a click does (`triggerToolbarAction`: `browserActionFor(extension).triggerAction(window)`, the widget's own path). Read both surfaces as soon as either shows: the sidebar open, no panel. Trigger again: the sidebar closes and no panel opens.
+  4. The woken wallet is locked (Fact 16): unlock on a new control page. From an onboarding page (the flag reset, so the shell routes the known profile to Learn), alone in its window and on its done route, click the real "Open wallet": the background's `openToolbarPopup` opens the panel (`waitForOpenPanel`, now shared with `onboarding-tab.test.ts`), and the panel's boot points the button at the sidebar again (`getPopup` reads `""`). Close the onboarding page, and its panel with it; trigger: the sidebar opens.
+  5. In the sidebar, open Display and turn the setting off: the sidebar closes, `sidePanel` is stored false and `action.getPopup` reads the manifest's popup.
+  6. Trigger the action again: the panel opens, no sidebar.
 - **The scenario's budget**:
-  - failure mode: the setting or the click handler no longer opens the sidebar, a stale popup wins, a woken background misses the click, or the sidebar stays open after the setting turns off;
+  - failure modes: the setting or the click handler no longer opens or closes the sidebar, a stale popup wins, a woken background misses the click, the popup the background opens does not open or never hands the button back, or the sidebar stays open after the setting turns off; on either sidebar kind, since Firefox's `SidebarController` takes its own path for each;
   - no cheaper layer: the user-input rule, the popup swap, the wake and the panel exist only in Firefox;
-  - estimate 25 s; measured 19.4, 19.6 and 20.4 s (three runs at retry 0). The Firefox smoke wall-clock before and after goes in #889's body.
-- **Negative controls** (uncommitted, `lessons/phase-5.md`): with the `onClicked` listener emptied, step 3 fails reading `{ sidebar: false, popup: false }`; the build before `close()` failed at step 4's "the sidebar closing itself".
+  - estimate 25 s per kind. Measured: the first version (one kind, steps 1–3, 5 and 6) took 19.4–20.4 s; this one 23.1–29.0 s per kind over three runs at retry 0 (`lessons/phase-5.md`). The Firefox smoke wall-clock before and after goes in #889's body.
+- **Negative controls** (uncommitted, `lessons/phase-5.md`): with the `onClicked` listener emptied, step 3 fails reading `{ sidebar: false, popup: false }`; the build before `close()` failed at step 5's "the sidebar closing itself"; without `app.vue`'s `pointToolbarAtSidebar`, step 4 fails at "the popup pointing the button at the sidebar again"; without `openToolbarPopup`'s restore, step 4 fails at `waitForOpenPanel`.
 - **Driver**: `clickWithPointer` in `firefox-frame-script.ts` takes a locator, scrolls the element into view as WebDriver's element click does, and refuses one it cannot reach. `clickInSidebar` and `clickInActionPopup` are that helper with each surface's locator; the pointer reached the panel, so no step falls back to a unit test.
 
 **Arc 2, the 240 px layout (P71-01 B), its own PR off `origin/dev`**:
@@ -189,7 +195,7 @@ Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spi
   - Firefox's `action-popup-layout.test.ts`: the real panel opens 360 px wide.
   - Each hard offender's check must fail on the base before its fix (Phase 6 step 3).
 - **Proof at 360** (scratch, recorded):
-  - **The CSS diff is the main proof**: every rule the branch adds to the built CSS sits inside the media query, and no rule outside it changed.
+  - **The CSS diff is the main proof**: every rule the branch adds to the built CSS sits inside the media query, and no rule outside it changed but the shell's floor-to-cap, which the real-popup checks hold (I3).
   - **The pixel compare backs it**: every page, surface and window at 360 on the base build and on the branch, light and dark, Chrome and Firefox. Both builds load from their own `extensionPath`, with animations off, the caret blurred, `document.fonts.ready` awaited, seeded rows, fixed times and `Date.now` pinned (`BalanceView.vue`, `TokensView.vue` and `RecentActivityView.vue` read it). A noise control (base against base) must find zero, and a positive control (a known 1 px change) must be found.
 - **Pictures**, headful under Xvfb as arc 1's were, from a build of the branch:
   - Firefox's sidebar at 240, at 340 (the revamped sidebar's width) and at 360 (whole window, `drawSnapshot`), and Chrome's popup page at 360 and at 240, each light and dark;
@@ -211,15 +217,16 @@ Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spi
   - **Rejected, waking the background at every Firefox start** (`runtime.onStartup`): it starts the whole wallet at each launch for everyone (Fact 10). Background work goes to the owner (OA-5).
 - **D10, the write is posted, then the sidebar opens or closes, with nothing awaited between** (Phase 5). Firefox's user-input rule forces it (Facts 3, 14): neither call can wait for the write to settle. Posted means the config client was connected: its request then reaches `postMessage` before the call returns, so a document the change closes has sent it (the e2e reads the stored value after the panel and the sidebar close). A client still reconnecting has not posted it (the Codex leg), so then the sidebar neither opens nor closes: the page stays, finishes the write and closes as on Chrome, and the toolbar button follows the stored setting. If a posted write fails, the sidebar is open (or closed) with the setting unchanged, and the error shows as on any failed setting, unless the document it shows in has closed. Chrome's order is unchanged.
 - **D11, arc 2 is its own PR off `origin/dev`** (P71-01's page). It touches every page and needs nothing from #889. The plan's files live on #889's branch only, so the two PRs do not conflict; arc 2's PR links them by branch.
-- **D12, narrow-only rules sit under `@media (width < 359px)`**, and none outside it. A viewport query keys on the width, not the surface, so one layout serves the sidebar, a narrowed side panel and a narrowed window alike ("one layout for every width"). 359, not 360: a zoomed 360 px popup can report 359.x px (Fact 19). At 360 px and wider no rule changes, which the CSS diff and the pixel compare prove.
+- **D12, narrow-only rules sit under `@media (width < 359px)`**, and none outside it but the shell's floor-to-cap, which the real-popup checks hold (I3). A viewport query keys on the width, not the surface, so one layout serves the sidebar, a narrowed side panel and a narrowed window alike ("one layout for every width"). 359, not 360: a zoomed 360 px popup can report 359.x px (Fact 19). At 360 px and wider no rule changes, which the CSS diff and the pixel compare prove.
 - **D13, the gate is `expectLaidOut` plus two small checks**, run at 240 inside the visits that already exist rather than in a second pass per width (the runtime budget). `expectLaidOut` reads text cut or past its box, and every offender the scratch sweep's box checks found is one; each must fail on the base before its fix (Phase 6 step 3; unverified until then). It reads horizontal spans only (Fact 18), so `expectInsideView` catches a box past the view and the logger gets a vertical check of its own. Two findings were by eye only, labels touching and a shortened value broken over two lines; the pictures cover them.
 - **D14, the 240 px work gets an issue** of its own, filed when arc 2 opens, so its PR has something to close. #596 is the sidebar, and #889 closes it.
-- **D15, the background's `openPopup` with the setting on opens nothing** (the Opus leg, Fact 15). The background holds no user input after onboarding or a passkey window, so it cannot open the sidebar instead; the person clicks the toolbar button and the sidebar opens. Onboarding's "Open wallet" does start in a click, so the onboarding tab could open the sidebar itself, a change to onboarding's flow (the Codex leg). Both are visible, so they are the owner's, asked with OA-5. If the owner accepts what ships, it is filed as a closed `known-limit` issue that reopens if Firefox lets `action.openPopup` reach `onClicked`.
+- **D15, the background opens its popup as on Chrome** (the Opus diff review, Fact 15). Chrome's `action.openPopup` opens the popup whatever the side-panel setting says. On Firefox the background puts the manifest's popup back first, and the popup's own boot points the button at the sidebar again. Restoring it right after `openPopup` resolves would race Firefox's later read of the URL (Fact 15). Rejected: opening the sidebar instead, since the background holds no user input then.
+- **D16, the toolbar click toggles** (the Opus diff review). Chrome's `openPanelOnActionClick` toggles its panel, and P71-03 B names Chrome's row, so a second click closes the sidebar.
 
 ## Security & Adversarial Considerations
 
 - **The sidebar** is a persistent extension document hosting every popup route, as Chrome's side panel already does. Only the user can open it, and the extension only on user input; no page can frame or script it. The key needs no permission. dApp approvals still open their own windows.
-- **The toolbar listener** (Phase 5) acts only on the toolbar click Firefox dispatches, and opens only the add-on's own sidebar. It reads no message and carries no data. `setPopup` takes a constant or `null`, never a value from storage.
+- **The toolbar listener** (Phase 5) acts only on the toolbar click Firefox dispatches (a page cannot dispatch it), and toggles only the add-on's own sidebar. It reads no message and carries no data. `setPopup` takes a constant or `null`, never a value from storage. Config writes reach the background only over ports that already refuse untrusted senders.
 - **Passkey**: the ceremony in the sidebar is the wallet's ordinary in-page path; Firefox allows it only in the focused, active sidebar.
 - **Layout** (arc 2): no logic changes. The risk is a regression a person would see; the CSS diff, the 360 px pixel compare and the 240 px gate are its checks. An address must never read as a different address: a shortened identifier moves under its label whole, and a complete value keeps all its characters, wrapping as today.
 - **Test channels**: `chromeActions` and `triggerToolbarAction` are privileged and exist only in the e2e fixtures, behind geckodriver's `--allow-system-access`.
@@ -233,9 +240,9 @@ Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spi
   - Pictures in [`screenshots/`](screenshots/).
 - **Settings → Display on Firefox (Phase 5)**, P71-03 B: "Add Chrome's "Open as Side Panel" row on Firefox; the toolbar button then opens the sidebar."
   - The row and its search entry appear on Firefox with Chrome's copy.
-  - Turning it on opens the sidebar and closes the page it was turned on in, as on Chrome. From then on the toolbar button opens the sidebar.
+  - Turning it on opens the sidebar and closes the page it was turned on in, as on Chrome. From then on the toolbar button opens the sidebar, and a second click closes it, as Chrome's button does with its panel (D16).
   - Turning it off closes the page it was turned off in, the sidebar included, and the toolbar button opens the popup again.
-  - With it on, after onboarding's "Open wallet" or a passkey window, nothing opens by itself (D15).
+  - With it on, onboarding's "Open wallet" and a passkey window's return open the popup, as on Chrome (D15).
 - **Every page below 360 px (arc 2)**, P71-01 B: "Fit every page down to 240 px everywhere: one layout for every width; the popup looks the same." The page added: "That is a layout change on every page, planned and shown to you in pictures before it ships."
   - Each fit is listed under § Architecture, arc 2; the pictures in the draft PR show every page, surface and window at 240 and 360, and the revamped sidebar at 340.
   - At 360 px and wider nothing changes, proven pixel by pixel.
@@ -252,16 +259,15 @@ The manifest key and pin, the driver and both scenarios, the pictures, and the a
 1. Merge `origin/dev` (no rebase).
 2. Add `sidebarAction()`, `hasSidePanelSurface()` and `isFirefoxSidebar()`; the row's gate, toggle and testid; the search context; `toolbar-sidebar.ts` and its registration.
 3. Add the unit tests (§ Architecture).
-4. Add the driver pieces: the shared pointer click, `clickInActionPopup`, `actionPopupShows`, `sidebarShows`, `closeSidebar` and `triggerToolbarAction`. Then add the scenario and update `settings-routes.test.ts`.
+4. Add the driver pieces: the shared pointer click, `clickInActionPopup`, `actionPopupShows`, `setSidebarKind`, `sidebarShows`, `closeSidebar` and `triggerToolbarAction`, and their `FIREFOX.md` row. Then add the scenario per kind and update `settings-routes.test.ts`.
 5. With load1 under 150, rebuild the armed Firefox build and run `firefox-sidebar.test.ts` three times at retry 0, then on Chrome (skipped).
-6. Negative controls (uncommitted): the `onClicked` listener emptied must fail step 3's read; the build without `close()` must fail step 4.
-7. Once the owner answers OA-5, file D15 as the answer says.
+6. Negative controls (uncommitted): the `onClicked` listener emptied must fail step 3's read; the build without `close()` must fail step 5; the build without `app.vue`'s re-apply must fail step 4.
 
 **Gate**:
 - `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run check:plans`, `bun run audit:vue`;
 - step 5 at exit 0, and step 6 failing where it must;
 - the full smoke suite on Firefox and `settings-routes.test.ts` on Chrome, at retry 0;
-- the full Firefox network suite through `e2e:agent`, since the background registers a listener before it boots.
+- the full Firefox network suite, since the background registers a listener before it boots: #889's required `extension-network-e2e-firefox-status`, which runs it at retry 0 on the pushed head (`pr-extension-network-e2e-firefox.yml`); a local rerun of that 3-hour suite on the shared host adds nothing.
 
 Then the Codex loop and an Opus review over the phase's diff, and a push to #889.
 
@@ -286,7 +292,7 @@ Pass: exit 0. Layers: smoke and network e2e, lint, typecheck.
 
 ### Phase 7: proof that 360 is unchanged
 
-1. Diff the built CSS of `origin/dev` and the branch: every added rule inside the media query, nothing else changed.
+1. Diff the built CSS of `origin/dev` and the branch: every added rule inside the media query, nothing else changed but the shell's floor-to-cap.
 2. Build both with the smoke flags into their own directories, and shoot every page, surface and window at 360 on each, stabilised as § Architecture says. Use Chrome and Firefox, light and dark. The windows come from the network lane on each build.
 3. Compare pixel by pixel (scratch; `sharp` raw buffers), with the noise and positive controls first.
 
@@ -358,6 +364,9 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | arc 1, loop 2 | Codex, resumed | approve | `open()` returns nothing, so a try/catch reports a throwing open | opening after `promiseInitialized` and one task follows the event loop's order |
 | P71 delta | Codex, gpt-6.1-sol | conditional approve | the panel toggle proven in the real panel, no unit fallback; OA-5 answered before #889 leaves draft; I3 checked on both real popups first; the inventory finished before any fix, the Button's sizes in `@nulo/design`; surfaces on demand; shortened against complete values; the logger's vertical check and a negative control per offender; the windows keep their 400 px pass | none |
 | P71 delta, round 2 | Codex, resumed | conditional approve | the open or close only once the write is posted (`isConnected`); Fact 14 states Firefox's history rule, not "a sidebar cannot close"; the shell's change named as the one rule outside the query; open fixed menus inside `expectInsideView`; D15 asked of the owner with OA-5, not called unavoidable | none |
+| P71 delta, round 3 | Codex, resumed | conditional approve | a port whose send throws stops reading as connected at once and is dropped once that request fails; the shell's exemption repeated in the CSS proof, D12 and Phase 7 | none |
+| Phase 5 diff, final | Codex, fresh | request changes | step 4 sends onboarding's real "Open wallet" message instead of restoring the popup by hand, so a restore that races Firefox's later URL read fails it | none |
+| Phase 5 diff | Opus 5.5, diff | request changes | the background's own popup open restored (D15), which also covers a backup restored during onboarding; `closeSidebar` proves the close; the scenario per sidebar kind; the click toggles (D16); a shell page's boot re-applies the setting, which repairs a failed or interrupted apply; `FIREFOX.md` | none |
 | P71 delta | Opus 5.5 lens | conditional approve | `getPopup` read before each trigger; both surfaces read as one opens; the click on a stopped background; D10 reworded; the `openPopup` known limit (D15); the full Firefox suites and `audit:vue` in Phase 5, the search test and `app.vue` comment; `expectInsideView`; overlays, dropdowns, toasts, sheets; `width < 359px` with nothing outside it; `wrapTrailing` reused; the CSS diff, controls and stabilised builds; 240 inside existing visits; Chrome's popup headful; arc 2's records on #889's branch; "Lock wallet"; the 340 px picture | a classic-scrollbar known limit: a media query's `width` includes the scrollbar (Fact 19), so the query reads what the popup has today |
 
 ## Seeds

@@ -27,7 +27,3 @@ P71-02, A, in chat: the owner unlocks once with a passkey from the sidebar on a 
   - start it only while the setting is on, which leans on how Firefox persists a late-registered listener and needs its own test.
   Either is background work at browser start that today waits until the person opens Nulo.
 - **Recommendation**: keep what ships. The gap is one click per launch and only with the sidebar closed; the cost is paid at every launch.
-- **A second part, also yours**: with the setting on, the wallet can no longer open its toolbar popup by itself after onboarding's "Open wallet" or after a passkey window. Firefox opens nothing when no popup is set.
-  - **Ships now**: nothing opens; the person clicks the toolbar button, and the sidebar opens. Filed as a known limit if you accept it.
-  - **The alternative**: onboarding's "Open wallet" opens the sidebar from its own click, a change to onboarding's last step. After a passkey window nothing can open the sidebar, since that click happened elsewhere.
-  - **Recommendation**: accept what ships. The setting is off on a new install, so onboarding with it on is rare, and the passkey window opens only from the popup, which with the setting on shows only on the first click after a restart.
