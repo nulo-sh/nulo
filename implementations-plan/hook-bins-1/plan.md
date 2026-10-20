@@ -144,6 +144,10 @@ None: git hooks, two developer scripts, a test comment, a CI-gating test and CLA
 - #2 the pin did not assert the installed path: it now does, per hook.
 - Resumed (verification): **approve**, no remaining finding.
 
+**Arc 1, Codex r1** (gpt-6.1-sol, high, session 01a156cf): findings, comments only: the baseline scripts' lockfile claim, the hook comments (now say why relative paths hold), two narrating test docstrings. All fixed.
+**Arc 1, Opus diff review:** findings, minor: the runner check missed spawn arguments (extended, with a control); CLAUDE.md:50 overclaimed `--no-install` for all of `scripts/` and skipped bunx's cache. Fixed; an earlier commit body left as is (the squash replaces it).
+**Arc 1, Codex r2** (resumed): one gap, spawn arguments split across lines; fixed. **r3** (resumed): **clean**.
+
 ## Seeds
 
 - `/goal` Phases 1-3 marked ✓ in implementations-plan/hook-bins-1/plan.md, each gate's output in the transcript; the Codex loop converged (a resumed pass with no new material finding quoted); PR `chore(hooks): run the worktree's installed biome and commitlint; refuse before install` open against `dev` with the close-out commits; `bun run test:ci-gating` and `bun run lint` exit 0.
