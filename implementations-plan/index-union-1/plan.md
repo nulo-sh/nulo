@@ -74,7 +74,7 @@ Out of scope: `index.md`, whose neighbouring deletions can still conflict (D1). 
 
 ## Phases
 
-### Phase 1: the attribute, its tests and the README
+### Phase 1: the attribute, its tests and the README ✓
 
 - Change map: `.gitattributes`; `scripts/ci-cd/plans/structure.test.ts` (one test); `scripts/ci-cd/plans/tree.test.ts` (one test); `implementations-plan/README.md` (rules 10 and step 4).
 - Red/green: with the base `.gitattributes` (`git show 01c27912:.gitattributes`) in the working tree and staged (`--cached` reads the index), both new tests fail: the merge test at its first `git merge` (conflict), the pin on a missing `union`. Both pass with the change restored and staged.
