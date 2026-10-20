@@ -1,7 +1,7 @@
 ---
 plan: terminal-card-flake-1
 tier: light
-status: A1 implemented, gate green, PR pending
+status: completed (delivered as #913)
 issues: "#903 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 44bc391f
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** delivered as one ready PR against `dev`, #913, which carries this close-out; its merge closes the plan.
+- **Shipped:** `readTerminalCard` reads the card inside one `waitForFunction`, once `nav-<tab>` is `aria-current="page"`; callers name the tab (four call sites in three network specs); the e2e skill's § What to assert bullet and flake-ledger row 61. Closes #903.
+- **Dropped or rejected:** #903's unscoped atomic read (it accepts Home's card while History's hash is set); `openSurface`'s leaving-handle wait (hangs on a same-page read); a page-root testid (a product change for a test). `readJournalDetail` and the other wait-then-read fixtures stay: no path (`recon.md`).
+- **Lessons:** in the owning skill (`.claude/skills/e2e-testing/SKILL.md`, the bullet and row 61); nothing promoted to `lessons.md`.
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds:** the `/goal` and `/loop` seeds below are retired; never run them.
 
 # terminal-card-flake-1: read the terminal card once the page it names has rendered
 
