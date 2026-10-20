@@ -37,7 +37,7 @@ post_implementation_hardening: not scheduled
   - Security's promise to re-run the probe on a CodeMirror bump is replaced by the stated gap.
   - Opus's alternative to `.cm-search .cm-textfield` is rejected (Audit verdicts).
 - **Lessons:** none promoted. The CodeMirror ordering is stated at the code it guards, the e2e rule is the `e2e-testing` flake ledger's row 64, and `lessons.md` is at its budget.
-- **Seeds:** the `/goal` and `/loop` seeds below are retired.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # viewer-followups-1: the deep link holds on its log; the search case reads its gap while following
 
