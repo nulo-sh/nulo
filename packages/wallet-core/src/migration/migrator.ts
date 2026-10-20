@@ -63,8 +63,8 @@ export const SCHEMA_ATTEMPTS_KEY = "nulo:schema:attempts"
  *  scratch read-back) must filter it out of user data. */
 export const SCHEMA_RESERVED_PREFIX = "nulo:schema:"
 const RESERVED_PREFIX = SCHEMA_RESERVED_PREFIX
-/** The forked-app's legacy wipe marker. Its presence is positive evidence of a
- *  non-fresh install (the "reinstall fresh" assumption is violated) → fail closed. */
+/** The forked-app's legacy wipe marker, written only by pre-release builds. Its presence without a
+ *  schema version is positive evidence of a non-fresh install the engine cannot place → fail closed. */
 export const LEGACY_VERSION_KEY = "nulo:core:storage-version"
 
 export const RESERVED_KEYS: readonly string[] = [SCHEMA_VERSION_KEY, SCHEMA_RUNNING_KEY, SCHEMA_BACKUP_KEY, SCHEMA_ATTEMPTS_KEY]
