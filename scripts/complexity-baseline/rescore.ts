@@ -22,6 +22,8 @@ import { parseObserved } from "./messages"
 import { type AcceptedDirective, BASELINED_RULES, type BaselinedRule, scanTree } from "./scan"
 
 const CATEGORY_PREFIX = "lint/complexity/"
+/** The root devDependency's launcher, run on Bun: the copy `bun.lock` pins, never one resolved elsewhere. */
+const BIOME = join(import.meta.dir, "..", "..", "node_modules", ".bin", "biome")
 
 export interface RescoreResult {
 	checked: number
@@ -48,7 +50,7 @@ function normalisePath(p: string): string {
 }
 
 function lintPaths(paths: string[], cwd: string): { diagnostics: Diagnostic[]; parseErrors: string[] } {
-	const res = spawnSync("bunx", ["biome", "lint", "--reporter=json", "--max-diagnostics=none", ...paths], {
+	const res = spawnSync(process.execPath, ["--no-install", BIOME, "lint", "--reporter=json", "--max-diagnostics=none", ...paths], {
 		cwd,
 		encoding: "utf8",
 		maxBuffer: 256 * 1024 * 1024,
