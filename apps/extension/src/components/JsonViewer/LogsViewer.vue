@@ -22,7 +22,7 @@ import { useToast } from "@/composables/toast"
 const { openToast } = useToast()
 
 /** Logs helpers */
-import { droppedPrefixLength, formatLogs, formatSingleLog, logsDocument } from "./logs-format"
+import { droppedPrefixLength, formatSingleLog, logsDocument } from "./logs-format"
 import { buildLogsCsv } from "./logs-csv"
 import { logDecorationsField } from "./logs-decoration"
 import { useLogFilters } from "./useLogFilters"
@@ -150,14 +150,16 @@ function scrollToTargetLog(targetLogId) {
 	if (!view) return
 	const idx = logs.value.findIndex((l) => l.id === targetLogId)
 	if (idx === -1) return
-	const pos = formatLogs(logs.value.slice(0, idx)).length + 1
+	// The editor stores every line break as "\n": measure the logs before it as the editor holds them.
+	const pos = view.state.toText(logsDocument(logs.value.slice(0, idx))).length
 	view.dispatch({
 		effects: EditorView.scrollIntoView(pos, { y: "center" }),
 		selection: { anchor: pos },
 	})
 	// A held line must not replace the pending target with its snapshot: CodeMirror maps a pending
-	// target through later changes, but a later scroll effect replaces it. The target's landing is the
-	// viewer's own scroll, which must not read as the reader moving down.
+	// target through later changes, but a later scroll effect replaces it, and it runs this read in the
+	// measure that applies the target, before applying it. The target's landing is the viewer's own
+	// scroll, which must not read as the reader moving down.
 	snapshotPending = true
 	view.requestMeasure({ read: () => (snapshotPending = false) })
 	lastScrollTop = Number.POSITIVE_INFINITY

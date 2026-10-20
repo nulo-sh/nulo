@@ -399,9 +399,9 @@ describe("LogsViewer opened at a log", () => {
 
 	/** The window opened at log 3 of 3, 400px over 1,000px of lines: CodeMirror centres it as far as
 	 *  the end lets it, so the target lands in the end band. */
-	async function openedAtLatest() {
+	async function openedAtLatest(loaded = [log(1), log(2), log(3)]) {
 		window.history.replaceState(null, "", "?logId=3")
-		H.getLogs.mockResolvedValueOnce([log(1), log(2), log(3)]).mockResolvedValue([])
+		H.getLogs.mockResolvedValueOnce(loaded).mockResolvedValue([])
 		const wrapper = mountViewer()
 		await vi.advanceTimersByTimeAsync(0)
 		const view = H.editors[0] as StubView & {
@@ -415,9 +415,10 @@ describe("LogsViewer opened at a log", () => {
 			onScroll()
 		}
 		Object.assign(el, { clientHeight: 400, scrollHeight: 1_000 })
-		const targeted = view.dispatch.mock.calls.some(([spec]) => spec.effects?.scrollTo && spec.selection)
+		const target = view.dispatch.mock.calls.find(([spec]) => spec.effects?.scrollTo && spec.selection)?.[0]
 		const measure = () => {
 			for (const [request] of view.requestMeasure.mock.calls) request.read()
+			view.requestMeasure.mockClear()
 		}
 		let next = 4
 		const nextLineDispatches = (effect: "scrollTo" | "snapshot") => {
@@ -429,7 +430,8 @@ describe("LogsViewer opened at a log", () => {
 		const snapshotsNext = () => nextLineDispatches("snapshot")
 		return {
 			wrapper,
-			targeted,
+			targetAnchor: (target?.selection as { anchor: number } | undefined)?.anchor,
+			lineStart: (n: number) => view.state.doc.line(n).from,
 			measure,
 			scrollTo,
 			followsNext,
@@ -438,12 +440,17 @@ describe("LogsViewer opened at a log", () => {
 		}
 	}
 
+	test("the target is its log's first character, past an earlier log's CRLF", async () => {
+		const { wrapper, targetAnchor, lineStart } = await openedAtLatest([{ ...log(1), data: ["first\r\nsecond"] }, log(2), log(3)])
+		expect(targetAnchor).toBe(lineStart(4))
+		wrapper.unmount()
+	})
+
 	test("a line before CodeMirror's first measure leaves the target pending", async () => {
-		const { wrapper, targeted, measure, scrollTo, snapshotsNext } = await openedAtLatest()
-		expect(targeted).toBe(true)
+		const { wrapper, targetAnchor, measure, snapshotsNext } = await openedAtLatest()
+		expect(targetAnchor).toBeDefined()
 		expect(snapshotsNext()).toBe(false)
 		measure()
-		scrollTo(590)
 		expect(snapshotsNext()).toBe(true)
 		wrapper.unmount()
 	})
