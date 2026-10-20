@@ -497,6 +497,7 @@ describe("cross-profile isolation (standing gate)", () => {
 	// `TransactionService` handles to delete only those accounts' txs.
 	describe("transaction — profile deletion is account-scoped, never chain-wide", () => {
 		let profile: FakeProfileService
+		let accountService: AccountService
 		let txService: TransactionService
 		const chainPurgeSubs: Array<(profileId: string, chainId: number, networkId: string) => Promise<void>> = []
 		const A1 = "0xa1-p1"
@@ -530,7 +531,8 @@ describe("cross-profile isolation (standing gate)", () => {
 					getNetworks: async () => [],
 				}),
 			)
-			services.add(new AccountService(mkLogger(), api))
+			accountService = new AccountService(mkLogger(), api)
+			services.add(accountService)
 			txService = new TransactionService(mkLogger(), api)
 			services.add(txService)
 			await services.start()
@@ -564,11 +566,61 @@ describe("cross-profile isolation (standing gate)", () => {
 			expect((await txService.getTransactions(A1)).map((t) => t.hash)).toEqual(["h1"])
 		})
 
+		describe("a keyless imported account dropped by the reconcile", () => {
+			const X = "0xx-imported"
+			const txKey = (hash: string) => `nulo:core:txs@${hash}`
+			const accountKey = () => `nulo:core:accounts@${accountRowId(p1.id, 1, X)}`
+			const accountRowKept = async () => Object.keys(await api.storage.local.get(accountKey())).length === 1
+
+			beforeEach(async () => {
+				await seedRow(api, "nulo:core:accounts", accountRowId(p1.id, 1, X), { ...(mkAccount(X, p1.id) as object), type: 1 })
+				await seedRow(api, "nulo:core:txs", "hx-p1", { ...(mkTx("hx-p1", X) as object), profileId: p1.id })
+				await seedRow(api, "nulo:core:txs", "hx-p2", { ...(mkTx("hx-p2", X) as object), profileId: p2.id })
+				await seedRow(api, "nulo:core:txs", "hx-chain2", { ...(mkTx("hx-chain2", X) as object), profileId: p1.id, chainId: 2 })
+			})
+
+			test("takes the profile's rows on its chain with it before the account row goes", async () => {
+				const remove = api.storage.local.remove.bind(api.storage.local)
+				let open!: () => void
+				const gate = new Promise<void>((resolve) => (open = resolve))
+				let parked!: () => void
+				const txDeleteParked = new Promise<void>((resolve) => (parked = resolve))
+				api.storage.local.remove = async (keys: string | string[]) => {
+					if ([keys].flat().includes(txKey("hx-p1"))) {
+						parked()
+						await gate
+					}
+					return remove(keys)
+				}
+				let settled = false
+				const run = accountService.reconcileImportedAccounts(p1.id).finally(() => {
+					settled = true
+				})
+				await txDeleteParked
+				expect(settled).toBe(false)
+				expect(await accountRowKept()).toBe(true)
+				open()
+				expect(await run).toEqual([{ chainId: 1, address: X }])
+				await new Promise((r) => setTimeout(r, 0))
+				expect((await txService.getTransactions(X)).map((t) => t.hash).sort()).toEqual(["hx-chain2", "hx-p2"])
+			})
+
+			test("a failed purge of those rows stops the reconcile with the account row kept", async () => {
+				const remove = api.storage.local.remove.bind(api.storage.local)
+				api.storage.local.remove = async (keys: string | string[]) => {
+					if ([keys].flat().includes(txKey("hx-p1"))) throw new Error("storage write failed")
+					return remove(keys)
+				}
+				await expect(accountService.reconcileImportedAccounts(p1.id)).rejects.toThrow("storage write failed")
+				expect(await accountRowKept()).toBe(true)
+			})
+		})
+
 		test("restore never overwrites an existing tx — hash-collision is create-only", async () => {
 			// h1 already exists (seeded, owned by A1). A crafted backup reuses that
 			// hash with a DIFFERENT account; an unguarded upsert would ERASE the original.
 			const [res] = await txService.restore([mkTx("h1", "0xattacker")], p1.id)
-			expect(res.restoreError).toBeDefined()
+			expect(res.restoreError).toBe("transaction already exists (hash collision)")
 			expect((await txService.getTransaction("h1")).account).toBe(A1)
 		})
 
@@ -586,7 +638,7 @@ describe("cross-profile isolation (standing gate)", () => {
 				calls: [{ contract: "0xc", method: "m", args: [] }],
 			}
 			const [res] = await txService.restore([pending as never], p1.id)
-			expect(res.restoreError).toBeDefined()
+			expect(res.restoreError).toBe("restored pending transaction rejected")
 			await expect(txService.getTransaction("hp")).rejects.toThrow()
 			expect((await txService.getTransactions(A1)).map((t) => t.hash)).not.toContain("hp")
 		})
