@@ -45,6 +45,7 @@ import { FpcService } from "@/wallet/services/fpc/service"
 import { TransactionService, TransferType } from "@/wallet/services/transaction/service"
 import { OriginType } from "@/wallet/services/transaction/spec"
 import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
+import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
 import {
 	InvalidWalletArgumentsError,
@@ -250,6 +251,7 @@ async function makeHarness() {
 	)
 	collection.add(svc(ContactService.name, {}))
 	collection.add(svc(AuthRegistryService.name, { assertWithinCap: async () => {} }))
+	collection.add(svc(DAPP_SESSION_SERVICE_NAME, {}))
 	collection.add(svc(LegalAcceptanceService.name, { assertCurrent: legalAssertCurrent }))
 	collection.add(journal)
 	// `cancel` is part of the real WrappedTask surface — classifyOperationCatch

@@ -14,6 +14,7 @@ import { FrozenSchnorrAccountArtifact, NuloAccount } from "@nulo/aztec-runtime/a
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
+import { OriginType } from "@/wallet/services/transaction/spec"
 import { ExecutionService } from "./service"
 
 const noopLogger: ILogger = { log: () => {} }
@@ -43,16 +44,21 @@ function makeService() {
 	const internals = service as unknown as {
 		networkService: unknown
 		pxeService: unknown
-		executeAztecRegisterContract(op: unknown): Promise<void>
+		dappSessionService: unknown
+		executeAztecRegisterContract(op: unknown, origin: unknown): Promise<void>
 	}
 	internals.networkService = { getNetwork: async () => NETWORK }
+	internals.dappSessionService = { admitDappRegistration: async () => {} }
 	internals.pxeService = {
 		getContractArtifact: async () => FrozenSchnorrAccountArtifact,
 		registerContract: record("registerContract"),
 		registerAccount: record("registerAccount"),
 	}
 	const register = (instance: unknown, secretKey: string) =>
-		internals.executeAztecRegisterContract({ kind: "aztec_registerContract", networkId: NETWORK.id, instance, secretKey })
+		internals.executeAztecRegisterContract(
+			{ kind: "aztec_registerContract", networkId: NETWORK.id, instance, secretKey },
+			{ type: OriginType.DAPP, name: "https://app.example" },
+		)
 	return { register, writes }
 }
 

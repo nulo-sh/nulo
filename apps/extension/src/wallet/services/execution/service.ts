@@ -38,6 +38,8 @@ import type { OperationContext } from "@/wallet/services/operation-journal/spec"
 import { isApprovedSendInFlight } from "@/utils/in-flight-send"
 import { abortableSleep } from "@/utils/abortable-sleep"
 import { DAPP_INTERACTION_SERVICE_NAME, type ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
+import type { DappSessionService } from "@/wallet/services/dapp-session/service"
+import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
 import { TaskService, type WrappedTask, ExecuteOperationContent } from "@/wallet/services/task/service"
 import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
@@ -48,7 +50,6 @@ import {
 	ContractNotRegisteredError,
 	InvalidWalletArgumentsError,
 	JobCancelledError,
-	PxeTaggingSourcesFullError,
 	ScopeViolationError,
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
@@ -169,25 +170,6 @@ const FENCED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set([
 	"aztec_createAuthWit",
 ])
 
-/**
- * The most distinct senders and accounts a dApp may grow one chain's PXE to: every one is a tagging
- * secret on each sync. The person's own count toward it and are never refused by it. A policy figure,
- * twice the senders a backup carries per network, not a measured threshold.
- */
-export const DAPP_TAGGING_SOURCES_BOUND = 128
-
-const TAGGING_SOURCES_FULL_REFUSAL = "Scope violation: registration past the network's tagging-source bound"
-
-/** A dApp reads a full chain as a scope refusal, the constant envelope that names nothing. */
-async function refuseFullTaggingSources<T>(register: () => Promise<T>): Promise<T> {
-	try {
-		return await register()
-	} catch (error) {
-		if (error instanceof PxeTaggingSourcesFullError) throw new ScopeViolationError(TAGGING_SOURCES_FULL_REFUSAL)
-		throw error
-	}
-}
-
 /** `tokenContract` as a transfer request carries it, or the refusal of `method`'s arguments. */
 function tokenContractKey(method: string, tokenContract: unknown): string {
 	const key = typeof tokenContract === "string" ? fieldAddressKey(tokenContract) : undefined
@@ -235,6 +217,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	private taskService: TaskService = null!
 	private operationJournal: OperationJournalService = null!
 	private legal: LegalAcceptanceService = null!
+	private dappSessionService: DappSessionService = null!
 	private planner: OperationPlanner = null!
 	private resolver: ContractResolver = null!
 
@@ -328,6 +311,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		this.taskService = services.get(TaskService.name)
 		this.operationJournal = services.get(OperationJournalService.name)
 		this.legal = services.get(LegalAcceptanceService.name)
+		this.dappSessionService = services.get(DAPP_SESSION_SERVICE_NAME)
 		this.planner = new OperationPlanner(this.profileService, this.tokenService)
 		this.resolver = new ContractResolver(this.logger)
 		this.authwit = new AuthwitDiscoverer(this.logger)
@@ -1038,13 +1022,13 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 				return this.viewExecutor.executeAztecGetChainInfo(operation)
 			}
 			case "aztec_registerSender": {
-				return this.executeAztecRegisterSender(operation)
+				return this.executeAztecRegisterSender(operation, origin)
 			}
 			case "aztec_getAddressBook": {
 				return this.viewExecutor.executeAztecGetAddressBook(operation)
 			}
 			case "aztec_registerContract": {
-				return this.executeAztecRegisterContract(operation)
+				return this.executeAztecRegisterContract(operation, origin)
 			}
 			case "aztec_simulateTx": {
 				return this.viewExecutor.executeAztecSimulateTx(operation)
@@ -1208,18 +1192,26 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 
 	// Aztec.js interface:
 
-	private async executeAztecRegisterSender(op: AztecRegisterSenderOperation): Promise<AztecAddress> {
+	/** A dApp's registration spends one of its app's on the profile's chain before anything is written
+	 *  (`dapp-session/registration-allowance.ts`); the person's own is not counted. The app is the origin
+	 *  the wallet-sdk dispatcher stamps, the only builder of the two registration kinds. */
+	private async admitDappRegistration(origin: LocalTxOrigin, network: Network): Promise<void> {
+		if (origin.type !== OriginType.DAPP) return
+		if (!origin.name) throw new Error("a dApp registration needs the app's origin")
+		await this.dappSessionService.admitDappRegistration(origin.name, network.profileId, network.chainId)
+	}
+
+	private async executeAztecRegisterSender(op: AztecRegisterSenderOperation, origin: LocalTxOrigin): Promise<AztecAddress> {
 		const network = await this.networkService.getNetwork(op.networkId)
-		return refuseFullTaggingSources(() =>
-			this.pxeService.registerSender(networkInfoFrom(network), op.address, DAPP_TAGGING_SOURCES_BOUND),
-		)
+		await this.admitDappRegistration(origin, network)
+		return this.pxeService.registerSender(networkInfoFrom(network), op.address)
 	}
 
 	// Resolves to void: the 5.0.1 wallet-sdk WalletSchema declares
 	// `registerContract(): Promise<void>`, and the dApp-side proxy validates the
 	// response with z.void() — any non-undefined result rejects the whole call
 	// on the dApp even though registration succeeded wallet-side.
-	private async executeAztecRegisterContract(op: AztecRegisterContractOperation): Promise<void> {
+	private async executeAztecRegisterContract(op: AztecRegisterContractOperation, origin: LocalTxOrigin): Promise<void> {
 		const instance = await ContractInstanceWithAddressSchema.parseAsync(op.instance)
 		const network = await this.networkService.getNetwork(op.networkId)
 
@@ -1265,12 +1257,10 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			throw InvalidWalletArgumentsError.forMethod("registerContract")
 		}
 
-		// The account first: a refusal at the tagging-source bound leaves the contract unregistered.
+		// Admitted before the account, so a refused keyed call registers neither the account nor the contract.
 		if (op.secretKey && account) {
-			const { secretKey } = op
-			await refuseFullTaggingSources(() =>
-				this.pxeService.registerAccount(networkInfoFrom(network), secretKey, account.partialAddress, DAPP_TAGGING_SOURCES_BOUND),
-			)
+			await this.admitDappRegistration(origin, network)
+			await this.pxeService.registerAccount(networkInfoFrom(network), op.secretKey, account.partialAddress)
 		}
 
 		await this.pxeService.registerContract(networkInfoFrom(network), { instance, artifact })

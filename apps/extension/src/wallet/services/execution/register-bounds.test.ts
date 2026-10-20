@@ -1,9 +1,10 @@
 // @vitest-environment node
 /**
  * A dApp's registrations through the real PXE service, with arguments crossing as JSON and errors
- * rebuilt from their payload, the two things the worker hop changes: the bound the handlers pass, the
- * refusal as the dApp reads it, and a sender the person adds, which passes none. The client's own
- * retry paths are not in play. Node environment for the real key derivation.
+ * rebuilt from their payload as the worker hop does, admitted against the real registration counts:
+ * the refusal as the dApp reads it, what a refused call writes, and a sender the person adds, which
+ * is not counted. The client's own retry paths are not in play. Node environment for the real key
+ * derivation.
  */
 
 import { describe, expect, test } from "vitest"
@@ -13,14 +14,17 @@ import type { PXE } from "@aztec-labs/pxe/client/bundle"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { computePartialAddress, type ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import { ScopeViolationError, WalletError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
+import { MemoryStorageArea } from "@nulo/wallet-core/storage"
 import { FrozenSchnorrAccountArtifact, NuloAccount } from "@nulo/aztec-runtime/account"
 import { ChainRuntime, PxeService } from "@nulo/aztec-runtime/pxe"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { AccountStateService } from "@/wallet/services/account-state/service"
+import { APP_REGISTRATIONS_PER_CHAIN, RegistrationAllowance } from "@/wallet/services/dapp-session/registration-allowance"
+import { OriginType } from "@/wallet/services/transaction/spec"
 import { toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
-import { DAPP_TAGGING_SOURCES_BOUND, ExecutionService } from "./service"
+import { ExecutionService } from "./service"
 
 const noopLogger: ILogger = { log: () => {} }
 const NETWORK = { id: "net1", profileId: "p1", chainId: 1, primaryEndpointId: "ep1", endpoints: [{ id: "ep1", rpcUrl: "http://fake" }] }
@@ -87,10 +91,15 @@ function makeService(senders: AztecAddress[], accounts: AztecAddress[]) {
 	const internals = service as unknown as {
 		networkService: unknown
 		pxeService: unknown
-		executeAztecRegisterSender(op: unknown): Promise<unknown>
-		executeAztecRegisterContract(op: unknown): Promise<unknown>
+		dappSessionService: unknown
+		executeAztecRegisterSender(op: unknown, origin: unknown): Promise<unknown>
+		executeAztecRegisterContract(op: unknown, origin: unknown): Promise<unknown>
 	}
+	const allowance = new RegistrationAllowance(new MemoryStorageArea())
 	internals.networkService = { getNetwork: async () => NETWORK }
+	internals.dappSessionService = {
+		admitDappRegistration: (origin: string, profileId: string, chainId: number) => allowance.admit(profileId, chainId, origin),
+	}
 	internals.pxeService = {
 		registerSender: overTheWire(pxeService.registerSender.bind(pxeService)),
 		registerAccount: overTheWire(pxeService.registerAccount.bind(pxeService)),
@@ -99,19 +108,28 @@ function makeService(senders: AztecAddress[], accounts: AztecAddress[]) {
 	}
 	const accountState = new AccountStateService(new LoggerStore(new ConfigStore()))
 	Object.assign(accountState, { initialized: true, networkService: internals.networkService, pxeService: internals.pxeService })
+	const dapp = { type: OriginType.DAPP, name: "https://app.example" }
 	const dappSender = (address: AztecAddress) =>
-		internals.executeAztecRegisterSender({ kind: "aztec_registerSender", networkId: NETWORK.id, address: address.toString() })
+		internals.executeAztecRegisterSender({ kind: "aztec_registerSender", networkId: NETWORK.id, address: address.toString() }, dapp)
 	const dappContract = (keyed: Awaited<ReturnType<typeof keyedInstance>>, withKey = true) => {
 		accountAddressOf.set(keyed.partialAddress, keyed.address)
-		return internals.executeAztecRegisterContract({
-			kind: "aztec_registerContract",
-			networkId: NETWORK.id,
-			instance: keyed.instance,
-			secretKey: withKey ? keyed.secretKey : undefined,
-		})
+		return internals.executeAztecRegisterContract(
+			{
+				kind: "aztec_registerContract",
+				networkId: NETWORK.id,
+				instance: keyed.instance,
+				secretKey: withKey ? keyed.secretKey : undefined,
+			},
+			dapp,
+		)
+	}
+	/** Spends the rest of the app's share on fresh senders. */
+	const useUpShare = async (spent = 0) => {
+		for (const address of distinct(1000, APP_REGISTRATIONS_PER_CHAIN - spent)) await dappSender(address)
+		writes.length = 0
 	}
 	const ownSender = (address: AztecAddress) => accountState.addSender(NETWORK.id, address.toString())
-	return { writes, dappSender, dappContract, ownSender }
+	return { writes, dappSender, dappContract, ownSender, useUpShare }
 }
 
 /** What a dApp receives for a refusal: the scope envelope every grant refusal shares. */
@@ -120,37 +138,46 @@ const SCOPE_ENVELOPE = toWalletResponseError(
 	new ScopeViolationError("Scope violation: requested account not authorized for this dApp session"),
 )
 
-describe(`a dApp grows a chain's senders and accounts to at most ${DAPP_TAGGING_SOURCES_BOUND}`, () => {
-	test("its sender is admitted at 127 sources and refused at 128, read as the scope refusal", async () => {
-		const { writes, dappSender } = makeService(distinct(0, 100), distinct(100, 27))
-		await dappSender(addressAt(500))
-		const refusal = await dappSender(addressAt(501)).catch((e: unknown) => e)
+describe(`an app's registrations on a profile's chain stop at ${APP_REGISTRATIONS_PER_CHAIN}`, () => {
+	test("past its share, its sender is refused as the scope refusal and nothing is written", async () => {
+		const { writes, dappSender, useUpShare } = makeService([], [])
+		await useUpShare()
+		const refusal = await dappSender(addressAt(500)).catch((e: unknown) => e)
 		expect(refusal).toBeInstanceOf(ScopeViolationError)
 		expect(dappReads(refusal)).toEqual(SCOPE_ENVELOPE)
-		expect(writes).toEqual(["registerSender"])
+		expect(writes).toEqual([])
 	})
 
-	test("its keyed contract registers the account, then the contract, at 127 sources", async () => {
-		const { writes, dappContract } = makeService(distinct(0, 100), distinct(100, 27))
-		await dappContract(await keyedInstance(2n))
-		expect(writes).toEqual(["registerAccount", "registerContract"])
-	})
-
-	test("its keyed contract refused at 128 sources registers neither the account nor the contract", async () => {
-		const { writes, dappContract } = makeService(distinct(0, 100), distinct(100, 28))
+	test("past its share, its keyed contract registers neither the account nor the contract", async () => {
+		const { writes, dappContract, useUpShare } = makeService([], [])
+		await useUpShare()
 		const refusal = await dappContract(await keyedInstance(2n)).catch((e: unknown) => e)
 		expect(refusal).toBeInstanceOf(ScopeViolationError)
 		expect(writes).toEqual([])
 	})
 
-	test("its keyless contract adds no source and is admitted at 128", async () => {
-		const { writes, dappContract } = makeService(distinct(0, 100), distinct(100, 28))
+	test("an address the chain holds and a fresh one get the same answer, under the share and past it", async () => {
+		const held = distinct(0, 100)
+		const { writes, dappSender, useUpShare } = makeService([...held], distinct(100, 28))
+		await dappSender(held[0])
+		await dappSender(addressAt(500))
+		expect(writes).toEqual(["registerSender", "registerSender"])
+		await useUpShare(2)
+		const refusals = await Promise.all([held[1], addressAt(501)].map((a) => dappSender(a).catch((e: unknown) => e)))
+		expect(refusals.map(dappReads)).toEqual([SCOPE_ENVELOPE, SCOPE_ENVELOPE])
+		expect(writes).toEqual([])
+	})
+
+	test("a keyless contract is not counted and is admitted past the share", async () => {
+		const { writes, dappContract, useUpShare } = makeService([], [])
+		await useUpShare()
 		await dappContract(await keyedInstance(2n), false)
 		expect(writes).toEqual(["registerContract"])
 	})
 
-	test("a sender the person adds is admitted at 128", async () => {
-		const { writes, ownSender } = makeService(distinct(0, 100), distinct(100, 28))
+	test("a sender the person adds is not counted and is admitted past the share", async () => {
+		const { writes, ownSender, useUpShare } = makeService([], [])
+		await useUpShare()
 		await ownSender(addressAt(500))
 		expect(writes).toEqual(["registerSender"])
 	})

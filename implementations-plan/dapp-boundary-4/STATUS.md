@@ -11,3 +11,4 @@
 - 2026-10-20 Phase 6: test:all red once on the type-roles producer digest of dispatcher.ts; re-attested (no new action-carrying or window-bound operation) and re-pinned; inventory.test.ts 10/10.
 - 2026-10-20 Phase 6 gate pass on the final head: lint 0, typecheck:all 0, test:all 0, test:ci-gating 640/640; Chrome 6 files green, Firefox 4 files green, retry 0. Arc review: Codex approve (round 2), Opus conditional approve, applied. PR next.
 - 2026-10-20 arc 2: owner pick P77-03 A; branch `dapp-boundary-4-a2` off `origin/dev` `85edeb866`; arc 2 planned in plan.md (Phases 7-10). Phase 7 gate pass: dapp-session, storage, backup 279/279; lint 0; typecheck:all 0.
+- 2026-10-20 Phase 8 gate pass: extension execution 1427 passed; aztec-runtime pxe 261; extension-messaging 429; the held-versus-fresh case red against the base sources (the old bound's refusal); lint 0; typecheck:all 0; type-roles 25/25.
