@@ -2,6 +2,10 @@
 
 ## OA-1: the Mac check of Allow, with the right toggles (a check, not a visible change)
 
+**Answered: P74-04 (decision page 74, 2026-10-20), option (A).** The owner re-checked on a Mac with all three toggles off. Verbatim: "Yes. Re-tested. /  / did the toolbar popup stay open when the doorhanger appeared => it stayed popped-up, nothing closed. /  / did the grant land: the row is gone in Settings → Proving and both 127.0.0.1 toggles are back on in about:addons => yes! all of that happened.  /  / where was keyboard focus afterwards => I pressed "tab" and it tabbed on the pop-up elements, so focus was still on nulo"
+
+The answer agrees with the headless Linux run. The panel stayed open, the grant landed, and focus stayed in the popup (plan.md § Outcome). The PR leaves draft with `Closes #572`.
+
 **Surface**: Settings › Proving in Firefox's toolbar panel, on a Mac. The arc changes nothing a person sees.
 
 **Why it is asked again**: the check of 2026-10-20 switched off the two `127.0.0.1` toggles. "Access your data for all websites" stayed on, and it covers `127.0.0.1`. So Nulo kept its loopback access, and the row was right not to show (plan.md § Finding).

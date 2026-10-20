@@ -9,7 +9,21 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at f73ce69d6
 issues: "#572"
+status: closed (one arc, one PR against dev; the merge closes the plan)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** closed. One arc, one PR against `dev` from `proving-grant-row-1-a1`. The merge that lands it closes the plan and #572.
+- **Shipped:** #572. The Firefox e2e pins the owner's two-toggle state: loopback stays granted while all-sites access is on, and no row shows. Then it pins all-sites off, and the row shows. FIREFOX.md and two comments say which toggles withhold loopback. No behaviour or UI change.
+- **OA-1 answered:** decision page 74, **P74-04** (2026-10-20, option A). The owner re-checked on a Mac with all three toggles off. Verbatim: "Yes. Re-tested. /  / did the toolbar popup stay open when the doorhanger appeared => it stayed popped-up, nothing closed. /  / did the grant land: the row is gone in Settings → Proving and both 127.0.0.1 toggles are back on in about:addons => yes! all of that happened.  /  / where was keyboard focus afterwards => I pressed "tab" and it tabbed on the pop-up elements, so focus was still on nulo".
+- **Mac result beside the headless proof:** both runs agree. The row showed with all three toggles off. Under the doorhanger, the toolbar panel stayed open (headless Linux: `open` at about 0.3, 1.3 and 3.8 s; Mac: "nothing closed"). Accepting landed the grant (headless: `contains` true and the row gave way to the card; Mac: the row was gone and both `127.0.0.1` toggles were back on). Focus stayed in the panel (headless: the panel document kept focus; Mac: Tab moved through the popup's elements). No contradiction.
+- **Dispositions:** #572's claim "the row's condition does not follow the toggles" did not hold (§ Finding). The brief's (a) and (b) did not hold either. Option (B) was not taken.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` is at its budget, and the gotcha lives in its owning doc, the `permissions.remove` row of `apps/extension/tests/e2e/FIREFOX.md`. The headless doorhanger technique (`windowUtils.setHandlingUserInput` around `click()`) stays in `lessons/phase-0.md`, run 3.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # proving-grant-row-1: why the Firefox permission row did not follow the about:addons toggles (#572)
 
@@ -30,7 +44,7 @@ The reproduction was a headless Firefox 153.0.4 spec in the real toolbar panel, 
 - In the panel, `isFirefox()` is true and the page is a `popup` view. `getManifest().host_permissions` carries both loopback entries, so the brief's suspects (a) do not hold: the manifest key, the pattern, a stale cache and `isFirefox()` are all right. The owner's build 0.31.0.889 is likely #889's (inference). #889 does not touch the composable or `isFirefox()`: it adds `sidebar_action` and sidebar helpers only.
 - (b) does not hold either, in the narrow sense the owner already decided on. Without the grant a request leaves in CORS mode, with the extension's `Origin`. Presto then serves its minimal body until it approves that origin; proving still works, and the first prove's approval brings the detailed body back (archived evidence, `implementations-plan/archive/home-onboarding-chrome/lessons/phase-2.md`). With the grant the probe carries no `Origin`. So the grant buys the detailed body only until Presto approves Nulo; on the owner's profile, which had already proved, it bought almost nothing. The owner kept the row for that (`implementations-plan/archive/home-onboarding-2/plan.md`), and this evidence does not reopen it. That plan already recorded the three-pattern rule (F4 there); the owner's check missed the third.
 - **Chrome**: the composable reads nothing off Firefox (`origins` is `[]`, `usePrestoHostPermission.ts:41`, unit case "Chrome probes at once"), so the row never shows. Chrome's `permissions.remove` refuses a required origin (`FIREFOX_ONLY.permissionRequest`). This lane makes no Chrome change.
-- **The doorhanger question** (the issue's original subject; lessons/phase-0.md, run 3) was tested on Linux, headless, with prompts on. A click under `windowUtils.setHandlingUserInput` opened `addon-webext-permissions-notification`. The toolbar panel stayed open under it (read about 0.3, 1.3 and 3.8 s after the click). Accepting it granted both origins, and the panel's row gave way to the card. Not shown: macOS focus behaviour, a real OS click, and where focus goes after a real click. That part stays the owner's (OWNER-ASKS OA-1).
+- **The doorhanger question** (the issue's original subject; lessons/phase-0.md, run 3) was tested on Linux, headless, with prompts on. A click under `windowUtils.setHandlingUserInput` opened `addon-webext-permissions-notification`. The toolbar panel stayed open under it (read about 0.3, 1.3 and 3.8 s after the click). Accepting it granted both origins, and the panel's row gave way to the card. Not shown headless: macOS focus behaviour, a real OS click, and where focus goes after a real click. The owner's Mac check (OA-1, answered as P74-04; § Outcome) covered those, and it agrees.
 
 The issue's claim, "the row's condition does not follow the about:addons toggles", did not hold. The row follows the grant. Two of the toggles do not move the grant while "all websites" is on.
 
