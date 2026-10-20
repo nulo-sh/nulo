@@ -28,7 +28,7 @@ import { useJournalMirror } from "@/composables/useJournalMirror"
 import { usePrices } from "@/composables/usePrices"
 import { balanceFormatted } from "@/utils/amount.js"
 import { knownDecimals } from "@/utils/token-amount"
-import { dashIfBlank } from "@/utils/string"
+import { dashIfBlank, isBlank } from "@/utils/string"
 import { stageSubtitle } from "@/utils/card-subtitle"
 import { activityRowRoute, journalRecordInScope, txOnToken } from "@/utils/activity-rows"
 import {
@@ -914,7 +914,7 @@ onBeforeUnmount(() => {
 
 		<div :class="$style.empty_state">
 			<span :class="$style.empty_headline">NOTHING HERE YET</span>
-			<span :class="$style.empty_sub">Send or receive {{ token.symbol }} to see activity here.</span>
+			<span :class="$style.empty_sub">Send or receive {{ isBlank(token.symbol) ? "this token" : token.symbol }} to see activity here.</span>
 		</div>
 	</Flex>
 	<SendReviewSheet

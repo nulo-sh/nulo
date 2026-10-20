@@ -34,7 +34,7 @@ const { requestConfirm } = useConfirm()
 
 /** Utils */
 import { copyWithToast } from "@/utils/clipboard"
-import { dashIfBlank } from "@/utils/string"
+import { dashIfBlank, isBlank } from "@/utils/string"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 
 /** Store */
@@ -151,12 +151,12 @@ const showHomeFull = async () => {
 	const still = scope()
 	if (unmounted || token.value !== subject || still?.profileId !== s.profileId || still.chainId !== s.chainId) return
 	if (popupStore.isOpened("confirm")) return
-	const symbolOf = new Map(tokens.map((t) => [t.contract.toLowerCase(), sanitizeWireString(t.symbol, 32)]))
+	const symbolOf = new Map(tokens.map((t) => [t.contract.toLowerCase(), dashIfBlank(sanitizeWireString(t.symbol, 32))]))
 	const pinned = [...pins.pinnedContracts.value].map((c) => symbolOf.get(c)).filter((x) => x !== undefined)
 	requestConfirm({
 		single: true,
 		title: "Home is full",
-		description: `Home shows up to 3 pinned tokens. Unpin one of these to pin ${sanitizeWireString(subject.symbol, 32)}: ${pinned.join(", ")}`,
+		description: `Home shows up to 3 pinned tokens. Unpin one of these to pin ${isBlank(subject.symbol) ? "this token" : sanitizeWireString(subject.symbol, 32)}: ${pinned.join(", ")}`,
 		confirm_text: "Got it",
 	})
 }

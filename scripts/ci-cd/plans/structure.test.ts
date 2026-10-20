@@ -1,4 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { CANONICAL_GITIGNORE, cleanupRepos, commitAll, findings, git, makeRepo, writeFiles } from "./fixture-repo"
 
 afterAll(cleanupRepos)
@@ -219,6 +221,30 @@ describe("archive-structure", () => {
 			"implementations-plan/archive/index.md:4 c/%2e%2e/a/plan.md is not a plain <dir>/<file> path",
 			"implementations-plan/archive/index.md:5 d/\\.\\./a/plan.md is not a plain <dir>/<file> path",
 		])
+	})
+
+	test("close-outs appending lines merge clean under the repo's attributes; an edit beside an append is listed twice", () => {
+		const index = "implementations-plan/archive/index.md"
+		const archived = (dir: string) => ({ [`implementations-plan/archive/${dir}/plan.md`]: `# ${dir}\n\n${OUTCOME}` })
+		const repo = makeRepo({
+			".gitattributes": readFileSync(join(import.meta.dir, "..", "..", "..", ".gitattributes"), "utf8"),
+			[index]: `${line("a")}\n`,
+			...archived("a"),
+		})
+		const branch = (name: string, files: Record<string, string>) => {
+			git(repo, "switch", "-q", "-c", name, "dev")
+			writeFiles(repo, files)
+			commitAll(repo)
+		}
+		branch("b", { [index]: `${line("a")}\n${line("b")}\n`, ...archived("b") })
+		branch("c", { [index]: `${line("a")}\n${line("c")}\n`, ...archived("c") })
+		git(repo, "merge", "-q", "--no-ff", "-m", "merge b", "b")
+		expect(findings(repo, "archive-structure")).toEqual([])
+
+		branch("edit", { [index]: `${line("a")}, edited\n` })
+		git(repo, "switch", "-q", "c")
+		git(repo, "merge", "-q", "--no-ff", "-m", "merge edit", "edit")
+		expect(findings(repo, "archive-structure").map((f) => f.detail)).toEqual(["a is listed twice"])
 	})
 })
 

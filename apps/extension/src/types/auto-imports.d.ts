@@ -239,6 +239,7 @@ declare global {
   const isActiveScopeRow: typeof import('../utils/token-order').isActiveScopeRow
   const isAmountAboveDustThreshold: typeof import('../utils/incoming-dust').isAmountAboveDustThreshold
   const isApprovedSendInFlight: typeof import('../utils/in-flight-send').isApprovedSendInFlight
+  const isBlank: typeof import('../utils/string').isBlank
   const isComposing: typeof import('../composables/usePopupEntity').isComposing
   const isEmptyContactName: typeof import('../utils/contact-name').isEmptyContactName
   const isFirefox: typeof import('../utils/browser-surface').isFirefox
@@ -1045,6 +1046,7 @@ declare module 'vue' {
     readonly isActiveScopeRow: UnwrapRef<typeof import('../utils/token-order')['isActiveScopeRow']>
     readonly isAmountAboveDustThreshold: UnwrapRef<typeof import('../utils/incoming-dust')['isAmountAboveDustThreshold']>
     readonly isApprovedSendInFlight: UnwrapRef<typeof import('../utils/in-flight-send')['isApprovedSendInFlight']>
+    readonly isBlank: UnwrapRef<typeof import('../utils/string')['isBlank']>
     readonly isComposing: UnwrapRef<typeof import('../composables/usePopupEntity')['isComposing']>
     readonly isEmptyContactName: UnwrapRef<typeof import('../utils/contact-name')['isEmptyContactName']>
     readonly isFirefox: UnwrapRef<typeof import('../utils/browser-surface')['isFirefox']>

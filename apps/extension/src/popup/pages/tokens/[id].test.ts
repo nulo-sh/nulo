@@ -225,6 +225,17 @@ describe("token page — Pin to Home", () => {
 		await flushPromises()
 		expect(H.cache.current.confirm.description).toContain(`${"X".repeat(32)}…, CCC, DDD`)
 	})
+
+	test("a symbol of spaces reads as a noun in the sentence and as the empty-value dash in the list", async () => {
+		storage = installChromeStorage({ [pinnedTokensKey("p1")]: { "7": [addr(2), addr(3), addr(4)] } })
+		H.tokens.current = [tok(1, "   "), tok(2, "BBB"), tok(3, "   "), tok(4, "DDD")]
+		const wrapper = await mountPage()
+		await pinItem(wrapper).trigger("click")
+		await flushPromises()
+		expect(H.cache.current.confirm.description).toBe(
+			"Home shows up to 3 pinned tokens. Unpin one of these to pin this token: BBB, —, DDD",
+		)
+	})
 })
 
 describe("token page — a token the signed list flags", () => {
