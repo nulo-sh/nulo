@@ -15,5 +15,5 @@
   - C. A noun in place of a blank symbol ("This token is missing", "Allow this token?"), with each sentence's wording yours.
 - **Recommendation:** C, worded per sentence, in a later lane with its own pictures; B for the unit toggle, a label. B reads like a clause join in a sentence; A is the gap #932 reports.
 - **What ships now:** A. These sentences and the toggle do not change.
-- **Blocks arc 1:** no.
+- **Blocks arc 1:** no. Filed as #949 (`owner-decision`).
 

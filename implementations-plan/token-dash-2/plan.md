@@ -1,7 +1,7 @@
 ---
 plan: token-dash-2
 tier: light (the lane brief's call; one Codex audit round-trip plus one Opus Plan lens, then a fresh Codex pass)
-status: planned; final Codex approve
+status: closed (arc 1 delivered in one PR against dev; the merge closes the plan)
 issues: "#932 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 21eb96866
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** closed. One arc, one PR against `dev` from `token-dash-2-a1`; the merge that lands it closes the plan.
+- **Shipped:** #932 by P72-05 C. `dashIfBlank` in `utils/string.ts` holds the rule (absent, or only whitespace after the wire strip, reads "—"; any other value as given), and the Register token card's `safeWireOrDash` now composes it. Thirteen name, title and label sites use it: Home's token and import rows, Send's picker row and asset card, Settings → Tokens, the token page's header, the metadata popup, History and Recent activity titles (settled, receipt, journal, running), the journal page's title and History's filter chip. Amount slots and `data-symbol` stay raw; the words a title falls back to for `""` stay (D3). A wire-shaped case per site, each red on the base; 38 pictures in `screenshots/`.
+- **Dispositions:** the brief's "transaction and receipt pages' titles" did not hold (neither title carries the symbol; the transaction page's banner is a sentence); its "settings and token pages have no colocated tests" did not hold (each got a case). C3's owner ask was declined on D3's argument; the final Codex pass agreed.
+- **Known limits:** none new; #931 still covers glyphs that draw nothing.
+- **Open items:** #949 (OA-1, `owner-decision`: a blank symbol inside a sentence, and Send's unit toggle).
+- **Lessons:** one line promoted to `lessons.md` (a long Bash call is moved to the background and then stopped).
+- **Size:** about 175 lines against the light target of 150: the 13-site change map and five audit rows.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # token-dash-2: the empty-value dash for a blank token name or symbol wherever it names the token
 
