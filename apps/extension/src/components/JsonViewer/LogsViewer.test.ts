@@ -390,3 +390,79 @@ describe("LogsViewer follow stopped by a selection", () => {
 		wrapper.unmount()
 	})
 })
+
+describe("LogsViewer opened at a log", () => {
+	const t = Date.now()
+	const log = (id: number): LogEntry => ({ id, timestamp: t, source: "ui", level: 1, data: [`log ${id}`] })
+	const home = window.location.href
+	afterEach(() => window.history.replaceState(null, "", home))
+
+	/** The window opened at log 3 of 3, 400px over 1,000px of lines: CodeMirror centres it as far as
+	 *  the end lets it, so the target lands in the end band. */
+	async function openedAtLatest() {
+		window.history.replaceState(null, "", "?logId=3")
+		H.getLogs.mockResolvedValueOnce([log(1), log(2), log(3)]).mockResolvedValue([])
+		const wrapper = mountViewer()
+		await vi.advanceTimersByTimeAsync(0)
+		const view = H.editors[0] as StubView & {
+			requestMeasure: ReturnType<typeof vi.fn>
+			scrollDOM: { scrollTop: number; scrollHeight: number; clientHeight: number; addEventListener: ReturnType<typeof vi.fn> }
+		}
+		const el = view.scrollDOM
+		const onScroll = el.addEventListener.mock.calls.find(([type]) => type === "scroll")?.[1] as () => void
+		const scrollTo = (top: number) => {
+			el.scrollTop = top
+			onScroll()
+		}
+		Object.assign(el, { clientHeight: 400, scrollHeight: 1_000 })
+		const targeted = view.dispatch.mock.calls.some(([spec]) => spec.effects?.scrollTo && spec.selection)
+		const measure = () => {
+			for (const [request] of view.requestMeasure.mock.calls) request.read()
+		}
+		let next = 4
+		const nextLineDispatches = (effect: "scrollTo" | "snapshot") => {
+			view.dispatch.mockClear()
+			H.onLog.invoke(log(next++))
+			return view.dispatch.mock.calls.some(([spec]) => spec.effects?.[effect])
+		}
+		const followsNext = () => nextLineDispatches("scrollTo")
+		const snapshotsNext = () => nextLineDispatches("snapshot")
+		return {
+			wrapper,
+			targeted,
+			measure,
+			scrollTo,
+			followsNext,
+			snapshotsNext,
+			button: () => wrapper.find('[data-testid="logs-scroll-btn"]'),
+		}
+	}
+
+	test("a line before CodeMirror's first measure leaves the target pending", async () => {
+		const { wrapper, targeted, measure, scrollTo, snapshotsNext } = await openedAtLatest()
+		expect(targeted).toBe(true)
+		expect(snapshotsNext()).toBe(false)
+		measure()
+		scrollTo(590)
+		expect(snapshotsNext()).toBe(true)
+		wrapper.unmount()
+	})
+
+	test("the target's own scroll into the end band keeps the hold", async () => {
+		const { wrapper, scrollTo, followsNext, button } = await openedAtLatest()
+		scrollTo(590)
+		expect(followsNext()).toBe(false)
+		await wrapper.vm.$nextTick()
+		expect(button().exists()).toBe(true)
+		wrapper.unmount()
+	})
+
+	test("a reader's scroll down into the end band after it still resumes the follow", async () => {
+		const { wrapper, scrollTo, followsNext } = await openedAtLatest()
+		scrollTo(590)
+		scrollTo(300)
+		scrollTo(600)
+		expect(followsNext()).toBe(true)
+		wrapper.unmount()
+	})
+})

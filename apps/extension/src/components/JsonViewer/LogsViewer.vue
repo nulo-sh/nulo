@@ -155,6 +155,12 @@ function scrollToTargetLog(targetLogId) {
 		effects: EditorView.scrollIntoView(pos, { y: "center" }),
 		selection: { anchor: pos },
 	})
+	// A held line must not replace the pending target with its snapshot: CodeMirror maps a pending
+	// target through later changes, but a later scroll effect replaces it. The target's landing is the
+	// viewer's own scroll, which must not read as the reader moving down.
+	snapshotPending = true
+	view.requestMeasure({ read: () => (snapshotPending = false) })
+	lastScrollTop = Number.POSITIVE_INFINITY
 }
 
 const handleToggleFilter = (kind, value) => {
