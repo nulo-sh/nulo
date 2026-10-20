@@ -9,3 +9,7 @@
 - `lint`, `typecheck:all`, `test` (886 files): exit 0.
 - `test:all`, first run: one timeout, `service.fence-entry.test.ts` "every facade call passes a fence" (a whole-`src` source scan, 6.6 s against a 5 s limit), with load1 at 180-217 on 188 cores. It is unrelated to this diff, and the same file passed in `bun run test` minutes before. Per the host-load rule, the run was retried once after load1 fell below 180: exit 0.
 - Smoke `legal-acceptance.test.ts`, Chrome, armed build, retry 0: 14/14 in 172 s (S9 reads the About row from the manifest, so it ran against 1.2.2).
+
+## Fix loop
+
+- Round 1 (2026-10-20): Codex (gpt-6.1-sol, high, read-only, session `01a15bb8-5409-75f0-bd84-bfc5a9b7c5fc`) clean, high confidence. Opus diff review: no P1 or P2. Its two P3s were plan bookkeeping (a stale index status, and Asks vs `OWNER-ASKS.md`); both applied. It also noted that the release skill never names `BEFORE-LAUNCH.md`; not taken (outside the arc; `CLAUDE.md` points every promote there). The loop converged; no resume needed, since the fixes touched no reviewed file.

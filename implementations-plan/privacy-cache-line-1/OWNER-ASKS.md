@@ -8,3 +8,7 @@ Two steps fall to the owner at the promote that publishes 1.2.2, as at every pri
 effective date (the publish day) and the re-paste of AMO's Privacy policy field. They are a
 `BEFORE-LAUNCH.md` § 4 item, not asks; until then the document carries `«FILL: effective date»`
 (plan D2).
+
+The plan's Asks A1 (the PR closes no issue) and A2 (two edits outside `legal/` and
+`packages/legal`) are process assumptions for the orchestrator, not owner asks: neither changes
+what a person sees.
