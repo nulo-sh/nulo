@@ -67,7 +67,11 @@ function makeHarness(overrides: Partial<ViewExecutorDeps> = {}) {
 		endpoints: [{ id: "e1", rpcUrl: "http://primary" }],
 		primaryEndpointId: "e1",
 	} as never
-	const node = { getNodeInfo: vi.fn(async () => ({ l1ChainId: 1, rollupVersion: 6 })) }
+	const node = {
+		getNodeInfo: vi.fn(async () => ({ l1ChainId: 1, rollupVersion: 6 })),
+		getContract: vi.fn(async (_address: AztecAddress): Promise<unknown> => undefined),
+		getContractClass: vi.fn(async (_id: Fr): Promise<unknown> => undefined),
+	}
 	const account = {
 		address: addr("0xacct"),
 		ensureRegistered: vi.fn(async () => {}),
@@ -95,7 +99,11 @@ function makeHarness(overrides: Partial<ViewExecutorDeps> = {}) {
 			getActiveProfile: vi.fn(async () => ({ id: "p1" })),
 			captureExecutionFence: vi.fn(async () => FENCE),
 		} as never,
-		networkService: { getNetwork: vi.fn(async () => network), getNode: vi.fn(async () => node) } as never,
+		networkService: {
+			getNetwork: vi.fn(async () => network),
+			getNode: vi.fn(async () => node),
+			getNodeForUrl: vi.fn(async () => node),
+		} as never,
 		accountService: { getAccountContract: vi.fn(async () => account) } as never,
 		contactService: { getContacts: vi.fn(async () => []) } as never,
 		logDebug: vi.fn(),
@@ -259,6 +267,34 @@ describe("ViewExecutor.executeAztecGetChainInfo", () => {
 		expect((refused as Error).message).toBe(
 			"Chain identity mismatch: selected network has chainId=7 but live node reports composite=3 (l1ChainId=1, rollupVersion=2). Refusing to sign/prove against a drifted endpoint.",
 		)
+	})
+})
+
+describe("ViewExecutor.executeAztecGetContractClassMetadata", () => {
+	const CLASS_ID = Fr.random().toString()
+	const run = (executor: ViewExecutor) =>
+		executor.executeAztecGetContractClassMetadata({ kind: "aztec_getContractClassMetadata", networkId: "net-1", id: CLASS_ID } as never)
+
+	test("publication is the node's answer; the artifact flag is the wallet's own", async () => {
+		const { executor, deps, node } = makeHarness()
+		node.getContractClass.mockResolvedValueOnce({ id: CLASS_ID })
+		expect(await run(executor)).toEqual({ isContractClassPubliclyRegistered: true, isArtifactRegistered: false })
+		expect(String(node.getContractClass.mock.calls[0]?.[0])).toBe(CLASS_ID)
+		expect(deps.networkService.getNodeForUrl).toHaveBeenCalledWith("http://primary")
+		expect(deps.networkService.getNode).not.toHaveBeenCalled()
+	})
+
+	test("a class the wallet holds but the node does not know is not published", async () => {
+		const { executor } = makeHarness({
+			pxeService: { getContractArtifact: vi.fn(async () => ({ kind: "artifact" })) } as never,
+		})
+		expect(await run(executor)).toEqual({ isContractClassPubliclyRegistered: false, isArtifactRegistered: true })
+	})
+
+	test("a node failure fails the call", async () => {
+		const { executor, node } = makeHarness()
+		node.getContractClass.mockRejectedValueOnce(new Error("node down"))
+		await expect(run(executor)).rejects.toThrow("node down")
 	})
 })
 

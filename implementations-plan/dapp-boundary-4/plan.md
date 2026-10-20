@@ -137,7 +137,7 @@ Every gate runs from the worktree root and also runs `bun run lint` and `bun run
   - `service.class-id.test.ts` and `register-contract-void-conformance.test.ts`: fake instances gain `originalContractClassId`, both ids with `equals`. New `aztec_registerContract` case: current ≠ original is refused with the plain `Error` and `MISMATCH`, and `registerContract` and `registerAccount` are not called. The looked-up case asserts the lookup used the original id. The existing cases stay as the controls, the recompute-failure pin included.
 - **Gate:** `cd packages/aztec-runtime && bun run test src/pxe/register-contract.test.ts src/pxe/artifact-class-id.test.ts`, then `cd apps/extension && bun run test src/wallet/services/execution/service.class-id.test.ts src/wallet/services/execution/register-contract-void-conformance.test.ts src/wallet/services/execution/register-contract-account.real.test.ts src/wallet/services/execution/register-bounds.test.ts src/wallet/services/account-state`. Pass: exit 0; the new refusal cases red against the base copies of the two changed sources.
 
-### Phase 3: class publication comes from the node
+### Phase 3: class publication comes from the node ✓
 
 - Change `executeAztecGetContractClassMetadata` as in Architecture.
 - Tests in `view-executor.test.ts` (the harness node gains `getContractClass`; the network fake gains `getNodeForUrl`):

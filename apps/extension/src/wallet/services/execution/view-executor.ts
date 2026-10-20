@@ -14,7 +14,7 @@
 import { type Aliased, ContractInitializationStatus } from "@aztec-labs/aztec.js/wallet"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import type { ChainInfo } from "@aztec-labs/entrypoints/interfaces"
-import type { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { PackedPrivateEvent } from "@aztec-labs/pxe/client/bundle"
 import {
 	type AbiDecoded,
@@ -146,13 +146,21 @@ export class ViewExecutor {
 		}
 	}
 
+	/** Publication is the node's answer; `isArtifactRegistered` says whether this wallet holds the
+	 *  artifact, as upstream answers it. A node failure fails the call: a false "not published" would
+	 *  make a deploy publish the class again. */
 	public async executeAztecGetContractClassMetadata(
 		op: AztecGetContractClassMetadataOperation,
 	): Promise<{ isContractClassPubliclyRegistered: boolean; isArtifactRegistered: boolean }> {
 		const network = await this.deps.networkService.getNetwork(op.networkId)
-		const artifact = await this.deps.pxeService.getContractArtifact(networkInfoFrom(network), op.id, { pxeOnly: true })
+		const info = networkInfoFrom(network)
+		const node = await this.deps.networkService.getNodeForUrl(info.rpcUrl)
+		const [artifact, publicClass] = await Promise.all([
+			this.deps.pxeService.getContractArtifact(info, op.id, { pxeOnly: true }),
+			node.getContractClass(await Fr.schema.parseAsync(op.id.toString())),
+		])
 		return {
-			isContractClassPubliclyRegistered: !!artifact,
+			isContractClassPubliclyRegistered: !!publicClass,
 			isArtifactRegistered: !!artifact,
 		}
 	}
