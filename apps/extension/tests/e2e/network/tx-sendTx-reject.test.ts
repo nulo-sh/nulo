@@ -100,7 +100,7 @@ test.skipIf(!hasConfig)(
 		await waitForHash(wallet, "#/popup/general", 30_000)
 		const record = await waitForSendRecord(wallet, (r) => r.kind === "dapp_execute" && r.stage === "failed", 30_000)
 		expect(await readErrorKind(wallet, record.id)).toBe("user_rejected")
-		expect(await readTerminalCard(wallet, "#/popup/activity")).toEqual({ title: "Transfer Public To Public", subtitle: "Cancelled" })
+		expect(await readTerminalCard(wallet, "activity")).toEqual({ title: "Transfer Public To Public", subtitle: "Cancelled" })
 		expect(await readJournalDetail(wallet, record.id)).toMatchObject({
 			"journal-detail-category": "You rejected",
 			"journal-detail-context": "You stopped this transaction.",
