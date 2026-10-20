@@ -67,7 +67,7 @@ One arc, one PR against `dev`, no stack, `Closes #932`. Recon: [recon.md](recon.
 - **D5, accessibility** (the owner's 2026-10-19 delegation): the dash is plain text in each existing element, the form token-dash-1 used (its D4): no `aria-hidden`, no hidden words (those would be copy).
 - **D6, tests.** Unit tests of the rule and one wire-shaped case (`"   "`, three spaces) per changed site that has a colocated test. Each new case also asserts a normal value (its success control), since three sites have none today (the running Send's title, the token page's header, the Settings row). Amount-slot sites assert the symbol stays raw, read through `props()` or `element.textContent`: VTU's `.text()` trims, so `"   "` would read as `""`. No e2e scenario: each site is one template expression a component or unit test reads.
 
-## Phase 1: the rule and the card (#932) ✓ when the gate passes
+## Phase 1: the rule and the card (#932) ✓
 
 Assumptions: Facts 1, 2; I1.
 
@@ -79,7 +79,7 @@ Assumptions: Facts 1, 2; I1.
 
 **Gate.** `bun run lint && bun run typecheck:all && bun run test`. Pass: exit 0; the red recorded.
 
-## Phase 2: the surfaces (#932) ✓ when the gate passes
+## Phase 2: the surfaces (#932) ✓
 
 Assumptions: Facts 3-7; D3, D4.
 
@@ -102,7 +102,7 @@ Tests (a `"   "` symbol, and `""` for names where the site shows names): `TokenC
 
 **Gate.** `bun run lint && bun run typecheck:all && bun run test && bun run test:all`, then `bun run build`. Pass: exit 0; after the commit, `git status --porcelain apps/extension/src/types` is empty and `git diff --quiet 21eb96866 -- apps/extension/src/popup/windows/execute/OperationCard.vue apps/extension/scripts/type-roles` exits 0.
 
-## Phase 3: pictures, then the pre-delivery gate
+## Phase 3: pictures, then the pre-delivery gate ✓
 
 In this order, since `audit:vue`'s build replaces the armed build the smoke suite and the pictures need:
 
@@ -142,6 +142,11 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 | Codex gpt-6.1-sol high, session `01a15995-8a5a-7603-97e0-51303f74d620` | conditional approve (C1-C6) | C1 `audit:vue`'s build replaces the armed build: accepted, phase 3 reordered. C2 the moved `fromField` breaks a kept case: accepted, literals. C3 D3 leaves `""` on the activity fallbacks while Home dashes it: the narrower Outcome wording and the UI-impact line accepted; the owner ask declined (ledger). C4 History's checks could read Home's cards: accepted, the spec waits for History and keys the rows by hash. C5 the spec swallowed readiness waits and lacked picker, header and amount-slot checks: accepted. C6 D2 holds for `max >= 1`: accepted, stated. D1, D4-D6, `TransactionIncomingCard` in scope and the tx and receipt pages left alone: confirmed. |
 | Opus 5.5 Plan lens | conditional approve (O1-O7) | O1 the build also rewrites `.eslintrc-auto-import.json`, and CI fails on either: accepted (Fact 7, phase 2 and 3 gates). O2 = C2. O3 VTU's `.text()` trims, three new cases lack a normal control, the settings test needs a hoisted list: accepted (D6, phase 2). O4 = C5 (picker, header, amount slots). O5 = C3. O6 Send's unit toggle is a label, not a sentence: accepted, OA-1 reworded. O7 = C6. Confirmed: no import cycle or bundle leak from `capability-meta` in `utils/string.ts`, no name clash, every phase 2 expression and harness, no missed site. |
 | Codex final fresh pass, session `01a159a3-6c9f-73c1-822d-e81eb0baab20` | conditional approve (F1), then **approve** on resume | F1 the spec's transition wait had been raised from 3 to 10 s: restored to 3 s, matcher and no-catch kept. Every first-round resolution verified; D3 held the stronger reading, no owner ask needed. |
+| Codex gpt-6.1-sol high, review round 1 over the arc's diff, session `01a159bc-db3f-7f20-aa2f-f8c5a708531a` | **approve**, no finding | Every change-map site covered; amount slots and `data-symbol` raw; `""` fallbacks kept; each new case fails on the base; generated files and layer rules clean. |
+| Opus 5.5 general-purpose review of the same diff | approve, V1-V3 | V1 the receipt card's prop comment named only the title: rewritten (1ed1f14cc). V2 the import row's case asserted only "not the address style": it now asserts the symbol style too (1ed1f14cc). V3 `dashIfBlank` throws on a non-string: needs unsupported conditions (`TokenSchema` holds strings on add and restore), no change. It reran the 13 suites against the base templates: exactly the 13 new cases failed, each on the dash. |
+| Codex, review round 2 (resume) over 1ed1f14cc | **approve**, no regression | V1 and V2 verified. Loop converged. |
+
+**Deviations (arc 1).** The review loop ran beside phase 3 once the code diff was final (after phase 2's gate); a red there would have restarted it. The first smoke attempt was stopped at 618 s by its own process group (lessons/phase-3.md) and rerun.
 
 **Decision ledger.** The legs agreed on every point but one. C3 asked for an owner ask on the `""` split; O5 offered a UI-impact line and a PR sentence instead. Taken: no ask, since the split follows from the pick's own definition (D3), and a `""` title that shows a word shows no stored symbol to dash; the UI-impact line, the Outcome wording and the PR body state the split. The final Codex pass agreed. Unresolved: none. Open for the owner: OA-1 (non-blocking; filed as an `owner-decision` issue at close-out).
 
