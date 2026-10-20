@@ -96,6 +96,7 @@
 		"@types/bun": "1.4.2",
 		"@types/node": "^24.13.2",
 		"@types/webextension-polyfill": "^0.12.5",
+		"@types/ws": "^8.18.2",
 		"@vitejs/plugin-vue": "^6.0.7",
 		"@vue/compiler-sfc": "^3.5.42",
 		"@vue/test-utils": "^2.4.11",
@@ -118,6 +119,7 @@
 		"vite-plugin-static-copy": "^4.1.1",
 		"vitest": "^4.1.9",
 		"vue-tsc": "^3.3.5",
-		"webext-bridge": "^6.0.1"
+		"webext-bridge": "^6.0.1",
+		"ws": "8.21.3"
 	}
 }

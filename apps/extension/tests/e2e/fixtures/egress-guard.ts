@@ -10,6 +10,7 @@ import { randomBytes } from "node:crypto"
 import { type Server, type Socket, createServer } from "node:net"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { TOKEN_LIST_URL } from "@/wallet/services/token-list/spec"
+import { HOW_AZTEC_WORKS_URL } from "@/utils/get-started"
 import { reservePort } from "../../../scripts/e2e/resolve-ports"
 import { REPO_ROOT } from "../lockfile"
 import { PortClaimConflict, claimPorts, registeredPorts, releasePorts } from "../port-registry"
@@ -90,6 +91,7 @@ export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
 		LIVE_LIST_HOST,
 		"the signed token list, fetched by a release build when the worker boots with the Terms accepted (a background restart) and on its daily alarm",
 	],
+	[new URL(HOW_AZTEC_WORKS_URL).hostname, "Home's How Aztec works row, which a spec opens in a tab"],
 	[EGRESS_CANARY_HOST, "the per-launch canary, fired from an extension page"],
 	[EGRESS_PROBE_HOST, "the control spec's background probe"],
 	[EGRESS_LINK_LOCAL_HOST, "the control spec's link-local probe"],

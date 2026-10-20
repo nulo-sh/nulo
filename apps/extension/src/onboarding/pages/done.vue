@@ -7,9 +7,16 @@
 import { vSnackFooter } from "@/composables/snackInset"
 
 /** Utils */
+import { donePath } from "../steps"
 import { clearOnboardingTabTracking, OPEN_TOOLBAR_POPUP, type OpenToolbarPopupAnswer } from "@/wallet/utils/onboarding-tab"
 
+/** Stores */
+import { useAppStore } from "@/stores/app.store"
+
 const appStore = useAppStore()
+
+// Only a reload outside Import lands here with no path: the wallet's type says which.
+const path = computed(() => donePath(window.history.state) ?? (appStore.profile?.type === "password" ? "password" : "passkey"))
 
 // Detected on mount so the pin-tip only shows for users who actually need
 // it. chrome.action.getUserSettings exists from Chrome 91+; we fall back
@@ -62,7 +69,7 @@ async function openWallet() {
 
 <template>
 	<OnboardingPage align="center" :gap="40">
-		<StepIndicator :current="6" />
+		<StepIndicator current="ready" :path="path" />
 		<Flex direction="column" align="center" gap="16" :class="$style.hero">
 			<BrutalistTitle main="You're" sub="In" align="center" />
 			<div :class="$style.hero_bar" />
@@ -86,8 +93,7 @@ async function openWallet() {
 				<Text variant="label-section" color="secondary">Pro tip</Text>
 			</Flex>
 			<Text variant="body" color="secondary" height="150">
-				Click the puzzle icon in your browser's toolbar, then pin Nulo for
-				quick access. That's how you'll open the wallet from now on.
+				Click the puzzle icon in your browser's toolbar, then pin Nulo for quick access.
 			</Text>
 		</Flex>
 

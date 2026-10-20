@@ -18,6 +18,7 @@ import {
 	setDeveloperMode,
 	setTheme,
 	unlockAfterBackgroundDeath,
+	waitForHomeReminders,
 } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
 import { shotSend } from "./fixtures/send-page"
@@ -92,6 +93,7 @@ async function openHomeWithRow(ctx: ExtensionContext, { priced = true } = {}): P
 	await seedUsdQuoteAndReload(page, scope.token.priceId)
 	await page.waitForSelector(sel("tx-card"), { visible: true, timeout: 15_000 })
 	await waitForSettledTokens(page, TOKENS_LAND_MS)
+	await waitForHomeReminders(page)
 	await page.bringToFront()
 	return page
 }
@@ -116,6 +118,9 @@ async function shiftTab(page: Page): Promise<void> {
  *  the next Space keydown was handled — a handled keydown has no default action, so no page scroll.
  *  All on the page, armed before the key or click that is measured. */
 async function armNavigationProbe(page: Page): Promise<void> {
+	// Tab scrolls a row below the fold into view, and that scroll's event is dispatched on the next
+	// frame: let it pass, so the probe counts only scrolls the pressed key causes.
+	await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
 	await page.evaluate(() => {
 		const w = window as unknown as Probe
 		w.__pushes = 0
@@ -183,6 +188,7 @@ async function backToHome(page: Page): Promise<void> {
 	await waitForHash(page, "#/popup/general", 10_000)
 	await page.waitForSelector(sel("tx-card"), { visible: true, timeout: 15_000 })
 	await waitForSettledTokens(page)
+	await waitForHomeReminders(page)
 }
 
 /** Records the named control each click lands in, at `window` capture, and how many clicks bubble up
@@ -1237,6 +1243,7 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 	await seedTokenRow(page, scope, TOKEN_PAGE_ID)
 	await seedUsdQuoteAndReload(page, scope.token.priceId)
 	await page.bringToFront()
+	await waitForHomeReminders(page)
 	await settledRows(page, HOME_ROWS.length)
 
 	const rest = await scrollPinned(page, "home", 0, "0")

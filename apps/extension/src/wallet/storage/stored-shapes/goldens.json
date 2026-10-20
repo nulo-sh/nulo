@@ -1502,6 +1502,104 @@
 				"networkIds": ["5a7f03c6"],
 				"leaseUntil": 0
 			}
+		},
+		{
+			"id": "uiGetStartedPhraseSaved.full",
+			"stamp": 0,
+			"shape": "uiGetStartedPhraseSaved",
+			"key": "nulo:ui:getStartedPhraseSaved@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedPhraseSaved.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedPhraseSaved",
+			"key": "nulo:ui:getStartedPhraseSaved@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedBackupSaved.full",
+			"stamp": 0,
+			"shape": "uiGetStartedBackupSaved",
+			"key": "nulo:ui:getStartedBackupSaved@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedBackupSaved.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedBackupSaved",
+			"key": "nulo:ui:getStartedBackupSaved@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedAztecOpened.full",
+			"stamp": 0,
+			"shape": "uiGetStartedAztecOpened",
+			"key": "nulo:ui:getStartedAztecOpened@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedAztecOpened.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedAztecOpened",
+			"key": "nulo:ui:getStartedAztecOpened@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedHidden.full",
+			"stamp": 0,
+			"shape": "uiGetStartedHidden",
+			"key": "nulo:ui:getStartedHidden@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedHidden.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedHidden",
+			"key": "nulo:ui:getStartedHidden@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedFeeJuiceHeld.full",
+			"stamp": 0,
+			"shape": "uiGetStartedFeeJuiceHeld",
+			"key": "nulo:ui:getStartedFeeJuiceHeld@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedFeeJuiceHeld.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedFeeJuiceHeld",
+			"key": "nulo:ui:getStartedFeeJuiceHeld@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiProfileImported.full",
+			"stamp": 0,
+			"shape": "uiProfileImported",
+			"key": "nulo:ui:profileImported@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiProfileImported.minimal",
+			"stamp": 0,
+			"shape": "uiProfileImported",
+			"key": "nulo:ui:profileImported@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiProfileNotFirst.full",
+			"stamp": 0,
+			"shape": "uiProfileNotFirst",
+			"key": "nulo:ui:profileNotFirst@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiProfileNotFirst.minimal",
+			"stamp": 0,
+			"shape": "uiProfileNotFirst",
+			"key": "nulo:ui:profileNotFirst@b04e6d18",
+			"value": true
 		}
 	]
 }

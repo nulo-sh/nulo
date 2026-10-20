@@ -20,6 +20,9 @@ export async function createAndActivateProfile(page: Page, name: string, passwor
 
 	await expectNameFieldPrefill(page, "register-page", "register-name-input", defaultProfileName(before))
 	await replaceInputValue(page, '[data-testid="register-name-input"]', name)
+	// New profile opens on Passkey.
+	await clickByTestId(page, "register-method-password")
+	await page.waitForSelector('[data-testid="register-password-input"]', { visible: true, timeout: 10_000 })
 	await replaceInputValue(page, '[data-testid="register-password-input"]', password)
 	await replaceInputValue(page, '[data-testid="register-password-confirm-input"]', password)
 	await clickByTestId(page, "register-submit-btn")
@@ -247,15 +250,31 @@ export async function waitForProfilePurged(
 	)
 }
 
-/** Drive the seed-phrase reveal flow on `/popup/settings/security/export/seed`.
- *  Caller asserts on `[data-testid="reveal-content"]` afterwards. */
-export async function revealSeedPhrase(page: Page, password: string): Promise<void> {
+/** The words a recovery phrase grid shows, in order: Settings' grid is `reveal-content`, the
+ *  onboarding step's `onboarding-phrase`. */
+export async function readRecoveryWords(page: Page, grid = "reveal-content"): Promise<string[]> {
+	await page.waitForSelector(`[data-testid="${grid}-word"]`, { visible: true, timeout: 15_000 })
+	return page.$$eval(`[data-testid="${grid}-word"]`, (words) => words.map((word) => word.textContent?.trim() ?? ""))
+}
+
+/** Drive the seed-phrase reveal flow on `/popup/settings/security/export/seed` and return its words. */
+export async function revealSeedPhrase(page: Page, password: string): Promise<string[]> {
 	await navigateByHash(page, "#/popup/settings/security/export/seed")
 	await clickByTestId(page, "agree-continue-btn")
 	await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 5_000 })
 	await replaceInputValue(page, '[data-testid="unlock-password-input"]', password)
 	await clickByTestId(page, "unlock-submit-btn")
-	await page.waitForSelector('[data-testid="reveal-content"]', { visible: true, timeout: 5_000 })
+	return readRecoveryWords(page)
+}
+
+/** A password wallet's Home without the Get started card: the phrase revealed, then Hide. The card
+ *  sits above Home's lists, so a spec that reads a row where Home rests needs it gone first. */
+export async function clearGetStarted(page: Page, password: string): Promise<void> {
+	await revealSeedPhrase(page, password)
+	await navigateByHash(page, "#/popup/general")
+	await page.waitForSelector('[data-testid="get-started-hide"]', { visible: true, timeout: 60_000 })
+	await clickByTestId(page, "get-started-hide")
+	await page.waitForFunction(() => !document.querySelector('[data-testid="get-started"]'), { timeout: 15_000, polling: 100 })
 }
 
 /** Open EditProfilePopup from /popup/settings/profile, replace the name,
