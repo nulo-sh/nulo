@@ -212,7 +212,7 @@ export class TokenListService implements IService {
 				credentials: "omit",
 				referrerPolicy: "no-referrer",
 				redirect: "error",
-				// The HTTP cache neither answers nor stores the request, so it carries no cache validator.
+				// No request carries a cache validator: "no-cache" would revalidate with the stored one.
 				cache: "no-store",
 				signal: controller.signal,
 			})

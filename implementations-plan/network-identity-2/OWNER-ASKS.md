@@ -8,7 +8,7 @@ Neither ask blocks arc 1, and neither changes a screen. Each ships its "what shi
 - **What ships now**: `Cache-Control: public, max-age=300`, unchanged. The header still reaches wallets; their requests bypass the browser's HTTP cache, so it decides nothing there.
 - **Options**:
   - A. Keep `public, max-age=300` (what ships now).
-  - B. `Cache-Control: no-store`, with the policy test changed to match. Compliant caches, the browser of anyone who opens the URL included, must then not store the file. It does not erase a copy stored before, and it may change how Cloudflare's edge caches the file, which the live host serves from its cache today (`cf-cache-status: HIT`).
+  - B. `Cache-Control: no-store`, with the policy test changed to match. Compliant caches, the browser of anyone who opens the URL included, must then not store the file. It does not erase a copy stored before, and it may change how Cloudflare's edge caches the file, which the live host serves from its cache today (`cf-cache-status: HIT`). The smoke e2e host mirrors the file, so under B its request loop would need its own cacheable `Cache-Control` to keep proving that no list request carries a validator.
 - **Recommendation**: A. The host's `ETag` is a hash of the file, the same for every wallet, and B's cost at the edge is unmeasured.
 
 ## OA-2: a privacy-policy line

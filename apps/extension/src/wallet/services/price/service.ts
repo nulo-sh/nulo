@@ -370,10 +370,10 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		this.abortController = controller
 		const timeout = setTimeout(() => controller.abort(), PRICE_FETCH_TIMEOUT_MS)
 		try {
-			// The HTTP cache neither answers nor stores the request, so it carries no cache validator.
 			const response = await this.fetchFn(url, {
 				signal: controller.signal,
 				headers,
+				// No request carries a cache validator: "no-cache" would revalidate with the stored one.
 				cache: "no-store",
 				credentials: "omit",
 				referrerPolicy: "no-referrer",
