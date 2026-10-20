@@ -75,8 +75,15 @@ class ChromeStorageAdapter implements StoragePort {
 }
 
 function adaptPort(port: chrome.runtime.Port): MessagePortLike {
+	const { sender } = port
 	return {
 		name: port.name,
+		sender: sender && {
+			id: sender.id,
+			origin: sender.origin,
+			url: sender.url,
+			tab: sender.tab && { id: sender.tab.id, url: sender.tab.url, windowId: sender.tab.windowId },
+		},
 		postMessage: (message) => port.postMessage(message),
 		disconnect: () => port.disconnect(),
 		onMessage: (listener) => {
@@ -198,6 +205,14 @@ class ChromeWindowsAdapter implements WindowPort {
 
 	public async closeTab(tabId: number): Promise<void> {
 		await chrome.tabs.remove(tabId)
+	}
+
+	public async isPopup(windowId: number): Promise<boolean> {
+		try {
+			return (await chrome.windows.get(windowId)).type === "popup"
+		} catch {
+			return false
+		}
 	}
 
 	public async update(windowId: number, options: UpdateWindowOptions): Promise<void> {

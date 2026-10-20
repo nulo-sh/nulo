@@ -1,7 +1,8 @@
 /**
- * The request windows a background restart leaves behind. Approval handles, interaction records,
- * check holds and transport sessions live only in the background's memory, so a restart ends the
- * request each of these windows shows, and all a person can meet there is an error.
+ * The windows a background restart leaves behind. Approval handles, interaction records, check
+ * holds and transport sessions live only in the background's memory, so a restart ends the request
+ * each request window shows, and all a person can meet there is an error. The lock's own restart
+ * also ends every wallet page, and Chrome leaves each popup window it ends as a New Tab window.
  */
 import { LogLevel, type ILogger } from "@/wallet/logger"
 import type { ExtensionContextInfo, RuntimePort, WindowPort } from "@nulo/wallet-core/ports"
@@ -24,17 +25,30 @@ const WINDOWS_ROUTE = /^#\/windows\/([^/?]+)(?:\?|$)/
  *  compared one by one: `origin` reads `"null"` for an extension scheme, so it cannot tell two
  *  extensions apart. */
 export function isRestartEndedUrl(url: string, popupPageUrl: string): boolean {
-	let page: URL
-	let own: URL
-	try {
-		page = new URL(url)
-		own = new URL(popupPageUrl)
-	} catch {
-		return false
-	}
-	if (page.protocol !== own.protocol || page.host !== own.host || page.pathname !== own.pathname) return false
+	const page = parse(url)
+	const own = parse(popupPageUrl)
+	if (!page || !own || !sameExtension(page, own) || page.pathname !== own.pathname) return false
 	const route = WINDOWS_ROUTE.exec(page.hash)?.[1]
 	return route !== undefined && RESTART_ENDED_ROUTES.has(route)
+}
+
+/** Whether `url` is any page of the extension `popupPageUrl` belongs to. */
+function isOwnExtensionUrl(url: string | undefined, popupPageUrl: string): boolean {
+	const page = url === undefined ? undefined : parse(url)
+	const own = parse(popupPageUrl)
+	return page !== undefined && own !== undefined && sameExtension(page, own)
+}
+
+function parse(url: string): URL | undefined {
+	try {
+		return new URL(url)
+	} catch {
+		return undefined
+	}
+}
+
+function sameExtension(page: URL, own: URL): boolean {
+	return page.protocol === own.protocol && page.host === own.host
 }
 
 /**
@@ -67,18 +81,35 @@ export async function closeRestartEndedTabs(runtime: RuntimePort, windows: Pick<
 	})
 }
 
-/** The background's window port, remembering each window it opened with the URL it opened it at:
- *  what the window is for, whatever its page's router shows by now. */
+/** The background's window port, which also knows every popup window showing a wallet page. */
 export interface TrackedWindowPort extends WindowPort {
-	/** Fires `remove` for every remembered window on a restart-ended route and returns at once. */
-	closeRestartEnded(): void
+	/** Fires `remove` for every window this background opened and every popup window a wallet page
+	 *  reported from, and returns at once. */
+	closeOwnWindows(): void
 }
 
-/** Every method delegates to `windows` itself, so the adapter's own state holds and its results
- *  and failures pass through unchanged. */
-export function trackOpenWindows(windows: WindowPort, popupPageUrl: string): TrackedWindowPort {
-	const opened = new Map<number, string>()
-	windows.onRemoved((windowId) => opened.delete(windowId))
+/**
+ * Every method delegates to `windows` itself, so the adapter's own state holds and its results and
+ * failures pass through unchanged. A page opens its windows itself (the logs viewer, request JSON,
+ * an export or import in its own window), so they are learned from the ports their pages open: the
+ * browser reports each port's tab and window, and only a popup-type window is kept, since closing a
+ * person's own window would take their other tabs with it.
+ */
+export function trackOpenWindows(windows: WindowPort, runtime: Pick<RuntimePort, "onConnect">, popupPageUrl: string): TrackedWindowPort {
+	const own = new Set<number>()
+	const asked = new Set<number>()
+	windows.onRemoved((windowId) => {
+		own.delete(windowId)
+		asked.delete(windowId)
+	})
+	runtime.onConnect(({ sender }) => {
+		const windowId = sender?.tab?.windowId
+		if (windowId === undefined || asked.has(windowId) || !isOwnExtensionUrl(sender?.url, popupPageUrl)) return
+		asked.add(windowId)
+		void windows.isPopup(windowId).then((popup) => {
+			if (popup && asked.has(windowId)) own.add(windowId)
+		})
+	})
 	const removeQuietly = (windowId: number): void => {
 		try {
 			windows.remove(windowId).catch(() => undefined)
@@ -89,16 +120,17 @@ export function trackOpenWindows(windows: WindowPort, popupPageUrl: string): Tra
 	return {
 		create: async (options) => {
 			const created = await windows.create(options)
-			if (created.id !== undefined) opened.set(created.id, options.url)
+			if (created.id !== undefined) own.add(created.id)
 			return created
 		},
 		onRemoved: (listener) => windows.onRemoved(listener),
 		remove: (windowId) => windows.remove(windowId),
 		closeTab: (tabId) => windows.closeTab(tabId),
+		isPopup: (windowId) => windows.isPopup(windowId),
 		update: (windowId, options) => windows.update(windowId, options),
 		getLastFocused: () => windows.getLastFocused(),
-		closeRestartEnded: () => {
-			for (const [windowId, url] of opened) if (isRestartEndedUrl(url, popupPageUrl)) removeQuietly(windowId)
+		closeOwnWindows: () => {
+			for (const windowId of own) removeQuietly(windowId)
 		},
 	}
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest"
-import type { ExtensionContextInfo, RuntimePort, WindowPort } from "@nulo/wallet-core/ports"
+import type { ExtensionContextInfo, MessagePortLike, MessageSender, RuntimePort, WindowPort } from "@nulo/wallet-core/ports"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import type { ILogger } from "@/wallet/logger"
 import { closeRestartEndedTabs, isRestartEndedUrl, trackOpenWindows } from "./restart-ended-windows"
@@ -101,40 +101,89 @@ describe("closeRestartEndedTabs", () => {
 	})
 })
 
-describe("trackOpenWindows", () => {
-	const at = (route: string) => `${POPUP}#/windows/${route}?requestId=0x01`
-	const tracked = () => {
-		const fake = new FakeBrowserApi().windows as WindowPort & { creates: unknown[] }
-		const removed: number[] = []
-		fake.onRemoved((id) => removed.push(id))
-		return { fake, removed, windows: trackOpenWindows(fake, POPUP) }
+const at = (route: string) => `${POPUP}#/windows/${route}?requestId=0x01`
+const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
+function tracked() {
+	const api = new FakeBrowserApi()
+	const fake = api.windows as WindowPort & { creates: unknown[]; closeByUser(id: number): void }
+	const runtime = api.runtime as RuntimePort & { connect(options: { name: string }, sender?: MessageSender): MessagePortLike }
+	const removed: number[] = []
+	fake.onRemoved((id) => removed.push(id))
+	/** A window a page opened itself, then a port from the page it shows. */
+	const pageWindow = async (url: string, type: "popup" | "normal" = "popup") => {
+		const { id } = await fake.create({ type, url })
+		runtime.connect({ name: "logger" }, { id: "wallet", url, tab: { id: 7, windowId: id } })
+		await settled()
+		return id as number
 	}
+	return { fake, runtime, removed, pageWindow, windows: trackOpenWindows(fake, runtime, POPUP) }
+}
 
+type Tracked = ReturnType<typeof tracked>
+
+describe("trackOpenWindows", () => {
 	test("delegates to the adapter unchanged", async () => {
 		const { fake, windows } = tracked()
-		await windows.create({ url: at("discover"), width: 1, height: 1 })
-		expect(fake.creates).toEqual([{ url: at("discover"), width: 1, height: 1 }])
+		const { id } = await windows.create({ type: "popup", url: at("discover"), width: 1, height: 1 })
+		expect(fake.creates).toEqual([{ type: "popup", url: at("discover"), width: 1, height: 1 }])
+		expect(await windows.isPopup(id as number)).toBe(true)
 		await expect(windows.update(999, { focused: true })).rejects.toThrow("No window with id: 999.")
 	})
 
-	test("closes the windows opened on a restart-ended route, and no other", async () => {
+	test("closes every window it opened, the passkey window included", async () => {
 		const { removed, windows } = tracked()
-		const discover = await windows.create({ url: at("discover") })
-		const check = await windows.create({ url: at("verify") })
-		const capabilities = await windows.create({ url: at("capabilities") })
-		const send = await windows.create({ url: at("execute") })
-		await windows.create({ url: `${POPUP}#/windows/passkey` })
-		windows.closeRestartEnded()
-		await Promise.resolve()
-		expect(removed.sort()).toEqual([discover.id, check.id, capabilities.id, send.id].sort())
+		const ids = []
+		for (const url of [at("discover"), `${POPUP}#/windows/verify?sessionId=s`, at("execute"), at("passkey")]) {
+			ids.push((await windows.create({ type: "popup", url })).id)
+		}
+		windows.closeOwnWindows()
+		await settled()
+		expect(removed.sort()).toEqual(ids.sort())
 	})
 
-	test("forgets a window once it closes", async () => {
-		const { fake, windows } = tracked()
-		const discover = await windows.create({ url: at("discover") })
-		await fake.remove(discover.id as number)
+	test.each([
+		["the logs viewer", `${POPUP}#/windows/logger`],
+		["a request's JSON", `${POPUP}#/windows/json?requestId=0x01`],
+		["an export in its own window", `${POPUP}#/popup/settings/security/export/full?window=own`],
+		["an import in its own window", `${POPUP}#/popup/import?window=own`],
+		["the popup in its own window", POPUP],
+	])("closes %s, a popup window a wallet page reported from", async (_name, url) => {
+		const { removed, pageWindow, windows } = tracked()
+		const id = await pageWindow(url)
+		windows.closeOwnWindows()
+		await settled()
+		expect(removed).toEqual([id])
+	})
+
+	test.each([
+		["a wallet page in a person's own window", (t: Tracked) => t.pageWindow(POPUP, "normal")],
+		["a web page's port in a popup window", (t: Tracked) => t.pageWindow("https://app.example/", "popup")],
+		["another extension's page", (t: Tracked) => t.pageWindow("chrome-extension://other/src/popup/index.html", "popup")],
+		[
+			"a port with no tab (the toolbar popup)",
+			async (t: Tracked) => {
+				t.runtime.connect({ name: "logger" }, { id: "wallet", url: POPUP })
+				await settled()
+			},
+		],
+	])("keeps %s", async (_name, open) => {
+		const t = tracked()
+		await open(t)
+		t.windows.closeOwnWindows()
+		await settled()
+		expect(t.removed).toEqual([])
+	})
+
+	test("forgets a window once it closes, even one closing before its type answers", async () => {
+		const { fake, runtime, windows } = tracked()
+		const opened = await windows.create({ type: "popup", url: at("discover") })
+		await fake.remove(opened.id as number)
+		const { id } = await fake.create({ type: "popup", url: `${POPUP}#/windows/logger` })
+		runtime.connect({ name: "logger" }, { id: "wallet", url: POPUP, tab: { id: 7, windowId: id } })
+		fake.closeByUser(id as number)
+		await settled()
 		const remove = vi.spyOn(fake, "remove")
-		windows.closeRestartEnded()
+		windows.closeOwnWindows()
 		expect(remove).not.toHaveBeenCalled()
 	})
 
@@ -151,9 +200,9 @@ describe("trackOpenWindows", () => {
 				return new Promise<void>(() => {})
 			},
 		} as unknown as WindowPort
-		const windows = trackOpenWindows(port, POPUP)
+		const windows = trackOpenWindows(port, { onConnect: () => () => {} }, POPUP)
 		for (const route of ["discover", "verify", "capabilities"]) await windows.create({ url: at(route) })
-		expect(windows.closeRestartEnded()).toBeUndefined()
+		expect(windows.closeOwnWindows()).toBeUndefined()
 		expect(calls).toEqual([1, 2, 3])
 	})
 })

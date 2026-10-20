@@ -16,7 +16,7 @@ function wired(endSession: (sessionId: string) => void) {
 			order.push(`end:${sessionId}`)
 			endSession(sessionId)
 		},
-		windows: { closeRestartEnded: () => void order.push("close windows") },
+		windows: { closeOwnWindows: () => void order.push("close windows") },
 		logger: { log: () => {} } as unknown as ILogger,
 	})
 	return { order, prepare: () => prepare?.() }

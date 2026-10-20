@@ -13,7 +13,7 @@ export function wireRestartPreparation(deps: {
 	profileService: Pick<ProfileService, "setRestartPreparation">
 	handler: { getActiveSessions(): Array<{ sessionId: string }> }
 	endSession: (sessionId: string) => void
-	windows: Pick<TrackedWindowPort, "closeRestartEnded">
+	windows: Pick<TrackedWindowPort, "closeOwnWindows">
 	logger: ILogger
 }): void {
 	deps.profileService.setRestartPreparation(() => {
@@ -24,6 +24,6 @@ export function wireRestartPreparation(deps: {
 				deps.logger.log("wallet-sdk", LogLevel.Warn, `Restart: failed to end session ${describeExternalId(sessionId)}`, { error })
 			}
 		}
-		deps.windows.closeRestartEnded()
+		deps.windows.closeOwnWindows()
 	})
 }

@@ -10,10 +10,12 @@ export function fakeSdkPorts(over: Partial<WindowPort> = {}): { windows: Tracked
 				onRemoved: () => () => {},
 				remove: async () => {},
 				closeTab: async () => {},
+				isPopup: async () => false,
 				update: async () => {},
 				getLastFocused: async () => undefined,
 				...over,
 			},
+			{ onConnect: () => () => {} },
 			"chrome-extension://test/src/popup/index.html",
 		),
 		clock: {

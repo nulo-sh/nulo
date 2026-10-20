@@ -24,3 +24,11 @@
 **Pick: A** (P72-03, 2026-10-20): "Close them too, as the connection windows close. Nothing of the request stays on screen; the app has its own error."
 
 **Disposition:** shipped in arc 1's PR, before its merge. `execute` (Send and Sign share it), `fee` and `network-unavailable` joined `RESTART_ENDED_ROUTES`, the one list the boot sweep and the lock's tracker read, each with a test row; the PR closes #939, which tracked this ask. The after pictures (Chrome, light and dark, after a crash and after the lock's restart) are `screenshots/chrome-fixed-*.png`.
+
+## #940: the wallet's own windows after the lock's restart
+
+Filed at close-out: on Chrome the lock's restart leaves the wallet's own popup windows (the logs viewer, a request's JSON, the passkey window, an export or import in its own window) open, as New Tab windows. Measured for the logs viewer while building the fix: with the page-opened windows left out, it stayed open past the restart.
+
+**Pick: A** (P73-02, 2026-10-20): "Close the wallet's own windows before the restart too (logs viewer, request JSON window, passkey window, export or import in its own window), as the request windows close. A person reopens one from the popup."
+
+**Disposition:** shipped in arc 1's PR, before its merge. Before the lock's restart the background removes every window it opened and every popup-type window a wallet page reported from by opening a port; the PR closes #940. Pictures: `screenshots/chrome-fixed-own-*.png`.

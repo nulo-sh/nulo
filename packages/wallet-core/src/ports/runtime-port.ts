@@ -16,6 +16,8 @@ export interface MessagePortLike {
 	disconnect(): void
 	onMessage(listener: (message: unknown) => void): Unsubscribe
 	onDisconnect(listener: () => void): Unsubscribe
+	/** Who opened the port, as the browser reports it; set on ports `onConnect` delivers. */
+	readonly sender?: MessageSender
 }
 
 /** Sender metadata attached to incoming `onMessage` events. Subset we actually use. */
@@ -23,7 +25,7 @@ export interface MessageSender {
 	id?: string
 	origin?: string
 	url?: string
-	tab?: { id?: number; url?: string }
+	tab?: { id?: number; url?: string; windowId?: number }
 }
 
 export type MessageListener = (message: unknown, sender: MessageSender) => Promise<unknown> | unknown

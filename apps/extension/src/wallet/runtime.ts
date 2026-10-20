@@ -503,8 +503,8 @@ function registerServices(
 	services.add(new AuthRegistryService(logger, browserApi))
 	services.add(new ConfigService(config, logger))
 	services.add(new LegalAcceptanceService(logger, browserApi))
-	// One port for every window the background opens, so the lock's restart can close the ones it ends.
-	const windows = trackOpenWindows(browserApi.windows, browserApi.runtime.getURL(POPUP_PAGE))
+	// One port that knows every wallet window, so the lock's restart can close them all.
+	const windows = trackOpenWindows(browserApi.windows, browserApi.runtime, browserApi.runtime.getURL(POPUP_PAGE))
 	const windowManager = new WindowManager(windows, clock, logger)
 	services.add(new ContactService(logger, browserApi, restoreGate))
 	services.add(new DappInteractionService(logger, windowManager))

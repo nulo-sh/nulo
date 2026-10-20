@@ -63,6 +63,10 @@ The logger captures service worker logs that are otherwise not directly visible.
 - Without the `tabs` permission, `chrome.windows.getAll({ populate: true })` returns tabs with no
   URL; `runtime.getContexts({ contextTypes: ["TAB"] })` lists the extension's own pages with their
   URL (hash route included), `windowId` and `tabId` on both browsers.
+- The background learns a page's window with no `tabs` permission and no await at use: a port's
+  `sender.tab.windowId` names it, and `windows.get(id).type === "popup"` tells a window the
+  extension opened from a person's browser window (verified on both browsers by the lock's-restart
+  smoke spec, 2026-10-20).
 - `new URL(...).origin` is `"null"` for `chrome-extension:` and `moz-extension:`: compare
   `protocol` and `host` to tell two extensions apart.
 
