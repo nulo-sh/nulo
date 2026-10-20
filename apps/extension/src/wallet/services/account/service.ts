@@ -12,7 +12,8 @@ import { ProfileService } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { NetworkService } from "@/wallet/services/network/service"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
-import { EntityStorage } from "@/wallet/storage"
+import type { EntityStorage } from "@/wallet/storage"
+import { entityStorage } from "@/wallet/storage/stores"
 import { array_max, fromBase64Lenient, hasIntersectionByKeys, KeyedLock, Lock } from "@/wallet/utils"
 import { EventHandler, toBase64 } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
@@ -43,7 +44,6 @@ import type { AccountIntegrityBlocked, AccountRuntimeMismatchDelegate } from "..
 import { ERR_UNATTENDED_LIVE_CHECK } from "@/wallet/services/network/spec"
 import {
 	ACCOUNT_SERVICE_NAME,
-	ACCOUNT_STORAGE_ROOT,
 	AccountMethodSchemas,
 	AccountSchema,
 	AccountType,
@@ -145,7 +145,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 
 	public constructor(logger: ILogger, browserApi: BrowserApi) {
 		super(ACCOUNT_SERVICE_NAME, logger)
-		this.storage = new EntityStorage<Account>(ACCOUNT_STORAGE_ROOT, browserApi.storage.local, (raw) => AccountSchema.parse(raw))
+		this.storage = entityStorage("accounts", browserApi.storage.local)
 		this.importedKeys = new ImportedKeysRepository(browserApi.storage.local)
 		this.staleNetworks = new StaleNetworkRepository(browserApi.storage.local)
 	}

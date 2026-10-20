@@ -9,7 +9,7 @@ import { type ExecutionFence, profileDeletedError } from "@/wallet/services/prof
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { purgeRows } from "@/wallet/services/purge-rows"
 import { nextRandomId } from "@/wallet/services/id-allocators"
-import { EntityStorage } from "@/wallet/storage"
+import { entityStorage } from "@/wallet/storage/stores"
 import { DappSessionMacStorage } from "./mac-storage"
 import { Lock } from "@/wallet/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
@@ -28,7 +28,6 @@ import {
 	type Events,
 	type VerificationRefusal,
 	type VerificationRefusalTarget,
-	DappSessionSchema,
 } from "./spec"
 
 export * from "./spec"
@@ -109,7 +108,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		// each row via `DappSessionSchema` (dev's boundary codec) BEFORE the MAC
 		// layer verifies row integrity — both defenses run.
 		this.storage = new DappSessionMacStorage(
-			new EntityStorage<DappSession>("nulo:core:dappSessions", browserApi.storage.local, (raw) => DappSessionSchema.parse(raw)),
+			entityStorage("dappSessions", browserApi.storage.local),
 			(profileId) => this.profileService.deriveDappSessionMacKey(profileId),
 			logger,
 		)

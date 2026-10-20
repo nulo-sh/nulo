@@ -14,7 +14,7 @@ import { resolveDappChain } from "../capabilities/chain-mismatch"
 
 /** Services */
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
-import { type DiscoveryPayload, DappInteractionServiceClient } from "@/wallet/services/dapp-interaction/client"
+import { type DiscoveryPayload, DappInteractionServiceClient, type WindowEnd } from "@/wallet/services/dapp-interaction/client"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -63,6 +63,7 @@ const {
 	start: startWindow,
 	dispose: disposeWindow,
 	closeWindow,
+	endAndClose,
 	completeInteraction,
 	onActiveProfileChanged,
 	stripStatus,
@@ -81,7 +82,7 @@ const {
 		interactionService.disconnect()
 	},
 	init: () => init(),
-	reject: () => reject(),
+	reject: (end) => reject(end),
 })
 
 const init = async () => {
@@ -123,10 +124,9 @@ const approve = async () => {
 	}
 }
 
-const reject = async () => {
+const reject = async (end: WindowEnd) => {
 	if (isInteractionCancelled.value || !requestId.value) return
-	rejectViaInteractionService("User rejected")
-	closeWindow(true)
+	await endAndClose(() => rejectViaInteractionService("User rejected", end))
 }
 
 const profileService = new ProfileServiceClient()
@@ -171,7 +171,7 @@ onUnmounted(disposeWindow)
 			confirm-label="Allow"
 			:confirm-loading="isLoading"
 			:confirm-disabled="processingError?.type === 'error' || !isReady || isLoading"
-			@reject="reject"
+			@reject="reject('reject')"
 			@approve="approve"
 		/>
 

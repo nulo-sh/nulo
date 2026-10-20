@@ -192,6 +192,7 @@ const RECORD_FIELDS = [
 	"networkId",
 	"feeSpender",
 	"priorityLevel",
+	"feeChoice",
 ] as const
 
 /** The activity record `addTransaction` received, by field name. */
@@ -804,6 +805,7 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			networkId: "net-built",
 			feeSpender: undefined,
 			priorityLevel: "normal",
+			feeChoice: "wallet",
 		})
 	})
 
@@ -850,6 +852,7 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			networkId: "net-live",
 			feeSpender: undefined,
 			priorityLevel: "normal",
+			feeChoice: "wallet",
 		})
 	})
 })

@@ -16,7 +16,8 @@
  * expect (hundreds of rows per profile, not millions).
  */
 
-import { EntityStorage } from "@/wallet/storage"
+import type { EntityStorage } from "@/wallet/storage"
+import { entityStorage } from "@/wallet/storage/stores"
 import type { MinimalStorageArea } from "@nulo/wallet-core/storage"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import {
@@ -25,20 +26,10 @@ import {
 	type IncomingTrustRecord,
 	type IncomingTrustState,
 	type PublicScanCursor,
-	IncomingBalanceOutboxRowSchema,
-	IncomingTransferRecordSchema,
-	IncomingTrustRecordSchema,
-	PublicScanCursorSchema,
 	balanceOutboxKey,
 	publicCursorKey,
 } from "./spec"
-import { type ArrivalRow, ArrivalRowSchema, arrivalKey } from "./arrival-state"
-
-const RECORDS_KEY = "nulo:core:incoming-transfers"
-const TRUST_KEY = "nulo:core:incoming-trust"
-const CURSORS_KEY = "nulo:core:incoming-public-cursors"
-const OUTBOX_KEY = "nulo:core:incoming-balance-outbox"
-const ARRIVALS_KEY = "nulo:core:incoming-arrivals"
+import { type ArrivalRow, arrivalKey } from "./arrival-state"
 
 /** Build a stable key for the trust table. Profile + network + contract are
  *  all stringified to defend against numeric drift. */
@@ -56,19 +47,11 @@ export class IncomingTransferRepository {
 
 	public constructor(browserApi: BrowserApi) {
 		this.local = browserApi.storage.local
-		this.records = new EntityStorage<IncomingTransferRecord>(RECORDS_KEY, browserApi.storage.local, (raw) =>
-			IncomingTransferRecordSchema.parse(raw),
-		)
-		this.trust = new EntityStorage<IncomingTrustRecord>(TRUST_KEY, browserApi.storage.local, (raw) =>
-			IncomingTrustRecordSchema.parse(raw),
-		)
-		this.cursors = new EntityStorage<PublicScanCursor>(CURSORS_KEY, browserApi.storage.local, (raw) =>
-			PublicScanCursorSchema.parse(raw),
-		)
-		this.outbox = new EntityStorage<IncomingBalanceOutboxRow>(OUTBOX_KEY, browserApi.storage.local, (raw) =>
-			IncomingBalanceOutboxRowSchema.parse(raw),
-		)
-		this.arrivals = new EntityStorage<ArrivalRow>(ARRIVALS_KEY, browserApi.storage.local, (raw) => ArrivalRowSchema.parse(raw))
+		this.records = entityStorage("incomingTransfers", browserApi.storage.local)
+		this.trust = entityStorage("incomingTrust", browserApi.storage.local)
+		this.cursors = entityStorage("incomingPublicCursors", browserApi.storage.local)
+		this.outbox = entityStorage("incomingBalanceOutbox", browserApi.storage.local)
+		this.arrivals = entityStorage("incomingArrivals", browserApi.storage.local)
 	}
 
 	// --- Records (keyed by `id`) ---

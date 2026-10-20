@@ -42,6 +42,7 @@ import {
 	refuseUnknownPriorities,
 } from "@nulo/wallet-bridge"
 import { assertSilentExecutable, materializeRequest, type MaterializeDeps } from "./materialize"
+import { isWindowEnd, WindowEndedError } from "./window-end"
 import { knownContracts } from "./known-contracts"
 import { applyFeeSelection, isShownTokenMetadata, type OperationApprovalDelta } from "./approval-delta"
 import {
@@ -317,7 +318,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		return this.storage.get(id)?.refusal
 	}
 
-	public async rejectInteraction(id: string, reason: string): Promise<void> {
+	public async rejectInteraction(id: string, reason: string, end?: unknown): Promise<void> {
 		const interactionRequest = this.storage.get(id)
 		if (!interactionRequest) {
 			return
@@ -325,8 +326,10 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		this.storage.delete(id)
 		// Typed so the dApp sees EIP-1193 4001 / USER_REJECTED. `reason` is
 		// popup-authored and forwarded verbatim to the dApp — never route a
-		// dApp-influenced string here.
-		this.windowManager.cancel(interactionRequest.handleId, new UserRejectedError(reason))
+		// dApp-influenced string here. The window closes only after this returns, so its close cannot
+		// reach the request first.
+		const rejection = isWindowEnd(end) ? new WindowEndedError(reason, end) : new UserRejectedError(reason)
+		this.windowManager.cancel(interactionRequest.handleId, rejection)
 	}
 
 	private async executeAndResolve(

@@ -1,20 +1,15 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
-import { ValueStorage } from "@/wallet/storage"
+import { valueStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { type Config, type ConfigKey, type ConfigProp, ConfigSchema, defaultConfig } from "./config"
 import type { IConfigStore } from "."
 
-/** ValueStorage key holding the whole serialized `Config` object. Frozen:
- *  renaming detaches every install's settings; the backup-migration registry
- *  pins it. */
-export const CONFIG_STORAGE_KEY = "nulo:config"
-
 export class ConfigStore implements IConfigStore {
 	public readonly onUpdate = new EventHandler<ConfigProp>()
 
 	private readonly lock = new Lock()
-	private readonly storage = new ValueStorage<Config>(CONFIG_STORAGE_KEY, chrome.storage.local)
+	private readonly storage = valueStorage<Config>("config", chrome.storage.local)
 	private config = defaultConfig()
 
 	public get props(): ConfigProp[] {
@@ -97,17 +92,32 @@ export class ConfigStore implements IConfigStore {
 	}
 
 	private changesFrom(src: Record<string, unknown>): ConfigProp[] {
-		const changes: ConfigProp[] = []
-		for (const key of Object.keys(this.config) as ConfigKey[]) {
-			// Skip missing AND explicit-undefined props: the per-key schema has a
-			// `.default()`, so `safeParse(undefined)` would reset to default rather
-			// than keep the current value (the prior typeof check skipped these).
-			if (!(key in src) || src[key] === undefined) continue
-			const parsed = ConfigSchema.shape[key].safeParse(src[key])
-			if (parsed.success && this.config[key] !== parsed.data) {
-				changes.push({ key, value: parsed.data } as ConfigProp)
-			}
-		}
-		return changes
+		return configChanges(this.config, src)
 	}
+}
+
+function configChanges(current: Config, src: Record<string, unknown>): ConfigProp[] {
+	const changes: ConfigProp[] = []
+	for (const key of Object.keys(current) as ConfigKey[]) {
+		// Skip missing AND explicit-undefined props: the per-key schema has a
+		// `.default()`, so `safeParse(undefined)` would reset to default rather
+		// than keep the current value (the prior typeof check skipped these).
+		if (!(key in src) || src[key] === undefined) continue
+		const parsed = ConfigSchema.shape[key].safeParse(src[key])
+		if (parsed.success && current[key] !== parsed.data) {
+			changes.push({ key, value: parsed.data } as ConfigProp)
+		}
+	}
+	return changes
+}
+
+/** The config `load()` adopts from a stored value: each prop that is present and validates, the
+ *  default for every other. */
+export function decodeStoredConfig(stored: unknown): Config {
+	const config = defaultConfig()
+	if (!stored || typeof stored !== "object") return config
+	for (const change of configChanges(config, stored as Record<string, unknown>)) {
+		;(config as Record<string, unknown>)[change.key] = change.value
+	}
+	return config
 }

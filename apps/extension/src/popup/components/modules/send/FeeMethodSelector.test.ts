@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
+import { sendEvent } from "../../../../../tests/helpers/send-event"
 import { Flex, Skeleton } from "@nulo/design"
 
 // The real-Dropdown suite below runs without a layout engine: no focus trap, no outside-click wiring.
@@ -238,12 +239,12 @@ describe("FeeMethodSelector — in the real menu", () => {
 		await flushPromises()
 		expect(isOpen(w)).toBe(true)
 
-		row("private")?.click()
+		expect(sendEvent(row("private")!, "click")).toBeDefined()
 		await flushPromises()
 		expect(isOpen(w)).toBe(true)
 		expect(w.emitted("update:modelValue")).toBeUndefined()
 
-		row("sponsored")?.click()
+		sendEvent(row("sponsored")!, "click")
 		await flushPromises()
 		expect(w.emitted("update:modelValue")?.[0]?.[0]).toMatchObject({ fpc: { id: "s1" } })
 		expect(isOpen(w)).toBe(false)
