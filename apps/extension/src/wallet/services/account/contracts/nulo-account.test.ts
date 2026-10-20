@@ -6,8 +6,8 @@ import { SchnorrAccountContractArtifact } from "@aztec-labs/accounts/schnorr"
  * `getSchnorrAccountContractAddress(seed, Fr.ZERO)` against a CLI-derived address)
  * requires Barretenberg's WASM runtime, which the vitest jsdom env doesn't load.
  *
- * Run it manually with:
- *   bunx aztec-wallet create-account --from-secret-key 0x<hex> --salt 0
+ * Run it manually with the Aztec CLI wallet of the pinned Aztec line:
+ *   aztec-wallet create-account --from-secret-key 0x<hex> --salt 0
  * and compare against `getSchnorrAccountContractAddress(seed, Fr.ZERO)` inside the
  * extension (popup console, after unlock). Any drift = upstream changed the
  * derivation or our salt pinning is broken; both are migration-level events.
