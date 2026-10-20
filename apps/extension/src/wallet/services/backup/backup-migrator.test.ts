@@ -3,7 +3,9 @@ import { defineMigration, Migrator, SCHEMA_VERSION_KEY } from "@nulo/wallet-core
 import { MemoryStorageArea } from "@nulo/wallet-core/storage"
 import { ACCOUNT_STORAGE_ROOT } from "@/wallet/services/account/spec"
 import { CONTACT_STORAGE_ROOT } from "@/wallet/services/contact/spec"
-import { PROFILE_STORAGE_ROOT } from "@/wallet/services/profile/spec"
+import { NETWORK_STORAGE_ROOT } from "@/wallet/services/network/spec"
+import { TOKEN_PRICES_STORAGE_KEY } from "@/wallet/services/price/spec"
+import { BACKUP_BLOCKED_ROOTS } from "./backup-migration-registry"
 import { migrateBackupData, maxBackupSchemaVersion } from "./backup-migrator"
 import { defineRowMapMigration } from "./row-map-migration"
 
@@ -146,22 +148,56 @@ describe("backup-migrator", () => {
 		if (res.kind === "incompatible") expect(res.reason).toContain("re-export")
 	})
 
-	test("a migration touching a block-listed or unmapped root blocks import", async () => {
-		const touchesProfiles = defineRowMapMigration({
+	test("a backup-safe migration of a root and a value key no slice carries imports the backup unchanged", async () => {
+		const unsliced = defineRowMapMigration({
 			version: 2,
-			description: "touches profiles",
-			rowMaps: { [PROFILE_STORAGE_ROOT]: { addDefault: { x: 1 } } },
+			description: "add defaults to networks and token prices",
+			rowMaps: { [NETWORK_STORAGE_ROOT]: { addDefault: { x: 1 } } },
+			valueMaps: { [TOKEN_PRICES_STORAGE_KEY]: { addDefault: { x: 1 } } },
 		})
-		const blocked = await migrateBackupData({ data: v1Data(), backupSchemaVersion: 1, migrations: [touchesProfiles] })
-		expect(blocked.kind).toBe("incompatible")
+		const res = await migrateBackupData({ data: v1Data(), backupSchemaVersion: 1, migrations: [unsliced] })
+		expect(res).toEqual({ kind: "migrated", from: 1, to: 2, data: v1Data() })
+	})
 
-		const touchesUnmapped = defineRowMapMigration({
+	test("the same root, authored imperatively, still blocks import", async () => {
+		const networks = { kind: "root", root: NETWORK_STORAGE_ROOT } as const
+		const imperative = defineMigration({
 			version: 2,
-			description: "touches an unmapped root",
-			rowMaps: { "nulo:core:elsewhere": { addDefault: { x: 1 } } },
+			description: "imperative networks transform",
+			reads: [networks],
+			writes: [networks],
+			up: async () => {},
 		})
-		const unmapped = await migrateBackupData({ data: v1Data(), backupSchemaVersion: 1, migrations: [touchesUnmapped] })
-		expect(unmapped.kind).toBe("incompatible")
+		const res = await migrateBackupData({ data: v1Data(), backupSchemaVersion: 1, migrations: [imperative] })
+		expect(res).toEqual({
+			kind: "incompatible",
+			reason: "this wallet version can't upgrade old backups: migration 2 is not backup-safe — re-export a fresh backup from a current wallet",
+		})
+	})
+
+	test.each(BACKUP_BLOCKED_ROOTS)("a backup-safe migration of the block-listed root %s blocks import", async (root) => {
+		const touchesBlocked = defineRowMapMigration({
+			version: 2,
+			description: "touches a blocked root",
+			rowMaps: { [root]: { addDefault: { x: 1 } } },
+		})
+		const res = await migrateBackupData({ data: v1Data(), backupSchemaVersion: 1, migrations: [touchesBlocked] })
+		expect(res).toEqual({
+			kind: "incompatible",
+			reason: `migration 2 touches "${root}", which backups cannot represent — re-export a fresh backup from a current wallet`,
+		})
+	})
+
+	test("a mixed footprint still migrates its sliced root", async () => {
+		const mixed = defineRowMapMigration({
+			version: 2,
+			description: "rename contact legacyName to name; add a network default",
+			rowMaps: { [CONTACT_STORAGE_ROOT]: { rename: { legacyName: "name" } }, [NETWORK_STORAGE_ROOT]: { addDefault: { x: 1 } } },
+		})
+		const res = await migrateOrThrow(v1Data(), 1, [mixed])
+		const { contact: _c, ...rest } = v1Data()
+		expect(res.kind).toBe("migrated")
+		expect(res.data).toEqual({ ...rest, contact: [{ id: "c1", profileId: "p1", address: "0xc", name: "Alice" }] })
 	})
 
 	test("version guards: newer-than-build is incompatible; non-integer/below-baseline is failed", async () => {

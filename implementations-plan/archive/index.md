@@ -28,6 +28,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [backup-import-repair](backup-import-repair/plan.md) — completed — restore writes the profile, and a separate last step opens the session
 - [backup-integrity](backup-integrity/plan.md) — completed — the backup migration core and restore surface split under the complexity budget, behaviour unchanged
 - [backup-log-hygiene](backup-log-hygiene/plan.md) — completed — every extension log line made safe to persist and export, in three redundant layers
+- [backup-preflight-1](backup-preflight-1/plan.md) — completed — a migration that cannot touch a backup's rows never refuses it: the backup preflight drops its unsliced-ref gate (#934)
 - [backup-restore-1](backup-restore-1/plan.md) — completed — what a paused reset, the migration barrier and a restore tell a person; restored imported accounts kept until their network is added, and the export warns of them (P38-04, -05, -09, -10; #663, #671)
 - [backup-restore-corruption-fix](backup-restore-corruption-fix/plan.md) — completed — three high-severity data-corruption bugs in full-backup restore and profile deletion
 - [backup-restore-security-hardening](backup-restore-security-hardening/plan.md) — completed — a backup treated as attacker-controlled, with the restore and delete paths hardened together
