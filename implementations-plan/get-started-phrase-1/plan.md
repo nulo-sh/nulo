@@ -9,9 +9,21 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at f5b7fd5ad (includes #743)
 trunk: dev
+status: completed (2026-10-20); closed in A1's final commits
 issues: "#936 (closed by A1)"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-20
+- **Status:** completed. Its delivery is A1, one PR against `dev` that closes #936; this close-out is its final commits. The orchestrator merges it.
+- **Shipped:** P73-01: a funded password wallet's unsaved phrase stays a step of the Get started card (step 1, "of 4" on the first profile; the row alone on a later one), and the urgent banner shows only after Hide. `getStartedView`'s banner needs `hidden`; the pure, Home and e2e pins follow the rule, with a funded hidden passkey case, a red proof on the base and pictures in both themes ([screenshots/](screenshots/)).
+- **Superseded or dropped:** D7's hero-prices frames, dropped for a scratch spec (D7a).
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted: `lessons.md` is at its budget (8152 B). The first-receive sheet over Home's middle in a backup-imported spec went to the `e2e-testing` skill's `NULO_E2E_SHOT_DIR` row.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; they are not instructions.
 
 # get-started-phrase-1: the phrase stays in the Get started card; the banner only after Hide
 
