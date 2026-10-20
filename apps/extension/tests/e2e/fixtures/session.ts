@@ -1,6 +1,7 @@
 import { MessageType } from "@nulo/extension-messaging/messages"
 import { wrapParams } from "@nulo/extension-messaging/utils"
 import type { Page } from "puppeteer"
+import { type BackgroundOwner, backgroundOrigin, evaluateInBackground, withInterceptionsReleased } from "./browser"
 import { pollUntil } from "./poll"
 
 /** The persisted session row's public fields: the unlocked profile, the last refresh, and when auto-lock is due. */
@@ -135,4 +136,58 @@ export async function waitForWorkerLiveness(page: Page, afterTs: number, opts: {
 		{ timeout: opts.timeoutMs ?? 30_000, polling: 500 },
 		afterTs,
 	)
+}
+
+const RESTART_BUDGET_MS = 30_000
+
+/**
+ * Run `restart`, then resolve once the extension has restarted: `openPage`, an extension page open
+ * before it, is closed, as both browsers close every extension page when the extension unloads, and
+ * a background newer than the one that ran before `restart` runs. A background restart alone
+ * closes no page, so it never satisfies this. The launch's interceptions are let go before the
+ * restart and re-armed once the pages close, before the wait for the successor.
+ */
+export async function waitForExtensionRestart(owner: BackgroundOwner, openPage: Page, restart: () => Promise<void>): Promise<void> {
+	const before = await backgroundOrigin(owner)
+	if (before === undefined) throw new Error("waitForExtensionRestart: no background runs before the restart")
+	const deadline = Date.now() + RESTART_BUDGET_MS
+	await withInterceptionsReleased(owner, async () => {
+		await restart()
+		await pollUntil(
+			async () => openPage.isClosed(),
+			(closed) => closed,
+			{
+				label: "the extension's pages closing on its restart",
+				timeoutMs: RESTART_BUDGET_MS,
+				intervalMs: 100,
+			},
+		)
+	})
+	await pollUntil(
+		() => backgroundOrigin(owner),
+		(origin) => origin !== undefined && origin > before,
+		{ label: "a background newer than the restarted one", timeoutMs: Math.max(0, deadline - Date.now()), intervalMs: 250 },
+	)
+}
+
+/** Swaps the background's `chrome.storage.session.remove`, the object its storage adapter holds, for
+ *  one that refuses every removal naming the session record. A restart ends the swap with the
+ *  background that holds it. */
+const REFUSE_SESSION_DELETES = `
+	const area = chrome.storage.session;
+	const remove = area.remove;
+	Object.defineProperty(area, "remove", {
+		configurable: true,
+		writable: true,
+		value: function (keys, ...rest) {
+			if ([keys].flat().includes("nulo:core:session")) return Promise.reject(new Error("the e2e refused this delete"));
+			return remove.apply(this, [keys, ...rest]);
+		},
+	});
+	return true;`
+
+/** Every delete of the persisted session record fails as a refused storage write does, until the
+ *  background ends. */
+export async function refuseSessionDeletes(owner: BackgroundOwner): Promise<void> {
+	await evaluateInBackground(owner, REFUSE_SESSION_DELETES)
 }
