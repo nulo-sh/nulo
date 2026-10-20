@@ -224,6 +224,13 @@ describe("TransactionService — a mined row until its block is final", () => {
 		expect(exported?.[0]).not.toHaveProperty("awaitingFinality")
 	})
 
+	test("a backup carries a row's fee chooser, so a restore of it reads the same label", async () => {
+		const chosen = `0x${"33".repeat(32)}`
+		await service.restore([storedRow({ hash: chosen, feeChoice: "app_protocol_sponsor" })], "p1")
+		const exported = await service.backup()
+		expect(exported?.find((tx) => tx.hash === chosen)?.feeChoice).toBe("app_protocol_sponsor")
+	})
+
 	test.each([
 		["a purge", (s: TransactionService) => s.purgeForAccounts([ACCOUNT])],
 		["the ambiguous marking", (s: TransactionService) => s.purgeForAccounts([ACCOUNT], "p1")],

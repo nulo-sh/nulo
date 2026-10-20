@@ -5,17 +5,29 @@
  * that id is adopted again never reaches the new profile; a write after the adoption does.
  */
 
-const PINNED_TOKENS_PREFIX = "nulo:ui:pinnedTokens@"
-const FEE_PICKS_PREFIX = "nulo:ui:feePaymentMethods@"
-const SEND_FEE_PICKS_PREFIX = "nulo:ui:sendFeePaymentMethods@"
-const RESTORE_OUTCOME_PREFIX = "nulo:ui:restoreOutcome@"
-const GET_STARTED_PHRASE_SAVED_PREFIX = "nulo:ui:getStartedPhraseSaved@"
-const GET_STARTED_BACKUP_SAVED_PREFIX = "nulo:ui:getStartedBackupSaved@"
-const GET_STARTED_AZTEC_OPENED_PREFIX = "nulo:ui:getStartedAztecOpened@"
-const GET_STARTED_HIDDEN_PREFIX = "nulo:ui:getStartedHidden@"
-const GET_STARTED_FEE_JUICE_HELD_PREFIX = "nulo:ui:getStartedFeeJuiceHeld@"
-const PROFILE_IMPORTED_PREFIX = "nulo:ui:profileImported@"
-const PROFILE_NOT_FIRST_PREFIX = "nulo:ui:profileNotFirst@"
+export const PINNED_TOKENS_ROOT = "nulo:ui:pinnedTokens"
+export const FEE_PICKS_ROOT = "nulo:ui:feePaymentMethods"
+export const SEND_FEE_PICKS_ROOT = "nulo:ui:sendFeePaymentMethods"
+export const RESTORE_OUTCOME_ROOT = "nulo:ui:restoreOutcome"
+export const GET_STARTED_PHRASE_SAVED_ROOT = "nulo:ui:getStartedPhraseSaved"
+export const GET_STARTED_BACKUP_SAVED_ROOT = "nulo:ui:getStartedBackupSaved"
+export const GET_STARTED_AZTEC_OPENED_ROOT = "nulo:ui:getStartedAztecOpened"
+export const GET_STARTED_HIDDEN_ROOT = "nulo:ui:getStartedHidden"
+export const GET_STARTED_FEE_JUICE_HELD_ROOT = "nulo:ui:getStartedFeeJuiceHeld"
+export const PROFILE_IMPORTED_ROOT = "nulo:ui:profileImported"
+export const PROFILE_NOT_FIRST_ROOT = "nulo:ui:profileNotFirst"
+
+const PINNED_TOKENS_PREFIX = `${PINNED_TOKENS_ROOT}@`
+const FEE_PICKS_PREFIX = `${FEE_PICKS_ROOT}@`
+const SEND_FEE_PICKS_PREFIX = `${SEND_FEE_PICKS_ROOT}@`
+const RESTORE_OUTCOME_PREFIX = `${RESTORE_OUTCOME_ROOT}@`
+const GET_STARTED_PHRASE_SAVED_PREFIX = `${GET_STARTED_PHRASE_SAVED_ROOT}@`
+const GET_STARTED_BACKUP_SAVED_PREFIX = `${GET_STARTED_BACKUP_SAVED_ROOT}@`
+const GET_STARTED_AZTEC_OPENED_PREFIX = `${GET_STARTED_AZTEC_OPENED_ROOT}@`
+const GET_STARTED_HIDDEN_PREFIX = `${GET_STARTED_HIDDEN_ROOT}@`
+const GET_STARTED_FEE_JUICE_HELD_PREFIX = `${GET_STARTED_FEE_JUICE_HELD_ROOT}@`
+const PROFILE_IMPORTED_PREFIX = `${PROFILE_IMPORTED_ROOT}@`
+const PROFILE_NOT_FIRST_PREFIX = `${PROFILE_NOT_FIRST_ROOT}@`
 
 /** Each prefix ends in `@`, so a key is its prefix followed by one whole profile id. */
 export const PROFILE_UI_KEY_PREFIXES: readonly string[] = [

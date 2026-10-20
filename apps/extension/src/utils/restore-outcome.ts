@@ -107,6 +107,16 @@ export async function readRestoreOutcome(profileId: string, now = Date.now()): P
 	const raw = (await storageLocalGet(key))[key]
 	if (raw === undefined) return undefined
 	const record = decode(raw) ?? (await withLock(profileId, () => readHoldingLock(profileId)))
-	if (!record) return undefined
+	return record && leaseRead(record, now)
+}
+
+/** What a reader sees of a stored record at `now`: a malformed one reads as absent. */
+export function decodeRestoreOutcome(raw: unknown, now: number): RestoreOutcome | undefined {
+	const record = decode(raw)
+	return record && leaseRead(record, now)
+}
+
+/** A lease further ahead than any run takes reads as ended. */
+function leaseRead(record: RestoreOutcome, now: number): RestoreOutcome {
 	return record.leaseUntil > now + RESTORE_OUTCOME_LEASE_MS ? { ...record, leaseUntil: 0 } : record
 }

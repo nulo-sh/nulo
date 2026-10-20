@@ -80,7 +80,7 @@ function slotsOf(value: unknown): SendSlots {
 }
 
 /** Send's whole map, re-parsed: a write never carries a malformed neighbour forward. */
-function readSendPicks(raw: unknown): Record<string, SendSlots> {
+export function readSendPicks(raw: unknown): Record<string, SendSlots> {
 	const out: Record<string, SendSlots> = {}
 	for (const [address, value] of Object.entries(asObject(raw) ?? {})) {
 		const slots = slotsOf(value)

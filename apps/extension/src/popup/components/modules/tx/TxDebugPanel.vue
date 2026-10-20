@@ -143,7 +143,7 @@ const formatTimestamp = (timestamp) => {
 
 .error_key {
 	composes: type--label-section from global;
-	color: var(--red);
+	color: var(--txt-danger);
 }
 
 .error_text {
@@ -152,7 +152,7 @@ const formatTimestamp = (timestamp) => {
 	border: 1px solid rgba(255, 0, 0, 0.3);
 	background: transparent;
 
-	color: var(--red);
+	color: var(--txt-danger);
 	word-break: break-word;
 }
 

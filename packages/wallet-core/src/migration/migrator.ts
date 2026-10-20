@@ -53,7 +53,7 @@ import { errorMessageFromUnknown } from "../utils/errors"
  *  footprints never include it and migrations may not write into it. */
 export const SCHEMA_VERSION_KEY = "nulo:schema:version"
 export const SCHEMA_RUNNING_KEY = "nulo:schema:running"
-const SCHEMA_BACKUP_KEY = "nulo:schema:backup"
+export const SCHEMA_BACKUP_KEY = "nulo:schema:backup"
 /** Exported for the host's boot gate: a build-version invalidation of a
  *  blocked verdict must also reset this durable budget — a new build is a new
  *  episode, and its first failure must not inherit exhausted attempts. */
@@ -65,7 +65,7 @@ export const SCHEMA_RESERVED_PREFIX = "nulo:schema:"
 const RESERVED_PREFIX = SCHEMA_RESERVED_PREFIX
 /** The forked-app's legacy wipe marker. Its presence is positive evidence of a
  *  non-fresh install (the "reinstall fresh" assumption is violated) → fail closed. */
-const LEGACY_VERSION_KEY = "nulo:core:storage-version"
+export const LEGACY_VERSION_KEY = "nulo:core:storage-version"
 
 export const RESERVED_KEYS: readonly string[] = [SCHEMA_VERSION_KEY, SCHEMA_RUNNING_KEY, SCHEMA_BACKUP_KEY, SCHEMA_ATTEMPTS_KEY]
 

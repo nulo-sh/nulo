@@ -3,11 +3,11 @@ import { BASELINE_VERSION } from "@/wallet/storage/migrations"
 import { ACCOUNT_STORAGE_ROOT, accountRowId } from "@/wallet/services/account/spec"
 import { AUTH_REGISTRY_ENABLED_STORAGE_ROOT, AUTH_REGISTRY_STORAGE_ROOT } from "@/wallet/services/auth-registry/spec"
 import { CONTACT_STORAGE_ROOT } from "@/wallet/services/contact/spec"
-import { PROFILE_STORAGE_ROOT } from "@/wallet/services/profile/repository"
+import { PROFILE_STORAGE_ROOT } from "@/wallet/services/profile/spec"
 import { TOKEN_BALANCE_STORAGE_ROOT } from "@/wallet/services/token-balance/spec"
 import { TOKEN_STORAGE_ROOT } from "@/wallet/services/token/spec"
 import { TRANSACTION_STORAGE_ROOT } from "@/wallet/services/transaction/spec"
-import { CONFIG_STORAGE_KEY } from "@/wallet/config/store"
+import { CONFIG_STORAGE_KEY } from "@/wallet/config/config"
 import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
 import {
 	BACKUP_BLOCKED_ROOTS,

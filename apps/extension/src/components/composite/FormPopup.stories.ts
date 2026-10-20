@@ -104,7 +104,7 @@ export const WithErrorRow: Story = {
 					</div>
 					<template #aboveSubmit>
 						<div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(255, 73, 73, 0.08);">
-							<span style="font-size: 12px; font-weight: 600; color: var(--red);">RPC didn't respond. Check the URL.</span>
+							<span style="font-size: 12px; font-weight: 600; color: var(--txt-danger);">RPC didn't respond. Check the URL.</span>
 						</div>
 					</template>
 				</FormPopup>

@@ -2,6 +2,7 @@ import { Flex, Tooltip } from "@nulo/design"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { nextTick } from "vue"
+import { sendEvent } from "../../../tests/helpers/send-event"
 
 vi.mock("@/utils/core", () => ({ managers: { profile: { refreshSession: vi.fn() } } }))
 
@@ -82,7 +83,7 @@ describe("Popup with a tooltip", () => {
 		const trigger = byTestId("trigger") as HTMLElement
 		trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "mouse" }))
 		trigger.focus()
-		trigger.click()
+		sendEvent(trigger, "click")
 		await settle()
 		expect(popupOpen()).toBe(true)
 		expect(tooltipOpen()).toBe(false)

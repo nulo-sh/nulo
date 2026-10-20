@@ -9,7 +9,8 @@
 import { beforeEach, describe, expect, test } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import type { Profile } from "./spec"
-import { PROFILE_STORAGE_ROOT, ProfileRepository } from "./repository"
+import { ProfileRepository } from "./repository"
+import { PROFILE_STORAGE_ROOT } from "./spec"
 
 function setup(): { api: FakeBrowserApi; repo: ProfileRepository } {
 	const api = new FakeBrowserApi()

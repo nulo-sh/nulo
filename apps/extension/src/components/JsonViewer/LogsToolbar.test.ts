@@ -1,6 +1,7 @@
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { defineComponent } from "vue"
+import { sendEvent } from "../../../tests/helpers/send-event"
 
 vi.mock("focus-trap", () => ({
 	createFocusTrap: vi.fn(() => ({ activate: vi.fn(), deactivate: vi.fn(), active: false })),
@@ -106,13 +107,13 @@ describe("LogsToolbar — the more menu", () => {
 	test("each item emits its own event once", async () => {
 		const w = mountToolbar()
 		await openMenu(w)
-		shownItem("logs-export-csv").click()
+		sendEvent(shownItem("logs-export-csv"), "click")
 		await flushPromises()
 		expect(w.emitted("exportCsv")).toHaveLength(1)
 		expect(w.emitted("clearLogs")).toBeUndefined()
 
 		await openMenu(w)
-		shownItem("logs-clear").click()
+		sendEvent(shownItem("logs-clear"), "click")
 		await flushPromises()
 		expect(w.emitted("clearLogs")).toHaveLength(1)
 		expect(w.emitted("exportCsv")).toHaveLength(1)

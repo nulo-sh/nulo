@@ -9,6 +9,7 @@ vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ query
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 
 import { Flex, Icon, Input, Text } from "@nulo/design"
+import { enterOn } from "../../../../../../tests/helpers/credential-pins"
 import { pressOn } from "../../../../../../tests/helpers/press-key"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import { useAppStore } from "@/stores/app.store"
@@ -86,8 +87,7 @@ describe("recovery phrase — Enter does what the focused control says", () => {
 
 	test("(preservation) Enter in the password field reveals once", async () => {
 		const w = await mountAgreedWithPassword()
-		const field = w.get('[data-testid="unlock-password-input"] input').element
-		field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
+		enterOn(w.get('[data-testid="unlock-password-input"] input').element)
 		await flushPromises()
 		expect(exportMnemonic).toHaveBeenCalledTimes(1)
 	})

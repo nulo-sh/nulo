@@ -42,6 +42,7 @@ import {
 	asBase64SecretPrf,
 	asHexUserHandle,
 	asImportedKeysDek,
+	asMasterSecretBytes,
 	EncryptionKey,
 	IMPORTED_DEK_AAD,
 	PasswordSecretBox,
@@ -64,7 +65,8 @@ import { flushPromises } from "@vue/test-utils"
 import { ProfileService } from "./service"
 import type { ProfileInfo } from "./spec"
 import { RESTORE_PENDING_ROOT, RestorePendingRepository } from "./restore-pending-repository"
-import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME } from "./session-manager"
+import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME, type SessionManager } from "./session-manager"
+import type { ProfileRepository } from "./repository"
 import {
 	feePicksKey,
 	pinnedTokensKey,
@@ -866,6 +868,27 @@ describe("ProfileService integration", () => {
 			await rebooted.lockActiveProfile()
 			expect(events).toEqual([undefined])
 			expect(SESSION_STORAGE_ROOT in (await api.storage.session.get(SESSION_STORAGE_ROOT))).toBe(false)
+		}, 30_000)
+
+		test("a lock whose close returns with a successor's session published does not announce over it", async () => {
+			const { service } = await makeService()
+			const created = await service.createProfile("P", "pass1234")
+			await service.lockActiveProfile()
+			const internals = service as unknown as { repo: ProfileRepository; sessionManager: SessionManager }
+			const profile = await internals.repo.get(created.id)
+			if (!profile) throw new Error("setup: no profile row")
+			const close = internals.sessionManager.close.bind(internals.sessionManager)
+			vi.spyOn(internals.sessionManager, "close").mockImplementationOnce(async (...args) => {
+				const emitted = await close(...args)
+				await internals.sessionManager.open(profile, asMasterSecretBytes(new Uint8Array(32).fill(1)))
+				return emitted
+			})
+			const events: unknown[] = []
+			service.onActiveProfileChanged.add((p) => events.push(p))
+
+			await service.lockActiveProfile().catch(() => undefined)
+
+			expect(events).toEqual([expect.objectContaining({ id: created.id })])
 		}, 30_000)
 
 		test("after a restart that already dropped the record (strict password): the lock is still announced", async () => {
@@ -3284,6 +3307,27 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 
 			vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("session remove failed"))
 			await expect(service.lockActiveProfile()).rejects.toThrow(/did not persist/)
+		}, 30_000)
+
+		test("a read-back that cannot read the record makes lockActiveProfile throw", async () => {
+			const { api, service } = await makeService()
+			await service.createProfile("P", "pass1234")
+
+			vi.spyOn(api.storage.session, "get").mockRejectedValue(new Error("session get failed"))
+			await expect(service.lockActiveProfile()).rejects.toThrow(/did not persist/)
+		}, 30_000)
+
+		test("a restarted worker whose lock cannot be confirmed still announces the lock", async () => {
+			const { api, service } = await makeService()
+			await service.createPasskeyProfile("PK")
+			const { service: rebooted } = await makeServiceFromExistingApi(api)
+			expect(await rebooted.getActiveProfile()).toBeUndefined()
+			const events: unknown[] = []
+			rebooted.onActiveProfileChanged.add((p) => events.push(p))
+
+			vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("session remove failed"))
+			await expect(rebooted.lockActiveProfile()).rejects.toThrow(/did not persist/)
+			expect(events).toEqual([undefined])
 		}, 30_000)
 	})
 

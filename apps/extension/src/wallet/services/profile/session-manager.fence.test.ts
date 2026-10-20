@@ -142,6 +142,35 @@ describe("SessionManager artifact fence", () => {
 		expect((manager as unknown as { activeSession?: ActiveSession }).activeSession?.profile.id).toBe("prof-B")
 	})
 
+	test("a close whose first delete fails makes its second attempt before the successor open lands", async () => {
+		const { api, manager } = setup()
+		const { events, rawRemove } = instrument(api)
+		await manager.open(profileA, secretBuffer())
+		expireActive(manager)
+
+		const gate = deferred()
+		let attempts = 0
+		api.storage.session.remove = async (keys: string | string[]) => {
+			events.push("row-delete")
+			if (++attempts > 1) return rawRemove(keys)
+			await gate.promise
+			throw new Error("storage remove failed")
+		}
+		const closing = manager.getActive()
+		await new Promise((r) => setTimeout(r, 0))
+		const opening = manager.open(profileB, secretBuffer())
+		await new Promise((r) => setTimeout(r, 0))
+
+		gate.resolve()
+		await Promise.all([closing, opening])
+
+		expect(attempts).toBe(2)
+		expect(events.lastIndexOf("row-delete")).toBeLessThan(events.indexOf("row-set:prof-B"))
+		expect(await readRow(api)).toBe("prof-B")
+		expect(events.lastIndexOf("alarm-create")).toBeGreaterThan(events.lastIndexOf("alarm-clear"))
+		expect((manager as unknown as { activeSession?: ActiveSession }).activeSession?.profile.id).toBe("prof-B")
+	})
+
 	test("a stale close whose head ran pre-open stands down at the generation re-check (the load-bearing mid-ordering)", async () => {
 		// close(A)'s sync head runs while A is still installed (identity guard
 		// passes, pre-bump generation captured) — then a listener-driven open(B)
