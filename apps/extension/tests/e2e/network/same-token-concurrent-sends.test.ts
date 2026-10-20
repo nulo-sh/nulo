@@ -39,6 +39,7 @@ import {
 	waitForHash,
 } from "../fixtures/extension"
 import { pinnedFeeText, refusePrices, seedFeeJuiceQuote } from "../fixtures/fee-quote"
+import { PollTimeoutError, pollUntil } from "../fixtures/poll"
 import {
 	createAndActivateProfile,
 	getAccountAddress,
@@ -325,18 +326,33 @@ async function readAwaitingCards(page: Page): Promise<AwaitingCard[]> {
 async function waitForAwaitingCard(page: Page, stage: string): Promise<AwaitingCard> {
 	const appearBy = Date.now() + 30_000
 	let settleBy: number | undefined
-	for (;;) {
+	let sampledAt = 0
+	let seen = "[]"
+	const late = () => new Error(`no awaiting card reached ${stage} in time: ${seen}`)
+	const sample = async () => {
 		const cards = await readAwaitingCards(page)
-		const sampledAt = Date.now()
-		const seen = JSON.stringify(cards)
+		sampledAt = Date.now()
+		seen = JSON.stringify(cards)
 		if (cards.length > 1) throw new Error(`${cards.length} awaiting cards for one send: ${seen}`)
-		if (sampledAt > (settleBy ?? appearBy)) throw new Error(`no awaiting card reached ${stage} in time: ${seen}`)
+		// The bound is the test's, so a sample taken past it fails even when it shows the card.
+		if (sampledAt > (settleBy ?? appearBy)) throw late()
 		const [card] = cards
-		if (card?.stage === stage && card.cancel) return card
-		if (card?.stage) throw new Error(`the awaiting card is not at ${stage} with a cancel control: ${seen}`)
-		if (card) settleBy ??= sampledAt + 10_000
-		await new Promise((r) => setTimeout(r, 250))
+		if (card?.stage && !(card.stage === stage && card.cancel))
+			throw new Error(`the awaiting card is not at ${stage} with a cancel control: ${seen}`)
+		return card
 	}
+	const ready = (card: AwaitingCard | undefined) => card?.stage === stage && card.cancel
+	const label = `an awaiting card at ${stage}`
+	const lateOnTimeout = (error: unknown): never => {
+		throw error instanceof PollTimeoutError ? late() : error
+	}
+	const first = await pollUntil(sample, (card) => card !== undefined, { label, timeoutMs: 30_000, intervalMs: 250 }).catch(lateOnTimeout)
+	if (ready(first)) return first as AwaitingCard
+	// The stage-less card gets 10 s from its first sighting to reach `stage`.
+	settleBy = sampledAt + 10_000
+	return (await pollUntil(sample, ready, { label, timeoutMs: settleBy - Date.now(), intervalMs: 250 }).catch(
+		lateOnTimeout,
+	)) as AwaitingCard
 }
 
 /**
@@ -485,11 +501,7 @@ function dappTxHash(result: PgResult): string {
 /** The dApp send recorded after `known` keeps reading `stage` for `windowMs`: its build has not started. */
 async function expectDappRecordHeld(page: Page, known: ReadonlySet<string>, stage: string, windowMs: number): Promise<void> {
 	const fresh = async () => (await readDappExecuteRecords(page)).filter((r) => !known.has(r.id))
-	const recorded = Date.now() + 30_000
-	while ((await fresh()).length === 0) {
-		if (Date.now() > recorded) throw new Error("the dApp send was never recorded")
-		await new Promise((r) => setTimeout(r, 250))
-	}
+	await pollUntil(fresh, (rows) => rows.length > 0, { label: "the dApp send recorded", timeoutMs: 30_000, intervalMs: 250 })
 	const deadline = Date.now() + windowMs
 	while (Date.now() < deadline) {
 		const stages = (await fresh()).map((r) => r.stage)
@@ -627,19 +639,21 @@ const BEFORE_PROOF = new Set(["pending", "queued", "simulating"])
 /** Waits for a re-ask held to `cap` (any, before the first accept) or, after an accept, for proof
  *  progress; fails on a terminal failure, or on proof progress before any accept. */
 async function waitForAskOrSent(page: Page, amountRaw: string, cap?: string): Promise<Asking | "sent"> {
-	const deadline = Date.now() + 180_000
-	for (;;) {
-		const row = (await readTransferRows(page)).find((r) => r.amount === amountRaw)
-		if (row?.stage === "queued" && row.reask && (cap === undefined || row.reask.cap === cap)) return row as Asking
-		if (row?.stage && !BEFORE_PROOF.has(row.stage)) {
-			if (cap === undefined || !["proving", "submitting", "succeeded"].includes(row.stage)) {
-				throw new Error(`transfer ${amountRaw} left the queue without an accept: ${JSON.stringify(row)}`)
+	const asking = (row: TransferRow | undefined) =>
+		row?.stage === "queued" && row.reask !== undefined && (cap === undefined || row.reask.cap === cap)
+	const sent = (row: TransferRow | undefined) => row?.stage !== undefined && !BEFORE_PROOF.has(row.stage)
+	const row = await pollUntil(
+		async () => {
+			const read = (await readTransferRows(page)).find((r) => r.amount === amountRaw)
+			if (!asking(read) && sent(read) && (cap === undefined || !["proving", "submitting", "succeeded"].includes(read?.stage ?? ""))) {
+				throw new Error(`transfer ${amountRaw} left the queue without an accept: ${JSON.stringify(read)}`)
 			}
-			return "sent"
-		}
-		if (Date.now() > deadline) throw new Error(`transfer ${amountRaw} never asked again: ${JSON.stringify(row)}`)
-		await new Promise((r) => setTimeout(r, 250))
-	}
+			return read
+		},
+		(read) => asking(read) || sent(read),
+		{ label: `transfer ${amountRaw} asked again`, timeoutMs: 180_000, intervalMs: 250 },
+	)
+	return asking(row) ? (row as Asking) : "sent"
 }
 
 async function readReaskSheet(page: Page): Promise<{ line: string; button: string }> {
