@@ -200,7 +200,7 @@ describe("popup import — full backup, a restore ready", () => {
 
 	test("(preservation) Enter in the repeat-password field restores once", async () => {
 		const w = await mountImport()
-		w.get('[data-testid="import-full-backup-password-confirm-input"] input').element.dispatchEvent(enterKey())
+		enterOn(w.get('[data-testid="import-full-backup-password-confirm-input"] input').element)
 		await flushPromises()
 		expect(holder.flow.restoreBackup).toHaveBeenCalledTimes(1)
 	})
@@ -676,7 +676,7 @@ describe("popup import — Enter runs the action the bar offers", () => {
 		holder.flow.selectedBackup.value = ENCRYPTED as never
 		holder.flow.decryptionPassword.value = "pw"
 		const w = await mountImport()
-		w.get('[data-testid="import-full-backup-decrypt-password-input"] input').element.dispatchEvent(enterKey())
+		enterOn(w.get('[data-testid="import-full-backup-decrypt-password-input"] input').element)
 		await flushPromises()
 		expect(holder.flow.decryptBackup).toHaveBeenCalledTimes(1)
 		expect(holder.flow.restoreBackup).not.toHaveBeenCalled()
@@ -686,7 +686,7 @@ describe("popup import — Enter runs the action the bar offers", () => {
 		holder.flow.nameFieldState.value = "shown"
 		holder.flow.restoreStatus.value = "failed"
 		const w = await mountImport()
-		nameInput(w).dispatchEvent(enterKey())
+		enterOn(nameInput(w))
 		await flushPromises()
 		expect(holder.flow.restoreBackup).not.toHaveBeenCalled()
 	})
@@ -695,13 +695,13 @@ describe("popup import — Enter runs the action the bar offers", () => {
 		holder.flow.nameFieldState.value = "shown"
 		holder.flow.isAllowedToImportBackup.value = false
 		const w = await mountImport()
-		nameInput(w).dispatchEvent(enterKey())
+		enterOn(nameInput(w))
 		await flushPromises()
 		expect(holder.flow.restoreBackup).not.toHaveBeenCalled()
 
 		holder.flow.isAllowedToImportBackup.value = true
 		await flushPromises()
-		nameInput(w).dispatchEvent(enterKey())
+		enterOn(nameInput(w))
 		await flushPromises()
 		expect(holder.flow.restoreBackup).toHaveBeenCalledTimes(1)
 	})
@@ -710,7 +710,7 @@ describe("popup import — Enter runs the action the bar offers", () => {
 		holder.flow.nameFieldState.value = "shown"
 		holder.flow.restoreStatus.value = "progress"
 		const w = await mountImport()
-		nameInput(w).dispatchEvent(enterKey())
+		enterOn(nameInput(w))
 		await flushPromises()
 		expect(holder.flow.restoreBackup).not.toHaveBeenCalled()
 		expect(holder.flow.decryptBackup).not.toHaveBeenCalled()
@@ -721,13 +721,13 @@ describe("popup import — Enter runs the action the bar offers", () => {
 		holder.flow.nameFieldState.value = "shown"
 		finishWithErrors()
 		const w = await mountImport()
-		nameInput(w).dispatchEvent(enterKey())
+		enterOn(nameInput(w))
 		await flushPromises()
 		expect(holder.flow.continueImport).toHaveBeenCalledTimes(1)
 
 		holder.flow.isRetryingAccountState.value = true
 		await flushPromises()
-		nameInput(w).dispatchEvent(enterKey())
+		enterOn(nameInput(w))
 		await flushPromises()
 		expect(holder.flow.continueImport).toHaveBeenCalledTimes(1)
 	})

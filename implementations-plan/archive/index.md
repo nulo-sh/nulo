@@ -321,6 +321,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [ui-followups-p18](ui-followups-p18/plan.md) — completed — the last outline-grey text moved to secondary (#363), store art regenerated after the owner signed it (#364), the tx fee row's hover fade removed
 - [ui-leftovers-1](ui-leftovers-1/plan.md) — completed — decision page 35's six picks: a display-only token hero, a selectable header address, the in-flight dApp chip, Holdings' unavailable state, 6 s action toasts, a large dApp transfer's app chip under its direction
 - [ui-leftovers-2](ui-leftovers-2/plan.md) — completed — decision page 39's two picks: a nameless dApp keeps its chip when its call ends, and Holdings' total waits for the first price answer
+- [unit-flake-1](unit-flake-1/plan.md) — completed — unit-test events sent past Vue's attach-time guard: #895's reopen press and 23 tests with the same cause; one `sendEvent` helper and a CLAUDE.md rule (#895)
 - [unserved-chain-connect](unserved-chain-connect/plan.md) — completed — a connection to a chain the profile has no network for is refused, and the wallet says so
 - [ux-cleanup-arc](ux-cleanup-arc/plan.md) — completed in part — five small fixes for user-facing rough edges
 - [ux-feedback](ux-feedback/plan.md) — completed — a user-testing proposal built as five batches on one stack
@@ -365,3 +366,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [egress-flake-1](egress-flake-1/plan.md) — completed — a reply to a paused request its worker's stop cancelled (`Invalid InterceptionId`) is no interception failure (#857)
 - [tx-record-1](tx-record-1/plan.md) — completed — a dApp send's failed estimate keeps its class (#820); a send ended in its approval window reads how it ended, Reject and the X "You rejected", a lock as a lock (#828, P60-02 B); a transaction records who chose its fee and the Fee method row names it (#821); #871 #872 known limits
 - [token-skeleton-1](token-skeleton-1/plan.md) — completed — the Register token card as labelled Symbol, Name and Decimals rows with grey bars while it reads (#850, P66-02 B; #897 open, #898 a known limit)
+- [log-warn-contrast-1](log-warn-contrast-1/plan.md) — completed — the logs window's light WARN lines take `--txt-warning`, 5.42:1 on their tint, gated in both themes (#887); known limits #900 #901
