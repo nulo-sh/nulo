@@ -20,6 +20,7 @@ import {
 	AccountIntegrityBlockedRepository,
 	AccountIntegrityVerifiedStampRepository,
 } from "@/wallet/services/account-integrity/blocked-repository"
+import { readSeedOffers } from "@/wallet/services/network/seed-offers"
 import { RestorePendingRepository } from "@/wallet/services/profile/restore-pending-repository"
 import { TombstoneRepository } from "@/wallet/services/profile/tombstone-repository"
 import { StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
@@ -146,6 +147,10 @@ const RAW_REPOSITORY_READS: Partial<Record<StoredShapeName, (area: StorageArea, 
 	staleNetworks: (area, id) => new StaleNetworkRepository(area).getRecord(id),
 	networkReset: (area, id) => new StaleNetworkRepository(area).getJournal(id),
 	networkResetDone: async (area, id) => (await new StaleNetworkRepository(area).takeNotice(id)) ?? undefined,
+	networkSeeded: async (area, id) => {
+		const record = await readSeedOffers(area, id)
+		return record.kind === "valid" ? record.value : undefined
+	},
 }
 
 /** The repositories take a full area; a decode reads and removes, and never clears or listens. */

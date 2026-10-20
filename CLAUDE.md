@@ -64,6 +64,7 @@ Any change to what a user sees — a screen's layout, its copy, which rows it sh
 - **Wire-shaped fixtures for dApp-facing surfaces.** A component test for anything that renders dApp data (the execute / connect / sign windows) feeds at least one fixture shaped as the wire carries it — `aztec_sendTx` arguments are `0x` + 64 hex fields, never `5n` — so a rendering that only works on friendly test values cannot pass.
 - **Screenshots close the loop.** A PR that changes a popup surface attaches a screenshot or artifact of the result; the smoke e2e counts rows, it does not read them.
 - **No em dash joins two clauses in user-facing copy.** A full stop does; the empty-value "—" stays. `apps/extension/src/utils/copy-dash-ban.test.ts` fails on the forms it can read (string and template literals, template text and attributes, outside log calls), and its header lists the ones it cannot; text no screen shows, or an empty value inside a label, goes on its reviewed list with a reason.
+- **Error and refusal text is `txt-danger`, never `--red`**, which reads 3.56:1 on the light page; `red` paints glyphs, fills and borders. `apps/extension/src/utils/red-text-ban.test.ts` fails on a `color`, class or style naming red on anything but a glyph, and on a stylesheet `color` naming `--red`; large text, a glyph or a recorded decision goes on its reviewed list with a reason.
 
 ## Tooltips and the glossary
 

@@ -135,6 +135,7 @@ describe("slot-for-executeSendTransaction", () => {
 				pendingPublicAuthwits: [],
 			})) as never,
 			addTransaction: vi.fn(async () => ({})) as never,
+			protocolSponsorAddress: vi.fn(async () => undefined),
 			recordPendingAuthwits: vi.fn(async () => {}) as never,
 			noteSent: () => {},
 			answers: {} as never,

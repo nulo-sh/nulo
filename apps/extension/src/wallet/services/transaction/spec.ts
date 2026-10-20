@@ -33,6 +33,16 @@ export enum TxExecutionResult {
 	BothReverted,
 }
 
+export const FEE_CHOICES = ["wallet", "app", "app_protocol_sponsor"] as const
+
+/**
+ * Who chose how a transaction's fee was paid: the person in the wallet, or the app through a fee
+ * payment it supplied itself. `app_protocol_sponsor` is the app's pick paid by the canonical
+ * SponsoredFPC, matched by the address the wallet derives when it writes the row, never by a
+ * function name alone.
+ */
+export type FeeChoice = (typeof FEE_CHOICES)[number]
+
 /** Full transaction call from UI/DApp interaction. */
 export type TxCall = {
 	/** Contract address. */
@@ -148,6 +158,8 @@ export type Tx = {
 	/** The speed a Send-page send was priced at; a queued send's fee cap is drawn only from a send of
 	 *  the same speed. */
 	priorityLevel?: PriorityLevel
+	/** See {@link FeeChoice}. Absent on a row written before the wallet recorded it. */
+	feeChoice?: FeeChoice
 	/** Error message, if some. */
 	error?: string
 	/** Set by this wallet's sync worker on a row it saw mined below Finalized, until the finalized
@@ -213,6 +225,8 @@ export const TxSchema: z.ZodType<Tx> = z.object({
 		.optional()
 		.catch(undefined)
 		.describe("anything else reads as absent"),
+	// An unknown chooser reads as none, so the row keeps the label it had before the field existed.
+	feeChoice: z.enum(FEE_CHOICES).optional().catch(undefined).describe("anything else reads as absent"),
 	error: z.string().optional(),
 	awaitingFinality: z.boolean().optional(),
 	submittedEndpointUrl: z.string().optional(),

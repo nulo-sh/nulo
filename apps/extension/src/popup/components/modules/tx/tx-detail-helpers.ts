@@ -41,10 +41,13 @@ export interface FeePaymentLabelInput {
 	calls?: { contract?: string; method?: string }[]
 	origin?: { type: number; name?: string }
 	feeSpender?: string
+	/** Who chose the fee (`Tx.feeChoice`); a row without a known one reads as it did before. */
+	feeChoice?: string
 }
 
 export function describeFeePaymentMethod(tx: FeePaymentLabelInput | undefined | null): string | null {
 	if (!tx) return null
+	if (tx.feeChoice === "app" || tx.feeChoice === "app_protocol_sponsor") return describeAppFee(tx)
 	const method = tx.feePaymentMethod
 	if (method === AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE) return "Public Fee Juice"
 	if (method === AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM) return "Public Fee Juice (with claim)"
@@ -59,6 +62,29 @@ function describeExternalFee(tx: FeePaymentLabelInput): string {
 	if (feeCall?.method === "pay_fee" && isPrivateFpc(feeCall.contract)) return "Private Fee Juice"
 	// A popup Send records only its transfer, so the FPC it paid through is its only fee trace.
 	if (!feeCall && tx.origin?.type === OriginType.UI) return isPrivateFpc(tx.feeSpender) ? "Private Fee Juice" : "Sponsored"
+	// The person's own pick names no app, whatever the row's origin.
+	if (tx.feeChoice === "wallet") return "External FPC"
 	if (tx.origin?.type === OriginType.DAPP) return `Set by ${tx.origin.name ?? "the app"}`
 	return "External FPC"
+}
+
+/** The app's own fee payment. Only a contract address proves a method: the protocol sponsor was
+ *  matched when the row was written, the PrivateFPC is matched here against its pinned address. */
+function describeAppFee(tx: FeePaymentLabelInput): string | null {
+	const method = tx.feePaymentMethod
+	const app = tx.origin?.name ?? "the app"
+	// The wallet's own entrypoint makes the claim to the sender, so its method is known whoever chose it.
+	if (method === AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM) return `Public Fee Juice (with claim), set by ${app}`
+	if (method === AccountFeePaymentMethodOptions.EXTERNAL) {
+		const proven = provenAppMethod(tx)
+		return proven ? `${proven}, set by ${app}` : `Set by ${app}`
+	}
+	if (method === AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE) return `Set by ${app}`
+	return method !== undefined ? `Unknown (${method})` : null
+}
+
+function provenAppMethod(tx: FeePaymentLabelInput): string | undefined {
+	if (tx.feeChoice === "app_protocol_sponsor") return "Sponsored"
+	const charged = tx.calls?.some((c) => (c.method === "pay_fee" || c.method === "mint_and_pay_fee") && isPrivateFpc(c.contract))
+	return charged ? "Private Fee Juice" : undefined
 }

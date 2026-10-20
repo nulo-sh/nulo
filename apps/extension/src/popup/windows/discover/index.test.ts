@@ -370,10 +370,10 @@ describe("discover popup — isReady race fix", () => {
 		loadPromiseResolve?.()
 		await flushPromises()
 		// Direct handler call to avoid stub click issues.
-		const vm = w.vm as unknown as { reject: () => Promise<void> }
-		await vm.reject()
+		const vm = w.vm as unknown as { reject: (end: "reject") => Promise<void> }
+		await vm.reject("reject")
 		await flushPromises()
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledWith("User rejected")
+		expect(rejectViaInteractionServiceMock).toHaveBeenCalledWith("User rejected", "reject")
 	})
 
 	test("12. requestId set but payload state half-loaded → Allow still disabled (REGRESSION CHECK)", async () => {

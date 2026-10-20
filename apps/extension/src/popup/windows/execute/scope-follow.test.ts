@@ -206,7 +206,7 @@ const open = async (operations: unknown[]) => {
 const banner = () => w!.find('[data-testid="execute-scope-banner"]')
 const bannerText = () => ({ title: w!.find('[data-testid="banner-title"]').text(), body: w!.find('[data-testid="banner-desc"]').text() })
 const action = () => w!.find('[data-testid="execute-scope-action-btn"]')
-type ExecVm = { approve: () => Promise<void>; reject: () => Promise<void>; processingError?: { title: string } }
+type ExecVm = { approve: () => Promise<void>; reject: (end: "reject") => Promise<void>; processingError?: { title: string } }
 const vm = () => w!.vm as unknown as ExecVm
 const accountWrites = () => storageSetMock.mock.calls.map(([items]) => items["nulo:ui:activeAccount"])
 
@@ -344,7 +344,7 @@ describe("execute window — the follow after Confirm", () => {
 		w!.unmount()
 
 		await open([sendFrom(MAIN.address)])
-		await vm().reject()
+		await vm().reject("reject")
 		expect(accountWrites()).toEqual([])
 		w!.unmount()
 

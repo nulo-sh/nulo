@@ -574,7 +574,8 @@
 						]
 					}
 				],
-				"ambiguous": false
+				"ambiguous": false,
+				"feeChoice": "app"
 			}
 		},
 		{
@@ -1065,6 +1066,24 @@
 			"value": {
 				"networkId": "9e21b7f0",
 				"addressesMoved": false
+			}
+		},
+		{
+			"id": "networkSeeded.full",
+			"stamp": 0,
+			"shape": "networkSeeded",
+			"key": "nulo:core:network-seeded@3f9a2c71",
+			"value": {
+				"offered": ["custom", "devnet", "local", "mainnet", "testnet"]
+			}
+		},
+		{
+			"id": "networkSeeded.minimal",
+			"stamp": 0,
+			"shape": "networkSeeded",
+			"key": "nulo:core:network-seeded@b04e6d18",
+			"value": {
+				"offered": []
 			}
 		},
 		{
