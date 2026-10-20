@@ -115,6 +115,7 @@ Per `implementations-plan/README.md` § Post-implementation standard at `eb0dd17
 - **Final fresh Codex pass** (`conditional approve`): the red/green gate could not fail on (c) as written (accepted: keep the class, revert the behaviour); id-clash wording needs "when no credential match exists" (accepted); onboarding's profile may be locked, not open (accepted, Inferences and OA-1); add a readable row holding another credential to (c) (accepted). Reorder confirmed safe: both orders refuse `I ∨ C` before any write, under the same lock, independent of `allowDuplicate`. Resumed on the fixes: `approve`, no new regression.
 - **Fix loop, round 1** (Codex session `01a15736-35e9-74b2-9f11-5caae22d0dab`, gpt-6.1-sol high, over `git diff origin/dev...HEAD`): 0 material; two narration comments (`profile-flow-notices.ts`, the page test's helper), removed. **Opus diff review** beside it: clean; nit taken: test (a) holds a second profile so it proves the matched row is the one named; nit declined: `notifyImportFailed`'s doc tail states why the parameter exists.
 - **Fix loop, round 2** (same Codex session, resumed on the fix diff): `clean`. Converged.
+- **Fix loop, round 3** (same Codex session, resumed after the sign-off on option B's words, their pins and the corner trace): `clean`; the trace and its five `notificationStore.create` callers confirmed.
 
 ## Seeds
 
