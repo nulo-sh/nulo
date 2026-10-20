@@ -1,5 +1,5 @@
 #!/bin/sh
-# Runs only the tools this worktree installed; without them it stops rather than look anywhere else.
+# Git starts hooks at the worktree root. commitlint must come from that worktree's install; before it exists, refuse.
 if [ ! -f node_modules/.bin/commitlint ]; then
 	echo 'commit-msg: commitlint is not installed in this worktree. Run bun install first.' >&2
 	exit 1

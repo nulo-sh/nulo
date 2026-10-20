@@ -1,7 +1,8 @@
 /**
  * The git hooks run the worktree's installed Biome and commitlint on Bun and, before `bun install`,
- * refuse with one line while running nothing. No hook, package script or root script calls a runner
- * that can fetch a package from npm.
+ * refuse with one line while running nothing. No hook, package script or root script names a runner
+ * that can fetch a package from npm (`bunx`, `bun x`, `bun create`, `npx`), in shell text or as a
+ * spawn's arguments.
  */
 import { afterAll, describe, expect, test } from "bun:test"
 import { spawnSync } from "node:child_process"
@@ -34,8 +35,8 @@ const GIT_CONFIG = [
 	"-c",
 	"user.email=fixture@example.invalid",
 ]
-/** The runner pattern `release-integrity.test.ts` refuses in its clean jobs, without the installs. */
-const RUNNER = /\bbunx\b|\bbun\s+(-\S+\s+)*(x|create)\s|\bnpx\b/
+/** `release-integrity.test.ts`'s runner pattern without the installs, plus a spawn's `"bun", "x"` arguments. */
+const RUNNER = /\bbunx\b|\bbun\s+(-\S+\s+)*(x|create)\s|\bnpx\b|(execPath|"bun"),\s*\[?"(x|create)"/
 
 interface Fixture {
 	dir: string
@@ -65,7 +66,7 @@ function git(fx: Fixture, ...args: string[]): void {
 	if (run.status !== 0) throw new Error(`git ${args.join(" ")}: ${run.stderr}`)
 }
 
-/** A repo holding only `hook`, a staged file in `sub/`, and sentinels that record any call and fail. */
+/** Only the hook under test: a pre-commit in front of commit-msg would refuse first and mask it. */
 function fixture(hook: Hook, sentinels: string[], body = readFileSync(join(ROOT, ".githooks", hook), "utf8")): Fixture {
 	const dir = mkdtempSync(join(tmpdir(), "nulo-githooks-"))
 	made.push(dir)
@@ -95,7 +96,6 @@ function recorded(fx: Fixture): string[] {
 	}
 }
 
-/** An installed launcher stand-in that records its arguments and exits with `TOOL_EXIT`. */
 function install(fx: Fixture, hook: Hook): void {
 	const tool = TOOL[hook]
 	const line = `${tool} \${process.argv.slice(2).join(" ")}\n`
@@ -178,7 +178,24 @@ describe("runners", () => {
 		}
 	})
 
-	test("no hook, package script or root script calls a runner that can fetch", () => {
+	test("the runner pattern sees each spelling of a runner and no installed launcher", () => {
+		const runners = [
+			"bunx biome check",
+			"bun x biome check",
+			"bun --bun x biome check",
+			"bun create vite app",
+			"npx tsc",
+			'spawnSync("bunx", ["biome"])',
+			'spawnSync("bun", ["x", "biome"])',
+			'spawnSync(process.execPath, ["x", "biome"])',
+			'Bun.spawnSync(["bun", "x", "biome"])',
+		]
+		const launchers = ["bun --no-install ./node_modules/.bin/biome check", 'spawnSync(process.execPath, ["--no-install", BIOME])']
+		expect(runners.filter((text) => !RUNNER.test(text))).toEqual([])
+		expect(launchers.filter((text) => RUNNER.test(text))).toEqual([])
+	})
+
+	test("no hook, package script or root script names a runner that can fetch", () => {
 		const sources = tracked(".githooks", "scripts")
 			.filter((path) => !/\.(test\.ts|md)$/.test(path))
 			.map((path) => [path, readFileSync(join(ROOT, path), "utf8")] as const)

@@ -34,7 +34,7 @@ import {
 } from "./scan"
 
 const CATEGORY_PREFIX = "lint/complexity/"
-/** The root devDependency's launcher, run on Bun: the copy `bun.lock` pins, never one resolved elsewhere. */
+/** This checkout's installed launcher, run on Bun; never one found through the working directory, `PATH` or a runner. */
 const BIOME = join(import.meta.dir, "..", "..", "node_modules", ".bin", "biome")
 const MANIFEST_PATH = "scripts/complexity-baseline/manifest.json"
 
