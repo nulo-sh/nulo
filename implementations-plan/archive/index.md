@@ -365,3 +365,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [egress-flake-1](egress-flake-1/plan.md) — completed — a reply to a paused request its worker's stop cancelled (`Invalid InterceptionId`) is no interception failure (#857)
 - [tx-record-1](tx-record-1/plan.md) — completed — a dApp send's failed estimate keeps its class (#820); a send ended in its approval window reads how it ended, Reject and the X "You rejected", a lock as a lock (#828, P60-02 B); a transaction records who chose its fee and the Fee method row names it (#821); #871 #872 known limits
 - [token-skeleton-1](token-skeleton-1/plan.md) — completed — the Register token card as labelled Symbol, Name and Decimals rows with grey bars while it reads (#850, P66-02 B; #897 open, #898 a known limit)
+- [capture-hang-1](capture-hang-1/plan.md) — completed — capture mode shows the wallet tab before its shot and refuses a page that is not shown (#885)
