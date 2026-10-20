@@ -19,6 +19,7 @@ status: completed 2026-10-19; delivered in #877
 - **Status:** completed. #877 closes #870, #863 and #746; its merge into `dev` closes the plan.
 - **Shipped:** Send's amount card says "More than your balance" under an amount above a balance the wallet read (P64-02 B), last in the card, in `--txt-danger`, `role="alert"`, with `aria-invalid` and `aria-describedby` on the shown input (D5); a missing or unreadable balance is `balanceUnknown`, and a row never synced shows no line (D3). A balance falling below the amount clears the fee row to "Fee estimated after simulation" and cancels an estimate still running (P64-01 B, D6). The restore warning's held sentence ends "Turn on Developer Mode in Settings to add a network." (P61-03 B). Pictures in `screenshots/`.
 - **Owner asks:** OA-1 decided after delivery, under the owner's accessibility delegation ("for accessibility questions / rings, etc. decide yourself", the orchestrator, 2026-10-19): the line is `--txt-danger`, 6.00:1 light and 6.24:1 dark on its background (D4). OA-2 to OA-5 ship in their "what ships now" form ([OWNER-ASKS.md](OWNER-ASKS.md)); #877 stays a draft until the owner has seen the line and the asks, so a different answer amends it before the merge.
+- **Owner sign-off:** P69-04 A, "Ship it as built, edge cases included." (2026-10-20), on the line, the fee row and the restore sentence as pictured; OA-2 to OA-5 stand in the form they shipped.
 - **Dropped:** none.
 - **Known limits:** none.
 - **Open items:** none.
