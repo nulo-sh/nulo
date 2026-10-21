@@ -93,3 +93,38 @@ describe("e2e-token-seeds config (layer-1 fail-closed guard)", () => {
 		await expect(import("./config")).rejects.toThrow(/both are required|double opt-in/i)
 	})
 })
+
+/**
+ * The wallet clocks: a build without the flag gets no e2e values and no stamp, so its services keep
+ * their production defaults and the release grep has nothing to find.
+ */
+describe("e2e-wallet-clocks config", () => {
+	beforeEach(() => {
+		vi.resetModules()
+	})
+	afterEach(() => {
+		vi.unstubAllEnvs()
+		vi.resetModules()
+	})
+
+	test("unset → no e2e values, no build stamp", async () => {
+		vi.stubEnv("VITE_NULO_E2E_WALLET_CLOCKS", "")
+		const mod = await import("./config")
+		expect(mod.E2E_WALLET_CLOCKS).toBeNull()
+		expect(mod.E2E_WALLET_CLOCKS_BUILD_STAMP).toBeNull()
+	})
+
+	test("0, as the prover-ON build passes it → no e2e values, no build stamp", async () => {
+		vi.stubEnv("VITE_NULO_E2E_WALLET_CLOCKS", "0")
+		const mod = await import("./config")
+		expect(mod.E2E_WALLET_CLOCKS).toBeNull()
+		expect(mod.E2E_WALLET_CLOCKS_BUILD_STAMP).toBeNull()
+	})
+
+	test("1 → the e2e values and the build stamp", async () => {
+		vi.stubEnv("VITE_NULO_E2E_WALLET_CLOCKS", "1")
+		const mod = await import("./config")
+		expect(mod.E2E_WALLET_CLOCKS).toEqual({ incomingPollMs: 10_000, finalityReadMs: 10_000 })
+		expect(mod.E2E_WALLET_CLOCKS_BUILD_STAMP).toBe("NULO_E2E_WALLET_CLOCKS_BUILD_STAMP")
+	})
+})
