@@ -88,7 +88,9 @@ import { useToast } from "@/composables/toast"
 import { enterOn, nativeInput } from "../../../tests/helpers/credential-pins"
 import type { BackupSelection } from "@/utils/full-backup-helpers"
 import OnboardingProfileNameField from "../components/OnboardingProfileNameField.vue"
+import { doneRoute } from "../steps"
 import Import from "./import.vue"
+import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 
 const wrappers: VueWrapper[] = []
 
@@ -117,12 +119,10 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	profileApi.getProfiles.mockResolvedValue([])
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) },
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
 	})
+	installChromeStorage({}, { persist: false })
 })
 afterEach(() => {
 	for (const w of wrappers.splice(0)) w.unmount()
@@ -152,7 +152,7 @@ describe("onboarding import", () => {
 	test.each([
 		["activates", true],
 		["is left locked", false],
-	])("a phrase import that %s goes on to /onboarding/learn and opens no snack", async (_, activates) => {
+	])("a phrase import that %s goes on to /onboarding/done and opens no snack", async (_, activates) => {
 		bootstrap.bootstrapActiveProfile.mockResolvedValue(activates)
 		bootstrap.hydrateKnownProfile.mockResolvedValue(undefined)
 		useToast().closeToast()
@@ -165,7 +165,7 @@ describe("onboarding import", () => {
 		await flow.handleImportSeed()
 
 		expect(profileApi.importMnemonic).toHaveBeenCalledTimes(1)
-		expect(router.push).toHaveBeenCalledWith("/onboarding/learn")
+		expect(router.push).toHaveBeenCalledWith(doneRoute("import"))
 		expect(useToast().toast.value).toBeNull()
 	})
 
@@ -233,7 +233,7 @@ describe("onboarding import", () => {
 		)
 	})
 
-	test("Continue on the errors screen completes the imported profile and goes on to /onboarding/learn", async () => {
+	test("Continue on the errors screen completes the imported profile and goes on to /onboarding/done", async () => {
 		bootstrap.bootstrapActiveProfile.mockResolvedValue(true)
 		const w = await mountImport()
 		importFlow.api!.selectedImportOption.value = "full_backup"
@@ -251,7 +251,7 @@ describe("onboarding import", () => {
 		await flushPromises()
 
 		expect(bootstrap.bootstrapActiveProfile).toHaveBeenCalledWith({ id: "p9", name: "Imported", type: "password" })
-		expect(router.push).toHaveBeenCalledWith("/onboarding/learn")
+		expect(router.push).toHaveBeenCalledWith(doneRoute("import"))
 	})
 
 	test("a passkey whose profile is already here gets its own notice, not the authenticator one", async () => {

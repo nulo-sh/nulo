@@ -11,7 +11,7 @@
  * window so the user sees the reason, then auto-dismisses.
  */
 
-import { trimAddress } from "@/utils/string"
+import { dashIfBlank, trimAddress } from "@/utils/string"
 
 const props = defineProps({
 	op: {
@@ -32,7 +32,7 @@ const shortAddress = computed(() => {
 const hasName = computed(() => typeof props.op?.title === "string" && props.op.title.length > 0)
 
 const title = computed(() => {
-	if (hasName.value) return props.op.title
+	if (hasName.value) return dashIfBlank(props.op.title)
 	return shortAddress.value || "Token"
 })
 

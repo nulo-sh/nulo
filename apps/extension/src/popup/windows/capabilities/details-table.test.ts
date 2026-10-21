@@ -12,7 +12,15 @@ const KNOWN = [
 	{ address: TOKEN, name: "Test USDC" },
 ]
 
-const row = (fields: Partial<DetailsRow>): DetailsRow => ({ simulate: [], add: false, transact: [], ...fields })
+const row = (fields: Partial<DetailsRow>): DetailsRow => ({
+	simulate: [],
+	add: false,
+	transact: [],
+	details: false,
+	events: false,
+	code: false,
+	...fields,
+})
 const sim = (transactions?: unknown, utilities?: unknown) => ({
 	type: "simulation",
 	...(transactions ? { transactions: { scope: transactions } } : {}),
@@ -100,17 +108,66 @@ describe("the Details table", () => {
 		expect(buildDetailsTable([register([A, B, TOKEN])], []).label).toBe("3 contracts")
 	})
 
-	test("contract details, data, accounts and contract classes feed no column", () => {
+	test("Details reads canGetMetadata with or without canRegister, and Add only canRegister", () => {
 		const table = buildDetailsTable(
 			[
 				{ type: "contracts", contracts: [A], canGetMetadata: true },
-				{ type: "data", addressBook: true, privateEvents: { contracts: [B] } },
-				{ type: "accounts", canGet: true, canCreateAuthWit: true, accounts: [] },
-				{ type: "contractClasses", classes: [TOKEN], canGetMetadata: true },
+				{ type: "contracts", contracts: [B], canRegister: true, canGetMetadata: true },
+				register([TOKEN]),
 			],
 			KNOWN,
 		)
-		expect(table).toEqual({ known: [], unknown: [], anyContract: null, label: "0 contracts" })
+		expect(table.unknown).toEqual([row({ address: A, details: true }), row({ address: B, add: true, details: true })])
+		expect(table.known).toEqual([row({ address: TOKEN, name: "Test USDC", add: true })])
+	})
+
+	test("Events reads the private-events list, and any contract marks the Any contract row", () => {
+		const listed = buildDetailsTable([{ type: "data", addressBook: true, privateEvents: { contracts: [B, TOKEN] } }], KNOWN)
+		expect(listed.unknown).toEqual([row({ address: B, events: true })])
+		expect(listed.known).toEqual([row({ address: TOKEN, name: "Test USDC", events: true })])
+		const any = buildDetailsTable(
+			[
+				{ type: "data", privateEvents: { contracts: "*" } },
+				{ type: "contracts", contracts: "*", canGetMetadata: true },
+			],
+			[],
+		)
+		expect(any.anyContract).toEqual(row({ name: "Any contract", events: true, details: true }))
+		expect(any.label).toBe("any contract")
+	})
+
+	test("Code marks a class row per listed class, never named, and any class marks the Any contract row", () => {
+		const classes = buildDetailsTable(
+			[{ type: "contractClasses", classes: [TOKEN, A, A.toUpperCase().replace("0X", "0x")], canGetMetadata: true }],
+			KNOWN,
+		)
+		expect(classes.classes).toEqual([row({ address: TOKEN, code: true }), row({ address: A, code: true })])
+		expect([classes.known, classes.unknown, classes.anyContract]).toEqual([[], [], null])
+		const any = buildDetailsTable([{ type: "contractClasses", classes: "*", canGetMetadata: true }], [])
+		expect([any.classes, any.anyContract]).toEqual([[], row({ name: "Any contract", code: true })])
+		expect(buildDetailsTable([{ type: "contractClasses", classes: [A] }], []).classes).toEqual([])
+	})
+
+	test("the label counts contracts, not classes; with no contract it counts the classes", () => {
+		const one = { type: "contractClasses", classes: [A], canGetMetadata: true }
+		expect(buildDetailsTable([one, register([B])], []).label).toBe("1 contract")
+		expect(buildDetailsTable([one], []).label).toBe("1 contract class")
+		expect(buildDetailsTable([{ ...one, classes: [A, B] }], []).label).toBe("2 contract classes")
+	})
+
+	test("accounts and the address book feed no column", () => {
+		const table = buildDetailsTable(
+			[
+				{ type: "data", addressBook: true },
+				{ type: "accounts", canGet: true, canCreateAuthWit: true, accounts: [] },
+			],
+			KNOWN,
+		)
+		expect(table).toEqual({ known: [], unknown: [], classes: [], anyContract: null, label: "0 contracts" })
+	})
+
+	test("a capability type named like an object property feeds nothing", () => {
+		expect(buildDetailsTable([{ type: "__proto__" }, { type: "constructor" }], []).label).toBe("0 contracts")
 	})
 
 	test("an address-book request after Allow still lists every contract the app holds", () => {
@@ -181,11 +238,6 @@ describe("the Details table and the scope check", () => {
 describe("the Details table's object check accepts arrays", () => {
 	test("an array carrying a transaction grant's fields reaches the table", () => {
 		const disguised = Object.assign([], { type: "transaction", scope: "*" })
-		expect(buildDetailsTable([disguised], []).anyContract).toEqual({
-			name: "Any contract",
-			simulate: [],
-			add: false,
-			transact: ["Any function"],
-		})
+		expect(buildDetailsTable([disguised], []).anyContract).toEqual(row({ name: "Any contract", transact: ["Any function"] }))
 	})
 })

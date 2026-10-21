@@ -20,6 +20,7 @@ import {
 	humanizeErrorKind,
 	journalCallTitle,
 	journalCardOriginLabel,
+	journalCardTitle,
 	type JournalTerminalDisplay,
 	journalTerminalDisplay,
 	type SendOutcome,
@@ -385,6 +386,12 @@ describe("buildJournalTerminalCardProps", () => {
 		expect(props).toMatchObject({ title: "Transfer", amount: "1.5", amountSymbol: "" })
 	})
 
+	test("a token whose symbol is only spaces titles the card with the empty-value dash and keeps the spaces beside the amount", () => {
+		const ctx = { tokenById: () => ({ symbol: "   ", decimals: 6, hasDecimals: true }), tokens: [] }
+		expect(buildJournalTerminalCardProps(transferRecord(), ctx)).toMatchObject({ title: "—", amount: "1.5", amountSymbol: "   " })
+		expect(journalCardTitle(transferRecord(), ctx)).toBe("—")
+	})
+
 	test("the transfer-type chip reads type 0 (private) and is absent without a type", () => {
 		expect(buildJournalTerminalCardProps(transferRecord({ transferType: 0 }), TEST_CTX)?.transferTypeLabel).toBe("Private → Private")
 		expect(buildJournalTerminalCardProps(transferRecord(), TEST_CTX)?.transferTypeLabel).toBeNull()
@@ -458,6 +465,15 @@ const CHECKED: [SendOutcome, SendCheckOutcome | undefined, JournalTerminalDispla
 		{
 			label: "Won't go through",
 			context: "This transaction expired before the network included it. No fee was paid, and you can send it again.",
+		},
+	],
+	[
+		"refused",
+		"refused",
+		{ state: "failed", subtitle: "Refused by the network", icon: "square-cross", color: "red" },
+		{
+			label: "Refused by the network",
+			context: "The network refused this transaction, so it won't go through. Check the details before sending it again.",
 		},
 	],
 ]

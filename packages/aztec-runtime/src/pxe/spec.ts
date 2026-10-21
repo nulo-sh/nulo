@@ -55,10 +55,8 @@ export type Methods = {
 	 *  used by note-rendering callers to label fields. Only the bundled
 	 *  standards have entries; absent entries fall back to raw rendering. */
 	getNoteSchemas(): Record<string, Record<string, NoteSchema>>
-	/** `maxTaggingSources`, when given, refuses a sender or account that is not yet one of the chain's
-	 *  distinct tagging sources once they number that many (`PxeTaggingSourcesFullError`). */
-	registerAccount(network: NetworkInfo, secretKey: Fr, partialAddress: PartialAddress, maxTaggingSources?: number): CompleteAddress
-	registerSender(network: NetworkInfo, address: AztecAddress, maxTaggingSources?: number): AztecAddress
+	registerAccount(network: NetworkInfo, secretKey: Fr, partialAddress: PartialAddress): CompleteAddress
+	registerSender(network: NetworkInfo, address: AztecAddress): AztecAddress
 	getSenders(network: NetworkInfo): AztecAddress[]
 	removeSender(network: NetworkInfo, address: AztecAddress): void
 	getRegisteredAccounts(network: NetworkInfo): CompleteAddress[]

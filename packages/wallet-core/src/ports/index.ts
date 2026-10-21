@@ -13,7 +13,7 @@
 export type { Unsubscribe } from "./types"
 export type { ClockPort, TimerHandle } from "./clock-port"
 export type { StoragePort, StorageArea, StorageEntries, StorageChanges } from "./storage-port"
-export type { RuntimePort, MessagePortLike, MessageSender, MessageListener } from "./runtime-port"
+export type { RuntimePort, MessagePortLike, MessageSender, MessageListener, ExtensionContextInfo } from "./runtime-port"
 export type { WindowPort, CreatedWindow, CreateWindowOptions, UpdateWindowOptions, WindowBounds } from "./window-port"
 export type { AlarmsPort, AlarmCreateOptions, AlarmEvent } from "./alarms-port"
 export type { BrowserApi } from "./browser-api"

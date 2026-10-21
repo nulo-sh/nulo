@@ -7,8 +7,8 @@
  * their per-window order, the `init()` body, and the window-local `reject()`, whose guard clauses
  * differ between windows on purpose.
  *
- * - `closeWindow(true)` and `completeInteraction()` remove the `beforeunload` listener, so a decided
- *   interaction is never rejected again on unload; `closeWindow()` with no argument leaves it, so an
+ * - `closeWindow(true)` removes the `beforeunload` listener, so a decided interaction is never
+ *   rejected again on unload; `closeWindow()` with no argument leaves it, so an
  *   overlay dismiss delivers the rejection through the unload event.
  * - Every rejection names the window's end: the unload `close`, the profile guard `lock` or
  *   `switch`, the window's own Reject `reject`.
@@ -60,11 +60,10 @@ export interface UseDappApprovalWindowResult {
 	/** The unmount-hook body. The window calls this from its own unmount hook. */
 	dispose: () => void
 	closeWindow: (interactionCompleted?: boolean) => void
-	/** Sends the window's end and closes the window once the wallet has taken it, the send failed, or
-	 *  {@link END_ACK_TIMEOUT_MS} passed. No unload repeats the end. */
+	/** Sends what the wallet must take before the window goes and closes the window once the wallet
+	 *  has taken it, the send failed, or {@link END_ACK_TIMEOUT_MS} passed. No unload repeats the
+	 *  window's end. */
 	endAndClose: (send: () => Promise<unknown>) => Promise<void>
-	/** The interaction is decided: an unload no longer rejects it, and the window stays open. */
-	completeInteraction: () => void
 	/** Register on the profile service's `onActiveProfileChanged` (pre-mount, as before). */
 	onActiveProfileChanged: (profile?: ProfileInfo) => void
 	stripStatus: ComputedRef<"ready" | "loading" | "cancelled">
@@ -113,15 +112,15 @@ export function useDappApprovalWindow(options: UseDappApprovalWindowOptions): Us
 		return "ready"
 	})
 
-	const completeInteraction = () => window.removeEventListener("beforeunload", onBeforeUnload)
+	const detachUnload = () => window.removeEventListener("beforeunload", onBeforeUnload)
 
 	const closeWindow = (interactionCompleted?: boolean) => {
-		if (interactionCompleted) completeInteraction()
+		if (interactionCompleted) detachUnload()
 		closeCurrentWindow()
 	}
 
 	const endAndClose = async (send: () => Promise<unknown>) => {
-		completeInteraction()
+		detachUnload()
 		let timer: ReturnType<typeof setTimeout> | undefined
 		const bound = new Promise<void>((resolve) => {
 			timer = setTimeout(resolve, END_ACK_TIMEOUT_MS)
@@ -166,7 +165,6 @@ export function useDappApprovalWindow(options: UseDappApprovalWindowOptions): Us
 		dispose,
 		closeWindow,
 		endAndClose,
-		completeInteraction,
 		onActiveProfileChanged,
 		stripStatus,
 		processingError,

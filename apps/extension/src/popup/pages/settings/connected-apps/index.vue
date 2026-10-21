@@ -151,7 +151,11 @@ onBeforeUnmount(() => {
 
 					<Flex direction="column" gap="2" wide :class="$style.row_text">
 						<span :id="`${rowIdBase}-${i}`" :class="$style.row_name">{{ ds.dappMetadata.name }}</span>
-						<span v-if="ds.capabilityGrants?.length" :class="$style.row_grants">
+						<!-- Establishment writes the hash, so a row without one was allowed and never connected. -->
+						<span v-if="!ds.verificationHash" data-testid="connected-app-row-not-connected" :class="$style.row_grants">
+							Allowed. Not connected yet.
+						</span>
+						<span v-else-if="ds.capabilityGrants?.length" :class="$style.row_grants">
 							{{ formatGrantSummary(ds.capabilityGrants) }}
 						</span>
 					</Flex>

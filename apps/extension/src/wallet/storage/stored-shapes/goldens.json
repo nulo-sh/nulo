@@ -340,6 +340,45 @@
 			}
 		},
 		{
+			"id": "journal.refused",
+			"stamp": 0,
+			"shape": "journal",
+			"key": "nulo:journal@7c2e95d04ab813f6",
+			"value": {
+				"id": "7c2e95d04ab813f6",
+				"kind": "transfer",
+				"origin": "popup",
+				"profileId": "3f9a2c71",
+				"progress": {
+					"stage": "failed",
+					"from": "submitting",
+					"txHash": "0x1e40c3a9d7b25f6084e1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7",
+					"submittedEndpointUrl": "https://aztec-testnet.example.org",
+					"expiry": {
+						"timestamp": 1790892000,
+						"nullifier": "0x0b7d2e4f6a8c1e3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a"
+					},
+					"check": "refused"
+				},
+				"error": {
+					"kind": "transfer",
+					"message": "Invalid tx: Existing nullifier",
+					"normalizedRaw": "{\"name\":\"Error\",\"message\":\"Invalid tx: Existing nullifier\"}"
+				},
+				"terminalAt": 1790805600000,
+				"attempts": 1,
+				"createdAt": 1790805540000,
+				"updatedAt": 1790805605000,
+				"accountAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+				"networkId": "e41b9d02",
+				"tokenId": 1,
+				"amountRaw": "12500000",
+				"recipientAddress": "0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+				"contractAddress": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+				"transferType": 0
+			}
+		},
+		{
 			"id": "journal.minimal",
 			"stamp": 0,
 			"shape": "journal",
@@ -1274,6 +1313,23 @@
 			}
 		},
 		{
+			"id": "dappRegistrations.full",
+			"stamp": 0,
+			"shape": "dappRegistrations",
+			"key": "nulo:core:dappRegistrations@3f9a2c71",
+			"value": {
+				"3415328944": { "total": 37, "apps": { "https://app.example": 32, "https://swap.example": 5 } },
+				"1": { "total": 1, "apps": { "http://localhost:5173": 1 } }
+			}
+		},
+		{
+			"id": "dappRegistrations.minimal",
+			"stamp": 0,
+			"shape": "dappRegistrations",
+			"key": "nulo:core:dappRegistrations@b04e6d18",
+			"value": { "0": { "total": 0, "apps": {} } }
+		},
+		{
 			"id": "activeNetwork.full",
 			"stamp": 0,
 			"shape": "activeNetwork",
@@ -1502,6 +1558,104 @@
 				"networkIds": ["5a7f03c6"],
 				"leaseUntil": 0
 			}
+		},
+		{
+			"id": "uiGetStartedPhraseSaved.full",
+			"stamp": 0,
+			"shape": "uiGetStartedPhraseSaved",
+			"key": "nulo:ui:getStartedPhraseSaved@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedPhraseSaved.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedPhraseSaved",
+			"key": "nulo:ui:getStartedPhraseSaved@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedBackupSaved.full",
+			"stamp": 0,
+			"shape": "uiGetStartedBackupSaved",
+			"key": "nulo:ui:getStartedBackupSaved@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedBackupSaved.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedBackupSaved",
+			"key": "nulo:ui:getStartedBackupSaved@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedAztecOpened.full",
+			"stamp": 0,
+			"shape": "uiGetStartedAztecOpened",
+			"key": "nulo:ui:getStartedAztecOpened@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedAztecOpened.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedAztecOpened",
+			"key": "nulo:ui:getStartedAztecOpened@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedHidden.full",
+			"stamp": 0,
+			"shape": "uiGetStartedHidden",
+			"key": "nulo:ui:getStartedHidden@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedHidden.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedHidden",
+			"key": "nulo:ui:getStartedHidden@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedFeeJuiceHeld.full",
+			"stamp": 0,
+			"shape": "uiGetStartedFeeJuiceHeld",
+			"key": "nulo:ui:getStartedFeeJuiceHeld@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedFeeJuiceHeld.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedFeeJuiceHeld",
+			"key": "nulo:ui:getStartedFeeJuiceHeld@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiProfileImported.full",
+			"stamp": 0,
+			"shape": "uiProfileImported",
+			"key": "nulo:ui:profileImported@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiProfileImported.minimal",
+			"stamp": 0,
+			"shape": "uiProfileImported",
+			"key": "nulo:ui:profileImported@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiProfileNotFirst.full",
+			"stamp": 0,
+			"shape": "uiProfileNotFirst",
+			"key": "nulo:ui:profileNotFirst@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiProfileNotFirst.minimal",
+			"stamp": 0,
+			"shape": "uiProfileNotFirst",
+			"key": "nulo:ui:profileNotFirst@b04e6d18",
+			"value": true
 		}
 	]
 }

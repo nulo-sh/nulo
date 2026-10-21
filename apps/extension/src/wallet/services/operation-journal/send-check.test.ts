@@ -289,6 +289,130 @@ describe("SendCheck: the window's last read", () => {
 	})
 })
 
+describe("SendCheck: a refusal a later block rarely lifts", () => {
+	const refusedBy = (message: string, kind = "transfer") => ({ kind, message, normalizedRaw: null })
+	const EXISTING = refusedBy("Invalid tx: Existing nullifier")
+	const nearTheEnd = T0 - DROPPED_RESURRECTION_WINDOW_MS + 20_000
+
+	test("a Dropped first read writes refused, refreshes nothing, and the row is still read", async () => {
+		const h = makeHarness([failedRow({ error: EXISTING })])
+		h.getTxReceipt.mockResolvedValue(dropped())
+		await h.check.start()
+		await h.tick()
+		expect(h.journal.writes).toEqual([{ id: "op-1", check: "refused" }])
+		expect(h.balances.refreshAccountBalances).not.toHaveBeenCalled()
+		await h.tick()
+		expect(h.getTxReceipt).toHaveBeenCalledTimes(2)
+		expect(h.journal.writes).toHaveLength(1)
+	})
+
+	test("an expiry refusal is one too; a Pending read is not, and a later Dropped read is", async () => {
+		const h = makeHarness([failedRow({ error: refusedBy("Invalid tx: Invalid expiration timestamp") })])
+		h.getTxReceipt.mockResolvedValueOnce(pending()).mockResolvedValue(dropped())
+		await h.check.start()
+		await h.tick()
+		expect(h.journal.writes).toEqual([])
+		await h.tick()
+		expect(h.journal.writes).toEqual([{ id: "op-1", check: "refused" }])
+	})
+
+	test.each([
+		["a read that throws", (h: ReturnType<typeof makeHarness>) => h.getTxReceipt.mockRejectedValue(new Error("fetch failed"))],
+		[
+			"a node lookup that throws",
+			(h: ReturnType<typeof makeHarness>) => h.network.getSingleAttemptNodeForUrl.mockRejectedValue(new Error("refused")),
+		],
+		[
+			"a status that does not parse",
+			(h: ReturnType<typeof makeHarness>) => h.getTxReceipt.mockResolvedValue({ txHash: HASH, status: "gone" }),
+		],
+	])("%s is never Dropped: nothing is written", async (_label, arrange) => {
+		const h = makeHarness([failedRow({ error: EXISTING })])
+		arrange(h)
+		await h.check.start()
+		await h.tick(6)
+		expect(h.journal.writes).toEqual([])
+	})
+
+	test("a refused send that landed after all is written sent and refreshes the account", async () => {
+		const h = makeHarness([failedRow({ error: EXISTING })])
+		h.getTxReceipt.mockResolvedValueOnce(dropped()).mockResolvedValue(mined("proposed"))
+		await h.check.start()
+		await h.tick(2)
+		expect(h.journal.writes).toEqual([
+			{ id: "op-1", check: "refused" },
+			{ id: "op-1", check: "sent" },
+		])
+		expect((await h.journal.getOperation("op-1"))?.progress).toMatchObject({ check: "sent", inclusion: BLOCK })
+		expect(h.balances.refreshAccountBalances).toHaveBeenCalledWith(ACCOUNT)
+	})
+
+	test("a refused row with no recorded expiry, stored past the window, is unwatched at start, with no read", async () => {
+		const progress = { stage: "failed", from: "submitting", txHash: HASH, submittedEndpointUrl: URL, check: "refused" } as const
+		const h = makeHarness([failedRow({ error: EXISTING, terminalAt: T0 - DROPPED_RESURRECTION_WINDOW_MS, progress })])
+		await h.check.start()
+		await h.tick(3)
+		expect(h.network.getSingleAttemptNodeForUrl).not.toHaveBeenCalled()
+		expect(watched(h.check)).toBe(0)
+	})
+
+	test("a first read past the window writes unconfirmed, never refused", async () => {
+		const h = makeHarness([failedRow({ error: EXISTING, terminalAt: T0 - DROPPED_RESURRECTION_WINDOW_MS })])
+		h.getTxReceipt.mockResolvedValue(dropped())
+		await h.check.start()
+		await h.tick()
+		expect(h.journal.writes).toEqual([{ id: "op-1", check: "unconfirmed" }])
+	})
+
+	test("a Dropped read that settles past the window's end writes nothing; the next read writes unconfirmed", async () => {
+		const h = makeHarness([failedRow({ error: EXISTING, terminalAt: T0 - DROPPED_RESURRECTION_WINDOW_MS + 6_000 })])
+		h.getTxReceipt.mockImplementationOnce(async () => {
+			h.clock.advance(2_000)
+			return dropped()
+		})
+		h.getTxReceipt.mockResolvedValue(dropped())
+		await h.check.start()
+		await h.tick()
+		expect(h.getTxReceipt).toHaveBeenCalledTimes(1)
+		expect(h.journal.writes).toEqual([])
+		await h.tick(3)
+		expect(h.journal.writes).toEqual([{ id: "op-1", check: "unconfirmed" }])
+	})
+
+	test.each([
+		["a listed refusal (control)", "refused", failedRow({ error: EXISTING, terminalAt: nearTheEnd })],
+		[
+			"a row once mined, then pruned,",
+			"unconfirmed",
+			failedRow({
+				error: EXISTING,
+				progress: { stage: "failed", from: "submitting", txHash: HASH, submittedEndpointUrl: URL, checkSince: nearTheEnd },
+			}),
+		],
+		[
+			"a fee refusal",
+			"unconfirmed",
+			failedRow({ error: refusedBy("Invalid tx: Insufficient fee payer balance"), terminalAt: nearTheEnd }),
+		],
+		[
+			"an account initialized elsewhere",
+			"unconfirmed",
+			failedRow({
+				error: refusedBy("Another first transaction initialized this account", "duplicate_initialization"),
+				terminalAt: nearTheEnd,
+			}),
+		],
+	])("%s on Dropped reads ends %s", async (_label, outcome, row) => {
+		const h = makeHarness([row])
+		h.getTxReceipt.mockResolvedValue(dropped())
+		await h.check.start()
+		await h.tick(4)
+		expect(h.journal.writes).toEqual([{ id: "op-1", check: outcome }])
+		// Two reads each: a refusal the journal would refuse to record is never tried, so never re-read at once.
+		expect(h.getTxReceipt).toHaveBeenCalledTimes(2)
+	})
+})
+
 describe("SendCheck: where it dials", () => {
 	test("the receipt is read on the row's recorded endpoint, for the row's hash, never the active node", async () => {
 		const h = makeHarness()
@@ -598,6 +722,39 @@ describe("SendCheck: an expiry the finalized chain has passed", () => {
 		await h.tick(DROPPED_RECHECK_INTERVAL_MS / SEND_CHECK_TICK_MS)
 		expect(h.journal.writes).toEqual([{ id: "op-1", check: "expired" }])
 	})
+
+	test.each([
+		["absent at the finalized block", "expired", (_h: ReturnType<typeof makeHarness>) => {}],
+		[
+			"present, with a mined success receipt,",
+			"sent",
+			(h: ReturnType<typeof makeHarness>) => {
+				h.findLeavesIndexes.mockResolvedValue([{ data: 3n, l2BlockNumber: 4, l2BlockHash: finalizedAt(0).blockHash }])
+				h.getTxReceipt.mockResolvedValue(mined("proven"))
+			},
+		],
+	])(
+		"a refused row past its window is read only once its expiry passes: its nullifier %s writes %s",
+		async (_label, outcome, arrange) => {
+			const progress = {
+				stage: "failed",
+				from: "submitting",
+				txHash: HASH,
+				submittedEndpointUrl: URL,
+				expiry: EXPIRY,
+				check: "refused",
+			} as const
+			const h = makeHarness([failedRow({ terminalAt: T0 - 40 * 60_000, progress })])
+			arrange(h)
+			h.clock.setNow(EXPIRES_AT - 2 * SEND_CHECK_TICK_MS)
+			await h.check.start()
+			await h.tick()
+			expect(h.getBlockData).not.toHaveBeenCalled()
+			expect(h.getTxReceipt).not.toHaveBeenCalled()
+			await h.tick()
+			expect(h.journal.writes).toEqual([{ id: "op-1", check: outcome }])
+		},
+	)
 
 	test("a row with no recorded expiry is never read for one", async () => {
 		const h = makeHarness([unconfirmedRow(false)])

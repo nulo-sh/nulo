@@ -11,6 +11,8 @@ import DottedTerm from "@/components/composite/DottedTerm.vue"
 import { GLOSSARY } from "@/utils/glossary"
 import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { shownText } from "../../../../tests/helpers/shown-text"
+import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
+import { captureWindowDocument } from "@/utils/window-document"
 import OperationCard from "./OperationCard.vue"
 
 const mocks = vi.hoisted(() => ({
@@ -156,12 +158,14 @@ beforeEach(() => {
 	mocks.getGasBalances.mockReset().mockResolvedValue({ publicFeeJuice: "5000000000000000000", privateFeeJuice: null })
 	mocks.getFpcs.mockReset().mockResolvedValue([NULO_SPONSOR])
 	priceFake.reset(0.06)
+	captureWindowDocument("#/windows/execute?requestId=r1")
 })
 
 afterEach(() => {
 	mounted?.unmount()
 	mounted = undefined
 	config.global.plugins = []
+	captureWindowDocument("")
 })
 
 describe("OperationCard — who pays a wire-shaped transaction's fee", () => {
@@ -351,10 +355,26 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		expect(row(previewing).text()).toBe("Fee payment method set by Swap")
 		expect(waiting(previewing).exists()).toBe(false)
 		expect(row(previewing).attributes("aria-busy")).toBeUndefined()
-		expect(priceFake.refreshes()).toBe(0)
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([0, 0])
+	})
 
-		previewing.unmount()
-		await mountWith(undefined, { isEstimating: true })
+	test("the app's line and the fee card price from the cache, and neither a mount nor a reconnect asks for a refresh", async () => {
+		const line = await mountWith({ ...ESTIMATE, appPayerFunding: covered })
+		expect(figure(line).text()).toBe("About ~3.577824 FJ ($0.215); payment method set by Swap.")
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([1, 0])
+		line.unmount()
+
+		const card = await mountCard(sendTx({ feePayer: OWNER }))
+		expect(card.find('[data-testid="fee-estimate-usd"]').text()).toBe("($0.215)")
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([2, 0])
+		priceFake.reconnect()
+		await flushPromises()
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([3, 0])
+		card.unmount()
+
+		// The same card in a popup document, as Send mounts it: the zero above is not the fake's.
+		captureWindowDocument("")
+		await mountCard(sendTx({ feePayer: OWNER }))
 		expect(priceFake.refreshes()).toBe(1)
 	})
 
@@ -393,8 +413,61 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 			const w = await mountWith({ ...ESTIMATE, appPayerFunding: { address: APP_FPC, funded: false, provenShort } })
 			expect(figure(w).text()).toBe("About ~3.577824 FJ ($0.215); payment method set by Swap.")
 			expect(region(w).text()).toBe("This app's fee contract may not cover this fee right now.")
+			expect(row(w).find('[name="square-check"]').exists()).toBe(true)
 		},
 	)
+
+	describe("paid through the PrivateFPC", () => {
+		const privatePaid = () => ({ ...appPaid(), exec: { ...appPaid().exec, feePayer: PRIVATE_FPC_ADDRESS } })
+		const notice = (w: VueWrapper) => w.find('[data-testid="execute-op-private-fee-notice"]')
+		const NOTICE = "Your Private Fee Juice must cover this fee."
+		const check = (w: VueWrapper) => row(w).find('[name="square-check"]')
+
+		test("the estimate lands: no check, the person pays first, the app's method under it, and the neutral notice", async () => {
+			const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { op: privatePaid() })
+			expect(check(w).exists()).toBe(false)
+			expect(shownText(figure(w).element)).toBe("You pay about ~3.577824 FJ ($0.215) from Private Fee Juice method set by Swap")
+			expect(notice(w).text()).toBe(NOTICE)
+			expect(notice(w).find('[name="info"]').attributes("aria-hidden")).toBe("true")
+		})
+
+		test("estimating and after a failed estimate: the notice in both, the loading bar or the legend, and no check", async () => {
+			const estimating = await mountWith(undefined, { op: privatePaid(), isEstimating: true })
+			expect(waiting(estimating).findComponent(Skeleton).exists()).toBe(true)
+			expect(shownText(waiting(estimating).element)).toBe("You pay about from Private Fee Juice method set by Swap")
+			expect([check(estimating).exists(), notice(estimating).text()]).toEqual([false, NOTICE])
+			estimating.unmount()
+
+			const failed = await mountWith(undefined, { op: privatePaid() })
+			expect(legend(failed).text()).toBe("Fee payment method set by Swap")
+			expect([check(failed).exists(), notice(failed).text()]).toEqual([false, NOTICE])
+		})
+
+		test.each([true, false])("its pool reads short (proven: %s): no fee-contract line, the notice stays", async (provenShort) => {
+			const w = await mountWith(
+				{ ...ESTIMATE, appPayerFunding: { address: PRIVATE_FPC_ADDRESS, funded: false, provenShort } },
+				{ op: privatePaid() },
+			)
+			expect(region(w).text()).toBe("")
+			expect(w.find('[data-testid="execute-op-app-payer-short"]').exists()).toBe(false)
+			expect(notice(w).text()).toBe(NOTICE)
+		})
+
+		test("another app fee contract keeps today's card: the check, no notice", async () => {
+			const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered })
+			expect([check(w).exists(), notice(w).exists()]).toEqual([true, false])
+		})
+
+		test("an app's priority fee follows the method's line", async () => {
+			const w = await mountWith(
+				{ ...ESTIMATE, maxFee: "16000000000000000", priorityFee: "4000000000000000", appPayerFunding: covered },
+				{ op: privatePaid() },
+			)
+			expect(shownText(figure(w).element)).toBe(
+				"You pay about ~0.016 FJ (<$0.001) from Private Fee Juice method set by Swap. Includes a ~0.004 FJ (<$0.001) priority fee the app asked for.",
+			)
+		})
+	})
 })
 
 describe("OperationCard — a window that only reads the request draws its own fee block", () => {

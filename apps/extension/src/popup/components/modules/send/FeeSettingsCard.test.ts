@@ -15,6 +15,7 @@ import { config, flushPromises, mount } from "@vue/test-utils"
 import { createPinia } from "pinia"
 import { reactive } from "vue"
 import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
+import { type Deferred, deferred } from "@nulo/wallet-core/utils"
 
 const mocks = vi.hoisted(() => ({
 	getGasBalances: vi.fn(),
@@ -191,22 +192,6 @@ function stubChromeStorage() {
 		...(globalThis as any).chrome,
 		storage: { local },
 	}
-}
-
-/**
- * Helpers to control the deferred SW promises per test. We default to
- * resolved values; tests that need to drive the timing precisely
- * override before mounting and resolve manually.
- */
-type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void }
-function deferred<T>(): Deferred<T> {
-	let resolve!: (v: T) => void
-	let reject!: (e: unknown) => void
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
 }
 
 beforeEach(() => {

@@ -88,6 +88,8 @@ import { createSessionBaton } from "./session-baton"
 import { chainInfoToChainId, handleSessionEstablished } from "./session-established"
 import { wireSessionTeardown } from "./session-revocation"
 import { wireTabLifecycle } from "./tab-lifecycle"
+import { wireRestartPreparation } from "./restart-preparation"
+import type { TrackedWindowPort } from "@/wallet/services/window-manager/restart-ended-windows"
 import { bindLiveSession, type LiveSession } from "./live-session"
 import { MAX_PENDING_PER_SESSION, type VerificationHold, wireVerificationHold } from "./verification-hold"
 import { SessionHolders } from "./session-holders"
@@ -123,7 +125,7 @@ const SESSION_NO_LONGER_VALID = "Session no longer valid — reconnect"
 export function initWalletSdkHandler(
 	services: ServiceCollection,
 	logger: ILogger,
-	ports: { windows: WindowPort; clock: ClockPort },
+	ports: { windows: TrackedWindowPort; clock: ClockPort },
 ): BackgroundConnectionHandler {
 	const deps = resolveSdkDeps(services, logger)
 	const state = createSdkHandlerState(ports)
@@ -185,6 +187,7 @@ export function initWalletSdkHandler(
 		logger,
 	})
 	wireDiscoveryDrain(deps, state)
+	wireRestartPreparation({ profileService: deps.profileService, handler, endSession, windows: ports.windows, logger })
 
 	// Tab lifecycle (close + cross-origin navigation → session termination)
 	// lives in `tab-lifecycle.ts`; it MUST stay registered before
@@ -299,11 +302,6 @@ type SdkHandlerState = {
 	admission: VerifyAdmissionGate
 	/** Handshakes currently waiting on another popup for the same `(origin, chainId)`, bounded. */
 	dedupeWaiters: Map<string, number>
-	/** Request id → the connect window its Allow handed over, until `runDiscoveryPopup` settles: a
-	 *  closed tab finds it here while the Allow still waits for a slot and no marker exists. */
-	handedOver: Map<string, { tabId: number; windowId: number }>
-	/** Best effort: a window already gone rejects, and its removal is what frees anything it held. */
-	closeWindow: (windowId: number) => void
 	/**
 	 * Bound right after the handler is constructed, before `initialize()`
 	 * attaches any listener; callbacks read these at call time, never earlier.
@@ -313,22 +311,15 @@ type SdkHandlerState = {
 
 export function createSdkHandlerState(ports: { windows: WindowPort; clock: ClockPort }): SdkHandlerState {
 	const pendingVerification = new Map<string, PendingVerificationEntry>()
-	const closeWindow = (windowId: number) => void ports.windows.remove(windowId).catch(() => undefined)
 	return {
 		pendingVerification,
 		sessions: new SessionHolders(),
 		pendingDiscoveryPromises: new Map(),
 		admission: new VerifyAdmissionGate(ports.clock, {
-			closeWindow,
-			navigateWindow: (windowId, url) => ports.windows.navigate(windowId, url),
-			// A marker still waiting when its slot is given back, or when its reservation expires with the
-			// window kept open, is tombstoned: that id can no longer establish.
-			expired: (id) => cancelPendingVerification(pendingVerification, id),
+			// A marker still waiting when its slot is given back is tombstoned: that id can no longer establish.
 			released: (id) => cancelPendingVerification(pendingVerification, id),
 		}),
 		dedupeWaiters: new Map(),
-		handedOver: new Map(),
-		closeWindow,
 		late: {},
 	}
 }
@@ -337,7 +328,6 @@ export function createSdkHandlerState(ports: { windows: WindowPort; clock: Clock
  *  safe because the SDK has already dropped the tab's discoveries, so none of their ids can
  *  establish. */
 function tearDownTabAttempts(state: SdkHandlerState, tabId: number): void {
-	for (const waiting of state.handedOver.values()) if (waiting.tabId === tabId) state.closeWindow(waiting.windowId)
 	for (const [id, marker] of state.pendingVerification) if (marker.tabId === tabId) state.admission.onSessionGone(id)
 	deletePendingVerificationForTab(state.pendingVerification, tabId)
 }
@@ -816,8 +806,6 @@ function discoveryDeps(deps: SdkDeps, state: SdkHandlerState): DiscoveryDeps {
 		resetRun: deps.resetRun,
 		admission: state.admission,
 		dedupeWaiters: state.dedupeWaiters,
-		handedOver: state.handedOver,
-		closeWindow: state.closeWindow,
 		switchEpoch: state.late.switchEpoch!,
 		logger: deps.logger,
 	}

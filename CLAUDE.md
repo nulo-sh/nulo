@@ -217,7 +217,7 @@ Six layers, low → high. A layer can import only from layers below it. Enforced
                        Cannot import service clients, stores, or @/utils/core.
 
 [L3] composites        src/components/composite/
-                       FormPopup, EntityForm, SecretRevealCard, AmountCard, ...
+                       FormPopup, EntityForm, RecoveryPhraseGrid, AmountCard, ...
                        Same ban as L2 — no service clients, stores, or @/utils/core.
 
 [L4] feature modules   src/popup/components/modules/

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.2.1 — effective 15 October 2026**
+**Version 1.2.2 — effective «FILL: effective date»**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -130,7 +130,8 @@ past 3 days by error, method and network.
 that extension version.
 
 **What it reveals:** the list is not selected from your holdings, and requests do not include your
-balances, account addresses or transaction contents. CoinGecko still receives ordinary request
+balances, account addresses or transaction contents. The request carries no cookies and no
+referrer, and bypasses the browser's HTTP cache. CoinGecko still receives ordinary request
 metadata and may infer application use from timing or other information.
 
 **When:** refreshes are scheduled approximately every three minutes during unlocked use, and may
@@ -279,7 +280,8 @@ It keeps a list only if the signature checks out against a key built into the ex
 is newer than the one it holds; otherwise it keeps what it had.
 
 **What it reveals:** every wallet requests the same file. The request carries no account address,
-balance, network, token or other wallet data, no cookies and no referrer. Cloudflare, Inc., which hosts
+balance, network, token or other wallet data, no cookies and no referrer. The request bypasses the
+browser's HTTP cache, so it carries no cached copy's validator. Cloudflare, Inc., which hosts
 the file, receives your IP address, the time and ordinary browser headers such as the user agent, and
 can infer from them that you use Nulo. Depending on the browser, the request may also carry an
 `Origin` header naming the extension; in Firefox that name is unique to your installation, and the
@@ -447,3 +449,4 @@ described in § 5.
 | 1.1.1 | 6 October 2026 | Updated the address for reporting security vulnerabilities. |
 | 1.2 | 13 October 2026 | The wallet downloads its list of default tokens from `tokens.nulo.sh` (§ 5.11). |
 | 1.2.1 | 15 October 2026 | The explorer is disabled in Settings → Privacy, not Settings → Advanced (§ 5.3). |
+| 1.2.2 | «FILL: effective date» | The token-list and price requests bypass the browser's HTTP cache, and the price request carries no cookies and no referrer (§§ 5.2, 5.11). |

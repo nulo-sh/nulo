@@ -8,7 +8,7 @@
  *     (real signing keys never enter PXE during dApp simulateTx)
  *   - the chain-identity rebind on getChainInfo
  *   - fast-path → standard fallback routing (split null / result null)
- *   - the PXE-local-vs-best-effort metadata ladder
+ *   - the metadata answers: session-bound instances, node-sourced publication
  */
 
 import { describe, expect, test, vi } from "vitest"
@@ -67,7 +67,11 @@ function makeHarness(overrides: Partial<ViewExecutorDeps> = {}) {
 		endpoints: [{ id: "e1", rpcUrl: "http://primary" }],
 		primaryEndpointId: "e1",
 	} as never
-	const node = { getNodeInfo: vi.fn(async () => ({ l1ChainId: 1, rollupVersion: 6 })) }
+	const node = {
+		getNodeInfo: vi.fn(async () => ({ l1ChainId: 1, rollupVersion: 6 })),
+		getContract: vi.fn(async (_address: AztecAddress): Promise<unknown> => undefined),
+		getContractClass: vi.fn(async (_id: Fr): Promise<unknown> => undefined),
+	}
 	const account = {
 		address: addr("0xacct"),
 		ensureRegistered: vi.fn(async () => {}),
@@ -95,7 +99,11 @@ function makeHarness(overrides: Partial<ViewExecutorDeps> = {}) {
 			getActiveProfile: vi.fn(async () => ({ id: "p1" })),
 			captureExecutionFence: vi.fn(async () => FENCE),
 		} as never,
-		networkService: { getNetwork: vi.fn(async () => network), getNode: vi.fn(async () => node) } as never,
+		networkService: {
+			getNetwork: vi.fn(async () => network),
+			getNode: vi.fn(async () => node),
+			getNodeForUrl: vi.fn(async () => node),
+		} as never,
 		accountService: { getAccountContract: vi.fn(async () => account) } as never,
 		contactService: { getContacts: vi.fn(async () => []) } as never,
 		logDebug: vi.fn(),
@@ -262,44 +270,108 @@ describe("ViewExecutor.executeAztecGetChainInfo", () => {
 	})
 })
 
-describe("ViewExecutor.executeAztecGetContractMetadata", () => {
-	test("PXE-local instance + artifact → INITIALIZED with instance attached", async () => {
-		const instance = { currentContractClassId: addr("0xclass") }
-		const { executor } = makeHarness({
-			pxeService: {
-				getContractInstance: vi.fn(async () => instance),
-				getContractArtifact: vi.fn(async () => ({ kind: "artifact" })),
-			} as never,
-		})
-		const meta = await executor.executeAztecGetContractMetadata({
-			kind: "aztec_getContractMetadata",
-			networkId: "net-1",
-			address: "0xcontract",
-		} as never)
+describe("ViewExecutor.executeAztecGetContractClassMetadata", () => {
+	const CLASS_ID = Fr.random().toString()
+	const run = (executor: ViewExecutor) =>
+		executor.executeAztecGetContractClassMetadata({ kind: "aztec_getContractClassMetadata", networkId: "net-1", id: CLASS_ID } as never)
 
-		expect(meta.instance).toBe(instance)
-		expect(meta.initializationStatus).toBe(ContractInitializationStatus.INITIALIZED)
-		expect(meta.isContractPublished).toBe(true)
+	test("publication is the node's answer; the artifact flag is the wallet's own", async () => {
+		const { executor, deps, node } = makeHarness()
+		node.getContractClass.mockResolvedValueOnce({ id: CLASS_ID })
+		expect(await run(executor)).toEqual({ isContractClassPubliclyRegistered: true, isArtifactRegistered: false })
+		expect(String(node.getContractClass.mock.calls[0]?.[0])).toBe(CLASS_ID)
+		expect(deps.networkService.getNodeForUrl).toHaveBeenCalledWith("http://primary")
+		expect(deps.networkService.getNode).not.toHaveBeenCalled()
 	})
 
-	test("not local: best-effort node lookup drives isContractPublished, instance stays undefined", async () => {
-		const getContractInstance = vi
-			.fn()
-			.mockResolvedValueOnce(undefined) // pxeOnly probe
-			.mockResolvedValueOnce({ found: true }) // nodeBestEffort probe
+	test("a class the wallet holds but the node does not know is not published", async () => {
 		const { executor } = makeHarness({
-			pxeService: { getContractInstance, getContractArtifact: vi.fn(async () => undefined) } as never,
+			pxeService: { getContractArtifact: vi.fn(async () => ({ kind: "artifact" })) } as never,
 		})
-		const meta = await executor.executeAztecGetContractMetadata({
-			kind: "aztec_getContractMetadata",
-			networkId: "net-1",
-			address: "0xcontract",
-		} as never)
+		expect(await run(executor)).toEqual({ isContractClassPubliclyRegistered: false, isArtifactRegistered: true })
+	})
 
-		expect(meta.instance).toBeUndefined()
-		expect(meta.initializationStatus).toBe(ContractInitializationStatus.UNKNOWN)
-		expect(meta.isContractPublished).toBe(true)
-		expect((getContractInstance.mock.calls[1] as unknown[])[2]).toEqual({ nodeBestEffort: true })
+	test("a node failure fails the call", async () => {
+		const { executor, node } = makeHarness()
+		node.getContractClass.mockRejectedValueOnce(new Error("node down"))
+		await expect(run(executor)).rejects.toThrow("node down")
+	})
+})
+
+describe("ViewExecutor.executeAztecGetContractMetadata", () => {
+	const SESSION = `0x${"0a".repeat(32)}`
+	const HIDDEN = `0x${"0b".repeat(32)}`
+	const FRESH = `0x${"0c".repeat(32)}`
+	const CONTRACT = `0x${"0d".repeat(32)}`
+	const ids = (original: Fr, current: Fr = original) => ({ originalContractClassId: original, currentContractClassId: current })
+	const stored = (address: string) => ({ address, ...ids(new Fr(1n)) })
+
+	/** The store holds SESSION, HIDDEN (a hidden account row) and CONTRACT; FRESH is unknown. */
+	function metadataHarness(nodeHas: Record<string, unknown> = {}) {
+		const h = makeHarness({
+			pxeService: {
+				getContractInstance: vi.fn(async (_network: unknown, address: string) =>
+					[SESSION, HIDDEN, CONTRACT].includes(address) ? stored(address) : undefined,
+				),
+				getContractArtifact: vi.fn(async () => ({ kind: "artifact" })),
+			} as never,
+			accountService: {
+				getAccounts: vi.fn(async (_profileId: string, _chainId: number, all?: boolean) =>
+					all ? [{ address: SESSION }, { address: HIDDEN }] : [{ address: SESSION }],
+				),
+			} as never,
+		})
+		h.node.getContract.mockImplementation(async (address: AztecAddress) => nodeHas[address.toString()])
+		const read = (address: string, sessionAccounts: string[] = [SESSION]) =>
+			h.executor.executeAztecGetContractMetadata({
+				kind: "aztec_getContractMetadata",
+				networkId: "net-1",
+				address,
+				sessionAccounts,
+			} as never)
+		return { ...h, read }
+	}
+
+	test("a profile account outside the session answers as an address the wallet never registered", async () => {
+		const { read, deps, node } = metadataHarness()
+		expect(await read(HIDDEN)).toEqual(await read(FRESH))
+		expect(node.getContract.mock.calls.map(([address]) => address.toString())).toEqual([HIDDEN, FRESH])
+		expect(deps.pxeService.getContractArtifact).not.toHaveBeenCalled()
+		expect(deps.accountService.getAccounts).toHaveBeenCalledWith("p1", 7, true)
+		expect(deps.networkService.getNodeForUrl).toHaveBeenCalledWith("http://primary")
+		expect(deps.networkService.getNode).not.toHaveBeenCalled()
+	})
+
+	test("a session account returns its stored instance; publication is the node's answer", async () => {
+		const { read } = metadataHarness()
+		const meta = await read(SESSION)
+		expect(meta.instance).toEqual(stored(SESSION))
+		expect(meta.initializationStatus).toBe(ContractInitializationStatus.INITIALIZED)
+		expect(meta.isContractPublished).toBe(false)
+	})
+
+	test("a stored contract the node reports upgraded is published and updated", async () => {
+		const current = new Fr(2n)
+		const { read } = metadataHarness({ [CONTRACT]: ids(new Fr(1n), current) })
+		expect(await read(CONTRACT)).toEqual({
+			instance: stored(CONTRACT),
+			initializationStatus: ContractInitializationStatus.INITIALIZED,
+			isContractPublished: true,
+			isContractUpdated: true,
+			updatedContractClassId: current,
+		})
+	})
+
+	test("a node failure answers unpublished alike and logs no address", async () => {
+		const { read, deps, node } = metadataHarness()
+		node.getContract.mockImplementation(async (address: AztecAddress) => {
+			throw new Error(`lookup failed for ${address.toString()}`)
+		})
+		const fresh = await read(FRESH)
+		expect(await read(HIDDEN)).toEqual(fresh)
+		expect(fresh.isContractPublished).toBe(false)
+		expect(JSON.stringify(vi.mocked(deps.logDebug).mock.calls)).not.toMatch(/0b0b|0c0c/)
+		expect(deps.logDebug).toHaveBeenCalled()
 	})
 })
 

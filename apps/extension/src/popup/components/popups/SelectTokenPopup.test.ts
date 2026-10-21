@@ -84,6 +84,8 @@ vi.mock("vue-router", async (importOriginal) => {
 })
 
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import { captureWindowDocument } from "@/utils/window-document"
+import { PriceServiceClient } from "@/wallet/services/price/client"
 import SelectTokenPopup from "./SelectTokenPopup.vue"
 
 const STUBS = {
@@ -167,6 +169,46 @@ describe("SelectTokenPopup", () => {
 		expect(H.getTokenBalances).toHaveBeenCalledWith(undefined, ACCOUNT)
 	})
 
+	// The shell mounts the picker, hidden, in every unlocked document, a dApp window's included.
+	test("in a window document the hidden picker reads the cache and never asks for a refresh, whatever the route is by then; in the popup it refreshes", async () => {
+		const asked = () => {
+			type Calls = { mock: { calls: unknown[] } }
+			const client = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as unknown as {
+				getQuotes: Calls
+				refreshIfStale: Calls
+			}
+			return [client.getQuotes.mock.calls.length, client.refreshIfStale.mock.calls.length]
+		}
+		H.getTokenBalances.mockResolvedValue([row(2, "ALPHA"), row(1, "PRICED", { contract: TEST_USDC })])
+		captureWindowDocument("#/windows/execute?requestId=r1")
+		window.location.hash = "#/popup/auth"
+		try {
+			const hidden = mount(SelectTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
+			await flushPromises()
+			expect(asked()).toEqual([1, 0])
+			H.priceConnected.emit()
+			await flushPromises()
+			expect(asked()).toEqual([2, 0])
+			const quote = { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null }
+			H.quotesUpdated.emit({ quotes: { "usd-coin": quote }, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: [] })
+			await hidden.setProps({ show: true })
+			await flushPromises()
+			expect(rowSymbols(hidden)).toEqual(["PRICED", "ALPHA"])
+			hidden.unmount()
+		} finally {
+			captureWindowDocument("")
+			window.location.hash = ""
+		}
+
+		const popup = mount(SelectTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
+		await flushPromises()
+		expect(asked()).toEqual([1, 1])
+		H.priceConnected.emit()
+		await flushPromises()
+		expect(asked()).toEqual([2, 2])
+		popup.unmount()
+	})
+
 	test("a row the signed list flags carries 'Flagged as a scam' as its second line; the others carry none", async () => {
 		// Wire-shaped, in the upper case a restored row may keep.
 		const contract = `0x${TEST_FLAGGED.address.slice(2).toUpperCase()}`
@@ -178,6 +220,17 @@ describe("SelectTokenPopup", () => {
 		expect(lines).toEqual([
 			["ALPHA", null],
 			["SCAM", "Flagged as a scam"],
+		])
+	})
+
+	test("a row whose symbol is blank is titled with the empty-value dash; data-symbol keeps the stored symbol", async () => {
+		const wrapper = await mountOpen([row(1, "   ", { contract: "0xblank" }), row(2, "ALPHA")])
+		const titles = wrapper
+			.findAll('[data-testid="select-token-row"]')
+			.map((el) => [el.attributes("data-symbol"), el.attributes("data-title")])
+		expect(titles).toEqual([
+			["   ", "—"],
+			["ALPHA", "ALPHA"],
 		])
 	})
 

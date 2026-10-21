@@ -1,0 +1,7 @@
+# Phase 0: planning consults
+
+- 2026-10-20 recon: one Explore agent (sonnet), the reuse sweep. The driver traced the restore order and found that a password restore keeps no master in the worker before `finalizeRestore`.
+- 2026-10-20 Codex (gpt-6.1-sol, high), session `01a15b25`, round 1: conditional approve. Findings: the key restore does not check key against address (accepted as a Fact correction; its fix rejected, plan Alternative B); the tx purge on reconcile is not awaited (accepted, I3); the stash's ownership was underspecified (moot once the stash was dropped). The run used the `alejo-icloud` Codex home: `CODEX_ACCOUNT=best` was set in the environment; later rounds stayed on that session.
+- 2026-10-20 Opus Plan leg: reject. Blocking: `nulo-v6.1` superseded `nulo-v6` in place and a `nulo-v6` backup's derived rows restore by design, so a restore-time derivation check drops a person's own accounts (verified; plan Alternative A); the key restore checks no address (verified). It proposed one change outside the lane (P4) and named an existing residual (P5); both are reported to the orchestrator.
+- 2026-10-20 Codex round 2 (resumed): conditional approve. Conditions: state the purge-failure behaviour; gate test (c) and add the rejection case; relabel P5 as an existing residual. All applied. It agreed P4 stays out of this arc.
+- 2026-10-20 Codex round 3 (resumed, verification): approve.

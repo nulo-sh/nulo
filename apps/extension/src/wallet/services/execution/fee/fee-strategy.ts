@@ -59,6 +59,7 @@ import type { IPXE } from "@/wallet/services/pxe/client"
 import { StepContent, type TaskService, type WrappedTask } from "@/wallet/services/task/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { DiscoveryProbe } from "../discovery-aware-estimator"
+import { throwIfAborted } from "../rpc-cancel"
 import type { Action, FeeOptions, FeeSettings } from "../spec"
 import type { BuiltStandardTx, TxRequestBuilder } from "../tx-request-builder"
 import type { PartialGasSettingsRPC } from "@nulo/aztec-runtime/account"
@@ -232,6 +233,8 @@ export async function buildFor(
 ): Promise<BuiltStandardTx> {
 	const built = await txBuilder.buildStandard(ctx.op, ctx.fence, method, task, appPriorityOf(ctx.op.fee))
 	await ctx.onBuilt?.(built.txCalls)
+	// A cancel that landed while this build ran must not start its simulation.
+	throwIfAborted(ctx.signal)
 	return built
 }
 

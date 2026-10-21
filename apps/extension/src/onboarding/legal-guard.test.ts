@@ -16,7 +16,7 @@ describe("onboarding legal guard", () => {
 		expect(await go("missing", path)).toBe(true)
 	})
 
-	test.each(["create", "import", "learn", "fees", "presto", "done", "anything-added-later"])(
+	test.each(["create", "import", "done", "anything-added-later"])(
 		"/onboarding/%s without a current acceptance lands on the Terms",
 		async (page) => {
 			for (const status of ["missing", "stale", new Error("background unreachable")] as const) {
@@ -27,7 +27,7 @@ describe("onboarding legal guard", () => {
 
 	test("the import path resumes at import; everything else resumes at create", async () => {
 		expect(await go("missing", "/onboarding/import")).toMatchObject({ query: { next: "import" } })
-		expect(await go("missing", "/onboarding/learn")).toMatchObject({ query: { next: "create" } })
+		expect(await go("missing", "/onboarding/done")).toMatchObject({ query: { next: "create" } })
 	})
 
 	test("a current acceptance passes every route", async () => {

@@ -22,6 +22,7 @@
  * estimator.
  */
 import AppFeeLine from "@/popup/components/modules/send/AppFeeLine.vue"
+import FlaggedTokenBanner from "@/popup/components/modules/general/FlaggedTokenBanner.vue"
 import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue"
 import { isSelfPay } from "@nulo/wallet-bridge"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
@@ -42,7 +43,7 @@ import DetailsToggle from "./DetailsToggle.vue"
 import OperationActionRow from "./OperationActionRow.vue"
 import SendTxSummary from "./SendTxSummary.vue"
 import { humanizeOperationKind, safeWire, safeWireOrDash } from "./humanize"
-import type { FeePayerPick } from "./fee-figure"
+import { type FeePayerPick, paysFromPrivateFeeJuice } from "./fee-figure"
 import type { DraftAztecSendTxOperation, DraftSendTransactionOperation, DraftUIOperation } from "./types"
 import { type CallSurface, type CallerContext, type WireCall, authwitTitle, callSurface, rowTitle, tokenAt, wire } from "./call-surface"
 import { trimAddress } from "@/utils/string"
@@ -97,6 +98,9 @@ const props = defineProps<{
 	tokenMetadata?: { name: string; symbol: string; decimals: number }
 	tokenMetadataError?: string
 	tokenMetadataLoading?: boolean
+	/** The signed list flags this `register_token` operation's token; Confirm waits for the tick. */
+	tokenFlagged?: boolean
+	tokenFlagAcknowledged?: boolean
 	/** The wallet refuses this request: nothing on the card advises approving it. */
 	refused?: boolean
 }>()
@@ -105,6 +109,7 @@ const emit = defineEmits<{
 	updateFeeSettings: [index: number, value: FeeSettings | undefined]
 	/** The fee card's paying method, or null while none pays. */
 	updatePayer: [index: number, payer: FeePayerPick | null]
+	acknowledgeTokenFlag: [index: number, on: boolean]
 }>()
 
 // A predicate, so the template's `v-if` narrows `op` to the send-like row: it gates the whole send
@@ -131,6 +136,9 @@ const sendTxCalls = (op: DraftAztecSendTxOperation): { call: WireCall; surface: 
 }
 const sendTxRows = computed(() => (props.op.kind === "aztec_sendTx" ? sendTxCalls(props.op) : []))
 const appName = computed(() => safeWire(props.dapp?.name, 64) || "the app")
+/** The app picked the method but the person pays, so the card claims nothing for the app and never
+ *  reads the fee contract's own pool as the person's. */
+const privateFeeJuice = computed(() => paysFromPrivateFeeJuice(props.op))
 
 /** Only a contract the wallet registered as a token gets the transfer/mint vocabulary. */
 const isToken = (contract: unknown): boolean => tokenAt(props.tokens, props.op.network?.chainId, contract) !== undefined
@@ -389,9 +397,9 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 				:aria-busy="isEstimating && !feeEstimate ? 'true' : undefined"
 				:class="$style.op_fee_set"
 			>
-				<Icon name="square-check" size="14" color="green" />
+				<Icon v-if="!privateFeeJuice" name="square-check" size="14" color="green" />
 				<Flex direction="column" :class="$style.fee_lines">
-					<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate">
+					<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate" :privateFeeJuice="privateFeeJuice">
 						<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
 					</AppFeeLine>
 					<Text v-else variant="body" color="secondary" height="150" data-testid="execute-op-app-legend">
@@ -403,7 +411,7 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 			<!-- Mounted with the row: a region created with its text in place may go unannounced. -->
 			<div role="status" aria-live="polite" aria-atomic="true" data-testid="execute-op-app-payer-live">
 				<Flex
-					v-if="feeEstimate?.appPayerFunding?.funded === false"
+					v-if="!privateFeeJuice && feeEstimate?.appPayerFunding?.funded === false"
 					align="start"
 					gap="6"
 					wide
@@ -414,6 +422,10 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 					<Text variant="body" color="secondary">This app's fee contract may not cover this fee right now.</Text>
 				</Flex>
 			</div>
+			<Flex v-if="privateFeeJuice" align="start" gap="6" wide :class="$style.op_fee_set" data-testid="execute-op-private-fee-notice">
+				<Icon name="info" size="14" color="secondary" aria-hidden="true" />
+				<Text variant="body" color="secondary">Your Private Fee Juice must cover this fee.</Text>
+			</Flex>
 		</template>
 
 		<FeeSettingsCard
@@ -465,6 +477,7 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'register_token'">
+			<FlaggedTokenBanner v-if="tokenFlagged" :class="$style.flag_banner" />
 			<!-- A token's contract chooses its symbol and name, so the address row stays beside them. -->
 			<Flex v-if="tokenMetadataLoading || tokenMetadata" direction="column" wide role="status" :aria-busy="tokenMetadataLoading || undefined" data-testid="register-token-details">
 				<Flex :class="$style.prop" data-testid="register-token-symbol-row">
@@ -500,6 +513,15 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 				<Text variant="label-section" color="secondary">Contract address:</Text>
 				<AddressDisplay :address="op.address" data-testid="register-token-address" />
 			</Flex>
+			<Checkbox
+				v-if="tokenFlagged"
+				:modelValue="tokenFlagAcknowledged === true"
+				:class="$style.flag_ack"
+				data-testid="register-token-flag-ack"
+				@update:modelValue="(on: boolean) => emit('acknowledgeTokenFlag', index, on)"
+			>
+				<Text variant="body" color="secondary" height="140">I understand Nulo flagged this token as a scam</Text>
+			</Checkbox>
 		</template>
 		<template v-else-if="op.kind === 'simulate_transaction'">
 			<Flex :class="$style.prop">
@@ -656,6 +678,14 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 .op_fee_set {
 	padding: 12px;
 	background: var(--nulo-surface-low);
+}
+
+.flag_banner {
+	margin-top: 12px;
+}
+
+.flag_ack {
+	margin-top: 16px;
 }
 
 /* Sets the first line's text on the icon's centre: 1.5 leading puts 3 px over it. An app's name may

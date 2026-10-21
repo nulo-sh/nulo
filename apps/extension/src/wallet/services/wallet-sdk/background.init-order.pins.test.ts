@@ -76,7 +76,7 @@ function makeServices(discoverImpl: () => Promise<{ approved: boolean }>) {
 		network: { servesChain: async () => true, servesLiveChain: async () => true },
 		account: {},
 		execution: {},
-		profile: { onActiveProfileChanged, getActiveProfile: async () => ({ id: "p1" }) },
+		profile: { onActiveProfileChanged, getActiveProfile: async () => ({ id: "p1" }), setRestartPreparation: () => {} },
 		"dapp-interaction": {
 			discover: async () => {
 				log.push("discover")

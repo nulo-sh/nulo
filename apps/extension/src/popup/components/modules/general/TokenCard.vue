@@ -8,6 +8,7 @@ import { usePrices } from "@/composables/usePrices"
 
 /** Utils */
 import { balanceFormatted } from "@/utils/amount.js"
+import { dashIfBlank } from "@/utils/string"
 import { knownDecimals, parseRawBalance } from "@/utils/token-amount"
 
 /** Store */
@@ -75,11 +76,11 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 		<a :href data-testid="tokens-card" :class="[$style.row, $style.link]" @click="navigate" @keydown.space="navigate">
 			<Flex direction="column" gap="2">
 				<span :class="$style.symbol" data-testid="token-symbol" :data-symbol="token.symbol">
-					{{ token.symbol }}
+					{{ dashIfBlank(token.symbol) }}
 				</span>
 				<span v-if="isFlagged" data-testid="token-flagged" :class="$style.flagged">Flagged as a scam</span>
 				<span v-else-if="fiatLabel" data-testid="token-fiat" :class="[$style.fiat, $style.fiat_figure]">{{ fiatLabel }}</span>
-				<span v-else data-testid="token-name" :class="$style.fiat">{{ token?.name || "unknown" }}</span>
+				<span v-else data-testid="token-name" :class="$style.fiat">{{ dashIfBlank(token?.name) }}</span>
 			</Flex>
 
 			<Flex

@@ -2268,11 +2268,16 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 	test("the recorder awaits addTransaction before it writes the pending authwits", async () => {
 		const authwits = [{ account: "0xacct", hash: "0xph", content: { kind: "message_hash", messageHash: "0xm" } }]
 		let resolveAdd: (v: unknown) => void = () => {}
-		const addTransaction = vi.fn(() => new Promise((r) => (resolveAdd = r)))
+		let reachAdd: () => void = () => {}
+		const added = new Promise<void>((r) => (reachAdd = r))
+		const addTransaction = vi.fn(() => {
+			reachAdd()
+			return new Promise((r) => (resolveAdd = r))
+		})
 		const { executor, deps, built } = makeHarness({ addTransaction: addTransaction as never })
 		Object.assign(built, { pendingPublicAuthwits: authwits })
 		const sending = executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
-		for (let i = 0; i < 50 && addTransaction.mock.calls.length === 0; i++) await Promise.resolve()
+		await added
 		expect(addTransaction).toHaveBeenCalledTimes(1)
 		for (let i = 0; i < 20; i++) await Promise.resolve()
 		expect(deps.recordPendingAuthwits).not.toHaveBeenCalled()

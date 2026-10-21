@@ -2,6 +2,7 @@ import type { Page } from "puppeteer"
 import { pinnedTokensKey } from "@/utils/profile-ui-keys"
 import { reloadExtensionPage } from "./browser"
 import { clickByTestId, replaceInputValue, withTimeoutMessage } from "./dom"
+import { PollTimeoutError, pollUntil } from "./poll"
 import { dropdownDiagnostic, openDropdown, waitForToast } from "./widgets"
 
 // ── Token ──────────────────────────────────────────────────────────────
@@ -110,6 +111,20 @@ export async function navigateToTokenDetail(page: Page, symbol?: string): Promis
 export async function waitForHomeTotal(page: Page): Promise<void> {
 	await page.waitForSelector('[data-testid="balance-amount"]', { visible: true, timeout: 15_000 })
 	await page.waitForFunction(() => !document.querySelector('[data-testid="balance-hero-loading"]'), { timeout: 20_000 })
+}
+
+/** Home's Get started card and backup banner mount once their reads settle, which can be after the
+ *  rows have: a spec that measures or scrolls the middle waits for this first. */
+export async function waitForHomeReminders(page: Page): Promise<void> {
+	await page.waitForSelector('[data-testid="home-scroller"][data-reminders-settled="true"]', { timeout: 30_000 })
+}
+
+/** The Get started card's steps in order, a done one suffixed " done"; Hide and the count aside. */
+export async function getStartedRows(page: Page): Promise<string[]> {
+	return await page.$$eval(
+		'[data-testid^="get-started-"]:not([data-testid="get-started-hide"]):not([data-testid="get-started-count"])',
+		(els) => els.map((el) => `${el.getAttribute("data-testid")}${el.getAttribute("data-done") === "true" ? " done" : ""}`),
+	)
 }
 
 /** Import a token from Home and wait for its projected balance row to carry `expectedPublicRaw`
@@ -323,33 +338,45 @@ export async function waitForFreshBalanceRow(
 	const MIN_REFRESH_SPACING_MS = 2_000
 	const { account, tokenContract, expectedPublicRaw, expectedPrivateRaw, baselineUpdatedAt, timeoutMs = 120_000 } = opts
 	const maxRefreshes = opts.maxRefreshes ?? Math.ceil(timeoutMs / MIN_REFRESH_SPACING_MS)
-	const deadline = Date.now() + timeoutMs
-	// The (account, token) join re-resolves EVERY poll (audit condition) — see `readScopedBalanceRows`.
-	const readRows = (): Promise<BalanceRow[]> => readScopedBalanceRows(page, account, tokenContract)
 
 	let refreshes = 0
 	let lastRefreshAt = 0
 	let rows: BalanceRow[] = []
-	while (Date.now() < deadline) {
-		rows = await readRows()
-		if (
-			rows.some(
-				(r) =>
-					(r.updatedAt ?? 0) > baselineUpdatedAt &&
-					r.publicBalance === expectedPublicRaw &&
-					(expectedPrivateRaw === undefined || r.privateBalance === expectedPrivateRaw),
-			)
+	try {
+		await pollUntil(
+			// The (account, token) join re-resolves EVERY poll (audit condition) — see `readScopedBalanceRows`.
+			async () => {
+				rows = await readScopedBalanceRows(page, account, tokenContract)
+				return rows
+			},
+			(read) =>
+				read.some(
+					(r) =>
+						(r.updatedAt ?? 0) > baselineUpdatedAt &&
+						r.publicBalance === expectedPublicRaw &&
+						(expectedPrivateRaw === undefined || r.privateBalance === expectedPrivateRaw),
+				),
+			{
+				label: "waitForFreshBalanceRow",
+				timeoutMs,
+				intervalMs: 1_000,
+				between: async () => {
+					const attemptFinished =
+						refreshes === 0 ||
+						rows.some((r) => (r.updatedAt ?? 0) >= lastRefreshAt) ||
+						Date.now() - lastRefreshAt >= REFRESH_ENVELOPE_MS
+					const spaced = refreshes === 0 || Date.now() - lastRefreshAt >= MIN_REFRESH_SPACING_MS
+					if (attemptFinished && spaced && refreshes < maxRefreshes) {
+						lastRefreshAt = Date.now()
+						refreshes++
+						await refreshBalances(page)
+					}
+				},
+			},
 		)
-			return
-		const attemptFinished =
-			refreshes === 0 || rows.some((r) => (r.updatedAt ?? 0) >= lastRefreshAt) || Date.now() - lastRefreshAt >= REFRESH_ENVELOPE_MS
-		const spaced = refreshes === 0 || Date.now() - lastRefreshAt >= MIN_REFRESH_SPACING_MS
-		if (attemptFinished && spaced && refreshes < maxRefreshes) {
-			lastRefreshAt = Date.now()
-			refreshes++
-			await refreshBalances(page)
-		}
-		await new Promise((r) => setTimeout(r, 1_000))
+		return
+	} catch (error) {
+		if (!(error instanceof PollTimeoutError)) throw error
 	}
 	// Census across roots, account-agnostic: distinguishes "the account's rows are
 	// keyed differently" from "the token/balance slices are simply absent" — the

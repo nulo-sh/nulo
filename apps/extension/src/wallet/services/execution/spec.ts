@@ -39,6 +39,9 @@ export type Methods = {
 	 * @param amount Amount.
 	 * @param feeCap With it, the send is queued against this fee in base units: a build above it is
 	 *   never proved, and the send asks again through its record (`acceptQueuedFee`).
+	 * @param shownFee The estimate the page showed, in base units, for a send not queued: a build more
+	 *   than `FEE_RISE_ASKS` above it is never proved, and the send asks again the same way. A send
+	 *   carries at most one of `feeCap` and `shownFee`, and one the account pays carries one.
 	 */
 	executeTransfer(
 		networkId: string,
@@ -51,6 +54,7 @@ export type Methods = {
 		feeSettings: FeeSettings,
 		precomputedEstimateId?: string,
 		feeCap?: string,
+		shownFee?: string,
 	): string
 	/**
 	 * Executes batch of operations.

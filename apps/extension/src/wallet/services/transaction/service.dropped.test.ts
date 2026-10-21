@@ -65,6 +65,7 @@ describe("TransactionService — DROPPED debounce + resurrection", () => {
 		services.add(
 			svc(ACCOUNT_SERVICE_NAME, {
 				onAccountDeleted: new EventHandler(),
+				registerAccountPurgeSubscriber: () => {},
 				getAccount: async () => undefined,
 				// Two profiles share ACCOUNT (same-seed derivation) so a scoped purge
 				// takes the not-sole-owner ambiguous-marking path.

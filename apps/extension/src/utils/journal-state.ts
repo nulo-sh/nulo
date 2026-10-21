@@ -9,6 +9,7 @@
 import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import { balanceFormatted } from "@/utils/amount.js"
+import { dashIfBlank } from "@/utils/string"
 import { knownDecimals } from "@/utils/token-amount"
 import type { ListedToken } from "@/utils/tx-amount"
 import { DAPP_LABEL, callTitle, formatTransferType, settledCallTitle } from "@/utils/tx-enrichment"
@@ -63,6 +64,7 @@ const CHECKED_DISPLAYS: Record<CheckedOutcome, JournalTerminalDisplay> = {
 	reverted: { state: "failed", subtitle: "Reverted", icon: ICONS.failed, color: "red" },
 	unconfirmed: { state: "unconfirmed", subtitle: "Unconfirmed", icon: ICONS.unconfirmed, color: "amber" },
 	expired: { state: "failed", subtitle: "Won't go through", icon: ICONS.failed, color: "red" },
+	refused: { state: "failed", subtitle: "Refused by the network", icon: ICONS.failed, color: "red" },
 }
 
 /**
@@ -213,6 +215,10 @@ const CHECKED_LABELS: Record<CheckedOutcome, CategoricalFailureLabel> = {
 	expired: {
 		label: "Won't go through",
 		context: "This transaction expired before the network included it. No fee was paid, and you can send it again.",
+	},
+	refused: {
+		label: "Refused by the network",
+		context: "The network refused this transaction, so it won't go through. Check the details before sending it again.",
 	},
 }
 
@@ -454,7 +460,7 @@ export function journalCardTransferTypeLabel(op: OperationRecord): string | null
 }
 
 function transferTitle(token: TokenForCardProps | undefined): string {
-	return token?.symbol || "Transfer"
+	return dashIfBlank(token?.symbol || "Transfer")
 }
 
 /**

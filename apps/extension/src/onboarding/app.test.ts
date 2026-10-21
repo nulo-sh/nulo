@@ -2,6 +2,12 @@ import { flushPromises, shallowMount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 const config = vi.hoisted(() => ({ getValue: vi.fn(), onConnected: undefined as unknown as { invoke: () => void } }))
+const router = vi.hoisted(() => ({
+	replace: vi.fn(),
+	isReady: vi.fn(async () => undefined),
+	currentRoute: { value: { path: "/onboarding/create" } },
+}))
+const hydrateKnownProfile = vi.hoisted(() => vi.fn(async (): Promise<{ id: string } | undefined> => undefined))
 vi.mock("@/wallet/services/config/client", async () => {
 	const { EventHandler } = await import("@nulo/wallet-core/utils")
 	return {
@@ -17,10 +23,11 @@ vi.mock("@/utils/core", async () => {
 	const { ref } = await import("vue")
 	return { isServiceReady: ref(false), managers: { profile: { getProfiles: vi.fn(async () => []) } } }
 })
-vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => ({ hydrateKnownProfile: vi.fn(async () => undefined) }) }))
-vi.mock("vue-router", () => ({ useRouter: () => ({ replace: vi.fn() }) }))
+vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => ({ hydrateKnownProfile }) }))
+vi.mock("vue-router", () => ({ useRouter: () => router }))
 
 import { THEME_HINT_KEY } from "@/utils/general"
+import { doneRoute } from "./steps"
 import App from "./app.vue"
 
 const root = document.documentElement
@@ -44,6 +51,8 @@ beforeEach(() => {
 
 afterEach(() => {
 	config.getValue.mockReset()
+	router.replace.mockReset()
+	hydrateKnownProfile.mockReset()
 	vi.restoreAllMocks()
 	vi.unstubAllGlobals()
 	localStorage.clear()
@@ -90,6 +99,39 @@ describe("onboarding's theme", () => {
 		await flushPromises()
 		expect(root.getAttribute("theme")).toBe("dark")
 		expect(hintWrites).toEqual(["light", "dark"])
+		page.unmount()
+	})
+})
+
+describe("onboarding's resume", () => {
+	test("a tab reopened over a profile it already made resumes at Ready", async () => {
+		config.getValue.mockResolvedValue("dark")
+		hydrateKnownProfile.mockResolvedValue({ id: "p1" })
+		const page = mountOnboarding()
+		await flushPromises()
+		expect(router.replace).toHaveBeenCalledWith("/onboarding/done")
+		page.unmount()
+	})
+
+	test("a tab reloaded mid-import resumes at Ready on the import's path", async () => {
+		config.getValue.mockResolvedValue("dark")
+		hydrateKnownProfile.mockResolvedValue({ id: "p1" })
+		router.currentRoute.value.path = "/onboarding/import"
+		try {
+			const page = mountOnboarding()
+			await flushPromises()
+			expect(router.replace).toHaveBeenCalledWith(doneRoute("import"))
+			page.unmount()
+		} finally {
+			router.currentRoute.value.path = "/onboarding/create"
+		}
+	})
+
+	test("a first run with no profile stays where it opened", async () => {
+		config.getValue.mockResolvedValue("dark")
+		const page = mountOnboarding()
+		await flushPromises()
+		expect(router.replace).not.toHaveBeenCalled()
 		page.unmount()
 	})
 })

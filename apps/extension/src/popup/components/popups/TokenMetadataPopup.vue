@@ -12,6 +12,7 @@ const { openToast } = useToast()
 /** Utils */
 import { copyWithToast } from "@/utils/clipboard"
 import { endsSelection } from "@/utils/selection"
+import { dashIfBlank } from "@/utils/string"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -105,7 +106,7 @@ watch(
 						<Text variant="label-section" color="tertiary"> Name </Text>
 
 						<Text variant="value" color="secondary">
-							{{ token.name }}
+							{{ dashIfBlank(token.name) }}
 						</Text>
 					</Flex>
 
@@ -113,7 +114,7 @@ watch(
 						<Text variant="label-section" color="tertiary"> Symbol </Text>
 
 						<Text variant="value" color="secondary">
-							{{ token.symbol }}
+							{{ dashIfBlank(token.symbol) }}
 						</Text>
 					</Flex>
 

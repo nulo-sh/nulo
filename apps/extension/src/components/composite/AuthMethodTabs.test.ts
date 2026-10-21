@@ -20,7 +20,7 @@ const PROPS = {
 }
 
 /** Mounts under a parent that owns the model, as both hosts do. */
-function mountOwned(initial: Method = "password") {
+function mountOwned(initial: Method = "passkey") {
 	const method = ref<Method>(initial)
 	const Host = defineComponent(
 		() => () =>
@@ -52,12 +52,25 @@ describe("AuthMethodTabs", () => {
 		expect(root.classes()).toEqual(["root-x"])
 	})
 
-	test("renders Password then Passkey with the host's test ids", () => {
+	test("renders Passkey then Password with the host's test ids", () => {
 		const { w } = mountOwned()
 		expect(w.findAll('[role="tab"]').map((t) => [t.attributes("data-testid"), t.text()])).toEqual([
-			["pw-x", "Password"],
 			["pk-x", "Passkey"],
+			["pw-x", "Password"],
 		])
+	})
+
+	test("the arrows switch the method and carry focus from either tab", async () => {
+		const { w, method } = mountOwned("passkey")
+		focus(w, "passkey")
+		expect(press("ArrowRight").defaultPrevented).toBe(true)
+		await flushPromises()
+		expect(method.value).toBe("password")
+		expect(document.activeElement).toBe(tab(w, "password").element)
+		expect(press("ArrowLeft").defaultPrevented).toBe(true)
+		await flushPromises()
+		expect(method.value).toBe("passkey")
+		expect(document.activeElement).toBe(tab(w, "passkey").element)
 	})
 
 	test("both tabs are non-submitting buttons", () => {

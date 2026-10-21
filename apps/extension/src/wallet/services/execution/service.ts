@@ -38,6 +38,8 @@ import type { OperationContext } from "@/wallet/services/operation-journal/spec"
 import { isApprovedSendInFlight } from "@/utils/in-flight-send"
 import { abortableSleep } from "@/utils/abortable-sleep"
 import { DAPP_INTERACTION_SERVICE_NAME, type ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
+import type { DappSessionService } from "@/wallet/services/dapp-session/service"
+import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
 import { TaskService, type WrappedTask, ExecuteOperationContent } from "@/wallet/services/task/service"
 import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
@@ -48,7 +50,6 @@ import {
 	ContractNotRegisteredError,
 	InvalidWalletArgumentsError,
 	JobCancelledError,
-	PxeTaggingSourcesFullError,
 	ScopeViolationError,
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
@@ -58,7 +59,7 @@ import {
 import { isFeeAmount, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity, liveChainInfo } from "@nulo/aztec-runtime/utils"
-import { assertArtifactClassId } from "@nulo/aztec-runtime/pxe"
+import { assertArtifactClassId, assertInstanceArtifactClassId } from "@nulo/aztec-runtime/pxe"
 import {
 	type DraftOperation,
 	type FeeSettingsReaders,
@@ -97,6 +98,7 @@ import { ChainTipGate } from "./chain-tip-gate"
 import { recordedTxKeys } from "./transfer-sequence-keys"
 import { coerceAmount } from "./coerce-amount"
 import { OperationPlanner, type TransferRequest } from "./operation-planner"
+import type { SendFeeFigure } from "./fee-reask"
 import { type QueuedFeeCap, QueuedFeeAnswers, queuedFeeBasis, queuedFeeCap, sendShapeOf } from "./queued-fee-cap"
 import { TransferEstimateReuse } from "./transfer-estimate-reuse"
 import { type ChainIdentity, type EstimateReuseDeps, feeMultiplierFor } from "./estimate-reuse-shared"
@@ -159,9 +161,12 @@ const MAX_DISPLAY_CALLS = 64
  *  wallet's own views run through `executeOperations` too. */
 const BROADCASTING_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set(["send_transaction", "aztec_sendTx"])
 
+/** The app a dApp registration is counted against, and the session it was captured under. */
+type Registrant = { origin: string; fence: ExecutionFence }
+
 /** The operations that run under the authorizing session's fence. The wallet-sdk dispatcher sends
- *  a dApp's reads, registrations and simulations with none, and those never read one; its
- *  silently-covered authwit arrives under the wire handler's admission fence. */
+ *  every dApp op under the wire handler's admission fence; of its reads, registrations and
+ *  simulations only a registration reads it, to count against that session (`registrant`). */
 const FENCED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set([
 	"send_transaction",
 	"aztec_sendTx",
@@ -169,30 +174,21 @@ const FENCED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set([
 	"aztec_createAuthWit",
 ])
 
-/**
- * The most distinct senders and accounts a dApp may grow one chain's PXE to: every one is a tagging
- * secret on each sync. The person's own count toward it and are never refused by it. A policy figure,
- * twice the senders a backup carries per network, not a measured threshold.
- */
-export const DAPP_TAGGING_SOURCES_BOUND = 128
-
-const TAGGING_SOURCES_FULL_REFUSAL = "Scope violation: registration past the network's tagging-source bound"
-
-/** A dApp reads a full chain as a scope refusal, the constant envelope that names nothing. */
-async function refuseFullTaggingSources<T>(register: () => Promise<T>): Promise<T> {
-	try {
-		return await register()
-	} catch (error) {
-		if (error instanceof PxeTaggingSourcesFullError) throw new ScopeViolationError(TAGGING_SOURCES_FULL_REFUSAL)
-		throw error
-	}
-}
-
 /** `tokenContract` as a transfer request carries it, or the refusal of `method`'s arguments. */
 function tokenContractKey(method: string, tokenContract: unknown): string {
 	const key = typeof tokenContract === "string" ? fieldAddressKey(tokenContract) : undefined
 	if (key === undefined) throw InvalidWalletArgumentsError.forMethod(method)
 	return key
+}
+
+/** The one figure a transfer is held to, from at most one of its two fee arguments. */
+function sendFeeFigureOf(feeCap: string | undefined, shownFee: string | undefined): SendFeeFigure | undefined {
+	const figure: SendFeeFigure | undefined =
+		feeCap !== undefined ? { fee: feeCap, rule: "cap" } : shownFee !== undefined ? { fee: shownFee, rule: "estimate" } : undefined
+	if ((feeCap !== undefined && shownFee !== undefined) || (figure && !isFeeAmount(figure.fee))) {
+		throw InvalidWalletArgumentsError.forMethod("executeTransfer")
+	}
+	return figure
 }
 
 /** The popup's fee settings: one per transfer or estimate, one per broadcasting operation. */
@@ -235,6 +231,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	private taskService: TaskService = null!
 	private operationJournal: OperationJournalService = null!
 	private legal: LegalAcceptanceService = null!
+	private dappSessionService: DappSessionService = null!
 	private planner: OperationPlanner = null!
 	private resolver: ContractResolver = null!
 
@@ -328,6 +325,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		this.taskService = services.get(TaskService.name)
 		this.operationJournal = services.get(OperationJournalService.name)
 		this.legal = services.get(LegalAcceptanceService.name)
+		this.dappSessionService = services.get(DAPP_SESSION_SERVICE_NAME)
 		this.planner = new OperationPlanner(this.profileService, this.tokenService)
 		this.resolver = new ContractResolver(this.logger)
 		this.authwit = new AuthwitDiscoverer(this.logger)
@@ -625,9 +623,10 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		feeSettings: FeeSettings,
 		precomputedEstimateId?: string,
 		feeCap?: string,
+		shownFee?: string,
 	): Promise<string> {
 		await this.ensureInitialized()
-		if (feeCap !== undefined && !isFeeAmount(feeCap)) throw InvalidWalletArgumentsError.forMethod("executeTransfer")
+		const figure = sendFeeFigureOf(feeCap, shownFee)
 		const contract = tokenContractKey("executeTransfer", tokenContract)
 		// Early refusal only — the wall is in the coordinator. This spares the user a proof.
 		await this.legal.assertCurrent()
@@ -637,7 +636,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			{ networkId, accountAddress, tokenId, tokenContract: contract, transferType, recipientAddress, amount, feeSettings },
 			precomputedEstimateId,
 			fence,
-			feeCap,
+			figure,
 		)
 	}
 
@@ -794,12 +793,14 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		flowKey?: string,
 	): Promise<TransferFeeEstimate> {
 		await this.ensureInitialized()
-		return this.refusalBound(interactionId, async () => {
-			const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
-			return this.withEstimateAdmission(estimateToken, flowKey ?? "op", (signal) =>
-				this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index }),
-			)
-		})
+		// Admitted before the stored request is read: a cancel then either finds the estimate or comes
+		// after the approval that deleted the request, which the read then refuses.
+		return this.refusalBound(interactionId, () =>
+			this.withEstimateAdmission(estimateToken, flowKey ?? "op", async (signal) => {
+				const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
+				return this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index })
+			}),
+		)
 	}
 
 	public async previewOperationAuthwits(
@@ -809,12 +810,13 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		flowKey?: string,
 	): Promise<OperationAuthwitPreview> {
 		await this.ensureInitialized()
-		return this.refusalBound(interactionId, async () => {
-			const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index)
-			return this.withEstimateAdmission(estimateToken, flowKey ?? "op", (signal) =>
-				this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal),
-			)
-		})
+		// Admitted before the read, as `estimateOperationFee` is.
+		return this.refusalBound(interactionId, () =>
+			this.withEstimateAdmission(estimateToken, flowKey ?? "op", async (signal) => {
+				const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index)
+				return this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal)
+			}),
+		)
 	}
 
 	/** A refusal is the request's, not one attempt's: the attempt that met it may be one the window
@@ -1038,13 +1040,13 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 				return this.viewExecutor.executeAztecGetChainInfo(operation)
 			}
 			case "aztec_registerSender": {
-				return this.executeAztecRegisterSender(operation)
+				return this.executeAztecRegisterSender(operation, await this.registrant(origin, authorizedFence))
 			}
 			case "aztec_getAddressBook": {
 				return this.viewExecutor.executeAztecGetAddressBook(operation)
 			}
 			case "aztec_registerContract": {
-				return this.executeAztecRegisterContract(operation)
+				return this.executeAztecRegisterContract(operation, await this.registrant(origin, authorizedFence))
 			}
 			case "aztec_simulateTx": {
 				return this.viewExecutor.executeAztecSimulateTx(operation)
@@ -1208,18 +1210,33 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 
 	// Aztec.js interface:
 
-	private async executeAztecRegisterSender(op: AztecRegisterSenderOperation): Promise<AztecAddress> {
+	/** The app a dApp registration is counted against, and the session it runs under, captured before
+	 *  the executor's first await. The app is the origin the wallet-sdk dispatcher stamps, the only
+	 *  builder of the two registration kinds; the person's own registrations are not counted. */
+	private async registrant(origin: LocalTxOrigin, authorizedFence?: ExecutionFence): Promise<Registrant | undefined> {
+		if (origin.type !== OriginType.DAPP) return undefined
+		if (!origin.name) throw new Error("a dApp registration needs the app's origin")
+		return { origin: origin.name, fence: authorizedFence ?? (await this.captureFence()) }
+	}
+
+	/** Before anything is written (`dapp-session/registration-allowance.ts`). */
+	private async admitDappRegistration(registrant: Registrant | undefined, network: Network): Promise<void> {
+		if (!registrant) return
+		if (registrant.fence.profileId !== network.profileId) throw new SessionEndedError()
+		await this.dappSessionService.admitDappRegistration(registrant.origin, registrant.fence, network.chainId)
+	}
+
+	private async executeAztecRegisterSender(op: AztecRegisterSenderOperation, registrant?: Registrant): Promise<AztecAddress> {
 		const network = await this.networkService.getNetwork(op.networkId)
-		return refuseFullTaggingSources(() =>
-			this.pxeService.registerSender(networkInfoFrom(network), op.address, DAPP_TAGGING_SOURCES_BOUND),
-		)
+		await this.admitDappRegistration(registrant, network)
+		return this.pxeService.registerSender(networkInfoFrom(network), op.address)
 	}
 
 	// Resolves to void: the 5.0.1 wallet-sdk WalletSchema declares
 	// `registerContract(): Promise<void>`, and the dApp-side proxy validates the
 	// response with z.void() — any non-undefined result rejects the whole call
 	// on the dApp even though registration succeeded wallet-side.
-	private async executeAztecRegisterContract(op: AztecRegisterContractOperation): Promise<void> {
+	private async executeAztecRegisterContract(op: AztecRegisterContractOperation, registrant?: Registrant): Promise<void> {
 		const instance = await ContractInstanceWithAddressSchema.parseAsync(op.instance)
 		const network = await this.networkService.getNetwork(op.networkId)
 
@@ -1240,7 +1257,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		// compiled-in known bundle (Aztec/Wonderland tokens, FPCs, NFTs,
 		// etc.). When neither has it, fail loudly with a message telling
 		// the dApp to pass `artifact` — there is no remote registry fallback.
-		const classId = instance.currentContractClassId
+		const classId = instance.originalContractClassId
 		const artifact = providedArtifact ?? (await this.pxeService.getContractArtifact(networkInfoFrom(network), classId))
 		if (!artifact) {
 			throw new ContractNotRegisteredError(
@@ -1250,7 +1267,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			)
 		}
 
-		await assertArtifactClassId(artifact, instance.currentContractClassId)
+		await assertInstanceArtifactClassId(instance, artifact)
 
 		// A secret key registers the instance's own account or nothing: one that derives another
 		// address or other keys would add an account the dApp's contract grant never named, or one
@@ -1265,12 +1282,10 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			throw InvalidWalletArgumentsError.forMethod("registerContract")
 		}
 
-		// The account first: a refusal at the tagging-source bound leaves the contract unregistered.
+		// Admitted before the account, so a refused keyed call registers neither the account nor the contract.
 		if (op.secretKey && account) {
-			const { secretKey } = op
-			await refuseFullTaggingSources(() =>
-				this.pxeService.registerAccount(networkInfoFrom(network), secretKey, account.partialAddress, DAPP_TAGGING_SOURCES_BOUND),
-			)
+			await this.admitDappRegistration(registrant, network)
+			await this.pxeService.registerAccount(networkInfoFrom(network), op.secretKey, account.partialAddress)
 		}
 
 		await this.pxeService.registerContract(networkInfoFrom(network), { instance, artifact })
