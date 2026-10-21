@@ -2,7 +2,7 @@
  * Each passkey step a page starts is refused once, as a dismissed prompt refuses it, and then tried
  * again: the toast says the passkey was not confirmed, the control that started the step is offered
  * again, the second try takes the toast away as it starts, and it finishes the step. Firefox's
- * toolbar runs its steps in windows of their own; `passkey-toolbar-panel.test.ts` refuses them there.
+ * toolbar runs its steps in windows of their own; `toolbar-panel.test.ts` refuses them there.
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"

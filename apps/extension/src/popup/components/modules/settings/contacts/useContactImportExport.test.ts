@@ -413,6 +413,52 @@ describe("useContactImportExport — export", () => {
 	})
 })
 
+describe("useContactImportExport — the running export", () => {
+	test("is exporting from the press until the file is handed over, after a success and after a failure", async () => {
+		const { accountStateService } = makeServices()
+		const { downloadFile } = await import("@/utils")
+		const api = useContactImportExport({ contacts: ref([{ id: "c1", name: "A", address: ADDR_A }]), accountStateService } as never)
+		expect(api.exporting.value).toBe(false)
+
+		const done = api.exportContacts()
+		expect(api.exporting.value).toBe(true)
+		await done
+		expect(api.exporting.value).toBe(false)
+
+		vi.mocked(downloadFile).mockRejectedValueOnce(new Error("refused"))
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			const failing = api.exportContacts()
+			expect(api.exporting.value).toBe(true)
+			await failing
+		} finally {
+			logged.mockRestore()
+		}
+		expect(api.exporting.value).toBe(false)
+	})
+
+	test("a stalled sender read keeps it exporting, and a second press downloads nothing", async () => {
+		const { accountStateService } = makeServices()
+		const { downloadFile } = await import("@/utils")
+		const held = deferred<string[]>()
+		accountStateService.getSendersAcrossActiveNetworks.mockReturnValueOnce(held.promise)
+		const api = useContactImportExport({ contacts: ref([{ id: "c1", name: "A", address: ADDR_A }]), accountStateService } as never)
+		const calls = vi.mocked(downloadFile).mock.calls.length
+
+		const first = api.exportContacts()
+		await vi.waitFor(() => expect(accountStateService.getSendersAcrossActiveNetworks).toHaveBeenCalledOnce())
+		await api.exportContacts()
+		expect(api.exporting.value).toBe(true)
+		expect(accountStateService.getSendersAcrossActiveNetworks).toHaveBeenCalledOnce()
+		expect(vi.mocked(downloadFile).mock.calls.length).toBe(calls)
+
+		held.resolve([])
+		await first
+		expect(vi.mocked(downloadFile).mock.calls.length).toBe(calls + 1)
+		expect(api.exporting.value).toBe(false)
+	})
+})
+
 describe("useContactImportExport — apply refuses what no row on screen promised", () => {
 	const ADDR_C = "0x02056523b85ea4e550facca78516f7270f18bddb0f5474177d406f6bf0e58617"
 

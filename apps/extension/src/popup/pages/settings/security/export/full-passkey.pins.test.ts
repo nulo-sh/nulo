@@ -157,7 +157,7 @@ vi.mock("vue-router", () => ({
 
 const surface = vi.hoisted(() => ({ needsOwnWindow: vi.fn(() => false), ownRoute: vi.fn((): string | undefined => undefined) }))
 const moveToOwnWindow = vi.hoisted(() => vi.fn(async () => true))
-vi.mock("@/utils/browser-surface", () => ({ passkeyNeedsOwnWindow: () => surface.needsOwnWindow() }))
+vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => surface.needsOwnWindow() }))
 vi.mock("@/utils/own-window", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils/own-window")>()),
 	moveToOwnWindow,

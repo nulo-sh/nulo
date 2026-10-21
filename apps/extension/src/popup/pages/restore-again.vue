@@ -26,6 +26,7 @@ import { useRestoreAgain } from "@/composables/useRestoreAgain"
 /** Utils */
 import { restoreAgainIntroText, withNetworkNames } from "@/components/composite/import/restore-warning"
 import { restoreCtaBlocked, showsDecryptCta, showsRestoreCta } from "@/utils/full-backup-ctas"
+import { OWN_WINDOW_ROUTES, leavePanelFor } from "@/utils/own-window"
 
 /** Stores */
 import { useAppStore } from "@/stores/app.store"
@@ -86,6 +87,12 @@ const cta = readonly({
 	isAllowedToImportBackup: isAllowedToRestore,
 })
 
+/** From Firefox's toolbar panel the pick moves to this page's own window, where a second press picks. */
+const handlePickFile = async () => {
+	if (await leavePanelFor(OWN_WINDOW_ROUTES.restoreAgain)) return
+	await pickBackupFile()
+}
+
 /** The decryption field's Enter decrypts; Restore, Retry and Continue answer only their buttons. */
 const onKeydown = (e) => {
 	if (e.defaultPrevented || !isPopupSubmitKey(e)) return
@@ -125,7 +132,7 @@ onBeforeUnmount(() => {
 			:retryFailedAgain="retryFailedAgain"
 			:error="error"
 			:isCopied="isCopied"
-			@pickFile="pickBackupFile"
+			@pickFile="handlePickFile"
 			@copyError="handleCopyError"
 		/>
 
