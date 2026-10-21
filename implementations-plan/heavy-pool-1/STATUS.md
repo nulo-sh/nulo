@@ -4,3 +4,5 @@
 - 2026-10-21 panel round 1: Codex conditional approve (6 findings), Opus conditional approve (9 findings); all verified, 14 adopted, O5's early stop and O9's pin rejected with reasons; plan revised.
 - 2026-10-21 panel round 2: Codex conditional approve (3 medium, 1 low), all adopted (suite argument for the generator, base-drift re-measure, open-row flake rule). Round 3: Codex approve. Awaiting the orchestrator.
 - 2026-10-21 approval: the orchestrator approves with a staged measurement (D9); Codex round 4 conditional approve, three conditions adopted. origin/dev merged (#1003); Phase 1 next.
+- 2026-10-21 Phase 1 ✓: A a3da01032 (generator + network record), B 1218eec4c (fold); timings, sequencer, ci-gating (655 pass), lint, lint:actions green on both, typecheck:all green; both pushed.
+- 2026-10-21 Phase 2 ✓, stopped after rounds 1–2 (D9): B − A = +132 s Chrome (39629158674 / 39629193473), +115 s Firefox (39632308349 / 39632256909); all checks clean. Phase 3b next.
