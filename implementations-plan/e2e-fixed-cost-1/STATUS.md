@@ -9,3 +9,4 @@
 - 2026-10-21 10:07Z: final pass verification turn approve; plan committed; auto-continue into arc 1.
 - 2026-10-21 10:43Z: arc 1 on `e2e-fixed-cost-1-a1`: fixture change committed; asserting probe pass on both browsers, base fails as required; smoke gate files green on both browsers; #997 filed closed (known-limit); network gate files running; Codex fix round 1 and the Opus review running.
 - 2026-10-21 11:02Z: network gate files green on both browsers; Codex fix round 1 approve, Opus conditional approve, fixes taken; resuming Codex to verify; full smoke suites next.
+- 2026-10-21 11:42Z: Codex fix round 2 approve (converged); full Chrome smoke 59/60 at `d0f786889`, `import-dead-rpc` red on a network-stamped build, green 8/8 on the armed build; merged `origin/dev`; final-head lint, typecheck:all, test:all green; full Firefox smoke running.

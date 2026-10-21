@@ -148,6 +148,8 @@ None. No screen, copy or layout changes; test harness only.
 
 **Arc 1, Opus review (`general-purpose`): conditional approve.** (1) Demonstrated: the skill cited the archive path, which does not resolve at HEAD, so `check:plans` failed: it cites the live plan path until the close-out's move repoints it. (2) The helper's comment: a duplicate sentence, a garbled clause, an imprecise parenthesis and no word on the I2 race: rewritten, with one clause for I2. (3) Nits taken: the settle's doc names the window, the `freshProfile` comment says "defaults to" the Terms seed, the close error carries the `launchExtension:` prefix.
 
+**Arc 1 fix loop, round 2, Codex (resumed): approve.** No findings; the fix commit's only executable change is the close error's label. The loop converged.
+
 ## Delivery
 
 - **Arc 1** = Phase 1, branch `e2e-fixed-cost-1-a1` off `origin/dev` with this plan's commit cherry-picked first; one PR against `dev` (the orchestrator's D-orch-1: no stack), ready. Title: `perf(e2e): settle every launch on its first-run surface, poll liveness at 200 ms` (80 characters). Body: what changed and why, the measured tables per browser, the validation runs, the complexity section, the D1 and D2 verdicts with the known-limit issue, `Closes #991`. No label at creation; the fixture path trips both lanes' filters.
