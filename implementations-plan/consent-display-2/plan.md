@@ -206,7 +206,7 @@ has none.
 
 ### Arc 1 (branch `consent-display-2-a1`, from this plan's commit on `origin/dev`)
 
-**Phase 1 — capability rows and the events default.** Files: `permission-rows.ts`, `build-items.ts`, capability
+**✓ Phase 1 — capability rows and the events default.** Files: `permission-rows.ts`, `build-items.ts`, capability
 `index.vue`; tests `permission-rows.test.ts`, `build-items.test.ts`, capability `index.test.ts`;
 `tests/e2e/network/cap-request-partial.test.ts`. Tests: each row with one unknown, two, and one named contract;
 the details `"*"` row flagged with its chip; classes counted and `"*"` unchanged; `privateEventsDefault` as one
@@ -218,7 +218,7 @@ private events On and the address book Off, and expects `{ type: "data", private
 Gate: `bun run lint`, `bun run typecheck:all`, `bun run --cwd apps/extension test src/popup/windows/capabilities`
 exit 0.
 
-**Phase 2 — the Details table.** Files: `details-table.ts`, `DetailsTable.vue`, `DetailsTable.stories.ts`,
+**✓ Phase 2 — the Details table.** Files: `details-table.ts`, `DetailsTable.vue`, `DetailsTable.stories.ts`,
 capability `index.vue`; tests `details-table.test.ts`, `DetailsTable.test.ts`. Tests: the "feed no column" case
 becomes one case per new column (details from a metadata grant, listed and `"*"`; events, listed and `"*"`;
 code on a class row, and on "Any contract" for `"*"`); accounts and the address book still feed nothing; the label
@@ -228,7 +228,7 @@ events (D15); the head's six glyphs in order, aria-hidden; a class row under
 `bun run --cwd apps/extension test src/popup/windows/capabilities src/components/composite/capabilities`,
 `bun run --cwd apps/extension build-storybook` exit 0.
 
-**Phase 3 — the PrivateFPC fee card.** Files: `fee-figure.ts`, `AppFeeLine.vue`, `OperationCard.vue`; tests
+**✓ Phase 3 — the PrivateFPC fee card.** Files: `fee-figure.ts`, `AppFeeLine.vue`, `OperationCard.vue`; tests
 `fee-figure.test.ts`, `AppFeeLine.test.ts`, `OperationCard.fee.test.ts`. Tests (wire-shaped `aztec_sendTx`, payer
 `PRIVATE_FPC_ADDRESS`): no check glyph, the two lines and the notice once landed; the estimating skeleton line;
 the failed legend with the notice and no check; `funded: false` draws no probe line (never-happens), while a
@@ -236,7 +236,7 @@ third-party FPC with `funded: false` draws the check and the probe line (control
 line two; `paysFromPrivateFeeJuice` true only for the PrivateFPC payer (not a third-party FPC, not a claim).
 Gate: lint, `typecheck:all`, `bun run --cwd apps/extension test src/popup/windows/execute src/popup/components/modules/send` exit 0.
 
-**Phase 4 — the flagged token add.** Files: execute `index.vue`, `OperationCard.vue`; tests `OperationCard.test.ts`,
+**✓ Phase 4 — the flagged token add.** Files: execute `index.vue`, `OperationCard.vue`; tests `OperationCard.test.ts`,
 execute `index.test.ts`; `tests/e2e/network/register-token.test.ts`, `tests/e2e/fixtures/token-list.ts` (a
 `flagged` option on `signTestList`), and whatever `fixtures/extension.ts` plumbing a network launch needs to serve
 a list (the session source key plus `requestListRefresh`, as `token-list.test.ts` does). Tests: a flagged card draws the banner and an unticked tick that emits; an
@@ -250,7 +250,7 @@ Space, which sends nothing, then approve and the token added). It proves the gat
 worker's held list and the keyboard path, which no component test reaches; estimate 60 s per browser. Gate: lint, `typecheck:all`,
 `bun run --cwd apps/extension test src/popup/windows/execute` exit 0.
 
-**Phase 5 — e2e, screenshots, full gates.** Run, each at retry 0, on Chrome then Firefox
+**✓ Phase 5 — e2e, screenshots, full gates.** Run, each at retry 0, on Chrome then Firefox
 (`NULO_E2E_BROWSER=firefox`): `cd <worktree> && NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run
 e2e:agent tests/e2e/network/{cap-request-partial,data-privateEvents,cap-window,cap-request-rerequest,register-token,fee-sponsor-funding,type-roles-windows,selfpay-phase}.test.ts`.
 Measure each browser's wall-clock for the two changed files (`register-token`, `cap-request-partial`) on
