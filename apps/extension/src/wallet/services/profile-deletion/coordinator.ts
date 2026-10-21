@@ -15,6 +15,7 @@ import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { TokenBalanceService } from "@/wallet/services/token-balance/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { TransactionService } from "@/wallet/services/transaction/service"
+import { purgeSealedRowsOf } from "@/wallet/storage/sealed-roots"
 import type { ProfileDeletionDelegate, ProfileDeletionRows, ProfileDeletionSnapshot } from "./types"
 
 export const PROFILE_DELETION_COORDINATOR_NAME = "profile-deletion-coordinator"
@@ -132,6 +133,11 @@ export class ProfileDeletionCoordinator implements IService, ProfileDeletionDele
 		await this.accounts.purgeForProfile(profileId)
 		await this.tokens.purgeForProfile(profileId)
 		await this.networks.purgeForProfile(profileId)
+		// The typed purges above ran with the row keys, so they could read the rows they purge
+		// and clear what those rows armed. Dropped next, so no sealed write for the profile can
+		// land behind the keyless sweep, which removes every row naming it, opened or not.
+		this.profiles.dropRowKeys(profileId)
+		await purgeSealedRowsOf(this.storage, profileId)
 		await this.storage.remove(profileUiKeys(profileId))
 		await this.pxe.clearProfileState(profileId, s.pxeGeneration)
 	}

@@ -11,7 +11,17 @@ import type { Page } from "puppeteer"
 import { describe, expect, vi } from "vitest"
 import { extensionUrl, FIREFOX_ONLY, isFirefox, stopBackground } from "./fixtures/browser"
 import { evaluateInActionPopup, openActionPopup } from "./fixtures/browser/firefox-action-popup"
-import { clickByTestId, type ExtensionContext, openOnboarding, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
+import {
+	clickByTestId,
+	type ExtensionContext,
+	launchExtension,
+	openOnboarding,
+	openPopup,
+	registerProfile,
+	replaceInputValue,
+	test,
+	waitForHash,
+} from "./fixtures/extension"
 import {
 	addContact,
 	clickNavTab,
@@ -28,10 +38,14 @@ import {
 } from "./fixtures/helpers"
 import { holdNextPasskeyRequest, openPasskeyRegister, setupPasskeyVirtualAuth } from "./fixtures/passkey"
 import { settleClosedPopup } from "./fixtures/popup-leave"
+import { openDropdown } from "./fixtures/widgets"
 import {
 	checkFontFaces,
 	clearTypeRoleProbes,
 	coverageOf,
+	atWidth,
+	expectFits,
+	expectFitsNarrow,
 	expectLaidOut,
 	expectSitesClean,
 	expectSweepClean,
@@ -39,6 +53,7 @@ import {
 	type IdentifierObservation,
 	identifierSites,
 	judgeTypography,
+	NARROW_WIDTH,
 	observeIdentifierSites,
 	overflowingText,
 	type PageTypography,
@@ -50,6 +65,8 @@ import {
 	type SiteEntry,
 	siteSuite,
 	sweepTypeRoles,
+	type TextFate,
+	textFates,
 	type TypeReading,
 	withBlockedAccount,
 } from "./fixtures/type-roles"
@@ -63,7 +80,7 @@ import {
 	seedTokenRow,
 	seedTransaction,
 } from "./helpers/activity-seeds"
-import { exportAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "./helpers/account-io"
+import { confirmImport, exportAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "./helpers/account-io"
 import { seedAuthwits } from "./helpers/authwit-seeds"
 import { closeImportWith, contactsFiles, pickContactsFile, refuseTestnet } from "./helpers/contacts"
 import { seedFpcs, seedProtocolFpcs } from "./helpers/fpc-seeds"
@@ -282,6 +299,72 @@ test("the layout gate reports text an ancestor cuts or that runs past the box it
 	expect(ctx.pageErrors).toEqual([])
 })
 
+const FATES_HTML = `
+	<div data-testid="tr-fate-split-box"><span data-testid="tr-fate-split">0x1234abcd..ef567890</span></div>
+	<div data-testid="tr-fate-presplit-box"><span data-testid="tr-fate-presplit">0x1234abcd..ef567890</span></div>
+	<div data-testid="tr-fate-short-box"><span data-testid="tr-fate-short">0x12..34</span></div>
+	<div data-testid="tr-fate-cut">Text shown whole now</div>
+	<div data-testid="tr-fate-gone">Gone</div>
+	<div data-testid="tr-fate-wraps">Text that wraps onto more lines at the narrow width</div>`
+
+/**
+ * In the identifiers' own face at `line-height: 1`, as `AddressDisplay` draws them: a 20-character
+ * line fits 50% of a 360 px view, not of a 240 px one.
+ */
+const FATES_STYLES: Record<string, Record<string, string>> = {
+	"tr-fate-split-box": { width: "50%" },
+	"tr-fate-split": { overflowWrap: "anywhere" },
+	"tr-fate-presplit-box": { width: "40px" },
+	"tr-fate-presplit": { overflowWrap: "anywhere" },
+	"tr-fate-short-box": { width: "50%" },
+	"tr-fate-short": { overflowWrap: "anywhere" },
+	"tr-fate-cut": { width: "50%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+	"tr-fate-gone": { width: "max(0px, calc(100% - 300px))", overflow: "hidden", whiteSpace: "nowrap" },
+	"tr-fate-wraps": { width: "50%" },
+}
+
+test("the narrow gate reports text its own width shows whole and the narrow width hides, cuts or splits, and nothing else", async ({
+	registeredExtension: ctx,
+}) => {
+	const page = await openHome(ctx)
+	await page.evaluate(
+		(html: string, styles: Record<string, Record<string, string>>) => {
+			const host = document.createElement("div")
+			host.setAttribute("data-testid", "tr-fates")
+			host.innerHTML = html
+			Object.assign(host.style, {
+				position: "fixed",
+				top: "0",
+				left: "0",
+				width: "100%",
+				font: "13px/1 var(--font-mono)",
+				zIndex: "9999",
+			})
+			for (const [testid, style] of Object.entries(styles))
+				Object.assign((host.querySelector(`[data-testid="${testid}"]`) as HTMLElement).style, style)
+			document.body.appendChild(host)
+		},
+		FATES_HTML,
+		FATES_STYLES,
+	)
+	try {
+		await textFates(page, "record")
+		let fates: TextFate[] = []
+		await atWidth(page, NARROW_WIDTH, async () => {
+			fates = await textFates(page, "compare")
+		})
+		// An identifier already split at the page's width, a short one and text that only wraps report nothing.
+		expect(fates.filter(({ testid }) => testid?.startsWith("tr-fate")).map(({ fate, testid }) => `${fate} ${testid}`)).toEqual([
+			"split tr-fate-split",
+			"cut tr-fate-cut",
+			"gone tr-fate-gone",
+		])
+	} finally {
+		await page.evaluate(() => document.querySelector('[data-testid="tr-fates"]')?.remove())
+	}
+	expect(ctx.pageErrors).toEqual([])
+})
+
 test("the three faces the roles name load, and none fails", async ({ registeredExtension: ctx }) => {
 	const page = await openHome(ctx)
 	const fonts = await withProbes(page, () => checkFontFaces(page))
@@ -391,14 +474,16 @@ const cutFigures = (readings: readonly TypeReading[]) =>
 		}))
 
 /**
- * The faces and roles of the page as it stands, then the identifier sites and hex text of each
- * state it renders, or the hex text alone when it names no state.
+ * The faces and roles of the page as it stands, its layout at its own width and at the narrowest,
+ * then the identifier sites and hex text of each state it renders, or the hex text alone when it
+ * names no state.
  */
-async function expectPageClean(page: Page, label: string, states: readonly SiteState[] = []): Promise<void> {
+async function expectPageClean(page: Page, label: string, states: readonly SiteState[] = [], { narrow = true } = {}): Promise<void> {
 	const sweep = await sweepTypeRoles(page)
 	expectSweepClean(sweep, label)
 	expect(cutFigures(sweep.readings), `${label}: figures cut`).toEqual([])
 	await expectLaidOut(page, label)
+	if (narrow) await expectFitsNarrow(page, label)
 	for (const [surface, state] of states) {
 		const observation = await observeIdentifierSites(page, surface, state)
 		expectSitesClean(observation)
@@ -738,15 +823,24 @@ test("a seeded wallet's Home, Holdings, Activity, its tx, receipt and send detai
 		const { page, scope, receipt } = await openSeededHome(ctx)
 		await waitForFittedHero(page)
 		await expectHero(page, false)
-		await expectPageClean(page, "Home", [["overlay:Header", ""]])
-		// Past $1T the figure outgrows a 160px cap onto a third line; its own cap keeps it on two. The
-		// row reads its quote apart from the hero, so the figure can land after the sweep.
+		// The row reads its quote apart from the hero, and its figure replaces the token's name when it
+		// lands: the sweep waits for it, or the narrow pass reads the name as gone.
 		await page.waitForSelector(sel("token-fiat"), VISIBLE)
+		await expectPageClean(page, "Home", [["overlay:Header", ""]])
+		// Past $1T the figure outgrows a 160px cap onto a third line; its own cap keeps it on two.
 		const fiat = await readTokenFiat(page)
 		expect(fiat.text).toMatch(/^≈ \$123,456,789,012,345\./)
 		expect.soft(fiat.lines, `the token row's dollar figure: ${JSON.stringify(fiat)}`).toBeLessThanOrEqual(2)
 		await expectRoleAt(page, "holdings-section-label", "label-section")
 		await expectButtons(page, "tokens-menu-trigger")
+		// A menu is placed when it opens, so it is opened at the narrow width.
+		await atWidth(page, NARROW_WIDTH, async () => {
+			await openDropdown(page, "tokens-menu-trigger")
+			await page.waitForSelector(sel("tokens-menu-import"), VISIBLE)
+			await expectFits(page, `Home's tokens menu at ${NARROW_WIDTH} px`)
+			await page.keyboard.press("Escape")
+			await page.waitForSelector(sel("tokens-menu-import"), { hidden: true, timeout: 5_000 })
+		})
 
 		await openAndSweep(page, "actions-receive", "receive-address", "Receive", [["popup:receive", ""]])
 		await expectButtons(page, "receive-close")
@@ -923,7 +1017,30 @@ async function expectHiddenAccountAndImport(page: Page): Promise<void> {
 	])
 }
 
-test("a contact on Send and in Contacts, a contacts file, an unnamed FPC, New sender, the profile, a hidden account and an account file", async ({
+/** An account file from another master imported, then Delete Profile listing it. */
+async function expectImportedOnReset(page: Page): Promise<void> {
+	let body: string
+	const donor = await launchExtension()
+	try {
+		await registerProfile(donor)
+		const donorPage = await openPopup(donor)
+		await waitForHash(donorPage, "#/popup/general", 30_000)
+		body = await exportAccountBody(donorPage, FIRST_ACCOUNT_NAME, false)
+	} finally {
+		await donor.close()
+	}
+	// The page still holds the previous file's preview, which a same-route navigation would keep.
+	await navigateByHash(page, "#/popup/settings/accounts", 10_000)
+	await page.waitForSelector(sel("accounts-new-btn"), VISIBLE)
+	expect(await previewImport(page, body)).toMatch(/^0x/)
+	await confirmImport(page, "Savings")
+	await closeStuckPopup(page)
+	await goAndSweep(page, "#/popup/settings/security/reset", "reset-imported-account", "Reset, an imported account", [
+		["popup-settings-security-reset", "an imported account"],
+	])
+}
+
+test("a contact on Send and in Contacts, a contacts file, an unnamed FPC, New sender, the profile, a hidden account, an account file and an imported account on Delete Profile", async ({
 	registeredExtensionPerTest: ctx,
 }) => {
 	const refusal = await refuseTestnet(ctx)
@@ -936,6 +1053,7 @@ test("a contact on Send and in Contacts, a contacts file, an unnamed FPC, New se
 		await expectContactsImport(page)
 		await expectSettingsForms(page)
 		await expectHiddenAccountAndImport(page)
+		await expectImportedOnReset(page)
 		expect(await refusal.failures()).toEqual([])
 	} finally {
 		await refusal.stop()
@@ -948,7 +1066,8 @@ test("the large CTA on onboarding's create step holds its role and box", async (
 	await clickByTestId(page, "onboarding-welcome-create")
 	await waitForHash(page, "#/onboarding/create")
 	await page.waitForSelector(sel("onboarding-submit-create"), VISIBLE)
-	await expectPageClean(page, "onboarding create")
+	// Onboarding is a tab with a floor of its own, never shown in a sidebar.
+	await expectPageClean(page, "onboarding create", [], { narrow: false })
 	await expectButtons(page, "onboarding-submit-create")
 	expect(ctx.pageErrors).toEqual([])
 }, 120_000)

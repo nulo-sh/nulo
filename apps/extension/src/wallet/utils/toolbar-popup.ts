@@ -3,6 +3,7 @@
  * that Firefox's toolbar panel handed to the passkey window, whose prompt closed the panel.
  */
 import { isSenderAtUrl } from "@nulo/extension-messaging/background"
+import { pointToolbarAtSidebar } from "@/utils/browser-surface"
 import { OPEN_TOOLBAR_POPUP, type OpenToolbarPopupAnswer, onboardingDocumentUrl } from "./onboarding-tab"
 
 /** How long the return to the wallet waits for its browser window to have focus again. */
@@ -25,6 +26,9 @@ export interface FocusWindows {
  */
 export async function openToolbarPopup(windowId: number): Promise<void> {
 	try {
+		// Firefox opens no popup while the button points at its sidebar, so the manifest's comes back
+		// first; the popup points it at the sidebar again as it boots, as every shell page does.
+		await pointToolbarAtSidebar(false)
 		await chrome.action.openPopup({ windowId })
 	} catch {
 		console.debug("[toolbar-popup] the browser did not open the popup")

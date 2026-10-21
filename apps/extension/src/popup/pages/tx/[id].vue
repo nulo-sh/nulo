@@ -217,7 +217,7 @@ onBeforeUnmount(() => {
 					{{ transferTypeLabel }}
 				</div>
 
-				<Flex wide gap="8">
+				<Flex wide gap="8" :class="$style.address_pair">
 					<Flex
 						wide
 						direction="column"
@@ -389,6 +389,10 @@ onBeforeUnmount(() => {
 
 .transfer_type_chip {
 	composes: type_chip from "../detail-page.module.css";
+}
+
+.address_pair {
+	composes: address_pair from "../detail-page.module.css";
 }
 
 .address_card {

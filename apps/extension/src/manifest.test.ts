@@ -19,6 +19,7 @@ const m = manifest as unknown as {
 
 type FirefoxManifest = {
 	permissions: string[]
+	sidebar_action?: { default_panel: string; default_icon: Record<string, string>; open_at_install: boolean }
 	host_permissions: string[]
 	optional_host_permissions?: unknown
 	optional_permissions?: unknown
@@ -30,7 +31,8 @@ type FirefoxManifest = {
 const buildFirefox = () =>
 	(firefoxManifest as unknown as (env: { command: string; mode: string }) => FirefoxManifest)({ command: "build", mode: "production" })
 type ManifestEnv = { command: string; mode: string }
-const chromeFor = (env: ManifestEnv) => (chromeManifest as unknown as (env: ManifestEnv) => { content_security_policy: unknown })(env)
+const chromeFor = (env: ManifestEnv) =>
+	(chromeManifest as unknown as (env: ManifestEnv) => { content_security_policy: unknown; side_panel: { default_path: string } })(env)
 
 /** Chrome match-pattern semantics for the subset the manifest uses: `<scheme>://<host>/<path>`,
  *  where host is `*`, `*.domain` (domain and every subdomain) or an exact domain. */
@@ -177,6 +179,18 @@ describe("firefox manifest", () => {
 		expect(permissions).not.toContain("sidePanel")
 		expect(permissions).not.toContain("offscreen")
 		expect(permissions).toContain("storage")
+	})
+
+	// The sidebar takes its page from the side panel's, so the two surfaces cannot drift apart; one
+	// opened at install would put the wallet beside every new Firefox user's first tab unasked.
+	test("declares a sidebar on the side panel's page, closed at install, on Firefox only", () => {
+		const chrome = chromeFor({ command: "build", mode: "production" })
+		expect(buildFirefox().sidebar_action).toEqual({
+			default_panel: chrome.side_panel.default_path,
+			default_icon: (manifest as unknown as { icons: Record<string, string> }).icons,
+			open_at_install: false,
+		})
+		expect(chrome).not.toHaveProperty("sidebar_action")
 	})
 
 	// A person withholds these in about:addons only by switching off all-sites access too.

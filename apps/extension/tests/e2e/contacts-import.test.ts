@@ -38,6 +38,7 @@ import {
 	sectionCounts,
 	senderLine,
 	shownRows,
+	rawContactRows,
 	storedContacts,
 	tabWalk,
 	toastAfter,
@@ -490,7 +491,8 @@ test("auto-lock mid-import locks the wallet and stops the import", async ({ regi
 		// Strictly inside, so a stop that missed the import fails loudly instead of passing.
 		expect(written).toBeGreaterThan(0)
 		expect(written).toBeLessThan(LONG_IMPORT_ROWS)
-		// A write whose reply the stop cut off is stored but not counted.
-		expect([written, written + 1]).toContain((await storedContacts(page)).length)
+		// A write whose reply the stop cut off is stored but not counted. Counted at rest: the wallet
+		// is locked, so its contact service reads nothing.
+		expect([written, written + 1]).toContain((await rawContactRows(page)).length)
 	})
 }, 180_000)

@@ -34,7 +34,7 @@ const toggleReveal = () => {
 
 <template>
 	<Flex direction="column" gap="10" :class="$style.card" data-testid="recipient-card" :data-address="address">
-		<Flex align="center" justify="between" gap="10" wide>
+		<Flex align="center" justify="between" gap="10" wide :class="$style.head">
 			<Flex align="center" gap="10" :class="$style.identity">
 				<AccountAvatar :name="name" :size="36" />
 				<Flex direction="column" gap="2" :class="$style.text">
@@ -139,5 +139,29 @@ const toggleReveal = () => {
 .full_addr {
 	word-break: break-all;
 	line-height: 1.4 !important;
+}
+
+/* Below the popup's width the head wraps: the identity keeps its whole width where the line has it,
+ * so the buttons go under it, at the right, rather than cut the shortened address, and a name wraps
+ * rather than end in an ellipsis. Two classes outrank the global `gap--10`. */
+@media (width < 359px) {
+	.card > .head {
+		flex-wrap: wrap;
+		row-gap: 8px;
+	}
+
+	.head > .identity {
+		flex: 1 1 auto;
+		max-width: 100%;
+	}
+
+	.head > .actions {
+		margin-left: auto;
+	}
+
+	.head .name {
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
 }
 </style>

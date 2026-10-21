@@ -8,8 +8,9 @@
  *   3. pub→priv to us (`transfer_public_to_private`) → the private note arm shows "Received
  *      privately", sender redacted: no public receipt, since the public leg is `to == MAGIC`.
  *
- * Receipt assertions get a >=120s budget — the default 30s test timeout EQUALS the scheduler
- * interval, so a receipt could time out on the very first idle tick.
+ * Receipt assertions get a >=120s budget — the default 30s test timeout EQUALS the production
+ * scheduler interval, so on a build without the e2e clocks a receipt could time out on the very
+ * first idle tick.
  */
 import { expect, inject } from "vitest"
 import { openPopup, test, waitForHash } from "../fixtures/extension"

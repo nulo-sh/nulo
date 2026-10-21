@@ -17,6 +17,7 @@ import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion
 import { ProfileService } from "@/wallet/services/profile/service"
 import type { PendingVerificationEntry } from "./pending-verification"
 import { wireSessionTeardown } from "./session-revocation"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 
 const ORIGIN = "https://dapp.xyz"
 const TAB = 7
@@ -34,6 +35,7 @@ async function harness() {
 			getActiveProfile: async () => ({ id: active }),
 			onProfileDeleted: new EventHandler(),
 			deriveDappSessionMacKey: async () => macKey,
+			...(await rowKeysForEveryProfile()),
 			getDeletionState: () => deletionState,
 			captureExecutionFence: async () => ({ profileId: active, epoch: deletionState.capture(active) }),
 		}),

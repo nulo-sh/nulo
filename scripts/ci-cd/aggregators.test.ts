@@ -70,7 +70,7 @@ function expressionOf(file: string, key: string, value: string): string {
  * Run the script as the runner does: each inline `${{ }}` replaced by its value first, then `bash -e`
  * from the repository root with an environment of only `PATH`, `extra` and the bound `env:`.
  */
-function exitCode(agg: Pick<Aggregator, "file" | "run" | "env">, world: World, extra: Record<string, string> = {}): number {
+function runScript(agg: Pick<Aggregator, "file" | "run" | "env">, world: World, extra: Record<string, string> = {}) {
 	const worldValue = (expression: string): string => {
 		if (!(expression in world)) throw new Error(`${agg.file}: no world value for ${expression}`)
 		return world[expression]
@@ -78,9 +78,11 @@ function exitCode(agg: Pick<Aggregator, "file" | "run" | "env">, world: World, e
 	const env: Record<string, string> = { PATH: process.env.PATH ?? "/usr/bin:/bin", ...extra }
 	for (const [key, value] of Object.entries(agg.env)) env[key] = worldValue(expressionOf(agg.file, key, value))
 	const script = agg.run.replace(/\$\{\{ (.+?) \}\}/g, (_, expression: string) => worldValue(expression))
-	return Bun.spawnSync(["bash", "--noprofile", "--norc", "-e", "-c", script], { cwd: ROOT, env, stdout: "ignore", stderr: "ignore" })
-		.exitCode
+	return Bun.spawnSync(["bash", "--noprofile", "--norc", "-e", "-c", script], { cwd: ROOT, env, stdout: "pipe", stderr: "ignore" })
 }
+
+const exitCode = (agg: Pick<Aggregator, "file" | "run" | "env">, world: World, extra: Record<string, string> = {}): number =>
+	runScript(agg, world, extra).exitCode
 
 /** Every need `success`, except the ones a world's conditions skip. */
 const results = (needs: string[], skipped: string[]): World =>
@@ -144,6 +146,9 @@ const PUBLISHED_SUBMISSION = release({ ...asked("true"), "needs.select-assets.ou
 	"build-firefox",
 ])
 
+const SOAK = aggregator("extension-network-e2e-soak.yml")
+const soak = (retry: string): World => ({ "inputs.repeats": "3", "inputs.retry": retry, ...results(SOAK.needs, []) })
+
 const CASES: { file: string; agg: Aggregator; advisory: string[]; worlds: Record<string, World> }[] = [
 	{
 		file: QUALITY.file,
@@ -162,6 +167,12 @@ const CASES: { file: string; agg: Aggregator; advisory: string[]; worlds: Record
 			"a promote or Release PR into main": quality("pull_request", "true", "true", [], "main"),
 			"a manual dispatch": quality("workflow_dispatch", "true", "true", ["commitlint", "launch-legal"]),
 		},
+	},
+	{
+		file: SOAK.file,
+		agg: SOAK,
+		advisory: [],
+		worlds: { "a soak at retry 0": soak("0"), "a soak at the config-default retry": soak("") },
 	},
 	{
 		file: ACTIONLINT.file,
@@ -238,6 +249,25 @@ describe.each(CASES)("$file aggregator", ({ agg, advisory, worlds }) => {
 
 	test.each(Object.entries(worlds))("fails %s once any one need ends otherwise", (_, world) => {
 		expectEveryOtherResultFails(agg, world)
+	})
+})
+
+describe("extension-network-e2e-soak.yml status line", () => {
+	const said = (world: World): string => runScript(SOAK, world).stdout.toString()
+
+	test("states the iteration count, and zero test retries only at retry 0", () => {
+		expect(said(soak("0"))).toContain("all 3 iteration(s) green, every named test ran, with zero test retries")
+		for (const retry of ["", "2"]) expect(said(soak(retry)), `retry '${retry}'`).not.toContain("zero test retries")
+	})
+
+	test("names a cancel as a cancel, never a refusal or a flake", () => {
+		const prep = said({ ...soak("0"), "needs.prep.result": "cancelled" })
+		expect(prep).toContain("prep=cancelled")
+		expect(prep).not.toContain("flake")
+		const iteration = said({ ...soak("0"), "needs.soak.result": "cancelled" })
+		expect(iteration).toContain("soak=cancelled")
+		expect(iteration).not.toContain("flake")
+		expect(said({ ...soak("0"), "needs.soak.result": "failure" })).toContain("a flake to fix or breakage")
 	})
 })
 

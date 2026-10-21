@@ -51,15 +51,18 @@ describe("composite/TransactionCardLayout", () => {
 		expect(mountLayout().get("[data-testid='activity-title']").attributes("class")).not.toMatch(cut)
 	})
 
-	test("title-trailing slot renders inline next to the title; `wrapTrailing` sets it in the group that drops under the title", () => {
+	test("title-trailing slot renders in the group beside the title; `wrapTrailing` lets the group drop under it at any width", () => {
 		const slots = { "title-trailing": "<span data-testid='trailing'>↗</span>" }
 		const row = (w: ReturnType<typeof mountLayout>) => w.get("[data-testid='activity-title']").element.parentElement as HTMLElement
+		const group = (w: ReturnType<typeof mountLayout>) => w.get("[data-testid='trailing']").element.parentElement as HTMLElement
 		const inline = mountLayout({}, slots)
-		expect(inline.get("[data-testid='trailing']").element.parentElement).toBe(row(inline))
+		expect(group(inline).className).toMatch(/_trailing_inline_/)
+		expect(group(inline).parentElement).toBe(row(inline))
 		expect(row(inline).className).not.toMatch(/_title_row_wrap_/)
 		const wrapping = mountLayout({ wrapTrailing: true }, slots)
-		expect(wrapping.get("[data-testid='trailing']").element.parentElement?.className).toMatch(/_trailing_/)
+		expect(group(wrapping).className).toMatch(/_trailing_(?!inline)/)
 		expect(row(wrapping).className).toMatch(/_title_row_wrap_/)
+		expect(row(mountLayout()).querySelector("[class*='_trailing_']")).toBeNull()
 	})
 
 	test("amount + amountSymbol render in the right column when both provided", () => {

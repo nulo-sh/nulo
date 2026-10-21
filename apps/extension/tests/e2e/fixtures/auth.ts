@@ -1,4 +1,5 @@
 import type { Page } from "puppeteer"
+import { E2E_WALLET_CLOCK_VALUES } from "@/e2e/wallet-clocks"
 import { TEST_PASSWORD } from "./constants"
 import { clickByTestId, clickSelector, replaceInputValue, waitForHash, withTimeoutMessage } from "./dom"
 import { navigateByHash } from "./navigation"
@@ -321,9 +322,10 @@ export async function unlockProfile(page: Page, profileId: string, password: str
 	await waitForHash(page, "#/popup/general", 30_000)
 }
 
-/** The incoming scheduler's tick interval: a receipt shown sooner after an unlock came from the
- *  unlock's own scan, not from a tick. */
-export const INCOMING_SCAN_INTERVAL_MS = 30_000
+/** The network e2e build's incoming tick. An unlock installs the schedulers with a scan of its own,
+ *  so a receipt shown sooner than one tick after the unlock was found by that scan; on a build with
+ *  the production tick the bound only tightens. */
+export const INCOMING_SCAN_INTERVAL_MS = E2E_WALLET_CLOCK_VALUES.incomingPollMs
 
 /** Unlock a locked wallet, then wait on History for an incoming row whose kind chip reads `label`
  *  and amount reads `amount`. Resolves the time from helper entry to the row. */
