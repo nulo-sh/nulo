@@ -145,7 +145,7 @@
 		{
 			"file": "apps/extension/src/components/composite/capabilities/DetailsTable.vue",
 			"expression": "shownAddress(entry.row.address)",
-			"branch": "!(entry.kind === 'sub') && !(entry.named)",
+			"branch": "!(entry.kind === 'sub') && !(isNamed(entry))",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"capability-address\"]",
