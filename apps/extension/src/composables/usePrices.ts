@@ -27,7 +27,7 @@ function listState() {
 	const flaggedTokens = ref<ReadonlySet<string>>(new Set())
 	/** The mapping has arrived. Until then no surface can tell a priced token from an unpriced one. */
 	const mapped = ref(false)
-	/** Bumped by each full snapshot, a broadcast or a refresh answer: a list read begun before one is older. */
+	/** Bumped by each full snapshot, a broadcast or a refresh answer: a read begun before one is older. */
 	let adopted = 0
 
 	const adopt = (snapshot: PriceSnapshot) => {
@@ -45,17 +45,17 @@ function listState() {
 		},
 		/** From a read that never touches the network: a refresh can wait on the price provider, and a
 		 *  surface must not wait with it to learn what the list says. Resolves with the snapshot it
-		 *  adopted, or undefined when a newer one landed first or the read failed. */
+		 *  adopted, or undefined when a broadcast or refresh answer was adopted first or the read failed. */
 		read(priceService: PriceServiceClient): Promise<PriceSnapshot | undefined> {
 			const before = adopted
-			return priceService.getQuotes().then(
-				(snapshot) => {
+			return priceService
+				.getQuotes()
+				.then((snapshot) => {
 					if (adopted !== before) return undefined
 					adopt(snapshot)
 					return snapshot
-				},
-				() => undefined,
-			)
+				})
+				.catch(() => undefined)
 		},
 	}
 }

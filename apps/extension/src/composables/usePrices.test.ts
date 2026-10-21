@@ -71,6 +71,8 @@ afterEach(() => {
 	vi.useRealTimers()
 })
 
+const reconnect = (client: ReturnType<typeof fakeClient>) => (client as unknown as { onConnected: EventHandler<void> }).onConnected.invoke()
+
 describe("composables/usePrices", () => {
 	test("initial mount refreshes stale-on-connect and adopts the result", async () => {
 		const client = fakeClient(quoteState(Date.now()))
@@ -286,8 +288,6 @@ describe("composables/usePrices", () => {
 describe("composables/usePrices in a window document", () => {
 	beforeEach(() => captureWindowDocument("#/windows/execute?requestId=r1"))
 	afterEach(() => captureWindowDocument(""))
-	const reconnect = (client: ReturnType<typeof fakeClient>) =>
-		(client as unknown as { onConnected: EventHandler<void> }).onConnected.invoke()
 
 	test("mount and every reconnect read the cache whole and never ask for a refresh; a broadcast is adopted", async () => {
 		const client = fakeClient()
@@ -333,9 +333,6 @@ describe("composables/usePrices in a window document", () => {
 })
 
 describe("composables/useTokenFlags", () => {
-	const reconnect = (client: ReturnType<typeof fakeClient>) =>
-		(client as unknown as { onConnected: EventHandler<void> }).onConnected.invoke()
-
 	test("flags come from the network-free read, on mount and on every reconnect, and no refresh is ever asked", async () => {
 		const client = fakeClient()
 		const flags = useTokenFlags(client as unknown as PriceServiceClient)

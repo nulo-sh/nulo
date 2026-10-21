@@ -4,15 +4,13 @@ import { describe, expect, test } from "vitest"
 import { REPO_ROOT, sourceFiles } from "../../scripts/type-roles/source-scan"
 
 /**
- * Static ban: Privacy Policy § 5.2 keeps transaction execution from triggering a price fetch, and
- * `usePrices` holds that line by asking for `refreshIfStale` only outside a window document. So no
- * other UI code may name `refreshIfStale`, and the window document is captured once, at boot, before
- * the router can move the first route. This test fails the unit gate listing every offending line.
+ * Privacy Policy § 5.2: no price fetch from a window document. `usePrices` alone may ask for
+ * `refreshIfStale`, and the boot module alone captures the window document, once, before the router
+ * can move the first route.
  */
 
 const SRC_ROOT = "apps/extension/src"
 
-/** The composable that decides, and the price service's own definition of the call. */
 const REFRESH_ALLOWED = new Set([
 	"composables/usePrices.ts",
 	"wallet/services/price/client.ts",
@@ -24,39 +22,42 @@ const BOOT = "popup/index.ts"
 const BOOT_CAPTURE = "captureWindowDocument(window.location.hash)"
 
 type Source = { path: string; content: string }
+type Hit = { path: string; line: number; text: string }
 
 const scanned = (path: string) => !/\.test\.(ts|js)$/.test(path) && !path.startsWith("types/")
 
-/** Code lines naming `name`, as `file:line → text`; comment lines may mention it. */
-function linesNaming(files: Source[], name: string, skip: (path: string) => boolean): string[] {
+/** Code lines naming `name`; a comment may mention it. */
+function linesNaming(files: Source[], name: string, skip: (path: string) => boolean): Hit[] {
 	const word = new RegExp(`\\b${name}\\b`)
-	const hits: string[] = []
+	const hits: Hit[] = []
 	for (const { path, content } of files) {
 		if (!scanned(path) || skip(path)) continue
 		content.split("\n").forEach((line, i) => {
-			const trimmed = line.trim()
-			if (/^(\/\/|\/?\*|<!--)/.test(trimmed)) return
-			if (word.test(trimmed)) hits.push(`${path}:${i + 1} → ${trimmed}`)
+			const text = line.trim()
+			if (!/^(\/\/|\/?\*|<!--)/.test(text) && word.test(text)) hits.push({ path, line: i + 1, text })
 		})
 	}
 	return hits
 }
 
-const refreshOffenders = (files: Source[]) => linesNaming(files, "refreshIfStale", (path) => REFRESH_ALLOWED.has(path))
+const show = (hits: Hit[]) => hits.map(({ path, line, text }) => `${path}:${line} → ${text}`)
+const code = (hits: Hit[]) => hits.filter(({ text }) => !text.startsWith("import "))
 
-/** Every way the capture is wired wrong: a caller besides the boot module, or a boot module that
- *  does not capture the first URL before it creates the router. */
+const refreshOffenders = (files: Source[]) => show(linesNaming(files, "refreshIfStale", (path) => REFRESH_ALLOWED.has(path)))
+
 function captureOffenders(files: Source[]): string[] {
-	const offenders = linesNaming(files, "captureWindowDocument", (path) => path === CAPTURE_DECLARED || path === BOOT)
-	const boot = files.find((file) => file.path === BOOT)?.content ?? ""
-	const capture = boot.indexOf(BOOT_CAPTURE)
-	if (capture < 0 || capture !== boot.lastIndexOf(BOOT_CAPTURE) || capture > boot.indexOf("createRouter(")) {
-		offenders.push(`${BOOT} → must call ${BOOT_CAPTURE} once, before createRouter(`)
+	const offenders = show(linesNaming(files, "captureWindowDocument", (path) => path === CAPTURE_DECLARED || path === BOOT))
+	const boot = files.filter((file) => file.path === BOOT)
+	const [capture, ...more] = code(linesNaming(boot, "captureWindowDocument", () => false))
+	const [router] = code(linesNaming(boot, "createRouter", () => false))
+	if (capture?.text !== BOOT_CAPTURE || more.length > 0 || !router || capture.line > router.line) {
+		offenders.push(`${BOOT} → must call ${BOOT_CAPTURE} once, before createRouter(, and nowhere else`)
 	}
 	return offenders
 }
 
-const BOOT_OK = `${BOOT_CAPTURE}\nconst router = createRouter({})`
+const IMPORT = 'import { captureWindowDocument } from "@/utils/window-document"'
+const BOOT_OK = `${IMPORT}\n${BOOT_CAPTURE}\nconst router = createRouter({})`
 
 describe("price refresh ban (static)", () => {
 	const files = sourceFiles({ roots: [SRC_ROOT], exts: ["ts", "js", "vue"] }).map((file) => ({
@@ -83,13 +84,14 @@ describe("price refresh ban (static)", () => {
 		expect(refreshOffenders([{ path: "composables/usePrices.ts", content: "priceService.refreshIfStale()" }])).toEqual([])
 	})
 
-	test("the capture scan admits the declaration and the boot call, and catches a second caller or a late one", () => {
+	test("the capture scan admits the declaration and the boot call, and catches a second caller, a re-capture, a late or a commented-out one", () => {
 		const declaration = { path: CAPTURE_DECLARED, content: "export function captureWindowDocument(hash: string): void {" }
-		expect(captureOffenders([declaration, { path: BOOT, content: BOOT_OK }])).toEqual([])
+		const boot = (content: string) => captureOffenders([declaration, { path: BOOT, content }])
+		expect(boot(BOOT_OK)).toEqual([])
 		const second = { path: "popup/pages/auth.vue", content: "captureWindowDocument(location.hash)" }
 		expect(captureOffenders([declaration, { path: BOOT, content: BOOT_OK }, second])).toHaveLength(1)
-		const late = `const router = createRouter({})\n${BOOT_CAPTURE}`
-		expect(captureOffenders([declaration, { path: BOOT, content: late }])).toHaveLength(1)
-		expect(captureOffenders([declaration, { path: BOOT, content: "const router = createRouter({})" }])).toHaveLength(1)
+		expect(boot(`${BOOT_OK}\nrouter.afterEach((to) => captureWindowDocument(to.fullPath))`)).toHaveLength(1)
+		expect(boot(`${IMPORT}\nconst router = createRouter({})\n${BOOT_CAPTURE}`)).toHaveLength(1)
+		expect(boot(`${IMPORT}\n// ${BOOT_CAPTURE}\nconst router = createRouter({})`)).toHaveLength(1)
 	})
 })

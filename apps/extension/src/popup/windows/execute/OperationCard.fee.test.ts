@@ -370,6 +370,12 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		priceFake.reconnect()
 		await flushPromises()
 		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([3, 0])
+		card.unmount()
+
+		// The same card in a popup document, as Send mounts it: the zero above is not the fake's.
+		captureWindowDocument("")
+		await mountCard(sendTx({ feePayer: OWNER }))
+		expect(priceFake.refreshes()).toBe(1)
 	})
 
 	// An approval window carries one operation, so the card's dotted terms are the screen's: this one

@@ -27,7 +27,6 @@ const answer = async () => {
 
 type Listeners = { add: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> }
 
-/** The listeners added to one of a client's events and not removed since. */
 const added = (event: Listeners): ((arg?: unknown) => void)[] => {
 	const removed = new Set(event.remove.mock.calls.map(([listener]) => listener))
 	return event.add.mock.calls.map(([listener]) => listener).filter((listener) => !removed.has(listener))
@@ -77,7 +76,7 @@ export const priceFake = {
 	},
 	/** Every `refreshIfStale` the clients created so far received. */
 	refreshes: () => priceFake.clients.reduce((n, c) => n + c.refreshIfStale.mock.calls.length, 0),
-	/** Every `getQuotes`, the read that never fetches, the clients created so far received. */
+	/** Every `getQuotes` the clients created so far received. */
 	reads: () => priceFake.clients.reduce((n, c) => n + c.getQuotes.mock.calls.length, 0),
 }
 

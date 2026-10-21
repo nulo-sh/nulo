@@ -1,7 +1,7 @@
 /**
- * A window document: the popup page loaded first at a `/windows/*` route, as every dApp approval, the
- * fee question and the json and logger viewers are. Recorded once at boot, because a locked window
- * moves to `/popup/auth` and back (`useDappApprovalWindow`), so the current route can say otherwise.
+ * A window document: the popup page loaded first at a `/windows/*` route. Recorded once at boot,
+ * because a locked window moves to `/popup/auth` and back (`useDappApprovalWindow`), so the current
+ * route can say otherwise.
  */
 
 let windowDocument = false
