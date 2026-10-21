@@ -1,7 +1,7 @@
 ---
 plan: warm-stack-1
 tier: light
-status: planned (Codex approve, round 4); Asks A1-A5 for the orchestrator
+status: approved 2026-10-21 (Asks A1-A5 answered, D6); arc 1 running
 issues: "#1006 (arc 1: Closes on the ship path; closed as a known limit with the numbers on the no-ship path)"
 driver: claude-code
 claude_model: opus
@@ -46,7 +46,7 @@ One arc, one PR against `dev`. The owner (chat, 2026-10-21): "Plan warm-stack, g
 
 **Claims that did not hold:** the PXE does not register the account at unlock (F3); no storage is written before the worker boots (F4); two renderings of one seed never agree byte for byte (random salts, IVs, DEK, MAC).
 
-**Asks (orchestrator, before Phase 1; nothing a person sees, so none for the owner):**
+**Asks (orchestrator; answered 2026-10-21, D6):**
 - A1 Admit K, a lever the brief does not name: the same cost removed at its cause, with no stored state.
 - A2 Read the brief's "saving on the critical shard" as rule (c) below, judged on both browsers. A real K saving on Chrome passes it about two times in three. Alternative c′: the pool's direction plus the mechanism line.
 - A3 Read "no file slower" as e2e-clocks-1's approved rule (d); a literal reading is unmeasurable at three runs per arm.
@@ -76,9 +76,9 @@ One arc, one PR against `dev`. The owner (chat, 2026-10-21): "Plan warm-stack, g
 - **Validation gate:** all green on both browsers, every `[onboard]` line present. Layers: e2e-live-network.
 
 ### Phase 4: review loop, then CI measurement
-- The Post-implementation loop to convergence first; merge `origin/dev`; freeze the head F. **P** = F plus one commit restoring the close and reopen (and the UI path for J), `[onboard]` kept; pushed as `warm-stack-1-p`, never a PR, deleted after.
+- The Post-implementation loop to convergence first; merge `origin/dev`; freeze the head F. **P** = F plus one commit restoring the close and reopen (and the UI path for J), `[onboard]` kept. P and F are pushed as `warm-stack-1-measure-p` and `warm-stack-1-measure-f`, so other lanes see the measurement; never a PR, deleted after.
 - Per browser, `gh workflow run pr-extension-network-e2e.yml --ref <branch>` (Firefox: `pr-extension-network-e2e-firefox.yml`), in the order P F F P P F, one dispatch at a time per lane; pairs fixed by order: (P1, F1), (F2, P2), (P3, F3). Records under `~/.cache/nulo-backlog/warm-stack-1/ci/<run>/`: `parseJobLog` over every shard, heavy and canary job, every `[onboard]` line, job envelopes. A run with a failed file is judged under (a), and its pair is dispatched again for timing; every result kept.
-- **Ship rule, on both browsers:** (a) no unresolved F failure: a run is invalid only if no test ran; any F failure counts unless its trace shows a cause outside the changed fixtures, with its file rerun at P and F; (b) the `[onboard]` median per call at F below P's by at least half the probe's saving; (c) the critical shard (the largest recorded total in `shard-timings.json`, the same files in both arms) has a lower summed file time at F in the median of the three pairs; (d) no file in any job is slower in all three pairs by more than max(10 % of its P median, 10 s) without a traced unrelated cause.
+- **Ship rule, on both browsers:** (a) no unresolved F failure: a run is invalid only if no test ran; any F failure counts unless its trace shows a cause outside the changed fixtures, with its file rerun at P and F; (b) the `[onboard]` median per call at F below P's by at least half the probe's saving; (c) the critical shard (the largest recorded total in `shard-timings.json`, the same files in both arms) has a lower summed file time at F in the median of the three pairs, a direction whose cause the per-file `[onboard]` lines prove; (d) e2e-clocks-1's rule word for word: "No other file is slower in all three pairs by more than max(10 % of its P median, 10 s) without a traced unrelated cause", over every file in every job.
 - **Validation gate:** the records and the verdict table in `lessons/phase-4.md`.
 
 ### Phase 5: ship or write up
@@ -108,12 +108,14 @@ None. Test harness only; no screen, copy or timing a person meets changes.
 - **D3 J only on its own go over K, rendered at run time;** no committed pool (A5, both legs).
 - **D4 The ship rule keeps the brief's critical shard and both browsers** (Codex), operationalized as (c) and (d) (A2, A3), with the PR stating each browser's critical-shard wall-clock P against F (Opus).
 - **D5 J on proverless network runs only;** the canary keeps the users' path; smoke unchanged (#1003: 3.5 %).
+- **D6 The orchestrator's answers (2026-10-21).** A1: K admitted; a fixture that stops closing and reopening the registration popup is inside the owner's "launch + onboarding" scope and stores nothing. A2: rule (c) as written, on both browsers, direction, the per-file `[onboard]` lines the proof that it is the lever's; c′ (the pool's direction plus the mechanism line) considered and not taken. A3: (d) is e2e-clocks-1's rule word for word. A4: the allowlist plus a healthy unlock replaces byte equality. A5: no committed seed pool; J renders at run time through the production `ProfileService`, scratch only, and ships nothing unless it passes G1. CI dispatches: one lane's measurement at a time; before each, `gh run list --workflow <lane> --status in_progress --status queued` shows no other lane's `*-measure-*` or `e2e-clocks-1*` ref, and heavy-pool-1 runs its round first.
 
 ## Review verdicts
 - **Round 1, Codex (gpt-6.1-sol high, session 01a15f16): `reject`.** Accepted: (1) F2 miscounted the PBKDF2 work (`getPasshash` is a SHA-256): corrected; (2) P F F P P F is three runs per arm, so G1 claimed a resolution it lacks: G1 is now a worth screen, I3 states the resolution; (3) the ship rule changed silently: the brief's critical shard and both browsers restored, the operationalizations listed as A2-A4; (4) K is an amendment: A1, with Phase 1's count of files that still open a fresh popup over an onboarded wallet; (5) a derived-only unlock reaches Home with a bad DEK: J asserts no recovery banner, with a success control; (6) the probe's capture point: reference dumps before and after the switch, the same start network and the address change asserted; (7) the renderer choice: run time or a known limit, no pool without approval. Rejected: twelve dispatches per browser, since twice the CI cost still leaves a shard's saving unresolved (I3).
 - **Round 2, Codex resumed: `conditional approve`.** Accepted: fresh profiles carry random ids and addresses in their storage keys, so the probe compares keys after replacing them by placeholders, counts kept and cross-references checked first. Round 1's dispositions verified.
 - **Round 3, Codex resumed: `conditional approve`.** Accepted: network ids are random too (`network/service.ts` `_freshStored8`), so the rule now normalizes every generated id by its row's stable identity instead of listing kinds.
 - **Round 4, Codex resumed: `approve`.** The rule closes the class; no generated id left in the fresh-onboarding key paths.
+- **The answers, Codex (gpt-6.1-sol high, session 01a15f25): `approve`.** D6 records A1-A5 and the dispatch order faithfully; no contradiction with G1, (a)-(d), Phases 1-5 or Delivery.
 - **Round 1, Opus Plan leg: `conditional approve`.** Accepted: G1's arithmetic (as Codex 2); F2 (as Codex 1); the error arrays asserted on every probe cycle, and any error K surfaces fixed at its cause (F5); J's probe arm injects what `createProfile` writes, the dump only a reference; J(b) out of the arc; the Firefox counts taken statically; the deviations as Asks, and the critical-shard wall-clock in the PR; `setupConnectedPlayground` through `launchOnLocalNetwork`; `multi-account-from` in Phase 3; the heavy and canary jobs parsed for (d), and a failed run's pair dispatched again; the boot-state trace before a J build; the rotating probe order. Rejected: none.
 
 ## Delivery
