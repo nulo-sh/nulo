@@ -91,8 +91,9 @@ jobs:
       test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
       proverless: true
 
-  # About 8 and 4.5 minutes on Firefox: a shard that once drew both reached its 30-minute limit with
-  # every test green.
+  # Kept out of the pool for time alone: the sequencer would place the two long files on separate
+  # shards, but their time spread over five shards would make the pool, the lane's slowest job,
+  # end later.
   network-e2e-heavy-long:
     name: heavy / snack-placement + failed-send-check
     uses: ./.github/workflows/_extension-network-e2e.yml
