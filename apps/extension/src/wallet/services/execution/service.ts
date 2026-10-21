@@ -160,12 +160,12 @@ const MAX_DISPLAY_CALLS = 64
  *  wallet's own views run through `executeOperations` too. */
 const BROADCASTING_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set(["send_transaction", "aztec_sendTx"])
 
-/** The operations that run under the authorizing session's fence. The wallet-sdk dispatcher sends
- *  a dApp's reads, registrations and simulations with none, and those never read one; its
- *  silently-covered authwit arrives under the wire handler's admission fence. */
 /** The app a dApp registration is counted against, and the session it was captured under. */
 type Registrant = { origin: string; fence: ExecutionFence }
 
+/** The operations that run under the authorizing session's fence. The wallet-sdk dispatcher sends
+ *  every dApp op under the wire handler's admission fence; of its reads, registrations and
+ *  simulations only a registration reads it, to count against that session (`registrant`). */
 const FENCED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set([
 	"send_transaction",
 	"aztec_sendTx",

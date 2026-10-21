@@ -62,11 +62,11 @@ async function makeHarness() {
 	const registerSender = vi.fn<PxeServiceClient["registerSender"]>(async (_network, address) => address)
 	const recording: Pick<PxeServiceClient, "registerSender"> = { registerSender }
 	const pxeClient = { ...recording, onProvePhase: { add: () => {} } } as unknown as PxeServiceClient
-	/** Holds the executor's network lookup, the await before a registration is admitted. */
+	/** Holds the dispatcher's network read, between the session read and the execution. */
 	let networkHeld: Promise<void> = Promise.resolve()
-	const getNetwork = vi.fn(async () => {
+	const getNetworksRaw = vi.fn(async () => {
 		await networkHeld
-		return NETWORK
+		return [NETWORK]
 	})
 
 	const collection = new ServiceCollection()
@@ -81,7 +81,7 @@ async function makeHarness() {
 			onActiveProfileChanged: new EventHandler<unknown>(),
 		}),
 	)
-	collection.add(svc(NetworkService.name, { getNetwork }))
+	collection.add(svc(NetworkService.name, { getNetwork: async () => NETWORK }))
 	collection.add(svc(AccountService.name, {}))
 	collection.add(svc(TransactionService.name, { onTransactionUpdated: { add: () => {} } }))
 	collection.add(svc(TokenService.name, {}))
@@ -99,7 +99,7 @@ async function makeHarness() {
 	await collection.start()
 
 	const dispatcher = new WalletSdkDispatcher(
-		{ getNetworksRaw: async () => [NETWORK] } as never,
+		{ getNetworksRaw } as never,
 		{ provisionDefaultAccount: async () => {}, getAccounts: async () => [] } as never,
 		execution,
 		{} as IDappInteractionRunner,
@@ -129,11 +129,13 @@ async function makeHarness() {
 		})
 		return release
 	}
-	const deleteProfile = async () => {
+	/** The profile deleted, then imported again under the same id: a new incarnation is live. */
+	const deleteAndReimport = async () => {
 		deletionState.beginDeletion("p1")
 		await sessions.purgeForProfile("p1")
+		deletionState.release("p1")
 	}
-	return { connect, registerSender, counts, holdNetwork, getNetwork, deleteProfile, api }
+	return { connect, registerSender, counts, holdNetwork, getNetworksRaw, deleteAndReimport, api }
 }
 
 const refusalOf = (call: Promise<unknown>) =>
@@ -161,16 +163,16 @@ describe("a dApp's registrations through the dispatcher spend its app's count", 
 		})
 	})
 
-	test("a registration its profile's deletion overtook counts nothing and writes nothing", async () => {
-		const { connect, registerSender, holdNetwork, getNetwork, deleteProfile, api } = await makeHarness()
+	test("a registration authorized before its profile's deletion and re-import counts nothing and writes nothing", async () => {
+		const { connect, registerSender, holdNetwork, getNetworksRaw, deleteAndReimport, api } = await makeHarness()
 		const a = await connect(APP_A)
 		const release = holdNetwork()
 		const call = a.register(addressAt(0)).then(
 			() => "admitted",
 			() => "refused",
 		)
-		await vi.waitFor(() => expect(getNetwork).toHaveBeenCalled())
-		await deleteProfile()
+		await vi.waitFor(() => expect(getNetworksRaw).toHaveBeenCalled())
+		await deleteAndReimport()
 		release()
 		expect(await call).toBe("refused")
 		expect(registerSender).not.toHaveBeenCalled()
