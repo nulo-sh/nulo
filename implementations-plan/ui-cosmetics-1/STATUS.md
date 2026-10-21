@@ -6,3 +6,4 @@
 - 2026-10-21: Opus leg: conditional approve; findings applied, one rejected (D8).
 - 2026-10-21: Codex verification: approve. Plan committed; awaiting the orchestrator.
 - 2026-10-21: P1 gate green: lint, typecheck:all, test, test:all; both controls red as expected.
+- 2026-10-21: P2 gate green: lint, typecheck:all, audit:vue; S1 control red on base (both browsers); six feedback e2e files green on Chrome and Firefox at retry 0. Full smoke deferred to the final head.

@@ -37,6 +37,7 @@ import { sendEvent } from "../../../tests/helpers/send-event"
 import OnboardingBackLink from "../components/OnboardingBackLink.vue"
 import OnboardingProfileNameField from "../components/OnboardingProfileNameField.vue"
 import OnboardingSkipLink from "../components/OnboardingSkipLink.vue"
+import OnboardingStepHeader from "../components/OnboardingStepHeader.vue"
 import { RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
 import { doneRoute } from "../steps"
 import Create from "./create.vue"
@@ -48,7 +49,17 @@ async function mountCreate() {
 		attachTo: document.body,
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn })],
-			components: { BrutalistTitle, Flex, Input, OnboardingBackLink, OnboardingProfileNameField, OnboardingSkipLink, Text, Icon },
+			components: {
+				BrutalistTitle,
+				Flex,
+				Input,
+				OnboardingBackLink,
+				OnboardingProfileNameField,
+				OnboardingSkipLink,
+				OnboardingStepHeader,
+				Text,
+				Icon,
+			},
 			stubs: {
 				// Registered globally, the design Button would resolve its own `<component is="button">` to itself.
 				Button: { template: '<button v-bind="$attrs"><slot /></button>' },

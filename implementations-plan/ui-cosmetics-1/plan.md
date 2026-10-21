@@ -78,7 +78,7 @@ Warning: run every e2e through its runner at `--retry=0`: smoke through `bun run
 
 **Validation gate.** `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`. Pass: each exits 0, the new rows pass, and the presto row reds when the `prestoOpened ||` term is removed (uncommitted control).
 
-### Phase 2 — one header geometry on every step after welcome (#1019 item 1)
+### Phase 2 — one header geometry on every step after welcome (#1019 item 1) ✓
 
 1. On the base build, measure create's back link box height `B` after `document.fonts.ready`, in Chrome and in Firefox. Record both in `lessons/phase-2.md`.
 2. Add `OnboardingStepHeader.vue` and its test `OnboardingStepHeader.test.ts`, with four rows:
@@ -140,6 +140,7 @@ No new input, message, permission or log line. `prestoOpened` is a per-profile b
 - D7: the Presto mark is started, then Proving is pushed at once (Codex). Opus found awaiting harmless; Codex's point decides it: an awaited push is a navigation that can land after the person has left Home. The mark starts before the push; the test proves the push does not wait for the write and the flag is stored after it.
 - D8: join stroke paths only; fill paths stay one element each (both legs). The planned mixed-paint refusal is dropped as impossible (the parser already splits stroke from fill). Codex's absolute-`M` refusal stays (Opus would drop every refusal): it guards the join's one precondition, in the validator that already refuses unfaithful drawings, at one line.
 - D9: the title read pins the scroll and reads `rect.top` in one `evaluate` (Opus), after waiting for the step's own testid (Codex). Exact equality per browser, no tolerance (both legs).
+- D11 (implementation): `B` measured 22 px on both browsers, so `H` = 22 px and create moves 0; the shifts land as UI impact says (lessons/phase-2.md).
 - D10: spacing under the title block stays each page's own (Codex); the empty back row on phrase and done is the alignment itself, shown in the PR's screenshots (Opus).
 
 ## Delivery
