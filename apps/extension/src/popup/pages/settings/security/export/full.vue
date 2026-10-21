@@ -13,14 +13,16 @@
 /** Components */
 import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
 import SecretUnlockSection from "@/components/composite/SecretUnlockSection.vue"
+import StatusCard from "@/components/composite/StatusCard.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 
 /** Services */
 import { managers } from "@/utils/core"
 
 /** Utils */
-import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { closesOnFocusLoss, isToolbarPopup } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
+import { goBack } from "@/utils/page-back"
 import { backupNotice } from "@/components/stale-network/copy"
 
 /** Composables */
@@ -36,6 +38,8 @@ const appStore = useAppStore()
 
 const router = useRouter()
 
+const closeButton = useTemplateRef("closeButton")
+
 const {
 	password,
 	repeatedPassword,
@@ -50,6 +54,7 @@ const {
 	chainStateOmitted,
 	unopenedImportedKeys,
 	importsOnAddedNetworks,
+	savedPlain,
 	isPasskeyProfile,
 	canDownload,
 	handleBackup,
@@ -105,10 +110,22 @@ const onKeydown = (e) => {
 			downloadBackup(true)
 			break
 		default:
-			// "progress" / "encrypting": a run is in flight, so Enter starts nothing.
+			// "progress" / "encrypting" hold a run in flight and "downloaded" has nothing left: Enter
+			// starts nothing.
 			break
 	}
 }
+
+const handleClose = () => {
+	if (isToolbarPopup()) window.close()
+	else void goBack(router, "/popup/settings/security/export")
+}
+
+watch(backupStatus, async (status) => {
+	if (status !== "downloaded") return
+	await nextTick()
+	closeButton.value?.$el?.focus()
+})
 
 // A profile switch made elsewhere updates this page in place. A backup it holds is the previous
 // profile's, and the download rule would read the new profile's type, so the page starts over.
@@ -126,7 +143,7 @@ watch(
 // Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey export moves
 // to its own window first. A failed move keeps the page where it is.
 onBeforeMount(() => {
-	if (isPasskeyProfile.value && passkeyNeedsOwnWindow()) void moveToOwnWindow(OWN_WINDOW_ROUTES.export)
+	if (isPasskeyProfile.value && closesOnFocusLoss()) void moveToOwnWindow(OWN_WINDOW_ROUTES.export)
 })
 
 onBeforeUnmount(() => {
@@ -187,49 +204,19 @@ onBeforeUnmount(() => {
 			-->
 
 			<template v-else-if="backupStatus">
-				<!--
-				Working states (progress = bundling the backup, encrypting =
-				sealing it with a password). Previously this block rendered
-				nothing while the button below ticked through "Creating
-				Backup…" / "Encrypting…" — the page looked empty for ~1-3s.
-				This inline status card mirrors the in-page-modal vibe
-				without hijacking the screen (the modal is reserved for
-				user-driven waits like the passkey ceremony).
-
-				Wrapped in `export_section_last` so it participates in the
-				page's existing 20px vertical rhythm (matches the agreement
-				gate's section frame above).
-
-				A11y: the wrapper is announced via `role="status"` +
-				`aria-live="polite"` (same pattern as
-				TransactionAwaitingCard.vue:37), the spinner is decorative
-				(`aria-hidden`), and the heading is left as a plain span so
-				the page's existing heading hierarchy isn't fractured
-				(CollapsingHeroLayout.vue:63 uses spans for the hero, no h1).
-				-->
 				<div
 					v-if="backupStatus === 'progress' || backupStatus === 'encrypting'"
 					class="export_section_last"
 				>
-					<div
-						:class="$style.status_card"
+					<StatusCard
+						:title="backupStatus === 'encrypting' ? 'Encrypting your backup' : 'Creating your backup'"
+						:description="
+							backupStatus === 'encrypting'
+								? 'Sealing the file with your password. Only you can open it.'
+								: 'Gathering your wallet data into your backup file.'
+						"
 						data-testid="backup-status-card"
-						role="status"
-						aria-live="polite"
-						aria-atomic="true"
-					>
-						<Spinner size="28" color="--nulo-accent" aria-hidden="true" />
-						<span :class="$style.status_title">
-							{{ backupStatus === "encrypting" ? "Encrypting your backup" : "Creating your backup" }}
-						</span>
-						<p :class="$style.status_subtitle">
-							{{
-								backupStatus === "encrypting"
-									? "Sealing the file with your password. Only you can open it."
-									: "Gathering your wallet data into your backup file."
-							}}
-						</p>
-					</div>
+					/>
 				</div>
 
 				<div v-else class="export_section">
@@ -301,9 +288,18 @@ onBeforeUnmount(() => {
 						</template>
 					</Banner>
 
-					<Banner v-if="backupStatus === 'encrypted'" variant="done" direction="vertical">
-						<template #title> Backup is successfully encrypted </template>
-						<template #description>
+					<!-- Banner always lays out its description, so a lone title sits on one row, where the empty
+					     description takes no height. -->
+					<Banner
+						v-if="backupStatus === 'encrypted' || backupStatus === 'downloaded'"
+						variant="done"
+						:direction="savedPlain ? 'horizontal' : 'vertical'"
+						data-testid="backup-done-banner"
+					>
+						<template #title>
+							{{ backupStatus === "downloaded" ? "Saved to your downloads" : "Backup is successfully encrypted" }}
+						</template>
+						<template v-if="!savedPlain" #description>
 							<Text color="secondary" height="140">
 								Don't forget your
 								<Text v-if="!isPasskeyProfile" color="primary">profile</Text>
@@ -396,6 +392,17 @@ onBeforeUnmount(() => {
 					{{ backupStatus === 'encrypting' ? 'Encrypting…' : 'Protect with Password' }}
 				</Button>
 				<Button
+					v-if="backupStatus === 'downloaded'"
+					ref="closeButton"
+					@click="handleClose"
+					@keydown.enter="refuseRepeatEnter"
+					variant="cta"
+					data-testid="backup-close-btn"
+				>
+					Close
+				</Button>
+				<Button
+					v-else
 					@click="handleDownloadClick"
 					@keydown.enter="refuseRepeatEnter"
 					:disabled="!canDownload || isDownloading"
@@ -421,42 +428,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
-/* In-page status card for the working states (progress / encrypting).
-   Visual language echoes PasskeyCeremonyDialog (centered, padded, light
-   border, spinner + title + subtitle) so the wallet feels cohesive
-   across waiting moments — but inline, not as a screen-blocking modal.
-
-   Outer spacing intentionally NOT defined here — the `export_section_last`
-   wrapper class supplies the page's standard 20px vertical rhythm. We
-   only style the card interior (centered column, padded surface, border). */
-.status_card {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 14px;
-
-	padding: 32px 24px;
-
-	border: 1px solid var(--nulo-border);
-	background: var(--nulo-surface-low);
-
-	text-align: center;
-}
-
-.status_title {
-	composes: type--row-title from global;
-	font-size: 16px;
-	color: var(--txt-primary);
-}
-
-.status_subtitle {
-	composes: type--body from global;
-	line-height: 1.5;
-	color: var(--nulo-secondary);
-	margin: 0;
-	max-width: 280px;
-}
-
 .error_text {
 	composes: type--body from global;
 	color: var(--txt-danger);

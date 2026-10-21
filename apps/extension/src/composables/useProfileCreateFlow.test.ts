@@ -17,10 +17,10 @@ vi.mock("@/wallet/utils/create-passkey-profile", () => ({
 	createPasskeyProfileWithRetry: vi.fn(async () => ({ id: "p1", name: "Created", type: "passkey" })),
 }))
 
-vi.mock("@/utils/browser-surface", () => ({ passkeyNeedsOwnWindow: vi.fn(() => false) }))
+vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: vi.fn(() => false) }))
 
 import { managers } from "@/utils/core"
-import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { createPasskeyProfileWithRetry } from "@/wallet/utils/create-passkey-profile"
 import { PasskeyPrfError, PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 import { useProfileCreateFlow, type UseProfileCreateFlowOptions } from "./useProfileCreateFlow"
@@ -46,7 +46,7 @@ function makeFlow(overrides: Partial<UseProfileCreateFlowOptions> = {}) {
 beforeEach(() => {
 	vi.clearAllMocks()
 	profileApi.getProfiles.mockResolvedValue([])
-	vi.mocked(passkeyNeedsOwnWindow).mockReturnValue(false)
+	vi.mocked(closesOnFocusLoss).mockReturnValue(false)
 })
 
 describe("useProfileCreateFlow", () => {
@@ -78,7 +78,7 @@ describe("useProfileCreateFlow", () => {
 	})
 
 	test("in Firefox's toolbar panel, passkey create goes to the background once, with no in-page ceremony", async () => {
-		vi.mocked(passkeyNeedsOwnWindow).mockReturnValue(true)
+		vi.mocked(closesOnFocusLoss).mockReturnValue(true)
 		const { flow, opts } = makeFlow()
 		flow.profileName.value = "MyProfile"
 		flow.authMethod.value = "passkey"

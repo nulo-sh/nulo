@@ -5,12 +5,16 @@ import {
 	captureOwnWindow,
 	closeOwnWindow,
 	followOwnRoute,
+	leavePanelFor,
 	moveToOwnWindow,
 	ownWindowRoute,
 	postAuthRoute,
 	releaseOwnWindow,
 } from "./own-window"
 import { deferred } from "@nulo/wallet-core/utils"
+
+const surface = vi.hoisted(() => ({ inPanel: false }))
+vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => surface.inPanel }))
 
 const EXPORT = "/popup/settings/security/export/full"
 const BROWSER = { left: 100, top: 50, width: 1200, height: 900, type: "normal" }
@@ -51,6 +55,7 @@ beforeEach(() => {
 		},
 	})
 	closeDocument = vi.spyOn(window, "close").mockImplementation(() => undefined)
+	surface.inPanel = false
 })
 
 afterEach(async () => {
@@ -73,6 +78,16 @@ describe("own window identity", () => {
 
 		captureOwnWindow("#/popup/import?option=full_backup&window=own&name=Alice")
 		expect(ownWindowRoute()).toBe("/popup/import?option=full_backup&name=Alice")
+	})
+
+	test.each([
+		["contacts", "/popup/settings/contacts"],
+		["account import", "/popup/settings/accounts/import"],
+		["restore again", "/popup/restore-again"],
+	])("a marked %s URL is an own window that returns to its page after auth, not Home", (_name, route) => {
+		captureOwnWindow(`#${route}?window=own`)
+		expect(ownWindowRoute()).toBe(route)
+		expect(postAuthRoute()).toBe(route)
 	})
 
 	test("an unmarked URL, another marker value or any other route is not", () => {
@@ -146,6 +161,28 @@ describe("moving to an own window", () => {
 	})
 })
 
+describe("leaving Firefox's toolbar panel for a step", () => {
+	test("outside the panel the step stays, and no window is asked for", async () => {
+		expect(await leavePanelFor("/popup/settings/contacts")).toBe(false)
+		expect(create).not.toHaveBeenCalled()
+		expect(closeDocument).not.toHaveBeenCalled()
+	})
+
+	test("in the panel the route moves to its own window", async () => {
+		surface.inPanel = true
+		expect(await leavePanelFor("/popup/settings/contacts")).toBe(true)
+		expect(create.mock.calls[0]?.[0].url).toBe("moz-extension://nulo/src/popup/index.html#/popup/settings/contacts?window=own")
+		expect(closeDocument).toHaveBeenCalledTimes(1)
+	})
+
+	test("in the panel, a window that cannot open keeps the step here", async () => {
+		surface.inPanel = true
+		create.mockRejectedValue(new Error("no"))
+		expect(await leavePanelFor("/popup/restore-again")).toBe(false)
+		expect(closeDocument).not.toHaveBeenCalled()
+	})
+})
+
 describe("closing an own window", () => {
 	test("an own window in a popup-type window closes", async () => {
 		captureOwnWindow(`#${EXPORT}?window=own`)
@@ -206,6 +243,15 @@ describe("one own window per flow", () => {
 		expect(await moveToOwnWindow("/popup/import?option=full_backup")).toBe(true)
 		expect(update).not.toHaveBeenCalled()
 		expect(create).toHaveBeenCalledTimes(1)
+	})
+
+	test("a second contacts import focuses the contacts window, under its own key", async () => {
+		session.set("nulo:own-window:contacts", 12)
+		getWindow.mockResolvedValue({ id: 12, type: "popup" })
+
+		expect(await moveToOwnWindow("/popup/settings/contacts")).toBe(true)
+		expect(update).toHaveBeenCalledWith(12, FOCUS)
+		expect(create).not.toHaveBeenCalled()
 	})
 
 	test("a storage read that rejects still opens a window", async () => {
