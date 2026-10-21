@@ -78,6 +78,7 @@ import {
 import { readScopeIdentity, seedTransaction } from "../helpers/activity-seeds"
 import { deleteProfile, exportBackup, waitForHeldProjection } from "../helpers/handshake-import"
 import { importFullBackup, POPUP_IMPORT_SHELL } from "../helpers/import-drivers"
+import { readSealedRows } from "../fixtures/sealed-rows"
 
 const hasConfig = aztecConfig !== undefined
 const OTHER_PASSWORD = "OtherProfilePw123!"
@@ -666,11 +667,7 @@ async function readReaskSheet(page: Page): Promise<{ line: string; button: strin
 }
 
 async function readRecordedFee(page: Page, hash: string): Promise<string | undefined> {
-	return page.evaluate(async (h: string) => {
-		const value = (await chrome.storage.local.get(`nulo:core:txs@${h}`))[`nulo:core:txs@${h}`]
-		const row = (typeof value === "string" ? JSON.parse(value) : value) as { estimatedFee?: string } | undefined
-		return row?.estimatedFee
-	}, hash)
+	return (await readSealedRows<{ estimatedFee?: string }>(page, "txs")).find((tx) => tx.naturalId === hash)?.row.estimatedFee
 }
 
 /** Seeds a finalized private send of TST an hour old, paid from public Fee Juice at Urgent, whose

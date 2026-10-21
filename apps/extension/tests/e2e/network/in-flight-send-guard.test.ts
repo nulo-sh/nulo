@@ -19,6 +19,7 @@ import type { AztecTestConfig } from "../fixtures/aztec"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { createSecondAccount, getAccountAddress, refreshBalances, sendTransfer, switchAccountByAddress } from "../fixtures/helpers"
 import { holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
+import { SEALED_READ_MESSAGE } from "../fixtures/sealed-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -34,19 +35,15 @@ async function activeAccount(page: Page): Promise<string> {
 /** True once the profile has a journaled send that has not reached a terminal stage. */
 async function waitForInFlightSend(page: Page, timeout = 60_000): Promise<void> {
 	await page.waitForFunction(
-		(stages: string[]) =>
-			chrome.storage.local.get(null).then((all: Record<string, unknown>) =>
-				Object.entries(all).some(([key, value]) => {
-					if (!key.startsWith("nulo:journal@")) return false
-					try {
-						const row = JSON.parse(String(value)) as { kind?: string; progress?: { stage?: string } }
-						return (row.kind === "transfer" || row.kind === "dapp_execute") && stages.includes(String(row.progress?.stage))
-					} catch {
-						return false
-					}
-				}),
-			),
+		async (message: string, stages: string[]) => {
+			type Row = { kind?: string; progress?: { stage?: string } }
+			const rows = ((await chrome.runtime.sendMessage({ type: message, root: "journal" })) ?? []) as { row: Row }[]
+			return rows.some(
+				({ row }) => (row.kind === "transfer" || row.kind === "dapp_execute") && stages.includes(String(row.progress?.stage)),
+			)
+		},
 		{ timeout, polling: 250 },
+		SEALED_READ_MESSAGE,
 		IN_FLIGHT_STAGES,
 	)
 }
@@ -133,20 +130,19 @@ test.skipIf(!hasConfig)(
 		// Once nothing is in flight the same switch goes through, so the guard
 		// gates on the send rather than disabling switching outright.
 		await page.waitForFunction(
-			(stages: string[]) =>
-				chrome.storage.local.get(null).then((all: Record<string, unknown>) =>
-					Object.entries(all).every(([key, value]) => {
-						if (!key.startsWith("nulo:journal@")) return true
-						try {
-							const row = JSON.parse(String(value)) as { kind?: string; progress?: { stage?: string } }
-							if (row.kind !== "transfer" && row.kind !== "dapp_execute") return true
-							return !stages.includes(String(row.progress?.stage))
-						} catch {
-							return true
-						}
-					}),
-				),
+			async (message: string, stages: string[]) => {
+				type Row = { kind?: string; progress?: { stage?: string } }
+				const rows = (await chrome.runtime.sendMessage({ type: message, root: "journal" })) as { row: Row }[] | undefined
+				return (
+					Array.isArray(rows) &&
+					rows.every(
+						({ row }) =>
+							(row.kind !== "transfer" && row.kind !== "dapp_execute") || !stages.includes(String(row.progress?.stage)),
+					)
+				)
+			},
 			{ timeout: 180_000, polling: 500 },
+			SEALED_READ_MESSAGE,
 			IN_FLIGHT_STAGES,
 		)
 

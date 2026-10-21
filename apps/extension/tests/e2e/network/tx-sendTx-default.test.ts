@@ -7,6 +7,7 @@ import { callService } from "../fixtures/helpers"
 import { snapshotResultSeq, waitForPgResult, assertPgOk } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { BROWSER_AWAITING_CARD, PRESTO_AWAITING_CARD, waitForAwaitingCardBackend, waitForDappExecuteWorked } from "../fixtures/journal"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import { createTestWallet, fundPublicFeeJuice, mintPublicTokensForAccount, type AztecTestConfig } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -175,20 +176,11 @@ test.skipIf(!hasConfig)(
 		await feePopup.waitForSelector('[data-testid="fee-raised"]', { visible: true, timeout: 60_000 })
 
 		// Held, unproven: the record asks the question the window shows, with the figure approved.
-		const asked = await feePopup.evaluate(async () => {
-			const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-			return Object.entries(all)
-				.filter(([key]) => key.startsWith("nulo:journal@"))
-				.map(
-					([, value]) =>
-						(typeof value === "string" ? JSON.parse(value) : value) as {
-							kind?: string
-							progress?: { stage?: string; reask?: { fee: string; cap: string; payer: unknown } }
-						},
-				)
-				.filter((record) => record.kind === "dapp_execute" && record.progress?.stage === "queued")
-				.map((record) => record.progress?.reask)
-		})
+		type Asked = { kind?: string; progress?: { stage?: string; reask?: { fee: string; cap: string; payer: unknown } } }
+		const asked = (await readSealedRows<Asked>(feePopup, "journal"))
+			.map(({ row }) => row)
+			.filter((record) => record.kind === "dapp_execute" && record.progress?.stage === "queued")
+			.map((record) => record.progress?.reask)
 		expect(asked).toEqual([{ fee: expect.any(String), cap: approved.toString(), payer: { type: "fj", isProtocol: false } }])
 		const fee = BigInt(asked[0]!.fee)
 		const text = (id: string) => feePopup.$eval(`[data-testid="${id}"]`, (el) => el.textContent?.replace(/\s+/g, " ").trim())

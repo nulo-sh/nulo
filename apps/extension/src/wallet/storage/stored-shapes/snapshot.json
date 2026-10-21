@@ -1018,6 +1018,7 @@
 					},
 					"encoding": "json",
 					"read": "codec",
+					"sealed": true,
 					"schema": {
 						"$schema": "https://json-schema.org/draft/2020-12/schema",
 						"properties": {
@@ -2374,6 +2375,7 @@
 					},
 					"encoding": "json",
 					"read": "codec",
+					"sealed": true,
 					"schema": {
 						"$schema": "https://json-schema.org/draft/2020-12/schema",
 						"properties": {
@@ -3156,6 +3158,52 @@
 					"terminalAt": null,
 					"updatedAt": 1790812200000
 				},
+				"journal.sealed": {
+					"accountAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"amountRaw": "1250000",
+					"attempts": 1,
+					"call": {
+						"argCount": 4,
+						"classId": "0x0f4760c9595980d657422b564cb908f54fcf0aff11a8f0b7803c25c5a96852ef",
+						"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0"
+					},
+					"contractAddress": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+					"createdAt": 1790798400000,
+					"error": {
+						"kind": "dapp_execute",
+						"message": "Transaction reverted in app logic",
+						"normalizedRaw": "{\"name\":\"Error\",\"message\":\"Transaction reverted in app logic\"}"
+					},
+					"id": "3d6f1a9c27e4b508",
+					"kind": "dapp_execute",
+					"networkId": "e41b9d02",
+					"origin": "dapp",
+					"profileId": "3f9a2c71",
+					"progress": {
+						"check": "reverted",
+						"checkSince": 1790802000000,
+						"expiry": {
+							"nullifier": "0x2698e9456e61875133340d4eea1d0b3e493be648417235c94cb3358ce6d77f51",
+							"timestamp": 1790805600
+						},
+						"from": "submitting",
+						"inclusion": {
+							"block": 81234,
+							"hash": "0x15248642522e44f73a1a28d8b5e924a945f6146130b0c232e4f19e9f93e7814b"
+						},
+						"stage": "failed",
+						"submittedEndpointUrl": "https://aztec-testnet.example.org",
+						"txHash": "0x0125856d7c1793f7a77241d1dcdc4c8fc375ee15405b2b60e00b789ce3e3dc79"
+					},
+					"recipientAddress": "0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+					"sessionId": "39433e6db4c616cb4812acd668a9698a6025fd16666375fa309cd05c5c23c75b",
+					"subtitle": "app.example.org",
+					"terminalAt": 1790802000000,
+					"title": "Transfer USDC",
+					"tokenId": 1,
+					"transferType": 0,
+					"updatedAt": 1790802000000
+				},
 				"networks.full": {
 					"chainId": 3415328944,
 					"endpoints": [
@@ -3377,6 +3425,70 @@
 					},
 					"status": 5,
 					"updatedAt": 1790035200000
+				},
+				"txs.sealed": {
+					"account": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"ambiguous": false,
+					"awaitingFinality": true,
+					"block": {
+						"hash": "0x099c9d518185c0ab773663034e0ded91c5d444b33d9ecbe36f9c1cb4392f694f",
+						"number": 81190
+					},
+					"calls": [
+						{
+							"args": [
+								"0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+								"0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+								"1250000",
+								"0x0000000000000000000000000000000000000000000000000000000000000000"
+							],
+							"classId": "0x0f4760c9595980d657422b564cb908f54fcf0aff11a8f0b7803c25c5a96852ef",
+							"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+							"method": "transfer_private_to_private",
+							"transfers": [
+								{
+									"amount": "1250000",
+									"from": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+									"to": "0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+									"token": {
+										"decimals": 6,
+										"name": "Test USDC",
+										"symbol": "USDC"
+									},
+									"type": 0
+								}
+							]
+						}
+					],
+					"chainId": 3415328944,
+					"createdAt": 1790791200000,
+					"error": "Assertion failed: Balance too low 'subtracted > 0'",
+					"estimatedFee": "4210000000000",
+					"executionResult": 1,
+					"fee": "3120000000000",
+					"feeChoice": "app",
+					"feePaymentMethod": 2,
+					"feeSpender": "0x261442f769babc690b9ceed102d19aa02a7f2f9d49e1fc8c94e5b877071e630c",
+					"gasDetails": {
+						"daGasLimit": 786432,
+						"feePerDaGas": "0",
+						"feePerL2Gas": "1250000",
+						"l2GasLimit": 6540000,
+						"teardownDaGasLimit": 131072,
+						"teardownL2GasLimit": 1000000
+					},
+					"hash": "0x2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f",
+					"networkId": "e41b9d02",
+					"nonce": "0x030b39a27b74f15a25cf7a35a696f06ac52688a59ed0acd33f1940d7ca09a8fd",
+					"origin": {
+						"name": "https://app.example.org",
+						"type": 1
+					},
+					"priorityLevel": "fast",
+					"profileId": "3f9a2c71",
+					"status": 4,
+					"submittedEndpointUrl": "https://aztec-testnet.example.org",
+					"updatedAt": 1790794800000
 				},
 				"incomingTransfers.full": {
 					"accountAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
