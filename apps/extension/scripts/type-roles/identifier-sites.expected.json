@@ -809,6 +809,16 @@
 			"state": ""
 		},
 		{
+			"file": "apps/extension/src/popup/pages/settings/security/reset.vue",
+			"expression": "trimAddress(account.address, 6, 4, '…')",
+			"branch": "importedAccounts.length",
+			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"reset-imported-account\"] [data-testid=\"setting-description\"]",
+			"surface": "popup-settings-security-reset",
+			"state": "an imported account"
+		},
+		{
 			"file": "apps/extension/src/popup/pages/tx/[id].vue",
 			"expression": "transfer.from",
 			"branch": "tx && transfer",
