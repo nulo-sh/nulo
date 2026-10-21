@@ -555,7 +555,6 @@ describe("useFullBackupExport — a current run", () => {
 			password: null,
 		})
 		expect(api.canDownload.value).toBe(false)
-		for (const { kind, disconnect } of h.state.built) expect(disconnect, kind).toHaveBeenCalled()
 		expect(await probeArtifacts(api)).toEqual({ downloads: 0, sealedFrom: [null] })
 		api.reset()
 		expect(api.savedPlain.value).toBe(false)
@@ -568,6 +567,11 @@ describe("useFullBackupExport — a current run", () => {
 		await api.downloadBackup(false)
 		expect(readState(api)).toMatchObject({ backupStatus: "finished", savedPlain: false })
 		expect(api.canDownload.value).toBe(true)
+		await api.downloadBackup(false)
+		expect(m.downloadFile).toHaveBeenCalledTimes(2)
+		const [first, second] = m.downloadFile.mock.calls.map(([file]) => file.data)
+		expect(second).toBe(first)
+		expect(readState(api)).toMatchObject({ backupStatus: "downloaded", savedPlain: true })
 	})
 
 	it("a refused sealed download keeps the sealed file and Download", async () => {

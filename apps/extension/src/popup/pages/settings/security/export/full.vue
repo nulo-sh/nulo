@@ -288,8 +288,8 @@ onBeforeUnmount(() => {
 						</template>
 					</Banner>
 
-					<!-- A plain file has no password to remind of. Banner always lays out its description, so a
-					     lone title sits on one row, where the empty description takes no height. -->
+					<!-- Banner always lays out its description, so a lone title sits on one row, where the empty
+					     description takes no height. -->
 					<Banner
 						v-if="backupStatus === 'encrypted' || backupStatus === 'downloaded'"
 						variant="done"

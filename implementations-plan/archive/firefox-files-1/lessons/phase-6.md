@@ -51,3 +51,7 @@
   passed alone (895 files); `passkey-backup` 3/3 on Chrome (48 s) and Firefox (62 s); the full smoke
   suites, run side by side on their own dists: Chrome 60 passed, 7 skipped (268 tests, 2378 s),
   Firefox 63 passed, 4 skipped (268 tests, 3629 s).
+- Review of the page-78 delta: Codex `approve` (one Low comment note), Opus `approve` (three Low
+  notes); all applied, with a mutation check (a scrub on a refused download turns the strengthened
+  test red). Gates after the fix: lint, `typecheck:all`, the two unit files, and `passkey-backup` on
+  both browsers through the smoke runner (`agent.sh` runs only the network config).
