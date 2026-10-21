@@ -36,3 +36,11 @@
 - Firefox, full smoke at retry 0 on the merged tree: 267 passed, 1 failed, 17 skipped; 3711 s wall-clock at load average ~250. The failure was `auth-flows.test.ts`'s "wrong password surfaces error-text and lets the user retry" at its own 30 s budget, which includes the first launch. Its sibling took 29.7 s in the same run. The file alone at retry 0 passed 5/5, with that test in 20.0 s, so it was a host-load flake. `toolbar-panel.test.ts`: 6/6 in 151.7 s, with the changed test at 29.7 s.
 - Chrome, full smoke at retry 0: 268 passed, 0 failed, 17 skipped; 2141 s.
 - `bun run test:all` exit 0 (extension 902 files, 14944 tests); `lint` and `typecheck:all` exit 0.
+
+## The second merge: #889 and #924
+
+- #889 (the Firefox sidebar) and #924 (contacts sealed at rest) landed before the PR opened, so `origin/dev` was merged again (`c4ad61c76`). Conflicts were in imports only: `wallet/index.ts` and `toolbar-popup.ts`.
+- The sidebar is not a `popup` view, so `closesOnFocusLoss()` is false there. A pick started in the sidebar runs in place, and the sidebar never reads the record.
+- `openToolbarPopup` now points the button back at the popup before `openPopup`, so the hand-back's reopen still opens the panel with the sidebar setting on. The known limit is restated in the plan.
+- On the merged tree: `lint`, `typecheck:all` and `test:all` exit 0 (extension 907 files, 15009 tests). Firefox at retry 0: `toolbar-panel`, `own-window`, `contacts-import` and `firefox-sidebar` 20/20 in 303 s; the changed test took 25.3 s.
+- Full smoke at retry 0 on the merged tree: Firefox 273 passed, 0 failed, 17 skipped, 3433 s; Chrome 269 passed, 0 failed, 21 skipped, 2254 s. `toolbar-panel.test.ts` took 161.3 s in the Firefox run, with the changed test at 30.3 s.
