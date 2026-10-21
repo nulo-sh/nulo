@@ -1,7 +1,7 @@
 ---
 plan: exec-prices-1
 tier: light
-status: A1 implemented, fix loop converged; PR pending
+status: completed; PR #983 against dev, merging is the orchestrator's call
 issues: "#982 (A1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at e7192fa8d
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-21
+- **Status:** completed. PR #983 against `dev` carries the work and this close-out; merging it is the orchestrator's call.
+- **Shipped:** #983. A document first loaded at a `/windows/*` route reads cached prices only: `captureWindowDocument` runs at boot in `popup/index.ts`, `usePrices` there reads `getQuotes` at mount and on reconnect and never `refreshIfStale`, and a static guard pins both. Closes #982, and path 4 (`SelectTokenPopup` in the shell), which #982 did not name.
+- **Deviations:** none from the change map. The fix loop added a popup-document control on the `OperationCard.fee` harness and kept `listState.read`'s old catch-all (Audit verdicts). Smoke ran on `015b9e896`, before the review fixes, which touch tests, comments and the read's catch only.
+- **Known limits:** #984.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` is at its budget, and the rule lives in code: `apps/extension/src/utils/window-document.ts` and `price-refresh-ban.test.ts`.
+- **Seeds retired:** the `/goal` and `/loop` seeds under § Seeds.
 
 # exec-prices-1: a dApp window reads cached prices only
 
