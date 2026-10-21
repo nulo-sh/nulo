@@ -180,8 +180,8 @@ Tests that land here:
 **Validation gate**
 - Commands:
   - `bun run audit:vue` (typecheck, test and lint, then build); `bun run test:all`.
-  - Smoke: `cd apps/extension && bun run test:e2e -- tests/e2e/send-fee-privacy.test.ts tests/e2e/send-keyboard.test.ts --retry=0`.
-  - Network, from the repo root: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/fee-methods.test.ts` (the network config retries twice unless `NULO_E2E_RETRY` says otherwise).
+  - Smoke, on the armed smoke build (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`): `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/send-fee-privacy.test.ts tests/e2e/send-keyboard.test.ts --retry=0`.
+  - Network, from the repo root: `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/fee-methods.test.ts` (the network config retries twice unless `NULO_E2E_RETRY` says otherwise; `same-token-concurrent-sends` is proverless-gated, and `agent.sh` refuses the run without `NULO_E2E_PROVERLESS=1`).
   - Then the same network run with `NULO_E2E_BROWSER=firefox` added. Through `agent.sh` only, one run at a time in this worktree.
 - Pass criteria:
   - Every command exits 0.
@@ -231,6 +231,11 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 - F1 (Low): the network gate promised retry 0 but passed neither `--retry=0` nor `NULO_E2E_RETRY=0`; `vitest.e2e.network.config.ts:28` defaults to 2. Accepted: `NULO_E2E_RETRY=0` on both network runs.
 - Looks fine: no bypass on the supported person-paid paths; D1-D6 hold; the tests cover distinct failures; the execution contract is executable from the README standard.
 - Resumed after the fix: **approve** ("the network command sets `NULO_E2E_RETRY=0` … no regressions found").
+
+**Implementation review loop (net diff from `85edeb86`, arc 1 of 1).**
+- Codex round 1 (gpt-6.1-sol, high): **clean**. Both build paths meet the figure before proving, the provenance reads are right, an accept keeps the rule, the wire keeps the 11th argument.
+- Opus diff review (alongside round 1): **clean**, three optional low items, all applied in `96db5421`: the composition refusal checks its recorded reason; the reused Private Fee Juice refusal checks that no fallback build ran; the question's two debug lines no longer say "queued send".
+- Codex round 2 (resumed, verification): **clean**. Converged.
 
 ## Seeds
 
