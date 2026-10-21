@@ -6,3 +6,4 @@
 - 2026-10-20 final fresh Codex pass: approve. Plan committed; A1 starts under auto-continue.
 - 2026-10-20 A1 phase 1 gate: pass (legal, landing, lint, typecheck:all, test, test:all on one load retry, smoke legal-acceptance 14/14 Chrome).
 - 2026-10-20 A1 fix loop: Codex r1 clean; Opus two P3 (plan bookkeeping, applied). Converged.
+- 2026-10-21 A1 final-head gates (after merging origin/dev): lint, typecheck:all, test:all exit 0; smoke legal-acceptance 14/14 Chrome in 221 s.
