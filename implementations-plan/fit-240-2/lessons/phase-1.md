@@ -16,7 +16,7 @@
   9.8 → 12.7, 57.5 → 61.6. Firefox tests with no change also grew by 2.5 to 3.6 s in the same run,
   so part of its delta is host load. Each check after a download waits out the 2 s success toast.
 
-## Controls (Chrome, scratch, never committed)
+## Controls (scratch, never committed)
 
 - First attempt: a `<style>` element injected with the hiding rule. The page's CSP refused it, so
   every control stayed green and the launch's CSP check failed three files. A control in an extension
@@ -34,3 +34,13 @@
   a person sees this frame once the passkey answers, while the export runs.
 - At every check on both browsers the hero `.wrapper` read `scrollWidth` 240, `clientWidth` 240,
   and the document 240: no sideways scroll (#1023's blind spot does not hide anything here today).
+
+## After the review loop (head `e1940c508`)
+
+- The seven controls rerun on Firefox: all red with the same fates (six `gone`, one `cut`).
+- Final gates: `lint`, `typecheck:all`, `test:all` exit 0; the three files green on both browsers.
+  Times (s, base → final): Chrome all three 135.2 → 126.5, Firefox 173.8 → 177.3; the tests that
+  gained checks, Chrome 21.9 → 24.7, 8.3 → 11.6, 46.6 → 47.6, Firefox 26.9 → 29.2, 9.8 → 12.3,
+  57.5 → 57.2. The checks cost a few seconds per file; host load moves the totals more.
+- Promoted: the CSP refuses a spec's own `<style>` element too; test CSS goes through CSSOM
+  (`.claude/skills/e2e-testing/SKILL.md`, § Harness behaviours that look like product bugs).

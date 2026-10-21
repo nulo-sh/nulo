@@ -17,6 +17,16 @@ post_implementation_hardening: not scheduled
 
 One arc, one PR against `dev` (the orchestrator's D-orch-1: no stack). The arc adds #986's 240 px check, `expectFitsNarrow`, at six points inside three existing smoke visits: the working card, the done state after a plain file, an encrypted backup, a ready backup, the done state after an encrypted file, and that done state under a warning. A probe on #986's head found the first five already fit on Chrome and Firefox, so the arc changes tests only, no CSS. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
+## Outcome
+
+- **Date:** 2026-10-21.
+- **Status:** closed with its one PR (`worktree-fit-240-2` → `dev`), which carries this close-out; the merge closes the plan. #1022 stays open for firefox-handoff-1's hand-off half.
+- **Shipped:** six `expectFitsNarrow` checks inside three existing smoke specs, on both browsers: the working card held under the passkey dialog, the done state after a plain file, an encrypted backup, a ready backup, the done state, and the done state under a warning. Tests only; no file under `src/` or `packages/` changed. Seven controls turned the checks red as named on both engines. 24 pictures in [screenshots/](screenshots/).
+- **Dispositions:** the orchestrator approved the plan as committed: A1 (one picture set for before and after), A3 (D6: the agreement, unlock and password-field states stay unchecked, not filed), and D4 (the gate's repair is #1023's; no second mechanism here). Codex's plan-round objection to D4 is recorded under D4.
+- **Known limits:** none.
+- **Open items:** #1023 (the 240 px gate passes a page that scrolls sideways inside its own scroller). At every check here the hero `.wrapper` read 240 of 240 on both browsers.
+- **Seeds retired:** the `/goal` and `/loop` below.
+
 ## The claims and what did not hold
 
 - **#1022, "the backup done state's `StatusCard`".** The done state renders no `StatusCard`. It is a `Banner variant="done"` above Close (`full.vue:293-310`, `:400`). `StatusCard` is the working card shown while the run creates or encrypts the file (`full.vue:206-220`). The lane brief names both, so the arc proves both.
@@ -111,6 +121,9 @@ None. The arc changes no file under `apps/extension/src` or `packages/`. The lan
 |---|---|---|---|---|
 | r1 | Codex, gpt-6.1-sol, high | request changes | F1 stale (#986 merged, base moved); visible-state waits (D7); release in `finally`; a control per call site that must fail (D8); the warning visit; D3, D6 and I1 wording | repairing the shared gate here or waiting on it (D4: out of scope, owner's rule; filed as #1023 and raised to the orchestrator) |
 | r1 | Opus 5.5, Plan | conditional approve | presence asserts around the held check and `finally` release; a control for each done-state check (D8); F1 and I1 for #986's merge; D3's reason rewritten; D6 raised as A3; the ready-state check (D9); the dialog named in the held check's label; the scrollbar gutter in #1023 | D4, the toast and the gutter as `known-limit` issues: D4 is an open defect in the gate with a supported path, so it stays open (#1023); the toast is #986's settled D20; the gutter is part of #1023 |
+| impl r1 | Codex, gpt-6.1-sol, high (diff) | approve | two comment notes in the touched spec: a workflow tag and a stale `full.vue:73` pointer, an eleven-line narration cut to two | none |
+| impl r1 | Opus 5.5, general-purpose (diff) | approve | each banner's visible wait moved above its text read; the controls rerun on Firefox | `release().catch(() => {})`: the reference test releases the same way, and the original error still surfaces |
+| impl r2 | Codex, resumed (verify) | approve | none | none |
 
 ## Seeds
 
