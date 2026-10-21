@@ -45,3 +45,27 @@ A script send through the default `waitForTx` (simulate, send, 1 s receipt polls
 - **H4a holds.** The chain clock leads by the slot's step per build at 72/12, 12/12 and 6/6, and lags at 4/1, where blocks are rarer than the 4 s slot.
 - **R1.** 12/12 and 6/6 sit inside M in every arm: screens only. 2/2 and 4/1 differ only in the overlap arms, and there they are slower: a timing cell would measure a predicted loss on the only arm the slot reaches, so no matched e2e cells run for them (plan D14); 3b's per-file times are reported as indicative.
 - **The node-level lever is the pool age**, not the slot: 2.0 s → 0.5 s → 0.02 s per inclusion, about 2 s off each `waitForTx` at age 0.
+
+## 3b, the mechanism screen
+
+P-mech (whole files) once per pair that boots, Chrome, and 2/2 on Firefox (D13), each with the companions of § What boots. Every node log was searched for propose failures, slot mismatches, prunes, rollbacks, drops and fee refusals, outside the boot config dump.
+
+| File time, s | 72/12 Chrome (phase 1) | 12/12 Chrome | 6/6 Chrome | 2/2 Chrome | 72/12 Firefox (phase 1) | 2/2 Firefox |
+|---|---:|---:|---:|---:|---:|---:|
+| `wait-for-tx-mined` | 12 | 9 | 9 | 9 | 11 | 9 |
+| `tx-sendTx-sponsoredFpc` | 26 | 23 | 19 | 24 | 58 | 25 |
+| `imported-account-execution` | 102 | 85 | 73 | 79 | 130 | 96 |
+| `incoming-transfers` | 43 | 44 | 40 | 43 | 75 | 45 |
+| `incoming-arrival` | 350 | 358 | 369 | 360 | 341 | 363 |
+| `authwit-lifecycle` | 115 | 71 | 71 | 70 | 114 | 83 |
+| `concurrent-sendtx-confirm` | 43 | 38 | 32 | 35 | 66 | 39 |
+| `sim-from-selfpay` | 60 | 38 | 34 | 37 | 57 | 42 |
+| `failed-send-check` | 257 | 261 | 257 | 258 | 282 | 270 |
+| **Sum** | 1008 | 927 | 904 | 915 | 1134 | 972 |
+| Chain clock at teardown | +11.0 ks (256 blocks) | +0.5 ks | −0.23 ks | −0.74 ks | +4.0 ks (109) | −0.80 ks |
+| load1 start → end | 106 → (2 h run) | 70 → 97 | 97 → 46 | 46 → 117 | ~220 | 117 → 37 |
+
+- **Every file green at every pair, both browsers.** No propose failure, slot mismatch, prune, rollback, drop or fee refusal. The one node error class, a `getCheckpoint` read that reverts with `Rollup__UnavailableTempCheckpointLog` while a publish lands and succeeds on retry, shows once or twice in six boots at 72/12, 6/6 and 2/2 alike: a publish-time read race, not a slot effect.
+- **H4b holds.** No wallet or test code broke with the chain clock from 11 ks ahead of the wall clock (72/12) to 0.8 ks behind it (2/2). The wallet reads expiry and finality against chain time, not the wall clock.
+- The time differences against phase 1 are unmatched (phase 1 ran at load1 106-220, inside a 2 h run) and the short pairs agree with 12/12 within noise; per R1 and D14 they are not a gain. The phase-1 Chrome P-mech sum (1008 s) is the same selection's time in a long, loaded run; 3d's matched pairs answer the timing question at the default slot.
+- The plan's short-slot break predictions did not occur: at L2 slot = L1 slot no stray L1 block pushed a propose into the next slot (the automine pre-sets the next timestamp and publishes in place), and no proof window was missed at 2/2.
