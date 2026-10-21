@@ -13,6 +13,15 @@ issues: "#972 (Refs: a draft PR the owner reviews and closes on merge)"
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-21.
+- **Status:** completed (pending the owner's merge). Delivered as one draft PR against `dev` with `Refs #972`, carrying this close-out; the owner merges or closes it, and the merge closes the plan.
+- **Shipped:** a vitest sequencer splits each e2e lane's `--shard=i/n` by a committed per-suite, per-browser record of measured file time (`shard-sequencer.ts`, `shard-timings.json`), written by `bun run e2e:timings` from green runs' job logs. No workflow step, matrix or shard count changed. A test drives each config's own sequencer and proves every real file list is handed out exactly once.
+- **Measured after** (one dispatch per lane at `f6e34b3e4`, all green; slowest job, s): smoke Chrome 606 (before 761, range 687–804), smoke Firefox 801 (1105), network Chrome 971 (1090), network Firefox 1121 (1143, inside its before range 1088–1293: no demonstrated gain on this sample). Shard spread 282 / 518 / 353 / 367 → 46 / 9 / 101 / 53. All 16 shard jobs ran exactly `assignShards`' files. Smoke file time matched the record within 0.7 %; network ran 5.4–5.8 % over it, evenly across files ([lessons/phase-5.md](lessons/phase-5.md)).
+- **Dispositions:** shapes (b)–(d) not taken (D1); no freshness gate (D4); four network shards and the heavy-long fold-back left to the owner ([OWNER-ASKS.md](OWNER-ASKS.md) OA-1, OA-2). **Known limits:** #977. **Open items:** none.
+- **Lessons:** none promoted: `lessons.md` sits at its budget (8152 B), and the vitest facts are version specific; they stay in [recon.md](recon.md) and the e2e README. **Size:** 160 lines against light's 150; the overage is this Outcome's measured result. **Seeds retired:** the `/goal` and `/loop` seeds below; they are not instructions.
+
 # shard-balance-1: the e2e shards carry equal measured time
 
 One arc (A1), one **draft** PR against `dev`, `Refs #972`. The owner said "go, but don't merge without my approval" and asked for the gains and the complexity. A committed timings record drives a vitest sequencer: it splits each lane's files across the same shards by measured time, and the workflows do not change. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md).
@@ -85,7 +94,7 @@ Gate: `cd apps/extension && bun --bun vitest run scripts/e2e/shard-sequencer.tes
 **Phase 4 ✓: the docs.** Correct every SHA-1 statement recon lists, without counts that rot, plus the README's "picks the same files locally as in CI" (now true only with the browser set and the pool's `--exclude` list, which its reproduction command must show) and `docker-ci-like.sh:27-28`. Keep each dedicated job's reason, but drop "the sharder weighs no runtime". Put the record's upkeep in CI.md § the e2e lanes (what it is, that a new file needs nothing, when to regenerate) and the procedure in the e2e-testing skill.
 Gate: `bun run lint`; `bun run check:plans`; `bun run test:ci-gating`; `bun run lint:actions`; `git grep -nE "SHA-1|deterministically|same files locally" -- CI.md .github apps/extension/tests/e2e/README.md apps/extension/scripts/e2e/docker-ci-like.sh .claude/skills/e2e-testing` shows no claim that the split is by path hash or fixed per shard.
 
-**Phase 5: measure after** (after the Codex loop, before the PR). Push the branch. Run `gh workflow run <wf> --ref shard-balance-1-a1` for each of the four `pr-extension-*-e2e*.yml`. Do not push until all four end. Poll them in one bounded loop. Record, per lane: the shard spread (slowest minus fastest), the slowest job beside the before range, every shard's duration, and the e2e-testing skill's envelope. Check that each shard's file set equals `assignShards`' prediction for its browser.
+**Phase 5 ✓: measure after** (after the Codex loop, before the PR). Push the branch. Run `gh workflow run <wf> --ref shard-balance-1-a1` for each of the four `pr-extension-*-e2e*.yml`. Do not push until all four end. Poll them in one bounded loop. Record, per lane: the shard spread (slowest minus fastest), the slowest job beside the before range, every shard's duration, and the e2e-testing skill's envelope. Check that each shard's file set equals `assignShards`' prediction for its browser.
 Gate: all four dispatches green. Pass: the numbers and the file-set check are in the PR body, and any lane that did not improve says so. A red run is read honestly: a known flake gets one rerun, reported apart from the first attempt's numbers; real breakage gets a fix. A red that the new split causes (a new first file paying the cold-start cost the README names) is evidence against I1: report it, never rerun it to green.
 
 ## Delivery
