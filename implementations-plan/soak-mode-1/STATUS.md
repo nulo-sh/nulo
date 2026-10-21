@@ -6,3 +6,4 @@
 - 2026-10-21 r2 approve with changes (more opt-in files); r3 both legs: report read-back, strict (D4, D5); r4 Codex approve. Plan ready for the orchestrator.
 - 2026-10-21 A1 phase 1 green: lint:actions, the three test files, test:ci-gating (678 pass), lint; red/green against cef87d9de copies (6 soak tests red on base).
 - 2026-10-21 A1 phase 2 green: lint, test:ci-gating, check-no-local-paths; known limit #1018 filed closed.
+- 2026-10-21 final local gates on 0472e2e28 (dev merged): lint, typecheck:all, test:all, test:ci-gating, test:release, lint:actions green; `bun run test` 14937/14938 twice, one static-scan timeout per run on a saturated host (load 281 on 188 cores; copy-dash-ban + type-role-ban, then log-payload-ban), each green in isolation; the arc touches nothing under apps/ or packages/.
