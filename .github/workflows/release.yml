@@ -49,7 +49,8 @@ concurrency:
 
 # Least-privilege default: read-only for every job (covers checkout; artifact +
 # cache ops don't need a `permissions:` scope). A job that writes escalates in its
-# own block or mints a release App token, whose permissions release-integrity.test.ts pins.
+# own block or mints a release App token, whose key only the `release-app` environment holds;
+# release-integrity.test.ts pins both.
 permissions:
   contents: read
 
@@ -58,6 +59,7 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    environment: release-app
     # Uses the App token for its writes (signing + CI cascade), but escalate the
     # job token too so the action is robust if it ever falls back to GITHUB_TOKEN.
     permissions:
@@ -106,9 +108,7 @@ jobs:
     uses: ./.github/workflows/_release-pr-lockfile.yml
     with:
       pr: ${{ needs.release-please.outputs.pr }}
-    secrets:
-      RELEASE_PLEASE_APP_ID: ${{ secrets.RELEASE_PLEASE_APP_ID }}
-      RELEASE_PLEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+    secrets: inherit
 
   # release-please never tags (skip-github-release; its own publish path also aborts on
   # its known bug), so after a Release PR merges release_created stays false and the
@@ -128,6 +128,7 @@ jobs:
       needs.release-please.outputs.release_created != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    environment: release-app
     # Every write goes through the App token, so the release App is the tag's creator.
     permissions:
       contents: read
@@ -685,6 +686,7 @@ jobs:
       needs.attach-assets.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    environment: release-app
     # Every write goes through the App token below; the job token only checks out.
     permissions:
       contents: read

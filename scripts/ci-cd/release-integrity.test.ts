@@ -19,6 +19,8 @@ type Step = { id?: string; uses?: string; with?: Record<string, unknown>; run?: 
 type Defaults = { run?: { "working-directory"?: string } }
 type Job = {
 	uses?: string
+	environment?: unknown
+	secrets?: unknown
 	permissions?: unknown
 	env?: Record<string, unknown>
 	defaults?: Defaults
@@ -35,7 +37,7 @@ const parse = <T>(path: string): T => Bun.YAML.parse(readFileSync(join(ROOT, pat
 
 function loadTree(): Tree {
 	const workflows: Record<string, Workflow> = {}
-	for (const file of readdirSync(join(ROOT, ".github/workflows")).filter((f) => f.endsWith(".yml"))) {
+	for (const file of readdirSync(join(ROOT, ".github/workflows")).filter((f) => /\.ya?ml$/.test(f))) {
 		workflows[file] = parse<Workflow>(`.github/workflows/${file}`)
 	}
 	const actions: Record<string, Action> = {}
@@ -132,6 +134,57 @@ function mintFindings(tree: Tree): string[] {
 		}
 	}
 	return [...findings, ...Object.keys(MINTS).flatMap((where) => (seen.has(where) ? [] : [`${where}: its pinned App token is gone`]))]
+}
+
+/** The release App's id and key are secrets of this environment, which GitHub opens only to runs from
+ *  `main` and `dev`; it matches an environment name case-blind. */
+const RELEASE_APP = "release-app"
+const APP_SECRET = /RELEASE_PLEASE_APP_/i
+const OWN_TOKEN = /\bsecrets\s*(?:\.\s*GITHUB_TOKEN\b|\[\s*'GITHUB_TOKEN'\s*\])/gi
+
+function environmentName(job: Job): string | undefined {
+	const named = typeof job.environment === "object" ? (job.environment as { name?: unknown } | null)?.name : job.environment
+	return typeof named === "string" ? named : undefined
+}
+
+const inReleaseApp = (job: Job): boolean => environmentName(job)?.toLowerCase() === RELEASE_APP
+
+/** The `${{ }}` spans of a job and its workflow's env, without the mint's two inputs: the App secrets' one use. */
+function spansBesideMint(wf: Workflow, job: Job): string[] {
+	const steps = job.steps?.map((s) =>
+		s.uses?.startsWith(MINT) ? { ...s, with: { ...s.with, "app-id": undefined, "private-key": undefined } } : s,
+	)
+	return expressions(JSON.stringify([wf.env, { ...job, steps }]))
+}
+
+function releaseAppJobFindings(tree: Tree, where: string, wf: Workflow, job: Job): string[] {
+	const findings: string[] = []
+	const spans = spansBesideMint(wf, job)
+	if (where in MINTS) {
+		if (environmentName(job) !== RELEASE_APP) findings.push(`${where}: mints the App token outside ${RELEASE_APP}`)
+		// Inside the environment any other read, `toJSON(secrets)` included, can carry the key.
+		if (spans.some((span) => /\bsecrets\b/i.test(span.replace(OWN_TOKEN, ""))))
+			findings.push(`${where}: reads a secret beside its mint`)
+		return findings
+	}
+	if (environmentName(job)?.includes("${{")) findings.push(`${where}: names its environment by an expression`)
+	else if (inReleaseApp(job)) findings.push(`${where}: enters ${RELEASE_APP} but mints no pinned App token`)
+	if (spans.some((span) => APP_SECRET.test(span))) findings.push(`${where}: reads the release App's secrets`)
+	// A workflow from another commit can enter release-app too, and this test cannot read it.
+	if (job.uses && !job.uses.startsWith("./") && job.secrets === "inherit")
+		findings.push(`${where}: inherits secrets into a workflow outside this commit`)
+	const callee = tree.workflows[job.uses?.match(/^\.\/\.github\/workflows\/([^/]+)$/)?.[1] ?? ""]
+	// A secret the caller does not pass resolves empty in the callee, and the run shows no error.
+	if (callee && Object.values(callee.jobs).some(inReleaseApp) && job.secrets !== "inherit")
+		findings.push(`${where}: calls a ${RELEASE_APP} workflow without secrets: inherit`)
+	return findings
+}
+
+/** Every job, callers included: exactly the minting jobs enter `release-app`, and only their mint reads the App's secrets. */
+function releaseAppFindings(tree: Tree): string[] {
+	return Object.entries(tree.workflows).flatMap(([file, wf]) =>
+		Object.entries(wf.jobs ?? {}).flatMap(([name, job]) => releaseAppJobFindings(tree, `${file}#${name}`, wf, job)),
+	)
 }
 
 /** release-please maintains Release PRs only; a run that tagged or released would bypass the publish checks. */
@@ -631,6 +684,85 @@ describe("App tokens", () => {
 		],
 	])("finds %s", (_, edit) => {
 		expect(mintFindings(mutated(edit)).length).toBeGreaterThan(0)
+	})
+	test("only the minting jobs enter release-app, and only their mint reads the App's secrets", () => {
+		expect(releaseAppFindings(TREE)).toEqual([])
+		const entered = Object.entries(TREE.workflows).flatMap(([file, wf]) =>
+			Object.entries(wf.jobs).flatMap(([name, job]) => (inReleaseApp(job) ? [`${file}#${name}`] : [])),
+		)
+		expect(entered.sort()).toEqual(Object.keys(MINTS).sort())
+	})
+	const notes = (t: Tree) => t.workflows["release.yml"].jobs["release-notes"]
+	const caller = (t: Tree, file: string) => t.workflows[file].jobs["release-pr-lockfile"]
+	const reading = (expression: string) => ({ run: "true", env: { KEY: `\${{ ${expression} }}` } }) as Step
+	const cases: [string, (t: Tree) => unknown, string[]][] = [
+		[
+			"a minting job outside it",
+			(t) => unset(t.workflows["release.yml"].jobs["auto-unstick"], "environment"),
+			["release.yml#auto-unstick: mints the App token outside release-app"],
+		],
+		[
+			"another job in it, in any case",
+			(t) => Object.assign(notes(t), { environment: "Release-App" }),
+			["release.yml#release-notes: enters release-app but mints no pinned App token"],
+		],
+		[
+			"an environment named by an expression",
+			(t) => Object.assign(notes(t), { environment: { name: "${{ 'release-app' }}" } }),
+			["release.yml#release-notes: names its environment by an expression"],
+		],
+		[
+			"another job reading the key",
+			(t) => notes(t).steps?.push(reading("secrets.release_please_app_private_key")),
+			["release.yml#release-notes: reads the release App's secrets"],
+		],
+		[
+			"a minting job handing the key to a script",
+			(t) => t.workflows["release.yml"].jobs["auto-unstick"].steps?.push(reading("secrets.RELEASE_PLEASE_APP_PRIVATE_KEY")),
+			["release.yml#auto-unstick: reads a secret beside its mint"],
+		],
+		[
+			"a minting job reading the whole context",
+			(t) => t.workflows["_release-pr-lockfile.yml"].jobs["lock-version"].steps?.push(reading("toJSON(secrets)")),
+			["_release-pr-lockfile.yml#lock-version: reads a secret beside its mint"],
+		],
+		[
+			"a caller passing the id by name",
+			(t) => Object.assign(caller(t, "release.yml"), { secrets: { RELEASE_PLEASE_APP_ID: "${{ secrets.RELEASE_PLEASE_APP_ID }}" } }),
+			[
+				"release.yml#release-pr-lockfile: reads the release App's secrets",
+				"release.yml#release-pr-lockfile: calls a release-app workflow without secrets: inherit",
+			],
+		],
+		[
+			"a caller passing nothing",
+			(t) => unset(caller(t, "release-prerelease.yml"), "secrets"),
+			["release-prerelease.yml#release-pr-lockfile: calls a release-app workflow without secrets: inherit"],
+		],
+		[
+			"a caller inheriting into another commit's workflow",
+			(t) => Object.assign(caller(t, "release.yml"), { uses: "nulo-sh/nulo/.github/workflows/_release-pr-lockfile.yml@main" }),
+			["release.yml#release-pr-lockfile: inherits secrets into a workflow outside this commit"],
+		],
+		[
+			"nothing in a minting job's environment without deployments",
+			(t) =>
+				Object.assign(t.workflows["release.yml"].jobs["sync-main-to-dev"], {
+					environment: { name: "release-app", deployment: false },
+				}),
+			[],
+		],
+		[
+			"nothing in a mint reading its key by bracket",
+			(t) =>
+				Object.assign(step(t, "_release-pr-lockfile.yml#lock-version", MINT).with ?? {}, {
+					"private-key": "${{ secrets['RELEASE_PLEASE_APP_PRIVATE_KEY'] }}",
+				}),
+			[],
+		],
+	]
+	test.each(cases)("finds %s", (_, edit, expected) => {
+		expect(releaseAppFindings(mutated(edit)).sort()).toEqual([...expected].sort())
 	})
 })
 
