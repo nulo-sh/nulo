@@ -360,9 +360,10 @@ async function rebootOverHeldList(browser: Browser, extensionId: string, scratch
 	return next
 }
 
-/** Register a profile with a test password and return the popup it registered on, at
- *  #/popup/general with its balance shown. */
-export async function registerProfileOnPage(ctx: ExtensionContext): Promise<Page> {
+/** Register a profile with a test password. Leaves the extension on #/popup/general.
+ *  Exported so a cold-shard warm-up tap (and any other test infra that
+ *  drives the full register flow outside the fixture pipeline) can reuse it. */
+export async function registerProfile(ctx: ExtensionContext): Promise<void> {
 	const page = await openPopup(ctx)
 
 	await waitForHash(page, "#/popup/register")
@@ -395,12 +396,6 @@ export async function registerProfileOnPage(ctx: ExtensionContext): Promise<Page
 
 	await waitForHash(page, "#/popup/general", 30_000)
 	await page.waitForSelector('[data-testid="balance-amount"]', { visible: true, timeout: 30_000 })
-	return page
-}
-
-/** Register a profile with a test password and close its popup. */
-export async function registerProfile(ctx: ExtensionContext): Promise<void> {
-	const page = await registerProfileOnPage(ctx)
 	await page.close()
 }
 
@@ -470,7 +465,7 @@ function makePhase(prefix: string) {
 			return await fn()
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)
-			throw new Error(`[${prefix}:${name}] ${msg}`, { cause: err })
+			throw new Error(`[${prefix}:${name}] ${msg}`)
 		}
 	}
 }
@@ -486,7 +481,11 @@ async function setupConnectedPlayground(
 	beforeClose?: (page: Page, phase: PhaseTagger) => Promise<void>,
 ): Promise<{ ctx: ExtensionContext; playgroundPage: Page; phase: PhaseTagger }> {
 	const phase = makePhase(prefix)
-	const { ctx, page: setupPage } = await launchOnLocalNetwork(phase)
+	const ctx = await phase("launchExtension", () => launchExtension())
+	await phase("registerProfile", () => registerProfile(ctx))
+	const setupPage = await phase("openPopup", () => openPopup(ctx))
+	await phase("waitForHashGeneral", () => waitForHash(setupPage, "#/popup/general", 30_000))
+	await phase("switchToLocalNetwork", () => switchToLocalNetwork(setupPage))
 	if (beforeClose) await beforeClose(setupPage, phase)
 	await setupPage.close()
 	const playgroundPage = await phase("connectPlayground", () => connectPlayground(ctx))
@@ -615,15 +614,12 @@ export function requireAztecConfig(): AztecTestConfig {
 /** What the funded network fixtures mint to the wallet's account, and so expect on its token row. */
 const FIXTURE_TOKEN_RAW = 1000n * 10n ** 18n
 
-/** Switches on the registration popup itself: a second popup pays another open and route for the
- *  same Home. `[onboard] <ms>` spans the registration through the switch, since work the popup
- *  still runs after registering lands in the switch. */
-async function launchOnLocalNetwork(phase: PhaseTagger): Promise<{ ctx: ExtensionContext; page: Page }> {
-	const ctx = await phase("launchExtension", () => launchExtension())
-	const t0 = performance.now()
-	const page = await phase("registerProfile", () => registerProfileOnPage(ctx))
-	await phase("switchToLocalNetwork", () => switchToLocalNetwork(page))
-	console.log(`[onboard] ${Math.round(performance.now() - t0)}`)
+async function launchOnLocalNetwork(): Promise<{ ctx: ExtensionContext; page: Page }> {
+	const ctx = await launchExtension()
+	await registerProfile(ctx)
+	const page = await openPopup(ctx)
+	await waitForHash(page, "#/popup/general", 30_000)
+	await switchToLocalNetwork(page)
 	return { ctx, page }
 }
 
@@ -838,7 +834,7 @@ export const test = base.extend<{
 	localNetworkExtension: [
 		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
 		async ({}, use) => {
-			const { ctx, page } = await launchOnLocalNetwork(makePhase("localNetworkExtension"))
+			const { ctx, page } = await launchOnLocalNetwork()
 			await page.close()
 			await use(ctx)
 			await ctx.close()
@@ -851,7 +847,7 @@ export const test = base.extend<{
 		async ({}, use) => {
 			const aztecConfig = requireAztecConfig()
 
-			const { ctx, page } = await launchOnLocalNetwork(makePhase("tokenReadyExtension"))
+			const { ctx, page } = await launchOnLocalNetwork()
 
 			const accountAddress = await getAccountAddress(page)
 			console.log("[tokenReady] Extension account address:", accountAddress)
@@ -896,7 +892,7 @@ export const test = base.extend<{
 		async ({}, use) => {
 			const aztecConfig = requireAztecConfig()
 
-			const { ctx, page } = await launchOnLocalNetwork(makePhase("feeJuiceReadyExtension"))
+			const { ctx, page } = await launchOnLocalNetwork()
 
 			const accountAddress = await getAccountAddress(page)
 			console.log("[feeJuiceReady] Extension account address:", accountAddress)
