@@ -11,7 +11,19 @@ base: origin/dev at ca052f08
 trunk: dev
 issues: "#959 (research; closes on the findings, never on the arc-2 PR, which says Refs #959)"
 post_implementation_hardening: not scheduled
+status: closed (arc 1 delivered as research; arc 2 not run, D15)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-21.
+- **Status:** closed. Arc 1 (phases 1, 2, 3 and 5) ran on `block-time-1-a1`; arc 2 did not run (D15). The docs-only PR that carries this archive closes #959, and its merge closes the plan.
+- **Shipped:** no code. The answer to #959, posted there as `## Findings`: on 6.0.0-rc.3's local network the slot is not the floor of a round trip. The 2 s minimum pool age is, settable only at boot, and it is 5.6 % (Chrome) and 4.2 % (Firefox) of the critical network shard, against a third for browser launch and onboarding. Short slots boot only with companion timing knobs (1 s never), admit 4.9 times the per-tx DA gas of a 72 s slot, and slow overlapping sends. They broke nothing in P-mech, which also stayed green with a forced block every 1 s and every 0.5 s. The combined node-side lever (pool age 0, 0.1 s script polls, forced blocks) cut 68-72 s of script time per P-mech run but did not pass the gain rule on a loaded host with a fixed A-then-B order.
+- **Dispositions:** 1/1 did not boot (the proposer timetable), so 2/2 took its place (D13). 3e, phase 4 and the arc-2 PR were not run (D15). No per-lever comparison was run, since no decision hung on one lever. Prover-ON lanes were not attributed. Phase 5's planned public filing for the sandbox's RPC surface became a private advisory (Codex p5 r1).
+- **Known limits:** none.
+- **Open items:** #988 (the bridge fixture's L1 nonce race), #989 (Firefox's late fee estimate), #990 (the node-side levers measured on CI in balanced order), #991 (per-file launch and onboarding cost), #992 (the wallet clocks, with OA-1), GHSA-4c23-7xf4-f9q3. Shard balance stays with #972.
+- **Lessons:** none promoted: `lessons.md` holds 8152 of its 8192 bytes. The boot-only pool age, the node polls `aztec.sh` fixes at 500 ms, and the proposer timetable's boot refusal are in `lessons/phase-2.md` and `phase-3.md`.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # block-time-1: are shorter Aztec slots the e2e speed lever? (#959)
 
@@ -136,7 +148,7 @@ All processes run on one host, so wall-clock stamps from the test process, the b
 
 ## Phases
 
-### Phase 1 — Where the time goes (default settings only)
+### Phase 1 — Where the time goes (default settings only) ✓
 
 1. Pull the last three green PR runs per lane and browser (done at planning for the network and smoke lanes: `~/.cache/nulo-backlog/block-time-1/ci/`). Record the envelope, each job's time, each file's median and the critical job's file list.
 2. Build the instrument patch set. Self-test it on `wait-for-tx-mined`: spans, transitions, the four node-log lines and the teardown skew are all present.
@@ -148,14 +160,14 @@ All processes run on one host, so wall-clock stamps from the test process, the b
 
 **Validation gate.** Commands: the runs above; `bun run check:plans` after staging. Pass: every table cell names its run id; `env.txt` shows default settings for every run; unattributed time ≤ 10 % per P-mech file; H5 decided; `git status` shows only plan files. Layers: e2e-live-network (local sandbox), e2e smoke.
 
-### Phase 2 — The knob inventory, verified
+### Phase 2 — The knob inventory, verified ✓
 
 1. Turn recon's families into one table: name, default, where read, what it governs, constraints, deploy-time or runtime, honoured by `--local-network`. Add the mechanisms that are not knobs: the RPC unseen-block hold-off (only a read of a block the node has not seen waits: by number 2 × `blockDurationMs`, by hash 3 s, independent of the slot), the fee provider's slot-stepped minimum fee (priced at the later of the next slot after the last checkpoint and the date provider's next L1 slot, `fee_provider.js:184-196`), the PXE anchor on the proposed tip, orphan pruning (disabled on the local network) against the rollback of a failed publish, the incoming scanner's gates (private on the proposed tip, public on the checkpointed tip, `incoming-transfer/service.ts:1228, 1517`; the 5 s tips cache; the forced fourth tick).
 2. Run **V-boot** at 12/12 through `agent.sh` with the probe spec and anvil started with `--block-time 1` (scratch): the node reads back slot 12 (F2), anvil's idle block count before and after the node starts (H2), `aztecDebug_mineBlock` and `aztecDebug_prove` over the main port, anvil's `finalized` offset under `--slots-in-an-epoch 1`.
 
 **Validation gate.** Pass: each "honoured" or "ignored" cell cites a code line or the V-boot; H2 and H3 decided. Layers: e2e-live-network (boot and probe).
 
-### Phase 3 — The sweep
+### Phase 3 — The sweep ✓
 
 1. **3a, probe:** slot pairs 72/12, 12/12, 6/6, 2/2, 1/1 (the brief's settings), plus 4/1 as a diagnostic that separates "short L2 slot" from "L2 slot = L1 slot"; three runs at 72/12 and 1/1, one at the others, interleaved. Each run carries all pool-age arms and both submit arms, and records the arrival and build times it actually got, not the scheduled offsets.
 2. **3b, mechanism screen:** P-mech once on Chrome at each non-default pair that boots, and on Firefox at 1/1. Grep every screen's node log for `Automine propose did not succeed`, `mined in slot`, prune lines and fee-refused drops: at L2 = L1 slot one stray L1 block between the timestamp pre-set and the propose pushes the propose into the next slot and rolls back a proposed block the PXE may already anchor on; at 1/1 the proof-submission window is 8 L1 blocks.
@@ -171,7 +183,7 @@ All processes run on one host, so wall-clock stamps from the test process, the b
 
 **Validation gate.** Pass: per setting, a pass or fail table per test and browser; every failure has a mechanism, a reproduction command and a label; every minute claim follows § Margin and statistics with load1; H1, H4a, H4b and H6 decided or marked inconclusive with the reason. Layers: e2e-live-network on both browsers.
 
-### Phase 5 — The findings
+### Phase 5 — The findings ✓
 
 1. Write `~/.cache/nulo-backlog/_orch/reports/block-time-1-findings.md`: the attribution tables, the knob inventory, the sweep, every break with its mechanism, every package experiment with its diff and result, the ideas not tried, the recommendation.
 2. Post a `## Findings` comment on #959: the answer to each of its four questions, the recommendation, and whether arc 2 runs. No local paths, no links to local files.
@@ -179,7 +191,7 @@ All processes run on one host, so wall-clock stamps from the test process, the b
 
 **Validation gate.** Pass: the document has every section above; `git grep -nE '/(Users|home|mnt)/' -- implementations-plan/block-time-1` and the comment body return nothing; `bun run check:plans` passes.
 
-### Phase 4 — CI (arc 2, only if a setting holds)
+### Phase 4 — CI (arc 2, only if a setting holds): not run, D15
 
 1. Apply the setting as a real change with its tests on `block-time-1-a2` off `origin/dev`. Run `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run test:ci-gating`, the touched e2e files on both browsers.
 2. Push the branch. Dispatch `pr-extension-network-e2e.yml` and `pr-extension-network-e2e-firefox.yml` three times each on the branch and three times each on `origin/dev`, alternating, so both arms meet the same runner pool; dispatch both smoke workflows once on each as a control.
@@ -222,6 +234,8 @@ All processes run on one host, so wall-clock stamps from the test process, the b
 - **Opus r1** (Plan agent): *conditional approve* (rebuild 3a, H1, F3 and R1 on the date provider; cut the budget; fix the log filter). Accepted: the backward clock at short slots (H1, H4a, I2), overlap offsets and in-boot pool-age arms (instrument 4), the log filter (`node:automine-sequencer`), the budget cuts (D8), H1 from the node log and the paired gain rule, simultaneous dev-versus-branch dispatches in phase 4, the await-then-sleep pump and its pool-age confound, the short-slot break mechanisms grepped in 3b, 4/1 in place of 6/6, the in-flight assertion check before a shorter pool age, H3 decided by code, the hold-off marked miss-only, the private-copy checks. Rejected: a separate owner ask for the pool-age fidelity trade (D7: the owner reviews the PR personally, and it is not a surface a person sees).
 - **Codex final r1** (fresh session 01a15adb): *conditional approve* (repair the local hold gate, restore 6 s, correct the measurement gaps). Accepted: F3's bound removed, both reset directions stated, achieved overlap recorded (F3, 3a); 6/6 restored, 4/1 kept as a diagnostic; transitions forwarded live and re-attached across `stopBackground`; three matched pairs per browser in 3d, phase 1.3 no longer a default arm; H6 bounded to P-mech's workload with latency growth; the combined arm claims no per-lever share; the budget projected after phase 1 with a written priority call above 30 h. Rejected: none.
 - **Codex final r2** (resumed 01a15adb, verification only): **approve**. All seven fixes present, no regression found.
+- **Codex p3d consult** (session 01a15d42): verdict (a), the combined lever does not hold; no arc 2 (D15). It also found the attribution double-count, since corrected (`lessons/phase-1.md`).
+- **Codex p5 r1** (gpt-6.1-sol, high; session 01a15d86, over the findings, the lessons, the instruments, the run data and the public drafts): *fix-then-ship*, ten findings, all accepted (`lessons/phase-5.md`). **r2** (resumed): three residuals, accepted. **r3** (resumed): **clean**.
 
 ## Post-implementation
 

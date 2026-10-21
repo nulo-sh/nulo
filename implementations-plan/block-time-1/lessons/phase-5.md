@@ -24,3 +24,13 @@ Findings 2, 3 and 6-10 verified fixed. Three residuals, all accepted:
 - The round-1 log restated what the advisory covers; it now carries only the advisory reference.
 - The Firefox estimate draft kept a stale "3 of 4 runs"; it now names the runs.
 - "The last third inside the earlier range" was false for two runs, whose last third was faster. Corrected to "no run's last third is slower than the slower of its first two", here and in the drafts.
+
+## Codex round 3 (resumed 01a15d86, verification): clean
+
+## Delivered
+
+- The findings document went to the orchestrator; the `## Findings` comment is on #959.
+- Issues, each after a dedupe: #988 (the bridge fixture's L1 nonce race), #989 (Firefox's late fee estimate), #990 (the node-side levers on CI, in balanced order), #991 (per-file launch and onboarding cost), #992 (the wallet clocks). Shard balance was already #972.
+- Tracked privately: GHSA-4c23-7xf4-f9q3.
+- Owner ask OA-1 (the wallet clocks), with what ships now: the production intervals stay.
+- The scratch instruments were reverted from the worktree. The findings carry their diff, which was never committed.
