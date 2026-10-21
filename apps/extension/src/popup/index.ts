@@ -17,6 +17,8 @@ import "./index.scss"
 
 import { initAppServiceContext, isServiceReady, managers, waitForServiceReady } from "@/utils/core"
 import { captureOwnWindow, followOwnRoute } from "@/utils/own-window"
+import { readHandback, settleLanding } from "@/utils/panel-handback"
+import { showSnack } from "@/utils/snack"
 import { captureWindowDocument } from "@/utils/window-document"
 import { LEGACY_SETTINGS_REDIRECTS } from "./legacy-routes"
 import { createPopupGuard } from "./route-guard"
@@ -32,6 +34,7 @@ initAppServiceContext()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
+import { useToast } from "@/composables/toast"
 
 routes.push({
 	path: "/",
@@ -42,6 +45,11 @@ routes.push(...LEGACY_SETTINGS_REDIRECTS)
 // Read before the router rewrites the URL: the guard may redirect the first route.
 captureOwnWindow(window.location.hash)
 captureWindowDocument(window.location.hash)
+
+// Firefox's toolbar panel opens on the page a hand-off window returned to: the URL is rewritten
+// before the router reads it, so Home never shows first.
+const landing = await readHandback()
+if (landing) window.history.replaceState(window.history.state, "", `#${landing}`)
 
 const scrollMemory = createScrollMemory(() => {
 	const position: unknown = window.history.state?.position
@@ -83,3 +91,12 @@ router.afterEach((_to, from, failure) => {
 })
 
 createApp(App).provide(START_GRACE_KEY, startGrace).use(router).use(createPinia()).mount("#app")
+
+if (landing) {
+	const appStore = useAppStore()
+	const { openToast } = useToast()
+	settleLanding(
+		() => ({ path: router.currentRoute.value.path, loggedIn: appStore.isLogined, profileId: appStore.profile?.id }),
+		(snack) => showSnack(openToast, snack),
+	)
+}

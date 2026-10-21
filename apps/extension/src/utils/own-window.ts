@@ -7,10 +7,15 @@
  *
  * One window per flow: the window stores its own id in `chrome.storage.session`, since the panel that
  * opened it is gone by the time it could, and a later start from the panel focuses that window.
+ *
+ * The file picks (contacts, the account file, Restore again's backup) open as a card window: the
+ * window shows only the pick, and when the flow ends it hands back to the panel and closes.
  */
 import type { CreateWindowOptions } from "@nulo/wallet-core/ports"
 import type { NavigationHookAfter } from "vue-router"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
+import { HANDBACK_KEY, type Handback, type HandbackRoute, type HandbackSnack, landingRoute } from "@/utils/panel-handback"
+import { RETURN_TO_PANEL, type ReturnToPanelMessage } from "@/wallet/utils/onboarding-tab"
 import { centerOn } from "@/wallet/services/window-manager/placement"
 
 /** The pages that may move to an own window, each its own flow. */
@@ -21,20 +26,26 @@ export const OWN_WINDOW_ROUTES = {
 	accountImport: "/popup/settings/accounts/import",
 	restoreAgain: "/popup/restore-again",
 } as const
+const CARD_FLOWS = ["contacts", "accountImport", "restoreAgain"] as const satisfies readonly OwnFlow[]
 const MARKER = "window"
 const MARKER_VALUE = "own"
+const OPENER = "opener"
 const WIDTH = 380
 const HEIGHT = 660
 
 type OwnFlow = keyof typeof OWN_WINDOW_ROUTES
+type CardFlow = (typeof CARD_FLOWS)[number]
 
 let ownRoute: string | undefined
 let ownFlow: OwnFlow | undefined
+let openerId: number | undefined
 let registeredId: number | undefined
 let registration: Promise<void> = Promise.resolve()
 let opening: Promise<boolean> | undefined
 
 const flowKey = (flow: OwnFlow) => `nulo:own-window:${flow}`
+
+const isCardFlow = (flow: OwnFlow | undefined): flow is CardFlow => CARD_FLOWS.some((card) => card === flow)
 
 function flowOf(route: string): OwnFlow | undefined {
 	const path = route.split("?")[0]
@@ -42,7 +53,8 @@ function flowOf(route: string): OwnFlow | undefined {
 }
 
 /** Called once in `popup/index.ts`, before the router exists: the document is an own window when its
- *  first URL is one of the own-window routes and carries `window=own`. */
+ *  first URL is one of the own-window routes and carries `window=own`, and `opener` names the browser
+ *  window it was opened from. */
 export function captureOwnWindow(hash: string): void {
 	const path = hash.replace(/^#/, "")
 	const queryStart = path.indexOf("?")
@@ -53,10 +65,13 @@ export function captureOwnWindow(hash: string): void {
 		void forgetThisWindow()
 		return
 	}
+	const opener = params.get(OPENER)
 	params.delete(MARKER)
+	params.delete(OPENER)
 	const query = params.toString()
 	ownRoute = query ? `${route}?${query}` : route
 	ownFlow = flow
+	openerId = opener !== null && /^\d{1,15}$/.test(opener) ? Number(opener) : undefined
 	registration = register(flow)
 }
 
@@ -93,6 +108,11 @@ export function ownWindowRoute(): string | undefined {
 	return ownRoute
 }
 
+/** This document shows one of the file picks as a card, in the window the panel handed it to. */
+export function isCardWindow(): boolean {
+	return isCardFlow(ownFlow)
+}
+
 /** The flow finished; from now on the document behaves like any popup page, and a later start opens
  *  a new window. Resolves once the registration is cleared; never rejects. */
 export function releaseOwnWindow(): Promise<void> {
@@ -126,9 +146,10 @@ export const followOwnRoute: NavigationHookAfter = (to, _from, failure) => {
 	void releaseOwnWindow()
 }
 
-/** Where a document goes after auth: a dApp window's saved page, else its own-window route, else Home. */
+/** Where a document goes after auth: a dApp window's saved page, else its own-window route, else the
+ *  page a hand-back opened the panel for, else Home. */
 export function postAuthRoute(pageAwaitingAuth?: string): string {
-	return pageAwaitingAuth || ownRoute || "/popup/general"
+	return pageAwaitingAuth || ownRoute || landingRoute() || "/popup/general"
 }
 
 /** Reopens `route` in a popup-type window sized like the popup and centered on this browser window,
@@ -147,8 +168,9 @@ async function openOwnWindow(route: string): Promise<boolean> {
 		window.close()
 		return true
 	}
-	const url = chrome.runtime.getURL(`src/popup/index.html#${route}${route.includes("?") ? "&" : "?"}${MARKER}=${MARKER_VALUE}`)
 	const anchor = await chrome.windows.getCurrent().catch(() => undefined)
+	const opener = typeof anchor?.id === "number" ? `&${OPENER}=${anchor.id}` : ""
+	const url = chrome.runtime.getURL(`src/popup/index.html#${route}${route.includes("?") ? "&" : "?"}${MARKER}=${MARKER_VALUE}${opener}`)
 	const sized: CreateWindowOptions = { type: "popup", url, width: WIDTH, height: HEIGHT }
 	const position = centerOn(anchor, WIDTH, HEIGHT)
 	try {
@@ -196,11 +218,32 @@ export async function leavePanelFor(route: string): Promise<boolean> {
 }
 
 /** Closes this document's window when it is an own window hosted in a popup-type window: the same
- *  URL in a tab or in the panel keeps ordinary back. */
+ *  URL in a tab or in the panel keeps ordinary back. A card window hands back to its flow's page. */
 export async function closeOwnWindow(): Promise<boolean> {
+	const flow = ownFlow
 	if (ownRoute === undefined) return false
 	const current = await chrome.windows.getCurrent().catch(() => undefined)
 	if (current?.type !== "popup") return false
+	if (isCardFlow(flow)) return returnToPanel(OWN_WINDOW_ROUTES[flow])
+	window.close()
+	return true
+}
+
+/**
+ * Ends a card window's flow: leaves the hand-back for the panel, asks the background to reopen the
+ * panel on the browser window this one was opened from, and closes, whatever the answer. A failed
+ * send leaves the record for the next panel. False, doing nothing, outside a card window.
+ */
+export async function returnToPanel(route: HandbackRoute, snack?: HandbackSnack): Promise<boolean> {
+	if (!isCardWindow()) return false
+	const handback: Handback = snack ? { route, snack } : { route }
+	try {
+		await chrome.storage.session.set({ [HANDBACK_KEY]: handback })
+		const message: ReturnToPanelMessage = { type: RETURN_TO_PANEL, opener: openerId }
+		await chrome.runtime.sendMessage(message)
+	} catch (error) {
+		console.debug("hand-back to the panel failed", { error })
+	}
 	window.close()
 	return true
 }

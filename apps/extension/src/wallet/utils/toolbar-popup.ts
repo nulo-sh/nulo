@@ -1,9 +1,11 @@
 /**
- * The toolbar popup, opened by the background: after onboarding's "Open wallet", and after a step
- * that Firefox's toolbar panel handed to the passkey window, whose prompt closed the panel.
+ * The toolbar popup, opened by the background: after onboarding's "Open wallet", after a step that
+ * Firefox's toolbar panel handed to the passkey window, whose prompt closed the panel, and after a
+ * file pick the panel handed to a window of its own.
  */
 import { isSenderAtUrl } from "@nulo/extension-messaging/background"
-import { OPEN_TOOLBAR_POPUP, type OpenToolbarPopupAnswer, onboardingDocumentUrl } from "./onboarding-tab"
+import { POPUP_PAGE } from "@/wallet/services/window-manager/restart-ended-windows"
+import { OPEN_TOOLBAR_POPUP, type OpenToolbarPopupAnswer, onboardingDocumentUrl, RETURN_TO_PANEL } from "./onboarding-tab"
 
 /** How long the return to the wallet waits for its browser window to have focus again. */
 export const POPUP_RETURN_FOCUS_MS = 3_000
@@ -17,6 +19,11 @@ export interface FocusWindows {
 		addListener(listener: (windowId: number) => void): void
 		removeListener(listener: (windowId: number) => void): void
 	}
+}
+
+/** The parts of `chrome.windows` the return from a hand-off window reads. */
+export interface PanelReturnWindows extends FocusWindows {
+	remove(windowId: number): Promise<void>
 }
 
 /**
@@ -61,6 +68,41 @@ export function registerToolbarPopupMessage(): void {
 		void closeTabThenOpenPopup({ id: tab.id, windowId: tab.windowId }).then(sendResponse)
 		return true
 	})
+}
+
+/**
+ * Answers `RETURN_TO_PANEL`, registered at module scope like `OPEN_TOOLBAR_POPUP`. Only the popup
+ * document in a popup-type window may ask. The window removed is always the sender's, never one the
+ * message names; the opener only says where the panel opens, and only a normal window does.
+ */
+export function registerPanelReturnMessage(windows = chrome.windows as unknown as PanelReturnWindows): void {
+	chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+		if ((message as { type?: unknown } | null)?.type !== RETURN_TO_PANEL) return false
+		const windowId = sender.tab?.windowId
+		if (!isSenderAtUrl(sender, chrome.runtime.getURL(POPUP_PAGE)) || typeof windowId !== "number") return false
+		void returnFromWindow(windows, windowId, (message as { opener?: unknown }).opener, sendResponse)
+		return true
+	})
+}
+
+/** Answers before removing the window, whose own close follows the answer: a removal that fails
+ *  because the window is already gone still reopens the panel. */
+async function returnFromWindow(
+	windows: PanelReturnWindows,
+	windowId: number,
+	opener: unknown,
+	answer: (value: OpenToolbarPopupAnswer) => void,
+): Promise<void> {
+	const sending = await windows.get(windowId).catch(() => undefined)
+	if (sending?.type !== "popup") {
+		answer({ ok: false })
+		return
+	}
+	answer({ ok: true })
+	const target = typeof opener === "number" ? await windows.get(opener).catch(() => undefined) : undefined
+	await windows.remove(windowId).catch(() => undefined)
+	if (target?.type !== "normal" || typeof opener !== "number" || target.id !== opener) return
+	if (await focusReturns(windows, opener)) await openToolbarPopup(opener)
 }
 
 /**

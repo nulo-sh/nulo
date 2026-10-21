@@ -1,7 +1,7 @@
 ---
 plan: firefox-handoff-1
 tier: light
-status: planned, Codex approve (awaiting the orchestrator's approval)
+status: approved 2026-10-21 with two conditions (D9, D10); A1 in progress
 issues: "#1007"
 trunk: dev
 driver: claude-code
@@ -61,10 +61,10 @@ One arc, one PR against `dev`, `Closes #1007` (related #160). The owner's pick i
 
 **The pages.** Contacts renders only the card in a card window (`busy` while `appStore.contactImports.size > 0`); Choose runs `importContacts()`; a result → `returnToPanel(contacts, result.snack)`. Account import shows the card while no file and no error, Restore again while no backup and no error; after a pick, the page as today. In a card window `closeOwnWindow()` (Cancel, every back arrow) calls `returnToPanel(<the flow's page>)` with no snack, instead of `window.close()`.
 
-**The record.** `nulo:own-window:handback` in `chrome.storage.session`: `{ route, snack? }`. `route` is one of five pages (Contacts, Accounts, Import account, Home, Restore again); `snack` as above, label at most 200 characters (counts and network names; never file contents, a file name or a path); an oversized or malformed snack is dropped, the route kept. One record; a later hand-back replaces it.
+**The record.** `nulo:own-window:handback` in `chrome.storage.session`: `{ route, snack? }`. `route` is one of five pages (Contacts, Accounts, Import account, Home, Restore again); `snack` is `{ kind, label, profileId }`: the outcome names the profile of the run that produced it (contacts' run fence, the account import's profile snapshot, Restore again's fence), never the profile at hand-back (D9); label at most 200 characters (counts and network names; never file contents, a file name or a path); an oversized or malformed snack is dropped, the route kept. One record; a later hand-back replaces it.
 - `returnToPanel(route, snack?)`, card window only: writes the record, sends `RETURN_TO_PANEL` (`nulo:return-to-panel`, beside `OPEN_TOOLBAR_POPUP`) with the opener id, then closes itself whatever the answer; a failed write or send leaves the record for the next panel.
 - `readHandback()`, Firefox toolbar panel only (`closesOnFocusLoss()`), never rejects: `popup/index.ts` awaits it after `initAppServiceContext()` and before the router exists. A record rewrites the hash with `history.replaceState` and becomes the landing: `postAuthRoute` returns it after an unlock.
-- **Consumption**: on the first arrival at the landing route while the document is visible (I6), the panel removes the key only if it still holds the raw value it read, compared before decoding (the `unregister` pattern, :114), shows the decoded snack, and clears the landing, so a later lock, reset or guard bounce goes Home. A preloaded panel whose press was abandoned consumes nothing; its listener dies with it. If phase 1 measures a preload as `visible`, the visibility wait is not built and the abandoned press becomes a known limit.
+- **Consumption**: on the first arrival at the landing route (I6 measured: a preload reads `visible`, so no visibility wait), the panel removes the key only if it still holds the raw value it read, compared before decoding (the `unregister` pattern, :114), shows the decoded snack only when, after its last await, the session is open (`isLogined`) on the snack's `profileId` (a session not yet open defers; another profile removes the record and the snack never shows), and clears the landing, so a later lock, reset or guard bounce goes Home. A preloaded panel whose press is abandoned consumes the record and dies: a known limit.
 
 **The opener.** `openOwnWindow` appends `opener=<anchor id>`; `captureOwnWindow` strips it with the marker and keeps the number.
 
@@ -77,7 +77,7 @@ Every gate runs `bun run lint`, `bun run typecheck:all`, `bun run test` (pass: e
 ### Phase 1: the record, the opener, the reopen
 First measure I6 (scratch, never committed): in the smoke harness, dispatch a toolbar `mousedown` from Firefox's privileged scope and read the preload document's `visibilityState`; log it in `lessons/phase-1.md`.
 Files: `utils/own-window{,.test}.ts`, `utils/snack{,.test}.ts`, `popup/index.ts`, `wallet/utils/{onboarding-tab,toolbar-popup,toolbar-popup.test}.ts`, `wallet/index.ts`, `wallet/storage/stored-shapes.scan.test.ts`.
-Tests: `captureOwnWindow` strips `opener`; `isCardWindow` for the three flows, not `export`/`import`; `returnToPanel` writes, sends, then closes the window on every answer, with no opener and on a failed send; `closeOwnWindow` hands back in a card window and closes elsewhere; `readHandback` reads once in the panel, nothing elsewhere, never rejects; a bad route drops the record, a bad snack only the snack, and a record with a bad snack is still consumed; consumption waits for arrival and visibility, keeps a record replaced meanwhile, clears the landing (`postAuthRoute` returns Home afterwards); `showSnack` maps both kinds. Handler: a foreign or non-popup sender is refused; a non-normal opener removes the sender only; a window already gone still reopens; focus within 3 s opens once, none opens nothing (fake timers), with a success control.
+Tests: `captureOwnWindow` strips `opener`; `isCardWindow` for the three flows, not `export`/`import`; `returnToPanel` writes, sends, then closes the window on every answer, with no opener and on a failed send; `closeOwnWindow` hands back in a card window and closes elsewhere; `readHandback` reads once in the panel, nothing elsewhere, never rejects; a bad route drops the record, a bad snack only the snack, and a record with a bad snack is still consumed; consumption waits for arrival on an open session, keeps a record replaced meanwhile, drops another profile's snack unread (with a same-profile control), clears the landing (`postAuthRoute` returns Home afterwards); `showSnack` maps both kinds. Handler: a foreign or non-popup sender is refused; a non-normal opener removes the sender only; a window already gone still reopens; focus within 3 s opens once, none opens nothing (fake timers), with a success control.
 Gate: the fast layers. Pass: exit 0; I6 logged.
 
 ### Phase 2: the card, the outcomes, the three pages
@@ -96,7 +96,7 @@ Gate: Firefox `toolbar-panel.test.ts`, `own-window.test.ts`, `contacts-import.te
 - **The message.** Web pages, content scripts and other extensions fail `isSenderAtUrl`. Only the sender's own popup-type window is ever removed, never a browser window; the opener only names where the popup opens. A same-extension popup window sending it needs a compromised extension page (unsupported, Codex 7).
 - **Privacy.** No file contents, file name or path in the record; it dies with the browser session. No new log line but a debug refusal, with no URL or label.
 - **Least privilege, crypto, supply chain.** No permission, dependency, credential or cryptography change.
-- **Known limits** (closed `known-limit` issues at close-out): a refused reopen lands on the next panel however late, and after a lock or a profile switch that panel shows the other profile's outcome snack (Opus 6, Codex 8); two panels shown at once in two browser windows can both show one snack, and a hand-back written between a read and its removal is lost (Codex 3, D4); "Open as Side Panel" (#889) switched on while a card window is open leaves the record for the next toolbar panel.
+- **Known limits** (closed `known-limit` issues at close-out): a toolbar press dragged off the button runs a preloaded panel that takes the record and is destroyed (I6, D6); two panels shown at once in two browser windows can both show one snack, and a hand-back written between a read and its removal is lost (Codex 3, D4); "Open as Side Panel" (#889) switched on while a card window is open leaves the record for the next toolbar panel.
 
 ## UI impact
 
@@ -116,9 +116,11 @@ The no-ask record, quoted: P79-01 B, "One card in the window ("Pick the contacts
 | D3 | The background answers, removes the sender's window, then one `openPopup` after `focusReturns` | opening before the close (no focus yet, F8); one attempt with no focus wait (races the OS) | both agree |
 | D4 | Compare-then-remove, no lock; the residual is a known limit | a Web Lock over writers and reader | Opus: no lock; Codex: a lock, or a known limit stated accurately |
 | D5 | Read before the router, `replaceState`, landing through `postAuthRoute` until first arrival, never fatal | navigating after mount (Home flashes) | both agree, with the landing cleared (Opus 2, Codex 4) |
-| D6 | Consume on first visible arrival, after I6 is measured | consume at boot (an abandoned press loses it) | Codex 1 taken; Opus had judged hover preloads harmless |
+| D6 | Consume on first arrival on an open session; I6 measured a preload as `visible`, so no visibility wait | consume at boot (an abandoned press loses it) | Codex 1 taken; Opus had judged hover preloads harmless |
 | D7 | Accessibility (2026-10-19 delegation): Choose file focused on mount; native buttons; Tab goes Choose, Cancel | no initial focus | both agree |
 | D8 | E2E proves activation at the input click; the OS picker is the Mac check | the `FileChooser` event (never fires on Firefox); dropping the press | Codex 5 and Opus 3, merged |
+| D9 | Orchestrator condition 1: the outcome snack names its profile and is dropped unread when another profile is active at the reopen; checked at arrival against the live profile, since a boot-time read of the last active profile waits on a running migration (`storageLocalGet`); a return with no snack names no profile and only lands on the page | a known limit (round 1's disposition, superseded) | orchestrator; Codex round 4 |
+| D10 | Orchestrator condition 2: OA-1..OA-4 ship as A and go on the decision page with the card copies, the reopened panel and the Cancel path, as items the owner can change; the PR stays draft until it is signed | waiting for answers | orchestrator |
 
 ## Audit verdicts
 
@@ -126,7 +128,9 @@ The no-ask record, quoted: P79-01 B, "One card in the window ("Pick the contacts
 - Accepted: Codex 1 → D6, I6. Codex 2 → D2, F5. Codex 3 → D4, the known limit restated. Codex 4 and Opus 2, 7 → `readHandback` never rejects, `replaceState`, the landing cleared. Codex 5 and Opus 3 → D8, I3, the Mac check. Codex 6 → the e2e observes from the control page before any panel read. Opus 1 → `closeOwnWindow`'s card branch, tested. Opus 4 → the answer shape, the remove failure, the constant's home. Opus 8 → the exact `settled` rule and the budget. Opus asks a, b → OA-3, OA-1. Opus I5 → I5; F1 nit → F1.
 **Round 2.** Codex (resumed): `conditional approve (with conditions: specify removal failure after acknowledgement and compare consumption against the original stored snapshot)`. Both applied: the window closes itself after any answer, the background's removal is best effort; consumption compares the raw stored value, and a record whose snack was dropped is still consumed (a unit case). It found no reason to reopen D4 or the rejected dispositions.
 **Round 3.** Codex (resumed): `approve`, no finding.
-- Rejected in round 1: Codex 6's refusal and Cancel e2e (no failure mode the unit layer misses; the panel boot and handler are the success path's). Codex 7's registered-id match (needs a compromised extension page). Codex 8 and Opus 6's profile binding (a known limit: a refused reopen, then a profile switch, then a stale snack; Opus advised against binding).
+- Rejected in round 1: Codex 6's refusal and Cancel e2e (no failure mode the unit layer misses; the panel boot and handler are the success path's). Codex 7's registered-id match (needs a compromised extension page). Codex 8 and Opus 6's profile binding, later superseded by the orchestrator's condition (D9).
+
+**Orchestrator approval** (2026-10-21): approved with D9 and D10, and the `{ kind, label }` snack confirmed in place of a snack id. Codex round 4 (resumed, high, on the conditions only): `conditional approve (with conditions: explicitly accept the route-only deviation and specify authenticated profile checks at capture and presentation)`. Applied: the snack is tagged from the originating run, and shown only after the last await on an open session of that profile. Open: the orchestrator's acceptance that D9 drops the snack, not the landing (the arc report asks it).
 
 ## Delivery
 

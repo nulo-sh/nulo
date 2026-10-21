@@ -5,12 +5,15 @@ import {
 	captureOwnWindow,
 	closeOwnWindow,
 	followOwnRoute,
+	isCardWindow,
 	leavePanelFor,
 	moveToOwnWindow,
 	ownWindowRoute,
 	postAuthRoute,
 	releaseOwnWindow,
+	returnToPanel,
 } from "./own-window"
+import { HANDBACK_KEY } from "./panel-handback"
 import { deferred } from "@nulo/wallet-core/utils"
 
 const surface = vi.hoisted(() => ({ inPanel: false }))
@@ -28,6 +31,7 @@ let getWindow: ReturnType<typeof vi.fn>
 let update: ReturnType<typeof vi.fn>
 let session: Map<string, unknown>
 let sessionGet: ReturnType<typeof vi.fn>
+let sendMessage: ReturnType<typeof vi.fn>
 let closeDocument: ReturnType<typeof vi.spyOn>
 
 beforeEach(() => {
@@ -35,12 +39,13 @@ beforeEach(() => {
 	getCurrent = vi.fn().mockResolvedValue(BROWSER)
 	getWindow = vi.fn().mockRejectedValue(new Error("No window with id"))
 	update = vi.fn().mockResolvedValue({})
+	sendMessage = vi.fn().mockResolvedValue({ ok: true })
 	session = new Map()
 	sessionGet = vi.fn(async (keys: string | string[]) =>
 		Object.fromEntries([keys].flat().flatMap((key) => (session.has(key) ? [[key, session.get(key)]] : []))),
 	)
 	vi.stubGlobal("chrome", {
-		runtime: { getURL: (path: string) => `moz-extension://nulo/${path}` },
+		runtime: { getURL: (path: string) => `moz-extension://nulo/${path}`, sendMessage },
 		windows: { create, getCurrent, get: getWindow, update },
 		storage: {
 			session: {
@@ -203,6 +208,71 @@ describe("closing an own window", () => {
 	test("a page that is not an own window never closes, and never asks", async () => {
 		expect(await closeOwnWindow()).toBe(false)
 		expect(getCurrent).not.toHaveBeenCalled()
+	})
+})
+
+describe("the card window", () => {
+	const CONTACTS = "/popup/settings/contacts"
+	const SNACK = { kind: "success", label: "Import completed successfully", profileId: "a1b2c3d4" } as const
+
+	test("the three file picks are cards; export, the profile restore and an unmarked page are not", () => {
+		for (const route of [CONTACTS, "/popup/settings/accounts/import", "/popup/restore-again"]) {
+			captureOwnWindow(`#${route}?window=own`)
+			expect(isCardWindow(), route).toBe(true)
+		}
+		for (const hash of [`#${EXPORT}?window=own`, "#/popup/import?option=full_backup&window=own", `#${CONTACTS}`]) {
+			captureOwnWindow(hash)
+			expect(isCardWindow(), hash).toBe(false)
+		}
+	})
+
+	test("the panel names its browser window as the opener, which the window strips from its route and keeps", async () => {
+		getCurrent.mockResolvedValue({ ...BROWSER, id: 12 })
+		await moveToOwnWindow(CONTACTS)
+		expect(create.mock.calls[0]?.[0].url).toBe(`moz-extension://nulo/src/popup/index.html#${CONTACTS}?window=own&opener=12`)
+
+		captureOwnWindow(`#${CONTACTS}?window=own&opener=12`)
+		expect(ownWindowRoute()).toBe(CONTACTS)
+		await returnToPanel(CONTACTS)
+		expect(sendMessage).toHaveBeenLastCalledWith({ type: "nulo:return-to-panel", opener: 12 })
+
+		captureOwnWindow(`#${CONTACTS}?window=own&opener=twelve`)
+		await returnToPanel(CONTACTS)
+		expect(sendMessage).toHaveBeenLastCalledWith({ type: "nulo:return-to-panel", opener: undefined })
+	})
+
+	test("the return writes the record, asks the background, then closes, whatever the answer", async () => {
+		captureOwnWindow(`#${CONTACTS}?window=own&opener=12`)
+		sendMessage.mockImplementationOnce(async () => {
+			expect(session.get(HANDBACK_KEY)).toEqual({ route: CONTACTS, snack: SNACK })
+			expect(closeDocument).not.toHaveBeenCalled()
+			return { ok: false }
+		})
+		expect(await returnToPanel(CONTACTS, SNACK)).toBe(true)
+		expect(closeDocument).toHaveBeenCalledTimes(1)
+
+		sendMessage.mockRejectedValueOnce(new Error("Could not establish connection. Receiving end does not exist."))
+		expect(await returnToPanel("/popup/settings/accounts")).toBe(true)
+		expect(session.get(HANDBACK_KEY)).toEqual({ route: "/popup/settings/accounts" })
+		expect(closeDocument).toHaveBeenCalledTimes(2)
+	})
+
+	test("outside a card window the return does nothing", async () => {
+		captureOwnWindow(`#${EXPORT}?window=own`)
+		expect(await returnToPanel(CONTACTS, SNACK)).toBe(false)
+		expect(session.has(HANDBACK_KEY)).toBe(false)
+		expect(sendMessage).not.toHaveBeenCalled()
+		expect(closeDocument).not.toHaveBeenCalled()
+	})
+
+	test("Cancel or back in a card window hands back to the flow's page with no snack", async () => {
+		captureOwnWindow("#/popup/restore-again?window=own&opener=12")
+		getCurrent.mockResolvedValue({ id: 30, type: "popup" })
+
+		expect(await closeOwnWindow()).toBe(true)
+		expect(session.get(HANDBACK_KEY)).toEqual({ route: "/popup/restore-again" })
+		expect(sendMessage).toHaveBeenCalledWith({ type: "nulo:return-to-panel", opener: 12 })
+		expect(closeDocument).toHaveBeenCalledTimes(1)
 	})
 })
 

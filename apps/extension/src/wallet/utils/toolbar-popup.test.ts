@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { OPEN_TOOLBAR_POPUP } from "./onboarding-tab"
+import { OPEN_TOOLBAR_POPUP, RETURN_TO_PANEL } from "./onboarding-tab"
 import {
 	armPopupReturn,
 	closeTabThenOpenPopup,
 	type FocusWindows,
+	type PanelReturnWindows,
 	POPUP_RETURN_FOCUS_MS,
+	registerPanelReturnMessage,
 	registerToolbarPopupMessage,
 } from "./toolbar-popup"
 
@@ -132,6 +134,103 @@ describe("the return to the wallet after a passkey window step", () => {
 		expect(late.listening()).toBe(0)
 
 		await armPopupReturn(browserWindows({ id: 4, type: "popup" }, true).windows)()
+		expect(openPopup).not.toHaveBeenCalled()
+	})
+})
+
+describe("the return from a hand-off window", () => {
+	const POPUP = `${BASE}src/popup/index.html#/popup/settings/contacts`
+	const CARD = { id: 31, windowId: 30 } as chrome.tabs.Tab
+
+	/** Browser window 3 (normal) and the card's window 30 (popup); `focusedNow` says whether 3 has focus already. */
+	function browserWindows(kinds: Record<number, string> = { 3: "normal", 30: "popup" }, focusedNow = false) {
+		const focusListeners = new Set<(windowId: number) => void>()
+		const remove = vi.fn(async (_id: number) => undefined)
+		const windows: PanelReturnWindows = {
+			getLastFocused: async () => ({ id: 3, type: "normal" }) as chrome.windows.Window,
+			get: async (id) => {
+				if (!(id in kinds)) throw new Error(`No window with id: ${id}`)
+				return { id, type: kinds[id], focused: id === 3 && focusedNow } as chrome.windows.Window
+			},
+			remove,
+			onFocusChanged: { addListener: (l) => focusListeners.add(l), removeListener: (l) => focusListeners.delete(l) },
+		}
+		const focus = (windowId: number) => {
+			for (const listener of [...focusListeners]) listener(windowId)
+		}
+		return { windows, remove, focus, listening: () => focusListeners.size }
+	}
+
+	/** Sends the message as `sender`; resolves with the answer, or `undefined` when it was refused. */
+	async function ask(
+		windows: PanelReturnWindows,
+		sender: chrome.runtime.MessageSender,
+		message: unknown = { type: RETURN_TO_PANEL, opener: 3 },
+	) {
+		listeners = []
+		registerPanelReturnMessage(windows)
+		let answer: unknown
+		const kept = listeners[0](message, sender, (value) => {
+			answer = value
+		})
+		if (kept) await vi.waitFor(() => expect(answer).toBeDefined())
+		return kept ? answer : undefined
+	}
+
+	test("answers, removes the sender's window, then opens the panel once its opener has focus", async () => {
+		vi.useFakeTimers()
+		const { windows, remove, focus, listening } = browserWindows()
+		expect(await ask(windows, { id: "nulo", url: POPUP, tab: CARD })).toEqual({ ok: true })
+		await vi.waitFor(() => expect(remove).toHaveBeenCalledWith(30))
+		expect(openPopup).not.toHaveBeenCalled()
+		await vi.advanceTimersByTimeAsync(POPUP_RETURN_FOCUS_MS - 1_000)
+		focus(3)
+		await vi.waitFor(() => expect(openPopup).toHaveBeenCalledWith({ windowId: 3 }))
+		await vi.advanceTimersByTimeAsync(POPUP_RETURN_FOCUS_MS)
+		expect(openPopup).toHaveBeenCalledTimes(1)
+		expect(listening()).toBe(0)
+	})
+
+	test("opens nothing when the opener has no focus in time", async () => {
+		vi.useFakeTimers()
+		const { windows, remove, focus, listening } = browserWindows()
+		await ask(windows, { id: "nulo", url: POPUP, tab: CARD })
+		await vi.advanceTimersByTimeAsync(POPUP_RETURN_FOCUS_MS)
+		focus(3)
+		expect(remove).toHaveBeenCalledWith(30)
+		expect(openPopup).not.toHaveBeenCalled()
+		expect(listening()).toBe(0)
+	})
+
+	test("a window already gone at its removal still reopens the panel", async () => {
+		const { windows, remove } = browserWindows(undefined, true)
+		remove.mockRejectedValueOnce(new Error("No window with id: 30"))
+		await ask(windows, { id: "nulo", url: POPUP, tab: CARD })
+		await vi.waitFor(() => expect(openPopup).toHaveBeenCalledWith({ windowId: 3 }))
+	})
+
+	test("an opener that is no normal window, or none, removes the sender's window only", async () => {
+		for (const opener of [30, 99, "3", undefined]) {
+			const { windows, remove } = browserWindows(undefined, true)
+			await ask(windows, { id: "nulo", url: POPUP, tab: CARD }, { type: RETURN_TO_PANEL, opener })
+			await vi.waitFor(() => expect(remove).toHaveBeenCalledWith(30))
+			expect(remove, String(opener)).toHaveBeenCalledTimes(1)
+		}
+		expect(openPopup).not.toHaveBeenCalled()
+	})
+
+	test("refuses a foreign sender, one with no window, and one whose window is not a popup window", async () => {
+		const { windows, remove } = browserWindows({ 3: "normal", 30: "normal" }, true)
+		const refused: chrome.runtime.MessageSender[] = [
+			{ id: "other-extension", url: POPUP, tab: CARD },
+			{ id: "nulo", url: "https://dapp.example/", tab: CARD },
+			{ id: "nulo", url: `${BASE}src/onboarding/index.html#/onboarding/done`, tab: CARD },
+			{ id: "nulo", url: POPUP },
+		]
+		for (const sender of refused) expect(await ask(windows, sender)).toBeUndefined()
+		expect(await ask(windows, { id: "nulo", url: POPUP, tab: CARD }, { type: OPEN_TOOLBAR_POPUP, opener: 3 })).toBeUndefined()
+		expect(await ask(windows, { id: "nulo", url: POPUP, tab: CARD })).toEqual({ ok: false })
+		expect(remove).not.toHaveBeenCalled()
 		expect(openPopup).not.toHaveBeenCalled()
 	})
 })
