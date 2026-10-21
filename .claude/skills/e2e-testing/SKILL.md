@@ -579,8 +579,9 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   Over a completed onboarding the page replaces itself with a popup window on `src/popup/index.html`
   and drops the id, often before the first read; there the fixture closes that window, found as a page
   target (Chrome's `windows.getAll` hides its tab URL without the `tabs` permission). A fresh profile
-  requires the id, a reused one the id or the window, within 5s; the launch fails otherwise.
-  Onboarding specs open their own tab via `openOnboarding`.
+  requires the id, a reused one the id or the window, within 5s; the launch fails otherwise. Only a
+  swap inside the running browser reports `update` (e2e README § In-place update). Onboarding specs
+  open their own tab via `openOnboarding`.
 - **Passkeys: the virtual authenticator is per FrameTreeNode**, not per browser context, and PRF
   state is not serialisable over CDP. Register, lock/unlock and reset→import are drivable in the SAME
   popup (`fixtures/passkey.ts` `setupPasskeyVirtualAuth`); cross-popup and cross-authenticator flows

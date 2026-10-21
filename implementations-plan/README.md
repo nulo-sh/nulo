@@ -26,7 +26,7 @@ Not every plan uses every file. Audit and review-leg transcripts (`audit-*.md`, 
 
 - **Non-trivial implementations**: multi-file refactors, new services, security-sensitive flows, anything that needs phasing.
 - **Audit-driven work**: when you have asked codex, opus or another agent for a review, record its verdict and each finding's resolution in the plan.
-- **Migrations**: anything that bumps the storage version, changes a derivation chain, or touches the message-wire format.
+- **Migrations**: anything that changes a stored shape beyond an additive mark (from 1.0.0 each such change ships a numbered migration), changes a derivation chain, or touches the message-wire format.
 
 Single-file bug fixes do not need a plan. The PR description is enough. Name the directory after the work, in kebab case; the same slug names its worktree and branch.
 

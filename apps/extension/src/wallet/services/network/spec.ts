@@ -69,7 +69,8 @@ const networkShape = {
 	chainId: z.number(),
 	// Key-derivation chain input: canonical u32, REQUIRED even in the lax row codec — a row
 	// without it cannot participate in account derivation, and a silent default would collapse
-	// the chain separation the field exists to provide (pre-production baseline, no migration).
+	// the chain separation the field exists to provide (required since the first release, so no
+	// stored row lacks it).
 	l1ChainId: z.number().int().nonnegative().max(0xffffffff),
 	name: z.string(),
 	primaryEndpointId: z.string(),
