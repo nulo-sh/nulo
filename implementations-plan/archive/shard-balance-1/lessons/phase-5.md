@@ -44,3 +44,21 @@ green at the first attempt. Job durations from GitHub's timestamps, setup includ
   acknowledgement on `dev`. The gate enforces on any PR whose `package.json` changes beyond
   `"version"` lines, and the root `e2e:timings` script was such a line. Fix: drop the script and
   run the generator by path (D7); the PR then touches no dependency file and the gate reports.
+
+## The PR's own runs: second and third samples (2026-10-21)
+
+Slowest `Run / …` job, s; shard spread in brackets. Every shard job ran exactly `assignShards`'
+files in both. File time against the record: smoke −4.0 % / −9.9 % then −4.0 % / +4.9 %
+(Chrome / Firefox), network +2.9 % / +1.5 % then +0.1 % / −4.1 %.
+
+| Lane | Dispatch `f6e34b3e4` | PR `8cf022dce` | PR `2c62c4118` | Before (range) |
+|---|---|---|---|---|
+| smoke Chrome | 606 (46) | 595 (104) | 608 (112) | 761 (687–804) |
+| smoke Firefox | 801 (9) | 838 (212) | 831 (40) | 1105 (859–1142) |
+| network Chrome | 971 (101) | 964 (109) | 954 (175) | 1090 (924–1115) |
+| network Firefox | 1121 (53) | 1115 (185) | 1116 (258) | 1143 (1088–1293) |
+
+- The dispatch's +5.6 % network excess did not recur on the same split, so it reads as runner noise rather than an effect of the new mix (I1).
+- Network Firefox's slowest shard sat at 1115–1121 s in all three samples, about 90 s above the
+  projection: one run's shard file times scatter by ±100 s, and the slowest of five pays that
+  scatter's upper tail. Balancing cannot remove that part.
