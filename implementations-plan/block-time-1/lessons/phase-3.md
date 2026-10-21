@@ -41,7 +41,7 @@ A script send through the default `waitForTx` (simulate, send, 1 s receipt polls
 
 ### H1 and R1
 
-- **H1 holds.** A sequential send waits the pool age at every slot (spread 17 ms against M = 250). An overlapping send waits less where chain time leads the wall clock, because the first tx's publish jumps the date provider forward and the second turns eligible at once (72/12, 12/12, 6/6: 1.0-1.6 s at +1000 and +1500), and more where it lags, because the publish pulls the clock back (4/1: 2.55-2.68 s; 2/2, with the chain near the wall clock, up to 4.0 s). At pool age 0 the slot has no effect (23 vs 19 ms).
+- **H1 holds.** A sequential send waits the pool age at every slot (2017-2036 ms, a spread of 19 ms against M = 250). An overlapping send waits less where chain time leads the wall clock, because the first tx's publish jumps the date provider forward and the second turns eligible at once (72/12, 12/12, 6/6: 1.0-1.6 s at +1000 and +1500), and more where it lags, because the publish pulls the clock back (4/1: 2.55-2.68 s; 2/2, with the chain near the wall clock, up to 4.0 s). At pool age 0 the slot has no effect (23 vs 19 ms).
 - **H4a holds.** The chain clock leads by the slot's step per build at 72/12, 12/12 and 6/6, and lags at 4/1, where blocks are rarer than the 4 s slot.
 - **R1.** 12/12 and 6/6 sit inside M in every arm: screens only. 2/2 and 4/1 differ only in the overlap arms, and there they are slower: a timing cell would measure a predicted loss on the only arm the slot reaches, so no matched e2e cells run for them (plan D14); 3b's per-file times are reported as indicative.
 - **The node-level lever is the pool age**, not the slot: 2.0 s → 0.5 s → 0.02 s per inclusion, about 2 s off each `waitForTx` at age 0.
@@ -69,6 +69,37 @@ P-mech (whole files) once per pair that boots, Chrome, and 2/2 on Firefox (D13),
 - **H4b holds.** No wallet or test code broke with the chain clock from 11 ks ahead of the wall clock (72/12) to 0.8 ks behind it (2/2). The wallet reads expiry and finality against chain time, not the wall clock.
 - The time differences against phase 1 are unmatched (phase 1 ran at load1 106-220, inside a 2 h run) and the short pairs agree with 12/12 within noise; per R1 and D14 they are not a gain. The phase-1 Chrome P-mech sum (1008 s) is the same selection's time in a long, loaded run; 3d's matched pairs answer the timing question at the default slot.
 - The plan's short-slot break predictions did not occur: at L2 slot = L1 slot no stray L1 block pushed a propose into the next slot (the automine pre-sets the next timestamp and publishes in place), and no proof window was missed at 2/2.
+
+## 3c, cadence: a forced block every 1 s and every 0.5 s at 2/2
+
+P-mech once per browser and period, at 2/2 with its companions (`SEQ_BLOCK_DURATION_MS=500`, propagation and prepare 0, D13), with the scratch pump in `global-setup.ts` (`NULO_E2E_BLOCK_PUMP_MS`): it awaits each `aztecDebug_mineBlock`, sleeps the rest of the period, never has two calls outstanding, and logs every block's height and time and every failure. Compared with 3b's unpumped 2/2 runs (the same nine files, one run each, not matched pairs).
+
+| Run | Blocks | Achieved period (gap p50 / p90) | `mineBlock` call p50 | Pump failures | Files | Wall | load1 start → end |
+|---|---:|---|---:|---:|---|---:|---|
+| Chrome, 1 s | 940 | 1004 ms (1001 / 1001) | 511 ms | 1 | 9 / 9 green | 1052 s | 142 → 66 |
+| Firefox, 1 s | 1050 | 1004 ms (1001 / 1001) | 526 ms | 1 | 9 / 9 green | 1133 s | 66 → 122 |
+| Chrome, 0.5 s | 1651 | 593 ms (556 / 742) | 556 ms | 2 | 9 / 9 green | 1072 s | 122 → 53 |
+| Firefox, 0.5 s | 1925 | 527 ms (501 / 596) | 448 ms | 1 | 9 / 9 green | 1091 s | 53 → 89 |
+
+Tx latency through the run, by thirds (script and wallet txs; "wallet mined" from the Tx transitions):
+
+| Run | arrival → build | arrival → published | arrival → wallet mined |
+|---|---|---|---|
+| 2/2 unpumped (3b, Chrome) | 2027, 2032, 2021 ms | 2541, 2582, 2576 ms | –, 2482, 2836 ms |
+| Chrome, 1 s | 810, 734, 309 ms | 1400, 1239, 804 ms | –, 1288, 753 ms |
+| Firefox, 1 s | 803, 292, 570 ms | 1374, 975, 1149 ms | –, 1463, 887 ms |
+| Chrome, 0.5 s | 404, 100, 86 ms | 1006, 664, 573 ms | –, 791, 483 ms |
+| Firefox, 0.5 s | 417, 373, 70 ms | 887, 854, 585 ms | –, 749, 780 ms |
+
+(The first third holds only script txs, so no wallet transition.)
+
+- **H6 holds at 1 s and at 0.5 s, on both browsers, bounded to P-mech's workload:** every file green in all four runs, the achieved period within the plan's 20 % (1004 ms against 1000; 593 ms on Chrome, 18.6 % over 500 under load1 122, and 527 ms on Firefox), and no latency growth through any run: arrival to published falls from the first third to the last in all four. P-mech's file times sit within noise of 3b's unpumped 2/2 runs (single runs, not matched). Serial `mineBlock` calls take 0.45-0.56 s at the median on this host, so 0.5 s is about the fastest cadence this pump can reach.
+- **The pump shortens the pool age, as the plan expected.** Each forced block moves the chain clock at least a slot (2 s), faster than the wall clock, so chain time leads at teardown by 3.0 / 3.3 ks at 1 s and 5.7 / 6.8 ks at 0.5 s (Chrome / Firefox) against −0.74 / −0.80 ks unpumped, and a tx turns eligible 0.3-0.8 s after arrival instead of 2.0 s. The result measures a cadence plus a shorter effective pool age, not empty blocks alone.
+- **One pump failure in each 1 s run and in the Firefox 0.5 s run, the same mechanism each time: an L1 nonce race.** `bridgeFeeJuice` signs its L1 deposit with anvil's account 0, the same account the sandbox publishes every block from. During `sim-from-selfpay`'s bridge, the node read its nonce while preparing a publish (about 0.4 s before it sends), the fixture's mint, approve and deposit were mined in that window and took the next three nonces (the node's own went 968 → 972 on Chrome and 1050 → 1054 on Firefox at 1 s), and the node's send failed ("nonce too low", "All available publishers exhausted (tried 1)"), rolled back its optimistic block ("Automine propose did not succeed"), pruned it (empty, nothing returned to the pool), and the next build 0.4-0.6 s later carried on. The pump's call failed with "runBuild returned undefined". Tests green. Seen in no other run of the lane; any lever that adds blocks makes it likely, and if the fixture loses instead the file fails on an L1 error (filed as an issue).
+- **At 0.5 s the same bridge breaks a publish in two other ways, both self-healing.** On Chrome, during `sim-from-selfpay`'s bridge, the bridge's L1 transactions were mined between the node's build and its send (the node's clock then jumped 8 s, four 2 s L1 slots), and the publish failed ("Publishing checkpoint at slot 3160 failed with no error message"). The rebuild at slot 3164 then reverted in the bundle simulation with `Rollup__UnconsumedInboxMessages(1)`: the deposit's L1→L2 message reached the inbox after the build. The third build, 0.3 s later, published. Two pump calls failed; tests green. Neither depends on the signing account, so a separate fixture account would not remove them; they cost a rebuild each.
+- **Retried publish-time reads grow with the publish rate:** the `getCheckpoint` read retries (`Rollup__UnavailableTempCheckpointLog`) 20 and 17 times over about a thousand publishes at 1 s (about 2 %, 3b's rate) and 133 and 93 times over 1660 and 1934 at 0.5 s (8 % and 5 %); the retry absorbs every one.
+- **A forced L1 block during a publish moves the checkpoint's slot.** On Firefox at 0.5 s, `failed-send-check`'s `finalizeThrough` mined empty L1 blocks while a publish was in flight; checkpoint 1062, built for slot 2130, landed in slot 2133 ("Automine checkpoint mined in slot 2133 but targeted 2130"). The rollup accepted it and nothing rolled back.
+- **The Firefox late fee estimate again**, in the 1 s run: one duplicate-nullifier rejection during `authwit-lifecycle`'s first grant, the 3d mechanism, exposed here by the pump's shortened pool age.
 
 ## 3d, the levers: matched pairs at the default slot
 
@@ -110,7 +141,7 @@ Load1 at start → end: Chrome A 47→84, 151→42, 146→59; B 84→49, 42→18
 
 - **The mechanism shows on both browsers and in every file:** pool wait falls to about 0 and the node path by 70-80 %, and the categories the levers reach shrink by 68-72 s per run.
 - **By the rule, a gain on two files per browser** (`wait-for-tx-mined`, `sim-from-selfpay`), inconclusive elsewhere, and on Firefox one regression by the numbers, `tx-sendTx-sponsoredFpc` (B slower by 1.2, 4.7 and 7.6 s, M = 2.9 s). Its spans put the excess in onboarding (+1.7, +2.9, +5.1 s) and browser launch (about +1 s), while its node path fell 2.6 → 0.7 s and its script setup fell 1-2 s. Load is the plausible cause, not an established one: onboarding includes PXE and account warm-up, which a different chain history could touch indirectly. The flag stands, its cause unresolved.
-- **The design confounds order with treatment.** Every pair ran A before B, and on this host (188 cores, load1 40-195 from other agents' runs) the B arms of rounds 2 and 3 ran while load rose and the A arms while it fell; the load-sensitive categories grew by 30-34 s in B, about half what the levers saved. Interleaving does not neutralise a drift that keeps its phase; balanced or randomised order would.
+- **The design confounds order with treatment.** Every pair ran A before B, and on this host (188 cores, load1 40-195 from other agents' runs) the B arms of rounds 2 and 3 ran while load rose and the A arms while it fell; the load-sensitive categories (launch, onboarding, navigation and UI driving) grew by 27 s (Chrome) and 25 s (Firefox) in B, more than a third of what the levers saved. Interleaving does not neutralise a drift that keeps its phase; balanced or randomised order would.
 - **A pre-existing Firefox behaviour, exposed by the lever:** in both Firefox B runs the node rejected a public simulation with a duplicate-nullifier collision during `authwit-lifecycle`'s first grant. The execute window's fee estimate keeps simulating after Confirm (its fire-and-forget cancel is lost as the window closes) and reaches the node about 0.5-0.7 s after the send; at pool age 0 the grant's block, which inserted the account's initialization nullifier, has already landed. Firefox A2 shows the same late simulation succeeding before the block. The result goes to a closed window and no state changes, but one or two private simulations hold the PXE queue on a first send.
 - **A fidelity limit of a forced block:** `aztecDebug_mineBlock` builds with `allowEmpty`, which sets the build's minimum to 0 and so bypasses `holdMining`'s `minTxsPerBlock: 2`; a forced block during a hold would include the held tx. No held window today overlaps a bridge wait, so it is a condition on any future use, not a failure. Forced empty blocks also remove the sponsored mints the bridge waits used to send, which changes the chain history those files run on.
 
