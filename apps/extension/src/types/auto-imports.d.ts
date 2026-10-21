@@ -43,6 +43,7 @@ declare global {
   const GET_STARTED_FEE_JUICE_HELD_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_FEE_JUICE_HELD_ROOT
   const GET_STARTED_HIDDEN_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_HIDDEN_ROOT
   const GET_STARTED_PHRASE_SAVED_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_PHRASE_SAVED_ROOT
+  const GET_STARTED_PRESTO_OPENED_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_PRESTO_OPENED_ROOT
   const GLOSSARY: typeof import('../utils/glossary').GLOSSARY
   const GLOSSARY_SECTIONS: typeof import('../utils/glossary').GLOSSARY_SECTIONS
   const HERO_MIN_SCALE: typeof import('../utils/hero-fit').HERO_MIN_SCALE
@@ -215,6 +216,7 @@ declare global {
   const getStartedHiddenKey: typeof import('../utils/profile-ui-keys').getStartedHiddenKey
   const getStartedKeys: typeof import('../utils/get-started').getStartedKeys
   const getStartedPhraseSavedKey: typeof import('../utils/profile-ui-keys').getStartedPhraseSavedKey
+  const getStartedPrestoOpenedKey: typeof import('../utils/profile-ui-keys').getStartedPrestoOpenedKey
   const getStartedView: typeof import('../utils/get-started').getStartedView
   const getThousandSeparator: typeof import('../utils/amount').getThousandSeparator
   const getTransaction: typeof import('../utils/core').getTransaction
@@ -856,6 +858,7 @@ declare module 'vue' {
     readonly GET_STARTED_FEE_JUICE_HELD_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_FEE_JUICE_HELD_ROOT']>
     readonly GET_STARTED_HIDDEN_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_HIDDEN_ROOT']>
     readonly GET_STARTED_PHRASE_SAVED_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_PHRASE_SAVED_ROOT']>
+    readonly GET_STARTED_PRESTO_OPENED_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_PRESTO_OPENED_ROOT']>
     readonly GLOSSARY: UnwrapRef<typeof import('../utils/glossary')['GLOSSARY']>
     readonly GLOSSARY_SECTIONS: UnwrapRef<typeof import('../utils/glossary')['GLOSSARY_SECTIONS']>
     readonly HERO_MIN_SCALE: UnwrapRef<typeof import('../utils/hero-fit')['HERO_MIN_SCALE']>
@@ -1028,6 +1031,7 @@ declare module 'vue' {
     readonly getStartedHiddenKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedHiddenKey']>
     readonly getStartedKeys: UnwrapRef<typeof import('../utils/get-started')['getStartedKeys']>
     readonly getStartedPhraseSavedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedPhraseSavedKey']>
+    readonly getStartedPrestoOpenedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedPrestoOpenedKey']>
     readonly getStartedView: UnwrapRef<typeof import('../utils/get-started')['getStartedView']>
     readonly getThousandSeparator: UnwrapRef<typeof import('../utils/amount')['getThousandSeparator']>
     readonly getTransaction: UnwrapRef<typeof import('../utils/core')['getTransaction']>
