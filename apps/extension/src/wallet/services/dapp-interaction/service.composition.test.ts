@@ -27,8 +27,6 @@ function svc(name: string, methods: Record<string, unknown>) {
 	return { name, dependencies: [], async start() {}, ...methods } as never
 }
 
-const flush = () => new Promise((r) => setTimeout(r, 0))
-
 type Outcome = { ok: unknown } | { err: unknown }
 const settleOf = (p: Promise<unknown>): Promise<Outcome> =>
 	p.then(
@@ -60,11 +58,13 @@ async function makeHarness() {
 	// `isConfirmationNeeded` awaits this; parking it holds `execute()` between
 	// its pre-popup journal read and the interaction's registration.
 	let profileGate: Promise<void> = Promise.resolve()
+	let reachedGate = () => {}
 
 	const collection = new ServiceCollection()
 	collection.add(
 		svc(ProfileService.name, {
 			getActiveProfile: async () => {
+				reachedGate()
 				await profileGate
 				return { id: "p1" }
 			},
@@ -110,12 +110,16 @@ async function makeHarness() {
 		execute,
 		windowIdOf,
 		interactionFor,
+		/** Parks `execute()` at the gate; `reached` settles once it waits there. */
 		parkProfile: () => {
 			let release!: () => void
 			profileGate = new Promise<void>((r) => {
 				release = r
 			})
-			return release
+			const reached = new Promise<void>((r) => {
+				reachedGate = r
+			})
+			return { release, reached }
 		},
 	}
 }
@@ -128,8 +132,12 @@ describe("DappInteractionService × OperationJournalService × WindowManager (fe
 
 		const outcomeA = h.execute(recA.id)
 		const outcomeB = h.execute(recB.id)
-		await flush()
-		await flush()
+		// Journal reads open sealed rows through real WebCrypto, which settles past a fixed tick count.
+		await vi.waitFor(async () => {
+			expect(await h.windowIdOf(1)).toBeTypeOf("number")
+			expect(h.interactionFor(recA.id)).toBeDefined()
+			expect(h.interactionFor(recB.id)).toBeDefined()
+		})
 		const windowA = await h.windowIdOf(0)
 		const windowB = await h.windowIdOf(1)
 		expect(windowA).toBeTypeOf("number")
@@ -145,8 +153,7 @@ describe("DappInteractionService × OperationJournalService × WindowManager (fe
 		expect(("err" in resultA ? (resultA.err as JobCancelledError) : undefined)?.details).toEqual({ jobId: recA.id })
 		expect(h.removeSpy).toHaveBeenCalledTimes(1)
 		expect(h.removeSpy).toHaveBeenCalledWith(windowA)
-		await flush()
-		expect(h.interactionFor(recA.id)).toBeUndefined()
+		await vi.waitFor(() => expect(h.interactionFor(recA.id)).toBeUndefined())
 		expect(h.interactionFor(recB.id)).toBeDefined()
 
 		// The popup's own unload-time reject after the SW closed it: harmless.
@@ -164,10 +171,9 @@ describe("DappInteractionService × OperationJournalService × WindowManager (fe
 		const h = await makeHarness()
 		const recC = await h.queuedRecord()
 
-		const release = h.parkProfile()
+		const { release, reached } = h.parkProfile()
 		const outcomeC = h.execute(recC.id)
-		await flush()
-		await flush()
+		await reached
 		// Parked inside isConfirmationNeeded: past the pre-popup short-circuit,
 		// before registration. The subscription fires here and finds nothing.
 		expect(h.interactionFor(recC.id)).toBeUndefined()
@@ -179,10 +185,8 @@ describe("DappInteractionService × OperationJournalService × WindowManager (fe
 		expect("err" in resultC && resultC.err).toBeInstanceOf(JobCancelledError)
 		expect(("err" in resultC ? (resultC.err as JobCancelledError) : undefined)?.details).toEqual({ jobId: recC.id })
 		// Reconciliation closes the window that was opened after the cancellation.
-		await flush()
-		await flush()
-		const windowC = await h.windowIdOf(0)
-		expect(h.removeSpy).toHaveBeenCalledWith(windowC)
+		await vi.waitFor(async () => expect(h.removeSpy).toHaveBeenCalledWith(await h.windowIdOf(0)))
+		expect(await h.windowIdOf(0)).toBeTypeOf("number")
 		expect(h.interactionFor(recC.id)).toBeUndefined()
 	})
 })

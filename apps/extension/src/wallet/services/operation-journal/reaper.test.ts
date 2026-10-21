@@ -363,10 +363,8 @@ describe("JournalReaper.start", () => {
 			periodInMinutes: 1,
 		} as chrome.alarms.Alarm)
 
-		// Let the fire-and-forget reap complete.
-		await new Promise((r) => setTimeout(r, 10))
-
-		expect((await service.getOperation(rec2.id))?.progress.stage).toBe("failed")
+		// The reap is fire-and-forget, and its sealed reads settle past any fixed delay.
+		await vi.waitFor(async () => expect((await service.getOperation(rec2.id))?.progress.stage).toBe("failed"))
 		await reaper.stop()
 	})
 
