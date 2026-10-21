@@ -150,7 +150,7 @@ chain's live imported accounts, read inside `readHeldReset` so a failed read kee
 defaults and the token flag and ships them in the payload): one source, but a new wire contract in
 `@nulo/wallet-bridge` for facts the window already derives from the same snapshot (D10). A list-only composable
 without `refreshIfStale` for the flag read: a new C1 composable and its ten tests for one caller, when `usePrices`
-already runs in this window's fee cards (D10). Naming every known contract in a row: unbounded titles (D2).
+already runs in the dApp-opened fee window through `FeeRaisedCard` (D10). Naming every known contract in a row: unbounded titles (D2).
 
 ## Decision ledger
 
@@ -185,6 +185,8 @@ already runs in this window's fee cards (D10). Naming every known contract in a 
 - **Known limits (filed closed at close-out).** D7's residual: a payload that declares another payer while a
   call makes the PrivateFPC pay reads as today's app card; the figure is shown and the worker caps it. D11's: a
   price service that answers neither read keeps Confirm off with Reject open.
+- **Network.** `usePrices` refreshes stale quotes when the execute window opens, as the dApp-opened fee window
+  does: the price host sees the wallet active, never the dApp or the call, and fiat display off fetches nothing.
 - **Logging.** No new log line; nothing about flags, counts or names is logged.
 - **Input validation, crypto, least privilege, supply chain.** No new input path, key, dependency or permission.
 
@@ -328,6 +330,16 @@ Parallelism: none (arc 2 waits on #964).
   confirmation turn); Delete held until the read answers,
   a failed read refused; the locked-read claim corrected (`getAccounts` has no session check, the page reads nothing
   while locked); OA-2 notes the full backup refuses while a reset is pending; explicit test commands for phases 6-7.
+- **Arc 1 Codex r1** (gpt-6.1-sol, high, session `01a15bc4`): **findings (1)**, low: two comments restated their
+  declarations. Fixed in `75c15eca4`: the stories one deleted, the `COLUMNS` one replaced by the glyph-to-row-icon
+  coupling it guards.
+- **Arc 1 Opus 5.5 r1** (general-purpose): **findings (3)**. Accepted: Details omitted held private events Allow
+  keeps when a data re-request replaces the data cap in `effectiveGrants` while `dataGrant` keeps the held field
+  (demonstrated; the window now reads the held data with the request's, pinned by a window test red without it);
+  `params.knownContracts` for the table; the events-default comment. Its note on the window's stale-quote refresh
+  is recorded under Security (Network), with the fee window as precedent.
+- **Arc 1 Codex r2** (resumed `01a15bc4`): **clean**. The union can only overstate (requested events that replace
+  held ones show both); the `COLUMNS` comment now documents a coupling.
 
 ## Seeds
 

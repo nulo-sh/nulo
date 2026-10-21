@@ -78,3 +78,17 @@ Accepted: merge by `(chainId, address)`, the held import keyed on its network's 
 - 2026-10-20 23:10Z, Chrome, `register-token` + `cap-request-partial` on the base: exit 86, the local Aztec node
   never answered within 90 s ("Address already in use" from the CLI's own anvil, expected; then no answer) with
   load1 at 180-200. Host saturation, no code involved. Retry once the load falls, in phase 5.
+
+## Arc 1 review round 1
+
+- Codex r1 (session `01a15bc4`): one low finding, two comments restating their declarations; fixed in `75c15eca4`.
+- Opus r1: `effectiveGrants` replaces a type wholesale but `dataGrant` merges data field-wise, so any view built
+  from `effectiveGrants` alone under-reads held data a data re-request keeps. Details now unions the held data cap.
+  Also: the plan's trade-off said `usePrices` already ran in the execute window; it ran only in the fee window.
+
+## Arc 1 phase 5, Chrome network e2e
+
+- r1 (load1 110-230): 6 of 8 files green; two spec errors, no product fault. The playground adds the dApp's
+  row as `pending` at the request, so "no answer yet" is "no settled row", never "seq unchanged" (the
+  pattern `tx-sendTx-default` already uses). `dataAnswer` always states `addressBook` to the dApp, while the
+  stored grant carries only what was granted. r2 on the two files: green.
