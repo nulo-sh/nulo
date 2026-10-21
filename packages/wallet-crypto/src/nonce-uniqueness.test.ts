@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest"
 import { EncryptionKey } from "./encryption-key"
 import { sealImportedSigningKeyV2 } from "./imported-account-key-box"
 import { sealDekUnderWrapKey } from "./imported-keys-dek-box"
+import { deriveRowKeys, sealRow } from "./row-seal"
 import { asImportedKeysDek, asMasterSecretBytes, asPasshash } from "./secret-types"
 import { SessionSecretBox } from "./session-secret-box"
 
@@ -23,7 +24,7 @@ import { SessionSecretBox } from "./session-secret-box"
  * scheme; the sample sizes are just large enough to be convincing while staying fast.
  */
 
-/** Frames laid out `version(1) ‖ iv(12) ‖ ct` — EncryptionKey and both DEK-rooted boxes. */
+/** Frames laid out `version(1) ‖ iv(12) ‖ ct` — EncryptionKey, both DEK-rooted boxes and the row seal. */
 const ivFromVersionedFrame = (frame: Uint8Array): string => Buffer.from(frame.subarray(1, 13)).toString("hex")
 /** The session bearer packs `iv(12) ‖ ct` and carries its version in the record instead. */
 const ivFromPackedFrame = (b64: string): string => Buffer.from(b64, "base64").subarray(0, 12).toString("hex")
@@ -69,6 +70,16 @@ describe("AES-GCM nonce uniqueness across every sealing box", () => {
 			ivs.push(ivFromVersionedFrame(Buffer.from(sealed, "base64")))
 		}
 		await expectAllDistinct("sealImportedSigningKeyV2", ivs)
+	})
+
+	test("sealRow draws a fresh nonce per call, same row and binding included", async () => {
+		// One AEAD key seals every row of a profile, and a row is re-sealed on every write at the
+		// same storage key (a journal heartbeat), so only a per-call random nonce keeps frames apart.
+		const keys = await deriveRowKeys(asMasterSecretBytes(new Uint8Array(32).fill(9) as Uint8Array<ArrayBuffer>), "p1", "g1")
+		const binding = { root: "nulo:journal", storageKey: "nulo:journal@0011223344556677", profileId: "p1" }
+		const ivs: string[] = []
+		for (let i = 0; i < 128; i++) ivs.push(ivFromVersionedFrame(Buffer.from(await sealRow(keys, "{}", binding), "base64")))
+		await expectAllDistinct("sealRow", ivs)
 	})
 
 	test("SessionSecretBox.wrapPair draws a fresh nonce per call", async () => {

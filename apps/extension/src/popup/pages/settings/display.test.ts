@@ -20,6 +20,7 @@ import DisplayPage from "./display.vue"
 let config: {
 	getProps: ReturnType<typeof vi.fn>
 	setValue: ReturnType<typeof vi.fn>
+	isConnected: boolean
 	onUpdate: EventHandler<ConfigProp>
 	onConnected: EventHandler<void>
 	disconnect: ReturnType<typeof vi.fn>
@@ -30,6 +31,7 @@ beforeEach(() => {
 	config = {
 		getProps: vi.fn(async () => [{ key: "theme", value: "dark" }] as ConfigProp[]),
 		setValue: vi.fn(async () => undefined),
+		isConnected: true,
 		onUpdate: new EventHandler<ConfigProp>(),
 		onConnected: new EventHandler<void>(),
 		disconnect: vi.fn(),
@@ -111,5 +113,96 @@ describe("settings/display", () => {
 		expect(sidePanelToggle().attributes("modelvalue")).toBe("true")
 		expect(close).not.toHaveBeenCalled()
 		expect(sidePanel.open).not.toHaveBeenCalled()
+	})
+
+	describe("on Firefox, whose sidebar stands in for the side panel", () => {
+		let open: ReturnType<typeof vi.fn>
+		let closeSidebar: ReturnType<typeof vi.fn>
+		let close: ReturnType<typeof vi.fn>
+		let views: Window[]
+		beforeEach(() => {
+			open = vi.fn(async () => undefined)
+			closeSidebar = vi.fn(async () => undefined)
+			vi.stubGlobal("browser", { sidebarAction: { open, close: closeSidebar } })
+			close = vi.spyOn(window, "close").mockImplementation(() => {})
+			views = []
+			Object.assign(chrome, {
+				extension: { getViews: vi.fn(({ type }: { type: string }) => (type === "sidebar" ? views : [])) },
+			})
+		})
+		afterEach(() => vi.stubGlobal("browser", undefined))
+
+		const sidePanelToggle = (w: Awaited<ReturnType<typeof mountDisplay>>) => {
+			const toggle = w.findAllComponents({ name: "Toggle" }).find((t) => t.attributes("data-testid") === "side-panel-toggle")
+			if (!toggle) throw new Error("no side-panel-toggle")
+			return toggle
+		}
+
+		test("renders the search registry's rows, the side panel's included", async () => {
+			expectOwnedRows(await mountDisplay(), "/popup/settings/display", settingsContext({ sidePanel: true }))
+		})
+
+		test("turning it on opens the sidebar in the same event, after the write is posted, and closes the page once stored", async () => {
+			let stored!: () => void
+			config.setValue.mockImplementationOnce(() => new Promise<void>((resolve) => (stored = resolve)))
+			const w = await mountDisplay()
+			sidePanelToggle(w).vm.$emit("update:modelValue", true)
+			expect(config.setValue).toHaveBeenCalledExactlyOnceWith("sidePanel", true)
+			expect(open).toHaveBeenCalledTimes(1)
+			expect(config.setValue.mock.invocationCallOrder[0]).toBeLessThan(open.mock.invocationCallOrder[0])
+			expect(close).not.toHaveBeenCalled()
+			stored()
+			await flushPromises()
+			expect(close).toHaveBeenCalledTimes(1)
+		})
+
+		test("turning it off in the toolbar panel closes the panel once stored and leaves the sidebar alone", async () => {
+			config.getProps.mockResolvedValueOnce([{ key: "sidePanel", value: true }] as ConfigProp[])
+			const w = await mountDisplay()
+			sidePanelToggle(w).vm.$emit("update:modelValue", false)
+			await flushPromises()
+			expect(config.setValue).toHaveBeenCalledExactlyOnceWith("sidePanel", false)
+			expect(open).not.toHaveBeenCalled()
+			expect(closeSidebar).not.toHaveBeenCalled()
+			expect(close).toHaveBeenCalledTimes(1)
+		})
+
+		test("turning it off in the sidebar closes the sidebar in the same event, after the write is posted", async () => {
+			views = [window]
+			config.getProps.mockResolvedValueOnce([{ key: "sidePanel", value: true }] as ConfigProp[])
+			config.setValue.mockImplementationOnce(() => new Promise<void>(() => {}))
+			const w = await mountDisplay()
+			sidePanelToggle(w).vm.$emit("update:modelValue", false)
+			expect(config.setValue).toHaveBeenCalledExactlyOnceWith("sidePanel", false)
+			expect(closeSidebar).toHaveBeenCalledTimes(1)
+			expect(config.setValue.mock.invocationCallOrder[0]).toBeLessThan(closeSidebar.mock.invocationCallOrder[0])
+			expect(open).not.toHaveBeenCalled()
+		})
+
+		test("a client still reconnecting has not posted the write, so the sidebar neither opens nor closes", async () => {
+			config.isConnected = false
+			sidePanelToggle(await mountDisplay()).vm.$emit("update:modelValue", true)
+			views = [window]
+			config.getProps.mockResolvedValueOnce([{ key: "sidePanel", value: true }] as ConfigProp[])
+			sidePanelToggle(await mountDisplay()).vm.$emit("update:modelValue", false)
+			await flushPromises()
+			expect(config.setValue.mock.calls).toEqual([
+				["sidePanel", true],
+				["sidePanel", false],
+			])
+			expect(open).not.toHaveBeenCalled()
+			expect(closeSidebar).not.toHaveBeenCalled()
+		})
+
+		test("a refused write leaves the page open with the error, though the click already opened the sidebar", async () => {
+			config.setValue.mockRejectedValueOnce(new Error("persist failed"))
+			const w = await mountDisplay()
+			sidePanelToggle(w).vm.$emit("update:modelValue", true)
+			await flushPromises()
+			expect(open).toHaveBeenCalledTimes(1)
+			expect(close).not.toHaveBeenCalled()
+			expect(fakes.openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "Failed to update setting" })
+			expect(sidePanelToggle(w).attributes("modelvalue")).toBe("false")
+		})
 	})
 })

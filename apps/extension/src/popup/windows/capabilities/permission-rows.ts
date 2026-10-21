@@ -70,6 +70,7 @@ export type PermissionRowEntry = {
 }
 
 export const ANY_CONTRACT = "Any contract"
+export const ANY_CLASS = "Any class"
 
 /** A contract the wallet names, its address lower-cased. */
 export type KnownName = { address: string; name: string }
@@ -165,7 +166,8 @@ export function contractsRow(cap: ContractsCapability, names: readonly KnownName
 	return undefined
 }
 
-/** Classes have no names, so a list is only counted. */
+/** Classes have no names, so a list is only counted. A lookup answers from two sources: the node, on
+ *  whether the class is published, and this wallet's own records, on whether it holds the artifact. */
 export function contractClassesRow(networkName: string, classes: "*" | readonly string[]): PermissionRowEntry {
 	const count = Array.isArray(classes) ? new Set(classes.map(contractKey)).size : undefined
 	return {
@@ -176,8 +178,9 @@ export function contractClassesRow(networkName: string, classes: "*" | readonly 
 			count === undefined
 				? `Look up contract code on ${networkName}`
 				: `Look up the code of ${count} contract ${count === 1 ? "class" : "classes"} on ${networkName}`,
-		subOn: [{ text: "Public information any node can give it." }],
-		flagged: false,
+		subOn: [{ text: "Whether it is on chain, and if this wallet has its code." }],
+		flagged: count === undefined,
+		...(count === undefined ? { chip: ANY_CLASS } : {}),
 	}
 }
 

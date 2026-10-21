@@ -129,6 +129,32 @@ export class WebDriverSession {
 		})
 	}
 
+	/**
+	 * Perform WebDriver `actions` in the scope `chromeScript` runs in, at that browser window's viewport
+	 * coordinates, then release every input. This reaches a document no protocol addresses, such as the
+	 * sidebar's. Its window switch first focuses the window's selected tab, as `chromeScript`'s does,
+	 * so an input and the step it starts belong in one call.
+	 */
+	chromeActions(actions: unknown[]): Promise<void> {
+		return this.exclusive(async () => {
+			await this.send("POST", "/moz/context", { context: "chrome" })
+			try {
+				const [handle] = await this.windowHandles()
+				await this.switchToWindow(handle)
+				try {
+					await this.send("POST", "/actions", { actions })
+				} catch (err) {
+					// Released on the way out, but the actions' own failure is the one to report.
+					await this.send("DELETE", "/actions").catch(() => {})
+					throw err
+				}
+				await this.send("DELETE", "/actions")
+			} finally {
+				await this.send("POST", "/moz/context", { context: "content" })
+			}
+		})
+	}
+
 	/** Reading a handle's URL requires switching to it, so this leaves the last window focused. */
 	windowsWithUrls(): Promise<WindowWithUrl[]> {
 		return this.exclusive(async () => {

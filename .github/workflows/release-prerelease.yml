@@ -30,6 +30,7 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    environment: release-app
     outputs:
       pr: ${{ steps.release.outputs.pr }}
     steps:
@@ -68,6 +69,4 @@ jobs:
     uses: ./.github/workflows/_release-pr-lockfile.yml
     with:
       pr: ${{ needs.release-please.outputs.pr }}
-    secrets:
-      RELEASE_PLEASE_APP_ID: ${{ secrets.RELEASE_PLEASE_APP_ID }}
-      RELEASE_PLEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+    secrets: inherit

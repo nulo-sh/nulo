@@ -1,5 +1,4 @@
 import { expect } from "vitest"
-import { isFirefox } from "./fixtures/browser"
 import { test, openPopup, replaceInputValue, waitForHash } from "./fixtures/extension"
 import { clickNavTab } from "./fixtures/helpers"
 import { shotSend } from "./fixtures/send-page"
@@ -71,11 +70,11 @@ test("a settings search opens the row's page with the row outlined", async ({ re
 
 		const shownResults = () =>
 			page.$$eval('[data-testid^="settings-search-result-"]', (rows) => rows.map((row) => row.getAttribute("data-testid")))
-		// Firefox has no side panel, so its row is not offered there and a search cannot find it.
+		// Firefox's sidebar stands in for the side panel, so a search finds the row on both browsers.
 		const sidePanel = "settings-search-result-display-side-panel"
 		await page.type('[data-testid="settings-search-input"]', "panel")
-		await page.waitForSelector(`[data-testid="${isFirefox ? "settings-search-empty" : sidePanel}"]`, { visible: true, timeout: 10_000 })
-		expect(await shownResults()).toEqual(isFirefox ? [] : [sidePanel])
+		await page.waitForSelector(`[data-testid="${sidePanel}"]`, { visible: true, timeout: 10_000 })
+		expect(await shownResults()).toEqual([sidePanel])
 
 		const animations = "settings-search-result-display-animations"
 		await replaceInputValue(page, '[data-testid="settings-search-input"]', "nimat")

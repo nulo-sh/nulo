@@ -1,0 +1,47 @@
+# firefox-sidebar-1: owner asks
+
+All answered. OA-1 to OA-4 on decision page 71 (2026-10-20); the Mac result in chat on 2026-10-21; OA-5, OA-6 and arc 2's pictures on decision page 78 (2026-10-21).
+
+## OA-1: how a person opens the sidebar (answered)
+
+P71-03, B: "Add Chrome's "Open as Side Panel" row on Firefox; the toolbar button then opens the sidebar." Built in Phase 5 (#889).
+
+## OA-2: the sidebar's width (answered)
+
+P71-01, B: "Fit every page down to 240 px everywhere: one layout for every width; the popup looks the same." The page added that any pick also signs the sidebar off as pictured, and that the layout change is planned and shown in pictures before it ships. Built in arc 2, its own PR.
+
+## OA-3: the sidebar at install (answered)
+
+P71-04, A: "As in the draft: no sidebar at install; an open one survives restarts only." No change.
+
+## OA-4: is Linux proof enough (answered)
+
+P71-02, A, in chat: the owner unlocks once with a passkey from the sidebar on a Mac, using a build of #889. #889 stays a draft until that report. If the sidebar dies there, the step keeps its window and arc 1 changes.
+
+The result, in chat on 2026-10-21 and recorded on #596: "worked perfectly". The sidebar survived the macOS passkey prompt, so arc 1 stands as built.
+
+## OA-5: the first toolbar click after Firefox starts (answered)
+
+P78-12, A: "Keep what ships: after a Firefox restart with the sidebar closed, the first toolbar click opens the popup, which wakes the wallet; every click after that opens the sidebar." Known limit #1004.
+
+
+- **Ships now**: with "Open as Side Panel" on, the toolbar button opens the sidebar. Firefox keeps that choice only while it runs. After a restart with the sidebar closed, the first click opens the popup; opening it wakes the wallet, which re-applies the choice, and every click after that opens the sidebar. A sidebar left open at shutdown comes back by itself.
+- **The question**: should the wallet start with Firefox, so that the first click opens the sidebar too?
+- **Cost if yes**: the background starts at every Firefox launch, and today the whole wallet boots with it: its migrations, Barretenberg and its services. There are two ways:
+  - start it for everyone, which is simpler;
+  - start it only while the setting is on, which leans on how Firefox persists a late-registered listener and needs its own test.
+  Either is background work at browser start that today waits until the person opens Nulo.
+- **Recommendation**: keep what ships. The gap is one click per launch and only with the sidebar closed; the cost is paid at every launch.
+
+## OA-6: placeholders at 240 (arc 2, answered)
+
+P78-13, A: "Keep the placeholders as they are: the label above each field names it, and the copy reads whole at 360 px, where the popup always is." Known limit #1005.
+
+
+- **What a person sees**: below 360 px, a one-line field narrower than its placeholder cuts it: with an ellipsis ("Search by kind, addre…" on Authwits), or mid-letter while the field has focus ("Enter current passwo" on Change password, which opens focused, on Chrome). The label above each field names it. No check reads a placeholder, so the pictures are where it shows.
+- **The question**: shorten those placeholders, or keep them?
+- **Recommendation**: keep them. The label carries the meaning, and the copy reads whole at 360, where the popup always is.
+
+## Arc 2's pictures (answered)
+
+P78-11: approved as pictured, with the note: "I mean... There is not much we can do if they choose side-bar... Other than try to give them a good UI... Can't we tell Firefox / Chrome "hey, use X width when side-bar"?" The page answered it: neither Firefox's `sidebar_action` nor Chrome's side panel takes a width from an extension, so there is nothing to build beyond the 240 px layout.

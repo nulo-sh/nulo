@@ -674,8 +674,29 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 			flagged: true,
 			chip: "Any contract",
 		})
-		expect(read("contract-classes").title).toMatch(/^Look up the code of 1 contract class on /)
+		expect(read("contract-classes")).toEqual({
+			title: expect.stringMatching(/^Look up the code of 1 contract class on /),
+			line: "Whether it is on chain, and if this wallet has its code.",
+			on: undefined,
+			flagged: false,
+			chip: undefined,
+		})
 		expect(await approve()).toEqual({ granted: [details, classes, txListed] })
+	})
+
+	test("a lookup of every class is flagged with its chip, like adding any contract", async () => {
+		const register = { type: "contracts", contracts: [TOKEN], canRegister: true, canGetMetadata: true }
+		const classes = { type: "contractClasses", classes: "*", canGetMetadata: true }
+		await mountWindow(firstRequest([register, classes]))
+		expect(read("contract-classes")).toEqual({
+			title: expect.stringMatching(/^Look up contract code on /),
+			line: "Whether it is on chain, and if this wallet has its code.",
+			on: undefined,
+			flagged: true,
+			chip: "Any class",
+		})
+		expect(read("contracts")).toMatchObject({ flagged: false, chip: undefined })
+		expect(await approve()).toEqual({ granted: [register, classes] })
 	})
 
 	test("Details shows what the app asked for, a row switched Off included, with its classes", async () => {

@@ -73,6 +73,18 @@ existing keys and profiles.
   - Forks repurposing this extension under a different domain MUST
     change BOTH the constant and the manifest entry atomically. There
     is no migration path for WebAuthn credentials.
+- **Row-seal labels, frame and AAD** — every sealed row (contacts, dApp
+  sessions) is `{ profileId, sealed }`, `sealed` being the AES-256-GCM frame
+  `[1 version byte = 1][12 byte IV][ciphertext ‖ tag]`, base64, that the
+  DEK-rooted imported-key boxes share (`packages/wallet-crypto/src/aes-gcm-frame.ts`).
+  Its key and the keyed-id HMAC key are HKDF-SHA256 over the 32-byte master,
+  salt the JSON `["nulo:row-seal:v1", profileId, pxeGeneration]`, info
+  `nulo:row-seal:aead:v1` and `nulo:row-seal:index:v1`; its AAD is the JSON
+  `["nulo:row:v1", root, storageKey, profileId]`
+  (`packages/wallet-crypto/src/row-seal.ts`). Pinned by V12 and the DEK-rooted
+  boxes by V13 (`apps/extension/src/wallet/crypto/key-vectors.test.ts`).
+  Changing any of them hides every sealed row of every profile, and the
+  pre-unlock migrator cannot re-seal: a change converts at unlock.
 - **The Schnorr account artifact** — vendored byte-exact at
   `packages/aztec-runtime/src/account/artifacts/SchnorrAccount.json` and pinned by digest +
   class id, precisely so that bumping `@aztec-labs/accounts` (which rebuilds its own copy on any
@@ -375,18 +387,42 @@ explicit and per-Network.
 Encrypted at rest:
 - `profile.secret` — master secret (AES-GCM)
 - `profile.guard` — password verification sentinel (AES-GCM)
+- Contacts and dApp sessions — sealed per row under the profile's row-seal
+  key (§ Crypto-bound invariants). The envelope names the profile; the row,
+  its names, addresses, origins and grants are ciphertext. The AAD binds each
+  row to its root, its storage key, its profile and, through the key, the
+  profile's incarnation: a row moved, swapped between profiles or kept from a
+  deleted profile whose id is reused never opens. A row that fails to open
+  reads as absent and is kept; the log names a fixed category
+  (`sealed-authentication`, `sealed-format`, `sealed-identity`), never the row.
 
 Plaintext at rest (`chrome.storage.local`):
-- Profile metadata, networks, accounts, contacts, dApp sessions, tokens,
-  token balances, tx history, auth registry state, FPC definitions,
-  config, storage version.
+- Profile metadata, networks, accounts, tokens, token balances, tx history,
+  auth registry state, FPC definitions, config, storage version.
+- dApp registration counts (`nulo:core:dappRegistrations@<profile>`): per
+  chain, the origin of each app that registered with the profile and how many
+  times, though not its accounts or grants.
 - Incoming receipts: account, token, amount, transaction hash and, for a
   private one, the note's hashes. A note's nullifier is never stored; it stays
   in the PXE's encrypted store.
 
-Expanding the encrypted boundary to cover profile-scoped metadata (contacts,
-dApp sessions, tx history) is not done: a large refactor, not a near-term
-patch.
+What sealing does not hide or prevent:
+- Root names, row ids, the `profileId` in each envelope (so per-profile row
+  counts), ciphertext length and write times.
+- A profile's rows written before this build stay plaintext until that
+  profile's next unlock seals them; until then they read as before.
+- An offline writer can delete a sealed row, roll it back to an earlier
+  sealed value at the same key, or plant a plaintext row, which the wallet
+  reads and seals at the next unlock. dApp sessions are the exception: each
+  keeps its HMAC (keyed `HKDF(master ‖ dek)`) inside the seal, so a planted or
+  edited grant is dropped on read.
+- The row-seal keys come from the master alone, so a same-phrase sibling
+  profile, or anyone holding the recovery phrase and a copy of the disk, can
+  open the rows; neither can forge a dApp grant.
+- The service worker holds the row-seal keys of every profile it has opened
+  until it ends or the profile is deleted, a lock included, so work that lands
+  after a lock still seals. Code running inside the extension can use them,
+  never the master (`packages/wallet-crypto/ATTACK-SURFACE.md`).
 
 Each dApp-session row carries a MAC keyed from the profile's keys: it stops a
 forged row and a row replayed under another id or profile, not a writer with
@@ -575,11 +611,11 @@ One path makes an extension release: `release.yml`'s `attach-assets` job, and `n
   A nightly names `nightly.yml`. `--signer-workflow` matches that workflow on any ref; `--source-digest` is what pins the commit. An attestation proves where and from which commit a zip was built, not that the commit is benign: a malicious commit merged to `main` gets a valid one. Releases published before this path existed (`v0.30.2` and its nightlies) carry none, so a store submission through the workflow refuses them.
 - **Digest read-back.** The first read-back keeps a draft that changed after upload from being published. The second reports a change that another holder of `contents: write` made between that check and the publish; GitHub has no compare-and-publish call, so it cannot prevent one.
 - **Store submissions ship the published bytes.** A dispatch on a published release downloads its assets, checks them against `SHASUMS256.txt` and their attestation, and hands those bytes to the store jobs. A rebuild that differs is only a warning: zip bytes depend on the runner's `zip`.
-- **Tags.** `auto-unstick` is the only workflow that creates a stable tag, through the REST API with its own App token, and only at the merge commit of the Release PR the run was triggered by; release-please runs with `skip-github-release: true`. One tag ruleset (`release tags: no deletion or update`, no bypass actor) stops anyone from deleting or moving a `v*` tag, and a second (`release tags: creation by the release app only`, whose one bypass actor is the release App) stops anyone else from creating a stable or rc tag; nightly tags are outside both. An rc tag, or a stable tag pushed by hand, goes through `scripts/release/tag-by-hand-run.ts`, which adds the owner as a bypass actor for that one push and puts the App back alone after it, whether or not the push succeeded; only a killed helper or an unreachable GitHub leaves that close to the owner by hand. Neither stops an admin, who can edit or disable them, or a stolen owner credential.
+- **Tags.** `auto-unstick` is the only workflow that creates a stable tag, through the REST API with its own App token, and only at the merge commit of the Release PR the run was triggered by; release-please runs with `skip-github-release: true`. One tag ruleset (`release tags: no deletion or update`, no bypass actor) stops anyone from deleting or moving a `v*` tag, and a second (`release tags: creation by the release app only`, whose one bypass actor is the release App) stops anyone else from creating a stable or rc tag; nightly tags are outside both. The App's id and private key are secrets of the `release-app` environment, whose deployment branches are `main` and `dev` and which has no reviewer, so `auto-unstick` and the sync PR never wait. GitHub opens the environment only to runs from those branches, so only workflow code that has reached `main` or `dev` can mint the App token; `release-integrity.test.ts` keeps the environment on exactly the jobs that mint it, a repository check rather than a GitHub rule. An rc tag, or a stable tag pushed by hand, goes through `scripts/release/tag-by-hand-run.ts`, which adds the owner as a bypass actor for that one push and puts the App back alone after it, whether or not the push succeeded; only a killed helper or an unreachable GitHub leaves that close to the owner by hand. Neither stops an admin, who can edit or disable them, or a stolen owner credential.
 - **Store copies are compared with the release.** `verify-store-copies.yml` (weekly, and on dispatch) downloads what the Chrome Web Store and Firefox Add-ons serve to the public, takes the version from its `manifest.json`, verifies that version's release zip and `SHASUMS256.txt` through the publish path's own digest and attestation checks, and compares the two file for file. Each store may add only its own exact entries (Chrome's `_metadata/verified_contents.json` and `update_url`, AMO's `META-INF/` signature); anything else, a missing copy, a served version with no release, or a failed check, reds the run. `v0.30.2` predates attestations and is checked by digest and `SHASUMS256.txt` only. It samples what a store serves once a week; it cannot see what one served to a single user.
 
 - **Immutable releases** are planned but not yet applied. Once on, a published release's assets and tag can no longer change, and each release gets a GitHub release attestation, checked with `gh release verify vX.Y.Z --repo nulo-sh/nulo`; no release carries one yet. Titles and notes stay editable, which is why the check is the attestation and not the notes.
-- **The jobs that tag or publish** install no dependency, check out the workflow's own revision without persisted credentials, set `GH_TOKEN` per step and run no third-party action but `oven-sh/setup-bun`, which gets no token; git-cliff, whose action downloads its binary at run time, runs in read-only notes jobs. Every App token names its permission set, so a permission later granted to the App reaches no token. `scripts/ci-cd/release-integrity.test.ts` pins all of it. Accepted residuals: a compromised `oven-sh/setup-bun`; `GITHUB_TOKEN` keeps `contents: write` in the two publish jobs; and a release published before this path stays mutable, and a dispatch with such a tag as `--ref` runs that tag's old workflow, which replaces assets. Only accounts with write access can dispatch, and the runbook forbids it.
+- **The jobs that tag or publish** install no dependency, check out the workflow's own revision without persisted credentials, set `GH_TOKEN` per step and run no third-party action but `oven-sh/setup-bun`, which gets no token; git-cliff, whose action downloads its binary at run time, runs in read-only notes jobs. Every App token names its permission set, so a permission later granted to the App reaches no token, and is minted only in a job that declares `release-app`. `scripts/ci-cd/release-integrity.test.ts` pins all of it. Accepted residuals: a compromised `oven-sh/setup-bun`; a workflow change merged into `dev`, which needs no approving review, or into `main` runs with the App's key on its next run there; `GITHUB_TOKEN` keeps `contents: write` in the two publish jobs; and a release published before this path stays mutable, and a dispatch with such a tag as `--ref` runs that tag's old workflow, which replaces assets. Only accounts with write access can dispatch, and the runbook forbids it.
 
 ## Token list signing
 

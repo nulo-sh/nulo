@@ -10,6 +10,7 @@
 <script setup>
 /** Components */
 import { Dropdown } from "@/components/ui/Dropdown"
+import StatusCard from "@/components/composite/StatusCard.vue"
 import ContactRow from "@/popup/components/modules/settings/contacts/ContactRow.vue"
 
 /** Services */
@@ -19,6 +20,7 @@ import { ContactServiceClient } from "@/wallet/services/contact/client"
 /** Utils */
 import { stringCompare } from "@/utils"
 import { copyWithToast } from "@/utils/clipboard"
+import { OWN_WINDOW_ROUTES, leavePanelFor } from "@/utils/own-window"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -110,7 +112,13 @@ accountStateService.onSenderAdded.add(onSenderAdded)
 accountStateService.onSenderDeleted.add(onSenderDeleted)
 watch(() => appStore.network?.id, syncSenders)
 
-const { exportContacts, importContacts } = useContactImportExport({ contacts, accountStateService })
+const { exporting, exportContacts, importContacts } = useContactImportExport({ contacts, accountStateService })
+
+/** From Firefox's toolbar panel the import moves to Contacts' own window, where a second press picks. */
+const handleImportContacts = async () => {
+	if (await leavePanelFor(OWN_WINDOW_ROUTES.contacts)) return
+	await importContacts()
+}
 
 const handleCopyContactAddress = (contact) => {
 	void copyWithToast(contact.address, openToast, "Address is copied")
@@ -152,13 +160,13 @@ onBeforeUnmount(() => {
 				</button>
 
 				<template #popup>
-					<DropdownItem @click="importContacts" :disabled="appStore.contactImports.size > 0" data-testid="contacts-menu-import">
+					<DropdownItem @click="handleImportContacts" :disabled="appStore.contactImports.size > 0" data-testid="contacts-menu-import">
 						<Flex align="center" gap="8">
 							<Icon name="upload" size="14" color="secondary" />
 							Import contacts
 						</Flex>
 					</DropdownItem>
-					<DropdownItem @click="exportContacts" :disabled="!contacts.length" data-testid="contacts-menu-export">
+					<DropdownItem @click="exportContacts" :disabled="!contacts.length || exporting" data-testid="contacts-menu-export">
 						<Flex align="center" gap="8">
 							<Icon name="download" size="14" color="secondary" />
 							Export contacts
@@ -167,6 +175,13 @@ onBeforeUnmount(() => {
 				</template>
 			</Dropdown>
 		</template>
+
+		<StatusCard
+			v-if="exporting"
+			title="Exporting your contacts"
+			description="Gathering your contacts into a file."
+			data-testid="contacts-export-status-card"
+		/>
 
 		<SectionLabel label="Contacts" :count="sortedContacts.length" />
 
