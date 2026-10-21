@@ -110,3 +110,12 @@ Accepted: merge by `(chainId, address)`, the held import keyed on its network's 
 - `test:all` caught what the phase gates' targeted runs missed: `scripts/type-roles/identifier-sites.expected.json`
   keys each identifier site on its template branch text, so `entry.named` → `isNamed(entry)` in `DetailsTable.vue`
   needed its entry's `branch` updated (`2e9ee118a`). A phase that edits a template runs the extension's whole `test`.
+
+## Arc 2 smoke r1 and review round 1
+
+- Smoke r1 at `964ffc058` (load1 ~200): 5 of 6 files green on both browsers (`stale-network-captures` skips by
+  design). `type-roles.test.ts`' new Delete Profile step failed in setup on both: the previous step leaves Import
+  account on its preview, and `previewImport` navigating to the same route keeps that page, so the file picker
+  never shows. The step now leaves for Manage accounts first (`ad51c6060`). Firefox had loaded the file before it.
+- Review r1: Codex 4 findings, Opus 4; the shared one (an import from another window while a delete's list stands)
+  was the high one. A list a destructive action names must be re-read at the action, not only at mount.

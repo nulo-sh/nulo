@@ -9,7 +9,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at f55b7b4e6
 trunk: dev
-issues: "none (no issue tracks these surfaces; the PRs close none)"
+issues: "#975 (the class lookup row, closed by arc 2)"
 post_implementation_hardening: not scheduled
 ---
 
@@ -20,8 +20,10 @@ changes three windows: the capability window names or counts what each grant rea
 gains three columns (P77-01 B); the execute window says the person pays when the fee goes through the
 PrivateFPC (P77-04 B); the token-add approval warns about a token the signed list flags and asks for a tick
 before Confirm (P77-05 B). **Arc 2** (`consent-display-2-a2`, started only after PR #964 is on `dev`) changes
-Delete Profile, the forgot-password popup and delete chain so they name imported accounts (P77-07 D), and
-carries the close-out. Every surface is the owner's pick; nothing else on these screens changes. Recon:
+Delete Profile, the forgot-password popup and delete chain so they name imported accounts (P77-07 D, with
+P78-04 A and P78-05 B settling OA-1 and OA-2), makes the capability window's class lookup row name both answers
+and flags a lookup of every class (P78-09 B, #975), and carries the close-out. Every surface is the owner's pick;
+nothing else on these screens changes. Recon:
 [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## The brief's claims against the tree
@@ -74,7 +76,15 @@ carries the close-out. Every surface is the owner's pick; nothing else on these 
   accounts." (C: "B, plus the forgot-password popup warns imported accounts are lost."; B: "A, plus name the
   imported accounts and offer Export first while unlocked."; A: "Qualify the sentence to accounts derived from the
   phrase.") Pictures `p77-delete-a`, `p77-delete-b`, `p77-delete-b-bottom`, `p77-forgot-c`, `p77-delete-chain-d`.
-  The locked states and Export first's target wait on OA-1 and OA-2.
+  P78-04 A: "The popup line shows for every profile; Delete Profile lists imported accounts only once unlocked."
+  P78-05 B: "The full backup page; while a reset is pending, the account export page instead." Locked, Delete
+  Profile shows the qualified sentence and no section; the popup line shows on every profile.
+- **Arc 2: capability window, class lookup row.** P78-09 B: "A, plus a sub-line naming both answers, for example
+  "Whether it is on chain, and whether this wallet holds its code.", the any-class chip and flag for a request
+  naming every class, and a contract-classes column in Details." Before `p78-class-a`, after `p78-class-b` and
+  `p78-class-anyclass-b`: the sub-line becomes the one-line "Whether it is on chain, and if this wallet has its
+  code." (the example wraps at 400 px; OA-3), and `"*"` draws the orange icon and the "ANY CLASS" chip as "Add any
+  contract" does. Details already has the class section and code column (#981), so it is unchanged.
 - The pictures live outside the repository; each PR body shows light and dark screenshots of the built surfaces.
 
 ## Architecture & Implementation
@@ -132,20 +142,27 @@ takes `tokenFlagged` and `tokenFlagAcknowledged`, emits `acknowledgeTokenFlag(in
 **Arc 2.** `reset.vue`: the sentence "You will be able to recover the accounts derived from your recovery phrase
 later if you have saved it"; while unlocked, an "Imported accounts" section after "Profile to delete" listing each
 imported account of the profile on every chain (name, trimmed address) with "Your recovery phrase can't bring these
-back." and an "Export first" button whose target OA-2 settles. The list reads `managers.network.getNetworks()` then
+back." and an "Export first" button: the full backup page, or while a reset is pending the account export page on a
+password profile and no button on a passkey one (P78-05 B, D16). The list (`imported-accounts.ts`) reads `managers.network.getNetworks()` then
 `managers.account.getAccounts(profileId, chainId, true)` per chain, filtered `AccountType.Imported`, plus a paused
-reset's `reset.heldImported` (`getPendingReset`, `getStaleNetwork`: imports a purge left only in the journal),
+reset's `reset.heldImported` once `reset.purged` (`getPendingReset`, `getStaleNetwork`: imports a purge left only in the
+journal; before the purge the live rows are those accounts, at their old addresses),
 merged by `(chainId, address)` (a held import keyed on its network's chain, which the rewrite moves before any row is recreated) so a recreated row is named once
 and one address on two chains is named twice. `getNetworks` refuses while locked (`requireActiveProfile`);
 `getAccounts` has no session check, so the page itself makes no read while locked, and no locked reader is built
-(OA-1). Unlocked, Delete stays disabled until the read answers and `handleReset` re-checks it; a failed read is
-never "no imports": the delete is refused with the page's existing "Couldn't delete profile. Try again" and the read
-retried, as delete chain already refuses on an unknown hold. `ForgotPasswordPopup.vue` (shown only while locked)
+(OA-1, P78-04 A). Unlocked, Delete stays disabled while the read runs and `handleReset` re-checks it; a failed read
+is never "no imports": a press is refused with the page's existing "Couldn't delete profile. Try again" and the read
+retried, as delete chain already refuses on an unknown hold (D17). The page re-reads on `onStaleNetworkChanged`. `ForgotPasswordPopup.vue` (shown only while locked)
 adds, under its sentence, a warning glyph and "Accounts you imported are lost with this profile. The recovery
 phrase can't bring them back." (OA-1).
 `networks/[id].vue`: the confirmation appends `deleteChainImported(names, exportable)` with a paused reset's
 `reset.imported` (which already merges live imports, `network-reset/service.ts:127,366`) when one is held, else the
-chain's live imported accounts, read inside `readHeldReset` so a failed read keeps today's refusal.
+chain's live imported accounts (hidden ones included, `getAccounts(…, true)`), read inside the delete's existing
+`try` so a failed read keeps today's refusal; "Export it first." follows the reachable export page (D18).
+
+**Class lookup row (arc 2).** `contractClassesRow` keeps its titles; its sub-line reads "Whether it is on chain, and
+if this wallet has its code." for every request, and `"*"` sets `flagged` and the `ANY_CLASS` chip ("Any class"),
+the treatment `contractsRow` gives "Add any contract". No other row and no Details code changes.
 
 **Trade-offs not taken.** A worker-built display model (the competing outline: the dispatcher computes reach,
 defaults and the token flag and ships them in the payload): one source, but a new wire contract in
@@ -172,6 +189,12 @@ which Privacy Policy § 5.2 rules out for transaction execution (D10). Naming ev
 | D13 | E2E | `cap-request-partial` asserts the new Off default and switches the other row; one added scenario, the flagged add in `register-token.test.ts`; no other new scenario |
 | D14 | Accessibility (owner's 2026-10-19 delegation) | Details heads aria-hidden, the row targets speak the column words; the tick is the design `Checkbox` (Tab stop, Enter and Space), before the footer; glyphs aria-hidden |
 | D15 | Details under a switch Off | Details reads the request over the held grants, as today, so it still ticks events while the events switch is Off: the approved B window takes A's Details picture (`p77-cap-a-details`, the lane brief) |
+| D16 | Export first (P78-05 B) | No reset pending: the full backup page (every imported account on every network, both profile kinds). Pending: the account export page, which reaches journal-held imports, on a password profile; a passkey profile gets no button, since neither page serves it then |
+| D17 | Delete while the list is unknown or stale | Held (disabled) while the read runs; a press reads the list again and goes only if it holds no account the page does not show, else it is refused with the existing toast and the page shows the fresh list (an import from another window); a failed read refuses the same way, so the page is never a dead end and never deletes on an unknown list. A read the lock or a newer read overtakes starts no account read (`getAccounts` answers while locked) and shows nothing. Delete chain's Confirm reads again and reopens the confirmation when its text changed; each press and Confirm takes a generation, so one a newer one or the lock overtook acts no further. Residual (known limit): an import that completes in another window in the milliseconds between the press-time check and the delete call is not named; closing it needs the worker to delete only on the set the page showed, a contract change |
+| D18 | "Export it first." on delete chain | Live imports: said when an export page reaches them: no reset pending (full backup), or a password profile and a chain that is not stale (account export, once the chain is active); a paused reset of this chain keeps its own rule (`exportsHeld`). Delete Profile's "Export first" keeps the owner's target (P78-05 B) even when a second, quarantined chain's imports are reachable from neither page while a reset is pending: the button promises no particular account |
+| D19 | Class row sub-line (P78-09 B) | One line at 400 px: "Whether it is on chain, and if this wallet has its code."; the owner signs the words from the screenshot (OA-3). `"*"` flagged with the "Any class" chip; Details unchanged (#981 lists classes) |
+| D20 | Locked (P78-04 A) | The popup line on every profile; Delete Profile reads nothing while locked and shows no section; no locked reader exists |
+| D21 | Arc 2 e2e | One added step, no new scenario: `type-roles.test.ts` imports a donor's account and sweeps Delete Profile, since the identifier inventory requires every smoke-owned address site to be observed in a real browser (the computed face and spacing, which no unit layer reads). The flows themselves are proven at the composition and component layers |
 
 ## Security & Adversarial Considerations
 
@@ -190,6 +213,9 @@ which Privacy Policy § 5.2 rules out for transaction execution (D10). Naming ev
   cached prices and never triggers a fetch", and a window test pins zero `refreshIfStale` calls on a token add. The
   execute window's fee children (`AppFeeLine`, `FeeSettingsCard`) and the fee window (`FeeRaisedCard`) already
   call `usePrices`, so they can refresh; that predates this plan and is reported as a follow-up.
+- **Deletion lists (arc 2).** Names and addresses are read and shown only while unlocked; the locked popup and
+  page read nothing (P78-04 A). A failed or pending read can never pass as "no imports", so a
+  delete never proceeds on an unknown list (D17). A wildcard class lookup now reads as broad (D19).
 - **Logging.** No new log line; nothing about flags, counts or names is logged.
 - **Input validation, crypto, least privilege, supply chain.** No new input path, key, dependency or permission.
 
@@ -199,8 +225,8 @@ which Privacy Policy § 5.2 rules out for transaction execution (D10). Naming ev
 but the gates read every `register_token` operation; I2 the snapshot read answers before the token details in
 practice, so D11's wait is not visible; it is timing, not a safety argument, and no gate rests on it. (A former
 I3, that the enumeration answers while locked: `getAccounts` does, `getNetworks` throws through
-`requireActiveProfile`; the page reads nothing while locked either way.) **Asks:** OA-1, OA-2 (arc 2 only). Arc 1
-has none.
+`requireActiveProfile`; the page reads nothing while locked either way.) **Asks:** OA-1 and OA-2, answered by P78-04 A and
+P78-05 B; OA-3 (the class row's one-line words) is signed from the screenshots. Arc 1 has none.
 
 ## Phases
 
@@ -265,28 +291,40 @@ each screenshot matches its approved picture in all but placeholder words, or an
 
 ### Arc 2 (branch `consent-display-2-a2`, off `origin/dev` after #964 and arc 1 merge)
 
-Before phase 6, re-read the export pages as #964 left them and update OA-2's options if they moved. The PR opens as
-a draft until OA-1 and OA-2 are answered; it builds their "ships now" forms meanwhile.
+The export pages as #964 left them hold OA-2's options as written. OA-1 and OA-2 were answered before phase 6
+(P78-04 A, P78-05 B), so the PR opens ready.
 
-**Phase 6 — Delete Profile and the forgot-password popup.** Files: `reset.vue`, `ForgotPasswordPopup.vue`; tests
-`reset.test.ts`, a new `ForgotPasswordPopup.test.ts`. Tests: the derived-accounts sentence; unlocked, the section
-lists each imported account across chains (two chains, one imported each) and hides with none (control); a paused
-reset's purged import is named from the journal, once recreated it is named once, and one address imported on two
-chains is named twice (controls); while the read is
-pending or after it fails Delete is disabled and `handleReset` deletes nothing, while an empty and an imported answer
-enable it (controls); locked, no account read is made and no section shows; Export first (`reset-export-first`)
-per OA-2 on a password profile, none on a passkey profile; the popup line per OA-1; `copy-dash-ban` stays green.
-E2E (smoke, both browsers): `security-reset.test.ts`, `auth-flows.test.ts`, `tooltips-glossary.test.ts`,
-`type-roles.test.ts`. Gate: lint, `typecheck:all`, `bun run --cwd apps/extension test
-src/popup/pages/settings/security src/popup/components/popups src/utils/copy-dash-ban.test.ts`,
-`cd apps/extension && bun run test:e2e -- <file> --retry=0` per file, exit 0.
+**✓ Phase 6 — Delete Profile and the forgot-password popup.** Files: `reset.vue`, a new `imported-accounts.ts`,
+`ForgotPasswordPopup.vue`; tests `imported-accounts.test.ts`, `reset.test.ts`, a new `ForgotPasswordPopup.test.ts`,
+a composition case in `network-reset/service.composition.test.ts`. Tests: the derived-accounts sentence; the list
+across two chains, a hidden import included and a derived account not (wire-shaped addresses); a paused reset's
+held import named from the journal, once when recreated, and one address on two chains named twice (controls, the
+merge mutation-checked in both layers); a reset paused before its purge named from its live row; a running reset's
+journal unread but the reset pending; each failed read fails the list; on the page, no imports means no section and Delete goes (control); while the read runs Delete is
+disabled, after a failure a press deletes nothing, toasts and re-reads, then the answer lets it go; an account
+imported after the list refuses the press and is shown, then the press goes; a reset event re-reads and an older
+read answering last never replaces the newer one; a lock mid-read starts no account read (D17); a pending
+reset sends Export first to the account export page, a passkey profile gets none (D16); locked, no read and no
+section; the popup line and its `aria-hidden` glyph on every profile; the composition case drives the real reset
+service to a paused reset and reads the held import once on its new chain and the same key elsewhere apart.
+E2E: `type-roles.test.ts` sweeps the new address site (an imported account on Delete Profile, D21).
 
-**Phase 7 — delete chain, then the close-out.** Files: `networks/[id].vue`; test `networks/[id].test.ts` (a live
-imported account named; a paused reset's `reset.imported` used as it is, live accounts not added twice, matched
-by address; two accounts of one name both named; a failed live read refuses as today; none unchanged). E2E:
-`settings-crud.test.ts`, `stale-network.test.ts` on both browsers. Then the close-out (Post-implementation). Gate:
-lint, `typecheck:all`, `bun run --cwd apps/extension test src/popup/pages/settings/networks`, `test:all`, the e2e
-files, `bun run check:plans` after staging, exit 0.
+**✓ Phase 7 — delete chain.** Files: `networks/[id].vue`; test `networks/[id].test.ts`: live imports named, a hidden
+one included and two of one name both ("Export them first."); a reset pending elsewhere says "Export" on a password
+profile and a chain that is not stale (D18); a paused reset of this chain uses its own list and reads no live
+accounts; a failed read refuses with today's toast and deletes nothing; an import made after the confirmation opened
+reopens it naming the account instead of deleting, and the next Confirm deletes (D17).
+
+**✓ Phase 8 — the class lookup row (#975).** Files: `permission-rows.ts`; tests `permission-rows.test.ts`,
+capability `index.test.ts` (wire-shaped request): the listed row's line, unflagged with no chip; `"*"` flagged with
+the "Any class" chip, approved as requested.
+
+**Phase 9 — e2e, screenshots, gates, then the close-out.** Smoke at retry 0 on Chrome then Firefox, on the armed
+build (`agent.sh` runs only the network config): `cd apps/extension && bun run test:e2e -- tests/e2e/{type-roles,security-reset,auth-flows,tooltips-glossary,settings-crud,stale-network,stale-network-captures}.test.ts --retry=0`.
+Network at retry 0 through `agent.sh`, both browsers: `type-roles-windows`, `contracts-getClassMetadata` (the class
+row). Screenshots from a scratch spec outside the repo, light and dark, Chrome 360×600 (the capability window at its
+400×800), into `screenshots/arc2/`. Gate: lint, `typecheck:all`, `test:all`, every listed e2e green on both
+browsers, `bun run check:plans` after staging, exit 0.
 
 ## Post-implementation
 
@@ -305,11 +343,12 @@ rides arc 2: merge `origin/dev` first; Outcome (`Known limits: none` unless file
 | Arc | Phases | Base | PR title (≤ 93) | Closes |
 |---|---|---|---|---|
 | 1 | 1–5 | `origin/dev` + this plan's commit | `feat(consent): windows count what a grant reaches; private fee juice card; flagged token add` (92) | none |
-| 2 | 6–7 + close-out | `origin/dev` after #964 and arc 1 merge | `fix(profile): deletion warnings name imported accounts the phrase cannot restore` (80) | none |
+| 2 | 6–9 + close-out | `origin/dev` after #964 and arc 1 merge | `fix(profile): deletion warnings name imported accounts the phrase cannot restore` (80) | #975 |
 
 Each PR opens without labels once its loop converges; add `e2e:extension-network` (arc 1) or
 `e2e:extension-smoke` (arc 2) only if the path filter skips a needed suite. Arc 1 opens ready when the screenshots
-match the pictures; arc 2 opens as a draft until OA-1 and OA-2 are answered. Bodies quote each surface's pick (id
+match the pictures; arc 2 opens ready (OA-1 and OA-2 answered), its class row words signed from the screenshots
+(OA-3). Bodies quote each surface's pick (id
 and text), show the light and dark screenshots, state the e2e wall-clock before and after, and name no decision page, finding or advisory.
 Parallelism: none (arc 2 waits on #964).
 
@@ -355,6 +394,22 @@ Parallelism: none (arc 2 waits on #964).
   `AppFeeLine` and `FeeSettingsCard` call `usePrices` too, so the window as a whole is not fetch-free. Not changed
   here (it predates the plan, outside its surfaces); the claim narrowed to the flag read, and the fee children and
   the fee window go to the orchestrator as one follow-up.
+
+- **Arc 2 Codex r1** (gpt-6.1-sol, high, session `01a15f7f`): **findings (4)**. Accepted: Delete Profile and delete
+  chain acted on a list read before an import made in another window (both high, demonstrated); a lock mid-read
+  still started `getAccounts` (medium); two comments restating what they sat on (low). Fixed in `d43f0f0fc`.
+- **Arc 2 Opus 5.5 r1** (general-purpose): **findings (4)**, all low. Accepted: a reset paused before its purge
+  listed a moved import twice (held only once purged); no test for the reset-event re-read and its out-of-order
+  guard; the cross-window import (as Codex); delete chain's "Export it first." for a stale chain while another
+  reset is pending (D18). Not changed: the same gap on Delete Profile's "Export first", the owner's target (D18).
+  Every fix mutation-checked.
+- **Arc 2 Codex r2** (resumed `01a15f7f`): **findings (3)**. Accepted: an older Confirm whose read a newer press
+  overtook could delete under the newer confirmation (high; a per-attempt generation); delete chain could start
+  `getAccounts` after a lock (medium). Argued and accepted in r3: an import completing during the press-time read is
+  the check-then-act race no client-side check closes; a known limit (D17). Fixed in `fefff6582`.
+- **Arc 2 Codex r3** (resumed `01a15f7f`, the last round): **findings (1)**, medium: a delete-chain read answering
+  after the lock could still open a confirmation naming the imports. Fixed in `dd9139e84` (the post-read guards
+  check the lock), pinned by a test red without it; not re-reviewed, the loop's three rounds being spent.
 
 ## Seeds
 

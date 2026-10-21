@@ -1,10 +1,13 @@
 # consent-display-2: owner asks
 
 Arc 1 depends on none of these: its three surfaces are the owner's picks P77-01 B, P77-04 B and P77-05 B as
-pictured. OA-1 and OA-2 concern arc 2 only, which starts after PR #964 is on `dev`; its PR opens as a draft and
-builds each ask's "ships now" form until the owner answers.
+pictured. OA-1 and OA-2 concern arc 2 only and are answered (P78-04 A, P78-05 B). OA-3 is the words of one line,
+signed from arc 2's screenshots.
 
 ## OA-1: what the locked screens say about imported accounts (arc 2)
+
+**Answered 2026-10-21, P78-04 A:** "The popup line shows for every profile; Delete Profile lists imported accounts
+only once unlocked."
 
 - **Surfaces.** The lock screen's "Lost your password?" popup (`p77-forgot-c`) and the Delete Profile page it opens,
   which is reachable while locked. P77-07 C adds to the popup, under its sentence, a warning glyph and "Accounts you
@@ -25,6 +28,9 @@ builds each ask's "ships now" form until the owner answers.
 
 ## OA-2: where "Export first" goes (arc 2)
 
+**Answered 2026-10-21, P78-05 B:** "The full backup page; while a reset is pending, the account export page
+instead." A passkey profile gets no button while a reset is pending, since neither page serves it then.
+
 - **Surface.** Delete Profile's "Imported accounts" section (`p77-delete-b`), unlocked. The brief sends "Export
   first" to the account export page.
 - **Why it is open.** The account export page lists only the active network's accounts and turns passkey profiles
@@ -40,3 +46,11 @@ builds each ask's "ships now" form until the owner answers.
 - **Recommendation.** B when no reset is pending, else A: the full backup covers every listed account for both
   profile kinds if the page serves them after #964, and the account export page is the one that reaches journal-held
   accounts. Re-checked against the export pages as #964 leaves them.
+
+## OA-3: the class lookup row's sub-line in one line (arc 2)
+
+- **Surface.** The capability window's "Look up … contract code on <network>" row (`p78-class-b`), at the window's
+  400 px. P78-09 B's example, "Whether it is on chain, and whether this wallet holds its code.", wraps to two lines.
+- **Proposal (ships in the PR):** "Whether it is on chain, and if this wallet has its code." Same two answers, one
+  line in the screenshot. The owner signs or rewords it from the screenshots; the example's words are one string to
+  swap.
