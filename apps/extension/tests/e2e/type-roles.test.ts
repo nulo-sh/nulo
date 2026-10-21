@@ -11,7 +11,17 @@ import type { Page } from "puppeteer"
 import { describe, expect, vi } from "vitest"
 import { extensionUrl, FIREFOX_ONLY, isFirefox, stopBackground } from "./fixtures/browser"
 import { evaluateInActionPopup, openActionPopup } from "./fixtures/browser/firefox-action-popup"
-import { clickByTestId, type ExtensionContext, openOnboarding, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
+import {
+	clickByTestId,
+	type ExtensionContext,
+	launchExtension,
+	openOnboarding,
+	openPopup,
+	registerProfile,
+	replaceInputValue,
+	test,
+	waitForHash,
+} from "./fixtures/extension"
 import {
 	addContact,
 	clickNavTab,
@@ -63,7 +73,7 @@ import {
 	seedTokenRow,
 	seedTransaction,
 } from "./helpers/activity-seeds"
-import { exportAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "./helpers/account-io"
+import { confirmImport, exportAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "./helpers/account-io"
 import { seedAuthwits } from "./helpers/authwit-seeds"
 import { closeImportWith, contactsFiles, pickContactsFile, refuseTestnet } from "./helpers/contacts"
 import { seedFpcs, seedProtocolFpcs } from "./helpers/fpc-seeds"
@@ -923,7 +933,27 @@ async function expectHiddenAccountAndImport(page: Page): Promise<void> {
 	])
 }
 
-test("a contact on Send and in Contacts, a contacts file, an unnamed FPC, New sender, the profile, a hidden account and an account file", async ({
+/** An account file from another master imported, then Delete Profile listing it. */
+async function expectImportedOnReset(page: Page): Promise<void> {
+	let body: string
+	const donor = await launchExtension()
+	try {
+		await registerProfile(donor)
+		const donorPage = await openPopup(donor)
+		await waitForHash(donorPage, "#/popup/general", 30_000)
+		body = await exportAccountBody(donorPage, FIRST_ACCOUNT_NAME, false)
+	} finally {
+		await donor.close()
+	}
+	expect(await previewImport(page, body)).toMatch(/^0x/)
+	await confirmImport(page, "Savings")
+	await closeStuckPopup(page)
+	await goAndSweep(page, "#/popup/settings/security/reset", "reset-imported-account", "Reset, an imported account", [
+		["popup-settings-security-reset", "an imported account"],
+	])
+}
+
+test("a contact on Send and in Contacts, a contacts file, an unnamed FPC, New sender, the profile, a hidden account, an account file and an imported account on Delete Profile", async ({
 	registeredExtensionPerTest: ctx,
 }) => {
 	const refusal = await refuseTestnet(ctx)
@@ -936,6 +966,7 @@ test("a contact on Send and in Contacts, a contacts file, an unnamed FPC, New se
 		await expectContactsImport(page)
 		await expectSettingsForms(page)
 		await expectHiddenAccountAndImport(page)
+		await expectImportedOnReset(page)
 		expect(await refusal.failures()).toEqual([])
 	} finally {
 		await refusal.stop()
