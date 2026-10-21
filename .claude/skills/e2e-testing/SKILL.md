@@ -277,8 +277,8 @@ then measured runtime, with each browser's suite wall-clock before and after in 
   close is 5.0 s on Chrome (the worker's liveness 2.0 of it) and 9.2 s on Firefox (the driver 3.2).
   A stored onboarded profile per worker saves 0.7 s / 1.1 s per registered launch on smoke and
   shares one account across files on network: not built
-  (`implementations-plan/e2e-fixed-cost-1/plan.md`, D1). A network fork's aztec.js import is 4-6 s
-  inlined against 2 s native; native loading is known limit #997.
+  (`implementations-plan/archive/e2e-fixed-cost-1/plan.md`, D1). A network fork's aztec.js import is
+  4-6 s inlined against 2 s native; native loading is known limit #997.
 - **A cost guard** (a latency ratio between builds, timed by a probe spec on builds chosen by
   `EXTENSION_PATH`) runs its variants interleaved in one pass, a fresh browser per sample, each
   sample started under a load ceiling well below the run gate's, with the load logged. A loaded
