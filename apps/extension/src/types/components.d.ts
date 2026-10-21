@@ -42,6 +42,7 @@ declare module 'vue' {
     FeeAmount: typeof import('./../components/composite/FeeAmount.vue')['default']
     Flex: typeof import('@nulo/design')['Flex']
     FormPopup: typeof import('./../components/composite/FormPopup.vue')['default']
+    HandoffCard: typeof import('./../components/composite/HandoffCard.vue')['default']
     Header: typeof import('./../components/Header.vue')['default']
     Icon: typeof import('@nulo/design')['Icon']
     IdentityStrip: typeof import('./../components/composite/IdentityStrip.vue')['default']

@@ -14,7 +14,8 @@
 import type { CreateWindowOptions } from "@nulo/wallet-core/ports"
 import type { NavigationHookAfter } from "vue-router"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
-import { HANDBACK_KEY, type Handback, type HandbackRoute, type HandbackSnack, landingRoute } from "@/utils/panel-handback"
+import { HANDBACK_KEY, type Handback, type HandbackRoute, landingRoute } from "@/utils/panel-handback"
+import type { Outcome } from "@/utils/snack"
 import { RETURN_TO_PANEL, type ReturnToPanelMessage } from "@/wallet/utils/onboarding-tab"
 import { centerOn } from "@/wallet/services/window-manager/placement"
 
@@ -234,9 +235,9 @@ export async function closeOwnWindow(): Promise<boolean> {
  * panel on the browser window this one was opened from, and closes, whatever the answer. A failed
  * send leaves the record for the next panel. False, doing nothing, outside a card window.
  */
-export async function returnToPanel(route: HandbackRoute, snack?: HandbackSnack): Promise<boolean> {
+export async function returnToPanel(route: HandbackRoute, outcome?: Outcome): Promise<boolean> {
 	if (!isCardWindow()) return false
-	const handback: Handback = snack ? { route, snack } : { route }
+	const handback: Handback = outcome ? { route, snack: { ...outcome.snack, profileId: outcome.profileId } } : { route }
 	try {
 		await chrome.storage.session.set({ [HANDBACK_KEY]: handback })
 		const message: ReturnToPanelMessage = { type: RETURN_TO_PANEL, opener: openerId }

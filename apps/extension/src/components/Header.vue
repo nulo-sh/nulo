@@ -13,6 +13,7 @@ import { useLockWallet } from "@/composables/useLockWallet"
 import { managers } from "@/utils/core"
 import { copyAddressToClipboard } from "./header-copy-address"
 import { endsSelection } from "@/utils/selection"
+import { isCardWindow } from "@/utils/own-window"
 import { accountStateOf } from "./header-account"
 
 /** Store */
@@ -168,7 +169,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<header v-if="!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader" :class="$style.wrapper">
+	<header v-if="!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader && !isCardWindow()" :class="$style.wrapper">
 		<!-- The switcher owns TWO explicit affordances (avatar + name) while the address is a
 		     one-click copy target — no popup detour. `account-selector` stays on the name button so
 		     every existing e2e switching flow passes unchanged (testid-preservation contract). -->

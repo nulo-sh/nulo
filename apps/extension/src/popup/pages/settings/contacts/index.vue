@@ -11,6 +11,7 @@
 /** Components */
 import { Dropdown } from "@/components/ui/Dropdown"
 import StatusCard from "@/components/composite/StatusCard.vue"
+import HandoffCard from "@/components/composite/HandoffCard.vue"
 import ContactRow from "@/popup/components/modules/settings/contacts/ContactRow.vue"
 
 /** Services */
@@ -20,7 +21,7 @@ import { ContactServiceClient } from "@/wallet/services/contact/client"
 /** Utils */
 import { stringCompare } from "@/utils"
 import { copyWithToast } from "@/utils/clipboard"
-import { OWN_WINDOW_ROUTES, leavePanelFor } from "@/utils/own-window"
+import { OWN_WINDOW_ROUTES, closeOwnWindow, isCardWindow, leavePanelFor, returnToPanel } from "@/utils/own-window"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -114,10 +115,18 @@ watch(() => appStore.network?.id, syncSenders)
 
 const { exporting, exportContacts, importContacts } = useContactImportExport({ contacts, accountStateService })
 
-/** From Firefox's toolbar panel the import moves to Contacts' own window, where a second press picks. */
+/** From Firefox's toolbar panel the import moves to Contacts' own window, where the card's press picks. */
 const handleImportContacts = async () => {
 	if (await leavePanelFor(OWN_WINDOW_ROUTES.contacts)) return
 	await importContacts()
+}
+
+const cardWindow = isCardWindow()
+
+/** A refused file keeps the card for another pick; any other end hands its snack back to the panel. */
+const handleChooseInCard = async () => {
+	const outcome = await importContacts()
+	if (outcome) await returnToPanel(OWN_WINDOW_ROUTES.contacts, outcome)
 }
 
 const handleCopyContactAddress = (contact) => {
@@ -152,7 +161,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<SettingsPageShell title="Contacts" :backTo="'/popup/settings'" gap="12" data-testid="contacts-page">
+	<HandoffCard
+		v-if="cardWindow"
+		title="Pick the contacts file"
+		:busy="appStore.contactImports.size > 0"
+		@choose="handleChooseInCard"
+		@cancel="closeOwnWindow"
+	/>
+	<SettingsPageShell v-else title="Contacts" :backTo="'/popup/settings'" gap="12" data-testid="contacts-page">
 		<template #trailing>
 			<Dropdown>
 				<button type="button" :class="$style.icon_btn" aria-label="Contact actions" data-testid="contacts-menu-trigger">

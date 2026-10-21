@@ -214,6 +214,7 @@ describe("closing an own window", () => {
 describe("the card window", () => {
 	const CONTACTS = "/popup/settings/contacts"
 	const SNACK = { kind: "success", label: "Import completed successfully", profileId: "a1b2c3d4" } as const
+	const OUTCOME = { snack: { kind: "success", label: SNACK.label }, profileId: SNACK.profileId } as const
 
 	test("the three file picks are cards; export, the profile restore and an unmarked page are not", () => {
 		for (const route of [CONTACTS, "/popup/settings/accounts/import", "/popup/restore-again"]) {
@@ -248,7 +249,7 @@ describe("the card window", () => {
 			expect(closeDocument).not.toHaveBeenCalled()
 			return { ok: false }
 		})
-		expect(await returnToPanel(CONTACTS, SNACK)).toBe(true)
+		expect(await returnToPanel(CONTACTS, OUTCOME)).toBe(true)
 		expect(closeDocument).toHaveBeenCalledTimes(1)
 
 		sendMessage.mockRejectedValueOnce(new Error("Could not establish connection. Receiving end does not exist."))
@@ -259,7 +260,7 @@ describe("the card window", () => {
 
 	test("outside a card window the return does nothing", async () => {
 		captureOwnWindow(`#${EXPORT}?window=own`)
-		expect(await returnToPanel(CONTACTS, SNACK)).toBe(false)
+		expect(await returnToPanel(CONTACTS, OUTCOME)).toBe(false)
 		expect(session.has(HANDBACK_KEY)).toBe(false)
 		expect(sendMessage).not.toHaveBeenCalled()
 		expect(closeDocument).not.toHaveBeenCalled()

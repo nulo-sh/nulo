@@ -12,3 +12,11 @@
 - Profile ids are 8 hex characters when generated and a passkey's user handle otherwise, so the decoder bounds the id at 1 to 128 characters and compares it with the open session's `profile.id`.
 - A failed removal at arrival still shows the snack: the person sees the result now, and at worst the next panel lands there once more.
 - Gate: `bun run lint`, `bun run typecheck:all`, `bun run test` (898 files) exit 0.
+
+# Phase 2: the card, the outcomes, the three pages
+
+- One outcome type, `Outcome = { snack, profileId }` in `utils/snack.ts`, serves all three flows and `returnToPanel(route, outcome?)`; the record flattens it to `{ kind, label, profileId }`.
+- The contacts outcome snack still opens inside the import's Lock hold (`applyHoldingLock`), so a lock waiting for the import's end closes it with the session, as before.
+- `HandoffCard` owns the window's centring and the shared line as its `description` default; the three pages pass only their title. A global `Button` registration in a component test recurses through the design base's `<component :is="tag">`, so the card imports `Button` explicitly.
+- Branch text keys the type-roles identifier inventory: a new `v-if` around an identifier site (Header, Import account's preview) re-keys its entry in `identifier-sites.expected.json`.
+- `audit:vue` once failed `useLogFilters.scan.test.ts` on its 5 s timeout at load average ~370 (31/31 alone in 3.3 s); the rerun passed whole.
