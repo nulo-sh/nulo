@@ -181,7 +181,64 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 		await flushPromises()
 		expect(w.find('[data-testid="reset-imported"]').exists()).toBe(false)
 		await deleteButton(w).trigger("click")
+		await flushPromises()
 		expect(client.deleteProfile).toHaveBeenCalledWith("p1")
+	})
+
+	test("a press reads the list again: an account imported since refuses it until the page shows it, then Delete goes", async () => {
+		reads.getNetworks.mockResolvedValue([{ id: "tn", chainId: TESTNET }])
+		reads.getAccounts.mockResolvedValue([row(TESTNET, SAVINGS, "Savings", AccountType.Imported)])
+		const { w } = await mountReady({ isLogined: true })
+		await flushPromises()
+		expect(listed(w)).toEqual([["Savings", "0x04c0…03b4"]])
+
+		reads.getAccounts.mockResolvedValue([
+			row(TESTNET, SAVINGS, "Savings", AccountType.Imported),
+			row(TESTNET, COLD, "Cold", AccountType.Imported),
+		])
+		await deleteButton(w).trigger("click")
+		await flushPromises()
+		expect(client.deleteProfile).not.toHaveBeenCalled()
+		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't delete profile. Try again" })
+		expect(listed(w)).toEqual([
+			["Savings", "0x04c0…03b4"],
+			["Cold", "0x1d7a…4d19"],
+		])
+
+		await deleteButton(w).trigger("click")
+		await flushPromises()
+		expect(client.deleteProfile).toHaveBeenCalledWith("p1")
+	})
+
+	test("a reset event reads the list again, and an older read answering last never replaces the newer one", async () => {
+		const { w } = await mountReady({ isLogined: true })
+		await flushPromises()
+		const onChanged = reads.onStaleNetworkChanged.add.mock.calls[0]?.[0] as () => Promise<void>
+		const answers: Array<(networks: unknown[]) => void> = []
+		reads.getNetworks.mockImplementation(() => new Promise((resolve) => answers.push(resolve)))
+		reads.getAccounts.mockResolvedValue([row(TESTNET, SAVINGS, "Savings", AccountType.Imported)])
+		void onChanged()
+		void onChanged()
+		await flushPromises()
+		expect(deleteButton(w).attributes("disabled")).toBeDefined()
+
+		answers[1]?.([{ id: "tn", chainId: TESTNET }])
+		await flushPromises()
+		answers[0]?.([])
+		await flushPromises()
+		expect(listed(w)).toEqual([["Savings", "0x04c0…03b4"]])
+		expect(deleteButton(w).attributes("disabled")).toBeUndefined()
+	})
+
+	test("a lock during the read stops it before any account read", async () => {
+		let answer: (networks: unknown[]) => void = () => {}
+		reads.getNetworks.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+		const { w, app } = await mountReady({ isLogined: true })
+		app.isLogined = false
+		answer([{ id: "tn", chainId: TESTNET }])
+		await flushPromises()
+		expect(reads.getAccounts).not.toHaveBeenCalled()
+		expect(w.find('[data-testid="reset-imported"]').exists()).toBe(false)
 	})
 
 	test("while a reset is pending, Export first goes to the account export page, which a passkey profile cannot use", async () => {
@@ -220,6 +277,7 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 		expect(client.deleteProfile).not.toHaveBeenCalled()
 		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't delete profile. Try again" })
 		await deleteButton(failed.w).trigger("click")
+		await flushPromises()
 		expect(client.deleteProfile).toHaveBeenCalledWith("p1")
 	})
 

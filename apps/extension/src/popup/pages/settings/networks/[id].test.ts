@@ -310,11 +310,28 @@ describe("Settings › Network detail — the live imported accounts Delete chai
 		expect(await confirmFor("password")).toBe(`${WIPES} It also deletes the imported account “Savings”. Export it first.`)
 	})
 
-	test("while another network's reset is pending, full backup refuses, so only a password profile is asked to export", async () => {
+	test("while another network's reset is pending, full backup refuses, so only a password profile is asked to export, and not from a stale chain", async () => {
 		networkReset.getPendingReset.mockResolvedValue({ networkId: "alpha", running: false })
 		accounts.getAccounts.mockResolvedValue([row("Savings", AccountType.Imported, 2)])
 		expect(await confirmFor("password")).toBe(`${WIPES} It also deletes the imported account “Savings”. Export it first.`)
 		expect(await confirmFor("passkey")).toBe(`${WIPES} It also deletes the imported account “Savings”.`)
+
+		networkReset.getStaleNetwork.mockImplementation(async (id) => (id === "mine" ? { networkId: "mine", name: MINE.name } : null))
+		expect(await confirmFor("password")).toBe(`${WIPES} It also deletes the imported account “Savings”.`)
+	})
+
+	test("Confirm deletes only what the confirmation named: an import made since reopens it naming the account", async () => {
+		expect(await confirmFor("password")).toBe(WIPES)
+		const appStore = useAppStore()
+		accounts.getAccounts.mockResolvedValue([row("Savings", AccountType.Imported, 2)])
+		await useCacheStore().confirm.callback?.()
+		await flushPromises()
+		expect(appStore.removeNetwork).not.toHaveBeenCalled()
+		expect(useCacheStore().confirm.description).toBe(`${WIPES} It also deletes the imported account “Savings”. Export it first.`)
+
+		await useCacheStore().confirm.callback?.()
+		await flushPromises()
+		expect(appStore.removeNetwork).toHaveBeenCalledWith(MINE)
 	})
 
 	test("a paused reset of this network names its own list, which already holds the live imports", async () => {

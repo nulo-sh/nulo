@@ -166,8 +166,8 @@ export function contractsRow(cap: ContractsCapability, names: readonly KnownName
 	return undefined
 }
 
-/** Classes have no names, so a list is only counted. A lookup answers whether the node has the class
- *  published and whether this wallet holds its artifact, so the line names both answers. */
+/** Classes have no names, so a list is only counted. A lookup answers from two sources: the node, on
+ *  whether the class is published, and this wallet's own records, on whether it holds the artifact. */
 export function contractClassesRow(networkName: string, classes: "*" | readonly string[]): PermissionRowEntry {
 	const count = Array.isArray(classes) ? new Set(classes.map(contractKey)).size : undefined
 	return {

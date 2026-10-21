@@ -53,8 +53,9 @@ async function readHeldReset(id) {
 }
 
 /** The imported accounts deleting network `network` deletes, and whether they can be exported first:
- *  a paused reset's list, which already names the chain's live imports, else the chain's live ones,
- *  which full backup exports unless a reset is pending, and account export from a password profile. */
+ *  a paused reset's list, which already names the chain's live imports, else the chain's live ones.
+ *  Full backup exports those unless a reset is pending; then only account export can, from a password
+ *  profile once the chain is active, which a stale chain never is. */
 async function readDeletedImports(network) {
 	const held = await readHeldReset(network.id)
 	if (held) return held
@@ -63,10 +64,21 @@ async function readDeletedImports(network) {
 		managers.networkReset.getPendingReset(),
 	])
 	const imported = rows.filter((a) => a.type === AccountType.Imported)
-	return {
-		imported: imported.map((a) => sentenceName(a.name, DEFAULT_IMPORTED_ACCOUNT_NAME)),
-		exportable: !pending || appStore.profile?.type === "password",
-	}
+	const exportable =
+		!pending || (appStore.profile?.type === "password" && (await managers.networkReset.getStaleNetwork(network.id)) === null)
+	return { imported: imported.map((a) => sentenceName(a.name, DEFAULT_IMPORTED_ACCOUNT_NAME)), exportable }
+}
+
+/** What the confirmation says deleting `network` removes; null when it cannot be known. */
+async function deleteDescription(network) {
+	const held = await readDeletedImports(network).catch(() => null)
+	if (!held) return null
+	return [
+		"This wipes accounts, balances, tokens, and PXE state on this chain. This cannot be undone.",
+		held.imported.length ? staleCopy.deleteChainImported(held.imported, held.exportable) : "",
+	]
+		.filter(Boolean)
+		.join(" ")
 }
 
 const heldReset = ref(null)
@@ -163,32 +175,20 @@ const handleDeleteEndpoint = (endpoint) => {
 	})
 }
 
-const handleDeleteNetwork = async () => {
-	if (!network.value) return
-	if (!canDelete.value) return
-	const { id, name } = network.value
-	// Read at the click: a confirmation opened before the page's own read landed must still name them.
-	let held
-	try {
-		held = await readDeletedImports(network.value)
-	} catch {
-		held = undefined
-	}
-	if (disposed || networkId.value !== id) return
-	// An unknown hold is not an empty one: the confirmation never omits what the delete removes.
-	if (held === undefined) return openToast({ kind: "error", label: "Failed to delete chain" })
+/** The delete goes only on what its confirmation said: Confirm reads the chain again, and an import
+ *  made since, in another window, reopens the confirmation naming it instead of deleting. */
+const confirmDeleteNetwork = (id, name, description) =>
 	requestConfirm({
 		confirm_text: "Yes, delete chain",
 		confirm_color: "red",
 		title: `Delete ${name}?`,
-		description: [
-			"This wipes accounts, balances, tokens, and PXE state on this chain. This cannot be undone.",
-			held?.imported.length ? staleCopy.deleteChainImported(held.imported, held.exportable) : "",
-		]
-			.filter(Boolean)
-			.join(" "),
+		description,
 		callback: async () => {
 			const target = network.value
+			const now = target?.id === id ? await deleteDescription(target) : null
+			if (disposed || networkId.value !== id) return
+			if (now === null) return openToast({ kind: "error", label: "Failed to delete chain" })
+			if (now !== description) return confirmDeleteNetwork(id, name, now)
 			try {
 				await appStore.removeNetwork(target)
 				openToast({ kind: "success", label: "Chain deleted" })
@@ -203,6 +203,17 @@ const handleDeleteNetwork = async () => {
 			}
 		},
 	})
+
+const handleDeleteNetwork = async () => {
+	if (!network.value) return
+	if (!canDelete.value) return
+	const { id, name } = network.value
+	// Read at the click: a confirmation opened before the page's own read landed must still name them.
+	const description = await deleteDescription(network.value)
+	if (disposed || networkId.value !== id) return
+	// An unknown hold is not an empty one: the confirmation never omits what the delete removes.
+	if (description === null) return openToast({ kind: "error", label: "Failed to delete chain" })
+	confirmDeleteNetwork(id, name, description)
 }
 
 // If the network row disappears (deleted from elsewhere), redirect back to the list.

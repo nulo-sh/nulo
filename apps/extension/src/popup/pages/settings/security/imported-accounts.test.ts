@@ -27,11 +27,11 @@ function reads(rows: Account[], over: Partial<ImportedAccountReads> = {}) {
 	} satisfies ImportedAccountReads
 }
 
-const pausedOn = (networkId: string, heldImported: Array<{ name: string; address: string }>) => ({
+const pausedOn = (networkId: string, heldImported: Array<{ name: string; address: string }>, purged = true) => ({
 	getPendingReset: vi.fn(async () => ({ networkId, running: false })),
 	getStaleNetwork: vi.fn(
 		async (): Promise<Pick<StaleNetworkView, "reset">> => ({
-			reset: { running: false, purged: true, doneCount: 0, imported: [], heldImported },
+			reset: { running: false, purged, doneCount: 0, imported: [], heldImported },
 		}),
 	),
 })
@@ -66,6 +66,15 @@ describe("the imported accounts Delete Profile names", () => {
 			accounts: [{ name: "Savings", address: SAVINGS, chainId: TESTNET }],
 			resetPending: true,
 		})
+	})
+
+	test("a reset paused before its purge names the live row at its address, not the journal's moved one", async () => {
+		const moved = `0x${"3f9b".repeat(16)}`
+		const r = reads(
+			[row(TESTNET, SAVINGS, "Savings", AccountType.Imported)],
+			pausedOn("tn", [{ name: "Savings", address: moved }], false),
+		)
+		expect((await readImportedAccounts(r, "p1")).accounts).toEqual([{ name: "Savings", address: SAVINGS, chainId: TESTNET }])
 	})
 
 	test("one address imported on two chains is named twice", async () => {
