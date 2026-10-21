@@ -25,8 +25,9 @@ import { expect } from "vitest"
 import type { Page } from "puppeteer"
 import { clickByTestId, openPopup, waitForHash, test, waitForServiceReady } from "./fixtures/extension"
 import { confirmProfileReset } from "./fixtures/helpers"
-import { registerPasskeyProfile, setupPasskeyVirtualAuth, stallNextPasskeyCeremony } from "./fixtures/passkey"
+import { holdNextPasskeyRequest, registerPasskeyProfile, setupPasskeyVirtualAuth, stallNextPasskeyCeremony } from "./fixtures/passkey"
 import { shotSend } from "./fixtures/send-page"
+import { expectFitsNarrow } from "./fixtures/type-roles"
 import { downloadPlainPasskeyBackup } from "./helpers/backup-export"
 import { type PlainBackup, passkeyBackupVerifies } from "./helpers/backup-seal"
 import { armDownloadCapture } from "./helpers/download-capture"
@@ -117,10 +118,22 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 		// auto-fires `handleBackup` → opens the modal (see `handleAgree`
 		// in export/full.vue:73). No "Create Backup" button for passkey.
 		await page.waitForSelector('[data-testid="agree-continue-btn"]', { visible: true, timeout: 5_000 })
-		// Without the progress state, the CTA-enabled wait below would pass on a body left blank
-		// during the export.
-		await armProgressObserver(page, CREATING)
-		await clickByTestId(page, "agree-continue-btn")
+		// The held passkey request keeps the working card on screen; a run never returns to `progress`,
+		// so the card still mounted after the 240 px check proves the check read it.
+		const release = await holdNextPasskeyRequest(page)
+		try {
+			// Without the progress state, the CTA-enabled wait below would pass on a body left blank
+			// during the export.
+			await armProgressObserver(page, CREATING)
+			await clickByTestId(page, "agree-continue-btn")
+			await page.waitForSelector('[data-testid="backup-status-card"]', { visible: true, timeout: 5_000 })
+			await page.waitForSelector('[data-testid="passkey-ceremony-dialog"]', { visible: true, timeout: 5_000 })
+			await expectFitsNarrow(page, "the working card under the passkey dialog")
+			expect(await page.$('[data-testid="backup-status-card"]')).not.toBeNull()
+			expect(await page.$('[data-testid="passkey-ceremony-dialog"]')).not.toBeNull()
+		} finally {
+			await release()
+		}
 
 		// The card unmounts and both CTAs enable once the status reads "finished"; 180 s leaves a
 		// loaded hosted runner room without masking a deadlock.
@@ -164,6 +177,8 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 		expect(await page.$('[data-testid="backup-ready-banner"]')).toBeNull()
 		expect(await page.$('[data-testid="protect-password-btn"]')).toBeNull()
 		expect(await page.$('[data-testid="download-backup-btn"]')).toBeNull()
+		await page.waitForSelector('[data-testid="backup-done-banner"]', { visible: true, timeout: 5_000 })
+		await expectFitsNarrow(page, "the done state after a plain file")
 		await shotSend(page, "export-full-saved-passkey", "backup-close-btn")
 
 		// A second run, for the encryption path.
@@ -221,6 +236,9 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 			{ timeout: 15_000, polling: 250 },
 		)
 		expect(await progressSeen(page), "the encryption never showed its Encrypting card").toBe(true)
+		await page.waitForSelector('[data-testid="backup-done-banner"]', { visible: true, timeout: 5_000 })
+		await page.waitForSelector('[data-testid="download-backup-btn"]', { visible: true, timeout: 5_000 })
+		await expectFitsNarrow(page, "an encrypted backup")
 
 		// Filter the benign "Client disconnected" cascade that can fire when
 		// the export's loop disconnects each backup service client.

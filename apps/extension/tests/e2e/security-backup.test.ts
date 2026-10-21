@@ -7,6 +7,7 @@ import { navigateByHash, revealSeedPhrase } from "./fixtures/helpers"
 import { createAndActivateProfile } from "./fixtures/profiles"
 import { shotSend } from "./fixtures/send-page"
 import { getStartedRows, waitForHomeReminders } from "./fixtures/tokens"
+import { expectFitsNarrow } from "./fixtures/type-roles"
 import { downloadEncryptedBackup, openEncryptedBackup } from "./helpers/backup-export"
 import { FULL_BACKUP_V2_TAG } from "@/utils/full-backup-helpers"
 
@@ -121,6 +122,9 @@ test("a password profile's full backup downloads only once it is encrypted", asy
 	)
 	// The plain file holds the recovery phrase and every key, so Download waits for encryption.
 	expect(await page.$eval('[data-testid="download-backup-btn"]', (el) => (el as HTMLButtonElement).disabled)).toBe(true)
+	for (const id of ["backup-ready-banner", "protect-password-btn", "download-backup-btn"])
+		await page.waitForSelector(sel(id), { visible: true, timeout: 5_000 })
+	await expectFitsNarrow(page, "a ready backup")
 	await shotSend(page, "export-full-ready", "backup-ready-banner")
 
 	const file = await downloadEncryptedBackup(page)
@@ -129,6 +133,8 @@ test("a password profile's full backup downloads only once it is encrypted", asy
 	await page.waitForSelector(sel("backup-close-btn"), { visible: true, timeout: 10_000 })
 	expect(await page.$(sel("download-backup-btn"))).toBeNull()
 	expect(await page.$eval(sel("backup-done-banner"), (el) => el.textContent)).toContain("Saved to your downloads")
+	await page.waitForSelector(sel("backup-done-banner"), { visible: true, timeout: 5_000 })
+	await expectFitsNarrow(page, "the done state")
 	await shotSend(page, "export-full-saved", "backup-close-btn")
 
 	expect(registeredExtension.consoleErrors).toEqual([])

@@ -29,6 +29,7 @@ import {
 	waitForServiceReady,
 } from "./fixtures/extension"
 import { acceptConfirmPopup, closeStuckPopup, navigateByHash, readSessionRow, reopenAndRecoverAfterImport } from "./fixtures/helpers"
+import { expectFitsNarrow } from "./fixtures/type-roles"
 import {
 	confirmImport,
 	exportAccountBody,
@@ -176,6 +177,9 @@ test("a full backup carries an imported account; restoring it (dup-confirmed) re
 		expect(await page.$('[data-testid="backup-keys-lost-banner"]')).toBeNull()
 		const withUnopened = await openEncryptedBackup(await downloadEncryptedBackup(page), RESTORE_PASSWORD)
 		expect((withUnopened.data?.["imported-account-keys"] as unknown[] | undefined)?.length).toBe(1)
+		for (const id of ["backup-close-btn", "backup-done-banner", "backup-imported-unopened-banner"])
+			await page.waitForSelector(`[data-testid="${id}"]`, { visible: true, timeout: 10_000 })
+		await expectFitsNarrow(page, "the done state under a warning")
 	} finally {
 		rmSync(filePath, { force: true })
 	}
