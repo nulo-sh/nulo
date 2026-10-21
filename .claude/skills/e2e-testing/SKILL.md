@@ -254,8 +254,11 @@ runtime env var can never arm a build-time flag.
   diff. A run it drops says why (a file line beyond vitest's count, a file in two shards). Never edit the
   record by hand; a new file needs no entry.
 - **Nightly** (`nightly.yml`, scheduled daily) mirrors the lanes on both browsers with config-default
-  retries, plus the seeded `send-chaos` run on each, and publishes a prerelease only when every one is green. **Soak** (`extension-network-e2e-soak.yml`) is manual,
-  N iterations at retry 0.
+  retries, plus the seeded `send-chaos` run on each, and publishes a prerelease only when every one is
+  green; it builds `dev` only, so it is never a branch soak. **Soak** (`extension-network-e2e-soak.yml`)
+  is the branch-level flake check: the named network files (`test_files`), N iterations at retry 0 on
+  Chrome, and every named test must pass, so an opt-in or browser-gated file cannot soak green. The
+  whole suite on a branch is a dispatch of the two PR network workflows (CI.md § the soak).
 - A red required gate is a flake → rerun once, or breakage → fix. Never advisory, never
   `continue-on-error`, never removed from the required set (CLAUDE.md § Quality gates).
 
