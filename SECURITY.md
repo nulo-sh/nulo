@@ -399,6 +399,9 @@ Encrypted at rest:
 Plaintext at rest (`chrome.storage.local`):
 - Profile metadata, networks, accounts, tokens, token balances, tx history,
   auth registry state, FPC definitions, config, storage version.
+- dApp registration counts (`nulo:core:dappRegistrations@<profile>`): per
+  chain, the origin of each app that registered with the profile and how many
+  times, though not its accounts or grants.
 - Incoming receipts: account, token, amount, transaction hash and, for a
   private one, the note's hashes. A note's nullifier is never stored; it stays
   in the PXE's encrypted store.

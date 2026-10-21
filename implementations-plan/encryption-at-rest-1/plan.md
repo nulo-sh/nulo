@@ -102,6 +102,7 @@ Path notation:
 | `nulo:core:tokens`, `token-seeded@p` (`S/token/service.ts:174`, `seeder.ts:748`) | sealed, numeric id / value | which assets a person tracks; deleted defaults; verified pins |
 | `nulo:core:networks`, `nulo:core:fpcs` (`S/network/service.ts:237`, `S/fpc/service.ts:70`) | sealed, natural random id | custom endpoints and names; chosen fee payers |
 | `nulo:ui:pinnedTokens@p`, `nulo:ui:feePaymentMethods@p`, `nulo:ui:sendFeePaymentMethods@p`, `nulo:ui:activeAccount` | plaintext, disclosed (KL-12) | pinned token contracts, fee-payer picks and the last-selected account address. They are `structured` shapes written by the popup through the facade; #865 refuses their removal without a migration and refuses every migration over them, and its writer test holds each to a live writer. Moving them is a plan of its own once #865 can retire a structured shape (follow-up issue) |
+| `nulo:core:dappRegistrations@p` (`S/dapp-session/registration-allowance.ts`, from #976) | plaintext, disclosed; A4's root census classifies it | per chain, each origin that registered with the profile and how many times. Added on `dev` after A1 was planned, so A1 does not seal it |
 | `nulo:core:active-network@p` | plaintext | a random network id, meaningless without the sealed network row |
 | `nulo:core:profiles` | plaintext | the key source, and the picker and lock screen show the name (OA-1) |
 | tombstones, restore-pending | plaintext, disclosed | the id reservation and the torn-restore gate run before unlock. A tombstone holds the deleted profile's addresses and token ids only while its deletion runs; it is cleared once every purge succeeds (`S/profile/service.ts:1625`) |
@@ -713,6 +714,7 @@ Every gate runs `bun run lint` and `bun run typecheck:all` (exit 0), `bun run te
   - **migration-rule-1 (#865):** a hard prerequisite (registry, factories, freeze). This lane adds a `sealed` flag to `encoding: "json"` shapes, adapts its baseline in A1 and re-stamps in every arc, and edits CLAUDE.md § Persisted-storage after it.
   - **tx-record-1:** its `feeChoice` touches txs/journal rows. It lands first (I4); A2 seals that shape.
   - **mainnet-arrival-1 (#875):** any per-profile root it adds is caught by A4's root census and classified there.
+  - **#976 (dApp registration counts):** `nulo:core:dappRegistrations@p` names each origin that registered on a chain, in plaintext; A4's root census classifies it, and SECURITY.md § Storage privacy discloses it until then.
   - **harden-security-fixes-3 arc 3:** it touches dApp tagging sources (`S/execution/service.ts:177`), not a stored root by name. If it adds one before A1, A1 classifies it. SECURITY.md is edited by both: rebase.
   - **ui-picks-1 and a11y-errors-1:** popup surfaces only; this lane changes no popup file now that the UI keys stay out. No shared file found.
   - **connect-split-1:** it touches the connect window and dApp-session flows A1 seals. A1 changes the store under `DappSessionService`, not its RPCs; rebase.
