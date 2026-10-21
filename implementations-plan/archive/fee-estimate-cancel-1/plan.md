@@ -1,7 +1,7 @@
 ---
 plan: fee-estimate-cancel-1
 tier: light
-status: arc 1 implemented, review converged (Codex approve, round 2); PR open against dev
+status: closed (arc 1 delivered)
 issues: "#989 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,23 @@ base: origin/dev at b3d6e0a2a
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-21.
+- **Status:** closed. Arc 1 (Phases 0-3) ran on `fee-estimate-cancel-1-a1` and merged into `dev` as #995 (`9d04ada81`), closing #989. This docs-only PR archives the plan, and its merge closes the plan.
+- **Shipped:** once the worker accepts an execute approval, the window disposes both estimate maps. Dispose is now awaitable and terminal. The window closes once the worker has handled the cancels, or after the 3 s end bound.
+  The worker admits an estimate before it reads the stored request, and `buildFor` checks the cancel signal after every build. #989's mechanism was corrected: no code unmounts an approval window, so the approval never sent a cancel (I1).
+  Proof, from Firefox runs of `authwit-lifecycle` at pool age 0:
+  - on the base, 1 public simulation after the send reached the node, and the node rejected it;
+  - on the head, none, and no rejection;
+  - Chrome on the head: green.
+  Details are in [lessons/phase-3.md](lessons/phase-3.md).
+- **Dispositions:** the owner ask about the close delay was rejected (D3). No composition test and no new e2e file (D7). The close-out ran as its own docs-only PR after #995 merged, not as #995's final commits, by the orchestrator's call.
+- **Known limits:** #998 (KL1: a rejected or closed window posts its estimate cancels without waiting for them), #999 (KL2: a cancel during the embedded fee-cap read or the unfolded discovery build still runs that simulation).
+- **Open items:** none.
+- **Lessons:** none promoted: `lessons.md` holds 8152 of its 8192 bytes, and nothing there is superseded. The fact that a removed window never unmounts is in [recon.md](recon.md) § Facts the plan rests on.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # fee-estimate-cancel-1: an approval ends the window's unfinished fee estimates
 
@@ -93,7 +110,7 @@ None, per the lane brief: "The fee card, the Confirm button and every copy stay 
 - **D5 Admission before materialization** (Codex 1 and 3). The approval's own delete of the request does the work a cancel record would. Rejected: a record of tokens cancelled before admission in the registry (new state with expiry and token-reuse rules).
 - **D6 The check sits in `buildFor`:** one line covers the four rebuild sites and every first build. Rejected: copies at the rebuild sites.
 - **D7 Tests.** No composition test: `tests/COMPOSITION-TESTS.md` D2, D3 and D6 forbid a simulation, a built request and bb, and no harness mounts a window over the worker. Each link has its own layer (T1-T2 engine, T3-T4 window, T5 worker, T6 strategies); the e2e runs confirm the whole. No new e2e file: `authwit-lifecycle`'s first grant already drives the path, and its count is a measurement. T4 of the first draft (the 3 s bound) is dropped: `useDappApprovalWindow.test.ts:248` pins it.
-- **D8 Known limits** (plausible but unverified; the consequence is one wasted estimate run, no state change), filed at close-out as closed `known-limit` issues: KL1 a window ended by Reject or by its own close button posts its cancels without waiting for them (`index.vue:519-520`, the unload rejection), reopen on a run or report of such an estimate simulating; KL2 a cancel that lands during the embedded strategy's fee-cap read (`embedded-strategy.ts:44`) or the unfolded discovery build (`discovery-aware-estimator.ts:131-133`) still runs that one simulation, reopen on a run or report showing it.
+- **D8 Known limits** (plausible but unverified; the consequence is one wasted estimate run, no state change), filed at close-out as closed `known-limit` issues (#998, #999): KL1 a window ended by Reject or by its own close button posts its cancels without waiting for them (`index.vue:519-520`, the unload rejection), reopen on a run or report of such an estimate simulating; KL2 a cancel that lands during the embedded strategy's fee-cap read (`embedded-strategy.ts:45`) or the unfolded discovery build (`discovery-aware-estimator.ts:131-133`) still runs that one simulation, reopen on a run or report showing it.
 
 ## Review verdicts
 
@@ -106,7 +123,7 @@ None, per the lane brief: "The fee card, the Confirm button and every copy stay 
 
 ## Delivery
 
-- **Arc 1** = Phases 0-3, one PR against `dev` (the orchestrator's D-orch-1: no stack), ready, not a draft. Title: `fix(execute): approval cancels the window's unfinished fee estimates before it closes` (84 characters). Body: what changed and why, I1 as a correction to #989, the close-wait note (D3), the validation runs with outcomes and `authwit-lifecycle`'s wall-clock per run, `Closes #989`. No label: the extension's source trips the e2e path filters.
+- **Arc 1** = Phases 0-3, one PR against `dev` (the orchestrator's D-orch-1: no stack), ready, not a draft. Title: `fix(execute): approval cancels the window's unfinished fee estimates before it closes` (84 characters). Body: what changed and why, I1 as a correction to #989, the close-wait note (D3), the validation runs with outcomes and `authwit-lifecycle`'s wall-clock per run, `Closes #989`. No label: the extension's source trips the e2e path filters. Merged as #995 (`9d04ada81`).
 
 ## Post-implementation
 
@@ -114,10 +131,10 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 - **Diff review:** `code_review: off`; the step is absent.
 - **Review loop**, once over the arc diff after Phase 3: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; the prompt carries the diff from `origin/dev`, this plan and its ledger, the adversarial ask and the README's two rules verbatim. One Opus `general-purpose` review of the same diff beside round 1. Hard stop at three rounds; log each in `lessons/phase-3.md` and under Review verdicts.
 - **Delivery:** `gh pr create --base dev`, then `gh pr checks <n> --watch`; one rerun for a known flake. Never merge.
-- **Close-out** as the PR's final commits: merge `origin/dev` and read `index.md` and `lessons.md`; KL1 and KL2 filed and closed (dedupe first); the `## Outcome` block with `Known limits:`; lessons only within the 8 KiB budget; delete `STATUS.md`; `git mv implementations-plan/fee-estimate-cancel-1 implementations-plan/archive/fee-estimate-cancel-1` in its own commit, index line moved to `archive/index.md`; `bun run check:plans` green after staging.
+- **Close-out** (ran as its own docs-only PR after #995 merged): merge `origin/dev` and read `index.md` and `lessons.md`; KL1 and KL2 filed and closed (dedupe first); the `## Outcome` block with `Known limits:`; lessons only within the 8 KiB budget; delete `STATUS.md`; `git mv implementations-plan/fee-estimate-cancel-1 implementations-plan/archive/fee-estimate-cancel-1` in its own commit, index line moved to `archive/index.md`; `bun run check:plans` green after staging.
 - **Teardown after the merge** (standing authorization): once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/fee-estimate-cancel-1/plan.md` succeeds, run `agent-worktree done fee-estimate-cancel-1 --merged`; relay a refusal, never force. A `/loop` session checks on every firing; a `/goal` session arms one background wait after its wrap-up report.
 
-## Seeds (draft until approval)
+## Seeds (retired)
 
 ```
 /goal Arc 1 of implementations-plan/fee-estimate-cancel-1/plan.md done: Phases 0-3 marked ✓, each gate reported passing in the transcript; the Codex loop (gpt-6.1-sol high) converged on the arc diff, quoted; the PR open against dev (gh pr view output).
