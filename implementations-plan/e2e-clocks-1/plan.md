@@ -1,8 +1,8 @@
 ---
 plan: e2e-clocks-1
 tier: light
-status: approved by the orchestrator with four conditions (D12-D15); arc 1 in progress
-issues: "#992 (arc 1: Closes on the ship path; closed as a known limit with the numbers on the no-ship path)"
+status: closed
+issues: "#992 (closes on arc 1)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,29 @@ base: origin/dev at 8663cdd15 (arc 1; planned at 34609f33d)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-21.
+- **Status:** closed. A1 ran on `e2e-clocks-1-a1`; its PR closes #992, and its merge closes the plan.
+- **Shipped:** `VITE_NULO_E2E_WALLET_CLOCKS=1`, set by `agent.sh`'s proverless build only, runs the incoming scan
+  and the finality re-read every 10 s (`apps/extension/src/e2e/wallet-clocks.ts`); the prover-ON build passes `0`.
+  Literal unit pins hold the production 30 s and 60 s; the marker step refuses the stamp, and
+  `scripts/ci-cd/build-env-guard.test.ts` runs it against every source stamp; Biome lets only `src/e2e/config.ts`
+  import the values. The three deliver-then-arm sites deliver while locked (`deliverWhileLocked`), and the install-run
+  bounds follow the e2e tick. Proof: twelve balanced CI slots per browser, all green; the three target files save a
+  summed median 481 s a run on Chrome and 454 s on Firefox, every pair faster, `wallet final` 3.5-6.1 s against
+  53-56 s, no other file slower ([lessons/phase-3.md](lessons/phase-3.md)).
+- **Dispositions:** `SendCheck` keeps its cadence (D9); the canary keeps the users' clocks (D6); the gate's 15 s safety
+  timeout after the unlock's park kept as is, since a slow bootstrap fails such a case rather than passing it weaker
+  (arc round 1); `shard-timings.json` untouched, its refresh trigger applying after the merge, with the measurement's
+  P-branch dispatch runs among the lanes' latest green runs until they age out ([lessons/phase-3.md](lessons/phase-3.md)).
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted: `lessons.md` holds 8152 of its 8192 bytes. The deliver-then-arm race and the arrivals
+  scope a lock resets are in the e2e-testing skill; Biome's replaced override options and extension specifiers are in
+  [lessons/phase-1.md](lessons/phase-1.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # e2e-clocks-1: the network e2e build runs the wallet's two clocks faster, if the numbers hold
 
