@@ -1,7 +1,7 @@
 ---
 plan: lessons-1
 tier: light
-status: planned, Codex approve
+status: completed (delivered in #1017)
 issues: none open (#957 closed by the owner's P78-10 A; cited only)
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at cef87d9de
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-21.
+- **Status:** delivered as one ready PR against `dev`, #1017, which carries this close-out; its merge closes the plan.
+- **Shipped:** `lessons.md` gains the extension-window close line (no Vue teardown runs as a window closes; await what it owes, bounded, as `endAndClose` does; a person's close leaves the page only `beforeunload`) and drops the CodeMirror line, whose facts `creator.js:98-99,116` state; 8174 of 8192 B after the last `dev` merge.
+- **Review loop:** plan: Codex r1, Opus r1 and Codex r1b conditional approve, Codex r1c approve. Arc: Codex r1 approve; Opus diff review approve with changes ("unmount hook" became "teardown"); Codex r2 approve.
+- **Gates at the head:** `lint`, `typecheck:all`, `test`, `test:all` exit 0 at load1 220-292; `check:plans` 0.
+- **Dispositions:** C1 changes no action (D1); C2 half false, the correction relayed to lane soak-mode-1 by the orchestrator (D2); C3 does not fit without evicting a costlier line (D3); C4 and C5 live in the e2e-testing skill (D4); C6 not as worded, personal tooling (D5); line 19 kept, line 33 a dedupe (D7); the roster name in archived logs reported (D8).
+- **Known limits:** none. **Open items:** none.
+- **Lessons:** the arc is the promotion; nothing further.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # lessons-1: promote this week's cross-task gotchas into lessons.md
 
