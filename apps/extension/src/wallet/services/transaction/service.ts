@@ -175,15 +175,16 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	}
 
 	/** Seals the profile's plaintext rows, adopts the ownerless ones it alone can own, then arms its
-	 *  rows. Each step runs under the tx lock the purges hold; the arming checks the deletion epoch
-	 *  captured before it, so an arming a deletion overtook inserts nothing. */
+	 *  rows. Each step runs under the tx lock the purges hold; the adoption and the arming check the
+	 *  deletion epoch captured before them, so neither arms anything once a deletion overtook them. */
 	private async onRowKeysReady(profileId: string): Promise<void> {
 		const epoch = this.deletionState.capture(profileId)
+		const live = () => !this.deletionState.isReserved(profileId) && this.deletionState.isCurrent(profileId, epoch)
 		try {
 			await this.txs.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
-			await this.adoptOwnerless(profileId)
+			await this.adoptOwnerless(profileId, live)
 			await this.lock.withLock(async () => {
-				if (this.deletionState.isReserved(profileId) || !this.deletionState.isCurrent(profileId, epoch)) return
+				if (!live()) return
 				for (const tx of await this.txs.getValues()) if (tx.profileId === profileId) this.arm(tx)
 			})
 		} catch (error) {
@@ -194,13 +195,13 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	/** An ownerless row becomes the profile's when the profile holds its account on its chain and no
 	 *  other profile can own it. It is re-armed under its new identity: the old watch's object names
 	 *  no profile, and a commit from it would write the plaintext row back. */
-	private async adoptOwnerless(profileId: string): Promise<void> {
+	private async adoptOwnerless(profileId: string, live: () => boolean): Promise<void> {
 		const owned = new Set((await this.accountService.getAccountsRaw(profileId)).map((a) => accountScopeKey(a.chainId, a.address)))
 		for (const { located, text } of await this.ownerlessRows()) {
 			const row = parseOwnerlessTx(text)
 			if (!row || row.ambiguous || !owned.has(accountScopeKey(row.chainId, row.account))) continue
 			await this.lock.withLock(async () => {
-				if ((await this.ownership([row.account], profileId)) !== "sole") return
+				if (!live() || (await this.ownership([row.account], profileId)) !== "sole") return
 				if (!(await this.txs.adoptOwnerless(located.naturalId, text, profileId))) return
 				this.unwatch(watchKey(row))
 				const adopted = await this.txs.get(located.naturalId, profileId)

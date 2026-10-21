@@ -290,13 +290,14 @@ describe("sealed transaction history — the real service graph", () => {
 		expect((await worker.txs.transactionsOf(ADDR, q.id))[0]?.status).toBe(TxStatus.Pending)
 	}, 60_000)
 
-	test("an arming that a deletion overtakes inserts no watch, and nothing is read for it", async () => {
+	test("an arming or adoption that a deletion overtakes inserts no watch, and nothing is read for it", async () => {
 		const api = freshApi()
 		const first = await boot(api)
 		const p = await first.profiles.createProfile("P", PW)
 		await seedAccount(api, p.id)
 		await send(first)
 		await toLegacy(api, first)
+		const ownerless = await seedLegacy(api, { hash: OTHER_HASH, status: TxStatus.Pending })
 
 		const restarted = await boot(api)
 		const area = api.storage.local
@@ -318,7 +319,11 @@ describe("sealed transaction history — the real service graph", () => {
 		restarted.profiles.getDeletionState().beginDeletion(p.id)
 		release()
 		await settle(1_500)
-		expect(restarted.txs.getPendingForAccount(ADDR)).toEqual([])
+		// The ownerless row stays ownerless and keeps the watch every profile reads it under.
+		expect(restarted.txs.getPendingForAccount(ADDR).map((tx) => [tx.hash, tx.profileId])).toEqual([[OTHER_HASH, undefined]])
+		expect((await area.get(`${TRANSACTION_STORAGE_ROOT}@${OTHER_HASH}`))[`${TRANSACTION_STORAGE_ROOT}@${OTHER_HASH}`]).toBe(
+			JSON.stringify(ownerless),
+		)
 		expect(askedFor(restarted.chain, HASH)).toBe(0)
 	}, 60_000)
 
