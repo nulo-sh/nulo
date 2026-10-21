@@ -723,6 +723,9 @@ the pattern.
 - **`navigateByHash` returns when the hash changes**, but the router swaps the page later, after
   its guards, so a read straight after it can see the old page's rows. Wait for the new page's own
   rows, never for the hash (`implementations-plan/archive/layout-polish/plan.md#hash-navigation`).
+- **`navigateByHash` to the route the page is already on keeps that page, state and all**: Import
+  account left on a preview never shows its file picker again. Leave for another page and wait for it
+  first (`implementations-plan/archive/consent-display-2/lessons/phase-0.md`).
 - **Home's `activity-feed-root` renders only for an account with activity or a token**, so a wait
   for it on a fresh, unfunded account fails; History's root always renders
   (`implementations-plan/archive/approval-scope-follow/plan.md#empty-feed`).

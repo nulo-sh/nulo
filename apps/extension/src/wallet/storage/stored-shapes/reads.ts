@@ -1,6 +1,7 @@
 import { MemoryStorageArea } from "@nulo/wallet-core/storage"
 import { STORED_SHAPES, type StoredShapeName } from "../stored-shapes"
-import { entityStorage } from "../stores"
+import { parseEnvelope } from "../sealed-entity-storage"
+import { type SealedStoreName, sealedEntityStorage } from "../stores"
 import { readStored } from "./baseline"
 
 export function shapeOfKey(key: string): StoredShapeName | undefined {
@@ -12,9 +13,21 @@ export function shapeOfKey(key: string): StoredShapeName | undefined {
 
 const idOf = (key: string): string => key.slice(key.indexOf("@") + 1)
 
+function envelopeOf(raw: unknown): unknown {
+	if (typeof raw !== "string") return undefined
+	try {
+		return parseEnvelope(JSON.parse(raw))
+	} catch {
+		return undefined
+	}
+}
+
 /**
- * The value the wallet reads from `key`. A dApp session's MAC key is derived from the unlocked
- * profile, so its row is read through the codec alone; a caller proves the MAC another way.
+ * The value the wallet reads from `key`. A sealed row opens only under its unlocked profile's row
+ * keys, which Node never holds, so it reads here when it is an envelope and a caller opens it
+ * another way; a row of a sealed root still plaintext reads through the codec, as the dual read
+ * serves it. A dApp session's MAC key is derived from the unlocked profile too, so a caller proves
+ * its MAC another way as well.
  */
 async function readRow(name: StoredShapeName, entries: Record<string, unknown>, key: string, now: number): Promise<unknown> {
 	const shape = STORED_SHAPES[name]
@@ -24,7 +37,8 @@ async function readRow(name: StoredShapeName, entries: Record<string, unknown>, 
 	}
 	// A read may delete what it refuses, so each one gets its own copy of the area.
 	const area = new MemoryStorageArea().seed(structuredClone(entries))
-	if ("authenticated" in shape) return entityStorage("dappSessions", area).get(idOf(key))
+	if ("sealed" in shape)
+		return envelopeOf(entries[key]) ?? sealedEntityStorage(name as SealedStoreName, area, () => undefined).get(idOf(key))
 	return readStored(name, area, key, now)
 }
 

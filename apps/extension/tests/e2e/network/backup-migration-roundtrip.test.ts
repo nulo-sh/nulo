@@ -38,6 +38,7 @@ import {
 } from "../fixtures/helpers"
 import { accountChainId, exportBackupContent, keepChainAccountState } from "../helpers/backup-export"
 import { sealPlainBackup } from "../helpers/backup-seal"
+import { rawContactRows, storedContacts } from "../helpers/contacts"
 import { gotoPopupImport, importFullBackup, POPUP_IMPORT_SHELL, TEST_PASSWORD, writeBackupToTemp } from "../helpers/import-drivers"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -90,15 +91,12 @@ test.skipIf(!hasConfig || !HAS_FIXTURE)(
 
 			// The migration ran BEFORE restore: the contact row landed in the
 			// CURRENT shape (v9001 renamed legacyName → name).
-			const contacts = await page2.evaluate(async () => {
-				const all = await chrome.storage.local.get()
-				return Object.entries(all)
-					.filter(([k]) => k.startsWith("nulo:core:contacts@"))
-					.map(([, v]) => JSON.parse(v as string) as Record<string, unknown>)
-			})
+			const contacts = await storedContacts(page2)
 			expect(contacts).toHaveLength(1)
 			expect(contacts[0].name).toBe("Roundtrip Ali")
 			expect(contacts[0]).not.toHaveProperty("legacyName")
+			// Restore sealed the row: its name never reaches storage in the clear.
+			expect((await rawContactRows(page2)).some((raw) => raw.includes("Roundtrip Ali"))).toBe(false)
 
 			// ── 4. On-chain functionality ──────────────────────────────────
 			// Restore preserved the profile id, so key derivation reproduces
