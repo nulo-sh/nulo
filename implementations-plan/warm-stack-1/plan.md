@@ -119,6 +119,7 @@ None. Test harness only; no screen, copy or timing a person meets changes.
 - **The answers, Codex (gpt-6.1-sol high, session 01a15f25): `approve`.** D6 records A1-A5 and the dispatch order faithfully; no contradiction with G1, (a)-(d), Phases 1-5 or Delivery.
 - **Arc round 1, Codex (gpt-6.1-sol high, session 01a15f74): `conditional approve`;** Opus `general-purpose` beside it: `conditional approve`. Every finding taken ([lessons/phase-4.md](lessons/phase-4.md)): the phase tag keeps its cause, I1 marked superseded, the skill cites the live plan path (`check:plans` joins the gates), the comment states its contract only, and two error-array files join Phase 3.
 - **Arc round 2, Codex resumed: `conditional approve`.** The fixes verified; Phases 2-3 now name `check:plans` and the two files.
+- **Arc round 3, Codex resumed: `approve`.** No findings; the loop converged.
 - **Round 1, Opus Plan leg: `conditional approve`.** Accepted: G1's arithmetic (as Codex 2); F2 (as Codex 1); the error arrays asserted on every probe cycle, and any error K surfaces fixed at its cause (F5); J's probe arm injects what `createProfile` writes, the dump only a reference; J(b) out of the arc; the Firefox counts taken statically; the deviations as Asks, and the critical-shard wall-clock in the PR; `setupConnectedPlayground` through `launchOnLocalNetwork`; `multi-account-from` in Phase 3; the heavy and canary jobs parsed for (d), and a failed run's pair dispatched again; the boot-state trace before a J build; the rotating probe order. Rejected: none.
 
 ## Delivery

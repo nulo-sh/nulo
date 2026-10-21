@@ -25,3 +25,7 @@
 - **Codex resumed: `conditional approve`.** It verified every round 1 fix. One finding: the plan's Phase 2 and 3 text did not yet name `check:plans` or the two added files. Taken.
 - **A second `agent.sh` run in the same worktree is refused at setup** ("another run in this worktree holds the sandbox"). The first Chrome run of the two added files hit this while Firefox held the sandbox. That is a refusal, not a result. It was rerun alone.
 - `connect-check-window` and `execute-scope-chain` at 140587739, retry 0: Chrome 2/2 files, 3/3 tests (load1 170 → 169). Firefox 2/2, 3/3 (load1 121 → 201). Two `[onboard]` lines each. Neither run saw a registration-time error in the arrays.
+
+## Round 3 (diff 140587739..6534b83a3, and the whole arc)
+
+- **Codex resumed: `approve`, no findings.** The loop converged, within its three-round stop.
