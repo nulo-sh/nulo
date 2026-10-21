@@ -1551,7 +1551,9 @@ describe("ExecutionService composition — a Send held to the estimate it showed
 	test("a send the account pays with neither figure ends failed before any proof", async () => {
 		const h = await fjHarness()
 		expect(await h.send(undefined, undefined)).toStrictEqual(recorded(h, expect.any(Error)))
-		expect(await stageOf(h, h.getJournalId())).toBe("failed")
+		const failed = await h.journal.getOperation(h.getJournalId())
+		expect(failed?.progress.stage).toBe("failed")
+		expect(failed?.error?.message).toContain("no fee figure")
 		expect(h.proveTx).not.toHaveBeenCalled()
 		expect(h.sendTx).not.toHaveBeenCalled()
 	})

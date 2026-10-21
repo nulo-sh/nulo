@@ -2052,6 +2052,8 @@ describe("TransferExecutor: a send held to its fee figure", () => {
 			const { h, req, estimateId } = setup()
 			await expect(h.executor.execute(req, estimateId, FENCE)).rejects.toBeInstanceOf(JournaledRejection)
 			expect(refusal(h)).toMatchObject({ message: expect.stringContaining("no fee figure") })
+			// The reused case must refuse through the reused provenance, not a fallback build.
+			expect(h.deps.buildAndEstimate).toHaveBeenCalledTimes(estimateId ? 0 : 1)
 			expect(h.proveAndSend).not.toHaveBeenCalled()
 		})
 

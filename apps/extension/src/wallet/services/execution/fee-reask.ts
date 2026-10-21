@@ -95,13 +95,13 @@ export async function askFeeAgain(deps: FeeReaskDeps, ask: FeeReask): Promise<vo
 		deps.answers.drop(journalId)
 		throw err
 	}
-	deps.logDebug("queued send: fee above its cap, asking again")
+	deps.logDebug("send: fee above the agreed figure, asking again")
 	ask.onAsked?.()
 	deps.beginQueuedWait(journalId)
 	const result = await answer.finally(() => deps.endQueuedWait(journalId))
 	if (result === "aborted") throw new JobCancelledSentinel(journalId)
 	if (result === "expired") {
-		deps.logDebug("queued send: unanswered at its deadline, cancelled")
+		deps.logDebug("send: unanswered at its deadline, cancelled")
 		await moveOwn(deps, journalId, controller, { stage: "cancelled" })
 		throw new JobCancelledSentinel(journalId)
 	}
