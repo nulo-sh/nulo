@@ -179,13 +179,14 @@ const spokenName = (entry: { row: Row; section: SectionKey | "any" }) => {
 	justify-self: center;
 }
 
-/* Below the popup's width a contract's name, and the heading's "Contract", take their own line above
- * the marks, since the six mark columns leave a name no room. The head and every row share one grid's
- * columns, so each mark sits under its glyph, and a column narrows to its mark before the view would. */
+/* Below the popup's width a name, and the heading's "Contract", take their own line above the marks,
+ * since the six mark columns leave it no room. The head and every row share one grid's columns, so
+ * each mark stays under its glyph at the right, and a mark column shrinks to 15 px before the table
+ * overflows. */
 @media (width < 359px) {
 	.table {
 		display: grid;
-		grid-template-columns: repeat(6, minmax(15px, 26px)) 14px;
+		grid-template-columns: minmax(0, 1fr) repeat(6, minmax(15px, 26px)) 14px;
 		column-gap: 4px;
 	}
 
@@ -206,6 +207,12 @@ const spokenName = (entry: { row: Row; section: SectionKey | "any" }) => {
 	.grid > .address,
 	.head > span:first-child {
 		grid-column: 1 / -1;
+	}
+
+	.grid > .name + *,
+	.grid > .address + *,
+	.head > span:first-child + * {
+		grid-column-start: 2;
 	}
 }
 
