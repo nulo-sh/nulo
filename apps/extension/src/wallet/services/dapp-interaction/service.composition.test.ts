@@ -19,6 +19,7 @@ import { ExecutionService } from "@/wallet/services/execution/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { WindowManager } from "@/wallet/services/window-manager/window-manager"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import { DappInteractionService } from "./service"
 import type { DappInteraction } from "./spec"
 
@@ -68,6 +69,7 @@ async function makeHarness() {
 				return { id: "p1" }
 			},
 			getProfiles: async () => [{ id: "p1" }],
+			...(await rowKeysForEveryProfile()),
 			refreshSession: async () => {},
 			captureExecutionFence: async () => ({ profileId: "p1", epoch: 0 }),
 		}),

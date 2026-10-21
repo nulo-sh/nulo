@@ -164,6 +164,7 @@ function makeHarness(rows: OperationRecord[] = [failedRow()]) {
 			return { profileId: session.profileId, epoch: 0, session: session.serial }
 		}),
 		isFenceLive: (fence: ExecutionFence) => session?.serial === fence.session && session.profileId === fence.profileId,
+		onRowKeysReady: new EventHandler<string>(),
 	}
 	const getTxReceipt = vi.fn(async (_hash: { toString(): string }): Promise<unknown> => pending())
 	const getBlockData = vi.fn(async (_tag: string): Promise<unknown> => finalizedAt(EXPIRY.timestamp + 1))

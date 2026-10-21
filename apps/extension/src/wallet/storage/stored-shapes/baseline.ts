@@ -198,7 +198,7 @@ export async function readStored(name: StoredShapeName, area: MinimalStorageArea
 	if (shape.engine) throw new Error(`${name} is the engine's own state: it has no goldens`)
 	const keys = shape.sealed ? await goldenKeysFor((await area.get(key))[key]) : () => undefined
 	if (shape.authenticated) return (await macStorage(area, keys)).get(idOf(shape, key))
-	if (shape.sealed) return sealedEntityStorage(name as SealedStoreName, area, keys).get(idOf(shape, key))
+	if (shape.sealed) return (await sealedEntityStorage(name as SealedStoreName, area, keys).readStorageId(idOf(shape, key)))?.row
 	const store = name in STORES ? STORES[name as keyof typeof STORES] : undefined
 	if (shape.read === "codec") {
 		if (store) return entityStorage(name as CodecStoreName, area).get(idOf(shape, key))
@@ -246,7 +246,9 @@ async function sealGoldens(goldens: readonly Golden[]): Promise<Golden[]> {
 			const keys = await goldenRowKeys(row.profileId)
 			const area = new MemoryStorageArea()
 			await sealedEntityStorage(golden.shape as SealedStoreName, area, () => keys).set(idOf(shape, golden.key), row as never)
-			return { ...golden, value: JSON.parse(area.data.get(golden.key) as string) as Json }
+			// A keyed root stores the row under its keyed id, not the natural key it was authored at.
+			const [[key, value]] = [...area.data]
+			return { ...golden, key, value: JSON.parse(value as string) as Json }
 		}),
 	)
 }

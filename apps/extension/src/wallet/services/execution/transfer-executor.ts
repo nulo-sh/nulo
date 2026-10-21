@@ -129,7 +129,7 @@ export interface TransferExecutorDeps {
 	chainTip: Pick<ChainTipGate, "unconfirmed" | "wait">
 	/** The validated row a build pays with: owned, with its protocol addresses derived even on a cold worker. */
 	getFpcImpl(fpcId: string): Promise<Fpc>
-	getTransactions(account: string): Promise<Tx[]>
+	transactionsOf(account: string, profileId: string): Promise<Tx[]>
 	getActiveProfile(): Promise<ProfileInfo | undefined>
 	captureExecutionFence(): Promise<ExecutionFence>
 	assertFence(fence: ExecutionFence): Promise<void>
@@ -188,12 +188,13 @@ const reusable = (feeSettings: FeeSettings): boolean => feeSettings.paymentMetho
 export class TransferExecutor {
 	public constructor(private readonly deps: TransferExecutorDeps) {}
 
-	/** The account's line this transfer joins, and the keys it holds there (`transfer-sequence-keys.ts`). */
-	public async sequence(req: TransferRequest): Promise<TransferSequence> {
+	/** The account's line this transfer joins, and the keys it holds there (`transfer-sequence-keys.ts`),
+	 *  read from the history of the profile it is sent from. */
+	public async sequence(req: TransferRequest, profileId: string): Promise<TransferSequence> {
 		const { chainId } = await this.deps.getNetwork(req.networkId)
 		const [fpc, history] = await Promise.all([
 			this.payingFpc(req.feeSettings),
-			this.deps.getTransactions(req.accountAddress).then((txs) => txs.filter((tx) => tx.chainId === chainId)),
+			this.deps.transactionsOf(req.accountAddress, profileId).then((txs) => txs.filter((tx) => tx.chainId === chainId)),
 		])
 		const feeSpender = feeSpenderOf(fpc, chainId)
 		const keys = transferSequenceKeys({
@@ -254,7 +255,7 @@ export class TransferExecutor {
 		try {
 			// The ticket's place in line is taken before the row exists, so the row's first stage says
 			// whether it waits. Fail closed here, inside the try: a transfer with no durable record never runs.
-			const sequence = await this.sequence(req)
+			const sequence = await this.sequence(req, fence.profileId)
 			const held: TransferLine = { sequence, ticket: this.deps.sequencer.enter(sequence.scope, sequence.keys) }
 			line = held
 			const queued =
@@ -528,7 +529,7 @@ export class TransferExecutor {
 				const fpc = await this.payingFpc(req.feeSettings)
 				if (feeSpenderOf(fpc, line.sequence.scope.chainId) !== line.sequence.feeSpender) {
 					release()
-					await this.reenter(req, line)
+					await this.reenter(req, line, fence.profileId)
 					continue
 				}
 				if (queued) await this.claim(journalId, controller, requeued)
@@ -541,8 +542,8 @@ export class TransferExecutor {
 	}
 
 	/** Takes a new place in line under the keys the request gives now, within the first ticket's deadline. */
-	private async reenter(req: TransferRequest, line: TransferLine): Promise<void> {
-		const next = await this.sequence(req)
+	private async reenter(req: TransferRequest, line: TransferLine, profileId: string): Promise<void> {
+		const next = await this.sequence(req, profileId)
 		const { deadline } = line.ticket
 		line.ticket.release()
 		line.sequence = next

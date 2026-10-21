@@ -13,8 +13,8 @@ import type { ExecutionFence, ProfileDeletionState } from "@/wallet/services/pro
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { StepContent, type WrappedTask } from "@/wallet/services/task/service"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
-import type { EntityStorage } from "@/wallet/storage"
-import { entityStorage } from "@/wallet/storage/stores"
+import type { Located, SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { Lock, sleep } from "@/wallet/utils"
 import type { PriorityLevel } from "@nulo/wallet-bridge"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
@@ -78,7 +78,8 @@ export type AddTransactionInput = {
 	priorityLevel?: PriorityLevel
 	/** See {@link Tx.feeChoice}. */
 	feeChoice?: FeeChoice
-	fence?: ExecutionFence
+	/** The execution's own fence: the row's profile, and the deletion epoch its write is checked against. */
+	fence: ExecutionFence
 	/** Owning network row id. Together with the fence's profile this is the
 	 *  row's activity scope — without it, two profiles holding the same
 	 *  address on one chain are indistinguishable in history. */
@@ -93,7 +94,14 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	public readonly onTransactionUpdated = new EventHandler<Tx>()
 	public readonly onTransactionDeleted = new EventHandler<Tx>()
 
-	private readonly txs: EntityStorage<Tx>
+	/**
+	 * Sealed at rest, keyed per profile: a row's storage id is its profile's keyed hash of the tx
+	 * hash, so no key names a hash and two profiles holding one hash hold two rows. A row with no
+	 * `profileId` (written by older restores) stays plaintext under its hash until a profile is
+	 * shown to be its only possible owner.
+	 */
+	private readonly txs: SealedEntityStorage<Tx>
+	/** Every watch below is keyed {@link watchKey}: a row's identity is its profile and its hash. */
 	private readonly pending = new Map<string, Tx>()
 	// Consecutive-DROPPED counter per pending hash. In-memory on purpose: a SW
 	// restart resets the streak, which only makes the debounce MORE conservative.
@@ -119,7 +127,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 
 	public constructor(logger: ILogger, browserApi: BrowserApi) {
 		super(TRANSACTION_SERVICE_NAME, logger)
-		this.txs = entityStorage("txs", browserApi.storage.local)
+		this.txs = sealedEntityStorage("txs", browserApi.storage.local, (profileId) => this.profileService.rowKeys(profileId))
 	}
 
 	protected async init(services: ServiceCollection) {
@@ -140,27 +148,99 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			for (const { chainId, address } of scopes) await this.purgeForAccounts([address], profileId, chainId)
 		})
 
-		// Only Pending rows and rows carrying the finality marker are re-armed: a restored row's
-		// `submittedEndpointUrl` is backup-controlled, so the worker never dials it for a row it did
-		// not transition itself (`restore` refuses Pending and strips the marker). `ambiguous` rows
-		// stay out, or a restart would poll them against whichever profile is now active.
-		const rows = (await this.txs.getValues()).filter((x) => !x.ambiguous)
-		for (const tx of rows.filter((x) => x.status === TxStatus.Pending)) this.pending.set(tx.hash, tx)
-		for (const tx of rows.filter((x) => x.awaitingFinality)) this.finalityWatch.set(tx.hash, tx)
+		// A profile's rows are armed once its keys are here: a plaintext row of a profile with none
+		// would be polled every tick, and its sealed commit refused, for the life of the worker.
+		for (const tx of await this.txs.getValues()) {
+			if (tx.profileId === undefined || this.profileService.rowKeys(tx.profileId)) this.arm(tx)
+		}
+		this.profileService.onRowKeysReady.add((profileId) => void this.onRowKeysReady(profileId))
 
 		this.runWorker()
 	}
 
-	public async getTransactions(account: string): Promise<Tx[]> {
-		return (await this.txs.getValues()).filter((x) => x.account === account)
+	/** Re-armed only for a Pending row or one carrying the finality marker: a restored row's
+	 *  `submittedEndpointUrl` is backup-controlled, so the worker never dials it for a row it did not
+	 *  transition itself (`restore` refuses Pending and strips the marker). `ambiguous` rows stay
+	 *  out, or a restart would poll them against whichever profile is now active. A row already
+	 *  watched keeps its watch, whose object an in-flight poll is fenced on. */
+	private arm(tx: Tx): void {
+		const key = watchKey(tx)
+		if (tx.ambiguous || this.pending.has(key) || this.finalityWatch.has(key) || this.droppedWatch.has(key)) return
+		if (tx.status === TxStatus.Pending) this.pending.set(key, tx)
+		else if (tx.awaitingFinality) this.finalityWatch.set(key, tx)
 	}
 
+	/** Seals the profile's plaintext rows, adopts the ownerless ones it alone can own, then arms its
+	 *  rows. Each step runs under the tx lock the purges hold; the arming checks the deletion epoch
+	 *  captured before it, so an arming a deletion overtook inserts nothing. */
+	private async onRowKeysReady(profileId: string): Promise<void> {
+		const epoch = this.deletionState.capture(profileId)
+		try {
+			await this.txs.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+			await this.adoptOwnerless(profileId)
+			await this.lock.withLock(async () => {
+				if (this.deletionState.isReserved(profileId) || !this.deletionState.isCurrent(profileId, epoch)) return
+				for (const tx of await this.txs.getValues()) if (tx.profileId === profileId) this.arm(tx)
+			})
+		} catch (error) {
+			this.logWarn("sealing or arming the profile's transactions failed; the next unlock retries", { error })
+		}
+	}
+
+	/** An ownerless row becomes the profile's when the profile holds its account on its chain and no
+	 *  other profile can own it. It is re-armed under its new identity: the old watch's object names
+	 *  no profile, and a commit from it would write the plaintext row back. */
+	private async adoptOwnerless(profileId: string): Promise<void> {
+		const owned = new Set((await this.accountService.getAccountsRaw(profileId)).map((a) => accountScopeKey(a.chainId, a.address)))
+		for (const { located, text } of await this.ownerlessRows()) {
+			const row = parseOwnerlessTx(text)
+			if (!row || row.ambiguous || !owned.has(accountScopeKey(row.chainId, row.account))) continue
+			await this.lock.withLock(async () => {
+				if ((await this.ownership([row.account], profileId)) !== "sole") return
+				if (!(await this.txs.adoptOwnerless(located.naturalId, text, profileId))) return
+				this.unwatch(watchKey(row))
+				const adopted = await this.txs.get(located.naturalId, profileId)
+				if (adopted) this.arm(adopted)
+			})
+		}
+	}
+
+	private async ownerlessRows(): Promise<Array<{ located: Located; text: string }>> {
+		const raw = new Map(await this.txs.rawStringEntries())
+		return (await this.txs.entries()).flatMap(({ located }) => {
+			const text = raw.get(located.storageId)
+			return !located.sealed && located.owner === undefined && text !== undefined ? [{ located, text }] : []
+		})
+	}
+
+	/** The active profile's rows of `account` (see {@link transactionsOf}); locked, none. */
+	public async getTransactions(account: string): Promise<Tx[]> {
+		const active = await this.activeProfileId()
+		return active ? this.transactionsOf(account, active) : []
+	}
+
+	/** The active profile's row of `hash`, or its ownerless one. */
 	public async getTransaction(hash: string): Promise<Tx> {
-		const tx = await this.txs.get(hash)
+		const active = await this.activeProfileId()
+		const tx = active ? await this.txs.get(hash, active) : undefined
 		if (!tx) {
 			throw new Error("unknown hash")
 		}
 		return tx
+	}
+
+	/** The rows of `account` that `profileId` reads: its own, and the ownerless ones it may own. A
+	 *  read that named no profile would answer with whichever profiles' keys this worker holds. */
+	public async transactionsOf(account: string, profileId: string): Promise<Tx[]> {
+		return (await this.txs.getValues()).filter((x) => x.account === account && (x.profileId ?? profileId) === profileId)
+	}
+
+	private async activeProfileId(): Promise<string | undefined> {
+		try {
+			return (await this.profileService.getActiveProfile())?.id
+		} catch {
+			return undefined
+		}
 	}
 
 	/** Synchronous read of in-memory pending txs for an account. Used by
@@ -204,12 +284,10 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			// Both checks are bound to the CAPTURED profileId: a successor that reused
 			// the deterministic address owns a DIFFERENT profileId, so getAccount
 			// returns undefined here even after the epoch is released.
-			if (fence) {
-				this.deletionState.assertCurrent(fence.profileId, fence.epoch)
-				const owner = await this.accountService.getAccount(fence.profileId, chainId, account)
-				if (!owner) throw new Error("stale execution owner — account no longer exists")
-			}
-			if (await this.txs.get(hash)) {
+			this.deletionState.assertCurrent(fence.profileId, fence.epoch)
+			const owner = await this.accountService.getAccount(fence.profileId, chainId, account)
+			if (!owner) throw new Error("stale execution owner — account no longer exists")
+			if (await this.txs.get(hash, fence.profileId)) {
 				throw new Error("duplicated hash")
 			}
 			const now = Date.now()
@@ -224,7 +302,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			const tx: Tx = {
 				origin,
 				chainId,
-				profileId: fence?.profileId,
+				profileId: fence.profileId,
 				networkId,
 				account,
 				calls,
@@ -241,9 +319,12 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 				...(feeChoice ? { feeChoice } : {}),
 				submittedEndpointUrl,
 			}
-			await this.txs.set(tx.hash, tx)
+			// Sealed first, then the epoch checked again and the row dispatched with no await between.
+			const write = await this.txs.prepare(tx.hash, tx)
+			this.deletionState.assertCurrent(fence.profileId, fence.epoch)
+			await write.commit()
 			this.emit("onTransactionAdded", tx)
-			this.pending.set(tx.hash, tx)
+			this.pending.set(watchKey(tx), tx)
 			return tx
 		})
 	}
@@ -262,7 +343,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	 * {@link TxConfirmationTimeoutError} (the tx may still mine — the copy
 	 * says "not confirmed", never "failed").
 	 */
-	public async waitForTx(txHash: string, parentTask?: WrappedTask, timeoutMs = 120_000) {
+	public async waitForTx(txHash: string, profileId: string, parentTask?: WrappedTask, timeoutMs = 120_000) {
 		let waitForTxTask: WrappedTask | undefined
 		try {
 			waitForTxTask = parentTask?.startSubtask(new StepContent("Waiting for transaction"))
@@ -284,7 +365,8 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		}
 		const deadline = Date.now() + timeoutMs
 		try {
-			while (this.pending.has(txHash)) {
+			const key = watchKey({ profileId, hash: txHash })
+			while (this.pending.has(key)) {
 				if (Date.now() >= deadline) {
 					const message = `Transaction not confirmed within ${Math.round(timeoutMs / 1000)}s — it may still complete`
 					settle("fail", message)
@@ -311,9 +393,10 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	 * Decides the fate of rows written before transactions carried a profile:
 	 * with a single owner they are unambiguously this profile's, so deletion is
 	 * safe; with more than one they could belong to either, and removing them
-	 * would destroy the surviving profile's history.
+	 * would destroy the surviving profile's history. `unknown` while another
+	 * profile's account row cannot be read: an owner it hides would read as none.
 	 */
-	private async isSoleOwner(addresses: readonly string[], profileId: string): Promise<boolean> {
+	private async ownership(addresses: readonly string[], profileId: string): Promise<"sole" | "shared" | "unknown"> {
 		const owners = new Set<string>()
 		for (const address of addresses) {
 			for (const account of await this.accountService.getAccountsByAddress(address)) {
@@ -321,7 +404,8 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			}
 		}
 		owners.delete(profileId)
-		return owners.size === 0
+		if (owners.size > 0) return "shared"
+		return (await this.accountService.hasUnreadAccountsBesides(profileId)) ? "unknown" : "sole"
 	}
 
 	/** Awaited tx purge for a SET of accounts — called by the deletion coordinator
@@ -339,62 +423,70 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			// caller knows whose rows these are, a scoped row must match that
 			// profile; a row that names no profile is only safe to remove when this
 			// is the address's sole owner, and is otherwise left alone.
-			const soleOwner = profileId !== undefined ? await this.isSoleOwner(addresses, profileId) : true
-			const all = await this.txs.getValues()
-			const txs = all.filter((x) => {
+			const owner = profileId !== undefined ? await this.ownership(addresses, profileId) : "sole"
+			const all = await this.txs.entries()
+			const doomed = all.filter(({ row: x }) => {
 				if (!set.has(x.account) || !onChain(x.chainId)) return false
 				if (profileId === undefined) return true
 				if (x.profileId !== undefined) return x.profileId === profileId
-				return soleOwner
+				return owner === "sole"
 			})
 			// An unscoped row shared with another profile is neither deleted (that
 			// would destroy the survivor's history) nor left plain, since deleting
 			// this profile makes the survivor the only owner and the row would
-			// silently become theirs. Mark it instead, permanently.
-			if (profileId !== undefined && !soleOwner) {
-				for (const tx of all) {
+			// silently become theirs. Mark it instead, permanently. While an owner
+			// cannot be read, the row is left as it is.
+			if (profileId !== undefined && owner === "shared") {
+				for (const { row: tx } of all) {
 					if (!set.has(tx.account) || !onChain(tx.chainId) || tx.profileId !== undefined || tx.ambiguous) continue
 					// A marked row must leave every watch: one left watched would keep
 					// being polled AND let a later write (built from the pre-mark
 					// in-memory object) silently erase the `ambiguous` flag.
-					this.unwatch(tx.hash)
+					this.unwatch(watchKey(tx))
 					await this.txs.set(tx.hash, { ...tx, ambiguous: true })
 				}
 			}
+			// A row may sit in both forms while its plaintext twin awaits removal: both go, one event.
 			await purgeRows(
-				txs,
-				(tx) => {
-					this.unwatch(tx.hash)
-					return this.txs.delete(tx.hash)
+				groupByIdentity(doomed),
+				async ({ row, storageIds }) => {
+					this.unwatch(watchKey(row))
+					for (const storageId of storageIds) await this.txs.deleteStorageId(storageId)
 				},
-				(tx) => this.emit("onTransactionDeleted", tx),
+				({ row }) => this.emit("onTransactionDeleted", row),
 			)
 			// Raw second pass, same lock hold, mirroring the typed rules —
 			// a malformed row scoped to another profile is left; an UNSCOPED
 			// malformed row is deleted only under sole ownership (it cannot be
 			// marked ambiguous like a typed row — rewriting bytes the codec cannot
 			// read would launder garbage into a "valid" write — so the non-sole
-			// case leaves it, fail-closed and codec-hidden as before).
+			// case leaves it, fail-closed and codec-hidden as before). An envelope
+			// names no account, so this pass never matches one: a profile's
+			// deletion removes its unopened sealed rows by the envelope's profile.
 			await purgeMalformedRows(
-				this.txs,
+				{
+					rawStringEntries: () => this.txs.rawStringEntries(),
+					rawValue: (id) => this.txs.rawValue(id),
+					delete: (id) => this.txs.deleteStorageId(id),
+				},
 				(raw) => {
 					if (typeof raw.account !== "string" || !set.has(raw.account) || !onChain(raw.chainId)) return false
 					if (profileId === undefined) return true
 					if (raw.profileId !== undefined) return raw.profileId === profileId
-					return soleOwner
+					return owner === "sole"
 				},
 				(id) => this.logDebug(`purged malformed tx row ${id}`),
 			)
 		})
 	}
 
-	private unwatch(hash: string): void {
-		this.pending.delete(hash)
-		this.droppedStreaks.delete(hash)
-		this.droppedWatch.delete(hash)
-		this.droppedNextCheckAt.delete(hash)
-		this.finalityWatch.delete(hash)
-		this.finalityNextCheckAt.delete(hash)
+	private unwatch(key: string): void {
+		this.pending.delete(key)
+		this.droppedStreaks.delete(key)
+		this.droppedWatch.delete(key)
+		this.droppedNextCheckAt.delete(key)
+		this.finalityWatch.delete(key)
+		this.finalityNextCheckAt.delete(key)
 	}
 
 	private async runWorker() {
@@ -424,14 +516,14 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	private collectDroppedDue(): Tx[] {
 		const now = Date.now()
 		const due: Tx[] = []
-		for (const [hash, tx] of this.droppedWatch) {
+		for (const [key, tx] of this.droppedWatch) {
 			if (now - tx.updatedAt > DROPPED_RESURRECTION_WINDOW_MS) {
-				this.droppedWatch.delete(hash)
-				this.droppedNextCheckAt.delete(hash)
+				this.droppedWatch.delete(key)
+				this.droppedNextCheckAt.delete(key)
 				continue
 			}
-			if ((this.droppedNextCheckAt.get(hash) ?? 0) <= now) {
-				this.droppedNextCheckAt.set(hash, now + DROPPED_RECHECK_INTERVAL_MS)
+			if ((this.droppedNextCheckAt.get(key) ?? 0) <= now) {
+				this.droppedNextCheckAt.set(key, now + DROPPED_RECHECK_INTERVAL_MS)
 				due.push(tx)
 			}
 		}
@@ -441,9 +533,9 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	private collectFinalityDue(): Tx[] {
 		const now = Date.now()
 		const due: Tx[] = []
-		for (const [hash, tx] of this.finalityWatch) {
-			if ((this.finalityNextCheckAt.get(hash) ?? 0) > now) continue
-			this.finalityNextCheckAt.set(hash, now + FINALITY_READ_INTERVAL_MS)
+		for (const [key, tx] of this.finalityWatch) {
+			if ((this.finalityNextCheckAt.get(key) ?? 0) > now) continue
+			this.finalityNextCheckAt.set(key, now + FINALITY_READ_INTERVAL_MS)
 			due.push(tx)
 		}
 		return due
@@ -455,10 +547,11 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	 *  instance — an in-flight poll racing a purge would otherwise recreate the map entry
 	 *  the purge just cleaned. Any non-(Dropped-over-Pending) observation resets the streak. */
 	private trackDroppedStreak(tx: Tx, status: TxStatus): "bail" | "proceed" {
+		const key = watchKey(tx)
 		if (status === TxStatus.Dropped && tx.status === TxStatus.Pending) {
-			if (this.pending.get(tx.hash) !== tx) return "bail"
-			const streak = (this.droppedStreaks.get(tx.hash) ?? 0) + 1
-			this.droppedStreaks.set(tx.hash, streak)
+			if (this.pending.get(key) !== tx) return "bail"
+			const streak = (this.droppedStreaks.get(key) ?? 0) + 1
+			this.droppedStreaks.set(key, streak)
 			const ageMs = Date.now() - tx.createdAt
 			if (ageMs < DROPPED_GRACE_MS || streak < DROPPED_CONFIRMATIONS) {
 				this.logDebug(
@@ -468,7 +561,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			}
 			return "proceed"
 		}
-		this.droppedStreaks.delete(tx.hash)
+		this.droppedStreaks.delete(key)
 		return "proceed"
 	}
 
@@ -520,7 +613,8 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		// (ABA) — a stale poll's `has(hash)` would pass and overwrite it, while
 		// `get(hash) !== tx` cannot.
 		await this.lock.withLock(async () => {
-			if (this.pending.get(tx.hash) !== tx && this.droppedWatch.get(tx.hash) !== tx) return
+			const key = watchKey(tx)
+			if (this.pending.get(key) !== tx && this.droppedWatch.get(key) !== tx) return
 			applyReceipt(tx, receipt)
 			await this.commit(tx)
 			this.logDebug(`Tx ${tx.hash.slice(0, 8)} ${receipt.status}`)
@@ -535,7 +629,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	private async checkFinality(tx: Tx): Promise<void> {
 		const { submittedEndpointUrl: url, block } = tx
 		if (!url || !block) return
-		const watched = () => this.finalityWatch.get(tx.hash) === tx
+		const watched = () => this.finalityWatch.get(watchKey(tx)) === tx
 		const node = await this.networkService.getSingleAttemptNodeForUrl(url)
 		const proof = await proveFinal(node, tx.hash, { block: block.number, hash: block.hash }, watched)
 		if (proof.kind === "unsettled" || proof.kind === "unknown") return
@@ -558,15 +652,16 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		tx.awaitingFinality = awaitsFinality(tx) || undefined
 		await this.txs.set(tx.hash, tx)
 		this.emit("onTransactionUpdated", tx)
-		this.unwatch(tx.hash)
+		const key = watchKey(tx)
+		this.unwatch(key)
 		if (tx.status === TxStatus.Pending) {
-			this.pending.set(tx.hash, tx)
+			this.pending.set(key, tx)
 		} else if (tx.status === TxStatus.Dropped) {
-			this.droppedWatch.set(tx.hash, tx)
-			this.droppedNextCheckAt.set(tx.hash, now + DROPPED_RECHECK_INTERVAL_MS)
+			this.droppedWatch.set(key, tx)
+			this.droppedNextCheckAt.set(key, now + DROPPED_RECHECK_INTERVAL_MS)
 		} else if (tx.awaitingFinality) {
-			this.finalityWatch.set(tx.hash, tx)
-			this.finalityNextCheckAt.set(tx.hash, now + FINALITY_READ_INTERVAL_MS)
+			this.finalityWatch.set(key, tx)
+			this.finalityNextCheckAt.set(key, now + FINALITY_READ_INTERVAL_MS)
 		}
 	}
 
@@ -583,7 +678,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		for (const n of networks) {
 			const accounts = await this.accountService.getAccounts(profile.id, n.chainId)
 			for (const acc of accounts) {
-				const mine = (await this.getTransactions(acc.address)).filter((tx) => exportableTx(tx, profile.id, n.chainId))
+				const mine = (await this.transactionsOf(acc.address, profile.id)).filter((tx) => exportableTx(tx, profile.id, n.chainId))
 				txs.push(...mine.map(unmarked))
 			}
 		}
@@ -613,8 +708,9 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 				if (tx.status === TxStatus.Pending) {
 					throw new Error("restored pending transaction rejected")
 				}
-				// Create-only: `EntityStorage.set` upserts by `hash` on a root every profile shares.
-				if (await this.txs.contains(tx.hash)) {
+				// Create-only within the destination profile, against both forms of its row and an
+				// ownerless row of the same hash, which may be this profile's own.
+				if (await this.txs.contains(tx.hash, profileId)) {
 					throw new Error("transaction already exists (hash collision)")
 				}
 				// Validate + canonicalize the persisted shape (mirror the read
@@ -623,8 +719,9 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 				if (!owned.has(accountScopeKey(row.chainId, row.account))) {
 					throw new Error("transaction names no account of the restored profile")
 				}
+				const write = await this.txs.prepare(row.hash, row)
 				assertRestoreEpoch(deletion, epochs, profileId)
-				await this.txs.set(row.hash, row)
+				await write.commit()
 				return row
 			})
 		})
@@ -664,4 +761,30 @@ function awaitsFinality(tx: Tx): boolean {
 function unmarked(tx: Tx): Tx {
 	const { awaitingFinality: _, ...row } = tx
 	return row
+}
+
+/** A row's identity: its profile and its hash. An ownerless row has no profile part. */
+function watchKey(tx: Pick<Tx, "profileId" | "hash">): string {
+	return `${tx.profileId ?? ""}|${tx.hash}`
+}
+
+/** One entry per row identity, the sealed copy first, with every storage id the row sits at. */
+function groupByIdentity(entries: ReadonlyArray<{ located: Located; row: Tx }>): Array<{ row: Tx; storageIds: string[] }> {
+	const groups = new Map<string, { row: Tx; storageIds: string[] }>()
+	for (const { located, row } of [...entries].sort((a, b) => Number(b.located.sealed) - Number(a.located.sealed))) {
+		const group = groups.get(watchKey(row))
+		if (group) group.storageIds.push(located.storageId)
+		else groups.set(watchKey(row), { row, storageIds: [located.storageId] })
+	}
+	return [...groups.values()]
+}
+
+/** The ownerless row `text` holds, read through the codec, or `undefined`. */
+function parseOwnerlessTx(text: string): Tx | undefined {
+	try {
+		const parsed = TxSchema.safeParse(JSON.parse(text))
+		return parsed.success && parsed.data.profileId === undefined ? parsed.data : undefined
+	} catch {
+		return undefined
+	}
 }

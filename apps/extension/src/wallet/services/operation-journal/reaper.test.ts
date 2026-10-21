@@ -19,6 +19,7 @@ import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { JOURNAL_REAPER_ALARM_NAME, JournalReaper } from "./reaper"
+import { profileKeysStub } from "../composition-harness"
 import { OperationJournalService } from "./service"
 import type { NewOperationInput } from "./spec"
 
@@ -34,6 +35,7 @@ async function started(): Promise<{ api: FakeBrowserApi; service: OperationJourn
 	const logger = new LoggerStore(new ConfigStore())
 	const service = new OperationJournalService(logger, api)
 	const services = new ServiceCollection()
+	services.add(await profileKeysStub("profile-a", "profile-b", "p1", "p2"))
 	services.add(service)
 	await services.start()
 	return { api, service, logger }

@@ -210,11 +210,11 @@ function makeTransactionStub(txs: { hash: string; account: string; chainId: numb
 		name: "transaction",
 		dependencies: [],
 		onTransactionAdded: eh<{ hash: string; account: string; chainId: number; calls: unknown[] }>(),
-		// Real surface: `getTransactions(accountAddress)` returns all txs for
-		// the address ACROSS profiles and networks; the service must filter to
-		// the scanned scope locally. Pinning the argspec here keeps the test
+		// Real surface: `transactionsOf(accountAddress, profileId)` returns the
+		// profile's txs for the address across networks, plus any row naming no
+		// profile; the service must filter to the scanned scope locally. Pinning the argspec here keeps the test
 		// honest with what scanContract calls.
-		getTransactions: vi.fn().mockImplementation(async (account: string) => {
+		transactionsOf: vi.fn().mockImplementation(async (account: string) => {
 			return txs.filter((t) => t.account === account)
 		}),
 		async start() {},
@@ -5745,7 +5745,7 @@ type CollaboratorMap = Record<string, (...args: unknown[]) => Promise<unknown>>
 const RECEIPT_COLLABORATORS: Array<[keyof ReceiptFixture | "repo", string, string]> = [
 	["note", "getNotesRaw", "notes"],
 	["token", "getTokensRaw", "tokens"],
-	["transaction", "getTransactions", "outgoing"],
+	["transaction", "transactionsOf", "outgoing"],
 	["journal", "getOperations", "inflight"],
 	["repo", "getRecord", "getRecord"],
 	["repo", "getTrust", "getTrust"],
@@ -6057,7 +6057,7 @@ describe("IncomingTransferService — a note's block time is read outside the se
 
 	test("a locked commit whose own-send read disagrees with the one before the lock reads no block time", async () => {
 		const f = await bootNoteReceipt("trusted")
-		f.transaction.getTransactions
+		f.transaction.transactionsOf
 			.mockResolvedValueOnce([{ hash: "0xtx1", account: "0xa", chainId: 1, profileId: "p1", networkId: "n1" }])
 			.mockRejectedValueOnce(new Error("transactions unavailable"))
 		await scan(f.service)

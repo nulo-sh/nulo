@@ -64,7 +64,7 @@ function makeFacade(rows: Tx[] = [], feeSpender?: string) {
 		profileService: { getActiveProfile: async () => ({ id: "p1" }) },
 		lane,
 		estimateCancel: { admit, settle: vi.fn() },
-		transactionService: { getTransactions: vi.fn(async () => rows) },
+		transactionService: { transactionsOf: vi.fn(async () => rows) },
 	}) as ExecutionService
 	const estimateWith = (feeSettings: FeeSettings) =>
 		facade.estimateTransferFee("net-1", "0xme", 1, TOKEN_CONTRACT, TransferType.Private, "0xyou", 5n, feeSettings, "tok-1")
