@@ -141,6 +141,8 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 - I-O1 (low–medium, demonstrated by mutation) the order test held only recorded files, so dropping the sort of unknown files passed. It now adds two unknown files out of order, and that mutation fails it. Vitest's glob order is a crawl order, so this sort is what keeps a new file in exactly one shard.
 - I-O2 (low) three lines still said a plain local `--shard` reproduces CI's shard (README:21, the README's reproduction block, `docker-ci-like.sh`). Locally the whole suite is split, not CI's pool. All three are corrected.
 
+**Implementation round 2, Codex (resumed): clean.** It verified both fixes, re-ran the parser tests and the unknown-file mutation, and found no regression. The loop converged.
+
 ## Seeds (drafts, not run: the orchestrator owns execution)
 
 ```

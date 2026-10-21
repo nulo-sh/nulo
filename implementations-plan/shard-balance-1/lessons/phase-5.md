@@ -9,3 +9,7 @@
   is what keeps a new file in exactly one shard when runners glob in different orders.
 - Mutation checks run on the sequencer: shard index ignored, absolute-path keys, shortest-first
   order, unsorted unknown files. Each now fails at least one pin.
+
+## Fix loop, round 2 (2026-10-21)
+
+- Resumed Codex session: clean. The loop converged after two rounds.

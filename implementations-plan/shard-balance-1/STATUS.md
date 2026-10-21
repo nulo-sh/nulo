@@ -10,3 +10,4 @@
 - 2026-10-21 A1 phase 3 green: shard-sequencer tests 15/15 (three mutations each caught), lint, typecheck:all, test, test:all, test:ci-gating 650/650; local smoke shard 2/3 (Chrome, armed build, retry 0) 21 passed + 2 skipped, its 23 files exactly `assignShards`' shard 2.
 - 2026-10-21 A1 phase 4 green: docs and workflow comments corrected; lint, lint:actions, the SHA-1 grep (one unrelated hit, CI.md:82's STUB tests).
 - 2026-10-21 fix loop round 1: Codex findings (2, adopted), Opus findings (3: 1 duplicate, 2 adopted); fixes committed, Codex resumed.
+- 2026-10-21 fix loop round 2: Codex clean (converged).
