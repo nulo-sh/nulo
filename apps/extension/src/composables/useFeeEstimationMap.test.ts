@@ -190,19 +190,18 @@ describe("useFeeEstimationMap — remote cancellation + handoff", () => {
 		await vi.advanceTimersByTimeAsync(500)
 		await flushAll()
 		let settled = false
-		const first = Promise.resolve(composable.dispose())
-		void first.then(() => {
+		const first = composable.dispose()
+		void Promise.resolve(first).then(() => {
 			settled = true
 		})
 		await flushAll()
 		expect(cancelRemote).toHaveBeenCalledTimes(2)
 		expect(settled).toBe(false)
+		expect(composable.dispose()).toBe(first)
 		release()
 		await flushAll()
 		expect(settled).toBe(true)
-		const again = composable.dispose()
-		expect(again).toBeInstanceOf(Promise)
-		expect(composable.dispose()).toBe(again)
+		expect(first).toBeInstanceOf(Promise)
 		expect(cancelRemote).toHaveBeenCalledTimes(2)
 		scope.stop()
 	})

@@ -15,6 +15,7 @@ import { JobCancelledError, walletErrorFromPayload } from "@nulo/extension-messa
 import { CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { flushPromises, mount } from "@vue/test-utils"
 import { nextTick, ref, type Ref } from "vue"
+import { END_ACK_TIMEOUT_MS } from "@/composables/useDappApprovalWindow"
 import {
 	approval,
 	beforeunloadAdds,
@@ -649,35 +650,44 @@ describe("execute window — approval envelope", () => {
 		expect(feeMapInstances[1]!.api.handoffAll).toHaveBeenCalledTimes(1)
 	})
 
-	test("an accepted approval ends both maps' unfinished estimates and closes only once the worker has taken the cancels", async () => {
-		resolvable()
-		previewTokenMetadataMock.mockResolvedValueOnce(preview)
-		approval.payloadToLoad = payload()
-		w = factory()
-		await completeInit()
-		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
-		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj" } })
-		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
-		const releases: Array<() => void> = []
-		for (const { api } of feeMapInstances) {
-			api.dispose.mockImplementationOnce(() => {
-				callLog.push("dispose")
-				return new Promise<void>((resolve) => releases.push(resolve))
-			})
-		}
-		approveInteractionMock.mockImplementationOnce(async () => {
-			callLog.push("approveInteraction")
-		})
-		const approving = vm.approve()
-		await flushPromises()
-		expect(callLog.filter((e) => e === "approveInteraction" || e === "dispose")).toEqual(["approveInteraction", "dispose", "dispose"])
-		releases[0]!()
-		await flushPromises()
-		expect(windowsRemoveMock).not.toHaveBeenCalled()
-		releases[1]!()
-		await approving
-		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
-	})
+	test.each([
+		[0, 1],
+		[1, 0],
+	])(
+		"an accepted approval ends both maps' unfinished estimates and closes only once both have answered (map %i first)",
+		async (first, second) => {
+			resolvable()
+			previewTokenMetadataMock.mockResolvedValueOnce(preview)
+			approval.payloadToLoad = payload()
+			w = factory()
+			await completeInit()
+			const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
+			vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj" } })
+			feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
+			const releases: Array<() => void> = []
+			for (const { api } of feeMapInstances) {
+				api.dispose.mockImplementationOnce(() => {
+					callLog.push("dispose")
+					return new Promise<void>((resolve) => releases.push(resolve))
+				})
+			}
+			let accept: () => void = () => {}
+			approveInteractionMock.mockImplementationOnce(() => new Promise<undefined>((resolve) => (accept = () => resolve(undefined))))
+			const approving = vm.approve()
+			await flushPromises()
+			expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+			expect(callLog).not.toContain("dispose")
+			accept()
+			await flushPromises()
+			expect(callLog.filter((e) => e === "dispose")).toHaveLength(2)
+			releases[first]!()
+			await flushPromises()
+			expect(windowsRemoveMock).not.toHaveBeenCalled()
+			releases[second]!()
+			await approving
+			expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
+		},
+	)
 
 	test.each([0, 1])("map %i's remote cancel settles only once the worker has answered it", async (i) => {
 		w = factory()
@@ -694,6 +704,33 @@ describe("execute window — approval envelope", () => {
 		answer()
 		await flushPromises()
 		expect(settled).toBe(true)
+		cancelEstimateMock.mockRejectedValueOnce(new Error("port closed"))
+		await expect(Promise.resolve(feeMapInstances[i]!.opts.cancelRemote?.("tok-2"))).resolves.toBeUndefined()
+	})
+
+	test("an accepted approval whose cancels never answer still closes the window at the end bound", async () => {
+		resolvable()
+		previewTokenMetadataMock.mockResolvedValueOnce(preview)
+		approval.payloadToLoad = payload()
+		w = factory()
+		await completeInit()
+		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
+		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj" } })
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
+		for (const { api } of feeMapInstances) api.dispose.mockImplementationOnce(() => new Promise<void>(() => {}))
+		const unloadRemovesBefore = beforeunloadRemoves()
+		vi.useFakeTimers()
+		try {
+			const approving = vm.approve()
+			await vi.advanceTimersByTimeAsync(END_ACK_TIMEOUT_MS - 1)
+			expect(windowsRemoveMock).not.toHaveBeenCalled()
+			await vi.advanceTimersByTimeAsync(1)
+			await approving
+			expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
+			expect(beforeunloadRemoves()).toBeGreaterThan(unloadRemovesBefore)
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	test("a token whose details could not be read keeps Confirm disabled and approve sends nothing", async () => {

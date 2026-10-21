@@ -60,9 +60,9 @@ export interface UseDappApprovalWindowResult {
 	/** The unmount-hook body. The window calls this from its own unmount hook. */
 	dispose: () => void
 	closeWindow: (interactionCompleted?: boolean) => void
-	/** Sends what the wallet must take before the window goes (its end, or the cancels an approval
-	 *  owes) and closes the window once the wallet has taken it, the send failed, or
-	 *  {@link END_ACK_TIMEOUT_MS} passed. No unload repeats the end. */
+	/** Sends what the wallet must take before the window goes and closes the window once the wallet
+	 *  has taken it, the send failed, or {@link END_ACK_TIMEOUT_MS} passed. No unload repeats the
+	 *  window's end. */
 	endAndClose: (send: () => Promise<unknown>) => Promise<void>
 	/** Register on the profile service's `onActiveProfileChanged` (pre-mount, as before). */
 	onActiveProfileChanged: (profile?: ProfileInfo) => void

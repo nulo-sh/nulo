@@ -20,8 +20,7 @@ export interface UseFeeEstimationMapOptions<TKey extends string | number, TParam
 	 * Receives the key + the error so logs can pinpoint which op failed.
 	 */
 	onError?: (key: TKey, err: unknown) => void
-	/** Remote cancel — see `useFeeEstimation`'s doc. Only `dispose()` waits for a returned promise,
-	 *  which must never reject. */
+	/** Remote cancel; its contract is the engine's `cancelRemote`. */
 	cancelRemote?: (estimateToken: string) => unknown
 }
 
@@ -38,8 +37,8 @@ export interface UseFeeEstimationMapResult<TKey extends string | number, TParams
 	cancelAll: () => void
 	/**
 	 * Disarm cancellation for every key's COMPLETED estimate — call on
-	 * approve, BEFORE the window closes, so unmount cleanup cannot race the
-	 * fire-and-forget execution out of its stashed reuse entries. In-flight
+	 * approve, BEFORE disposing, so the disposal cannot evict the stashed
+	 * reuse entries the execution is about to consume. In-flight
 	 * estimates are deliberately left armed: their ids never reach the
 	 * approve payload, so handing them off would only orphan their eventual
 	 * stashes. Returns the handed-off token per key.

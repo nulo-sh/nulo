@@ -31,12 +31,11 @@ export interface FeeEstimationEngineOptions<TKey extends string | number, TParam
 	/** Called only for real errors, never for stale-counter or post-dispose settles. */
 	onError?: (key: TKey, err: unknown) => void
 	/**
-	 * Remote cancel. Invoked for a superseded or abandoned
-	 * token whose RPC actually started — a debounce that never fired needs no
-	 * remote cancel. Never invoked for handed-off tokens (ownership
-	 * transferred to the execution path, which is about to consume the
-	 * stashed estimate). Only `dispose()` waits for a returned promise, which
-	 * must never reject: every other path drops it.
+	 * Remote cancel. Invoked for a superseded or abandoned token whose RPC actually started — a
+	 * debounce that never fired needs no remote cancel. Never invoked for handed-off tokens
+	 * (ownership transferred to the execution path, which is about to consume the stashed
+	 * estimate). Only `dispose()` waits for a returned promise, which must never reject: every
+	 * other path drops it.
 	 */
 	cancelRemote?: (estimateToken: string) => unknown
 }
@@ -94,7 +93,7 @@ export function createFeeEstimationEngine<TKey extends string | number, TParams,
 		}
 	}
 
-	/** Remote-cancel every live token still owned for `key`; returns what each cancel returned. */
+	/** Remote-cancel every live token still owned for `key`. */
 	const cancelOwnedRemoteFor = (key: TKey): unknown[] => {
 		const flight = inflight.get(key)
 		flight?.abort.abort()
@@ -132,7 +131,7 @@ export function createFeeEstimationEngine<TKey extends string | number, TParams,
 
 		// Stale = disposed, or a newer schedule/cancel bumped this key's counter
 		// while our run was in flight. Every settle path re-checks it AFTER the
-		// awaited run, at the positions the pre-split callback checked.
+		// awaited run.
 		const isStale = () => disposed !== undefined || myCounter !== counters.get(key)
 		const settleSuccess = (r: TResult) => {
 			onResult(key, r)
