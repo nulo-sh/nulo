@@ -122,6 +122,7 @@ None. The arc changes dependency files only; no screen, copy or layout.
 
 - **Arc 1 review, round 1, Codex (gpt-6.1-sol high, session 01a15c4b, on the Phase 1 diff): `approve with fixes`, confidence high.** It found no dependency-file defect: six lockfile lines, every other entry byte-identical, one range per manifest, integrity matching the registry. Accepted: recon said all ten changed files sit under `dist/` (nine do, plus `package.json`) and omitted three bundled moves; both corrected (F8, recon).
 - **Arc 1 review, Opus (general-purpose, same diff): `approve with fixes`, confidence high.** Accepted: (2) the full bundled list (F8, adds `@vitejs/devtools`); (3) Phase 1's evidence recorded in `lessons/phase-1.md`; the Security line narrowed to vite's own route. Its (1) is out of this lane's scope and went to the orchestrator.
+- **Arc 1 review, round 2, Codex resumed: `approve`, confidence high.** "No remaining findings." The loop converged before the candidate was chosen.
 
 ## Delivery
 
