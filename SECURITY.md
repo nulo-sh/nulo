@@ -73,6 +73,18 @@ existing keys and profiles.
   - Forks repurposing this extension under a different domain MUST
     change BOTH the constant and the manifest entry atomically. There
     is no migration path for WebAuthn credentials.
+- **Row-seal labels, frame and AAD** — every sealed row (contacts, dApp
+  sessions) is `{ profileId, sealed }`, `sealed` being the AES-256-GCM frame
+  `[1 version byte = 1][12 byte IV][ciphertext ‖ tag]`, base64, that the
+  DEK-rooted imported-key boxes share (`packages/wallet-crypto/src/aes-gcm-frame.ts`).
+  Its key and the keyed-id HMAC key are HKDF-SHA256 over the 32-byte master,
+  salt the JSON `["nulo:row-seal:v1", profileId, pxeGeneration]`, info
+  `nulo:row-seal:aead:v1` and `nulo:row-seal:index:v1`; its AAD is the JSON
+  `["nulo:row:v1", root, storageKey, profileId]`
+  (`packages/wallet-crypto/src/row-seal.ts`). Pinned by V12 and the DEK-rooted
+  boxes by V13 (`apps/extension/src/wallet/crypto/key-vectors.test.ts`).
+  Changing any of them hides every sealed row of every profile, and the
+  pre-unlock migrator cannot re-seal: a change converts at unlock.
 - **The Schnorr account artifact** — vendored byte-exact at
   `packages/aztec-runtime/src/account/artifacts/SchnorrAccount.json` and pinned by digest +
   class id, precisely so that bumping `@aztec-labs/accounts` (which rebuilds its own copy on any
@@ -375,18 +387,42 @@ explicit and per-Network.
 Encrypted at rest:
 - `profile.secret` — master secret (AES-GCM)
 - `profile.guard` — password verification sentinel (AES-GCM)
+- Contacts and dApp sessions — sealed per row under the profile's row-seal
+  key (§ Crypto-bound invariants). The envelope names the profile; the row,
+  its names, addresses, origins and grants are ciphertext. The AAD binds each
+  row to its root, its storage key, its profile and, through the key, the
+  profile's incarnation: a row moved, swapped between profiles or kept from a
+  deleted profile whose id is reused never opens. A row that fails to open
+  reads as absent and is kept; the log names a fixed category
+  (`sealed-authentication`, `sealed-format`, `sealed-identity`), never the row.
 
 Plaintext at rest (`chrome.storage.local`):
-- Profile metadata, networks, accounts, contacts, dApp sessions, tokens,
-  token balances, tx history, auth registry state, FPC definitions,
-  config, storage version.
+- Profile metadata, networks, accounts, tokens, token balances, tx history,
+  auth registry state, FPC definitions, config, storage version.
+- dApp registration counts (`nulo:core:dappRegistrations@<profile>`): per
+  chain, the origin of each app that registered with the profile and how many
+  times, though not its accounts or grants.
 - Incoming receipts: account, token, amount, transaction hash and, for a
   private one, the note's hashes. A note's nullifier is never stored; it stays
   in the PXE's encrypted store.
 
-Expanding the encrypted boundary to cover profile-scoped metadata (contacts,
-dApp sessions, tx history) is not done: a large refactor, not a near-term
-patch.
+What sealing does not hide or prevent:
+- Root names, row ids, the `profileId` in each envelope (so per-profile row
+  counts), ciphertext length and write times.
+- A profile's rows written before this build stay plaintext until that
+  profile's next unlock seals them; until then they read as before.
+- An offline writer can delete a sealed row, roll it back to an earlier
+  sealed value at the same key, or plant a plaintext row, which the wallet
+  reads and seals at the next unlock. dApp sessions are the exception: each
+  keeps its HMAC (keyed `HKDF(master ‖ dek)`) inside the seal, so a planted or
+  edited grant is dropped on read.
+- The row-seal keys come from the master alone, so a same-phrase sibling
+  profile, or anyone holding the recovery phrase and a copy of the disk, can
+  open the rows; neither can forge a dApp grant.
+- The service worker holds the row-seal keys of every profile it has opened
+  until it ends or the profile is deleted, a lock included, so work that lands
+  after a lock still seals. Code running inside the extension can use them,
+  never the master (`packages/wallet-crypto/ATTACK-SURFACE.md`).
 
 Each dApp-session row carries a MAC keyed from the profile's keys: it stops a
 forged row and a row replayed under another id or profile, not a writer with

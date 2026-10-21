@@ -35,7 +35,7 @@ export class EntityStorage<T> {
 	 * schema's `parse`). When omitted, reads keep the legacy `JSON.parse(...) as T`
 	 * behavior (no validation). When provided, every read validates the parsed
 	 * JSON. Both JSON-SYNTAX failure and CODEC-VALIDATION failure KEEP the row
-	 * (return undefined; the read path never deletes — see `decodeRow`).
+	 * (return undefined; the read path never deletes — see `decodeStored`).
 	 * wallet-core carries no zod itself; the schema is injected from the app layer.
 	 *
 	 * `requireKeyIdentityMatch` opts a root into the id/key consistency guard: a row whose
@@ -73,7 +73,7 @@ export class EntityStorage<T> {
 	 * The root names WHICH store failed, which is the actionable half; the id contributes only its
 	 * length, enough to tell a plausible id from a truncated or empty one.
 	 */
-	private describeKey(fullKey: string): string {
+	public describeKey(fullKey: string): string {
 		const idLength = Math.max(0, fullKey.length - this.root.length - 1)
 		return `${this.root}@<id:${idLength} chars>`
 	}
@@ -95,7 +95,7 @@ export class EntityStorage<T> {
 	 *     it. The write→read round-trip corpus tests guard against the codec
 	 *     rejecting a shape the app actually produces.
 	 */
-	private decodeRow(fullKey: string, raw: unknown): T | undefined {
+	public decodeStored(fullKey: string, raw: unknown): T | undefined {
 		let parsed: unknown
 		try {
 			parsed = JSON.parse(raw as string)
@@ -129,6 +129,15 @@ export class EntityStorage<T> {
 			)
 			return undefined
 		}
+		return this.decodeParsed(fullKey, parsed)
+	}
+
+	/**
+	 * The codec and key-identity half of a read, over an already-parsed row: for a wrapper that
+	 * unwraps the stored JSON itself (a sealed envelope) and must read the inner row exactly as a
+	 * plain row is read. Same KEEP contract: a failure hides the row and logs no payload.
+	 */
+	public decodeParsed(fullKey: string, parsed: unknown): T | undefined {
 		if (!this.parse) {
 			return this.requireIdMatch(fullKey, parsed as T)
 		}
@@ -183,7 +192,7 @@ export class EntityStorage<T> {
 		const key = `${this.root}@${id}`
 		const res = await this.storage.get(key)
 		if (!(key in res)) return undefined
-		return this.decodeRow(key, res[key])
+		return this.decodeStored(key, res[key])
 	}
 
 	public set(id: string, entity: T): Promise<void> {
@@ -203,7 +212,7 @@ export class EntityStorage<T> {
 	public async getAll(): Promise<Array<[string, T]>> {
 		const out: Array<[string, T]> = []
 		for (const [k, id, v] of await this.scopedRows()) {
-			const entity = this.decodeRow(k, v)
+			const entity = this.decodeStored(k, v)
 			if (entity !== undefined) out.push([id, entity])
 		}
 		return out
@@ -216,7 +225,7 @@ export class EntityStorage<T> {
 	public async getValues(): Promise<Array<T>> {
 		const out: T[] = []
 		for (const [k, , v] of await this.scopedRows()) {
-			const entity = this.decodeRow(k, v)
+			const entity = this.decodeStored(k, v)
 			if (entity !== undefined) out.push(entity)
 		}
 		return out

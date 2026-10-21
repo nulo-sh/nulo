@@ -34,6 +34,7 @@ import { TaskService } from "@/wallet/services/task/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { TransactionService } from "@/wallet/services/transaction/service"
 import { toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import { ExecutionService } from "./service"
 
 const NETWORK = {
@@ -79,6 +80,7 @@ async function makeHarness() {
 			deriveDappSessionMacKey: async () => macKey,
 			setExpiryDeferral: () => {},
 			onActiveProfileChanged: new EventHandler<unknown>(),
+			...(await rowKeysForEveryProfile()),
 		}),
 	)
 	collection.add(svc(NetworkService.name, { getNetwork: async () => NETWORK }))
