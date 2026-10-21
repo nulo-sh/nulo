@@ -298,7 +298,7 @@ export function consentLostOnWidening(consent: unknown, held: readonly unknown[]
 /**
  * The private-events switch's starting state: On only when every listed contract is inside a call
  * scope of the grants after Allow, where the app already reaches it. A contract or scope the window
- * cannot place counts as outside, so the default never starts On for more than it can show.
+ * cannot place counts as outside, so the default fails Off.
  */
 export function privateEventsDefault(contracts: "*" | readonly string[], resulting: readonly unknown[]): boolean {
 	if (!Array.isArray(contracts)) return false

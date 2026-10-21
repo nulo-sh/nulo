@@ -738,6 +738,20 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 		expect(await approve()).toEqual({ granted: [txAny, heldData] })
 	})
 
+	test("Details lists the held events a data request for the address book alone keeps", async () => {
+		const heldEvents = { type: "data", privateEvents: { contracts: [TOKEN] } }
+		const book = { type: "data", addressBook: true }
+		await mountWindow({
+			params: { sessionId: "s1", manifest: manifest([book]), delta: [book], existingGrants: [heldEvents], heldGrants: [heldEvents] },
+			session: { chainId: "1" },
+		})
+		expect(detailsToggle().find("span").text()).toBe("Details · 1 contract")
+		await detailsToggle().trigger("click")
+		const row = w!.find('[data-testid="cap-details-row"]')
+		expect(w!.find(`[id="${row.attributes("aria-labelledby")}"]`).text()).toBe("Unknown contract 0x1b1b…1b1b: events")
+		expect(await approve()).toEqual({ granted: [{ type: "data", addressBook: true, privateEvents: { contracts: [TOKEN] } }] })
+	})
+
 	describe("U1: a connected app asks for more", () => {
 		const simulation = {
 			type: "simulation",

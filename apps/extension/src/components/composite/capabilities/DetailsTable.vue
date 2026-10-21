@@ -65,7 +65,7 @@ const shownAddress = (address: string | undefined) => trimAddress(sanitizeWireSt
 
 const functions = (names: readonly string[]) => names.map((name) => sanitizeWireString(name, 64)).join(" · ")
 
-/** Each column's word, which a row's spoken name uses, and the glyph of the row it stands for. */
+/** A column's glyph is the icon of the permission row it stands for. */
 const COLUMNS = [
 	["simulate", "play", (row: Row) => row.simulate.length > 0],
 	["add", "add", (row: Row) => row.add],

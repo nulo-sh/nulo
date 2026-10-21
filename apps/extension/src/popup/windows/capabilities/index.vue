@@ -223,11 +223,13 @@ const setSwitch = (key: string, on: boolean) => {
 /** Names come only from the wallet's list in the snapshot; the request never names a contract.
  *  Grants that reach no contract or class show no Details: its table would list nothing. Details
  *  reads the request over the held grants whatever the switches say, so a row switched Off still
- *  shows what the app asked for. */
+ *  shows what the app asked for. Allow keeps a held data field the request leaves alone, so the held
+ *  data joins the request's. */
 const detailsTable = computed(() => {
 	if (!payload.value) return undefined
 	const params = windowParams(payload.value.params)
-	const table = buildDetailsTable(effectiveGrants(params.heldGrants, params.delta), payload.value.params.knownContracts ?? [])
+	const heldData = params.heldGrants.filter((cap) => cap.type === "data")
+	const table = buildDetailsTable([...effectiveGrants(params.heldGrants, params.delta), ...heldData], params.knownContracts)
 	return table.known.length > 0 || table.unknown.length > 0 || table.classes.length > 0 || table.anyContract ? table : undefined
 })
 

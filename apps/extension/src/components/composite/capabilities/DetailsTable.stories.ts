@@ -4,7 +4,6 @@ import DetailsTable from "./DetailsTable.vue"
 /** The ends are the drawing's; the middles are filler, since the table shows only the ends. */
 const address = (start: string, end: string) => `0x${start}${"0".repeat(56)}${end}`
 
-/** The marks a call-only row leaves blank. */
 const unmarked = { details: false, events: false, code: false }
 
 const burner = {
