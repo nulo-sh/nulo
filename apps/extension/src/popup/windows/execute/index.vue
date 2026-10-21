@@ -43,6 +43,7 @@ import {
 	type TransferFeeEstimate,
 } from "@/wallet/services/execution/client"
 import { type TokenInfo, TokenServiceClient } from "@/wallet/services/token/client"
+import { PriceServiceClient } from "@/wallet/services/price/client"
 import {
 	DappInteractionServiceClient,
 	type ExecutionPayload,
@@ -56,6 +57,7 @@ import type { DappMetadata } from "@/wallet/services/dapp-session/client"
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 import { useFeeEstimationMap } from "@/composables/useFeeEstimationMap"
+import { usePrices } from "@/composables/usePrices"
 import { useToast } from "@/composables/toast"
 
 const { openToast } = useToast()
@@ -111,6 +113,31 @@ const tokenMetadataLoading = ref(false)
 const tokenMetadataError = ref<Map<string, string>>(new Map())
 const tokenMetadataUnread = computed(() =>
 	operations.value.some((op) => op.kind === "register_token" && !tokenMetadata.value.has(op.address)),
+)
+
+/** The signed list's flags, read from the price snapshot the token page reads. */
+const priceService = new PriceServiceClient()
+const prices = usePrices(priceService)
+
+const isFlaggedAdd = (op: UIOperation): boolean =>
+	op.kind === "register_token" && prices.isFlagged({ chainId: op.network?.chainId, contract: op.address })
+
+/** The flagged token adds the person ticked, by operation index: empty at every mount, never stored. */
+const flagAcknowledged = ref(new Set<number>())
+const acknowledgeTokenFlag = (index: number, on: boolean) => {
+	const next = new Set(flagAcknowledged.value)
+	if (on) next.add(index)
+	else next.delete(index)
+	flagAcknowledged.value = next
+}
+
+/** A token add waits for the list's first answer, and a flagged one for its tick; a list that flags
+ *  the token while the window is open holds Confirm again. */
+const tokenFlagHold = computed(() =>
+	operations.value.some(
+		(op, i) =>
+			op.kind === "register_token" && (!prices.mapped.value || (isFlaggedAdd(op as UIOperation) && !flagAcknowledged.value.has(i))),
+	),
 )
 
 /**
@@ -250,12 +277,15 @@ const {
 		profileService.connect()
 		interactionService.connect()
 		tokenService.connect()
+		priceService.connect()
 	},
 	disconnectServices: () => {
 		profileService.disconnect()
 		interactionService.disconnect()
 		executionService.disconnect()
 		tokenService.disconnect()
+		priceService.disconnect()
+		prices.dispose()
 	},
 	init: () => init(),
 	// A request of another profile than the active one was ended by that lock or switch, not by the
@@ -428,7 +458,7 @@ const approve = async () => {
 		setError("Validation error", "Select a fee payment method for each transaction", "warning")
 		return
 	}
-	if (payerShort.value || awaitsFeeFigure.value) return
+	if (payerShort.value || awaitsFeeFigure.value || tokenFlagHold.value) return
 	if (grantsPending.value || grantRefusal.value || refusal.value) return
 	try {
 		isLoading.value = true
@@ -629,9 +659,12 @@ onUnmounted(() => {
 						:tokenMetadata="op.kind === 'register_token' ? tokenMetadata.get((op as { address: string }).address) : undefined"
 						:tokenMetadataError="op.kind === 'register_token' ? tokenMetadataError.get((op as { address: string }).address) : undefined"
 						:tokenMetadataLoading="op.kind === 'register_token' && tokenMetadataLoading"
+						:tokenFlagged="isFlaggedAdd(op as UIOperation)"
+						:tokenFlagAcknowledged="flagAcknowledged.has(i)"
 						:refused="refusal !== undefined"
 						@updateFeeSettings="handleFeeUpdate"
 						@updatePayer="(index: number, payer: FeePayerPick | null) => (feePayers[index] = payer)"
+						@acknowledgeTokenFlag="acknowledgeTokenFlag"
 					>
 						<template v-if="refusal" #fee>
 							<Flex
@@ -672,6 +705,7 @@ onUnmounted(() => {
 				needsFeeSelection ||
 				payerShort ||
 				awaitsFeeFigure ||
+				tokenFlagHold ||
 				grantsPending ||
 				grantRefusal !== undefined ||
 				isInteractionCancelled

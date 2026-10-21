@@ -69,11 +69,13 @@ export function e2eSigner(): Promise<Signer> {
 	return signer
 }
 
-/** `E2E_LIST_TOKENS` (or `tokens` in their place) and `E2E_LIST_FLAGGED`, signed with the run's key at
- *  `nowMs`'s sequence. */
-export async function signTestList(opts: { tokens?: readonly unknown[]; nowMs?: number } = {}): Promise<string> {
+/** `E2E_LIST_TOKENS` and `E2E_LIST_FLAGGED` (or `tokens` and `flagged` in their place), signed with the
+ *  run's key at `nowMs`'s sequence. */
+export async function signTestList(
+	opts: { tokens?: readonly unknown[]; flagged?: readonly TokenListPair[]; nowMs?: number } = {},
+): Promise<string> {
 	const { seedHex, pinned } = await e2eSigner()
-	const sourceText = JSON.stringify({ tokens: opts.tokens ?? E2E_LIST_TOKENS, flagged: E2E_LIST_FLAGGED })
+	const sourceText = JSON.stringify({ tokens: opts.tokens ?? E2E_LIST_TOKENS, flagged: opts.flagged ?? E2E_LIST_FLAGGED })
 	const signed = await signList({ sourceText, seedHex, keyId: pinned.keyId, nowMs: opts.nowMs ?? Date.now(), keys: [pinned] })
 	return signed.envelopeText
 }

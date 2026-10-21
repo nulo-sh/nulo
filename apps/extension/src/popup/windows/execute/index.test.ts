@@ -6,14 +6,15 @@
  * included), its reject routed through the shell's close (B8), its reject's bail-out with no
  * request id (B9-mirror), the profile guard it subscribes (C12), and a request from another
  * profile, refused on dismiss and unload (D13, D14). Then the window's own business: cancellation,
- * init sequencing, self-pay, the approval envelope, app-paid operations, send drafts and grants.
+ * init sequencing, self-pay, the approval envelope, a flagged token add, app-paid operations, send
+ * drafts and grants.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { JobCancelledError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
 import { CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { flushPromises, mount } from "@vue/test-utils"
-import { ref, type Ref } from "vue"
+import { nextTick, ref, type Ref } from "vue"
 import {
 	approval,
 	beforeunloadAdds,
@@ -27,6 +28,7 @@ import {
 	resetWindowHarness,
 	windowsRemoveMock,
 } from "../../../../tests/helpers/approval-window-harness"
+import { priceFake } from "../../../../tests/helpers/price-client-fake"
 
 const approveInteractionMock = vi.fn(async () => undefined)
 const executionServiceConnectMock = vi.fn(() => callLog.push("execution.connect"))
@@ -108,6 +110,8 @@ vi.mock("@/wallet/services/token/client", () => ({
 	}),
 }))
 
+vi.mock("@/wallet/services/price/client", async () => (await import("../../../../tests/helpers/price-client-fake")).priceClientModule())
+
 vi.mock("@/wallet/services/account/client", () => ({
 	AccountServiceClient: accountServiceCtorMock,
 }))
@@ -140,6 +144,7 @@ vi.mock("vue-router", async (importOriginal) => ({
 }))
 
 beforeEach(() => {
+	priceFake.reset(undefined)
 	installWindowSpies()
 	Object.assign(chrome, { runtime: { getURL: (p: string) => `chrome-extension://test/${p}` } })
 })
@@ -175,7 +180,7 @@ const STUBS = {
 		`,
 	},
 	SectionLabel: { template: "<div />" },
-	OperationCard: { props: ["refused"], template: '<div><slot name="fee" /></div>' },
+	OperationCard: { props: ["refused", "tokenFlagged", "tokenFlagAcknowledged"], template: '<div><slot name="fee" /></div>' },
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" />',
@@ -190,6 +195,7 @@ const STUBS = {
 
 // Lazy import after vi.mock hoist
 import Execute from "./index.vue"
+import OperationCard from "./OperationCard.vue"
 
 const factory = () => mount(Execute, { global: { stubs: STUBS } })
 
@@ -703,6 +709,108 @@ describe("execute window — approval envelope", () => {
 		expect(estimateOperationFeeMock).toHaveBeenCalledExactlyOnceWith("req-123", 0, { paymentMethod: { kind: "fj" } }, "tok-a", "flow-a")
 		await previews!.opts.estimate({ index: 1 }, "tok-b", "flow-b")
 		expect(previewOperationAuthwitsMock).toHaveBeenCalledExactlyOnceWith("req-123", 1, "tok-b", "flow-b")
+	})
+})
+
+// ── A token add the signed list flags: Confirm and approve() wait for the list's first answer, and
+//    for the person's tick on a flagged token, however the list comes to flag it. ──
+describe("execute window — a token the signed list flags", () => {
+	const NETWORK = { id: "n1", chainId: 1, name: "TestNet" }
+	const OWNER = "0xabc"
+	// Wire-shaped: 0x + 64 hex, as a registerToken call carries it.
+	const TOKEN = `0x${"0e".repeat(32)}`
+	const FLAG = [`1:${TOKEN}`]
+	const preview = { name: "USD Coin", symbol: "USDC", decimals: 6, interface: { classId: `0x${"c1".repeat(32)}`, contract: TOKEN } }
+	const mountAdd = async () => {
+		accountServiceCtorMock.mockImplementationOnce(function () {
+			return {
+				getAccount: vi.fn(async (_p: string, _c: number, address: string) => ({ address, chainId: 1, name: "Account 1" })),
+				connect: vi.fn(),
+				disconnect: vi.fn(),
+			}
+		})
+		networkServiceCtorMock.mockImplementationOnce(function () {
+			return { getNetworks: vi.fn(async () => [NETWORK]), connect: vi.fn(), disconnect: vi.fn() }
+		} as never)
+		previewTokenMetadataMock.mockResolvedValueOnce(preview)
+		approval.payloadToLoad = {
+			session: { profileId: "p1", dappMetadata: { name: "Test DApp", url: "https://example.com" } },
+			params: { operations: [{ kind: "register_token", account: `aztec:1:${OWNER}`, address: TOKEN }] },
+		}
+		w = factory()
+		await completeInit()
+	}
+	const confirmOff = () => w!.find('[data-testid="execute-confirm-btn"]').attributes("disabled") !== undefined
+	const card = () => w!.findComponent(OperationCard)
+	const tick = async (on: boolean) => {
+		card().vm.$emit("acknowledgeTokenFlag", 0, on)
+		await nextTick()
+	}
+	const approve = async () => {
+		await (w!.vm as unknown as ExecVm).approve()
+		return approveInteractionMock.mock.calls.length
+	}
+
+	test("flagged: Confirm off and approve sends nothing until the tick; ticked, both go", async () => {
+		priceFake.flagged = FLAG
+		await mountAdd()
+		expect([card().props("tokenFlagged"), card().props("tokenFlagAcknowledged")]).toEqual([true, false])
+		expect(confirmOff()).toBe(true)
+		expect(await approve()).toBe(0)
+		await tick(true)
+		expect(card().props("tokenFlagAcknowledged")).toBe(true)
+		expect(confirmOff()).toBe(false)
+		await tick(false)
+		expect(confirmOff()).toBe(true)
+		await tick(true)
+		expect(await approve()).toBe(1)
+	})
+
+	test("a token the list does not flag confirms with no tick", async () => {
+		await mountAdd()
+		expect(card().props("tokenFlagged")).toBe(false)
+		expect(confirmOff()).toBe(false)
+		expect(await approve()).toBe(1)
+	})
+
+	test("before the list's first answer Confirm is off and approve sends nothing; the answer enables it", async () => {
+		priceFake.hold()
+		await mountAdd()
+		expect(confirmOff()).toBe(true)
+		expect(await approve()).toBe(0)
+		priceFake.release()
+		await flushPromises()
+		expect(confirmOff()).toBe(false)
+	})
+
+	test("a list that flags the token while the window is open holds Confirm and approve until the tick", async () => {
+		await mountAdd()
+		expect(confirmOff()).toBe(false)
+		priceFake.flagged = FLAG
+		priceFake.broadcast()
+		await nextTick()
+		expect(card().props("tokenFlagged")).toBe(true)
+		expect(confirmOff()).toBe(true)
+		expect(await approve()).toBe(0)
+		await tick(true)
+		expect(await approve()).toBe(1)
+	})
+
+	test("a new window starts unticked, and closing one drops its price client after disconnecting it", async () => {
+		priceFake.flagged = FLAG
+		await mountAdd()
+		await tick(true)
+		const [client] = priceFake.clients
+		w!.unmount()
+		w = undefined
+		expect(client!.disconnect).toHaveBeenCalledTimes(1)
+		expect(client!.onQuotesUpdated.remove).toHaveBeenCalledTimes(1)
+		expect(client!.disconnect.mock.invocationCallOrder[0]).toBeLessThan(client!.onQuotesUpdated.remove.mock.invocationCallOrder[0]!)
+
+		resetWindowHarness()
+		await mountAdd()
+		expect(card().props("tokenFlagAcknowledged")).toBe(false)
+		expect(confirmOff()).toBe(true)
 	})
 })
 

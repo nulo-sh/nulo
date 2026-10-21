@@ -22,6 +22,7 @@
  * estimator.
  */
 import AppFeeLine from "@/popup/components/modules/send/AppFeeLine.vue"
+import FlaggedTokenBanner from "@/popup/components/modules/general/FlaggedTokenBanner.vue"
 import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue"
 import { isSelfPay } from "@nulo/wallet-bridge"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
@@ -97,6 +98,9 @@ const props = defineProps<{
 	tokenMetadata?: { name: string; symbol: string; decimals: number }
 	tokenMetadataError?: string
 	tokenMetadataLoading?: boolean
+	/** The signed list flags this `register_token` operation's token; Confirm waits for the tick. */
+	tokenFlagged?: boolean
+	tokenFlagAcknowledged?: boolean
 	/** The wallet refuses this request: nothing on the card advises approving it. */
 	refused?: boolean
 }>()
@@ -105,6 +109,7 @@ const emit = defineEmits<{
 	updateFeeSettings: [index: number, value: FeeSettings | undefined]
 	/** The fee card's paying method, or null while none pays. */
 	updatePayer: [index: number, payer: FeePayerPick | null]
+	acknowledgeTokenFlag: [index: number, on: boolean]
 }>()
 
 // A predicate, so the template's `v-if` narrows `op` to the send-like row: it gates the whole send
@@ -472,6 +477,7 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'register_token'">
+			<FlaggedTokenBanner v-if="tokenFlagged" :class="$style.flag_banner" />
 			<!-- A token's contract chooses its symbol and name, so the address row stays beside them. -->
 			<Flex v-if="tokenMetadataLoading || tokenMetadata" direction="column" wide role="status" :aria-busy="tokenMetadataLoading || undefined" data-testid="register-token-details">
 				<Flex :class="$style.prop" data-testid="register-token-symbol-row">
@@ -507,6 +513,15 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 				<Text variant="label-section" color="secondary">Contract address:</Text>
 				<AddressDisplay :address="op.address" data-testid="register-token-address" />
 			</Flex>
+			<Checkbox
+				v-if="tokenFlagged"
+				:modelValue="tokenFlagAcknowledged === true"
+				:class="$style.flag_ack"
+				data-testid="register-token-flag-ack"
+				@update:modelValue="(on: boolean) => emit('acknowledgeTokenFlag', index, on)"
+			>
+				<Text variant="body" color="secondary" height="140">I understand Nulo flagged this token as a scam</Text>
+			</Checkbox>
 		</template>
 		<template v-else-if="op.kind === 'simulate_transaction'">
 			<Flex :class="$style.prop">
@@ -663,6 +678,14 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 .op_fee_set {
 	padding: 12px;
 	background: var(--nulo-surface-low);
+}
+
+.flag_banner {
+	margin-top: 12px;
+}
+
+.flag_ack {
+	margin-top: 16px;
 }
 
 /* Sets the first line's text on the icon's centre: 1.5 leading puts 3 px over it. An app's name may

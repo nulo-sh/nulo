@@ -9,3 +9,4 @@
 - 2026-10-20 phase 1 gate pass: `bun run lint` 0, `bun run typecheck:all` 0, `bun run --cwd apps/extension test src/popup/windows/capabilities` 157 passed.
 - 2026-10-20 phase 2 gate pass: lint 0, `typecheck:all` 0, `bun run --cwd apps/extension test src/popup/windows/capabilities src/components/composite/capabilities` 237 passed, `build-storybook` 0.
 - 2026-10-20 phase 3 gate pass: lint 0, `typecheck:all` 0, `bun run --cwd apps/extension test src/popup/windows/execute src/popup/components/modules/send` 743 passed.
+- 2026-10-21 phase 4 gate pass: lint 0, `typecheck:all` 0, `bun run --cwd apps/extension test src/popup/windows/execute` 330 passed (approve() guard mutation-checked: 3 window tests red without it). E2E flagged case runs in phase 5.
