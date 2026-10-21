@@ -4,6 +4,7 @@
  * file pick the panel handed to a window of its own.
  */
 import { isSenderAtUrl } from "@nulo/extension-messaging/background"
+import { pointToolbarAtSidebar } from "@/utils/browser-surface"
 import { POPUP_PAGE } from "@/wallet/services/window-manager/restart-ended-windows"
 import { OPEN_TOOLBAR_POPUP, type OpenToolbarPopupAnswer, onboardingDocumentUrl, RETURN_TO_PANEL } from "./onboarding-tab"
 
@@ -32,6 +33,9 @@ export interface PanelReturnWindows extends FocusWindows {
  */
 export async function openToolbarPopup(windowId: number): Promise<void> {
 	try {
+		// Firefox opens no popup while the button points at its sidebar, so the manifest's comes back
+		// first; the popup points it at the sidebar again as it boots, as every shell page does.
+		await pointToolbarAtSidebar(false)
 		await chrome.action.openPopup({ windowId })
 	} catch {
 		console.debug("[toolbar-popup] the browser did not open the popup")

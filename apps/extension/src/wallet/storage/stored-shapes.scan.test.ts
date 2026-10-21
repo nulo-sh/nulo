@@ -86,6 +86,10 @@ const NOT_LOCAL_STORAGE: Record<string, { kind: NotLocalKind; reason: string; fi
 	"nulo:imported-account-key:v2": { kind: "label", reason: "a domain separator" },
 	"nulo:kdf:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:master:v1": { kind: "label", reason: "a domain separator" },
+	"nulo:row:v1": { kind: "label", reason: "a domain separator" },
+	"nulo:row-seal:v1": { kind: "label", reason: "a domain separator" },
+	"nulo:row-seal:aead:v1": { kind: "label", reason: "a domain separator" },
+	"nulo:row-seal:index:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:profile-entropy:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:profile-guard:v2": { kind: "label", reason: "a domain separator" },
 	"nulo:profile-imported-dek:v1": { kind: "label", reason: "a domain separator" },
@@ -101,16 +105,17 @@ const NOT_LOCAL_STORAGE: Record<string, { kind: NotLocalKind; reason: string; fi
 const SYNCED_REF_PREFIX = "nulo:ui:"
 const REGISTRY_FILE = "apps/extension/src/wallet/storage/stored-shapes.ts"
 const STORE_FACTORY = "apps/extension/src/wallet/storage/stores.ts"
-/** The only files that may hold the store classes as values: their definition, the barrel that
+/** The only files that may hold the store classes as values: their definitions, the barrel that
  *  re-exports them, the factories, and the session store, which is over `storage.session`. */
 const STORE_CLASS_HOLDERS = [
 	"packages/wallet-core/src/storage/",
+	"apps/extension/src/wallet/storage/sealed-entity-storage.ts",
 	"apps/extension/src/wallet/storage/index.ts",
 	STORE_FACTORY,
 	"apps/extension/src/wallet/services/profile/session-manager.ts",
 ]
-const STORE_CLASSES = new Set(["EntityStorage", "ValueStorage"])
-const STORE_CLASS_MODULES = new Set(["@nulo/wallet-core/storage", "@/wallet/storage"])
+const STORE_CLASSES = new Set(["EntityStorage", "ValueStorage", "SealedEntityStorage"])
+const STORE_CLASS_MODULES = new Set(["@nulo/wallet-core/storage", "@/wallet/storage", "@/wallet/storage/sealed-entity-storage"])
 const SHAPES: readonly StoredShape[] = Object.values(STORED_SHAPES)
 
 type Source = { file: string; source: string }

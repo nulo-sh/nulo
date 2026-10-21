@@ -33,6 +33,7 @@ describe("updateProblems", () => {
 			...before,
 			[blocked]: refusals[blocked],
 			"nulo:core:accounts@x": "{not json",
+			"nulo:core:contacts@x": JSON.stringify({ profileId: "b04e6d18", sealed: 1 }),
 			"nulo:unknown": 1,
 		}
 		delete after["nulo:core:profiles@b04e6d18"]
@@ -40,6 +41,7 @@ describe("updateProblems", () => {
 		const others = [
 			"nulo:core:account-integrity-blocked@b04e6d18: the boot refused what it found",
 			"nulo:core:accounts@x: the accounts read returns nothing",
+			"nulo:core:contacts@x: the contacts read returns nothing",
 			"nulo:unknown: no registered shape claims it",
 		]
 		const lost = (keys: string[]) => keys.sort().map((key) => `${key}: lost in the update`)

@@ -1,6 +1,7 @@
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { extensionUrl, gotoExtensionPage, isFirefox, newPage, openScratchPage, prepareKeys, waitForTarget } from "./fixtures/browser"
+import { waitForOpenPanel } from "./fixtures/browser/firefox-action-popup"
 import { clickByTestId, expectNoNameField, openOnboarding, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
 import { readProfileNames, readRecoveryWords, revealSeedPhrase } from "./fixtures/helpers"
 import { waitForPopupClosed } from "./fixtures/popups"
@@ -22,17 +23,6 @@ const phraseSavedFlags = (page: Page) =>
 
 const onboardingCompleted = (control: Page) =>
 	control.evaluate(async () => (await chrome.storage.local.get("nulo:onboarding:completed"))["nulo:onboarding:completed"])
-
-/** Read from another extension page, which moves no focus, as reading inside the panel would. Firefox
- *  loads the popup's document before the panel opens, and only the open panel gives it focus. */
-const waitForOpenPanel = (control: Page) =>
-	control.waitForFunction(
-		() => {
-			const views = chrome.extension.getViews({ type: "popup" })
-			return views.length === 1 && views[0].document.hasFocus()
-		},
-		{ timeout: 10_000, polling: 100 },
-	)
 
 describe("onboarding tab", () => {
 	test("welcome screen renders both CTAs", async ({ freshExtensionPerTest: extension }) => {

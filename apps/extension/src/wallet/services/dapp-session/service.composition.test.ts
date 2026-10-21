@@ -20,6 +20,7 @@ import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion
 import { svc } from "@/wallet/services/composition-harness"
 import { DappSessionService } from "./service"
 import { AccessLevel, type GrantedCapabilityRecord } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 
 const _waitFor = async (pred: () => Promise<boolean>, ms = 1000) => {
 	const deadline = Date.now() + ms
@@ -47,6 +48,7 @@ async function makeHarness() {
 			getActiveProfile: async () => ({ id: "p1" }),
 			onProfileDeleted,
 			deriveDappSessionMacKey: async () => macKey,
+			...(await rowKeysForEveryProfile()),
 			getDeletionState: () => deletionState,
 			captureExecutionFence: async () => ({ profileId: "p1", epoch: deletionState.capture("p1") }),
 		}),

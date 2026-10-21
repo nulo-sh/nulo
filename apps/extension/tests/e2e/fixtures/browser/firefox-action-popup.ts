@@ -1,6 +1,6 @@
-import type { Browser } from "puppeteer"
+import type { Browser, Page } from "puppeteer"
 import { actionPopupContext, inPageRealm } from "./firefox"
-import { evaluateViaFrameScript } from "./firefox-frame-script"
+import { clickWithPointer, evaluateViaFrameScript } from "./firefox-frame-script"
 
 /**
  * The toolbar popup is a *panel*: not a tab, not a window, and no WebDriver or BiDi command reaches
@@ -8,6 +8,18 @@ import { evaluateViaFrameScript } from "./firefox-frame-script"
  * a layout that only breaks inside a panel went unseen. These reach it the way Firefox's own tests
  * do: from the browser's privileged scope, and into the panel with a frame script.
  */
+
+/** Resolves once a panel is open in any window, read from another extension page, which moves no
+ *  focus as reading inside the panel would. Firefox loads the popup's document before the panel
+ *  opens, and only the open panel gives it focus. */
+export const waitForOpenPanel = (control: Page) =>
+	control.waitForFunction(
+		() => {
+			const views = chrome.extension.getViews({ type: "popup" })
+			return views.length === 1 && views[0].document.hasFocus()
+		},
+		{ timeout: 10_000, polling: 100 },
+	)
 
 /**
  * Privileged source, run with `addonId`, that returns this add-on's panel browser while its panel is
@@ -59,6 +71,38 @@ export async function evaluateInActionPopup<T>(browser: Browser, body: string): 
 	} catch (err) {
 		throw new Error(`evaluateInActionPopup: ${err instanceof Error ? err.message : String(err)}`)
 	}
+}
+
+/** Clicks `testid` in the open panel with a real pointer (`clickWithPointer`). */
+export async function clickInActionPopup(browser: Browser, testid: string): Promise<void> {
+	const { session, addonId } = actionPopupContext(browser)
+	try {
+		await clickWithPointer(session, { addonId, locate: LOCATE_LIVE_PANEL, missing: "the action popup is not open" }, testid)
+	} catch (err) {
+		throw new Error(`clickInActionPopup: ${err instanceof Error ? err.message : String(err)}`)
+	}
+}
+
+/** Whether the panel is open with the add-on's page in it. */
+export async function actionPopupShows(browser: Browser): Promise<boolean> {
+	const { session, addonId } = actionPopupContext(browser)
+	return session.chromeScript<boolean>(`const [addonId, done] = arguments; done(!!(function () { ${LOCATE_LIVE_PANEL} })());`, [addonId])
+}
+
+/**
+ * Does what a click on the toolbar button does, from the button's own handler on: opens the popup
+ * that is set, or, with none, fires `action.onClicked` as a user's input. In the window
+ * `chromeScript` runs in, which the switch has just focused.
+ */
+export async function triggerToolbarAction(browser: Browser): Promise<void> {
+	const { session, addonId } = actionPopupContext(browser)
+	await session.chromeScript<null>(
+		`const [addonId, done] = arguments;
+		const { extension } = WebExtensionPolicy.getByID(addonId);
+		extension.apiManager.global.browserActionFor(extension).triggerAction(window);
+		done(null);`,
+		[addonId],
+	)
 }
 
 /** Closes the panel, as a click outside it would. */

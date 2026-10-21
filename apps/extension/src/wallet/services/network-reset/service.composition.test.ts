@@ -62,6 +62,7 @@ import { TransactionService } from "@/wallet/services/transaction/service"
 import { TxStatus } from "@/wallet/services/transaction/spec"
 import { NetworkResetService } from "./service"
 import type { StaleNetworkChanged } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 
 const OLD = 4321
 const NEW = CHAIN_IDS.TESTNET
@@ -136,6 +137,7 @@ async function harness(hold?: Hold, opts: { balances?: "real" } = {}) {
 			getProfileSecret: async () => new Fr(42n),
 			getProfileDek: async () => dekOf(),
 			deriveDappSessionMacKey: async () => macKey,
+			...(await rowKeysForEveryProfile()),
 		}),
 	)
 	const network = new NetworkService(logger(), api, new FakeNodeFactory())

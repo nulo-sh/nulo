@@ -5,6 +5,7 @@ import { createAccount } from "../fixtures/helpers"
 import { assertPgOk, callExpectingNoPopup, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveCapabilities, rejectCapabilities, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
 import type { AztecTestConfig } from "../fixtures/aztec"
+import { callService } from "../fixtures/session"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -30,16 +31,11 @@ async function readPickerRows(popup: Page): Promise<PickerRow[]> {
 	)
 }
 
-/** The one dApp session row the wallet stores for the playground, as persisted (MAC field included). */
+/** The one dApp session row the wallet stores for the playground, as it reads it (MAC field included). */
 async function readSessionRow(popup: Page): Promise<SessionRow> {
-	return popup.evaluate(async () => {
-		const all = await chrome.storage.local.get(null)
-		const rows = Object.entries(all)
-			.filter(([key]) => key.startsWith("nulo:core:dappSessions@"))
-			.map(([, value]) => (typeof value === "string" ? JSON.parse(value) : value))
-		if (rows.length !== 1) throw new Error(`expected one dApp session row, found ${rows.length}`)
-		return rows[0] as SessionRow
-	})
+	const rows = await callService<SessionRow[]>(popup, "dapp-session", "getDappSessions")
+	if (rows.length !== 1) throw new Error(`expected one dApp session row, found ${rows.length}`)
+	return rows[0] as SessionRow
 }
 
 async function requestAccountsAgain(ctx: ExtensionContext, page: Page): Promise<{ popup: Page; seq: number }> {
