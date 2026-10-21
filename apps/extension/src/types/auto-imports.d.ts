@@ -132,6 +132,7 @@ declare global {
   const capitalize: typeof import('../utils/string').capitalize
   const cappedBackupPick: typeof import('../composables/useProfileImportFlow').cappedBackupPick
   const captureOwnWindow: typeof import('../utils/own-window').captureOwnWindow
+  const captureWindowDocument: typeof import('../utils/window-document').captureWindowDocument
   const categoricalLabel: typeof import('../utils/journal-state').categoricalLabel
   const changedGetStarted: typeof import('../utils/get-started').changedGetStarted
   const clampDecimals: typeof import('../utils/amount').clampDecimals
@@ -269,6 +270,7 @@ declare global {
   const isValidDecimals: typeof import('../utils/token-amount').isValidDecimals
   const isValidHex: typeof import('../utils/string').isValidHex
   const isValidatedTokenClass: typeof import('../utils/token-class').isValidatedTokenClass
+  const isWindowDocument: typeof import('../utils/window-document').isWindowDocument
   const journalAdded: typeof import('../utils/journal-mirror').journalAdded
   const journalCallTitle: typeof import('../utils/journal-state').journalCallTitle
   const journalCardIcon: typeof import('../utils/journal-state').journalCardIcon
@@ -944,6 +946,7 @@ declare module 'vue' {
     readonly capitalize: UnwrapRef<typeof import('../utils/string')['capitalize']>
     readonly cappedBackupPick: UnwrapRef<typeof import('../composables/useProfileImportFlow')['cappedBackupPick']>
     readonly captureOwnWindow: UnwrapRef<typeof import('../utils/own-window')['captureOwnWindow']>
+    readonly captureWindowDocument: UnwrapRef<typeof import('../utils/window-document')['captureWindowDocument']>
     readonly categoricalLabel: UnwrapRef<typeof import('../utils/journal-state')['categoricalLabel']>
     readonly changedGetStarted: UnwrapRef<typeof import('../utils/get-started')['changedGetStarted']>
     readonly clampDecimals: UnwrapRef<typeof import('../utils/amount')['clampDecimals']>
@@ -1081,6 +1084,7 @@ declare module 'vue' {
     readonly isValidDecimals: UnwrapRef<typeof import('../utils/token-amount')['isValidDecimals']>
     readonly isValidHex: UnwrapRef<typeof import('../utils/string')['isValidHex']>
     readonly isValidatedTokenClass: UnwrapRef<typeof import('../utils/token-class')['isValidatedTokenClass']>
+    readonly isWindowDocument: UnwrapRef<typeof import('../utils/window-document')['isWindowDocument']>
     readonly journalAdded: UnwrapRef<typeof import('../utils/journal-mirror')['journalAdded']>
     readonly journalCallTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCallTitle']>
     readonly journalCardIcon: UnwrapRef<typeof import('../utils/journal-state')['journalCardIcon']>

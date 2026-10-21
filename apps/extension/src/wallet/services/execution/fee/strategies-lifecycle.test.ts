@@ -82,6 +82,8 @@ type HarnessOpts = {
 	effects?: Action[]
 	probe?: boolean
 	abortOnFirstSim?: boolean
+	/** Aborts the estimate while the nth build runs. */
+	abortOnBuild?: number
 }
 
 function harness(path: PathName, opts: HarnessOpts = {}) {
@@ -101,6 +103,7 @@ function harness(path: PathName, opts: HarnessOpts = {}) {
 			)
 		}
 		builds.push(built)
+		if (opts.abortOnBuild === builds.length) controller.abort()
 		return built
 	})
 	const controller = new AbortController()
@@ -376,6 +379,24 @@ describe("probe fold", () => {
 			expect(estimateTasks(h.created).map((t) => t.status)).toEqual([TaskStatus.Failed])
 		},
 	)
+
+	test.each(FOLD_MATRIX.filter((row) => row.methods.length > 1))(
+		"$path, $cell: a cancel during the second build throws before that build is simulated",
+		async ({ path, cell }) => {
+			const h = harness(path, foldOpts(cell, { abortOnBuild: 2 }))
+			expect(await rejectionOf(h.strategy.buildAndEstimate(h.ctx))).toBeInstanceOf(JobCancelledSentinel)
+			expect(h.buildStandard).toHaveBeenCalledTimes(2)
+			expect(h.simulateTxTask).toHaveBeenCalledTimes(1)
+			expect(estimateTasks(h.created).map((t) => t.status)).toEqual([TaskStatus.Failed])
+		},
+	)
+
+	test.each(PATHS)("%s: a cancel during the first build throws before any simulation", async (path) => {
+		const h = harness(path, { abortOnBuild: 1 })
+		expect(await rejectionOf(h.strategy.buildAndEstimate(h.ctx))).toBeInstanceOf(JobCancelledSentinel)
+		expect(h.simulateTxTask).not.toHaveBeenCalled()
+		expect(estimateTasks(h.created).map((t) => t.status)).toEqual([TaskStatus.Failed])
+	})
 
 	test("fpc two-pass, effects only: the fold passes; the cancel lands before Pass 2, after one fee read", async () => {
 		const h = harness("fpc two-pass", foldOpts("effects", { abortOnFirstSim: true }))

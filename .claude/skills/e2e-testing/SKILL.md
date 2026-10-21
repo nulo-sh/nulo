@@ -231,7 +231,7 @@ runtime env var can never arm a build-time flag.
   Required check `extension-smoke-e2e-status` on both branches.
 - **Network** — `pr-extension-network-e2e.yml` → `_extension-network-e2e-lane.yml` → `_extension-network-e2e.yml`.
   Filter `extension-network`, label `e2e:extension-network`. The lane file is the partition every caller runs (both
-  PR lanes, the nightly, release's opt-in run); a file moves between the pool and a dedicated job there alone. Lanes: 5 vitest shards (`--shard=N/5`, SHA-1 of the file path, proverless, retry 0,
+  PR lanes, the nightly, release's opt-in run); a file moves between the pool and a dedicated job there alone. Lanes: 5 vitest shards (`--shard=N/5`, split by the timings record, proverless, retry 0,
   the 12 dedicated files excluded); three heavy lanes (`fee-methods` + `selfpay-phase`,
   `concurrent-sendtx-confirm` + `same-token-concurrent-sends`, and `snack-placement` + `failed-send-check`,
   proverless); the **canary** lane prover-ON with the SHA-256-pinned
@@ -246,6 +246,13 @@ runtime env var can never arm a build-time flag.
   grep only when its `probe` input is `"1"`, a caller-set investigation mode, not a dispatch option):
   string constants shipped in `dist/` must not contain `PROBE`.
   `scripts/ci-cd/behavior-gating.test.ts` pins the filters and the exclude list against the lanes.
+- **Shard timings** — both suites' `--shard` splits by `apps/extension/tests/e2e/shard-timings.json`
+  (README § CI sharding). Refresh it with `bun scripts/ci-cd/e2e-timings.ts` from the repo root: it needs a `gh` login,
+  reads each PR lane's latest green runs (one per branch) in about a minute, and prints each run's shard
+  spread. Do it when a lane's shards end more than 2 minutes apart, after adding or removing a file over a
+  minute long, or after an Aztec, browser or harness change; commit the record alone after reading its
+  diff. A run it drops says why (a file line beyond vitest's count, a file in two shards). Never edit the
+  record by hand; a new file needs no entry.
 - **Nightly** (`nightly.yml`, scheduled daily) mirrors the lanes on both browsers with config-default
   retries, plus the seeded `send-chaos` run on each, and publishes a prerelease only when every one is green. **Soak** (`extension-network-e2e-soak.yml`) is manual,
   N iterations at retry 0.
