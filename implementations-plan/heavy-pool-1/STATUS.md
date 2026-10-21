@@ -6,3 +6,4 @@
 - 2026-10-21 approval: the orchestrator approves with a staged measurement (D9); Codex round 4 conditional approve, three conditions adopted. origin/dev merged (#1003); Phase 1 next.
 - 2026-10-21 Phase 1 ✓: A a3da01032 (generator + network record), B 1218eec4c (fold); timings, sequencer, ci-gating (655 pass), lint, lint:actions green on both, typecheck:all green; both pushed.
 - 2026-10-21 Phase 2 ✓, stopped after rounds 1–2 (D9): B − A = +132 s Chrome (39629158674 / 39629193473), +115 s Firefox (39632308349 / 39632256909); all checks clean. Phase 3b next.
+- 2026-10-21 Phase 3b ✓: three reason sites rewritten (3f08349e7); lint, lint:actions, test:ci-gating (651 pass), check:plans green; diff limited to the three files and implementations-plan/. Codex loop next.
