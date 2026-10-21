@@ -1,7 +1,7 @@
 ---
 plan: e2e-fixed-cost-1
 tier: mid
-status: planned, Codex approve
+status: closed
 issues: "#991 (closes on arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,24 @@ base: origin/dev at b3d6e0a2a
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-21.
+- **Status:** closed. A1 ran on `e2e-fixed-cost-1-a1`; its PR closes #991, and its merge closes the plan.
+- **Shipped:** every e2e launch settles the first-run sequence on its tracked tab or, over a completed profile, the
+  popup window the onboarding page became (`closeFirstRunSurface` in `apps/extension/tests/e2e/fixtures/extension.ts`),
+  and fails on neither; the liveness wait polls at 200 ms; the e2e-testing skill's first-run text corrected and the
+  launch cost recorded. Proof: an asserting relaunch probe green on both browsers and red on base, a relaunch over a
+  completed profile 4.5 s faster on Chrome and 4.8 s on Firefox, both full smoke suites and the network gate files green
+  at retry 0 ([lessons/phase-1.md](lessons/phase-1.md)).
+- **Dispositions:** a reused onboarded state per worker not built (D1); the concurrent script setup and the isolation
+  pin dropped (D3, D6); the I2 race left as is (D4); the earlier draft's native loading out (D2).
+- **Known limits:** #997 (native `@aztec` loading in the network forks).
+- **Open items:** none.
+- **Lessons:** none promoted: both gotchas (every launch installs; `chrome.windows` hides a tab URL without the `tabs`
+  permission) live in the e2e-testing skill, and `lessons.md` holds 8152 of its 8192 bytes.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # e2e-fixed-cost-1: the per-file cost of launching a browser and onboarding a wallet
 
