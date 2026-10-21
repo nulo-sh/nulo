@@ -148,6 +148,8 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 
 **Implementation round 1, Opus 5.5 diff review: findings.** None medium or high; it recomputed every Phase 2 figure. Adopted: the old comment's "spread over five shards" held only once a regenerated record prices the two files (today they would land as unknowns, unspread), which the observed-result wording removes; a double colon in the README; the docs cite #972, so its measurement comment goes up at close-out, before any merge.
 
+**Implementation round 2, Codex (resumed): clean.** Both fixes verified, no regression; the loop converged.
+
 ## Seeds (drafts, not run: the orchestrator owns execution)
 
 ```
