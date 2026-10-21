@@ -7,4 +7,4 @@
 - 2026-10-21 ~15:10Z: Codex r2 (resumed): conditional approve; P built at the base would lack the deliver-then-arm helper (a confound in `incoming-arrival`), so P became the head with the clocks off. Recon synced with D6 and D9.
 - 2026-10-21 ~15:20Z: Codex r3 and r4 (resumed): conditional approve each; removing or unsetting the flag leaves an inherited or `.env` value in force, so P and the prover-ON build pass `0` explicitly and P requires the stamp absent.
 - 2026-10-21 ~15:25Z: Codex r5 (resumed): approve, no new material findings.
-- 2026-10-21 ~16:00Z: the orchestrator approved with four conditions (D12-D15): measure on CI, production untouched, nothing weakens a test, review before measuring. Codex r6 (resumed) on the rewritten measurement: conditional approve, five findings, all accepted; r7: approve.
+- 2026-10-21 ~15:15Z: the orchestrator approved with four conditions (D12-D15): measure on CI, production untouched, nothing weakens a test, review before measuring. Codex r6 (resumed) on the rewritten measurement: conditional approve, five findings, all accepted; r7: approve.

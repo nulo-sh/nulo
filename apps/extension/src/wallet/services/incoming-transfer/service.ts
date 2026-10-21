@@ -49,9 +49,7 @@ import {
 
 export * from "./spec"
 
-/** Default poll cadence per (networkId, accountAddress) scheduler. Start
- *  conservative (30s); a future PR can tune based on SW restart frequency
- *  + PXE sync cadence. */
+/** Production poll cadence per scheduler; the network e2e build passes a shorter one. */
 const DEFAULT_POLL_INTERVAL_MS = 30_000
 
 /** Every target runs on every fourth tick whatever the tips say, so a note the PXE delivers late or

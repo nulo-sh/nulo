@@ -28,7 +28,15 @@ import { ContactService } from "./services/contact/service"
 import { DappInteractionService } from "./services/dapp-interaction/service"
 import { DappSessionService } from "./services/dapp-session/service"
 import { ExecutionService } from "./services/execution/service"
-import { E2E_PROVERLESS, E2E_TOKEN_LIST, E2E_TOKEN_LIST_BUILD_STAMP, E2E_TOKEN_SEEDS, E2E_TOKEN_SEEDS_BUILD_STAMP } from "@/e2e/config"
+import {
+	E2E_PROVERLESS,
+	E2E_TOKEN_LIST,
+	E2E_TOKEN_LIST_BUILD_STAMP,
+	E2E_TOKEN_SEEDS,
+	E2E_TOKEN_SEEDS_BUILD_STAMP,
+	E2E_WALLET_CLOCKS,
+	E2E_WALLET_CLOCKS_BUILD_STAMP,
+} from "@/e2e/config"
 import { ChromeStorageProofGate } from "@/e2e/chrome-storage-proof-gate"
 import { ChromeStorageRestoreGate } from "@/e2e/chrome-storage-restore-gate"
 import { ChromeStorageIncomingPollGate } from "@/e2e/chrome-storage-incoming-poll-gate"
@@ -555,14 +563,20 @@ function registerServices(
 	services.add(new TokenService(logger, browserApi, undefined, seederOverrides))
 	// E2E_PROVERLESS injects the projection gate; tree-shaken from prod like the proof gate.
 	services.add(new TokenBalanceService(logger, browserApi, undefined, E2E_PROVERLESS ? new ChromeStorageProjectionGate() : undefined))
-	services.add(new TransactionService(logger, browserApi))
+	// E2E_WALLET_CLOCKS shortens the finality re-read and the incoming tick; unarmed, both services
+	// keep their production defaults. Its stamp is the release grep's handle on the values.
+	if (E2E_WALLET_CLOCKS_BUILD_STAMP) {
+		;(globalThis as { __NULO_E2E_WALLET_CLOCKS_BUILD_STAMP__?: string }).__NULO_E2E_WALLET_CLOCKS_BUILD_STAMP__ =
+			E2E_WALLET_CLOCKS_BUILD_STAMP
+	}
+	services.add(new TransactionService(logger, browserApi, E2E_WALLET_CLOCKS?.finalityReadMs))
 	// E2E_PROVERLESS injects the incoming-poll gate (same tree-shaken-in-prod
-	// pattern + negative-grep as the proof gate above). Default poll interval kept.
+	// pattern + negative-grep as the proof gate above).
 	services.add(
 		new IncomingTransferService(
 			logger,
 			browserApi,
-			undefined, // pollIntervalMs (default)
+			E2E_WALLET_CLOCKS?.incomingPollMs,
 			undefined, // publicReader (production uses the built-in PXE reader)
 			E2E_PROVERLESS ? new ChromeStorageIncomingPollGate() : undefined,
 		),

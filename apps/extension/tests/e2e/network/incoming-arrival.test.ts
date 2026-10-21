@@ -35,7 +35,7 @@ import {
 	waitForHomeTotal,
 	waitForToast,
 } from "../fixtures/helpers"
-import { holdIncomingPoll, readIncomingPollStatus, releaseIncomingPoll, waitForIncomingPollPhase } from "../fixtures/incoming-poll-gate"
+import { deliverWhileLocked, readIncomingPollStatus, releaseIncomingPoll, waitForIncomingPollPhase } from "../fixtures/incoming-poll-gate"
 import { pollUntil } from "../fixtures/poll"
 import { confirmImport, exportAccountBody, previewImport } from "../helpers/account-io"
 
@@ -432,14 +432,11 @@ test.skipIf(!hasConfig)(
 		await waitForHash(page, "#/popup/general", 30_000)
 		const triple = await activeTriple(page)
 
-		const txHash = await sendPrivate(config, triple.account, 7n * D)
-		await holdIncomingPoll(page, {
-			profileId: triple.profileId,
-			networkId: triple.networkId,
-			accountAddress: triple.account,
-			contract: config.tokenAddress,
-			txHash,
-		})
+		const txHash = await deliverWhileLocked(
+			page,
+			{ profileId: triple.profileId, networkId: triple.networkId, accountAddress: triple.account, contract: config.tokenAddress },
+			() => sendPrivate(config, triple.account, 7n * D),
+		)
 		await driveUntilHeld(page, txHash)
 		await clickNavTab(page, "settings")
 		await waitForHash(page, "#/popup/settings")

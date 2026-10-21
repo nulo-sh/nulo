@@ -378,6 +378,26 @@
 			}
 		},
 		{
+			"includes": ["apps/extension/src/**", "!apps/extension/src/e2e/config.ts", "!apps/extension/src/**/*.test.ts"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": {
+							"level": "error",
+							"options": {
+								"patterns": [
+									{
+										"group": ["@/e2e/wallet-clocks", "**/wallet-clocks", "./wallet-clocks"],
+										"message": "only src/e2e/config.ts reads the e2e wallet clocks; their release-gate stamp travels with its flag"
+									}
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		{
 			"includes": [
 				"apps/extension/src/components/core/**",
 				"apps/extension/src/components/ui/**",
@@ -397,6 +417,10 @@
 									"@/stores/notification.store": "UI primitives cannot import stores"
 								},
 								"patterns": [
+									{
+										"group": ["@/e2e/wallet-clocks", "**/wallet-clocks", "./wallet-clocks"],
+										"message": "only src/e2e/config.ts reads the e2e wallet clocks; their release-gate stamp travels with its flag"
+									},
 									{
 										"group": ["@/wallet/services/*/client"],
 										"message": "UI primitives cannot import any *Service client"
@@ -423,6 +447,10 @@
 							"options": {
 								"patterns": [
 									{
+										"group": ["@/e2e/wallet-clocks", "**/wallet-clocks", "./wallet-clocks"],
+										"message": "only src/e2e/config.ts reads the e2e wallet clocks; their release-gate stamp travels with its flag"
+									},
+									{
 										"group": ["@/popup/pages/*", "@/popup/pages/**"],
 										"message": "L4 modules (popup/components/modules/**) cannot import from L5 pages — pages depend on modules, not the other way around"
 									},
@@ -446,6 +474,10 @@
 							"level": "error",
 							"options": {
 								"patterns": [
+									{
+										"group": ["@/e2e/wallet-clocks", "**/wallet-clocks", "./wallet-clocks"],
+										"message": "only src/e2e/config.ts reads the e2e wallet clocks; their release-gate stamp travels with its flag"
+									},
 									{
 										"group": ["@/popup/pages/*", "@/popup/pages/**"],
 										"message": "onboarding is a peer of popup — cannot import popup pages; promote shared logic to @/components/composite or @/composables"

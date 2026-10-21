@@ -126,7 +126,7 @@ test.skipIf(!hasConfig)(
 		// Note on Bug 2 (Token-placeholder UI cache staleness): the e2e
 		// surface for that bug is flaky here because the extension's PXE
 		// sync of the just-minted private note is non-deterministic
-		// relative to the scheduler's 30s interval. The fix (subscribing
+		// relative to the scheduler's tick. The fix (subscribing
 		// activity.vue + RecentActivityView to tokenService.onTokenAdded)
 		// is structurally trivial — it's a 1-line subscription whose
 		// regression would also break the existing component tests that

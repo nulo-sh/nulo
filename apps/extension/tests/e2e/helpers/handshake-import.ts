@@ -11,7 +11,7 @@
  * registers the account, so the loss only shows on a node slow enough to let a scan in first. The
  * projection gate makes that order deterministic: it parks the receiver's projections after they
  * register the token and before they register the receiver, while the incoming-transfer scheduler
- * scans every visible account every 30 s. The note must be discovered INSIDE the hold, which only
+ * scans every visible account each tick. The note must be discovered INSIDE the hold, which only
  * a scan that registers the receiver itself can do; a scan that merely refuses finds it later.
  */
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
@@ -61,7 +61,7 @@ import { importFullBackup, POPUP_IMPORT_SHELL, readPasskeyPrf, submitPasskeyFull
 
 const AMOUNT = 25n * 10n ** 18n
 const OTHER_PASSWORD = "OtherProfilePw123!"
-/** Several incoming-transfer poll intervals (30 s each). */
+/** Five incoming-transfer ticks at the production 30 s, so the bound holds on any build. */
 const DISCOVERY_TIMEOUT_MS = 150_000
 
 export type Credential = "password" | "passkey"

@@ -1,4 +1,7 @@
 import type { Page } from "puppeteer"
+import { ensureUnlocked, lockWallet } from "./auth"
+import { TEST_PASSWORD } from "./constants"
+import { waitForHash } from "./dom"
 import { pollUntil } from "./poll"
 import { INCOMING_POLL_HOLD_KEY, INCOMING_POLL_STATUS_KEY, type IncomingPollPhase } from "@/e2e/chrome-storage-incoming-poll-gate"
 
@@ -23,6 +26,23 @@ export type IncomingPollStatus = { phase: IncomingPollPhase; txHash: string }
  *  discovers a note carrying `txHash` parks after discovery, before commit. */
 export async function holdIncomingPoll(extensionPage: Page, arm: IncomingPollArm): Promise<void> {
 	await extensionPage.evaluate((key, value) => chrome.storage.session.set({ [key]: value }), INCOMING_POLL_HOLD_KEY, arm)
+}
+
+/** Lock the wallet, run `deliver`, arm the gate for the tx hash it returns, unlock, and return that
+ *  hash once Home shows. A locked wallet runs no incoming scheduler, so no scan can commit the note
+ *  between its block and the arm at any tick; the unlock's own scan is the first that can find it. */
+export async function deliverWhileLocked(
+	page: Page,
+	arm: Omit<IncomingPollArm, "txHash">,
+	deliver: () => Promise<string>,
+	password = TEST_PASSWORD,
+): Promise<string> {
+	await lockWallet(page)
+	const txHash = await deliver()
+	await holdIncomingPoll(page, { ...arm, txHash })
+	await ensureUnlocked(page, password)
+	await waitForHash(page, "#/popup/general", 60_000)
+	return txHash
 }
 
 /** Release a parked scan; the SW proceeds into the locked commit. */

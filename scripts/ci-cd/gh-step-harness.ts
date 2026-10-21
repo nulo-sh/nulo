@@ -15,6 +15,7 @@ export interface WorkflowStep {
 export interface StepRun {
 	code: number
 	stdout: string
+	stderr: string
 	/** The shim's log, one call per line, in order. */
 	calls: string[]
 }
@@ -26,9 +27,11 @@ export interface StepRunOptions {
 	/** Env values that replace the step's own after binding (a retry pause of 0, say). */
 	overrides?: Record<string, string>
 	setup?: (dir: string) => void
+	/** The step's working directory, for a step that reads paths relative to the checkout. */
+	cwd?: string
 }
 
-export function runStep(step: WorkflowStep, { shim, bound, overrides, setup }: StepRunOptions): StepRun {
+export function runStep(step: WorkflowStep, { shim, bound, overrides, setup, cwd }: StepRunOptions): StepRun {
 	const dir = mkdtempSync(join(tmpdir(), "gh-step-"))
 	try {
 		writeFileSync(join(dir, "gh"), shim)
@@ -41,9 +44,9 @@ export function runStep(step: WorkflowStep, { shim, bound, overrides, setup }: S
 			env[key] = bound[value] ?? value
 		}
 		Object.assign(env, overrides)
-		const run = Bun.spawnSync(["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", step.run], { env })
+		const run = Bun.spawnSync(["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", step.run], { env, cwd })
 		const calls = readFileSync(join(dir, "calls"), "utf8").split("\n").filter(Boolean)
-		return { code: run.exitCode, stdout: run.stdout.toString(), calls }
+		return { code: run.exitCode, stdout: run.stdout.toString(), stderr: run.stderr.toString(), calls }
 	} finally {
 		rmSync(dir, { recursive: true, force: true })
 	}
