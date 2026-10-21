@@ -24,8 +24,8 @@
 #   nulo-bun-cache    — preserves bun's npm cache across runs (~few minutes saved)
 #   nulo-aztec        — preserves aztec CLI install (~5 minutes saved)
 #
-# Arg 1: vitest --shard expression (e.g. "5/5"). Default "5/5" (the shard that
-#        hits the connectPlayground:awaitVerifyPopup failure deterministically).
+# Arg 1: vitest --shard expression (e.g. "5/5"), split as CI splits it for the
+#        selected browser. Default "5/5".
 
 set -euo pipefail
 
