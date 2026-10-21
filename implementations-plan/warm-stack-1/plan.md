@@ -40,7 +40,7 @@ One arc, one PR against `dev`. The owner (chat, 2026-10-21): "Plan warm-stack, g
 - F6 CI noise: the pool's summed file time varies by 113 s (Chrome) and 123 s (Firefox) across the six recorded runs; per shard 48-96 s. `parseJobLog` refuses a job with a failed file; `runCosts` reads only the five shard jobs (`e2e-timings.ts:33, 87`).
 
 **Inferences**
-- I1 K saves about 0.9 s / 1.95 s per call; over the pool's calls (about 140, counted in Phase 1) about 125 s / 270 s, and 25-60 s per shard.
+- I1 K saves about 0.9 s / 1.95 s per call; over the pool's calls (about 140, counted in Phase 1) about 125 s / 270 s, and 25-60 s per shard. *Superseded by Phase 1:* 1.15 s / 2.0 s net over 94 / 95 calls, about 108 s / 190 s per pool run; the critical shard's 19 calls, about 22 s / 38 s.
 - I2 J's increment over K is about the register page plus any creation-only work: likely under 0.5 s per call. #1003's 0.7 s / 1.1 s came from a copied profile directory, which also carried the browser's code cache.
 - I3 With P F F P P F per browser (three runs per arm) the pool resolves about 185 s (Chrome) and 201 s (Firefox); a shard's saving is direction, not significance. CI confirms the mechanism; the outcome is arithmetic over it, reported pair by pair.
 

@@ -398,9 +398,7 @@ export async function registerProfileOnPage(ctx: ExtensionContext): Promise<Page
 	return page
 }
 
-/** Register a profile with a test password and close its popup. Exported so a cold-shard warm-up
- *  tap (and any other test infra that drives the full register flow outside the fixture pipeline)
- *  can reuse it. */
+/** Register a profile with a test password and close its popup. */
 export async function registerProfile(ctx: ExtensionContext): Promise<void> {
 	const page = await registerProfileOnPage(ctx)
 	await page.close()
@@ -472,7 +470,7 @@ function makePhase(prefix: string) {
 			return await fn()
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)
-			throw new Error(`[${prefix}:${name}] ${msg}`)
+			throw new Error(`[${prefix}:${name}] ${msg}`, { cause: err })
 		}
 	}
 }
