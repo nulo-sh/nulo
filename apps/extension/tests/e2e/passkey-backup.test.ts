@@ -11,7 +11,8 @@
  * Coverage:
  *   1. Export full backup as a passkey profile — modal appears, virtual
  *      authenticator completes, CTAs become available, and an unencrypted
- *      download passes the confirmation that names what the file exposes.
+ *      download passes the confirmation that names what the file exposes,
+ *      then ends the run; a second run encrypts.
  *      Locks in the `usePasskeyCeremony` wiring on the export page.
  *   2. Export cancel UX — Escape during the modal is marked handled and
  *      returns the user to the agreement gate (`isAgreed = false`), NOT a
@@ -156,6 +157,30 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 		expect("entropy" in plain).toBe(false)
 		const passkey = { id: credentialId, prf: await readPasskeyPrf(page, credentialId) }
 		expect(await passkeyBackupVerifies(plain, passkey), "the export's checksum and MAC under its own passkey").toBe(true)
+
+		// The plain file ends the run: the done state names no password, and Close stands alone.
+		await page.waitForSelector('[data-testid="backup-close-btn"]', { visible: true, timeout: 5_000 })
+		expect(await page.$eval('[data-testid="backup-done-banner"]', (el) => el.textContent?.trim())).toBe("Saved to your downloads")
+		expect(await page.$('[data-testid="backup-ready-banner"]')).toBeNull()
+		expect(await page.$('[data-testid="protect-password-btn"]')).toBeNull()
+		expect(await page.$('[data-testid="download-backup-btn"]')).toBeNull()
+		await shotSend(page, "export-full-saved-passkey", "backup-close-btn")
+
+		// A second run, for the encryption path.
+		await clickByTestId(page, "backup-close-btn")
+		await page.waitForFunction(() => window.location.hash !== "#/popup/settings/security/export/full", { timeout: 5_000 })
+		await page.evaluate(() => {
+			window.location.hash = "#/popup/settings/security/export/full"
+		})
+		await waitForHash(page, "#/popup/settings/security/export/full", 5_000)
+		await clickByTestId(page, "agree-continue-btn")
+		await page.waitForFunction(
+			() => {
+				const protect = document.querySelector<HTMLButtonElement>('[data-testid="protect-password-btn"]')
+				return !!protect && !protect.disabled
+			},
+			{ timeout: 180_000, polling: 250 },
+		)
 
 		// Drive the encryption path so the second status card variant
 		// ("Encrypting your backup") is exercised too. For passkey profiles
@@ -329,4 +354,4 @@ test("passkey full-backup: in-session round-trip (register → reset → import 
 }, 120_000)
 
 // A real passkey export → reset → import round trip: the passkey row of
-// `network/import-handshake-note-matrix.test.ts`, and `passkey-toolbar-panel.test.ts` on Firefox.
+// `network/import-handshake-note-matrix.test.ts`, and `toolbar-panel.test.ts` on Firefox.

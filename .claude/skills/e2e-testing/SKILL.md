@@ -31,7 +31,7 @@ Every suite runs on Chrome (default) and on Firefox (`NULO_E2E_BROWSER=firefox`)
 - **Red on Firefox only?** Read `document.visibilityState` and `document.hasFocus()` in the page before touching a fixture.
 - **Extension-page errors reach `pageErrors` and `consoleErrors` on Firefox through the driver's relay** (`fixtures/browser/firefox-page-errors.ts`, FIREFOX.md), proved on Firefox 153.0.4 by `page-error-capture.test.ts`. It calls two Firefox internals and fails the launch when either is gone. **A Firefox bump whose arming check or capture test fails is a hold on the bump**, never a `skipIf`, a soft-fail or a removed assertion. An error Firefox now records is a real failure: read its stack URL and text, never filter it.
 - **Never navigate away from an extension page while it loads a route.** Firefox rejects the departing document's in-flight import (or the CSS preload before it) and the relay records it; Chrome recorded nothing for a cut import. So `waitForLockScreen` observes the popup's own redirect and never reloads (FIREFOX.md).
-- **The toolbar panel is drivable on Firefox only** (`fixtures/browser/firefox-action-popup.ts`): `openActionPopup` opens the real panel, `evaluateInActionPopup` reads and clicks in it, and `armPanelDeath` makes it die as a Mac's does when anything else takes focus, recording any WebAuthn call made in it. Each panel call is privileged and focuses a browser window, which refuses a passkey prompt starting in another window at that moment: while a passkey window is up, read the outcome from a control page opened beforehand (`passkey-toolbar-panel.test.ts`). A passkey-window step that succeeds reopens the panel by itself on the window it started from (`armPopupReturn`), so a spec reads that panel rather than opening one; to count panels without moving focus, ask another extension page for `chrome.extension.getViews({ type: "popup" })`, which lists a preloading document too: the panel is open once that document has focus.
+- **The toolbar panel is drivable on Firefox only** (`fixtures/browser/firefox-action-popup.ts`): `openActionPopup` opens the real panel, `evaluateInActionPopup` reads and clicks in it, and `armPanelDeath` makes it die as a Mac's does when anything else takes focus, recording any WebAuthn call or file picker opened in it. Each panel call is privileged and focuses a browser window, which refuses a passkey prompt starting in another window at that moment: while a passkey window is up, read the outcome from a control page opened beforehand (`toolbar-panel.test.ts`). A passkey-window step that succeeds reopens the panel by itself on the window it started from (`armPopupReturn`), so a spec reads that panel rather than opening one; to count panels without moving focus, ask another extension page for `chrome.extension.getViews({ type: "popup" })`, which lists a preloading document too: the panel is open once that document has focus.
 
 ## 1. Run it
 
@@ -280,6 +280,12 @@ then measured runtime, with each browser's suite wall-clock before and after in 
   teardown, so it is not vitest's test time. Report a cancelled, timed-out or rerun attempt apart,
   never folded in: a later attempt's envelope spans the gap between attempts.
 - **Scenario runtime** is the per-file duration vitest's reporter prints for the file.
+- **What a launch costs** (one host, medians of five, 2026-10): a fresh launch + `registerProfile` +
+  close is 5.0 s on Chrome (the worker's liveness 2.0 of it) and 9.2 s on Firefox (the driver 3.2).
+  A stored onboarded profile per worker saves 0.7 s / 1.1 s per registered launch on smoke and
+  shares one account across files on network: not built
+  (`implementations-plan/archive/e2e-fixed-cost-1/plan.md`, D1). A network fork's aztec.js import is
+  4-6 s inlined against 2 s native; native loading is known limit #997.
 - **A cost guard** (a latency ratio between builds, timed by a probe spec on builds chosen by
   `EXTENSION_PATH`) runs its variants interleaved in one pass, a fresh browser per sample, each
   sample started under a load ceiling well below the run gate's, with the load logged. A loaded
@@ -548,17 +554,20 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   relaunch over the same `userDataDir` (`migration.test.ts` `retryAndReopen`). Firefox reloads the
   add-on in place instead, and its boot takes the retry token: a slow close kills that run midway.
 - **The first-run onboarding tab.** `onInstalled` (`reason === "install"`) opens it before
-  `launchExtension` can seed `nulo:onboarding:completed`; the fixture closes it by the id the worker
-  stores in `nulo:onboarding:tab-id` BEFORE flipping the flag (a mounted onboarding page that reads the
-  flag replaces itself with a popup window and drops the id). On a fresh profile the id is required
-  within 5s and the launch fails otherwise; a reused `userDataDir` opens no tab. Onboarding specs open
-  their own tab via `openOnboarding`.
+  `launchExtension` can seed `nulo:onboarding:completed`, on EVERY launch: Chrome's `--load-extension`
+  and Firefox's temporary add-on report `install` on each start, a reused `userDataDir` included. The
+  fixture closes it by the id the worker stores in `nulo:onboarding:tab-id` BEFORE flipping the flag.
+  Over a completed onboarding the page replaces itself with a popup window on `src/popup/index.html`
+  and drops the id, often before the first read; there the fixture closes that window, found as a page
+  target (Chrome's `windows.getAll` hides its tab URL without the `tabs` permission). A fresh profile
+  requires the id, a reused one the id or the window, within 5s; the launch fails otherwise.
+  Onboarding specs open their own tab via `openOnboarding`.
 - **Passkeys: the virtual authenticator is per FrameTreeNode**, not per browser context, and PRF
   state is not serialisable over CDP. Register, lock/unlock and reset→import are drivable in the SAME
   popup (`fixtures/passkey.ts` `setupPasskeyVirtualAuth`); cross-popup and cross-authenticator flows
   are not (`apps/extension/tests/e2e/PRF-NON-PORTABLE.md`). Keep the anchor popup open. Firefox's
   authenticator is session-scoped (`credentialOutlivesPage`), and only there does the toolbar panel
-  hand a passkey step to the passkey window (`passkey-toolbar-panel.test.ts`). A step that must stay
+  hand a passkey step to the passkey window (`toolbar-panel.test.ts`). A step that must stay
   in the page says so: `watchPasskeySurface` / `readPasskeySurface` record whether the card mounted and
   whether any window opened, as `passkey-paths.test.ts` asserts on both browsers. To refuse a step as
   a dismissed prompt does, use `refusePasskeyStep` (`fixtures/passkey.ts`): Firefox's authenticator

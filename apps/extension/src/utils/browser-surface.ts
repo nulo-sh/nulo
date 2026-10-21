@@ -4,16 +4,18 @@ export function isFirefox(): boolean {
 }
 
 /**
- * Firefox closes its toolbar panel when an OS passkey prompt takes focus, which cancels the request
- * (Mozilla bug 2026687): a passkey step started there has to run in a window instead.
+ * Firefox closes its toolbar panel whenever another window takes focus: an OS passkey prompt, which
+ * the close cancels (Mozilla bug 2026687), or a file picker, whose pick never reaches the page. A
+ * step that opens either has to run in a window instead.
  */
-export function passkeyNeedsOwnWindow(): boolean {
-	return isFirefox() && isToolbarPanel()
+export function closesOnFocusLoss(): boolean {
+	return isFirefox() && isToolbarPopup()
 }
 
-/** Both Firefox popup kinds (the toolbar button and the unified-extensions panel) are `popup`
- *  views; a tab, a window page or a `windows.create` popup window is not. */
-function isToolbarPanel(): boolean {
+/** The browser's toolbar popup: Chrome's action popup, or either Firefox popup kind (the toolbar
+ *  button's and the unified-extensions panel's). A tab, the side panel, a window page or a
+ *  `windows.create` popup window is not a `popup` view. */
+export function isToolbarPopup(): boolean {
 	return chrome.extension.getViews({ type: "popup" }).includes(window)
 }
 

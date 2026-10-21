@@ -34,10 +34,11 @@ const surface = vi.hoisted(() => ({
 	close: vi.fn(async () => false),
 	release: vi.fn(),
 }))
-vi.mock("@/utils/browser-surface", () => ({ passkeyNeedsOwnWindow: () => surface.needsOwnWindow() }))
+vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => surface.needsOwnWindow() }))
 vi.mock("@/utils/own-window", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils/own-window")>()),
 	moveToOwnWindow: (route: string) => surface.move(route),
+	leavePanelFor: async (route: string) => surface.needsOwnWindow() && (await surface.move(route)),
 	closeOwnWindow: () => surface.close(),
 	releaseOwnWindow: () => surface.release(),
 }))
