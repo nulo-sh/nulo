@@ -100,8 +100,8 @@ export interface PublicScanTips {
 
 /**
  * Node-direct class-gate verdict. `unresolved` = transient (node threw / no instance at
- * finalized) → fail closed for this tick but DO NOT cache; `non-standard` = a resolved class that
- * is not the bundled Token (or an upgraded one) → fail closed, cacheable.
+ * finalized) → fail closed for this tick but DO NOT cache; `non-standard` = a resolved instance
+ * whose original or current class is not the bundled Token → fail closed, cacheable.
  */
 export type PublicTokenClassStatus = "standard" | "non-standard" | "unresolved"
 
@@ -426,10 +426,12 @@ export async function getPublicScanTips(node: AztecNode): Promise<PublicScanTips
 }
 
 /**
- * Node-direct class gate. Resolves the contract's CURRENT class — NOT the PXE cascade, which
- * short-circuits on a preimage hit and would report the original class for an upgraded registered
- * token — and requires it to be the bundled Token class at BOTH the `finalized` (stable) anchor AND
- * the EXACT checkpoint hash the scan is pinned to. Gating at `finalized` alone left an upgrade window:
+ * Node-direct class gate. Resolves the contract from the node — NOT the PXE cascade, which
+ * short-circuits on a preimage hit and reports the original class as the current one — and requires
+ * BOTH its original and its current class to be the bundled Token class, since a log counts as a
+ * receipt only if bundled-Token code emitted it, before or after any upgrade. Checked at BOTH the
+ * `finalized` (stable) anchor AND the EXACT checkpoint hash the scan is pinned to. Gating at
+ * `finalized` alone left an upgrade window:
  * a contract standard-at-finalized but MALICIOUS-at-checkpointed would have its checkpointed logs
  * indexed as fake receipts impersonating an already-trusted, price-mapped token. The
  * checkpoint anchor is the pinned HASH, not the symbolic `"checkpointed"` tag, so the node can't show
@@ -458,7 +460,9 @@ export async function resolveTokenClassStatus(
 			return "unresolved"
 		}
 		if (!instance) return "unresolved"
-		if (!instance.currentContractClassId.equals(expected)) return "non-standard"
+		if (!instance.originalContractClassId.equals(expected) || !instance.currentContractClassId.equals(expected)) {
+			return "non-standard"
+		}
 	}
 	return "standard"
 }

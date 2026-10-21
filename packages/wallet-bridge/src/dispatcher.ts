@@ -970,7 +970,8 @@ export class WalletSdkDispatcher {
 		// see another session.
 		if (NETWORK_ONLY_KINDS.has(kind)) {
 			const network = await this.resolveNetwork(ctx)
-			return this.buildNetworkOperation(kind, args, network.id)
+			const sessionAccounts = dappSession ? [...this.getSessionAccountAddresses(dappSession, ctx.chainId)] : []
+			return this.buildNetworkOperation(kind, args, network.id, sessionAccounts)
 		}
 
 		if (ACCOUNT_KINDS.has(kind)) {
@@ -997,14 +998,19 @@ export class WalletSdkDispatcher {
 	 *   - getAddressBook(): []
 	 *   - registerContract(instance, artifact?, secretKey?): [ContractInstanceWithAddress, ContractArtifact?, Fr?]
 	 */
-	private buildNetworkOperation(kind: Operation["kind"], args: unknown[], networkId: string): Operation {
+	private buildNetworkOperation(
+		kind: Operation["kind"],
+		args: unknown[],
+		networkId: string,
+		sessionAccounts: readonly string[],
+	): Operation {
 		switch (kind) {
 			case "aztec_getChainInfo":
 				return { kind, networkId }
 			case "aztec_getContractClassMetadata":
 				return { kind, networkId, id: args[0] as AztecGetContractClassMetadataOperation["id"] }
 			case "aztec_getContractMetadata":
-				return { kind, networkId, address: args[0] as AztecGetContractMetadataOperation["address"] }
+				return { kind, networkId, address: args[0] as AztecGetContractMetadataOperation["address"], sessionAccounts }
 			case "aztec_getPrivateEvents":
 				return {
 					kind,

@@ -156,7 +156,7 @@ if (import.meta.main) {
 			"### Flag changes",
 			"",
 			renderFlagDiff(flagDiff(published.flagged, flagged)),
-			`Raises the compiled floor: ${raisesFloor(published, { tokens, flagged }) ? `yes. The publish PR sets \`${FLOOR_PATH}\` to the signed sequence, and every wallet built after it refuses an older list.` : "no."}`,
+			`Raises the compiled floor against the served list: ${raisesFloor(published, { tokens, flagged }) ? `yes. The publish PR sets \`${FLOOR_PATH}\` to the signed sequence, and every wallet built after it refuses an older list.` : "no."} The publish PR also compares the lists at publish PR and branch heads, and its body names every reason the floor rises.`,
 			"",
 			"### Signing-relevant changes",
 			"",
