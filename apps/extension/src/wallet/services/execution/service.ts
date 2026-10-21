@@ -793,12 +793,14 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		flowKey?: string,
 	): Promise<TransferFeeEstimate> {
 		await this.ensureInitialized()
-		return this.refusalBound(interactionId, async () => {
-			const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
-			return this.withEstimateAdmission(estimateToken, flowKey ?? "op", (signal) =>
-				this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index }),
-			)
-		})
+		// Admitted before the stored request is read: a cancel then either finds the estimate or comes
+		// after the approval that deleted the request, which the read then refuses.
+		return this.refusalBound(interactionId, () =>
+			this.withEstimateAdmission(estimateToken, flowKey ?? "op", async (signal) => {
+				const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
+				return this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index })
+			}),
+		)
 	}
 
 	public async previewOperationAuthwits(
@@ -808,12 +810,13 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		flowKey?: string,
 	): Promise<OperationAuthwitPreview> {
 		await this.ensureInitialized()
-		return this.refusalBound(interactionId, async () => {
-			const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index)
-			return this.withEstimateAdmission(estimateToken, flowKey ?? "op", (signal) =>
-				this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal),
-			)
-		})
+		// Admitted before the read, as `estimateOperationFee` is.
+		return this.refusalBound(interactionId, () =>
+			this.withEstimateAdmission(estimateToken, flowKey ?? "op", async (signal) => {
+				const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index)
+				return this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal)
+			}),
+		)
 	}
 
 	/** A refusal is the request's, not one attempt's: the attempt that met it may be one the window

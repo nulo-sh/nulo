@@ -184,14 +184,13 @@ const {
 	handoffAll: handoffFeeEstimates,
 	rearm: rearmFeeEstimates,
 	cancelAll: cancelAllFeeEstimates,
+	dispose: disposeFeeEstimates,
 } = useFeeEstimationMap<number, { index: number; feeSettings: FeeSettings }, TransferFeeEstimate>({
 	// By reference: the SW re-materializes the stored request at this index and
 	// applies the fee choice itself — the popup never hands it an operation.
 	estimate: ({ index, feeSettings }, estimateToken, flowKey) =>
 		executionService.estimateOperationFee(requestId.value!, index, feeSettings, estimateToken, flowKey),
-	cancelRemote: (estimateToken) => {
-		executionService.cancelEstimate(estimateToken).catch(() => {})
-	},
+	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 500,
 	onError: (key, err) => {
 		if (holdRefusal(err)) return
@@ -244,12 +243,11 @@ const {
 	handoffAll: handoffAuthwitPreviews,
 	rearm: rearmAuthwitPreviews,
 	cancelAll: cancelAllAuthwitPreviews,
+	dispose: disposeAuthwitPreviews,
 } = useFeeEstimationMap<number, { index: number }, OperationAuthwitPreview>({
 	estimate: ({ index }, estimateToken, flowKey) =>
 		executionService.previewOperationAuthwits(requestId.value!, index, estimateToken, flowKey),
-	cancelRemote: (estimateToken) => {
-		executionService.cancelEstimate(estimateToken).catch(() => {})
-	},
+	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 0,
 	onError: (key, err) => {
 		if (holdRefusal(err)) return
@@ -463,10 +461,9 @@ const approve = async () => {
 	if (grantsPending.value || grantRefusal.value || refusal.value) return
 	try {
 		isLoading.value = true
-		// Ownership handoff: approval transfers the estimates and previews to the
-		// execution path — the window's unmount cleanup must NOT remote-cancel
-		// them, or the eviction would race the fire-and-forget execution out of
-		// its reuse hits and its preview snapshots.
+		// Ownership handoff: approval transfers the completed estimates and previews to
+		// the execution path, so the disposal below must NOT remote-cancel them, or the
+		// eviction would race the execution out of its reuse hits and preview snapshots.
 		handoffFeeEstimates()
 		handoffAuthwitPreviews()
 		// The SW executes the dApp's stored request; per operation the popup
@@ -485,9 +482,12 @@ const approve = async () => {
 		})
 		const stillOurs = scopeFollow.capture()
 		await interactionService.approveInteraction(requestId.value!, deltas)
+		// A removed window runs no unmount, so the approval itself ends every estimate it did not
+		// hand over, and the window closes once the worker has taken those cancels.
+		const estimatesEnded = Promise.all([disposeFeeEstimates(), disposeAuthwitPreviews()])
 		// Never throws, so a failed follow cannot turn the approval into an error below.
 		await scopeFollow.follow(scopeView.value, followDeclined.value, stillOurs)
-		closeWindow(true)
+		await endAndClose(() => estimatesEnded)
 	} catch (error) {
 		// The execution path never took ownership — re-arm so a later
 		// reject/unmount can still cancel + evict the handed-off estimates.
