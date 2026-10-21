@@ -83,7 +83,7 @@ Alternatives not taken:
 
 ## Phases
 
-### Phase 1: the two edits
+### Phase 1: the two edits ✓
 
 - Change map: `implementations-plan/lessons.md` only.
 - Steps: apply the table above. Check that the new link resolves and that the file is within budget.
@@ -130,6 +130,8 @@ None: a planning document only.
 
 **Arc A1, Codex r1** (gpt-6.1-sol, high, session 01a15fe6): **approve**, no finding.
 **Arc A1, Opus diff review:** approve with changes. #1 "no Vue unmount hook" can read as sparing `onScopeDispose`: taken, "no Vue teardown" (a wording fix inside the approved edit, 8174 B). #2 the page-side half's evidence: F2 cites `execute/index.vue:516-518`. #3 other unload events fire too: no change.
+
+**Arc A1, Codex r2** (resumed): **approve**, no finding; the loop converged.
 
 ## Seeds
 
