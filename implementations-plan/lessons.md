@@ -23,7 +23,7 @@
 
 - A popup call waits for the worker's Ready and fails 60 s after it began unless its client sets `requestTimeoutMs`, so one awaiting a proof fails as the send lands; a dropped port replays nothing: read config via `useConfigRead`. [Evidence](archive/e2e-reliability-fixes/plan.md#rpc-60s)
 - `PopupManager` mounts every popup at start for good: gate setup on `show` or `v-if`. A profile switch elsewhere updates open pages in place: reset held secrets on a profile-id change. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts), [more](archive/security-ui-1/lessons/phase-2.md)
-- A closing extension window runs no Vue unmount hook: await what it owes, bounded, as `endAndClose` does; a person's close leaves the page only a best-effort `beforeunload`. [Evidence](archive/fee-estimate-cancel-1/plan.md)
+- A closing extension window runs no Vue teardown: await what it owes, bounded, as `endAndClose` does; a person's close leaves the page only a best-effort `beforeunload`. [Evidence](archive/fee-estimate-cancel-1/plan.md)
 - `EventHandler.invoke` drops an async handler's promise: awaiting it waits for nothing, and a rejection escapes. [Evidence](archive/backup-restore-corruption-fix/plan.md#async-events)
 - A typed error survives only hops that name it (`walletErrorFromPayload`, `classifyOperationCatch`, `toWalletResponseError`); `viaPxe` rethrows `Error`. [Evidence](archive/harden-security-prerelease/plan.md#typed-errors)
 - EntityStorage's `getAll()` hides undecodable rows, so a purge, dedupe or max+1 id misses them: key off `getKeys()`. [Evidence](archive/backup-restore-security-hardening/plan.md#hidden-rows)

@@ -33,7 +33,7 @@ Good enough: a candidate whose knowledge already lives where its reader is route
 **Facts** (verified at `cef87d9de`; evidence in recon.md):
 
 - F1. `lessons.md` is 8152 of 8192 B (`scripts/ci-cd/plans/structure.ts:37`) in 33 entries. The gate wants one line per entry with at least one plans-tree or allowlisted-permalink link; an issue link may sit beside it (`structure.ts:41,226-266`). No rule checks a `#fragment` (`links.ts:160`). All 43 existing links resolve.
-- F2. No code unmounts an extension window as it closes: no `.unmount()`, `pagehide` or `unload` handler under `apps/extension/src` outside tests; `closeCurrentWindow` calls `chrome.windows.remove` (`utils/close-current-window.ts:2-6`). Vue hooks still run on a route change inside a window. `endAndClose` drops the `beforeunload` listener, waits up to 3 s for the send, then closes (`composables/useDappApprovalWindow.ts:122-136`); on a person's close the page has only `beforeunload` (registered by that composable and the json and logger windows; the passkey window has none), while the worker settles the close from `windows.onRemoved` (`wallet/services/window-manager/window-manager.ts:128-133`). `archive/fee-estimate-cancel-1/plan.md` F1, D3 and KL1 state it; no skill or doc does, and CLAUDE.md § Cleanup order puts teardown in `onBeforeUnmount`.
+- F2. No code unmounts an extension window as it closes: no `.unmount()`, `pagehide` or `unload` handler under `apps/extension/src` outside tests; `closeCurrentWindow` calls `chrome.windows.remove` (`utils/close-current-window.ts:2-6`). Vue hooks still run on a route change inside a window. `endAndClose` drops the `beforeunload` listener, waits up to 3 s for the send, then closes (`composables/useDappApprovalWindow.ts:122-136`); on a person's close the page has only `beforeunload` (registered by that composable and the json and logger windows; the passkey window has none), while the worker settles the close from `windows.onRemoved` (`wallet/services/window-manager/window-manager.ts:128-133`). `archive/fee-estimate-cancel-1/plan.md` F1, D3 and KL1 state it, and the execute window's reject says teardown "isn't guaranteed to run dispose before the window dies" (`popup/windows/execute/index.vue:516-518`); no skill or doc does, and CLAUDE.md § Cleanup order puts teardown in `onBeforeUnmount`.
 - F3. Line 33's two CodeMirror facts sit at the code that needs them: `apps/extension/src/components/JsonViewer/creator.js:98-99` (one theme, marked dark, serves both app themes) and `:116` (the base theme's pressed rule is one class more specific).
 - F4. C1 holds (#957's comment: PR #978 CONFLICTING on GitHub, `merge-tree` clean with `-c attr.tree=origin/dev`), and a local merge applies the union (`structure.test.ts:226`). Line 17 already says "a PR conflicting with `dev` gets no run: merge `dev` first".
 - F5. C2's second half is false: run 39652968832 (`nightly` on `encryption-at-rest-1-a1`) failed at `resolve` in 10 s, since `nightly.yml:109` refuses any ref but `dev`. Its first half holds: run 39642793500's iterations died at the 30-minute limit (`_extension-network-e2e.yml:115`). No archived plan holds either run.
@@ -53,10 +53,10 @@ Two edits in `implementations-plan/lessons.md`; every other line stays byte for 
 
 | Edit | Where | Text |
 |---|---|---|
-| add P3 | § Extension runtime, after the `PopupManager` line (25) | `- A closing extension window runs no Vue unmount hook: await what it owes, bounded, as `endAndClose` does; a person's close leaves the page only a best-effort `beforeunload`. [Evidence](archive/fee-estimate-cancel-1/plan.md)` |
+| add P3 | § Extension runtime, after the `PopupManager` line (25) | `- A closing extension window runs no Vue teardown: await what it owes, bounded, as `endAndClose` does; a person's close leaves the page only a best-effort `beforeunload`. [Evidence](archive/fee-estimate-cancel-1/plan.md)` |
 | delete | § Extension runtime, line 33 | the CodeMirror base-theme line (its home is `creator.js`, F3) |
 
-Bytes: 8152 + 225 − 199 = 8178 (measured on a scratch copy), 14 B under budget.
+Bytes: 8152 + 221 − 199 = 8174 (measured), 18 B under budget.
 
 Alternatives not taken:
 
@@ -127,6 +127,9 @@ None: a planning document only.
 **Round 1 resumed (r1b), Codex:** conditional approve. #1 "a person's close reaches only `beforeunload`" is false outside the page (`window-manager.ts:128-133` settles it from `onRemoved`; the passkey window has no handler): demonstrated; P3 narrowed to the page, the wait named bounded (D6). #2 recon still marked line 19 retire: demonstrated; corrected. P2 may stay unpromoted (D3 accepted). The byte math checked.
 
 **Round 1 resumed (r1c), Codex:** **approve**, no remaining finding; 8178 B verified.
+
+**Arc A1, Codex r1** (gpt-6.1-sol, high, session 01a15fe6): **approve**, no finding.
+**Arc A1, Opus diff review:** approve with changes. #1 "no Vue unmount hook" can read as sparing `onScopeDispose`: taken, "no Vue teardown" (a wording fix inside the approved edit, 8174 B). #2 the page-side half's evidence: F2 cites `execute/index.vue:516-518`. #3 other unload events fire too: no change.
 
 ## Seeds
 
