@@ -51,7 +51,7 @@
 | H3: no sub-second slot | decided by code (`parseSafeInteger`); not run |
 | `aztecDebug_mineBlock`, `aztecDebug_prove` on the main port | `mineBlock` built block 6 in 627 ms (height 5 → 6); `prove` returned 6, and the proven tip reached 6 |
 | Finality under `--slots-in-an-epoch 1` | L1 `finalized` = latest − 2; L2 finalized = proven − 1 |
-| Listeners | anvil on 127.0.0.1; the node's main and admin ports on every interface, the admin port with no API key (`--disable-admin-api-key`); no TCP listener on the P2P port |
+| RPC surface | tracked privately: GHSA-4c23-7xf4-f9q3 |
 | Chain clock | +163 s ahead of the wall clock at boot, +864 s at teardown after 43 blocks: at 12/12 each build and each settle still advance L1 by a full 12 s step, faster than the wall clock |
 | Pool age at runtime | not honoured (table above); 3a sets it per boot instead (plan D12) |
 
