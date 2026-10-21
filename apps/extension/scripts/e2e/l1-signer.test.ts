@@ -10,9 +10,11 @@ import { REPO_ROOT, sourceFiles } from "../type-roles/source-scan"
 const LOCAL_NETWORK_SIGNER = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 const ANVIL_ACCOUNT_1 = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
 const SIGNER_MODULE = "apps/extension/tests/e2e/fixtures/l1-signer.ts"
+/** The ways to build a signing L1 client: the Aztec wrapper and viem's own. */
+const L1_SIGNER = /\b(createExtendedL1Client|createWalletClient|mnemonicToAccount|privateKeyToAccount)\b/
 
 describe("the e2e fixtures' L1 signer", () => {
-	test("signs as an anvil-funded account the local network never signs with", () => {
+	test("signs as an anvil-funded account the local network does not sign with by default", () => {
 		const { address } = createFixtureL1Client(["http://127.0.0.1:1"], 31337).account
 		expect(address).toBe(ANVIL_ACCOUNT_1)
 		expect(address).not.toBe(LOCAL_NETWORK_SIGNER)
@@ -20,7 +22,7 @@ describe("the e2e fixtures' L1 signer", () => {
 
 	test("is the only L1 client the e2e tree builds", () => {
 		const callers = sourceFiles({ roots: ["apps/extension/tests/e2e"], exts: ["ts"] }).filter((file) =>
-			readFileSync(join(REPO_ROOT, file), "utf8").includes("createExtendedL1Client"),
+			L1_SIGNER.test(readFileSync(join(REPO_ROOT, file), "utf8")),
 		)
 		expect(callers).toEqual([SIGNER_MODULE])
 	})
