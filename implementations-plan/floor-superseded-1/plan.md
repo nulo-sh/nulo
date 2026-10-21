@@ -1,8 +1,8 @@
 ---
 plan: floor-superseded-1
 tier: light
-status: planned, Codex approve; arc 1 in review
-issues: none (the owner's pick P77-06 B is the record; no issue to close)
+status: closed (arc 1 delivered)
+issues: "#1001 (known limit, filed at close-out)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,17 @@ base: origin/dev at 85edeb866
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-21.
+- **Status:** closed. Arc 1 (Phases 1-3) ran on `floor-superseded-1-a1` and merged into `dev` as #973 (`ba5e0d30b`). This docs-only PR files the known limit, states it in the publishing notes and archives the plan; its merge closes the plan.
+- **Shipped:** the publisher's floor rule compares the next list with the list `dev` serves and with the list at the head of every publish PR (open or closed unmerged, read at its head commit) and every publish branch, signed from the floor at the run's base up to the next sequence. A drop or a new flag against any of them, or a list there that cannot be read, sets `floor.json` to the next sequence, and the publish PR body names every reason. From the review loop: a GitHub write that answers 404 fails the run, the PR listing dedupes repeats, and finding and superseding read open PRs only. The owner's pick: **P77-06 B**, "Evaluate the floor rule against superseded envelopes too."
+- **Dispositions:** D10's question, sent to the owner privately during planning, came back as decision page 78 (2026-10-21): **P78-06 A**, "Accept it as a known limit with its reopening condition; the publishing notes say that a stopped run's artifact is not read." Option B (on the stale-base stop, commit the signed list alone on its branch and fail the run) was declined. `infra/token-list/README.md` § Publishing a change now says it, and `SECURITY.md`'s accepted limits name it.
+- **Known limits:** #1001 (a list signed by a publish run that stopped before its branch commit is never read by the floor rule).
+- **Open items:** none.
+- **Lessons:** none promoted: `lessons.md` holds 8152 of its 8192 bytes, and nothing there is superseded. The GitHub behaviours this plan rests on (a read at a closed PR's head commit after its branch is gone; newest-first paging that repeats an item when a PR opens mid-listing) are in Facts F4 and [lessons/phase-3.md](lessons/phase-3.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # floor-superseded-1: the floor rule reads the lists at publish PR and branch heads
 
@@ -104,7 +115,7 @@ None. The arc changes CI tooling, a GitHub PR body, a CI step summary line and d
 - **D7 The prepare summary** keeps its served-list answer and says so. The decision lives once, in `publish-pr`, on the snapshot it writes from; a second discovery in `prepare` could read another snapshot and disagree (Codex r1 corrected the first rationale: public reads need no token). Giving `prepare`, which runs installed dependencies, a token would also widen the unprivileged job (Opus r1).
 - **D8 No workflow change:** the permissions and the step command (pinned by `scripts/ci-cd/behavior-gating.test.ts`) already fit.
 - **D9 Scope:** the rule reads the lists at PR heads and existing branches. The owner settles anything further privately; the arc does not wait on it.
-- **D10 The stale-base guard is unchanged:** it still stops before any write. A change to it is the owner's call, sent privately with both legs' views (Opus r1 for a change, Codex r1 against).
+- **D10 The stale-base guard is unchanged:** it still stops before any write. A change to it was the owner's call, sent privately with both legs' views (Opus r1 for a change, Codex r1 against); the owner picked P78-06 A, a known limit (#1001).
 
 ## Review verdicts
 
