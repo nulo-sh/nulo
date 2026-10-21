@@ -402,3 +402,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [exec-prices-1](exec-prices-1/plan.md) — completed — a dApp window reads cached prices and never asks for a refresh, whatever mounts in it (#982)
 - [bridge-nonce-1](bridge-nonce-1/plan.md) — completed — both e2e L1 signers sign as anvil index 1 through one module, off the local network's publisher account; a unit test pins it and refuses any other e2e L1 client (#988)
 - [fee-estimate-cancel-1](fee-estimate-cancel-1/plan.md) — completed — an accepted execute approval cancels the estimates it did not hand over and closes once the worker has handled them; admission before the request read; a cancelled build is never simulated (#989)
+- [floor-superseded-1](floor-superseded-1/plan.md) — completed — the token-list floor rule also reads the lists at publish PR and branch heads signed from the floor (P77-06 B, #973); a stopped run's artifact list is known limit #1001 (P78-06 A)
