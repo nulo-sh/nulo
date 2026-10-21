@@ -29,3 +29,13 @@
 ## Round 3 (diff 140587739..6534b83a3, and the whole arc)
 
 - **Codex resumed: `approve`, no findings.** The loop converged, within its three-round stop.
+
+## Compliance round (after F)
+
+- Rounds 1-3 asked adversarial questions but did not carry `implementations-plan/README.md` § Post-implementation standard's two rules verbatim, nor its three adversarial questions. One resumed Codex round over the whole arc's code and skill diff carried them: **`approve`, no findings.** It found no new trust boundary, weakened assertion, suppression or evidence loss, and the changed comments state contracts and the switch's timing constraint.
+
+## Freeze and measurement
+
+- `origin/dev` merged (0510ba904; #964, #1008, #1009). `lint`, `typecheck:all`, `test`, `test:all` and `check:plans` all exit 0. **F = 0510ba904. P = c7764a2ee**, F plus one commit that closes the registration popup and reopens one inside `launchOnLocalNetwork`, with the `[onboard]` line and phase tags unchanged. Pushed as `warm-stack-1-measure-f` and `warm-stack-1-measure-p`.
+- The critical shard on F's tree is Chrome shard 5 (784 s recorded) and Firefox shard 3 (931 s). Each file list matches exactly one shard job in the CI runs.
+- **Dispatch rule in practice:** e2e-clocks-1's lead dispatches its next slot within seconds of its own runs finishing, so a polling dispatcher never sees a gap mid-round. P1 ran in the one gap before e2e-clocks-1's slot 4. F2 waits for the end of e2e-clocks-1's round, about 2.6 h after P1, which loosens pair 1 only.
