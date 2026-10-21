@@ -1212,12 +1212,14 @@ describe("token-list publish", () => {
 		expect(wf.jobs.prepare.if).toBe("github.ref == 'refs/heads/dev'")
 	})
 
-	test("prepare, then sign in the token-list environment, then publish-pr; only sign reads the signing key", () => {
+	test("prepare, then sign in the token-list environment, then publish-pr in release-app; only sign reads the signing key", () => {
 		expect(Object.keys(wf.jobs)).toEqual(["prepare", "sign", "publish-pr"])
 		expect([wf.jobs.sign.needs, wf.jobs["publish-pr"].needs]).toEqual(["prepare", "sign"])
 		expect(Object.entries(wf.jobs).flatMap(([name, job]) => ((job as { environment?: unknown }).environment ? [name] : []))).toEqual([
 			"sign",
+			"publish-pr",
 		])
+		expect([wf.jobs.sign.environment, wf.jobs["publish-pr"].environment]).toEqual(["token-list", "release-app"])
 		expect(text.match(/secrets\.TOKEN_LIST_SIGNING_KEY/g)).toHaveLength(1)
 		const signStep = wf.jobs.sign.steps.find((step: { id?: string }) => step.id === "sign")
 		expect(signStep.env.TOKEN_LIST_SIGNING_KEY).toBe("${{ secrets.TOKEN_LIST_SIGNING_KEY }}")

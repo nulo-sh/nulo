@@ -231,7 +231,7 @@ runtime env var can never arm a build-time flag.
   Required check `extension-smoke-e2e-status` on both branches.
 - **Network** — `pr-extension-network-e2e.yml` → `_extension-network-e2e-lane.yml` → `_extension-network-e2e.yml`.
   Filter `extension-network`, label `e2e:extension-network`. The lane file is the partition every caller runs (both
-  PR lanes, the nightly, release's opt-in run); a file moves between the pool and a dedicated job there alone. Lanes: 5 vitest shards (`--shard=N/5`, SHA-1 of the file path, proverless, retry 0,
+  PR lanes, the nightly, release's opt-in run); a file moves between the pool and a dedicated job there alone. Lanes: 5 vitest shards (`--shard=N/5`, split by the timings record, proverless, retry 0,
   the 12 dedicated files excluded); three heavy lanes (`fee-methods` + `selfpay-phase`,
   `concurrent-sendtx-confirm` + `same-token-concurrent-sends`, and `snack-placement` + `failed-send-check`,
   proverless); the **canary** lane prover-ON with the SHA-256-pinned
@@ -246,6 +246,13 @@ runtime env var can never arm a build-time flag.
   grep only when its `probe` input is `"1"`, a caller-set investigation mode, not a dispatch option):
   string constants shipped in `dist/` must not contain `PROBE`.
   `scripts/ci-cd/behavior-gating.test.ts` pins the filters and the exclude list against the lanes.
+- **Shard timings** — both suites' `--shard` splits by `apps/extension/tests/e2e/shard-timings.json`
+  (README § CI sharding). Refresh it with `bun scripts/ci-cd/e2e-timings.ts` from the repo root: it needs a `gh` login,
+  reads each PR lane's latest green runs (one per branch) in about a minute, and prints each run's shard
+  spread. Do it when a lane's shards end more than 2 minutes apart, after adding or removing a file over a
+  minute long, or after an Aztec, browser or harness change; commit the record alone after reading its
+  diff. A run it drops says why (a file line beyond vitest's count, a file in two shards). Never edit the
+  record by hand; a new file needs no entry.
 - **Nightly** (`nightly.yml`, scheduled daily) mirrors the lanes on both browsers with config-default
   retries, plus the seeded `send-chaos` run on each, and publishes a prerelease only when every one is green. **Soak** (`extension-network-e2e-soak.yml`) is manual,
   N iterations at retry 0.
@@ -273,6 +280,12 @@ then measured runtime, with each browser's suite wall-clock before and after in 
   teardown, so it is not vitest's test time. Report a cancelled, timed-out or rerun attempt apart,
   never folded in: a later attempt's envelope spans the gap between attempts.
 - **Scenario runtime** is the per-file duration vitest's reporter prints for the file.
+- **What a launch costs** (one host, medians of five, 2026-10): a fresh launch + `registerProfile` +
+  close is 5.0 s on Chrome (the worker's liveness 2.0 of it) and 9.2 s on Firefox (the driver 3.2).
+  A stored onboarded profile per worker saves 0.7 s / 1.1 s per registered launch on smoke and
+  shares one account across files on network: not built
+  (`implementations-plan/archive/e2e-fixed-cost-1/plan.md`, D1). A network fork's aztec.js import is
+  4-6 s inlined against 2 s native; native loading is known limit #997.
 - **A cost guard** (a latency ratio between builds, timed by a probe spec on builds chosen by
   `EXTENSION_PATH`) runs its variants interleaved in one pass, a fresh browser per sample, each
   sample started under a load ceiling well below the run gate's, with the load logged. A loaded
@@ -541,11 +554,14 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   relaunch over the same `userDataDir` (`migration.test.ts` `retryAndReopen`). Firefox reloads the
   add-on in place instead, and its boot takes the retry token: a slow close kills that run midway.
 - **The first-run onboarding tab.** `onInstalled` (`reason === "install"`) opens it before
-  `launchExtension` can seed `nulo:onboarding:completed`; the fixture closes it by the id the worker
-  stores in `nulo:onboarding:tab-id` BEFORE flipping the flag (a mounted onboarding page that reads the
-  flag replaces itself with a popup window and drops the id). On a fresh profile the id is required
-  within 5s and the launch fails otherwise; a reused `userDataDir` opens no tab. Onboarding specs open
-  their own tab via `openOnboarding`.
+  `launchExtension` can seed `nulo:onboarding:completed`, on EVERY launch: Chrome's `--load-extension`
+  and Firefox's temporary add-on report `install` on each start, a reused `userDataDir` included. The
+  fixture closes it by the id the worker stores in `nulo:onboarding:tab-id` BEFORE flipping the flag.
+  Over a completed onboarding the page replaces itself with a popup window on `src/popup/index.html`
+  and drops the id, often before the first read; there the fixture closes that window, found as a page
+  target (Chrome's `windows.getAll` hides its tab URL without the `tabs` permission). A fresh profile
+  requires the id, a reused one the id or the window, within 5s; the launch fails otherwise.
+  Onboarding specs open their own tab via `openOnboarding`.
 - **Passkeys: the virtual authenticator is per FrameTreeNode**, not per browser context, and PRF
   state is not serialisable over CDP. Register, lock/unlock and reset→import are drivable in the SAME
   popup (`fixtures/passkey.ts` `setupPasskeyVirtualAuth`); cross-popup and cross-authenticator flows
