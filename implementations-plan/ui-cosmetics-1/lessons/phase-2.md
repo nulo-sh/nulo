@@ -21,3 +21,7 @@ Chrome and Firefox read the same numbers, base and after. The step row is 640 px
 - Feedback files, retry 0, green on both browsers: `legal-acceptance`, `onboarding-tab`, `onboarding-import`, `keyboard-guards`, `passkey-retry`, `import-paths`.
 - A scratch probe outside the repository (`~/.cache/nulo-backlog/ui-cosmetics-1/probe2/`) took the pictures in `screenshots/arc1/` and the numbers above. The base build carried Phase 1, so the card's base run reverted Phase 1's source for that build: opening Presto left the step unchecked there and checks it here. The card's first picture is the card before Presto is opened, which is also what `dev` shows after opening it.
 - An element screenshot of an extension page wrote no file with no error (Chrome, Puppeteer 25); `page.screenshot` with a clip works.
+
+## Fix loop
+
+- Round 1: Codex clean (one comment trim, applied); Opus found two test gaps (Presto marked only from its own row; `align` reaches the title), both added. The guard control reds the phrase-row test.

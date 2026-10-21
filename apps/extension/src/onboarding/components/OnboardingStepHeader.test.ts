@@ -46,6 +46,11 @@ describe("OnboardingStepHeader", () => {
 		expect(w.element.classList.contains("page-space")).toBe(false)
 	})
 
+	test("align reaches the title: Ready centres it, every other step leaves it at the default", () => {
+		expect(mountHeader({ align: "center" }).findComponent(BrutalistTitle).props("align")).toBe("center")
+		expect(mountHeader().findComponent(BrutalistTitle).props("align")).toBeUndefined()
+	})
+
 	test("focus() focuses the header, the step's focus target", () => {
 		const w = mountHeader({}, { tabindex: "-1" })
 		w.vm.focus({ preventScroll: true })

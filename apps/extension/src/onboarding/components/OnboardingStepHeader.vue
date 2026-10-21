@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * Everything above an onboarding step's content: the back row, the step row and the title. Every
- * step after welcome draws it the same, so moving between steps never moves the title. Attributes
- * land on the `<header>`, the element a step marks or focuses; `class` sets the space under it.
+ * Every step after welcome draws this one header, so moving between steps never moves the title.
+ * Attributes land on the `<header>`, the element a step marks or focuses; `class` sets the
+ * space under it.
  */
 import type { OnboardingPath, OnboardingStep } from "../steps"
 

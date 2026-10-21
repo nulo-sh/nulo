@@ -329,6 +329,8 @@ describe("Home — what the reminders do", () => {
 		gas = ZERO
 		const calm = await mountHome()
 		await calm.get('[data-testid="get-started-phrase"]').trigger("click")
+		await flushPromises()
+		expect(storage.data[PRESTO_KEY]).toBeUndefined()
 		tokenHoldings = "some"
 		const urgent = await mountHome("password", HIDDEN)
 		await urgent.get('[data-testid="backup-reminder-save"]').trigger("click")
