@@ -44,6 +44,14 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 			material: false,
 			changes: ["The explorer is disabled in Settings → Privacy, not Settings → Advanced (§ 5.3)."],
 		},
+		{
+			version: "1.2.2",
+			effective: null,
+			material: false,
+			changes: [
+				"The token-list and price requests bypass the browser's HTTP cache, and the price request carries no cookies and no referrer (§§ 5.2, 5.11).",
+			],
+		},
 	],
 }
 

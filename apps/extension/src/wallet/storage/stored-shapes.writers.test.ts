@@ -25,7 +25,18 @@ import type { z } from "zod"
 import { type PinMap, usePinnedTokens } from "@/composables/usePinnedTokens"
 import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
 import type { AppPick, SendSlots } from "@/utils/fee-picks"
-import { feePicksKey, pinnedTokensKey, restoreOutcomeKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
+import { markGetStarted } from "@/utils/get-started"
+import {
+	feePicksKey,
+	getStartedAztecOpenedKey,
+	getStartedBackupSavedKey,
+	getStartedFeeJuiceHeldKey,
+	getStartedHiddenKey,
+	getStartedPhraseSavedKey,
+	pinnedTokensKey,
+	restoreOutcomeKey,
+	sendFeePicksKey,
+} from "@/utils/profile-ui-keys"
 import { armRestoreOutcome, type RestoreOutcome } from "@/utils/restore-outcome"
 import { ServiceCollection } from "@/wallet/base"
 import { CONFIG_STORAGE_KEY, type Config, ConfigSchema, ConfigStore } from "@/wallet/config"
@@ -33,6 +44,11 @@ import { LoggerStore } from "@/wallet/logger"
 import { createWalletRuntime } from "@/wallet/runtime"
 import { svc, tokenListStub } from "@/wallet/services/composition-harness"
 import { CONFIG_SERVICE_NAME } from "@/wallet/services/config/spec"
+import {
+	RegistrationAllowance,
+	type RegistrationCounts,
+	RegistrationCountsSchema,
+} from "@/wallet/services/dapp-session/registration-allowance"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
 import { NetworkService } from "@/wallet/services/network/service"
 import { ACTIVE_NETWORK_STORAGE_ROOT } from "@/wallet/services/network/spec"
@@ -122,6 +138,7 @@ describe("described schemas match their writers' types", () => {
 			Equivalent<Out<typeof PriceStateSchema>, PriceState>,
 			Equivalent<Out<typeof TokenListStateSchema>, TokenListStoredState>,
 			Equivalent<Out<typeof SeedMarkersSchema>, SeedMarkerState>,
+			Equivalent<Out<typeof RegistrationCountsSchema>, RegistrationCounts>,
 			Equivalent<Variant<Out<typeof ProfileRowSchema>, "password">, Variant<Profile, "password">>,
 			Equivalent<Variant<Out<typeof ProfileRowSchema>, "passkey">, Variant<Profile, "passkey">>,
 			Equivalent<DeepReadonly<Registered<"legalAccepted">>, LegalAcceptanceRecord>,
@@ -135,10 +152,10 @@ describe("described schemas match their writers' types", () => {
 			Equivalent<Registered<"uiActiveAccount">, string>,
 			Equivalent<Registered<"uiLastActiveProfile">, string>,
 			Equivalent<Registered<"onboardingCompleted">, boolean>,
-		] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]
+		] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]
 		const controls: [Equivalent<{ a: string }, { a?: string }>, Equivalent<{ a: string; b?: string }, { a: string }>] = [false, false]
 		// The check is the typecheck of these two assignments; the run only records that they compiled.
-		expect([checks.length, controls.length]).toEqual([17, 2])
+		expect([checks.length, controls.length]).toEqual([18, 2])
 	})
 
 	// Entries built through `described()` or `engine()` are typed `StoredShape`, whose schema is any
@@ -148,6 +165,7 @@ describe("described schemas match their writers' types", () => {
 		expect(STORED_SHAPES.tokenPrices.schema).toBe(PriceStateSchema)
 		expect(STORED_SHAPES.tokenList.schema).toBe(TokenListStateSchema)
 		expect(STORED_SHAPES.tokenSeeded.schema).toBe(SeedMarkersSchema)
+		expect(STORED_SHAPES.dappRegistrations.schema).toBe(RegistrationCountsSchema)
 		expect(STORED_SHAPES.profiles.schema).toBe(ProfileRowSchema)
 		expect(STORED_SHAPES.schemaBlocked.schema).toBe(MigrationBlockedSchema)
 		expect(STORED_SHAPES.schemaDegraded.schema).toBe(MigrationDegradedSchema)
@@ -288,6 +306,16 @@ describe("what each writer stores parses back to itself", () => {
 		)
 	})
 
+	test("dappRegistrations: RegistrationAllowance.admit for two apps on two chains", async () => {
+		const area = new MemoryStorageArea()
+		const allowance = new RegistrationAllowance(area)
+		await allowance.admit("p1", 1, "https://a.example")
+		await allowance.admit("p1", 1, "https://b.example")
+		await allowance.admit("p1", 2, "https://a.example")
+		const raw = (await area.get("nulo:core:dappRegistrations@p1"))["nulo:core:dappRegistrations@p1"]
+		expectDescribed("dappRegistrations", raw)
+	})
+
 	test("activeNetwork: NetworkService.getOrInitNetworks points the profile at its primary seed", async () => {
 		const api = new FakeBrowserApi()
 		api.reset()
@@ -397,6 +425,22 @@ describe("what each writer stores parses back to itself", () => {
 		const raw = local.data.get(restoreOutcomeKey("p1"))
 		expect(raw).toMatchObject({ run, networkIds: ["net-1", "net-2"] })
 		expectDescribed("uiRestoreOutcome", raw)
+	})
+
+	test("the Get started flags: markGetStarted", async () => {
+		const local = stubChromeStorage()
+		const marks = [
+			["phraseSaved", "uiGetStartedPhraseSaved", getStartedPhraseSavedKey],
+			["backupSaved", "uiGetStartedBackupSaved", getStartedBackupSavedKey],
+			["aztecOpened", "uiGetStartedAztecOpened", getStartedAztecOpenedKey],
+			["hidden", "uiGetStartedHidden", getStartedHiddenKey],
+			["feeJuiceHeld", "uiGetStartedFeeJuiceHeld", getStartedFeeJuiceHeldKey],
+		] as const
+		for (const [flag, name, keyOf] of marks) {
+			await markGetStarted("p1", flag)
+			expect(keyOf("p1")).toBe(`${(STORED_SHAPES[name].ref as { root: string }).root}@p1`)
+			expectDescribed(name, local.data.get(keyOf("p1")))
+		}
 	})
 
 	test("schemaVersion, schemaRunning, schemaBackup, schemaAttempts: Migrator journal, mid-run and after a failed restore", async () => {

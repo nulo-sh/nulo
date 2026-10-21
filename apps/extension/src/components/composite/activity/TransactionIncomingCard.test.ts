@@ -56,6 +56,15 @@ describe("composite/TransactionIncomingCard", () => {
 		expect(w.find(".symbol").text()).toBe("cUSD")
 	})
 
+	test("a blank symbol titles the row with the empty-value dash; the amount keeps the symbol as given", () => {
+		const read = (tokenSymbol: string) => {
+			const layout = mountCard({ tokenSymbol }).findComponent(STUBS.TransactionCardLayout)
+			return [layout.props("title"), layout.props("amountSymbol")]
+		}
+		expect(read("   ")).toEqual(["—", "   "])
+		expect(read("cUSD")).toEqual(["cUSD", "cUSD"])
+	})
+
 	test("fractional raw amounts keep their precision", () => {
 		const w = mountCard({ amountRaw: "1500000", tokenDecimals: 6 }) // 1.5
 		expect(w.find(".amount").text()).toBe("+1.5")

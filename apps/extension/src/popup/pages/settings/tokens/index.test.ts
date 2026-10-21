@@ -6,12 +6,14 @@ import { installChromeStorage } from "../../../../../tests/helpers/chrome-storag
 import { useAppStore } from "@/stores/app.store"
 import TokensIndex from "./index.vue"
 
+const H = vi.hoisted(() => ({ tokens: [] as Array<Record<string, unknown>> }))
+
 vi.mock("@/wallet/services/token/client", async () => {
 	const { EventHandler } = await import("@nulo/wallet-core/utils")
 	return {
 		TokenServiceClient: function TokenServiceClient() {
 			return {
-				getTokens: vi.fn(async () => [{ id: "t", symbol: "TST", name: "Test token" }]),
+				getTokens: vi.fn(async () => H.tokens),
 				onTokenAdded: new EventHandler(),
 				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
@@ -34,6 +36,7 @@ beforeEach(() => {
 	})
 	installChromeStorage({}, { persist: false })
 	document.body.innerHTML = '<div id="tooltip"></div>'
+	H.tokens = [{ id: "t", symbol: "TST", name: "Test token" }]
 })
 afterEach(() => {
 	document.body.innerHTML = ""
@@ -78,4 +81,18 @@ test("the delete icon's tooltip leaves with the icon, and stops taking Escape", 
 	const esc = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
 	document.body.dispatchEvent(esc)
 	expect(esc.defaultPrevented).toBe(false)
+})
+
+test("a row whose symbol or name is blank reads the empty-value dash; a normal row keeps its own", async () => {
+	H.tokens = [
+		{ id: "t", symbol: "TST", name: "Test token" },
+		{ id: "b", symbol: "   ", name: "" },
+	]
+	const { wrapper } = mountPage()
+	await flushPromises()
+	const rows = wrapper.findAll('[data-testid="token-row"]').map((r) => [r.attributes("title"), r.attributes("description")])
+	expect(rows).toEqual([
+		["—", "—"],
+		["TST", "Test token"],
+	])
 })

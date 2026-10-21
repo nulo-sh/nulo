@@ -320,7 +320,8 @@ export type Methods = {
 	deleteProfile(id: string): ProfileInfo
 
 	/**
-	 * Imports a passkey-backed profile using an existing credential and signs in.
+	 * Imports a passkey-backed profile using an existing credential and signs in. Throws
+	 * `PasskeyProfileExistsError` (naming it) when a live profile here already holds the credential.
 	 *
 	 * @param name Display name.
 	 * @param credentialData OPTIONAL — PATH A. See `createPasskeyProfile` for

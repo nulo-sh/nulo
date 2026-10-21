@@ -18,12 +18,25 @@ import {
 import { z } from "zod"
 import { readSendPicks, readAppPicks } from "@/utils/fee-picks"
 import { LAST_ACTIVE_PROFILE_KEY } from "@/utils/lastActiveProfile"
-import { FEE_PICKS_ROOT, PINNED_TOKENS_ROOT, RESTORE_OUTCOME_ROOT, SEND_FEE_PICKS_ROOT } from "@/utils/profile-ui-keys"
+import {
+	FEE_PICKS_ROOT,
+	GET_STARTED_AZTEC_OPENED_ROOT,
+	GET_STARTED_BACKUP_SAVED_ROOT,
+	GET_STARTED_FEE_JUICE_HELD_ROOT,
+	GET_STARTED_HIDDEN_ROOT,
+	GET_STARTED_PHRASE_SAVED_ROOT,
+	PINNED_TOKENS_ROOT,
+	PROFILE_IMPORTED_ROOT,
+	PROFILE_NOT_FIRST_ROOT,
+	RESTORE_OUTCOME_ROOT,
+	SEND_FEE_PICKS_ROOT,
+} from "@/utils/profile-ui-keys"
 import { decodeRestoreOutcome } from "@/utils/restore-outcome"
 import { sanitizePinMap } from "@/composables/usePinnedTokens"
 import { ConfigSchema } from "@/wallet/config/config"
 import { decodeStoredConfig } from "@/wallet/config/store"
 import { ACCOUNT_INTEGRITY_BLOCKED_ROOT, ACCOUNT_INTEGRITY_VERIFIED_ROOT } from "@/wallet/services/account-integrity/types"
+import { decodeRegistrationCounts, RegistrationCountsSchema } from "@/wallet/services/dapp-session/registration-allowance"
 import { AccountIntegrityBlockedSchema, VerifiedStampSchema } from "@/wallet/services/account-integrity/types"
 import { SEED_OFFERS_ROOT, SeedOffersSchema } from "@/wallet/services/network/seed-offers"
 import { ACTIVE_NETWORK_STORAGE_ROOT, decodeActiveNetworkId } from "@/wallet/services/network/spec"
@@ -82,6 +95,10 @@ function described(name: Exclude<StoreName, CodecStoreName>, schema: z.ZodType, 
 
 const rawRow = (r: string, schema: z.ZodType): StoredShape => ({ ref: root(r), encoding: "json", schema, read: "codec" })
 const asStored: StoredDecoder = (v) => v
+
+/** A per-profile flag of Home's Get started card (`utils/get-started.ts`): written `true` only, and
+ *  anything else reads as not set. */
+const uiFlag = (r: string): StoredShape => ({ ref: root(r), encoding: "structured", schema: z.literal(true), read: (v) => v === true })
 
 export const PriceStateSchema = z.record(
 	z.string(),
@@ -209,6 +226,7 @@ export const STORED_SHAPES = {
 	tokenPrices: described("tokenPrices", PriceStateSchema, usableQuotes),
 	tokenList: described("tokenList", TokenListStateSchema, decodeTokenListState),
 	tokenSeeded: described("tokenSeeded", SeedMarkersSchema, decodeSeedMarkers),
+	dappRegistrations: described("dappRegistrations", RegistrationCountsSchema, decodeRegistrationCounts),
 
 	activeNetwork: { ref: root(ACTIVE_NETWORK_STORAGE_ROOT), encoding: "structured", schema: z.string(), read: decodeActiveNetworkId },
 	legalAccepted: { ref: value(LEGAL_ACCEPTANCE_KEY), encoding: "structured", schema: LegalAcceptanceSchema, read: parseAcceptanceRecord },
@@ -232,6 +250,13 @@ export const STORED_SHAPES = {
 	uiFeePicks: { ref: root(FEE_PICKS_ROOT), encoding: "structured", schema: AppPicksSchema, read: readAppPicks },
 	uiSendFeePicks: { ref: root(SEND_FEE_PICKS_ROOT), encoding: "structured", schema: SendPicksSchema, read: readSendPicks },
 	uiRestoreOutcome: { ref: root(RESTORE_OUTCOME_ROOT), encoding: "structured", schema: RestoreOutcomeSchema, read: decodeRestoreOutcome },
+	uiGetStartedPhraseSaved: uiFlag(GET_STARTED_PHRASE_SAVED_ROOT),
+	uiGetStartedBackupSaved: uiFlag(GET_STARTED_BACKUP_SAVED_ROOT),
+	uiGetStartedAztecOpened: uiFlag(GET_STARTED_AZTEC_OPENED_ROOT),
+	uiGetStartedHidden: uiFlag(GET_STARTED_HIDDEN_ROOT),
+	uiGetStartedFeeJuiceHeld: uiFlag(GET_STARTED_FEE_JUICE_HELD_ROOT),
+	uiProfileImported: uiFlag(PROFILE_IMPORTED_ROOT),
+	uiProfileNotFirst: uiFlag(PROFILE_NOT_FIRST_ROOT),
 
 	schemaVersion: engine(SCHEMA_VERSION_KEY, z.number()),
 	schemaRunning: engine(SCHEMA_RUNNING_KEY, z.number()),

@@ -208,7 +208,7 @@ describe("PasskeyService PATH B requests", () => {
 		expect(removed).toHaveBeenCalledWith(1000)
 	})
 
-	test("the popup comes back after a step that finished, never after one that failed or was cancelled", async () => {
+	test("the popup comes back after a step that finished, never after one that failed, found its profile here or was cancelled", async () => {
 		const fired: string[] = []
 		let armed = 0
 		const logger = { log } as unknown as ILogger
@@ -218,7 +218,7 @@ describe("PasskeyService PATH B requests", () => {
 				fired.push(`step ${step}`)
 			}
 		})
-		for (const outcome of ["done", "failed"] as const) {
+		for (const outcome of ["done", "failed", "exists"] as const) {
 			const owner = service.getKey("cred-1", UNLOCK)
 			await flush()
 			const answered = service.resolvePasskeyRequest(requestIdOf(armed - 1), data)
@@ -227,10 +227,10 @@ describe("PasskeyService PATH B requests", () => {
 		}
 		const cancelled = service.getKey("cred-1", UNLOCK)
 		await flush()
-		await service.rejectPasskeyRequest(requestIdOf(2))
+		await service.rejectPasskeyRequest(requestIdOf(3))
 		await expect(cancelled).rejects.toBeInstanceOf(UserRejectedError)
 
-		expect(armed).toBe(3)
+		expect(armed).toBe(4)
 		expect(fired).toEqual(["step 1"])
 	})
 

@@ -16,6 +16,8 @@ export interface MessagePortLike {
 	disconnect(): void
 	onMessage(listener: (message: unknown) => void): Unsubscribe
 	onDisconnect(listener: () => void): Unsubscribe
+	/** Who opened the port, as the browser reports it; set on ports `onConnect` delivers. */
+	readonly sender?: MessageSender
 }
 
 /** Sender metadata attached to incoming `onMessage` events. Subset we actually use. */
@@ -23,10 +25,19 @@ export interface MessageSender {
 	id?: string
 	origin?: string
 	url?: string
-	tab?: { id?: number; url?: string }
+	tab?: { id?: number; url?: string; windowId?: number }
 }
 
 export type MessageListener = (message: unknown, sender: MessageSender) => Promise<unknown> | unknown
+
+/** One extension context. `windowId` and `tabId` are set for a page in a tab, on both browsers. */
+export interface ExtensionContextInfo {
+	contextId: string
+	contextType: string
+	documentUrl?: string
+	windowId?: number
+	tabId?: number
+}
 
 export interface RuntimePort {
 	/** Send a one-shot message; resolves with the receiver's reply. */
@@ -64,8 +75,5 @@ export interface RuntimePort {
 	 * filter; used by `ensureOffscreenRunning()` to detect zombies.
 	 * Optional because not all adapters need it (e.g. FakeBrowserApi).
 	 */
-	getContexts?(filter: {
-		contextTypes?: string[]
-		documentUrls?: string[]
-	}): Promise<Array<{ contextId: string; contextType: string; documentUrl?: string }>>
+	getContexts?(filter: { contextTypes?: string[]; documentUrls?: string[] }): Promise<ExtensionContextInfo[]>
 }

@@ -191,7 +191,6 @@ onBeforeUnmount(() => {
 .card {
 	overflow: hidden;
 
-	border-radius: 10px;
 	background: var(--dropdown-bg);
 	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--txt-primary) 8%, transparent), 0 14px 34px rgba(0, 0, 0, 15%), 0 4px 14px rgba(0, 0, 0, 5%);
 

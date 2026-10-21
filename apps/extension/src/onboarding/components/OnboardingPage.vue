@@ -7,18 +7,12 @@
  * page's single `<main>` landmark; nesting another `<main>` would violate
  * HTML5 + WAI-ARIA-1.2. The test file asserts `tagName === 'DIV'` so a
  * future refactor can't silently re-introduce nested-`<main>`.
- *
- * Hosts a CSS container (`container-type: inline-size`,
- * `container-name: onboarding-page`) so the explainer's 3-card grid can
- * stack via container query — viewport-based queries would have to
- * account for app.vue's 24+24 px horizontal padding, which is fragile.
  */
 
 const props = defineProps<{
 	/** Centers the inner content + hero block. Used by welcome + done. */
 	align?: "start" | "center"
-	/** Inter-child gap in px. Default 32 px. `import` passes 24, `learn`
-	 * + `done` pass 40, `welcome` passes 56. */
+	/** Inter-child gap in px. Default 32 px. */
 	gap?: number
 }>()
 
@@ -43,10 +37,6 @@ const gapVar = computed(() => (props.gap !== undefined ? { "--onboarding-page-ga
 	gap: var(--onboarding-page-gap, 32px);
 
 	flex: 1;
-
-	/* Anchor for learn.vue's @container query. Benign on other pages. */
-	container-type: inline-size;
-	container-name: onboarding-page;
 }
 
 .center {

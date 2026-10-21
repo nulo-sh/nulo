@@ -8,14 +8,25 @@ const TOKEN = `0x0c1e${"0".repeat(56)}5a7f`
 const DRIP = `0x0643${"1".repeat(56)}15fd`
 const FEE_JUICE = `0x${"0".repeat(63)}5`
 
-const feeJuice = { address: FEE_JUICE, name: "Fee Juice", simulate: ["claim", "balance_of_public"], add: false, transact: ["claim"] }
-const token = { address: TOKEN, simulate: ["balance_of_public"], add: true, transact: ["transfer", "burn_public"] }
-const drip = { address: DRIP, simulate: [], add: true, transact: ["drip_to_public"] }
-const anyContract = { name: "Any contract", simulate: ["Any function"], add: false, transact: [] }
+const CLASS_ID = `0x0c3e${"2".repeat(56)}d726`
+
+const unmarked = { details: false, events: false, code: false }
+const feeJuice = {
+	...unmarked,
+	address: FEE_JUICE,
+	name: "Fee Juice",
+	simulate: ["claim", "balance_of_public"],
+	add: false,
+	transact: ["claim"],
+}
+const token = { ...unmarked, address: TOKEN, simulate: ["balance_of_public"], add: true, transact: ["transfer", "burn_public"] }
+const drip = { ...unmarked, address: DRIP, simulate: [], add: true, transact: ["drip_to_public"] }
+const anyContract = { ...unmarked, name: "Any contract", simulate: ["Any function"], add: false, transact: [] }
+const contractClass = { ...unmarked, address: CLASS_ID, simulate: [], add: false, transact: [], code: true }
 
 const mountTable = (props: Record<string, unknown> = {}) =>
 	mount(DetailsTable, {
-		props: { known: [feeJuice], unknown: [token, drip], anyContract: null, label: "3 contracts", ...props } as never,
+		props: { known: [feeJuice], unknown: [token, drip], classes: [], anyContract: null, label: "3 contracts", ...props } as never,
 		global: { components: { RowAction, Icon } },
 	})
 
@@ -49,15 +60,32 @@ describe("composite/capabilities/DetailsTable", () => {
 		expect(targets(w)).toHaveLength(3)
 	})
 
-	test("the head, the sub-headers in order, and the any-contract row last under none", async () => {
-		const w = await opened({ anyContract })
+	test("the head, the sub-headers in order, classes after contracts, and the any-contract row last under none", async () => {
+		const w = await opened({ anyContract, classes: [contractClass] })
 		expect(w.find(`.${STYLE.head}`).attributes("aria-hidden")).toBe("true")
 		const lines = [...w.find(`.${STYLE.table}`).element.children].flatMap((el) => {
 			if (el.classList.contains(STYLE.sub)) return [`# ${el.textContent}`]
 			if (!el.classList.contains(STYLE.row)) return []
 			return [(el.querySelector(`.${STYLE.name}`) ?? el.querySelector(`.${STYLE.address} > span`))?.textContent]
 		})
-		expect(lines).toEqual(["# Nulo knows", "Fee Juice", "# Nulo doesn't know", "0x0c1e…5a7f", "0x0643…15fd", "Any contract"])
+		expect(lines).toEqual([
+			"# Nulo knows",
+			"Fee Juice",
+			"# Nulo doesn't know",
+			"0x0c1e…5a7f",
+			"0x0643…15fd",
+			"# Contract classes",
+			"0x0c3e…d726",
+			"Any contract",
+		])
+	})
+
+	test("the head draws each column as its row's glyph, in the rows' order", async () => {
+		const w = await opened()
+		const head = w.find(`.${STYLE.head}`)
+		const glyphs = w.findAllComponents(Icon).filter((glyph) => head.element.contains(glyph.element))
+		expect(glyphs.map((glyph) => glyph.props("name"))).toEqual(["play", "add", "check", "info", "mail-lock", "code"])
+		expect(head.text()).toBe("Contract")
 	})
 
 	test("no sub-header for an empty side", async () => {
@@ -71,11 +99,38 @@ describe("composite/capabilities/DetailsTable", () => {
 			[...rowOf(w, i).children]
 				.filter((el) => el.classList.contains(STYLE.yes) || el.classList.contains(STYLE.no))
 				.map((el) => (el.classList.contains(STYLE.yes) ? "check" : "dash"))
-		expect(marks(0)).toEqual(["check", "dash", "check"])
-		expect(marks(1)).toEqual(["check", "check", "check"])
-		expect(marks(2)).toEqual(["dash", "check", "check"])
+		expect(marks(0)).toEqual(["check", "dash", "check", "dash", "dash", "dash"])
+		expect(marks(1)).toEqual(["check", "check", "check", "dash", "dash", "dash"])
+		expect(marks(2)).toEqual(["dash", "check", "check", "dash", "dash", "dash"])
 		const yes = w.findAllComponents(Icon).find((glyph) => glyph.classes().includes(STYLE.yes))
 		expect(yes?.props("name")).toBe("check")
+	})
+
+	test("details, events and code mark their own columns", async () => {
+		const w = await opened({
+			known: [],
+			unknown: [{ ...drip, add: false, transact: [], details: true, events: true }],
+			classes: [contractClass],
+		})
+		const marks = (i: number) => [...rowOf(w, i).children].filter((el) => el.classList.contains(STYLE.yes)).length
+		const columns = (i: number) =>
+			[...rowOf(w, i).children]
+				.filter((el) => el.classList.contains(STYLE.yes) || el.classList.contains(STYLE.no))
+				.map((el) => el.classList.contains(STYLE.yes))
+		expect(columns(0)).toEqual([false, false, false, true, true, false])
+		expect(columns(1)).toEqual([false, false, false, false, false, true])
+		expect([marks(0), marks(1)]).toEqual([2, 1])
+		expect(spoken(w, 0)).toBe("Unknown contract 0x0643…15fd: details, events")
+	})
+
+	test("a class row shows its id with a copy button and says it is a contract class", async () => {
+		const w = await opened({ known: [], unknown: [], classes: [contractClass] })
+		expect(targets(w)[0].attributes("data-details-key")).toBe("classes-0")
+		expect(spoken(w, 0)).toBe("Contract class 0x0c3e…d726: code")
+		const copy = w.find('[data-testid="cap-details-copy"]')
+		expect(copy.attributes("data-details-key")).toBe("classes-0")
+		await copy.trigger("click")
+		expect(w.emitted("copy")).toEqual([[CLASS_ID]])
 	})
 
 	test("a named row's target is named for what it lists, since the head is hidden", async () => {
@@ -141,7 +196,10 @@ describe("composite/capabilities/DetailsTable", () => {
 
 	test("bidi and control characters in a function name and an address are stripped", async () => {
 		const hostile = `0x0c1e‮${"0".repeat(56)}​5a7f`
-		const w = await opened({ known: [], unknown: [{ address: hostile, simulate: ["bal‮ance\u0007_of"], add: false, transact: [] }] })
+		const w = await opened({
+			known: [],
+			unknown: [{ ...unmarked, address: hostile, simulate: ["bal‮ance\u0007_of"], add: false, transact: [] }],
+		})
 		expect(w.find(`.${STYLE.address}`).find("span").text()).toBe("0x0c1e…5a7f")
 		await targets(w)[0].trigger("click")
 		expect(w.find('[data-testid="cap-details-fns"]').text()).toContain("balance_of")

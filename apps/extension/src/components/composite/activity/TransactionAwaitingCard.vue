@@ -164,6 +164,5 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 .action_btn:focus-visible {
 	outline: 2px solid var(--nulo-accent);
 	outline-offset: -2px;
-	border-radius: 4px;
 }
 </style>

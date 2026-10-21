@@ -12,11 +12,10 @@
  *     onAccountDeleted → tear down per-network scheduler).
  *   - dedup + late-delete + trust transitions (this file's headline).
  *
- * Fixture strategy: mock IncomingTransferRepository with an in-memory
- * Map-backed shape; stub the 8 declared dependencies as plain objects
- * with the surface scanContract / replayPendingPrompts / lifecycle
- * handlers actually touch. The real ServiceCollection.start() flow is
- * used so init() runs end-to-end.
+ * The suite runs the real IncomingTransferRepository over the process-wide fake browser storage.
+ * The other declared dependencies are plain-object stubs with the surface scanContract /
+ * replayPendingPrompts / lifecycle handlers actually touch. The real ServiceCollection.start() flow
+ * is used so init() runs end-to-end.
  */
 
 import { deferred, EventHandler } from "@nulo/wallet-core/utils"
@@ -32,11 +31,12 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 // its inlined @nulo/* graph during the file's import phase, NOT inside the first
 // test's 5s budget. Under Vite 8 that cold transform can exceed 5s on CI's
 // shared runner, which timed out the first `bootService()` when the import was
-// dynamic. vi.mock("./repository") is hoisted above this, so the mock still applies.
+// dynamic.
 import { IncomingTransferService } from "./service"
+import { IncomingTransferRepository } from "./repository"
 import type { BalanceRefreshOutbox } from "./balance-outbox"
 import { PublicScanCursorSchema, noteRecordId } from "./spec"
-import type { IncomingNoteRecord, IncomingPublicEventRecord, IncomingTransferRecord, IncomingTrustRecord, IncomingTrustState } from "./spec"
+import type { IncomingNoteRecord, IncomingPublicEventRecord, IncomingTransferRecord, IncomingTrustRecord, PublicScanCursor } from "./spec"
 import { TaskStatus } from "@/wallet/services/task/spec"
 import type { SyncedBlock } from "@/wallet/services/note/spec"
 import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
@@ -53,117 +53,17 @@ import type {
 } from "@nulo/aztec-runtime/pxe/public-events"
 import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
-// ── Repo mock (in-memory) ────────────────────────────────────────────────
+// ── Storage ─────────────────────────────────────────────────────────────
 
-const records = new Map<string, IncomingTransferRecord>()
-const trust = new Map<string, IncomingTrustRecord>()
-const cursors = new Map<string, unknown>()
-const outbox = new Map<string, unknown>()
-const arrivals = new Map<string, ArrivalRow>()
+// Every `FakeBrowserApi` in this file shares `@webext-core/fake-browser`'s one store, so this
+// repository reads and writes the rows of every service the suite boots.
+const suiteBrowser = new FakeBrowserApi()
+const repo = new IncomingTransferRepository(suiteBrowser)
 
-function trustKey(profileId: string, networkId: string, contract: string): string {
-	return `${profileId}|${networkId}|${contract}`
+/** Writes `row` as given, `updatedAt` included, where `setTrust` would stamp the clock. */
+function seedTrustRow(row: IncomingTrustRecord): Promise<void> {
+	return repo.setArrivalFloor(row, { arrivalFloor: row.arrivalFloor, pending: row.arrivalFloorPending === true })
 }
-
-function dropKeys(map: Map<string, unknown>, prefix: string): void {
-	for (const key of map.keys()) if (key.startsWith(prefix)) map.delete(key)
-}
-
-vi.mock("./repository", () => ({
-	// A constructable class — Vitest 4 refuses to `new` a vi.fn whose impl is an
-	// arrow, and Biome rewrites a `function` impl back to an arrow. The mock's
-	// call-tracking isn't asserted, so a plain class returning the in-memory
-	// fake is the robust form.
-	IncomingTransferRepository: class {
-		constructor() {
-			const repo = {
-				getRecord: async (k: string) => records.get(k),
-				hasRecord: async (k: string) => records.has(k),
-				upsertRecord: async (r: IncomingTransferRecord) => {
-					records.set(r.id, r)
-				},
-				deleteRecord: async (k: string) => {
-					records.delete(k)
-				},
-				listRecords: async () => [...records.values()],
-				listForAccount: async (p: string, n: string, a: string) =>
-					[...records.values()].filter((r) => r.profileId === p && r.networkId === n && r.accountAddress === a),
-				listByTxHash: async (p: string, n: string, h: string) =>
-					[...records.values()].filter((r) => r.profileId === p && r.networkId === n && r.txHash === h),
-				listByContract: async (p: string, n: string, c: string) =>
-					[...records.values()].filter((r) => r.profileId === p && r.networkId === n && r.contract === c),
-				getTrust: async (p: string, n: string, c: string) => trust.get(trustKey(p, n, c)),
-				/** The stored read inside `setTrust`, a method of its own so a test can park on it. */
-				readTrustForWrite: async (p: string, n: string, c: string) => trust.get(trustKey(p, n, c)),
-				// As the real repository: the stored read, then the fence, then the write, keeping the floor fields.
-				setTrust: async (p: string, n: string, c: string, state: IncomingTrustState, fence?: () => boolean) => {
-					const stored = await repo.readTrustForWrite(p, n, c)
-					if (fence && !fence()) return undefined
-					const { arrivalFloor, arrivalFloorPending } = stored ?? {}
-					const rec: IncomingTrustRecord = { profileId: p, networkId: n, contract: c, state, updatedAt: 0 }
-					if (arrivalFloor !== undefined) rec.arrivalFloor = arrivalFloor
-					if (arrivalFloorPending) rec.arrivalFloorPending = true
-					trust.set(trustKey(p, n, c), rec)
-					return rec
-				},
-				setArrivalFloor: async (stored: IncomingTrustRecord, floor: { arrivalFloor: number | undefined; pending: boolean }) => {
-					const { profileId, networkId, contract, state, updatedAt } = stored
-					const rec: IncomingTrustRecord = { profileId, networkId, contract, state, updatedAt }
-					if (floor.arrivalFloor !== undefined) rec.arrivalFloor = floor.arrivalFloor
-					if (floor.pending) rec.arrivalFloorPending = true
-					trust.set(trustKey(profileId, networkId, contract), rec)
-				},
-				// One call, as the real one: every row lands, or (on a rejection) none does.
-				commitAcceptance: async (row: IncomingTrustRecord, unhidden: IncomingTransferRecord[]) => {
-					trust.set(trustKey(row.profileId, row.networkId, row.contract), row)
-					for (const r of unhidden) records.set(r.id, r)
-				},
-				listTrust: async () => [...trust.values()],
-				getArrivalRow: async (p: string, n: string, a: string) => arrivals.get(`${p}|${n}|${a}`),
-				setArrivalRow: async (p: string, n: string, a: string, row: ArrivalRow) => {
-					arrivals.set(`${p}|${n}|${a}`, row)
-				},
-				deleteArrivalRow: async (p: string, n: string, a: string) => {
-					arrivals.delete(`${p}|${n}|${a}`)
-				},
-				clearProfile: async (p: string) => {
-					for (const [k, v] of records) if (v.profileId === p) records.delete(k)
-					for (const [k, v] of trust) if (v.profileId === p) trust.delete(k)
-					dropKeys(arrivals, `${p}|`)
-				},
-				// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 30 — clearing a chain atomically covers records, trust, cursors and outbox under one scope predicate
-				clearChain: async (p: string, n: string) => {
-					for (const [k, v] of records) if (v.profileId === p && v.networkId === n) records.delete(k)
-					for (const [k, v] of trust) if (v.profileId === p && v.networkId === n) trust.delete(k)
-					for (const key of cursors.keys()) if (key.startsWith(`${p}|${n}|`)) cursors.delete(key)
-					for (const key of outbox.keys()) if (key.startsWith(`${p}|${n}|`)) outbox.delete(key)
-					dropKeys(arrivals, `${p}|${n}|`)
-				},
-				// Public-event cursors.
-				getCursor: async (p: string, n: string, c: string) => cursors.get(`${p}|${n}|${c}`),
-				setCursor: async (p: string, n: string, c: string, cur: unknown) => {
-					cursors.set(`${p}|${n}|${c}`, cur)
-				},
-				deleteCursor: async (p: string, n: string, c: string) => {
-					cursors.delete(`${p}|${n}|${c}`)
-				},
-				listCursors: async () => [...cursors.entries()],
-				// Balance-refresh outbox.
-				getOutbox: async (p: string, n: string, a: string, t: number) => outbox.get(`${p}|${n}|${a}|${t}`),
-				setOutbox: async (p: string, n: string, a: string, t: number, row: unknown) => {
-					outbox.set(`${p}|${n}|${a}|${t}`, row)
-				},
-				deleteOutbox: async (p: string, n: string, a: string, t: number) => {
-					outbox.delete(`${p}|${n}|${a}|${t}`)
-				},
-				listOutbox: async () => [...outbox.entries()],
-			}
-			// biome-ignore lint/correctness/noConstructorReturn: mock ctor returns the in-memory fake
-			return repo
-		}
-	},
-	trustKey,
-}))
 
 // Pass-through, so a test can observe when a clear builds its episode prefix.
 vi.mock("./scan-episodes", async (importOriginal) => {
@@ -441,7 +341,7 @@ async function bootService(
 		price?: ReturnType<typeof makePriceStub>
 		publicReader?: PublicEventReader
 	} = {},
-	opts: { keepStorage?: boolean; pollIntervalMs?: number } = {},
+	opts: { pollIntervalMs?: number } = {},
 ) {
 	const fixture = {
 		profile: stubs.profile ?? makeProfileStub(),
@@ -459,9 +359,8 @@ async function bootService(
 	const logger = new LoggerStore(new ConfigStore())
 	// Huge poll interval so scheduler doesn't fire during tests; we exercise
 	// the scan path via the public surface or via direct method calls.
+	// Every boot shares the suite's storage, so a second boot in a test models a service-worker restart.
 	const browserApi = new FakeBrowserApi()
-	// `keepStorage` models a service-worker restart: a new service graph over the same storage areas.
-	if (!opts.keepStorage) browserApi.reset()
 	const service = new IncomingTransferService(logger, browserApi, opts.pollIntervalMs ?? 1_000_000, stubs.publicReader)
 	const collection = new ServiceCollection()
 	for (const stub of Object.values(fixture)) collection.add(stub as never)
@@ -471,11 +370,7 @@ async function bootService(
 }
 
 beforeEach(() => {
-	records.clear()
-	trust.clear()
-	cursors.clear()
-	outbox.clear()
-	arrivals.clear()
+	suiteBrowser.reset()
 })
 
 /** A record's fields plus the note's `uniqueNoteHash`, which the record keeps only in its id. */
@@ -506,9 +401,9 @@ function noteRecord({ uniqueNoteHash = validNoteHash(1), ...overrides }: NoteSee
 }
 
 /** Seed a note record keyed by its `id` (matches the repo's real keying). Returns the record. */
-function seedNote(overrides: NoteSeed = {}): IncomingNoteRecord {
+async function seedNote(overrides: NoteSeed = {}): Promise<IncomingNoteRecord> {
 	const r = noteRecord(overrides)
-	records.set(r.id, r)
+	await repo.upsertRecord(r)
 	return r
 }
 
@@ -559,7 +454,7 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 	test("getIncomingTransfers returns [] when incomingTransfersVisible=false", async () => {
 		const config = makeConfigStub(false)
 		const { service } = await bootService({ config })
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "k",
 			profileId: "p1",
 			networkId: "n1",
@@ -582,7 +477,7 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 
 	test("getIncomingTransfers returns visible records when visibility=true", async () => {
 		const { service } = await bootService()
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "k",
 			profileId: "p1",
 			networkId: "n1",
@@ -606,7 +501,7 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 	test("getIncomingTransfers fails CLOSED on a config error (returns [], record stays persisted)", async () => {
 		const config = makeConfigStub()
 		const { service } = await bootService({ config })
-		records.set("k", {
+		await repo.upsertRecord({
 			kind: "note",
 			id: "note:p1|n1|k",
 			profileId: "p1",
@@ -632,12 +527,12 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 		const out = await service.getIncomingTransfers("p1", "n1", "0xa")
 		expect(out).toEqual([])
 		// Still persisted — reappears once visibility can be read again.
-		expect(records.size).toBe(1)
+		expect((await repo.listRecords()).length).toBe(1)
 	})
 
 	test("getIncomingTransfers filters hidden records", async () => {
 		const { service } = await bootService()
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "v",
 			profileId: "p1",
 			networkId: "n1",
@@ -654,7 +549,7 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 			hidden: false,
 			discoveredAt: 0,
 		})
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "h",
 			profileId: "p1",
 			networkId: "n1",
@@ -682,14 +577,14 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 		const seen = vi.fn()
 		service.onIncomingTransferPending.add(seen)
 		// Pre-seed a pending trust record so the method has something to emit.
-		trust.set(trustKey("p1", "n1", "0xtokenA"), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: "0xtokenA",
 			state: "pending",
 			updatedAt: 0,
 		})
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: validNoteHash(7),
 			profileId: "p1",
 			networkId: "n1",
@@ -715,21 +610,21 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 		const { service } = await bootService({ token })
 		const seen = vi.fn()
 		service.onIncomingTransferPending.add(seen)
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
 			state: "pending",
 			updatedAt: 0,
 		})
-		trust.set(trustKey("p1", "n1", tokenB.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenB.contract,
 			state: "pending",
 			updatedAt: 0,
 		})
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "ka",
 			profileId: "p1",
 			networkId: "n1",
@@ -746,7 +641,7 @@ describe("IncomingTransferService — public surface gating (visibility)", () =>
 			hidden: true,
 			discoveredAt: 0,
 		})
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "kb",
 			profileId: "p1",
 			networkId: "n1",
@@ -772,14 +667,14 @@ describe("IncomingTransferService — trust transitions", () => {
 	test("setTrustAllow flips hidden records visible + emits onIncomingTransferAdded", async () => {
 		const token = makeTokenStub([tokenA])
 		const { service } = await bootService({ token })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
 			state: "pending",
 			updatedAt: 0,
 		})
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "k",
 			profileId: "p1",
 			networkId: "n1",
@@ -799,21 +694,21 @@ describe("IncomingTransferService — trust transitions", () => {
 		const added = vi.fn()
 		service.onIncomingTransferAdded.add(added)
 		await service.setTrustAllow("p1", "n1", tokenA.contract)
-		expect(records.get("note:p1|n1|k")?.hidden).toBe(false)
+		expect((await repo.getRecord("note:p1|n1|k"))?.hidden).toBe(false)
 		expect(added).toHaveBeenCalledTimes(1)
 	})
 
 	test("setTrustAllow with visibility=false flips records visible but does NOT emit", async () => {
 		const config = makeConfigStub(false)
 		const { service } = await bootService({ config, token: makeTokenStub([tokenA]) })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
 			state: "pending",
 			updatedAt: 0,
 		})
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "k",
 			profileId: "p1",
 			networkId: "n1",
@@ -834,13 +729,13 @@ describe("IncomingTransferService — trust transitions", () => {
 		service.onIncomingTransferAdded.add(added)
 		await service.setTrustAllow("p1", "n1", tokenA.contract)
 		// Records flipped (so a future toggle-on shows them) but no live event.
-		expect(records.get("note:p1|n1|k")?.hidden).toBe(false)
+		expect((await repo.getRecord("note:p1|n1|k"))?.hidden).toBe(false)
 		expect(added).not.toHaveBeenCalled()
 	})
 
 	test("setTrustReject sets state=blocked and deletes the hidden records", async () => {
 		const { service } = await bootService({ token: makeTokenStub([tokenA]) })
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "k",
 			profileId: "p1",
 			networkId: "n1",
@@ -858,8 +753,8 @@ describe("IncomingTransferService — trust transitions", () => {
 			discoveredAt: 0,
 		})
 		await service.setTrustReject("p1", "n1", tokenA.contract)
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("blocked")
-		expect(records.has("note:p1|n1|k")).toBe(false)
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("blocked")
+		expect(await repo.hasRecord("note:p1|n1|k")).toBe(false)
 	})
 })
 
@@ -890,7 +785,7 @@ describe("IncomingTransferService — trust after a full-backup import", () => {
 	test("a restored token's first note asks: the backup carries no trust rows and the restore trusts nothing", async () => {
 		const { pending, open } = await bootRestored()
 		await open()
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("pending")
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("pending")
 		expect(pending).toHaveBeenCalledTimes(1)
 	})
 
@@ -899,7 +794,7 @@ describe("IncomingTransferService — trust after a full-backup import", () => {
 		await open()
 		await token.onTokenUpdated.invoke({ ...tokenA, profileId: "p1", name: "Token A" } as never)
 		await flushPromises()
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("pending")
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("pending")
 		expect(pending).toHaveBeenCalledTimes(1)
 	})
 })
@@ -988,7 +883,7 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 			const noteSvc = makeNoteStub({ [tokenA.contract]: [note()] }, { 100: 1_234 })
 			const { service } = await bootService({ network, token, note: noteSvc })
 			const trustRead = holdCall(internals(service).repo, "getTrust", 1, "after")
-			trust.set(trustKey("p1", "n1", tokenA.contract), {
+			await seedTrustRow({
 				profileId: "p1",
 				networkId: "n1",
 				contract: tokenA.contract,
@@ -1004,7 +899,7 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 			// the same lock) — nothing has been wiped or written yet.
 			token.onTokenDeleted.invoke({ ...tokenA, profileId: "p1" })
 			await vi.advanceTimersByTimeAsync(0)
-			expect(records.size).toBe(0)
+			expect((await repo.listRecords()).length).toBe(0)
 
 			// The serviceLock watchdog fires → handoff → the deletion bumps the
 			// epoch and wipes the token's rows.
@@ -1015,8 +910,8 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 			await scanP
 			await vi.advanceTimersByTimeAsync(0)
 
-			expect(records.size).toBe(0) // no resurrection
-			expect(outbox.size).toBe(0) // no post-park outbox write
+			expect((await repo.listRecords()).length).toBe(0) // no resurrection
+			expect((await repo.listOutbox()).length).toBe(0) // no post-park outbox write
 			expect(added).not.toHaveBeenCalled() // no post-park emit
 		} finally {
 			vi.useRealTimers()
@@ -1039,7 +934,7 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 			const recordRead = holdCall(internals(service).repo, "getRecord", 2, "after")
 			// Existing record for the SAME note, timestamp missing → the
 			// scan takes the backfill branch and parks.
-			seedNote({
+			await seedNote({
 				uniqueNoteHash: n.uniqueNoteHash,
 				contract: tokenA.contract,
 				tokenId: tokenA.id,
@@ -1052,13 +947,13 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 			await vi.advanceTimersByTimeAsync(0)
 
 			await vi.advanceTimersByTimeAsync(5 * 60_000 + 1) // handoff → wipe
-			expect(records.size).toBe(0)
+			expect((await repo.listRecords()).length).toBe(0)
 
 			recordRead.release()
 			await scanP
 			await vi.advanceTimersByTimeAsync(0)
 
-			expect(records.size).toBe(0) // the backfill did not resurrect it
+			expect((await repo.listRecords()).length).toBe(0) // the backfill did not resurrect it
 		} finally {
 			vi.useRealTimers()
 		}
@@ -1077,12 +972,12 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 
 		await scan(service)
 
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("pending")
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("pending")
 		expect(pending).toHaveBeenCalledTimes(1)
 		// Pending state → record is hidden → no Added emit.
 		expect(added).not.toHaveBeenCalled()
 		// Record is persisted (hidden) for the future toggle-on / Allow path.
-		const persisted = [...records.values()]
+		const persisted = await repo.listRecords()
 		expect(persisted).toHaveLength(1)
 		expect(persisted[0].hidden).toBe(true)
 	})
@@ -1101,9 +996,9 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 
 		// Trust transition still happens (so toggle-on can replay) — only the
 		// emit is silenced.
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("pending")
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("pending")
 		expect(pending).not.toHaveBeenCalled()
-		expect([...records.values()]).toHaveLength(1)
+		expect(await repo.listRecords()).toHaveLength(1)
 	})
 
 	test("trusted contract: scanContract emits Added per note + persists visible", async () => {
@@ -1111,7 +1006,7 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 		const token = makeTokenStub([tokenA])
 		const noteSvc = makeNoteStub({ [tokenA.contract]: [note()] })
 		const { service } = await bootService({ network, token, note: noteSvc })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -1125,7 +1020,7 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 		await scan(service)
 
 		expect(added).toHaveBeenCalledTimes(1)
-		expect([...records.values()][0].hidden).toBe(false)
+		expect((await repo.listRecords())[0].hidden).toBe(false)
 	})
 
 	test("visibility fails CLOSED: a config error suppresses the Added emit but persists the record hidden", async () => {
@@ -1134,7 +1029,7 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 		const noteSvc = makeNoteStub({ [tokenA.contract]: [note()] })
 		const config = makeConfigStub()
 		const { service } = await bootService({ network, token, note: noteSvc, config })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -1154,7 +1049,7 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 		// Privacy control fails closed: no emit when visibility can't be confirmed…
 		expect(added).not.toHaveBeenCalled()
 		// …but the record is persisted (hidden), so it reappears once visibility resolves.
-		expect(records.size).toBe(1)
+		expect((await repo.listRecords()).length).toBe(1)
 	})
 
 	test("dedupe source 1 (prior records): existing uniqueNoteHash → skip", async () => {
@@ -1163,7 +1058,7 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 		const n = note()
 		const noteSvc = makeNoteStub({ [tokenA.contract]: [n] })
 		const { service } = await bootService({ network, token, note: noteSvc })
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: n.uniqueNoteHash,
 			profileId: "p1",
 			networkId: "n1",
@@ -1206,7 +1101,7 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 
 		// Skipped → no trust transition either; nothing to prompt about.
 		expect(pending).not.toHaveBeenCalled()
-		expect(trust.size).toBe(0)
+		expect(await repo.listTrust()).toHaveLength(0)
 	})
 
 	test("a FOREIGN profile's outgoing tx does not suppress this scope's note", async () => {
@@ -1240,7 +1135,7 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 		await scan(service)
 
 		expect(pending).not.toHaveBeenCalled()
-		expect(trust.size).toBe(0)
+		expect(await repo.listTrust()).toHaveLength(0)
 	})
 
 	test("a failed send's own note: a note whose hash matches a failed row of this scope → skip", async () => {
@@ -1274,7 +1169,7 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 		await scan(service)
 
 		expect(pending).not.toHaveBeenCalled()
-		expect([...records.values()]).toHaveLength(0)
+		expect(await repo.listRecords()).toHaveLength(0)
 	})
 
 	test("token-removed (no matching tokens for contract) → scanContract no-ops", async () => {
@@ -1289,7 +1184,7 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 		await scan(service)
 
 		expect(pending).not.toHaveBeenCalled()
-		expect([...records.values()]).toHaveLength(0)
+		expect(await repo.listRecords()).toHaveLength(0)
 	})
 })
 
@@ -1315,7 +1210,7 @@ describe("IncomingTransferService — late-delete on onTransactionAdded", () => 
 			hidden: false,
 			discoveredAt: 0,
 		})
-		records.set(pre.id, pre)
+		await repo.upsertRecord(pre)
 
 		const deleted = vi.fn()
 		service.onIncomingTransferDeleted.add(deleted)
@@ -1323,7 +1218,7 @@ describe("IncomingTransferService — late-delete on onTransactionAdded", () => 
 		transaction.onTransactionAdded.invoke({ hash: "0xpending", account: "0xa", chainId: 1, calls: [] } as never)
 		await flushPromises()
 
-		expect(records.has(pre.id)).toBe(false)
+		expect(await repo.hasRecord(pre.id)).toBe(false)
 		expect(deleted).toHaveBeenCalledTimes(1)
 	})
 
@@ -1348,7 +1243,7 @@ describe("IncomingTransferService — late-delete on onTransactionAdded", () => 
 			hidden: false,
 			discoveredAt: 0,
 		})
-		records.set(pre.id, pre)
+		await repo.upsertRecord(pre)
 
 		const deleted = vi.fn()
 		service.onIncomingTransferDeleted.add(deleted)
@@ -1356,7 +1251,7 @@ describe("IncomingTransferService — late-delete on onTransactionAdded", () => 
 		transaction.onTransactionAdded.invoke({ hash: "0xdifferent", account: "0xa", chainId: 1, calls: [] } as never)
 		await flushPromises()
 
-		expect(records.has(pre.id)).toBe(true)
+		expect(await repo.hasRecord(pre.id)).toBe(true)
 		expect(deleted).not.toHaveBeenCalled()
 	})
 
@@ -1381,7 +1276,7 @@ describe("IncomingTransferService — late-delete on onTransactionAdded", () => 
 			hidden: false,
 			discoveredAt: 0,
 		})
-		records.set(pre.id, pre)
+		await repo.upsertRecord(pre)
 
 		const deleted = vi.fn()
 		service.onIncomingTransferDeleted.add(deleted)
@@ -1393,7 +1288,7 @@ describe("IncomingTransferService — late-delete on onTransactionAdded", () => 
 		transaction.onTransactionAdded.invoke({ hash: "0xreentrant", account: "0xa", chainId: 1, calls: [] } as never)
 		await flushPromises()
 
-		expect(records.has(pre.id)).toBe(false)
+		expect(await repo.hasRecord(pre.id)).toBe(false)
 		expect(deleted).toHaveBeenCalledTimes(1)
 	})
 
@@ -1422,8 +1317,8 @@ describe("IncomingTransferService — late-delete on onTransactionAdded", () => 
 			discoveredAt: 0,
 		})
 		const recordB = noteRecord({ ...recordA, uniqueNoteHash: validNoteHash(11), accountAddress: "0xB", owner: "0xB" })
-		records.set(recordA.id, recordA)
-		records.set(recordB.id, recordB)
+		await repo.upsertRecord(recordA)
+		await repo.upsertRecord(recordB)
 
 		const deleted = vi.fn()
 		service.onIncomingTransferDeleted.add(deleted)
@@ -1432,8 +1327,8 @@ describe("IncomingTransferService — late-delete on onTransactionAdded", () => 
 		await flushPromises()
 
 		// Only account A's record gone; B's stays grounding.
-		expect(records.has(recordA.id)).toBe(false)
-		expect(records.has(recordB.id)).toBe(true)
+		expect(await repo.hasRecord(recordA.id)).toBe(false)
+		expect(await repo.hasRecord(recordB.id)).toBe(true)
 		expect(deleted).toHaveBeenCalledTimes(1)
 	})
 })
@@ -1441,7 +1336,7 @@ describe("IncomingTransferService — late-delete on onTransactionAdded", () => 
 describe("IncomingTransferService — cleanup wiring", () => {
 	test("clearProfile wipes records + trust for that profileId", async () => {
 		const { service } = await bootService()
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "k1",
 			profileId: "p1",
 			networkId: "n1",
@@ -1458,7 +1353,7 @@ describe("IncomingTransferService — cleanup wiring", () => {
 			hidden: false,
 			discoveredAt: 0,
 		})
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "k2",
 			profileId: "p2",
 			networkId: "n1",
@@ -1475,20 +1370,20 @@ describe("IncomingTransferService — cleanup wiring", () => {
 			hidden: false,
 			discoveredAt: 0,
 		})
-		trust.set(trustKey("p1", "n1", "0xc"), { profileId: "p1", networkId: "n1", contract: "0xc", state: "trusted", updatedAt: 0 })
-		trust.set(trustKey("p2", "n1", "0xc"), { profileId: "p2", networkId: "n1", contract: "0xc", state: "trusted", updatedAt: 0 })
+		await seedTrustRow({ profileId: "p1", networkId: "n1", contract: "0xc", state: "trusted", updatedAt: 0 })
+		await seedTrustRow({ profileId: "p2", networkId: "n1", contract: "0xc", state: "trusted", updatedAt: 0 })
 
 		await service.clearProfile("p1")
 
-		expect(records.has("note:p1|n1|k1")).toBe(false)
-		expect(records.has("note:p2|n1|k2")).toBe(true)
-		expect(trust.has(trustKey("p1", "n1", "0xc"))).toBe(false)
-		expect(trust.has(trustKey("p2", "n1", "0xc"))).toBe(true)
+		expect(await repo.hasRecord("note:p1|n1|k1")).toBe(false)
+		expect(await repo.hasRecord("note:p2|n1|k2")).toBe(true)
+		expect(await repo.getTrust("p1", "n1", "0xc")).toBeUndefined()
+		expect(await repo.getTrust("p2", "n1", "0xc")).toBeDefined()
 	})
 
 	test("clearChain wipes only records + trust matching (profileId, networkId)", async () => {
 		const { service } = await bootService()
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "k1",
 			profileId: "p1",
 			networkId: "n1",
@@ -1505,7 +1400,7 @@ describe("IncomingTransferService — cleanup wiring", () => {
 			hidden: false,
 			discoveredAt: 0,
 		})
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "k2",
 			profileId: "p1",
 			networkId: "n2",
@@ -1522,15 +1417,15 @@ describe("IncomingTransferService — cleanup wiring", () => {
 			hidden: false,
 			discoveredAt: 0,
 		})
-		trust.set(trustKey("p1", "n1", "0xc"), { profileId: "p1", networkId: "n1", contract: "0xc", state: "trusted", updatedAt: 0 })
-		trust.set(trustKey("p1", "n2", "0xc"), { profileId: "p1", networkId: "n2", contract: "0xc", state: "trusted", updatedAt: 0 })
+		await seedTrustRow({ profileId: "p1", networkId: "n1", contract: "0xc", state: "trusted", updatedAt: 0 })
+		await seedTrustRow({ profileId: "p1", networkId: "n2", contract: "0xc", state: "trusted", updatedAt: 0 })
 
 		await service.clearChain("p1", "n1")
 
-		expect(records.has("note:p1|n1|k1")).toBe(false)
-		expect(records.has("note:p1|n2|k2")).toBe(true)
-		expect(trust.has(trustKey("p1", "n1", "0xc"))).toBe(false)
-		expect(trust.has(trustKey("p1", "n2", "0xc"))).toBe(true)
+		expect(await repo.hasRecord("note:p1|n1|k1")).toBe(false)
+		expect(await repo.hasRecord("note:p1|n2|k2")).toBe(true)
+		expect(await repo.getTrust("p1", "n1", "0xc")).toBeUndefined()
+		expect(await repo.getTrust("p1", "n2", "0xc")).toBeDefined()
 	})
 })
 
@@ -1542,7 +1437,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 		const noteSvc = makeNoteStub({ [tokenA.contract]: [note({ l2BlockNumber: 42 })] }, { 42: 1_700_000_000 })
 		const { service } = await bootService({ network: network(), token: token(), note: noteSvc })
 		// Trust = trusted so the record persists visible immediately.
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -1552,7 +1447,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 
 		await scan(service)
 
-		const persisted = [...records.values()][0]
+		const persisted = (await repo.listRecords())[0]
 		expect(persisted.blockTimestamp).toBe(1_700_000_000)
 		expect(persisted.l2BlockNumber).toBe(42)
 	})
@@ -1566,7 +1461,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 		]
 		const noteSvc = makeNoteStub({ [tokenA.contract]: notes }, { 10: 1_700_000_000, 11: 1_700_000_036 })
 		const { service } = await bootService({ network: network(), token: token(), note: noteSvc })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -1578,7 +1473,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 
 		// Exactly 2 lookups (block 10 fetched once, reused; block 11 once).
 		expect(noteSvc.getBlockTimestamp).toHaveBeenCalledTimes(2)
-		const persisted = [...records.values()]
+		const persisted = await repo.listRecords()
 		expect(persisted.find((r) => r.l2BlockNumber === 10)?.blockTimestamp).toBe(1_700_000_000)
 		expect(persisted.find((r) => r.l2BlockNumber === 11)?.blockTimestamp).toBe(1_700_000_036)
 	})
@@ -1588,7 +1483,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 		// blockTimestamp=undefined; sort path falls back to discoveredAt.
 		const noteSvc = makeNoteStub({ [tokenA.contract]: [note({ l2BlockNumber: 99 })] }, { 99: undefined })
 		const { service } = await bootService({ network: network(), token: token(), note: noteSvc })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -1598,7 +1493,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 
 		await scan(service)
 
-		const persisted = [...records.values()][0]
+		const persisted = (await repo.listRecords())[0]
 		expect(persisted.blockTimestamp).toBeUndefined()
 		expect(persisted.id).toBe(noteRecordId("p1", "n1", validNoteHash(1)))
 	})
@@ -1610,7 +1505,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 		const tokenStub = makeTokenStub([tokenA])
 		const { service } = await bootService({ network: network(), account: accountStub, token: tokenStub })
 
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "k1",
 			profileId: "p1",
 			networkId: "n1",
@@ -1628,7 +1523,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 			discoveredAt: 0,
 			blockTimestamp: 1_700_000_000,
 		})
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "k2",
 			profileId: "p1",
 			networkId: "n1",
@@ -1647,7 +1542,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 			blockTimestamp: 1_700_000_036,
 		})
 		// Unrelated contract's records must survive.
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "kOther",
 			profileId: "p1",
 			networkId: "n1",
@@ -1664,7 +1559,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 			hidden: false,
 			discoveredAt: 0,
 		})
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -1682,12 +1577,12 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 		await flushPromises()
 
 		// tokenA's records wiped; tokenB's record untouched.
-		expect(records.has("note:p1|n1|k1")).toBe(false)
-		expect(records.has("note:p1|n1|k2")).toBe(false)
-		expect(records.has("note:p1|n1|kOther")).toBe(true)
+		expect(await repo.hasRecord("note:p1|n1|k1")).toBe(false)
+		expect(await repo.hasRecord("note:p1|n1|k2")).toBe(false)
+		expect(await repo.hasRecord("note:p1|n1|kOther")).toBe(true)
 		expect(deleted).toHaveBeenCalledTimes(2)
 		// Trust row for tokenA flipped to unknown.
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("unknown")
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("unknown")
 		expect(trustChanged).toHaveBeenCalled()
 	})
 
@@ -1696,7 +1591,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 		const tokenStub = makeTokenStub([tokenA])
 		const { service } = await bootService({ network: network(), account: accountStub, token: tokenStub })
 
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "k1",
 			profileId: "p1",
 			networkId: "n1",
@@ -1721,7 +1616,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 		tokenStub.onTokenDeleted.invoke(tokenA as never)
 		await flushPromises()
 
-		expect(records.has("note:p1|n1|k1")).toBe(false)
+		expect(await repo.hasRecord("note:p1|n1|k1")).toBe(false)
 		// No trust row to reset → no emit.
 		expect(trustChanged).not.toHaveBeenCalled()
 	})
@@ -1737,7 +1632,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 			token: tokenStub,
 			note: noteSvc,
 		})
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -1747,19 +1642,19 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 
 		// First scan: record persists with blockTimestamp=1.7B.
 		await scan(service)
-		const firstPersist = [...records.values()][0]
+		const firstPersist = (await repo.listRecords())[0]
 		expect(firstPersist.blockTimestamp).toBe(1_700_000_000)
 
 		// Delete the token → records + trust wiped.
 		tokenStub.getTokensRaw.mockResolvedValue([])
 		tokenStub.onTokenDeleted.invoke(tokenA as never)
 		await flushPromises()
-		expect(records.size).toBe(0)
+		expect((await repo.listRecords()).length).toBe(0)
 
 		// Simulate re-add: setTrust back to trusted (mimics the popup-add
 		// auto-trust path), then re-scan.
 		tokenStub.getTokensRaw.mockResolvedValue([tokenA])
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -1769,7 +1664,7 @@ describe("IncomingTransferService — Path 2 block-timestamp + token-delete wipe
 		await scan(service)
 
 		// Re-indexed record has the ORIGINAL chain timestamp, not Date.now().
-		const reindexed = [...records.values()][0]
+		const reindexed = (await repo.listRecords())[0]
 		expect(reindexed.blockTimestamp).toBe(1_700_000_000)
 		expect(reindexed.l2BlockNumber).toBe(42)
 		// The id is the original's: a note's unique note hash is stable across delete + re-discover.
@@ -1824,7 +1719,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 			token: tokenStub,
 			note: noteSvc,
 		})
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -1873,7 +1768,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 		const accountStub = makeAccountStub([{ profileId: "p1", chainId: 1, address: "0xa" }])
 		const tokenStub = makeTokenStub([tokenA])
 		const { service } = await bootService({ network: network(), account: accountStub, token: tokenStub })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -1883,7 +1778,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 
 		const result = await service.setTrustAllow("p1", "n1", tokenA.contract)
 		expect(result).toBe(true)
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("trusted")
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("trusted")
 	})
 
 	test("pending transition bails when delete lands during the unknown→pending window", async () => {
@@ -1945,7 +1840,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 		await scanPromise
 
 		// Critical: NO `pending` trust row created, NO Pending event emitted.
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))).toBeUndefined()
+		expect(await repo.getTrust("p1", "n1", tokenA.contract)).toBeUndefined()
 		expect(transferPending).not.toHaveBeenCalled()
 		// onIncomingTrustChanged should not fire from the scan path. (It
 		// would normally fire from onTokenDeleted's trust-reset, but that
@@ -1958,11 +1853,10 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 		const stale = await bootService({ network: network(), account: accountStub, token: makeTokenStub([]) })
 		expect(await stale.service.setTrustReject("p1", "n1", tokenA.contract)).toBe(false)
 
-		records.clear()
-		trust.clear()
+		await repo.clearProfile("p1")
 
 		const live = await bootService({ network: network(), account: accountStub, token: makeTokenStub([tokenA]) })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -1970,7 +1864,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 			updatedAt: 0,
 		})
 		expect(await live.service.setTrustReject("p1", "n1", tokenA.contract)).toBe(true)
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("blocked")
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("blocked")
 	})
 
 	test("setTrustAllow on deleted token is a no-op", async () => {
@@ -1980,7 +1874,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 		const tokenStub = makeTokenStub([])
 		const { service } = await bootService({ network: network(), account: accountStub, token: tokenStub })
 		// Pre-seed trust=unknown (the post-delete state).
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -1993,7 +1887,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 		await service.setTrustAllow("p1", "n1", tokenA.contract)
 
 		// Stale-popup guard: tokenService.getTokensRaw returns [] → no flip.
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("unknown")
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("unknown")
 		expect(trustChanged).not.toHaveBeenCalled()
 	})
 
@@ -2001,7 +1895,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 		const accountStub = makeAccountStub([{ profileId: "p1", chainId: 1, address: "0xa" }])
 		const tokenStub = makeTokenStub([])
 		const { service } = await bootService({ network: network(), account: accountStub, token: tokenStub })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -2013,7 +1907,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 
 		await service.setTrustReject("p1", "n1", tokenA.contract)
 
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("unknown")
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("unknown")
 		expect(trustChanged).not.toHaveBeenCalled()
 	})
 
@@ -2022,7 +1916,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 		const accountStub = makeAccountStub([{ profileId: "p1", chainId: 1, address: "0xa" }])
 		const tokenStub = makeTokenStub([tokenA])
 		const { service } = await bootService({ network: network(), account: accountStub, token: tokenStub })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -2032,7 +1926,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 
 		await service.setTrustAllow("p1", "n1", tokenA.contract)
 
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("trusted")
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("trusted")
 	})
 
 	test("second scan backfills blockTimestamp after a first-scan PXE miss", async () => {
@@ -2044,7 +1938,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 		const noteSvc = makeNoteStub({ [tokenA.contract]: [note({ l2BlockNumber: 50 })] }, blockMap)
 		const tokenStub = makeTokenStub([tokenA])
 		const { service } = await bootService({ network: network(), token: tokenStub, note: noteSvc })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -2053,14 +1947,14 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 		})
 
 		await scan(service)
-		const first = [...records.values()][0]
+		const first = (await repo.listRecords())[0]
 		expect(first.blockTimestamp).toBeUndefined()
 
 		// PXE recovers: block 50 timestamp is now resolvable.
 		blockMap[50] = 1_700_000_050
 
 		await scan(service)
-		const second = [...records.values()][0]
+		const second = (await repo.listRecords())[0]
 		expect(second.blockTimestamp).toBe(1_700_000_050)
 		// Other fields untouched — backfill preserves the original record.
 		expect(second.id).toBe(noteRecordId("p1", "n1", validNoteHash(1)))
@@ -2073,7 +1967,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 		const noteSvc = makeNoteStub({ [tokenA.contract]: [note({ l2BlockNumber: 60 })] }, { 60: 1_700_000_060 })
 		const tokenStub = makeTokenStub([tokenA])
 		const { service } = await bootService({ network: network(), token: tokenStub, note: noteSvc })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -2083,7 +1977,7 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 
 		await scan(service)
 		// Pre-condition: first scan persisted with timestamp.
-		expect([...records.values()][0].blockTimestamp).toBe(1_700_000_060)
+		expect((await repo.listRecords())[0].blockTimestamp).toBe(1_700_000_060)
 		const callsBeforeSecondScan = (noteSvc.getBlockTimestamp as ReturnType<typeof vi.fn>).mock.calls.length
 
 		await scan(service)
@@ -2110,14 +2004,14 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 			return getTokensCalls === 1 ? [tokenA] : []
 		})
 		const { service } = await bootService({ network: network(), account: accountStub, token: tokenStub })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
 			state: "pending",
 			updatedAt: 0,
 		})
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "k1",
 			profileId: "p1",
 			networkId: "n1",
@@ -2160,14 +2054,14 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 		const tokenStub = makeTokenStub([tokenA])
 		const { service } = await bootService({ network: network(), account: accountStub, token: tokenStub })
 		// Snapshot state: trust is `pending`.
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
 			state: "pending",
 			updatedAt: 0,
 		})
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "k1",
 			profileId: "p1",
 			networkId: "n1",
@@ -2220,7 +2114,7 @@ describe("IncomingTransferService — lock-races (pins for the global serviceLoc
 		const accountStub = makeAccountStub([{ profileId: "p1", chainId: 1, address: "0xa" }])
 		const tokenStub = makeTokenStub([tokenA])
 		const { service } = await bootService({ network: network(), account: accountStub, token: tokenStub })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -2230,7 +2124,7 @@ describe("IncomingTransferService — lock-races (pins for the global serviceLoc
 
 		const ok = await service.setTrustAllow("p1", "n1", tokenA.contract)
 		expect(ok).toBe(true)
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("trusted")
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("trusted")
 	})
 
 	test("(LR12 lifecycle epoch) clearChain during in-flight scan: no records persisted post-clear", async () => {
@@ -2252,7 +2146,7 @@ describe("IncomingTransferService — lock-races (pins for the global serviceLoc
 			token: tokenStub,
 			note: noteSvc,
 		})
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -2284,7 +2178,7 @@ describe("IncomingTransferService — lock-races (pins for the global serviceLoc
 		await scanPromise
 
 		// Storage is empty + no upserts happened.
-		expect(records.size).toBe(0)
+		expect((await repo.listRecords()).length).toBe(0)
 		expect(upsertSpy).not.toHaveBeenCalled()
 	})
 
@@ -2311,7 +2205,7 @@ describe("IncomingTransferService — lock-races (pins for the global serviceLoc
 			token: tokenStub,
 			note: noteSvc,
 		})
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -2516,7 +2410,7 @@ describe("IncomingTransferService — lock-races (pins for the global serviceLoc
 			token: tokenStub,
 			transaction: txStub,
 		})
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: validNoteHash(1),
 			profileId: "p1",
 			networkId: "n1",
@@ -2544,7 +2438,7 @@ describe("IncomingTransferService — lock-races (pins for the global serviceLoc
 		await flushPromises()
 
 		expect(deletedSpy).toHaveBeenCalledTimes(1)
-		expect(records.size).toBe(0)
+		expect((await repo.listRecords()).length).toBe(0)
 	})
 
 	test("(LR14 onTokenAdded auto-trusts before any scan can read unknown) → no Pending emit", async () => {
@@ -2593,7 +2487,7 @@ describe("IncomingTransferService — lock-races (pins for the global serviceLoc
 		} as never)
 		await flushPromises()
 
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("trusted")
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("trusted")
 		expect(trustChangedSpy).toHaveBeenCalledTimes(1)
 		expect(trustChangedSpy).toHaveBeenCalledWith(expect.objectContaining({ state: "trusted" }))
 		// The immediate poll kicked by startScheduler runs scanContract for
@@ -2615,7 +2509,7 @@ describe("IncomingTransferService — lock-races (pins for the global serviceLoc
 			account: accountStub,
 			token: tokenStub,
 		})
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -2638,7 +2532,7 @@ describe("IncomingTransferService — lock-races (pins for the global serviceLoc
 		await flushPromises()
 
 		expect(trustChangedSpy).not.toHaveBeenCalled()
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("trusted")
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("trusted")
 	})
 })
 
@@ -2663,8 +2557,8 @@ function pubEvent(overrides: Partial<PublicTransferEvent> = {}): PublicTransferE
 const pubReceipt = (block: number, overrides: Partial<PublicTransferEvent> = {}) =>
 	pubEvent({ txHash: `0x${block}-${overrides.txIndexWithinBlock ?? 0}`, l2BlockNumber: block, blockHash: `0xbh${block}`, ...overrides })
 const pubRecordKey = (e: PublicTransferEvent) => `pub:p1|n1|${e.txHash}|${e.logIndexWithinTx}`
-const storedBlockHash = (e: PublicTransferEvent) => {
-	const record = records.get(pubRecordKey(e))
+const storedBlockHash = async (e: PublicTransferEvent) => {
+	const record = await repo.getRecord(pubRecordKey(e))
 	return record?.kind === "public-event" ? record.blockHash : undefined
 }
 
@@ -2784,8 +2678,7 @@ async function bootPublic(
 ) {
 	const booted = await bootService({ account: publicAccountStub(), token: makeTokenStub([tokenA]), ...stubs, publicReader: reader }, opts)
 	await flushPromises()
-	cursors.clear()
-	outbox.clear()
+	await clearPublicProgress()
 	// The initial kick warmed the class-gate cache, the shared tips read and the targets' marks; clear
 	// them so each test starts cold.
 	const warmed = booted.service as unknown as Record<
@@ -2797,18 +2690,20 @@ async function bootPublic(
 	return booted
 }
 
-const cursorFor = (c: string = tokenA.contract) =>
-	cursors.get(`p1|n1|${c}`) as
-		| {
-				cursor: unknown
-				lastSyncedBlockHash: string | null
-				lastScanFinalized: number | null
-				reconciling?: unknown
-				pendingPage?: unknown
-		  }
-		| undefined
-const outboxFor = (account = "0xa", tokenId = tokenA.id) =>
-	outbox.get(`p1|n1|${account}|${tokenId}`) as { dirtyAt: number; pendingTaskId?: string } | undefined
+/** Deletes every cursor and outbox row, each by the scope its key names. */
+async function clearPublicProgress(): Promise<void> {
+	for (const [key] of await repo.listCursors()) {
+		const [profileId, networkId, contract] = key.split("|")
+		await repo.deleteCursor(profileId, networkId, contract)
+	}
+	for (const [key] of await repo.listOutbox()) {
+		const [profileId, networkId, account, tokenId] = key.split("|")
+		await repo.deleteOutbox(profileId, networkId, account, Number(tokenId))
+	}
+}
+
+const cursorFor = (c: string = tokenA.contract) => repo.getCursor("p1", "n1", c)
+const outboxFor = (account = "0xa", tokenId = tokenA.id) => repo.getOutbox("p1", "n1", account, tokenId)
 
 describe("IncomingTransferService — public-event scan arm", () => {
 	test("public first-receive: creates a hidden record, trust unknown→pending, emits Pending, writes outbox", async () => {
@@ -2820,13 +2715,13 @@ describe("IncomingTransferService — public-event scan arm", () => {
 
 		await scanPublic(service)
 
-		const rec = records.get("pub:p1|n1|0xp1|0")
+		const rec = await repo.getRecord("pub:p1|n1|0xp1|0")
 		expect(rec?.kind).toBe("public-event")
 		expect(rec?.hidden).toBe(true)
 		expect(rec?.amountRaw).toBe("777")
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("pending")
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("pending")
 		expect(pending).toHaveBeenCalledTimes(1)
-		expect(outboxFor()).toBeDefined()
+		expect(await outboxFor()).toBeDefined()
 	})
 
 	test("auto-trusted token: public receipt inserts VISIBLE + emits Added", async () => {
@@ -2834,7 +2729,7 @@ describe("IncomingTransferService — public-event scan arm", () => {
 		const added = vi.fn()
 		const { service } = await bootPublic(reader, state)
 		service.onIncomingTransferAdded.add(added)
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -2845,7 +2740,7 @@ describe("IncomingTransferService — public-event scan arm", () => {
 
 		await scanPublic(service)
 
-		expect(records.get("pub:p1|n1|0xp2|0")?.hidden).toBe(false)
+		expect((await repo.getRecord("pub:p1|n1|0xp2|0"))?.hidden).toBe(false)
 		expect(added).toHaveBeenCalledTimes(1)
 	})
 
@@ -2857,8 +2752,8 @@ describe("IncomingTransferService — public-event scan arm", () => {
 
 		await scanPublic(service)
 
-		expect(records.get("pub:p1|n1|0xmine|0")).toBeUndefined()
-		expect(outboxFor()).toBeUndefined()
+		expect(await repo.getRecord("pub:p1|n1|0xmine|0")).toBeUndefined()
+		expect(await outboxFor()).toBeUndefined()
 	})
 
 	test("a FOREIGN profile's outgoing tx does not suppress this scope's public event", async () => {
@@ -2872,7 +2767,7 @@ describe("IncomingTransferService — public-event scan arm", () => {
 
 		await scanPublic(service)
 
-		expect(records.get("pub:p1|n1|0xtheirs|0")).toBeDefined()
+		expect(await repo.getRecord("pub:p1|n1|0xtheirs|0")).toBeDefined()
 	})
 
 	test("MAGIC (from-private) and zero (mint) senders stored raw; both create records", async () => {
@@ -2886,8 +2781,8 @@ describe("IncomingTransferService — public-event scan arm", () => {
 
 		await scanPublic(service)
 
-		const priv = records.get("pub:p1|n1|0xfromPriv|0")
-		const mint = records.get("pub:p1|n1|0xmint|0")
+		const priv = await repo.getRecord("pub:p1|n1|0xfromPriv|0")
+		const mint = await repo.getRecord("pub:p1|n1|0xmint|0")
 		expect(priv?.kind === "public-event" && priv.from).toBe(MAGIC)
 		expect(mint?.kind === "public-event" && mint.from).toBe(ZERO)
 	})
@@ -2899,8 +2794,8 @@ describe("IncomingTransferService — public-event scan arm", () => {
 
 		await scanPublic(service)
 
-		expect([...records.keys()].filter((k) => k.startsWith("pub:"))).toHaveLength(0)
-		expect(cursorFor()?.cursor).toEqual({ blockNumber: 5, txIndexWithinBlock: 0, logIndexWithinTx: 0 })
+		expect((await repo.listRecords()).map((r) => r.id).filter((k) => k.startsWith("pub:"))).toHaveLength(0)
+		expect((await cursorFor())?.cursor).toEqual({ blockNumber: 5, txIndexWithinBlock: 0, logIndexWithinTx: 0 })
 	})
 
 	test("non-standard class → NO scan (fail closed): no fetch, no records", async () => {
@@ -2910,7 +2805,7 @@ describe("IncomingTransferService — public-event scan arm", () => {
 
 		await scanPublic(service)
 
-		expect(records.get("pub:p1|n1|0xnope|0")).toBeUndefined()
+		expect(await repo.getRecord("pub:p1|n1|0xnope|0")).toBeUndefined()
 		expect(state.fetchArgs).toHaveLength(0)
 	})
 
@@ -2950,8 +2845,8 @@ describe("IncomingTransferService — public-event scan arm", () => {
 		state.responses.push(pubPage([pubEvent({ txHash: "0xa1", l2BlockNumber: 7, logIndexWithinTx: 3 })], false))
 
 		await scanPublic(service)
-		expect(cursorFor()?.cursor).toEqual({ blockNumber: 7, txIndexWithinBlock: 0, logIndexWithinTx: 3 })
-		expect(records.get("pub:p1|n1|0xa1|3")).toBeDefined()
+		expect((await cursorFor())?.cursor).toEqual({ blockNumber: 7, txIndexWithinBlock: 0, logIndexWithinTx: 3 })
+		expect(await repo.getRecord("pub:p1|n1|0xa1|3")).toBeDefined()
 
 		await scanPublic(service) // empty page
 		expect(state.fetchArgs[state.fetchArgs.length - 1].afterCursor).toEqual({
@@ -2973,14 +2868,20 @@ describe("IncomingTransferService — public-event scan arm", () => {
 		expect(state.fetchArgs).toHaveLength(5)
 		expect(state.fetchArgs.every((a) => a.referenceBlock === "0xcheckpoint")).toBe(true)
 		expect(state.fetchArgs[0].toBlock).toBe(100) // pinned to tips.checkpointedBlockNumber
-		expect(cursorFor()?.cursor).toEqual({ blockNumber: 14, txIndexWithinBlock: 0, logIndexWithinTx: 0 })
+		expect((await cursorFor())?.cursor).toEqual({ blockNumber: 14, txIndexWithinBlock: 0, logIndexWithinTx: 0 })
 	})
 
 	test("same-tx note + public event yield TWO records under disjoint PKs", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		seedNote({ uniqueNoteHash: "sn-shared", txHash: "0xshared", contract: tokenA.contract, tokenId: tokenA.id, accountAddress: "0xa" })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedNote({
+			uniqueNoteHash: "sn-shared",
+			txHash: "0xshared",
+			contract: tokenA.contract,
+			tokenId: tokenA.id,
+			accountAddress: "0xa",
+		})
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -2991,14 +2892,14 @@ describe("IncomingTransferService — public-event scan arm", () => {
 
 		await scanPublic(service)
 
-		expect(records.get("note:p1|n1|sn-shared")).toBeDefined()
-		expect(records.get("pub:p1|n1|0xshared|0")).toBeDefined()
+		expect(await repo.getRecord("note:p1|n1|sn-shared")).toBeDefined()
+		expect(await repo.getRecord("pub:p1|n1|0xshared|0")).toBeDefined()
 	})
 
 	test("chain-purge mid-scan (epoch bump via clearChain) → the page's record is NOT persisted", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -3011,13 +2912,13 @@ describe("IncomingTransferService — public-event scan arm", () => {
 		await service.clearChain("p1", "n1") // bumps serviceEpoch mid-flight
 		await scanP
 
-		expect(records.get("pub:p1|n1|0xrace|0")).toBeUndefined()
+		expect(await repo.getRecord("pub:p1|n1|0xrace|0")).toBeUndefined()
 	})
 })
 
 // ── Public-event reorg reconciliation ───────────────────────────────────────
 
-function seedPublic(overrides: Partial<IncomingPublicEventRecord> = {}): IncomingPublicEventRecord {
+async function seedPublic(overrides: Partial<IncomingPublicEventRecord> = {}): Promise<IncomingPublicEventRecord> {
 	const merged = {
 		kind: "public-event" as const,
 		from: "0xfrom",
@@ -3040,27 +2941,33 @@ function seedPublic(overrides: Partial<IncomingPublicEventRecord> = {}): Incomin
 		...merged,
 		id: `pub:${merged.profileId}|${merged.networkId}|${merged.txHash}|${merged.indexInTx}`,
 	}
-	records.set(rec.id, rec)
+	await repo.upsertRecord(rec)
 	return rec
 }
 
-function seedCursor(overrides: Record<string, unknown> = {}, contract = tokenA.contract): void {
-	cursors.set(`p1|n1|${contract}`, { cursor: null, lastSyncedBlockHash: null, lastScanFinalized: null, startBlock: 0, ...overrides })
+function seedCursor(overrides: Partial<PublicScanCursor> = {}, contract = tokenA.contract): Promise<void> {
+	return repo.setCursor("p1", "n1", contract, {
+		cursor: null,
+		lastSyncedBlockHash: null,
+		lastScanFinalized: null,
+		startBlock: 0,
+		...overrides,
+	})
 }
 
 describe("IncomingTransferService — public-event reorg reconciliation", () => {
 	test("referenceBlock throw → reconcile: orphan (blockHash ≠ canonical) deleted, balance refresh enqueued BEFORE delete, rewind to lastScanFinalized", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
 			state: "trusted",
 			updatedAt: 0,
 		})
-		const orphan = seedPublic({ txHash: "0xorphan", l2BlockNumber: 8, blockHash: "0xoldfork" })
-		seedCursor({
+		const orphan = await seedPublic({ txHash: "0xorphan", l2BlockNumber: 8, blockHash: "0xoldfork" })
+		await seedCursor({
 			cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 },
 			lastSyncedBlockHash: "0xoldfork",
 			lastScanFinalized: 5,
@@ -3073,26 +2980,26 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 
 		await scanPublic(service)
 
-		expect(records.get(orphan.id)).toBeUndefined()
+		expect(await repo.getRecord(orphan.id)).toBeUndefined()
 		expect(deleted).toHaveBeenCalledTimes(1)
-		expect(outboxFor()).toBeDefined()
+		expect(await outboxFor()).toBeDefined()
 		expect(state.fetchArgs[1].fromBlock).toBe(6) // lastScanFinalized(5)+1, NOT current finalized(50)
 		expect(state.fetchArgs[1].referenceBlock).toBe("0xcheckpoint")
-		expect(cursorFor()?.reconciling).toBeUndefined()
+		expect((await cursorFor())?.reconciling).toBeUndefined()
 	})
 
 	test("still-canonical record (blockHash matches) is KEPT across reconciliation", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
 			state: "trusted",
 			updatedAt: 0,
 		})
-		const rec = seedPublic({ txHash: "0xkeep", l2BlockNumber: 8, blockHash: "0xcanon8" })
-		seedCursor({
+		const rec = await seedPublic({ txHash: "0xkeep", l2BlockNumber: 8, blockHash: "0xcanon8" })
+		await seedCursor({
 			cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 },
 			lastSyncedBlockHash: "0xanchor",
 			lastScanFinalized: 5,
@@ -3102,21 +3009,21 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 
 		await scanPublic(service)
 
-		expect(records.get(rec.id)).toBeDefined()
+		expect(await repo.getRecord(rec.id)).toBeDefined()
 	})
 
 	test("deletion driven ONLY by blockHash canonicality — a different-recipient orphan-height still deletes our record", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
 			state: "trusted",
 			updatedAt: 0,
 		})
-		const orphan = seedPublic({ txHash: "0xorph2", l2BlockNumber: 8, blockHash: "0xoldfork" })
-		seedCursor({
+		const orphan = await seedPublic({ txHash: "0xorph2", l2BlockNumber: 8, blockHash: "0xoldfork" })
+		await seedCursor({
 			cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 },
 			lastSyncedBlockHash: "0xoldfork",
 			lastScanFinalized: 5,
@@ -3126,13 +3033,13 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 
 		await scanPublic(service)
 
-		expect(records.get(orphan.id)).toBeUndefined() // deleted on hash mismatch (0xoldfork ≠ 0xnewfork)
+		expect(await repo.getRecord(orphan.id)).toBeUndefined() // deleted on hash mismatch (0xoldfork ≠ 0xnewfork)
 	})
 
 	test("mid-reconcile reorg (upperBoundHash gone) → discard + restart (no cross-fork seen mixing)", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		seedCursor({
+		await seedCursor({
 			cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 },
 			lastSyncedBlockHash: "0xoldfork",
 			lastScanFinalized: 5,
@@ -3144,7 +3051,7 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 		await scanPublic(service)
 
 		expect(state.fetchArgs.length).toBeGreaterThanOrEqual(3)
-		expect(cursorFor()?.reconciling).toBeUndefined()
+		expect((await cursorFor())?.reconciling).toBeUndefined()
 	})
 
 	test("a budget-incomplete forward scan CAPS the finalized watermark at the scanned block (no reconcile-gap)", async () => {
@@ -3156,14 +3063,14 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 			finalizedBlockNumber: 90,
 			proposedBlockHash: "0xproposed",
 		}
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
 			state: "trusted",
 			updatedAt: 0,
 		})
-		seedCursor({ cursor: null, lastSyncedBlockHash: null, lastScanFinalized: 0, startBlock: 0 })
+		await seedCursor({ cursor: null, lastSyncedBlockHash: null, lastScanFinalized: 0, startBlock: 0 })
 		// 5 FULL pages (budget exhausted → hasMore) whose last log sits at block 10, far below finality
 		// (90): the scan is BEHIND. Non-recipient events so they only advance the cursor.
 		for (let i = 0; i < 5; i++) {
@@ -3175,14 +3082,14 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 		// The watermark must NOT jump to finalized(90) — that would let a later reconcile skip the
 		// unscanned logs in (9, 90]. It is capped at the last FULLY-scanned block: block 10 is only
 		// PARTIALLY scanned (the budget stopped mid-block), so the floor is block 10 − 1 = 9.
-		expect(cursorFor()?.cursor).toEqual({ blockNumber: 10, txIndexWithinBlock: 0, logIndexWithinTx: 4 })
-		expect(cursorFor()?.lastScanFinalized).toBe(9)
+		expect((await cursorFor())?.cursor).toEqual({ blockNumber: 10, txIndexWithinBlock: 0, logIndexWithinTx: 4 })
+		expect((await cursorFor())?.lastScanFinalized).toBe(9)
 	})
 
 	test("checkpoint ROLLBACK: records above the new (rolled-back) tip are deleted + cursor rewinds", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -3190,10 +3097,10 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 			updatedAt: 0,
 		})
 		// Records committed when the checkpoint was 100 — now stranded above a rolled-back tip of 90.
-		const above1 = seedPublic({ txHash: "0xrb1", l2BlockNumber: 95, blockHash: "0xh95" })
-		const above2 = seedPublic({ txHash: "0xrb2", l2BlockNumber: 100, blockHash: "0xh100" })
-		const belowFloor = seedPublic({ txHash: "0xfin", l2BlockNumber: 50, blockHash: "0xh50" }) // finalized — kept
-		seedCursor({
+		const above1 = await seedPublic({ txHash: "0xrb1", l2BlockNumber: 95, blockHash: "0xh95" })
+		const above2 = await seedPublic({ txHash: "0xrb2", l2BlockNumber: 100, blockHash: "0xh100" })
+		const belowFloor = await seedPublic({ txHash: "0xfin", l2BlockNumber: 50, blockHash: "0xh50" }) // finalized — kept
+		await seedCursor({
 			cursor: { blockNumber: 100, txIndexWithinBlock: 0, logIndexWithinTx: 0 },
 			lastSyncedBlockHash: "0xoldcheckpoint",
 			lastScanFinalized: 60,
@@ -3215,26 +3122,26 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 		await scanPublic(service)
 
 		// Stranded rows above the new tip (90) are deleted; the finalized row (≤ floor) is kept.
-		expect(records.get(above1.id)).toBeUndefined()
-		expect(records.get(above2.id)).toBeUndefined()
-		expect(records.get(belowFloor.id)).toBeDefined()
+		expect(await repo.getRecord(above1.id)).toBeUndefined()
+		expect(await repo.getRecord(above2.id)).toBeUndefined()
+		expect(await repo.getRecord(belowFloor.id)).toBeDefined()
 		// The cursor (was 100, above the new tip) is rewound to null so a re-advancing checkpoint re-indexes.
-		expect(cursorFor()?.cursor).toBeNull()
-		expect(cursorFor()?.reconciling).toBeUndefined()
+		expect((await cursorFor())?.cursor).toBeNull()
+		expect((await cursorFor())?.reconciling).toBeUndefined()
 	})
 
 	test("pendingPage crash window: a set pendingPage whose fork is gone triggers reconciliation", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
 			state: "trusted",
 			updatedAt: 0,
 		})
-		const orphan = seedPublic({ txHash: "0xpp", l2BlockNumber: 8, blockHash: "0xoldfork" })
-		seedCursor({
+		const orphan = await seedPublic({ txHash: "0xpp", l2BlockNumber: 8, blockHash: "0xoldfork" })
+		await seedCursor({
 			cursor: { blockNumber: 7, txIndexWithinBlock: 0, logIndexWithinTx: 0 },
 			lastSyncedBlockHash: "0xanchor",
 			lastScanFinalized: 5,
@@ -3253,14 +3160,14 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 		// (not a standalone canonicity fetch of the stale upperHash).
 		expect(state.fetchArgs[0].referenceBlock).toBe("0xcheckpoint")
 		expect(state.fetchArgs[0].verifyAncestorHash).toBe("0xoldfork")
-		expect(records.get(orphan.id)).toBeUndefined()
-		expect(cursorFor()?.pendingPage).toBeUndefined()
+		expect(await repo.getRecord(orphan.id)).toBeUndefined()
+		expect((await cursorFor())?.pendingPage).toBeUndefined()
 	})
 
 	test("clean pendingPage is cleared; forward scan proceeds", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		seedCursor({
+		await seedCursor({
 			cursor: { blockNumber: 7, txIndexWithinBlock: 0, logIndexWithinTx: 0 },
 			lastSyncedBlockHash: "0xanchor",
 			lastScanFinalized: 5,
@@ -3275,20 +3182,20 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 
 		await scanPublic(service)
 
-		expect(cursorFor()?.pendingPage).toBeUndefined()
+		expect((await cursorFor())?.pendingPage).toBeUndefined()
 	})
 
 	test("intra-scan reorg: a page read off the wrong fork throws on the pinned checkpoint hash → reconcile, mixed-fork batch NEVER committed", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
 			state: "trusted",
 			updatedAt: 0,
 		})
-		seedCursor({
+		await seedCursor({
 			cursor: { blockNumber: 4, txIndexWithinBlock: 0, logIndexWithinTx: 0 },
 			lastSyncedBlockHash: "0xboundary",
 			lastScanFinalized: 3,
@@ -3304,25 +3211,25 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 		await scanPublic(service)
 
 		// page 1's event was NEVER committed (the scan threw before the commit loop)…
-		expect(records.get("pub:p1|n1|0xp1e|0")).toBeUndefined()
+		expect(await repo.getRecord("pub:p1|n1|0xp1e|0")).toBeUndefined()
 		// …every forward page pinned the checkpoint hash…
 		expect(state.fetchArgs[1].referenceBlock).toBe("0xcheckpoint")
 		// …and reconciliation ran to completion (marker cleared).
-		expect(cursorFor()?.reconciling).toBeUndefined()
+		expect((await cursorFor())?.reconciling).toBeUndefined()
 	})
 
 	test("forward scan runs an ATOMIC boundary-ancestry probe first; a non-ancestor → reconcile", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
 			state: "trusted",
 			updatedAt: 0,
 		})
-		const orphan = seedPublic({ txHash: "0xbnd", l2BlockNumber: 8, blockHash: "0xoldfork" })
-		seedCursor({
+		const orphan = await seedPublic({ txHash: "0xbnd", l2BlockNumber: 8, blockHash: "0xoldfork" })
+		await seedCursor({
 			cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 },
 			lastSyncedBlockHash: "0xoldfork",
 			lastScanFinalized: 5,
@@ -3336,22 +3243,22 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 		// (one atomic membership query — not two independent "canonical now" probes).
 		expect(state.fetchArgs[0].referenceBlock).toBe("0xcheckpoint")
 		expect(state.fetchArgs[0].verifyAncestorHash).toBe("0xoldfork")
-		expect(records.get(orphan.id)).toBeUndefined()
+		expect(await repo.getRecord(orphan.id)).toBeUndefined()
 	})
 
 	test("a DROPPED reconcile page does NOT finish reconciliation (no deletion) — retries next tick", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
 			state: "trusted",
 			updatedAt: 0,
 		})
-		const rec = seedPublic({ txHash: "0xkeepme", l2BlockNumber: 7, blockHash: "0xcanon7" })
+		const rec = await seedPublic({ txHash: "0xkeepme", l2BlockNumber: 7, blockHash: "0xcanon7" })
 		// A reconciliation already staged over [6..8].
-		seedCursor({
+		await seedCursor({
 			cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 },
 			lastSyncedBlockHash: "0xanchor",
 			lastScanFinalized: 5,
@@ -3366,9 +3273,9 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 		await scanPublic(service)
 
 		// A dropped page is NOT "window complete": the record must survive and the marker must remain.
-		expect(records.get(rec.id)).toBeDefined()
+		expect(await repo.getRecord(rec.id)).toBeDefined()
 		expect(deleted).not.toHaveBeenCalled()
-		expect(cursorFor()?.reconciling).toBeDefined()
+		expect((await cursorFor())?.reconciling).toBeDefined()
 	})
 })
 
@@ -3376,7 +3283,7 @@ describe("IncomingTransferService — public-arm lifecycle", () => {
 	test("onAccountAdded resets public cursors to null (rescan the new account's history)", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		seedCursor({
+		await seedCursor({
 			cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 },
 			lastSyncedBlockHash: "0xh",
 			lastScanFinalized: 5,
@@ -3384,14 +3291,14 @@ describe("IncomingTransferService — public-arm lifecycle", () => {
 
 		await (service as unknown as { onAccountAdded: (a: unknown) => Promise<void> }).onAccountAdded({ chainId: 1, address: "0xnew" })
 
-		expect(cursorFor()?.cursor).toBeNull()
-		expect(cursorFor()?.lastSyncedBlockHash).toBeNull()
+		expect((await cursorFor())?.cursor).toBeNull()
+		expect((await cursorFor())?.lastSyncedBlockHash).toBeNull()
 	})
 
 	test("onAccountAdded bumps the epoch DURING the reset — a pre-reset persist is rejected", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		seedCursor({
+		await seedCursor({
 			cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 },
 			lastSyncedBlockHash: "0xh",
 			lastScanFinalized: 5,
@@ -3421,14 +3328,14 @@ describe("IncomingTransferService — public-arm lifecycle", () => {
 			epochBefore,
 		)
 		expect(persisted).toBe(false)
-		expect(cursorFor()?.cursor).toBeNull() // still the reset value, not the stale 99
+		expect((await cursorFor())?.cursor).toBeNull() // still the reset value, not the stale 99
 	})
 
 	test("onTokenDeleted deletes the cursor row (re-add re-indexes from startBlock)", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		seedCursor({ cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 } })
-		seedPublic({ txHash: "0xtok", l2BlockNumber: 8 })
+		await seedCursor({ cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 } })
+		await seedPublic({ txHash: "0xtok", l2BlockNumber: 8 })
 
 		await (service as unknown as { onTokenDeleted: (t: unknown) => Promise<void> }).onTokenDeleted({
 			id: tokenA.id,
@@ -3437,19 +3344,19 @@ describe("IncomingTransferService — public-arm lifecycle", () => {
 			contract: tokenA.contract,
 		})
 
-		expect(cursorFor()).toBeUndefined()
+		expect(await cursorFor()).toBeUndefined()
 	})
 
 	test("clearChain wipes the public cursor + outbox rows too", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		seedCursor({ cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 } })
-		outbox.set("p1|n1|0xa|1", { dirtyAt: 1 })
+		await seedCursor({ cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 } })
+		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 1 })
 
 		await service.clearChain("p1", "n1")
 
-		expect(cursorFor()).toBeUndefined()
-		expect(outboxFor()).toBeUndefined()
+		expect(await cursorFor()).toBeUndefined()
+		expect(await outboxFor()).toBeUndefined()
 	})
 })
 
@@ -3463,7 +3370,7 @@ describe("IncomingTransferService — balance-refresh outbox (write-side)", () =
 	test("a public receipt of a blocked contract stores no record and marks no balance dirty", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -3472,16 +3379,18 @@ describe("IncomingTransferService — balance-refresh outbox (write-side)", () =
 		})
 		state.responses.push(pubPage([pubEvent({ txHash: "0xblocked" })]))
 
+		const setOutbox = vi.spyOn((service as never as { repo: IncomingTransferRepository }).repo, "setOutbox")
 		await scanPublic(service)
 
-		expect(records.has("pub:p1|n1|0xblocked|0")).toBe(false)
-		expect(outboxFor()).toBeUndefined()
+		expect(await repo.hasRecord("pub:p1|n1|0xblocked|0")).toBe(false)
+		expect(setOutbox).not.toHaveBeenCalled()
+		expect(await outboxFor()).toBeUndefined()
 	})
 
 	test("coalescing: N receipts for one (account, token) → ONE outbox row", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -3492,7 +3401,7 @@ describe("IncomingTransferService — balance-refresh outbox (write-side)", () =
 
 		await scanPublic(service)
 
-		expect([...outbox.keys()].filter((k) => k.startsWith("p1|n1|0xa|"))).toHaveLength(1)
+		expect((await repo.listOutbox()).filter(([k]) => k.startsWith("p1|n1|0xa|"))).toHaveLength(1)
 	})
 
 	test("private-arm parity: a discovered NOTE marks the balance dirty too", async () => {
@@ -3502,7 +3411,7 @@ describe("IncomingTransferService — balance-refresh outbox (write-side)", () =
 			token: makeTokenStub([tokenA]),
 			note: noteStub,
 		})
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -3512,7 +3421,7 @@ describe("IncomingTransferService — balance-refresh outbox (write-side)", () =
 
 		await scan(service, tokenA.contract)
 
-		expect(outbox.get("p1|n1|0xa|1")).toBeDefined()
+		expect(await repo.getOutbox("p1", "n1", "0xa", 1)).toBeDefined()
 	})
 })
 
@@ -3522,19 +3431,19 @@ describe("IncomingTransferService — balance-refresh drain (causal ack)", () =>
 		const tokenBalance = makeTokenBalanceStub()
 		const task = makeTaskStub()
 		const { service } = await bootPublic(reader, state, { tokenBalance, task })
-		outbox.set("p1|n1|0xa|1", { dirtyAt: 100 })
+		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
 		tokenBalance.setResult({ taskId: "T1" })
 
 		await drain(service) // requests refresh, anchors T1 — row REMAINS
-		expect(outboxFor()?.pendingTaskId).toBe("T1")
+		expect((await outboxFor())?.pendingTaskId).toBe("T1")
 
 		task.setTask("T1", TaskStatus.Processing) // not terminal
 		await drain(service)
-		expect(outboxFor()).toBeDefined() // still there
+		expect(await outboxFor()).toBeDefined() // still there
 
 		task.setTask("T1", TaskStatus.Completed, Date.now()) // terminal-success
 		await drain(service)
-		expect(outboxFor()).toBeUndefined() // NOW deleted
+		expect(await outboxFor()).toBeUndefined() // NOW deleted
 	})
 
 	test("in-flight-coalescing interleave: T1 succeeds while B is busy → B's row survives until a FRESH T2 succeeds", async () => {
@@ -3544,46 +3453,46 @@ describe("IncomingTransferService — balance-refresh drain (causal ack)", () =>
 		const { service } = await bootPublic(reader, state, { tokenBalance, task })
 
 		// Receipt A: drain anchors a fresh T1.
-		outbox.set("p1|n1|0xa|1", { dirtyAt: 100 })
+		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
 		tokenBalance.setResult({ taskId: "T1" })
 		await drain(service)
-		expect(outboxFor()?.pendingTaskId).toBe("T1")
+		expect((await outboxFor())?.pendingTaskId).toBe("T1")
 
 		// Receipt B arrives (clears the anchor, newer dirtyAt); the drain finds T1 still pending → busy.
-		outbox.set("p1|n1|0xa|1", { dirtyAt: 200 })
+		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 200 })
 		tokenBalance.setResult({ busy: true })
 		await drain(service)
-		expect(outboxFor()).toEqual({ dirtyAt: 200 }) // unanchored
+		expect(await outboxFor()).toEqual({ dirtyAt: 200 }) // unanchored
 
 		// T1 completes on pre-B chain state — but B's row has NO anchor, so it is NOT deleted.
 		task.setTask("T1", TaskStatus.Completed, Date.now())
 		await drain(service)
-		expect(outboxFor()).toBeDefined()
+		expect(await outboxFor()).toBeDefined()
 
 		// A later drain (T1 drained) mints a FRESH T2 (created after dirtyAt=200) and anchors it.
 		tokenBalance.setResult({ taskId: "T2" })
 		await drain(service)
-		expect(outboxFor()?.pendingTaskId).toBe("T2")
+		expect((await outboxFor())?.pendingTaskId).toBe("T2")
 
 		// T2 succeeds → its projection saw receipt B → row deletes.
 		task.setTask("T2", TaskStatus.Completed, Date.now())
 		await drain(service)
-		expect(outboxFor()).toBeUndefined()
+		expect(await outboxFor()).toBeUndefined()
 	})
 
 	test("a new receipt CLEARS the prior anchor + OVERWRITES dirtyAt", async () => {
 		const { reader, state } = makePublicReader()
 		const tokenBalance = makeTokenBalanceStub()
 		const { service } = await bootPublic(reader, state, { tokenBalance })
-		outbox.set("p1|n1|0xa|1", { dirtyAt: 100 })
+		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
 		tokenBalance.setResult({ taskId: "T1" })
 		await drain(service)
-		expect(outboxFor()?.pendingTaskId).toBe("T1")
+		expect((await outboxFor())?.pendingTaskId).toBe("T1")
 
 		// markDirty (via a fresh receipt) overwrites the whole row.
 		await (service as unknown as { outbox: BalanceRefreshOutbox }).outbox.markDirty("p1", "n1", "0xa", 1)
-		expect(outboxFor()?.pendingTaskId).toBeUndefined()
-		expect(outboxFor()?.dirtyAt).toBeGreaterThan(100)
+		expect((await outboxFor())?.pendingTaskId).toBeUndefined()
+		expect((await outboxFor())?.dirtyAt).toBeGreaterThan(100)
 	})
 
 	test("task terminal-FAILURE → clear anchor + re-request next drain", async () => {
@@ -3591,17 +3500,17 @@ describe("IncomingTransferService — balance-refresh drain (causal ack)", () =>
 		const tokenBalance = makeTokenBalanceStub()
 		const task = makeTaskStub()
 		const { service } = await bootPublic(reader, state, { tokenBalance, task })
-		outbox.set("p1|n1|0xa|1", { dirtyAt: 100 })
+		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
 		tokenBalance.setResult({ taskId: "T1" })
 		await drain(service)
 
 		task.setTask("T1", TaskStatus.Failed, Date.now())
 		await drain(service)
-		expect(outboxFor()?.pendingTaskId).toBeUndefined() // anchor cleared
+		expect((await outboxFor())?.pendingTaskId).toBeUndefined() // anchor cleared
 
 		tokenBalance.setResult({ taskId: "T2" })
 		await drain(service)
-		expect(outboxFor()?.pendingTaskId).toBe("T2") // re-requested
+		expect((await outboxFor())?.pendingTaskId).toBe("T2") // re-requested
 	})
 
 	test("task MISSING (expired / never existed) → clear anchor + re-request", async () => {
@@ -3609,62 +3518,62 @@ describe("IncomingTransferService — balance-refresh drain (causal ack)", () =>
 		const tokenBalance = makeTokenBalanceStub()
 		const task = makeTaskStub()
 		const { service } = await bootPublic(reader, state, { tokenBalance, task })
-		outbox.set("p1|n1|0xa|1", { dirtyAt: 100, pendingTaskId: "GONE" }) // anchor to a task the ledger doesn't have
+		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100, pendingTaskId: "GONE" }) // anchor to a task the ledger doesn't have
 		tokenBalance.setResult({ taskId: "T2" })
 
 		await drain(service) // GONE is missing → clear anchor
-		expect(outboxFor()?.pendingTaskId).toBeUndefined()
+		expect((await outboxFor())?.pendingTaskId).toBeUndefined()
 		await drain(service) // re-request
-		expect(outboxFor()?.pendingTaskId).toBe("T2")
+		expect((await outboxFor())?.pendingTaskId).toBe("T2")
 	})
 
 	test("active-profile-scoped: a BACKGROUND profile's outbox row is NOT drained", async () => {
 		const { reader, state } = makePublicReader()
 		const tokenBalance = makeTokenBalanceStub()
 		const { service } = await bootPublic(reader, state, { tokenBalance })
-		outbox.set("p2|n1|0xa|1", { dirtyAt: 100 }) // p2 is NOT the active profile (p1)
+		await repo.setOutbox("p2", "n1", "0xa", 1, { dirtyAt: 100 }) // p2 is NOT the active profile (p1)
 
 		await drain(service)
 
 		expect(tokenBalance.requestBalanceRefresh).not.toHaveBeenCalled()
-		expect(outbox.get("p2|n1|0xa|1")).toBeDefined() // untouched
+		expect(await repo.getOutbox("p2", "n1", "0xa", 1)).toBeDefined() // untouched
 	})
 
 	test("stale-row tolerance: a POSITIVELY-missing balance ({missing:true}) → row deleted, never throws", async () => {
 		const { reader, state } = makePublicReader()
 		const tokenBalance = makeTokenBalanceStub()
 		const { service } = await bootPublic(reader, state, { tokenBalance })
-		outbox.set("p1|n1|0xa|1", { dirtyAt: 100 })
+		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
 		tokenBalance.setResult({ missing: true })
 
 		await drain(service)
 
-		expect(outboxFor()).toBeUndefined()
+		expect(await outboxFor()).toBeUndefined()
 	})
 
 	test("a TRANSIENT refresh throw KEEPS the row (never discards the durable marker)", async () => {
 		const { reader, state } = makePublicReader()
 		const tokenBalance = makeTokenBalanceStub()
 		const { service } = await bootPublic(reader, state, { tokenBalance })
-		outbox.set("p1|n1|0xa|1", { dirtyAt: 100 })
+		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
 		tokenBalance.setThrow(true) // a transient storage/task failure, NOT a missing pair
 
 		await drain(service) // must not throw
 
-		expect(outboxFor()).toBeDefined() // row preserved for the next drain
-		expect(outboxFor()?.pendingTaskId).toBeUndefined() // and left unanchored
+		expect(await outboxFor()).toBeDefined() // row preserved for the next drain
+		expect((await outboxFor())?.pendingTaskId).toBeUndefined() // and left unanchored
 	})
 
 	test("drain-on-init after simulated SW death: the row survives + a refresh is re-requested", async () => {
 		// Seed a persisted outbox row BEFORE boot (as if the SW died with a pending refresh).
-		outbox.set("p1|n1|0xa|1", { dirtyAt: 100 })
+		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
 		const tokenBalance = makeTokenBalanceStub()
 		tokenBalance.setResult({ taskId: "T1" })
 		await bootService({ account: publicAccountStub(), token: makeTokenStub([tokenA]), tokenBalance })
 		await flushPromises()
 
 		expect(tokenBalance.requestBalanceRefresh).toHaveBeenCalledWith(1, "0xa")
-		expect(outboxFor()?.pendingTaskId).toBe("T1")
+		expect((await outboxFor())?.pendingTaskId).toBe("T1")
 	})
 })
 
@@ -3705,8 +3614,8 @@ const dustSeed = (uniqueNoteHash: string, amountRaw: string) =>
 describe("IncomingTransferService — dust filter (getIncomingTransfers)", () => {
 	test("hides sub-threshold receipts; keeps at/above (RAISING hides MORE, LOWERING re-reveals)", async () => {
 		const service = await bootDust({ threshold: 0.01, quotes: { "usd-coin": { usd: 1 } } })
-		dustSeed("big", "20000") // 0.02 cUSD @ $1 = $0.02
-		dustSeed("dust", "5000") // 0.005 cUSD @ $1 = $0.005 < $0.01
+		await dustSeed("big", "20000") // 0.02 cUSD @ $1 = $0.02
+		await dustSeed("dust", "5000") // 0.005 cUSD @ $1 = $0.005 < $0.01
 
 		let out = await service.getIncomingTransfers("p1", "nMain", "0xa")
 		expect(out.map((r) => r.id)).toEqual(["note:p1|nMain|big"])
@@ -3730,7 +3639,7 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 		await flushPromises()
 		config.setDustThreshold(1000) // huge threshold
 		price.setQuotes({ "usd-coin": { usd: 1 } })
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "unk",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -3746,7 +3655,7 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 
 	test("fails OPEN when the quote is stale/absent (getQuotes returns FRESH only)", async () => {
 		const service = await bootDust({ threshold: 1000, quotes: {} }) // mapped token, but NO quote present
-		dustSeed("noquote", "1")
+		await dustSeed("noquote", "1")
 
 		const out = await service.getIncomingTransfers("p1", "nMain", "0xa")
 		expect(out.map((r) => r.id)).toEqual(["note:p1|nMain|noquote"])
@@ -3754,14 +3663,14 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 
 	test("NEVER bypasses the visible/hidden gates: incomingTransfersVisible=false → [] even with priced records", async () => {
 		const service = await bootDust({ threshold: 0.01, quotes: { "usd-coin": { usd: 1 } }, visibility: false })
-		dustSeed("big", "20000")
+		await dustSeed("big", "20000")
 
 		expect(await service.getIncomingTransfers("p1", "nMain", "0xa")).toEqual([])
 	})
 
 	test("NEVER bypasses hidden: a hidden (pending) record stays hidden regardless of dust value", async () => {
 		const service = await bootDust({ threshold: 0.01, quotes: { "usd-coin": { usd: 1 } } })
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: "hid",
 			networkId: "nMain",
 			accountAddress: "0xa",
@@ -3776,7 +3685,7 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 
 	test("getIncomingTransferById is UNFILTERED — returns a dust record the feed hides", async () => {
 		const service = await bootDust({ threshold: 100, quotes: { "usd-coin": { usd: 1 } } })
-		const rec = dustSeed("tiny", "1") // way below $100
+		const rec = await dustSeed("tiny", "1") // way below $100
 
 		expect(await service.getIncomingTransfers("p1", "nMain", "0xa")).toHaveLength(0) // dust-hidden in the feed
 		const byId = await service.getIncomingTransferById(rec.id)
@@ -3788,9 +3697,9 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 		const { service } = await bootPublic(reader, state) // active profile = "p1"
 		// The record exists in the shared store but belongs to ANOTHER profile. The `id` is a URL route
 		// param, so a stale/crafted foreign id must not surface another profile's receipt.
-		const foreign = seedPublic({ profileId: "pOTHER", txHash: "0xforeign", l2BlockNumber: 5 })
+		const foreign = await seedPublic({ profileId: "pOTHER", txHash: "0xforeign", l2BlockNumber: 5 })
 		expect(await service.getIncomingTransferById(foreign.id)).toBeUndefined()
-		const own = seedPublic({ txHash: "0xown", l2BlockNumber: 5 }) // profileId defaults to "p1"
+		const own = await seedPublic({ txHash: "0xown", l2BlockNumber: 5 }) // profileId defaults to "p1"
 		expect((await service.getIncomingTransferById(own.id))?.id).toBe(own.id)
 	})
 
@@ -3803,7 +3712,7 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 	test("getReceiptFee returns the sender-paid fee juice for a public receipt + caches it (one node call)", async () => {
 		const network = makeNetworkStub()
 		const { service } = await bootService({ network })
-		const rec = seedPublic({ txHash: txh(0x1001), blockHash: "0xbh" })
+		const rec = await seedPublic({ txHash: txh(0x1001), blockHash: "0xbh" })
 		let calls = 0
 		network.setReceiptImpl(async () => {
 			calls++
@@ -3820,14 +3729,14 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 		const network = makeNetworkStub()
 		const { service } = await bootService({ network })
 
-		const noFee = seedPublic({ txHash: txh(0x1002), blockHash: "0xbh" })
+		const noFee = await seedPublic({ txHash: txh(0x1002), blockHash: "0xbh" })
 		network.setReceiptImpl(async () => ({ transactionFee: undefined, blockHash: hash("0xbh") }))
 		expect(await service.getReceiptFee(noFee.id)).toBeNull()
 		// Not cached: a later retry that DOES find a fee must not be shadowed by the null.
 		network.setReceiptImpl(async () => ({ transactionFee: 7n, blockHash: hash("0xbh") }))
 		expect(await service.getReceiptFee(noFee.id)).toEqual({ feeJuice: "7" })
 
-		const throws = seedPublic({ txHash: txh(0x1003), blockHash: "0xbh" })
+		const throws = await seedPublic({ txHash: txh(0x1003), blockHash: "0xbh" })
 		let called = false
 		network.setReceiptImpl(async () => {
 			called = true
@@ -3840,7 +3749,7 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 	test("getCachedReceiptFee answers only from what getReceiptFee fetched, and never reaches the network", async () => {
 		const network = makeNetworkStub()
 		const { service } = await bootService({ network })
-		const rec = seedPublic({ txHash: txh(0x1010), blockHash: "0xbh" })
+		const rec = await seedPublic({ txHash: txh(0x1010), blockHash: "0xbh" })
 		network.setReceiptImpl(async () => ({ transactionFee: 321n, blockHash: hash("0xbh") }))
 
 		expect(await service.getCachedReceiptFee(rec.id)).toBeNull()
@@ -3852,14 +3761,14 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 		expect(await service.getCachedReceiptFee(rec.id)).toEqual({ feeJuice: "321" })
 		expect(network.getNodeForUrl).toHaveBeenCalledTimes(1)
 
-		seedPublic({ txHash: txh(0x1010), blockHash: "0xremined" })
+		await seedPublic({ txHash: txh(0x1010), blockHash: "0xremined" })
 		expect(await service.getCachedReceiptFee(rec.id)).toBeNull()
 	})
 
 	test("a failed fee lookup logs the error's class, never the hash or the node's message", async () => {
 		const network = makeNetworkStub()
 		const { service } = await bootService({ network })
-		const rec = seedPublic({ txHash: txh(0x1011), blockHash: "0xbh" })
+		const rec = await seedPublic({ txHash: txh(0x1011), blockHash: "0xbh" })
 		network.setReceiptImpl(async (txHash) => {
 			throw new TypeError(`tx ${txHash} not found on node`)
 		})
@@ -3876,7 +3785,7 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 	test("getReceiptFee is reorg-safe — a receipt/record blockHash MISMATCH returns null (never a wrong-block fee)", async () => {
 		const network = makeNetworkStub()
 		const { service } = await bootService({ network })
-		const rec = seedPublic({ txHash: txh(0x1005), blockHash: "0xblockA" })
+		const rec = await seedPublic({ txHash: txh(0x1005), blockHash: "0xblockA" })
 		let calls = 0
 		// The node reports the tx in a DIFFERENT block than the record currently names (reconciler lagging).
 		network.setReceiptImpl(async () => {
@@ -3889,7 +3798,7 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 		expect(calls).toBe(2) // never cached → refetched every time
 
 		// The reconciler catches up: the record's blockHash becomes the node's block → now it matches → fee + cache.
-		seedPublic({ txHash: txh(0x1005), blockHash: "0xblockB" }) // same id (indexInTx 0), new blockHash
+		await seedPublic({ txHash: txh(0x1005), blockHash: "0xblockB" }) // same id (indexInTx 0), new blockHash
 		expect(await service.getReceiptFee(rec.id)).toEqual({ feeJuice: "100" })
 		const after = calls
 		expect(await service.getReceiptFee(rec.id)).toEqual({ feeJuice: "100" })
@@ -3905,7 +3814,7 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 	])("getReceiptFee → null for a network with %s, reaching neither the record's endpoint nor the chain node", async (_name, net) => {
 		const network = makeNetworkStub([net])
 		const { service } = await bootService({ network })
-		const rec = seedPublic({ txHash: txh(0x1006), blockHash: "0xbh" })
+		const rec = await seedPublic({ txHash: txh(0x1006), blockHash: "0xbh" })
 		network.setReceiptImpl(async () => ({ transactionFee: 1n, blockHash: hash("0xbh") }))
 		expect(await service.getReceiptFee(rec.id)).toBeNull()
 		expect(network.getNodeForUrl).not.toHaveBeenCalled()
@@ -3915,7 +3824,7 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 	test("getReceiptFee skips the cache write when a purge bumped the epoch mid-fetch (no stale repopulation)", async () => {
 		const network = makeNetworkStub()
 		const { service } = await bootService({ network })
-		seedPublic({ txHash: txh(0x1006), blockHash: "0xbh" })
+		await seedPublic({ txHash: txh(0x1006), blockHash: "0xbh" })
 		const id = `pub:p1|n1|${txh(0x1006)}|0`
 		let calls = 0
 		network.setReceiptImpl(async () => {
@@ -3928,7 +3837,7 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 
 		// Re-seed (the purge wiped it) + swap in a non-clearing impl. Had the first fetch poisoned the cache,
 		// this would be served from it (calls stays 1); the epoch guard forces a real refetch instead.
-		seedPublic({ txHash: txh(0x1006), blockHash: "0xbh" })
+		await seedPublic({ txHash: txh(0x1006), blockHash: "0xbh" })
 		network.setReceiptImpl(async () => {
 			calls++
 			return { transactionFee: 50n, blockHash: hash("0xbh") }
@@ -3948,7 +3857,7 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 
 		// A private (note) receipt must never hand its tx hash to the node — the server-side kind gate
 		// short-circuits BEFORE any getNode/getTxReceipt.
-		const noteRec = seedNote({ txHash: txh(0x1004) })
+		const noteRec = await seedNote({ txHash: txh(0x1004) })
 		expect(await service.getReceiptFee(noteRec.id)).toBeNull()
 		// A bogus / foreign id also yields null (getIncomingTransferById returns undefined) — no node call.
 		expect(await service.getReceiptFee("pub:pX|nX|0xdead|0")).toBeNull()
@@ -3974,7 +3883,7 @@ describe("IncomingTransferService — public-scan tick outcomes", () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
 		const pendingPage = { fromCursor: null, toScannedThrough: at(10), upperHash: "0xcheckpoint" }
-		seedCursor({ pendingPage })
+		await seedCursor({ pendingPage })
 		reader.getScanTips = async () => {
 			throw new Error("node down")
 		}
@@ -3986,7 +3895,7 @@ describe("IncomingTransferService — public-scan tick outcomes", () => {
 		)
 
 		expect(record).toHaveBeenCalledWith(`p1|n1|${tokenA.contract}`, "failed", expect.any(Number))
-		expect(cursorFor()).toEqual({ cursor: null, lastSyncedBlockHash: null, lastScanFinalized: null, startBlock: 0, pendingPage })
+		expect(await cursorFor()).toEqual({ cursor: null, lastSyncedBlockHash: null, lastScanFinalized: null, startBlock: 0, pendingPage })
 		expect(state.fetchArgs).toEqual([])
 	})
 
@@ -4006,7 +3915,7 @@ describe("IncomingTransferService — public-scan tick outcomes", () => {
 		// between cursor and tip would report it as permanently behind.
 		const { reader, state } = makePublicReader({ tips: { checkpointedBlockNumber: 100 } })
 		const { service } = await bootPublic(reader, state)
-		seedCursor({ cursor: at(10) })
+		await seedCursor({ cursor: at(10) })
 
 		expect(await scanPublic(service)).toBe("idle-at-tip")
 	})
@@ -4014,11 +3923,11 @@ describe("IncomingTransferService — public-scan tick outcomes", () => {
 	test("a dropped page → no-progress, and the finalized floor does not move", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		seedCursor({ cursor: at(10), lastScanFinalized: 5 })
+		await seedCursor({ cursor: at(10), lastScanFinalized: 5 })
 		state.responses.push(pubDroppedPage())
 
 		expect(await scanPublic(service)).toBe("no-progress")
-		expect(cursorFor()).toMatchObject({ cursor: at(10), lastScanFinalized: 5 })
+		expect(await cursorFor()).toMatchObject({ cursor: at(10), lastScanFinalized: 5 })
 	})
 
 	test("a valid page followed by a dropped one → no-progress, though the valid prefix is committed", async () => {
@@ -4027,7 +3936,7 @@ describe("IncomingTransferService — public-scan tick outcomes", () => {
 		state.responses.push({ events: [], scannedThrough: at(20), hasMore: true, dropped: false }, pubDroppedPage())
 
 		expect(await scanPublic(service)).toBe("no-progress")
-		expect(cursorFor()?.cursor).toEqual(at(20))
+		expect((await cursorFor())?.cursor).toEqual(at(20))
 	})
 
 	test("a commit the epoch fence rejects is never a success: EOF → no-progress, reconciliation end → no-progress", async () => {
@@ -4038,25 +3947,25 @@ describe("IncomingTransferService — public-scan tick outcomes", () => {
 			return probeAck()
 		}
 
-		seedCursor({ cursor: at(10) })
+		await seedCursor({ cursor: at(10) })
 		state.responses.push(eofAfterBump)
 		expect(await scanPublic(service)).toBe("no-progress")
 
 		const reconciling = { lowerBound: 60, upperBound: 90, upperBoundHash: "0xfork", progress: null, seen: [] }
-		seedCursor({ ...anchored, reconciling })
+		await seedCursor({ ...anchored, reconciling })
 		state.responses.push(eofAfterBump)
 		expect(await scanPublic(service)).toBe("no-progress")
-		expect(cursorFor()?.reconciling).toEqual(reconciling)
+		expect((await cursorFor())?.reconciling).toEqual(reconciling)
 	})
 
 	test("a non-advancing (hostile) page → no-progress, never a false idle-at-tip", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		seedCursor({ cursor: at(50) })
+		await seedCursor({ cursor: at(50) })
 		state.responses.push({ events: [], scannedThrough: at(50), hasMore: true, dropped: false })
 
 		expect(await scanPublic(service)).toBe("no-progress")
-		expect(cursorFor()?.cursor).toEqual(at(50))
+		expect((await cursorFor())?.cursor).toEqual(at(50))
 	})
 
 	test("many pages inside ONE busy block → progress every tick, though no new block is covered", async () => {
@@ -4068,13 +3977,13 @@ describe("IncomingTransferService — public-scan tick outcomes", () => {
 		expect(await scanPublic(service)).toBe("progress")
 		state.responses.push(probeAck(), ...inBlock(5))
 		expect(await scanPublic(service)).toBe("progress")
-		expect(cursorFor()?.cursor).toEqual(at(70, 9))
+		expect((await cursorFor())?.cursor).toEqual(at(70, 9))
 	})
 
 	test("a multi-tick reconciliation → progress per step, then the forward scan settles at idle-at-tip", async () => {
 		const { reader, state } = makePublicReader({ tips: { checkpointedBlockNumber: 100 } })
 		const { service } = await bootPublic(reader, state)
-		seedCursor({
+		await seedCursor({
 			...anchored,
 			cursor: at(90),
 			reconciling: { lowerBound: 60, upperBound: 90, upperBoundHash: "0xfork", progress: null, seen: [] },
@@ -4090,10 +3999,10 @@ describe("IncomingTransferService — public-scan tick outcomes", () => {
 			]),
 		)
 		expect(await scanPublic(service)).toBe("progress")
-		expect(cursorFor()?.reconciling).toMatchObject({ progress: at(65) })
+		expect((await cursorFor())?.reconciling).toMatchObject({ progress: at(65) })
 
 		expect(await scanPublic(service)).toBe("progress") // empty EOF → the window is exhausted → finished
-		expect(cursorFor()?.reconciling).toBeUndefined()
+		expect((await cursorFor())?.reconciling).toBeUndefined()
 
 		state.responses.push(probeAck())
 		expect(await scanPublic(service)).toBe("idle-at-tip")
@@ -4103,23 +4012,23 @@ describe("IncomingTransferService — public-scan tick outcomes", () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
 		const reconciling = { lowerBound: 60, upperBound: 90, upperBoundHash: "0xfork", progress: null, seen: [] }
-		seedCursor({ ...anchored, reconciling })
+		await seedCursor({ ...anchored, reconciling })
 		state.responses.push(pubDroppedPage())
 
 		expect(await scanPublic(service)).toBe("no-progress")
-		expect(cursorFor()?.reconciling).toEqual(reconciling)
+		expect((await cursorFor())?.reconciling).toEqual(reconciling)
 	})
 
 	test("an anchored throw → failed AND a reconciliation begins; a transient one recovers to idle-at-tip", async () => {
 		const { reader, state } = makePublicReader({ tips: { checkpointedBlockNumber: 100 } })
 		const { service } = await bootPublic(reader, state)
-		seedCursor(anchored)
+		await seedCursor(anchored)
 		state.responses.push(new Error("transient node error")) // the boundary-ancestry probe throws
 
 		expect(await scanPublic(service)).toBe("failed")
 		// The reconcile scan ran over the rewind window, pinned to the checkpoint it was staged against.
 		expect(state.fetchArgs.at(-1)).toMatchObject({ fromBlock: 6, toBlock: 100, referenceBlock: "0xcheckpoint" })
-		expect(cursorFor()).toMatchObject({ cursor: at(10), lastSyncedBlockHash: "0xcheckpoint" })
+		expect(await cursorFor()).toMatchObject({ cursor: at(10), lastSyncedBlockHash: "0xcheckpoint" })
 
 		state.responses.push(probeAck())
 		expect(await scanPublic(service)).toBe("idle-at-tip")
@@ -4131,18 +4040,18 @@ describe("IncomingTransferService — public-scan tick outcomes", () => {
 		state.responses.push(new Error("node error"))
 
 		expect(await scanPublic(service)).toBe("failed")
-		expect(cursorFor()).toBeUndefined()
+		expect(await cursorFor()).toBeUndefined()
 	})
 
 	test("a reorged pending page → failed, and the marker hands over to a reconciliation", async () => {
 		const { reader, state } = makePublicReader({ tips: { checkpointedBlockNumber: 100 } })
 		const { service } = await bootPublic(reader, state)
-		seedCursor({ ...anchored, pendingPage: { fromCursor: at(10), toScannedThrough: at(20), upperHash: "0xgone" } })
+		await seedCursor({ ...anchored, pendingPage: { fromCursor: at(10), toScannedThrough: at(20), upperHash: "0xgone" } })
 		state.responses.push(new Error("upperHash is not an ancestor"))
 
 		expect(await scanPublic(service)).toBe("failed")
 		expect(state.fetchArgs.at(-1)).toMatchObject({ fromBlock: 6, referenceBlock: "0xcheckpoint" })
-		expect(cursorFor()?.pendingPage).toBeUndefined()
+		expect((await cursorFor())?.pendingPage).toBeUndefined()
 	})
 
 	test.each([
@@ -4166,7 +4075,7 @@ describe("IncomingTransferService — public-scan cursor resume (SW-restart, cas
 		// Simulate a PRIOR instance that scanned up to block 50 (cursor persisted; no anchor → no boundary
 		// probe, so the first reader call IS the forward scan).
 		const persisted = { blockNumber: 50, txIndexWithinBlock: 3, logIndexWithinTx: 1 }
-		seedCursor({ cursor: persisted, lastSyncedBlockHash: null })
+		await seedCursor({ cursor: persisted, lastSyncedBlockHash: null })
 
 		// Boot a FRESH service over the SAME persisted storage (bootService does NOT clear cursors — only
 		// bootPublic does). This is the SW restart: a new instance re-hydrating from chrome.storage.local.
@@ -4189,7 +4098,7 @@ describe("IncomingTransferService — public-scan cursor resume (SW-restart, cas
 		// resume that anchor triggers a boundary ancestry probe (a distinct reader call) BEFORE the forward
 		// scan — so this exercises the probe-present branch the no-anchor case above skips.
 		const persisted = { blockNumber: 50, txIndexWithinBlock: 3, logIndexWithinTx: 1 }
-		seedCursor({ cursor: persisted, lastSyncedBlockHash: "0xanchor" })
+		await seedCursor({ cursor: persisted, lastSyncedBlockHash: "0xanchor" })
 
 		const { service } = await bootService({ account: publicAccountStub(), token: makeTokenStub([tokenA]), publicReader: reader })
 		await flushPromises()
@@ -4210,16 +4119,16 @@ describe("IncomingTransferService — public-scan cursor resume (SW-restart, cas
 
 describe("IncomingTransferService — newest-first public scan", () => {
 	const receipt = pubReceipt
-	const recordedBlocks = (account = "0xa") =>
-		[...records.values()]
+	const recordedBlocks = async (account = "0xa") =>
+		(await repo.listRecords())
 			.filter((r) => r.kind === "public-event" && r.accountAddress === account)
 			.map((r) => r.l2BlockNumber)
 			.sort((x, y) => x - y)
-	const backfillOf = () => (cursorFor() as { backfill?: { low: number; high: number; position: unknown } } | undefined)?.backfill
+	const backfillOf = async () => (await cursorFor())?.backfill
 	const backfillReads = (fetchArgs: PublicTransferFetchArgs[]) =>
 		fetchArgs.filter((a) => a.referenceBlock === undefined).map((a) => [a.fromBlock, a.toBlock])
 	const trustTokenA = () =>
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -4248,7 +4157,7 @@ describe("IncomingTransferService — newest-first public scan", () => {
 		const landed: number[][] = []
 		for (let i = 0; i < 3; i++) {
 			expect(await scanPublic(service)).toBe("progress")
-			landed.push(recordedBlocks())
+			landed.push(await recordedBlocks())
 		}
 
 		expect(landed).toEqual([
@@ -4256,7 +4165,7 @@ describe("IncomingTransferService — newest-first public scan", () => {
 			[500, 950, 1005],
 			[50, 500, 950, 1005],
 		])
-		expect(backfillOf()).toBeUndefined()
+		expect(await backfillOf()).toBeUndefined()
 	})
 
 	test("on a quiet chain with finalized = checkpointed, a receipt at the floor lands on the first tick, history still unread", async () => {
@@ -4268,8 +4177,8 @@ describe("IncomingTransferService — newest-first public scan", () => {
 		await scanPublic(service)
 
 		expect(state.fetchArgs[0].fromBlock).toBe(1001)
-		expect(recordedBlocks()).toEqual([1000])
-		expect(backfillOf()).toMatchObject({ high: 600 })
+		expect(await recordedBlocks()).toEqual([1000])
+		expect(await backfillOf()).toMatchObject({ high: 600 })
 	})
 
 	test("an empty window ends and the next one starts, as many as the tick's page budget allows", async () => {
@@ -4283,44 +4192,53 @@ describe("IncomingTransferService — newest-first public scan", () => {
 			[701, 800],
 			[601, 700],
 		])
-		expect(backfillOf()).toEqual({ low: 501, high: 600, position: null })
+		expect(await backfillOf()).toEqual({ low: 501, high: 600, position: null })
 	})
 
 	test("a block with more logs than one tick's budget resumes at the next log, with no duplicate and no gap", async () => {
 		const logs = Array.from({ length: 150 }, (_, i) => receipt(1000, { txIndexWithinBlock: i, to: i % 7 === 0 ? "0xa" : "0xother" }))
 		const { service, state } = await bootChain({ finalizedBlockNumber: 1000, checkpointedBlockNumber: 1000 }, logs)
-		trustTokenA()
+		await trustTokenA()
 		const added = vi.fn()
 		service.onIncomingTransferAdded.add(added)
 
 		await scanPublic(service)
-		expect(backfillOf()).toEqual({ low: 901, high: 1000, position: { blockNumber: 1000, txIndexWithinBlock: 79, logIndexWithinTx: 0 } })
+		expect(await backfillOf()).toEqual({
+			low: 901,
+			high: 1000,
+			position: { blockNumber: 1000, txIndexWithinBlock: 79, logIndexWithinTx: 0 },
+		})
 		state.fetchArgs.length = 0
 
 		await scanPublic(service)
 
 		expect(state.fetchArgs.find((a) => a.referenceBlock === undefined)?.afterCursor).toEqual(positionOf(logs[79]))
 		const ours = logs.filter((e) => e.to === "0xa").map(pubRecordKey)
-		expect([...records.keys()].filter((k) => k.startsWith("pub:")).sort()).toEqual(ours.sort())
+		expect(
+			(await repo.listRecords())
+				.map((r) => r.id)
+				.filter((k) => k.startsWith("pub:"))
+				.sort(),
+		).toEqual(ours.sort())
 		expect(added).toHaveBeenCalledTimes(ours.length)
-		expect(backfillOf()).toEqual({ low: 801, high: 900, position: null })
+		expect(await backfillOf()).toEqual({ low: 801, high: 900, position: null })
 	})
 
 	test("a restart between a back-fill record and its cursor write replays the page without a duplicate", async () => {
 		const { service } = await bootChain({ finalizedBlockNumber: 1000, checkpointedBlockNumber: 1010 }, [receipt(950)])
-		trustTokenA()
+		await trustTokenA()
 		const added = vi.fn()
 		service.onIncomingTransferAdded.add(added)
 		await scanPublic(service)
-		expect(recordedBlocks()).toEqual([950])
+		expect(await recordedBlocks()).toEqual([950])
 		// The record write landed and the cursor write that followed it did not.
-		seedCursor({ ...cursorFor(), backfill: { low: 901, high: 1000, position: null } })
+		await seedCursor({ ...(await cursorFor()), backfill: { low: 901, high: 1000, position: null } })
 
 		expect(await scanPublic(service)).toBe("progress")
 
-		expect(recordedBlocks()).toEqual([950])
+		expect(await recordedBlocks()).toEqual([950])
 		expect(added).toHaveBeenCalledTimes(1)
-		expect(backfillOf()).toEqual({ low: 501, high: 600, position: null })
+		expect(await backfillOf()).toEqual({ low: 501, high: 600, position: null })
 	})
 
 	test("a revoked back-fill commit leaves the window's position where it was", async () => {
@@ -4328,12 +4246,12 @@ describe("IncomingTransferService — newest-first public scan", () => {
 		;(service as unknown as { deletersRunning: number }).deletersRunning = 1
 
 		expect(await scanPublic(service)).toBe("no-progress")
-		expect(recordedBlocks()).toEqual([])
-		expect(backfillOf()).toEqual({ low: 901, high: 1000, position: null })
+		expect(await recordedBlocks()).toEqual([])
+		expect(await backfillOf()).toEqual({ low: 901, high: 1000, position: null })
 		;(service as unknown as { deletersRunning: number }).deletersRunning = 0
 
 		await scanPublic(service)
-		expect(recordedBlocks()).toEqual([950])
+		expect(await recordedBlocks()).toEqual([950])
 	})
 
 	test("a reconciliation deletes a forward orphan and never reaches a back-filled record", async () => {
@@ -4342,7 +4260,7 @@ describe("IncomingTransferService — newest-first public scan", () => {
 			receipt(1005),
 		])
 		await scanPublic(service)
-		expect(recordedBlocks()).toEqual([990, 1005])
+		expect(await recordedBlocks()).toEqual([990, 1005])
 
 		// The block holding 1005's receipt is reorged out: the boundary probe fails and the node serves
 		// no receipt at all, so only the reconciliation's reach decides which rows it deletes.
@@ -4351,8 +4269,8 @@ describe("IncomingTransferService — newest-first public scan", () => {
 		state.responses.push(new Error("not an ancestor"))
 		await scanPublic(service)
 
-		expect(recordedBlocks()).toEqual([990])
-		expect(cursorFor()?.reconciling).toBeUndefined()
+		expect(await recordedBlocks()).toEqual([990])
+		expect((await cursorFor())?.reconciling).toBeUndefined()
 	})
 
 	test("an account added during back-fill restarts both halves and finds the account's history", async () => {
@@ -4364,19 +4282,19 @@ describe("IncomingTransferService — newest-first public scan", () => {
 			{ account },
 		)
 		await scanPublic(service)
-		expect(recordedBlocks()).toEqual([960])
-		expect(backfillOf()).toMatchObject({ high: 600 })
+		expect(await recordedBlocks()).toEqual([960])
+		expect(await backfillOf()).toMatchObject({ high: 600 })
 
 		accounts.push({ profileId: "p1", chainId: 1, address: "0xnew" })
 		state.fetchArgs.length = 0
 		await (service as unknown as { onAccountAdded: (a: unknown) => Promise<void> }).onAccountAdded({ chainId: 1, address: "0xnew" })
 		await flushPromises()
-		for (let i = 0; i < 3 && backfillOf() !== undefined; i++) await scanPublic(service)
+		for (let i = 0; i < 3 && (await backfillOf()) !== undefined; i++) await scanPublic(service)
 
 		expect(state.fetchArgs[0]).toMatchObject({ fromBlock: 1001, afterCursor: undefined })
 		expect(backfillReads(state.fetchArgs)[0]).toEqual([901, 1000])
-		expect(recordedBlocks("0xnew")).toEqual([50, 950, 1005])
-		expect(recordedBlocks()).toEqual([960])
+		expect(await recordedBlocks("0xnew")).toEqual([50, 950, 1005])
+		expect(await recordedBlocks()).toEqual([960])
 	})
 })
 
@@ -4407,9 +4325,9 @@ describe("IncomingTransferService — public arm post-park epoch discipline", ()
 
 		await scanPublic(service)
 
-		expect(records.get("pub:p1|n1|0xparked|0")).toBeUndefined()
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))).toBeUndefined()
-		expect(outboxFor()).toBeUndefined()
+		expect(await repo.getRecord("pub:p1|n1|0xparked|0")).toBeUndefined()
+		expect(await repo.getTrust("p1", "n1", tokenA.contract)).toBeUndefined()
+		expect(await outboxFor()).toBeUndefined()
 		expect(pending).not.toHaveBeenCalled()
 	})
 
@@ -4433,16 +4351,16 @@ describe("IncomingTransferService — public arm post-park epoch discipline", ()
 		const { reader, state } = makePublicReader()
 		const tokenBalance = makeTokenBalanceStub()
 		const { service } = await bootPublic(reader, state, { tokenBalance })
-		outbox.set("p1|n1|0xa|1", { dirtyAt: 100 })
+		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
 		tokenBalance.requestBalanceRefresh.mockImplementationOnce(async () => {
 			// A receipt lands while the request is in flight: fresh dirt, anchor cleared.
-			outbox.set("p1|n1|0xa|1", { dirtyAt: 999 })
+			await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 999 })
 			return { taskId: "T1" }
 		})
 
 		await drain(service)
 
-		expect(outboxFor()).toEqual({ dirtyAt: 999 })
+		expect(await outboxFor()).toEqual({ dirtyAt: 999 })
 	})
 
 	test("drain: a DISPLACED holder (watchdog handoff) cannot land its anchor over a successor's receipt", async () => {
@@ -4454,7 +4372,7 @@ describe("IncomingTransferService — public arm post-park epoch discipline", ()
 		const { reader, state } = makePublicReader()
 		const tokenBalance = makeTokenBalanceStub()
 		const { service } = await bootPublic(reader, state, { tokenBalance })
-		outbox.set("p1|n1|0xa|1", { dirtyAt: 100 })
+		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
 		vi.useFakeTimers()
 		try {
 			tokenBalance.requestBalanceRefresh.mockImplementationOnce(async () => {
@@ -4462,7 +4380,7 @@ describe("IncomingTransferService — public arm post-park epoch discipline", ()
 				// the receipt writer under a REAL lock acquisition (ticket flips).
 				await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
 				await (service as unknown as { withServiceLock: (fn: () => Promise<void>) => Promise<void> }).withServiceLock(async () => {
-					outbox.set("p1|n1|0xa|1", { dirtyAt: 100 })
+					await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
 				})
 				return { taskId: "T1" }
 			})
@@ -4471,7 +4389,7 @@ describe("IncomingTransferService — public arm post-park epoch discipline", ()
 
 			// The displaced drain must NOT have anchored: the row keeps the
 			// receipt's shape (no pendingTaskId), so the next drain re-requests.
-			expect(outboxFor()).toEqual({ dirtyAt: 100 })
+			expect(await outboxFor()).toEqual({ dirtyAt: 100 })
 		} finally {
 			vi.useRealTimers()
 		}
@@ -4481,15 +4399,15 @@ describe("IncomingTransferService — public arm post-park epoch discipline", ()
 		const { reader, state } = makePublicReader()
 		const tokenBalance = makeTokenBalanceStub()
 		const { service } = await bootPublic(reader, state, { tokenBalance })
-		outbox.set("p1|n1|0xa|1", { dirtyAt: 100 })
+		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
 		tokenBalance.requestBalanceRefresh.mockImplementationOnce(async () => {
-			outbox.delete("p1|n1|0xa|1")
+			await repo.deleteOutbox("p1", "n1", "0xa", 1)
 			return { taskId: "T1" }
 		})
 
 		await drain(service)
 
-		expect(outboxFor()).toBeUndefined()
+		expect(await outboxFor()).toBeUndefined()
 	})
 })
 
@@ -4499,7 +4417,7 @@ describe("IncomingTransferService — public arm post-park epoch discipline", ()
 
 describe("IncomingTransferService — seam pins (outbox order, trust order, fresh isCurrent)", () => {
 	function seedTrusted() {
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		return seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
@@ -4513,9 +4431,9 @@ describe("IncomingTransferService — seam pins (outbox order, trust order, fres
 		const token = makeTokenStub([tokenA])
 		const noteSvc = makeNoteStub({ [tokenA.contract]: [note()] })
 		const { service } = await bootService({ network, token, note: noteSvc })
-		seedTrusted()
-		const outboxSet = vi.spyOn(outbox, "set")
-		const recordSet = vi.spyOn(records, "set")
+		await seedTrusted()
+		const outboxSet = vi.spyOn(internals(service).repo, "setOutbox")
+		const recordSet = vi.spyOn(internals(service).repo, "upsertRecord")
 		try {
 			await scan(service)
 			expect(outboxSet).toHaveBeenCalledTimes(1)
@@ -4530,10 +4448,10 @@ describe("IncomingTransferService — seam pins (outbox order, trust order, fres
 	test("the outbox row is written BEFORE the record", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		seedTrusted()
+		await seedTrusted()
 		state.responses.push(pubPage([pubEvent({ txHash: "0xorder" })]))
-		const outboxSet = vi.spyOn(outbox, "set")
-		const recordSet = vi.spyOn(records, "set")
+		const outboxSet = vi.spyOn(internals(service).repo, "setOutbox")
+		const recordSet = vi.spyOn(internals(service).repo, "upsertRecord")
 		try {
 			await scanPublic(service)
 			expect(outboxSet).toHaveBeenCalledTimes(1)
@@ -4550,18 +4468,19 @@ describe("IncomingTransferService — seam pins (outbox order, trust order, fres
 		const token = makeTokenStub([tokenA])
 		const noteSvc = makeNoteStub({ [tokenA.contract]: [note()] })
 		const { service } = await bootService({ network, token, note: noteSvc })
-		const seenAtEmit: string[] = []
+		// A read answers with the rows stored when it is called, so each entry is the row at the emit.
+		const seenAtEmit: Promise<string>[] = []
 		const changed = vi.fn(() => {
-			seenAtEmit.push(trust.get(trustKey("p1", "n1", tokenA.contract))?.state ?? "absent")
+			seenAtEmit.push(repo.getTrust("p1", "n1", tokenA.contract).then((row) => row?.state ?? "absent"))
 		})
 		service.onIncomingTrustChanged.add(changed)
-		const trustSet = vi.spyOn(trust, "set")
+		const trustSet = vi.spyOn(internals(service).repo, "setTrust")
 		try {
 			await scan(service)
 			expect(trustSet).toHaveBeenCalledTimes(1)
 			expect(changed).toHaveBeenCalledTimes(1)
 			expect(trustSet.mock.invocationCallOrder[0]).toBeLessThan(changed.mock.invocationCallOrder[0])
-			expect(seenAtEmit).toEqual(["pending"])
+			expect(await Promise.all(seenAtEmit)).toEqual(["pending"])
 		} finally {
 			trustSet.mockRestore()
 		}
@@ -4579,13 +4498,13 @@ describe("IncomingTransferService — seam pins (outbox order, trust order, fres
 			const tokenBalance = makeTokenBalanceStub()
 			const task = makeTaskStub()
 			const { service } = await bootPublic(reader, state, { tokenBalance, task })
-			outbox.set("p1|n1|0xa|1", { dirtyAt: 100, pendingTaskId: "T1" })
+			await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100, pendingTaskId: "T1" })
 			task.setTask("T1", TaskStatus.Completed, Date.now())
 			let releaseRow!: () => void
 			const parked = new Promise<unknown>((resolve) => {
 				releaseRow = () => resolve({ dirtyAt: 100, pendingTaskId: "T1" })
 			})
-			const getSpy = vi.spyOn(outbox, "get").mockImplementationOnce(() => parked as never)
+			const getSpy = vi.spyOn(internals(service).repo, "getOutbox").mockImplementationOnce(() => parked as never)
 			try {
 				const drainP = drain(service) // parks inside getOutbox, serviceLock held
 				await vi.advanceTimersByTimeAsync(0)
@@ -4596,7 +4515,7 @@ describe("IncomingTransferService — seam pins (outbox order, trust order, fres
 			} finally {
 				getSpy.mockRestore()
 			}
-			expect(outboxFor()?.pendingTaskId).toBe("T1") // the revoked CS wrote nothing
+			expect((await outboxFor())?.pendingTaskId).toBe("T1") // the revoked CS wrote nothing
 		} finally {
 			vi.useRealTimers()
 		}
@@ -4729,10 +4648,7 @@ describe("IncomingTransferService — public-scan health (episodes, backoff, ret
 		vi.setSystemTime(T0 + 11 * MIN)
 		const second = makePublicReader()
 		nodeDown(second.reader)
-		const restarted = await bootService(
-			{ account: publicAccountStub(), token: makeTokenStub([tokenA]), publicReader: second.reader },
-			{ keepStorage: true },
-		)
+		const restarted = await bootService({ account: publicAccountStub(), token: makeTokenStub([tokenA]), publicReader: second.reader })
 		await flushPromises()
 
 		expect(await surface(restarted.service).getIncomingSyncHealth("n1")).toEqual({ stalled: true, since: T0 })
@@ -4746,10 +4662,7 @@ describe("IncomingTransferService — public-scan health (episodes, backoff, ret
 		const tips = vi.fn().mockRejectedValue(new Error("node down"))
 		reader.getScanTips = tips
 		// No account, so no note target reads tips: the public target is the only scheduler.
-		const { service } = await bootService(
-			{ account: makeAccountStub([]), token: makeTokenStub([tokenA]), publicReader: reader },
-			{ keepStorage: true },
-		)
+		const { service } = await bootService({ account: makeAccountStub([]), token: makeTokenStub([tokenA]), publicReader: reader })
 		await flushPromises()
 
 		expect(tips).not.toHaveBeenCalled()
@@ -4907,7 +4820,7 @@ describe("IncomingTransferService — public-scan health (episodes, backoff, ret
 		releaseTeardown()
 		await deleting
 		await flushPromises()
-		expect(cursorFor()).toBeUndefined()
+		expect(await cursorFor()).toBeUndefined()
 		expect(await storedEpisodes(service)).toBeUndefined()
 	})
 
@@ -4963,10 +4876,7 @@ describe("IncomingTransferService — public-scan health (episodes, backoff, ret
 			})
 			return healthyTips(networkId)
 		}
-		const { service } = await bootService(
-			{ account: publicAccountStub(), token: makeTokenStub([tokenA]), publicReader: reader },
-			{ keepStorage: true },
-		)
+		const { service } = await bootService({ account: publicAccountStub(), token: makeTokenStub([tokenA]), publicReader: reader })
 		await flushPromises()
 		const events = captureHealthEvents(service)
 
@@ -4985,10 +4895,7 @@ describe("IncomingTransferService — public-scan health (episodes, backoff, ret
 		for (let wake = 0; wake < 3; wake++) {
 			vi.setSystemTime(T0 + wake * 30_000)
 			const { reader } = makePublicReader()
-			const { service } = await bootService(
-				{ account: publicAccountStub(), token: makeTokenStub([tokenA]), publicReader: reader },
-				{ keepStorage: true },
-			)
+			const { service } = await bootService({ account: publicAccountStub(), token: makeTokenStub([tokenA]), publicReader: reader })
 			await flushPromises()
 			await surface(service).episodes.settled()
 		}
@@ -5033,13 +4940,7 @@ type ArrivalInternals = {
 	onTokenAdded: (token: unknown) => Promise<void>
 	onAccountAdded: (account: { chainId: number; address: string }) => Promise<void>
 	onAccountDeleted: (account: { profileId: string; chainId: number; address: string }) => Promise<void>
-	repo: {
-		getTrust: (p: string, n: string, c: string) => Promise<IncomingTrustRecord | undefined>
-		setTrust: (...args: unknown[]) => Promise<IncomingTrustRecord | undefined>
-		getArrivalRow: (p: string, n: string, a: string) => Promise<ArrivalRow | undefined>
-		getRecord: (id: string) => Promise<IncomingTransferRecord | undefined>
-		setCursor: (...args: unknown[]) => Promise<void>
-	}
+	repo: IncomingTransferRepository
 }
 const internals = (service: unknown) => service as ArrivalInternals
 
@@ -5063,7 +4964,7 @@ async function bootArrivals(tipValue: number | Error, stubs: Parameters<typeof b
 }
 
 function seedTrust(contract: string, over: Partial<IncomingTrustRecord> = {}) {
-	trust.set(trustKey("p1", "n1", contract), { profileId: "p1", networkId: "n1", contract, state: "trusted", updatedAt: 0, ...over })
+	return seedTrustRow({ profileId: "p1", networkId: "n1", contract, state: "trusted", updatedAt: 0, ...over })
 }
 
 /** A receipt in `block` for `account`, on tokenA unless `contract` says otherwise. */
@@ -5073,38 +4974,52 @@ function receipt(n: number, block: number, over: NoteSeed = {}) {
 
 const tokenAdd = (token: typeof tokenB) => ({ ...token, profileId: "p1", name: `${token.symbol} Token` })
 
+/** Every account scope `bootArrivals` installs, as `profileId|networkId|accountAddress`. */
+const BOOTED_SCOPES = ["p1|n1|0xa", "p1|n1|0xb", "p1|n2|0xa", "p1|n2|0xb"]
+
+/** The scopes among `scopes` that hold an arrival row; the repository lists no arrival rows. */
+async function arrivalRowsAt(scopes: string[]): Promise<string[]> {
+	const present: string[] = []
+	for (const scope of scopes) {
+		const [profileId, networkId, accountAddress] = scope.split("|")
+		if (await repo.getArrivalRow(profileId, networkId, accountAddress)) present.push(scope)
+	}
+	return present
+}
+
 describe("IncomingTransferService — arrival state", () => {
 	test("a missing row is baselined to the tip, so a receipt in the tip's block is history", async () => {
 		const { service } = await bootArrivals(120)
 		const state = await service.getArrivalState("p1", "n1", "0xa")
 
-		expect(arrivals.get("p1|n1|0xa")).toEqual({ sinceBlock: 120, played: [] })
+		expect(await repo.getArrivalRow("p1", "n1", "0xa")).toEqual({ sinceBlock: 120, played: [] })
 		expect(isArrivalEligible(noteRecord({ contract: tokenA.contract, l2BlockNumber: 120 }), state)).toBe(false)
 		expect(isArrivalEligible(noteRecord({ contract: tokenA.contract, l2BlockNumber: 121 }), state)).toBe(true)
 	})
 
 	test("a stored row and a stored floor stay above a lower tip; only the pending floor moves", async () => {
 		const { service, tip } = await bootArrivals(50)
-		arrivals.set("p1|n1|0xa", { sinceBlock: 300, played: [] })
-		seedTrust(tokenA.contract, { arrivalFloor: 400 })
-		seedTrust(tokenB.contract, { arrivalFloor: 20, arrivalFloorPending: true })
+		await repo.setArrivalRow("p1", "n1", "0xa", { sinceBlock: 300, played: [] })
+		await seedTrust(tokenA.contract, { arrivalFloor: 400 })
+		await seedTrust(tokenB.contract, { arrivalFloor: 20, arrivalFloorPending: true })
 
 		const state = await service.getArrivalState("p1", "n1", "0xa")
 
 		expect(tip.calls).toBe(1)
 		expect(state).toMatchObject({ sinceBlock: 300, floors: { [tokenA.contract]: 400, [tokenB.contract]: 50 } })
-		expect(arrivals.get("p1|n1|0xa")?.sinceBlock).toBe(300)
+		expect((await repo.getArrivalRow("p1", "n1", "0xa"))?.sinceBlock).toBe(300)
 	})
 
 	test("an account floor raised by eviction stays when the tip later reads lower", async () => {
 		const { service, tip } = await bootArrivals(0)
-		arrivals.set("p1|n1|0xa", { sinceBlock: 300, played: [] })
-		const ids = Array.from({ length: 501 }, (_, i) => receipt(i, 301 + i, { contract: "0xtokenC" }).id)
+		await repo.setArrivalRow("p1", "n1", "0xa", { sinceBlock: 300, played: [] })
+		const ids: string[] = []
+		for (let i = 0; i < 501; i++) ids.push((await receipt(i, 301 + i, { contract: "0xtokenC" })).id)
 		await service.claimArrivals("p1", "n1", "0xa", ids.slice(0, 500))
 		await service.claimArrivals("p1", "n1", "0xa", ids.slice(500))
-		expect(arrivals.get("p1|n1|0xa")?.sinceBlock).toBe(301)
+		expect((await repo.getArrivalRow("p1", "n1", "0xa"))?.sinceBlock).toBe(301)
 
-		seedTrust(tokenA.contract, { arrivalFloorPending: true })
+		await seedTrust(tokenA.contract, { arrivalFloorPending: true })
 		tip.standing = 50
 		expect((await service.getArrivalState("p1", "n1", "0xa")).sinceBlock).toBe(301)
 	})
@@ -5132,22 +5047,22 @@ describe("IncomingTransferService — arrival state", () => {
 			token: makeTokenStub([tokenA]),
 		})
 		await flushPromises()
-		seedTrust(tokenA.contract, { arrivalFloor: 5, arrivalFloorPending: true })
+		await seedTrust(tokenA.contract, { arrivalFloor: 5, arrivalFloorPending: true })
 
 		await service.getArrivalState("p1", "n1", "0xa")
 
 		expect(isChainQuarantined).toHaveBeenCalledWith("p1", 1)
 		expect(readChainTip.mock.calls).toEqual(quarantined ? [] : [["n1"]])
-		expect(arrivals.get("p1|n1|0xa")).toEqual(quarantined ? undefined : { sinceBlock: 120, played: [] })
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))).toMatchObject(
+		expect(await repo.getArrivalRow("p1", "n1", "0xa")).toEqual(quarantined ? undefined : { sinceBlock: 120, played: [] })
+		expect(await repo.getTrust("p1", "n1", tokenA.contract)).toMatchObject(
 			quarantined ? { arrivalFloor: 5, arrivalFloorPending: true } : { arrivalFloor: 120 },
 		)
 	})
 
 	test("a row with no pending floor reads no tip", async () => {
 		const { service, tip } = await bootArrivals(50)
-		arrivals.set("p1|n1|0xa", { sinceBlock: 10, played: [] })
-		seedTrust(tokenA.contract, { arrivalFloor: 5 })
+		await repo.setArrivalRow("p1", "n1", "0xa", { sinceBlock: 10, played: [] })
+		await seedTrust(tokenA.contract, { arrivalFloor: 5 })
 
 		await service.getArrivalState("p1", "n1", "0xa")
 		expect(tip.calls).toBe(0)
@@ -5155,8 +5070,10 @@ describe("IncomingTransferService — arrival state", () => {
 
 	test("a failed tip read answers sinceBlock null and writes nothing", async () => {
 		const { service } = await bootArrivals(new Error("node down"))
+		const arrivalWrites = vi.spyOn(internals(service).repo, "setArrivalRow")
 		expect((await service.getArrivalState("p1", "n1", "0xa")).sinceBlock).toBeNull()
-		expect(arrivals.size).toBe(0)
+		expect(await arrivalRowsAt(BOOTED_SCOPES)).toEqual([])
+		expect(arrivalWrites).not.toHaveBeenCalled()
 	})
 
 	test.each([
@@ -5166,8 +5083,10 @@ describe("IncomingTransferService — arrival state", () => {
 	])("nothing is baselined when %s", async (_name, remove) => {
 		const fixture = await bootArrivals(120)
 		remove(fixture)
+		const arrivalWrites = vi.spyOn(internals(fixture.service).repo, "setArrivalRow")
 		expect((await fixture.service.getArrivalState("p1", "n1", "0xa")).sinceBlock).toBeNull()
-		expect(arrivals.size).toBe(0)
+		expect(await arrivalRowsAt(BOOTED_SCOPES)).toEqual([])
+		expect(arrivalWrites).not.toHaveBeenCalled()
 	})
 })
 
@@ -5185,8 +5104,8 @@ describe("IncomingTransferService — arrival floors", () => {
 
 	test("an add that read N and enters after an Allow that read N + k keeps N + k", async () => {
 		const { service, tip } = await bootArrivals(0)
-		seedTrust(tokenA.contract, { state: "pending" })
-		receipt(1, 5, { hidden: true })
+		await seedTrust(tokenA.contract, { state: "pending" })
+		await receipt(1, 5, { hidden: true })
 		const addTip = deferred<number>()
 		tip.queue.push(addTip.promise)
 
@@ -5197,7 +5116,7 @@ describe("IncomingTransferService — arrival floors", () => {
 		addTip.resolve(100)
 		await add
 
-		const row = trust.get(trustKey("p1", "n1", tokenA.contract))
+		const row = await repo.getTrust("p1", "n1", tokenA.contract)
 		expect(row?.arrivalFloor).toBe(130)
 		expect(row?.arrivalFloorPending).toBeUndefined()
 	})
@@ -5216,13 +5135,13 @@ describe("IncomingTransferService — arrival floors", () => {
 		addTip.resolve(100)
 		await add
 
-		expect(trust.get(trustKey("p1", "n1", tokenB.contract))).toBeUndefined()
+		expect(await repo.getTrust("p1", "n1", tokenB.contract)).toBeUndefined()
 	})
 
 	test("a floor kept through a failed tip read resolves to the higher of its number and the tip", async () => {
 		const { service, tip } = await bootArrivals(new Error("node down"))
-		arrivals.set("p1|n1|0xa", { sinceBlock: 0, played: [] })
-		seedTrust(tokenA.contract, { arrivalFloor: 200 })
+		await repo.setArrivalRow("p1", "n1", "0xa", { sinceBlock: 0, played: [] })
+		await seedTrust(tokenA.contract, { arrivalFloor: 200 })
 		await internals(service).onTokenAdded(tokenAdd(tokenA))
 		expect((await service.getArrivalState("p1", "n1", "0xa")).floors[tokenA.contract]).toBe("pending")
 
@@ -5236,7 +5155,7 @@ describe("IncomingTransferService — arrival floors", () => {
 	test("a pending floor with no number resolves to the tip", async () => {
 		const { service, tip, token } = await bootArrivals(new Error("node down"))
 		token.getTokensRaw.mockResolvedValue([tokenA, tokenB])
-		arrivals.set("p1|n1|0xa", { sinceBlock: 0, played: [] })
+		await repo.setArrivalRow("p1", "n1", "0xa", { sinceBlock: 0, played: [] })
 		await internals(service).onTokenAdded(tokenAdd(tokenB))
 		tip.standing = 150
 		expect((await service.getArrivalState("p1", "n1", "0xa")).floors[tokenB.contract]).toBe(150)
@@ -5244,8 +5163,8 @@ describe("IncomingTransferService — arrival floors", () => {
 
 	test("a numeric write that lands while a resolution waits for its tip is not overwritten", async () => {
 		const { service, tip } = await bootArrivals(0)
-		arrivals.set("p1|n1|0xa", { sinceBlock: 0, played: [] })
-		seedTrust(tokenA.contract, { arrivalFloor: 100, arrivalFloorPending: true })
+		await repo.setArrivalRow("p1", "n1", "0xa", { sinceBlock: 0, played: [] })
+		await seedTrust(tokenA.contract, { arrivalFloor: 100, arrivalFloorPending: true })
 		const resolutionTip = deferred<number>()
 		tip.queue.push(resolutionTip.promise)
 
@@ -5261,13 +5180,13 @@ describe("IncomingTransferService — arrival floors", () => {
 	test("adding a token floors its history before the scan commits it", async () => {
 		const noteSvc = makeNoteStub({ [tokenB.contract]: [note({ contract: tokenB.contract, l2BlockNumber: 50 })] })
 		const { service, token } = await bootArrivals(60, { note: noteSvc })
-		arrivals.set("p1|n1|0xa", { sinceBlock: 10, played: [] })
+		await repo.setArrivalRow("p1", "n1", "0xa", { sinceBlock: 10, played: [] })
 		token.getTokensRaw.mockResolvedValue([tokenA, tokenB])
 
 		await internals(service).onTokenAdded(tokenAdd(tokenB))
 		await flushPromises()
 
-		const history = [...records.values()].filter(
+		const history = (await repo.listRecords()).filter(
 			(r) => r.contract === tokenB.contract && r.networkId === "n1" && r.accountAddress === "0xa",
 		)
 		expect(history.length).toBeGreaterThan(0)
@@ -5277,23 +5196,24 @@ describe("IncomingTransferService — arrival floors", () => {
 
 	test("adding an account floors its history before its cursors reset", async () => {
 		const { service } = await bootArrivals(70)
-		const atReset: Array<ArrivalRow | undefined> = []
+		// A read answers with the rows stored when it is called, so each entry is the row at the reset.
+		const atReset: Array<Promise<ArrivalRow | undefined>> = []
 		vi.spyOn(internals(service).repo, "setCursor").mockImplementation(async () => {
-			atReset.push(arrivals.get("p1|n1|0xnew"))
+			atReset.push(repo.getArrivalRow("p1", "n1", "0xnew"))
 		})
 
 		await internals(service).onAccountAdded({ chainId: 1, address: "0xnew" })
 
-		expect(atReset[0]).toEqual({ sinceBlock: 70, played: [] })
+		expect(await atReset[0]).toEqual({ sinceBlock: 70, played: [] })
 	})
 
 	test("Allow floors the receipts it un-hides on every account; a later receipt plays on both", async () => {
 		const { service } = await bootArrivals(44)
-		arrivals.set("p1|n1|0xa", { sinceBlock: 10, played: [] })
-		arrivals.set("p1|n1|0xb", { sinceBlock: 10, played: [] })
-		seedTrust(tokenA.contract, { state: "pending" })
-		const onA = receipt(1, 40, { hidden: true })
-		const onB = receipt(2, 45, { hidden: true, accountAddress: "0xb", owner: "0xb" })
+		await repo.setArrivalRow("p1", "n1", "0xa", { sinceBlock: 10, played: [] })
+		await repo.setArrivalRow("p1", "n1", "0xb", { sinceBlock: 10, played: [] })
+		await seedTrust(tokenA.contract, { state: "pending" })
+		const onA = await receipt(1, 40, { hidden: true })
+		const onB = await receipt(2, 45, { hidden: true, accountAddress: "0xb", owner: "0xb" })
 
 		expect(await service.setTrustAllow("p1", "n1", tokenA.contract)).toBe(true)
 
@@ -5343,7 +5263,7 @@ describe("IncomingTransferService — a token add displaced by the watchdog whil
 		["the registration's network read", (f: Booted) => holdCall(f.network, "getNetwork", 1, "after")],
 		["the registration's token read", (f: Booted) => holdCall(f.token, "getTokensRaw", 1, "after")],
 		["the trust write's own read", (f: Booted) => holdCall(internals(f.service).repo, "setTrust", 1, "before")],
-		["the floor's trust read", (f: Booted) => holdCall(internals(f.service).repo, "getTrust", 2, "after")],
+		["the floor's trust read", (f: Booted) => holdCall(internals(f.service).repo, "getTrust", 3, "after")],
 	])("a pause at %s writes neither trust nor a floor after the delete", async (_name, pause) => {
 		const fixture = await bootArrivals(100)
 		let registered = [tokenA, tokenB]
@@ -5365,7 +5285,7 @@ describe("IncomingTransferService — a token add displaced by the watchdog whil
 			vi.useRealTimers()
 		}
 
-		const row = trust.get(trustKey("p1", "n1", tokenB.contract))
+		const row = await repo.getTrust("p1", "n1", tokenB.contract)
 		expect(row?.state).not.toBe("trusted")
 		expect(row?.arrivalFloor).toBeUndefined()
 		expect(row?.arrivalFloorPending).toBeUndefined()
@@ -5373,9 +5293,9 @@ describe("IncomingTransferService — a token add displaced by the watchdog whil
 })
 
 describe("IncomingTransferService — a trust write lands only in its session and incarnation", () => {
-	const key = (profileId = "p1") => trustKey(profileId, "n1", tokenA.contract)
+	const trustOf = (profileId = "p1") => repo.getTrust(profileId, "n1", tokenA.contract)
 	const seedPending = (profileId = "p1") =>
-		trust.set(key(profileId), { profileId, networkId: "n1", contract: tokenA.contract, state: "pending", updatedAt: 0 })
+		seedTrustRow({ profileId, networkId: "n1", contract: tokenA.contract, state: "pending", updatedAt: 0 })
 	const allow = (f: Booted) => f.service.setTrustAllow("p1", "n1", tokenA.contract)
 	const reject = (f: Booted) => f.service.setTrustReject("p1", "n1", tokenA.contract)
 	const setters = [
@@ -5386,7 +5306,7 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		["a profile switch", (f: Booted) => f.profile.unlock("p2")],
 		["a lock", (f: Booted) => f.profile.lock()],
 	] as const
-	const hiddenOf = (receipts: IncomingTransferRecord[]) => receipts.map((r) => records.get(r.id)?.hidden)
+	const hiddenOf = (receipts: IncomingTransferRecord[]) => Promise.all(receipts.map(async (r) => (await repo.getRecord(r.id))?.hidden))
 
 	/** Parks the next chain-tip read until the returned `resolve`. */
 	function parkTip(f: Booted) {
@@ -5397,7 +5317,7 @@ describe("IncomingTransferService — a trust write lands only in its session an
 
 	test("setters queued behind the cascade's clear write nothing once their profile's deletion began", async () => {
 		const f = await bootArrivals(100)
-		seedPending()
+		await seedPending()
 		const wipe = holdCall(internals(f.service).repo, "clearProfile", 1, "before")
 		const clear = f.service.clearProfile("p1")
 		await flushPromises()
@@ -5410,12 +5330,12 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		await clear
 
 		expect(await Promise.all(queued)).toEqual([false, false])
-		expect(trust.has(key())).toBe(false)
+		expect(await trustOf()).toBeUndefined()
 	})
 
 	test("a setter called after its profile's deletion began is refused at the capture", async () => {
 		const f = await bootArrivals(100)
-		seedPending()
+		await seedPending()
 		f.profile.beginDeletion("p1")
 		const tipReads = f.tip.calls
 		f.token.getTokensRaw.mockClear()
@@ -5424,7 +5344,7 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		expect(await reject(f)).toBe(false)
 		expect(f.tip.calls).toBe(tipReads)
 		expect(f.token.getTokensRaw).not.toHaveBeenCalled()
-		expect(trust.get(key())?.state).toBe("pending")
+		expect((await trustOf())?.state).toBe("pending")
 	})
 
 	test.each([
@@ -5438,7 +5358,7 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		],
 	])("an Allow whose tip read spans its profile being %s writes nothing", async (_name, after) => {
 		const f = await bootArrivals(100)
-		seedPending()
+		await seedPending()
 		const tip = parkTip(f)
 		const call = allow(f)
 		await flushPromises()
@@ -5450,12 +5370,12 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		tip.resolve(100)
 
 		expect(await call).toBe(false)
-		expect(trust.has(key())).toBe(false)
+		expect(await trustOf()).toBeUndefined()
 	})
 
 	test.each(sessionMoves)("%s while an Allow reads the tip leaves the contract pending", async (_name, move) => {
 		const f = await bootArrivals(100)
-		seedPending()
+		await seedPending()
 		const tip = parkTip(f)
 		const call = allow(f)
 		await flushPromises()
@@ -5465,14 +5385,14 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		tip.resolve(100)
 
 		expect(await call).toBe(false)
-		expect(trust.get(key())?.state).toBe("pending")
+		expect((await trustOf())?.state).toBe("pending")
 	})
 
 	test.each(setters.flatMap(([setter, run]) => sessionMoves.map(([name, move]) => [setter, name, run, move] as const)))(
 		"%s waiting in its registration read through %s leaves the contract pending",
 		async (_setter, _name, run, move) => {
 			const f = await bootArrivals(100)
-			seedPending()
+			await seedPending()
 			const registration = holdCall(f.token, "getTokensRaw", 1, "after")
 			const call = run(f)
 			await flushPromises()
@@ -5482,7 +5402,7 @@ describe("IncomingTransferService — a trust write lands only in its session an
 			registration.release()
 
 			expect(await call).toBe(false)
-			expect(trust.get(key())?.state).toBe("pending")
+			expect((await trustOf())?.state).toBe("pending")
 		},
 	)
 
@@ -5490,7 +5410,7 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		"%s displaced by the watchdog in its registration read writes nothing after a successor's clear",
 		async (_setter, run) => {
 			const f = await bootArrivals(100)
-			seedPending()
+			await seedPending()
 			const registration = holdCall(f.token, "getTokensRaw", 1, "after")
 			vi.useFakeTimers()
 			try {
@@ -5507,14 +5427,14 @@ describe("IncomingTransferService — a trust write lands only in its session an
 			} finally {
 				vi.useRealTimers()
 			}
-			expect(trust.has(key())).toBe(false)
+			expect(await trustOf()).toBeUndefined()
 		},
 	)
 
 	test("an Allow displaced in its visibility read leaves a successor Reject's block, which deleted the receipts", async () => {
 		const f = await bootArrivals(100)
-		seedPending()
-		const receipts = [receipt(1, 40, { hidden: true }), receipt(2, 41, { hidden: true })]
+		await seedPending()
+		const receipts = [await receipt(1, 40, { hidden: true }), await receipt(2, 41, { hidden: true })]
 		const read = holdCall(f.service, "isVisibilityEnabled", 1, "after")
 		vi.useFakeTimers()
 		try {
@@ -5531,14 +5451,18 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		} finally {
 			vi.useRealTimers()
 		}
-		expect(trust.get(key())?.state).toBe("blocked")
-		expect(receipts.map((r) => records.has(r.id))).toEqual([false, false])
+		expect((await trustOf())?.state).toBe("blocked")
+		expect(await Promise.all(receipts.map((r) => repo.hasRecord(r.id)))).toEqual([false, false])
 	})
 
 	test("an Allow the watchdog displaced writes nothing, and the next popup open prompts again", async () => {
 		const f = await bootArrivals(100)
-		seedPending()
-		const receipts = [receipt(1, 40, { hidden: true }), receipt(2, 41, { hidden: true }), receipt(3, 42, { hidden: true })]
+		await seedPending()
+		const receipts = [
+			await receipt(1, 40, { hidden: true }),
+			await receipt(2, 41, { hidden: true }),
+			await receipt(3, 42, { hidden: true }),
+		]
 		const read = holdCall(f.service, "isVisibilityEnabled", 1, "after")
 		vi.useFakeTimers()
 		try {
@@ -5553,9 +5477,9 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		} finally {
 			vi.useRealTimers()
 		}
-		expect(trust.get(key())).toMatchObject({ state: "pending" })
-		expect(trust.get(key())?.arrivalFloor).toBeUndefined()
-		expect(hiddenOf(receipts)).toEqual([true, true, true])
+		expect(await trustOf()).toMatchObject({ state: "pending" })
+		expect((await trustOf())?.arrivalFloor).toBeUndefined()
+		expect(await hiddenOf(receipts)).toEqual([true, true, true])
 		const prompts = vi.fn()
 		f.service.onIncomingTransferPending.add(prompts)
 		await f.service.replayPendingPrompts("p1", "n1", "0xa")
@@ -5564,8 +5488,8 @@ describe("IncomingTransferService — a trust write lands only in its session an
 
 	test("a lock before an Allow's write refuses it and writes nothing", async () => {
 		const f = await bootArrivals(100)
-		seedPending()
-		const receipts = [receipt(1, 40, { hidden: true }), receipt(2, 41, { hidden: true })]
+		await seedPending()
+		const receipts = [await receipt(1, 40, { hidden: true }), await receipt(2, 41, { hidden: true })]
 		const read = holdCall(f.service, "isVisibilityEnabled", 1, "after")
 		const call = allow(f)
 		await flushPromises()
@@ -5575,14 +5499,14 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		read.release()
 
 		expect(await call).toBe(false)
-		expect(trust.get(key())).toMatchObject({ state: "pending" })
-		expect(hiddenOf(receipts)).toEqual([true, true])
+		expect(await trustOf()).toMatchObject({ state: "pending" })
+		expect(await hiddenOf(receipts)).toEqual([true, true])
 	})
 
 	test("a lock after an Allow's write keeps its floor and every un-hide", async () => {
 		const f = await bootArrivals(100)
-		seedPending()
-		const receipts = [receipt(1, 40, { hidden: true }), receipt(2, 41, { hidden: true })]
+		await seedPending()
+		const receipts = [await receipt(1, 40, { hidden: true }), await receipt(2, 41, { hidden: true })]
 		const write = holdCall(internals(f.service).repo, "commitAcceptance", 1, "after")
 		const call = allow(f)
 		await flushPromises()
@@ -5592,14 +5516,17 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		write.release()
 
 		expect(await call).toBe(true)
-		expect(trust.get(key())).toMatchObject({ state: "trusted", arrivalFloor: 100 })
-		expect(hiddenOf(receipts)).toEqual([false, false])
+		expect(await trustOf()).toMatchObject({ state: "trusted", arrivalFloor: 100 })
+		expect(await hiddenOf(receipts)).toEqual([false, false])
 	})
 
 	test("an accepted Allow commits the trusted row, its floor and every un-hide in one write", async () => {
 		const f = await bootArrivals(100)
-		seedPending()
-		const receipts = [receipt(1, 40, { hidden: true }), receipt(2, 141, { hidden: true, accountAddress: "0xb", owner: "0xb" })]
+		await seedPending()
+		const receipts = [
+			await receipt(1, 40, { hidden: true }),
+			await receipt(2, 141, { hidden: true, accountAddress: "0xb", owner: "0xb" }),
+		]
 		const repo = internals(f.service).repo as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>
 		const commit = vi.spyOn(repo, "commitAcceptance")
 		const others = ["setTrust", "setArrivalFloor", "upsertRecord"].map((method) => vi.spyOn(repo, method))
@@ -5612,32 +5539,32 @@ describe("IncomingTransferService — a trust write lands only in its session an
 			receipts.map((r) => [r.id, false]),
 		)
 		for (const other of others) expect(other).not.toHaveBeenCalled()
-		expect(hiddenOf(receipts)).toEqual([false, false])
+		expect(await hiddenOf(receipts)).toEqual([false, false])
 	})
 
 	test.each([
-		["a missing trust row", () => trust.delete(key())],
+		// The repository deletes no single trust row, so a missing row is one never seeded.
+		["a missing trust row", () => Promise.resolve()],
 		[
 			"a trust row reset to unknown",
-			() => trust.set(key(), { profileId: "p1", networkId: "n1", contract: tokenA.contract, state: "unknown", updatedAt: 0 }),
+			() => seedTrustRow({ profileId: "p1", networkId: "n1", contract: tokenA.contract, state: "unknown", updatedAt: 0 }),
 		],
 	])("an Allow over %s writes nothing", async (_name, arrange) => {
 		const f = await bootArrivals(100)
-		seedPending()
-		const receipts = [receipt(1, 40, { hidden: true })]
-		arrange()
-		const before = trust.get(key())
+		const receipts = [await receipt(1, 40, { hidden: true })]
+		await arrange()
+		const before = await trustOf()
 
 		expect(await allow(f)).toBe(false)
-		expect(trust.get(key())).toEqual(before)
-		expect(hiddenOf(receipts)).toEqual([true])
+		expect(await trustOf()).toEqual(before)
+		expect(await hiddenOf(receipts)).toEqual([true])
 	})
 
 	test("a displaced late-delete that finishes during an Allow's reads does not get its record back", async () => {
 		const f = await bootArrivals(100)
-		seedPending()
-		const own = receipt(1, 40, { hidden: true, txHash: "0xown" })
-		const other = receipt(2, 41, { hidden: true })
+		await seedPending()
+		const own = await receipt(1, 40, { hidden: true, txHash: "0xown" })
+		const other = await receipt(2, 41, { hidden: true })
 		const read = holdCall(f.service, "isVisibilityEnabled", 1, "after")
 		vi.useFakeTimers()
 		try {
@@ -5651,21 +5578,21 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		} finally {
 			vi.useRealTimers()
 		}
-		expect(records.has(own.id)).toBe(false)
-		expect(trust.get(key())?.state).toBe("pending")
-		expect(hiddenOf([other])).toEqual([true])
+		expect(await repo.hasRecord(own.id)).toBe(false)
+		expect((await trustOf())?.state).toBe("pending")
+		expect(await hiddenOf([other])).toEqual([true])
 	})
 
 	test("a token add emitted after a switch away from its profile changes neither profile's trust", async () => {
 		const f = await bootArrivals(100)
 		f.token.getTokensRaw.mockImplementation(async (profileId: string) => [{ ...tokenA, profileId }])
-		seedPending("p1")
-		seedPending("p2")
+		await seedPending("p1")
+		await seedPending("p2")
 		f.profile.unlock("p2")
 
 		await internals(f.service).onTokenAdded(tokenAdd(tokenA))
 
-		expect([trust.get(key("p1"))?.state, trust.get(key("p2"))?.state]).toEqual(["pending", "pending"])
+		expect([(await trustOf("p1"))?.state, (await trustOf("p2"))?.state]).toEqual(["pending", "pending"])
 	})
 
 	test("a token add whose tip read spans its profile's deletion writes neither trust nor a floor", async () => {
@@ -5680,12 +5607,12 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		tip.resolve(100)
 		await add
 
-		expect(trust.get(key())).toBeUndefined()
+		expect(await trustOf()).toBeUndefined()
 	})
 
 	test("an already-trusted token add whose session moves during its registration read leaves the floor", async () => {
 		const f = await bootArrivals(100)
-		seedTrust(tokenA.contract, { arrivalFloor: 40 })
+		await seedTrust(tokenA.contract, { arrivalFloor: 40 })
 		const registration = holdCall(f.token, "getTokensRaw", 1, "after")
 		const add = internals(f.service).onTokenAdded(tokenAdd(tokenA))
 		await flushPromises()
@@ -5695,7 +5622,7 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		registration.release()
 		await add
 
-		const row = trust.get(key())
+		const row = await trustOf()
 		expect(row).toMatchObject({ state: "trusted", arrivalFloor: 40 })
 		expect(row?.arrivalFloorPending).toBeUndefined()
 	})
@@ -5705,7 +5632,7 @@ describe("IncomingTransferService — claimArrivals", () => {
 	test("claims an eligible receipt once", async () => {
 		const { service } = await bootArrivals(10)
 		await service.getArrivalState("p1", "n1", "0xa")
-		const r = receipt(1, 11)
+		const r = await receipt(1, 11)
 
 		expect(await service.claimArrivals("p1", "n1", "0xa", [r.id])).toEqual([r.id])
 		expect(await service.claimArrivals("p1", "n1", "0xa", [r.id])).toEqual([])
@@ -5714,13 +5641,13 @@ describe("IncomingTransferService — claimArrivals", () => {
 	test("ignores another profile's, network's and account's ids, played ids and unknown ids", async () => {
 		const { service } = await bootArrivals(10)
 		await service.getArrivalState("p1", "n1", "0xa")
-		const mine = receipt(1, 11)
-		const played = receipt(2, 12)
+		const mine = await receipt(1, 11)
+		const played = await receipt(2, 12)
 		await service.claimArrivals("p1", "n1", "0xa", [played.id])
 		const foreign = [
-			receipt(3, 11, { accountAddress: "0xb", owner: "0xb" }).id,
-			receipt(4, 11, { networkId: "n2" }).id,
-			receipt(5, 11, { profileId: "p2" }).id,
+			(await receipt(3, 11, { accountAddress: "0xb", owner: "0xb" })).id,
+			(await receipt(4, 11, { networkId: "n2" })).id,
+			(await receipt(5, 11, { profileId: "p2" })).id,
 		]
 
 		expect(await service.claimArrivals("p1", "n1", "0xa", [...foreign, played.id, "note:p1|n1|0xunknown", mine.id])).toEqual([mine.id])
@@ -5730,8 +5657,8 @@ describe("IncomingTransferService — claimArrivals", () => {
 		const { service } = await bootArrivals(10)
 		await service.getArrivalState("p1", "n1", "0xa")
 		await service.getArrivalState("p1", "n1", "0xb")
-		const onA = receipt(1, 11)
-		const onB = receipt(2, 11, { accountAddress: "0xb", owner: "0xb" })
+		const onA = await receipt(1, 11)
+		const onB = await receipt(2, 11, { accountAddress: "0xb", owner: "0xb" })
 		const repo = internals(service).repo
 		const hold = deferred<void>()
 		const realGet = repo.getArrivalRow.bind(repo)
@@ -5748,14 +5675,14 @@ describe("IncomingTransferService — claimArrivals", () => {
 		await Promise.all([holder, clear])
 
 		expect(await claim).toEqual([])
-		expect(arrivals.has("p1|n1|0xa")).toBe(false)
+		expect(await repo.getArrivalRow("p1", "n1", "0xa")).toBeUndefined()
 	})
 
 	test("a claim the watchdog displaced writes nothing after it resumes", async () => {
 		const { service } = await bootArrivals(10)
 		await service.getArrivalState("p1", "n1", "0xa")
-		const first = receipt(1, 11)
-		const second = receipt(2, 12)
+		const first = await receipt(1, 11)
+		const second = await receipt(2, 12)
 		const repo = internals(service).repo
 		const parked = deferred<void>()
 		const realGetRecord = repo.getRecord.bind(repo)
@@ -5773,7 +5700,7 @@ describe("IncomingTransferService — claimArrivals", () => {
 
 			parked.resolve()
 			expect(await displaced).toEqual([])
-			expect(arrivals.get("p1|n1|0xa")?.played.map(([id]) => id)).toEqual([second.id])
+			expect((await repo.getArrivalRow("p1", "n1", "0xa"))?.played.map(([id]) => id)).toEqual([second.id])
 		} finally {
 			vi.useRealTimers()
 		}
@@ -5784,16 +5711,22 @@ describe("IncomingTransferService — arrival purges", () => {
 	test("an account purge, clearChain and clearProfile delete only their scope's rows", async () => {
 		const { service } = await bootArrivals(10)
 		const row = { sinceBlock: 1, played: [] }
-		for (const key of ["p1|n1|0xa", "p1|n1|0xb", "p1|n2|0xa", "p1|n2|0xb", "p2|n1|0xa"]) arrivals.set(key, row)
+		const seeded = [...BOOTED_SCOPES, "p2|n1|0xa"]
+		for (const scope of seeded) {
+			const [profileId, networkId, accountAddress] = scope.split("|")
+			await repo.setArrivalRow(profileId, networkId, accountAddress, row)
+		}
+		const arrivalWrites = vi.spyOn(internals(service).repo, "setArrivalRow")
 
 		await internals(service).onAccountDeleted({ profileId: "p1", chainId: 1, address: "0xa" })
-		expect([...arrivals.keys()].sort()).toEqual(["p1|n1|0xb", "p1|n2|0xb", "p2|n1|0xa"])
+		expect((await arrivalRowsAt(seeded)).sort()).toEqual(["p1|n1|0xb", "p1|n2|0xb", "p2|n1|0xa"])
 
 		await service.clearChain("p1", "n1")
-		expect([...arrivals.keys()].sort()).toEqual(["p1|n2|0xb", "p2|n1|0xa"])
+		expect((await arrivalRowsAt(seeded)).sort()).toEqual(["p1|n2|0xb", "p2|n1|0xa"])
 
 		await service.clearProfile("p1")
-		expect([...arrivals.keys()]).toEqual(["p2|n1|0xa"])
+		expect(await arrivalRowsAt(seeded)).toEqual(["p2|n1|0xa"])
+		expect(arrivalWrites).not.toHaveBeenCalled()
 	})
 })
 
@@ -5802,8 +5735,9 @@ describe("IncomingTransferService — arrival purges", () => {
 // Each row parks one await of a receipt critical section, bumps the service epoch while it is
 // parked (where an off-lock hydrate or a watchdog-admitted wipe would land) and releases it. The
 // ordered call log is the oracle: a removed check that a later check masks still changes which
-// collaborators run. A parked collaborator has already run, so its fake effect precedes `BUMP`;
-// that order says nothing about when production storage commits.
+// collaborators run. A parked collaborator has already run, so its effect on the fake storage precedes
+// `BUMP`; that order says nothing about when production storage commits. The real `setTrust` reads the
+// stored row through `getTrust`, so a trust write logs `setTrust` then a second `getTrust`.
 
 type ReceiptFixture = Awaited<ReturnType<typeof bootService>>
 type CollaboratorMap = Record<string, (...args: unknown[]) => Promise<unknown>>
@@ -5816,7 +5750,6 @@ const RECEIPT_COLLABORATORS: Array<[keyof ReceiptFixture | "repo", string, strin
 	["repo", "getRecord", "getRecord"],
 	["repo", "getTrust", "getTrust"],
 	["repo", "setTrust", "setTrust"],
-	["repo", "readTrustForWrite", "trustRead"],
 	["config", "getValue", "visibility"],
 	["note", "getBlockTimestamp", "timestamp"],
 	["repo", "setOutbox", "setOutbox"],
@@ -5841,7 +5774,7 @@ function instrumentReceipt(f: ReceiptFixture, hold?: string) {
 	const parked = { reached: false }
 	for (const [owner, method, label] of RECEIPT_COLLABORATORS) {
 		const target = collaboratorTarget(f, owner)
-		const real = target[method]
+		const real = target[method].bind(target)
 		target[method] = async (...args: unknown[]) => {
 			if (label === "visibility" && args[0] !== "incomingTransfersVisible") return real(...args)
 			log.push(label)
@@ -5912,7 +5845,7 @@ const NOTE_ID = noteRecordId("p1", "n1", validNoteHash(1))
 const PUB_TX = "0xptx"
 const PUB_ID = `pub:p1|n1|${PUB_TX}|0`
 const trustedRow = () =>
-	trust.set(trustKey("p1", "n1", tokenA.contract), {
+	seedTrustRow({
 		profileId: "p1",
 		networkId: "n1",
 		contract: tokenA.contract,
@@ -5930,9 +5863,9 @@ async function bootNoteReceipt(fixture: NoteFixture) {
 		note: makeNoteStub({ [tokenA.contract]: [note()] }, { 100: 1_234 }),
 		transaction: fixture === "outgoing-hit" ? ownTx("0xtx1") : makeTransactionStub(),
 	})
-	if (fixture === "trusted") trustedRow()
+	if (fixture === "trusted") await trustedRow()
 	if (fixture === "existing")
-		seedNote({
+		await seedNote({
 			uniqueNoteHash: validNoteHash(1),
 			contract: tokenA.contract,
 			tokenId: tokenA.id,
@@ -5943,8 +5876,8 @@ async function bootNoteReceipt(fixture: NoteFixture) {
 }
 
 /** [trust written, trustChanged, pending, outbox written, record written, added], from state + emits. */
-function receiptFlags(log: string[], recordId: string, fixture: string): string {
-	const record = records.get(recordId)
+async function receiptFlags(log: string[], recordId: string, fixture: string): Promise<string> {
+	const record = await repo.getRecord(recordId)
 	const recordWritten =
 		fixture === "existing"
 			? record?.blockTimestamp === 1_234
@@ -5952,10 +5885,10 @@ function receiptFlags(log: string[], recordId: string, fixture: string): string 
 				? record?.kind === "public-event" && record.blockHash === "0xbh5"
 				: record !== undefined
 	return flagString([
-		trust.get(trustKey("p1", "n1", tokenA.contract))?.state === "pending",
+		(await repo.getTrust("p1", "n1", tokenA.contract))?.state === "pending",
 		log.includes("trustChanged"),
 		log.includes("pending"),
-		outbox.has(`p1|n1|0xa|${tokenA.id}`),
+		(await repo.getOutbox("p1", "n1", "0xa", tokenA.id)) !== undefined,
 		recordWritten,
 		log.includes("added"),
 	])
@@ -5965,7 +5898,7 @@ function receiptFlags(log: string[], recordId: string, fixture: string): string 
 const RECEIPT_HEAD = ["tokens", "getRecord", "outgoing", "inflight"]
 /** A new note's block time is read before the lock, behind the head's own local reads. */
 const NOTE_TIME_READ = ["getRecord", "outgoing", "inflight", "timestamp"]
-const NOTE_PROMOTION = ["getTrust", "setTrust", "trustRead", "trustChanged", "visibility", "pending"]
+const NOTE_PROMOTION = ["getTrust", "setTrust", "getTrust", "trustChanged", "visibility", "pending"]
 const NOTE_UNKNOWN = ["notes", ...NOTE_TIME_READ, ...RECEIPT_HEAD, ...NOTE_PROMOTION, "setOutbox", "upsert"]
 const NOTE_TRUSTED = ["notes", ...NOTE_TIME_READ, ...RECEIPT_HEAD, "getTrust", "setOutbox", "upsert", "visibility", "added"]
 /** Index of `label` in `log`, or of its n-th occurrence for `label#n`. */
@@ -6007,7 +5940,7 @@ describe("IncomingTransferService — note receipt epoch re-check matrix", () =>
 			"N6 bare bump after the trust write: the prompt still emits",
 			"unknown",
 			"setTrust",
-			bumpedAfter(NOTE_UNKNOWN, "trustRead", "pending"),
+			bumpedAfter(NOTE_UNKNOWN, "getTrust#2", "pending"),
 			"111000",
 		],
 		[
@@ -6056,17 +5989,17 @@ describe("IncomingTransferService — note receipt epoch re-check matrix", () =>
 		const inst = instrumentReceipt(f, hold)
 		await runReceipt(inst, hold, () => scan(f.service))
 		expect(inst.log).toEqual(expectedLog)
-		expect(receiptFlags(inst.log, NOTE_ID, fixture)).toBe(expectedFlags)
+		expect(await receiptFlags(inst.log, NOTE_ID, fixture)).toBe(expectedFlags)
 	})
 
 	test.each<[string, string, string[], string]>([
 		[
 			"N5b handoff in the trust write's stored read: no row is written",
-			"trustRead",
-			handedOffAfter(NOTE_UNKNOWN, "trustRead"),
+			"getTrust#2",
+			handedOffAfter(NOTE_UNKNOWN, "getTrust#2"),
 			"000000",
 		],
-		["N6h handoff after the trust write: neither prompt emits", "setTrust", handedOffAfter(NOTE_UNKNOWN, "trustRead"), "100000"],
+		["N6h handoff after the trust write: neither prompt emits", "setTrust", handedOffAfter(NOTE_UNKNOWN, "getTrust#2"), "100000"],
 		[
 			"N7h handoff in the prompt's visibility read: the trust event emits, the prompt does not",
 			"visibility",
@@ -6084,7 +6017,7 @@ describe("IncomingTransferService — note receipt epoch re-check matrix", () =>
 		const inst = instrumentReceipt(f, hold)
 		await runHandoff(inst, () => scan(f.service))
 		expect(inst.log).toEqual(expectedLog)
-		expect(receiptFlags(inst.log, NOTE_ID, "unknown")).toBe(expectedFlags)
+		expect(await receiptFlags(inst.log, NOTE_ID, "unknown")).toBe(expectedFlags)
 	})
 
 	test("an own outgoing hash: the record is read first, the journal and the block time never", async () => {
@@ -6096,7 +6029,7 @@ describe("IncomingTransferService — note receipt epoch re-check matrix", () =>
 
 	test("an already-recorded note costs a record read before the lock, then the token and record reads", async () => {
 		const f = await bootNoteReceipt("existing")
-		records.set(NOTE_ID, { ...(records.get(NOTE_ID) as IncomingNoteRecord), blockTimestamp: 1_234 })
+		await repo.upsertRecord({ ...((await repo.getRecord(NOTE_ID)) as IncomingNoteRecord), blockTimestamp: 1_234 })
 		const inst = instrumentReceipt(f)
 		await scan(f.service)
 		expect(inst.log).toEqual(["notes", "getRecord", "tokens", "getRecord"])
@@ -6118,8 +6051,8 @@ describe("IncomingTransferService — a note's block time is read outside the se
 
 		timestamp.release()
 		await receipt
-		expect(records.has(NOTE_ID)).toBe(false)
-		expect(outbox.size).toBe(0)
+		expect(await repo.hasRecord(NOTE_ID)).toBe(false)
+		expect((await repo.listOutbox()).length).toBe(0)
 	})
 
 	test("a locked commit whose own-send read disagrees with the one before the lock reads no block time", async () => {
@@ -6129,7 +6062,10 @@ describe("IncomingTransferService — a note's block time is read outside the se
 			.mockRejectedValueOnce(new Error("transactions unavailable"))
 		await scan(f.service)
 		expect(f.note.getBlockTimestamp).not.toHaveBeenCalled()
-		expect(records.get(NOTE_ID)).toMatchObject({ blockTimestamp: undefined })
+		// A stored row is JSON, so an unset time is an absent key.
+		const stored = await repo.getRecord(NOTE_ID)
+		expect(stored).toBeDefined()
+		expect(stored?.blockTimestamp).toBeUndefined()
 	})
 
 	test("a new note without an amount, which the commit never records, costs no block-time read", async () => {
@@ -6138,10 +6074,10 @@ describe("IncomingTransferService — a note's block time is read outside the se
 			token: makeTokenStub([tokenA]),
 			note: makeNoteStub({ [tokenA.contract]: [note({ content: {} })] }, { 100: 1_234 }),
 		})
-		trustedRow()
+		await trustedRow()
 		await scan(f.service)
 		expect(f.note.getBlockTimestamp).not.toHaveBeenCalled()
-		expect(records.size).toBe(0)
+		expect((await repo.listRecords()).length).toBe(0)
 	})
 
 	test("a failed block-time read is made once per block per scan, and again by the next scan", async () => {
@@ -6151,10 +6087,10 @@ describe("IncomingTransferService — a note's block time is read outside the se
 			token: makeTokenStub([tokenA]),
 			note: makeNoteStub({ [tokenA.contract]: notes }),
 		})
-		trustedRow()
+		await trustedRow()
 		await scan(f.service)
 		expect(f.note.getBlockTimestamp).toHaveBeenCalledTimes(1)
-		expect(records.size).toBe(2)
+		expect((await repo.listRecords()).length).toBe(2)
 		await scan(f.service)
 		expect(f.note.getBlockTimestamp).toHaveBeenCalledTimes(2)
 	})
@@ -6165,8 +6101,8 @@ type PublicFixture = "unknown" | "trusted" | "reconcile" | "outgoing-hit"
 async function bootPublicReceipt(fixture: PublicFixture) {
 	const { reader, state } = makePublicReader()
 	const booted = await bootPublic(reader, state, fixture === "outgoing-hit" ? { transaction: ownTx(PUB_TX) } : {})
-	if (fixture === "trusted") trustedRow()
-	if (fixture === "reconcile") seedPublic({ txHash: PUB_TX, blockHash: "0xold" })
+	if (fixture === "trusted") await trustedRow()
+	if (fixture === "reconcile") await seedPublic({ txHash: PUB_TX, blockHash: "0xold" })
 	return booted
 }
 
@@ -6186,7 +6122,7 @@ function commitPublic(service: unknown, opts?: { reconcile?: boolean }, ev: Publ
 	return svc.commitPublicEvent("p1", "n1", tokenA.contract, 1, "0xa", ev, svc.serviceEpoch, opts)
 }
 
-const PUB_UNKNOWN = [...RECEIPT_HEAD, "getTrust", "setTrust", "trustRead", "trustChanged", "visibility", "pending", "setOutbox", "upsert"]
+const PUB_UNKNOWN = [...RECEIPT_HEAD, "getTrust", "setTrust", "getTrust", "trustChanged", "visibility", "pending", "setOutbox", "upsert"]
 const PUB_TRUSTED = [...RECEIPT_HEAD, "getTrust", "setOutbox", "upsert", "visibility", "added"]
 const PUB_RECONCILE = ["tokens", "getRecord", "upsert", "visibility", "updated"]
 
@@ -6209,7 +6145,7 @@ describe("IncomingTransferService — public receipt epoch re-check matrix", () 
 			"P6 bare bump after the trust write: the prompt still emits",
 			"unknown",
 			"setTrust",
-			bumpedAfter(PUB_UNKNOWN, "trustRead", "pending"),
+			bumpedAfter(PUB_UNKNOWN, "getTrust#2", "pending"),
 			"111000",
 		],
 		[
@@ -6239,17 +6175,17 @@ describe("IncomingTransferService — public receipt epoch re-check matrix", () 
 		const inst = instrumentReceipt(f, hold)
 		await runReceipt(inst, hold, () => commitPublic(f.service, fixture === "reconcile" ? { reconcile: true } : undefined))
 		expect(inst.log).toEqual(expectedLog)
-		expect(receiptFlags(inst.log, PUB_ID, fixture)).toBe(expectedFlags)
+		expect(await receiptFlags(inst.log, PUB_ID, fixture)).toBe(expectedFlags)
 	})
 
 	test.each<[string, string, string[], string]>([
 		[
 			"P5b handoff in the trust write's stored read: no row is written",
-			"trustRead",
-			handedOffAfter(PUB_UNKNOWN, "trustRead"),
+			"getTrust#2",
+			handedOffAfter(PUB_UNKNOWN, "getTrust#2"),
 			"000000",
 		],
-		["P6h handoff after the trust write: neither prompt emits", "setTrust", handedOffAfter(PUB_UNKNOWN, "trustRead"), "100000"],
+		["P6h handoff after the trust write: neither prompt emits", "setTrust", handedOffAfter(PUB_UNKNOWN, "getTrust#2"), "100000"],
 		[
 			"P7h handoff in the prompt's visibility read: the trust event emits, the prompt does not",
 			"visibility",
@@ -6262,7 +6198,7 @@ describe("IncomingTransferService — public receipt epoch re-check matrix", () 
 		const inst = instrumentReceipt(f, hold)
 		expect(await runHandoff(inst, () => commitPublic(f.service))).toBe("revoked")
 		expect(inst.log).toEqual(expectedLog)
-		expect(receiptFlags(inst.log, PUB_ID, "unknown")).toBe(expectedFlags)
+		expect(await receiptFlags(inst.log, PUB_ID, "unknown")).toBe(expectedFlags)
 	})
 
 	test("an own outgoing hash: the record is read first and the journal is never read", async () => {
@@ -6289,15 +6225,15 @@ describe("IncomingTransferService — Updated on a re-mine", () => {
 		expect(updated[0]).toMatchObject({ id: PUB_ID, blockHash: "0xbh5", l2BlockNumber: 5 })
 	})
 
-	test.each<[string, (f: Awaited<ReturnType<typeof bootPublicReceipt>>) => void]>([
+	test.each<[string, (f: Awaited<ReturnType<typeof bootPublicReceipt>>) => unknown]>([
 		["a hidden record", () => seedPublic({ txHash: PUB_TX, blockHash: "0xold", hidden: true })],
 		["visibility off", (f) => f.config.setVisibility(false)],
 	])("%s is rewritten without an Updated", async (_name, arrange) => {
 		const f = await bootPublicReceipt("reconcile")
-		arrange(f)
+		await arrange(f)
 		const updated = updatesOf(f.service)
 		await commitPublic(f.service, { reconcile: true })
-		expect(records.get(PUB_ID)).toMatchObject({ blockHash: "0xbh5" })
+		expect(await repo.getRecord(PUB_ID)).toMatchObject({ blockHash: "0xbh5" })
 		expect(updated).toEqual([])
 	})
 
@@ -6306,7 +6242,7 @@ describe("IncomingTransferService — Updated on a re-mine", () => {
 		const inst = instrumentReceipt(f, "visibility")
 		await runHandoff(inst, () => commitPublic(f.service, { reconcile: true }))
 		expect(inst.log).toEqual(handedOffAfter(PUB_RECONCILE, "visibility"))
-		expect(records.get(PUB_ID)).toMatchObject({ blockHash: "0xbh5" })
+		expect(await repo.getRecord(PUB_ID)).toMatchObject({ blockHash: "0xbh5" })
 	})
 })
 
@@ -6347,7 +6283,7 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 			expect(inst.log).not.toContain("pending")
 
 			await commit(f)
-			expect(records.get(id)?.hidden).toBe(true)
+			expect((await repo.getRecord(id))?.hidden).toBe(true)
 			const prompts = vi.fn()
 			f.service.onIncomingTransferPending.add(prompts)
 			await f.service.replayPendingPrompts("p1", "n1", "0xa")
@@ -6363,14 +6299,14 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 			publicReader: steeredTip(100).reader,
 		})
 		await flushPromises()
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: tokenA.contract,
 			state: "pending",
 			updatedAt: 0,
 		})
-		const earlier = seedNote({ uniqueNoteHash: validNoteHash(1), contract: tokenA.contract, hidden: true })
+		const earlier = await seedNote({ uniqueNoteHash: validNoteHash(1), contract: tokenA.contract, hidden: true })
 		const fresh = noteRecordId("p1", "n1", validNoteHash(2))
 		const trustRead = holdCall(internals(f.service).repo, "getTrust", 1, "after")
 		vi.useFakeTimers()
@@ -6386,17 +6322,17 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 			vi.useRealTimers()
 		}
 
-		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("trusted")
-		expect(records.get(earlier.id)?.hidden).toBe(false)
-		expect(records.has(fresh)).toBe(false)
+		expect((await repo.getTrust("p1", "n1", tokenA.contract))?.state).toBe("trusted")
+		expect((await repo.getRecord(earlier.id))?.hidden).toBe(false)
+		expect(await repo.hasRecord(fresh)).toBe(false)
 		await scan(f.service)
-		expect(records.get(fresh)?.hidden).toBe(false)
+		expect((await repo.getRecord(fresh))?.hidden).toBe(false)
 	})
 
 	test("a handoff in a public commit holds its page, and the next tick lands the receipt", async () => {
 		const { reader, state } = makePublicReader()
 		const f = await bootPublic(reader, state)
-		trustedRow()
+		await trustedRow()
 		state.responses.push(pubPage([pubEvent({ txHash: PUB_TX })]))
 		const trustRead = holdCall(internals(f.service).repo, "getTrust", 1, "after")
 		let first: ScanOutcome | undefined
@@ -6412,24 +6348,28 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 			vi.useRealTimers()
 		}
 		expect(first).toBe("no-progress")
-		expect(records.has(PUB_ID)).toBe(false)
-		expect(cursorFor()).toMatchObject({ cursor: null, pendingPage: expect.anything() })
+		expect(await repo.hasRecord(PUB_ID)).toBe(false)
+		expect(await cursorFor()).toMatchObject({ cursor: null, pendingPage: expect.anything() })
 
 		// The resume path's ancestry probe reads one page before the forward scan re-reads this one.
 		state.responses.push(pubPage([]), pubPage([pubEvent({ txHash: PUB_TX })]))
 		expect(await scanPublic(f.service)).toBe("progress")
-		expect(records.get(PUB_ID)?.hidden).toBe(false)
-		expect(cursorFor()?.pendingPage).toBeUndefined()
-		expect(cursorFor()?.cursor).toMatchObject({ blockNumber: 5 })
+		expect((await repo.getRecord(PUB_ID))?.hidden).toBe(false)
+		expect((await cursorFor())?.pendingPage).toBeUndefined()
+		expect((await cursorFor())?.cursor).toMatchObject({ blockNumber: 5 })
 	})
 
 	test("a handoff in a reconcile rewrite keeps the marker, so the moved receipt is rewritten, not deleted", async () => {
 		const { reader, state } = makePublicReader()
 		const f = await bootPublic(reader, state)
-		trustedRow()
-		const moved = seedPublic({ txHash: "0xmoved", l2BlockNumber: 7, blockHash: "0xold7" })
+		await trustedRow()
+		const moved = await seedPublic({ txHash: "0xmoved", l2BlockNumber: 7, blockHash: "0xold7" })
 		const marker = { lowerBound: 6, upperBound: 8, upperBoundHash: "0xcheckpoint", progress: null, seen: [] }
-		seedCursor({ cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 }, lastScanFinalized: 5, reconciling: marker })
+		await seedCursor({
+			cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 },
+			lastScanFinalized: 5,
+			reconciling: marker,
+		})
 		const remined = () => pubPage([pubEvent({ txHash: "0xmoved", l2BlockNumber: 7, blockHash: "0xnew7" })])
 		state.responses.push(remined())
 		const recordRead = holdCall(internals(f.service).repo, "getRecord", 1, "after")
@@ -6444,20 +6384,20 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 		} finally {
 			vi.useRealTimers()
 		}
-		expect(cursorFor()?.reconciling).toEqual(marker)
-		expect(records.get(moved.id)).toMatchObject({ blockHash: "0xold7" })
+		expect((await cursorFor())?.reconciling).toEqual(marker)
+		expect(await repo.getRecord(moved.id)).toMatchObject({ blockHash: "0xold7" })
 
 		state.responses.push(remined())
 		expect(await scanPublic(f.service)).toBe("progress")
-		expect(cursorFor()?.reconciling).toBeUndefined()
-		expect(records.get(moved.id)).toMatchObject({ blockHash: "0xnew7", l2BlockNumber: 7 })
+		expect((await cursorFor())?.reconciling).toBeUndefined()
+		expect(await repo.getRecord(moved.id)).toMatchObject({ blockHash: "0xnew7", l2BlockNumber: 7 })
 	})
 
 	test("an undisturbed page of an existing record, an own send and a new receipt advances the cursor", async () => {
 		const { reader, state } = makePublicReader()
 		const f = await bootPublic(reader, state, { transaction: ownTx("0xmine") })
-		trustedRow()
-		seedPublic({ txHash: "0xknown", blockHash: "0xbh5" })
+		await trustedRow()
+		await seedPublic({ txHash: "0xknown", blockHash: "0xbh5" })
 		const events = [
 			pubEvent({ txHash: "0xknown", txIndexWithinBlock: 0 }),
 			pubEvent({ txHash: "0xmine", txIndexWithinBlock: 1 }),
@@ -6466,10 +6406,10 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 		state.responses.push(pubPage(events))
 
 		expect(await scanPublic(f.service)).toBe("progress")
-		expect(records.has("pub:p1|n1|0xnew|0")).toBe(true)
-		expect(records.has("pub:p1|n1|0xmine|0")).toBe(false)
-		expect(cursorFor()?.pendingPage).toBeUndefined()
-		expect(cursorFor()?.cursor).toEqual({ blockNumber: 5, txIndexWithinBlock: 2, logIndexWithinTx: 0 })
+		expect(await repo.hasRecord("pub:p1|n1|0xnew|0")).toBe(true)
+		expect(await repo.hasRecord("pub:p1|n1|0xmine|0")).toBe(false)
+		expect((await cursorFor())?.pendingPage).toBeUndefined()
+		expect((await cursorFor())?.cursor).toEqual({ blockNumber: 5, txIndexWithinBlock: 2, logIndexWithinTx: 0 })
 	})
 
 	test.each([
@@ -6481,20 +6421,20 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 		try {
 			const deleter = displaced ? await displacedDeleter(f, "0xunrelated") : undefined
 			await scan(f.service)
-			expect(records.has(NOTE_ID)).toBe(!displaced)
+			expect(await repo.hasRecord(NOTE_ID)).toBe(!displaced)
 			await deleter?.finish()
 		} finally {
 			vi.useRealTimers()
 		}
 		await scan(f.service)
-		expect(records.get(NOTE_ID)?.hidden).toBe(false)
+		expect((await repo.getRecord(NOTE_ID))?.hidden).toBe(false)
 	})
 
 	test("a receipt section entered beside a displaced deleter reads nothing, and its row stays gone", async () => {
 		const f = await bootNoteReceipt("existing")
 		vi.useFakeTimers()
 		try {
-			const deleter = await displacedDeleter(f, (records.get(NOTE_ID) as IncomingNoteRecord).txHash)
+			const deleter = await displacedDeleter(f, ((await repo.getRecord(NOTE_ID)) as IncomingNoteRecord).txHash)
 			const inst = instrumentReceipt(f)
 			const receipt = scan(f.service)
 			await vi.advanceTimersByTimeAsync(0)
@@ -6504,7 +6444,7 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 		} finally {
 			vi.useRealTimers()
 		}
-		expect(records.has(NOTE_ID)).toBe(false)
+		expect(await repo.hasRecord(NOTE_ID)).toBe(false)
 	})
 })
 
@@ -6645,7 +6585,7 @@ describe("IncomingTransferService — block-gated ticks", () => {
 		await ticking
 		await vi.advanceTimersByTimeAsync(0)
 
-		expect([...records.values()].filter((r) => r.accountAddress === "0xb")).toEqual([])
+		expect((await repo.listRecords()).filter((r) => r.accountAddress === "0xb")).toEqual([])
 	})
 
 	test("a public target whose tips read outlives its token's deletion leaves no cursor behind", async () => {
@@ -6663,7 +6603,7 @@ describe("IncomingTransferService — block-gated ticks", () => {
 		await ticking
 		await vi.advanceTimersByTimeAsync(0)
 
-		expect(cursorFor()).toBeUndefined()
+		expect(await cursorFor()).toBeUndefined()
 	})
 
 	test("a non-standard token counts as caught up: it is not scanned again until the checkpoint moves", async () => {
@@ -6687,9 +6627,9 @@ describe("IncomingTransferService — block-gated ticks", () => {
 /** Ticks until `landed` holds, at most twelve ticks, and returns the fake time since `since`. Every
  *  fourth tick runs every target, so a run the block rule missed would land on one 120 s or more
  *  after an event that came just after the previous one. */
-async function landedAfter(landed: () => boolean, since: number): Promise<number> {
-	for (let i = 0; i < 12 && !landed(); i++) await tick()
-	expect(landed()).toBe(true)
+async function landedAfter(landed: () => Promise<boolean>, since: number): Promise<number> {
+	for (let i = 0; i < 12 && !(await landed()); i++) await tick()
+	expect(await landed()).toBe(true)
 	return Date.now() - since
 }
 
@@ -6725,10 +6665,10 @@ describe("IncomingTransferService — liveness on the real cadence", () => {
 		const event = Date.now()
 
 		await tick()
-		expect(records.has(NOTE_ID)).toBe(true)
-		expect(records.has(pubRecordKey(ours))).toBe(false)
+		expect(await repo.hasRecord(NOTE_ID)).toBe(true)
+		expect(await repo.hasRecord(pubRecordKey(ours))).toBe(false)
 
-		expect(await landedAfter(() => records.has(pubRecordKey(ours)), event)).toBeLessThan(120_000)
+		expect(await landedAfter(() => repo.hasRecord(pubRecordKey(ours)), event)).toBeLessThan(120_000)
 	})
 
 	test("reorg: a same-height hash change runs the target, reconciliation finishes, the re-mined receipt lands and the scan resumes", async () => {
@@ -6737,7 +6677,7 @@ describe("IncomingTransferService — liveness on the real cadence", () => {
 			pubReceipt(51 + Math.floor(i / 3), { txIndexWithinBlock: i % 3, to: "0xother" }),
 		)
 		const f = await bootTicking({}, { chain: below })
-		trustedRow()
+		await trustedRow()
 		await tick()
 		f.state.chain = [...below, pubReceipt(101, { blockHash: "0xbh101a" })]
 		f.state.tips = { ...f.state.tips, checkpointedBlockNumber: 101, checkpointedBlockHash: "0xcp101a", proposedBlockHash: "0xpp101a" }
@@ -6745,7 +6685,7 @@ describe("IncomingTransferService — liveness on the real cadence", () => {
 		await tick()
 		await tick()
 		const remined = pubReceipt(101, { blockHash: "0xbh101b" })
-		expect(storedBlockHash(remined)).toBe("0xbh101a")
+		expect(await storedBlockHash(remined)).toBe("0xbh101a")
 
 		f.state.chain = [...below, remined]
 		f.state.tips = { ...f.state.tips, checkpointedBlockHash: "0xcp101b", proposedBlockHash: "0xpp101b" }
@@ -6754,9 +6694,9 @@ describe("IncomingTransferService — liveness on the real cadence", () => {
 
 		const updated: IncomingTransferRecord[] = []
 		f.service.onIncomingTransferUpdated.add((r) => updated.push(r))
-		expect(await landedAfter(() => storedBlockHash(remined) === "0xbh101b", event)).toBeLessThan(120_000)
+		expect(await landedAfter(async () => (await storedBlockHash(remined)) === "0xbh101b", event)).toBeLessThan(120_000)
 		expect(updated.map((r) => r.kind === "public-event" && r.blockHash)).toEqual(["0xbh101b"])
-		expect(cursorFor()?.reconciling).toBeUndefined()
+		expect((await cursorFor())?.reconciling).toBeUndefined()
 		f.state.fetchArgs.length = 0
 		await tick()
 		expect(f.state.fetchArgs.find((a) => a.verifyAncestorHash === undefined)).toMatchObject({
@@ -6792,31 +6732,31 @@ describe("IncomingTransferService — liveness on the real cadence", () => {
 		const event = Date.now()
 
 		await tick()
-		expect(records.has(NOTE_ID) || records.has(pubRecordKey(ours))).toBe(false)
+		expect((await repo.hasRecord(NOTE_ID)) || (await repo.hasRecord(pubRecordKey(ours)))).toBe(false)
 		await tick()
-		expect(records.has(NOTE_ID)).toBe(true)
+		expect(await repo.hasRecord(NOTE_ID)).toBe(true)
 
-		expect(await landedAfter(() => records.has(pubRecordKey(ours)), event)).toBeLessThan(120_000)
+		expect(await landedAfter(() => repo.hasRecord(pubRecordKey(ours)), event)).toBeLessThan(120_000)
 	})
 
 	test("quiet chain: ticks with no new block drain the outbox, and the fourth lands a note the PXE delivered late", async () => {
 		const tokenBalance = makeTokenBalanceStub()
 		const task = makeTaskStub()
 		const f = await bootTicking({ tokenBalance, task })
-		outbox.set("p1|n1|0xa|1", { dirtyAt: 100 })
+		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
 		tokenBalance.setResult({ taskId: "T1" })
 		await tick()
-		expect(outboxFor()?.pendingTaskId).toBe("T1")
+		expect((await outboxFor())?.pendingTaskId).toBe("T1")
 		task.setTask("T1", TaskStatus.Completed, Date.now())
 		await tick()
-		expect(outboxFor()).toBeUndefined()
+		expect(await outboxFor()).toBeUndefined()
 
 		f.note.getNotesRaw.mockImplementation(async (_n: string, account: string) => (account === "0xa" ? [note()] : []))
 		const delivered = Date.now()
 		await tick()
-		expect(records.has(NOTE_ID)).toBe(false)
+		expect(await repo.hasRecord(NOTE_ID)).toBe(false)
 
-		expect(await landedAfter(() => records.has(NOTE_ID), delivered)).toBeLessThan(120_000)
+		expect(await landedAfter(() => repo.hasRecord(NOTE_ID), delivered)).toBeLessThan(120_000)
 	})
 })
 
@@ -6877,14 +6817,14 @@ describe("IncomingTransferService — prompt payloads", () => {
 
 	test("the replayed prompt", async () => {
 		const f = await bootWire()
-		trust.set(trustKey("p1", "n1", WIRE_CONTRACT), {
+		await seedTrustRow({
 			profileId: "p1",
 			networkId: "n1",
 			contract: WIRE_CONTRACT,
 			state: "pending",
 			updatedAt: 0,
 		})
-		seedNote({ accountAddress: WIRE_ACCOUNT, contract: WIRE_CONTRACT, tokenId: 7, amountRaw: WIRE_AMOUNT })
+		await seedNote({ accountAddress: WIRE_ACCOUNT, contract: WIRE_CONTRACT, tokenId: 7, amountRaw: WIRE_AMOUNT })
 		await f.service.replayPendingPrompts("p1", "n1", WIRE_ACCOUNT)
 		expectWirePrompt(f.prompts)
 	})
@@ -6920,7 +6860,7 @@ async function bootClear(method: "clearProfile" | "clearChain", wipeFails = fals
 		return realDelete(key)
 	}
 	f.service.onIncomingSyncHealthChanged.add(() => at("health"))
-	const realWipe = svc.repo[method]
+	const realWipe = svc.repo[method].bind(svc.repo)
 	svc.repo[method] = async (...args: unknown[]) => {
 		at("wipe")
 		// A fee read that wrote after the first eviction: the final eviction must sweep it.
@@ -6971,9 +6911,9 @@ describe("IncomingTransferService — scope clears", () => {
 
 			// The failed wipe no longer counts as a running deleter: a receipt after it lands.
 			f.token.getTokensRaw.mockResolvedValue([tokenA])
-			trustedRow()
+			await trustedRow()
 			expect(await commitPublic(f.service)).toBe("processed")
-			expect(records.has(PUB_ID)).toBe(true)
+			expect(await repo.hasRecord(PUB_ID)).toBe(true)
 		},
 	)
 
@@ -7076,7 +7016,7 @@ async function bootReconcile() {
 		token: makeTokenStub([tokenA, tokenB]),
 		note: noteStub,
 	})
-	trustedRow()
+	await trustedRow()
 	const pxe = {
 		active: [] as ReturnType<typeof note>[],
 		spent: [] as ReturnType<typeof note>[],
@@ -7097,8 +7037,8 @@ async function bootReconcile() {
 }
 
 /** A stored note row of tokenA for `0xa` at `block`, its PXE note at the same position. */
-function reconcileRow(n: number, block = 100, overrides: NoteSeed = {}) {
-	const row = seedNote({
+async function reconcileRow(n: number, block = 100, overrides: NoteSeed = {}) {
+	const row = await seedNote({
 		uniqueNoteHash: validNoteHash(n),
 		contract: tokenA.contract,
 		tokenId: tokenA.id,
@@ -7111,21 +7051,19 @@ function reconcileRow(n: number, block = 100, overrides: NoteSeed = {}) {
 	return { row, pxeNote }
 }
 
-const OUTBOX_A = `p1|n1|0xa|${tokenA.id}`
-
 describe("IncomingTransferService — note rows reconciled against the PXE", () => {
 	test("a row missing from two verified scans past its block survives the first and is deleted on the second", async () => {
 		const f = await bootReconcile()
-		const { row } = reconcileRow(1)
+		const { row } = await reconcileRow(1)
 
 		expect(await f.run()).toBe(false)
-		expect(records.has(row.id)).toBe(true)
-		expect(outbox.has(OUTBOX_A)).toBe(false)
+		expect(await repo.hasRecord(row.id)).toBe(true)
+		expect(await outboxFor()).toBeUndefined()
 		expect(f.deleted).toEqual([])
 
 		expect(await f.run()).toBe(true)
-		expect(records.has(row.id)).toBe(false)
-		expect(outbox.has(OUTBOX_A)).toBe(true)
+		expect(await repo.hasRecord(row.id)).toBe(false)
+		expect(await outboxFor()).toBeDefined()
 		expect(f.deleted.map((r) => r.id)).toEqual([row.id])
 	})
 
@@ -7134,65 +7072,65 @@ describe("IncomingTransferService — note rows reconciled against the PXE", () 
 		["the spent-or-unspent read", (status) => status === "active-or-nullified"],
 	])("%s rejecting on two verified scans keeps the row", async (_name, rejects) => {
 		const f = await bootReconcile()
-		const { row } = reconcileRow(1)
+		const { row } = await reconcileRow(1)
 		f.note.getNotesRaw.mockImplementation(async (_n: string, _a: string, _c: string, status?: string) => {
 			if (rejects(status)) throw new Error("identity unavailable")
 			return []
 		})
 		expect(await f.run()).toBe(false)
 		expect(await f.run()).toBe(false)
-		expect(records.get(row.id)).toEqual(row)
+		expect(await repo.getRecord(row.id)).toEqual(row)
 		expect(f.deleted).toEqual([])
 	})
 
 	test("a row missing once and then found keeps no strike: the next absence strikes it again", async () => {
 		const f = await bootReconcile()
-		const { row, pxeNote } = reconcileRow(1, 115)
+		const { row, pxeNote } = await reconcileRow(1, 115)
 		expect(await f.run()).toBe(false)
 		f.pxe.active = [pxeNote]
 		expect(await f.run()).toBe(true)
 		f.pxe.active = []
 		expect(await f.run()).toBe(false)
-		expect(records.has(row.id)).toBe(true)
+		expect(await repo.hasRecord(row.id)).toBe(true)
 		expect(f.deleted).toEqual([])
 	})
 
 	test("a spent note's row on a finalized block settles and is never deleted", async () => {
 		const f = await bootReconcile()
-		const { row, pxeNote } = reconcileRow(1)
+		const { row, pxeNote } = await reconcileRow(1)
 		f.pxe.spent = [pxeNote]
 		expect(await f.run()).toBe(true)
-		expect(records.get(row.id)).toMatchObject({ settled: true, blockTimestamp: 1_000 })
+		expect(await repo.getRecord(row.id)).toMatchObject({ settled: true, blockTimestamp: 1_000 })
 
 		f.pxe.spent = []
 		f.note.getSyncedBlock.mockClear()
 		for (let i = 0; i < 3; i++) expect(await f.run()).toBe(true)
-		expect(records.has(row.id)).toBe(true)
+		expect(await repo.hasRecord(row.id)).toBe(true)
 		expect(f.note.getSyncedBlock).not.toHaveBeenCalled()
 	})
 
 	test("a stale anchor settles, strikes and deletes nothing and is not reached; at the tip it decides both", async () => {
 		const f = await bootReconcile()
-		const missing = reconcileRow(1)
-		const final = reconcileRow(2, 100, { txIndexInBlock: 1 })
+		const missing = await reconcileRow(1)
+		const final = await reconcileRow(2, 100, { txIndexInBlock: 1 })
 		f.pxe.active = [{ ...final.pxeNote, txIndexInBlock: 1 }]
 		f.pxe.synced = { number: 120, hash: LATER_TIP }
 		for (let i = 0; i < 3; i++) expect(await f.run()).toBe(false)
-		expect(records.get(missing.row.id)).toEqual(missing.row)
-		expect(records.get(final.row.id)).toEqual(final.row)
+		expect(await repo.getRecord(missing.row.id)).toEqual(missing.row)
+		expect(await repo.getRecord(final.row.id)).toEqual(final.row)
 		expect(f.deleted).toEqual([])
 
 		f.pxe.synced = { number: 120, hash: SYNCED_TIP }
 		expect(await f.run()).toBe(false)
-		expect(records.get(final.row.id)).toMatchObject({ settled: true })
+		expect(await repo.getRecord(final.row.id)).toMatchObject({ settled: true })
 		expect(await f.run()).toBe(true)
-		expect(records.has(missing.row.id)).toBe(false)
+		expect(await repo.hasRecord(missing.row.id)).toBe(false)
 	})
 
 	test("a block landing mid-scan leaves a later contract unverified; the next quiet tick decides it", async () => {
 		const f = await bootReconcile()
-		const { row } = reconcileRow(2, 100, { contract: tokenB.contract, tokenId: tokenB.id })
-		reconcileRow(1, 115)
+		const { row } = await reconcileRow(2, 100, { contract: tokenB.contract, tokenId: tokenB.id })
+		await reconcileRow(1, 115)
 		const tips = reconcileTips()
 		let syncedReads = 0
 		f.note.getSyncedBlock.mockImplementation(async () => ({ number: 121, hash: ++syncedReads <= 2 ? SYNCED_TIP : LATER_TIP }))
@@ -7203,15 +7141,15 @@ describe("IncomingTransferService — note rows reconciled against the PXE", () 
 		const quiet = reconcileTips({ proposedBlockHash: LATER_TIP })
 		expect(await f.run(quiet, tokenB.contract)).toBe(false)
 		expect(await f.run(quiet, tokenB.contract)).toBe(true)
-		expect(records.has(row.id)).toBe(false)
+		expect(await repo.hasRecord(row.id)).toBe(false)
 	})
 
 	test("a row missing above the synced block waits for a new block and the scan is reached", async () => {
 		const f = await bootReconcile()
-		const { row } = reconcileRow(1, 121)
+		const { row } = await reconcileRow(1, 121)
 		expect(await f.run()).toBe(true)
 		expect(await f.run()).toBe(true)
-		expect(records.get(row.id)).toEqual(row)
+		expect(await repo.getRecord(row.id)).toEqual(row)
 	})
 
 	test.each<[string, (pxeNote: ReturnType<typeof note>) => ReturnType<typeof note>, Partial<IncomingNoteRecord>]>([
@@ -7220,63 +7158,63 @@ describe("IncomingTransferService — note rows reconciled against the PXE", () 
 		["a new transaction hash", (n) => ({ ...n, txHash: "0xtx-replacement" }), { txHash: "0xtx-replacement", blockTimestamp: 1_000 }],
 	])("a re-mine at %s rewrites the row in place with one Updated and no second arrival", async (_name, remine, expected) => {
 		const f = await bootReconcile()
-		const { row, pxeNote } = reconcileRow(1, 100, { discoveredAt: 7 })
-		arrivals.set("p1|n1|0xa", { sinceBlock: 50, played: [[row.id, 100]] })
+		const { row, pxeNote } = await reconcileRow(1, 100, { discoveredAt: 7 })
+		await repo.setArrivalRow("p1", "n1", "0xa", { sinceBlock: 50, played: [[row.id, 100]] })
 		f.pxe.active = [remine(pxeNote)]
 		expect(await f.run()).toBe(true)
-		expect(records.get(row.id)).toMatchObject({ ...expected, id: row.id, hidden: false, discoveredAt: 7 })
+		expect(await repo.getRecord(row.id)).toMatchObject({ ...expected, id: row.id, hidden: false, discoveredAt: 7 })
 		expect(f.updated.map((r) => r.id)).toEqual([row.id])
 		expect(await f.service.claimArrivals("p1", "n1", "0xa", [row.id])).toEqual([])
-		expect(records.size).toBe(1)
+		expect((await repo.listRecords()).length).toBe(1)
 	})
 
 	test("a same-position re-mine with a new time is rewritten when the row settles, with one Updated", async () => {
 		const f = await bootReconcile()
-		const { row, pxeNote } = reconcileRow(1)
+		const { row, pxeNote } = await reconcileRow(1)
 		f.pxe.active = [pxeNote]
 		f.note.getBlockTimestamp.mockResolvedValue(1_005)
 		expect(await f.run()).toBe(true)
-		expect(records.get(row.id)).toMatchObject({ settled: true, blockTimestamp: 1_005 })
+		expect(await repo.getRecord(row.id)).toMatchObject({ settled: true, blockTimestamp: 1_005 })
 		expect(f.updated.map((r) => r.kind === "note" && r.blockTimestamp)).toEqual([1_005])
 	})
 
 	test("the steady state is one notes read; a hidden row's move emits no Updated", async () => {
 		const f = await bootReconcile()
-		const { pxeNote } = reconcileRow(1, 115)
-		const hidden = reconcileRow(2, 116, { hidden: true })
+		const { pxeNote } = await reconcileRow(1, 115)
+		const hidden = await reconcileRow(2, 116, { hidden: true })
 		f.pxe.active = [pxeNote, { ...hidden.pxeNote, txIndexInBlock: 4 }]
 		f.note.getNotesRaw.mockClear()
 		expect(await f.run()).toBe(true)
 		expect(f.note.getNotesRaw).toHaveBeenCalledTimes(1)
 		expect(f.note.getSyncedBlock).not.toHaveBeenCalled()
-		expect(records.get(hidden.row.id)).toMatchObject({ txIndexInBlock: 4, hidden: true })
+		expect(await repo.getRecord(hidden.row.id)).toMatchObject({ txIndexInBlock: 4, hidden: true })
 		expect(f.updated).toEqual([])
 	})
 
 	test("after a restart, a row whose unfinalized block was dropped meanwhile goes; a settled one at that height stays", async () => {
 		const first = await bootReconcile()
-		const settled = reconcileRow(1)
+		const settled = await reconcileRow(1)
 		first.pxe.spent = [settled.pxeNote]
 		expect(await first.run()).toBe(true)
-		const dropped = reconcileRow(2, 100, { txIndexInBlock: 1 })
+		const dropped = await reconcileRow(2, 100, { txIndexInBlock: 1 })
 
 		const f = await bootReconcile()
 		f.pxe.synced = { number: 160, hash: SYNCED_TIP }
 		const tips = reconcileTips({ finalizedBlockNumber: 150 })
 		expect(await f.run(tips)).toBe(false)
 		expect(await f.run(tips)).toBe(true)
-		expect(records.has(dropped.row.id)).toBe(false)
-		expect(records.get(settled.row.id)).toMatchObject({ settled: true })
+		expect(await repo.hasRecord(dropped.row.id)).toBe(false)
+		expect(await repo.getRecord(settled.row.id)).toMatchObject({ settled: true })
 	})
 
 	test("without tips nothing settles, strikes or deletes", async () => {
 		const f = await bootReconcile()
-		const missing = reconcileRow(1)
-		const final = reconcileRow(2, 100, { txIndexInBlock: 1 })
+		const missing = await reconcileRow(1)
+		const final = await reconcileRow(2, 100, { txIndexInBlock: 1 })
 		f.pxe.active = [{ ...final.pxeNote, txIndexInBlock: 1 }]
 		for (let i = 0; i < 3; i++) expect(await f.run(null)).toBe(false)
-		expect(records.get(missing.row.id)).toEqual(missing.row)
-		expect(records.get(final.row.id)).toEqual(final.row)
+		expect(await repo.getRecord(missing.row.id)).toEqual(missing.row)
+		expect(await repo.getRecord(final.row.id)).toEqual(final.row)
 		expect(f.note.getSyncedBlock).not.toHaveBeenCalled()
 	})
 
@@ -7286,7 +7224,7 @@ describe("IncomingTransferService — note rows reconciled against the PXE", () 
 			[
 				"settle",
 				async (f) => {
-					const { row, pxeNote } = reconcileRow(1)
+					const { row, pxeNote } = await reconcileRow(1)
 					f.pxe.spent = [pxeNote]
 					return { id: row.id, before: row }
 				},
@@ -7294,7 +7232,7 @@ describe("IncomingTransferService — note rows reconciled against the PXE", () 
 			[
 				"move",
 				async (f) => {
-					const { row, pxeNote } = reconcileRow(1, 115)
+					const { row, pxeNote } = await reconcileRow(1, 115)
 					f.pxe.active = [{ ...pxeNote, txIndexInBlock: 2 }]
 					return { id: row.id, before: row }
 				},
@@ -7302,7 +7240,7 @@ describe("IncomingTransferService — note rows reconciled against the PXE", () 
 			[
 				"delete",
 				async (f) => {
-					const { row } = reconcileRow(1)
+					const { row } = await reconcileRow(1)
 					expect(await f.run()).toBe(false)
 					return { id: row.id, before: row }
 				},
@@ -7314,10 +7252,10 @@ describe("IncomingTransferService — note rows reconciled against the PXE", () 
 			const { id, before } = await arrange(f)
 			f.svc.deletersRunning += 1
 			expect(await f.run()).toBe(false)
-			expect(records.get(id)).toEqual(before)
+			expect(await repo.getRecord(id)).toEqual(before)
 			f.svc.deletersRunning -= 1
 			expect(await f.run()).toBe(true)
-			expect(records.get(id)).not.toEqual(before)
+			expect(await repo.getRecord(id)).not.toEqual(before)
 		})
 
 		test.each(decisions)("%s, across a watchdog handoff during its row re-read", async (_name, arrange) => {
@@ -7337,7 +7275,7 @@ describe("IncomingTransferService — note rows reconciled against the PXE", () 
 			} finally {
 				vi.useRealTimers()
 			}
-			expect(records.get(id)).toEqual(before)
+			expect(await repo.getRecord(id)).toEqual(before)
 			expect(f.updated).toEqual([])
 			expect(f.deleted).toEqual([])
 		})
@@ -7354,14 +7292,14 @@ describe("IncomingTransferService — note reconciliation on the real cadence", 
 
 	test("a struck row leaves its target unmarked, so the very next unforced tick deletes it", async () => {
 		const f = await bootTicking()
-		const { row } = reconcileRow(1, 40)
+		const { row } = await reconcileRow(1, 40)
 		f.note.getSyncedBlock.mockImplementation(async () => ({ number: 60, hash: f.state.tips.proposedBlockHash }))
 		f.state.tips = { ...f.state.tips, proposedBlockHash: SYNCED_TIP }
 
 		await tick()
-		expect(records.has(row.id)).toBe(true)
+		expect(await repo.hasRecord(row.id)).toBe(true)
 		await tick()
-		expect(records.has(row.id)).toBe(false)
+		expect(await repo.hasRecord(row.id)).toBe(false)
 	})
 })
 

@@ -165,3 +165,25 @@ export function usePrices(priceService: PriceServiceClient) {
 		dispose,
 	}
 }
+
+/**
+ * The signed list's flags alone, from the network-free read and the worker's broadcasts, for a
+ * surface inside transaction execution: it never asks the worker for a price fetch (Privacy Policy
+ * § 5.2). Receives the connected client, as `usePrices` does.
+ */
+export function useTokenFlags(priceService: PriceServiceClient) {
+	const list = listState()
+	const read = () => list.read(priceService)
+	priceService.onQuotesUpdated.add(list.adoptFull)
+	priceService.onConnected.add(read)
+	read()
+	return {
+		mapped: readonly(list.mapped),
+		/** The signed list flags this token as a scam, on its chain and contract. False until `mapped`. */
+		isFlagged: (token: PricedToken | undefined): boolean => isFlaggedToken(list.flaggedTokens.value, token),
+		dispose: () => {
+			priceService.onQuotesUpdated.remove(list.adoptFull)
+			priceService.onConnected.remove(read)
+		},
+	}
+}

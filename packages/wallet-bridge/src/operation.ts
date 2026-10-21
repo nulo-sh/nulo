@@ -119,6 +119,9 @@ export type AztecGetContractMetadataOperation = {
 	readonly kind: "aztec_getContractMetadata"
 	readonly networkId: string
 	readonly address: AztecAddress
+	/** The dApp session's raw addresses on this chain: any other profile account answers as an
+	 *  address the wallet never registered. */
+	readonly sessionAccounts: readonly string[]
 }
 
 export type AztecGetPrivateEventsOperation = {

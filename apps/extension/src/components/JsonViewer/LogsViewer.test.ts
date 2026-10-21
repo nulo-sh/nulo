@@ -390,3 +390,86 @@ describe("LogsViewer follow stopped by a selection", () => {
 		wrapper.unmount()
 	})
 })
+
+describe("LogsViewer opened at a log", () => {
+	const t = Date.now()
+	const log = (id: number): LogEntry => ({ id, timestamp: t, source: "ui", level: 1, data: [`log ${id}`] })
+	const home = window.location.href
+	afterEach(() => window.history.replaceState(null, "", home))
+
+	/** The window opened at log 3 of 3, 400px over 1,000px of lines: CodeMirror centres it as far as
+	 *  the end lets it, so the target lands in the end band. */
+	async function openedAtLatest(loaded = [log(1), log(2), log(3)]) {
+		window.history.replaceState(null, "", "?logId=3")
+		H.getLogs.mockResolvedValueOnce(loaded).mockResolvedValue([])
+		const wrapper = mountViewer()
+		await vi.advanceTimersByTimeAsync(0)
+		const view = H.editors[0] as StubView & {
+			requestMeasure: ReturnType<typeof vi.fn>
+			scrollDOM: { scrollTop: number; scrollHeight: number; clientHeight: number; addEventListener: ReturnType<typeof vi.fn> }
+		}
+		const el = view.scrollDOM
+		const onScroll = el.addEventListener.mock.calls.find(([type]) => type === "scroll")?.[1] as () => void
+		const scrollTo = (top: number) => {
+			el.scrollTop = top
+			onScroll()
+		}
+		Object.assign(el, { clientHeight: 400, scrollHeight: 1_000 })
+		const target = view.dispatch.mock.calls.find(([spec]) => spec.effects?.scrollTo && spec.selection)?.[0]
+		const measure = () => {
+			for (const [request] of view.requestMeasure.mock.calls) request.read()
+			view.requestMeasure.mockClear()
+		}
+		let next = 4
+		const nextLineDispatches = (effect: "scrollTo" | "snapshot") => {
+			view.dispatch.mockClear()
+			H.onLog.invoke(log(next++))
+			return view.dispatch.mock.calls.some(([spec]) => spec.effects?.[effect])
+		}
+		const followsNext = () => nextLineDispatches("scrollTo")
+		const snapshotsNext = () => nextLineDispatches("snapshot")
+		return {
+			wrapper,
+			targetAnchor: (target?.selection as { anchor: number } | undefined)?.anchor,
+			lineStart: (n: number) => view.state.doc.line(n).from,
+			measure,
+			scrollTo,
+			followsNext,
+			snapshotsNext,
+			button: () => wrapper.find('[data-testid="logs-scroll-btn"]'),
+		}
+	}
+
+	test("the target is its log's first character, past an earlier log's CRLF", async () => {
+		const { wrapper, targetAnchor, lineStart } = await openedAtLatest([{ ...log(1), data: ["first\r\nsecond"] }, log(2), log(3)])
+		expect(targetAnchor).toBe(lineStart(4))
+		wrapper.unmount()
+	})
+
+	test("a line before CodeMirror's first measure leaves the target pending", async () => {
+		const { wrapper, targetAnchor, measure, snapshotsNext } = await openedAtLatest()
+		expect(targetAnchor).toBeDefined()
+		expect(snapshotsNext()).toBe(false)
+		measure()
+		expect(snapshotsNext()).toBe(true)
+		wrapper.unmount()
+	})
+
+	test("the target's own scroll into the end band keeps the hold", async () => {
+		const { wrapper, scrollTo, followsNext, button } = await openedAtLatest()
+		scrollTo(590)
+		expect(followsNext()).toBe(false)
+		await wrapper.vm.$nextTick()
+		expect(button().exists()).toBe(true)
+		wrapper.unmount()
+	})
+
+	test("a reader's scroll down into the end band after it still resumes the follow", async () => {
+		const { wrapper, scrollTo, followsNext } = await openedAtLatest()
+		scrollTo(590)
+		scrollTo(300)
+		scrollTo(600)
+		expect(followsNext()).toBe(true)
+		wrapper.unmount()
+	})
+})

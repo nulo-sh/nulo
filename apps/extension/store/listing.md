@@ -240,9 +240,7 @@ Modifications to third-party code, stated exactly:
   and `file_map` blanked (`vite.config.ts:94`, `scripts/strip-artifact-debug-info.ts`); this removes
   the embedded Noir sources and changes no bytecode.
 
-Linter warnings and their origin: `innerHTML` is assigned by Vue's
-runtime (`insertStaticContent`) and by the `@alejoamiras/presto-banners` banner element, which renders its
-own template (its link is normalized to an http(s) URL; variant and state come from fixed lists).
+Linter warnings and their origin: `innerHTML` is assigned by Vue's runtime (`insertStaticContent`).
 `Function` and `eval` appear in zod's eval-capability probe, msgpackr's record decoder and
 get-intrinsic's constructor probe, each inside try/catch with a non-evaluating fallback, and in
 get-intrinsic's intrinsics table, which references `eval` without calling it; the extension CSP forbids

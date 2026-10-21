@@ -660,6 +660,23 @@ describe("RecentActivityView — one feed block for token and account views", ()
 		expect(awaitingCards(w)).toHaveLength(1)
 	})
 
+	test("the running Send's card is titled with its token's symbol, or the empty-value dash for a blank one", async () => {
+		H.getTokens.mockResolvedValue([
+			{ id: 42, symbol: "USDC", decimals: 6, hasDecimals: true },
+			{ id: 43, symbol: "   ", decimals: 6, hasDecimals: true },
+		])
+		const titleFor = async (tokenId: number) => {
+			H.getTasks.mockResolvedValue([
+				{ ...uiTransferTask(ACCT_A), content: { kind: H.ContentKind.Transfer, senderAddress: ACCT_A, tokenId, amount: "1500000" } },
+			])
+			const w = mountFeed()
+			await flushPromises()
+			return awaitingCards(w).map((c) => c.props("title"))
+		}
+		expect(await titleFor(42)).toEqual(["USDC"])
+		expect(await titleFor(43)).toEqual(["—"])
+	})
+
 	test("a proving op's backend subtitle outranks the executing task's label and stamps the card", async () => {
 		const proving = (backend?: string) => ({
 			...inFlightTransferOp(ACCT_A),
@@ -684,7 +701,7 @@ describe("RecentActivityView — one feed block for token and account views", ()
 		expect(awaitingCards(w)[0].props("backend")).toBe("presto")
 	})
 
-	test("empty states: a token feed says NOTHING HERE YET with the symbol, an account feed renders nothing", async () => {
+	test("empty states: a token feed says NOTHING HERE YET with the symbol, or this token for a blank one; an account feed renders nothing", async () => {
 		const withToken = mountFeed({ token: TOKEN })
 		await flushPromises()
 		expect(withToken.text()).toContain("NOTHING HERE YET")
@@ -693,6 +710,9 @@ describe("RecentActivityView — one feed block for token and account views", ()
 		await flushPromises()
 		expect(root(withoutToken).exists()).toBe(false)
 		expect(withoutToken.text()).not.toContain("NOTHING HERE YET")
+		const blank = mountFeed({ token: { ...TOKEN, symbol: "   " } })
+		await flushPromises()
+		expect(blank.text()).toContain("Send or receive this token to see activity here.")
 	})
 
 	test("a token-presence flip remounts the feed root", async () => {

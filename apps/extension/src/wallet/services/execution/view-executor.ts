@@ -14,7 +14,7 @@
 import { type Aliased, ContractInitializationStatus } from "@aztec-labs/aztec.js/wallet"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import type { ChainInfo } from "@aztec-labs/entrypoints/interfaces"
-import type { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { PackedPrivateEvent } from "@aztec-labs/pxe/client/bundle"
 import {
 	type AbiDecoded,
@@ -35,6 +35,7 @@ import z from "zod"
 import type { AccountService } from "@/wallet/services/account/service"
 import type { ContactService } from "@/wallet/services/contact/service"
 import { type NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
+import type { NetworkInfo } from "@/wallet/services/network/spec"
 import type { ProfileService } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
@@ -69,6 +70,12 @@ export interface ViewExecutorDeps {
 	contactService: ContactService
 	logDebug(msg: string, ...rest: unknown[]): void
 	logError(msg: string, ...rest: unknown[]): void
+}
+
+function isWithheldAccount(address: string, accounts: readonly { address: string }[], sessionAccounts: readonly string[]): boolean {
+	const key = address.toLowerCase()
+	const same = (other: string) => other.toLowerCase() === key
+	return accounts.some((account) => same(account.address)) && !sessionAccounts.some(same)
 }
 
 export class ViewExecutor {
@@ -146,17 +153,28 @@ export class ViewExecutor {
 		}
 	}
 
+	/** Publication is the node's answer; `isArtifactRegistered` says whether this wallet holds the
+	 *  artifact, as upstream answers it. A node failure fails the call: a false "not published" would
+	 *  make a deploy publish the class again. */
 	public async executeAztecGetContractClassMetadata(
 		op: AztecGetContractClassMetadataOperation,
 	): Promise<{ isContractClassPubliclyRegistered: boolean; isArtifactRegistered: boolean }> {
 		const network = await this.deps.networkService.getNetwork(op.networkId)
-		const artifact = await this.deps.pxeService.getContractArtifact(networkInfoFrom(network), op.id, { pxeOnly: true })
+		const info = networkInfoFrom(network)
+		const node = await this.deps.networkService.getNodeForUrl(info.rpcUrl)
+		const [artifact, publicClass] = await Promise.all([
+			this.deps.pxeService.getContractArtifact(info, op.id, { pxeOnly: true }),
+			node.getContractClass(await Fr.schema.parseAsync(op.id.toString())),
+		])
 		return {
-			isContractClassPubliclyRegistered: !!artifact,
+			isContractClassPubliclyRegistered: !!publicClass,
 			isArtifactRegistered: !!artifact,
 		}
 	}
 
+	/** Publication and upgrade come from the node for every address, as upstream. The instance and
+	 *  `INITIALIZED` come only for a stored instance the session may see whose artifact the PXE holds:
+	 *  a profile account outside the session answers exactly as an address the wallet never registered. */
 	public async executeAztecGetContractMetadata(op: AztecGetContractMetadataOperation): Promise<{
 		instance?: ContractInstanceWithAddress
 		initializationStatus: ContractInitializationStatus
@@ -165,46 +183,46 @@ export class ViewExecutor {
 		updatedContractClassId?: Fr
 	}> {
 		const network = await this.deps.networkService.getNetwork(op.networkId)
-
-		// Check PXE-local only: simulation requires both instance AND artifact
-		// registered in PXE. The full cascade (node/known/registry) finds on-chain
-		// data that PXE can't use for simulation.
-		const localInstance = await this.deps.pxeService.getContractInstance(networkInfoFrom(network), op.address, { pxeOnly: true })
-
-		let hasArtifact = false
-		if (localInstance) {
-			try {
-				const artifact = await this.deps.pxeService.getContractArtifact(
-					networkInfoFrom(network),
-					localInstance.currentContractClassId,
-					{ pxeOnly: true },
-				)
-				hasArtifact = !!artifact
-			} catch {
-				hasArtifact = false
-			}
-		}
-
-		const isLocallyRegistered = !!localInstance && hasArtifact
-
-		// `isContractPublished` is a best-effort flag — the wallet-sdk doc treats
-		// it as a hint, not a guarantee. `nodeBestEffort: true` keeps a transient
-		// node failure (testnet RPC noise) from failing the whole metadata call;
-		// the local known-bundle fallback still runs underneath.
-		let isPublished = isLocallyRegistered
-		if (!isPublished) {
-			const fullInstance = await this.deps.pxeService.getContractInstance(networkInfoFrom(network), op.address, {
-				nodeBestEffort: true,
-			})
-			isPublished = !!fullInstance
-		}
+		const info = networkInfoFrom(network)
+		// The rows of the profile whose store is read, never the active one: a switch mid-call must not
+		// pair one profile's store with another's accounts.
+		const [stored, accounts] = await Promise.all([
+			this.deps.pxeService.getContractInstance(info, op.address, { pxeOnly: true }),
+			this.deps.accountService.getAccounts(network.profileId, network.chainId, true),
+		])
+		const visible = stored && !isWithheldAccount(op.address.toString(), accounts, op.sessionAccounts) ? stored : undefined
+		// Simulation needs both the instance AND the artifact in the PXE.
+		const isLocallyRegistered = !!visible && (await this.hasLocalArtifact(info, visible))
+		const onChain = await this.nodeInstance(info.rpcUrl, op.address.toString())
+		const isContractUpdated = !!onChain && !onChain.currentContractClassId.equals(onChain.originalContractClassId)
 
 		return {
-			instance: isLocallyRegistered ? localInstance : undefined,
+			instance: isLocallyRegistered ? visible : undefined,
 			initializationStatus: isLocallyRegistered ? ContractInitializationStatus.INITIALIZED : ContractInitializationStatus.UNKNOWN,
-			isContractPublished: isPublished,
-			isContractUpdated: false,
-			updatedContractClassId: undefined,
+			isContractPublished: !!onChain,
+			isContractUpdated,
+			updatedContractClassId: isContractUpdated ? onChain.currentContractClassId : undefined,
+		}
+	}
+
+	private async hasLocalArtifact(network: NetworkInfo, instance: ContractInstanceWithAddress): Promise<boolean> {
+		try {
+			return !!(await this.deps.pxeService.getContractArtifact(network, instance.currentContractClassId, { pxeOnly: true }))
+		} catch {
+			return false
+		}
+	}
+
+	/** Best effort: the flags it feeds are hints, so a node failure answers "not published" rather than
+	 *  failing the call. Read from the dApp network's own endpoint, never the active profile's. */
+	private async nodeInstance(rpcUrl: string, address: string): Promise<ContractInstanceWithAddress | undefined> {
+		try {
+			const node = await this.deps.networkService.getNodeForUrl(rpcUrl)
+			return await node.getContract(await AztecAddress.schema.parseAsync(address))
+		} catch {
+			// The category only: a node error message can carry the requested address.
+			this.deps.logDebug("getContractMetadata: node lookup failed")
+			return undefined
 		}
 	}
 

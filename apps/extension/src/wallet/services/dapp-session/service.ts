@@ -11,6 +11,7 @@ import { purgeRows } from "@/wallet/services/purge-rows"
 import { nextRandomId } from "@/wallet/services/id-allocators"
 import { entityStorage } from "@/wallet/storage/stores"
 import { DappSessionMacStorage } from "./mac-storage"
+import { RegistrationAllowance } from "./registration-allowance"
 import { Lock } from "@/wallet/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
@@ -97,6 +98,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 
 	private readonly storage: DappSessionMacStorage
 	private readonly lock = new Lock()
+	private readonly registrations: RegistrationAllowance
 
 	private profileService: ProfileService = null!
 
@@ -112,11 +114,20 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 			(profileId) => this.profileService.deriveDappSessionMacKey(profileId),
 			logger,
 		)
+		this.registrations = new RegistrationAllowance(browserApi.storage.local)
 	}
 
 	protected async init(services: ServiceCollection) {
 		this.profileService = services.get(ProfileService.name)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
+	}
+
+	/** `RegistrationAllowance.admit` under the fence's profile; a fence a deletion overtook writes
+	 *  nothing. Not an RPC method. */
+	public async admitDappRegistration(origin: string, fence: ExecutionFence, chainId: number): Promise<void> {
+		await this.ensureInitialized()
+		const deletion = this.profileService.getDeletionState()
+		await this.registrations.admit(fence.profileId, chainId, origin, () => deletion.assertCurrent(fence.profileId, fence.epoch))
 	}
 
 	public async getDappSessions(): Promise<DappSession[]> {
@@ -469,8 +480,9 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	}
 
 	/** Every session of `profileId` on `chainId`, read raw like `purgeForProfile`, so a lock or
-	 *  recovery mode cannot hide one. Not part of the chain purge: a deleted network's sessions stay
-	 *  until the next connect drops them, so a network added back on that chain keeps them. */
+	 *  recovery mode cannot hide one, and the apps' registration counts there. Not part of the chain
+	 *  purge: a deleted network's sessions and counts stay, so a network added back on that chain
+	 *  keeps them. */
 	public async purgeForChain(profileId: string, chainId: number): Promise<void> {
 		await this.ensureInitialized()
 		await this.lock.withLock(async () => {
@@ -481,6 +493,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 				({ row }) => this.emit("onDappSessionDeleted", row),
 			)
 		})
+		await this.registrations.clearChain(profileId, chainId)
 	}
 
 	/** Awaited profile-scoped purge, called by the deletion coordinator (relocated
@@ -505,5 +518,6 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 				({ row }) => this.emit("onDappSessionDeleted", row),
 			)
 		})
+		await this.registrations.purgeProfile(profileId)
 	}
 }

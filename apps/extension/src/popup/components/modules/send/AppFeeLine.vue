@@ -4,6 +4,7 @@
  * parent mounts it only while an estimate runs or has landed, so an operation the wallet never
  * estimates reads no price. "About", never "up to": the figure caps nothing. Paid from the person's
  * balance the fee may rise 10 % without asking again (`feeRiseAsks`), and an app's fee contract any amount.
+ * Through the PrivateFPC the person pays from their own Private Fee Juice, so the line says so first.
  */
 /** Vendor */
 import type { PropType } from "vue"
@@ -23,6 +24,7 @@ import { feeDisplay } from "@/utils/fee-estimation"
 
 const props = defineProps({
 	feeEstimate: { type: Object as PropType<TransferFeeEstimate>, default: undefined },
+	privateFeeJuice: { type: Boolean, default: false },
 })
 
 const priceService = new PriceServiceClient()
@@ -39,8 +41,8 @@ onBeforeUnmount(() => {
 
 <template>
 	<Text variant="body" color="secondary" height="150" :data-testid="fee ? 'execute-op-app-fee' : 'execute-op-app-fee-estimating'">
-		About
-		<FeeAmount v-if="fee" :display="fee" :class="$style.figure" /><Skeleton v-else :class="$style.bar" />; payment method set by <slot />.<template v-if="priority"> Includes a <FeeAmount :display="priority" :class="$style.fee_figure" /> <DottedTerm term="priority-fee" testid="execute-op-priority-term">priority fee</DottedTerm> the app asked for.</template>
+		<template v-if="privateFeeJuice"><span :class="$style.line">You pay about <FeeAmount v-if="fee" :display="fee" :class="$style.figure" /><Skeleton v-else :class="$style.bar" /> from Private Fee Juice</span> method set by <slot /></template>
+		<template v-else>About <FeeAmount v-if="fee" :display="fee" :class="$style.figure" /><Skeleton v-else :class="$style.bar" />; payment method set by <slot /></template><template v-if="priority">. Includes a <FeeAmount :display="priority" :class="$style.fee_figure" /> <DottedTerm term="priority-fee" testid="execute-op-priority-term">priority fee</DottedTerm> the app asked for</template><template v-if="priority || !privateFeeJuice">.</template>
 	</Text>
 </template>
 
@@ -56,5 +58,9 @@ onBeforeUnmount(() => {
 
 .bar {
 	vertical-align: middle;
+}
+
+.line {
+	display: block;
 }
 </style>

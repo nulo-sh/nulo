@@ -11,11 +11,10 @@
 - Vue unit tests (3.5.42, VTU 2.4.11): only `vue`/`vue-router` auto-import; stub `@nulo/design`'s recursing `Button`; a 2nd `mount` strips the 1st's stubs. [Evidence](archive/ux-feedback/plan.md#vue-tests)
 - A check accepting a wrong state passes broken code: pair never-happens tests with a success control; match screenshot state exactly; stub only what production returns. [Evidence](archive/connect-window/plan.md#controls), [more](archive/harden-dedupe/plan.md#success-control)
 - CodeQL's ReDoS query fails a PR on any regex it reaches, a test's or a helper's too: never put a free-form group beside `\s*`; split on the delimiter. [Evidence](archive/forms-and-contacts/lessons/phase-3.md)
-- A change to when a window's Confirm enables reaches every e2e that presses it, refusals included (`authwit-lifecycle`, `scope-refusal`): run those before the PR. [Evidence](archive/harden-security-fixes-2/lessons/phase-6.md)
 
 ## Git & GitHub
 
-- A `pull_request` run takes workflows from the merge ref but builds `head.sha`, so a later `dev` fix is absent: merge `dev` first. [Evidence](archive/dedup-ledger/plan.md#merge-ref)
+- A `pull_request` run builds `head.sha` with the merge ref's workflows, so a later `dev` fix is absent; a PR conflicting with `dev` gets no run: merge `dev` first. [Evidence](archive/dedup-ledger/plan.md#merge-ref), [more](archive/connect-split-1/lessons/phase-3.md)
 - A job needing a skipped job is skipped unless its `if` calls a status function; `always()` also runs after a cancel: use `always() && !cancelled()`. [Evidence](archive/release-pipeline-hardening/plan.md#always)
 - `git diff -M`'s R100 is not byte identity (compare blob ids and modes), and a pathspec splits a move across it into a delete and an add. [Evidence](archive/plans-scaffolding/plan.md#renames)
 - `gh stack` runs the plans gate on each arc head (no forward links); after a squash merge, `dev` into the old head is add/add; parallel arcs need disjoint decision ids; their index lines auto-merge as two (`check:plans` after a `dev` merge). [Evidence](archive/ux-feedback/plan.md#stack-gate), [more](archive/harden-security-fixes-2/plan.md#decision-ledger), [more](archive/owner-feedback-1/lessons/phase-8.md)
@@ -31,7 +30,8 @@
 - An error message carries text the log redactor never sees (`JSON.parse` quotes its input): log a fixed category. [Evidence](archive/backup-log-hygiene/plan.md#error-text)
 - Classify a dApp call by address, selector and arguments, never its name; validate both sides before comparing normalised keys. [Evidence](archive/dapp-preexisting-fee/plan.md#classify), [more](archive/grant-check-address-case/plan.md#normalise)
 - A MAC binds only what it names: key it on the storage key (a stored `id` moves with its row); refuse on failure, never self-heal. An address binds its original class: check artifacts against it; the PXE reports that class, a call runs the node's current one (`node.getContract`). [Evidence](archive/mac-identity-binding/plan.md#mac-scope)
-- CSS Modules refuse `composes` in `:global()`; `text-transform` changes `innerText`, not `textContent`; Firefox lays out in 1/60 px. [Evidence](archive/type-roles/plan.md#lessons)
+- CodeMirror's base theme follows the editor's `dark` flag, not the page's, and its state rules (`&dark .cm-button:active`) outrank a theme's. [Evidence](archive/square-corners-1/lessons/phase-5.md)
+- CSS Modules refuse `composes` in `:global()`; `text-transform` changes `innerText`, not `textContent`; Firefox lays out in 1/60 px, and a page's `storage.local` read from its own `onChanged` listener can return the old value: use `newValue`. [Evidence](archive/type-roles/plan.md#lessons), [more](archive/onboarding-3/lessons/phase-4.md)
 - A session id re-keys after its session ends: code paused across an await checks its own `ActiveSession` object, not the id, and re-checks the live session after its last await. [Evidence](archive/dapp-dispatch-hold/plan.md#mechanics-that-are-not-obvious), [more](archive/docs-1/lessons/phase-5.md)
 - A `Lock` watchdog handoff admits a successor but never stops the displaced holder, which keeps writing: a current ticket proves no wipe ran only beside a count of deleters still running. [Evidence](archive/incoming-transfers/decisions.md#decision-ledger)
 - A C1 hook's `dispose()` must be terminal: a run fence that only drops answers in flight lets a continuation released after unmount start a new call. [Evidence](archive/incoming-transfers/lessons/phase-3.md)
@@ -49,5 +49,4 @@
 
 - Agent Bash (zsh 5.9): `set -e` ignores the left of `&&`, a pipe returns its last stage's status, `$FILES` stays one word: test each exit code. [Evidence](archive/stable-release/plan.md#agent-shell)
 - `pgrep -f` matches its own `zsh -c` wrapper and any agent prompt naming the pattern: anchor it (`^(bun|node) .*vitest`); signal your launcher's pgid, not `$$`/`$PPID`; a signal-killed Node child's `exitCode` is null: wait on `signalCode`. [Evidence](archive/harden-findings-remediation/plan.md#pgrep)
-- Under Puppeteer mobile emulation, `innerWidth` grows to the content: compare `scrollWidth` with the width you set (25.8). [Evidence](archive/landing-store-buttons/plan.md#mobile-emulation-width)
 - Take a red/green proof's old copy from the base SHA, never `HEAD`; rerun an environmental-looking red on base first; grep a green run for a suspect log line. [Evidence](archive/firefox-first-class-spike/plan.md#base-copy)

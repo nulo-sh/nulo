@@ -7,6 +7,7 @@ import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { clampDecimals, formatBaseUnits, readAmountText } from "@/utils/amount"
 import { fitHero } from "@/utils/hero-fit"
 import { heroRoom, inputRoom, rulerWidth } from "@/utils/hero-ruler"
+import { isBlank } from "@/utils/string"
 import { usdToTokenAmount, tokenAmountToUsdMicro, formatUsdMicro, usdMicroToPlainString } from "@/wallet/services/price/convert"
 import { caretAfter, nextAmountText, restingAmount } from "./amount-field"
 
@@ -60,6 +61,7 @@ const conversionEl = useTemplateRef("conversionEl")
 const derivedRuler = useTemplateRef("derivedRuler")
 
 const tokenDecimals = computed(() => (typeof props.token?.decimals === "number" ? props.token.decimals : undefined))
+const symbolBlank = computed(() => isBlank(props.token?.symbol))
 
 /** True when the user typed more decimal places than the token supports
  *  and the input was clamped on the most recent keystroke. Drives the
@@ -227,7 +229,7 @@ const modelRaw = computed(() => {
 const unitRateLabel = computed(() => {
 	if (!props.liveQuote || tokenDecimals.value === undefined) return null
 	const unitMicro = tokenAmountToUsdMicro(10n ** BigInt(tokenDecimals.value), tokenDecimals.value, props.liveQuote.usd)
-	return `1 ${props.token?.symbol ?? "token"} ≈ ${formatUsdMicro(unitMicro)}`
+	return `1 ${symbolBlank.value ? "token" : props.token.symbol} ≈ ${formatUsdMicro(unitMicro)}`
 })
 
 const tokenModeFiatLabel = computed(() => {
@@ -468,10 +470,10 @@ const handleFiatBalanceAction = (divisor) => {
 					@click.stop="toggleFiatMode"
 					@keydown.enter="refuseRepeatEnter"
 					data-testid="send-amount-fiat-toggle"
-					:title="fiatMode ? `Type in ${token?.symbol || 'token'}` : 'Type in USD'"
+					:title="fiatMode ? `Type in ${symbolBlank ? 'token' : token.symbol}` : 'Type in USD'"
 					:class="$style.unit_pair"
 				>
-					<span :class="!fiatMode && $style.unit_on">{{ token?.symbol || "Token" }}</span>
+					<span :class="!fiatMode && $style.unit_on">{{ symbolBlank ? "Token" : token.symbol }}</span>
 					<span :class="$style.unit_sep">/</span>
 					<span :class="fiatMode && $style.unit_on">USD</span>
 				</button>
@@ -526,7 +528,7 @@ const handleFiatBalanceAction = (divisor) => {
 				Type it without the comma.
 			</span>
 			<span v-else-if="wasClamped && tokenDecimals !== undefined" :class="$style.clamp_hint" data-testid="send-amount-clamp-hint">
-				{{ token.symbol || "Token" }} supports {{ tokenDecimals }} decimal{{ tokenDecimals === 1 ? "" : "s" }}
+				{{ symbolBlank ? "Token" : token.symbol }} supports {{ tokenDecimals }} decimal{{ tokenDecimals === 1 ? "" : "s" }}
 			</span>
 			<!-- Last, so a hint keeps its place; an alert, so the line is heard as it appears. -->
 			<Text

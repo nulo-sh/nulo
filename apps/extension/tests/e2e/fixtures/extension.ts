@@ -371,6 +371,8 @@ export async function registerProfile(ctx: ExtensionContext): Promise<void> {
 	// A fresh install's first profile has no name field; it is created as "Main".
 	await expectNoNameField(page, "register-page", "register-name-input")
 
+	// New profile opens on Passkey.
+	await clickByTestId(page, "register-method-password")
 	await page.waitForSelector('input[placeholder="Strong password"]', {
 		visible: true,
 		timeout: 30_000,
@@ -392,7 +394,8 @@ export async function registerProfile(ctx: ExtensionContext): Promise<void> {
  *   1) Open the playground (?test=1 disables HMR + persistence), on `opts.chainInfo`'s chain if given
  *   2) Click `pg-btn-connect` — fires `WalletManager.getAvailableWallets`
  *   3) Approve at `/windows/discover` (testid `discover-allow-btn`)
- *   4) After ECDH key exchange, approve the emoji check the same window shows
+ *   4) After ECDH key exchange, approve the emoji check, which opens in its own window as the
+ *      connect window closes
  *   5) Wait for the playground status pill to flip to `connected`
  *
  * Returns the dApp Page so the caller can keep driving it; the caller is

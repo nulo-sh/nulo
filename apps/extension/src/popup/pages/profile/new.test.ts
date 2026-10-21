@@ -17,6 +17,7 @@ vi.mock("vue-router", () => ({ useRouter: () => ({ push: vi.fn() }), useRoute: (
 import { Flex, Input, Text } from "@nulo/design"
 import { expectNativeAttrs, nativeInput, pasteInto, typeNow } from "../../../../tests/helpers/credential-pins"
 import New from "./new.vue"
+import { installChromeStorage } from "../../../../tests/helpers/chrome-storage-mock"
 
 const wrappers: VueWrapper[] = []
 
@@ -45,12 +46,10 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	profileApi.getProfiles.mockResolvedValue([])
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) },
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
 	})
+	installChromeStorage({}, { persist: false })
 })
 afterEach(() => {
 	for (const w of wrappers.splice(0)) w.unmount()
@@ -69,6 +68,11 @@ describe("popup new profile", () => {
 		const w = await mountNew()
 		expect(page(w).attributes("data-name-field")).toBe("hidden")
 		expect(w.find('[data-testid="register-name-input"]').exists()).toBe(false)
+	})
+
+	test("the method starts on Passkey, as onboarding's does", async () => {
+		const w = await mountNew()
+		expect(w.findComponent({ name: "NewProfileMethodTabs" }).props("type")).toBe("passkey")
 	})
 })
 

@@ -344,6 +344,7 @@ describe("send page — the submit tail", () => {
 			SPONSOR.settings,
 			undefined,
 			undefined,
+			undefined,
 		)
 		expect(appStore.awaitingTransactions).toHaveLength(1)
 		expect(appStore.awaitingTransactions[0]).toMatchObject({ account: ACCOUNT, destination: DESTINATION, contract: TOKEN.contract })
@@ -411,6 +412,7 @@ describe("send page — the submit tail", () => {
 			DESTINATION,
 			1_234_567_123_456n,
 			SPONSOR.settings,
+			undefined,
 			undefined,
 			undefined,
 		)
