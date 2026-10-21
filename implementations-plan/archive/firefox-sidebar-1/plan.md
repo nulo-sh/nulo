@@ -371,7 +371,7 @@ Headful under `xvfb-run -a -s "-screen 0 1440x1000x24"`, from a build of the bra
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `993b3efc`. Specific to this plan:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `993b3efc`. Specific to this plan:
 - **Reviews**: step 2 runs per arc, over each arc's diff against its base:
   - Phase 5: `git diff <head before Phase 5>..HEAD`;
   - arc 2: `git diff origin/dev...HEAD` on its branch.
