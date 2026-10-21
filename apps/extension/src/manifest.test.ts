@@ -179,7 +179,8 @@ describe("firefox manifest", () => {
 		expect(permissions).toContain("storage")
 	})
 
-	// A person can withhold these in about:addons; the Presto pages ask for exactly them again.
+	// A person withholds these in about:addons only by switching off all-sites access too.
+	// The Presto pages ask for exactly them again.
 	test("keeps the shared host permissions and lists only Presto's loopback as optional", () => {
 		const built = buildFirefox()
 		expect(built.host_permissions).toEqual(m.host_permissions)

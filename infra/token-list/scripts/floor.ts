@@ -22,3 +22,13 @@ export function raisesFloor(served: ListPairs, next: ListPairs): boolean {
 export function floorText(sequence: number): string {
 	return `${JSON.stringify({ sequence }, null, "\t")}\n`
 }
+
+/** The sequence `floor.json` holds, or 0 unless it is a positive safe integer: a floor of 0 reads every list. */
+export function floorSequence(text: string | null): number {
+	try {
+		const { sequence } = JSON.parse(text ?? "null") as { sequence?: unknown }
+		return typeof sequence === "number" && Number.isSafeInteger(sequence) && sequence > 0 ? sequence : 0
+	} catch {
+		return 0
+	}
+}

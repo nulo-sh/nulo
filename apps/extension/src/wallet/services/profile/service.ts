@@ -287,6 +287,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	private readonly restorePending: RestorePendingRepository
 	private readonly local: StorageArea
 	private readonly runtime: RuntimePort
+	private restartPreparation: (() => void) | undefined
 
 	public constructor(config: IConfig, logger: ILogger, browserApi: BrowserApi) {
 		super(PROFILE_SERVICE_NAME, logger)
@@ -682,6 +683,12 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		this.sessionManager.setExpiryDeferral(predicate)
 	}
 
+	/** Registers what runs in the turn the wallet restarts itself after a lock it could not save;
+	 *  in-process only. The restart follows in that same turn, so `prepare` must not wait on anything. */
+	public setRestartPreparation(prepare: () => void): void {
+		this.restartPreparation = prepare
+	}
+
 	public async getProfiles(): Promise<ProfileInfo[]> {
 		await this.ensureInitialized()
 		// A tombstoned (deletion-pending) profile is ABSENT to every read (finding D).
@@ -1038,6 +1045,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// fails, a restart clears it, as both browsers start `storage.session` empty.
 			if (recordKept && this.sessionHandle() === undefined) {
 				this.logger.log(this.name, LogLevel.Error, "lock could not be saved; restarting the wallet")
+				this.prepareRestart()
 				this.runtime.reload()
 			}
 			// Post-close read-back: `close()` is memory-first and swallows a
@@ -1049,6 +1057,17 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				throw new Error("Lock did not persist — the session record could not be cleared; retry")
 			}
 		})
+	}
+
+	/** Nothing is awaited between a lock's failed deletes and the restart: until the restart, the
+	 *  record they left could restore the session in a successor worker. A failing preparation never
+	 *  holds the restart back. */
+	private prepareRestart(): void {
+		try {
+			this.restartPreparation?.()
+		} catch {
+			this.logger.log(this.name, LogLevel.Warn, "The restart's preparation failed; restarting anyway")
+		}
 	}
 
 	/**

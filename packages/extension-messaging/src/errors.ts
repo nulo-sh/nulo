@@ -417,19 +417,6 @@ export class PxeScopeUnregisteredError extends WalletError {
 }
 
 /**
- * A bounded registration would add a tagging source to a chain whose distinct senders and accounts
- * are at the bound its caller set. Refused under the chain's write guard, before anything is written.
- */
-export class PxeTaggingSourcesFullError extends WalletError {
-	public static readonly CODE = "PXE_TAGGING_SOURCES_FULL"
-	public static readonly MESSAGE = "This network holds as many senders and accounts as an app may add."
-
-	public constructor() {
-		super(PxeTaggingSourcesFullError.CODE, PxeTaggingSourcesFullError.MESSAGE, undefined, "PxeTaggingSourcesFullError")
-	}
-}
-
-/**
  * The Terms of Use have not been accepted on this install, or a material revision has not been.
  * Raised before any transaction is broadcast and before any dApp request is served. Constant message
  * and no details: it tells a dApp what to ask the user to do and names nothing else.
@@ -648,7 +635,6 @@ const REBUILT_AS = [
 	ChainNotSupportedError,
 	PxeStoreKeyMissingError,
 	PxeScopeUnregisteredError,
-	PxeTaggingSourcesFullError,
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
 	OperationNotRecordedError,

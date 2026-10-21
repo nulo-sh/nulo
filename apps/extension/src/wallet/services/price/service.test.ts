@@ -120,6 +120,21 @@ describe("PriceService — refresh pipeline", () => {
 		expect(quotes["usd-coin"]?.usd).toBe(0.9998)
 	})
 
+	test("requests prices with no credentials, referrer or HTTP cache", async () => {
+		const { service, fetchFn } = await harness()
+		const { quotes } = await service.refreshIfStale()
+		expect(fetchFn).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({
+				cache: "no-store",
+				credentials: "omit",
+				referrerPolicy: "no-referrer",
+				signal: expect.any(AbortSignal),
+			}),
+		)
+		expect(quotes.aztec?.usd).toBe(0.0147)
+	})
+
 	test("emits onQuotesUpdated after a successful refresh", async () => {
 		const { service } = await harness()
 		const seen: PriceState[] = []

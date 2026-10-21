@@ -18,7 +18,7 @@ import {
 	AuthwitStatusSchema,
 } from "@/wallet/services/auth-registry/spec"
 import { CONTACT_STORAGE_ROOT, ContactSchema } from "@/wallet/services/contact/spec"
-import { DAPP_SESSION_STORAGE_ROOT, DappSessionSchema } from "@/wallet/services/dapp-session/spec"
+import { DAPP_REGISTRATIONS_STORAGE_ROOT, DAPP_SESSION_STORAGE_ROOT, DappSessionSchema } from "@/wallet/services/dapp-session/spec"
 import { FPC_STORAGE_ROOT, StoredFpcSchema } from "@/wallet/services/fpc/spec"
 import { ArrivalRowSchema } from "@/wallet/services/incoming-transfer/arrival-state"
 import {
@@ -97,6 +97,7 @@ export const STORES = {
 	tokenPrices: value(TOKEN_PRICES_STORAGE_KEY),
 	tokenList: value(TOKEN_LIST_STORAGE_KEY),
 	tokenSeeded: perProfileValue(TOKEN_SEEDED_STORAGE_ROOT),
+	dappRegistrations: perProfileValue(DAPP_REGISTRATIONS_STORAGE_ROOT),
 } as const satisfies Record<string, Store>
 
 type Stores = typeof STORES

@@ -78,8 +78,10 @@ describe("TransactionService — a mined row until its block is final", () => {
 		services.add(
 			svc(ACCOUNT_SERVICE_NAME, {
 				onAccountDeleted: new EventHandler(),
+				registerAccountPurgeSubscriber: () => {},
 				getAccount: async () => undefined,
 				getAccounts: async () => [{ address: ACCOUNT }],
+				getAccountsRaw: async (profileId: string) => (profileId === "p1" ? [{ profileId, chainId: 1, address: ACCOUNT }] : []),
 				getAccountsByAddress: async () => [
 					{ profileId: "p1", address: ACCOUNT },
 					{ profileId: "p2", address: ACCOUNT },

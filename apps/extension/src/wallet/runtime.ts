@@ -66,6 +66,12 @@ import { TokenService } from "./services/token/service"
 import { TokenBalanceService } from "./services/token-balance/service"
 import { TransactionService } from "./services/transaction/service"
 import { IncomingTransferService } from "./services/incoming-transfer/service"
+import {
+	closeRestartEndedTabs,
+	POPUP_PAGE,
+	type TrackedWindowPort,
+	trackOpenWindows,
+} from "./services/window-manager/restart-ended-windows"
 import { WindowManager } from "./services/window-manager/window-manager"
 import { initWalletSdkHandler } from "./services/wallet-sdk/background"
 import { type MigrationResult, Migrator, SCHEMA_ATTEMPTS_KEY } from "@nulo/wallet-core/migration"
@@ -204,10 +210,10 @@ export function stopRuntime(state: RuntimeState, clock: WalletRuntimeDeps["clock
 }
 
 /** The boot sequence — the single-flight memo's body. Phase order is the
- *  contract: uninstall URL → migration gate → engine → outcome persistence →
- *  config + Barretenberg → registration → `services.start()` (with the journal
- *  boot cutoff captured IMMEDIATELY before it) → post-start work → wallet-sdk
- *  handler → first liveness write → heartbeat (deliberately last). */
+ *  contract: uninstall URL → restart-ended windows → migration gate → engine →
+ *  outcome persistence → config + Barretenberg → registration → `services.start()`
+ *  (with the journal boot cutoff captured IMMEDIATELY before it) → post-start
+ *  work → wallet-sdk handler → first liveness write → heartbeat (deliberately last). */
 async function bootRuntime(deps: WalletRuntimeDeps, services: ServiceCollection, state: RuntimeState): Promise<void> {
 	const { browserApi, clock, config, logger } = deps
 	// Uninstall URL comes first — zero-cost and covers the user experience
@@ -217,6 +223,7 @@ async function bootRuntime(deps: WalletRuntimeDeps, services: ServiceCollection,
 	} catch (error) {
 		logger.log("wallet", LogLevel.Warn, "Failed to set uninstall URL", error)
 	}
+	await closeRestartEndedTabs(browserApi.runtime, browserApi.windows, logger)
 
 	let gateDecision: MigrationGateDecision
 	try {
@@ -256,7 +263,7 @@ async function bootRuntime(deps: WalletRuntimeDeps, services: ServiceCollection,
 	// Registration zone: `ServiceCollection.add` throws on duplicates and the
 	// tabs/pxe-provider registrations are not re-entrant — no retry past here.
 	state.retrySafe = false
-	const { deletionCoordinator } = registerServices(services, deps)
+	const { deletionCoordinator, windows } = registerServices(services, deps)
 
 	// Capture the journal boot cutoff BEFORE services start. Service RPC
 	// handlers (including journal-creating ones) go live during `services.start()`,
@@ -276,7 +283,7 @@ async function bootRuntime(deps: WalletRuntimeDeps, services: ServiceCollection,
 	// Wallet-sdk protocol handler (discovery, key exchange, encrypted channel).
 	// Still reaches for chrome.runtime.onMessage internally; will be
 	// port-migrated alongside its own refactor.
-	initWalletSdkHandler(services, logger, { windows: browserApi.windows, clock })
+	initWalletSdkHandler(services, logger, { windows, clock })
 
 	writeInitialLiveness(browserApi, clock, logger)
 	// Heartbeat — keeps the MV3 service worker alive long enough for cross-SW
@@ -481,7 +488,10 @@ function loadConfigAndBarretenberg(
  *  ordering is determined by `ServiceCollection.start()`'s topological phases.
  *  Fully synchronous: the PXE provider CALLBACKS registered here run later,
  *  off the boot chain. */
-function registerServices(services: ServiceCollection, deps: WalletRuntimeDeps): { deletionCoordinator: ProfileDeletionCoordinator } {
+function registerServices(
+	services: ServiceCollection,
+	deps: WalletRuntimeDeps,
+): { deletionCoordinator: ProfileDeletionCoordinator; windows: TrackedWindowPort } {
 	const { armPopupReturn, browserApi, clock, config, logger } = deps
 	const accountService = new AccountService(logger, browserApi)
 	services.add(accountService)
@@ -493,7 +503,9 @@ function registerServices(services: ServiceCollection, deps: WalletRuntimeDeps):
 	services.add(new AuthRegistryService(logger, browserApi))
 	services.add(new ConfigService(config, logger))
 	services.add(new LegalAcceptanceService(logger, browserApi))
-	const windowManager = new WindowManager(browserApi.windows, clock, logger)
+	// One port that knows every wallet window, so the lock's restart can close them all.
+	const windows = trackOpenWindows(browserApi.windows, browserApi.runtime, browserApi.runtime.getURL(POPUP_PAGE))
+	const windowManager = new WindowManager(windows, clock, logger)
 	services.add(new ContactService(logger, browserApi, restoreGate))
 	services.add(new DappInteractionService(logger, windowManager))
 	services.add(new DappSessionService(logger, browserApi))
@@ -564,7 +576,7 @@ function registerServices(services: ServiceCollection, deps: WalletRuntimeDeps):
 	services.add(new AccountIntegrityCoordinator(logger, browserApi))
 	// The proverless-only restore gate carries the reset's hold points, under the same key.
 	services.add(new NetworkResetService(logger, browserApi, restoreGate))
-	return { deletionCoordinator }
+	return { deletionCoordinator, windows }
 }
 
 /** The three SW-side hooks every `PxeServiceClient` consults, bound to the live ProfileService:

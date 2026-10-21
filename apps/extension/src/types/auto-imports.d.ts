@@ -132,6 +132,7 @@ declare global {
   const capitalize: typeof import('../utils/string').capitalize
   const cappedBackupPick: typeof import('../composables/useProfileImportFlow').cappedBackupPick
   const captureOwnWindow: typeof import('../utils/own-window').captureOwnWindow
+  const captureWindowDocument: typeof import('../utils/window-document').captureWindowDocument
   const categoricalLabel: typeof import('../utils/journal-state').categoricalLabel
   const changedGetStarted: typeof import('../utils/get-started').changedGetStarted
   const clampDecimals: typeof import('../utils/amount').clampDecimals
@@ -239,6 +240,7 @@ declare global {
   const isActiveScopeRow: typeof import('../utils/token-order').isActiveScopeRow
   const isAmountAboveDustThreshold: typeof import('../utils/incoming-dust').isAmountAboveDustThreshold
   const isApprovedSendInFlight: typeof import('../utils/in-flight-send').isApprovedSendInFlight
+  const isBlank: typeof import('../utils/string').isBlank
   const isComposing: typeof import('../composables/usePopupEntity').isComposing
   const isEmptyContactName: typeof import('../utils/contact-name').isEmptyContactName
   const isFirefox: typeof import('../utils/browser-surface').isFirefox
@@ -266,6 +268,7 @@ declare global {
   const isValidDecimals: typeof import('../utils/token-amount').isValidDecimals
   const isValidHex: typeof import('../utils/string').isValidHex
   const isValidatedTokenClass: typeof import('../utils/token-class').isValidatedTokenClass
+  const isWindowDocument: typeof import('../utils/window-document').isWindowDocument
   const journalAdded: typeof import('../utils/journal-mirror').journalAdded
   const journalCallTitle: typeof import('../utils/journal-state').journalCallTitle
   const journalCardIcon: typeof import('../utils/journal-state').journalCardIcon
@@ -534,6 +537,7 @@ declare global {
   const useTicker: typeof import('../composables/ticker').useTicker
   const useToast: typeof import('../composables/toast.js').useToast
   const useTokenBalanceSnapshot: typeof import('../composables/useTokenBalanceSnapshot').useTokenBalanceSnapshot
+  const useTokenFlags: typeof import('../composables/usePrices').useTokenFlags
   const useWalletTxEstimates: typeof import('../composables/useWalletTxEstimates').useWalletTxEstimates
   const vSnackFooter: typeof import('../composables/snackInset').vSnackFooter
   const vSnackSheet: typeof import('../composables/snackInset').vSnackSheet
@@ -938,6 +942,7 @@ declare module 'vue' {
     readonly capitalize: UnwrapRef<typeof import('../utils/string')['capitalize']>
     readonly cappedBackupPick: UnwrapRef<typeof import('../composables/useProfileImportFlow')['cappedBackupPick']>
     readonly captureOwnWindow: UnwrapRef<typeof import('../utils/own-window')['captureOwnWindow']>
+    readonly captureWindowDocument: UnwrapRef<typeof import('../utils/window-document')['captureWindowDocument']>
     readonly categoricalLabel: UnwrapRef<typeof import('../utils/journal-state')['categoricalLabel']>
     readonly changedGetStarted: UnwrapRef<typeof import('../utils/get-started')['changedGetStarted']>
     readonly clampDecimals: UnwrapRef<typeof import('../utils/amount')['clampDecimals']>
@@ -1045,6 +1050,7 @@ declare module 'vue' {
     readonly isActiveScopeRow: UnwrapRef<typeof import('../utils/token-order')['isActiveScopeRow']>
     readonly isAmountAboveDustThreshold: UnwrapRef<typeof import('../utils/incoming-dust')['isAmountAboveDustThreshold']>
     readonly isApprovedSendInFlight: UnwrapRef<typeof import('../utils/in-flight-send')['isApprovedSendInFlight']>
+    readonly isBlank: UnwrapRef<typeof import('../utils/string')['isBlank']>
     readonly isComposing: UnwrapRef<typeof import('../composables/usePopupEntity')['isComposing']>
     readonly isEmptyContactName: UnwrapRef<typeof import('../utils/contact-name')['isEmptyContactName']>
     readonly isFirefox: UnwrapRef<typeof import('../utils/browser-surface')['isFirefox']>
@@ -1072,6 +1078,7 @@ declare module 'vue' {
     readonly isValidDecimals: UnwrapRef<typeof import('../utils/token-amount')['isValidDecimals']>
     readonly isValidHex: UnwrapRef<typeof import('../utils/string')['isValidHex']>
     readonly isValidatedTokenClass: UnwrapRef<typeof import('../utils/token-class')['isValidatedTokenClass']>
+    readonly isWindowDocument: UnwrapRef<typeof import('../utils/window-document')['isWindowDocument']>
     readonly journalAdded: UnwrapRef<typeof import('../utils/journal-mirror')['journalAdded']>
     readonly journalCallTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCallTitle']>
     readonly journalCardIcon: UnwrapRef<typeof import('../utils/journal-state')['journalCardIcon']>
@@ -1340,6 +1347,7 @@ declare module 'vue' {
     readonly useTicker: UnwrapRef<typeof import('../composables/ticker')['useTicker']>
     readonly useToast: UnwrapRef<typeof import('../composables/toast.js')['useToast']>
     readonly useTokenBalanceSnapshot: UnwrapRef<typeof import('../composables/useTokenBalanceSnapshot')['useTokenBalanceSnapshot']>
+    readonly useTokenFlags: UnwrapRef<typeof import('../composables/usePrices')['useTokenFlags']>
     readonly useWalletTxEstimates: UnwrapRef<typeof import('../composables/useWalletTxEstimates')['useWalletTxEstimates']>
     readonly vSnackFooter: UnwrapRef<typeof import('../composables/snackInset')['vSnackFooter']>
     readonly vSnackSheet: UnwrapRef<typeof import('../composables/snackInset')['vSnackSheet']>

@@ -45,8 +45,9 @@ export function isTerminal(stage: JobStage): stage is TerminalStage {
 
 /** What the network answered for a failed send that may have reached it. `unconfirmed`: no
  *  answer within the check's window. `expired`: the finalized chain is past the send's expiry and
- *  holds none of it. */
-export type SendCheckOutcome = "sent" | "reverted" | "unconfirmed" | "expired"
+ *  holds none of it. `refused`: the node refused it for a reason a later block rarely lifts, and a
+ *  read inside the window found it neither pooled nor mined on the node it reached. */
+export type SendCheckOutcome = "sent" | "reverted" | "unconfirmed" | "expired" | "refused"
 
 /** What proves a send can never be included: its expiry in chain seconds, and its first
  *  nullifier, which every block that includes it inserts, reverted or not. */

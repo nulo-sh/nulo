@@ -1,0 +1,8 @@
+# Phase 0: planning consults
+
+- **Recon** (Explore, sonnet): one stale line beyond the brief's pins, `.claude/skills/e2e-testing/SKILL.md:595-597`; `general.test.ts:140,148,298` and `fee-methods.test.ts:356-358` found by the driver. No doc, glossary, store copy or active plan states the rule.
+- **Codex r1** (gpt-6.1-sol, high, session `01a15a23-be22-7803-b14c-14f8f15b8226`): reject. D1's reading (banner whenever `firstProfileSteps` is empty) contradicts the brief's later-profile line; its fix: the banner only when `hidden`. Plus: scope "never neither" to settled reads; F5/F6 wording.
+- **Opus 5.5 r1** (Plan): conditional approve. D1 (a) safe: the brief's line holds under either reading, and (a) keeps a signed screen. Conditions: drop the smoke run from Phase 2 (it would run on the network build), name the cases that must fail in the red proof. Smaller: UI impact misses M10 and the Hide transition, the hero-to-scroller move, citations, the PNG count.
+- **Decision on the split (driver):** Codex's reading. The brief's "therefore … say so in the plan" names a change for the later profile, and the owner's "leave it on the get started" covers its row; Hide is the only exception either record names. Both records are quoted in UI impact, so no owner ask. Base fast-forwarded to `f5b7fd5ad`.
+- **Codex r2** (resumed): conditional approve. D1 settled for the Hide-only banner (the brief names the later profile; Hide and `notFirst` record different facts). Conditions accepted: wait for the post-reveal state (`seed.vue:76` does not await the flag write); `audit:vue` plus the three card-reading smoke files on the armed build in Phase 1's gate, before `e2e:agent` rebuilds `dist/`.
+- **Codex r3** (resumed): approve, no new material finding.

@@ -36,6 +36,7 @@ import { sanitizePinMap } from "@/composables/usePinnedTokens"
 import { ConfigSchema } from "@/wallet/config/config"
 import { decodeStoredConfig } from "@/wallet/config/store"
 import { ACCOUNT_INTEGRITY_BLOCKED_ROOT, ACCOUNT_INTEGRITY_VERIFIED_ROOT } from "@/wallet/services/account-integrity/types"
+import { decodeRegistrationCounts, RegistrationCountsSchema } from "@/wallet/services/dapp-session/registration-allowance"
 import { AccountIntegrityBlockedSchema, VerifiedStampSchema } from "@/wallet/services/account-integrity/types"
 import { SEED_OFFERS_ROOT, SeedOffersSchema } from "@/wallet/services/network/seed-offers"
 import { ACTIVE_NETWORK_STORAGE_ROOT, decodeActiveNetworkId } from "@/wallet/services/network/spec"
@@ -229,6 +230,7 @@ export const STORED_SHAPES = {
 	tokenPrices: described("tokenPrices", PriceStateSchema, usableQuotes),
 	tokenList: described("tokenList", TokenListStateSchema, decodeTokenListState),
 	tokenSeeded: described("tokenSeeded", SeedMarkersSchema, decodeSeedMarkers),
+	dappRegistrations: described("dappRegistrations", RegistrationCountsSchema, decodeRegistrationCounts),
 
 	activeNetwork: { ref: root(ACTIVE_NETWORK_STORAGE_ROOT), encoding: "structured", schema: z.string(), read: decodeActiveNetworkId },
 	legalAccepted: { ref: value(LEGAL_ACCEPTANCE_KEY), encoding: "structured", schema: LegalAcceptanceSchema, read: parseAcceptanceRecord },

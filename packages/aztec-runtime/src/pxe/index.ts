@@ -25,6 +25,7 @@ export {
 	type ArtifactClassIdVerifier,
 	type ClassIdVerifyLogger,
 	assertArtifactClassId,
+	assertInstanceArtifactClassId,
 	assertWireArtifactClassId,
 	DefaultArtifactClassIdVerifier,
 	verifyArtifactClassId,

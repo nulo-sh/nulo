@@ -103,7 +103,7 @@ afterEach(() => {
 })
 
 describe("TokenListService admission", () => {
-	test("requests nothing before the Terms are accepted, then fetches on acceptance with no credentials", async () => {
+	test("requests nothing before the Terms are accepted, then fetches on acceptance with no credentials, referrer or HTTP cache", async () => {
 		const { pinned, sign } = await signer()
 		const h = await makeHarness({ keys: [pinned], answers: [{ body: await sign(aboveFloor(10)) }] })
 		await h.service.onAlarmTick()
@@ -117,7 +117,7 @@ describe("TokenListService admission", () => {
 		expect(h.calls).toEqual([
 			{
 				url: URL,
-				init: expect.objectContaining({ credentials: "omit", referrerPolicy: "no-referrer", redirect: "error", cache: "no-cache" }),
+				init: expect.objectContaining({ credentials: "omit", referrerPolicy: "no-referrer", redirect: "error", cache: "no-store" }),
 			},
 		])
 		expect(h.calls[0].init.headers).toBeUndefined()

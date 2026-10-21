@@ -55,6 +55,16 @@ describe("ChromeWindowsAdapter", () => {
 		await windows.update(42, { focused: true, drawAttention: true, state: "normal" })
 		expect(update).toHaveBeenCalledWith(42, { focused: true, drawAttention: true, state: "normal" })
 	})
+
+	test("isPopup reads the window's type and answers false for a window that is gone", async () => {
+		const { windows } = stubWindows({
+			get: async (id: unknown) => {
+				if (id === 3) throw new Error("No window with id: 3.")
+				return { id, type: id === 1 ? "popup" : "normal" }
+			},
+		})
+		expect([await windows.isPopup(1), await windows.isPopup(2), await windows.isPopup(3)]).toEqual([true, false, false])
+	})
 })
 
 describe("ChromeWindowsAdapter on Firefox (getLastFocused ignores windowTypes)", () => {

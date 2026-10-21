@@ -46,6 +46,8 @@ export function fakeSdkServices(
 		operationJournal?: Record<string, unknown>
 		/** A dApp-session service in place of the row map, which then stays empty. */
 		dappSession?: unknown
+		/** Receives the restart preparation the handler registers. */
+		setRestartPreparation?: (prepare: () => void) => void
 	} = {},
 ): {
 	services: never
@@ -84,6 +86,7 @@ export function fakeSdkServices(
 					onActiveProfileChanged,
 					getActiveProfile,
 					getDeletionState: () => ({ capture: () => 0 }),
+					setRestartPreparation: opts.setRestartPreparation ?? (() => {}),
 					captureExecutionFence: async () => {
 						const profile = await getActiveProfile()
 						if (!profile) throw new Error("Wallet locked")
