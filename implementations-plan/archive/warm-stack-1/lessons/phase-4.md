@@ -44,7 +44,7 @@
   - Chrome: `[onboard]` median 3763 → 2993 ms (−0.77 s); critical shard 830 → 801 s.
   - Firefox: 4448 → 3521 ms (−0.93 s); critical shard 985 → 941 s.
   - CI's reopen is cheaper than the loaded host's on Firefox, so Firefox's rule (b) bar of 1.0 s (half the probe's 2.0 s) is close.
-- **My dispatcher exhausted the account's API rate limit** (about 20:45-21:00Z). It polled ten `gh run list` calls (five statuses × two workflows) every 10 s, about 3600 calls an hour, on a 5000-an-hour limit that every lane's agents share. `gh api rate_limit` showed this token's `core` bucket nearly full while every call returned 403, because the limit is per user across tokens. It now polls one unfiltered list call per workflow every 45 s, under 200 calls an hour. e2e-clocks-1's last slot (20:39) ran before F3.
+- **My dispatcher exhausted the account's API rate limit** (about 20:45-21:00Z). It polled ten `gh run list` calls (five statuses × two workflows) every 10 s, about 3600 calls an hour, on a 5000-an-hour limit that every lane's agents share. `gh api rate_limit` showed this token's `core` bucket almost unused (125 of 5000) while every call returned 403 "API rate limit exceeded for user ID". The cause is not known. It now polls one unfiltered list call per workflow every 45 s, under 200 calls an hour. e2e-clocks-1's last slot (20:39) ran before F3.
 - e2e-clocks-1's 17:59 slot also overlapped P1 (17:58). So pair 1's two runs each ran beside one of its runs, again on separate runners.
 
 ## The measurement (P = c7764a2ee, F = 0510ba904; pairs by order (P1, F2), (F3, P4), (P5, F6); every run green at retry 0)

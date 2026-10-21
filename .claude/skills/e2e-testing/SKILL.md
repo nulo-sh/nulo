@@ -291,15 +291,20 @@ then measured runtime, with each browser's suite wall-clock before and after in 
   shares one account across files on network: not built
   (`implementations-plan/archive/e2e-fixed-cost-1/plan.md`, D1). A network fork's aztec.js import is
   4-6 s inlined against 2 s native; native loading is known limit #997.
-- **The fixtures built on `launchOnLocalNetwork` switch to Local on the registration popup**
-  (`localNetworkExtension`, the funded ones, and every per-test dApp fixture through
-  `setupConnectedPlayground`), and print `[onboard] <ms>`: the registration through the switch, the
-  line CI's per-file times are read against. Their launch's error arrays therefore hold the
-  registration's errors too, which a reopen used to clear. Closing that popup and opening another
-  cost 1.15 s (Chrome) / 2.0 s (Firefox) per call (2026-10, 12 paired blocks on one host). A profile
-  injected into storage instead (the production `ProfileService`'s rows rendered in the fork, then
-  the UI unlock) saved nothing more, because an unlock runs the creation's PBKDF2 work, and the
-  fork's import of the renderer costs 18-27 s. Not built (`implementations-plan/archive/warm-stack-1/plan.md`).
+- **Two onboarding levers, measured and not built** (2026-10). Switching to Local on the
+  registration popup, instead of closing it and opening another, saves 0.75 s (Chrome) / 0.77 s
+  (Firefox) a call on CI over about 105 calls a run. Three P/F pairs cannot show that on a shard
+  whose file time moves 150-200 s between runs, and a local probe on a loaded host had put
+  Firefox's saving at 2.0 s. A profile injected into storage (the production `ProfileService`'s
+  rows rendered in the fork, then the UI unlock) saved nothing more: an unlock runs the creation's
+  PBKDF2 work, and the fork's import of the renderer costs 18-27 s
+  (`implementations-plan/archive/warm-stack-1/plan.md`, known limit #1006).
+- **Measuring on CI beside other lanes:** every agent's `gh` draws on the account's one
+  5000-an-hour REST limit, and `gh api rate_limit` showed this token's bucket almost unused while
+  every call was refused with 403. So a dispatcher polls one `gh run list` per workflow every 45 s
+  or slower. Another lane's dispatcher may not see
+  a run you just started: check again a minute after dispatching, and on a clash cancel yours and
+  wait.
 - **A cost guard** (a latency ratio between builds, timed by a probe spec on builds chosen by
   `EXTENSION_PATH`) runs its variants interleaved in one pass, a fresh browser per sample, each
   sample started under a load ceiling well below the run gate's, with the load logged. A loaded
