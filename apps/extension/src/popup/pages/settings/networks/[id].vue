@@ -8,8 +8,10 @@
 
 <script setup>
 /** Utils */
-import { managers } from "@/utils/core"
+import { managers, requireAccount } from "@/utils/core"
+import { sentenceName } from "@/utils/string"
 import * as staleCopy from "@/components/stale-network/copy"
+import { AccountType, DEFAULT_IMPORTED_ACCOUNT_NAME } from "@/wallet/services/account/client"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -48,6 +50,23 @@ async function readHeldReset(id) {
 	if (pending?.networkId !== id) return null
 	const view = pending.running ? null : await managers.networkReset.getStaleNetwork(id)
 	return { imported: view?.reset?.imported ?? [], exportable: exportsHeld(view, appStore.profile?.type) }
+}
+
+/** The imported accounts deleting network `network` deletes, and whether they can be exported first:
+ *  a paused reset's list, which already names the chain's live imports, else the chain's live ones,
+ *  which full backup exports unless a reset is pending, and account export from a password profile. */
+async function readDeletedImports(network) {
+	const held = await readHeldReset(network.id)
+	if (held) return held
+	const [rows, pending] = await Promise.all([
+		requireAccount().getAccounts(appStore.profile?.id, network.chainId, true),
+		managers.networkReset.getPendingReset(),
+	])
+	const imported = rows.filter((a) => a.type === AccountType.Imported)
+	return {
+		imported: imported.map((a) => sentenceName(a.name, DEFAULT_IMPORTED_ACCOUNT_NAME)),
+		exportable: !pending || appStore.profile?.type === "password",
+	}
 }
 
 const heldReset = ref(null)
@@ -151,7 +170,7 @@ const handleDeleteNetwork = async () => {
 	// Read at the click: a confirmation opened before the page's own read landed must still name them.
 	let held
 	try {
-		held = await readHeldReset(id)
+		held = await readDeletedImports(network.value)
 	} catch {
 		held = undefined
 	}

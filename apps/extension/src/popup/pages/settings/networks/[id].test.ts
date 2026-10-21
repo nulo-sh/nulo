@@ -5,6 +5,7 @@ import { installChromeStorage } from "../../../../../tests/helpers/chrome-storag
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 import SettingsPageShell from "@/components/composite/SettingsPageShell.vue"
+import { type Account, AccountType } from "@/wallet/services/account/client"
 import type { PendingReset, StaleNetworkView } from "@/wallet/services/network-reset/client"
 import NetworkDetail from "./[id].vue"
 
@@ -15,11 +16,13 @@ const networkReset = vi.hoisted(() => ({
 	getStaleNetwork: vi.fn(async (_id: string): Promise<Partial<StaleNetworkView> | null> => null),
 	onStaleNetworkChanged: { add: vi.fn(), remove: vi.fn() },
 }))
+const accounts = vi.hoisted(() => ({ getAccounts: vi.fn(async (_p: string, _c: number, _all: boolean): Promise<Account[]> => []) }))
 vi.mock("@/utils/core", () => ({
 	managers: {
 		network: { getNetworks: vi.fn(async () => []), setActiveNetwork: vi.fn(), getActiveNetwork: vi.fn(), setPrimaryEndpoint },
 		networkReset,
 	},
+	requireAccount: () => accounts,
 }))
 vi.mock("@/composables/useNetworkActivation", () => ({ useNetworkActivation: () => ({ activate: vi.fn(async () => "activated") }) }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast }) }))
@@ -43,6 +46,7 @@ beforeEach(() => {
 	openToast.mockClear()
 	networkReset.getPendingReset.mockReset().mockResolvedValue(null)
 	networkReset.getStaleNetwork.mockReset().mockResolvedValue(null)
+	accounts.getAccounts.mockReset().mockResolvedValue([])
 	vi.stubGlobal("chrome", {
 		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
@@ -266,5 +270,67 @@ describe("Settings › Network detail — a paused reset of this network", () =>
 		networkReset.getStaleNetwork.mockClear()
 		expect(await deleteConfirmText()).toBe(WIPES)
 		expect(networkReset.getStaleNetwork).not.toHaveBeenCalled()
+	})
+})
+
+describe("Settings › Network detail — the live imported accounts Delete chain deletes", () => {
+	const WIPES = "This wipes accounts, balances, tokens, and PXE state on this chain. This cannot be undone."
+	/** Wire-shaped rows: `0x` + 64 hex, as the account service stores them. */
+	const row = (name: string, type: AccountType, n: number): Account =>
+		({
+			profileId: "p1",
+			chainId: MINE.chainId,
+			address: `0x${n.toString(16).padStart(64, "0")}`,
+			name,
+			type,
+			index: n,
+			visible: n !== 3,
+		}) as Account
+	const confirmFor = async (profileType: string) => {
+		const wrapper = mountDetail()
+		useAppStore().profile = { id: "p1", name: "Main", type: profileType } as never
+		await flushPromises()
+		await wrapper.get('[data-testid="network-delete-chain-btn"]').trigger("click")
+		await flushPromises()
+		return useCacheStore().confirm?.description
+	}
+
+	test("names each imported account on the chain, a hidden one and two of one name included, and asks to export them", async () => {
+		accounts.getAccounts.mockResolvedValue([
+			row("Account 1", AccountType.Nulo_v1, 1),
+			row("Savings", AccountType.Imported, 2),
+			row("Savings", AccountType.Imported, 3),
+		])
+		expect(await confirmFor("passkey")).toBe(
+			`${WIPES} It also deletes the imported accounts “Savings” and “Savings”. Export them first.`,
+		)
+		expect(accounts.getAccounts).toHaveBeenLastCalledWith("p1", MINE.chainId, true)
+
+		accounts.getAccounts.mockResolvedValue([row("Savings", AccountType.Imported, 2)])
+		expect(await confirmFor("password")).toBe(`${WIPES} It also deletes the imported account “Savings”. Export it first.`)
+	})
+
+	test("while another network's reset is pending, full backup refuses, so only a password profile is asked to export", async () => {
+		networkReset.getPendingReset.mockResolvedValue({ networkId: "alpha", running: false })
+		accounts.getAccounts.mockResolvedValue([row("Savings", AccountType.Imported, 2)])
+		expect(await confirmFor("password")).toBe(`${WIPES} It also deletes the imported account “Savings”. Export it first.`)
+		expect(await confirmFor("passkey")).toBe(`${WIPES} It also deletes the imported account “Savings”.`)
+	})
+
+	test("a paused reset of this network names its own list, which already holds the live imports", async () => {
+		networkReset.getPendingReset.mockResolvedValue({ networkId: "mine", running: false })
+		networkReset.getStaleNetwork.mockResolvedValue({
+			networkId: "mine",
+			reset: { running: false, purged: true, doneCount: 0, imported: ["Savings"] },
+		})
+		accounts.getAccounts.mockResolvedValue([row("Savings", AccountType.Imported, 2)])
+		expect(await confirmFor("passkey")).toBe(`${WIPES} It also deletes the imported account “Savings”.`)
+		expect(accounts.getAccounts).not.toHaveBeenCalled()
+	})
+
+	test("a failed account read opens no confirmation, only the failure toast", async () => {
+		accounts.getAccounts.mockRejectedValue(new Error("worker gone"))
+		expect(await confirmFor("password")).toBeUndefined()
+		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to delete chain" })
 	})
 })
