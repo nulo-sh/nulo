@@ -309,10 +309,11 @@ export class SealedEntityStorage<T> {
 		return true
 	}
 
-	private commitWithRemovals(items: Record<string, string>, removals: string[]): Promise<void> {
-		const writes = [Object.keys(items).length > 0 ? this.area.set(items) : Promise.resolve()]
-		if (removals.length > 0) writes.push(this.area.remove(removals))
-		return Promise.all(writes).then(() => undefined)
+	/** The write is dispatched at once; the removal waits for it, so a rejected write leaves the
+	 *  original, and an interrupted pair leaves both copies, which the next pass resolves. */
+	private async commitWithRemovals(items: Record<string, string>, removals: string[]): Promise<void> {
+		if (Object.keys(items).length > 0) await this.area.set(items)
+		if (removals.length > 0) await this.area.remove(removals)
 	}
 
 	private async envelope(keys: RowKeys, profileId: string, storageKey: string, text: string): Promise<string> {

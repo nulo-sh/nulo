@@ -286,6 +286,22 @@ describe("SealedEntityStorage", () => {
 			expect(await keyedStore().get(id, "q")).toEqual(contact(id, "q", "other"))
 		})
 
+		test("a write, a pass or an adoption whose sealed write is refused keeps the plaintext original", async () => {
+			await legacy(area, contact(id, "p"))
+			const txKey = `${TRANSACTION_STORAGE_ROOT}@0x${"11".repeat(32)}`
+			const ownerless = JSON.stringify({ hash: `0x${"11".repeat(32)}`, account: "0xab", chainId: 1 })
+			await area.set({ [txKey]: ownerless })
+			const before = await area.get()
+			vi.spyOn(area, "set").mockRejectedValue(new Error("disk full"))
+
+			await expect(keyedStore().set(id, contact(id, "p", "renamed"))).rejects.toThrow("disk full")
+			await expect(keyedStore().sealLegacy("p", (fn) => fn())).rejects.toThrow("disk full")
+			await expect(
+				sealedEntityStorage("txs", area, keys.source).adoptOwnerless(`0x${"11".repeat(32)}`, ownerless, "p"),
+			).rejects.toThrow("disk full")
+			expect(await area.get()).toEqual(before)
+		})
+
 		test("a write, or a pass, replaces the row's plaintext twin, and a leftover twin never doubles a read", async () => {
 			await legacy(area, contact(id, "p"))
 			expect(await keyedStore().get(id, "p")).toEqual(contact(id, "p"))
