@@ -236,7 +236,7 @@ empty-list refusal stays, pinned, for the day `required` goes.
 ## Post-implementation
 
 Contract: this plan plus [`implementations-plan/README.md` § Post-implementation
-standard](../README.md#post-implementation-standard) at `cef87d9de`. Plan-specific values:
+standard](../../README.md#post-implementation-standard) at `cef87d9de`. Plan-specific values:
 
 1. No diff review (`code_review: off`).
 2. Review loop: Codex `gpt-6.1-sol` at `high` (`run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`)
