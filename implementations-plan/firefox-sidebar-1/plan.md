@@ -10,8 +10,30 @@ eli5_mode: skipped (orchestrator-owned)
 base: 993b3efc
 trunk: dev
 post_implementation_hardening: not scheduled
-status: arc 1 in review (#889, draft) with Phase 5, the Display row (P71-03 B); arc 2, the 240 px layout (P71-01 B), in review as #986 (draft) for the owner's look at its pictures
+status: closed (arc 1 delivered as #889, arc 2 as #986)
+issues: "#596 (#889), #985 (#986); #1004 and #1005 (known limits, filed at close-out)"
 ---
+
+## Outcome
+
+- **Date:** 2026-10-21.
+- **Status:** closed. Arc 1 (Phases 0-5) is #889 on `firefox-sidebar-1-a1`, which carries this close-out; arc 2 (Phases 6-9) is #986 on `firefox-sidebar-1-a2`, which carries no plan files. Merge order: #889 first, then #986 after a `dev` merge; #889's merge closes the plan. § Post-implementation held the archive commit until arc 2 merged; the orchestrator's merge order puts #889 first, so the archive rides it.
+- **Shipped:**
+  - Arc 1 (#889, closes #596): Firefox's `sidebar_action` loads the popup shell Chrome's side panel loads, and a passkey step started there runs in place, with no window. Settings → Display's "Open as Side Panel" row on Firefox: on, the toolbar button opens or closes the sidebar; off, it opens the popup. `firefox-sidebar.test.ts` drives both sidebar kinds on the Firefox lane.
+  - Arc 2 (#986, closes #985): every page and window lays out down to 240 px. Every narrow rule sits under `@media (width < 359px)`, so the popup at 360 px is unchanged (the CSS diff, and 84 pairs per browser in the pixel compare). `expectFitsNarrow` runs the 240 px check inside the existing smoke and network visits on both browsers.
+- **Dispositions:** the owner's picks.
+  - **P71-01 B** (decision page 71, 2026-10-20): "Fit every page down to 240 px everywhere: one layout for every width; the popup looks the same." It also signed the sidebar off as pictured.
+  - **P71-02 A** (in chat: "ill test firefox"), with its result in chat on 2026-10-21, recorded on #596: "worked perfectly". The sidebar survived the macOS passkey prompt; arc 1 stands as built.
+  - **P71-03 B**: "Add Chrome's "Open as Side Panel" row on Firefox; the toolbar button then opens the sidebar." Built in Phase 5.
+  - **P71-04 A**: "As in the draft: no sidebar at install; an open one survives restarts only." No change.
+  - **P78-11** (decision page 78, 2026-10-21): arc 2's pictures approved as pictured. Its note asked whether an extension can set the sidebar's width; neither Firefox's `sidebar_action` nor Chrome's side panel takes one, so nothing is built beyond the 240 px layout.
+  - **P78-12 A**: "Keep what ships: after a Firefox restart with the sidebar closed, the first toolbar click opens the popup, which wakes the wallet; every click after that opens the sidebar." Known limit #1004.
+  - **P78-13 A**: "Keep the placeholders as they are: the label above each field names it, and the copy reads whole at 360 px, where the popup always is." Known limit #1005.
+  - The review findings not taken, each with its reason, are in § Audit verdicts. #593 stays closed (D5).
+- **Known limits:** #1004 (the first toolbar click after a Firefox restart with the sidebar closed opens the popup), #1005 (a placeholder can read cut below 360 px).
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` holds 8152 of its 8192 bytes and nothing there is superseded. The Firefox behaviours are in Facts 3, 8 to 10, 14 and 15, and in `apps/extension/tests/e2e/FIREFOX.md`; the 360 px compare and the picture capture in [lessons/phase-7.md](lessons/phase-7.md) and [lessons/phase-8.md](lessons/phase-8.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # firefox-sidebar-1: a Firefox sidebar whose passkey steps run in place (#596), and a shell that fits it
 
@@ -24,6 +46,8 @@ status: arc 1 in review (#889, draft) with Phase 5, the Display row (P71-03 B); 
 - **P71-02 (OA-4), A**, in chat: "ill test firefox". The owner will unlock once with a passkey from the sidebar on a Mac, using a build of #889. #889 stays a draft until that report. If the sidebar dies there, the step keeps its window and arc 1 changes.
 - **P71-03 (OA-1), B**: "Add Chrome's "Open as Side Panel" row on Firefox; the toolbar button then opens the sidebar." That is Phase 5, in #889.
 - **P71-04 (OA-3), A**: "As in the draft: no sidebar at install; an open one survives restarts only." No change.
+
+**The owner's answers on 2026-10-21**: P71-02's Mac run "worked perfectly" (chat, recorded on #596); P78-11 approves arc 2's pictures as pictured; P78-12 A keeps the restart gap (OA-5) and P78-13 A the placeholders (OA-6). Each is quoted in § Outcome and `OWNER-ASKS.md`.
 
 Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spike runs and consults: [`lessons/phase-0.md`](lessons/phase-0.md).
 
@@ -227,6 +251,10 @@ Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spi
 - **D19, the header row tightens below 359 px** (sides 16/12, gap 8, the Lock chip icon-only): with the word dropped alone, the chip still ended 14 px past the row.
 - **D20, toasts unchanged**: a toast card is already `calc(100% - 32px)` wide. The only toast with an action follows a network send and closes itself after 6 s, so no check opens one at 240; the gate waits for a success snack to close rather than judge it mid-close.
 - **D21, three changes outside the media query, each inert at 359 px and wider**: the activity title's trailing slot gains a wrapper with `display: contents`, which generates no box; the activity separators gain a testid; `Popover`'s 8 px left clamp applies only when `(width < 359px)` matches. The CSS diff and the 360 px pixel compare hold them.
+- **D22, arc 1 stands as built** (P71-02's result, 2026-10-21): the owner's passkey unlock from the sidebar on a Mac "worked perfectly", so the passkey step keeps running in place there.
+- **D23, the restart gap is a known limit** (P78-12 A, #1004): no background start at Firefox launch.
+- **D24, the placeholders stay** (P78-13 A, #1005).
+- **D25, nothing beyond the 240 px layout for the sidebar's width** (P78-11's note): neither Firefox's `sidebar_action` nor Chrome's side panel takes a width from an extension.
 
 ## Security & Adversarial Considerations
 
@@ -251,13 +279,14 @@ Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spi
 - **Every page below 360 px (arc 2)**, P71-01 B: "Fit every page down to 240 px everywhere: one layout for every width; the popup looks the same." The page added: "That is a layout change on every page, planned and shown to you in pictures before it ships."
   - Each fit is listed under § Architecture, arc 2; the pictures in the draft PR show every page, surface and window at 240 and 360, and the revamped sidebar at 340.
   - At 360 px and wider nothing changes, proven pixel by pixel.
+  - Signed off: P78-11, approved as pictured (2026-10-21).
 - **At install** (P71-04 A): no sidebar opens. Firefox lists Nulo in View → Sidebar and, with the revamped sidebar, in its launcher.
 
 ## Arc 1
 
 ### Phases 1–4 ✓
 
-The manifest key and pin, the driver and both scenarios, the pictures, and the arc gate. Each gate's outcome is in `STATUS.md` and `lessons/phase-2.md` to `phase-4.md`.
+The manifest key and pin, the driver and both scenarios, the pictures, and the arc gate. Each gate's outcome is in `lessons/phase-2.md` to `phase-4.md`.
 
 ### Phase 5: the Display row on Firefox ✓
 
