@@ -104,8 +104,9 @@ refuses a `@requires-proverless` file at each iteration's start, before the buil
    vitest 4.1.10 reports a skipped `describe`'s tests as `skipped` (fixture `skipped-chrome.json`).
 7. No lane or nightly label starts with `soak`; the soak's is `soak-${{ matrix.iteration }}`.
 
-**Inferences**: `required: true` makes the dispatch form refuse an empty field; the API's handling of an
-omitted one is unverified, and whitespace passes both, so `prep` stays the gate.
+**Verified at dispatch** (the inference here was wrong): GitHub trims a required input before its check,
+so an empty, space, newline or tab `test_files` is refused with HTTP 422 and starts no run. `prep`'s
+empty-list refusal stays, pinned, for the day `required` goes.
 
 **Asks**: none for the owner. No product surface changes; the soak's dispatch form loses `mode` and `shard`
 (maintainer tooling, the panel's call, stated in the PR body with the new command).
@@ -196,7 +197,12 @@ omitted one is unverified, and whitespace passes both, so `prep` stays the gate.
   test_files="<files>" -f repeats=5`), the gate runs, `Closes #1014`. The suite edit trips both network
   lanes' path filters, so both run on the PR; no e2e scenario changes, so no wall-clock line, no label.
 - Before the PR: `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`,
-  `bun run test:ci-gating`, `bun run test:release`, `bun run lint:actions`: each exit 0. No dispatch.
+  `bun run test:ci-gating`, `bun run test:release`, `bun run lint:actions`: each exit 0.
+- Dispatch proof on the branch (the orchestrator's addition), exactly two runs. A blank list cannot be one:
+  `""`, `" "`, `"\n"` and `"\t"` each got HTTP 422 and no run. Run 39673385943 named the smallest file
+  beside a one-letter typo of it: `prep` refused the typo by name in 5 s, no iteration ran, `Status` named
+  the unbuilt matrix. Run 39673485998, `cap-request-basic` at `repeats=1`: green in 1:54, the read-back
+  "1 file(s) present, every test passed" at `NULO_E2E_RETRY: 0`.
 
 ## Post-implementation
 
