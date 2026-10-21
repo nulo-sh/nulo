@@ -9,7 +9,7 @@
  */
 
 import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { IService, ServiceCollection as ServiceCollectionType } from "@/wallet/base"
 import { ServiceCollection } from "@/wallet/base"
 import { LoggerStore } from "@/wallet/logger"
@@ -22,7 +22,7 @@ import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { LOCAL_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { ACCOUNT_STATE_CAPS, normalizeAccountStateSlice } from "./normalize"
-import { AccountStateService } from "./service"
+import { AccountStateService, SENDER_PROBE_TIMEOUT_MS } from "./service"
 import { FakeFenceProfileService, LIVE_FENCE } from "./fence.fixtures"
 import { svc } from "@/wallet/services/composition-harness"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
@@ -49,6 +49,10 @@ class FakeNetworkService implements IService {
 	}
 
 	public async getNodeStatus(networkId: string): Promise<NodeStatus> {
+		return this.statuses.get(networkId) ?? NodeStatus.Inactive
+	}
+
+	public async probeNodeStatus(networkId: string, _timeoutMs: number): Promise<NodeStatus> {
 		return this.statuses.get(networkId) ?? NodeStatus.Inactive
 	}
 }
@@ -246,6 +250,13 @@ describe("AccountStateService.getSendersAcrossActiveNetworks", () => {
 		accountStateService = new AccountStateService(logger)
 		services.add(accountStateService)
 		await services.start()
+		// The retrying status check can hold a stalled endpoint for minutes: the read must never wait on it.
+		vi.spyOn(networkService, "getNodeStatus").mockImplementation(() => new Promise<never>(() => {}))
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+		expect(networkService.getNodeStatus).not.toHaveBeenCalled()
 	})
 
 	test("returns empty list when no networks are configured", async () => {
@@ -325,6 +336,42 @@ describe("AccountStateService.getSendersAcrossActiveNetworks", () => {
 		await accountStateService.getSendersAcrossActiveNetworks()
 		// chainId 1 is queried once, chainId 2 once = 2 calls total.
 		expect(getSendersSpy).toHaveBeenCalledTimes(2)
+	})
+
+	test("every network's probe starts at once, with the limit, so two probes that take it all cost one limit", async () => {
+		vi.useFakeTimers()
+		networkService.networks = [makeNetwork("net-a", 1), makeNetwork("net-b", 2)]
+		const probe = vi
+			.spyOn(networkService, "probeNodeStatus")
+			.mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve(NodeStatus.Active), SENDER_PROBE_TIMEOUT_MS)))
+		vi.spyOn(accountStateService, "getSenders").mockImplementation(async (id: string) => [`0x${id}`])
+
+		let result: string[] | undefined
+		void accountStateService.getSendersAcrossActiveNetworks().then((senders) => {
+			result = senders
+		})
+		await vi.advanceTimersByTimeAsync(0)
+		expect(probe.mock.calls).toEqual([
+			["net-a", SENDER_PROBE_TIMEOUT_MS],
+			["net-b", SENDER_PROBE_TIMEOUT_MS],
+		])
+		await vi.advanceTimersByTimeAsync(SENDER_PROBE_TIMEOUT_MS)
+		expect(result).toEqual(["0xnet-a", "0xnet-b"])
+	})
+
+	test("a wrong chain or a probe that throws skips only its network", async () => {
+		networkService.networks = [makeNetwork("net-a", 1), makeNetwork("net-b", 2), makeNetwork("net-c", 3)]
+		networkService.statuses.set("net-a", NodeStatus.InvalidChain)
+		networkService.statuses.set("net-c", NodeStatus.Active)
+		const probe = networkService.probeNodeStatus.bind(networkService)
+		vi.spyOn(networkService, "probeNodeStatus").mockImplementation(async (id, ms) => {
+			if (id === "net-b") throw new Error("no such network")
+			return probe(id, ms)
+		})
+		const getSendersSpy = vi.spyOn(accountStateService, "getSenders").mockImplementation(async (id: string) => [`0x${id}`])
+
+		expect(await accountStateService.getSendersAcrossActiveNetworks()).toEqual(["0xnet-c"])
+		expect(getSendersSpy.mock.calls).toEqual([["net-c"]])
 	})
 })
 

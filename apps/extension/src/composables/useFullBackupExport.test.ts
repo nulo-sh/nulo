@@ -174,6 +174,7 @@ const SENTINELS = {
 	importsOnAddedNetworks: { accounts: 1, networks: 1 },
 	password: "sentinel",
 	repeatedPassword: "sentinel",
+	savedPlain: true,
 } as const
 type StateKey = keyof typeof SENTINELS
 
@@ -521,6 +522,69 @@ describe("useFullBackupExport — a current run", () => {
 		const file = JSON.parse(m.downloadFile.mock.calls[0][0].data)
 		expect(file["master-key"]).toBe("cred-1")
 		expect(file.entropy).toBeUndefined()
+	})
+
+	it("an accepted sealed download ends the run: done, with nothing left to download or seal", async () => {
+		const { api } = setup("password")
+		await api.handleBackup()
+		await api.handleEncrypt()
+		await api.downloadBackup(true)
+		expect(readState(api)).toMatchObject({
+			backupStatus: "downloaded",
+			savedPlain: false,
+			isDownloading: false,
+			password: null,
+			repeatedPassword: null,
+		})
+		expect(api.canDownload.value).toBe(false)
+		expect(m.openToast).toHaveBeenCalledWith({ kind: "success", label: "Backup downloaded successfully" })
+		for (const { kind, disconnect } of h.state.built) expect(disconnect, kind).toHaveBeenCalled()
+		expect(await probeArtifacts(api)).toEqual({ downloads: 0, sealedFrom: [null] })
+	})
+
+	it("a passkey profile's accepted plain download ends the run the same way, marked plain", async () => {
+		const { api } = setup("passkey")
+		await api.handleBackup()
+		await api.downloadBackup(false)
+		expect(m.downloadFile).toHaveBeenCalledOnce()
+		expect(readState(api)).toMatchObject({
+			backupStatus: "downloaded",
+			savedPlain: true,
+			showRecommendation: false,
+			isDownloading: false,
+			password: null,
+		})
+		expect(api.canDownload.value).toBe(false)
+		expect(await probeArtifacts(api)).toEqual({ downloads: 0, sealedFrom: [null] })
+		api.reset()
+		expect(api.savedPlain.value).toBe(false)
+	})
+
+	it("a refused plain download keeps the plain file and Download", async () => {
+		const { api } = setup("passkey")
+		await api.handleBackup()
+		m.downloadFile.mockRejectedValueOnce(new Error("refused"))
+		await api.downloadBackup(false)
+		expect(readState(api)).toMatchObject({ backupStatus: "finished", savedPlain: false })
+		expect(api.canDownload.value).toBe(true)
+		await api.downloadBackup(false)
+		expect(m.downloadFile).toHaveBeenCalledTimes(2)
+		const [first, second] = m.downloadFile.mock.calls.map(([file]) => file.data)
+		expect(second).toBe(first)
+		expect(readState(api)).toMatchObject({ backupStatus: "downloaded", savedPlain: true })
+	})
+
+	it("a refused sealed download keeps the sealed file and Download", async () => {
+		const { api } = setup("password")
+		await api.handleBackup()
+		await api.handleEncrypt()
+		m.downloadFile.mockRejectedValueOnce(new Error("refused"))
+		await api.downloadBackup(true)
+		expect(api.backupStatus.value).toBe("encrypted")
+		expect(api.canDownload.value).toBe(true)
+		await api.downloadBackup(true)
+		expect(m.downloadFile.mock.calls.map(([file]) => file.data)).toEqual(["SEALED", "SEALED"])
+		expect(api.backupStatus.value).toBe("downloaded")
 	})
 
 	// A new await is a new place a run can be superseded: add its row to the table, then this count.

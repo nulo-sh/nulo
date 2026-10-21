@@ -10,7 +10,7 @@ import { useAppStore } from "@/stores/app.store"
 import { useToast } from "@/composables/toast"
 import { managers } from "@/utils/core"
 import { AccountServiceClient } from "@/wallet/services/account/client"
-import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { captureOwnWindow, releaseOwnWindow } from "@/utils/own-window"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
 import type { ProfileInfo } from "@/wallet/services/profile/spec"
@@ -74,7 +74,7 @@ vi.mock("@/composables/usePasskeyCeremony", () => ({
 		onReject: vi.fn(),
 	}),
 }))
-vi.mock("@/utils/browser-surface", () => ({ passkeyNeedsOwnWindow: vi.fn(() => false) }))
+vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: vi.fn(() => false) }))
 vi.mock("@/utils/lastActiveProfile", () => ({
 	getLastActiveProfileId: vi.fn(async () => undefined),
 	setLastActiveProfileId: (...args: unknown[]) => setLastActiveProfileIdMock(...(args as [])),
@@ -91,7 +91,7 @@ beforeEach(() => {
 	unlockPasskeyProfile.mockReset()
 	getPasskeyCredentialId.mockReset()
 	runCeremony.mockReset()
-	vi.mocked(passkeyNeedsOwnWindow).mockReturnValue(false)
+	vi.mocked(closesOnFocusLoss).mockReturnValue(false)
 	openToastMock.mockReset()
 	useToast().closeToast()
 	initTransactionServiceMock.mockReset()
@@ -442,7 +442,7 @@ describe("auth.vue — passkey unlock", () => {
 	})
 
 	test("in Firefox's toolbar panel, the background runs the step and the page runs no ceremony", async () => {
-		vi.mocked(passkeyNeedsOwnWindow).mockReturnValue(true)
+		vi.mocked(closesOnFocusLoss).mockReturnValue(true)
 		await submitPasskeyUnlock()
 		expect(unlockPasskeyProfile).toHaveBeenCalledTimes(1)
 		expect(unlockPasskeyProfile.mock.calls[0]).toEqual(["p1"])

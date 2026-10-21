@@ -12,7 +12,7 @@ import { FileTooLargeError, pickFile } from "@/utils"
 import { copyWithToast } from "@/utils/clipboard"
 import { MAX_BACKUP_FILE_BYTES } from "@/utils/full-backup-helpers"
 import { managers } from "@/utils/core"
-import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import { isNewPasswordValid } from "@/utils/password"
@@ -202,9 +202,7 @@ function createImportHandlers(deps: ImportHandlerDeps) {
 			if (name === null) return
 			// Discovery `get` — no allowedCredentials; the user picks from their
 			// available passkeys. In Firefox's toolbar panel the background runs it in its own window.
-			const credData = passkeyNeedsOwnWindow()
-				? undefined
-				: await deps.runCeremony({ mode: "get", step: "import", profileName: name })
+			const credData = closesOnFocusLoss() ? undefined : await deps.runCeremony({ mode: "get", step: "import", profileName: name })
 			// PATH A reuses this credential on the confirm-retry, so no second ceremony runs.
 			const profile = await deps.withDuplicateConfirm(() => managers.profile.importPasskey(name, credData, deps.allowDuplicate.value))
 			if (!profile) return

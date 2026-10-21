@@ -46,7 +46,7 @@ on:
           Explicit space-separated list of test files to run, passed straight to
           vitest as positional args. Used by the dedicated heavy-network job to
           run e.g. tests/e2e/network/fee-methods.test.ts alone, separated from
-          the SHA-1-distributed matrix shards so it doesn't pre-pressure the
+          the matrix shards so it doesn't pre-pressure the
           prover queue for popup-shape tests sharing the same shard host.
           Leave empty for the default (sharded) suite distribution.
         required: false
@@ -56,8 +56,8 @@ on:
         description: |
           Space-separated --exclude patterns passed to vitest. Used by the
           lightweight matrix shards to exclude heavy-network files that are
-          run in a dedicated job (see test_files). Without this, an excluded
-          file would still consume one slot in the SHA-1 shard distribution.
+          run in a dedicated job (see test_files). Without this, a file a
+          dedicated job runs would also run in a shard.
         required: false
         type: string
         default: ""

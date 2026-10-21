@@ -10,7 +10,7 @@ vi.mock("@/utils/core", () => ({ managers: { profile: profileApi } }))
 vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => ({ hydrateKnownProfile: vi.fn() }) }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn(), toast: { value: undefined }, closeToast: vi.fn() }) }))
 vi.mock("@/wallet/utils/onboarding-tab", () => ({ redirectToOnboardingTabIfNeeded: vi.fn() }))
-vi.mock("@/utils/browser-surface", () => ({ passkeyNeedsOwnWindow: () => false }))
+vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => false }))
 vi.mock("vue-router", () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: vi.fn(), back: vi.fn() }) }))
 
 import { Flex, Input, Text } from "@nulo/design"
