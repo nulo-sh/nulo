@@ -91,9 +91,8 @@ jobs:
       test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
       proverless: true
 
-  # Kept out of the pool for time alone: the sequencer would place the two long files on separate
-  # shards, but their time spread over five shards would make the pool, the lane's slowest job,
-  # end later.
+  # Dedicated for wall time alone: folded into the five-shard pool, these two files made the lane end
+  # later on both browsers when measured.
   network-e2e-heavy-long:
     name: heavy / snack-placement + failed-send-check
     uses: ./.github/workflows/_extension-network-e2e.yml

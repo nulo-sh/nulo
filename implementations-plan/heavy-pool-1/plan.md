@@ -144,6 +144,10 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 
 **Round 4, Codex (resumed, on the orchestrator's staging, D9): conditional approve.** Three findings, adopted: (1, medium, demonstrated) one pair can stop a B that would pass, so D9 calls the 60 s rule a futility rule and drops the claim that it confirms the replay; (2, medium) red runs and gate checks (2)–(5) are settled before the threshold, and a folded-shard red is a correctness verdict; (3, low) the contention check runs before every dispatch, replacements included.
 
+**Implementation round 1, Codex (`gpt-6.1-sol`, high, session `01a15f51`): findings.** Both low, verified, adopted: (1) the three reason sites stated a one-pair futility stop as a lasting prediction; they now state the observed result, with "one measured pair per browser" in the docs; (2) the index line still read "awaiting orchestrator". It confirmed the Phase 2 table against the lessons and found no stale 30-minute reason left.
+
+**Implementation round 1, Opus 5.5 diff review: findings.** None medium or high; it recomputed every Phase 2 figure. Adopted: the old comment's "spread over five shards" held only once a regenerated record prices the two files (today they would land as unknowns, unspread), which the observed-result wording removes; a double colon in the README; the docs cite #972, so its measurement comment goes up at close-out, before any merge.
+
 ## Seeds (drafts, not run: the orchestrator owns execution)
 
 ```
