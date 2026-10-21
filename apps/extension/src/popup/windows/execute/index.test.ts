@@ -56,8 +56,17 @@ const { accountServiceCtorMock, networkServiceCtorMock } = vi.hoisted(() => ({
 /** One entry per composable instance the window creates, in creation order:
  *  [0] fee estimates, [1] authorization previews. */
 const feeMapInstances: Array<{
-	opts: { estimate: (params: unknown, token: string, flowKey: string) => Promise<unknown>; onError?: (key: number, err: unknown) => void }
-	api: { results: Ref<Record<number, unknown>>; estimate: ReturnType<typeof vi.fn>; handoffAll: ReturnType<typeof vi.fn> }
+	opts: {
+		estimate: (params: unknown, token: string, flowKey: string) => Promise<unknown>
+		onError?: (key: number, err: unknown) => void
+		cancelRemote?: (token: string) => unknown
+	}
+	api: {
+		results: Ref<Record<number, unknown>>
+		estimate: ReturnType<typeof vi.fn>
+		handoffAll: ReturnType<typeof vi.fn>
+		dispose: ReturnType<typeof vi.fn>
+	}
 }> = []
 vi.mock("@/composables/useFeeEstimationMap", () => ({
 	useFeeEstimationMap: vi.fn((opts: unknown) => {
@@ -76,6 +85,7 @@ vi.mock("@/composables/useFeeEstimationMap", () => ({
 	}),
 }))
 const estimateOperationFeeMock = vi.fn(async () => undefined)
+const cancelEstimateMock = vi.fn(async (_token: string): Promise<void> => undefined)
 const decodeGrantsForDisplayMock = vi.fn(async (): Promise<unknown[]> => [])
 const previewOperationAuthwitsMock = vi.fn(async () => undefined)
 
@@ -93,7 +103,7 @@ vi.mock("@/wallet/services/execution/client", () => ({
 			previewOperationAuthwits: previewOperationAuthwitsMock,
 			decodeCallsForDisplay: vi.fn(async () => []),
 			decodeGrantsForDisplay: decodeGrantsForDisplayMock,
-			cancelEstimate: vi.fn(async () => undefined),
+			cancelEstimate: cancelEstimateMock,
 		}
 	}),
 }))
@@ -436,6 +446,7 @@ describe("execute window — dApp cancellation state", () => {
 		await flushPromises()
 		expect(w!.find('[data-testid="dapp-cancelled-overlay"]').exists()).toBe(true)
 		expect(w!.find('[data-testid="error-text"]').exists()).toBe(false)
+		for (const { api } of feeMapInstances) expect(api.dispose).not.toHaveBeenCalled()
 	})
 })
 
@@ -636,6 +647,53 @@ describe("execute window — approval envelope", () => {
 		expect((approveInteractionMock.mock.calls[0] as unknown[]).length).toBe(2)
 		expect(feeMapInstances[0]!.api.handoffAll).toHaveBeenCalledTimes(1)
 		expect(feeMapInstances[1]!.api.handoffAll).toHaveBeenCalledTimes(1)
+	})
+
+	test("an accepted approval ends both maps' unfinished estimates and closes only once the worker has taken the cancels", async () => {
+		resolvable()
+		previewTokenMetadataMock.mockResolvedValueOnce(preview)
+		approval.payloadToLoad = payload()
+		w = factory()
+		await completeInit()
+		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
+		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj" } })
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
+		const releases: Array<() => void> = []
+		for (const { api } of feeMapInstances) {
+			api.dispose.mockImplementationOnce(() => {
+				callLog.push("dispose")
+				return new Promise<void>((resolve) => releases.push(resolve))
+			})
+		}
+		approveInteractionMock.mockImplementationOnce(async () => {
+			callLog.push("approveInteraction")
+		})
+		const approving = vm.approve()
+		await flushPromises()
+		expect(callLog.filter((e) => e === "approveInteraction" || e === "dispose")).toEqual(["approveInteraction", "dispose", "dispose"])
+		releases[0]!()
+		await flushPromises()
+		expect(windowsRemoveMock).not.toHaveBeenCalled()
+		releases[1]!()
+		await approving
+		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
+	})
+
+	test.each([0, 1])("map %i's remote cancel settles only once the worker has answered it", async (i) => {
+		w = factory()
+		await completeInit()
+		let answer: () => void = () => {}
+		cancelEstimateMock.mockImplementationOnce(() => new Promise<void>((resolve) => (answer = resolve)))
+		let settled = false
+		void Promise.resolve(feeMapInstances[i]!.opts.cancelRemote?.("tok-1")).then(() => {
+			settled = true
+		})
+		await flushPromises()
+		expect(cancelEstimateMock).toHaveBeenCalledExactlyOnceWith("tok-1")
+		expect(settled).toBe(false)
+		answer()
+		await flushPromises()
+		expect(settled).toBe(true)
 	})
 
 	test("a token whose details could not be read keeps Confirm disabled and approve sends nothing", async () => {
