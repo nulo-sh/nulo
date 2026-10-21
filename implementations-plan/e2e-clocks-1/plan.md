@@ -1,7 +1,7 @@
 ---
 plan: e2e-clocks-1
 tier: light
-status: planned (Codex approve, round 5)
+status: approved by the orchestrator with four conditions (D12-D15); arc 1 in progress
 issues: "#992 (arc 1: Closes on the ship path; closed as a known limit with the numbers on the no-ship path)"
 driver: claude-code
 claude_model: opus
@@ -10,7 +10,7 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 budget: recon 2 explorers (sonnet); one Codex audit round-trip (gpt-6.1-sol high) plus one Opus Plan leg
-base: origin/dev at 34609f33d
+base: origin/dev at 8663cdd15 (arc 1; planned at 34609f33d)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
@@ -24,8 +24,8 @@ One arc, one PR against `dev`. The owner's pick (page 78, P78-14 B, 2026-10-21):
 ## Outcome & Quality Bar
 
 - **For whom:** the owner, who decides from the numbers whether the trade is worth it, and every contributor who waits on the network lanes.
-- **Excellent:** (1) the PR shows, per browser and from six balanced local runs, the clock-bound files faster by at least the predicted amount, their mechanism lines moved as predicted, no new failure and no other file slower; (2) a release build provably carries 30 s and 60 s: literal unit pins, the marker step on a real bundle, CI's grep on every artifact; (3) no test proves less than today.
-- **Good enough:** three pairs are a pilot for a large effect, not a reliability claim; CI confirms the direction. Shard balance stays with #972.
+- **Excellent:** (1) the PR shows, per browser and from twelve balanced CI runs of the network lane, the clock-bound files faster by at least the predicted amount, their mechanism lines moved as predicted, no new failure and no other file slower; (2) a release build provably carries 30 s and 60 s: literal unit pins, the marker step on a real bundle, CI's grep on every artifact; (3) no test proves less than today.
+- **Good enough:** six pairs a browser bound a large effect, not a reliability claim. Shard balance stays with #972's record, which only its script regenerates.
 
 ## Assumptions
 
@@ -73,22 +73,24 @@ None. A production build keeps both intervals; no screen, copy or timing a perso
 - Tests: T1 `config.test.ts`: unset gives `null` and no stamp; set gives the values and the literal. T1b literal production pins: a default-built `TransactionService` reads a mined row at 60 000 ms, not at 59 000; a default-built `IncomingTransferService` polls again at 30 000 ms, not at 29 999. T2 the marker step run with `cwd` a temp root: `test.each` over every `NULO_*_BUILD_STAMP` literal in non-test `apps/extension/src/**`, a file under `<root>/apps/extension/dist/chrome/` carrying it exits 1 with the literal in `stderr`; control, a clean dist exits 0. T3 `TransactionService` built with `10_000` re-reads an unsettled row at 10 s, not before.
 - **Validation gate:** `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`, `bun run test:ci-gating`, `bun run test:release`, `bun run lint:actions` exit 0. T2 fails with the stamp removed from the workflow's list, then restore; T1b fails with either default edited, then restore; an import of `@/e2e/wallet-clocks` from `runtime.ts` fails `bun run lint`, then remove it. Real bundle: `bun run --cwd apps/extension build:chrome` with no `VITE_*` set, the marker step's script exits 0; with `VITE_NULO_E2E_WALLET_CLOCKS=1` it exits 1 naming the stamp. Layers: lint, typecheck, unit, CI-shape.
 
-### Phase 2: the touched e2e files, both browsers
-- Widened-copy proof of F6 (scratch, never committed): a 25 s pause between delivery and arming in `account-switch-isolation`'s first case is red at the e2e cadence with the old order and green with the helper; revert the pause.
-- One run each, retry 0, Chrome then Firefox: `cd <worktree> && NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/{incoming-transfers,incoming-public-transfers,incoming-arrival,account-switch-isolation,snack-placement,failed-send-check}.test.ts`, then with `NULO_E2E_BROWSER=firefox`.
-- **Validation gate:** all green; agent.sh prints the stamp check; every `[install-run]` under 10 000 ms; every `[snack-placement] … wallet final` under 20 000 ms. Layers: e2e-live-network, both browsers.
+### Phase 2: the touched e2e files, both browsers (on CI, D12)
+- Host mechanism check, the one pair D12 allows for it (scratch, never committed): `account-switch-isolation`'s first case on Chrome at retry 0 through `agent.sh` (`-t`), with a 25 s pause between delivery and arming: red with the old order, green with the helper; revert the pause.
+- Push `e2e-clocks-1-a1` and dispatch both network workflows on it once (the Phase 3 commands). This run validates; it is not a measurement sample.
+- **Validation gate:** both runs green with every job present; agent.sh's stamp line in the proverless jobs; every `[install-run]` under 10 000 ms; every `[snack-placement] … wallet final` under 20 000 ms. Layers: e2e-live-network, both browsers.
 
-### Phase 3: review loop, then the measurement
-- Run the Post-implementation review loop to convergence first; then freeze the head SHA, the P SHA and `bun.lock` (D8).
-- **Arms:** F = the frozen head; P = F plus one local commit, never pushed, that sets the flag to `0` in agent.sh's proverless branch and turns its stamp check into an absence check, so an inherited or `.env` value cannot arm P and the arms differ only in the two clocks (Codex r2, r3). Each run: the whole suite, `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NULO_E2E_RESULTS_FILE=<run>/results.json bun run e2e:agent`. Order: Chrome P F F P P F, then Firefox F P P F F P, one run at a time.
-- **While at P** (`git switch --detach <P>`): write nothing under the worktree; never switch with a run in flight; the state is the run directories plus `git rev-parse HEAD`; write `lessons/phase-3.md` back on the arc branch.
-- **Records:** `~/.cache/nulo-backlog/e2e-clocks-1/runs/<id>/`: log, `results.json`, `env.txt` (HEAD, browser, start and end), `load.txt` (load1 and the `nulo-e2e-*` row count of `~/.agents/ports.md` every 60 s). Every result is kept; a rerun never replaces one. Budget about 24 h; project after the first two runs, drop nothing.
-- **Predictions** (median paired saving per run; scanner waits from #992's local figures): `snack-placement` 120-150 s (three grants, 55 s to about 7 s each); `failed-send-check` 35-50 s; `incoming-arrival` 70-115 s Chrome, 50-85 s Firefox (173 s and 128 s of scanner waits, to about a third). Faster, not gated: `incoming-public-transfers`, `account-switch-isolation`, `import-handshake-note*`. Envelope, secondary: Chrome's pool shard 2/5 falls about 110 s; Firefox's stays near 4/5's 1115 s.
-- **Gate (ship rule), per browser:** (a) no unresolved F failure. A run is invalid only when no test ran (boot failure, exit 86); it is rerun and both are reported. Any F test failure counts unless its trace shows a cause outside the two clocks and what they drive; an open issue's name alone exempts nothing, nor does load; each gets its mechanism, a rerun of its file at P and at F, and a label. (b) The three target files' median savings sum to at least the lower predictions' sum (225 s Chrome, 205 s Firefox), all three pairs favour F in each file, every F `wallet final` is under 20 s and every F `[install-run]` under 10 s. (c) No other file is slower in all three pairs by more than max(10 % of its P median, 10 s) without a traced unrelated cause. Report raw times, pairs and load beside the verdict.
+### Phase 3: review loop, then the measurement on CI (D12)
+- Run the Post-implementation review loop to convergence first; then freeze F's code SHA and P's SHA (D8).
+- **Arms:** F = the arc branch `e2e-clocks-1-a1` at the frozen head; P = F plus one commit on the throwaway branch `e2e-clocks-1-p`, which sets the flag to `0` in agent.sh's proverless branch and turns its stamp check into an absence check (D7). P is pushed for these runs only, never gets a PR, and is deleted after the last run. Both arms read the same `shard-timings.json`, so their shard splits match.
+- **Instrument:** `gh workflow run pr-extension-network-e2e.yml --ref <branch>` and `gh workflow run pr-extension-network-e2e-firefox.yml --ref <branch>` (retry 0; five shards plus the dedicated jobs). Twelve slots, both browsers in each, in the order P F F P P F F P P F F P: six pairs a browser, each pair two adjacent slots. A slot is dispatched only after both runs of the slot before it have finished: a dispatch on a ref and SHA whose run is still live cancels that run (`concurrency` with `cancel-in-progress` outside pull requests). Wait in bounded `until` loops on `gh run view <id> --json status`.
+- **Records:** per run, its id, arm, branch SHA, conclusion, queue and execution time, runner image, every exit-86 retry, and the Presto mode (`vars.NULO_E2E_DISABLE_PRESTO`, read before the first and after the last slot; a change voids the comparison). Per job, keyed by job name and file, the costs from `parseJobLog` in `scripts/ci-cd/e2e-timings.ts`, read by a scratch script under `~/.cache/nulo-backlog/e2e-clocks-1/` that imports it and stores no log; a job with an exit-86 retry is parsed from the retry's banner on, both attempts recorded; a parser refusal is reported, never read as an invalid run. Also the `[install-run]` and `[snack-placement] … wallet final` lines. Tables go to `lessons/phase-3.md`.
+- **Invalid runs:** only a traced external failure (runner lost, a GitHub or download outage) voids a run; its slot is dispatched again. Every observed test or build failure stays evidence across a replacement, a clock or stamp failure included. A cancelled or incomplete run gives no timing sample but keeps its failures; timing needs the complete job set. Budget: about 5 h of wall-clock; project after the first two slots, drop nothing.
+- **Host runs:** none planned; at most three interleaved P/F pairs through `agent.sh` at retry 0, and only to check a mechanism a CI result raises.
+- **Predictions** (median paired saving per run; scanner waits from #992's local figures): `snack-placement` 120-150 s (three grants, 55 s to about 7 s each); `failed-send-check` 35-50 s; `incoming-arrival` 70-115 s Chrome, 50-85 s Firefox (173 s and 128 s of scanner waits, to about a third). Faster, not gated: `incoming-public-transfers`, `account-switch-isolation`, `import-handshake-note*`. Envelope, secondary: reported per run.
+- **Gate (ship rule), per browser:** (a) no unresolved F failure: any F test failure counts unless its trace shows a cause outside the two clocks and what they drive; an open issue's name alone exempts nothing, nor does runner load; each gets its mechanism and a label, and P's failures are reported beside them. (b) The three target files' median savings sum to at least 225 s on Chrome and 205 s on Firefox, every pair favours F in each target file, every F `wallet final` is under 20 s and every F `[install-run]` under 10 s. (c) No other file is slower in all three pairs of either block (pairs 1-3, pairs 4-6) by more than max(10 % of its P median, 10 s) without a traced unrelated cause. Report raw times, pairs and run ids beside the verdict.
 
-### Phase 4: ship, or write it up
-- **Ship:** the PR per Delivery. **No ship:** revert the clock commits on the arc branch, keep T2's list pin and the F6 helper, and carry the close-out with the numbers (`Refs #992`); #992 gets the numbers, the `known-limit` label and closes as not planned. Reopen on the failing criterion: a different interval, a deterministic setup for the failing case, or a host or CI change.
-- **Validation gate:** the Phase 1 commands green on the final head; `bun run check:plans` after staging.
+### Phase 4: ship, or write it up (D15)
+- **Ship:** the PR per Delivery, with the table. **No ship:** reset the arc to a docs-only change (the plan, its lessons and the numbers) and open that PR, `Refs #992`; #992 gets the numbers, the `known-limit` label and closes as not planned; nothing new is filed. Reopen on the failing criterion: a different interval, a deterministic setup for the failing case, or a CI change.
+- **Validation gate:** the Phase 1 commands green on the final head; `bun run check:plans` after staging; `e2e-clocks-1-p` deleted from origin.
 
 ## Decision ledger
 
@@ -102,7 +104,12 @@ None. A production build keeps both intervals; no screen, copy or timing a perso
 - **D8 Review before measuring**; a later change to the plumbing, the values or a measured test re-runs the affected cells.
 - **D9 No `SendCheck` seam** (Opus 5, Codex 2): no e2e file waits on its re-reads and its first read ignores the interval; the e2e keeps its production cadence.
 - **D10 The F6 race is fixed at the three sites** (Codex 3): delivery and arming happen while locked, where no scheduler runs, so the order holds at any cadence. Rejected: moving the arm before the sender's cleanup (narrows the window, keeps the race); a hold keyed on the target without a hash (gate protocol change).
-- **D11 No e2e scenario added**; the six runs are the measurement, D5 the coverage.
+- **D11 No e2e scenario added**; the CI runs are the measurement, D5 the coverage.
+
+- **D12 Measure on CI, not on this host** (the orchestrator, 2026-10-21, condition 1): the host is shared at load1 150-300 and needed by other lanes, and block-time-1's host A/B was inconclusive on load alone. The network lanes themselves are the instrument (Phase 3). Supersedes the host-run design of the first draft; D7's P stands, as a pushed throwaway branch.
+- **D13 Production untouched** (condition 2): the literal 30 s and 60 s pins, the flag set only by agent.sh's proverless build, the stamp in the marker step and `build-env-guard.test.ts` with the real-bundle red/green, the canary and smoke at the users' cadence.
+- **D14 Nothing weakens a test** (condition 3): the two install-run bounds follow the build's tick and only tighten; D10 ships with its widened-copy proof; `SendCheck` keeps its cadence.
+- **D15 Order and the miss** (condition 4): review loop, then the measurement, then the PR with the table and `Closes #992`. A missed ship rule ends the lane in a docs-only PR recording the numbers on #992, nothing new filed (supersedes the first draft's "keep T2's pin and the F6 helper").
 
 ## Review verdicts
 
@@ -114,6 +121,8 @@ None. A production build keeps both intervals; no screen, copy or timing a perso
 - **Round 3, Codex resumed: `conditional approve`.** Accepted: removing the flag's line would not disarm P against an inherited or `.env` value, so P sets it to `0` and requires the stamp absent; the prover-ON build gets `0` for the same reason. Rejected: none.
 - **Round 4, Codex resumed: `conditional approve`.** Accepted: an `unset` leaves a `.env` value in force, so the prover-ON build passes `0` explicitly. Rejected: none.
 - **Round 5, Codex resumed: `approve`.** No new material findings; P stays disarmed with its absence check.
+- **Round 6, Codex resumed, on the CI measurement (D12-D15): `conditional approve`.** Accepted: (1) only a traced external failure voids a run, every observed failure stays evidence, timing needs the full job set; (2) per-job parsing keyed by job and file (the chaos jobs share `send-chaos.test.ts`, which `runCosts` refuses), exit-86 retries split at the retry; (3) rule (c) per three-pair block; (4) Phase 2 moves to one CI dispatch plus the one host mechanism pair; (5) queue and execution time, runner image, retries and the Presto mode recorded. Rejected: none.
+- **Round 7, Codex resumed: `approve`.** No new material findings.
 
 ## Delivery
 
@@ -131,9 +140,9 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 ## Seeds (draft)
 
 ```
-/goal Arc 1 of implementations-plan/e2e-clocks-1/plan.md done: Phases 1-4 marked ✓, each gate reported passing in the transcript; the Codex loop (gpt-6.1-sol high) converged before the measurement, quoted; the twelve runs' tables in lessons/phase-3.md; the PR open against dev (gh pr view output).
+/goal Arc 1 of implementations-plan/e2e-clocks-1/plan.md done: Phases 1-4 marked ✓, each gate reported passing in the transcript; the Codex loop (gpt-6.1-sol high) converged before the measurement, quoted; the twenty-four CI runs' tables in lessons/phase-3.md; the PR open against dev (gh pr view output).
 ```
 
 ```
-/loop 15m Drive arc 1 of implementations-plan/e2e-clocks-1 per its plan.md (plan.md is the state; while detached at P, the run directories are). Next unchecked step, fast gates after each edit, signed commits, one e2e run at a time polled in a bounded loop. Review loop before the measurement. After Phase 4 open the PR, watch checks, report and stop. Never merge.
+/loop 15m Drive arc 1 of implementations-plan/e2e-clocks-1 per its plan.md (plan.md is the state). Next unchecked step, fast gates after each edit, signed commits, one e2e run at a time polled in a bounded loop. Review loop before the measurement. After Phase 4 open the PR, watch checks, report and stop. Never merge.
 ```
