@@ -97,6 +97,7 @@ function mountDetail() {
 		},
 	})
 	const appStore = useAppStore()
+	appStore.isLogined = true
 	appStore.networks = [ALPHA, MINE] as never
 	appStore.network = ALPHA as never
 	return wrapper
@@ -334,15 +335,47 @@ describe("Settings › Network detail — the live imported accounts Delete chai
 		expect(appStore.removeNetwork).toHaveBeenCalledWith(MINE)
 	})
 
-	test("a paused reset of this network names its own list, which already holds the live imports", async () => {
-		networkReset.getPendingReset.mockResolvedValue({ networkId: "mine", running: false })
-		networkReset.getStaleNetwork.mockResolvedValue({
-			networkId: "mine",
-			reset: { running: false, purged: true, doneCount: 0, imported: ["Savings"] },
-		})
+	test("a Confirm whose read a newer Delete chain press overtook deletes nothing", async () => {
+		const wrapper = mountDetail()
+		const appStore = useAppStore()
+		appStore.profile = { id: "p1", name: "Main", type: "password" } as never
+		await flushPromises()
+		const press = async () => {
+			await wrapper.get('[data-testid="network-delete-chain-btn"]').trigger("click")
+			await flushPromises()
+		}
+		await press()
+		const older = useCacheStore().confirm.callback
+		let answer: (rows: Account[]) => void = () => {}
+		accounts.getAccounts.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+		const olderDone = older?.()
+		await flushPromises()
+
+		const named = `${WIPES} It also deletes the imported account “Savings”. Export it first.`
 		accounts.getAccounts.mockResolvedValue([row("Savings", AccountType.Imported, 2)])
-		expect(await confirmFor("passkey")).toBe(`${WIPES} It also deletes the imported account “Savings”.`)
+		await press()
+		expect(useCacheStore().confirm.description).toBe(named)
+
+		answer([])
+		await olderDone
+		await flushPromises()
+		expect(appStore.removeNetwork).not.toHaveBeenCalled()
+		expect(useCacheStore().confirm.description).toBe(named)
+	})
+
+	test("a lock during the click's read starts no account read", async () => {
+		const wrapper = mountDetail()
+		const appStore = useAppStore()
+		appStore.profile = { id: "p1", name: "Main", type: "password" } as never
+		await flushPromises()
+		let answer: (pending: PendingReset | null) => void = () => {}
+		networkReset.getPendingReset.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+		await wrapper.get('[data-testid="network-delete-chain-btn"]').trigger("click")
+		appStore.isLogined = false
+		answer(null)
+		await flushPromises()
 		expect(accounts.getAccounts).not.toHaveBeenCalled()
+		expect(useCacheStore().confirm?.description).toBeUndefined()
 	})
 
 	test("a failed account read opens no confirmation, only the failure toast", async () => {

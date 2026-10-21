@@ -59,6 +59,8 @@ async function readHeldReset(id) {
 async function readDeletedImports(network) {
 	const held = await readHeldReset(network.id)
 	if (held) return held
+	// `getAccounts` answers while locked, so a read the lock or a page change overtook stops before it.
+	if (disposed || !appStore.isLogined || networkId.value !== network.id) throw new Error("read overtaken")
 	const [rows, pending] = await Promise.all([
 		requireAccount().getAccounts(appStore.profile?.id, network.chainId, true),
 		managers.networkReset.getPendingReset(),
@@ -175,6 +177,9 @@ const handleDeleteEndpoint = (endpoint) => {
 	})
 }
 
+/** Each press and each Confirm; one a later one overtook while it read acts no further. */
+let deleteAttempts = 0
+
 /** The delete goes only on what its confirmation said: Confirm reads the chain again, and an import
  *  made since, in another window, reopens the confirmation naming it instead of deleting. */
 const confirmDeleteNetwork = (id, name, description) =>
@@ -184,9 +189,10 @@ const confirmDeleteNetwork = (id, name, description) =>
 		title: `Delete ${name}?`,
 		description,
 		callback: async () => {
+			const attempt = ++deleteAttempts
 			const target = network.value
 			const now = target?.id === id ? await deleteDescription(target) : null
-			if (disposed || networkId.value !== id) return
+			if (disposed || networkId.value !== id || attempt !== deleteAttempts) return
 			if (now === null) return openToast({ kind: "error", label: "Failed to delete chain" })
 			if (now !== description) return confirmDeleteNetwork(id, name, now)
 			try {
@@ -208,9 +214,10 @@ const handleDeleteNetwork = async () => {
 	if (!network.value) return
 	if (!canDelete.value) return
 	const { id, name } = network.value
+	const attempt = ++deleteAttempts
 	// Read at the click: a confirmation opened before the page's own read landed must still name them.
 	const description = await deleteDescription(network.value)
-	if (disposed || networkId.value !== id) return
+	if (disposed || networkId.value !== id || attempt !== deleteAttempts) return
 	// An unknown hold is not an empty one: the confirmation never omits what the delete removes.
 	if (description === null) return openToast({ kind: "error", label: "Failed to delete chain" })
 	confirmDeleteNetwork(id, name, description)
