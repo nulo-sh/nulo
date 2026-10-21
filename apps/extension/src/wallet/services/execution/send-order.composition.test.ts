@@ -25,6 +25,7 @@ import { FpcType } from "@/wallet/services/fpc/spec"
 import { TransactionService, TransferType, TxStatus } from "@/wallet/services/transaction/service"
 import { OriginType, TxExecutionResult } from "@/wallet/services/transaction/spec"
 import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
+import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { TaskService } from "@/wallet/services/task/service"
@@ -143,6 +144,7 @@ async function makeHarness() {
 	)
 	collection.add(svc(ContactService.name, {}))
 	collection.add(svc(AuthRegistryService.name, {}))
+	collection.add(svc(DAPP_SESSION_SERVICE_NAME, {}))
 	collection.add(svc(LegalAcceptanceService.name, { assertCurrent: async () => {} }))
 	collection.add(journal)
 	collection.add(svc(TaskService.name, { startNewTask: () => ({ complete: vi.fn(), fail: vi.fn(), cancel: vi.fn() }) }))

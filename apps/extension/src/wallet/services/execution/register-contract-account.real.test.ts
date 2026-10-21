@@ -43,16 +43,21 @@ function makeService() {
 	const internals = service as unknown as {
 		networkService: unknown
 		pxeService: unknown
-		executeAztecRegisterContract(op: unknown): Promise<void>
+		dappSessionService: unknown
+		executeAztecRegisterContract(op: unknown, registrant: unknown): Promise<void>
 	}
 	internals.networkService = { getNetwork: async () => NETWORK }
+	internals.dappSessionService = { admitDappRegistration: async () => {} }
 	internals.pxeService = {
 		getContractArtifact: async () => FrozenSchnorrAccountArtifact,
 		registerContract: record("registerContract"),
 		registerAccount: record("registerAccount"),
 	}
 	const register = (instance: unknown, secretKey: string) =>
-		internals.executeAztecRegisterContract({ kind: "aztec_registerContract", networkId: NETWORK.id, instance, secretKey })
+		internals.executeAztecRegisterContract(
+			{ kind: "aztec_registerContract", networkId: NETWORK.id, instance, secretKey },
+			{ origin: "https://app.example", fence: { profileId: "p1", epoch: 0, session: 1 } },
+		)
 	return { register, writes }
 }
 

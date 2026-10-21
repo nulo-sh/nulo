@@ -467,6 +467,15 @@ const CHECKED: [SendOutcome, SendCheckOutcome | undefined, JournalTerminalDispla
 			context: "This transaction expired before the network included it. No fee was paid, and you can send it again.",
 		},
 	],
+	[
+		"refused",
+		"refused",
+		{ state: "failed", subtitle: "Refused by the network", icon: "square-cross", color: "red" },
+		{
+			label: "Refused by the network",
+			context: "The network refused this transaction, so it won't go through. Check the details before sending it again.",
+		},
+	],
 ]
 
 describe("a failed send that may have reached the network reads as its check's answer", () => {

@@ -1,0 +1,5 @@
+# Post-implementation: the review loop
+
+- Codex (gpt-6.1-sol, high), session `01a15b4b`, round 1 over `ad4de50d8..5e2c61332`: "VERDICT: no new material findings". Two low: (1) the tx init comment kept a stale claim and a plan path, and the restore and normalizer comments ran long (accepted, `511a7a676`); (2) no test pinned a kept `ambiguous` flag (accepted, folded into test (a)) or a malformed row (rejected: the existing fee-chooser test fails if the codec stops running).
+- Opus diff review (general-purpose), beside round 1: no bugs, no lock cycle (reconcile awaits subscribers between its tuple-lock passes; `getAccountsRaw` and `getAccountsByAddress` take no lock). Two low: a dangling `D16` reference above `droppedWatch` (accepted, `511a7a676`); the collision test keeps the `0xattacker` row instead of the plan's own-account row (kept: it pins the collision message, so removing that guard turns it red).
+- Codex round 2 (resumed) over `511a7a676`: "VERDICT: no new material findings". Loop converged.

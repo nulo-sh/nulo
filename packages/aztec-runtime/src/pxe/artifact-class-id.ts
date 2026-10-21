@@ -5,9 +5,11 @@
  *   failure, so artifact resolution can fall through to the next source.
  * - `assertArtifactClassId` throws on mismatch and lets a recompute failure propagate unchanged, for
  *   registration, where a mismatched artifact must be refused at the boundary.
- * - `assertWireArtifactClassId` parses a wire-form pair first, binds the artifact to the class the
- *   address commits to, and maps every failure to the fixed mismatch text, for registration inputs
- *   that crossed a trust boundary as JSON.
+ * - `assertInstanceArtifactClassId` binds a parsed artifact to the class a parsed instance's address
+ *   commits to, for a registration whose inputs the caller already parsed.
+ * - `assertWireArtifactClassId` parses a wire-form pair first, applies the same binding, and maps
+ *   every failure to the fixed mismatch text, for registration inputs that crossed a trust boundary
+ *   as JSON.
  *
  * Pure: no chrome.*, no network, no storage, no cache. Just a Poseidon-heavy compute via upstream
  * `getContractClassFromArtifact`. Tests inject fixture artifacts directly.
@@ -15,7 +17,11 @@
 
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { type ContractArtifact, ContractArtifactSchema } from "@aztec-labs/stdlib/abi"
-import { ContractInstanceWithAddressSchema, getContractClassFromArtifact } from "@aztec-labs/stdlib/contract"
+import {
+	type ContractInstanceWithAddress,
+	ContractInstanceWithAddressSchema,
+	getContractClassFromArtifact,
+} from "@aztec-labs/stdlib/contract"
 
 const CLASS_ID_MISMATCH = "Contract artifact doesn't match instance's current class id"
 
@@ -82,18 +88,27 @@ export async function assertArtifactClassId(artifact: ContractArtifact, expected
 }
 
 /**
- * Throws unless the wire-form artifact hashes to the wire-form instance's original class id, the one
- * its address commits to. The current class id must equal it: the PXE stores only the address
- * preimage, so a differing current id is either an upgrade (unsupported) or a forged field that
- * would let any artifact through. A schema parse, hash or comparison failure all throw the one fixed
- * mismatch text: the upstream messages carry artifact-chosen names, which would reach logs and any
- * classifier that reads the message.
+ * Throws unless `artifact` hashes to the instance's original class id, the one its address commits
+ * to. The current class id must equal it: the PXE stores only the preimage, so a differing current id
+ * would pair the address with code it does not commit to. A recompute failure propagates, as in
+ * `assertArtifactClassId`.
+ */
+export async function assertInstanceArtifactClassId(instance: ContractInstanceWithAddress, artifact: ContractArtifact): Promise<void> {
+	if (!instance.currentContractClassId.equals(instance.originalContractClassId)) throw new Error(CLASS_ID_MISMATCH)
+	await assertArtifactClassId(artifact, instance.originalContractClassId)
+}
+
+/**
+ * `assertInstanceArtifactClassId` over a wire-form pair. A schema parse, hash or comparison failure
+ * all throw the one fixed mismatch text: the upstream messages carry artifact-chosen names, which
+ * would reach logs and any classifier that reads the message.
  */
 export async function assertWireArtifactClassId(instance: unknown, artifact: unknown): Promise<void> {
 	try {
-		const { originalContractClassId, currentContractClassId } = await ContractInstanceWithAddressSchema.parseAsync(instance)
-		if (!currentContractClassId.equals(originalContractClassId)) throw new Error(CLASS_ID_MISMATCH)
-		await assertArtifactClassId(await ContractArtifactSchema.parseAsync(artifact), originalContractClassId)
+		await assertInstanceArtifactClassId(
+			await ContractInstanceWithAddressSchema.parseAsync(instance),
+			await ContractArtifactSchema.parseAsync(artifact),
+		)
 	} catch {
 		throw new Error(CLASS_ID_MISMATCH)
 	}

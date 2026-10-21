@@ -74,6 +74,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [dapp-boundary-1](dapp-boundary-1/plan.md) — completed — an app-facing simulateTx result for dApps, and no dApp profileTx (OA-1 is #699)
 - [dapp-boundary-2](dapp-boundary-2/plan.md) — completed — a contract's key registers only its own account, one chain check per dApp call, no row for a connect that reaches no page
 - [dapp-boundary-3](dapp-boundary-3/plan.md) — completed — the authorization registry answers only the wallet's own action (P38-06 = A); the address row says it controls listing (P38-08)
+- [dapp-boundary-4](dapp-boundary-4/plan.md) — completed — dApp metadata reads answer from the session and the node, registrations bind the original class; each app's registrations counted per profile chain, one refusal once used up (P77-03 = A)
 - [dapp-results-1](dapp-results-1/plan.md) — completed — an app-facing `executeUtility` answer, and the log redactor denies `witness`, `newNotes` and `taggingIndexRanges`; the simulate side shipped in #701
 - [dapp-dispatch-hold](dapp-dispatch-hold/plan.md) — completed — hold an app's calls until They match: a per-session hold opened at establishment, released by the session's own hash, dropped on every session end; a lock ends unconfirmed sessions; 32 held calls then -32005
 - [dapp-grants](dapp-grants/plan.md) — completed — a refused dApp request tells no one more than it must
@@ -393,3 +394,6 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [get-started-phrase-1](get-started-phrase-1/plan.md) — completed — a funded password wallet keeps its unsaved phrase in the Get started card (step 1, "of 4" on the first profile; the row alone on a later one); the banner only after Hide (#936, P73-01)
 - [proving-grant-row-1](proving-grant-row-1/plan.md) — completed — the Firefox Proving row follows the grant: all-sites access covers loopback, so the two 127.0.0.1 toggles alone withhold nothing; e2e pin and FIREFOX.md line; the owner's Mac check (P74-04) confirmed the panel survives the doorhanger and the grant lands (#572)
 - [index-union-1](index-union-1/plan.md) — completed — the archive index merges by union, so close-outs stop conflicting on it; a test keeps any merge attribute off every other path (#962, #957)
+- [backup-restore-2](backup-restore-2/plan.md) — completed — a restored transaction row binds to the restored profile and one of its accounts; a dropped account's restored rows go with it (#970)
+- [refused-send-1](refused-send-1/plan.md) — completed — a send the network refused with an existing nullifier or an expiry reads "Refused by the network" once a read finds it Dropped, then once more at its expiry (#112)
+- [privacy-cache-line-1](privacy-cache-line-1/plan.md) — completed — privacy 1.2.2: §§ 5.11 and 5.2 say the list and price requests bypass the HTTP cache, and the price request carries no cookies or referrer (P77-13 C)
