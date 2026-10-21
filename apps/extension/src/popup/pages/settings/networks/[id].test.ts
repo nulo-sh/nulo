@@ -378,6 +378,34 @@ describe("Settings › Network detail — the live imported accounts Delete chai
 		expect(useCacheStore().confirm?.description).toBeUndefined()
 	})
 
+	test("a read answering after the lock opens no confirmation naming the imports, and deletes nothing", async () => {
+		const wrapper = mountDetail()
+		const appStore = useAppStore()
+		appStore.profile = { id: "p1", name: "Main", type: "password" } as never
+		await flushPromises()
+		const lockDuring = async (act: () => unknown) => {
+			let answer: (rows: Account[]) => void = () => {}
+			accounts.getAccounts.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+			const done = act()
+			await flushPromises()
+			appStore.isLogined = false
+			answer([row("Savings", AccountType.Imported, 2)])
+			await done
+			await flushPromises()
+			appStore.isLogined = true
+		}
+		await lockDuring(() => wrapper.get('[data-testid="network-delete-chain-btn"]').trigger("click"))
+		expect(useCacheStore().confirm?.description).toBeUndefined()
+
+		await wrapper.get('[data-testid="network-delete-chain-btn"]').trigger("click")
+		await flushPromises()
+		expect(useCacheStore().confirm.description).toBe(WIPES)
+		const confirm = useCacheStore().confirm.callback
+		await lockDuring(() => confirm?.())
+		expect(useCacheStore().confirm.description).toBe(WIPES)
+		expect(appStore.removeNetwork).not.toHaveBeenCalled()
+	})
+
 	test("a failed account read opens no confirmation, only the failure toast", async () => {
 		accounts.getAccounts.mockRejectedValue(new Error("worker gone"))
 		expect(await confirmFor("password")).toBeUndefined()

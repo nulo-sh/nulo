@@ -177,8 +177,9 @@ const handleDeleteEndpoint = (endpoint) => {
 	})
 }
 
-/** Each press and each Confirm; one a later one overtook while it read acts no further. */
+/** Each press and each Confirm; one a later one or the lock overtook while it read acts no further. */
 let deleteAttempts = 0
+const overtaken = (id, attempt) => disposed || !appStore.isLogined || networkId.value !== id || attempt !== deleteAttempts
 
 /** The delete goes only on what its confirmation said: Confirm reads the chain again, and an import
  *  made since, in another window, reopens the confirmation naming it instead of deleting. */
@@ -192,7 +193,7 @@ const confirmDeleteNetwork = (id, name, description) =>
 			const attempt = ++deleteAttempts
 			const target = network.value
 			const now = target?.id === id ? await deleteDescription(target) : null
-			if (disposed || networkId.value !== id || attempt !== deleteAttempts) return
+			if (overtaken(id, attempt)) return
 			if (now === null) return openToast({ kind: "error", label: "Failed to delete chain" })
 			if (now !== description) return confirmDeleteNetwork(id, name, now)
 			try {
@@ -217,7 +218,7 @@ const handleDeleteNetwork = async () => {
 	const attempt = ++deleteAttempts
 	// Read at the click: a confirmation opened before the page's own read landed must still name them.
 	const description = await deleteDescription(network.value)
-	if (disposed || networkId.value !== id || attempt !== deleteAttempts) return
+	if (overtaken(id, attempt)) return
 	// An unknown hold is not an empty one: the confirmation never omits what the delete removes.
 	if (description === null) return openToast({ kind: "error", label: "Failed to delete chain" })
 	confirmDeleteNetwork(id, name, description)
