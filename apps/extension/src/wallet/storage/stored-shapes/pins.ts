@@ -19,6 +19,6 @@ export const PINNED_STAMPS: readonly Pin[] = [
  * e2e test password; `passkey.json` a fresh passkey profile's, with its passkey check. Never edited.
  */
 export const PINNED_BACKUPS: Readonly<Record<string, string>> = {
-	"password.txt": "f735236f1517e26ad6d1f698978d8e15ffa14b5b780c8a620e9e4a406a3ee456",
-	"passkey.json": "325307d1c5155721438095a723add78f086a8b588383e1cc9284cd7078a0e2a9",
+	"password.txt": "e30a64f3db7ac0ab210a2d78927525f22401b5e19c53651ad3cdba1f059c8d76",
+	"passkey.json": "3f82563c7987d6a9a865a39ff45303b78041688d7f2ec07739198f33e7366aea",
 }

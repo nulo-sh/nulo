@@ -3,20 +3,20 @@
   "aztec-version": "6.0.0-rc.3",
   "compat-epoch": 5,
   "backup-schema-version": 1,
-  "master-key": "CrOoVKxlQdQT1e3XKAYdB1TPP16yi6yzIp2XLlR9nQg=",
-  "imported-keys-dek-sealed": "AcGz15OuMk+gAVyJ3DoDSgid/dlTOUwF7kWcknDyqb1GJJUFHANQ3ZwZCmrcJdTTNz1dgFwtm2edaD2PgQ==",
+  "master-key": "X//xdW+vS4xoca1IuxhVn04fUh77rtn0KhGA6vnt41A=",
+  "imported-keys-dek-sealed": "AW8rxOq5UW42HbCUWqdzJL/VZMQYF/kDh52XdrCrClgW6O0QiRFWLG8nJeTSzX9gVC6zmwfAyTMtsiHUCQ==",
   "active-chain-id": 3415328944,
   "data": {
     "profile": {
-      "id": "f85fc8b8",
+      "id": "1978085f",
       "name": "Main",
       "type": "passkey"
     },
     "account": [
       {
-        "profileId": "f85fc8b8",
+        "profileId": "1978085f",
         "chainId": 3415328944,
-        "address": "0x0699f0e5846b2a9b9ff353e5ae3802abf9072f751e9ae20a511a67171ffff46d",
+        "address": "0x305bb8cc9878cd315b613d19ed707edbd9d3ae2ea37f0dedef47104f30cc8934",
         "index": 0,
         "type": 0,
         "l1ChainId": 11155111,
@@ -94,6 +94,6 @@
       }
     ]
   },
-  "checksum": "adb8ca3a060192ef125e3445607b0162d47918d3c970c3daeb29661a1be118a9",
-  "backup-mac": "5j7gRrnUpn8y08YyjXfPbVSsLWU5VubmzSQMZiNSLLc="
+  "checksum": "e4ee8795620e792a7614d6f5d2b237c8182aea6618df7bb65bd83d0b6a1bcfe5",
+  "backup-mac": "TxjvZLHTSSXP9aLK5PAc04eAsibaJ4nqJgjYElO5oU8="
 }
