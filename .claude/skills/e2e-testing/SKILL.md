@@ -286,6 +286,14 @@ then measured runtime, with each browser's suite wall-clock before and after in 
   shares one account across files on network: not built
   (`implementations-plan/archive/e2e-fixed-cost-1/plan.md`, D1). A network fork's aztec.js import is
   4-6 s inlined against 2 s native; native loading is known limit #997.
+- **The funded and dApp fixtures switch to Local on the registration popup**, through
+  `launchOnLocalNetwork` (which `setupConnectedPlayground` goes through), and print `[onboard] <ms>`:
+  the registration through the switch, the line CI's per-file times are read against. Closing that
+  popup and opening another cost 1.15 s (Chrome) / 2.0 s (Firefox) per call (2026-10, 12 paired
+  blocks on one host). A profile injected into storage instead (the production `ProfileService`'s
+  rows rendered in the fork, then the UI unlock) saved nothing more, because an unlock runs the
+  creation's PBKDF2 work, and the fork's import of the renderer costs 18-27 s. Not built
+  (`implementations-plan/archive/warm-stack-1/plan.md`).
 - **A cost guard** (a latency ratio between builds, timed by a probe spec on builds chosen by
   `EXTENSION_PATH`) runs its variants interleaved in one pass, a fresh browser per sample, each
   sample started under a load ceiling well below the run gate's, with the load logged. A loaded
