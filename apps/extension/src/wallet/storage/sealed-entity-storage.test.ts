@@ -346,6 +346,17 @@ describe("SealedEntityStorage", () => {
 			expect(await txs().get(HASH, "q")).toBeUndefined()
 		})
 
+		test("its adoption keeps a sealed row the profile already holds and drops only the plaintext", async () => {
+			await txs().set(HASH, tx({ profileId: "p", status: TxStatus.Finalized }))
+			const sealedOnly = await stored()
+			const planted = JSON.stringify(tx({ status: TxStatus.Dropped }))
+			await area.set({ [legacyKey]: planted })
+
+			expect(await txs().adoptOwnerless(HASH, planted, "p")).toBe(true)
+			expect(await stored()).toEqual(sealedOnly)
+			expect(await txs().get(HASH, "p")).toEqual(tx({ profileId: "p", status: TxStatus.Finalized }))
+		})
+
 		test.each([
 			[
 				"the stored text changed since it was read",

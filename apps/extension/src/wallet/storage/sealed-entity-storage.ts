@@ -286,9 +286,10 @@ export class SealedEntityStorage<T> {
 	/**
 	 * Gives the ownerless legacy row at `naturalId` to `profileId`: seals it, stamped with the
 	 * profile, under the profile's keyed id and removes the plaintext original in the same dispatch,
-	 * only while the original still holds `text` and the profile the keys it was sealed under. The
-	 * caller decides the profile owns it and holds the lock its root's writers hold. Returns whether
-	 * it was adopted.
+	 * only while the original still holds `text` and the profile the keys it was sealed under. A
+	 * sealed row the profile already holds at that id is kept and only the original removed: an
+	 * unauthenticated row never replaces an authenticated one. The caller decides the profile owns it
+	 * and holds the lock its root's writers hold. Returns whether it was adopted.
 	 */
 	public async adoptOwnerless(naturalId: string, text: string, profileId: string): Promise<boolean> {
 		const keys = this.keysFor(profileId)
@@ -298,7 +299,11 @@ export class SealedEntityStorage<T> {
 		const adopted = JSON.stringify({ ...parsed.value, profileId })
 		const legacyKey = this.prefix + naturalId
 		const sealedKey = this.prefix + (await this.physicalId(naturalId, profileId, keys))
-		const items = { [sealedKey]: await this.envelope(keys, profileId, sealedKey, JSON.stringify({ k: naturalId, r: adopted })) }
+		const twin = (await this.area.get(sealedKey))[sealedKey]
+		const items =
+			twin === undefined
+				? { [sealedKey]: await this.envelope(keys, profileId, sealedKey, JSON.stringify({ k: naturalId, r: adopted })) }
+				: {}
 		if ((await this.area.get(legacyKey))[legacyKey] !== text || this.keysFor(profileId) !== keys) return false
 		await this.commitWithRemovals(items, [legacyKey])
 		return true
