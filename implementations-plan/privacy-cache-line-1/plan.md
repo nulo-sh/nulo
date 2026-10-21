@@ -1,7 +1,7 @@
 ---
 plan: privacy-cache-line-1
 tier: light
-status: planned; final Codex pass approve; A1 under auto-continue
+status: completed; PR #974 against dev, merging is the orchestrator's call
 issues: none (the work is the owner's pick P77-13 C; the PR closes nothing)
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at f55b7b4e6
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-21
+- **Status:** completed. PR #974 against `dev` carries the work and this close-out; merging it is the orchestrator's call.
+- **Shipped:** #974. Privacy 1.2.2, a patch: §§ 5.11 and 5.2 each gain the owner's sentence (P77-13 C). 1.2.1 is archived byte-identical. The manifest entry is `material: false`, `effective: null`. `BEFORE-LAUNCH.md` § 4 gains the release item. `remote-code.md:110` follows the § 13 sentence.
+- **Deviations:** two edits outside `legal/` and `packages/legal` (A2, D3). One `test:all` timeout under host load passed on its one retry ([lessons/phase-1.md](lessons/phase-1.md)).
+- **Known limits:** none.
+- **Open items:** `BEFORE-LAUNCH.md` § 4, "Due at the release that publishes privacy 1.2.2" (the effective date in three places, the DRAFT-banner check, AMO's pasted copy).
+- **Lessons:** none promoted. Nothing here generalizes past the legal procedure that `packages/legal/README.md` and `BEFORE-LAUNCH.md` § 4 hold.
+- **Seeds retired:** the `/goal` and `/loop` seeds under § Seeds.
 
 # privacy-cache-line-1: the privacy policy names what the list and price requests carry
 
