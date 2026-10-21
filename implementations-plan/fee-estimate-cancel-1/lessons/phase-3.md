@@ -39,3 +39,11 @@ Runs live under `~/.cache/nulo-backlog/fee-estimate-cancel-1/runs/`; each throug
 
 - **Codex** (gpt-6.1-sol high, session 01a15dc9-f7fd-7633-b3cb-2325a6c9367b): conditional approve, no production defect, three low findings, all accepted: (1) T3 let an unawaited `approveInteraction` and a wait on one map only pass: the approval is now held until the test releases it, no dispose may start before, and both release orders run; (2) T1's identity check skipped the first call: it now compares the first promise while the cancel is held; (3) two comments carried history or restated their line: trimmed.
 - **Opus** (`general-purpose`, beside round 1): approve, low findings, all accepted: (1) no test closed an accepted approval whose cancels never answer: one now runs on fake timers, the window stays until `END_ACK_TIMEOUT_MS` and the unload rejection is detached; (2) a rejecting `cancelEstimate` had no row: the wired `cancelRemote` resolves; (3) four comments named callers, a stale cause or a sibling's doc: rewritten; (4) the plan's Phase 2 gate claimed every T5 case red on the base: narrowed.
+
+## Review loop, round 2 (2026-10-21)
+
+- **Codex** resumed (the resume stays on the account the session started on): approve, no findings. Converged in two rounds.
+
+## Arc gate (2026-10-21)
+
+- `bun run lint` 0; `bun run typecheck:all` 0; `bun run test` 14799 passed, 5 skipped, 7 todo; `bun run test:all` every workspace 0; `bun run check:plans` 0 findings; `git diff --exit-code -- apps/extension/tests/e2e` clean.
