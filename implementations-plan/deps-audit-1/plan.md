@@ -1,7 +1,7 @@
 ---
 plan: deps-audit-1
 tier: light
-status: planned, Codex approve; arc 1 next
+status: planned, Codex approve; arc 1 Phase 1 done, review loop
 issues: "#980 (closed by arc 1)"
 driver: claude-code
 claude_model: opus
@@ -37,7 +37,7 @@ After the arc, `bun audit` reports the 41 acknowledged advisories and nothing el
 - F5 The planned edits (the root override, the three app manifests) make `bun install` re-resolve, and it refuses `@alejoamiras/presto` 6.0.0-rc.3 (inside the gate until about 2026-10-21T16:54Z) and `@alejoamiras/private-fee-juice` 6.0.0-rc.3 (until about 21:01Z). Both are exact pins, already locked.
 - F6 The probe in `recon.md` lands 6 changed lines in `bun.lock` (4 vite ranges, the vite entry, the follow-redirects entry) and one `vite` line in each of the 4 manifests; the tracked `bunfig.toml` stays untouched; `bun install --frozen-lockfile --force` passes; the gate in enforce mode reads 41 / 0 / 0 / 0.
 - F7 Nothing in the tree pins these versions (no test, notices record or doc number); the ack file and `SECURITY.md`'s table need no edit. `reference/{nulo-v6,key-model-v2,aztec-5.0.0-stable/regime-b}/bun.lock` also lock follow-redirects 1.16.0 (D9).
-- F8 vite 8.2.4's `dist` also bundles magic-string 1.1.0 → 1.2.0 and shell-quote 1.8.4 → 1.12.0, which no lock entry shows.
+- F8 vite 8.2.4's `dist` also bundles, with no lock entry to show it: magic-string 1.1.0 → 1.2.0, shell-quote 1.8.4 → 1.12.0, ws 8.21.1 → 8.21.3 (the dev server's HMR socket), postcss-import 16.1.1 → 16.2.0, @vercel/detect-agent 1.2.3 → 1.2.5, @vitejs/devtools 0.4.10 → 0.4.12.
 - F9 8.2.4's `module-runner.js` changes `isCircularRequest`: an import whose call stack holds a module that already finished is no longer circular, so `cachedRequest` awaits the requested module instead of returning its partial exports. vitest's runner inherits it through `super.cachedRequest` (Codex reproduced both outcomes on the installed code).
 
 **Inferences**
@@ -57,7 +57,7 @@ After the arc, `bun audit` reports the 41 acknowledged advisories and nothing el
 ## Security & Adversarial Considerations
 
 - **follow-redirects (2 high):** on a cross-origin redirect, a credential header passed in array form, or named by a `sensitiveHeaders` pattern holding `^` or `|`, reaches the new host. It runs only in Node and Bun (axios's http adapter): tests, the e2e harness, scripts that use the Aztec client. Exploitability here: unknown; the fix removes it.
-- **launch-editor in vite (3):** command or flag injection on Windows and WSL, and a Windows existence-check bypass, through the dev server's open-in-editor middleware. Reachable on a Windows or WSL host running a vite dev server (`apps/extension` `dev`, landing, playground, Storybook dev). No `vite build`, so no shipped artifact, serves it.
+- **launch-editor in vite (3):** command or flag injection on Windows and WSL, and a Windows existence-check bypass, through the dev server's open-in-editor middleware. Reachable on a Windows or WSL host through vite's `/__open-in-editor` dev-server route (`apps/extension` `dev`, landing, playground). No `vite build`, so no shipped artifact, serves it.
 - **Supply chain:** the age gate holds for every new version (F4). The exclude names packages, not versions: it is safe here only because both names stay exact pins whose lock entries do not change, and Phase 1 checks both. A matching `dist.integrity` proves byte consistency with the registry, not publisher innocence; the controls are the age gate, the full `bun pm diff` read (bundled changes included, F8), vite's provenance, and the byte-identical rest of the lockfile. Compromised build tooling could alter shipped code: that is the residual every build carries, not new here.
 - **Least privilege, crypto:** N/A; no workflow, token or crypto change.
 
@@ -67,7 +67,7 @@ None. The arc changes dependency files only; no screen, copy or layout.
 
 ## Phases (arc 1, branch `deps-audit-1-a1` off `origin/dev`, this plan's commit cherry-picked first)
 
-### Phase 1: the two bumps
+### Phase 1: the two bumps ✓
 - First, on the base: `bun run test:all`; record each workspace's pass count.
 - `bun update follow-redirects`.
 - If before 21:01Z: regenerate the scratch config from the tracked `bunfig.toml`; `diff` them shows only the exclude line.
@@ -119,6 +119,9 @@ None. The arc changes dependency files only; no screen, copy or layout.
 - **Round 2, Codex resumed: `conditional approve`, confidence high.** The 13 workspaces and the soak commands verified against `cli.ts` and `lib.ts`. Accepted: (1) the artifact check runs from the repo root on `apps/extension/dist/*`, accepts only grep exit 1, and adds launch-editor's own string; (2) the soak's binding stated as it is (per call, per pair) and all 26 summaries checked against one candidate; (3) the audit output moves to scratch (an untracked `a.json` at the root dirties the tree, so `compare` refuses); (4) the candidate is chosen after a `dev` merge, and a close-out merge that touches runtime inputs reruns Phases 2-3; recon's re-gate wording narrowed.
 - **Round 3, Codex resumed: `approve`, confidence high.** "No remaining material findings." It verified the launch-editor fingerprint is in 8.2.4, the grep fails closed, the audit output stays outside the tree, and the 26 summaries plus the dispatch bind to one clean candidate.
 - **Round 1, Opus Plan leg: `conditional approve`, confidence 0.8.** Accepted: (A) six lines; (B) a fresh install before the builds; (C) vite's provenance recorded, follow-redirects has none; (D) the scratch config regenerated and diffed, dropped after 21:01Z; (E) I2 rewritten; (F) the vacuous notices greps replaced, the duplicate Chrome build dropped, the base `test:all` moved to step 0; trims applied. Rejected: D6 as Opus argued it (see D6); dropping the local Firefox smoke (D10).
+
+- **Arc 1 review, round 1, Codex (gpt-6.1-sol high, session 01a15c4b, on the Phase 1 diff): `approve with fixes`, confidence high.** It found no dependency-file defect: six lockfile lines, every other entry byte-identical, one range per manifest, integrity matching the registry. Accepted: recon said all ten changed files sit under `dist/` (nine do, plus `package.json`) and omitted three bundled moves; both corrected (F8, recon).
+- **Arc 1 review, Opus (general-purpose, same diff): `approve with fixes`, confidence high.** Accepted: (2) the full bundled list (F8, adds `@vitejs/devtools`); (3) Phase 1's evidence recorded in `lessons/phase-1.md`; the Security line narrowed to vite's own route. Its (1) is out of this lane's scope and went to the orchestrator.
 
 ## Delivery
 
