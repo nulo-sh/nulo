@@ -4,7 +4,6 @@
  * panel reads the record before its router exists and removes it on its first arrival there, so the
  * next panel the person opens lands there once.
  */
-import { watch } from "vue"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
 import type { Snack } from "@/utils/snack"
 
@@ -19,7 +18,9 @@ const HANDBACK_ROUTES = [
 ] as const
 export type HandbackRoute = (typeof HANDBACK_ROUTES)[number]
 
-const MAX_LABEL_LENGTH = 200
+/** Above the longest label a flow builds: Restore again names up to 64 networks, which the network
+ *  form caps at 25 characters each. */
+const MAX_LABEL_LENGTH = 2048
 const MAX_PROFILE_ID_LENGTH = 128
 
 /** An outcome belongs to the profile of the run that produced it; another profile never sees it. */
@@ -50,7 +51,7 @@ function decodeSnack(raw: unknown): HandbackSnack | undefined {
 }
 
 /** Removes the record only while it still holds `raw`: a hand-back written since is the next one. */
-async function removeIfUnchanged(raw: unknown): Promise<void> {
+export async function removeHandbackIfUnchanged(raw: unknown): Promise<void> {
 	const stored: unknown = (await chrome.storage.session.get(HANDBACK_KEY))[HANDBACK_KEY]
 	if (JSON.stringify(stored) === JSON.stringify(raw)) await chrome.storage.session.remove(HANDBACK_KEY)
 }
@@ -74,7 +75,7 @@ export async function readHandback(): Promise<HandbackRoute | undefined> {
 		if (raw === undefined) return undefined
 		const handback = decodeHandback(raw)
 		if (!handback) {
-			await removeIfUnchanged(raw)
+			await removeHandbackIfUnchanged(raw)
 			return undefined
 		}
 		landing = { handback, raw }
@@ -85,43 +86,12 @@ export async function readHandback(): Promise<HandbackRoute | undefined> {
 	}
 }
 
-/** What the panel shows now: its completed route, and the open session's profile. */
-export interface LandingState {
-	path: string
-	loggedIn: boolean
-	profileId: string | undefined
+/** The record this panel landed for, as read, until its arrival ends the landing. */
+export function pendingLanding(): { handback: Handback; raw: unknown } | undefined {
+	return landing
 }
 
-/**
- * Settles the landing on the first arrival at its route with a session open: the record is removed,
- * the landing ends (a later lock or reset goes Home), and the snack shows when the session, read
- * after the removal, is still open on the snack's profile. A preload Firefox abandons dies holding it.
- */
-export function settleLanding(state: () => LandingState, show: (snack: Snack) => void): void {
-	const taken = landing
-	if (!taken) return
-	let settled = false
-	const stop = watch(
-		state,
-		async ({ path, loggedIn }) => {
-			if (settled || !loggedIn || path !== taken.handback.route) return
-			settled = true
-			landing = undefined
-			queueMicrotask(() => stop())
-			try {
-				await removeIfUnchanged(taken.raw)
-			} catch (error) {
-				console.debug("hand-back removal failed", { error })
-			}
-			const { snack } = taken.handback
-			const now = state()
-			if (snack && now.loggedIn && now.profileId === snack.profileId) show({ kind: snack.kind, label: snack.label })
-		},
-		{ immediate: true },
-	)
-}
-
-/** Forgets the landing; for tests. */
-export function resetLanding(): void {
+/** Ends the landing: a later lock, reset or guard bounce goes Home. */
+export function endLanding(): void {
 	landing = undefined
 }

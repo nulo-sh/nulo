@@ -1,9 +1,5 @@
-import { flushPromises } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { reactive } from "vue"
-import { postAuthRoute } from "./own-window"
-import { decodeHandback, HANDBACK_KEY, type LandingState, landingRoute, readHandback, resetLanding, settleLanding } from "./panel-handback"
-import type { Snack } from "./snack"
+import { decodeHandback, endLanding, HANDBACK_KEY, landingRoute, readHandback } from "./panel-handback"
 
 const surface = vi.hoisted(() => ({ inPanel: true }))
 vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => surface.inPanel }))
@@ -26,28 +22,9 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-	resetLanding()
+	endLanding()
 	vi.unstubAllGlobals()
 })
-
-/** A panel that read `record` at boot, on Home with no session yet. */
-async function bootWith(record: unknown) {
-	session.set(HANDBACK_KEY, record)
-	const route = await readHandback()
-	const state = reactive<LandingState>({ path: "/", loggedIn: false, profileId: undefined })
-	const shown: Snack[] = []
-	settleLanding(
-		() => ({ ...state }),
-		(snack) => shown.push(snack),
-	)
-	return { route, state, shown }
-}
-
-/** The panel arrives on its landing with `profileId`'s session open. */
-async function arrive(state: LandingState, profileId: string = SNACK.profileId, path: string = CONTACTS) {
-	Object.assign(state, { path, loggedIn: true, profileId })
-	await flushPromises()
-}
 
 describe("reading the hand-back", () => {
 	test("only Firefox's toolbar panel reads it, once, and lands on its route", async () => {
@@ -85,7 +62,7 @@ describe("reading the hand-back", () => {
 		const malformed = [
 			{ ...SNACK, kind: "info" },
 			{ ...SNACK, label: "" },
-			{ ...SNACK, label: "x".repeat(201) },
+			{ ...SNACK, label: "x".repeat(2049) },
 			{ ...SNACK, label: 5 },
 			{ kind: SNACK.kind, label: SNACK.label },
 			{ ...SNACK, profileId: "" },
@@ -93,88 +70,6 @@ describe("reading the hand-back", () => {
 		]
 		for (const snack of malformed)
 			expect(decodeHandback({ route: CONTACTS, snack }), JSON.stringify(snack)).toEqual({ route: CONTACTS })
-		expect(decodeHandback({ route: CONTACTS, snack: { ...SNACK, label: "x".repeat(200) } })?.snack?.label).toHaveLength(200)
-	})
-})
-
-describe("settling the landing", () => {
-	test("waits for an open session on the landing route, then removes the record and shows the snack once", async () => {
-		const { route, state, shown } = await bootWith({ route: CONTACTS, snack: SNACK })
-		expect(route).toBe(CONTACTS)
-		Object.assign(state, { path: "/popup/auth" })
-		await flushPromises()
-		Object.assign(state, { path: CONTACTS })
-		await flushPromises()
-		Object.assign(state, { path: "/popup/general", loggedIn: true, profileId: SNACK.profileId })
-		await flushPromises()
-		expect(session.has(HANDBACK_KEY)).toBe(true)
-		expect(postAuthRoute()).toBe(CONTACTS)
-
-		await arrive(state)
-		await arrive(state, SNACK.profileId, "/popup/general")
-		await arrive(state)
-		expect(shown).toEqual([{ kind: "success", label: SNACK.label }])
-		expect(session.has(HANDBACK_KEY)).toBe(false)
-		expect(landingRoute()).toBeUndefined()
-		expect(postAuthRoute()).toBe("/popup/general")
-	})
-
-	test("another profile's session removes the record and never shows its snack; the same profile does", async () => {
-		const other = await bootWith({ route: CONTACTS, snack: SNACK })
-		await arrive(other.state, "e5f6a7b8")
-		expect(other.shown).toEqual([])
-		expect(session.has(HANDBACK_KEY)).toBe(false)
-
-		resetLanding()
-		const same = await bootWith({ route: CONTACTS, snack: { ...SNACK, kind: "error", label: "Contact import canceled" } })
-		await arrive(same.state)
-		expect(same.shown).toEqual([{ kind: "error", label: "Contact import canceled" }])
-	})
-
-	test("a session that closes while the record is removed shows nothing", async () => {
-		const { state, shown } = await bootWith({ route: CONTACTS, snack: SNACK })
-		sessionGet.mockImplementationOnce(async (key: string) => {
-			state.loggedIn = false
-			return { [key]: session.get(key) }
-		})
-		await arrive(state)
-		expect(shown).toEqual([])
-		expect(session.has(HANDBACK_KEY)).toBe(false)
-	})
-
-	test("a hand-back written since the read is kept for the next panel", async () => {
-		const { state, shown } = await bootWith({ route: CONTACTS, snack: SNACK })
-		const next = { route: "/popup/settings/accounts", snack: { ...SNACK, label: "Account imported" } }
-		session.set(HANDBACK_KEY, next)
-		await arrive(state)
-		expect(session.get(HANDBACK_KEY)).toEqual(next)
-		expect(shown).toHaveLength(1)
-	})
-
-	test("a record whose snack was dropped is still consumed, with nothing shown", async () => {
-		const { route, state, shown } = await bootWith({ route: CONTACTS, snack: { ...SNACK, label: "" } })
-		expect(route).toBe(CONTACTS)
-		await arrive(state)
-		expect(session.has(HANDBACK_KEY)).toBe(false)
-		expect(shown).toEqual([])
-	})
-
-	test("a removal that rejects still settles the landing and shows the snack", async () => {
-		const { state, shown } = await bootWith({ route: CONTACTS, snack: SNACK })
-		sessionRemove.mockRejectedValueOnce(new Error("storage unavailable"))
-		await arrive(state)
-		expect(shown).toHaveLength(1)
-		expect(landingRoute()).toBeUndefined()
-	})
-
-	test("a panel that read no record settles nothing", async () => {
-		const shown: Snack[] = []
-		settleLanding(
-			() => ({ path: CONTACTS, loggedIn: true, profileId: SNACK.profileId }),
-			(snack) => shown.push(snack),
-		)
-		await flushPromises()
-		expect(shown).toEqual([])
-		expect(sessionRemove).not.toHaveBeenCalled()
+		expect(decodeHandback({ route: CONTACTS, snack: { ...SNACK, label: "x".repeat(2048) } })?.snack?.label).toHaveLength(2048)
 	})
 })

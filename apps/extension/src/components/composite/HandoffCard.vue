@@ -20,17 +20,17 @@ onMounted(() => chooseRef.value?.$el?.focus())
 
 <template>
 	<div :class="$style.window">
-	<section :class="$style.card" :aria-labelledby="titleId" data-testid="handoff-card">
-		<Icon name="upload" :size="24" aria-hidden="true" />
-		<h1 :id="titleId" :class="$style.title">{{ title }}</h1>
-		<p :class="$style.description">{{ description }}</p>
-		<div :class="$style.actions">
-			<Button ref="chooseRef" variant="cta" size="compact" :disabled="busy" data-testid="handoff-card-choose" @click="emit('choose')">
-				Choose file
-			</Button>
-			<Button variant="secondary" size="large" wide :disabled="busy" data-testid="handoff-card-cancel" @click="emit('cancel')">Cancel</Button>
-		</div>
-	</section>
+		<section :class="$style.card" :aria-labelledby="titleId" data-testid="handoff-card">
+			<Icon name="upload" :size="24" aria-hidden="true" />
+			<h1 :id="titleId" :class="$style.title">{{ title }}</h1>
+			<p :class="$style.description">{{ description }}</p>
+			<div :class="$style.actions">
+				<Button ref="chooseRef" variant="cta" size="compact" :disabled="busy" data-testid="handoff-card-choose" @click="emit('choose')">
+					Choose file
+				</Button>
+				<Button variant="secondary" size="large" wide :disabled="busy" data-testid="handoff-card-cancel" @click="emit('cancel')">Cancel</Button>
+			</div>
+		</section>
 	</div>
 </template>
 

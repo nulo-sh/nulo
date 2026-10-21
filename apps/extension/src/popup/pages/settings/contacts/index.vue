@@ -54,6 +54,7 @@ const { entities: contacts } = useEntityCrud({
 	mode: "resync",
 })
 
+const cardWindow = isCardWindow()
 const sortedContacts = computed(() =>
 	[...contacts.value].sort((a, b) => {
 		const abbrPos = stringCompare(a.abbr, b.abbr)
@@ -120,8 +121,6 @@ const handleImportContacts = async () => {
 	if (await leavePanelFor(OWN_WINDOW_ROUTES.contacts)) return
 	await importContacts()
 }
-
-const cardWindow = isCardWindow()
 
 /** A refused file keeps the card for another pick; any other end hands its snack back to the panel. */
 const handleChooseInCard = async () => {

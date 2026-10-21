@@ -53,11 +53,11 @@ let generation = 0
  *  needs the password it was exported with. */
 const isProtectedFile = computed(() => fileBody.value.trim().length > 0 && !fileBody.value.trim().startsWith("{"))
 const needsConfirm = computed(() => previewAddress.value.length > 0)
-/** Another account's name: the account this page imports, once in the list, is not another. */
-/** The hand-off window shows only the card until a file is picked or refused; the refusal shows on the
- *  page with its own file row. */
+/** The hand-off window shows only the card until a file is picked or refused; the page then shows the
+ *  file, or the refusal with its own file row. */
 const cardWindow = isCardWindow()
-const showCard = computed(() => cardWindow && !fileBody.value && !error.value)
+const showCard = computed(() => cardWindow && !fileName.value && !fileBody.value && !error.value)
+/** Another account's name: the account this page imports, once in the list, is not another. */
 const nameTaken = computed(() =>
 	appStore.accounts.some((a) => !sameFieldAddress(a.address, previewAddress.value) && sameStoredName(a.name, accountName.value)),
 )

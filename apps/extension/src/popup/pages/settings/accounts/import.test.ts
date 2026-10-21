@@ -209,6 +209,15 @@ describe("settings/accounts/import — the hand-off window", () => {
 		expect(w.find('[data-testid="import-account-pick-file"]').exists()).toBe(true)
 	})
 
+	test("an empty file shows the page with the file it named, as outside the window", async () => {
+		vi.mocked(pickFile).mockResolvedValueOnce({ name: "empty.json", text: async () => "  " } as never)
+		const w = mountImport()
+		await w.get('[data-testid="handoff-card-choose"]').trigger("click")
+		await flushPromises()
+		expect(w.find('[data-testid="handoff-card"]').exists()).toBe(false)
+		expect(w.find('[data-testid="import-account-pick-file"]').exists()).toBe(true)
+	})
+
 	test("the import hands 'Account imported' back to the account list, for the profile it imported into", async () => {
 		const w = await confirmStep()
 		await nameAndEnter(w, "Imported")

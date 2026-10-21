@@ -16,8 +16,8 @@ import "@nulo/design/base.css"
 import "./index.scss"
 
 import { initAppServiceContext, isServiceReady, managers, waitForServiceReady } from "@/utils/core"
-import { captureOwnWindow, followOwnRoute } from "@/utils/own-window"
-import { readHandback, settleLanding } from "@/utils/panel-handback"
+import { captureOwnWindow, followOwnRoute, ownWindowSettled } from "@/utils/own-window"
+import { readHandback } from "@/utils/panel-handback"
 import { showSnack } from "@/utils/snack"
 import { captureWindowDocument } from "@/utils/window-document"
 import { LEGACY_SETTINGS_REDIRECTS } from "./legacy-routes"
@@ -35,6 +35,7 @@ initAppServiceContext()
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 import { useToast } from "@/composables/toast"
+import { settleLanding } from "@/composables/panelLanding"
 
 routes.push({
 	path: "/",
@@ -47,8 +48,8 @@ captureOwnWindow(window.location.hash)
 captureWindowDocument(window.location.hash)
 
 // Firefox's toolbar panel opens on the page a hand-off window returned to: the URL is rewritten
-// before the router reads it, so Home never shows first.
-const landing = await readHandback()
+// before the router reads it, so Home never shows first. An own window's pages read its window type.
+const [landing] = await Promise.all([readHandback(), ownWindowSettled()])
 if (landing) window.history.replaceState(window.history.state, "", `#${landing}`)
 
 const scrollMemory = createScrollMemory(() => {

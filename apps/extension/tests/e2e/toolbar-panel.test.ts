@@ -278,7 +278,7 @@ async function untilRegistered(control: Page, id: number | null): Promise<void> 
 	)
 }
 
-type InputClickProbe = Window & { __inputClicks?: Array<{ type: string; active: boolean }> }
+type InputClickProbe = Window & { __inputClicks?: Array<{ input: HTMLInputElement; active: boolean }> }
 
 /** Records, in the window's own realm, each input the page clicks and whether the person's press was
  *  still active then: Firefox opens a file picker only for a click that carries one. */
@@ -288,11 +288,18 @@ async function recordInputClicks(page: Page): Promise<void> {
 		w.__inputClicks = []
 		const click = HTMLInputElement.prototype.click
 		HTMLInputElement.prototype.click = function (this: HTMLInputElement) {
-			w.__inputClicks?.push({ type: this.type, active: navigator.userActivation.isActive })
+			w.__inputClicks?.push({ input: this, active: navigator.userActivation.isActive })
 			click.call(this)
 		}
 	})
 }
+
+/** The first recorded click: its input's type, whether it is still in the page, and its activation. */
+const firstInputClick = (page: Page) =>
+	page.evaluate(() => {
+		const first = (window as InputClickProbe).__inputClicks?.[0]
+		return first ? { type: first.input.type, connected: first.input.isConnected, active: first.active } : null
+	})
 
 type HandbackProbe = Window & { __handbacks?: unknown[] }
 
@@ -536,24 +543,25 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await waitForHash(contactsWindow, CONTACTS, 60_000)
 			await contactsWindow.waitForSelector(sel("handoff-card"), { visible: true, timeout: 15_000 })
 			expect(await contactsWindow.$(sel("contacts-menu-trigger")), "the page behind the card").toBeNull()
-			expect(await contactsWindow.$(sel("header-lock")), "the header").toBeNull()
 			const cardWindowId = await windowIdOf(contactsWindow)
 
 			// Only a press in this window opens the picker, so the input's click must still carry it.
 			// Headless Firefox cancels that picker at once, which removes its input and keeps the card.
 			await recordInputClicks(contactsWindow)
 			await contactsWindow.click(sel("handoff-card-choose"))
-			await contactsWindow.waitForFunction(
-				() => (window as InputClickProbe).__inputClicks?.length === 1 && !document.querySelector('body > input[type="file"]'),
-				{ timeout: 10_000, polling: 100 },
+			const firstClick = await pollUntil(
+				() => firstInputClick(contactsWindow),
+				(click) => click !== null && !click.connected,
+				{ label: "the picker's input clicked and cancelled", timeoutMs: 10_000, intervalMs: 100, show: JSON.stringify },
 			)
-			expect(await contactsWindow.evaluate(() => (window as InputClickProbe).__inputClicks)).toEqual([{ type: "file", active: true }])
+			expect(firstClick).toEqual({ type: "file", connected: false, active: true })
 			await contactsWindow.waitForSelector(sel("handoff-card-choose"), { visible: true, timeout: 5_000 })
 
 			await watchHandback(control)
 			const profile = await sessionProfile(control)
 			await pickFileByTestId(contactsWindow, "handoff-card-choose", files.write(TWO_CONTACTS))
 			await contactsWindow.waitForSelector(sel("import-contact-row"), { visible: true, timeout: 15_000 })
+			expect(await contactsWindow.$(sel("header-lock")), "the header, with the session open").toBeNull()
 			await clickByTestId(contactsWindow, "import-contacts-submit")
 
 			// Read from the control page before any read in the panel, which would move focus.

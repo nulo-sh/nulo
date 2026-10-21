@@ -82,12 +82,6 @@ const {
 	leave: (outcome) => void leaveToHome(outcome),
 })
 
-/** A hand-off window hands every end back to the panel, which opens on Home. */
-async function leaveToHome(outcome) {
-	if (await returnToPanel("/popup/general", outcome)) return
-	await router.replace("/popup/general")
-}
-
 /** The hand-off window shows only the card until a backup is picked or refused. */
 const cardWindow = isCardWindow()
 const showCard = computed(() => cardWindow && !selectedBackup.value && !error.value.title)
@@ -97,6 +91,12 @@ const cta = readonly({
 	restoreStatus,
 	isAllowedToImportBackup: isAllowedToRestore,
 })
+
+/** A hand-off window hands every end back to the panel, which opens on Home. */
+async function leaveToHome(outcome) {
+	if (await returnToPanel("/popup/general", outcome)) return
+	await router.replace("/popup/general")
+}
 
 /** From Firefox's toolbar panel the pick moves to this page's own window, where a second press picks. */
 const handlePickFile = async () => {

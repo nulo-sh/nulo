@@ -178,6 +178,7 @@ declare global {
   const displaySymbol: typeof import('../utils/tx-amount').displaySymbol
   const downloadFile: typeof import('../utils/files').downloadFile
   const effectScope: typeof import('vue').effectScope
+  const endLanding: typeof import('../utils/panel-handback').endLanding
   const endsSelection: typeof import('../utils/selection').endsSelection
   const errorLogWriters: typeof import('../composables/useFullBackupImport').errorLogWriters
   const estimateWhenClear: typeof import('../utils/estimate-when-clear').estimateWhenClear
@@ -326,6 +327,7 @@ declare global {
   const openThirdPartyNotices: typeof import('../utils/legal-links').openThirdPartyNotices
   const orderTokenRows: typeof import('../utils/token-order').orderTokenRows
   const ownWindowRoute: typeof import('../utils/own-window').ownWindowRoute
+  const ownWindowSettled: typeof import('../utils/own-window').ownWindowSettled
   const parseAmountToBaseUnits: typeof import('../utils/amount').parseAmountToBaseUnits
   const parseContactsExport: typeof import('../utils/contacts-export-format').parseContactsExport
   const parseEncryptedBackup: typeof import('../utils/full-backup-helpers').parseEncryptedBackup
@@ -336,6 +338,7 @@ declare global {
   const passkeyFailureCopy: typeof import('../utils/passkey-copy').passkeyFailureCopy
   const passkeyImportFailedNotice: typeof import('../utils/profile-flow-notices').passkeyImportFailedNotice
   const passkeyTag: typeof import('../utils/passkey-copy').passkeyTag
+  const pendingLanding: typeof import('../utils/panel-handback').pendingLanding
   const persistThemeHint: typeof import('../utils/general').persistThemeHint
   const pickFile: typeof import('../utils/files').pickFile
   const pickPrimaryIndex: typeof import('../utils/primary-method').pickPrimaryIndex
@@ -377,10 +380,10 @@ declare global {
   const relinkRestoredTokenBalances: typeof import('../composables/full-backup-restore').relinkRestoredTokenBalances
   const remapByMap: typeof import('../utils/full-backup-helpers').remapByMap
   const remapNetworkIdByChain: typeof import('../utils/full-backup-helpers').remapNetworkIdByChain
+  const removeHandbackIfUnchanged: typeof import('../utils/panel-handback').removeHandbackIfUnchanged
   const requireAccount: typeof import('../utils/core').requireAccount
   const requireNetwork: typeof import('../utils/core').requireNetwork
   const reseedNetworksStage: typeof import('../composables/full-backup-restore').reseedNetworksStage
-  const resetLanding: typeof import('../utils/panel-handback').resetLanding
   const resolveComponent: typeof import('vue').resolveComponent
   const resolveFromDisplay: typeof import('../utils/received-display').resolveFromDisplay
   const resolvePasskeyCredential: typeof import('../composables/full-backup-restore').resolvePasskeyCredential
@@ -431,7 +434,7 @@ declare global {
   const settingsResultTo: typeof import('../utils/settings-search').settingsResultTo
   const settingsRow: typeof import('../utils/settings-search').settingsRow
   const settleHeldAccounts: typeof import('../composables/full-backup-restore').settleHeldAccounts
-  const settleLanding: typeof import('../utils/panel-handback').settleLanding
+  const settleLanding: typeof import('../composables/panelLanding').settleLanding
   const settledCallTitle: typeof import('../utils/tx-enrichment').settledCallTitle
   const settledReading: typeof import('../utils/tx-amount').settledReading
   const shallowReactive: typeof import('vue').shallowReactive
@@ -586,6 +589,9 @@ declare global {
   // @ts-ignore
   export type { PreflightVerdict, PreflightOptions } from '../composables/importPreflight'
   import('../composables/importPreflight')
+  // @ts-ignore
+  export type { LandingState } from '../composables/panelLanding'
+  import('../composables/panelLanding')
   // @ts-ignore
   export type { RunFence } from '../composables/runFence'
   import('../composables/runFence')
@@ -785,7 +791,7 @@ declare global {
   export type { LegalSheetContext } from '../utils/legal-sheet'
   import('../utils/legal-sheet')
   // @ts-ignore
-  export type { HandbackRoute, HandbackSnack, Handback, LandingState } from '../utils/panel-handback'
+  export type { HandbackRoute, HandbackSnack, Handback } from '../utils/panel-handback'
   import('../utils/panel-handback')
   // @ts-ignore
   export type { PasskeyTitle, WindowStep, PasskeyFailure } from '../utils/passkey-copy'
@@ -1006,6 +1012,7 @@ declare module 'vue' {
     readonly displaySymbol: UnwrapRef<typeof import('../utils/tx-amount')['displaySymbol']>
     readonly downloadFile: UnwrapRef<typeof import('../utils/files')['downloadFile']>
     readonly effectScope: UnwrapRef<typeof import('vue')['effectScope']>
+    readonly endLanding: UnwrapRef<typeof import('../utils/panel-handback')['endLanding']>
     readonly endsSelection: UnwrapRef<typeof import('../utils/selection')['endsSelection']>
     readonly errorLogWriters: UnwrapRef<typeof import('../composables/useFullBackupImport')['errorLogWriters']>
     readonly estimateWhenClear: UnwrapRef<typeof import('../utils/estimate-when-clear')['estimateWhenClear']>
@@ -1154,6 +1161,7 @@ declare module 'vue' {
     readonly openThirdPartyNotices: UnwrapRef<typeof import('../utils/legal-links')['openThirdPartyNotices']>
     readonly orderTokenRows: UnwrapRef<typeof import('../utils/token-order')['orderTokenRows']>
     readonly ownWindowRoute: UnwrapRef<typeof import('../utils/own-window')['ownWindowRoute']>
+    readonly ownWindowSettled: UnwrapRef<typeof import('../utils/own-window')['ownWindowSettled']>
     readonly parseAmountToBaseUnits: UnwrapRef<typeof import('../utils/amount')['parseAmountToBaseUnits']>
     readonly parseContactsExport: UnwrapRef<typeof import('../utils/contacts-export-format')['parseContactsExport']>
     readonly parseEncryptedBackup: UnwrapRef<typeof import('../utils/full-backup-helpers')['parseEncryptedBackup']>
@@ -1164,6 +1172,7 @@ declare module 'vue' {
     readonly passkeyFailureCopy: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyFailureCopy']>
     readonly passkeyImportFailedNotice: UnwrapRef<typeof import('../utils/profile-flow-notices')['passkeyImportFailedNotice']>
     readonly passkeyTag: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyTag']>
+    readonly pendingLanding: UnwrapRef<typeof import('../utils/panel-handback')['pendingLanding']>
     readonly persistThemeHint: UnwrapRef<typeof import('../utils/general')['persistThemeHint']>
     readonly pickFile: UnwrapRef<typeof import('../utils/files')['pickFile']>
     readonly pickPrimaryIndex: UnwrapRef<typeof import('../utils/primary-method')['pickPrimaryIndex']>
@@ -1205,10 +1214,10 @@ declare module 'vue' {
     readonly relinkRestoredTokenBalances: UnwrapRef<typeof import('../composables/full-backup-restore')['relinkRestoredTokenBalances']>
     readonly remapByMap: UnwrapRef<typeof import('../utils/full-backup-helpers')['remapByMap']>
     readonly remapNetworkIdByChain: UnwrapRef<typeof import('../utils/full-backup-helpers')['remapNetworkIdByChain']>
+    readonly removeHandbackIfUnchanged: UnwrapRef<typeof import('../utils/panel-handback')['removeHandbackIfUnchanged']>
     readonly requireAccount: UnwrapRef<typeof import('../utils/core')['requireAccount']>
     readonly requireNetwork: UnwrapRef<typeof import('../utils/core')['requireNetwork']>
     readonly reseedNetworksStage: UnwrapRef<typeof import('../composables/full-backup-restore')['reseedNetworksStage']>
-    readonly resetLanding: UnwrapRef<typeof import('../utils/panel-handback')['resetLanding']>
     readonly resolveComponent: UnwrapRef<typeof import('vue')['resolveComponent']>
     readonly resolveFromDisplay: UnwrapRef<typeof import('../utils/received-display')['resolveFromDisplay']>
     readonly resolvePasskeyCredential: UnwrapRef<typeof import('../composables/full-backup-restore')['resolvePasskeyCredential']>
@@ -1259,7 +1268,7 @@ declare module 'vue' {
     readonly settingsResultTo: UnwrapRef<typeof import('../utils/settings-search')['settingsResultTo']>
     readonly settingsRow: UnwrapRef<typeof import('../utils/settings-search')['settingsRow']>
     readonly settleHeldAccounts: UnwrapRef<typeof import('../composables/full-backup-restore')['settleHeldAccounts']>
-    readonly settleLanding: UnwrapRef<typeof import('../utils/panel-handback')['settleLanding']>
+    readonly settleLanding: UnwrapRef<typeof import('../composables/panelLanding')['settleLanding']>
     readonly settledCallTitle: UnwrapRef<typeof import('../utils/tx-enrichment')['settledCallTitle']>
     readonly settledReading: UnwrapRef<typeof import('../utils/tx-amount')['settledReading']>
     readonly shallowReactive: UnwrapRef<typeof import('vue')['shallowReactive']>

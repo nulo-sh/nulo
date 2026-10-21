@@ -40,9 +40,12 @@ type CardFlow = (typeof CARD_FLOWS)[number]
 let ownRoute: string | undefined
 let ownFlow: OwnFlow | undefined
 let openerId: number | undefined
+/** Set once the window type is read: a marked URL in a tab is never a card. */
+let inPopupWindow = false
 let registeredId: number | undefined
 let registration: Promise<void> = Promise.resolve()
 let opening: Promise<boolean> | undefined
+let returning: Promise<boolean> | undefined
 
 const flowKey = (flow: OwnFlow) => `nulo:own-window:${flow}`
 
@@ -57,6 +60,8 @@ function flowOf(route: string): OwnFlow | undefined {
  *  first URL is one of the own-window routes and carries `window=own`, and `opener` names the browser
  *  window it was opened from. */
 export function captureOwnWindow(hash: string): void {
+	inPopupWindow = false
+	returning = undefined
 	const path = hash.replace(/^#/, "")
 	const queryStart = path.indexOf("?")
 	const route = queryStart < 0 ? path : path.slice(0, queryStart)
@@ -82,6 +87,7 @@ async function register(flow: OwnFlow): Promise<void> {
 	try {
 		const current = await chrome.windows.getCurrent()
 		if (current.type !== "popup" || current.id === undefined) return
+		inPopupWindow = true
 		await chrome.storage.session.set({ [flowKey(flow)]: current.id })
 		registeredId = current.id
 	} catch (error) {
@@ -109,9 +115,15 @@ export function ownWindowRoute(): string | undefined {
 	return ownRoute
 }
 
-/** This document shows one of the file picks as a card, in the window the panel handed it to. */
+/** Resolves once the boot registration settled, and with it `isCardWindow`; never rejects. */
+export function ownWindowSettled(): Promise<void> {
+	return registration
+}
+
+/** This document shows one of the file picks as a card, in the popup-type window the panel handed it
+ *  to. Read after `ownWindowSettled`. */
 export function isCardWindow(): boolean {
-	return isCardFlow(ownFlow)
+	return inPopupWindow && isCardFlow(ownFlow)
 }
 
 /** The flow finished; from now on the document behaves like any popup page, and a later start opens
@@ -232,14 +244,25 @@ export async function closeOwnWindow(): Promise<boolean> {
 
 /**
  * Ends a card window's flow: leaves the hand-back for the panel, asks the background to reopen the
- * panel on the browser window this one was opened from, and closes, whatever the answer. A failed
- * send leaves the record for the next panel. False, doing nothing, outside a card window.
+ * panel on the browser window this one was opened from, and closes, whatever the answer. The first
+ * call wins, so a late Cancel cannot replace an outcome. False, doing nothing, outside a card window.
  */
-export async function returnToPanel(route: HandbackRoute, outcome?: Outcome): Promise<boolean> {
-	if (!isCardWindow()) return false
+export function returnToPanel(route: HandbackRoute, outcome?: Outcome): Promise<boolean> {
+	if (!isCardWindow()) return Promise.resolve(false)
+	returning ??= handBack(route, outcome)
+	return returning
+}
+
+/** A failed write still asks for the reopen, which then opens the panel where it was; a failed send
+ *  leaves the record for the next panel. */
+async function handBack(route: HandbackRoute, outcome: Outcome | undefined): Promise<boolean> {
 	const handback: Handback = outcome ? { route, snack: { ...outcome.snack, profileId: outcome.profileId } } : { route }
 	try {
 		await chrome.storage.session.set({ [HANDBACK_KEY]: handback })
+	} catch (error) {
+		console.debug("hand-back record failed", { error })
+	}
+	try {
 		const message: ReturnToPanelMessage = { type: RETURN_TO_PANEL, opener: openerId }
 		await chrome.runtime.sendMessage(message)
 	} catch (error) {
