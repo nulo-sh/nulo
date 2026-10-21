@@ -31,7 +31,7 @@ Every suite runs on Chrome (default) and on Firefox (`NULO_E2E_BROWSER=firefox`)
 - **Red on Firefox only?** Read `document.visibilityState` and `document.hasFocus()` in the page before touching a fixture.
 - **Extension-page errors reach `pageErrors` and `consoleErrors` on Firefox through the driver's relay** (`fixtures/browser/firefox-page-errors.ts`, FIREFOX.md), proved on Firefox 153.0.4 by `page-error-capture.test.ts`. It calls two Firefox internals and fails the launch when either is gone. **A Firefox bump whose arming check or capture test fails is a hold on the bump**, never a `skipIf`, a soft-fail or a removed assertion. An error Firefox now records is a real failure: read its stack URL and text, never filter it.
 - **Never navigate away from an extension page while it loads a route.** Firefox rejects the departing document's in-flight import (or the CSS preload before it) and the relay records it; Chrome recorded nothing for a cut import. So `waitForLockScreen` observes the popup's own redirect and never reloads (FIREFOX.md).
-- **The toolbar panel is drivable on Firefox only** (`fixtures/browser/firefox-action-popup.ts`): `openActionPopup` opens the real panel, `evaluateInActionPopup` reads and clicks in it, and `armPanelDeath` makes it die as a Mac's does when anything else takes focus, recording any WebAuthn call made in it. Each panel call is privileged and focuses a browser window, which refuses a passkey prompt starting in another window at that moment: while a passkey window is up, read the outcome from a control page opened beforehand (`passkey-toolbar-panel.test.ts`). A passkey-window step that succeeds reopens the panel by itself on the window it started from (`armPopupReturn`), so a spec reads that panel rather than opening one; to count panels without moving focus, ask another extension page for `chrome.extension.getViews({ type: "popup" })`, which lists a preloading document too: the panel is open once that document has focus.
+- **The toolbar panel is drivable on Firefox only** (`fixtures/browser/firefox-action-popup.ts`): `openActionPopup` opens the real panel, `evaluateInActionPopup` reads and clicks in it, and `armPanelDeath` makes it die as a Mac's does when anything else takes focus, recording any WebAuthn call or file picker opened in it. Each panel call is privileged and focuses a browser window, which refuses a passkey prompt starting in another window at that moment: while a passkey window is up, read the outcome from a control page opened beforehand (`toolbar-panel.test.ts`). A passkey-window step that succeeds reopens the panel by itself on the window it started from (`armPopupReturn`), so a spec reads that panel rather than opening one; to count panels without moving focus, ask another extension page for `chrome.extension.getViews({ type: "popup" })`, which lists a preloading document too: the panel is open once that document has focus.
 
 ## 1. Run it
 
@@ -569,7 +569,7 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   popup (`fixtures/passkey.ts` `setupPasskeyVirtualAuth`); cross-popup and cross-authenticator flows
   are not (`apps/extension/tests/e2e/PRF-NON-PORTABLE.md`). Keep the anchor popup open. Firefox's
   authenticator is session-scoped (`credentialOutlivesPage`), and only there does the toolbar panel
-  hand a passkey step to the passkey window (`passkey-toolbar-panel.test.ts`). A step that must stay
+  hand a passkey step to the passkey window (`toolbar-panel.test.ts`). A step that must stay
   in the page says so: `watchPasskeySurface` / `readPasskeySurface` record whether the card mounted and
   whether any window opened, as `passkey-paths.test.ts` asserts on both browsers. To refuse a step as
   a dismissed prompt does, use `refusePasskeyStep` (`fixtures/passkey.ts`): Firefox's authenticator
@@ -724,6 +724,9 @@ the pattern.
 - **`navigateByHash` returns when the hash changes**, but the router swaps the page later, after
   its guards, so a read straight after it can see the old page's rows. Wait for the new page's own
   rows, never for the hash (`implementations-plan/archive/layout-polish/plan.md#hash-navigation`).
+- **`navigateByHash` to the route the page is already on keeps that page, state and all**: Import
+  account left on a preview never shows its file picker again. Leave for another page and wait for it
+  first (`implementations-plan/archive/consent-display-2/lessons/phase-0.md`).
 - **Home's `activity-feed-root` renders only for an account with activity or a token**, so a wait
   for it on a fresh, unfunded account fails; History's root always renders
   (`implementations-plan/archive/approval-scope-follow/plan.md#empty-feed`).

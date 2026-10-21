@@ -12,6 +12,11 @@
 <script setup>
 /** Services */
 import { deleteProfileClient } from "@/wallet/services/profile/client"
+import { managers, requireAccount, requireNetwork } from "@/utils/core"
+
+/** Utils */
+import { dashIfBlank, trimAddress } from "@/utils/string"
+import { importedKey, readImportedAccounts } from "./imported-accounts"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -34,7 +39,51 @@ const checks = reactive({
 
 const confirmText = ref("")
 
-const isReadyToReset = computed(() => checks.permanent && checks.undone && checks.sure && confirmText.value === appStore.profile?.name)
+/** Unlocked, the imported accounts the delete removes, which the recovery phrase cannot restore: null
+ *  while the read runs or after it failed. Locked, nothing is read, so the page shows none of them. */
+const imported = ref(null)
+const importedReadFailed = ref(false)
+let importedReads = 0
+/** The list as it stands; it fails once the lock or a newer read overtakes it, and since `getAccounts`
+ *  answers while locked, no account read starts after that. */
+const fetchImported = (read) => {
+	const live = () => read === importedReads && appStore.isLogined
+	const reads = {
+		getNetworks: () => requireNetwork().getNetworks(),
+		getAccounts: (id, chainId, all) =>
+			live() ? requireAccount().getAccounts(id, chainId, all) : Promise.reject(new Error("read overtaken")),
+		getPendingReset: () => managers.networkReset.getPendingReset(),
+		getStaleNetwork: (networkId) => managers.networkReset.getStaleNetwork(networkId),
+	}
+	return readImportedAccounts(reads, appStore.profile?.id)
+		.then((result) => (live() ? result : null))
+		.catch(() => null)
+}
+const readImported = async () => {
+	const read = ++importedReads
+	imported.value = null
+	importedReadFailed.value = false
+	if (!appStore.isLogined || !appStore.profile?.id) return
+	const result = await fetchImported(read)
+	if (read !== importedReads) return
+	imported.value = result
+	importedReadFailed.value = result === null
+}
+managers.networkReset.onStaleNetworkChanged.add(readImported)
+const importedAccounts = computed(() => (appStore.isLogined ? (imported.value?.accounts ?? []) : []))
+/** Full backup carries every imported account, but refuses while a reset is pending, whose journal-held
+ *  accounts only the account export page reaches; that page takes password profiles only. */
+const exportFirstTo = computed(() => {
+	if (!imported.value?.resetPending) return "/popup/settings/security/export/full"
+	return appStore.profile?.type === "password" ? "/popup/settings/security/export/account" : null
+})
+/** Unlocked, a delete never runs before the list is known: a pending read holds the button, and a
+ *  failed one is refused at the press. */
+const importedSettled = computed(() => !appStore.isLogined || imported.value !== null || importedReadFailed.value)
+
+const isReadyToReset = computed(
+	() => checks.permanent && checks.undone && checks.sure && confirmText.value === appStore.profile?.name && importedSettled.value,
+)
 
 const isResetting = ref(false)
 
@@ -52,6 +101,17 @@ let slowDeleteTimer = null
 const deleteService = deleteProfileClient()
 let isUnmounted = false
 
+/** A press deletes only what the page lists: it reads the list again, and an import made since, in
+ *  another window, refuses it until the page has shown that account. */
+const listsEveryImport = async () => {
+	if (!appStore.isLogined) return true
+	const shown = imported.value
+	if (shown === null) return false
+	const fresh = await fetchImported(importedReads)
+	const listed = new Set(shown.accounts.map(importedKey))
+	return fresh?.accounts.every((account) => listed.has(importedKey(account))) ?? false
+}
+
 const handleReset = async () => {
 	if (!isReadyToReset.value || isResetting.value) return
 
@@ -59,11 +119,18 @@ const handleReset = async () => {
 	// handlers may null appStore.profile mid-await.
 	const deletedId = appStore.profile.id
 
+	isResetting.value = true
+	if (!(await listsEveryImport())) {
+		isResetting.value = false
+		openToast({ kind: "error", label: "Couldn't delete profile. Try again" })
+		void readImported()
+		return
+	}
+
 	// AWAIT the deletion: deleteProfile now drives the coordinator's full awaited
 	// purge internally. If it REJECTS (e.g. the coordinator isn't ready, or a
 	// purge failed and the tombstone was retained), we must NOT clear local state
 	// or show success — the profile still exists and its data is mid-erase.
-	isResetting.value = true
 	slowDeleteTimer = setTimeout(() => {
 		isSlowDelete.value = true
 	}, SLOW_DELETE_HINT_DELAY_MS)
@@ -114,8 +181,11 @@ const handleReset = async () => {
 	}
 }
 
+watch(() => [appStore.isLogined, appStore.profile?.id], readImported, { immediate: true })
+
 onBeforeUnmount(() => {
 	isUnmounted = true
+	managers.networkReset.onStaleNetworkChanged.remove(readImported)
 	if (!isResetting.value) deleteService.disconnect()
 	if (slowDeleteTimer) clearTimeout(slowDeleteTimer)
 })
@@ -136,6 +206,24 @@ onBeforeUnmount(() => {
 			<ItemsContainer flat>
 				<SettingItem :title="appStore.profile?.name ?? ''" titleVariant="name" raw />
 			</ItemsContainer>
+		</div>
+
+		<div v-if="importedAccounts.length" :class="$style.section" data-testid="reset-imported">
+			<span :class="$style.section_label">Imported accounts</span>
+			<ItemsContainer flat>
+				<SettingItem
+					v-for="account in importedAccounts"
+					:key="`${account.chainId}:${account.address}`"
+					:title="dashIfBlank(account.name)"
+					titleVariant="name"
+					:description="trimAddress(account.address, 6, 4, '…')"
+					descriptionVariant="meta"
+					raw
+					data-testid="reset-imported-account"
+				/>
+			</ItemsContainer>
+			<Text variant="body" color="tertiary" height="150">Your recovery phrase can't bring these back.</Text>
+			<Button v-if="exportFirstTo" variant="primary_outline" size="compact" :link="exportFirstTo" data-testid="reset-export-first">Export first</Button>
 		</div>
 
 		<!-- Agreements -->
@@ -166,7 +254,7 @@ onBeforeUnmount(() => {
 				data-testid="reset-confirm-input"
 			/>
 			<Text variant="body" color="tertiary" height="150">
-				You will be able to recover your profile later if you have saved your recovery phrase
+				You will be able to recover the accounts derived from your recovery phrase later if you have saved it
 			</Text>
 		</div>
 

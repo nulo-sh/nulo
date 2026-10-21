@@ -15,10 +15,10 @@ vi.mock("@/utils/core", () => {
 
 vi.mock("@/utils", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/utils")>()), pickFile: vi.fn() }))
 
-vi.mock("@/utils/browser-surface", () => ({ passkeyNeedsOwnWindow: vi.fn(() => false) }))
+vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: vi.fn(() => false) }))
 
 import { managers } from "@/utils/core"
-import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { pickFile } from "@/utils"
 import { useProfileImportFlow, type UseProfileImportFlowOptions } from "./useProfileImportFlow"
 
@@ -48,7 +48,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0))
 beforeEach(() => {
 	vi.clearAllMocks()
 	profileApi.getProfiles.mockResolvedValue([])
-	vi.mocked(passkeyNeedsOwnWindow).mockReturnValue(false)
+	vi.mocked(closesOnFocusLoss).mockReturnValue(false)
 	// The flow reads cacheStore/popupStore for the duplicate-phrase confirm dialog.
 	setActivePinia(createPinia())
 })
@@ -80,7 +80,7 @@ describe("useProfileImportFlow", () => {
 	})
 
 	test("in Firefox's toolbar panel, passkey import runs no in-page ceremony: the background does", async () => {
-		vi.mocked(passkeyNeedsOwnWindow).mockReturnValue(true)
+		vi.mocked(closesOnFocusLoss).mockReturnValue(true)
 		const { flow, opts } = makeFlow()
 		flow.profileName.value = "MyProfile"
 		await flow.handleImportPasskey()

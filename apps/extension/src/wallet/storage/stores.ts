@@ -40,14 +40,22 @@ import { TOKEN_SEEDED_STORAGE_ROOT, TOKEN_STORAGE_ROOT, TokenSchema } from "@/wa
 import { TOKEN_BALANCE_STORAGE_ROOT, TokenBalanceRawSchema } from "@/wallet/services/token-balance/spec"
 import { TOKEN_LIST_STORAGE_KEY } from "@/wallet/services/token-list/spec"
 import { TRANSACTION_STORAGE_ROOT, TxSchema } from "@/wallet/services/transaction/spec"
+import { type RowKeysSource, SealedEntityStorage, type SealedRootOptions } from "./sealed-entity-storage"
 
 export type KeyIdentityOptions = { requireKeyIdentityMatch: true; keyIdentityMode?: "numeric" }
 
 type RootRef = Extract<StorageRef, { kind: "root" }>
 type ValueRef = Extract<StorageRef, { kind: "value" }>
 
-/** An EntityStorage root whose zod codec is its read code. */
-export type CodecStore<S extends z.ZodType = z.ZodType> = { kind: "entity"; ref: RootRef; schema: S; options?: KeyIdentityOptions }
+/** An EntityStorage root whose zod codec is its read code. `sealed`: each row is stored as a
+ *  row-seal envelope under its profile's row keys (`./sealed-entity-storage.ts`). */
+export type CodecStore<S extends z.ZodType = z.ZodType> = {
+	kind: "entity"
+	ref: RootRef
+	schema: S
+	options?: KeyIdentityOptions
+	sealed?: true
+}
 /** An EntityStorage root read with no codec: its service checks every row it uses. */
 export type PlainEntityStore = { kind: "entity"; ref: RootRef; options?: KeyIdentityOptions }
 /** A ValueStorage key read with no codec; a `root` ref is one key per profile, `${root}@${id}`. */
@@ -56,6 +64,7 @@ export type Store = CodecStore | PlainEntityStore | PlainValueStore
 
 const codec = <S extends z.ZodType>(root: string, schema: S, options?: KeyIdentityOptions) =>
 	({ kind: "entity", ref: { kind: "root", root }, schema, ...(options ? { options } : {}) }) as const
+const sealedCodec = <S extends z.ZodType>(root: string, schema: S) => ({ ...codec(root, schema), sealed: true }) as const
 const plainEntity = (root: string, options: KeyIdentityOptions) => ({ kind: "entity", ref: { kind: "root", root }, options }) as const
 const value = (key: string) => ({ kind: "value", ref: { kind: "value", key } }) as const
 const perProfileValue = (root: string) => ({ kind: "value", ref: { kind: "root", root } }) as const
@@ -69,8 +78,8 @@ export const STORES = {
 	importedAccountKeys: codec(IMPORTED_KEYS_STORAGE_ROOT, ImportedAccountKeySchema),
 	authRegistry: codec(AUTH_REGISTRY_STORAGE_ROOT, AuthwitSchema, NUMERIC_ID),
 	authRegistryEnabled: codec(AUTH_REGISTRY_ENABLED_STORAGE_ROOT, AuthwitStatusSchema),
-	contacts: codec(CONTACT_STORAGE_ROOT, ContactSchema),
-	dappSessions: codec(DAPP_SESSION_STORAGE_ROOT, DappSessionSchema),
+	contacts: sealedCodec(CONTACT_STORAGE_ROOT, ContactSchema),
+	dappSessions: sealedCodec(DAPP_SESSION_STORAGE_ROOT, DappSessionSchema),
 	fpcs: codec(FPC_STORAGE_ROOT, StoredFpcSchema),
 	journal: codec(OPERATION_JOURNAL_STORAGE_ROOT, OperationRecordSchema),
 	networks: codec(NETWORK_STORAGE_ROOT, NetworkRowSchema),
@@ -94,13 +103,20 @@ export const STORES = {
 type Stores = typeof STORES
 export type StoreName = keyof Stores
 type NamesWhere<C> = { [N in StoreName]: Stores[N] extends C ? N : never }[StoreName]
-export type CodecStoreName = NamesWhere<CodecStore>
-export type PlainEntityStoreName = Exclude<NamesWhere<{ kind: "entity" }>, CodecStoreName>
+/** A sealed root is built only by {@link sealedEntityStorage}: no plain store reads or writes it. */
+export type SealedStoreName = NamesWhere<{ sealed: true }>
+export type CodecStoreName = Exclude<NamesWhere<CodecStore>, SealedStoreName>
+export type PlainEntityStoreName = Exclude<NamesWhere<{ kind: "entity" }>, CodecStoreName | SealedStoreName>
 export type ValueStoreName = NamesWhere<{ kind: "value"; ref: ValueRef }>
 export type PerProfileValueStoreName = NamesWhere<{ kind: "value"; ref: RootRef }>
 
 /** The value a codec store reads: its schema's output. */
-export type StoredRow<N extends CodecStoreName> = z.output<Stores[N]["schema"]>
+export type StoredRow<N extends CodecStoreName | SealedStoreName> = z.output<Stores[N]["schema"]>
+
+/** The roots whose rows are sealed at rest. */
+export const SEALED_ROOTS: readonly string[] = Object.values(STORES as Record<string, Store>).flatMap((store) =>
+	"sealed" in store && store.sealed === true ? [store.ref.root] : [],
+)
 
 /** The local store `name` names, reading through its registered codec and key-identity options. */
 export function entityStorage<N extends CodecStoreName>(name: N, area: MinimalStorageArea): EntityStorage<StoredRow<N>>
@@ -110,6 +126,18 @@ export function entityStorage(name: CodecStoreName | PlainEntityStoreName, area:
 	const store: CodecStore | PlainEntityStore = STORES[name]
 	const parse = "schema" in store ? (raw: unknown) => store.schema.parse(raw) : undefined
 	return new EntityStorage<unknown>(store.ref.root, area, parse, store.options)
+}
+
+/** A sealed root, read and written through its registered codec under the row keys `keys` holds. */
+export function sealedEntityStorage<N extends SealedStoreName>(
+	name: N,
+	area: MinimalStorageArea,
+	keys: RowKeysSource,
+	options?: SealedRootOptions,
+): SealedEntityStorage<StoredRow<N>> {
+	const store: CodecStore = STORES[name]
+	const inner = new EntityStorage<StoredRow<N>>(store.ref.root, area, (raw) => store.schema.parse(raw) as StoredRow<N>, store.options)
+	return new SealedEntityStorage(inner, area, store.ref.root, keys, options)
 }
 
 export function valueStorage<T>(name: ValueStoreName, area: MinimalStorageArea): ValueStorage<T>

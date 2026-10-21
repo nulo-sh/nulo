@@ -676,6 +676,9 @@ export function armPostStartWork(
 	void deletionCoordinator
 		.resumePending(journalBootCutoff)
 		.catch((error) => logger.log("wallet", LogLevel.Error, "resumePendingDeletions failed", error))
+	// An unlock that completed during `services.start()` announced its keys before every
+	// subscriber attached; each handler is idempotent, so a replay is safe.
+	;(services.get(ProfileService.name) as ProfileService).replayRowKeysReady()
 
 	const journalService = services.get(OperationJournalService.name) as OperationJournalService
 	const reaper = new JournalReaper(journalService, browserApi.alarms, logger, undefined, journalBootCutoff)

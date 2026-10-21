@@ -14,6 +14,7 @@
  */
 import { expect } from "vitest"
 import { test } from "./fixtures/extension"
+import { rawContactRows, storedContacts } from "./helpers/contacts"
 import {
 	buildSyntheticBackup,
 	deriveNuloAccountAddress,
@@ -78,17 +79,13 @@ test.skipIf(!HAS_FIXTURE)(
 		expect(address.startsWith("0x")).toBe(true)
 
 		// The contact slice was migrated to the CURRENT shape before restore
-		// wrote it. Raw chrome.storage read from the page context, not the
-		// app's facade.
-		const contacts = await page.evaluate(async () => {
-			const all = await chrome.storage.local.get()
-			return Object.entries(all)
-				.filter(([k]) => k.startsWith("nulo:core:contacts@"))
-				.map(([, v]) => JSON.parse(v as string) as Record<string, unknown>)
-		})
+		// wrote it.
+		const contacts = await storedContacts(page)
 		expect(contacts).toHaveLength(1)
 		expect(contacts[0].name).toBe("Migrated Ali")
 		expect(contacts[0]).not.toHaveProperty("legacyName")
+		// Restore sealed the row: its name never reaches storage in the clear.
+		expect((await rawContactRows(page)).some((raw) => raw.includes("Migrated Ali"))).toBe(false)
 
 		expect(freshExtensionPerTest.pageErrors).toEqual([])
 		await page.close()
