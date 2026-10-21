@@ -1,7 +1,7 @@
 ---
 plan: warm-stack-1
 tier: light
-status: approved 2026-10-21 (Asks A1-A5 answered, D6); arc 1 running
+status: approved 2026-10-21 (Asks A1-A5 answered, D6); arc 1 running (Phase 1 done: K go, J no-go)
 issues: "#1006 (arc 1: Closes on the ship path; closed as a known limit with the numbers on the no-ship path)"
 driver: claude-code
 claude_model: opus
@@ -55,7 +55,7 @@ One arc, one PR against `dev`. The owner (chat, 2026-10-21): "Plan warm-stack, g
 
 ## Architecture & Implementation (arc 1, branch `warm-stack-1-a1` off `origin/dev`, this plan's commit cherry-picked first)
 
-### Phase 1: the probe and the go gate
+### Phase 1: the probe and the go gate ✓ (K go on both browsers, J no-go: [lessons/phase-1.md](lessons/phase-1.md))
 - Scratch, never committed: `apps/extension/tests/e2e/network/_probe-warm-stack.test.ts`. One reference launch onboards through the UI and saves its storage before the switch and after it. Then twelve cycles per arm in rotating blocks (U K J, K J U, J U K, …), each from `launchExtension()` through the switch on Local:
   - **U** (today): `registerProfile`, `openPopup`, Home, `switchToLocalNetwork`.
   - **K**: the registration steps on a popup the caller keeps, then the switch.
@@ -67,7 +67,7 @@ One arc, one PR against `dev`. The owner (chat, 2026-10-21): "Plan warm-stack, g
 
 ### Phase 2: build what passed (skipped on a double no-go)
 - **K** (`tests/e2e/fixtures/extension.ts`): `registerProfileOnPage(ctx): Promise<Page>` returns the registration popup at Home with `balance-amount`; `registerProfile` is that plus `page.close()`, unchanged for its other callers. `launchOnLocalNetwork(phase)` continues on the returned page and logs `[onboard] <ms>` (the CI mechanism line); `setupConnectedPlayground` calls it instead of repeating its steps. `dappConnectedExtension` keeps its reopen (its page comes from the file-scoped `registeredExtension`). A console error or throw K surfaces is a race on the users' path: fixed at its cause, or K dropped.
-- **J, only on its go:** `injectProfile(ctx): Promise<Page>` renders a fresh profile in the fork, writes its rows after liveness, opens the popup and unlocks, on proverless network runs only. Before building: trace the worker state that depends on a profile existing at boot. One network test onboards by each path and compares the dumps under an exact allowlist of random, id and time fields, and asserts no `recovery-mode-banner` after the unlock, with a success control (a corrupted DEK slot shows it): the drift a cheaper layer cannot see is a row the popup writes.
+- **J, only on its go** (skipped by G1): `injectProfile(ctx): Promise<Page>` renders a fresh profile in the fork, writes its rows after liveness, opens the popup and unlocks, on proverless network runs only. Before building: trace the worker state that depends on a profile existing at boot. One network test onboards by each path and compares the dumps under an exact allowlist of random, id and time fields, and asserts no `recovery-mode-banner` after the unlock, with a success control (a corrupted DEK slot shows it): the drift a cheaper layer cannot see is a row the popup writes.
 - `.claude/skills/e2e-testing/SKILL.md` § Runtime budget: the `[onboard]` line and each arm's verdict with its numbers.
 - **Validation gate:** `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all` exit 0. Layers: lint, typecheck, unit.
 
@@ -109,6 +109,7 @@ None. Test harness only; no screen, copy or timing a person meets changes.
 - **D4 The ship rule keeps the brief's critical shard and both browsers** (Codex), operationalized as (c) and (d) (A2, A3), with the PR stating each browser's critical-shard wall-clock P against F (Opus).
 - **D5 J on proverless network runs only;** the canary keeps the users' path; smoke unchanged (#1003: 3.5 %).
 - **D6 The orchestrator's answers (2026-10-21).** A1: K admitted; a fixture that stops closing and reopening the registration popup is inside the owner's "launch + onboarding" scope and stores nothing. A2: rule (c) as written, on both browsers, direction, the per-file `[onboard]` lines the proof that it is the lever's; c′ (the pool's direction plus the mechanism line) considered and not taken. A3: (d) is e2e-clocks-1's rule word for word. A4: the allowlist plus a healthy unlock replaces byte equality. A5: no committed seed pool; J renders at run time through the production `ProfileService`, scratch only, and ships nothing unless it passes G1. CI dispatches: one lane's measurement at a time; before each, `gh run list --workflow <lane> --status in_progress --status queued` shows no other lane's `*-measure-*` or `e2e-clocks-1*` ref, and heavy-pool-1 runs its round first.
+- **D7 `[onboard]` spans the registration through the switch.** On Firefox the kept popup's switch runs 0.5 s slower (work the reopen used to absorb), so a line ending at Home would overstate K. Rule (b)'s "probe's saving" is the net: 1.15 s (Chrome) and 2.0 s (Firefox) per call.
 
 ## Review verdicts
 - **Round 1, Codex (gpt-6.1-sol high, session 01a15f16): `reject`.** Accepted: (1) F2 miscounted the PBKDF2 work (`getPasshash` is a SHA-256): corrected; (2) P F F P P F is three runs per arm, so G1 claimed a resolution it lacks: G1 is now a worth screen, I3 states the resolution; (3) the ship rule changed silently: the brief's critical shard and both browsers restored, the operationalizations listed as A2-A4; (4) K is an amendment: A1, with Phase 1's count of files that still open a fresh popup over an onboarded wallet; (5) a derived-only unlock reaches Home with a bad DEK: J asserts no recovery banner, with a success control; (6) the probe's capture point: reference dumps before and after the switch, the same start network and the address change asserted; (7) the renderer choice: run time or a known limit, no pool without approval. Rejected: twelve dispatches per browser, since twice the CI cost still leaves a shard's saving unresolved (I3).
