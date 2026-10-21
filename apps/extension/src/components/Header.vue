@@ -456,6 +456,23 @@ onBeforeUnmount(() => {
 	color: var(--nulo-secondary);
 }
 
+/* Below the popup's width the row tightens and the Lock chip keeps only its icon, its name still "Lock
+ * wallet", so the address stays whole and both chips stay inside the row. */
+@media (width < 359px) {
+	.wrapper {
+		gap: 8px;
+		padding: 0 12px 0 16px;
+	}
+
+	.lock_chip {
+		padding: 0 6px;
+	}
+
+	.lock_label {
+		display: none;
+	}
+}
+
 .status_dot {
 	width: 6px;
 	height: 6px;

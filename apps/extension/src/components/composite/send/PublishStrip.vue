@@ -85,6 +85,15 @@ const cells = computed(() => CELLS.map((c) => ({ ...c, glyph: publishGlyph(props
 	letter-spacing: 0.08em;
 }
 
+/* Below the popup's width a cell's fact goes under its name when the strip cannot hold every cell on
+ * one line. */
+@media (width < 359px) {
+	.strip .cell {
+		flex-wrap: wrap;
+		row-gap: 2px;
+	}
+}
+
 .name {
 	composes: type--tag-name from global;
 	color: var(--nulo-secondary);

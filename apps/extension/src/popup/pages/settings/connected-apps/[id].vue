@@ -238,7 +238,7 @@ onBeforeUnmount(() => {
 				<Text variant="name" color="primary" :class="$style.name_size">
 					{{ session.dappMetadata.name ?? "Unknown dapp" }}
 				</Text>
-				<Text variant="data-lead" color="tertiary" selectable>
+				<Text variant="data-lead" color="tertiary" selectable :class="$style.url">
 					{{ session.dappMetadata.url }}
 				</Text>
 				<Text v-if="expiryFormatted" variant="time" color="tertiary">
@@ -369,6 +369,13 @@ onBeforeUnmount(() => {
 
 .name_size {
 	font-size: 14px;
+}
+
+/* Below the popup's width an app's address breaks anywhere rather than run past the view. */
+@media (width < 359px) {
+	.url {
+		overflow-wrap: anywhere;
+	}
 }
 
 .icon_btn {

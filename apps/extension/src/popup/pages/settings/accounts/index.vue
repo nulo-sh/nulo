@@ -143,7 +143,7 @@ const handleCopyAddress = (target) => {
 				</SettingItem>
 			</ItemsContainer>
 
-			<Flex gap="10">
+			<Flex gap="10" :class="$style.account_actions">
 				<Button
 					@click="popupStore.open('new_account')"
 					wide
@@ -222,5 +222,11 @@ const handleCopyAddress = (target) => {
 
 .disabled {
 	opacity: 0.3;
+}
+
+@media (width < 359px) {
+	.account_actions {
+		flex-direction: column;
+	}
 }
 </style>

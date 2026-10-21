@@ -828,7 +828,7 @@ onBeforeUnmount(() => {
 		:data-active-account="appStore.account?.address"
 		:data-fee-quote="feeQuoteState"
 	>
-		<Flex align="end" justify="between">
+		<Flex align="end" justify="between" :class="$style.section_header">
 			<SectionLabel label="Recent activity" />
 			<RouterLink :to="historyRoute" :class="$style.archive_link" data-testid="activity-view-all">View history</RouterLink>
 		</Flex>
@@ -938,6 +938,13 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
+@media (width < 359px) {
+	.section_header {
+		flex-wrap: wrap;
+		gap: 4px 12px;
+	}
+}
+
 .archive_link {
 	composes: type--label-section from global;
 	user-select: none;

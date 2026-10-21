@@ -40,6 +40,7 @@ import {
 	waitForTermsGate,
 	waitForToastLayer,
 } from "./helpers/legal-drivers"
+import { expectFitsNarrow } from "./fixtures/type-roles"
 
 const CURRENT_TERMS = LEGAL_MANIFEST.terms.at(-1)?.version
 const CURRENT_PRIVACY = LEGAL_MANIFEST.privacy.at(-1)?.version
@@ -164,6 +165,7 @@ describe("popup: declining never locks a person out", () => {
 			expect(await page.$$eval('[data-testid="legal-declined-kept"]', (rows) => rows.length)).toBe(3)
 			expect(await page.$$eval('[data-testid="legal-declined-paused"]', (rows) => rows.length)).toBe(1)
 			expect(await readLegalRecord(page)).toBeUndefined()
+			await expectFitsNarrow(page, "the declined screen")
 
 			// Declined holds for the session: the wallet is usable and the sheet stays away.
 			await navigateByHash(page, "#/popup/send", 15_000)
@@ -241,6 +243,7 @@ describe("popup: declining never locks a person out", () => {
 		)
 		expect(await textOf(page, "legal-consent-label")).toBe(`I agree to the Terms of Use, version ${CURRENT_TERMS}.`)
 		expect(await isContinueDisabled(page)).toBe(true)
+		await expectFitsNarrow(page, "the changed-terms sheet")
 
 		await pointerClick(page, "legal-consent-checkbox")
 		await pointerClick(page, "legal-continue")

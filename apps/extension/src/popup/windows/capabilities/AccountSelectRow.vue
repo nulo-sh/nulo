@@ -74,7 +74,7 @@ const startRename = async () => {
 					<span v-if="locked" :class="$style.chain_label">SHARED</span>
 					<span v-else :class="$style.chain_label">{{ getChainName(account.chainId).toUpperCase() }}</span>
 				</Flex>
-				<Flex align="center" justify="between" gap="8" wide>
+				<Flex align="center" justify="between" gap="8" wide :class="$style.address_line">
 					<span data-testid="account-select-address" :class="$style.row_address">{{ trimAddress(account.address, 6, 4, "...") }}</span>
 					<DottedTerm
 						v-if="canRename && !renaming"
@@ -193,6 +193,19 @@ const startRename = async () => {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* Below the popup's width the rename link goes under the shortened address, at the right, when the two
+ * do not fit side by side, so the address is never cut. Two classes outrank the global `gap--8`. */
+@media (width < 359px) {
+	.row_text > .address_line {
+		flex-wrap: wrap;
+		row-gap: 2px;
+	}
+
+	.address_line > .row_address + * {
+		margin-left: auto;
+	}
 }
 
 .chain_label {
