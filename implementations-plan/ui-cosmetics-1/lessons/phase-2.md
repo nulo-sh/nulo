@@ -25,3 +25,4 @@ Chrome and Firefox read the same numbers, base and after. The step row is 640 px
 ## Fix loop
 
 - Round 1: Codex clean (one comment trim, applied); Opus found two test gaps (Presto marked only from its own row; `align` reaches the title), both added. The guard control reds the phrase-row test.
+- Round 2: Codex verified the fixes, clean. Loop converged.

@@ -165,6 +165,7 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `6d50
 - **Codex verification** (two resumes of 01a16023): all six conditions met; one new defect, demonstrated by trace and fixed (the unawaited write lands after the push, D7); final verdict **approve**.
 - **Fix loop round 1, Codex** (gpt-6.1-sol, high, session 01a1606b): clean. One non-material comment trim on `OnboardingStepHeader.vue`, accepted.
 - **Fix loop round 1, Opus diff review** (general-purpose, opus): no bug, nothing seen beyond UI impact. Two test gaps, accepted: the phrase row must not mark Presto (a never-happens row beside the Presto test; it reds with the `item === "presto"` guard dropped), and `align` must reach the title.
+- **Fix loop round 2, Codex** (resume of 01a1606b): the accepted fixes verified, no regression; **clean**. The loop converged on Phases 1–2.
 - No high-severity finding is open. Security: both legs found nothing material; a forged flag only hides an optional reminder.
 
 ## Seeds
