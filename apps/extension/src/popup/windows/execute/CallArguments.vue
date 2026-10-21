@@ -204,4 +204,21 @@ const nonce = computed(() =>
 		text-align: left;
 	}
 }
+
+/* Below the popup's width a value goes under its name, at the right, when the two do not fit side by
+ * side, so a name breaks only inside a word wider than the card. */
+@media (width < 359px) {
+	.block:not(.full) .row {
+		flex-wrap: wrap;
+		row-gap: 2px;
+	}
+
+	.block:not(.full) .row > :first-child {
+		overflow-wrap: break-word;
+	}
+
+	.block:not(.full) .row > :last-child {
+		margin-left: auto;
+	}
+}
 </style>

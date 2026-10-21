@@ -108,10 +108,14 @@ function hasActionsContent() {
 			</Flex>
 
 			<Flex direction="column" gap="4" :class="$style.text" data-testid="activity-text">
-				<Flex align="center" :gap="wrapTrailing ? undefined : '6'" :class="wrapTrailing && $style.title_row_wrap" data-testid="activity-title-row">
+				<Flex
+					align="center"
+					:gap="wrapTrailing ? undefined : '6'"
+					:class="[$style.title_row, wrapTrailing && $style.title_row_wrap]"
+					data-testid="activity-title-row"
+				>
 					<span :id="titleId" :class="[$style.title, oneLineTitle && $style.title_one_line]" data-testid="activity-title">{{ title }}</span>
-					<span v-if="wrapTrailing" :class="$style.trailing"><slot name="title-trailing" /></span>
-					<slot v-else name="title-trailing" />
+					<span v-if="$slots['title-trailing']" :class="wrapTrailing ? $style.trailing : $style.trailing_inline"><slot name="title-trailing" /></span>
 				</Flex>
 				<Flex v-if="$slots.secondary" align="center" gap="6" :class="$style.secondary_row">
 					<slot name="secondary" />
@@ -261,6 +265,61 @@ function hasActionsContent() {
 	margin-left: calc(-1 * var(--sep-room));
 }
 
+/* Generates no box, so the separator and chips lay out as the title row's own items. */
+.trailing_inline {
+	display: contents;
+}
+
+/* Below the popup's width every title row wraps as `wrapTrailing` does, and the amount and actions
+ * drop under the text, at the right, when they do not fit beside it, since neither a chip nor a
+ * figure may be cut. A function's name breaks anywhere and is cut only past a third line. Two classes
+ * outrank the global `justify-between`. */
+@media (width < 359px) {
+	.wrapper.wrapper {
+		flex-wrap: wrap;
+		justify-content: flex-end;
+	}
+
+	.wrapper_has_actions,
+	.wrapper_two_actions {
+		padding-right: 8px;
+	}
+
+	.left_content {
+		margin-right: auto;
+	}
+
+	.actions {
+		position: static;
+		align-self: flex-start;
+	}
+
+	.title_one_line {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 3;
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+
+	.title_row:has(> .trailing_inline) {
+		--sep-room: 8.78px;
+		flex-wrap: wrap;
+		row-gap: 4px;
+		overflow-x: clip;
+	}
+
+	.title_row:has(> .trailing_inline) > .title {
+		margin-right: var(--sep-room);
+	}
+
+	.trailing_inline {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin-left: calc(-1 * var(--sep-room));
+	}
+}
 
 .secondary_row {
 	min-height: 14px;

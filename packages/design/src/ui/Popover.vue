@@ -120,9 +120,12 @@ watch(
 
 			popoverStyles.top = `${triggerRect.y + triggerRect.height + 8}px`
 			switch (props.side) {
-				case "left":
-					popoverStyles[props.side] = `${triggerRect.x + triggerRect.width - Number(props.width)}px`
+				case "left": {
+					// Ends at its trigger's right edge; below the popup's width it never starts past the view's left one.
+					const left = triggerRect.x + triggerRect.width - Number(props.width)
+					popoverStyles[props.side] = `${window.matchMedia("(width < 359px)").matches ? Math.max(8, left) : left}px`
 					break
+				}
 				case "right":
 					popoverStyles[props.side] = `${Number(props.width) - triggerRect.x - triggerRect.width}px`
 					break
