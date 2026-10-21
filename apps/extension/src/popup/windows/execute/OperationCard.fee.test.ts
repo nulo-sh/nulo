@@ -12,6 +12,7 @@ import { GLOSSARY } from "@/utils/glossary"
 import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { shownText } from "../../../../tests/helpers/shown-text"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
+import { captureWindowDocument } from "@/utils/window-document"
 import OperationCard from "./OperationCard.vue"
 
 const mocks = vi.hoisted(() => ({
@@ -157,12 +158,14 @@ beforeEach(() => {
 	mocks.getGasBalances.mockReset().mockResolvedValue({ publicFeeJuice: "5000000000000000000", privateFeeJuice: null })
 	mocks.getFpcs.mockReset().mockResolvedValue([NULO_SPONSOR])
 	priceFake.reset(0.06)
+	captureWindowDocument("#/windows/execute?requestId=r1")
 })
 
 afterEach(() => {
 	mounted?.unmount()
 	mounted = undefined
 	config.global.plugins = []
+	captureWindowDocument("")
 })
 
 describe("OperationCard — who pays a wire-shaped transaction's fee", () => {
@@ -352,10 +355,26 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		expect(row(previewing).text()).toBe("Fee payment method set by Swap")
 		expect(waiting(previewing).exists()).toBe(false)
 		expect(row(previewing).attributes("aria-busy")).toBeUndefined()
-		expect(priceFake.refreshes()).toBe(0)
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([0, 0])
+	})
 
-		previewing.unmount()
-		await mountWith(undefined, { isEstimating: true })
+	test("the app's line and the fee card price from the cache, and neither a mount nor a reconnect asks for a refresh", async () => {
+		const line = await mountWith({ ...ESTIMATE, appPayerFunding: covered })
+		expect(figure(line).text()).toBe("About ~3.577824 FJ ($0.215); payment method set by Swap.")
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([1, 0])
+		line.unmount()
+
+		const card = await mountCard(sendTx({ feePayer: OWNER }))
+		expect(card.find('[data-testid="fee-estimate-usd"]').text()).toBe("($0.215)")
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([2, 0])
+		priceFake.reconnect()
+		await flushPromises()
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([3, 0])
+		card.unmount()
+
+		// The same card in a popup document, as Send mounts it: the zero above is not the fake's.
+		captureWindowDocument("")
+		await mountCard(sendTx({ feePayer: OWNER }))
 		expect(priceFake.refreshes()).toBe(1)
 	})
 

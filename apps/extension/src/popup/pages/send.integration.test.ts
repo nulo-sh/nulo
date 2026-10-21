@@ -692,6 +692,20 @@ describe("send page with the real fee card — a sponsor that can't cover the fe
 	})
 })
 
+describe("send page with the real fee card — its price reads", () => {
+	test("the page and its fee card each ask for a stale-on-connect refresh, at mount and after a reconnect", async () => {
+		const { w } = await mountSend(FUNDING["public Fee Juice only"])
+		const clients = vi.mocked(PriceServiceClient).mock.results.map(({ value }) => value)
+		const refreshes = () => clients.map((client) => vi.mocked(client.refreshIfStale).mock.calls.length)
+		// The page's own client, then the card's.
+		expect(refreshes()).toEqual([1, 1])
+		for (const client of clients) client.onConnected.invoke()
+		await flushPromises()
+		expect(refreshes()).toEqual([2, 2])
+		w.unmount()
+	})
+})
+
 describe("send page with the real fee card — the review sheet's fee", () => {
 	test("repeats the card's dollars, never the page's own quote", async () => {
 		mocks.estimateTransferFee.mockResolvedValue({ maxFee: HELD, gasDetails: {} })
