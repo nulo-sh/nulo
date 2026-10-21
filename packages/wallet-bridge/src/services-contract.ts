@@ -85,8 +85,8 @@ export interface IExecutionRunner {
 		hooks?: IExecutionHooks,
 		/** Popup approval envelopes on the concrete runner; the dispatcher passes `undefined`. */
 		approvals?: unknown,
-		/** The admission-time fence forwarded for a fenced dApp op (e.g. a silently-covered
-		 *  createAuthWit). Without it a DAPP-origin fenced op is refused at the runner's entry. */
+		/** The admission-time fence the dispatcher forwards with every dApp op. Without it a DAPP-origin
+		 *  fenced op (e.g. a silently-covered createAuthWit) is refused at the runner's entry. */
 		authorizedFence?: ExecutionFence,
 	): Promise<OperationResult[]>
 }

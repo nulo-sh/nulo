@@ -13,6 +13,9 @@ export const DAPP_SESSION_SERVICE_NAME = "dapp-session"
 /** EntityStorage root for dApp session rows. Frozen: renaming detaches every connected session. */
 export const DAPP_SESSION_STORAGE_ROOT = "nulo:core:dappSessions"
 
+/** Per-profile value: the registrations dApps have made on each chain (`registration-allowance.ts`). */
+export const DAPP_REGISTRATIONS_STORAGE_ROOT = "nulo:core:dappRegistrations"
+
 /**
  * Capability + scope types + AccessLevel + DappPermissions live in
  * `@nulo/wallet-bridge` (they belong to the wallet-sdk dispatcher layer,

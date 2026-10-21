@@ -53,6 +53,8 @@ const instance = (current = classId("0xclass")) => ({
 	originalContractClassId: ORIGINAL,
 })
 
+const DAPP = { origin: "https://app.example", fence: { profileId: "p1", epoch: 0, session: 1 } }
+
 function makeService() {
 	const pxe = {
 		registerContract: vi.fn(async () => {}),
@@ -66,10 +68,12 @@ function makeService() {
 		networkService: unknown
 		pxeService: unknown
 		executeRegisterContract(op: unknown): Promise<unknown>
-		executeAztecRegisterContract(op: unknown): Promise<unknown>
+		dappSessionService: unknown
+		executeAztecRegisterContract(op: unknown, registrant: unknown): Promise<unknown>
 	}
 	internals.networkService = { getNetwork: async () => NETWORK }
 	internals.pxeService = pxe
+	internals.dappSessionService = { admitDappRegistration: async () => {} }
 	return { internals, pxe }
 }
 
@@ -100,13 +104,10 @@ const SITES = [
 		site: "aztec_registerContract (C2)",
 		accountsRegistered: 1,
 		run: (s: ReturnType<typeof makeService>["internals"], artifact?: unknown) =>
-			s.executeAztecRegisterContract({
-				kind: "aztec_registerContract",
-				networkId: NETWORK.id,
-				instance: instance(),
-				artifact,
-				secretKey: "0x05",
-			}),
+			s.executeAztecRegisterContract(
+				{ kind: "aztec_registerContract", networkId: NETWORK.id, instance: instance(), artifact, secretKey: "0x05" },
+				DAPP,
+			),
 	},
 ]
 
@@ -171,12 +172,10 @@ describe.each(SITES)("$site: the artifact must hash to the instance's class id",
 
 describe("aztec_registerContract binds the artifact to the original class", () => {
 	const register = (s: ReturnType<typeof makeService>["internals"], current = classId("0xclass")) =>
-		s.executeAztecRegisterContract({
-			kind: "aztec_registerContract",
-			networkId: NETWORK.id,
-			instance: instance(current),
-			secretKey: "0x05",
-		})
+		s.executeAztecRegisterContract(
+			{ kind: "aztec_registerContract", networkId: NETWORK.id, instance: instance(current), secretKey: "0x05" },
+			DAPP,
+		)
 
 	test("the artifact is looked up by the original class id", async () => {
 		const { internals, pxe } = makeService()

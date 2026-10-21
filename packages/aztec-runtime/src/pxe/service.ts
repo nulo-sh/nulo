@@ -16,7 +16,7 @@ import {
 import { BlockParameterSchema } from "@aztec-labs/stdlib/block"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import type { NoteDao } from "@aztec-labs/stdlib/note"
-import { computeAddress, deriveKeys } from "@aztec-labs/stdlib/keys"
+import { deriveKeys } from "@aztec-labs/stdlib/keys"
 import type { NotesFilter } from "./spec"
 import { ContractUpgradedError, assertNotUpgraded, hydratePreimage } from "./effective-class"
 import {
@@ -50,7 +50,7 @@ import { type PrivateEventFilter, PrivateEventFilterSchema } from "@aztec-labs/a
 import { NotesFilterSchema } from "./schemas"
 import { withStaleAnchorRetry } from "./stale-anchor"
 import { assertScopesRegistered } from "./scope-guard"
-import { PxeScopeUnregisteredError, PxeTaggingSourcesFullError } from "@nulo/extension-messaging/errors"
+import { PxeScopeUnregisteredError } from "@nulo/extension-messaging/errors"
 import {
 	type PublicScanTips,
 	type PublicTokenClassStatus,
@@ -63,21 +63,6 @@ import {
 } from "./public-events"
 
 export * from "./spec"
-
-const TaggingSourceBoundSchema = z.number().int().positive().optional()
-
-/**
- * Upstream derives one tagging secret per registered sender and per keystore account on every
- * tagged-log sync. The bound counts the distinct addresses of both sets, so an address held in both
- * counts once and costs two secrets. Runs inside the chain's write guard: the read and the caller's
- * write are one step, and an address already counted is free.
- */
-async function assertTaggingSourceRoom(pxe: PXE, address: AztecAddress, bound: number): Promise<void> {
-	const senders = (await pxe.getTaggingSecretSources({ kind: "address-derived" })).map((s) => s.sender)
-	const accounts = (await pxe.getRegisteredAccounts()).map((a) => a.address)
-	const sources = new Set([...senders, ...accounts].map((a) => a.toString()))
-	if (!sources.has(address.toString()) && sources.size >= bound) throw new PxeTaggingSourcesFullError()
-}
 
 /** One profile id's incarnations in this document: see `PxeService.profileLifecycles`. */
 interface ProfileLifecycle {
@@ -354,13 +339,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		return out
 	}
 
-	public async registerAccount(
-		network: NetworkInfo,
-		secretKey: Fr,
-		partialAddress: PartialAddress,
-		maxTaggingSources?: number,
-	): Promise<CompleteAddress> {
-		const bound = await TaggingSourceBoundSchema.parseAsync(maxTaggingSources)
+	public async registerAccount(network: NetworkInfo, secretKey: Fr, partialAddress: PartialAddress): Promise<CompleteAddress> {
 		return this.withPxeWrite("registerAccount", network, async (pxe) => {
 			// The seam wire carries only the derived privacy SECRET KEY — never the account seed and
 			// never the signing key (5.0.0 trust model: the PXE must not hold ownership material, and
@@ -370,7 +349,6 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 			const parsed = await Fr.schema.parseAsync(secretKey)
 			const keys = await deriveKeys(parsed)
 			const partial = await Fr.schema.parseAsync(partialAddress)
-			if (bound !== undefined) await assertTaggingSourceRoom(pxe, await computeAddress(keys.publicKeys, partial), bound)
 			return pxe.registerAccount(
 				{
 					masterNullifierHidingSecretKey: keys.masterNullifierHidingSecretKey,
@@ -385,13 +363,11 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		})
 	}
 
-	public async registerSender(network: NetworkInfo, address: AztecAddress, maxTaggingSources?: number): Promise<AztecAddress> {
-		const bound = await TaggingSourceBoundSchema.parseAsync(maxTaggingSources)
+	public async registerSender(network: NetworkInfo, address: AztecAddress): Promise<AztecAddress> {
 		// rc.2 folded senders into tagging-secret sources; `address-derived` carries the old sender
 		// semantics. The new API returns void, so return the parsed address to keep this service's contract.
 		return this.withPxeWrite("registerSender", network, async (pxe) => {
 			const sender = await AztecAddress.schema.parseAsync(address)
-			if (bound !== undefined) await assertTaggingSourceRoom(pxe, sender, bound)
 			await pxe.registerTaggingSecretSource({ kind: "address-derived", sender })
 			return sender
 		})
@@ -980,8 +956,6 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 			this.logDebug(`[${kind}] ${label} pre-provision miss after ${Date.now() - start}ms (client re-provisions + retries)`)
 		} else if (err instanceof PxeScopeUnregisteredError) {
 			this.logDebug(`[${kind}] ${label} refused an unregistered scope (client registers + retries)`)
-		} else if (err instanceof PxeTaggingSourcesFullError) {
-			this.logDebug(`[${kind}] ${label} refused: tagging sources at their bound`)
 		} else {
 			this.logError(`[${kind}] ${label} failed after ${Date.now() - start}ms`, { error: err })
 		}

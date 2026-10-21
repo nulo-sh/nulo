@@ -250,7 +250,8 @@ export class WalletSdkDispatcher {
 		const operation = await this.buildOperation(kind, args, ctx, dappSession)
 		const origin: LocalTxOrigin = { type: OriginType.DAPP, name: ctx.origin }
 
-		const results = await this.executionService.executeOperations([operation], origin)
+		// Under the admission fence, so a registration counts against the session that authorized it.
+		const results = await this.executionService.executeOperations([operation], origin, undefined, undefined, undefined, ctx.fence)
 		return unwrapOperationResult(results[0])
 	}
 
