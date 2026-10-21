@@ -29,8 +29,8 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
   built after it refuses an older list. That file is under the extension e2e lanes' path filters,
   so such a PR runs them. The tree tests refuse a floor below 1 or above the committed list. A list
   at the head of a publish PR (open or closed unmerged) or of a publish branch, signed from the floor
-  up to the new list, counts as served for this rule, so a list signed but never served is retired as
-  a served one would be; one that cannot be read raises the floor too.
+  up to the new list, counts as served for this rule, so such a list, signed but never served, is
+  retired as a served one would be; one that cannot be read raises the floor too.
 - **The tree tests are strict** (`bun run test`, in `test:all`): the source passes the strict rules in
   canonical form; every pinned key is real (a placeholder fails) and is the one `FORMAT.md` publishes;
   `public/` holds `_headers` and `v1/list.json` only; a committed envelope is canonical, verifies and
@@ -60,7 +60,9 @@ A run whose base no longer holds the list `dev` serves fails before it opens a P
 floor decision compared against a list no longer served. A publish PR that conflicts with `dev` on
 `list.json` is stale the same way: close it and re-dispatch, never resolve the conflict. A closed
 publish PR's list stays on record: the next publish's floor rule reads it at the PR's head commit,
-whether or not its branch is deleted.
+whether or not its branch is deleted. A run that stops before its publish branch has a commit (the
+stale-base stop, a failure or a cancel) leaves its signed list only in the run's `token-list-envelope`
+artifact, kept 7 days: the floor rule does not read it (known limit #1001).
 
 `gh workflow run publish-token-list.yml --ref dev` re-signs the current source with a new sequence.
 
