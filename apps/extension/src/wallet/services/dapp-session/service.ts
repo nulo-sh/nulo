@@ -9,7 +9,7 @@ import { type ExecutionFence, profileDeletedError } from "@/wallet/services/prof
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { purgeRows } from "@/wallet/services/purge-rows"
 import { nextRandomId } from "@/wallet/services/id-allocators"
-import { entityStorage } from "@/wallet/storage/stores"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { DappSessionMacStorage } from "./mac-storage"
 import { RegistrationAllowance } from "./registration-allowance"
 import { Lock } from "@/wallet/utils"
@@ -104,13 +104,11 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 
 	public constructor(logger: ILogger, browserApi: BrowserApi) {
 		super(DAPP_SESSION_SERVICE_NAME, logger)
-		// Wrap the raw store with the row-integrity (MAC) layer. The key
-		// provider reads `this.profileService` lazily — it is set in `init`,
-		// before any storage operation runs. The inner EntityStorage validates
-		// each row via `DappSessionSchema` (dev's boundary codec) BEFORE the MAC
-		// layer verifies row integrity — both defenses run.
+		// The sealed store opens each row and validates it via `DappSessionSchema` BEFORE the MAC
+		// layer verifies its integrity — every defense runs. Both key providers read
+		// `this.profileService` lazily — it is set in `init`, before any storage operation runs.
 		this.storage = new DappSessionMacStorage(
-			entityStorage("dappSessions", browserApi.storage.local),
+			sealedEntityStorage("dappSessions", browserApi.storage.local, (profileId) => this.profileService.rowKeys(profileId)),
 			(profileId) => this.profileService.deriveDappSessionMacKey(profileId),
 			logger,
 		)
@@ -120,6 +118,17 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	protected async init(services: ServiceCollection) {
 		this.profileService = services.get(ProfileService.name)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
+		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+	}
+
+	/** Seals the profile's plaintext rows under the lock every session writer holds, so no write
+	 *  lands between a row's read and its sealed commit. */
+	private async sealLegacyRows(profileId: string): Promise<void> {
+		try {
+			await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+		} catch (error) {
+			this.logWarn("sealing the profile's plaintext dApp sessions failed; the next unlock retries", { error })
+		}
 	}
 
 	/** `RegistrationAllowance.admit` under the fence's profile; a fence a deletion overtook writes
@@ -233,8 +242,10 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 				confirmationLevel: confirmationLevel,
 				expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
 			}
+			// Signed and sealed before the check, committed with no await after it.
+			const write = await this.storage.prepare(session.id, session)
 			deletion.assertCurrent(fence.profileId, fence.epoch)
-			await this.storage.set(session.id, session)
+			await write.commit()
 			// The set awaits — compensate before the grant becomes observable.
 			if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
 				await this.storage.delete(session.id)
@@ -410,7 +421,8 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	 * The emoji check's refusal. The app's live channels end first, on every path; then every row of
 	 * the app under the window's profile is deleted, read raw and by storage key as the profile
 	 * purge does, so neither a lock, another active profile nor recovery mode can hide one.
-	 * `unavailable` means the channels ended but a row could not be deleted.
+	 * `unavailable` means the channels ended but a row could not be deleted, or the profile has
+	 * sealed rows this worker holds no key for, so which of them are the app's is unknown.
 	 */
 	public async refuseVerification(target: VerificationRefusalTarget): Promise<VerificationRefusal> {
 		const { origin, chainId, profileId } = readRefusalTarget(target)
@@ -418,14 +430,16 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		return await this.lock.withLock(async () => {
 			this.emit("onVerificationRefused", { origin, chainId, profileId })
 			try {
-				const rows = (await this.storage.rowsForProfile(profileId)).filter(
-					({ row }) => row.dappMetadata?.url === origin && row.chainId === chainId,
-				)
+				const { rows: all, keyless } = await this.storage.rowsForProfile(profileId)
+				const rows = all.filter(({ row }) => row.dappMetadata?.url === origin && row.chainId === chainId)
 				await purgeRows(
 					rows,
 					({ storageId }) => this.storage.delete(storageId),
 					({ storageId, row }) => this.emit("onDappSessionDeleted", { ...row, id: storageId }),
 				)
+				// Decided by the scan, not by the keys now: an unlock during the deletes would make an
+				// unread row look tampered. A row the held keys refused is tampered and never served.
+				if (keyless.length > 0) throw new Error("sealed rows without their key")
 				return rows.length > 0 ? "revoked" : "absent"
 			} catch (err) {
 				// No delete event will follow, and an establishment that read the row before the lock
@@ -482,11 +496,12 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	/** Every session of `profileId` on `chainId`, read raw like `purgeForProfile`, so a lock or
 	 *  recovery mode cannot hide one, and the apps' registration counts there. Not part of the chain
 	 *  purge: a deleted network's sessions and counts stay, so a network added back on that chain
-	 *  keeps them. */
+	 *  keeps them. Its one caller, a network reset, runs unlocked, so a sealed row that does not open
+	 *  here is tampered: never served, so never an auto-approval, and left alone. */
 	public async purgeForChain(profileId: string, chainId: number): Promise<void> {
 		await this.ensureInitialized()
 		await this.lock.withLock(async () => {
-			const rows = (await this.storage.rowsForProfile(profileId)).filter(({ row }) => Number(row.chainId) === chainId)
+			const rows = (await this.storage.rowsForProfile(profileId)).rows.filter(({ row }) => Number(row.chainId) === chainId)
 			await purgeRows(
 				rows,
 				({ storageId }) => this.storage.delete(storageId),
@@ -508,7 +523,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 			// re-import. `rowsForProfile` returns the true `storageId` per row; delete
 			// by it (not the self-reported id) and emit per successful delete so a
 			// live wallet-SDK channel is torn down even on a partial failure.
-			const rows = await this.storage.rowsForProfile(profileId)
+			const { rows, unopened, keyless } = await this.storage.rowsForProfile(profileId)
 			await purgeRows(
 				rows,
 				({ storageId }) => {
@@ -517,6 +532,8 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 				},
 				({ row }) => this.emit("onDappSessionDeleted", row),
 			)
+			// A row that did not open was never served by this worker, so no channel holds it.
+			for (const storageId of [...unopened, ...keyless]) await this.storage.delete(storageId)
 		})
 		await this.registrations.purgeProfile(profileId)
 	}

@@ -35,6 +35,8 @@ import { type Contact, CONTACT_SERVICE_NAME, CONTACT_STORAGE_ROOT } from "@/wall
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { PROFILE_SERVICE_NAME, type RunFence, toProfileInfo } from "@/wallet/services/profile/spec"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 
 const boundary = vi.hoisted(() => ({
 	file: null as { size: number; text: () => Promise<string> } | null,
@@ -194,6 +196,7 @@ async function startWallet() {
 			if (fence?.incarnation !== "w1" || !isFenceLive(fence)) throw new SessionEndedError()
 		},
 		isFenceLive,
+		...(await rowKeysForEveryProfile()),
 	}
 	boundary.profile = profile
 	const services = new ServiceCollection()
@@ -229,7 +232,8 @@ async function pick(page: ContactsPage, content: string): Promise<{ done: Promis
 	const done = page.io.importContacts()
 	await vi.waitFor(() => expect(boundary.opened).toEqual(["import_contacts"]))
 	await page.popup.setProps({ show: true })
-	await flushPromises()
+	// The book is read through real WebCrypto, which settles past a microtask flush.
+	await vi.waitFor(() => expect(page.popup.findAll(ROW).length).toBeGreaterThan(0))
 	return { done }
 }
 const fileOf = (contacts: unknown[]) => JSON.stringify({ version: 2, contacts })
@@ -411,18 +415,16 @@ describe("import composition — a profile switch mid-import", () => {
 		{ name: "Eve", address: ADDR.e },
 	])
 	/** Every stored contact's name by profile, read from storage itself rather than through a fence. */
-	async function namesByProfile(api: FakeBrowserApi): Promise<Record<string, string[]>> {
+	async function namesByProfile(api: FakeBrowserApi, profile: ProfileStub): Promise<Record<string, string[]>> {
 		const out: Record<string, string[]> = {}
-		for (const [key, raw] of Object.entries(await api.storage.local.get(null))) {
-			if (!key.startsWith(`${CONTACT_STORAGE_ROOT}@`)) continue
-			const row = JSON.parse(raw as string) as Contact
+		for (const row of await sealedEntityStorage("contacts", api.storage.local, profile.rowKeys).getValues()) {
 			out[row.profileId] = [...(out[row.profileId] ?? []), row.name]
 		}
 		return out
 	}
 
 	test("a switch while a row's sender registers leaves that row's contact unwritten, writes nothing more, and the toast reports it", async () => {
-		const { api } = await startWallet()
+		const { api, profile } = await startWallet()
 		const page = openContactsPage()
 		// The registration that was already running finishes in its profile; its contact never follows.
 		accountState.addSender.mockImplementationOnce(async (_networkId: string, address: string) => {
@@ -433,20 +435,20 @@ describe("import composition — a profile switch mid-import", () => {
 
 		const { done } = await pick(page, fiveNew)
 		expect(await confirm(page, done)).toBe("Import incomplete · 1 of 5 contacts written")
-		expect(await namesByProfile(api)).toEqual({ p1: ["Ana"] })
+		expect(await namesByProfile(api, profile)).toEqual({ p1: ["Ana"] })
 		expect(accountState.addSender).toHaveBeenCalledTimes(1)
 		expect([...sendersOf("p1")]).toEqual([ADDR.b])
 		expect(sendersOf("p2").size).toBe(0)
 	})
 
 	test("a sender that fails while the session holds still writes its contact, and the toast says so", async () => {
-		const { api } = await startWallet()
+		const { api, profile } = await startWallet()
 		const page = openContactsPage()
 		accountState.addSender.mockRejectedValueOnce(new Error("PXE request failed"))
 
 		const { done } = await pick(page, fiveNew)
 		expect(await confirm(page, done)).toBe("Contacts imported · sender registration failed")
-		expect(await namesByProfile(api)).toEqual({ p1: ["Ana", "Ben", "Cleo", "Dan", "Eve"] })
+		expect(await namesByProfile(api, profile)).toEqual({ p1: ["Ana", "Ben", "Cleo", "Dan", "Eve"] })
 	})
 
 	test.each([
@@ -480,12 +482,12 @@ describe("import composition — a profile switch mid-import", () => {
 	)
 
 	test("control: the same file without a switch writes every row to the profile it was shown in", async () => {
-		const { api } = await startWallet()
+		const { api, profile } = await startWallet()
 		const page = openContactsPage()
 
 		const { done } = await pick(page, fiveNew)
 		expect(await confirm(page, done)).toBe("Contacts imported · 1 sender registered")
-		expect(await namesByProfile(api)).toEqual({ p1: ["Ana", "Ben", "Cleo", "Dan", "Eve"] })
+		expect(await namesByProfile(api, profile)).toEqual({ p1: ["Ana", "Ben", "Cleo", "Dan", "Eve"] })
 		expect([...sendersOf("p1")]).toEqual([ADDR.b])
 	})
 })
