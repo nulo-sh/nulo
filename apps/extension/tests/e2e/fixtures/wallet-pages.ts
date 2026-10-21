@@ -147,12 +147,13 @@ async function loadPopup(ctx: ExtensionContext, page: Page): Promise<void> {
 	await gotoExtensionPage(page, extensionUrl(ctx.extensionId, "/src/popup/index.html"))
 }
 
-/** Puppeteer's BiDi `close()` swallows a failed close, so only the `close` event proves one. */
-async function closeConfirmed(page: Page): Promise<void> {
+/** Puppeteer's BiDi `close()` swallows a failed close, so only the `close` event proves one. `what`
+ *  names the page in the error. */
+export async function closeConfirmed(page: Page, what: string): Promise<void> {
 	const closed = new Promise<void>((resolve) => page.once("close", () => resolve()))
 	let timer: ReturnType<typeof setTimeout> | undefined
 	const refused = new Promise<never>((_, reject) => {
-		timer = setTimeout(() => reject(new Error("openPopup: the slow popup tab did not close within 10 s")), 10_000)
+		timer = setTimeout(() => reject(new Error(`${what} did not close within 10 s`)), 10_000)
 	})
 	try {
 		await Promise.race([page.close().then(() => closed), refused])
@@ -216,7 +217,7 @@ async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> 
 	}
 	// Closing a tab raises nothing from it, imports in flight included, while a navigation would make
 	// Firefox reject the left document's in-flight imports from it; the tab stays recorded until gone.
-	await closeConfirmed(page)
+	await closeConfirmed(page, "openPopup: the slow popup tab")
 	const fresh = await newPage(ctx.browser)
 	try {
 		await loadPopup(ctx, fresh)

@@ -20,7 +20,7 @@ import { clickByTestId, expectNoNameField, isFrameDetachError, patchPagePolling,
 import { switchToLocalNetwork } from "./networks"
 import { readLivenessBaseline, waitForWorkerLiveness } from "./session"
 import { importTokenAndWaitForBalance } from "./tokens"
-import { openPopup, seedLegalAcceptance, waitForServiceReady } from "./wallet-pages"
+import { closeConfirmed, openPopup, seedLegalAcceptance, waitForServiceReady } from "./wallet-pages"
 import { assertPgOk, openPlayground, type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
 import { approveCapabilities, approveConnect, approveVerify, waitForPopup, waitForPopupClosed } from "./popups"
 import { TEST_PASSWORD } from "./constants"
@@ -108,9 +108,9 @@ export async function launchExtension(
 	const { userDataDir, waitForLiveness = true, fixedWindowSize, grantPermissionRequests, installInSession } = opts
 	const extensionPath = opts.extensionPath ?? inject("extensionPath")
 	const cspArmed = CSP_REPORT_ARMED && opts.cspRecorder !== false
-	// Read before Chrome writes the profile: `onInstalled` fires with reason "install" — the only
-	// reason that opens the first-run tab — exactly when the profile has never held the extension.
-	// A caller's freshly created empty `userDataDir` is therefore a fresh install, not a reuse.
+	// Read before the browser writes the profile. An absent or empty directory has never held the
+	// wallet, so its onboarding cannot be complete: the launch requires its first-run tab and seeds the
+	// current Terms. A caller's freshly created empty `userDataDir` is therefore fresh, not a reuse.
 	const freshProfile = !userDataDir || !existsSync(userDataDir) || readdirSync(userDataDir).length === 0
 
 	// HEADLESS=0 flips to windowed mode for local debugging.
@@ -277,34 +277,11 @@ async function settleLaunchedExtension(
 					return false
 				}
 			},
-			{ timeout: 30_000, polling: 500 },
+			{ timeout: 30_000 },
 		)
 	}
 
-	// `onInstalled` opens the extension's first-run tab and stores its id in session storage. Nothing
-	// in the worker's boot awaits that open, so the id can land after liveness; on a fresh profile
-	// the install is certain, so the id is REQUIRED — a launch that cannot find it would hand the
-	// test an untracked extension page, and that is a setup failure, not a warning. A reused profile
-	// was installed by an earlier launch and opens no tab; there the poll is only a courtesy. Close
-	// the tab BEFORE marking onboarding complete: an onboarding page that mounts and reads the
-	// completed flag replaces itself with a popup window and drops the tracked id. Every e2e drives
-	// the popup flows directly; the tab-flow specs open their own tab.
-	const firstRunTabClosed = await blankPage.evaluate(async () => {
-		const key = "nulo:onboarding:tab-id"
-		for (let attempt = 0; attempt < 20; attempt++) {
-			const id = (await chrome.storage.session.get(key))[key]
-			if (typeof id === "number") {
-				await chrome.tabs.remove(id).catch(() => {})
-				await chrome.storage.session.remove(key)
-				return true
-			}
-			await new Promise((r) => setTimeout(r, 250))
-		}
-		return false
-	})
-	if (!firstRunTabClosed && freshProfile) {
-		throw new Error("launchExtension: the first-run onboarding tab never registered its id within 5s of liveness")
-	}
+	await closeFirstRunSurface(browser, blankPage, extensionId, freshProfile)
 
 	// Default: bypass the new onboarding tab flow for all e2e tests. Existing
 	// tests (registration, import-paths, passkey-paths, etc.) drive the
@@ -322,6 +299,42 @@ async function settleLaunchedExtension(
 	await blankPage.close()
 
 	return extensionId
+}
+
+/**
+ * Chrome's `--load-extension` and Firefox's temporary add-on report `install` on every launch, so
+ * `onInstalled` opens the first-run tab each time and stores its id, which can land after liveness.
+ * Over a completed onboarding the page instead opens a popup window on the popup document, drops the
+ * id and closes itself, often before the first read. Close whatever the sequence left, before the
+ * completed flag is set (a tab still open would convert too); a launch that shows neither never ran
+ * its install or handed the test an untracked extension page. A fresh profile cannot convert, so
+ * there the tab is required. Every e2e drives the popup flows directly; the tab-flow specs open their
+ * own tab.
+ */
+async function closeFirstRunSurface(browser: Browser, page: Page, extensionId: string, freshProfile: boolean): Promise<void> {
+	// `chrome.windows` hides the window's tab URL without the `tabs` permission; its page target does not.
+	const popupDocument = extensionUrl(extensionId, "/src/popup/index.html")
+	await pollUntil(
+		async () => {
+			const tabClosed = await page.evaluate(async () => {
+				const key = "nulo:onboarding:tab-id"
+				const id = (await chrome.storage.session.get(key))[key]
+				if (typeof id !== "number") return false
+				await chrome.tabs.remove(id).catch(() => {})
+				await chrome.storage.session.remove(key)
+				return true
+			})
+			const converted = freshProfile ? [] : browser.targets().filter((t) => t.type() === "page" && t.url().startsWith(popupDocument))
+			for (const target of converted) await closeConfirmed(await target.asPage(), "the first-run popup window")
+			return tabClosed || converted.length > 0
+		},
+		(settled) => settled,
+		{
+			label: freshProfile ? "launchExtension: the first-run tab's id" : "launchExtension: the first-run tab's id or its popup window",
+			timeoutMs: 5_000,
+			intervalMs: 250,
+		},
+	)
 }
 
 /**
