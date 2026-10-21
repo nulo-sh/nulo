@@ -7,4 +7,3 @@ Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 - [migration-rule-1](migration-rule-1/plan.md) — A1 merged, A3 in review — from 1.0.0 every stored-shape change ships a migration: a registry of stored shapes and its snapshot guard, a passkey-backup refusal, a 0.31.0 in-place update test, the flip (#865)
 - [floor-superseded-1](floor-superseded-1/plan.md) — planned, Codex approve, A1 in review — the token-list floor rule also reads the lists at publish PR and branch heads, signed at or above the floor (P77-06 B)
 - [consent-display-2](consent-display-2/plan.md) — planned, panel approved, A1 in review — the capability window counts each grant's reach, a PrivateFPC fee reads as the person's, a flagged token add asks for a tick (A1); deletion warnings name imported accounts (A2, after #964)
-- [exec-prices-1](exec-prices-1/plan.md) — closed, awaiting archive — a dApp window reads cached prices and never asks for a refresh, whatever mounts in it (#982)
