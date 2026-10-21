@@ -11,13 +11,29 @@ base: origin/dev at b3d6e0a2a
 trunk: dev
 issues: "#988 (A1)"
 post_implementation_hardening: not scheduled
+status: closed (A1 delivered)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-21.
+- **Status:** closed. A1 ran on `bridge-nonce-1-a1`; its PR closes #988, and its merge closes the plan.
+- **Shipped:** both e2e L1 signers (`bridgeFeeJuice`, `bridgeForMint`) sign as anvil index 1 through
+  `apps/extension/tests/e2e/fixtures/l1-signer.ts`; `apps/extension/scripts/e2e/l1-signer.test.ts` pins the address
+  against the local network's default signer and refuses any other `tests/e2e` file that builds a signing L1 client.
+  Proof: 7 bridging files green at retry 0 on Chrome, every mint signed by account 1 ([lessons/phase-1.md](lessons/phase-1.md)).
+- **Dispositions:** `send-chaos` skipped as opt-in; the proof ran proverless (D7).
+- **Known limits:** #994 (the sandbox's L1 signer moved to index 1 by a shell or an Aztec line).
+- **Open items:** none.
+- **Lessons:** none promoted: `lessons.md` holds 8152 of its 8192 bytes. The vitest-silenced Aztec logger is in
+  [lessons/phase-0.md](lessons/phase-0.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # bridge-nonce-1: the e2e fixtures sign L1 transactions as an account the sandbox never uses
 
 One arc, one PR against `dev` (`bridge-nonce-1-a1`, `Closes #988`): both e2e L1 signers move to anvil account 1
 through one module. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults:
-[lessons/phase-0.md](lessons/phase-0.md). Size: 150-line target, about 15 over; the overage is evidence and audit record.
+[lessons/phase-0.md](lessons/phase-0.md). Size: 150-line target, about 35 over with the Outcome; the overage is evidence and audit record.
 
 ## The issue's claims against the tree
 
@@ -100,6 +116,9 @@ through one module. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASK
   `src/utils/*-ban.test.ts` idiom. Chosen: the scan. `aztec-private-fpc-bridge.ts` is a maintained copy of an
   upstream harness, so a re-port brings back its own `createExtendedL1Client` call on index 0, the exact
   regression this issue is; the scan costs one test and no runtime.
+- **D7 Deviation in Phase 2:** the run was proverless (`NULO_E2E_PROVERLESS=1`), as CI's shard pool runs these
+  files; the signer does not depend on proving. `send-chaos` is opt-in (`NULO_E2E_CHAOS=1`) and skipped; its bridge
+  path ran in `same-token-concurrent-sends`.
 
 ## Security & Adversarial Considerations
 
@@ -161,5 +180,7 @@ unticked phase of plan.md; stop at a red gate or an open PR."
 - **Codex round 2** (resumed): approve with changes; withdrew the 5.x finding, backed the scan (D6). Its one
   finding, a non-empty control for Phase 2's log check per helper, is taken for `bridgeFeeJuice` only (the
   Aztec logger is silent under vitest). **Round 3** (resumed, on that evidence): **approve**.
+- **Diff review** (A1, [lessons/phase-1.md](lessons/phase-1.md)): Codex round 1, one comment fix; Opus clean, the
+  scan widened to viem's signers and "by default" added; Codex round 2 **clean**.
 - **Opus** (Plan): approve with changes. Accepted: the scan (D6), Phase 2's positive account check (a clean
   log proves nothing at the default block rate), F8, two literals for the range check, the cuts.
