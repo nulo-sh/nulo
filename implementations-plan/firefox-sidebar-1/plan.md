@@ -10,7 +10,7 @@ eli5_mode: skipped (orchestrator-owned)
 base: 993b3efc
 trunk: dev
 post_implementation_hardening: not scheduled
-status: arc 1 in review (#889, draft) with Phase 5, the Display row (P71-03 B); arc 2, the 240 px layout (P71-01 B), is its own PR
+status: arc 1 in review (#889, draft) with Phase 5, the Display row (P71-03 B); arc 2, the 240 px layout (P71-01 B), in review as #986 (draft) for the owner's look at its pictures
 ---
 
 # firefox-sidebar-1: a Firefox sidebar whose passkey steps run in place (#596), and a shell that fits it
@@ -91,11 +91,15 @@ Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spi
 17. **Surfaces a page opens on demand**: the overlays under `popup/components/popups/` (25 `*Popup.vue`), dropdown menus (`components/ui/Dropdown/DropdownRoot.vue`, mounted only while open and positioned with fixed widths), the legal sheet, toasts with an action, tooltips, the logger's filters (`components/JsonViewer/LogsToolbar.vue`), and the register and restore states. A route visit sees none of them unless it opens them.
 18. **What the reviewers found in the code**: Lock's accessible name is "Lock wallet" (`components/Header.vue:245`); the network chip already ends in an ellipsis; `TransactionCardLayout` already has `wrapTrailing`, which puts the title's trailing chip on its own line (`components/composite/activity/TransactionCardLayout.vue:45, 111`); the CTA sizes live in `packages/design/src/ui/Button.vue`, which the extension's `Button` wraps; complete values that a person inspects wrap on purpose (an account-state note's hex, `popup/windows/execute/CallArguments.vue`'s arguments). `expectLaidOut` reads horizontal spans only (`fixtures/type-roles.ts:128`), so it cannot see the logger's vertical overlap.
 19. **A media query's `width` is the viewport's, scrollbar included**, so a classic scrollbar does not flip it. A zoomed 360 px popup can report a 359.x px viewport (the Opus leg).
+20. **Both real popups keep 360 px with the floor turned into a cap** (I3, Phase 6 step 1): Firefox's panel reads `innerWidth` 360 on every tab and sample (`action-popup-layout.test.ts`, now asserting it); Chrome's, opened headful under Xvfb through `action.openPopup()` from a tab, reads `outerWidth`, `innerWidth` and the body 360 after load and after a route change (scratch spec, `lessons/phase-6.md`).
+21. **An activity row's text column is about 50 px at 240**, narrower than its state chip (127 px), so the chip on its own line (`wrapTrailing`) still leaves the row past its box beside the amount.
+22. **An ellipsis the popup never draws at 360 cuts primary text at 240**: Settings rows' titles and descriptions ("Te…" for Testnet), sub-page titles ("MANAGE N…"), the Get started steps ("Ho…"), a contact's name and address ("Ale", "0…"), Manage accounts' names (zero width beside four controls), Home's backup reminder, the stale-network confirmation's account names. `expectLaidOut` accepts a drawn ellipsis, so it cannot see them.
+23. **The app shell clips** (`popup/app.vue`, `.wrapper { overflow: clip }`), so "a box past the view unless an ancestor contains it" passes everything; only an ancestor that scrolls sideways inside the view may hold a wider box.
 
 **Inferences**
 - I1: On a Mac, the OS passkey prompt leaves a sidebar open (it is not a panel). Unverified; the owner checks it (P71-02).
 - I2: Which sidebar a Firefox 153 user gets is not settled, so the spec drives both (D8).
-- I3: With `max-width: 100%` in place of `min-width`, a toolbar popup still opens 360 px wide. Plausible, not proven: Chromium's autosizer also starts from minimum dimensions on a scroll-width path (the Codex leg). Phase 6 step 1 checks both real popups, settled after load and after a route change, before anything else. If either shrinks, the floor stays for a real toolbar popup (a `popup` view, as `isToolbarPanel` reads it) and only the sidebar, the side panel and windows lose it.
+- I3: With `max-width: 100%` in place of `min-width`, a toolbar popup still opens 360 px wide. Proven (Fact 20): the floor became a cap for every view.
 - I4: The dApp windows (discover, verify, capabilities, execute, fee, network-unavailable, passkey) share the measured components; their own offenders are measured in Phase 6 on the network lane.
 
 **Issue claims**: #596 holds (Fact 1, § Phase 0); "the sidebar does not close under the OS prompt" is I1. #593 stays closed; its reopening condition, "a Firefox sidebar ships", is met for the sidebar path only.
@@ -173,27 +177,23 @@ Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spi
 - **The one rule**: nothing changes at 360 px and wider.
   - The shell's floor becomes a cap: `body { width: var(--base-width); max-width: 100% }`, unless I3 fails (then the floor stays for a real toolbar popup). Windows keep `width: 100%`.
   - Every narrow-only rule sits under `@media (width < 359px)`, which a zoomed 360 px popup's 359.x px viewport does not match (Fact 19). The shell's floor-to-cap change is the one rule outside it, held by the real-popup checks (I3); every component rule sits inside.
-- **How each offender fits** (Facts 13, 18). These are layout calls the owner sees in pictures before it ships (P71-01's record):
-  - **Header** (every signed-in page): the Lock chip keeps its icon and drops its word; its accessible name stays "Lock wallet". The network chip keeps the ellipsis it has. `components/Header.vue`.
-  - **Activity rows** (Home, History, a token's page): the state chip moves to its own line, through `TransactionCardLayout`'s existing `wrapTrailing`, so a row grows a line; measured on every row kind the seeds make.
-  - **Section header with an action** (`RECENT ACTIVITY` / `VIEW HISTORY`): the two keep a gap and wrap when they cannot.
-  - **Buttons**:
-    - a CTA label wraps to a second line instead of being cut (`packages/design/src/ui/Button.vue`'s sizes; the label keeps its role);
-    - side-by-side pairs stack (Accounts);
-    - Send's sticky CTA keeps its place.
-  - **Values**:
-    - an identifier already shortened (`0x1a1a…f3`) never breaks: its row puts it under its label, whole (the account-state record, a transaction's details, the From/To cards);
-    - a complete value a person inspects (an account-state note's hex, a call's arguments) keeps wrapping as it does today. Nothing new is shortened.
-  - **Logger window**: its toolbar and filters wrap above the log.
-  - **Surfaces on demand and windows**: fixed by the same rules once measured; each listed in `lessons/phase-6.md` and the PR body.
-  - **Every other route** fits as it stands (Fact 13), and the gate keeps it so.
-- **Gate in the suite** (committed), inside the visits that already exist, so no page loads twice:
-  - the seeded page sweeps in `type-roles.test.ts`: after each visit's 360 px checks, the viewport moves to 240 and `expectLaidOut` runs again, with a new `expectInsideView` next to it (`scrollWidth ≤ innerWidth`, and no visible box past the view: in-flow boxes and open fixed ones such as a dropdown menu or a popover, which `DropdownRoot.vue` positions fixed; a full-screen backdrop is excluded);
-  - the windows sweep (`network/type-roles-windows.test.ts`) keeps its 400 px pass and adds 240 on the same request;
-  - the representative surfaces on demand (one overlay, one open dropdown, the legal sheet, an action toast, the logger's filters) opened in seeded journeys that already exist, and checked at 240;
-  - the logger: a targeted check that its toolbar's bottom sits above its first line;
-  - Firefox's `action-popup-layout.test.ts`: the real panel opens 360 px wide.
-  - Each hard offender's check must fail on the base before its fix (Phase 6 step 3).
+- **How each offender fits** (Facts 13, 18, 21, 22), as built; the owner sees each in pictures before it ships (P71-01's record):
+  - **Header** (every signed-in page, `components/Header.vue`): the row tightens (sides 16/12 px, gap 8 px) and the Lock chip keeps its icon; its accessible name stays "Lock wallet". The network chip keeps the ellipsis it has (D19).
+  - **Activity rows** (Home, History, a token's page, `TransactionCardLayout.vue`): every row's trailing chips wrap under the title as `wrapTrailing` rows do, the separator left of the clip, and the amount and the row's actions drop under the text, at the right, when they do not fit beside it (D17). A dApp's function name breaks anywhere and is cut only past a third line.
+  - **Section headers with an action** (`RecentActivityView.vue`, `GetStartedCard.vue`) and **Home's backup reminder** (`BackupReminderBanner.vue`): they wrap; the reminder's action goes under its message.
+  - **Buttons** (`packages/design/src/ui/Button.vue`): every size's label wraps instead of being cut, its height a minimum, CTA sides 8 px; Manage accounts' pair stacks (`settings/accounts/index.vue`); Send's sticky CTA keeps its place.
+  - **Settings rows** (`components/ui/Settings/SettingItem.vue`): title and description wrap; the controls go under the text when beside them it would have less than 72 px. **Sub-page titles** wrap (`SubPageHeaderBase.vue`).
+  - **Values**: a shortened identifier never breaks. The From/To cards stack (`detail-page.module.css`); a record's value goes under its key (`record-card.module.css`); Send's chosen recipient puts its two buttons under the name and address (`RecipientCard.vue`); a detail's value keeps a gap from its key, and an app's name breaks between words (`detail-page.module.css`); Send's summary strip puts a cell's fact under its name (`PublishStrip.vue`); the capabilities window puts an account's rename link under its address (`AccountSelectRow.vue`) and a contract's name above its six marks in Details, which stay at the right, each column narrowing to its mark (`DetailsTable.vue`); a note's type wraps and its contract goes under it (`notes/index.vue`); a settings row's controls go under its text when its identifier description would not fit whole (`SettingItem.vue`); the execute window puts a detail's value under its name, at the right, when the two do not fit, so a name breaks only inside a word wider than the card (`OperationCard.vue`, `CallArguments.vue`); a contacts import's address change wraps its two forms (`ImportContactsPopup.vue`); the stale-network confirmation puts an account's address under its name, which wraps (`StaleNetworkConfirm.vue`). A complete value a person inspects keeps wrapping as it does today; nothing new is shortened.
+  - **Contacts and connected apps** (`ContactRow.vue`, `settings/connected-apps/index.vue`, `[id].vue`): names wrap; a contact's actions go under its text; a connected app's address breaks anywhere.
+  - **The dApp windows' identity strip** (`IdentityStrip.vue`), when a person narrows a window: the network goes under the account without its separator, and the NULO mark under both, at the right, only when it does not fit beside them.
+  - **Logs window** (`LogsToolbar.vue`, `LogsViewer.vue`, `packages/design/src/ui/Popover.vue`): the toolbar takes its own row above the log, the log keeps inside the window's border, and the Source panel starts at least 8 px inside the view (D21).
+  - **Unchanged**: toasts (D20), onboarding (a tab with its own floor), and every other route.
+- **Gate in the suite** (committed), inside the visits that already exist, so no page loads twice: `expectFitsNarrow` (`fixtures/type-roles.ts`) lets the page settle (two frames, any transitions, two frames) and a success snack close itself, records each text's fate at the page's own width (painted after its clipping ancestors, cut by an ellipsis or a line clamp, a shortened identifier on one line or split over two), moves to 240, settles again, and asserts `expectLaidOut`, `expectInsideView` (a box past the view fails unless a sideways scroller inside the view holds it, Fact 23) and that no text shown whole at the page's width is gone, newly cut or has a shortened identifier newly split (D18); a planted page proves the three fates and their exemptions. A replaced element is judged by its replacement. Content that lands late and replaces text (Home's token quote, a fee estimate) is waited for by the spec before its sweep, since the narrow pass reads a replacement as text gone. `NARROW_ACCEPTED` names the planned exceptions: the Lock word, the network name's ellipsis, the row separators a wrap leaves left of the clip, and the identity strip's separator. It runs:
+  - in every seeded page sweep of `type-roles.test.ts`, the register, legal and restore journeys, and `rows.test.ts`'s dApp rows (a name whole at 360 seeded);
+  - on surfaces on demand: overlays through `openAndSweep`, Home's tokens menu opened at 240, the legal sheet, the restore banner, and the logs window (`viewers-csp.test.ts`: the toolbar above the log, the log's box inside its shadow root, Source, Level and the more menu inside the view);
+  - in the windows sweep (`network/type-roles-windows.test.ts`), after its 400 px pass;
+  - Firefox's `action-popup-layout.test.ts` asserts the real panel 360 px wide.
+  - Each check fails on the base (`lessons/phase-6.md`).
 - **Proof at 360** (scratch, recorded):
   - **The CSS diff is the main proof**: every rule the branch adds to the built CSS sits inside the media query, and no rule outside it changed but the shell's floor-to-cap, which the real-popup checks hold (I3).
   - **The pixel compare backs it**: every page, surface and window at 360 on the base build and on the branch, light and dark, Chrome and Firefox. Both builds load from their own `extensionPath`, with animations off, the caret blurred, `document.fonts.ready` awaited, seeded rows, fixed times and `Date.now` pinned (`BalanceView.vue`, `TokensView.vue` and `RecentActivityView.vue` read it). A noise control (base against base) must find zero, and a positive control (a known 1 px change) must be found.
@@ -222,6 +222,11 @@ Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spi
 - **D14, the 240 px work gets an issue** of its own, filed when arc 2 opens, so its PR has something to close. #596 is the sidebar, and #889 closes it.
 - **D15, the background opens its popup as on Chrome** (the Opus diff review, Fact 15). Chrome's `action.openPopup` opens the popup whatever the side-panel setting says. On Firefox the background puts the manifest's popup back first, and the popup's own boot points the button at the sidebar again. Restoring it right after `openPopup` resolves would race Firefox's later read of the URL (Fact 15). Rejected: opening the sidebar instead, since the background holds no user input then.
 - **D16, the toolbar click toggles** (the Opus diff review). Chrome's `openPanelOnActionClick` toggles its panel, and P71-03 B names Chrome's row, so a second click closes the sidebar.
+- **D17, an activity row's amount and actions drop under the text below 359 px** when they do not fit beside it, at the right, and every row's trailing chips wrap under the title as `wrapTrailing` rows do (Fact 21). The planned fit alone left the chip past the row. A narrow rule that sets a gap or a justification on a `Flex` element takes two classes, since the global `gap--N` and `justify-*` utilities are single classes in another chunk and could win (the Opus diff review).
+- **D18, the gate reads text fates** (Fact 22, the Codex diff review): text shown whole at the page's own width that is gone or newly cut at 240 fails, so a row's title and description wrap, its controls go under the text, a sub-page title wraps, a shortened address goes under its label, and a section header with an action wraps.
+- **D19, the header row tightens below 359 px** (sides 16/12, gap 8, the Lock chip icon-only): with the word dropped alone, the chip still ended 14 px past the row.
+- **D20, toasts unchanged**: a toast card is already `calc(100% - 32px)` wide. The only toast with an action follows a network send and closes itself after 6 s, so no check opens one at 240; the gate waits for a success snack to close rather than judge it mid-close.
+- **D21, three changes outside the media query, each inert at 359 px and wider**: the activity title's trailing slot gains a wrapper with `display: contents`, which generates no box; the activity separators gain a testid; `Popover`'s 8 px left clamp applies only when `(width < 359px)` matches. The CSS diff and the 360 px pixel compare hold them.
 
 ## Security & Adversarial Considerations
 
@@ -254,7 +259,7 @@ Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Spi
 
 The manifest key and pin, the driver and both scenarios, the pictures, and the arc gate. Each gate's outcome is in `STATUS.md` and `lessons/phase-2.md` to `phase-4.md`.
 
-### Phase 5: the Display row on Firefox
+### Phase 5: the Display row on Firefox ✓
 
 1. Merge `origin/dev` (no rebase).
 2. Add `sidebarAction()`, `hasSidePanelSurface()` and `isFirefoxSidebar()`; the row's gate, toggle and testid; the search context; `toolbar-sidebar.ts` and its registration.
@@ -275,7 +280,7 @@ Then the Codex loop and an Opus review over the phase's diff, and a push to #889
 
 Branch `firefox-sidebar-1-a2` off `origin/dev`; one draft PR → `dev`, which leaves draft only after the owner's look at the pictures.
 
-### Phase 6: the shell, the inventory, the fits and the 240 px gate
+### Phase 6: the shell, the inventory, the fits and the 240 px gate ✓
 
 1. The shell's floor becomes a cap (§ Architecture). At once, check I3: Firefox's real panel (`action-popup-layout.test.ts`) and Chrome's real popup, headful under `xvfb-run` through `action.openPopup()` from a scratch spec, each settled after load and after a route change. If either opens narrower than 360, keep the floor for a real toolbar popup before going on.
 2. Finish the inventory at 240 on both browsers: the routes' unmeasured states, the surfaces on demand (Fact 17), and every window on the network lane. Write the map into `lessons/phase-6.md`.
@@ -290,7 +295,7 @@ Branch `firefox-sidebar-1-a2` off `origin/dev`; one draft PR → `dev`, which le
 
 Pass: exit 0. Layers: smoke and network e2e, lint, typecheck.
 
-### Phase 7: proof that 360 is unchanged
+### Phase 7: proof that 360 is unchanged ✓
 
 1. Diff the built CSS of `origin/dev` and the branch: every added rule inside the media query, nothing else changed but the shell's floor-to-cap.
 2. Build both with the smoke flags into their own directories, and shoot every page, surface and window at 360 on each, stabilised as § Architecture says. Use Chrome and Firefox, light and dark. The windows come from the network lane on each build.
@@ -298,7 +303,7 @@ Pass: exit 0. Layers: smoke and network e2e, lint, typecheck.
 
 **Gate**: the CSS diff clean; the noise control at zero and the positive control found; zero changed pixels on every pair. A difference is a regression to fix, never a mask. The counts go in `lessons/phase-7.md`.
 
-### Phase 8: pictures
+### Phase 8: pictures ✓
 
 Headful under `xvfb-run -a -s "-screen 0 1440x1000x24"`, from a build of the branch:
 - Firefox's sidebar, set to exactly 240, 340 and 360, whole window via `drawSnapshot`;
@@ -308,7 +313,7 @@ Headful under `xvfb-run -a -s "-screen 0 1440x1000x24"`, from a build of the bra
 
 **Gate**: a picture for each page × width × theme × browser, with nothing cut by eye; the windows included.
 
-### Phase 9: arc gate
+### Phase 9: arc gate ✓
 
 `bun run audit:vue`, `bun run test:all`, then the full smoke suite on both browsers at retry 0, since every page's layout changed. Then the network specs that measure windows or rows on both browsers (`type-roles-windows`, the execute and capabilities window specs), and `rows.test.ts`, which moves `--base-width` at run time. CI runs the full network lanes on the PR.
 
@@ -320,7 +325,7 @@ Headful under `xvfb-run -a -s "-screen 0 1440x1000x24"`, from a build of the bra
 |---|---|---|---|
 | #596 | 1 | 1–5 | `Closes #596` (#889) |
 | #593 | none | none | stays closed; commented (D5) |
-| new (D14) | 2 | 6–9 | `Closes #<n>` (arc 2's PR) |
+| #985 (D14) | 2 | 6–9 | `Closes #985` (#986) |
 
 ## Delivery
 
@@ -368,6 +373,15 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | Phase 5 diff, final | Codex, fresh | request changes | step 4 sends onboarding's real "Open wallet" message instead of restoring the popup by hand, so a restore that races Firefox's later URL read fails it | none |
 | Phase 5 diff | Opus 5.5, diff | request changes | the background's own popup open restored (D15), which also covers a backup restored during onboarding; `closeSidebar` proves the close; the scenario per sidebar kind; the click toggles (D16); a shell page's boot re-applies the setting, which repairs a failed or interrupted apply; `FIREFOX.md` | none |
 | P71 delta | Opus 5.5 lens | conditional approve | `getPopup` read before each trigger; both surfaces read as one opens; the click on a stopped background; D10 reworded; the `openPopup` known limit (D15); the full Firefox suites and `audit:vue` in Phase 5, the search test and `app.vue` comment; `expectInsideView`; overlays, dropdowns, toasts, sheets; `width < 359px` with nothing outside it; `wrapTrailing` reused; the CSS diff, controls and stabilised builds; 240 inside existing visits; Chrome's popup headful; arc 2's records on #889's branch; "Lock wallet"; the 340 px picture | a classic-scrollbar known limit: a media query's `width` includes the scrollbar (Fact 19), so the query reads what the popup has today |
+| arc 2 diff, 1 | Codex, gpt-6.1-sol | request changes | the gate reads text fates; a wider box only inside a sideways scroller inside the view (Fact 23); `display: contents` on the trailing slot; every Button label wraps; Settings rows' controls under the text; the Popover clamp; transitions settled | the Lock word and the network name's ellipsis (planned fits); a record value's two-line clamp, which it has at 360 too |
+| arc 2 diff, 1 | Opus 5.5, diff | request changes | the same; onboarding out of the 240 check; the comments | none |
+| arc 2 diff, 2 | Codex, resumed | request changes | dApp function names wrap below 359 px, seeded whole at 360 in `rows.test.ts`; the Popover clamp only below 359 px; a replaced element judged by its replacement; clipping ancestors counted; the log's box read inside its shadow root | none |
+| arc 2 diff, 3 | Codex, resumed (the last) | request changes | a row's actions go under its text with no side reservation, pending rows with one and two actions checked; a recipient's name wraps; replacements matched one to one; a held snack released before the wait | none |
+| arc 2 diff, final | Opus 5.5, diff | request changes | the amount and actions packed right instead of split by two auto margins; two classes where a global `Flex` utility could win; the stale confirmation's name wraps; a function name cut only past a third line; the comments | the separator exemption by testid, the `wrapTrailing` design; Chrome's real popup at 240, which never opens narrower than 360 |
+| arc 2 delta | Opus 5.5, diff | request changes | the dApp windows' network under the account with no separator (no dangling `·` beside a long name); a deterministic detail gap; a wrapped title row's 4 px line gap; the page settles before the snack wait | an import's arrow trailing the saved address on its line, which still reads as "becomes"; a third line in Send's strip, which needs a strip narrower than 240 gives |
+| arc 2 last fixes | Opus 5.5, diff | conditional approve | the Details table's head and rows share one grid's columns (subgrid), so each mark sits under its heading; its rows' vertical padding; a note header's rule at two classes; the fee wait treats the Fee Juice nudge as settled | a per-request fee flag: the wait already settles on every terminal state the readout has |
+| arc 2 execute rows | Opus 5.5, diff | request changes | the split fate told lines apart by one rect's bottom, which never clears the next line's top at `line-height: 1` (every `AddressDisplay`): lines are now told apart by their tops; the planted page draws its identifiers in their own face at `line-height: 1`, and fails with the old reading; a negative control: the windows spec without the execute rows' narrow rules reports the splits | none |
+| arc 2 rebase and account switcher | Opus 5.5, diff | conditional approve | the Details table's narrow grid stopped at 194 px between 253 and 358 px: a leading flexible track spans the panel, the marks at the right under their glyphs (a replica measured on both engines at 182 to 300 px); its comment | Manage accounts' hidden rows put their undo control on its own line at 240 under the 14ch floor, nothing hidden or cut |
 
 ## Seeds
 

@@ -1,6 +1,6 @@
 # firefox-sidebar-1: owner asks
 
-OA-1 to OA-4 are answered (decision page 71, 2026-10-20). OA-5 is open; what ships now is stated with it, and #889 leaves draft only once it is answered.
+OA-1 to OA-4 are answered (decision page 71, 2026-10-20). OA-5 and OA-6 are open; what ships now is stated with each. #889 leaves draft only once OA-5 is answered; OA-6 rides with arc 2's pictures.
 
 ## OA-1: how a person opens the sidebar (answered)
 
@@ -27,3 +27,9 @@ P71-02, A, in chat: the owner unlocks once with a passkey from the sidebar on a 
   - start it only while the setting is on, which leans on how Firefox persists a late-registered listener and needs its own test.
   Either is background work at browser start that today waits until the person opens Nulo.
 - **Recommendation**: keep what ships. The gap is one click per launch and only with the sidebar closed; the cost is paid at every launch.
+
+## OA-6: placeholders at 240 (arc 2)
+
+- **What a person sees**: below 360 px, a one-line field narrower than its placeholder cuts it: with an ellipsis ("Search by kind, addre…" on Authwits), or mid-letter while the field has focus ("Enter current passwo" on Change password, which opens focused, on Chrome). The label above each field names it. No check reads a placeholder, so the pictures are where it shows.
+- **The question**: shorten those placeholders, or keep them?
+- **Recommendation**: keep them. The label carries the meaning, and the copy reads whole at 360, where the popup always is.
