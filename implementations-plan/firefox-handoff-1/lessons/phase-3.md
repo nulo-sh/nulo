@@ -23,3 +23,16 @@
 
 - Codex (resumed, high): `approve`. No material finding. It found that F1's disposition holds as an explicit product tradeoff. It checked in memory the window-type gate, the single-shot hand-back, the reopen after a failed write, the longest restore label (1,739 characters), and the lock and profile races in the moved watcher.
 - The loop converged in two rounds; `audit:vue` exit 0 on the fixed tree (900 files).
+
+## Pictures
+
+- The cards and the account page after a pick are page screenshots of a real popup-type window opened from the control page, at 380×660 and 2x, with the theme set on the document.
+- The reopened panel is Firefox's own snapshot of the open panel's browser (`drawSnapshot` on its window global, from the privileged scope). The canvas comes from the browser element's `ownerDocument`. `ownerGlobal` reads `undefined` there, and the throw inside the promise callback left the script hanging until its timeout.
+- The Cancel picture first failed with no reopen, which was correct. The scratch harness named the control tab's window as the opener, but focus went back to another normal window, so the handler opened nothing. Naming the last-focused normal window as the opener, as the panel does, reopened it on Contacts with no snack.
+
+## Smoke and the merge
+
+- `origin/dev` moved two commits and conflicted on `index.md` only, so it was merged before the gate (`chore: merge origin/dev`) and both dists were rebuilt with the smoke flags. #889 is still open.
+- Firefox, full smoke at retry 0 on the merged tree: 267 passed, 1 failed, 17 skipped; 3711 s wall-clock at load average ~250. The failure was `auth-flows.test.ts`'s "wrong password surfaces error-text and lets the user retry" at its own 30 s budget, which includes the first launch. Its sibling took 29.7 s in the same run. The file alone at retry 0 passed 5/5, with that test in 20.0 s, so it was a host-load flake. `toolbar-panel.test.ts`: 6/6 in 151.7 s, with the changed test at 29.7 s.
+- Chrome, full smoke at retry 0: 268 passed, 0 failed, 17 skipped; 2141 s.
+- `bun run test:all` exit 0 (extension 902 files, 14944 tests); `lint` and `typecheck:all` exit 0.
