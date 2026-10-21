@@ -238,3 +238,4 @@ Implementation review (arc A1, diff `4cc6e5c75..HEAD`):
 - Round 1: Codex (`01a16010`) changes needed, one finding (the title test bypassed the CLI); Opus
   (general-purpose) changes needed, five (cancel misnamed in `Status`, two CI.md overstatements, the
   `soak*` label claim only partly pinned, a header that restated the YAML). All six accepted and fixed.
+- Round 2 (Codex resumed): **clean**, every fix verified, no regression.
