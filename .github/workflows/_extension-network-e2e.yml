@@ -83,7 +83,7 @@ on:
         description: |
           Override the vitest `retry` count via NULO_E2E_RETRY. Empty = config
           default (3 attempts). The soak workflow passes "0" so a test that
-          passes only on a retry FAILS the iteration ("zero retries consumed").
+          passes only on a retry FAILS the iteration ("zero test retries").
         required: false
         type: string
         default: ""
@@ -261,7 +261,7 @@ jobs:
           EXCLUDE_FILES: ${{ inputs.exclude_files }}
           TEST_FILES: ${{ inputs.test_files }}
           SHARD: ${{ inputs.shard }}
-          NULO_E2E_RESULTS_FILE: ${{ (inputs.chaos || startsWith(inputs.shard_label, 'canary')) && format('{0}/canary-results.json', runner.temp) || '' }}
+          NULO_E2E_RESULTS_FILE: ${{ (inputs.chaos || startsWith(inputs.shard_label, 'canary') || startsWith(inputs.shard_label, 'soak')) && format('{0}/canary-results.json', runner.temp) || '' }}
         run: |
           # Use bash arrays + read -ra so word-splitting is explicit + scoped
           # (avoids shellcheck SC2086 noise on intentional split-into-flags).
@@ -307,11 +307,12 @@ jobs:
           fi
           exit "$CODE"
 
-      # A canary or chaos lane is evidence only if every file it was given ran and its substantive
-      # test passed. The exit code and the file count cannot see a skipped describe, a missing sandbox
+      # A canary, chaos or soak run is evidence only if every file it was given ran and its tests
+      # passed. The exit code and the file count cannot see a skipped describe, a missing sandbox
       # config or a deleted test — each canary file also carries a setup-contract test that keeps
-      # passing on its own, and the chaos file skips its one test unless armed — so the json report
-      # is read back against canary-expectations.json.
+      # passing on its own, and the chaos and opt-in files skip unless armed — so the json report is
+      # read back: against canary-expectations.json for a canary or chaos lane, and for a soak with
+      # every test required to pass and a listed file's titles kept.
       - name: Assert canary results
         if: ${{ always() && !cancelled() && (inputs.chaos || startsWith(inputs.shard_label, 'canary')) }}
         shell: bash
@@ -320,6 +321,15 @@ jobs:
         run: |
           read -ra TEST_FILE_LIST <<< "${TEST_FILES//$'\n'/ }"
           bun scripts/ci-cd/assert-canary-results.ts "${RUNNER_TEMP}/canary-results.json" "${TEST_FILE_LIST[@]}"
+
+      - name: Assert soak results
+        if: ${{ always() && !cancelled() && startsWith(inputs.shard_label, 'soak') }}
+        shell: bash
+        env:
+          TEST_FILES: ${{ inputs.test_files }}
+        run: |
+          read -ra TEST_FILE_LIST <<< "${TEST_FILES//$'\n'/ }"
+          bun scripts/ci-cd/assert-canary-results.ts --allow-unlisted "${RUNNER_TEMP}/canary-results.json" "${TEST_FILE_LIST[@]}"
 
       # Permanent guard: bundle-grep is the actual leak guarantee for diagnostic
       # probes (the compile-time gate is design intent, not a safety property). Probes accidentally surviving to dist/chrome would

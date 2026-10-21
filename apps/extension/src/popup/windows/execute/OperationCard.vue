@@ -758,4 +758,24 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 		text-align: right;
 	}
 }
+
+/* Below the popup's width a value goes under its name, at the right, when the two do not fit side by
+ * side: a name breaks only inside a word wider than the card, and a shortened address stays whole. */
+@media (width < 359px) {
+	.row,
+	.prop {
+		flex-wrap: wrap;
+		column-gap: 12px;
+		row-gap: 2px;
+	}
+
+	.row > :last-child,
+	.prop > :last-child {
+		margin-left: auto;
+	}
+
+	.call_row > :first-child {
+		overflow-wrap: break-word;
+	}
+}
 </style>

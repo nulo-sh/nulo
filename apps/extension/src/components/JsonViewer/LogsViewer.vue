@@ -340,6 +340,13 @@ onBeforeUnmount(() => {
 	overflow: hidden;
 }
 
+/* The view's width runs a pixel past the window's border; below the popup's width the log takes the box it sits in. */
+@media (width < 359px) {
+	.wrapper {
+		width: 100%;
+	}
+}
+
 .scroll_btn {
 	user-select: none;
 	position: absolute;

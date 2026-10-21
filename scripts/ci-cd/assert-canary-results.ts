@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Refuse a canary or chaos job whose listed files did not all run and pass.
+ * Refuse a canary, chaos or soak job whose listed files did not all run and pass.
  *
  * The job's exit code and its file count cannot see a skipped `describe`, a missing sandbox
  * config or a deleted test: every canary file also carries a setup-contract test that keeps
@@ -9,7 +9,10 @@
  * job was given to be present, every test in it `passed` (nothing skipped or todo), and each title
  * `canary-expectations.json` names for that file among them.
  *
- *   assert-canary-results.ts <vitest json report> <test file…>
+ *   assert-canary-results.ts [--allow-unlisted] <vitest json report> <test file…>
+ *
+ * `--allow-unlisted` serves a soak, which may name any network file: a file with no entry must
+ * still be present with every test passed, and a listed file keeps its titles.
  */
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -61,6 +64,11 @@ export function canaryProblems(report: CanaryReport, files: readonly string[], e
 	return problems
 }
 
+/** `expectations` with an empty title list for each listed file it has no entry for. */
+function allowUnlisted(expectations: CanaryExpectations, files: readonly string[]): CanaryExpectations {
+	return { ...Object.fromEntries(files.map((file) => [file, []])), ...expectations }
+}
+
 function readReport(path: string): CanaryReport {
 	try {
 		return JSON.parse(readFileSync(path, "utf8"))
@@ -71,12 +79,15 @@ function readReport(path: string): CanaryReport {
 }
 
 if (import.meta.main) {
-	const [reportPath, ...files] = process.argv.slice(2)
+	const args = process.argv.slice(2)
+	const unlisted = args[0] === "--allow-unlisted"
+	const [reportPath, ...files] = unlisted ? args.slice(1) : args
 	if (!reportPath) {
-		console.error("usage: assert-canary-results.ts <vitest json report> <test file…>")
+		console.error("usage: assert-canary-results.ts [--allow-unlisted] <vitest json report> <test file…>")
 		process.exit(2)
 	}
-	const problems = canaryProblems(readReport(reportPath), files, loadExpectations())
+	const expectations = unlisted ? allowUnlisted(loadExpectations(), files) : loadExpectations()
+	const problems = canaryProblems(readReport(reportPath), files, expectations)
 	for (const problem of problems) console.error(command("error", `canary results: ${problem}`))
 	if (problems.length > 0) process.exit(1)
 	console.log(`canary results: ${files.length} file(s) present, every test passed`)

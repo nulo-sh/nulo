@@ -52,4 +52,25 @@ const emit = defineEmits<{ save: [] }>()
 	outline: 2px solid var(--nulo-accent);
 	outline-offset: 2px;
 }
+
+/* Below the popup's width the message wraps rather than ending in an ellipsis, and the action goes
+ * under it when the two do not fit side by side. */
+@media (width < 359px) {
+	.banner {
+		flex-wrap: wrap;
+		row-gap: 4px;
+	}
+
+	.banner > .message {
+		flex: 1 1 auto;
+	}
+
+	.text {
+		white-space: normal;
+	}
+
+	.banner > .action {
+		margin-left: auto;
+	}
+}
 </style>

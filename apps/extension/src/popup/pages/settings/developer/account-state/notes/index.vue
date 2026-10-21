@@ -281,6 +281,25 @@ onBeforeUnmount(() => {
 	composes: type from "../../../../../components/modules/settings/record-card.module.css";
 }
 
+/* Below the popup's width a note's type wraps rather than end in an ellipsis, and its contract goes
+ * under it, at the right, when the two do not fit side by side. */
+@media (width < 359px) {
+	.card > .header {
+		flex-wrap: wrap;
+		row-gap: 6px;
+	}
+
+	.header > .type {
+		flex: 1 1 auto;
+		white-space: normal;
+		overflow-wrap: break-word;
+	}
+
+	.header > .contract {
+		margin-left: auto;
+	}
+}
+
 .contract {
 	composes: type--meta from global;
 	flex-shrink: 0;

@@ -132,4 +132,17 @@ defineExpose({ focusTitle: () => titleEl.value?.focus() })
 	min-width: 40px;
 	flex-shrink: 0;
 }
+
+/* Below the popup's width the sides tighten and a title wraps rather than being cut. */
+@media (width < 359px) {
+	.wrapper {
+		padding: 0 12px;
+	}
+
+	.title {
+		white-space: normal;
+		overflow-wrap: break-word;
+		text-align: center;
+	}
+}
 </style>

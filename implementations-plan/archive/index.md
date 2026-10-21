@@ -104,6 +104,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [dynamic-token-list](dynamic-token-list/plan.md) — completed — a signed token list at tokens.nulo.sh replaces the built-in default tokens: CI signs it in a gated environment, the wallet fetches it after the Terms and daily (#79)
 - [dynamic-token-list-2](dynamic-token-list-2/plan.md) — completed — a `flagged` set in the signed token list, a compiled sequence floor, and a red row line and banners on a flagged token (#383)
 - [e2e-ci-followups-2](e2e-ci-followups-2/plan.md) — completed — cold module loads off unit-test timeouts (#500), one e2e fee ladder for every speed (#405), a readable Firefox exception and the chaos seed closed as a known limit (#322)
+- [e2e-clocks-1](e2e-clocks-1/plan.md) — completed — the network e2e build scans incoming and re-reads finality every 10 s, shipped on twelve measured CI slots a browser (#992)
 - [e2e-deflake](e2e-deflake/plan.md) — completed — recurring e2e and CI flakes eliminated by root cause, never by budget
 - [e2e-determinism](e2e-determinism/plan.md) — completed — fixed sleeps in the e2e helpers replaced with observable signals
 - [e2e-flake-fixes](e2e-flake-fixes/plan.md) — completed — two CI flakes fixed at their mechanism under a two-core affinity
@@ -411,3 +412,5 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [heavy-pool-1](heavy-pool-1/plan.md) — completed — heavy-long folded into the five-shard network pool, measured on CI: the lane ended later on both browsers (+132 s Chrome, +115 s Firefox), so it stays dedicated; docs-only close, #972 a known limit
 - [release-pipeline-2](release-pipeline-2/plan.md) — completed — every job that mints the release App token runs in the `release-app` environment (branches `main` and `dev`), the lockfile callers pass `secrets: inherit`, `release-integrity.test.ts` keeps it so (P77-08 A, #1008)
 - [lessons-1](lessons-1/plan.md) — completed — lessons.md gains the extension-window close lesson (no Vue teardown runs as a window closes; `endAndClose`, `beforeunload`) and drops the CodeMirror line its code states; five candidates declined with reasons (#1017)
+- [soak-mode-1](soak-mode-1/plan.md) — completed — the network soak runs only named files, refuses what it cannot run, reads each report back and says what it proved; the docs name the whole-suite instruments (#1014)
+- [warm-stack-1](warm-stack-1/plan.md) — completed — the network files' onboarding cost, measured on CI: switching on the registration popup saves 0.75 s (Chrome) and 0.77 s (Firefox) a call but missed its ship rule on Firefox, so nothing shipped; an injected profile saved nothing over it (#1006, a known limit)
