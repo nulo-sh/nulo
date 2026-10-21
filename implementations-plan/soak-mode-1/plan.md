@@ -13,6 +13,35 @@ issues: "#1014 (A1 closes it)"
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-21.
+- **Status:** delivered as one ready PR against `dev`, #1020, which carries this close-out; its merge closes
+  the plan and #1014.
+- **Shipped:** the soak takes named network files only (`test_files` required, `mode` and `shard` gone);
+  `prep` refuses a bad token, a missing file, `repeats` outside 1 to 25 and `retry` other than empty or one
+  digit; each iteration reads its report back through `assert-canary-results.ts --allow-unlisted`; `Status`
+  states the true count, claims zero test retries only at `retry=0` and names a cancel as one. Pinned in
+  `behavior-gating.test.ts`, `aggregators.test.ts` and `assert-canary-results.test.ts`; `CI.md`,
+  `.github/WORKFLOWS.md` and the `e2e-testing` skill say the nightly builds `dev` only and the branch's
+  whole-suite retry-0 run is a dispatch of the two PR network workflows.
+- **Dispatch proof:** a blank list gets HTTP 422 at dispatch and no run; 39673385943 refused a typo at
+  `prep` in 5 s; 39673485998 ran `cap-request-basic` once green, read back, at retry 0.
+- **Review loop:** plan: Codex four rounds, approve at r4, Opus beside r1 and r3. Arc: Codex r1 one
+  finding and Opus r1 five, all fixed; Codex r2 clean.
+- **Gates at the head:** `lint`, `typecheck:all`, `test:all`, `test:ci-gating`, `test:release`,
+  `lint:actions`, `check:plans` exit 0; `bun run test` red only on static-scan timeouts at load 281 on 188
+  cores, a different file each run, each green alone.
+- **Dispositions:** D1's F (fan-out through the lane) not taken: eleven runners per iteration, and the
+  whole suite at retry 0 already exists per browser; revisit when one commit needs repeated whole-suite
+  qualification. D2's shard mode dropped, a deviation from #1014's `n ≥ 2` stated in the PR body. The
+  inference that whitespace passes `required` was false; the docs say GitHub refuses a blank list.
+- **Known limits:** #1018 (D5); #977 unchanged. **Open items:** none.
+- **Lessons:** none promoted. The candidate (the nightly builds `dev` only; a branch's whole-suite run is
+  a PR-workflow dispatch) is stated in `CI.md` and the `e2e-testing` skill, its owners, and `lessons.md`
+  has 18 B left.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
+
 # soak-mode-1: the network soak runs only named files, and says what it proved
 
 One arc, one PR against `dev` (the orchestrator's D-orch-1: no stack). **A1** (branch `soak-mode-1-a1`)
