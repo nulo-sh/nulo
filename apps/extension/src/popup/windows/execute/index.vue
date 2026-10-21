@@ -57,7 +57,7 @@ import type { DappMetadata } from "@/wallet/services/dapp-session/client"
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 import { useFeeEstimationMap } from "@/composables/useFeeEstimationMap"
-import { usePrices } from "@/composables/usePrices"
+import { useTokenFlags } from "@/composables/usePrices"
 import { useToast } from "@/composables/toast"
 
 const { openToast } = useToast()
@@ -115,12 +115,12 @@ const tokenMetadataUnread = computed(() =>
 	operations.value.some((op) => op.kind === "register_token" && !tokenMetadata.value.has(op.address)),
 )
 
-/** The signed list's flags, read from the price snapshot the token page reads. */
+/** The signed list's flags, from the snapshot the token page reads, with no price fetch. */
 const priceService = new PriceServiceClient()
-const prices = usePrices(priceService)
+const tokenFlags = useTokenFlags(priceService)
 
 const isFlaggedAdd = (op: UIOperation): boolean =>
-	op.kind === "register_token" && prices.isFlagged({ chainId: op.network?.chainId, contract: op.address })
+	op.kind === "register_token" && tokenFlags.isFlagged({ chainId: op.network?.chainId, contract: op.address })
 
 /** The flagged token adds the person ticked, by operation index: empty at every mount, never stored. */
 const flagAcknowledged = ref(new Set<number>())
@@ -136,7 +136,8 @@ const acknowledgeTokenFlag = (index: number, on: boolean) => {
 const tokenFlagHold = computed(() =>
 	operations.value.some(
 		(op, i) =>
-			op.kind === "register_token" && (!prices.mapped.value || (isFlaggedAdd(op as UIOperation) && !flagAcknowledged.value.has(i))),
+			op.kind === "register_token" &&
+			(!tokenFlags.mapped.value || (isFlaggedAdd(op as UIOperation) && !flagAcknowledged.value.has(i))),
 	),
 )
 
@@ -285,7 +286,7 @@ const {
 		executionService.disconnect()
 		tokenService.disconnect()
 		priceService.disconnect()
-		prices.dispose()
+		tokenFlags.dispose()
 	},
 	init: () => init(),
 	// A request of another profile than the active one was ended by that lock or switch, not by the

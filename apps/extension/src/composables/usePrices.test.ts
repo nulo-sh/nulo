@@ -11,7 +11,7 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { QUOTE_TTL_MS, type PriceSnapshot, type PriceState } from "@/wallet/services/price/spec"
 import type { PriceServiceClient } from "@/wallet/services/price/client"
-import { usePrices } from "./usePrices"
+import { usePrices, useTokenFlags } from "./usePrices"
 import { flaggedKeysOf } from "@/utils/token-flag"
 import { TEST_FLAGGED, TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
@@ -279,5 +279,67 @@ describe("composables/usePrices", () => {
 
 		expect(api.quoteFor(CHAIN_IDS.TESTNET, TEST_USDC)).toBeUndefined()
 		expect(api.usableQuotes.value["usd-coin"]).toBeDefined()
+	})
+})
+
+describe("composables/useTokenFlags", () => {
+	const reconnect = (client: ReturnType<typeof fakeClient>) =>
+		(client as unknown as { onConnected: EventHandler<void> }).onConnected.invoke()
+
+	test("flags come from the network-free read, on mount and on every reconnect, and no refresh is ever asked", async () => {
+		const client = fakeClient()
+		const flags = useTokenFlags(client as unknown as PriceServiceClient)
+		expect(flags.mapped.value).toBe(false)
+		expect(flags.isFlagged(FLAGGED_ROW)).toBe(false)
+		await flushPromises()
+		expect(flags.mapped.value).toBe(true)
+		expect(flags.isFlagged(FLAGGED_ROW)).toBe(true)
+		expect(flags.isFlagged({ chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC })).toBe(false)
+		expect(flags.isFlagged(undefined)).toBe(false)
+
+		client.getQuotes.mockResolvedValue(snap({}, { flagged: [] }))
+		reconnect(client)
+		await flushPromises()
+		expect(flags.isFlagged(FLAGGED_ROW)).toBe(false)
+		expect(client.getQuotes).toHaveBeenCalledTimes(2)
+		expect(client.refreshIfStale).not.toHaveBeenCalled()
+	})
+
+	test("a broadcast replaces the flags, and a read begun before it is dropped", async () => {
+		const client = fakeClient()
+		let answer: (s: PriceSnapshot) => void = () => {}
+		client.getQuotes.mockReturnValue(new Promise<PriceSnapshot>((resolve) => (answer = resolve)))
+		const flags = useTokenFlags(client as unknown as PriceServiceClient)
+		client.onQuotesUpdated.invoke(snap({}, { flagged: [] }))
+		expect(flags.mapped.value).toBe(true)
+		answer(snap({}))
+		await flushPromises()
+		expect(flags.isFlagged(FLAGGED_ROW)).toBe(false)
+
+		client.onQuotesUpdated.invoke(snap({}))
+		expect(flags.isFlagged(FLAGGED_ROW)).toBe(true)
+	})
+
+	test("a failed read leaves the list unmapped, so nothing reads as flagged or cleared", async () => {
+		const client = fakeClient()
+		client.getQuotes.mockRejectedValue(new Error("worker gone"))
+		const flags = useTokenFlags(client as unknown as PriceServiceClient)
+		await flushPromises()
+		expect(flags.mapped.value).toBe(false)
+		expect(flags.isFlagged(FLAGGED_ROW)).toBe(false)
+	})
+
+	test("dispose stops both the broadcast and the reconnect read", async () => {
+		const client = fakeClient()
+		client.getQuotes.mockResolvedValue(snap({}, { flagged: [] }))
+		const flags = useTokenFlags(client as unknown as PriceServiceClient)
+		await flushPromises()
+		flags.dispose()
+		client.onQuotesUpdated.invoke(snap({}))
+		client.getQuotes.mockResolvedValue(snap({}))
+		reconnect(client)
+		await flushPromises()
+		expect(flags.isFlagged(FLAGGED_ROW)).toBe(false)
+		expect(client.getQuotes).toHaveBeenCalledTimes(1)
 	})
 })
