@@ -1,8 +1,8 @@
 ---
 plan: dapp-boundary-4
 tier: mid
-status: planned, final Codex pass approve; arc 1 in review
-issues: none open; #966 and #967 are closed known limits the arc 1 PR references
+status: completed; arc 1 merged (#971), arc 2's PR carries this close-out
+issues: #975 (OA-1, owner-decision) open; #966 and #967 are closed known limits arc 1 references
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -10,10 +10,26 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 budget: recon 2 explorers (sonnet); dual audit (Codex gpt-6.1-sol high + one Opus Plan leg); one fresh final Codex pass
-base: origin/dev at ad4de50d8
+base: origin/dev at ad4de50d8 (arc 1); 85edeb866 (arc 2)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-21. Planned 2026-10-20; arc 1 merged 2026-10-20 as [#971](https://github.com/nulo-sh/nulo/pull/971); arc 2's PR carries this close-out, and its merge closes the plan.
+- **Status:** delivered in two ready PRs against `dev`: arc 1 as #971 (merged), and arc 2's, which carries this close-out; merging it is the orchestrator's call.
+- **Shipped:**
+  - Arc 1 (#971): `getContractMetadata` answers a profile account outside the dApp session as an address the wallet never registered, with publication and upgrade fields from the node; `getContractClassMetadata` takes publication from the node; the public receipt class gate requires the bundled original class; registrations bind the current class to the original (hardening under #966); `SECURITY.md` states what the session MAC stops (#967).
+  - Arc 2 (P77-03 A): a dApp's `registerSender` and keyed `registerContract` count against its app (32) and all apps (128) on the profile's chain, every admitted call counting, under the session that authorized it; one scope refusal once a count is used up, the same for every address; the PXE-level source bound and `PxeTaggingSourcesFullError` removed; the `nulo:core:dappRegistrations` store registered with two goldens and the re-stamped snapshot, device-local and in no backup.
+- **Review loop:** the plan took conditional approves from Codex and Opus, then a fresh Codex approve at round 3. Arc 1: Codex approve, Opus conditional approve, applied. Arc 2: Codex reject, reject, approve over three rounds, Opus conditional approve; all applied (D12).
+- **Gates at the head**, after merging `origin/dev` at `5ac883bfb`: lint, `typecheck:all`, `test:all`, `test:ci-gating`, `check:plans` exit 0; network e2e at retry 0, Chrome `data-registerSender`, `contracts-register`, `senders-advanced` and Firefox `data-registerSender`, `contracts-register` green. No e2e scenario added.
+- **Deviations:** D6 (the parsed-form binder) in arc 1; D12 (the forwarded fence, the fail-closed read) in arc 2; the type-roles inventory's dispatcher digest re-pinned in both arcs; `COMPOSITION-TESTS.md` names a second D1 carve-out.
+- **Dropped:** a per-app set of registered addresses (D8); keeping the PXE-level bound without its exemption (D10).
+- **Known limits:** #966 and #967, closed. Other residuals are tracked privately.
+- **Open items:** #975 (OA-1, `owner-decision`).
+- **Lessons:** none promoted; this plan's one cross-task gotcha, a zsh variable that stays one word, is already in `lessons.md`.
+- **Seeds retired:** the `/goal` and `/loop` drafts are removed; this plan is a record, not a task list.
 
 # dapp-boundary-4: dApp reads and registrations answer from the session and the chain
 
@@ -25,7 +41,7 @@ Arc 1 changes four wallet answers to a connected dApp and one paragraph of `SECU
 4. A dApp `registerContract` binds its artifact to the instance's original class and requires the current class to equal it; the PXE seam refuses a current class that differs from the original, for every caller.
 5. `SECURITY.md` states what the dApp-session MAC stops and what it does not (#967).
 
-Arc 2 is held for the owner (OA-2). Item 4 is hardening under #966. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md).
+Arc 2 counts a dApp's registrations per app and per profile chain and refuses one way once a count is used up (OA-2, the owner's pick P77-03 A); it is planned below. Item 4 is hardening under #966. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md).
 
 **Claims that did not hold** (at `ad4de50d8`):
 - The brief asks for `isContractPublished` "from the same node lookup a miss makes". A miss today asks the PXE cascade (PXE, node, compiled-in known bundle; `packages/aztec-runtime/src/pxe/service.ts:294-339`), which cannot give a node-only answer. The plan asks the node directly for every address (D2).
@@ -63,7 +79,7 @@ Arc 2 is held for the owner (OA-2). Item 4 is hardening under #966. Recon: [reco
 
 **Asks** (working assumption in brackets; none blocks arc 1):
 - A1 = OA-1: what the class-lookup consent row shows. [Unchanged; arc 1 ships the node's publication answer only.]
-- A2 = OA-2: arc 2. [Held.]
+- A2 = OA-2: arc 2. [Decided: P77-03 A.]
 - A3 No public issue exists for item 2. [None filed: the PR records it.]
 
 ## Architecture & Implementation
@@ -169,9 +185,66 @@ Every gate runs from the worktree root and also runs `bun run lint` and `bun run
   - Firefox: `NULO_E2E_BROWSER=firefox NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/contracts-getMetadata.test.ts tests/e2e/network/contracts-getClassMetadata.test.ts tests/e2e/network/batch-mixed.test.ts tests/e2e/network/contracts-register.test.ts`
 - **Pass:** every command exits 0, and every listed file is green. No e2e scenario is added, so the runtime budget is unchanged.
 
-## Arc 2 (held for OA-2)
+## Arc 2: counted dApp registrations (OA-2 = P77-03 A)
 
-How a dApp's registrations are admitted. The design and its options are tracked privately; nothing in arc 1 depends on them. Arc 2 is planned here only after the owner picks.
+The owner picked P77-03 A on 2026-10-20: "Per-app, per-profile counters of admitted registrations; one uniform refusal once used up." The new stored state is approved: a registry entry, its goldens and the re-stamp. No screen changes.
+
+**Outcome.** A dApp's `registerSender`, and its `registerContract` with a secret key, are admitted against two counts on the profile's chain: the app's own (at most `APP_REGISTRATIONS_PER_CHAIN` = 32) and all apps' together (at most `DAPP_REGISTRATIONS_PER_CHAIN` = 128, the figure the old bound used). Every admitted call spends one from both, a repeat included, before anything is written. Once either is used up, every such call is refused with one fixed scope refusal and writes nothing. A keyless `registerContract` and the person's own registrations neither count nor are refused.
+
+**Invariant.** Whether a dApp registration is admitted depends only on how many registrations that app, and all apps, have made on the profile's chain, never on what the chain's PXE holds.
+
+**Facts** (at `origin/dev` `85edeb866`):
+- F10 Only the dispatcher builds `aztec_registerSender` and `aztec_registerContract` (`buildNetworkOperation`, grep of both kinds), and runs them through `executeOperations([op], { type: DAPP, name: ctx.origin })` (`packages/wallet-bridge/src/dispatcher.ts:251-253`); a batch leg re-enters `dispatch`. `dispatchOperation` holds that origin (`apps/extension/src/wallet/services/execution/service.ts:997-1050`).
+- F11 Today both executors pass `DAPP_TAGGING_SOURCES_BOUND` to `PxeService.registerSender` / `registerAccount`, whose `assertTaggingSourceRoom` refuses with `PxeTaggingSourcesFullError`, mapped to a `ScopeViolationError` (`service.ts:172-188`, `packages/aztec-runtime/src/pxe/service.ts:67-80`). No other caller passes a bound (grep `maxTaggingSources`).
+- F12 A per-profile value store is `perProfileValue(root)` in `apps/extension/src/wallet/storage/stores.ts`, registered by `described(...)` in `stored-shapes.ts` with a `full` and a `minimal` golden (as `tokenSeeded`). `PINNED_STAMPS` is empty, so `bun run baseline:storage` rewrites the one stamp with no pin.
+- F13 The deletion coordinator awaits `DappSessionService.purgeForProfile` (`profile-deletion/coordinator.ts:129`); a network reset awaits `DappSessionService.purgeForChain` for the chain it leaves (`network-reset/service.ts:547`), and a deleted network's sessions stay by design (`purgeForChain`'s doc).
+
+**Architecture.**
+- `apps/extension/src/wallet/services/dapp-session/registration-allowance.ts`: `RegistrationAllowance` over one per-profile value store, `nulo:core:dappRegistrations@<profileId>`, holding `{ [chainId]: { total, apps: { [origin]: count } } }`. `admit(profileId, chainId, origin, assertLive)` runs `assertLive`, reads, checks both counts, writes both increments under one lock, or throws `ScopeViolationError(REGISTRATIONS_USED_UP)`. `clearChain` and `purgeProfile` remove a chain's entry and the profile's key under the same lock. Malformed JSON reads as no registrations; a failed storage read propagates.
+- `DappSessionService` owns it: `admitDappRegistration(origin, fence, chainId)` (not an RPC method) asserts the fence's deletion epoch under the counts' lock, the profile's key removed in `purgeForProfile`, the chain's entry in `purgeForChain`. The counts follow the sessions: a network reset clears them, a deleted network keeps them.
+- `ExecutionService`: both arms take the registrant, the DAPP origin's name and the wire handler's admission fence, which the dispatcher now forwards with every dApp op (a direct caller without one captures the live session's fence before the executor's first await); a fence of another profile than the op's network is refused (`SessionEndedError`). `executeAztecRegisterSender` admits before `registerSender`; `executeAztecRegisterContract` admits after every argument, class and key check and before `registerAccount`, keyed calls only. A DAPP origin admits under its name; a UI origin is the person's own and is not counted. Neither passes a bound to the PXE.
+- The PXE-level bound goes: the `maxTaggingSources` parameter (service, client, spec), `assertTaggingSourceRoom`, `TaggingSourceBoundSchema`, `PxeTaggingSourcesFullError` and their tests.
+- The counts are device-local: no backup slice carries them, as no backup carries a dApp session.
+
+| File | Change |
+|---|---|
+| `apps/extension/src/wallet/services/dapp-session/registration-allowance.ts` (+ test) | the counts, the refusal, the purges |
+| `apps/extension/src/wallet/services/dapp-session/service.ts` (+ composition test) | own the allowance; purge with the profile and the chain's sessions |
+| `apps/extension/src/wallet/storage/stores.ts`, `stored-shapes.ts`, `stored-shapes/goldens.json`, `snapshot.json`, `stored-shapes.writers.test.ts` | the registry entry, two goldens, the re-stamp, the writer round-trip |
+| `apps/extension/src/wallet/services/execution/service.ts` | admit in both executors; the bound and its mapping removed |
+| `apps/extension/src/wallet/services/execution/register-bounds.test.ts` | rewritten against the counts |
+| `packages/aztec-runtime/src/pxe/{service,client,spec}.ts`, `tagging-source-bound.test.ts` (deleted) | the PXE-level bound removed |
+| `packages/extension-messaging/src/errors.ts` (+ test) | `PxeTaggingSourcesFullError` removed |
+| `packages/wallet-bridge/README.md`, `src/dispatcher.ts`, `src/services-contract.ts` | the registration paragraph states the counts; the admission fence forwarded with every dApp op |
+| `apps/extension/scripts/type-roles/identifier-sites.expected.json` | the dispatcher's digest re-pinned and its evidence line re-quoted, after re-attesting |
+| `apps/extension/tests/COMPOSITION-TESTS.md` | the typed test-local client stub named as D1's second carve-out |
+| a dispatcher composition test | dispatcher → execution → counts in one graph |
+
+**Security.** A connected origin controls how often it calls and with which addresses; it does not control the origin key (the port's sender origin) or the profile and chain (the session's). The total count is shared, so an app can learn that others have made many registrations, never which. Accepted: a repeat spends a registration, so an app that registers the same sender on every load uses up its share; the only resets are a network reset of that chain and the profile's deletion. Logging: the refusal is a scope refusal, logged at `debug` with no origin or address.
+
+**Phases (arc 2).** Every gate also runs `bun run lint` and `bun run typecheck:all`.
+
+### Phase 7: the counts and their store ✓
+
+- Add `RegistrationAllowance`, its constants and its refusal text; wire it into `DappSessionService` with both purges; register the store, add the goldens, re-stamp; add the writer round-trip.
+- Tests (`registration-allowance.test.ts`): an app is admitted 32 times and refused on the 33rd with nothing written; four apps spend 128 and a fifth is refused; another chain and another profile keep their own counts; a refusal writes nothing; an unparseable value reads as none; `clearChain` and `purgeProfile` remove exactly their scope. `DappSessionService` composition: `purgeForChain` and `purgeForProfile` remove the counts.
+- **Gate:** `cd apps/extension && bun run test src/wallet/services/dapp-session src/wallet/storage src/wallet/services/backup`. Pass: exit 0.
+
+### Phase 8: the executors admit through the counts ✓
+
+- Pass the origin to both executors and admit as in Architecture; remove the PXE-level bound and its error.
+- Tests: `register-bounds.test.ts` rewritten: a keyed contract past the share registers neither the account nor the contract; a keyless contract is admitted past it; the person's own sender is admitted past it; an address the chain already holds and a fresh one get the same answer at the share's edge. `service.class-id.test.ts` and the conformance tests stay green.
+- **Gate:** `cd apps/extension && bun run test src/wallet/services/execution`, `cd packages/aztec-runtime && bun run test src/pxe`, `cd packages/extension-messaging && bun run test`. Pass: exit 0; the held-versus-fresh case red against the base copy of `execution/service.ts`.
+
+### Phase 9: through the dispatcher ✓
+
+- One composition test: the real dispatcher, `ExecutionService` and `DappSessionService` over fake storage and a recording PXE client typed against the real one. One app's 33rd `registerSender` and a `batch` leg past the share are refused with the scope envelope; a second app is still admitted; the stored counts match. A registration held before admission while its profile is deleted writes nothing.
+- **Gate:** the composition file, exit 0.
+
+### Phase 10: arc gate and close-out ✓
+
+- `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run test:ci-gating`, `bun run check:plans`. Network e2e through `agent.sh` at `NULO_E2E_RETRY=0`: Chrome `data-registerSender`, `contracts-register`, `senders-advanced`; Firefox `data-registerSender`, `contracts-register`. No scenario added.
+- Close-out per Post-implementation, in this PR.
 
 ## Decision ledger
 
@@ -183,6 +256,11 @@ How a dApp's registrations are admitted. The design and its options are tracked 
 - **D5 PXE-seam error.** A plain `Error` beside the address check, not `assertNotUpgraded`, whose `ContractUpgradedError` is defined as a node answer.
 - **D6 Parsed-form binder.** `assertInstanceArtifactClassId` holds the rule once; the wire binder parses and delegates. Rejected: the wire binder on the dApp path (refuses parsed and absent artifacts); an inline check with an exported text constant in the executor (Opus r1; a second copy of the rule).
 - **D7 Logging.** A fixed category with no error object on a node failure (Codex r1).
+- **D8 Count every admitted call.** A repeat spends a registration too: a count that skipped an address already present would depend on what the PXE holds. Rejected: a per-app set of registered addresses (repeat-free, but it stores which addresses each app registered, which the owner's pick does not approve).
+- **D9 The executors admit, the session service counts.** The executor admits after its own argument checks, so a malformed call spends nothing, and keys the app by the origin the dispatcher stamps (F10). `DappSessionService` holds the counts because it already purges per profile and holds per-app state. Rejected: admitting in the dispatcher (a call the executor then refuses would spend a registration); counts on the session row (a disconnect would reset an app's share).
+- **D10 The PXE-level bound goes.** The counts bound what apps add to one chain's PXE (at most 128 sources), and a bound that counts the PXE's own contents is what the invariant rules out. Rejected: keeping it without its exemption, which would refuse every app once the person's own senders and accounts reach it.
+- **D12 Fenced, fail-closed admission** (arc 2 review r1-r2). A registration counts under the session that authorized it: the dispatcher forwards the wire handler's admission fence, and its epoch is asserted under the lock `purgeProfile` takes, as `addDappSession` does, so a registration a deletion (and a same-id re-import) overtook writes no key. A failed storage read refuses the call instead of reading as none. Rejected: an `isReserved` check alone (misses a deletion that already released its id).
+- **D11 Shares.** 32 per app, 128 per profile chain: four apps can use the chain's whole total, and no one app can use more than a quarter of it. Policy figures, not measured thresholds.
 
 ## Review verdicts
 
@@ -193,30 +271,26 @@ How a dApp's registrations are admitted. The design and its options are tracked 
 - **Final pass, resumed round 2: `conditional approve`.** One condition: the D2 rewrite still narrated a failure path in committed text; reworded to the invariant. **Round 3: `approve`.** "All previously accepted conditions are satisfied. Confidence: high."
 - **Arc 1 review, round 1, Codex (gpt-6.1-sol high, session 01a15b4b, on the arc diff): `approve`.** Two low comment findings, accepted: two stale test headers corrected, two comments that restated their helpers removed. Its trace found no other difference between a withheld account and a fresh address than the one I2 names.
 - **Arc 1 review, Opus (general-purpose, same diff): `conditional approve`.** Accepted: (1) the metadata executor's doc claimed upstream parity for the instance and initialization: restated; (2) the binder's rationale named a lookup keyed on the current id, which no longer exists: restated as the invariant; (3) an executor-level pin that an artifact of the original class does not admit a different current id and registers no account; (4) a repeated read and the executor-level empty-session case (the dispatcher pins `[]`) removed. Rejected: dropping the checkpoint-only gate row, which catches a check made at one anchor only.
+- **Arc 2 review, round 1, Codex (gpt-6.1-sol high, session 01a15baa, on the arc diff): `reject`.** Accepted: (1) a failed storage read reset the counts: it now propagates (D12); (2) an admission held before its write could recreate a deleted profile's key: fenced (D12); (3) the composition test's client fake was untyped: typed against `PxeServiceClient`; (4) two comments restated their names: removed.
+- **Arc 2 review, round 2, Codex (same session): `reject`.** Accepted: (1) the fence was captured at execution, after the dispatcher's own awaits, so a same-id re-import in between handed the registration a live fence: the dispatcher forwards the admission fence (D12), with a regression holding the dispatcher's network read; (2) the fenced-kinds comment was stale: rewritten; (3) the inline client stub needed the guide's word: D1's second carve-out.
+- **Arc 2 review, round 3, Codex (same session): `approve`.** No findings; it checked the forwarded fence across ten operation kinds and the three digest pins.
+- **Arc 2 review, Opus (general-purpose, same diff): `conditional approve`.** Accepted: (1) and (2) as Codex's; two docs and a test header trimmed, with `overTheWire`'s dead error branch; one test covered by two others dropped; the plan's key name. One residual tracked privately.
 
 ## Delivery
 
 - **Arc 1** = Phases 1-6, branch `dapp-boundary-4-a1` off `origin/dev` with this plan's commit cherry-picked first, one PR against `dev` (the orchestrator's D-orch-1: no stack), ready, not a draft. Title: `fix(dapp): answer metadata from the session and the node; bind registered classes` (81 characters). Body: what changed and the invariant each change keeps, the validation runs, "Refs #966, #967", and no `Closes` line (no open issue). Open it without labels; add `e2e:extension-network` only if the path filter skips the network lane.
-- **Arc 2** = OA-2's pick, a later PR against `dev`, carrying the close-out. If the pick needs no code here, arc 1's PR gets the close-out commits before it merges.
+- **Arc 2** = Phases 7-10, branch `dapp-boundary-4-a2` off `origin/dev` `85edeb866`, one PR against `dev` carrying the close-out, ready. Title: `feat(dapp): count each app's registrations per profile chain; one refusal once used up`. Body: the counts and the uniform refusal, the stored state, the validation runs; no issue reference unless the diff touches #966's or #967's paths.
 - **Parallelism:** none; six short phases on one path.
 
 ## Post-implementation
 
 Execution contract: this plan plus `implementations-plan/README.md` § Post-implementation standard at `ad4de50d8`. Plan-specific values:
 - **Diff review:** `code_review: off`; the step is absent.
-- **Review loop, per arc, before that arc's PR:** `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. The prompt carries the arc diff from `origin/dev`, this plan and its ledger, the arc map ("arc 1 of 2; arc 2 is held"), the adversarial ask, and the README's two rules verbatim. One Opus review (`general-purpose`) of the same diff runs beside round 1. Hard stop at three rounds. Log each round in `lessons/phase-6.md` and under Review verdicts. A fix that adds state, a lifecycle, a protocol, a recovery policy or a public contract stops for approval.
+- **Review loop, per arc, before that arc's PR:** `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. The prompt carries the arc diff from `origin/dev`, this plan and its ledger, the arc map ("arc 1 of 2; arc 2 is held"; for arc 2: "arc 2 of 2; arc 1 merged"), the adversarial ask, and the README's two rules verbatim. One Opus review (`general-purpose`) of the same diff runs beside round 1. Hard stop at three rounds. Log each round in `lessons/phase-6.md` and under Review verdicts. A fix that adds state, a lifecycle, a protocol, a recovery policy or a public contract stops for approval.
 - **Delivery:** `gh pr create --base dev`, then `gh pr checks <n> --watch`; one rerun for a known flake. Never merge.
 - **Close-out** (with the last arc): merge `origin/dev` and read `index.md` and `lessons.md`; write the `## Outcome` block; promote lessons only within the 8 KiB budget; file OA-1 as an `owner-decision` issue if still open; OA-2 stays with the private tracking, never a public issue; delete `STATUS.md`; `git mv implementations-plan/dapp-boundary-4 implementations-plan/archive/dapp-boundary-4` in its own commit, with the index line moved to `archive/index.md`; `bun run check:plans` green after staging.
 - **Teardown after the merge** (standing authorization): once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/dapp-boundary-4/plan.md` succeeds, leave the worktree if this session entered it, then run `agent-worktree done dapp-boundary-4 --merged`; relay a refusal, never force. A `/loop` session checks on every firing; a `/goal` session arms one background wait after its wrap-up report.
 
-## Seeds (draft until approval)
+## Seeds
 
-Recommended: `/goal`.
-
-```
-/goal Arc 1 of implementations-plan/dapp-boundary-4/plan.md done: Phases 1-6 marked ✓ in plan.md, each backed by its validation gate reported passing in the transcript, LESSONS_FILE=implementations-plan/dapp-boundary-4/lessons/phase-N.md printed per phase; the Codex loop (gpt-6.1-sol high) converged on the arc diff, quoted; the arc PR open against dev after the loop (gh pr view output); bun run test:all and bun run lint exit 0 in the transcript.
-```
-
-```
-/loop 15m Drive arc 1 of implementations-plan/dapp-boundary-4 forward per its plan.md (read it and lessons/ first; plan.md is the state). Pick the next unchecked step, run the fast gates after each edit, commit signed. Decide open questions with Codex (gpt-6.1-sol high) and log each consult. A phase is green only when its gate passes as written. After Phase 6, run the Post-implementation loop, open the PR against dev, watch checks, report and stop. Never merge; never start arc 2.
-```
+Retired at close-out: the `/goal` and `/loop` drafts are removed.

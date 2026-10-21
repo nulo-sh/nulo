@@ -300,6 +300,43 @@
 						"type": "object"
 					}
 				},
+				"dappRegistrations": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:dappRegistrations"
+					},
+					"encoding": "json",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"additionalProperties": {
+							"properties": {
+								"apps": {
+									"additionalProperties": {
+										"maximum": 9007199254740991,
+										"minimum": 0,
+										"type": "integer"
+									},
+									"propertyNames": {
+										"type": "string"
+									},
+									"type": "object"
+								},
+								"total": {
+									"maximum": 9007199254740991,
+									"minimum": 0,
+									"type": "integer"
+								}
+							},
+							"required": ["apps", "total"],
+							"type": "object"
+						},
+						"propertyNames": {
+							"type": "string"
+						},
+						"type": "object"
+					}
+				},
 				"dappSessions": {
 					"ref": {
 						"kind": "root",
@@ -3644,6 +3681,27 @@
 				"tokenSeeded.minimal": {
 					"0:0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311": {
 						"attempts": 1
+					}
+				},
+				"dappRegistrations.full": {
+					"1": {
+						"apps": {
+							"http://localhost:5173": 1
+						},
+						"total": 1
+					},
+					"3415328944": {
+						"apps": {
+							"https://app.example": 32,
+							"https://swap.example": 5
+						},
+						"total": 37
+					}
+				},
+				"dappRegistrations.minimal": {
+					"0": {
+						"apps": {},
+						"total": 0
 					}
 				},
 				"activeNetwork.full": "e41b9d02",
