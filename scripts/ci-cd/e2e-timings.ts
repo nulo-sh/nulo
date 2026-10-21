@@ -41,7 +41,6 @@ type Line =
 	| { at: number; kind: "total"; files: number }
 	| { at: number; kind: "file"; file: string; reportedMs: number }
 
-/** A log line the parser reads, a problem, or undefined for every other line. */
 function classify(raw: string): Line | { problem: string } | undefined {
 	const line = stripVTControlCharacters(raw).trimEnd()
 	const space = line.indexOf(" ")
@@ -63,7 +62,8 @@ function classify(raw: string): Line | { problem: string } | undefined {
  * One shard job's file costs in ms, read from the default reporter's file lines. A file costs the
  * time since the previous file line; the first file's gap holds the global setup, so it costs its
  * reported time capped by that gap. Every cost is a span between the runner's own timestamps, so a
- * line a test prints can move time between files but never add any, and it breaks vitest's count.
+ * line a test prints can move time between files but never add any. A printed file line breaks
+ * vitest's file count, and a printed count makes two summaries, so either drops the job.
  * Throws when no file line matches: the reporter's format has changed.
  */
 export function parseJobLog(log: string): Parsed {
@@ -73,7 +73,9 @@ export function parseJobLog(log: string): Parsed {
 	const read = lines.filter((line): line is Line => line !== undefined)
 	const files = read.filter((line) => line.kind === "file")
 	if (files.length === 0) throw new Error("no reporter file line in a shard job's log: has vitest's default reporter changed its format?")
-	const total = read.find((line) => line.kind === "total")
+	const totals = read.filter((line) => line.kind === "total")
+	if (totals.length !== 1) return { problem: `${totals.length} test-file summaries` }
+	const total = totals[0]
 	let previous = read.find((line) => line.kind === "banner")?.at ?? Number.NaN
 	const costs = new Map<string, number>()
 	for (const line of files) {
@@ -82,7 +84,7 @@ export function parseJobLog(log: string): Parsed {
 		costs.set(line.file, costs.size > 0 ? gap : Math.min(line.reportedMs, gap))
 		previous = line.at
 	}
-	if (total?.files !== costs.size) return { problem: `${costs.size} file lines against vitest's count of ${total?.files}` }
+	if (total.files !== costs.size) return { problem: `${costs.size} file lines against vitest's count of ${total.files}` }
 	return { costs }
 }
 

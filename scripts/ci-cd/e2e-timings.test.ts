@@ -55,6 +55,17 @@ describe("parseJobLog", () => {
 		expect(twice).toEqual({ problem: `${A} reported twice, or before the run banner` })
 	})
 
+	test("a printed file line with a printed count to match still drops the job", () => {
+		const forged = [
+			banner(0),
+			passed(10, "tests/e2e/network/fee-methods.test.ts", 9_000),
+			total(11, 2),
+			passed(30, B, 19_000),
+			total(31, 1),
+		]
+		expect(parseJobLog(forged.join("\n"))).toEqual({ problem: "2 test-file summaries" })
+	})
+
 	test("a path that leaves tests/e2e drops the job", () => {
 		expect(parseJobLog([banner(0), passed(10, "tests/e2e/../../src/x.test.ts", 1), total(11, 1)].join("\n"))).toEqual({
 			problem: 'unreadable file path "tests/e2e/../../src/x.test.ts"',

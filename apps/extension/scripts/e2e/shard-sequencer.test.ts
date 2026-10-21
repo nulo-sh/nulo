@@ -16,7 +16,6 @@ const BROWSERS = ["chrome", "firefox"] as const
 type Config = typeof smokeConfig
 type Sequencer = new (ctx: never) => { shard(files: TestSpecification[]): Promise<TestSpecification[]> }
 
-/** The files a config selects, as vitest globs them from the extension root. */
 function selection(config: Config): string[] {
 	const excluded = new Set(globSync(config.test?.exclude ?? [], { cwd: EXTENSION }))
 	return globSync(config.test?.include ?? [], { cwd: EXTENSION })
@@ -36,7 +35,6 @@ function pool(files: string[]): string[] {
 
 const spec = (root: string) => (file: string) => ({ moduleId: path.join(root, file) }) as TestSpecification
 
-/** Every shard the config's own sequencer hands out for `specs`, from a stub context rooted at `root`. */
 async function shardsOf(config: Config, specs: TestSpecification[], count: number, root = EXTENSION): Promise<TestSpecification[][]> {
 	const Sequencer = config.test?.sequence?.sequencer as unknown as Sequencer
 	const shards: TestSpecification[][] = []
@@ -95,8 +93,8 @@ describe("assignShards", () => {
 		expect(assignShards(["a", "b", "x"], { a: 10, b: 9, x: 20 }, 2)).toEqual([["x"], ["a", "b"]])
 	})
 
-	test("the split ignores the order files arrive in", () => {
-		const files = Object.keys(timings.network.chrome)
+	test("the split ignores the order files arrive in, the record's files and the ones it lacks alike", () => {
+		const files = [...Object.keys(timings.network.chrome), "tests/e2e/network/zz-new.test.ts", "tests/e2e/network/aa-new.test.ts"]
 		const turned = [...files.slice(40), ...files.slice(0, 40)].reverse()
 		expect(assignShards(turned, timings.network.chrome, 5)).toEqual(assignShards(files, timings.network.chrome, 5))
 	})

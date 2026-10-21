@@ -18,7 +18,7 @@ The agent wrapper handles port allocation, the wallet build, and the test invoca
 bun run e2e:agent                                    # full network suite
 bun run e2e:agent --reporter=verbose                 # extra args go to vitest
 bun run e2e:agent tests/e2e/network/transfers.test.ts # filter to one file
-bun run e2e:agent --shard=5/5                        # reproduce one CI shard (see "CI sharding")
+bun run e2e:agent --shard=5/5                        # shard 5 of the whole suite (CI's pool: see "CI sharding")
 ```
 
 Both suites run on Chrome by default and on Firefox with `NULO_E2E_BROWSER=firefox` (`bun run test:e2e` for smoke, `bun run e2e:agent …` for network). One run drives one browser: the agent builds `dist/<browser>`, greps that bundle and loads that extension. Firefox needs `geckodriver` (on `PATH` or at `$GECKODRIVER`) and `bun x puppeteer browsers install firefox`. How it is driven, what behaves differently and the rule for absorbing a difference: [`FIREFOX.md`](./FIREFOX.md).
@@ -218,10 +218,10 @@ CI runs the network suite as a **5-shard GitHub Actions matrix** beside its dedi
 
 **Failing shard logs**: each shard uploads its own artifact (`network-e2e-logs-<N>-of-5`) containing `.e2e-state`, `aztec-*.log`, `anvil-*.log`, `presto-server.log`, `presto-health.json` on failure.
 
-**Reproducing a CI shard locally**: pass `--shard=N/5` to `e2e:agent`:
+**Reproducing a CI shard locally**: `--shard=N/5` on `e2e:agent` splits the whole suite:
 
 ```bash
-bun run e2e:agent --shard=5/5                                  # just the files in shard 5
+bun run e2e:agent --shard=5/5                                  # shard 5 of the whole suite, not of CI's pool
 ```
 
 It runs the files CI's shard 5 ran only with the same browser (`NULO_E2E_BROWSER`) and the pool's exclusions (an `--exclude` for each file of the lane's `exclude_files`): without them the file set differs, and so does the split. To chase a shard-specific failure (e.g. "register-token only fails on shard 1"), run the files that shard's log lists. Each invocation still starts its own anvil + aztec + playground; running multiple shards in parallel needs multiple worktrees (see "Running multiple agents in parallel" above).

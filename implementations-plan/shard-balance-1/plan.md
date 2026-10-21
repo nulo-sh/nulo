@@ -133,6 +133,14 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 
 **Round 2, Codex (resumed): approve.** It re-ran the revised numbers and found them matching. One low finding, adopted: the once-per-run check proves no file ran twice, not that none ran zero times (mixed partitions can drop one). The sentence now says so; the known limit stands.
 
+**Implementation round 1, Codex (`gpt-6.1-sol`, high, session `01a15bd5`): findings.** Both adopted:
+- I-C1 (medium, demonstrated in memory) a printed file line plus a printed `Test Files` count passed the per-job check, since the parser read the first summary. A job now needs exactly one summary; a regression test covers it.
+- I-C2 (low) three comments restated their code. They are deleted.
+
+**Implementation round 1, Opus 5.5 diff review: findings.** One duplicated I-C1; two adopted:
+- I-O1 (low–medium, demonstrated by mutation) the order test held only recorded files, so dropping the sort of unknown files passed. It now adds two unknown files out of order, and that mutation fails it. Vitest's glob order is a crawl order, so this sort is what keeps a new file in exactly one shard.
+- I-O2 (low) three lines still said a plain local `--shard` reproduces CI's shard (README:21, the README's reproduction block, `docker-ci-like.sh`). Locally the whole suite is split, not CI's pool. All three are corrected.
+
 ## Seeds (drafts, not run: the orchestrator owns execution)
 
 ```
