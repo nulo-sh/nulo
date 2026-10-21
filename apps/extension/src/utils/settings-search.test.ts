@@ -12,7 +12,7 @@ import {
 } from "./settings-search"
 
 const CHROME: SettingsContext = { sidePanel: true, passkey: false, developerMode: false, provingStatus: "Presto · connected" }
-const FIREFOX: SettingsContext = { ...CHROME, sidePanel: false }
+const NO_SIDE_SURFACE: SettingsContext = { ...CHROME, sidePanel: false }
 
 const ids = (groups: ReturnType<typeof searchSettings>) => groups?.map((g) => [g.caption, g.rows.map((r) => r.id)])
 const find = (query: string, context = CHROME) => ids(searchSettings(visibleSettingsRows(context), query))
@@ -25,7 +25,7 @@ describe("matching", () => {
 
 	test('"full" finds Open as Side Panel by a synonym, and nothing on a browser with no side panel', () => {
 		expect(find("full")).toEqual([["Display", ["display-side-panel"]]])
-		expect(find("full", FIREFOX)).toEqual([])
+		expect(find("full", NO_SIDE_SURFACE)).toEqual([])
 	})
 
 	test("case and accents fold: THÉME finds Theme", () => {

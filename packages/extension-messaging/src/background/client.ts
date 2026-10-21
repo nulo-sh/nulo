@@ -49,6 +49,11 @@ export abstract class ServiceClient<
 	private ready?: Deferred<void>
 	private reconnectTimer?: ReturnType<typeof setTimeout>
 
+	/** A port that said Ready is open: a request made now is posted before the call returns. */
+	public get isConnected(): boolean {
+		return this.state === ClientState.Connected
+	}
+
 	protected constructor(service: string, logger: ILogger, name?: string, options?: { requestTimeoutMs?: number }) {
 		super(service, logger, name, { defaultTimeoutMs: options?.requestTimeoutMs ?? DEFAULT_RPC_TIMEOUT_MS, warnAfterMs: WARN_AFTER_MS })
 	}
@@ -213,7 +218,15 @@ export abstract class ServiceClient<
 	protected sendEnvelope(content: unknown): void {
 		const port = this.port
 		if (this.state !== ClientState.Connected || !port) throw new Error("port not ready at send")
-		port.postMessage({ type: MessageType.Request, content })
+		try {
+			port.postMessage({ type: MessageType.Request, content })
+		} catch (error) {
+			// A port that throws is gone before its onDisconnect comes: the client stops reading as
+			// connected at once, and drops the port once this request has failed as a send failure.
+			this.state = ClientState.Disconnected
+			queueMicrotask(() => this.onDisconnect(port))
+			throw error
+		}
 	}
 
 	protected timeoutMessage(meta: RequestErrorMeta): string {
