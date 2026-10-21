@@ -1,7 +1,7 @@
 ---
 plan: exec-prices-1
 tier: light
-status: planned; Codex approve (r3), Opus conditional approve folded in
+status: A1 implemented, fix loop converged; PR pending
 issues: "#982 (A1)"
 driver: claude-code
 claude_model: opus
@@ -138,3 +138,5 @@ The standard is `implementations-plan/README.md` § Post-implementation standard
 - **Round 1, Opus Plan: conditional approve**, no P1. Accepted: the same red/green and Fact 2 findings; the unlock inside a window (KL1 (i), an Ask in its view: taken as a known limit, since § 5.2 discloses unlock refreshes and the lane bars service changes); distinct names from `isDappWindow` (now `isWindowDocument`); (b) also pins the capture's only caller; the regenerated `X/types/` files; the path-4 test; the Send success control moved to `send.integration.test.ts` (the comount file calls its mount "an operation window shape"); keep `reads()` 0 in `:342-360`; run the two network specs locally (CLAUDE.md § Quality gates); the inference corrections (alarm re-creation, the first-connect read, vitest's default isolation). Not taken: dropping the `AppFeeLine` and `FeeRaisedCard` edits (D4).
 - **Round 2, Codex (resumed): conditional approve**, high confidence; the accepted fixes check out (allowlist complete, test locations feasible, red proof feasible, gate flags right, KL1's traces match). Accepted: (b) must exempt the helper's own declaration (P2); step 6's reconnect count made explicit, with an unmount between the A/B mounts (P3).
 - **Round 3, Codex (resumed): approve**, high confidence; both round-2 edits verified, no remaining finding.
+- **Fix loop round 1** (diff `e7192fa8d..015b9e896`): Codex (gpt-6.1-sol, high, session `01a15c7d-193a-7592-8350-3a9649be89b7`) findings; Opus `general-purpose` findings, no production bug. Both found the P2: the boot-capture check exempted `popup/index.ts` and matched one literal, so a commented-out capture or a re-capture in a router hook passed (demonstrated in memory); now it reads the boot module's code lines. Accepted P3s: comment trims in the guard, the fake, `listState.read` and `window-document.ts`; `listState.read` keeps its old catch-all after `adopt` (Opus); a popup-document control for the fake's `refreshes()` on the `OperationCard.fee` harness (Opus); one file-scope `reconnect` helper. Fixes in `185a64cd0`.
+- **Fix loop round 2** (Codex, resumed): clean, high confidence. Converged.
