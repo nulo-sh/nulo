@@ -54,6 +54,7 @@ const {
 	chainStateOmitted,
 	unopenedImportedKeys,
 	importsOnAddedNetworks,
+	savedPlain,
 	isPasskeyProfile,
 	canDownload,
 	handleBackup,
@@ -287,16 +288,18 @@ onBeforeUnmount(() => {
 						</template>
 					</Banner>
 
+					<!-- A plain file has no password to remind of. Banner always lays out its description, so a
+					     lone title sits on one row, where the empty description takes no height. -->
 					<Banner
 						v-if="backupStatus === 'encrypted' || backupStatus === 'downloaded'"
 						variant="done"
-						direction="vertical"
+						:direction="savedPlain ? 'horizontal' : 'vertical'"
 						data-testid="backup-done-banner"
 					>
 						<template #title>
 							{{ backupStatus === "downloaded" ? "Saved to your downloads" : "Backup is successfully encrypted" }}
 						</template>
-						<template #description>
+						<template v-if="!savedPlain" #description>
 							<Text color="secondary" height="140">
 								Don't forget your
 								<Text v-if="!isPasskeyProfile" color="primary">profile</Text>

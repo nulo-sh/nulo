@@ -174,6 +174,7 @@ const SENTINELS = {
 	importsOnAddedNetworks: { accounts: 1, networks: 1 },
 	password: "sentinel",
 	repeatedPassword: "sentinel",
+	savedPlain: true,
 } as const
 type StateKey = keyof typeof SENTINELS
 
@@ -528,19 +529,44 @@ describe("useFullBackupExport — a current run", () => {
 		await api.handleBackup()
 		await api.handleEncrypt()
 		await api.downloadBackup(true)
-		expect(readState(api)).toMatchObject({ backupStatus: "downloaded", isDownloading: false, password: null, repeatedPassword: null })
+		expect(readState(api)).toMatchObject({
+			backupStatus: "downloaded",
+			savedPlain: false,
+			isDownloading: false,
+			password: null,
+			repeatedPassword: null,
+		})
 		expect(api.canDownload.value).toBe(false)
 		expect(m.openToast).toHaveBeenCalledWith({ kind: "success", label: "Backup downloaded successfully" })
 		for (const { kind, disconnect } of h.state.built) expect(disconnect, kind).toHaveBeenCalled()
 		expect(await probeArtifacts(api)).toEqual({ downloads: 0, sealedFrom: [null] })
 	})
 
-	it("a passkey profile's plain download leaves the page as it was", async () => {
+	it("a passkey profile's accepted plain download ends the run the same way, marked plain", async () => {
 		const { api } = setup("passkey")
 		await api.handleBackup()
 		await api.downloadBackup(false)
 		expect(m.downloadFile).toHaveBeenCalledOnce()
-		expect(api.backupStatus.value).toBe("finished")
+		expect(readState(api)).toMatchObject({
+			backupStatus: "downloaded",
+			savedPlain: true,
+			showRecommendation: false,
+			isDownloading: false,
+			password: null,
+		})
+		expect(api.canDownload.value).toBe(false)
+		for (const { kind, disconnect } of h.state.built) expect(disconnect, kind).toHaveBeenCalled()
+		expect(await probeArtifacts(api)).toEqual({ downloads: 0, sealedFrom: [null] })
+		api.reset()
+		expect(api.savedPlain.value).toBe(false)
+	})
+
+	it("a refused plain download keeps the plain file and Download", async () => {
+		const { api } = setup("passkey")
+		await api.handleBackup()
+		m.downloadFile.mockRejectedValueOnce(new Error("refused"))
+		await api.downloadBackup(false)
+		expect(readState(api)).toMatchObject({ backupStatus: "finished", savedPlain: false })
 		expect(api.canDownload.value).toBe(true)
 	})
 

@@ -11,6 +11,7 @@ import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import { useAppStore } from "@/stores/app.store"
 import { usePopupStore } from "@/stores/popup.store"
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 import FullExportPage from "./full.vue"
 import { installChromeStorage } from "../../../../../../tests/helpers/chrome-storage-mock"
 
@@ -30,7 +31,16 @@ function accountSliceClient() {
 		...sliceClient(),
 		backupImportedKeys: vi.fn(async (): Promise<unknown> => []),
 		exportFullBackupKeys: (fence: unknown, password: string) => exportFullBackupKeys(fence, password),
+		exportPasskeyBackupKeys: vi.fn(async () => PASSKEY_KEYS),
 	}
+}
+const PASSKEY_KEYS = {
+	credentialId: "cred",
+	dekSealed: "sealed",
+	dekReplaced: false,
+	unopenedImportedKeys: 0,
+	accounts: [],
+	importedKeyRows: [],
 }
 let profileClient = sliceClient()
 let accountClient = accountSliceClient()
@@ -125,10 +135,16 @@ vi.mock("@/utils", async (importOriginal) => ({
 	downloadFile: (opts: DownloadArgs) => downloadFile(opts),
 }))
 
+const requestConfirm = vi.fn<(request: { callback: () => void }) => void>()
+vi.mock("@/composables/useConfirm", () => ({
+	useConfirm: () => ({ requestConfirm: (request: { callback: () => void }) => requestConfirm(request) }),
+}))
+
 const openToast = vi.fn()
 vi.mock("@/composables/toast.js", async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
-	useToast: () => ({ openToast }),
+	// The passkey ceremony reads the open toast to clear its own line.
+	useToast: () => ({ openToast, toast: { value: null }, closeToast: () => {} }),
 }))
 
 // The app store's synced refs read chrome.storage.local and subscribe to chrome.storage.onChanged.
@@ -161,14 +177,14 @@ const allClients = () => [
 
 const wrappers: VueWrapper[] = []
 
-function mountPage(profileName = "Test Profile") {
+function mountPage(profileName = "Test Profile", type: "password" | "passkey" = "password") {
 	const wrapper = mount(FullExportPage, {
 		attachTo: document.body,
 		global: {
 			plugins: [
 				createTestingPinia({
 					initialState: {
-						app: { profile: { id: "p1", type: "password", name: profileName }, network: { id: "net1", chainId: 7 } },
+						app: { profile: { id: "p1", type, name: profileName }, network: { id: "net1", chainId: 7 } },
 					},
 					stubActions: false,
 				}),
@@ -747,5 +763,36 @@ describe("export/full.vue — the done state after the encrypted file", () => {
 		await flushPromises()
 		expect(router.push).toHaveBeenCalledWith("/popup/settings/security/export")
 		expect(close).not.toHaveBeenCalled()
+	})
+})
+
+describe("export/full.vue — the done state after a passkey profile's plain file", () => {
+	const CEREMONY_ANSWER = {
+		id: Buffer.from("cred").toString("base64"),
+		prf: Buffer.from(new Uint8Array(32).fill(6)).toString("base64"),
+	}
+
+	async function savedPlain() {
+		const wrapper = mountPage("Test Profile", "passkey")
+		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.findComponent(PasskeyCeremonyDialog).exists()).toBe(true))
+		wrapper.findComponent(PasskeyCeremonyDialog).vm.$emit("resolve", CEREMONY_ANSWER)
+		await vi.waitFor(() => expect(downloadButton(wrapper).attributes("disabled")).toBeUndefined())
+		await downloadButton(wrapper).trigger("click")
+		requestConfirm.mock.calls[0][0].callback()
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='backup-close-btn']").exists()).toBe(true))
+		await flushPromises()
+		return wrapper
+	}
+
+	it("reads saved with no password named, and a focused Close replaces Download and Protect with Password", async () => {
+		const wrapper = await savedPlain()
+		expect(downloadFile).toHaveBeenCalledOnce()
+		expect(downloadFile.mock.calls[0][0].filename).toMatch(/^NuloBackup_.+\.json$/)
+		expect(wrapper.get("[data-testid='backup-done-banner']").text()).toBe("Saved to your downloads")
+		expect(wrapper.find("[data-testid='backup-ready-banner']").exists()).toBe(false)
+		expect(wrapper.find("[data-testid='download-backup-btn']").exists()).toBe(false)
+		expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(false)
+		expect(document.activeElement).toBe(wrapper.get("[data-testid='backup-close-btn']").element)
 	})
 })
