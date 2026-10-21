@@ -6,7 +6,7 @@ Base: `origin/dev` at `8663cdd15`. One Sonnet explorer (reuse sweep) plus the pl
 
 - `release-app` exists: protection rule `branch_policy` only, custom policies `main` and `dev` (type branch), no reviewer, no wait timer.
 - Its secrets: `RELEASE_PLEASE_APP_ID`. The private key is not there yet: the owner adds it from their Mac before the next promote.
-- No organization secret reaches the repository, and the environment holds no variable. The owner's remaining steps are tracked privately.
+- No organization secret reaches the repository, and the environment holds no variable. The owner's steps are logged on #21.
 
 ## Who reads the two secrets today
 
