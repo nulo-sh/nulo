@@ -29,3 +29,8 @@
   client" true (red proved with a `// privateKeyToAccount` line in `fixtures/poll.ts`); "by default" in the signer's
   comment and the test title. Not taken: dropping `not.toBe(LOCAL_NETWORK_SIGNER)`, which names the invariant.
 - Codex round 2 (resumed with the fix diff): clean. The loop converged in two rounds.
+
+## Final gates on the final head, 2026-10-21
+
+`lint`, `typecheck:all`, `test:all`, `test:ci-gating`, `check:plans` exit 0. The same network run: exit 0, 7 files and 30
+tests passed at retry 0, `send-chaos` skipped, 1445.5 s; 9 of 9 mint lines name account 1, none names account 0.
