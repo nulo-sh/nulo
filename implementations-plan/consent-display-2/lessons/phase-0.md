@@ -101,3 +101,12 @@ Accepted: merge by `(chainId, address)`, the held import keyed on its network's 
   Chrome 25.5 s on `30480ea79` → 39.2 s on `d2c816ddc`; Firefox 38.6 s → 63.9 s. The added flagged scenario is
   14.1 s on Chrome and 24.2 s on Firefox, against a 60 s estimate.
 - Codex r3: clean; loop converged in three rounds.
+
+## Arc 1 final gates
+
+- Merging `origin/dev` (6 commits; only `index.md` conflicted) surfaced Privacy Policy § 5.2, "Transaction
+  execution reads cached prices and never triggers a fetch". The flag read moved to `useTokenFlags`
+  (`c23b75760`). The execute window's fee children and the fee window already call `usePrices`; reported, not fixed.
+- `test:all` caught what the phase gates' targeted runs missed: `scripts/type-roles/identifier-sites.expected.json`
+  keys each identifier site on its template branch text, so `entry.named` → `isNamed(entry)` in `DetailsTable.vue`
+  needed its entry's `branch` updated (`2e9ee118a`). A phase that edits a template runs the extension's whole `test`.

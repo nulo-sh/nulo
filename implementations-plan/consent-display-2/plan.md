@@ -118,9 +118,10 @@ line one reads "You pay about {fee} from Private Fee Juice" (the skeleton while 
 a failed or previewed estimate, shows the notice "Your Private Fee Juice must cover this fee." (`info` glyph,
 secondary, testid `execute-op-private-fee-notice`) in every state, and never the probe line for the PrivateFPC.
 
-**Flagged token add (arc 1).** `execute/index.vue` owns a `PriceServiceClient` and `usePrices`: the client connects
-in `connectServices`, and `disconnectServices` disconnects it, then calls `prices.dispose()` (CLAUDE.md's order). `flaggedAdds` = indices of `register_token` operations that
-`prices.isFlagged({ chainId: op.network.chainId, contract: op.address })`; `acknowledged = ref(new Set<number>())`,
+**Flagged token add (arc 1).** `execute/index.vue` owns a `PriceServiceClient` and `useTokenFlags` (the list half of
+`usePrices.ts`, no price fetch): the client connects
+in `connectServices`, and `disconnectServices` disconnects it, then calls `tokenFlags.dispose()` (CLAUDE.md's order). `flaggedAdds` = indices of `register_token` operations that
+`tokenFlags.isFlagged({ chainId: op.network.chainId, contract: op.address })`; `acknowledged = ref(new Set<number>())`,
 empty at every mount and never read from anywhere. One `tokenFlagHold` computed (a token add while `!prices.mapped`, or
 a flagged add not ticked) joins `confirm-disabled` and the existing `payerShort || awaitsFeeFigure` return in
 `approve()`, so no early return is added. `OperationCard.vue`
@@ -148,9 +149,9 @@ chain's live imported accounts, read inside `readHeldReset` so a failed read kee
 
 **Trade-offs not taken.** A worker-built display model (the competing outline: the dispatcher computes reach,
 defaults and the token flag and ships them in the payload): one source, but a new wire contract in
-`@nulo/wallet-bridge` for facts the window already derives from the same snapshot (D10). A list-only composable
-without `refreshIfStale` for the flag read: a new C1 composable and its ten tests for one caller, when `usePrices`
-already runs in the dApp-opened fee window through `FeeRaisedCard` (D10). Naming every known contract in a row: unbounded titles (D2).
+`@nulo/wallet-bridge` for facts the window already derives from the same snapshot (D10). `usePrices` itself for the
+flag read: its mount-time `refreshIfStale` would add a price fetch to every execute window, token adds included,
+which Privacy Policy § 5.2 rules out for transaction execution (D10). Naming every known contract in a row: unbounded titles (D2).
 
 ## Decision ledger
 
@@ -165,7 +166,7 @@ already runs in the dApp-opened fee window through `FeeRaisedCard` (D10). Naming
 | D7 | Which fee card changes | `aztec_sendTx` with `exec.feePayer` the PrivateFPC, the popup's existing notion (`personPaysAppPayment`); the claim route and every other payer unchanged. Residual: a payload declaring another payer while one of its calls makes the PrivateFPC the kernel's payer reads as today's app card (the worker still treats it as the person's: `fee-reask.ts:37-52`); the popup sees the kernel payer only through the probe, so the clean fix carries it on the estimate, a contract change outside this lane: a known limit filed at close-out |
 | D8 | Notice and probe line | The picture shows the notice on a send whose today frame has no probe line, so the notice shows in every state; the probe line never shows for the PrivateFPC; `provenShort` still holds Confirm, and then the notice names the cause: `pay_fee` deducts the max gas cost from the caller's credit and credit is minted only from claims into the pool, so a pool short of the fee limit means every credit is short of it (the installed `PrivateFPC` source) |
 | D9 | Priority sentence | After "method set by {app}", as today's sentence orders them |
-| D10 | Flag source | `usePrices` in the window: the token page's check on the same snapshot, no new code path |
+| D10 | Flag source | `useTokenFlags`, the list half `usePrices` already holds (`listState`, the network-free `getQuotes` read, the broadcasts): the token page's check on the same snapshot, and the flag read asks for no price fetch (Privacy Policy § 5.2) |
 | D11 | List not yet read | A window with a token add stays unapprovable until the first price snapshot answers (it carries the list the worker loaded at start, `token-list/service.ts:112-116`), as it does for token details. A price service that answers neither read leaves Confirm off with Reject open: it needs a worker whose storage reads fail, a known limit filed at close-out |
 | D12 | Tick state | Window-level `Set` of op indices, empty at mount, never persisted or restored |
 | D13 | E2E | `cap-request-partial` asserts the new Off default and switches the other row; one added scenario, the flagged add in `register-token.test.ts`; no other new scenario |
@@ -185,10 +186,10 @@ already runs in the dApp-opened fee window through `FeeRaisedCard` (D10). Naming
 - **Known limits (filed closed at close-out).** D7's residual: a payload that declares another payer while a
   call makes the PrivateFPC pay reads as today's app card; the figure is shown and the worker caps it. D11's: a
   price service that answers neither read keeps Confirm off with Reject open.
-- **Network.** `usePrices` refreshes stale quotes when the execute window opens, as the dApp-opened fee window
-  does: the price host gets one more activity time and the fixed price-id set, never the dApp, the call or the
-  token; fiat display off fetches nothing. The flag read is the network-free `getQuotes`, so a slow or failed
-  refresh never holds Confirm.
+- **Network.** The flag read asks for no price fetch: Privacy Policy § 5.2 says "Transaction execution reads
+  cached prices and never triggers a fetch", and a window test pins zero `refreshIfStale` calls on a token add. The
+  execute window's fee children (`AppFeeLine`, `FeeSettingsCard`) and the fee window (`FeeRaisedCard`) already
+  call `usePrices`, so they can refresh; that predates this plan and is reported as a follow-up.
 - **Logging.** No new log line; nothing about flags, counts or names is logged.
 - **Input validation, crypto, least privilege, supply chain.** No new input path, key, dependency or permission.
 
@@ -345,6 +346,15 @@ Parallelism: none (arc 2 waits on #964).
 - **Arc 1 Codex r3** (resumed `01a15bc4`): **clean** over `92e9a1709` (two e2e spec corrections) and the whole arc.
   Argued the execute window's stale-quote refresh: the price host does gain activity times, but no dApp, call or
   token, and the flag read never waits on the refresh; keep D10. The Security line is corrected to say so.
+- **After r3: Privacy Policy § 5.2** (read while merging `origin/dev`) promises "Transaction execution reads cached
+  prices and never triggers a fetch", which `usePrices`' mount-time `refreshIfStale` in the execute window breaks
+  when quotes are stale; r3 had argued without that text. D10 now reads `useTokenFlags`, the list half `usePrices`
+  already holds (`c23b75760`), pinned by a window test red under `usePrices`.
+- **Codex consult on `c23b75760`** (resumed `01a15bc4`): the flag read is right and the stale-read guard holds
+  with `adoptFull` passed by reference; **findings (1)**, medium, pre-existing: the execute window's fee children
+  `AppFeeLine` and `FeeSettingsCard` call `usePrices` too, so the window as a whole is not fetch-free. Not changed
+  here (it predates the plan, outside its surfaces); the claim narrowed to the flag read, and the fee children and
+  the fee window go to the orchestrator as one follow-up.
 
 ## Seeds
 

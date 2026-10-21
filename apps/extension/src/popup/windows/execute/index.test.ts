@@ -755,7 +755,7 @@ describe("execute window — a token the signed list flags", () => {
 		priceFake.flagged = FLAG
 		await mountAdd()
 		expect([card().props("tokenFlagged"), card().props("tokenFlagAcknowledged")]).toEqual([true, false])
-		expect(priceFake.refreshes(), "the window reads cached prices only").toBe(0)
+		expect(priceFake.refreshes(), "the flag read asks for no price fetch").toBe(0)
 		expect(confirmOff()).toBe(true)
 		expect(await approve()).toBe(0)
 		await tick(true)
