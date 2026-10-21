@@ -74,6 +74,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [dapp-boundary-1](dapp-boundary-1/plan.md) — completed — an app-facing simulateTx result for dApps, and no dApp profileTx (OA-1 is #699)
 - [dapp-boundary-2](dapp-boundary-2/plan.md) — completed — a contract's key registers only its own account, one chain check per dApp call, no row for a connect that reaches no page
 - [dapp-boundary-3](dapp-boundary-3/plan.md) — completed — the authorization registry answers only the wallet's own action (P38-06 = A); the address row says it controls listing (P38-08)
+- [dapp-boundary-4](dapp-boundary-4/plan.md) — completed — dApp metadata reads answer from the session and the node, registrations bind the original class; each app's registrations counted per profile chain, one refusal once used up (P77-03 = A)
 - [dapp-results-1](dapp-results-1/plan.md) — completed — an app-facing `executeUtility` answer, and the log redactor denies `witness`, `newNotes` and `taggingIndexRanges`; the simulate side shipped in #701
 - [dapp-dispatch-hold](dapp-dispatch-hold/plan.md) — completed — hold an app's calls until They match: a per-session hold opened at establishment, released by the session's own hash, dropped on every session end; a lock ends unconfirmed sessions; 32 held calls then -32005
 - [dapp-grants](dapp-grants/plan.md) — completed — a refused dApp request tells no one more than it must
@@ -212,6 +213,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [network-e2e-required](network-e2e-required/plan.md) — completed — the network e2e check made reliably green, then required
 - [network-e2e-unquarantine](network-e2e-unquarantine/plan.md) — completed — the network suite restored to zero skips and no stretched waits
 - [network-identity-1](network-identity-1/plan.md) — completed — chain 0 is the local L1 on a loopback node; SECURITY.md says what adoption, promotion and use check (#659)
+- [network-identity-2](network-identity-2/plan.md) — completed — the token-list and price requests bypass the browser's HTTP cache; the price request omits credentials and the referrer
 - [network-playground-testing](network-playground-testing/plan.md) — completed — the wallet's dApp surface covered in the network suite through a local playground dApp
 - [network-test-triage](network-test-triage/plan.md) — completed — the failing network e2e tests diagnosed before any timeout was touched
 - [nightly-release](nightly-release/plan.md) — completed — one tagged nightly prerelease per day from the tip of dev
@@ -391,3 +393,9 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [test-infra-1](test-infra-1/plan.md) — completed — one source walker and TS tokenizer, one approval-window harness, one wait per test layer, shared builders (#561 #550 #540 #536)
 - [get-started-phrase-1](get-started-phrase-1/plan.md) — completed — a funded password wallet keeps its unsaved phrase in the Get started card (step 1, "of 4" on the first profile; the row alone on a later one); the banner only after Hide (#936, P73-01)
 - [proving-grant-row-1](proving-grant-row-1/plan.md) — completed — the Firefox Proving row follows the grant: all-sites access covers loopback, so the two 127.0.0.1 toggles alone withhold nothing; e2e pin and FIREFOX.md line; the owner's Mac check (P74-04) confirmed the panel survives the doorhanger and the grant lands (#572)
+- [index-union-1](index-union-1/plan.md) — completed — the archive index merges by union, so close-outs stop conflicting on it; a test keeps any merge attribute off every other path (#962, #957)
+- [backup-restore-2](backup-restore-2/plan.md) — completed — a restored transaction row binds to the restored profile and one of its accounts; a dropped account's restored rows go with it (#970)
+- [refused-send-1](refused-send-1/plan.md) — completed — a send the network refused with an existing nullifier or an expiry reads "Refused by the network" once a read finds it Dropped, then once more at its expiry (#112)
+- [privacy-cache-line-1](privacy-cache-line-1/plan.md) — completed — privacy 1.2.2: §§ 5.11 and 5.2 say the list and price requests bypass the HTTP cache, and the price request carries no cookies or referrer (P77-13 C)
+- [execution-integrity-2](execution-integrity-2/plan.md) — completed — every Send the person pays is held to the fee it showed: the queued cap strictly, the estimate by the dApp rule, a build more than 10% above it asks the existing fee question (P77-02 A, #979)
+- [exec-prices-1](exec-prices-1/plan.md) — completed — a dApp window reads cached prices and never asks for a refresh, whatever mounts in it (#982)

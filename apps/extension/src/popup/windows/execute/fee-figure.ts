@@ -16,10 +16,16 @@ function claimsToAccount(op: DraftUIOperation): boolean {
 	return op.kind === "aztec_sendTx" && classifyFeePayer(op.exec?.feePayer, op.opts?.from, op.exec?.calls) === "fjwc"
 }
 
-/** An app's own payment the person pays all the same: a claim to the account, or one naming the
- *  PrivateFPC as payer, which charges the sender's own Private Fee Juice. */
+/** An app's own payment naming the PrivateFPC as payer, which charges the sender's own Private Fee
+ *  Juice. */
+export function paysFromPrivateFeeJuice(op: DraftUIOperation): boolean {
+	return op.kind === "aztec_sendTx" && isPrivateFpc(op.exec?.feePayer)
+}
+
+/** An app's own payment the person pays all the same: a claim to the account, or one through the
+ *  PrivateFPC. */
 export function personPaysAppPayment(op: DraftUIOperation): boolean {
-	return claimsToAccount(op) || (op.kind === "aztec_sendTx" && isPrivateFpc(op.exec?.feePayer))
+	return claimsToAccount(op) || paysFromPrivateFeeJuice(op)
 }
 
 /** The paying method the window's fee card reports; `fpc` is a sponsor, never the person. */

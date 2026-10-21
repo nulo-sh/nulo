@@ -504,6 +504,8 @@ function snapshotTransfer() {
 	// cancel) for the full TTL.
 	const feeCap = queueCap.value?.cap
 	const precomputedEstimateId = feeCap ? undefined : feeEstimate.value?.estimateId
+	// A send the person pays is held to the figure the page showed: the queued cap, or the estimate.
+	const shownFee = feeCap || feePayerOf(payer.value) !== "self" ? undefined : feeEstimate.value?.maxFee
 	if (precomputedEstimateId) handoffFeeEstimate()
 	return {
 		networkId: appStore.network.id,
@@ -515,6 +517,7 @@ function snapshotTransfer() {
 		feeSettings: feeSettings.value,
 		precomputedEstimateId,
 		feeCap,
+		shownFee,
 		contract: activeToken.value.contract,
 		symbol: activeToken.value.symbol,
 		decimals: activeToken.value.decimals,

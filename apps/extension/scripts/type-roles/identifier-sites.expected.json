@@ -23,7 +23,7 @@
 			"digests": {
 				"apps/extension/src/wallet/services/auth-registry/service.ts": "216d4b91918b80d354f26921f9bed97116f125f3876502a19990bfc2b85a1ccd",
 				"apps/extension/src/wallet/services/execution/operation-planner.ts": "bbcaf06f67030ba2a7b26bc54a4671db80d11059f0b0b50ce0142a7cf16b5185",
-				"packages/wallet-bridge/src/dispatcher.ts": "fe414e0bb40a8453c7ae8119c93f34b5cb2f72e52a2a44b7680e2a385f5f7975"
+				"packages/wallet-bridge/src/dispatcher.ts": "078a3db852a84faef2b28c7874ba0de05084ac0cfe72e88cd603a1b127a8914c"
 			},
 			"evidence": [
 				{
@@ -53,7 +53,7 @@
 				}
 			],
 			"digests": {
-				"packages/wallet-bridge/src/dispatcher.ts": "fe414e0bb40a8453c7ae8119c93f34b5cb2f72e52a2a44b7680e2a385f5f7975"
+				"packages/wallet-bridge/src/dispatcher.ts": "078a3db852a84faef2b28c7874ba0de05084ac0cfe72e88cd603a1b127a8914c"
 			},
 			"evidence": [
 				{
@@ -87,7 +87,7 @@
 				}
 			],
 			"digests": {
-				"packages/wallet-bridge/src/dispatcher.ts": "fe414e0bb40a8453c7ae8119c93f34b5cb2f72e52a2a44b7680e2a385f5f7975"
+				"packages/wallet-bridge/src/dispatcher.ts": "078a3db852a84faef2b28c7874ba0de05084ac0cfe72e88cd603a1b127a8914c"
 			},
 			"evidence": [
 				{
@@ -104,7 +104,7 @@
 				},
 				{
 					"file": "packages/wallet-bridge/src/dispatcher.ts",
-					"text": "const results = await this.executionService.executeOperations([operation], origin)"
+					"text": "const results = await this.executionService.executeOperations([operation], origin, undefined, undefined, undefined, ctx.fence)"
 				}
 			]
 		}
@@ -145,7 +145,7 @@
 		{
 			"file": "apps/extension/src/components/composite/capabilities/DetailsTable.vue",
 			"expression": "shownAddress(entry.row.address)",
-			"branch": "!(entry.kind === 'sub') && !(entry.named)",
+			"branch": "!(entry.kind === 'sub') && !(isNamed(entry))",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"capability-address\"]",

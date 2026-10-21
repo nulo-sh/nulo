@@ -5,4 +5,6 @@
 *.scss text eol=lf
 implementations-plan/** linguist-generated=true
 implementations-plan/lessons.md -linguist-generated
+# Close-outs only append here; check:plans refuses the duplicate a union keeps when a line was edited.
+implementations-plan/archive/index.md merge=union
 .github/actions/setup-aztec/cli/package-lock.json linguist-generated=true

@@ -9,6 +9,7 @@
  * the owner lists. An artifact run holds the published envelope, the only list a release build's
  * pinned keys accept.
  */
+import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http"
 import path from "node:path"
@@ -68,11 +69,13 @@ export function e2eSigner(): Promise<Signer> {
 	return signer
 }
 
-/** `E2E_LIST_TOKENS` (or `tokens` in their place) and `E2E_LIST_FLAGGED`, signed with the run's key at
- *  `nowMs`'s sequence. */
-export async function signTestList(opts: { tokens?: readonly unknown[]; nowMs?: number } = {}): Promise<string> {
+/** `E2E_LIST_TOKENS` and `E2E_LIST_FLAGGED` (or `tokens` and `flagged` in their place), signed with the
+ *  run's key at `nowMs`'s sequence. */
+export async function signTestList(
+	opts: { tokens?: readonly unknown[]; flagged?: readonly TokenListPair[]; nowMs?: number } = {},
+): Promise<string> {
 	const { seedHex, pinned } = await e2eSigner()
-	const sourceText = JSON.stringify({ tokens: opts.tokens ?? E2E_LIST_TOKENS, flagged: E2E_LIST_FLAGGED })
+	const sourceText = JSON.stringify({ tokens: opts.tokens ?? E2E_LIST_TOKENS, flagged: opts.flagged ?? E2E_LIST_FLAGGED })
 	const signed = await signList({ sourceText, seedHex, keyId: pinned.keyId, nowMs: opts.nowMs ?? Date.now(), keys: [pinned] })
 	return signed.envelopeText
 }
@@ -86,7 +89,7 @@ export async function signForgedList(): Promise<string> {
 	return (await signList({ sourceText, seedHex, keyId: forger.keyId, nowMs: Date.now(), keys: [forger] })).envelopeText
 }
 
-export type ListRequest = { cookie?: string; referer?: string; origin?: string }
+export type ListRequest = { cookie?: string; referer?: string; origin?: string; ifNoneMatch?: string }
 
 export interface ListHost {
 	/** What the armed build's source names: `http://localhost`, never a granted host. */
@@ -116,8 +119,14 @@ export async function serveTokenList(): Promise<ListHost> {
 		req.resume()
 		if (req.url === "/cookie") return res.writeHead(200, { "Set-Cookie": "nulo-e2e=1; Path=/" }).end("ok")
 		if (req.url !== LIST_PATH) return res.writeHead(404).end()
-		seen.push({ cookie: req.headers.cookie, referer: req.headers.referer, origin: req.headers.origin })
-		res.writeHead(200, headers).end(envelope)
+		seen.push({
+			cookie: req.headers.cookie,
+			referer: req.headers.referer,
+			origin: req.headers.origin,
+			ifNoneMatch: req.headers["if-none-match"],
+		})
+		// A content ETag, as the production host sends, gives a browser that kept the response a validator to send back.
+		res.writeHead(200, { ...headers, ETag: `"${createHash("sha256").update(envelope).digest("hex")}"` }).end(envelope)
 	}
 	const { server, port, release } = await listenClaimed<Server>(() => createServer(handle), "token-list-host")
 	let stopping: Promise<void> | undefined
