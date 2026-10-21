@@ -67,7 +67,7 @@ For a person creating or importing a wallet in the onboarding tab, then landing 
 
 Warning: run every e2e through its runner at `--retry=0`: smoke through `bun run test:e2e`, which claims ports in `~/.agents/ports.md`. Run one e2e at a time in this worktree.
 
-### Phase 1 — the Presto step is done on open (#1019 item 3)
+### Phase 1 — the Presto step is done on open (#1019 item 3) ✓
 
 1. Apply the item 3 changes. Run `bun run baseline:storage`, add the two golden rows, and run it again: the second run changes nothing. Warning: if `stored-shapes/pins.ts` holds a pin by then (migration-rule-1 freezes the baseline), run it with `-- --additive "a new per-profile UI flag; every stored row still reads"` and add the pin it prints.
 2. Tests. Update the exact fixtures, never loosening them: `get-started.test.ts`'s `getStartedKeys` list and `NONE`, and `useGetStarted.test.ts`'s flag objects.

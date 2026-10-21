@@ -1652,6 +1652,20 @@
 			"value": true
 		},
 		{
+			"id": "uiGetStartedPrestoOpened.full",
+			"stamp": 0,
+			"shape": "uiGetStartedPrestoOpened",
+			"key": "nulo:ui:getStartedPrestoOpened@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedPrestoOpened.minimal",
+			"stamp": 0,
+			"shape": "uiGetStartedPrestoOpened",
+			"key": "nulo:ui:getStartedPrestoOpened@b04e6d18",
+			"value": true
+		},
+		{
 			"id": "uiProfileImported.full",
 			"stamp": 0,
 			"shape": "uiProfileImported",

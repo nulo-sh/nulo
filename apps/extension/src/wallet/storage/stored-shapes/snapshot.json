@@ -2608,6 +2608,19 @@
 						"type": "boolean"
 					}
 				},
+				"uiGetStartedPrestoOpened": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:getStartedPrestoOpened"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"const": true,
+						"type": "boolean"
+					}
+				},
 				"uiLastActiveProfile": {
 					"ref": {
 						"kind": "value",
@@ -3872,6 +3885,8 @@
 				"uiGetStartedHidden.minimal": true,
 				"uiGetStartedFeeJuiceHeld.full": true,
 				"uiGetStartedFeeJuiceHeld.minimal": true,
+				"uiGetStartedPrestoOpened.full": true,
+				"uiGetStartedPrestoOpened.minimal": true,
 				"uiProfileImported.full": true,
 				"uiProfileImported.minimal": true,
 				"uiProfileNotFirst.full": true,

@@ -9,6 +9,7 @@ import {
 	getStartedFeeJuiceHeldKey,
 	getStartedHiddenKey,
 	getStartedPhraseSavedKey,
+	getStartedPrestoOpenedKey,
 	profileImportedKey,
 	profileNotFirstKey,
 } from "@/utils/profile-ui-keys"
@@ -17,7 +18,15 @@ import { storageLocalGet, storageLocalSet } from "@/utils/storage"
 /** The slice of a gas balance read the reminders need (`stores/balances.store.ts`' `GasSlice`). */
 type GasRead = { display?: { publicFeeJuice: string | null; privateFeeJuice: string | null }; status: string }
 
-export type GetStartedFlag = "phraseSaved" | "backupSaved" | "aztecOpened" | "feeJuiceHeld" | "hidden" | "imported" | "notFirst"
+export type GetStartedFlag =
+	| "phraseSaved"
+	| "backupSaved"
+	| "aztecOpened"
+	| "feeJuiceHeld"
+	| "prestoOpened"
+	| "hidden"
+	| "imported"
+	| "notFirst"
 
 /** The flags a page may set; `imported` and `notFirst` have one writer, the profile service, beside the row. */
 export type MarkableGetStartedFlag = Exclude<GetStartedFlag, "imported" | "notFirst">
@@ -29,6 +38,7 @@ const KEYS: Readonly<Record<GetStartedFlag, (profileId: string) => string>> = {
 	backupSaved: getStartedBackupSavedKey,
 	aztecOpened: getStartedAztecOpenedKey,
 	feeJuiceHeld: getStartedFeeJuiceHeldKey,
+	prestoOpened: getStartedPrestoOpenedKey,
 	hidden: getStartedHiddenKey,
 	imported: profileImportedKey,
 	notFirst: profileNotFirstKey,
@@ -118,7 +128,7 @@ function firstProfileSteps(i: Ready): GetStartedStep[] {
 	steps.push(
 		{ item: "aztec", done: i.flags.aztecOpened },
 		{ item: "feeJuice", done: i.flags.feeJuiceHeld || i.feeJuice === "some" },
-		{ item: "presto", done: i.prestoReached },
+		{ item: "presto", done: i.flags.prestoOpened || i.prestoReached },
 	)
 	return steps
 }

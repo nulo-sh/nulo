@@ -5,3 +5,4 @@
 - 2026-10-21: Codex audit round 1: conditional approve; seven findings accepted and applied.
 - 2026-10-21: Opus leg: conditional approve; findings applied, one rejected (D8).
 - 2026-10-21: Codex verification: approve. Plan committed; awaiting the orchestrator.
+- 2026-10-21: P1 gate green: lint, typecheck:all, test, test:all; both controls red as expected.
