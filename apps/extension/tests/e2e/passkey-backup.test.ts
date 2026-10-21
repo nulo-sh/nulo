@@ -17,7 +17,7 @@
  *   2. Export cancel UX — Escape during the modal is marked handled and
  *      returns the user to the agreement gate (`isAgreed = false`), NOT a
  *      dead form or a toast+bounce.
- *   3. (Commit 2) In-session import round-trip — register, build a
+ *   3. In-session import round-trip — register, build a
  *      synthetic passkey backup with the real credentialId, reset storage,
  *      drive the import flow, assert the same address comes back.
  */
@@ -114,9 +114,8 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 		})
 		await waitForHash(page, "#/popup/settings/security/export/full", 5_000)
 
-		// Tick the agreement gate. For passkey profiles, agreement
-		// auto-fires `handleBackup` → opens the modal (see `handleAgree`
-		// in export/full.vue:73). No "Create Backup" button for passkey.
+		// For a passkey profile, Agree starts the backup and its passkey request (`handleAgree`); there
+		// is no Create Backup button.
 		await page.waitForSelector('[data-testid="agree-continue-btn"]', { visible: true, timeout: 5_000 })
 		// The held passkey request keeps the working card on screen; a run never returns to `progress`,
 		// so the card still mounted after the 240 px check proves the check read it.
@@ -173,11 +172,11 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 
 		// The plain file ends the run: the done state names no password, and Close stands alone.
 		await page.waitForSelector('[data-testid="backup-close-btn"]', { visible: true, timeout: 5_000 })
+		await page.waitForSelector('[data-testid="backup-done-banner"]', { visible: true, timeout: 5_000 })
 		expect(await page.$eval('[data-testid="backup-done-banner"]', (el) => el.textContent?.trim())).toBe("Saved to your downloads")
 		expect(await page.$('[data-testid="backup-ready-banner"]')).toBeNull()
 		expect(await page.$('[data-testid="protect-password-btn"]')).toBeNull()
 		expect(await page.$('[data-testid="download-backup-btn"]')).toBeNull()
-		await page.waitForSelector('[data-testid="backup-done-banner"]', { visible: true, timeout: 5_000 })
 		await expectFitsNarrow(page, "the done state after a plain file")
 		await shotSend(page, "export-full-saved-passkey", "backup-close-btn")
 
@@ -197,17 +196,8 @@ test("passkey full-backup export: modal appears + status card + CTAs become avai
 			{ timeout: 180_000, polling: 250 },
 		)
 
-		// Drive the encryption path so the second status card variant
-		// ("Encrypting your backup") is exercised too. For passkey profiles
-		// the "Protect with Password" CTA is a two-click flow:
-		//   1st click → clears `showRecommendation` and exposes the password
-		//     fields (the `handleEncrypt` passkey branch sets
-		//     `showRecommendation = false` then returns early on empty
-		//     password).
-		//   2nd click → with password + repeat filled, actually runs the
-		//     PBKDF2 + AES-GCM encryption.
-		// Order matters: the password fields are only mounted when
-		// `!showRecommendation`, so we have to click first to reveal them.
+		// The first Protect click mounts the password fields; the second starts the encryption, whose
+		// Encrypting card this run is the only one to show.
 		const ENCRYPT_PASSWORD = "EncryptPassword123!"
 		await clickByTestId(page, "protect-password-btn")
 		await page.waitForSelector('[data-testid="backup-encrypt-password-input"]', { visible: true, timeout: 5_000 })

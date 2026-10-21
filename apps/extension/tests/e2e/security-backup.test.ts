@@ -132,8 +132,8 @@ test("a password profile's full backup downloads only once it is encrypted", asy
 	expect((await openEncryptedBackup(file))["master-key"]).toBeTruthy()
 	await page.waitForSelector(sel("backup-close-btn"), { visible: true, timeout: 10_000 })
 	expect(await page.$(sel("download-backup-btn"))).toBeNull()
-	expect(await page.$eval(sel("backup-done-banner"), (el) => el.textContent)).toContain("Saved to your downloads")
 	await page.waitForSelector(sel("backup-done-banner"), { visible: true, timeout: 5_000 })
+	expect(await page.$eval(sel("backup-done-banner"), (el) => el.textContent)).toContain("Saved to your downloads")
 	await expectFitsNarrow(page, "the done state")
 	await shotSend(page, "export-full-saved", "backup-close-btn")
 
