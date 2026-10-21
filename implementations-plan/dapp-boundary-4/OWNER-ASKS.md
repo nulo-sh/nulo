@@ -11,6 +11,7 @@ Arc 1 depends on neither ask: it changes no screen. OA-2 is decided; arc 2 ships
   - **B:** A, plus a sub-line that also names the wallet's own records (for example "Whether it is on chain, and whether this wallet holds its code."), the any-class chip and flag for `"*"`, and a `contractClasses` column in the Details table, taken with the other consent-row work in another lane.
   - **C:** A, plus `isArtifactRegistered` answered `false` for every class: no local answer at all, at the cost of upstream's meaning (a dApp may then send an artifact it need not send).
 - **Recommendation.** A now; B with the consent-row lane.
+- **Tracked:** #975 (`owner-decision`), filed at close-out.
 
 ## OA-2: arc 2
 

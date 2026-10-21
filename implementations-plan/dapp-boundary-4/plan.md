@@ -1,8 +1,8 @@
 ---
 plan: dapp-boundary-4
 tier: mid
-status: arc 1 merged (#971); arc 2 in progress (OA-2 = P77-03 A)
-issues: none open; #966 and #967 are closed known limits the arc 1 PR references
+status: completed; arc 1 merged (#971), arc 2's PR carries this close-out
+issues: #975 (OA-1, owner-decision) open; #966 and #967 are closed known limits arc 1 references
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,22 @@ base: origin/dev at ad4de50d8 (arc 1); 85edeb866 (arc 2)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-21. Planned 2026-10-20; arc 1 merged 2026-10-20 as [#971](https://github.com/nulo-sh/nulo/pull/971); arc 2's PR carries this close-out, and its merge closes the plan.
+- **Status:** delivered in two ready PRs against `dev`: arc 1 as #971 (merged), and arc 2's, which carries this close-out; merging it is the orchestrator's call.
+- **Shipped:**
+  - Arc 1 (#971): `getContractMetadata` answers a profile account outside the dApp session as an address the wallet never registered, with publication and upgrade fields from the node; `getContractClassMetadata` takes publication from the node; the public receipt class gate requires the bundled original class; registrations bind the current class to the original (hardening under #966); `SECURITY.md` states what the session MAC stops (#967).
+  - Arc 2 (P77-03 A): a dApp's `registerSender` and keyed `registerContract` count against its app (32) and all apps (128) on the profile's chain, every admitted call counting, under the session that authorized it; one scope refusal once a count is used up, the same for every address; the PXE-level source bound and `PxeTaggingSourcesFullError` removed; the `nulo:core:dappRegistrations` store registered with two goldens and the re-stamped snapshot, device-local and in no backup.
+- **Review loop:** the plan took conditional approves from Codex and Opus, then a fresh Codex approve at round 3. Arc 1: Codex approve, Opus conditional approve, applied. Arc 2: Codex reject, reject, approve over three rounds, Opus conditional approve; all applied (D12).
+- **Gates at the head**, after merging `origin/dev` at `5ac883bfb`: lint, `typecheck:all`, `test:all`, `test:ci-gating`, `check:plans` exit 0; network e2e at retry 0, Chrome `data-registerSender`, `contracts-register`, `senders-advanced` and Firefox `data-registerSender`, `contracts-register` green. No e2e scenario added.
+- **Deviations:** D6 (the parsed-form binder) in arc 1; D12 (the forwarded fence, the fail-closed read) in arc 2; the type-roles inventory's dispatcher digest re-pinned in both arcs; `COMPOSITION-TESTS.md` names a second D1 carve-out.
+- **Dropped:** a per-app set of registered addresses (D8); keeping the PXE-level bound without its exemption (D10).
+- **Known limits:** #966 and #967, closed. Other residuals are tracked privately.
+- **Open items:** #975 (OA-1, `owner-decision`).
+- **Lessons:** none promoted; this plan's one cross-task gotcha, a zsh variable that stays one word, is already in `lessons.md`.
+- **Seeds retired:** the `/goal` and `/loop` drafts are removed; this plan is a record, not a task list.
 
 # dapp-boundary-4: dApp reads and registrations answer from the session and the chain
 
@@ -208,24 +224,24 @@ The owner picked P77-03 A on 2026-10-20: "Per-app, per-profile counters of admit
 
 **Phases (arc 2).** Every gate also runs `bun run lint` and `bun run typecheck:all`.
 
-### Phase 7: the counts and their store
+### Phase 7: the counts and their store ✓
 
 - Add `RegistrationAllowance`, its constants and its refusal text; wire it into `DappSessionService` with both purges; register the store, add the goldens, re-stamp; add the writer round-trip.
 - Tests (`registration-allowance.test.ts`): an app is admitted 32 times and refused on the 33rd with nothing written; four apps spend 128 and a fifth is refused; another chain and another profile keep their own counts; a refusal writes nothing; an unparseable value reads as none; `clearChain` and `purgeProfile` remove exactly their scope. `DappSessionService` composition: `purgeForChain` and `purgeForProfile` remove the counts.
 - **Gate:** `cd apps/extension && bun run test src/wallet/services/dapp-session src/wallet/storage src/wallet/services/backup`. Pass: exit 0.
 
-### Phase 8: the executors admit through the counts
+### Phase 8: the executors admit through the counts ✓
 
 - Pass the origin to both executors and admit as in Architecture; remove the PXE-level bound and its error.
 - Tests: `register-bounds.test.ts` rewritten: a keyed contract past the share registers neither the account nor the contract; a keyless contract is admitted past it; the person's own sender is admitted past it; an address the chain already holds and a fresh one get the same answer at the share's edge. `service.class-id.test.ts` and the conformance tests stay green.
 - **Gate:** `cd apps/extension && bun run test src/wallet/services/execution`, `cd packages/aztec-runtime && bun run test src/pxe`, `cd packages/extension-messaging && bun run test`. Pass: exit 0; the held-versus-fresh case red against the base copy of `execution/service.ts`.
 
-### Phase 9: through the dispatcher
+### Phase 9: through the dispatcher ✓
 
 - One composition test: the real dispatcher, `ExecutionService` and `DappSessionService` over fake storage and a recording PXE client typed against the real one. One app's 33rd `registerSender` and a `batch` leg past the share are refused with the scope envelope; a second app is still admitted; the stored counts match. A registration held before admission while its profile is deleted writes nothing.
 - **Gate:** the composition file, exit 0.
 
-### Phase 10: arc gate and close-out
+### Phase 10: arc gate and close-out ✓
 
 - `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run test:ci-gating`, `bun run check:plans`. Network e2e through `agent.sh` at `NULO_E2E_RETRY=0`: Chrome `data-registerSender`, `contracts-register`, `senders-advanced`; Firefox `data-registerSender`, `contracts-register`. No scenario added.
 - Close-out per Post-implementation, in this PR.
@@ -257,6 +273,7 @@ The owner picked P77-03 A on 2026-10-20: "Per-app, per-profile counters of admit
 - **Arc 1 review, Opus (general-purpose, same diff): `conditional approve`.** Accepted: (1) the metadata executor's doc claimed upstream parity for the instance and initialization: restated; (2) the binder's rationale named a lookup keyed on the current id, which no longer exists: restated as the invariant; (3) an executor-level pin that an artifact of the original class does not admit a different current id and registers no account; (4) a repeated read and the executor-level empty-session case (the dispatcher pins `[]`) removed. Rejected: dropping the checkpoint-only gate row, which catches a check made at one anchor only.
 - **Arc 2 review, round 1, Codex (gpt-6.1-sol high, session 01a15baa, on the arc diff): `reject`.** Accepted: (1) a failed storage read reset the counts: it now propagates (D12); (2) an admission held before its write could recreate a deleted profile's key: fenced (D12); (3) the composition test's client fake was untyped: typed against `PxeServiceClient`; (4) two comments restated their names: removed.
 - **Arc 2 review, round 2, Codex (same session): `reject`.** Accepted: (1) the fence was captured at execution, after the dispatcher's own awaits, so a same-id re-import in between handed the registration a live fence: the dispatcher forwards the admission fence (D12), with a regression holding the dispatcher's network read; (2) the fenced-kinds comment was stale: rewritten; (3) the inline client stub needed the guide's word: D1's second carve-out.
+- **Arc 2 review, round 3, Codex (same session): `approve`.** No findings; it checked the forwarded fence across ten operation kinds and the three digest pins.
 - **Arc 2 review, Opus (general-purpose, same diff): `conditional approve`.** Accepted: (1) and (2) as Codex's; two docs and a test header trimmed, with `overTheWire`'s dead error branch; one test covered by two others dropped; the plan's key name. One residual tracked privately.
 
 ## Delivery
@@ -274,14 +291,6 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 - **Close-out** (with the last arc): merge `origin/dev` and read `index.md` and `lessons.md`; write the `## Outcome` block; promote lessons only within the 8 KiB budget; file OA-1 as an `owner-decision` issue if still open; OA-2 stays with the private tracking, never a public issue; delete `STATUS.md`; `git mv implementations-plan/dapp-boundary-4 implementations-plan/archive/dapp-boundary-4` in its own commit, with the index line moved to `archive/index.md`; `bun run check:plans` green after staging.
 - **Teardown after the merge** (standing authorization): once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/dapp-boundary-4/plan.md` succeeds, leave the worktree if this session entered it, then run `agent-worktree done dapp-boundary-4 --merged`; relay a refusal, never force. A `/loop` session checks on every firing; a `/goal` session arms one background wait after its wrap-up report.
 
-## Seeds (draft until approval)
+## Seeds
 
-Recommended: `/goal`.
-
-```
-/goal Arc 1 of implementations-plan/dapp-boundary-4/plan.md done: Phases 1-6 marked ✓ in plan.md, each backed by its validation gate reported passing in the transcript, LESSONS_FILE=implementations-plan/dapp-boundary-4/lessons/phase-N.md printed per phase; the Codex loop (gpt-6.1-sol high) converged on the arc diff, quoted; the arc PR open against dev after the loop (gh pr view output); bun run test:all and bun run lint exit 0 in the transcript.
-```
-
-```
-/loop 15m Drive arc 1 of implementations-plan/dapp-boundary-4 forward per its plan.md (read it and lessons/ first; plan.md is the state). Pick the next unchecked step, run the fast gates after each edit, commit signed. Decide open questions with Codex (gpt-6.1-sol high) and log each consult. A phase is green only when its gate passes as written. After Phase 6, run the Post-implementation loop, open the PR against dev, watch checks, report and stop. Never merge; never start arc 2.
-```
+Retired at close-out: the `/goal` and `/loop` drafts are removed.
