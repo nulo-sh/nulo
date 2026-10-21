@@ -34,25 +34,28 @@ Network: Chrome runs 39480000408, 39477728140, 39477584910; Firefox 39480000356,
 - `tx-sendTx-sponsoredFpc` failed at 21:51Z: it passes a test-local async function to `page.evaluate`, Puppeteer serialized the span wrapper into the page, and the page threw on the wrapper's closure. Instrument fault again: the wrapper's `toString` now returns the original's source (`instruments-v6`, from about 21:56Z). Any file of this run that failed before then on a function passed to `evaluate` reruns under v6.
 - Result (2026-10-20 22:37Z, 2 h 10 min wall, load1 106 at start): 120 files green, 5 skipped, the two above red. `p1-rerun-chrome` (22:43-22:59Z, v6) ran both green: `same-token-concurrent-sends` 627 s, `tx-sendTx-sponsoredFpc` 26 s. Tables below merge the two runs, the rerun replacing the red files.
 
+**Correction (2026-10-21).** The first version of these tables summed each span's own time, which counted concurrent sibling spans and root timers twice: categories exceeded the wall clock by 2.6 % over the 127 files and by up to 40 % in a single file. Every table here now gives each instant to the deepest span active then (the latest started on a tie), so categories plus unattributed equal the file time; the node-path and pool-wait overlays were computed separately and do not change.
+
 ### Chrome: where the time goes (default 72/12, pool age 2000 ms)
 
 Exclusive time per category (a span's own time, its children's subtracted; launch, onboarding and the close read own everything under them). "Node path" is an overlay, not a category: the union of [tx enters the pool, its checkpoint is published] from the node log, and "pool wait" the part of it before the build starts, outside the `minTxsPerBlock: 2` holds tests set on purpose.
 
 | | All 127 files | Shard 2/5 (23, the critical job) | Heavy jobs (6) | P-mech (9) |
 |---|---:|---:|---:|---:|
-| File time | 7276 s | 1234 s | 1854 s | 1011 s |
-| Onboarding & profile | 23.5 % | 24.5 % | 5.5 % | 9.9 % |
-| UI waits (`waitFor*`) | 23.2 % | 24.5 % | 18.8 % | 21.4 % |
-| Script-side setup | 13.7 % | 11.5 % | 12.1 % | 15.1 % |
-| Polls (`pollUntil`) | 12.4 % | 12.8 % | 36.7 % | 22.0 % |
-| Browser launch | 12.4 % | 13.1 % | 3.2 % | 5.6 % |
-| Fixture UI driving, Puppeteer calls, navigation, test helpers | 12.3 % | 13.4 % | 14.8 % | 6.2 % |
-| Fixed waits (literal sleeps) | 3.1 % | 1.1 % | 8.3 % | 16.3 % |
+| File time | 7272 s | 1234 s | 1854 s | 1006 s |
+| Onboarding & profile | 20.8 % | 22.3 % | 4.8 % | 8.6 % |
+| UI waits (`waitFor*`) | 22.2 % | 22.8 % | 17.7 % | 21.1 % |
+| Script-side setup | 13.7 % | 11.5 % | 12.1 % | 14.7 % |
+| Polls (`pollUntil`) | 12.2 % | 12.8 % | 36.7 % | 22.1 % |
+| Browser launch | 12.3 % | 13.1 % | 3.2 % | 5.0 % |
+| Fixture UI driving, Puppeteer calls, navigation, test helpers | 10.7 % | 11.8 % | 14.5 % | 5.8 % |
+| Fixed waits (literal sleeps) | 2.8 % | 0.7 % | 8.1 % | 15.8 % |
 | Script waits on chain | 1.2 % | 1.8 % | 2.2 % | 1.7 % |
+| Module import (lazy aztec.js) | 0.5 % | 0.0 % | 0.0 % | 3.8 % |
 | Close and CSP read | 0.8 % | 1.2 % | 0.2 % | 0.4 % |
-| Unattributed | 3.1 % | 1.9 % | 0.6 % | 2.8 % |
-| **Node path (overlay)** | **12.1 %** (255 txs) | **7.7 %** (34) | **24.4 %** (98) | **10.3 %** (38) |
-| **Pool wait outside holds** | **6.6 %** | **5.6 %** | **8.7 %** | **7.6 %** |
+| Unattributed | 2.8 % | 1.9 % | 0.6 % | 1.0 % |
+| **Node path (overlay)** | **12.1 %** (255 txs) | **7.7 %** (34 txs) | **24.4 %** (98 txs) | **10.2 %** (38 txs) |
+| **Pool wait outside holds** | **6.6 %** | **5.6 %** | **8.7 %** | **7.7 %** |
 
 - Per tx (312 txs with a build, both runs): arrival to build start p10 2009, p50 2034, p90 2066 ms (the pool age; the 26 s maximum is a hold); build start to published p10 489, p50 633, p90 813 ms; the wallet's row reads mined p50 47 ms *before* the publish line (PROPOSED is set when the block is added, before the L1 publish), p90 420 ms after.
 - Chain clock at teardown: +10 998 s ahead of the wall clock after 256 blocks (boot: +623 s after 5).
@@ -67,15 +70,18 @@ One run of the union (32 files: shard 2/5's 24 as CI's Firefox log lists them, t
 | Firefox | Shard 2/5 (24) | Heavy (4 of the 6) | P-mech (9) |
 |---|---:|---:|---:|
 | File time | 1747 s | 1808 s | 1135 s |
-| Onboarding & profile | 29.9 % | 8.3 % | 13.1 % |
-| UI waits | 22.1 % | 14.5 % | 21.3 % |
+| Onboarding & profile | 26.8 % | 7.3 % | 12.2 % |
+| UI waits (`waitFor*`) | 20.2 % | 14.5 % | 21.3 % |
+| Script-side setup | 8.5 % | 6.3 % | 15.5 % |
+| Polls (`pollUntil`) | 10.4 % | 40.8 % | 17.5 % |
 | Browser launch | 16.1 % | 4.2 % | 7.0 % |
-| Polls | 11.9 % | 40.9 % | 17.6 % |
-| Script-side setup | 8.9 % | 6.7 % | 16.2 % |
-| Fixed waits | 0.7 % | 8.3 % | 13.9 % |
+| Fixture UI driving, Puppeteer calls, navigation, test helpers | 11.0 % | 16.9 % | 7.5 % |
+| Fixed waits (literal sleeps) | 0.5 % | 8.3 % | 13.9 % |
 | Script waits on chain | 1.2 % | 0.8 % | 1.3 % |
+| Module import (lazy aztec.js) | 0.0 % | 0.0 % | 0.0 % |
+| Close and CSP read | 3.9 % | 0.7 % | 1.1 % |
 | Unattributed | 1.5 % | 0.1 % | 2.5 % |
-| **Node path (overlay)** | **6.3 %** (36 txs) | **21.4 %** (60) | **10.4 %** (37) |
+| **Node path (overlay)** | **6.3 %** (36 txs) | **21.4 %** (60 txs) | **10.4 %** (37 txs) |
 | **Pool wait outside holds** | **4.2 %** | **4.6 %** | **6.6 %** |
 
 - Per tx (113): arrival to build p50 2037 ms; build to published p50 709, p90 962 ms; wallet reads mined p50 4 ms before the publish line, p90 433 ms after. Chain clock +4033 s at teardown after 109 blocks. No propose failure, slot mismatch, prune or drop line.
@@ -84,8 +90,8 @@ One run of the union (32 files: shard 2/5's 24 as CI's Firefox log lists them, t
 
 ## Step 6: smoke's critical shard
 
-- `p1-smoke-chrome` (00:17-00:32Z, shard 2/3's 20 files as CI's Chrome log lists them, built as CI's smoke job builds): 20 of 20 green, 847 s of file time. Browser launch 37.4 % (the egress-guarded launch alone 205 s over 69 launches, about 3 s each), onboarding and profile 20.7 %, UI waits 19.0 %, navigation 6.2 %, unattributed 8.5 %, no node path. No chain setting can move smoke.
-- `p1-smoke-firefox` (00:33-00:57Z, shard 2/3's 21 files as CI's Firefox log lists them): 21 of 21 green, 1316 s. Browser launch 32.7 %, onboarding 19.0 %, UI waits 15.1 %, close and CSP read 7.7 %, unattributed 12.4 %.
+- `p1-smoke-chrome` (00:17-00:32Z, shard 2/3's 20 files as CI's Chrome log lists them, built as CI's smoke job builds): 20 of 20 green, 847 s of file time. Browser launch 37.4 % (the egress-guarded launch alone 205 s over 69 launches, about 3 s each), onboarding and profile 20.1 %, UI waits 19.0 %, navigation 6.2 %, unattributed 8.5 %, no node path. No chain setting can move smoke.
+- `p1-smoke-firefox` (00:33-00:57Z, shard 2/3's 21 files as CI's Firefox log lists them): 21 of 21 green, 1316 s. Browser launch 32.7 %, onboarding 18.6 %, UI waits 15.1 %, close and CSP read 7.7 %, unattributed 12.4 %.
 
 ## Step 7: the top waits
 

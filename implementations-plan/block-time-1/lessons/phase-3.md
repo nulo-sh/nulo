@@ -69,3 +69,51 @@ P-mech (whole files) once per pair that boots, Chrome, and 2/2 on Firefox (D13),
 - **H4b holds.** No wallet or test code broke with the chain clock from 11 ks ahead of the wall clock (72/12) to 0.8 ks behind it (2/2). The wallet reads expiry and finality against chain time, not the wall clock.
 - The time differences against phase 1 are unmatched (phase 1 ran at load1 106-220, inside a 2 h run) and the short pairs agree with 12/12 within noise; per R1 and D14 they are not a gain. The phase-1 Chrome P-mech sum (1008 s) is the same selection's time in a long, loaded run; 3d's matched pairs answer the timing question at the default slot.
 - The plan's short-slot break predictions did not occur: at L2 slot = L1 slot no stray L1 block pushed a propose into the next slot (the automine pre-sets the next timestamp and publishes in place), and no proof window was missed at 2/2.
+
+## 3d, the levers: matched pairs at the default slot
+
+Arm B combines the levers phase 1 ranked: the pool age at 0 (`P2P_MIN_TX_POOL_AGE_MS=0`, read back from the node's dump), the script's receipt polls every 0.1 s instead of 1 s (`E2E_TX_WAIT`), and the bridge waits forcing blocks through `aztecDebug_mineBlock` with 250 ms polls instead of a sponsored mint every 1.5 s. Both arms ran with the same files, order and instruments, interleaved Chrome A, B, Firefox A, B, three rounds; a validation run first (`p3d-val-chrome-B`: pool age 0 read back, a bridge claimable in 1.4 s). Every file green in all twelve runs. A−B is positive when B is faster; M is 10 % of A's median.
+
+### chrome: 3 matched pairs
+
+| File | A (s) | B (s) | A−B per pair (s) | median | M | verdict | pool wait A→B (s) | node path A→B (s) |
+|---|---|---|---|---:|---:|---|---|---|
+| `authwit-lifecycle` | 72.5, 64.3, 70.8 | 47.4, 69.3, 58.7 | 25.1, -5.0, 12.1 | 12.1 | 7.1 | inconclusive | 14.2 → 0.1 | 18.1 → 4.1 |
+| `concurrent-sendtx-confirm` | 32.7, 32.1, 31.6 | 23.8, 36.0, 43.8 | 8.9, -3.9, -12.2 | -3.9 | 3.2 | inconclusive | 6.1 → 0.0 | 7.7 → 2.1 |
+| `failed-send-check` | 258.5, 258.9, 266.5 | 264.3, 259.0, 256.7 | -5.8, -0.1, 9.8 | -0.1 | 25.9 | inconclusive | 4.1 → 0.0 | 5.2 → 1.2 |
+| `imported-account-execution` | 85.7, 76.5, 76.8 | 66.3, 80.0, 82.3 | 19.4, -3.5, -5.5 | -3.5 | 7.7 | inconclusive | 8.1 → 0.1 | 10.3 → 2.3 |
+| `incoming-arrival` | 346.7, 345.6, 364.0 | 352.6, 348.0, 351.4 | -5.9, -2.4, 12.6 | -2.4 | 34.7 | inconclusive | 26.4 → 0.3 | 33.1 → 7.7 |
+| `incoming-transfers` | 46.6, 38.2, 43.7 | 30.2, 41.2, 42.6 | 16.4, -3.0, 1.1 | 1.1 | 4.4 | inconclusive | 6.1 → 0.1 | 7.9 → 2.0 |
+| `sim-from-selfpay` | 36.2, 32.2, 34.8 | 22.7, 30.6, 31.3 | 13.5, 1.5, 3.6 | 3.6 | 3.5 | gain | 6.1 → 0.0 | 7.5 → 1.2 |
+| `tx-sendTx-sponsoredFpc` | 21.9, 19.6, 18.9 | 16.1, 27.6, 27.0 | 5.8, -8.0, -8.2 | -8.0 | 2.0 | inconclusive | 2.0 → 0.0 | 2.6 → 0.8 |
+| `wait-for-tx-mined` | 9.6, 9.2, 9.2 | 4.2, 7.2, 6.8 | 5.4, 2.0, 2.3 | 2.3 | 0.9 | gain | 4.0 → 0.0 | 5.0 → 1.3 |
+| **Sum** | 910.3, 876.5, 916.2 | 827.5, 898.9, 900.7 | 82.8, -22.5, 15.5 | 15.5 | 91.0 | | | |
+
+### firefox: 3 matched pairs
+
+| File | A (s) | B (s) | A−B per pair (s) | median | M | verdict | pool wait A→B (s) | node path A→B (s) |
+|---|---|---|---|---:|---:|---|---|---|
+| `authwit-lifecycle` | 79.6, 87.4, 90.9 | 92.8, 86.3, 77.2 | -13.2, 1.1, 13.7 | 1.1 | 8.7 | inconclusive | 14.2 → 0.1 | 17.9 → 4.9 |
+| `concurrent-sendtx-confirm` | 47.0, 45.9, 40.8 | 40.2, 42.6, 36.7 | 6.8, 3.3, 4.1 | 4.1 | 4.6 | faster, < M | 6.1 → 0.1 | 7.9 → 2.0 |
+| `failed-send-check` | 267.5, 282.2, 268.1 | 275.0, 276.8, 270.2 | -7.6, 5.4, -2.1 | -2.1 | 26.8 | inconclusive | 4.1 → 0.1 | 5.1 → 1.4 |
+| `imported-account-execution` | 89.8, 130.8, 90.7 | 101.1, 101.1, 99.9 | -11.3, 29.7, -9.2 | -9.2 | 9.1 | inconclusive | 8.1 → 0.1 | 10.0 → 2.7 |
+| `incoming-arrival` | 329.5, 321.5, 358.8 | 299.4, 332.3, 282.6 | 30.2, -10.8, 76.1 | 30.2 | 33.0 | inconclusive | 24.4 → 0.3 | 31.8 → 7.1 |
+| `incoming-transfers` | 54.7, 47.8, 52.2 | 63.0, 57.5, 50.2 | -8.3, -9.7, 2.0 | -8.3 | 5.2 | inconclusive | 6.1 → 0.1 | 7.7 → 2.0 |
+| `sim-from-selfpay` | 47.6, 44.0, 38.0 | 34.6, 37.0, 35.9 | 13.1, 7.0, 2.1 | 7.0 | 4.4 | gain | 6.1 → 0.1 | 7.7 → 1.3 |
+| `tx-sendTx-sponsoredFpc` | 29.7, 28.6, 26.2 | 30.8, 33.3, 33.8 | -1.2, -4.7, -7.6 | -4.7 | 2.9 | REGRESSION | 2.0 → 0.0 | 2.6 → 0.7 |
+| `wait-for-tx-mined` | 9.5, 9.3, 9.1 | 5.5, 5.1, 7.6 | 4.0, 4.3, 1.5 | 4.0 | 0.9 | gain | 4.1 → 0.1 | 5.0 → 1.3 |
+| **Sum** | 954.9, 997.5, 974.7 | 942.3, 972.0, 894.2 | 12.5, 25.6, 80.5 | 25.6 | 97.5 | | | |
+
+Category moves, summed over the nine files, median of the three pairs (A−B, s; exclusive time, each instant to the deepest active span): script-side setup +56.0 (Chrome) / +60.0 (Firefox), script waits on chain +11.9 / +11.6; browser launch −8.0 / −5.2, onboarding −16.2 / −14.6, navigation and UI driving −3.1 / −4.9.
+
+Load1 at start → end: Chrome A 47→84, 151→42, 146→59; B 84→49, 42→181, 59→195. Firefox A 49→98, 181→76, 195→51; B 98→151, 76→146, 51→155.
+
+- **The mechanism shows on both browsers and in every file:** pool wait falls to about 0 and the node path by 70-80 %, and the categories the levers reach shrink by 68-72 s per run.
+- **By the rule, a gain on two files per browser** (`wait-for-tx-mined`, `sim-from-selfpay`), inconclusive elsewhere, and on Firefox one regression by the numbers, `tx-sendTx-sponsoredFpc` (B slower by 1.2, 4.7 and 7.6 s, M = 2.9 s). Its spans put the excess in onboarding (+1.7, +2.9, +5.1 s) and browser launch (about +1 s), while its node path fell 2.6 → 0.7 s and its script setup fell 1-2 s. Load is the plausible cause, not an established one: onboarding includes PXE and account warm-up, which a different chain history could touch indirectly. The flag stands, its cause unresolved.
+- **The design confounds order with treatment.** Every pair ran A before B, and on this host (188 cores, load1 40-195 from other agents' runs) the B arms of rounds 2 and 3 ran while load rose and the A arms while it fell; the load-sensitive categories grew by 30-34 s in B, about half what the levers saved. Interleaving does not neutralise a drift that keeps its phase; balanced or randomised order would.
+- **A pre-existing Firefox behaviour, exposed by the lever:** in both Firefox B runs the node rejected a public simulation with a duplicate-nullifier collision during `authwit-lifecycle`'s first grant. The execute window's fee estimate keeps simulating after Confirm (its fire-and-forget cancel is lost as the window closes) and reaches the node about 0.5-0.7 s after the send; at pool age 0 the grant's block, which inserted the account's initialization nullifier, has already landed. Firefox A2 shows the same late simulation succeeding before the block. The result goes to a closed window and no state changes, but one or two private simulations hold the PXE queue on a first send.
+- **A fidelity limit of a forced block:** `aztecDebug_mineBlock` builds with `allowEmpty`, which sets the build's minimum to 0 and so bypasses `holdMining`'s `minTxsPerBlock: 2`; a forced block during a hold would include the held tx. No held window today overlaps a bridge wait, so it is a condition on any future use, not a failure. Forced empty blocks also remove the sponsored mints the bridge waits used to send, which changes the chain history those files run on.
+
+### The arc-2 decision (Codex consult, `gpt-6.1-sol`, high, session 01a15d42)
+
+Asked: (a) "does not hold" by the plan's letter, docs-only close; (b) run arc 2 anyway with CI as the decisive layer; (c) re-run 3d differently. **Verdict (a), high confidence:** the candidate fails the agreed local gate (seven targeted files without a qualifying gain on both browsers, 3e unrun); picking the two winning files afterwards would change the acceptance criterion, and the right wording is "does not hold under this protocol", not "does not accelerate". Accepted in full, with its corrections: the attribution double-counted concurrent spans (fixed, phase-1 tables corrected), the regression's cause stays unresolved, the fixed A-then-B order is a confound, the collision is pre-existing but exposed by the lever, and a forced block bypasses a mining hold. A separately specified CI experiment with balanced order is a follow-up for the owner (plan D15), not this lane.
