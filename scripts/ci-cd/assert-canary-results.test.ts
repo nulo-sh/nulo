@@ -10,9 +10,10 @@
  * Wired into CI via the root `test:ci-gating` script in `_unit-tests.yml`.
  */
 import { describe, expect, test } from "bun:test"
-import { readdirSync, readFileSync } from "node:fs"
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { type CanaryReport, canaryProblems, loadExpectations } from "./assert-canary-results"
+import { allowUnlisted, type CanaryReport, canaryProblems, loadExpectations } from "./assert-canary-results"
 
 const ROOT = join(import.meta.dir, "..", "..")
 const FIXTURES = join(import.meta.dir, "fixtures", "canary-results")
@@ -98,6 +99,47 @@ describe("assert-canary-results", () => {
 		expect(red.stderr.toString()).toContain(`::error::canary results: ${PASSKEY}: "${PASSKEY_TITLE}" skipped`)
 		expect(run("no-such-report.json", CANARY_JOB_FILES).exitCode).toBe(1)
 		expect(run("clean-chrome.json", []).exitCode).toBe(1)
+	})
+})
+
+describe("assert-canary-results --allow-unlisted (the soak's read-back)", () => {
+	const UNLISTED = "tests/e2e/network/cap-request-basic.test.ts"
+	const cli = (...args: string[]) => Bun.spawnSync(["bun", SCRIPT, ...args], { stdout: "pipe", stderr: "pipe" })
+
+	test("a file with no entry passes only when it ran and every test passed; without the flag it fails", () => {
+		const dir = mkdtempSync(join(tmpdir(), "soak-results-"))
+		try {
+			const soak = report("clean-chrome.json")
+			const [first] = CANARY_JOB_FILES
+			const file = soak.testResults.find((result) => result.name.endsWith(`/${first}`))
+			if (!file) throw new Error("the clean report carries the first canary job file")
+			file.name = file.name.replace(first, UNLISTED)
+			const path = join(dir, "soak.json")
+			writeFileSync(path, JSON.stringify(soak))
+			expect(expectations[UNLISTED]).toBeUndefined()
+			expect(cli("--allow-unlisted", path, UNLISTED).exitCode).toBe(0)
+			const listedOnly = cli(path, UNLISTED)
+			expect(listedOnly.exitCode).toBe(1)
+			expect(listedOnly.stderr.toString()).toContain(`${UNLISTED}: no entry in canary-expectations.json`)
+			const absent = cli("--allow-unlisted", path, "tests/e2e/network/never-ran.test.ts")
+			expect(absent.exitCode).toBe(1)
+			expect(absent.stderr.toString()).toContain("tests/e2e/network/never-ran.test.ts: absent from the report — it never ran")
+			const skipped = cli("--allow-unlisted", join(FIXTURES, "skipped-chrome.json"), PASSKEY)
+			expect(skipped.exitCode).toBe(1)
+			expect(skipped.stderr.toString()).toContain(`${PASSKEY}: "${CONTRACT_TEST}" skipped`)
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	test("a listed file keeps its titles", () => {
+		const clean = report("clean-chrome.json")
+		const file = clean.testResults.find((result) => result.name.endsWith(`/${PASSKEY}`))
+		if (!file) throw new Error("the clean report carries the passkey canary")
+		file.assertionResults = file.assertionResults.filter((test) => test.title !== PASSKEY_TITLE)
+		expect(canaryProblems(clean, [PASSKEY], allowUnlisted(expectations, [PASSKEY]))).toEqual([
+			`${PASSKEY}: "${PASSKEY_TITLE}" not reported — the expected test is gone`,
+		])
 	})
 })
 
