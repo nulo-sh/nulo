@@ -20,6 +20,7 @@
  * never in the production bundle (the build's negative bundle-grep looks for this
  * marker in `dist/`; it must be absent).
  */
+import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { describe, expect, test, vi } from "vitest"
 import { BlockNumber } from "@aztec-labs/foundation/branded-types"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
@@ -1543,6 +1544,83 @@ describe("ExecutionService composition — a send queued against a fee cap asks 
 		expect(await settled(h, run)).toBeInstanceOf(JobCancelledError)
 		expect(await stageOf(h, id)).toBe("cancelled")
 		expect(h.proveTx).not.toHaveBeenCalled()
+	})
+})
+
+describe("ExecutionService composition — a Send held to the estimate it showed asks again above it", () => {
+	// Fee Juice, paid by the account. The stashed build's fee is 100 × 2 + L2 × 3 = 11 × 10^12, eleven
+	// readout units: exactly 10% above SHOWN_AT_LINE, and past the line for one base unit less.
+	const FJ: FeeSettings = { paymentMethod: { kind: "fj" } }
+	const L2 = 3_666_666_666_600
+	const BUILT = "11000000000000"
+	const SHOWN_AT_LINE = "10000000000000"
+	const SHOWN_BELOW_LINE = "9999999999999"
+
+	async function fjHarness() {
+		const h = await makeHarness()
+		const gasSettings = { ...(h.entry.txRequest as never as { txContext: { gasSettings: object } }).txContext.gasSettings }
+		const entry: TransferEstimateReuseEntry = {
+			...h.entry,
+			feeSettingsHash: fingerprintFeeSettings(FJ),
+			fpcIdentity: undefined,
+			feePaymentMethod: AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE,
+			txRequest: { txContext: { gasSettings: { ...gasSettings, gasLimits: { daGas: 100, l2Gas: L2 } } } } as never,
+		}
+		;(h.service as unknown as { estimateReuse: TransferEstimateReuse }).estimateReuse.stash("estimate-fj", entry)
+		const send = (feeCap: string | undefined, shownFee: string | undefined) =>
+			h.service
+				.executeTransfer(
+					h.req.networkId,
+					h.req.accountAddress,
+					h.req.tokenId,
+					h.req.tokenContract,
+					h.req.transferType,
+					h.req.recipientAddress,
+					h.req.amount,
+					FJ,
+					"estimate-fj",
+					feeCap,
+					shownFee,
+				)
+				.catch((e) => e)
+		return { ...h, entry, send }
+	}
+
+	test("a build more than 10% above the figure is asked about and never proved or sent", async () => {
+		const h = await fjHarness()
+		const run = h.send(undefined, SHOWN_BELOW_LINE)
+		await waitFor(() => h.stages.includes("queued"))
+		const id = h.getJournalId()
+		expect((await h.journal.getOperation(id))?.progress).toEqual({
+			stage: "queued",
+			reask: { fee: BUILT, cap: SHOWN_BELOW_LINE, payer: { type: "fj", isProtocol: false } },
+		})
+		await h.service.cancelJob(id)
+		h.ctrl.release()
+		expect(await run).toBeInstanceOf(JobCancelledError)
+		expect(h.proveTx).not.toHaveBeenCalled()
+		expect(h.sendTx).not.toHaveBeenCalled()
+	})
+
+	test("the control: a build exactly 10% above the figure is proved and sent once, never asked about", async () => {
+		const h = await fjHarness()
+		const run = h.send(undefined, SHOWN_AT_LINE)
+		await waitFor(() => h.ctrl.entered)
+		h.ctrl.release()
+		expect(await run).toBe("0xhash")
+		expect((h.proveTx.mock.calls[0] as unknown[])[0]).toBe(h.entry.txRequest)
+		expect(h.sendTx).toHaveBeenCalledTimes(1)
+		expect(h.stages).not.toContain("queued")
+	})
+
+	test("a send the account pays with neither figure ends failed before any proof", async () => {
+		const h = await fjHarness()
+		expect(await h.send(undefined, undefined)).toStrictEqual(recorded(h, expect.any(Error)))
+		const failed = await h.journal.getOperation(h.getJournalId())
+		expect(failed?.progress.stage).toBe("failed")
+		expect(failed?.error?.message).toContain("no fee figure")
+		expect(h.proveTx).not.toHaveBeenCalled()
+		expect(h.sendTx).not.toHaveBeenCalled()
 	})
 })
 
