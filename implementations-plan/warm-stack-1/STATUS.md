@@ -1,0 +1,7 @@
+# warm-stack-1 status
+
+- 2026-10-21 recon: two explorers; the onboarding split read from block-time-1's local spans; CI noise from the six recorded runs per lane.
+- 2026-10-21 #1006 filed (ci, enhancement), linking #991 and #1003.
+- 2026-10-21 plan drafted: probe three arms (UI, kept popup, injected profile) before building; panel pending.
+- 2026-10-21 panel round 1: Codex reject (3 blocking, all fixed), Opus conditional approve (all taken); plan revised with Asks A1-A5 for the orchestrator.
+- 2026-10-21 panel rounds 2-4: Codex conditional, conditional, approve (the probe's key comparison normalizes every generated id).
