@@ -186,7 +186,9 @@ already runs in the dApp-opened fee window through `FeeRaisedCard` (D10). Naming
   call makes the PrivateFPC pay reads as today's app card; the figure is shown and the worker caps it. D11's: a
   price service that answers neither read keeps Confirm off with Reject open.
 - **Network.** `usePrices` refreshes stale quotes when the execute window opens, as the dApp-opened fee window
-  does: the price host sees the wallet active, never the dApp or the call, and fiat display off fetches nothing.
+  does: the price host gets one more activity time and the fixed price-id set, never the dApp, the call or the
+  token; fiat display off fetches nothing. The flag read is the network-free `getQuotes`, so a slow or failed
+  refresh never holds Confirm.
 - **Logging.** No new log line; nothing about flags, counts or names is logged.
 - **Input validation, crypto, least privilege, supply chain.** No new input path, key, dependency or permission.
 
@@ -340,6 +342,9 @@ Parallelism: none (arc 2 waits on #964).
   is recorded under Security (Network), with the fee window as precedent.
 - **Arc 1 Codex r2** (resumed `01a15bc4`): **clean**. The union can only overstate (requested events that replace
   held ones show both); the `COLUMNS` comment now documents a coupling.
+- **Arc 1 Codex r3** (resumed `01a15bc4`): **clean** over `92e9a1709` (two e2e spec corrections) and the whole arc.
+  Argued the execute window's stale-quote refresh: the price host does gain activity times, but no dApp, call or
+  token, and the flag read never waits on the refresh; keep D10. The Security line is corrected to say so.
 
 ## Seeds
 

@@ -92,3 +92,12 @@ Accepted: merge by `(chainId, address)`, the held import keyed on its network's 
   row as `pending` at the request, so "no answer yet" is "no settled row", never "seq unchanged" (the
   pattern `tx-sendTx-default` already uses). `dataAnswer` always states `addressBook` to the dApp, while the
   stored grant carries only what was granted. r2 on the two files: green.
+
+## Arc 1 phase 5, Firefox and timing
+
+- Firefox network, all 8 files at retry 0: green (1 skip, `cap-window`'s pre-existing Firefox `skipIf`); 1431 s
+  under load1 100-190. `cap-window` S2 (12 px) held on both browsers.
+- Same selection (`register-token`, `cap-request-partial`), suite time without the build, load1 60-77:
+  Chrome 25.5 s on `30480ea79` → 39.2 s on `d2c816ddc`; Firefox 38.6 s → 63.9 s. The added flagged scenario is
+  14.1 s on Chrome and 24.2 s on Firefox, against a 60 s estimate.
+- Codex r3: clean; loop converged in three rounds.
