@@ -104,6 +104,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [dynamic-token-list](dynamic-token-list/plan.md) — completed — a signed token list at tokens.nulo.sh replaces the built-in default tokens: CI signs it in a gated environment, the wallet fetches it after the Terms and daily (#79)
 - [dynamic-token-list-2](dynamic-token-list-2/plan.md) — completed — a `flagged` set in the signed token list, a compiled sequence floor, and a red row line and banners on a flagged token (#383)
 - [e2e-ci-followups-2](e2e-ci-followups-2/plan.md) — completed — cold module loads off unit-test timeouts (#500), one e2e fee ladder for every speed (#405), a readable Firefox exception and the chaos seed closed as a known limit (#322)
+- [e2e-clocks-1](e2e-clocks-1/plan.md) — completed — the network e2e build scans incoming and re-reads finality every 10 s, shipped on twelve measured CI slots a browser (#992)
 - [e2e-deflake](e2e-deflake/plan.md) — completed — recurring e2e and CI flakes eliminated by root cause, never by budget
 - [e2e-determinism](e2e-determinism/plan.md) — completed — fixed sleeps in the e2e helpers replaced with observable signals
 - [e2e-flake-fixes](e2e-flake-fixes/plan.md) — completed — two CI flakes fixed at their mechanism under a two-core affinity
@@ -144,6 +145,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [firefox-first-class-spike](firefox-first-class-spike/plan.md) — completed — Firefox gets the same smoke and network suites as Chrome
 - [firefox-passkey-unlock](firefox-passkey-unlock/plan.md) — completed — passkey steps started in Firefox's toolbar panel run in a window, and every passkey failure shows a way out
 - [first-account-token-seeding](first-account-token-seeding/plan.md) — completed — default tokens seeded on the first account through an account-added subscription
+- [fit-240-2](fit-240-2/plan.md) — completed — the full backup's working card, ready, encrypted and done states checked at 240 px inside existing smoke visits; tests only
 - [fix-account-generation-fence](fix-account-generation-fence/plan.md) — completed — stale account activation fenced by generation
 - [fix-cold-wake-discovery-loss](fix-cold-wake-discovery-loss/plan.md) — completed — a module-scope relay keeps dApp messages that wake a dead service worker
 - [fix-discovery-restart-durability](fix-discovery-restart-durability/plan.md) — completed — queued dApp discoveries lost on a worker restart stay the accepted behaviour, pinned by a spec
@@ -405,8 +407,12 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [exec-prices-1](exec-prices-1/plan.md) — completed — a dApp window reads cached prices and never asks for a refresh, whatever mounts in it (#982)
 - [bridge-nonce-1](bridge-nonce-1/plan.md) — completed — both e2e L1 signers sign as anvil index 1 through one module, off the local network's publisher account; a unit test pins it and refuses any other e2e L1 client (#988)
 - [fee-estimate-cancel-1](fee-estimate-cancel-1/plan.md) — completed — an accepted execute approval cancels the estimates it did not hand over and closes once the worker has handled them; admission before the request read; a cancelled build is never simulated (#989)
+- [migration-rule-1](migration-rule-1/plan.md) — completed — from 1.0.0 every stored-shape change ships a migration: every stored key registered and its snapshot frozen, two 1.0.0 backups pinned, a passkey-backup refusal, a 0.31.0 in-place update on both browsers (#865); open #934, known limit #935
 - [floor-superseded-1](floor-superseded-1/plan.md) — completed — the token-list floor rule also reads the lists at publish PR and branch heads signed from the floor (P77-06 B, #973); a stopped run's artifact list is known limit #1001 (P78-06 A)
+- [firefox-sidebar-1](firefox-sidebar-1/plan.md) — completed — a Firefox sidebar with the popup shell where a passkey step runs in place, and the Display row's toolbar choice (#889, #596); every page and window fits down to 240 px, the popup unchanged at 360 (#986, #985); known limits #1004 and #1005 (P78-12 A, P78-13 A)
 - [e2e-fixed-cost-1](e2e-fixed-cost-1/plan.md) — completed — every e2e launch settles its first-run tab or the popup window it became, and fails on neither; liveness at 200 ms; no per-worker reuse (measured) and native `@aztec` loading a known limit (#991, #997)
 - [heavy-pool-1](heavy-pool-1/plan.md) — completed — heavy-long folded into the five-shard network pool, measured on CI: the lane ended later on both browsers (+132 s Chrome, +115 s Firefox), so it stays dedicated; docs-only close, #972 a known limit
 - [release-pipeline-2](release-pipeline-2/plan.md) — completed — every job that mints the release App token runs in the `release-app` environment (branches `main` and `dev`), the lockfile callers pass `secrets: inherit`, `release-integrity.test.ts` keeps it so (P77-08 A, #1008)
 - [lessons-1](lessons-1/plan.md) — completed — lessons.md gains the extension-window close lesson (no Vue teardown runs as a window closes; `endAndClose`, `beforeunload`) and drops the CodeMirror line its code states; five candidates declined with reasons (#1017)
+- [soak-mode-1](soak-mode-1/plan.md) — completed — the network soak runs only named files, refuses what it cannot run, reads each report back and says what it proved; the docs name the whole-suite instruments (#1014)
+- [warm-stack-1](warm-stack-1/plan.md) — completed — the network files' onboarding cost, measured on CI: switching on the registration popup saves 0.75 s (Chrome) and 0.77 s (Firefox) a call but missed its ship rule on Firefox, so nothing shipped; an injected profile saved nothing over it (#1006, a known limit)

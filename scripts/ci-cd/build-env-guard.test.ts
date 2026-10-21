@@ -1,10 +1,11 @@
 /**
- * Pins the build-env guard in `_build-extension.yml`, which every release, nightly and PR build of
- * the extension runs: only the production build options may be set when the build starts.
- * Wired into CI via the root `test:ci-gating` script.
+ * Pins two guards in `_build-extension.yml`, which every release, nightly and PR build of the
+ * extension runs: only the production build options may be set when the build starts, and no built
+ * bundle carries a test-only build stamp. Wired into CI via the root `test:ci-gating` script.
  */
 import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { runStep, type WorkflowStep } from "./gh-step-harness"
 
@@ -15,6 +16,10 @@ const GUARD = WORKFLOW.jobs.build.steps.find(
 	(step: { name?: string }) => step.name === "Assert no test-only or secret VITE_* flags in the build env",
 )
 const STEP: WorkflowStep = { run: GUARD.run, env: GUARD.env ?? {} }
+const MARKERS = WORKFLOW.jobs.build.steps.find(
+	(step: { name?: string }) => step.name === "Assert test-only markers absent (production guard)",
+)
+const MARKER_STEP: WorkflowStep = { run: MARKERS.run, env: MARKERS.env ?? {} }
 /** The guard never calls `gh`; a call fails the run. */
 const NO_GH = "#!/usr/bin/env bash\nexit 1\n"
 
@@ -37,5 +42,40 @@ describe("the build-env guard", () => {
 		["an unknown flag", "VITE_X"],
 	])("refuses %s", (_, name) => {
 		expect(exitCodeWith({ [name]: "1" })).toBe(1)
+	})
+})
+
+/** Every `NULO_*_BUILD_STAMP` literal in the extension's source, read from the source so a new one
+ *  is covered the day it lands. */
+const STAMPS = [
+	...new Set(
+		[...new Bun.Glob("**/*.{ts,js,vue}").scanSync(join(ROOT, "apps/extension/src"))]
+			.filter((file) => !/\.test\.[jt]s$/.test(file))
+			.flatMap((file) => readFileSync(join(ROOT, "apps/extension/src", file), "utf8").match(/NULO_[A-Z0-9_]+_BUILD_STAMP/g) ?? []),
+	),
+].sort()
+
+/** Runs the marker step in a fresh checkout whose Chrome bundle holds one file with `content`. */
+function markerRun(content: string) {
+	const root = mkdtempSync(join(tmpdir(), "marker-guard-"))
+	try {
+		mkdirSync(join(root, "apps/extension/dist/chrome"), { recursive: true })
+		writeFileSync(join(root, "apps/extension/dist/chrome/background.js"), content)
+		return runStep(MARKER_STEP, { shim: NO_GH, bound: {}, cwd: root })
+	} finally {
+		rmSync(root, { recursive: true, force: true })
+	}
+}
+
+describe("the test-only marker guard", () => {
+	test("passes a bundle with no marker, and the source scan finds the stamps", () => {
+		expect(markerRun("globalThis.x = 1").code).toBe(0)
+		expect(STAMPS).toContain("NULO_E2E_PROVERLESS_BUILD_STAMP")
+	})
+
+	test.each(STAMPS)("refuses a bundle carrying %s", (stamp) => {
+		const run = markerRun(`globalThis.__STAMP__ = "${stamp}"`)
+		expect(run.code).toBe(1)
+		expect(run.stderr).toContain(stamp)
 	})
 })

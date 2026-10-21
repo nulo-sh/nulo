@@ -13,6 +13,21 @@ issues: "#865 (A4 Closes; A1-A3 Refs)"
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-20.
+- **Status:** delivered as four PRs against `dev`, not stacked (D-orch-1): A1 #890, A2 #909 and A3 #912 merged; A4 #938, a draft that merges as the last PR before `release: promote dev → main` and carries this close-out. Its merge closes the plan and #865.
+- **Shipped:** every `chrome.storage.local` key family registered in `stored-shapes.ts` with its schema and read code, stores built only through `stores.ts`, the closed-world scan, the emitter, `snapshot.json`, 84 goldens and `bun run baseline:storage` (A1); the unchecked passkey backup's own refusal in the owner's words on all three pages (A2, P70-11 D, P70-13 A); the in-place update harness on both browsers, the live 0.31.0 update and the offline replay of its recording, through the reset (A3); stamp 0 frozen and pinned, R4 refusing an unfrozen guard, R5 opening two backups the candidate exported (the password one encrypted, the passkey one with its check), `IMPORT_BLOCKING_ACK` honoured by R3 and R5, the docs and skills stating the production rule, the e2e-testing skill's relaunch claim corrected, no "reinstall" advice left at a code site, OA-2's sentence, #709's line restated (A4).
+- **Review loop (A4):** Codex r1 conditional approve (3) and Opus conditional approve (10), applied but one kept (D-A4-5); Codex r2 conditional approve (1), applied (D-A4-6); Codex r3 approve, "No new material finding". A1-A3's loops: D22 and D23, D-A2-3, D24 to D32.
+- **Gates at the head:** after merging `origin/dev` at `a170d84d`: lint, `typecheck:all`, `test:all`, `test:ci-gating` and `check:plans` exit 0; `bun run baseline:storage` answers "stored shapes unchanged". Update e2e at retry 0 on candidates of `a170d84d`: the live 0.31.0 update, Chrome 149 s, Firefox 199 s; the replay, three cases, Chrome 61 s, Firefox 74 s (its passkey case after `358a7035` moved one storage read out of the export's passkey check, a `tests/`-only change, D-A4-7). The wording review: [lessons/phase-3.md](lessons/phase-3.md) § Step 5.
+- **Deviations:** A4 was built before the 6.0.0 bump and before #924 and #886 land, on the orchestrator's order (D-A4-2), so the gate's replay "with the 6.0.0 bump" ran on Aztec 6.0.0-rc.3 with the synthetic reset; README's banner is left to #893 (D-A4-3); #709 stays closed, where the plan drafted a reopening (D-A4-4); the password backup is pinned encrypted (D-A4-5).
+- **Dropped:** a nightly update run (D12: by hand before each promote); a migration for pre-1.0.0 rows (P62-02); a promotion to `lessons.md` of the engine's JSON-only limit, which CLAUDE.md § Persisted-storage shape changes now states.
+- **Merge order:** A4 merges last. If #924, #886, another shape PR or the 6.0.0 bump lands first: merge `dev`, delete stamp 0's pin, `bun run baseline:storage`, `-- --freeze` and pin again; when a backup slice or the export changed, run the replay with `NULO_E2E_BACKUP_RECORD=1` on Chrome, copy both files from `.e2e-state/pinned-backups/` and re-pin them. Then the replay on both browsers.
+- **Known limits:** #935 (a changed refinement or transform body is caught only where a golden exercises it); #709 and #524 stay closed known limits, with a comment each.
+- **Open items:** #934 (a backup-safe migration on a key no backup slice carries refuses every older backup).
+- **Lessons:** the relaunch-reports-`install` behaviour went to the `e2e-testing` skill, which had it wrong; nothing promoted to `lessons.md`, whose budget is spent and which has no entry this supersedes.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
+
 # migration-rule-1: from 1.0.0 every stored-shape change ships a migration; the registry and snapshot that enforce it
 
 Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1), each a draft until decision page 62 is signed. **A1** registers every stored shape and lands the snapshot guard before the flip (phases 1, 2). **A2** gives a passkey backup with no passkey check its own refusal (phase 5, OA-1). **A3** builds the in-place update harness, updates a populated 0.31.0 install on both browsers, and records that install (phase 4). **A4** flips the rule, last, right before the 1.0.0 promote (phase 3), and closes the plan. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are relative to `apps/extension/src` unless they start with `apps/`, `packages/`, `scripts/`, `.claude/`, `implementations-plan/` or a root file name; `S` = `wallet/services`.
@@ -23,11 +38,17 @@ Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1),
 - **P62-03 A**: "Before the promote, update a populated 0.31.0 install to 1.0.0 through the reset on both browsers, and fix what breaks."
 - **P62-04 A**: "A snapshot of every stored schema in CI; a change needs a migration or a reviewed additive mark." The owner asked for "the most professional, and durable approach ... integrating and leveraging the migrations helpers".
 - **P62-05 A** (the orchestrator's call on the owner's stated lean): "Refuse them, with a message that says how to come back: import the passkey, then re-add contacts and imported accounts."
+- **P62-11 A** (OA-3): "Keep accepting them; the known limit stays, reopened only by a leaked old backup."
 
 ## The owner's answers on A2's asks (decision page 70, signed 2026-10-20)
 
 - **P70-11 D** (OA-1): title as A ("Backup cannot be restored"); message "This passkey backup is too old or was changed. Choose Passkey to restore your wallet, then add your contacts and imported accounts again."
 - **P70-13 A** (OA-1R): "The import's words, whichever you pick for them, on this page too. What the draft ships now; their advice cannot work here."
+- **P70-10 B** (OA-2): "Soften: "Keep the extension installed. A later update may be able to repair this.""
+
+## The owner's answer on OA-2 (decision page 66)
+
+- **P66-03 B** (OA-2): B, keep the first three sentences and replace the last; the owner's note in chat: a later update MAY repair it, which P70-10 B's words then state.
 
 ## #865, the lane brief, and what did not hold
 
@@ -46,7 +67,7 @@ Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1),
 ## UI impact
 
 - **A2 · the full-backup import's refusal of a passkey backup with no `backup-mac`** (`ImportFullBackupForm.vue`, testid `import-full-backup-error`, on the popup import, onboarding import and restore-again pages). P62-05 A, quoted above. Before: "Incompatible backup" / "This backup was created by an incompatible wallet version and cannot be imported. Re-export a backup from a current version of the wallet." After, on all three pages (P70-11 D, P70-13 A): "Backup cannot be restored" / "This passkey backup is too old or was changed. Choose Passkey to restore your wallet, then add your contacts and imported accounts again." It fits the box's three lines at 400 px on Chrome and Firefox. No other refusal changes.
-- **A4**: none. The pxe-generation fence's error and the legacy-marker reason lose their "reinstall" advice; no released install can reach either (recon). `MigrationBarrier.vue` keeps its copy until OA-2 is answered.
+- **A4 · the update-failed screen** (`MigrationBarrier.vue`, testid `migration-blocked`, its terminal state). P66-03 B and P70-10 B, quoted above. Before: "Your funds are safe. Your secret phrase still recovers your accounts. It does not recover imported accounts or passkey profiles. Reinstall the extension to start clean." After: the same first three sentences, then "Keep the extension installed. A later update may be able to repair this." Title and the engine's reason unchanged; at 400 px the line runs to five lines instead of four. Pictures, Chrome popup at 400×600, a real terminal block: before [light](screenshots/oa2-before-light-chrome.png), [dark](screenshots/oa2-before-dark-chrome.png); after [light](screenshots/oa2-after-light-chrome.png), [dark](screenshots/oa2-after-dark-chrome.png). The pxe-generation fence's error and the legacy-marker reason lose their "reinstall" advice; no released install can reach either (recon).
 - **A1, A3**: none.
 
 ## Architecture & Implementation
@@ -100,7 +121,8 @@ Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1),
 - **Before the promote (A1-A3)**: the registry, the scan, R1 and R3 bind every PR; the one stamp and the goldens may be rewritten, since the baseline is still being defined.
 - **A4**, merged as the last PR before `release: promote dev → main`: first, every open PR that touches a registered spec or `stored-shapes/` lands or rebases (`gh pr list --search` on those paths), since `dev` does not require up-to-date branches; then `bun run baseline:storage -- --freeze` and stamp 0's pin; two full backups exported from the candidate in the replay run (password plain, passkey with its MAC) become R5's fixtures with their pins; after A4 merges, `bun run test` on the `dev` tip before the promote.
 - **Docs**: CLAUDE.md § Persisted-storage shape changes (the production rule, the two procedures) and § Account-address freeze's V5 line (past tense: a pre-1.0 one-off); ARCHITECTURE.md § 5 (one rule, the guard, kept rows, `:237` corrected); `.claude/skills/aztec-update/SKILL.md` Branch B step 2 and Branch A (a version-only bump that moves `PXE_DATA_SCHEMA_VERSION_PIN` is held, D18); README's storage bullet only (the rest of the banner is `BEFORE-LAUNCH.md` § 3's item); `implementations-plan/README.md:29`; `S/backup/README.md:20`; the release skill's promote step (run the replay from the last stable release on both browsers; check the snapshot is frozen).
-- **Code sites**: `S/account/service.ts` `liveRows` comment; `S/network/spec.ts` `l1ChainId` comment; `S/profile/service.ts` fence message without reinstall (its `copy-dash-ban.test.ts` pin follows); `packages/aztec-runtime/src/pxe/opfs-store.ts` comments (D18); `migrator.ts` legacy reason; `packages/aztec-runtime/src/account/address-freeze.ts:12-26` and its test's pre-launch wording; `packages/wallet-crypto/ATTACK-SURFACE.md` #709 line restated as facts and #709 reopened as its own condition says (OA-3).
+- **Code sites**: `S/account/service.ts` `liveRows` comment; `S/network/spec.ts` `l1ChainId` comment; `S/profile/service.ts` fence message without reinstall (its `copy-dash-ban.test.ts` pin follows); `packages/aztec-runtime/src/pxe/opfs-store.ts` comments (D18); `migrator.ts` legacy reason; `packages/aztec-runtime/src/account/address-freeze.ts:12-26` and its test's pre-launch wording; `packages/wallet-crypto/ATTACK-SURFACE.md` #709 line restated as facts and #709 reopened as its own condition says (OA-3; superseded by D-A4-4: it stays closed).
+- **Result (A4).** Stamp 0 pinned (`stored-shapes/pins.ts`); the generator is a no-op until a change. R5 opens `stored-shapes/backups/password.txt` (encrypted) and `passkey.json`, exported by the candidate in the replay run: the updated 0.31.0 profile's password backup and a fresh passkey profile's, with its check; the e2e checks every export on both browsers for dropped rows and with the same `backupProblems`. OA-2's sentence ships (P66-03 B, P70-10 B). OA-3 (P62-11 A): #709 stays a closed known limit and its `ATTACK-SURFACE.md` line is restated, not reopened as the plan had drafted. README's banner is left to #893, whose owner-signed bullet states the rule. Lessons: [lessons/phase-3.md](lessons/phase-3.md).
 
 ## Decision ledger
 
@@ -122,7 +144,7 @@ Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1),
 | D14 | Flip | A4 last; open shape PRs land first; `dev` tip tested before the promote | sound | race finding |
 | D15 | P62-05 | a dedicated refusal on the `:192` branch; copy claims no age | missing MAC ≠ old | same |
 | D16 | Barrier copy | OA-2, asked now (reachable at 1.0.0); unchanged until answered | surface now | facts wrong |
-| D17 | #709 | reopened at the flip per its condition; fix is the owner's (OA-3) | — | fine |
+| D17 | #709 | reopened at the flip per its condition; fix is the owner's (OA-3). Superseded by D-A4-4 | — | fine |
 | D18 | PXE schema pin | a version-only Aztec bump that moves it is held; a reset purges the store | — | fine |
 | D20 | Final pass r2 (Codex conditional) | healthy imported keys reseal, not drop; read metadata in the snapshot, downgrades refused; candidates in the run-owned dir; purge proof cited per root | accepted | — |
 | D21 | Update mechanism (A3 step 1, run in A1) | swap P inside one session and reinstall (Firefox: driver install; Chrome: CDP `loadUnpacked`); a relaunch reports `install` on both | — | — |
@@ -142,12 +164,19 @@ Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1),
 | D-A2-2 | A2: restore-again's words | the same refusal (one validator for three pages) until the owner answers OA-1R: the advice fails there (a passkey that already has a profile is refused), as "Incompatible backup"'s did | approve | finding: advice fails there; ask the owner |
 | D-A2-3 | A2 review r1 (Codex approve, one P3; Opus conditional approve) | applied: the constant made module-private (no auto-import global), the branch comment states the invariant, a test name and a fixture comment corrected, OA-1's restore-again and imported-keys facts, the shots retaken with a neutral profile name on `dev`'s colours | approve | conditional approve |
 | D-A2-4 | A2: the owner's answers (P70-11 D, P70-13 A) | D's title and message on the one refusal, so popup import, onboarding import and restore-again read the same; pins in the composable, onboarding page and restore-again tests; D fits three lines at 400 px on Chrome and Firefox (both pages, both themes) | — | — |
+| D-A4-1 | A4: R5's backups | exported by the candidate in the replay run (the updated 0.31.0 password profile's, encrypted, as `password.txt`; a fresh passkey profile's, with its check), each checked on both browsers to carry every stored row and by the same `backupProblems` R5 runs, written from Chrome on `NULO_E2E_BACKUP_RECORD=1` under `.e2e-state/`, copied by hand, SHA-256 pinned in `pins.ts`; R5 opens `password.txt` with the production codec | — | — |
+| D-A4-2 | A4: open shape PRs (#924, #915, #886) | the orchestrator lands or rebases them before A4 merges; one that lands first means A4 rebases, re-stamps, re-freezes and, if a slice changed, records the backups again | — | — |
+| D-A4-3 | A4: README's storage bullet | left to #893, whose owner-signed banner states the rule; editing it here would conflict | — | — |
+| D-A4-4 | A4: OA-2, OA-3 | OA-2 ships P66-03 B in P70-10 B's words; OA-3 is P62-11 A: #709 stays closed and its line is restated (the plan had drafted a reopening) | — | — |
+| D-A4-5 | A4 review r1 (Codex conditional approve, 3; Opus conditional approve, 10) | applied: the replay counts each row slice against the rows storage held; R4 refuses an empty pin list; R5 opens the encrypted password export and expects a refusal only for a version in `IMPORT_BLOCKING_ACK` (moved to `S/backup/import-blocking-ack.ts`); the PXE pin is held whatever resets, since a reset purges only its own chain's store; the V6 window closed by 0.30.2; #709's line and the legacy marker stated as facts; R5's claim narrowed to validate, migrate and read; pinned backups written under `.e2e-state/`; the preflight's refusal of a migration on an unsliced key filed as #934 (reproduced); the body limit filed as #935. Kept: A4 is built before the 6.0.0 bump and the open shape PRs (the orchestrator's order, D-A4-2) | conditional approve | conditional approve |
+| D-A4-6 | A4 review r2 (Codex conditional approve, 1) | applied: the goldens' backup path, R3 and R5 accept a backup refusal only when the import names the acknowledged migration that blocks that version (`acknowledgedBlock`); a test drives it | conditional approve | — |
+| D-A4-7 | A4 e2e at the merged head | the passkey case read storage inside the export's passkey check; its scratch window took the focus Firefox's WebAuthn needs, so the read moved before the export page (`tests/` only, after Codex r3) | — | — |
 
 ## Security & Adversarial Considerations
 
 - **Threat model.** Stored rows and imported backups are hostile input (CLAUDE.md § Persisted-storage). No read path changes semantics: codec roots read through the same schemas, hand-guarded keys keep their decoders (D4). The new factories construct the same stores; the type-level and goldens checks fail if a factory passed a different schema.
 - **Authenticated rows.** `nulo:core:dappSessions` is read through its MAC check; R3 reads its goldens the same way and R2 refuses any migration of it, so no schema change can silently delete every connected session. The MAC rule itself is untouched.
-- **What the guard trusts.** A reviewer reading the pins: rewriting history means editing `PINNED_STAMPS` in a test, which the diff shows. A changed predicate or transform body passes the snapshot and is caught only by a golden that exercises it (a known limit, filed at close-out).
+- **What the guard trusts.** A reviewer reading the pins: rewriting history means editing `PINNED_STAMPS` in a test, which the diff shows. A changed predicate or transform body passes the snapshot and is caught only by a golden that exercises it (#935, a closed known limit).
 - **P62-05.** A hostile file chooses which refusal it gets (strip the MAC from a passkey body); both refuse, neither spends a passkey prompt, and the new copy claims nothing about the file it cannot check.
 - **Supply chain.** No new dependency (`z.toJSONSchema` ships in zod 4.4.3). The harness runs a downloaded release zip only when its SHA-256 equals a digest reviewed into the repo; GitHub's release storage is otherwise trusted, as store reviewers' source is. CI needs no new permission.
 - **Gates.** Nothing loosens a gate; the guard adds R1-R5 to `bun run test`.
@@ -156,7 +185,7 @@ Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1),
 
 - **Facts.** Every recon table row (file:line in [recon.md](recon.md)); `realMigrations` is empty and `BASELINE_VERSION = 1` at `60fde7e7` and `v0.31.0`; the engine reads JSON strings only (`staging.ts:27`); `__VERSION__` comes from `package.json` (`apps/extension/vite.shared.ts:54`), dev is at 0.31.0; the coordinator re-derives on a version change (`coordinator.ts:84-125`); 0.31.0 bundles Aztec `6.0.0-rc.3`; `override` sees `catch`, `custom` and refinement checks on zod 4.4.3 (Opus probe).
 - **Inferences.** (I2) Firefox keeps an add-on's storage and reports `update` when the temporary add-on at P changes bytes on one profile (A3 step 1, run first; else stop and report at once, before A1's PR). (I3) The 0.31.0 UI's testids match the current helpers for the population steps (A3 adapts a step to the tag's testids where not). (I4) The 6.0.0 bump moves Testnet's chain id. (I5) A3's live run lands before the 6.0.0 bump; if the bump lands first, the live scenario runs on the last rc.3 commit of `dev` (`git worktree` at that SHA) and the recording is made there.
-- **Asks** (working assumption in brackets): OA-1 [answered: P70-11 D, P70-13 A]; OA-2 [unchanged until answered; must be answered before the first real migration ships]; OA-3 [A: #709 reopened, the line restated].
+- **Asks**: OA-1 answered (P70-11 D, P70-13 A); OA-2 answered (P66-03 B, P70-10 B), shipped in A4; OA-3 answered (P62-11 A): #709 stays closed and its line is restated, where the plan had assumed a reopening.
 
 ## Phases and gates
 
@@ -192,7 +221,7 @@ Each gate also runs `bun run lint` and `bun run typecheck:all` (exit 0), and `bu
 
 ## Post-implementation
 
-The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `60fde7e7`. Specific to this plan:
+The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `60fde7e7`. Specific to this plan:
 - **While implementing:** comments to CLAUDE.md § Code-comment style; attempts in `lessons/phase-N.md`; `agent-worktree status migration-rule-1 "<arc> phase N green: <next>"` at each gate; three failures on one step stops the arc.
 - **Review loop, per arc:** `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol` over `git diff origin/dev...HEAD`, with this plan, the ledger, the arc map ("arc N of 4: A1 registry and guard, A2 refusal, A3 update harness, A4 flip"), the adversarial ask and the standard's two rules verbatim; `resume-codex.sh` until a round has no new material finding, hard stop at three rounds. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) beside round 1. The arcs are not stacked, so no cross-arc pass; A4's prompt also asks for drift across the merged arcs.
 - **Delivery:** as above, then `gh pr checks <n> --watch` once; a known flake one rerun, breakage a fix and the loop again. Never merge.

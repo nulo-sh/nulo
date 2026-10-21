@@ -228,6 +228,7 @@ declare global {
   const hasInFlightSend: typeof import('../utils/in-flight-send').hasInFlightSend
   const hasReachedPresto: typeof import('../utils/presto-ui-state').hasReachedPresto
   const hasRowsBeyondRetry: typeof import('../composables/useFullBackupImport').hasRowsBeyondRetry
+  const hasSidePanelSurface: typeof import('../utils/browser-surface').hasSidePanelSurface
   const heroRoom: typeof import('../utils/hero-ruler').heroRoom
   const holdHeroFit: typeof import('../utils/hero-fit').holdHeroFit
   const hubValues: typeof import('../utils/settings-labels').hubValues
@@ -248,6 +249,7 @@ declare global {
   const isComposing: typeof import('../composables/usePopupEntity').isComposing
   const isEmptyContactName: typeof import('../utils/contact-name').isEmptyContactName
   const isFirefox: typeof import('../utils/browser-surface').isFirefox
+  const isFirefoxSidebar: typeof import('../utils/browser-surface').isFirefoxSidebar
   const isFlaggedToken: typeof import('../utils/token-flag').isFlaggedToken
   const isForeignProfile: typeof import('../utils/activity-rows').isForeignProfile
   const isHiddenHolding: typeof import('../utils/token-fold').isHiddenHolding
@@ -344,6 +346,7 @@ declare global {
   const plainMethodName: typeof import('../utils/tx-enrichment').plainMethodName
   const planImportWrites: typeof import('../utils/contact-import-rows').planImportWrites
   const planRestoreAgain: typeof import('../composables/full-backup-restore').planRestoreAgain
+  const pointToolbarAtSidebar: typeof import('../utils/browser-surface').pointToolbarAtSidebar
   const postAuthRoute: typeof import('../utils/own-window').postAuthRoute
   const preflightNetworkConnectivity: typeof import('../composables/importPreflight').preflightNetworkConnectivity
   const pricesUnavailable: typeof import('../utils/token-aggregate').pricesUnavailable
@@ -435,6 +438,7 @@ declare global {
   const showsDecryptCta: typeof import('../utils/full-backup-ctas').showsDecryptCta
   const showsRestoreCta: typeof import('../utils/full-backup-ctas').showsRestoreCta
   const showsRestoreErrorCtas: typeof import('../utils/full-backup-ctas').showsRestoreErrorCtas
+  const sidebarAction: typeof import('../utils/browser-surface').sidebarAction
   const smallFieldDecimal: typeof import('../utils/transfer-intent').smallFieldDecimal
   const snackInset: typeof import('../composables/snackInset').snackInset
   const stageSubtitle: typeof import('../utils/card-subtitle').stageSubtitle
@@ -1043,6 +1047,7 @@ declare module 'vue' {
     readonly hasInFlightSend: UnwrapRef<typeof import('../utils/in-flight-send')['hasInFlightSend']>
     readonly hasReachedPresto: UnwrapRef<typeof import('../utils/presto-ui-state')['hasReachedPresto']>
     readonly hasRowsBeyondRetry: UnwrapRef<typeof import('../composables/useFullBackupImport')['hasRowsBeyondRetry']>
+    readonly hasSidePanelSurface: UnwrapRef<typeof import('../utils/browser-surface')['hasSidePanelSurface']>
     readonly heroRoom: UnwrapRef<typeof import('../utils/hero-ruler')['heroRoom']>
     readonly holdHeroFit: UnwrapRef<typeof import('../utils/hero-fit')['holdHeroFit']>
     readonly hubValues: UnwrapRef<typeof import('../utils/settings-labels')['hubValues']>
@@ -1063,6 +1068,7 @@ declare module 'vue' {
     readonly isComposing: UnwrapRef<typeof import('../composables/usePopupEntity')['isComposing']>
     readonly isEmptyContactName: UnwrapRef<typeof import('../utils/contact-name')['isEmptyContactName']>
     readonly isFirefox: UnwrapRef<typeof import('../utils/browser-surface')['isFirefox']>
+    readonly isFirefoxSidebar: UnwrapRef<typeof import('../utils/browser-surface')['isFirefoxSidebar']>
     readonly isFlaggedToken: UnwrapRef<typeof import('../utils/token-flag')['isFlaggedToken']>
     readonly isForeignProfile: UnwrapRef<typeof import('../utils/activity-rows')['isForeignProfile']>
     readonly isHiddenHolding: UnwrapRef<typeof import('../utils/token-fold')['isHiddenHolding']>
@@ -1159,6 +1165,7 @@ declare module 'vue' {
     readonly plainMethodName: UnwrapRef<typeof import('../utils/tx-enrichment')['plainMethodName']>
     readonly planImportWrites: UnwrapRef<typeof import('../utils/contact-import-rows')['planImportWrites']>
     readonly planRestoreAgain: UnwrapRef<typeof import('../composables/full-backup-restore')['planRestoreAgain']>
+    readonly pointToolbarAtSidebar: UnwrapRef<typeof import('../utils/browser-surface')['pointToolbarAtSidebar']>
     readonly postAuthRoute: UnwrapRef<typeof import('../utils/own-window')['postAuthRoute']>
     readonly preflightNetworkConnectivity: UnwrapRef<typeof import('../composables/importPreflight')['preflightNetworkConnectivity']>
     readonly pricesUnavailable: UnwrapRef<typeof import('../utils/token-aggregate')['pricesUnavailable']>
@@ -1250,6 +1257,7 @@ declare module 'vue' {
     readonly showsDecryptCta: UnwrapRef<typeof import('../utils/full-backup-ctas')['showsDecryptCta']>
     readonly showsRestoreCta: UnwrapRef<typeof import('../utils/full-backup-ctas')['showsRestoreCta']>
     readonly showsRestoreErrorCtas: UnwrapRef<typeof import('../utils/full-backup-ctas')['showsRestoreErrorCtas']>
+    readonly sidebarAction: UnwrapRef<typeof import('../utils/browser-surface')['sidebarAction']>
     readonly smallFieldDecimal: UnwrapRef<typeof import('../utils/transfer-intent')['smallFieldDecimal']>
     readonly snackInset: UnwrapRef<typeof import('../composables/snackInset')['snackInset']>
     readonly stageSubtitle: UnwrapRef<typeof import('../utils/card-subtitle')['stageSubtitle']>

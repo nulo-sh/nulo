@@ -26,6 +26,8 @@
  * `ProductionPxeFactory`'s `proverless` option and the injected `ProofGate`.
  */
 
+import { E2E_WALLET_CLOCK_VALUES } from "./wallet-clocks"
+
 const PROVERLESS = (import.meta.env.VITE_NULO_E2E_PROVERLESS ?? "") === "1"
 const PROVERLESS_CONFIRM = (import.meta.env.VITE_NULO_E2E_PROVERLESS_CONFIRM ?? "") === "1"
 
@@ -106,4 +108,17 @@ export const E2E_TOKEN_LIST = E2E_TOKEN_SEEDS
 
 export const E2E_TOKEN_LIST_BUILD_STAMP: "NULO_E2E_TOKEN_LIST_BUILD_STAMP" | null = E2E_TOKEN_LIST
 	? "NULO_E2E_TOKEN_LIST_BUILD_STAMP"
+	: null
+
+/**
+ * E2E-only wallet clocks. A single flag, like the migration fixture: shipped values would cost node
+ * traffic, not funds, and the stamp below fails the release grep.
+ */
+const WALLET_CLOCKS = (import.meta.env.VITE_NULO_E2E_WALLET_CLOCKS ?? "") === "1"
+
+export const E2E_WALLET_CLOCKS: typeof E2E_WALLET_CLOCK_VALUES | null = WALLET_CLOCKS ? E2E_WALLET_CLOCK_VALUES : null
+
+/** Build-time marker, pinned as live data in `wallet/runtime.ts` beside the values it travels with. */
+export const E2E_WALLET_CLOCKS_BUILD_STAMP: "NULO_E2E_WALLET_CLOCKS_BUILD_STAMP" | null = WALLET_CLOCKS
+	? "NULO_E2E_WALLET_CLOCKS_BUILD_STAMP"
 	: null

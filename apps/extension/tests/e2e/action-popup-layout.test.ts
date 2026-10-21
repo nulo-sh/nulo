@@ -1,6 +1,8 @@
 /**
  * The toolbar popup, as Firefox renders it: in a panel, which lays a document out differently from
- * the window every other test opens the popup in. Firefox only — no protocol opens Chrome's.
+ * the window every other test opens the popup in. Firefox only — no protocol opens Chrome's. A panel
+ * sizes itself to its document, which caps its width rather than holding a floor, so the width is
+ * read too.
  */
 import { expect, vi } from "vitest"
 import { isFirefox } from "./fixtures/browser"
@@ -9,6 +11,7 @@ import { test } from "./fixtures/extension"
 
 interface Layout {
 	hash: string
+	viewportWidth: number
 	viewportHeight: number
 	shellHeight: number
 	navBottom: number
@@ -19,6 +22,7 @@ const MEASURE = `
 	const box = (selector) => doc.querySelector(selector)?.getBoundingClientRect();
 	return {
 		hash: content.location.hash,
+		viewportWidth: content.innerWidth,
 		viewportHeight: content.innerHeight,
 		shellHeight: Math.round(box("#app")?.height ?? -1),
 		navBottom: Math.round(box('[data-testid="bottom-nav"]')?.bottom ?? -1),
@@ -34,7 +38,7 @@ const clickTab = (tab: string) => `content.document.querySelector('[data-testid=
 const SETTLE_SAMPLES_MS = [0, 150, 300, 600, 1_200]
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-test.skipIf(!isFirefox)("the bottom nav stays on the popup's bottom edge on every tab", async ({ registeredExtensionPerTest: ctx }) => {
+test.skipIf(!isFirefox)("the popup is 360 px wide and its nav on its bottom on every tab", async ({ registeredExtensionPerTest: ctx }) => {
 	await openActionPopup(ctx.browser)
 	const measure = () => evaluateInActionPopup<Layout>(ctx.browser, MEASURE)
 
@@ -63,6 +67,7 @@ test.skipIf(!isFirefox)("the bottom nav stays on the popup's bottom edge on ever
 			const layout = await measure()
 			expect(layout, `${tab} +${wait}ms`).toMatchObject({
 				hash: `#/popup/${tab}`,
+				viewportWidth: 360,
 				shellHeight: layout.viewportHeight,
 				navBottom: layout.viewportHeight,
 			})

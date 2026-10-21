@@ -149,6 +149,21 @@ watch(
 	color: var(--txt-secondary);
 }
 
+/* Below the popup's width an account's shortened address goes under its name when the two do not fit
+ * side by side, and the name wraps rather than end in an ellipsis. */
+@media (width < 359px) {
+	.account {
+		flex-wrap: wrap;
+		row-gap: 2px;
+	}
+
+	.account > .account_name {
+		flex: 1 1 auto;
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+}
+
 .notice {
 	composes: type--body from global;
 	padding: 10px 12px;

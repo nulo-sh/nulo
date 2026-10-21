@@ -9,6 +9,7 @@ import NetworkArrival from "@/components/network-arrival/NetworkArrival.vue"
 /** Utils */
 import { managers, isServiceReady } from "@/utils/core"
 import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
+import { pointToolbarAtSidebar } from "@/utils/browser-surface"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { ownWindowRoute, postAuthRoute } from "@/utils/own-window"
 import { shouldAdvanceToGeneral } from "./should-advance-to-general"
@@ -118,10 +119,10 @@ const settingHandlers = {
 		root.classList.toggle("noanimations", Boolean(value))
 	},
 	sidePanel(value) {
-		// Chrome-only API: Firefox has no side panel.
 		chrome.sidePanel?.setPanelBehavior({
 			openPanelOnActionClick: Boolean(value),
 		})
+		pointToolbarAtSidebar(Boolean(value)).catch(() => console.debug("[app] Firefox did not change the toolbar popup"))
 	},
 	defaultExplorer(value) {
 		appStore.defaultExplorer = value

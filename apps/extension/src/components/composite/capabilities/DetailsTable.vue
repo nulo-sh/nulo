@@ -179,6 +179,43 @@ const spokenName = (entry: { row: Row; section: SectionKey | "any" }) => {
 	justify-self: center;
 }
 
+/* Below the popup's width a name, and the heading's "Contract", take their own line above the marks,
+ * since the six mark columns leave it no room. The head and every row share one grid's columns, so
+ * each mark stays under its glyph at the right, and a mark column shrinks to 15 px before the table
+ * overflows. */
+@media (width < 359px) {
+	.table {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) repeat(6, minmax(15px, 26px)) 14px;
+		column-gap: 4px;
+	}
+
+	.table > * {
+		grid-column: 1 / -1;
+	}
+
+	.table > .grid {
+		grid-template-columns: subgrid;
+		row-gap: 4px;
+	}
+
+	.table > .row {
+		padding: 4px 0;
+	}
+
+	.grid > .name,
+	.grid > .address,
+	.head > span:first-child {
+		grid-column: 1 / -1;
+	}
+
+	.grid > .name + *,
+	.grid > .address + *,
+	.head > span:first-child + * {
+		grid-column-start: 2;
+	}
+}
+
 .sub {
 	composes: type--label-section from global;
 	padding: 10px 0 5px;

@@ -22,6 +22,7 @@ import { useHeroVisible } from "@/composables/useHeroVisible"
 import { usePrestoCheck } from "@/composables/usePrestoCheck"
 
 /** Utils */
+import { hasSidePanelSurface } from "@/utils/browser-surface"
 import { rowDescriptionFor } from "@/utils/presto-ui-state"
 import { hubValues, profileTypeLabel } from "@/utils/settings-labels"
 import { settingItemProps, settingsQueryTerms } from "@/utils/settings-search"
@@ -53,7 +54,7 @@ const hubConfig = reactive({})
 const values = computed(() => hubValues(hubConfig))
 
 const searchContext = computed(() => ({
-	sidePanel: Boolean(chrome.sidePanel),
+	sidePanel: hasSidePanelSurface(),
 	passkey: isPasskey.value,
 	developerMode: hubConfig.developerMode === true,
 	provingStatus: provingDescription.value,

@@ -4,6 +4,7 @@ import { snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { waitForPopup, waitForExecuteContent, approveCapabilities, approveExecute } from "../fixtures/popups"
 import { holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
 import type { AztecTestConfig } from "../fixtures/aztec"
+import { expectFitsNarrow } from "../fixtures/type-roles"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -124,6 +125,8 @@ test.skipIf(!hasConfig)(
 		// The cancel button is hidden during `submitting` (FSM forbids that
 		// transition). It's present during `pending` / `simulating` / `proving`.
 		await walletPopup.waitForSelector('[data-testid="tx-awaiting-cancel"]', { visible: true, timeout: 30_000 })
+		// A parked dApp call is the row with two actions: at 240 px they must leave its chips whole.
+		await expectFitsNarrow(walletPopup, "an in-flight dApp call with its two actions")
 		await clickByTestId(walletPopup, "tx-awaiting-cancel")
 
 		// Release the gate so proveTx returns; the coordinator's post-prove

@@ -409,12 +409,17 @@ export async function registerProfile(ctx: ExtensionContext): Promise<void> {
  *   5) Wait for the playground status pill to flip to `connected`
  *
  * Returns the dApp Page so the caller can keep driving it; the caller is
- * responsible for closing it (or letting the browser teardown handle it).
+ * responsible for closing it (or letting the browser teardown handle it). `approve` is step 3 and
+ * resolves with the check's page; a release build whose check opens elsewhere passes its own.
  *
  * Exported alongside `registerProfile` so a cold-shard warm-up tap
  * can perform the same setup without going through the fixture pipeline.
  */
-export async function connectPlayground(ctx: ExtensionContext, opts: Parameters<typeof openPlayground>[1] = {}): Promise<Page> {
+export async function connectPlayground(
+	ctx: ExtensionContext,
+	opts: Parameters<typeof openPlayground>[1] = {},
+	approve: (discoverPage: Page) => Promise<Page> = (discoverPage) => approveConnect(ctx, discoverPage),
+): Promise<Page> {
 	// Internal phase-tag so the outer `[dappConnectedExtensionPerTest:connectPlayground]`
 	// error tells us WHICH step inside this function fails. Without this we
 	// only know "30s timeout somewhere in here" — useless for triage.
@@ -441,7 +446,7 @@ export async function connectPlayground(ctx: ExtensionContext, opts: Parameters<
 	await step("clickConnect", () => clickByTestId(dappPage, "pg-btn-connect"))
 
 	const discoverPage = await step("awaitDiscoverPopup", () => discoverP)
-	const verifyPage = await step("approveConnect", () => approveConnect(ctx, discoverPage))
+	const verifyPage = await step("approveConnect", () => approve(discoverPage))
 	await step("approveVerify", () => approveVerify(verifyPage))
 
 	await step("waitForConnectedStatus", () =>
