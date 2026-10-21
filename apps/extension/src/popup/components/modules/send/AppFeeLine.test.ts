@@ -1,6 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils"
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { priceFake } from "../../../../../tests/helpers/price-client-fake"
+import { captureWindowDocument } from "@/utils/window-document"
 import AppFeeLine from "./AppFeeLine.vue"
 
 vi.mock("@/wallet/services/price/client", async () => (await import("../../../../../tests/helpers/price-client-fake")).priceClientModule())
@@ -18,7 +19,12 @@ const factory = async (feeEstimate?: Record<string, unknown>) => {
 	return w
 }
 
-beforeEach(() => priceFake.reset(0.06))
+// Mounted only by the dApp windows, where every price read is a cache read.
+beforeEach(() => {
+	priceFake.reset(0.06)
+	captureWindowDocument("#/windows/execute?requestId=r1")
+})
+afterEach(() => captureWindowDocument(""))
 
 describe("AppFeeLine", () => {
 	test("the app's limit and its priority part, each priced at the one quote the line reads", async () => {
@@ -27,7 +33,7 @@ describe("AppFeeLine", () => {
 			"About ~0.016 FJ (<$0.001); payment method set by Swap. Includes a ~0.004 FJ (<$0.001) priority fee the app asked for.",
 		)
 		expect(priceFake.clients).toHaveLength(1)
-		expect(priceFake.refreshes()).toBe(1)
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([1, 0])
 	})
 
 	test("no priority part unless the worker set one, and the loading bar in the amount's place until the estimate lands", async () => {
