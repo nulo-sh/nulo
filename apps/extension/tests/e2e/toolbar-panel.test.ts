@@ -22,6 +22,7 @@ import {
 	type ExtensionContext,
 	openPopup,
 	patchPagePolling,
+	pickFileByTestId,
 	registerProfile,
 	test,
 	waitForHash,
@@ -32,6 +33,7 @@ import { waitForMainFrame, waitForPopupClosed } from "./fixtures/popups"
 import { PollTimeoutError, pollUntil } from "./fixtures/poll"
 import { refusePasskeyStep, registerPasskeyProfile } from "./fixtures/passkey"
 import { downloadPlainPasskeyBackup } from "./helpers/backup-export"
+import { contactsFiles } from "./helpers/contacts"
 import { completeResetRitual } from "./helpers/crash-truth"
 import {
 	buildSyntheticPasskeyBackup,
@@ -42,6 +44,7 @@ import {
 	waitForActiveAccount,
 	writeBackupToTemp,
 } from "./helpers/import-drivers"
+import { HANDBACK_KEY } from "@/utils/panel-handback"
 import { POPUP_RETURN_FOCUS_MS } from "@/wallet/utils/toolbar-popup"
 
 const EXPORT = "#/popup/settings/security/export/full"
@@ -275,6 +278,60 @@ async function untilRegistered(control: Page, id: number | null): Promise<void> 
 	)
 }
 
+type InputClickProbe = Window & { __inputClicks?: Array<{ type: string; active: boolean }> }
+
+/** Records, in the window's own realm, each input the page clicks and whether the person's press was
+ *  still active then: Firefox opens a file picker only for a click that carries one. */
+async function recordInputClicks(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		const w = window as InputClickProbe
+		w.__inputClicks = []
+		const click = HTMLInputElement.prototype.click
+		HTMLInputElement.prototype.click = function (this: HTMLInputElement) {
+			w.__inputClicks?.push({ type: this.type, active: navigator.userActivation.isActive })
+			click.call(this)
+		}
+	})
+}
+
+type HandbackProbe = Window & { __handbacks?: unknown[] }
+
+/** Records each write of the hand-back record, `null` for its removal. */
+async function watchHandback(control: Page): Promise<void> {
+	await control.evaluate((key: string) => {
+		const w = window as HandbackProbe
+		w.__handbacks = []
+		chrome.storage.onChanged.addListener((changes, area) => {
+			if (area === "session" && changes[key]) w.__handbacks?.push(changes[key].newValue ?? null)
+		})
+	}, HANDBACK_KEY)
+}
+
+/** The card window's return as the control page sees it, without moving focus. */
+const returnState = (control: Page, windowId: number) =>
+	control.evaluate(
+		async (key: string, id: number) => ({
+			windowOpen: (await chrome.windows.getAll()).some((win) => win.id === id),
+			record: (await chrome.storage.session.get(key))[key] ?? null,
+			panels: chrome.extension.getViews({ type: "popup" }).length,
+			handbacks: (window as HandbackProbe).__handbacks,
+		}),
+		HANDBACK_KEY,
+		windowId,
+	)
+
+const sessionProfile = (control: Page) =>
+	control.evaluate(async () => JSON.parse((await chrome.storage.session.get("nulo:core:session"))["nulo:core:session"]).profile as string)
+
+// Wire-shaped: 0x + 64 hex, each the x coordinate of a Grumpkin point.
+const TWO_CONTACTS = {
+	version: 2,
+	contacts: [
+		{ name: "Ana", address: "0x01904dba18e847d163097ce15dcd8597e763fb11fe19ef1273d266d6e959ec4a" },
+		{ name: "Dev", address: "0x09c1c9d2ce72c53c2451f8e9add86ccb8cb284dd4dc4f0eaf301b40b38a9459b" },
+	],
+}
+
 type GetProbe = Window & { __credentialGets?: Array<{ prf: boolean }> }
 
 /** Records, in the page's own realm, whether each `credentials.get` resolved with PRF output. */
@@ -453,6 +510,7 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 		const { browser } = ctx
 		const control = await openPopup(ctx)
 		const auth = await sessionAuthenticator(browser)
+		const files = contactsFiles()
 		try {
 			await registerPasskeyProfile(control)
 
@@ -467,7 +525,8 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await waitForEnabled(exportWindow, "download-backup-btn", 240_000)
 			expect(await readCredentialGets(exportWindow)).toEqual([{ prf: true }])
 
-			// A file picker takes focus as a passkey prompt does, so Import contacts leaves the panel first.
+			// A file picker takes focus as a passkey prompt does, so Import contacts leaves the panel for a
+			// window that shows only the pick and hands the result back to a panel that reopens on it.
 			await openActionPopup(browser)
 			await panelOn(browser, "#/popup/general")
 			await routePanel(browser, CONTACTS)
@@ -475,7 +534,58 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await clickInPanel(browser, "contacts-menu-trigger")
 			const contactsWindow = await toOwnWindow(ctx, control, () => clickInPanel(browser, "contacts-menu-import"))
 			await waitForHash(contactsWindow, CONTACTS, 60_000)
-			await contactsWindow.waitForSelector(sel("contacts-menu-trigger"), { visible: true, timeout: 15_000 })
+			await contactsWindow.waitForSelector(sel("handoff-card"), { visible: true, timeout: 15_000 })
+			expect(await contactsWindow.$(sel("contacts-menu-trigger")), "the page behind the card").toBeNull()
+			expect(await contactsWindow.$(sel("header-lock")), "the header").toBeNull()
+			const cardWindowId = await windowIdOf(contactsWindow)
+
+			// Only a press in this window opens the picker, so the input's click must still carry it.
+			// Headless Firefox cancels that picker at once, which removes its input and keeps the card.
+			await recordInputClicks(contactsWindow)
+			await contactsWindow.click(sel("handoff-card-choose"))
+			await contactsWindow.waitForFunction(
+				() => (window as InputClickProbe).__inputClicks?.length === 1 && !document.querySelector('body > input[type="file"]'),
+				{ timeout: 10_000, polling: 100 },
+			)
+			expect(await contactsWindow.evaluate(() => (window as InputClickProbe).__inputClicks)).toEqual([{ type: "file", active: true }])
+			await contactsWindow.waitForSelector(sel("handoff-card-choose"), { visible: true, timeout: 5_000 })
+
+			await watchHandback(control)
+			const profile = await sessionProfile(control)
+			await pickFileByTestId(contactsWindow, "handoff-card-choose", files.write(TWO_CONTACTS))
+			await contactsWindow.waitForSelector(sel("import-contact-row"), { visible: true, timeout: 15_000 })
+			await clickByTestId(contactsWindow, "import-contacts-submit")
+
+			// Read from the control page before any read in the panel, which would move focus.
+			const returned = await pollUntil(
+				() => returnState(control, cardWindowId),
+				(state) => !state.windowOpen && state.record === null && state.panels === 1,
+				{
+					label: "the window closed, the record consumed, one panel open",
+					timeoutMs: 30_000,
+					intervalMs: 100,
+					show: JSON.stringify,
+				},
+			)
+			expect(returned.handbacks).toEqual([
+				{
+					route: "/popup/settings/contacts",
+					snack: { kind: "success", label: "Import completed successfully", profileId: profile },
+				},
+				null,
+			])
+			await panelOn(browser, CONTACTS)
+			await untilInPanel<true>(
+				browser,
+				`return [...content.document.querySelectorAll('${sel("snackbar-title")}')].some((el) => el.textContent.includes("Import completed successfully")) || null;`,
+				"showed the import's snack",
+			)
+			await sleep(POPUP_RETURN_FOCUS_MS)
+			expect(await control.evaluate(() => chrome.extension.getViews({ type: "popup" }).length), "panels after the return").toBe(1)
+			await closeActionPopup(browser)
+			await openActionPopup(browser)
+			await panelOn(browser, "#/popup/general")
+			await closeActionPopup(browser)
 
 			await clickByTestId(control, "header-lock")
 			await waitForHash(control, "#/popup/auth", 15_000)
@@ -487,6 +597,7 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await restoreWindow.waitForSelector(sel("import-full-backup-pick-file"), { visible: true, timeout: 15_000 })
 			expect(await restoreWindow.evaluate(() => window.location.hash)).toMatch(/^#\/popup\/import\?option=full_backup&.*window=own/)
 		} finally {
+			files.cleanup()
 			await auth.cleanup()
 		}
 	}, 360_000)
