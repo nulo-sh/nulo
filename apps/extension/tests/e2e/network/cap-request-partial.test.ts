@@ -33,7 +33,8 @@ test.skipIf(!hasConfig)(
 		await assertPgOk(page, result, "cap-request-partial:result")
 		const granted = (result.resultJson as { granted?: Array<{ type: string }> })?.granted ?? []
 		const eventsAlone = { type: "data", privateEvents: { contracts: [tokenAddress] } }
-		expect(granted.find((g) => g.type === "data")).toEqual(eventsAlone)
+		// The answer always states the address book; the stored grant carries only what was granted.
+		expect(granted.find((g) => g.type === "data")).toEqual({ ...eventsAlone, addressBook: false })
 		expect(await readStoredCapability(ctx, new URL(PLAYGROUND_TEST_URL).origin, "data")).toEqual(eventsAlone)
 	},
 )

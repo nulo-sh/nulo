@@ -145,7 +145,16 @@ test.skipIf(!hasConfig)(
 			).toEqual([])
 			await execPopup.keyboard.press(SPACE)
 			await execPopup.waitForSelector('[data-testid="register-token-flag-ack"][aria-checked="true"]', { timeout: 5_000 })
-			expect(await snapshotResultSeq(page)).toBe(seqRegister)
+			// The dApp's row is pending from its request on; only a settled one would mean an answer.
+			const settled = await page.evaluate(
+				(after) =>
+					[...document.querySelectorAll<HTMLElement>('[data-testid="pg-result"][data-method="registerToken"]')].filter(
+						(row) =>
+							Number(row.getAttribute("data-result-seq") ?? "0") > after && row.getAttribute("data-status") !== "pending",
+					).length,
+				seqRegister,
+			)
+			expect(settled).toBe(0)
 
 			await approveExecute(execPopup)
 			const result = await waitForPgResult(page, "registerToken", seqRegister, 30_000)
