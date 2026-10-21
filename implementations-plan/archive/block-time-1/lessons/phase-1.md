@@ -14,7 +14,7 @@ Runs live in the scratch run directory (`runs/<id>/`: `log.txt`, `results.json`,
 
 Network: Chrome runs 39480000408, 39477728140, 39477584910; Firefox 39480000356, 39477727911, 39477584945. Smoke: Chrome 39480945420, 39480000252, 39477727946; Firefox 39480000231, 39477727820, 39477585010. Job times in minutes, median [the three].
 
-| Lane | Envelope | Critical job | Next job | Summed file medians |
+| Lane | Envelope (run wall: first test job start to last end) | Critical job | Next job | Summed file medians |
 |---|---|---|---|---|
 | Network Chrome | 18.2, 17.9, 18.0 | shard 2/5: 18.0 [18.2, 17.8, 18.0] | shard 1/5: 15.3 | 103 min, 128 files |
 | Network Firefox | 20.9, 21.1, 18.4 | shard 2/5: 19.0 [20.9, 19.0, 18.4] | shard 1/5: 16.6, shard 5/5: 16.5 | 114 min, 127 files |
@@ -24,7 +24,7 @@ Network: Chrome runs 39480000408, 39477728140, 39477584910; Firefox 39480000356,
 - Network heavy jobs (Chrome / Firefox medians): snack-placement + failed-send-check 13.7 / 14.1, concurrent-confirm 12.0 / 13.2, fee-methods + selfpay-phase 7.6 / 8.4; canary 8.0 / 9.6; chaos 4.2-4.7.
 - Longest network files (median s, Chrome / Firefox): `same-token-concurrent-sends` 557 / 620, `snack-placement` 469 / 483, `incoming-arrival` 342 / 313, `send-chaos` 300 / 339, `failed-send-check` 251 / 256, `fee-methods` 186 / 207, `selfpay-phase` 158 / 176, `type-roles-windows` 122 / 154.
 - Shard 2/5 holds 23 files on Chrome (952 s of file time in run 39480000408, `incoming-arrival` 345 s of it) and 24 on Firefox (1119 s in run 39480000356, `incoming-arrival` 320 s); the list is the P-pole set.
-- Smoke boots no sandbox, so no chain setting moves it. Its critical shard is a sharding imbalance: in runs 39480000252 / 39480000231 shard 2/3 carries 11.8 / 15.7 min of file time against 7.2-7.5 / 8.0-10.1 for the other two (`legal-acceptance` 144 / 185 s is in it). An even split would take about 3 min (Chrome) to 4.5 min (Firefox) off the smoke envelope; out of this lane's scope, filed in phase 5.
+- Smoke boots no sandbox, so no chain setting moves it. Its critical shard is a sharding imbalance: in runs 39480000252 / 39480000231 shard 2/3 carries 11.8 / 15.7 min of file time against 7.2-7.5 / 8.0-10.1 for the other two (`legal-acceptance` 144 / 185 s is in it). An even split would take about 3 min (Chrome) to 4.5 min (Firefox) off the smoke envelope; out of this lane's scope, tracked in #972.
 
 ## Step 3: CI's proverless set, Chrome (`p1-ci-chrome`)
 
