@@ -165,6 +165,17 @@ const filteredKeys = (kind, filters, search) => {
 	z-index: 1;
 }
 
+/* Below the popup's width the toolbar takes its own row above the log rather than covering its lines. */
+@media (width < 359px) {
+	.actions {
+		position: static;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		padding: 10px 18px 0;
+		transform: none;
+	}
+}
+
 .filter_button {
 	user-select: none;
 	padding: 6px 8px;

@@ -218,6 +218,15 @@ onBeforeUnmount(() => {
 	composes: row_actions from "../../../../components/ui/Settings/settings-row.module.css";
 }
 
+/* Below the popup's width an app's name and its grants wrap rather than being cut. */
+@media (width < 359px) {
+	.row .row_name,
+	.row .row_grants {
+		white-space: normal;
+		overflow-wrap: break-word;
+	}
+}
+
 .action_danger {
 	&:hover svg,
 	&:focus-visible svg {

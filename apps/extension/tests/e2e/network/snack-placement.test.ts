@@ -223,7 +223,8 @@ async function placementsAtRestAndScrolled(page: Page, testid: string): Promise<
 type DrainCtx = ExtensionContext & { playgroundPage: Page; accountAddress: string }
 
 const DRAINED = 10n * 10n ** 18n
-/** Two of the worker's once-a-minute finality reads, each a single attempt that can fail, and margin. */
+/** Two finality reads at the production minute, each a single attempt that can fail, and margin, so
+ *  the bound holds on a build without the e2e clocks. */
 const FINAL_READ_MS = 180_000
 
 async function storedTx(page: Page, hash: string): Promise<Tx | undefined> {

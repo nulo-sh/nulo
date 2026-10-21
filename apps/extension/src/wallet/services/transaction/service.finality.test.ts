@@ -72,7 +72,7 @@ describe("TransactionService — a mined row until its block is final", () => {
 	let getBlockData: ReturnType<typeof vi.fn>
 	let findLeavesIndexes: ReturnType<typeof vi.fn>
 
-	const buildService = async () => {
+	const buildService = async (finalityReadMs?: number) => {
 		const services = new ServiceCollection()
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
@@ -105,7 +105,7 @@ describe("TransactionService — a mined row until its block is final", () => {
 				reportEndpointFailure: () => {},
 			}),
 		)
-		const built = new TransactionService(new LoggerStore(new ConfigStore()), api)
+		const built = new TransactionService(new LoggerStore(new ConfigStore()), api, finalityReadMs)
 		services.add(built)
 		await services.start()
 		builtServices.push(built)
@@ -152,6 +152,27 @@ describe("TransactionService — a mined row until its block is final", () => {
 		await tick(1_000)
 		expect(await service.getTransaction(HASH)).toMatchObject({ status: TxStatus.Proposed, awaitingFinality: true })
 	}
+
+	test("a default-built worker reads a mined row first at the production minute", async () => {
+		await minedAndMarked()
+		await tick(59_000)
+		expect(getBlockData).not.toHaveBeenCalled()
+		await tick(1_000)
+		expect(getBlockData).toHaveBeenCalledTimes(1)
+	})
+
+	test("a worker built with a shorter interval reads on it, first and after an unsettled answer", async () => {
+		service = await buildService(10_000)
+		await minedAndMarked()
+		await tick(9_000)
+		expect(getBlockData).not.toHaveBeenCalled()
+		await tick(1_000)
+		expect(getBlockData).toHaveBeenCalledTimes(1)
+		await tick(9_000)
+		expect(getBlockData).toHaveBeenCalledTimes(1)
+		await tick(1_000)
+		expect(getBlockData).toHaveBeenCalledTimes(2)
+	})
 
 	test("is marked when this worker sees it mined, read until final, then written Finalized and unmarked", async () => {
 		await minedAndMarked()

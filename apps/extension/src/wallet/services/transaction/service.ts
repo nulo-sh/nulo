@@ -125,7 +125,11 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	private networkService: NetworkService = null!
 	private deletionState: ProfileDeletionState = null!
 
-	public constructor(logger: ILogger, browserApi: BrowserApi) {
+	public constructor(
+		logger: ILogger,
+		browserApi: BrowserApi,
+		private readonly finalityReadMs: number = FINALITY_READ_INTERVAL_MS,
+	) {
 		super(TRANSACTION_SERVICE_NAME, logger)
 		this.txs = sealedEntityStorage("txs", browserApi.storage.local, (profileId) => this.profileService.rowKeys(profileId))
 	}
@@ -535,7 +539,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		const due: Tx[] = []
 		for (const [key, tx] of this.finalityWatch) {
 			if ((this.finalityNextCheckAt.get(key) ?? 0) > now) continue
-			this.finalityNextCheckAt.set(key, now + FINALITY_READ_INTERVAL_MS)
+			this.finalityNextCheckAt.set(key, now + this.finalityReadMs)
 			due.push(tx)
 		}
 		return due
@@ -661,7 +665,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			this.droppedNextCheckAt.set(key, now + DROPPED_RECHECK_INTERVAL_MS)
 		} else if (tx.awaitingFinality) {
 			this.finalityWatch.set(key, tx)
-			this.finalityNextCheckAt.set(key, now + FINALITY_READ_INTERVAL_MS)
+			this.finalityNextCheckAt.set(key, now + this.finalityReadMs)
 		}
 	}
 

@@ -23,7 +23,7 @@ const doneCount = computed(() => props.steps.filter((step) => step.done).length)
 
 <template>
 	<Flex direction="column" gap="12" data-testid="get-started">
-		<Flex align="end" justify="between">
+		<Flex align="end" justify="between" :class="$style.header">
 			<SectionLabel label="Get started" />
 			<Flex align="end" gap="16">
 				<span v-if="steps.length > 1" role="status" :class="$style.count" data-testid="get-started-count">{{ doneCount }} of {{ steps.length }} done</span>
@@ -61,6 +61,13 @@ const doneCount = computed(() => props.steps.filter((step) => step.done).length)
 </template>
 
 <style module>
+@media (width < 359px) {
+	.header {
+		flex-wrap: wrap;
+		gap: 4px 12px;
+	}
+}
+
 .count {
 	composes: type--label-section from global;
 	color: var(--nulo-secondary);

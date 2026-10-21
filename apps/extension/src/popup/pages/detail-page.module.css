@@ -146,6 +146,25 @@
 	color: var(--nulo-secondary);
 }
 
+/* Below the popup's width the From and To cards stack, so each shortened address stays whole; a
+ * detail's value keeps a gap from its key when it wraps, and an app's name breaks between its words,
+ * inside one only when a word is wider than the line. */
+@media (width < 359px) {
+	.address_pair {
+		flex-direction: column;
+	}
+
+	.details_box > * {
+		column-gap: 16px;
+	}
+
+	.app_value {
+		word-break: normal;
+		line-break: auto;
+		overflow-wrap: anywhere;
+	}
+}
+
 .address_card {
 	/* Anchors the corner explorer link. */
 	position: relative;

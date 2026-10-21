@@ -2,6 +2,7 @@
 import { expect } from "vitest"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import { test, openPopup, waitForHash, typeIntoInput, clickByTestId, expectNoNameField, waitForServiceReady } from "./fixtures/extension"
+import { expectFitsNarrow } from "./fixtures/type-roles"
 
 test("fresh install shows register page", async ({ extension }) => {
 	const page = await openPopup(extension)
@@ -10,6 +11,7 @@ test("fresh install shows register page", async ({ extension }) => {
 
 	await page.waitForSelector('[data-testid="register-create-btn"]', { visible: true })
 	await page.waitForSelector('[data-testid="register-import-btn"]', { visible: true })
+	await expectFitsNarrow(page, "register")
 })
 
 test("create profile with password", async ({ extension }) => {
@@ -28,6 +30,7 @@ test("create profile with password", async ({ extension }) => {
 
 	// The first profile has no name field; it is created as "Main".
 	await expectNoNameField(page, "register-page", "register-name-input")
+	await expectFitsNarrow(page, "New profile, passkey")
 
 	// New profile opens on Passkey.
 	await clickByTestId(page, "register-method-password")
@@ -40,6 +43,7 @@ test("create profile with password", async ({ extension }) => {
 	const testPassword = TEST_PASSWORD
 	await typeIntoInput(page, "Strong password", testPassword)
 	await typeIntoInput(page, "Repeat password", testPassword)
+	await expectFitsNarrow(page, "New profile, password")
 
 	// Submit (clickByTestId gates on :disabled so it waits for validation)
 	await clickByTestId(page, "register-submit-btn")

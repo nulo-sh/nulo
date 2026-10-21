@@ -102,6 +102,9 @@ echo "[e2e:agent] building $BROWSER wallet with VITE_LOCAL_NETWORK_RPC_URL=$AZTE
 # VITE_NULO_E2E_SEALED_READ builds in the e2e-only reader of the sealed roots
 # (src/e2e/sealed-read.ts), through which the journal and transaction helpers
 # read rows the wallet stores encrypted.
+# VITE_NULO_E2E_WALLET_CLOCKS shortens the incoming scan and the finality re-read
+# (src/e2e/wallet-clocks.ts) in the proverless build only; the prover-ON build
+# passes 0, which outranks any .env line, so the canary keeps the users' cadence.
 if [ "${NULO_E2E_PROVERLESS:-}" = "1" ]; then
   if [ "${VITE_NULO_PRESTO_REQUIRED:-}" = "1" ]; then
     echo "[e2e:agent] FATAL: NULO_E2E_PROVERLESS and VITE_NULO_PRESTO_REQUIRED are mutually exclusive" >&2
@@ -117,6 +120,7 @@ if [ "${NULO_E2E_PROVERLESS:-}" = "1" ]; then
   VITE_NULO_E2E_SEALED_READ=1 \
   VITE_NULO_E2E_PROVERLESS=1 \
   VITE_NULO_E2E_PROVERLESS_CONFIRM=1 \
+  VITE_NULO_E2E_WALLET_CLOCKS=1 \
     bun run "build:$BROWSER"
 else
   # Scrub any inherited proverless flags so a non-proverless build (e.g. the
@@ -130,6 +134,7 @@ else
   VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 \
   VITE_NULO_E2E_CSP_REPORT=1 \
   VITE_NULO_E2E_SEALED_READ=1 \
+  VITE_NULO_E2E_WALLET_CLOCKS=0 \
     bun run "build:$BROWSER"
 fi
 
@@ -211,6 +216,14 @@ if [ "${NULO_E2E_PROVERLESS:-}" = "1" ]; then
     exit 2
   fi
   echo "[e2e:agent] bundle contains NULO_E2E_PROVERLESS_BUILD_STAMP ✓"
+  if ! grep -rq "NULO_E2E_WALLET_CLOCKS_BUILD_STAMP" "$DIST_DIR" 2>/dev/null; then
+    echo "[e2e:agent] FATAL: wallet-clocks build stamp absent from $DIST_DIR: the suite would wait on the production cadence" >&2
+    exit 2
+  fi
+  echo "[e2e:agent] bundle contains NULO_E2E_WALLET_CLOCKS_BUILD_STAMP ✓"
+elif grep -rq "NULO_E2E_WALLET_CLOCKS_BUILD_STAMP" "$DIST_DIR" 2>/dev/null; then
+  echo "[e2e:agent] FATAL: a prover-ON build carries the wallet-clocks stamp; it must run the users' cadence" >&2
+  exit 2
 fi
 
 # Fail loudly if VITE_NULO_FEE_MULTIPLIER didn't propagate into the bundle.

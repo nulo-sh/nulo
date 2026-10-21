@@ -113,8 +113,8 @@ const Root = (_, { slots }) => {
 	<Root>
 		<RowTarget v-if="mode === 'click'" :labelledby="titleId" />
 
-		<Flex wide align="center" justify="between" gap="16">
-			<Flex align="center" gap="14" wide>
+		<Flex wide align="center" justify="between" gap="16" :class="$style.main">
+			<Flex align="center" gap="14" wide :class="$style.left">
 				<div v-if="icon || $slots.dot || $slots.icon" :class="[$style.icon_wrapper, $slots.icon && $style.icon_slotted]">
 					<!-- Dot -->
 					<slot name="dot" />
@@ -135,19 +135,19 @@ const Root = (_, { slots }) => {
 				</div>
 
 				<!-- Labels: Title & Description -->
-				<Flex direction="column" gap="4" wide>
-					<Flex align="center" gap="6">
+				<Flex direction="column" gap="4" wide :class="$style.labels">
+					<Flex align="center" gap="6" :class="$style.title_row">
 						<Text v-if="titleVariant === 'meta'" :id="titleId" data-testid="setting-title" variant="meta" color="primary" :class="[$style.title, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
 						<Text v-else :id="titleId" data-testid="setting-title" :variant="titleVariant === 'name' ? 'name' : 'row-title'" color="primary" :class="[$style.title, $style.title_size, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
 						<slot name="titleSuffix" />
 					</Flex>
-					<Text v-if="description || $slots.description" data-testid="setting-description" :variant="descriptionVariant === 'meta' ? 'meta' : 'caption'" color="tertiary" :class="$style.description">
+					<Text v-if="description || $slots.description" data-testid="setting-description" :variant="descriptionVariant === 'meta' ? 'meta' : 'caption'" color="tertiary" :class="[$style.description, descriptionVariant === 'meta' && $style.description_meta]">
 						<slot name="description">{{ description }}</slot>
 					</Text>
 				</Flex>
 			</Flex>
 
-			<Flex align="center" gap="12">
+			<Flex align="center" gap="12" :class="$style.right">
 				<Text v-if="value" data-testid="setting-value" variant="value" color="secondary" :class="$style.value">{{ value }}</Text>
 				<slot name="right">
 					<Icon
@@ -295,5 +295,46 @@ const Root = (_, { slots }) => {
 	text-overflow: ellipsis;
 	overflow: clip;
 	white-space: nowrap;
+}
+
+/* Below the popup's width a title and its description wrap rather than being cut, a title's suffix
+ * drops under it when the two do not fit, and the row's controls go under its text when beside them
+ * the text would have less than 72 px, or a `meta` description's line less than 14 characters. */
+@media (width < 359px) {
+	.wrapper .main {
+		flex-wrap: wrap;
+		row-gap: 8px;
+	}
+
+	.main > .left {
+		flex: 1 1 0;
+	}
+
+	.left > .labels {
+		min-width: 72px;
+	}
+
+	.main > .right {
+		margin-left: auto;
+	}
+
+	.title_row {
+		flex-wrap: wrap;
+	}
+
+	.title,
+	.description {
+		white-space: normal;
+		overflow-wrap: break-word;
+	}
+
+	/* A `meta` description is an identifier: its line holds a shortened one (13 characters) whole. */
+	.labels > .description_meta {
+		min-width: max(100%, 14ch);
+	}
+
+	.left > .labels:has(> .description_meta) {
+		min-width: auto;
+	}
 }
 </style>
