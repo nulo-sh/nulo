@@ -397,3 +397,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [backup-restore-2](backup-restore-2/plan.md) — completed — a restored transaction row binds to the restored profile and one of its accounts; a dropped account's restored rows go with it (#970)
 - [refused-send-1](refused-send-1/plan.md) — completed — a send the network refused with an existing nullifier or an expiry reads "Refused by the network" once a read finds it Dropped, then once more at its expiry (#112)
 - [privacy-cache-line-1](privacy-cache-line-1/plan.md) — completed — privacy 1.2.2: §§ 5.11 and 5.2 say the list and price requests bypass the HTTP cache, and the price request carries no cookies or referrer (P77-13 C)
+- [execution-integrity-2](execution-integrity-2/plan.md) — completed — every Send the person pays is held to the fee it showed: the queued cap strictly, the estimate by the dApp rule, a build more than 10% above it asks the existing fee question (P77-02 A, #979)
