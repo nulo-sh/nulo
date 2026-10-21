@@ -7,8 +7,8 @@ import type { Pin } from "./baseline"
  */
 export const PINNED_STAMPS: readonly Pin[] = [
 	{
-		stamp: "278ccf57ee615920cc53f61efe09594049614f3280ea87ea1830160a55096c33",
-		goldens: "b2264a44a0587abcc0e8ffcc8a59ea595f7ed0b0b73b17b28818672530314521",
+		stamp: "27dc0de69827668974b26630bcebd39383ab673fdb9682164102a083ab2c5c9f",
+		goldens: "ee9cf595a340013f09c090ffac14aae9a07b57ca8db91da595bfabadc3c80afd",
 	},
 ]
 
