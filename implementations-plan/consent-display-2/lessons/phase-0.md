@@ -119,3 +119,16 @@ Accepted: merge by `(chainId, address)`, the held import keyed on its network's 
   never shows. The step now leaves for Manage accounts first (`ad51c6060`). Firefox had loaded the file before it.
 - Review r1: Codex 4 findings, Opus 4; the shared one (an import from another window while a delete's list stands)
   was the high one. A list a destructive action names must be re-read at the action, not only at mount.
+
+## Arc 2 rounds 2-3 and final gates
+
+- Codex r2: an older Confirm whose read a newer press overtook, and a lock-time account read on delete chain
+  (`fefff6582`); the import-during-the-check race argued as a known limit (#1013), accepted in r3. Codex r3: a read
+  answering after the lock could still open a confirmation naming the imports (`dd9139e84`). Every post-await
+  guard needs the lock as well as the generation.
+- Final gates at `0b4b949fc` (load1 180-320): `test:all` 0; network (`type-roles-windows`,
+  `contracts-getClassMetadata`, `profile-reimport-matrix`, `connect-unserved-chain`) Chrome 714 s, Firefox 687 s;
+  smoke (seven files) Chrome 277 s, Firefox 542 s. The added type-roles step, measured on its test with and without
+  it on one build: Chrome 22.3 → 40.2 s, Firefox 34.4 → 48.2 s. No host-saturation retry was needed.
+- Screenshots: the first Delete Profile frame caught the import's success toast; the scratch spec now waits out
+  its 2 s. The Firefox panel renders the same screens.

@@ -13,6 +13,23 @@ issues: "#975 (the class lookup row, closed by arc 2)"
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-21.
+- **Status:** completed (pending the merge of #1015).
+- **Shipped:** #981 (arc 1: the capability window counts or names what each grant reaches, Details' three columns
+  and class section, the PrivateFPC card, the flagged token add's tick); #1015 (arc 2: Delete Profile, the
+  forgot-password popup and delete chain name the imported accounts a deletion removes, and each delete reads its
+  list again at the action; the class lookup row names both answers and flags every class; closes #975).
+- **Dispositions:** OA-1 P78-04 A, OA-2 P78-05 B; OA-3, the class row's one-line words, proposed in #1015 for the
+  owner's sign-off from its screenshots. **Known limits:** #1011 (D7), #1012 (D11), #1013 (D17's residual), each
+  closed as not planned with its reopening condition. **Open items:** none (the execute and fee windows' price
+  refresh went to #982, since closed).
+- **Lessons:** none promoted: `lessons.md` sits at its budget (8152 B). The same-route navigation gotcha went to
+  the `e2e-testing` skill; re-reading a destructive action's list at the action is D17. **Size:** over mid's 350
+  lines; the overage is two arcs' audit record. **Seeds retired:** the `/goal` and `/loop` seeds below are not
+  instructions.
+
 # consent-display-2: four consent surfaces say what the wallet already knows
 
 Two arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1). **Arc 1** (`consent-display-2-a1`)
@@ -230,101 +247,52 @@ P78-05 B; OA-3 (the class row's one-line words) is signed from the screenshots. 
 
 ## Phases
 
+Each phase's tests pair a never-happens case with its success control and feed wire-shaped values; the test files
+are the list.
+
 ### Arc 1 (branch `consent-display-2-a1`, from this plan's commit on `origin/dev`)
 
-**✓ Phase 1 — capability rows and the events default.** Files: `permission-rows.ts`, `build-items.ts`, capability
-`index.vue`; tests `permission-rows.test.ts`, `build-items.test.ts`, capability `index.test.ts`;
-`tests/e2e/network/cap-request-partial.test.ts`. Tests: each row with one unknown, two, and one named contract;
-the details `"*"` row flagged with its chip; classes counted and `"*"` unchanged; `privateEventsDefault` as one
-`test.each` (Off: a contract outside, no call scope, a utilities-only scope, an unreadable entry, a malformed scope, `"*"`;
-On: inside a transaction scope, a `simulation.transactions` scope, an any-contract call scope); a re-request whose held
-transaction scope covers the events contract starts On; one wire-shaped window case (the picture's request) reads
-the four titles and the Off line, and its grant omits `privateEvents`. `cap-request-partial` expects Off, switches
-private events On and the address book Off, and expects `{ type: "data", privateEvents: { contracts: [token] } }`.
-Gate: `bun run lint`, `bun run typecheck:all`, `bun run --cwd apps/extension test src/popup/windows/capabilities`
-exit 0.
+**✓ Phase 1 — capability rows and the events default.** `permission-rows.ts`, `build-items.ts`, capability
+`index.vue`, and their tests; `cap-request-partial` expects the Off default and the switched grant. Gate: lint,
+`typecheck:all`, `bun run --cwd apps/extension test src/popup/windows/capabilities`.
 
-**✓ Phase 2 — the Details table.** Files: `details-table.ts`, `DetailsTable.vue`, `DetailsTable.stories.ts`,
-capability `index.vue`; tests `details-table.test.ts`, `DetailsTable.test.ts`. Tests: the "feed no column" case
-becomes one case per new column (details from a metadata grant, listed and `"*"`; events, listed and `"*"`;
-code on a class row, and on "Any contract" for `"*"`); accounts and the address book still feed nothing; the label
-counts contracts not classes, and classes alone; with the events switch Off the window's Details still ticks
-events (D15); the head's six glyphs in order, aria-hidden; a class row under
-"Contract classes" with its trimmed id and copy; a spoken name with the new words. Gate: lint, `typecheck:all`,
-`bun run --cwd apps/extension test src/popup/windows/capabilities src/components/composite/capabilities`,
-`bun run --cwd apps/extension build-storybook` exit 0.
+**✓ Phase 2 — the Details table.** `details-table.ts`, `DetailsTable.vue` and its story, capability `index.vue`, and
+their tests (one case per new column, the label, D15, the head's glyphs, the class section, the spoken name). Gate:
+lint, `typecheck:all`, the capabilities tests, `build-storybook`.
 
-**✓ Phase 3 — the PrivateFPC fee card.** Files: `fee-figure.ts`, `AppFeeLine.vue`, `OperationCard.vue`; tests
-`fee-figure.test.ts`, `AppFeeLine.test.ts`, `OperationCard.fee.test.ts`. Tests (wire-shaped `aztec_sendTx`, payer
-`PRIVATE_FPC_ADDRESS`): no check glyph, the two lines and the notice once landed; the estimating skeleton line;
-the failed legend with the notice and no check; `funded: false` draws no probe line (never-happens), while a
-third-party FPC with `funded: false` draws the check and the probe line (control); the priority sentence follows
-line two; `paysFromPrivateFeeJuice` true only for the PrivateFPC payer (not a third-party FPC, not a claim).
-Gate: lint, `typecheck:all`, `bun run --cwd apps/extension test src/popup/windows/execute src/popup/components/modules/send` exit 0.
+**✓ Phase 3 — the PrivateFPC fee card.** `fee-figure.ts`, `AppFeeLine.vue`, `OperationCard.vue`, and their tests
+(each estimate state; a third-party FPC as the control). Gate: lint, `typecheck:all`, the execute and send tests.
 
-**✓ Phase 4 — the flagged token add.** Files: execute `index.vue`, `OperationCard.vue`; tests `OperationCard.test.ts`,
-execute `index.test.ts`; `tests/e2e/network/register-token.test.ts`, `tests/e2e/fixtures/token-list.ts` (a
-`flagged` option on `signTestList`), and whatever `fixtures/extension.ts` plumbing a network launch needs to serve
-a list (the session source key plus `requestListRefresh`, as `token-list.test.ts` does). Tests: a flagged card draws the banner and an unticked tick that emits; an
-unflagged card draws neither (control); in the window (wire-shaped `0x`+64-hex token, a fake price client whose
-snapshot flags it): Confirm stays disabled and a direct `approve()` sends nothing before the tick, then both work;
-an unflagged add confirms with no tick (control); before the snapshot answers Confirm is disabled, and it enables
-once the snapshot lands (pair); an unflagged window that a broadcast then flags re-disables Confirm and refuses
-`approve()` until the tick; a remount starts unticked. E2E: the happy path also asserts no banner and no tick; a new
-flagged case (a served list flags the sandbox token: banner, Confirm disabled, the tick reached by Tab and set by
-Space, which sends nothing, then approve and the token added). It proves the gate on a real window fed by the
-worker's held list and the keyboard path, which no component test reaches; estimate 60 s per browser. Gate: lint, `typecheck:all`,
-`bun run --cwd apps/extension test src/popup/windows/execute` exit 0.
+**✓ Phase 4 — the flagged token add.** Execute `index.vue`, `OperationCard.vue`, their tests (the tick, a direct
+`approve()`, the snapshot wait, a mid-window flag, a remount); `register-token` gains the flagged case (a served
+list flags the sandbox token; the tick by Tab and Space), estimated at 60 s per browser. Gate: lint,
+`typecheck:all`, the execute tests.
 
-**✓ Phase 5 — e2e, screenshots, full gates.** Run, each at retry 0, on Chrome then Firefox
-(`NULO_E2E_BROWSER=firefox`): `cd <worktree> && NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run
-e2e:agent tests/e2e/network/{cap-request-partial,data-privateEvents,cap-window,cap-request-rerequest,register-token,fee-sponsor-funding,type-roles-windows,selfpay-phase}.test.ts`.
-Measure each browser's wall-clock for the two changed files (`register-token`, `cap-request-partial`) on
-`origin/dev` and on the arc's head, the same selection, suite time apart from the build.
-`cap-window`'s S2 pin (12 px) must hold; a changed value is a measured layout change, re-pinned with the reason.
-Screenshots: a scratch spec outside the repo (adapted from the pictures' spec) shoots the capability window
-(rows and Details open), the PrivateFPC card and the flagged add (unticked, Confirm disabled), light and dark,
-into `implementations-plan/consent-display-2/screenshots/`. No smoke spec opens these windows; since `fixtures/token-list.ts`
-changes, the smoke specs that import it (`token-list.test.ts`, `rows.test.ts`) run on both browsers too
-(`cd apps/extension && bun run test:e2e -- <file> --retry=0`, `NULO_E2E_BROWSER=firefox` for the twin). Gate: `bun run audit:vue`, `bun run test:all` exit 0; every listed e2e green on both browsers;
-each screenshot matches its approved picture in all but placeholder words, or an OWNER-ASKS entry and a draft PR.
+**✓ Phase 5 — e2e, screenshots, full gates.** Network at retry 0 on both browsers through `agent.sh`
+(`cap-request-partial`, `data-privateEvents`, `cap-window`, `cap-request-rerequest`, `register-token`,
+`fee-sponsor-funding`, `type-roles-windows`, `selfpay-phase`); smoke `token-list`, `rows`, `send-keyboard`,
+`type-roles`; `cap-window`'s S2 pin held; screenshots in `screenshots/arc1/`. Gate: `audit:vue`, `test:all`.
 
 ### Arc 2 (branch `consent-display-2-a2`, off `origin/dev` after #964 and arc 1 merge)
 
-The export pages as #964 left them hold OA-2's options as written. OA-1 and OA-2 were answered before phase 6
-(P78-04 A, P78-05 B), so the PR opens ready.
+The export pages as #964 left them held OA-2's options as written; OA-1 and OA-2 were answered before phase 6.
 
-**✓ Phase 6 — Delete Profile and the forgot-password popup.** Files: `reset.vue`, a new `imported-accounts.ts`,
-`ForgotPasswordPopup.vue`; tests `imported-accounts.test.ts`, `reset.test.ts`, a new `ForgotPasswordPopup.test.ts`,
-a composition case in `network-reset/service.composition.test.ts`. Tests: the derived-accounts sentence; the list
-across two chains, a hidden import included and a derived account not (wire-shaped addresses); a paused reset's
-held import named from the journal, once when recreated, and one address on two chains named twice (controls, the
-merge mutation-checked in both layers); a reset paused before its purge named from its live row; a running reset's
-journal unread but the reset pending; each failed read fails the list; on the page, no imports means no section and Delete goes (control); while the read runs Delete is
-disabled, after a failure a press deletes nothing, toasts and re-reads, then the answer lets it go; an account
-imported after the list refuses the press and is shown, then the press goes; a reset event re-reads and an older
-read answering last never replaces the newer one; a lock mid-read starts no account read (D17); a pending
-reset sends Export first to the account export page, a passkey profile gets none (D16); locked, no read and no
-section; the popup line and its `aria-hidden` glyph on every profile; the composition case drives the real reset
-service to a paused reset and reads the held import once on its new chain and the same key elsewhere apart.
-E2E: `type-roles.test.ts` sweeps the new address site (an imported account on Delete Profile, D21).
+**✓ Phase 6 — Delete Profile and the forgot-password popup.** `reset.vue`, a new `imported-accounts.ts`,
+`ForgotPasswordPopup.vue`; their tests and a composition case in `network-reset/service.composition.test.ts` that
+drives the real reset service to a paused reset (the held import named once on its new chain, the same key on
+another chain apart). `type-roles.test.ts` sweeps the new address site (D21).
 
-**✓ Phase 7 — delete chain.** Files: `networks/[id].vue`; test `networks/[id].test.ts`: live imports named, a hidden
-one included and two of one name both ("Export them first."); a reset pending elsewhere says "Export" on a password
-profile and a chain that is not stale (D18); a paused reset of this chain uses its own list and reads no live
-accounts; a failed read refuses with today's toast and deletes nothing; an import made after the confirmation opened
-reopens it naming the account instead of deleting, and the next Confirm deletes (D17).
+**✓ Phase 7 — delete chain.** `networks/[id].vue` and its test (D17, D18).
 
-**✓ Phase 8 — the class lookup row (#975).** Files: `permission-rows.ts`; tests `permission-rows.test.ts`,
-capability `index.test.ts` (wire-shaped request): the listed row's line, unflagged with no chip; `"*"` flagged with
-the "Any class" chip, approved as requested.
+**✓ Phase 8 — the class lookup row (#975).** `permission-rows.ts`, its test and the window's (D19).
 
-**Phase 9 — e2e, screenshots, gates, then the close-out.** Smoke at retry 0 on Chrome then Firefox, on the armed
-build (`agent.sh` runs only the network config): `cd apps/extension && bun run test:e2e -- tests/e2e/{type-roles,security-reset,auth-flows,tooltips-glossary,settings-crud,stale-network,stale-network-captures}.test.ts --retry=0`.
-Network at retry 0 through `agent.sh`, both browsers: `type-roles-windows`, `contracts-getClassMetadata` (the class
-row). Screenshots from a scratch spec outside the repo, light and dark, Chrome 360×600 (the capability window at its
-400×800), into `screenshots/arc2/`. Gate: lint, `typecheck:all`, `test:all`, every listed e2e green on both
-browsers, `bun run check:plans` after staging, exit 0.
+**✓ Phase 9 — e2e, screenshots, gates, then the close-out.** Smoke at retry 0 on both browsers, on the armed build
+(`agent.sh` runs only the network config): `type-roles`, `security-reset`, `auth-flows`, `tooltips-glossary`,
+`settings-crud`, `stale-network`, `stale-network-captures`. Network at retry 0 through `agent.sh`, both browsers:
+`type-roles-windows`, `contracts-getClassMetadata` (the class row), `profile-reimport-matrix`,
+`connect-unserved-chain` (the two delete helpers). Screenshots in `screenshots/arc2/`, Chrome 360×600 and the
+capability window at 400×800; the Firefox panel was shot and renders the same. Gate: lint, `typecheck:all`,
+`test:all`, `check:plans`.
 
 ## Post-implementation
 
@@ -343,7 +311,7 @@ rides arc 2: merge `origin/dev` first; Outcome (`Known limits: none` unless file
 | Arc | Phases | Base | PR title (≤ 93) | Closes |
 |---|---|---|---|---|
 | 1 | 1–5 | `origin/dev` + this plan's commit | `feat(consent): windows count what a grant reaches; private fee juice card; flagged token add` (92) | none |
-| 2 | 6–9 + close-out | `origin/dev` after #964 and arc 1 merge | `fix(profile): deletion warnings name imported accounts the phrase cannot restore` (80) | #975 |
+| 2 | 6–9 + close-out | `origin/dev` after #964 and arc 1 merge | `fix(profile): deletion warnings name imported accounts; class lookup flags every class` (86), #1015 | #975 |
 
 Each PR opens without labels once its loop converges; add `e2e:extension-network` (arc 1) or
 `e2e:extension-smoke` (arc 2) only if the path filter skips a needed suite. Arc 1 opens ready when the screenshots
