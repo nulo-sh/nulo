@@ -1,8 +1,8 @@
 ---
 plan: warm-stack-1
 tier: light
-status: approved 2026-10-21 (Asks A1-A5 answered, D6); arc 1 running (Phase 1 done: K go, J no-go)
-issues: "#1006 (arc 1: Closes on the ship path; closed as a known limit with the numbers on the no-ship path)"
+status: closed (arc 1, no ship: K measured and dropped by its ship rule, J not built)
+issues: "#1006 (closed as a known limit with the numbers)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,23 @@ base: origin/dev at 8663cdd15
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-21.
+- **Status:** closed, no ship. Arc 1 ran on `warm-stack-1-a1`; this docs-only PR carries the record and archives the plan, and its merge closes the plan.
+- **Shipped:** no code. The e2e-testing skill's § Runtime budget states both levers' numbers, and how a measurement dispatcher shares the CI lanes and the account's API limit with other agents.
+- **Measured:**
+  - The probe ([lessons/phase-1.md](lessons/phase-1.md)): K saved 1.15 s (Chrome) and 2.0 s (Firefox) net per call. J saved nothing over K, and its fork import costs 18-27 s.
+  - CI ([lessons/phase-4.md](lessons/phase-4.md)): K saves 0.75 s and 0.77 s per call, over 106 / 105 calls a run. Rules (a) and (d) pass on both browsers. Rules (b) and (c) pass on Chrome and fail on Firefox: 0.77 s against a 1.0 s bar, and the critical shard is +45 s at F in the median pair.
+- **Dispositions:**
+  - K is dropped by the ship rule (D4, D6, D7). Its code is this PR's commits 77d7f0a06 and 140587739: `registerProfileOnPage`, and `launchOnLocalNetwork` switching on the registration popup.
+  - J was never built (G1).
+  - No seed pool was committed (A5).
+- **Known limits:** #1006 is labelled `known-limit` and closed as not planned. It reopens on a cheaper unlock, a launch that keeps the code cache, or a CI design that resolves a per-shard saving of about 15 s.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` holds 8174 of its 8192 bytes, and nothing there is superseded. The shared API limit and the dispatch race are in the e2e-testing skill and [lessons/phase-4.md](lessons/phase-4.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # warm-stack-1: the network files' onboarding cost, measured before anything is built
 
@@ -65,23 +82,23 @@ One arc, one PR against `dev`. The owner (chat, 2026-10-21): "Plan warm-stack, g
 - **G1:** K goes on if U − K is positive on both browsers with disjoint interquartile ranges. J goes on only if J's saving over K, times its calls, is at least 2 % of a browser's pool file time with its range clear of zero, render included. Every verdict and number goes to `lessons/phase-1.md` and #1006.
 - **Validation gate:** the probe green at retry 0 on both browsers through `agent.sh`, load1 logged, the file deleted. Layers: e2e-live-network.
 
-### Phase 2: build what passed (skipped on a double no-go)
+### Phase 2: build what passed (skipped on a double no-go) ✓ (K built; J skipped by G1; K dropped at Phase 5)
 - **K** (`tests/e2e/fixtures/extension.ts`): `registerProfileOnPage(ctx): Promise<Page>` returns the registration popup at Home with `balance-amount`; `registerProfile` is that plus `page.close()`, unchanged for its other callers. `launchOnLocalNetwork(phase)` continues on the returned page and logs `[onboard] <ms>` (the CI mechanism line); `setupConnectedPlayground` calls it instead of repeating its steps. `dappConnectedExtension` keeps its reopen (its page comes from the file-scoped `registeredExtension`). A console error or throw K surfaces is a race on the users' path: fixed at its cause, or K dropped.
 - **J, only on its go** (skipped by G1): `injectProfile(ctx): Promise<Page>` renders a fresh profile in the fork, writes its rows after liveness, opens the popup and unlocks, on proverless network runs only. Before building: trace the worker state that depends on a profile existing at boot. One network test onboards by each path and compares the dumps under an exact allowlist of random, id and time fields, and asserts no `recovery-mode-banner` after the unlock, with a success control (a corrupted DEK slot shows it): the drift a cheaper layer cannot see is a row the popup writes.
 - `.claude/skills/e2e-testing/SKILL.md` § Runtime budget: the `[onboard]` line and each arm's verdict with its numbers.
 - **Validation gate:** `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`, `bun run check:plans` exit 0. Layers: lint, typecheck, unit, plans.
 
-### Phase 3: the touched fixtures on both browsers, retry 0
+### Phase 3: the touched fixtures on both browsers, retry 0 ✓ (nine files green on both browsers: [lessons/phase-4.md](lessons/phase-4.md))
 - `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/{send-amount-exact,holdings,imported-account-execution,popup-escape-layered,sim-methods,authwit-variants,multi-account-from,connect-check-window,execute-scope-chain}.test.ts`, then with `NULO_E2E_BROWSER=firefox`: sends, holdings and an import over `tokenReadyExtension`, popups over `localNetworkExtension`, dApp sessions with popup-target diffs and a kept-page `createAccount` over `setupConnectedPlayground`, and two files that assert the error arrays before their first `openPopup`, which now also hold the registration's errors. One `agent.sh` run per worktree at a time: a second is refused at setup.
 - **Validation gate:** all green on both browsers, every `[onboard]` line present. Layers: e2e-live-network.
 
-### Phase 4: review loop, then CI measurement
+### Phase 4: review loop, then CI measurement ✓ (loop converged; rule fails on Firefox: [lessons/phase-4.md](lessons/phase-4.md))
 - The Post-implementation loop to convergence first; merge `origin/dev`; freeze the head F. **P** = F plus one commit restoring the close and reopen (and the UI path for J), `[onboard]` kept. P and F are pushed as `warm-stack-1-measure-p` and `warm-stack-1-measure-f`, so other lanes see the measurement; never a PR, deleted after.
 - Per browser, `gh workflow run pr-extension-network-e2e.yml --ref <branch>` (Firefox: `pr-extension-network-e2e-firefox.yml`), in the order P F F P P F, one dispatch at a time per lane; pairs fixed by order: (P1, F1), (F2, P2), (P3, F3). Records under `~/.cache/nulo-backlog/warm-stack-1/ci/<run>/`: `parseJobLog` over every shard, heavy and canary job, every `[onboard]` line, job envelopes. A run with a failed file is judged under (a), and its pair is dispatched again for timing; every result kept.
 - **Ship rule, on both browsers:** (a) no unresolved F failure: a run is invalid only if no test ran; any F failure counts unless its trace shows a cause outside the changed fixtures, with its file rerun at P and F; (b) the `[onboard]` median per call at F below P's by at least half the probe's saving; (c) the critical shard (the largest recorded total in `shard-timings.json`, the same files in both arms) has a lower summed file time at F in the median of the three pairs, a direction whose cause the per-file `[onboard]` lines prove; (d) e2e-clocks-1's rule word for word: "No other file is slower in all three pairs by more than max(10 % of its P median, 10 s) without a traced unrelated cause", over every file in every job.
 - **Validation gate:** the records and the verdict table in `lessons/phase-4.md`.
 
-### Phase 5: ship or write up
+### Phase 5: ship or write up ✓ (no ship)
 - **Ship:** the PR per Delivery, `Closes #1006`. **No ship:** drop the code commits; the PR carries the close-out and the skill's verdict lines; #1006 gets the numbers and the `known-limit` label and closes as not planned. Reopening: a cheaper unlock, a launch that keeps the code cache, or a CI design that resolves a smaller saving.
 - **Validation gate:** Phase 2's commands green on the final head; `bun run check:plans` after staging.
 
@@ -110,6 +127,7 @@ None. Test harness only; no screen, copy or timing a person meets changes.
 - **D5 J on proverless network runs only;** the canary keeps the users' path; smoke unchanged (#1003: 3.5 %).
 - **D6 The orchestrator's answers (2026-10-21).** A1: K admitted; a fixture that stops closing and reopening the registration popup is inside the owner's "launch + onboarding" scope and stores nothing. A2: rule (c) as written, on both browsers, direction, the per-file `[onboard]` lines the proof that it is the lever's; c′ (the pool's direction plus the mechanism line) considered and not taken. A3: (d) is e2e-clocks-1's rule word for word. A4: the allowlist plus a healthy unlock replaces byte equality. A5: no committed seed pool; J renders at run time through the production `ProfileService`, scratch only, and ships nothing unless it passes G1. CI dispatches: one lane's measurement at a time; before each, `gh run list --workflow <lane> --status in_progress --status queued` shows no other lane's `*-measure-*` or `e2e-clocks-1*` ref, and heavy-pool-1 runs its round first.
 - **D7 `[onboard]` spans the registration through the switch.** On Firefox the kept popup's switch runs 0.5 s slower (work the reopen used to absorb), so a line ending at Home would overstate K. Rule (b)'s "probe's saving" is the net: 1.15 s (Chrome) and 2.0 s (Firefox) per call.
+- **D8 No ship (2026-10-21).** The CI measurement fails rules (b) and (c) on Firefox. K's code is dropped from the PR; #1006 becomes a closed known limit with the numbers.
 
 ## Review verdicts
 - **Round 1, Codex (gpt-6.1-sol high, session 01a15f16): `reject`.** Accepted: (1) F2 miscounted the PBKDF2 work (`getPasshash` is a SHA-256): corrected; (2) P F F P P F is three runs per arm, so G1 claimed a resolution it lacks: G1 is now a worth screen, I3 states the resolution; (3) the ship rule changed silently: the brief's critical shard and both browsers restored, the operationalizations listed as A2-A4; (4) K is an amendment: A1, with Phase 1's count of files that still open a fresh popup over an onboarded wallet; (5) a derived-only unlock reaches Home with a bad DEK: J asserts no recovery banner, with a success control; (6) the probe's capture point: reference dumps before and after the switch, the same start network and the address change asserted; (7) the renderer choice: run time or a known limit, no pool without approval. Rejected: twelve dispatches per browser, since twice the CI cost still leaves a shard's saving unresolved (I3).
