@@ -3,6 +3,7 @@ import { JobCancelledError } from "@nulo/extension-messaging/errors"
 import { flushPromises, mount } from "@vue/test-utils"
 import { reactive, ref, type Ref } from "vue"
 import { priceFake } from "../../../../tests/helpers/price-client-fake"
+import { captureWindowDocument } from "@/utils/window-document"
 
 // ── The request as the dApp's wire carried it: 32-byte hex fields, a CAIP account. ──
 
@@ -182,6 +183,7 @@ beforeEach(() => {
 		runtime: { getURL: (p: string) => `chrome-extension://test/${p}` },
 	}
 	priceFake.reset(undefined)
+	captureWindowDocument("#/windows/fee?requestId=r1")
 })
 
 afterEach(() => {
@@ -194,6 +196,7 @@ afterEach(() => {
 	Object.assign(appStoreMock, { isSessionChecked: true, isLogined: true, pageAwaitingAuth: "" })
 	accountReadGate = undefined
 	vi.clearAllMocks()
+	captureWindowDocument("")
 })
 
 describe("the fee question window", () => {
@@ -217,7 +220,10 @@ describe("the fee question window", () => {
 		expect(byId("fee-raised-now").text()).toBe("Now ~0.021 FJ ($0.042)")
 		expect(confirm().text()).toBe("Send for ~0.021 FJ ($0.042)")
 		expect(byId("dapp-approval-confirm-detail").text()).toBe("($0.042)")
-		expect(priceFake.refreshes()).toBe(1)
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([1, 0])
+		priceFake.reconnect()
+		await flushPromises()
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([2, 0])
 	})
 
 	test("while the request's operation resolves, Confirm already names the new fee, off and with no price read", async () => {
@@ -228,24 +234,24 @@ describe("the fee question window", () => {
 		expect(confirm().text()).toBe("Send for ~0.021 FJ")
 		expect(byId("dapp-approval-confirm-detail").exists()).toBe(false)
 		expect(confirm().attributes("disabled")).toBeDefined()
-		expect(priceFake.refreshes()).toBe(0)
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([0, 0])
 	})
 
 	test.each([
 		["still checking its session", { isSessionChecked: false, isLogined: true }],
 		["locked", { isSessionChecked: true, isLogined: false }],
-	])("a window %s reads no price; one signed in reads it once, from its fee card", async (_case, session) => {
+	])("a window %s reads no price; one signed in reads the cache once, from its fee card", async (_case, session) => {
 		priceFake.reset(2)
 		Object.assign(appStoreMock, session)
 		await opened()
 		expect(byId("fee-raised-card").exists()).toBe(false)
-		expect(priceFake.refreshes()).toBe(0)
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([0, 0])
 
 		w!.unmount()
 		Object.assign(appStoreMock, { isSessionChecked: true, isLogined: true })
 		await opened()
 		expect(byId("fee-raised-card").exists()).toBe(true)
-		expect(priceFake.refreshes()).toBe(1)
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([1, 0])
 	})
 
 	test("the authorizations the approval window listed are listed again, each decoded on its consumer", async () => {

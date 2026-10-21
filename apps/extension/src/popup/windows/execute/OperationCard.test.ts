@@ -1,3 +1,4 @@
+import { Banner, Checkbox } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
@@ -146,6 +147,7 @@ describe("windows/execute/OperationCard — a token add", () => {
 				...props,
 			},
 			global: {
+				components: { Banner, Checkbox },
 				stubs: {
 					...stubs,
 					Skeleton: {
@@ -195,6 +197,37 @@ describe("windows/execute/OperationCard — a token add", () => {
 		expect(values.map((value) => value.text())).toEqual(["—", "—", "18"])
 		expect(values[1]!.attributes("variant")).toBe("name")
 		expect(w.get("[data-testid='register-token-address']").attributes("data-address")).toBe(token)
+	})
+
+	test("a flagged token: the list's banner before the details, and an unticked acknowledgement after the address", async () => {
+		const w = mountTokenAdd({ tokenMetadata: { symbol: "USDC", name: "USD Coin", decimals: 6 }, tokenFlagged: true })
+		const order = [...w.element.querySelectorAll("[data-testid]")]
+			.map((el) => el.getAttribute("data-testid"))
+			.filter((id) =>
+				["token-flagged-banner", "register-token-details", "register-token-address", "register-token-flag-ack"].includes(id ?? ""),
+			)
+		expect(order).toEqual(["token-flagged-banner", "register-token-details", "register-token-address", "register-token-flag-ack"])
+		const tick = w.get("[data-testid='register-token-flag-ack']")
+		expect(tick.attributes("role")).toBe("checkbox")
+		expect(tick.attributes("aria-checked")).toBe("false")
+		expect(tick.attributes("tabindex")).toBe("0")
+		expect(tick.text()).toBe("I understand Nulo flagged this token as a scam")
+		await tick.trigger("click")
+		await tick.trigger("keydown", { key: " " })
+		expect(w.emitted("acknowledgeTokenFlag")).toEqual([
+			[0, true],
+			[0, true],
+		])
+		await w.setProps({ tokenFlagAcknowledged: true })
+		expect(tick.attributes("aria-checked")).toBe("true")
+		await tick.trigger("click")
+		expect(w.emitted("acknowledgeTokenFlag")?.at(-1)).toEqual([0, false])
+	})
+
+	test("a token the list does not flag shows neither the banner nor the acknowledgement", () => {
+		const w = mountTokenAdd({ tokenMetadata: { symbol: "USDC", name: "USD Coin", decimals: 6 } })
+		expect(w.find("[data-testid='token-flagged-banner']").exists()).toBe(false)
+		expect(w.find("[data-testid='register-token-flag-ack']").exists()).toBe(false)
 	})
 
 	test("a token whose details cannot be read points the person at Reject, since Confirm stays off", () => {
