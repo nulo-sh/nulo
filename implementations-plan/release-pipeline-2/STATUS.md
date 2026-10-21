@@ -5,3 +5,4 @@
 - 2026-10-21 round 1: Codex approve with changes, Opus approve with changes; plan revised (test rules, red proofs, ordered deletion, advisory-safe wording); Codex r2 verifying.
 - 2026-10-21 round 2 (Codex approve with changes: staged copy, owner-step timing, recon) applied; round 3 Codex approve. Plan committed; arc 1 next (auto-continue).
 - 2026-10-21 arc 1 phase 1 green (lint:actions, test:ci-gating 660, test:release 351, typecheck:all, test:all, both red proofs); review round 1 (Codex and Opus approve with changes) applied; Codex round 2 next.
+- 2026-10-21 arc 1 review round 1 applied; round 2 Codex approve; final gates on the head next, then push and PR.
