@@ -58,6 +58,7 @@ import { pollUntil } from "../fixtures/poll"
 import { reconnectPlayground, runApprovedPgCall } from "../fixtures/send"
 import { inPlaceUpdate, readLocalStorage, updateBuilds } from "../fixtures/update/in-place"
 import { writeRecording } from "../fixtures/update/recording"
+import { approveReleaseConnect } from "../fixtures/update/release-ui"
 import { BARRIERS, missingFamilies, shownOverlays, updateProblems } from "../fixtures/update/verify"
 import {
 	confirmImport,
@@ -194,7 +195,7 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 	const incoming = await incomingCards(page, 2)
 	await page.close()
 
-	const dapp = await connectPlayground(ctx, { chainInfo })
+	const dapp = await connectPlayground(ctx, { chainInfo }, approveReleaseConnect)
 	await grantCapBundle(ctx, dapp, "transaction", async (ids) => {
 		if (!ids.includes(account)) throw new Error(`the capabilities window offers ${ids.join(", ")}, not ${account}`)
 		return [account]
