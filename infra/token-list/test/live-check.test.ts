@@ -260,7 +260,8 @@ describe("the live check script", () => {
 				)
 		})
 		try {
-			const child = spawn(process.execPath, ["infra/token-list/scripts/live-check.ts", `${origin}/hostile`, `${origin}/moved`], {
+			// `bun`, as CI runs it: under a Node runner `process.execPath` cannot load the script's TypeScript.
+			const child = spawn("bun", ["infra/token-list/scripts/live-check.ts", `${origin}/hostile`, `${origin}/moved`], {
 				cwd: REPO_ROOT,
 			})
 			let stdout = ""
