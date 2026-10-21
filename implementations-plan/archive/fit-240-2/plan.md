@@ -13,10 +13,6 @@ issues: "#1022 (Refs only: it closes when firefox-handoff-1's hand-off half also
 post_implementation_hardening: not scheduled
 ---
 
-# fit-240-2: the full backup's done state and its working card, proven at 240 px
-
-One arc, one PR against `dev` (the orchestrator's D-orch-1: no stack). The arc adds #986's 240 px check, `expectFitsNarrow`, at six points inside three existing smoke visits: the working card, the done state after a plain file, an encrypted backup, a ready backup, the done state after an encrypted file, and that done state under a warning. A probe on #986's head found the first five already fit on Chrome and Firefox, so the arc changes tests only, no CSS. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults: [lessons/phase-0.md](lessons/phase-0.md).
-
 ## Outcome
 
 - **Date:** 2026-10-21.
@@ -26,6 +22,10 @@ One arc, one PR against `dev` (the orchestrator's D-orch-1: no stack). The arc a
 - **Known limits:** none.
 - **Open items:** #1023 (the 240 px gate passes a page that scrolls sideways inside its own scroller). At every check here the hero `.wrapper` read 240 of 240 on both browsers.
 - **Seeds retired:** the `/goal` and `/loop` below.
+
+# fit-240-2: the full backup's done state and its working card, proven at 240 px
+
+One arc, one PR against `dev` (the orchestrator's D-orch-1: no stack). The arc adds #986's 240 px check, `expectFitsNarrow`, at six points inside three existing smoke visits: the working card, the done state after a plain file, an encrypted backup, a ready backup, the done state after an encrypted file, and that done state under a warning. A probe on #986's head found the first five already fit on Chrome and Firefox, so the arc changes tests only, no CSS. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## The claims and what did not hold
 
@@ -106,7 +106,7 @@ None. The arc changes no file under `apps/extension/src` or `packages/`. The lan
 
 ## Post-implementation
 
-[README § Post-implementation standard](../README.md#post-implementation-standard) at `b88c20a39` binds; plan-specific parts: single arc, so the review loop runs once over the diff from `origin/dev` after Phase 1 is green. Consult: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; hard stop at three rounds. Log each round in `lessons/phase-1.md` and under § Audit verdicts. Teardown after the merge: `agent-worktree done fit-240-2 --merged`, trunk `dev`.
+[README § Post-implementation standard](../../README.md#post-implementation-standard) at `b88c20a39` binds; plan-specific parts: single arc, so the review loop runs once over the diff from `origin/dev` after Phase 1 is green. Consult: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; hard stop at three rounds. Log each round in `lessons/phase-1.md` and under § Audit verdicts. Teardown after the merge: `agent-worktree done fit-240-2 --merged`, trunk `dev`.
 
 ## Delivery
 
