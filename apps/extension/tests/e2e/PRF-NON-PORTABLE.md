@@ -137,7 +137,7 @@ before each release:
 
 Firefox closes its toolbar popup as soon as the OS passkey prompt takes focus (Mozilla bug 2026687),
 so every passkey step started there runs in a window of its own. Headless Firefox keeps the popup
-open, and `passkey-toolbar-panel.test.ts` only simulates its closing: before each release, run these
+open, and `toolbar-panel.test.ts` only simulates its closing: before each release, run these
 in real Firefox on a Mac with a real authenticator, starting from one passkey profile, each step
 started by clicking the toolbar icon.
 

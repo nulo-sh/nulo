@@ -1,8 +1,8 @@
 /**
- * Own windows in a real browser: the export and restore pages that Firefox's toolbar panel hands to
+ * Own windows in a real browser: the pages that Firefox's toolbar panel hands to
  * a window of their own (`src/utils/own-window.ts`). The shell reads the marker on every boot of
  * every surface, so its lifecycle is proven here on both browsers with a password profile; the move
- * out of the real panel belongs to `passkey-toolbar-panel.test.ts`.
+ * out of the real panel belongs to `toolbar-panel.test.ts`.
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"

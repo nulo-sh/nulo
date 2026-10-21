@@ -12,9 +12,10 @@ run-name: "publish-token-list ← ${{ github.event_name }} at ${{ github.sha }}"
 #   one step, installs nothing and runs the signer with `bun --no-install`; the signer's import
 #   closure is pinned to `node:` and its own package. It refuses any token set but the summary's,
 #   a sequence not above the served one, and a key that is not the pinned `nulo-ci-1`.
-# - `publish-pr` mints the release App token (contents and pull-requests write), commits the envelope
-#   on `token-list-publish-<sequence>` through createCommitOnBranch (GitHub-signed, so the PR's CI
-#   runs and re-verifies it), opens the PR into dev and closes older publish PRs.
+# - `publish-pr` runs in the `release-app` environment, which holds the release App's key, mints its
+#   token (contents and pull-requests write), commits the envelope on `token-list-publish-<sequence>`
+#   through createCommitOnBranch (GitHub-signed, so the PR's CI runs and re-verifies it), opens the
+#   PR into dev and closes older publish PRs.
 #
 # `gh workflow run publish-token-list.yml --ref dev`
 
@@ -100,6 +101,7 @@ jobs:
     needs: sign
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: release-app
     permissions:
       contents: read
     steps:

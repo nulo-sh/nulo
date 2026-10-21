@@ -3,7 +3,7 @@
 // importers (journal/tx/tokens [id].vue) resolve HERE (NOT via the resolver). The router-free base
 // lives in @nulo/design; this wrapper owns the router + history policy and the /popup/general fallback.
 import { SubPageHeaderBase } from "@nulo/design"
-import { closeOwnWindow } from "@/utils/own-window"
+import { goBack } from "@/utils/page-back"
 
 const props = defineProps({
 	title: {
@@ -33,19 +33,8 @@ const router = useRouter()
 const base = useTemplateRef("base")
 defineExpose({ focusTitle: () => base.value?.focusTitle() })
 
-async function handleBack() {
-	// An own window has nowhere to go back to: its back arrow closes it.
-	if (await closeOwnWindow()) return
-	// Prefer actual browser-history back — matches what users expect from a "back" arrow after having
-	// navigated forward. `backTo` is the structural fallback for cold-open / deep-link cases where no
-	// history exists.
-	if (window.history.length > 1) {
-		router.back()
-	} else if (props.backTo) {
-		router.push(props.backTo)
-	} else {
-		router.push("/popup/general")
-	}
+function handleBack() {
+	void goBack(router, props.backTo)
 }
 </script>
 

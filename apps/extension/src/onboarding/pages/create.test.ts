@@ -22,7 +22,7 @@ vi.mock("@/utils/get-started", () => ({ markGetStarted }))
 // The background runs the passkey ceremony, as in Firefox's toolbar panel, so no ceremony is driven here.
 vi.mock("@/utils/browser-surface", async (original) => ({
 	...(await original<typeof import("@/utils/browser-surface")>()),
-	passkeyNeedsOwnWindow: () => true,
+	closesOnFocusLoss: () => true,
 }))
 vi.mock("@/composables/usePasskeyCeremony", () => ({
 	usePasskeyCeremony: () => ({ request: { value: null }, runCeremony: vi.fn(), onResolve: vi.fn(), onReject: vi.fn() }),

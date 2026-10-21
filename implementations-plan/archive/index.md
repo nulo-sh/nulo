@@ -139,6 +139,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [fees-display-1](fees-display-1/plan.md) — completed — one helper prints every fee as `~X FJ ($Y)` at 6 decimals, balances as today, precisions named once (#515)
 - [firefox-arc-closeout](firefox-arc-closeout/plan.md) — completed — the Firefox arc closed: fast answers to in-flight dApp calls, canaries on both browsers
 - [firefox-background-kill](firefox-background-kill/plan.md) — completed — the e2e suite ends the Firefox background page through the browser driver
+- [firefox-files-1](firefox-files-1/plan.md) — completed — file pickers leave Firefox's toolbar panel for the wallet's own window (contacts, account file, Restore again), the full backup's "Saved to your downloads" done state with Close, the contacts export probed at once in 5 s with a working card (#160); known limits #960 #961
 - [firefox-first-class-spike](firefox-first-class-spike/plan.md) — completed — Firefox gets the same smoke and network suites as Chrome
 - [firefox-passkey-unlock](firefox-passkey-unlock/plan.md) — completed — passkey steps started in Firefox's toolbar panel run in a window, and every passkey failure shows a way out
 - [first-account-token-seeding](first-account-token-seeding/plan.md) — completed — default tokens seeded on the first account through an account-added subscription
@@ -405,3 +406,5 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [fee-estimate-cancel-1](fee-estimate-cancel-1/plan.md) — completed — an accepted execute approval cancels the estimates it did not hand over and closes once the worker has handled them; admission before the request read; a cancelled build is never simulated (#989)
 - [floor-superseded-1](floor-superseded-1/plan.md) — completed — the token-list floor rule also reads the lists at publish PR and branch heads signed from the floor (P77-06 B, #973); a stopped run's artifact list is known limit #1001 (P78-06 A)
 - [e2e-fixed-cost-1](e2e-fixed-cost-1/plan.md) — completed — every e2e launch settles its first-run tab or the popup window it became, and fails on neither; liveness at 200 ms; no per-worker reuse (measured) and native `@aztec` loading a known limit (#991, #997)
+- [heavy-pool-1](heavy-pool-1/plan.md) — completed — heavy-long folded into the five-shard network pool, measured on CI: the lane ended later on both browsers (+132 s Chrome, +115 s Firefox), so it stays dedicated; docs-only close, #972 a known limit
+- [release-pipeline-2](release-pipeline-2/plan.md) — completed — every job that mints the release App token runs in the `release-app` environment (branches `main` and `dev`), the lockfile callers pass `secrets: inherit`, `release-integrity.test.ts` keeps it so (P77-08 A, #1008)
