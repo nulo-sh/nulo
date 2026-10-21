@@ -72,8 +72,8 @@ export function isSeedChain(chainId: number): boolean {
  *  `getPrimaryNetwork` (the import/bootstrap fallback), so the two can't disagree. */
 export const PRIMARY_SEED = DEFAULT_SEEDS.find((s) => s.isPrimaryActive)
 
-/** The build's seed for a row's kind; `undefined` for custom, devnet and Mainnet, which this build
- *  seeds no identity for. */
+/** The build's seed for a row's kind; `undefined` for custom, devnet and every kind no seed of
+ *  this build carries (a shipped build seeds no Mainnet). */
 export function seedForKind(kind: ChainKind | undefined): DefaultSeed | undefined {
 	return kind === undefined ? undefined : DEFAULT_SEEDS.find((s) => s.kind === kind)
 }

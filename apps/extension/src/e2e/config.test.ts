@@ -170,4 +170,14 @@ describe("e2e-extra-seed config (layer-1 fail-closed guard)", () => {
 		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED_CONFIRM", "1")
 		await expect(import("./config")).rejects.toThrow(/both are required|double opt-in/i)
 	})
+
+	test("no shipped seed has the extra seed's kind or chainId", async () => {
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED", "")
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED_CONFIRM", "")
+		const { DEFAULT_SEEDS } = await import("@/wallet/services/network/seeds")
+		const { E2E_EXTRA_SEED } = await import("./extra-seed")
+		// It stands in for a default no shipped build seeds yet. Once one ships with its kind, an armed
+		// build would seed two of that kind: retire the arm, or give it a kind no shipped seed has.
+		expect(DEFAULT_SEEDS.filter(({ kind, chainId }) => kind === E2E_EXTRA_SEED.kind || chainId === E2E_EXTRA_SEED.chainId)).toEqual([])
+	})
 })

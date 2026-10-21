@@ -12,8 +12,9 @@
 # was built from, and the scenarios refuse it at any other.
 #
 # `--extra-seed` arms the one test-only flag pair a candidate may carry, the extra default network
-# (src/e2e/extra-seed.ts) the arrival scenario updates into, and writes to <browser>-extra-seed/ so
-# the plain candidate the other scenarios read is left as it is.
+# (src/e2e/extra-seed.ts) the arrival scenario updates into. It writes to <browser>-extra-seed/, so
+# the plain candidate the other scenarios read is left as it is, and removes dist/<browser> on exit.
+# `update-candidate.json` records which kind it is, and each scenario refuses the other.
 set -euo pipefail
 
 usage() {
@@ -73,7 +74,11 @@ SOURCE="$(cd "$EXT" && bun tests/e2e/fixtures/update/source.ts)"
 mkdir -p "$EXT/.e2e-state"
 BACKUP="$(mktemp "$EXT/.e2e-state/package.json.XXXXXX")"
 cp "$PKG" "$BACKUP"
-restore() { cp "$BACKUP" "$PKG" && rm -f "$BACKUP"; }
+# An armed build left in dist/ would be the extension a later smoke or artifact run loads.
+restore() {
+  cp "$BACKUP" "$PKG" && rm -f "$BACKUP"
+  if [[ -n "$EXTRA_SEED" ]]; then rm -rf "$EXT/dist/$BROWSER"; fi
+}
 trap restore EXIT
 
 SUFFIX="$SUFFIX" PKG="$PKG" bun -e "
@@ -97,5 +102,8 @@ fi
 rm -rf "$OUT"
 mkdir -p "$OUT"
 cp -R "$EXT/dist/$BROWSER/." "$OUT/"
-printf '%s\n' "$SOURCE" >"$OUT/update-candidate.json"
+SOURCE="$SOURCE" EXTRA_SEED="$EXTRA_SEED" bun -e "
+  const source = JSON.parse(process.env.SOURCE);
+  console.log(JSON.stringify({ ...source, extraSeed: process.env.EXTRA_SEED === '1' }));
+" >"$OUT/update-candidate.json"
 echo "[update-candidate] $BROWSER candidate at $OUT ($(bun -e "console.log(require('$OUT/manifest.json').version)"))"
