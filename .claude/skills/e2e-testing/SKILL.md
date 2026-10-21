@@ -299,7 +299,7 @@ then measured runtime, with each browser's suite wall-clock before and after in 
   cost 1.15 s (Chrome) / 2.0 s (Firefox) per call (2026-10, 12 paired blocks on one host). A profile
   injected into storage instead (the production `ProfileService`'s rows rendered in the fork, then
   the UI unlock) saved nothing more, because an unlock runs the creation's PBKDF2 work, and the
-  fork's import of the renderer costs 18-27 s. Not built (`implementations-plan/warm-stack-1/plan.md`).
+  fork's import of the renderer costs 18-27 s. Not built (`implementations-plan/archive/warm-stack-1/plan.md`).
 - **A cost guard** (a latency ratio between builds, timed by a probe spec on builds chosen by
   `EXTENSION_PATH`) runs its variants interleaved in one pass, a fresh browser per sample, each
   sample started under a load ceiling well below the run gate's, with the load logged. A loaded
