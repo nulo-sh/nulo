@@ -13,6 +13,15 @@ issues: "#972 (Closes only if the fold ships; otherwise a known limit recorded o
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-21.
+- **Status:** completed (pending the merge of #1010). The fold was measured slower on both browsers and does not ship; the lane closed docs-only.
+- **Shipped:** #1010. heavy-long's reason is restated in its lane comment, `CI.md` and the e2e README. No CI behaviour, job, check or record changes.
+- **Measured:** B minus A, Chrome +132 s, Firefox +115 s, one pair per browser under D9's futility stop (§ Phase 2 result; every run in [lessons/phase-2.md](lessons/phase-2.md)).
+- **Dispositions:** the fold, not shipped (D9). The widened generator and its suite argument ship only with a fold (D3, D7), so neither landed, and D8 is moot. Six shards were not asked (Ask-4). heavy and heavy-concurrent were out of scope (Ask-1). **Known limits:** #972, closed as not planned with the measurement and its reopening condition. **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` sits at its budget (8152 B), and this lane's mechanics (the dispatch concurrency group, the unpriced dedicated files) stay in [lessons/](lessons/phase-2.md). **Size:** over light's 150 lines; the overage is the measurement record and the staged-run ledger. **Seeds retired:** the `/goal` and `/loop` seeds below are not instructions.
+
 # heavy-pool-1: fold the heavy-long network job into the balanced pool, only on measured evidence
 
 One arc (A1), one PR against `dev`, no stack (D-orch-1). The owner picked P78-08 B on #972: "Fold the two files back into the pool, in a follow-up that measures again", with five shards kept (P78-07 A). The two files are `snack-placement` and `failed-send-check`, which `network-e2e-heavy-long` runs. The plan measures the current layout (A) against the folded layout (B), on CI, before anything ships. B ships only if it passes the gate below; otherwise the lane closes with a docs-only PR. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md).
