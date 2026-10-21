@@ -818,6 +818,14 @@ park: a test that depends on the hold needs evidence that excludes a timed-out r
 stage that can only exist while held, or an in-flight count that stays put across the window).
 Always release in `finally`.
 
+Arm an incoming-poll hold before the note it names can be committed: a tick that commits it between
+its block and the arm leaves nothing to park, or a later scan parks after the record exists
+(`expected { kind: 'note', … } to be null` at the while-held read), and the network build's 10 s tick
+makes that window real. `deliverWhileLocked` delivers and arms while the wallet is locked, which
+runs no incoming scheduler, so the unlock's own scan is the first that can find the note. A lock
+resets a popup page's arrivals scope, so a case about a page that seeds on its mount opens a fresh
+page after the unlock.
+
 ## 4. Diagnose a red run
 
 ### Flake or breakage
