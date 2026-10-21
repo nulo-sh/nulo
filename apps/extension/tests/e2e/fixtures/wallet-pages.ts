@@ -147,8 +147,7 @@ async function loadPopup(ctx: ExtensionContext, page: Page): Promise<void> {
 	await gotoExtensionPage(page, extensionUrl(ctx.extensionId, "/src/popup/index.html"))
 }
 
-/** Puppeteer's BiDi `close()` swallows a failed close, so only the `close` event proves one. `what`
- *  names the page in the error. */
+/** Puppeteer's BiDi `close()` swallows a failed close, so only the `close` event proves one. */
 export async function closeConfirmed(page: Page, what: string): Promise<void> {
 	const closed = new Promise<void>((resolve) => page.once("close", () => resolve()))
 	let timer: ReturnType<typeof setTimeout> | undefined

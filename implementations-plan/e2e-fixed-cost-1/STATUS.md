@@ -7,3 +7,5 @@
 - 2026-10-21 10:00Z: Codex round 2 conditional approve, all four conditions taken (page targets for the converted window, the fresh-install id kept, measurement terms, timing range); entering the final fresh Codex pass.
 - 2026-10-21 10:07Z: final fresh Codex pass conditional approve, conditions taken (confirmed close, asserting probe, quotations); verification turn on the final session.
 - 2026-10-21 10:07Z: final pass verification turn approve; plan committed; auto-continue into arc 1.
+- 2026-10-21 10:43Z: arc 1 on `e2e-fixed-cost-1-a1`: fixture change committed; asserting probe pass on both browsers, base fails as required; smoke gate files green on both browsers; #997 filed closed (known-limit); network gate files running; Codex fix round 1 and the Opus review running.
+- 2026-10-21 11:02Z: network gate files green on both browsers; Codex fix round 1 approve, Opus conditional approve, fixes taken; resuming Codex to verify; full smoke suites next.

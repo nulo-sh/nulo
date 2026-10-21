@@ -109,8 +109,8 @@ export async function launchExtension(
 	const extensionPath = opts.extensionPath ?? inject("extensionPath")
 	const cspArmed = CSP_REPORT_ARMED && opts.cspRecorder !== false
 	// Read before the browser writes the profile. An absent or empty directory has never held the
-	// wallet, so its onboarding cannot be complete: the launch requires its first-run tab and seeds the
-	// current Terms. A caller's freshly created empty `userDataDir` is therefore fresh, not a reuse.
+	// wallet, so its onboarding cannot be complete: the launch requires its first-run tab and defaults
+	// to seeding the current Terms.
 	const freshProfile = !userDataDir || !existsSync(userDataDir) || readdirSync(userDataDir).length === 0
 
 	// HEADLESS=0 flips to windowed mode for local debugging.
@@ -229,8 +229,8 @@ async function fireCanary(browser: Browser, extensionId: string, url: string, re
 	}
 }
 
-/** Discover the extension id, wait for the worker, close the first-run tab and mark onboarding
- *  complete. Returns the extension id. */
+/** Discover the extension id, wait for the worker, close the first-run tab (or the window it became)
+ *  and mark onboarding complete. Returns the extension id. */
 async function settleLaunchedExtension(
 	browser: Browser,
 	{
@@ -302,14 +302,11 @@ async function settleLaunchedExtension(
 }
 
 /**
- * Chrome's `--load-extension` and Firefox's temporary add-on report `install` on every launch, so
- * `onInstalled` opens the first-run tab each time and stores its id, which can land after liveness.
- * Over a completed onboarding the page instead opens a popup window on the popup document, drops the
- * id and closes itself, often before the first read. Close whatever the sequence left, before the
- * completed flag is set (a tab still open would convert too); a launch that shows neither never ran
- * its install or handed the test an untracked extension page. A fresh profile cannot convert, so
- * there the tab is required. Every e2e drives the popup flows directly; the tab-flow specs open their
- * own tab.
+ * Chrome's `--load-extension` and Firefox's temporary add-on report `install` on every launch, so the
+ * first-run tab opens each time and its id can land after liveness; over a completed onboarding the
+ * page turns into a popup window instead, often before the first read. Close whichever is left; fail
+ * on neither. A fresh profile cannot convert until the caller sets the flag, so there the id is
+ * required. An id read while the page is creating its window can still leave that window.
  */
 async function closeFirstRunSurface(browser: Browser, page: Page, extensionId: string, freshProfile: boolean): Promise<void> {
 	// `chrome.windows` hides the window's tab URL without the `tabs` permission; its page target does not.
@@ -325,7 +322,7 @@ async function closeFirstRunSurface(browser: Browser, page: Page, extensionId: s
 				return true
 			})
 			const converted = freshProfile ? [] : browser.targets().filter((t) => t.type() === "page" && t.url().startsWith(popupDocument))
-			for (const target of converted) await closeConfirmed(await target.asPage(), "the first-run popup window")
+			for (const target of converted) await closeConfirmed(await target.asPage(), "launchExtension: the first-run popup window")
 			return tabClosed || converted.length > 0
 		},
 		(settled) => settled,

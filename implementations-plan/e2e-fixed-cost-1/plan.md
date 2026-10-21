@@ -78,7 +78,7 @@ Filed in arc 1 as a closed `known-limit` issue: the measured gain, the three rej
 
 ## Architecture & Implementation
 
-### Phase 1: the first-run settle and the liveness poll
+### Phase 1: the first-run settle and the liveness poll ✓
 
 - `apps/extension/tests/e2e/fixtures/extension.ts` `settleLaunchedExtension`: the first-run read keeps its 20 × 250 ms budget and settles on the tracked id (close that tab, remove the key) on every launch; on a reused profile it also settles on the converted window: a `page` target of the browser whose URL starts with `extensionUrl(extensionId, "/src/popup/index.html")` (the exact extension origin and popup document, any route), closed through its page and confirmed by the page's `close` event, since Puppeteer's BiDi `close()` swallows a failed close: `closeConfirmed` (`fixtures/wallet-pages.ts:150`) is exported with a caller-named message and reused, not copied. Every match found in the settling iteration is closed. The loop is `pollUntil` (`fixtures/poll.ts`) at 250 ms for 5 s, replacing the in-page loop. Finding nothing throws on every launch; a fresh profile still requires the id. The comment says why (every launch installs; a completed onboarding turns the tab into that window), and `launchExtension`'s `freshProfile` comment is rewritten to what the flag now decides (the legal seed, the id requirement).
 - `apps/extension/tests/e2e/fixtures/wallet-pages.ts`: `closeConfirmed(page, what)` exported; `openPopup`'s call passes its own wording, so its message is unchanged.
@@ -143,6 +143,10 @@ None. No screen, copy or layout changes; test harness only.
 **Final fresh Codex pass (new session): conditional approve.** Conditions, all accepted: (1) a popup close is confirmed by the page's `close` event, as `closeConfirmed` does, since Puppeteer's BiDi `close()` resolves on a failed close (Phase 1); (2) the relaunch probe only logged: it now asserts cleanup at both snapshots, times fresh launches against relaunches, and has a negative control on base (gate); (3) #991 states starting-state independence, not the "made impossible, with a test" wording, which is the lane's rule, nor an `isolate: false` ban: quotations corrected. Also taken: `pollUntil` for the loop instead of a new polling shape; I2 worded as an unchanged path whose incidence may move. Independently reproduced: the fresh-cycle medians (4,996 ms Chrome, 9,212 ms Firefox) and the 112 sites in 15 files.
 
 **Final pass, verification turn (resumed): approve.** All five points resolved in the text, no regression from the edits; D1, D2 and the fresh-profile id requirement intact.
+
+**Arc 1 fix loop, round 1, Codex (gpt-6.1-sol, high): approve.** It verified the side-effecting `pollUntil` probe, the target filter, `closeConfirmed` on both protocols, the unreachable window branch on a fresh profile and the 200 ms default. Taken: the helper's doc comment compressed and `closeConfirmed`'s redundant sentence dropped.
+
+**Arc 1, Opus review (`general-purpose`): conditional approve.** (1) Demonstrated: the skill cited the archive path, which does not resolve at HEAD, so `check:plans` failed: it cites the live plan path until the close-out's move repoints it. (2) The helper's comment: a duplicate sentence, a garbled clause, an imprecise parenthesis and no word on the I2 race: rewritten, with one clause for I2. (3) Nits taken: the settle's doc names the window, the `freshProfile` comment says "defaults to" the Terms seed, the close error carries the `launchExtension:` prefix.
 
 ## Delivery
 
