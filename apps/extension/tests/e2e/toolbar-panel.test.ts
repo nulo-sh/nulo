@@ -1,9 +1,9 @@
 /**
  * Firefox's toolbar panel as it behaves on a Mac: it closes as soon as anything else takes focus, the
- * passkey prompt included. Every passkey step started there must therefore run in a window of its
- * own and leave nothing behind in the panel. Headless Firefox keeps the panel open, so
- * `armPanelDeath` closes it the way that focus loss would, and a WebAuthn call made in the panel is
- * recorded and fails the case. Outcomes are read from a control page opened beforehand, which moves
+ * passkey prompt and the file picker included. Every passkey step or file pick started there must
+ * therefore run in a window of its own and leave nothing behind in the panel. Headless Firefox keeps
+ * the panel open, so `armPanelDeath` closes it the way that focus loss would, and a WebAuthn call or
+ * a file picker opened in the panel is recorded and fails the case. Outcomes are read from a control page opened beforehand, which moves
  * no focus.
  */
 import type { Browser, Page, Target } from "puppeteer"
@@ -45,6 +45,7 @@ import {
 import { POPUP_RETURN_FOCUS_MS } from "@/wallet/utils/toolbar-popup"
 
 const EXPORT = "#/popup/settings/security/export/full"
+const CONTACTS = "#/popup/settings/contacts"
 const EXPORT_KEY = "nulo:own-window:export"
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -194,7 +195,7 @@ async function stepFromDyingPanel(
 			async () => `no session opened; windows: ${await walletWindows(ctx)}`,
 		)
 		const record = await death.record()
-		expect(record.calls, "WebAuthn calls made in the panel").toEqual([])
+		expect(record.calls, "passkey and file prompts opened in the panel").toEqual([])
 		expect(record.windowActiveAt, "a window took focus from the panel").toBeDefined()
 		expect(opened.popupViews, "panels alive when the session opened").toBe(0)
 		return opened
@@ -208,7 +209,7 @@ async function toOwnWindow(ctx: ExtensionContext, control: Page, start: () => Pr
 		await start()
 		const win = await openedWindow(ctx, before, "/src/popup/index.html")
 		await control.waitForFunction(() => chrome.extension.getViews({ type: "popup" }).length === 0, { timeout: 15_000, polling: 100 })
-		expect((await death.record()).calls, "WebAuthn calls made in the panel").toEqual([])
+		expect((await death.record()).calls, "passkey and file prompts opened in the panel").toEqual([])
 		return win
 	})
 }
@@ -391,7 +392,7 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 				await win.waitForSelector('[data-testid="passkey-window"][data-state="step-exists"]', { timeout: 60_000 })
 				await win.waitForSelector(sel("passkey-window-error"), { visible: true, timeout: 5_000 })
 				const record = await death.record()
-				expect(record.calls, "WebAuthn calls made in the panel").toEqual([])
+				expect(record.calls, "passkey and file prompts opened in the panel").toEqual([])
 				expect(record.windowActiveAt, "a window took focus from the panel").toBeDefined()
 				await clickByTestId(win, "passkey-window-close")
 				await waitForPopupClosed(win, 10_000)
@@ -446,7 +447,9 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 		}
 	}, 300_000)
 
-	test("export and restore leave the dying panel for windows of their own", async ({ freshExtensionPerTest: ctx }) => {
+	test("export, restore and the contacts import leave the dying panel for windows of their own", async ({
+		freshExtensionPerTest: ctx,
+	}) => {
 		const { browser } = ctx
 		const control = await openPopup(ctx)
 		const auth = await sessionAuthenticator(browser)
@@ -463,6 +466,16 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await clickByTestId(exportWindow, "agree-continue-btn")
 			await waitForEnabled(exportWindow, "download-backup-btn", 240_000)
 			expect(await readCredentialGets(exportWindow)).toEqual([{ prf: true }])
+
+			// A file picker takes focus as a passkey prompt does, so Import contacts leaves the panel first.
+			await openActionPopup(browser)
+			await panelOn(browser, "#/popup/general")
+			await routePanel(browser, CONTACTS)
+			await panelOn(browser, CONTACTS)
+			await clickInPanel(browser, "contacts-menu-trigger")
+			const contactsWindow = await toOwnWindow(ctx, control, () => clickInPanel(browser, "contacts-menu-import"))
+			await waitForHash(contactsWindow, CONTACTS, 60_000)
+			await contactsWindow.waitForSelector(sel("contacts-menu-trigger"), { visible: true, timeout: 15_000 })
 
 			await clickByTestId(control, "header-lock")
 			await waitForHash(control, "#/popup/auth", 15_000)

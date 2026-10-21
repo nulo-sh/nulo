@@ -1,0 +1,7 @@
+# Phase 0: planning consults
+
+- 2026-10-20 recon: two sonnet Explore agents (a reuse sweep over seven capabilities; the e2e and Firefox-panel seams). Findings in [recon.md](../recon.md). Corrections they found to the pictures lane's report: the profile restore already moves for every backup kind; a window on an unlisted route lands Home only through the lock screen; a cold PXE build calls the node past the probe.
+- 2026-10-20 round 1, Codex (gpt-6.1-sol, high, session `01a15a4d`): `conditional approve` (fix the fallback and the reminder condition; resolve the download wording and the owner asks; strengthen browser validation). Nine findings; dispositions in plan.md § Audit verdicts. Plan A over outline B on all three points.
+- 2026-10-20 round 1, Opus 5.5 Plan: `conditional approve` (Close through history, refuseRepeatEnter and a ref focus, trim the e2e into an existing panel test, measure I3 on a live network, surface the asks). Plan A over outline B on all three points. Plan revised (hand-off at the press, done state for an encrypted file only, `goBack` shared with the back arrow, known limit for "Saved", OA-1..OA-4).
+- 2026-10-20 round 2: Codex (resumed) `conditional approve` (the Mac acceptance check as a draft-exit condition; the full network suite on both browsers), both applied. Opus (resumed) `approve`, three Low notes applied.
+- 2026-10-20 final fresh Codex pass (session `01a15a70`): `approve`; one Low wording note applied (D1's fallback "may work").

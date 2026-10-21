@@ -26,7 +26,7 @@ import { useToast } from "@/composables/toast.js"
 import { useConfirm } from "@/composables/useConfirm"
 import { useAppStore } from "@/stores/app.store"
 
-type BackupStatus = "" | "progress" | "finished" | "encrypting" | "encrypted"
+type BackupStatus = "" | "progress" | "finished" | "encrypting" | "encrypted" | "downloaded"
 type BackupClient = { backup(): Promise<unknown>; disconnect(): void }
 type NamedClient = { name: string; client: BackupClient }
 type HeldSlices = Record<string, unknown>
@@ -78,6 +78,8 @@ interface ExportState {
 	/** The file's imported accounts with a key in it, on chains a restore does not re-create; a key
 	 *  that did not open counts too. None when a replaced DEK has its own warning. */
 	importsOnAddedNetworks: Ref<AddedNetworkImports>
+	/** The saved file is a passkey profile's plain file, which no password opens. */
+	savedPlain: Ref<boolean>
 }
 
 interface ExportCtx {
@@ -433,6 +435,13 @@ async function runDownload(ctx: ExportCtx, isEncrypted: boolean) {
 		if (!isCurrent()) return
 		void markGetStarted(profileId, "backupSaved")
 		ctx.openToast({ kind: "success", label: "Backup downloaded successfully" })
+		// A saved file is the run's last step, so its plaintext and passwords go now. The latch clears
+		// first: the discard invalidates the fence the `finally` below checks.
+		state.backupStatus.value = "downloaded"
+		state.savedPlain.value = !isEncrypted
+		state.showRecommendation.value = false
+		state.isDownloading.value = false
+		discardRun(ctx)
 	} catch (err) {
 		if (!isCurrent()) return
 		console.error("Download failed:", { error: err })
@@ -492,6 +501,7 @@ function resetFlow(ctx: ExportCtx) {
 	state.unopenedImportedKeys.value = 0
 	state.importsOnAddedNetworks.value = noAddedNetworkImports()
 	state.chainStateOmitted.value = false
+	state.savedPlain.value = false
 }
 
 function createExportState(): ExportState {
@@ -509,6 +519,7 @@ function createExportState(): ExportState {
 		chainStateOmitted: ref(false),
 		unopenedImportedKeys: ref(0),
 		importsOnAddedNetworks: ref(noAddedNetworkImports()),
+		savedPlain: ref(false),
 	}
 }
 

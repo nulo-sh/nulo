@@ -102,6 +102,7 @@ declare module 'vue' {
     StaleNetworkConfirm: typeof import('./../components/stale-network/StaleNetworkConfirm.vue')['default']
     StaleNetworkTakeover: typeof import('./../components/stale-network/StaleNetworkTakeover.vue')['default']
     StartBar: typeof import('./../components/StartBar.vue')['default']
+    StatusCard: typeof import('./../components/composite/StatusCard.vue')['default']
     StepIndicator: typeof import('./../onboarding/components/StepIndicator.vue')['default']
     SubPageHeader: typeof import('./../components/ui/SubPageHeader.vue')['default']
     TakeoverLayout: typeof import('./../components/composite/TakeoverLayout.vue')['default']
