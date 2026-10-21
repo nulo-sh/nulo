@@ -1,7 +1,7 @@
 ---
 plan: deps-audit-1
 tier: light
-status: arc 1 blocked at Phase 3 (#987); owner ask OA-1
+status: arc 1 blocked at Phase 3 (the extension soak pair, host saturation); ask OA-2
 issues: "#980 (closed by arc 1)"
 driver: claude-code
 claude_model: opus
@@ -88,7 +88,7 @@ None. The arc changes dependency files only; no screen, copy or layout.
 - **Smoke e2e, both browsers, one after the other:** build armed (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:chrome`), then `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- --retry=0`. Repeat with `build:firefox` and `NULO_E2E_BROWSER=firefox`. Poll each log in one bounded `until` loop; record each wall-clock.
 - **Pass criteria:** every command exits 0; the artifact check finds nothing; smoke has no failure on either browser. Network e2e runs in CI (all four lanes trip on `bun.lock`).
 
-### Phase 3: the soak matrix at the Phase 1 commit (blocked: #987)
+### Phase 3: the soak matrix at the candidate (blocked: the extension pair, D12)
 - **Warning:** change no file in the repo and make no commit while it runs. Each `soak` call snapshots HEAD, the dirty state and the lockfile hash once, and `compare` checks agreement within its pair only. Keep every output and log in `<scratch>`. Start only when `git status --porcelain` is empty.
 - For each workspace whose `test` is `bun --bun vitest run …` (13: `apps/extension`, `apps/landing`, `infra/token-list`, and `packages/{aztec-runtime,design,extension-messaging,legal,third-party-notices,token-list,wallet-bridge,wallet-core,wallet-crypto,wallet-sdk-schema-patch}`): `bun scripts/ci-cd/test-soak/cli.ts soak --cwd <ws> --runtime node --runs 30 --out <scratch>/<ws>-node.json`, the same with `--runtime script` into `<ws>-bun.json`, then `cli.ts compare` on the pair. Run them in sequence from one background script; poll its log in bounded `until` loops under two hours each.
 - `bun run test:all` five times; each exits 0 with the Phase 1 base counts.
@@ -112,7 +112,8 @@ None. The arc changes dependency files only; no screen, copy or layout.
 - **D8 No doc change.** No doc names these versions; the acknowledged set (41) does not change.
 - **D9 The `reference/*/bun.lock` files stay.** They are frozen address-vector generators, installed by no workflow and audited by no gate, and they derive keys without network calls. Re-pinning one is an address-freeze change, outside this lane.
 - **D10 Local Firefox smoke stays.** The lane brief names smoke on both browsers; it costs one more run.
-- **D11 The `infra/token-list` red blocks the arc; the cause is #987.** Its Node reference fails one test on all 30 runs, and it fails the same way on the base. The cause: the test spawns `process.execPath` on a TypeScript script that Node's strip-only mode refuses. The fix is one line in `infra/token-list/test/live-check.test.ts`, outside this lane's files. Rejected: declaring the bar met with the red disclosed (Codex: the plan and CLAUDE.md require every compare to exit 0), and fixing the test in this arc without approval (Codex: scope expansion, the owner's call). The arc stops before its PR (OA-1).
+- **D11 #987 is fixed in this arc.** At the first candidate (`57c35cec5`), `infra/token-list`'s Node reference failed one test on all 30 runs, the same on the base: the test spawned `process.execPath`, which is `node` under the reference, on a TypeScript script Node's strip-only mode refuses. That file sat outside the lane, so the arc stopped (OA-1). The orchestrator's call, under the owner's standing rules: "**option A**, 'arc 1 adds `test(token-list): spawn the live-check script with bun, as ci runs it` (`spawn("bun", …)`, closing #987 in the same PR). Then Phases 2-3 rerun in full at the new candidate, and the PR opens when every compare exits 0.'" Landed as `dc82d009d`, after a merge of `origin/dev` (`f5fa9f68c`, which brought #981 and #983). Red under the Node reference on its parent (1 of 1), green after it (3 of 3 on each engine, the same 24-test inventory). `dc82d009d` is the new candidate. Rejected: declaring the bar met with the red disclosed, because CLAUDE.md and this plan require every compare to exit 0.
+- **D12 The `apps/extension` soak pair stops after one saturation retry.** At `dc82d009d`, the other 12 compares exit 0, `infra/token-list` included. The extension pair failed twice, with other leads' runs holding load1 between 120 and 300 on this 188-core host. Every recorded failure is a vitest timeout at the default 5000 ms (`STACK_TRACE_ERROR`). They hit whole-repo filesystem scans and, twice, the same fee-read pin, which takes 8 to 24 ms alone. The common brief allows one retry after load falls, and it was used. Codex r6 found no code cause, but did not count saturation as proven either. Rejected: a third attempt without the orchestrator ("retry once" is the limit), a raised timeout or a skip, and declaring the step met. The arc stops before its PR (OA-2). A later attempt runs at a detached `dc82d009d`, so that all 26 summaries bind one candidate.
 
 ## Review verdicts
 
@@ -127,6 +128,8 @@ None. The arc changes dependency files only; no screen, copy or layout.
 
 - **Arc 1 review, round 3, Codex resumed (on the Phase 2-3 results): `reject` of the first D11, confidence high.** The evidence proves the red pre-existing and independent of the bump, but the written bar is unmet; prefer the engine-explicit spawn. The issue draft's counts corrected (24 tests in the file, 85 pass and 3 skip per Bun run, stdout empty, stderr the parse error).
 - **Arc 1 review, round 4, Codex resumed: `B`, confidence high.** The one-line fix is local in complexity but outside the lane's files, so it waits for the owner. Spawning `bun` is the right fix: on this setup, `bun` on PATH and Bun's `process.execPath` are the same 1.4.2 binary. After approval, run the file under both engines first, then Phases 1-gate, 2 and 3 in full at one new candidate.
+- **Arc 1 review, round 5, Codex resumed (on `dc82d009d`): `approve`, confidence high.** "No findings. The authorized fix matches CI's invocation"; the assertions are unchanged, and 24 tests pass 3 of 3 on each engine with matching inventories. Its approval covers the fix only, not Phases 2-3.
+- **Arc 1 review, round 6, Codex resumed (on the extension soak): `b`, confidence high.** The allowed saturation retry is used up; "Three failures" is a hard stop, "not permission to exceed 'retry once.'" No code cause is shown, but saturation is still a hypothesis: a timeout proves that the deadline expired, not why. The lost failure names block classifying every red. Hand scheduling to the orchestrator, and keep every failure's name on any later attempt (D12).
 
 ## Delivery
 

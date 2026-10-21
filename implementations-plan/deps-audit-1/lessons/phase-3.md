@@ -8,3 +8,22 @@ Candidate `57c35cec5` (`bun.lock` sha256 `7076bcbe…af2284`); `dev` had not mov
 - Soak: 26 summaries, all at the candidate SHA, `gitDirty` false, the candidate lockfile hash. Compares: 12 of 13 OK. `apps/extension` ran node 30/30 (median 234 s) and bun 30/30 (median 142 s), with the three reviewed Bun-only files. `test:all` ×5: exit 0, counts equal to the base.
 - The red: the `infra/token-list` compare. Bun passed 85 and skipped 3 on all 30 runs. The Node reference failed `live-check.test.ts`'s script test on all 30 runs: `process.execPath` is `node`, which refuses the script's parameter properties (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`). A scratch worktree at the base `ef5336bbc` reproduced it on 3 of 3 runs, and was removed afterwards. Filed as #987.
 - Codex (session 01a15c4b) r3 rejected declaring the bar met; r4 chose to stop for the owner (B) over an in-arc fix (A). The first r3 attempt failed with "Selected model is at capacity"; the retry succeeded.
+
+## Candidate `dc82d009d` (after OA-1)
+
+`origin/dev` merged as `f5fa9f68c` (it brought #981 and #983; `index.md` kept both rows). Then the #987 fix landed as `dc82d009d`, the last commit to change a dependency or test file, so it is the candidate (`bun.lock` sha256 `7076bcbe…af2284`, unchanged).
+
+- The #987 fix: on its parent, `live-check.test.ts` under the Node reference failed 1 of 1; after it, 3 of 3 passed on node and 3 of 3 on bun, the same 24-test inventory. Codex r5 approve.
+- Fresh frozen install; audit gate enforce 41 / 0 / 0 / 0, repeated at HEAD before this record.
+- Phase 2: `audit:vue` exit 0 (156 s); `build:firefox`, landing, playground, Storybook exit 0; `test:ci-gating` exit 0. The artifact check exits 1 for every grep on both production builds, and neither notices file names follow-redirects or axios. Smoke, retry 0, armed builds: Chrome 268 passed, 17 skipped, 0 failed, 1682 s; Firefox the same counts, 2871 s.
+- `pr-quick.yml` dispatch at `dc82d009d`: run 39566120198, success.
+- Soak: 12 compares exit 0. `infra/token-list` node 30/30 and bun 30/30; the 11 packages and landing as before.
+- `apps/extension`, attempt 1 (from about 10:10Z, load1 120 to 230). Node failed runs 3, 23, 27, 28 and 29: 1, 1, 1, 1 and 4 tests. Every failure is `Error: STACK_TRACE_ERROR` with the definition-site stack, vitest's timeout at the default 5000 ms. The tests:
+  - runs 3 and 23: `operation-estimate-reuse.pins.test.ts` "priority undefined: a null node reply";
+  - runs 27-29: `manifest.test.ts`'s RP-host scan;
+  - run 29 also: `log-payload-ban.test.ts` static, `service.fence-entry.test.ts`, `stored-shapes.scan.test.ts`.
+
+  The bun leg failed runs 1 and 2 (2 and 3 tests) at load1 about 225 and was stopped by its process group, so those names are lost.
+- Attempt 2, the one saturation retry, started 13:42Z at load1 78. Node runs 1-11 passed (272 to 347 s each). Run 12 failed 1 test in 391 s at load1 about 300. It was stopped, and the name is lost: the tool deletes each run's raw report.
+- Diagnostics, no repo change: three plain `bun run test` runs of `apps/extension` at load1 170 to 250 passed 14771 with 5 skipped and 7 todo, the base counts. The twice-failed pin file alone under the Node launcher took 80 to 170 ms, and none of its tests took over 24 ms. A 5 s timeout there means a stall more than 200 times its cost.
+- Codex r6 (b, high): the allowed retry is used up, no code cause is shown, and saturation is still a hypothesis. Hand scheduling to the orchestrator (OA-2). A later attempt must keep each failing test's name.

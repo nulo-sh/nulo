@@ -1,11 +1,17 @@
 # deps-audit-1: owner asks
 
-## OA-1: may arc 1 carry the one-line test fix for #987?
+## OA-1: may arc 1 carry the one-line test fix for #987? (answered: A)
 
 - **Surface:** none a person sees. The ask concerns scope: one test file outside the lane's dependency files.
-- **Why:** the soak matrix (CLAUDE.md's bar for a test-runtime change, which vite 8.2.4 is) cannot pass `infra/token-list` at any commit. `test/live-check.test.ts:263` spawns `process.execPath`, which is `node` under the soak's Node reference, on a TypeScript script Node refuses. The failure is pre-existing (same red on `ef5336bbc`) and filed as #987. Every other gate is green at candidate `57c35cec5`: the bumps, builds, artifact checks, smoke on both browsers, 12 of 13 compares, `test:all` ×5 and the `pr-quick` dispatch.
+- **Why:** the soak could not pass `infra/token-list` at any commit: `test/live-check.test.ts:263` spawned `process.execPath`, which is `node` under the Node reference, on a TypeScript script Node refuses (#987, pre-existing).
+- **Options:** A, carry `spawn("bun", …)` and rerun Phases 2-3 at the new candidate; B, fix #987 in its own PR first; C, open the PR with the red stated.
+- **Answer (the orchestrator, under the owner's standing rules):** "**option A**, 'arc 1 adds `test(token-list): spawn the live-check script with bun, as ci runs it` (`spawn("bun", …)`, closing #987 in the same PR). Then Phases 2-3 rerun in full at the new candidate, and the PR opens when every compare exits 0.'" Landed as `dc82d009d` (D11).
+
+## OA-2: a quiet window for the `apps/extension` soak pair
+
+- **Surface:** none a person sees. The ask is host time.
+- **Why:** at candidate `dc82d009d` every gate is green except the extension soak pair and the `test:all` ×5 run that follows it. The green gates: fresh install, audit gate 41/0/0/0, every build, the artifact check, smoke on both browsers, 12 of 13 compares and the `pr-quick` dispatch. Both attempts of the pair failed while other leads' runs held load1 at 120 to 300 on this host. Each failure is a vitest timeout at the default 5000 ms, and the one retry the brief allows is used (D12). A third red ends the arc as ARC_FAILED.
 - **Options:**
-  - **A (recommended):** arc 1 adds `test(token-list): spawn the live-check script with bun, as ci runs it` (`spawn("bun", …)`, closing #987 in the same PR). Then Phases 2-3 rerun in full at the new candidate (about 5 h of host time), and the PR opens when every compare exits 0.
-  - **B:** fix #987 first in its own PR. Arc 1 then merges `dev` and reruns Phases 2-3 at the new candidate.
-  - **C:** an owner exception: open arc 1's PR now with the red stated in its body, and fix #987 later.
-- **What ships now:** nothing. The arc is committed and pushed (`deps-audit-1-a1`), with no PR. #980 stays open, and the audit gate keeps failing dependency PRs until one of the options lands.
+  - **A (recommended):** the orchestrator schedules a window with no other lead's unit suites or e2e on the host, about 4 h at load5 under 80. It authorizes one final attempt of the extension pair plus `test:all` ×5, run at a detached `dc82d009d`, and every failing test's name is kept. If it passes, the PR opens. If it fails, the arc ends ARC_FAILED and the failures are read as a finding.
+  - **B:** an exception: open the PR now with the extension pair stated as unpassed. Not recommended, for the same reason as OA-1's C.
+- **What ships now:** nothing. The branch `deps-audit-1-a1` is pushed, with no PR. #980 and #987 stay open, and the audit gate keeps failing dependency PRs.
