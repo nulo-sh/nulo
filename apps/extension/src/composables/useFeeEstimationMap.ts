@@ -20,8 +20,9 @@ export interface UseFeeEstimationMapOptions<TKey extends string | number, TParam
 	 * Receives the key + the error so logs can pinpoint which op failed.
 	 */
 	onError?: (key: TKey, err: unknown) => void
-	/** Fire-and-forget remote cancel — see `useFeeEstimation`'s doc. */
-	cancelRemote?: (estimateToken: string) => void
+	/** Remote cancel — see `useFeeEstimation`'s doc. Only `dispose()` waits for a returned promise,
+	 *  which must never reject. */
+	cancelRemote?: (estimateToken: string) => unknown
 }
 
 export interface UseFeeEstimationMapResult<TKey extends string | number, TParams, TResult> {
@@ -47,8 +48,9 @@ export interface UseFeeEstimationMapResult<TKey extends string | number, TParams
 	/** Undo handoffAll after a FAILED approve — the execution path never
 	 *  took ownership, so normal cancellation must apply again. */
 	rearm: () => void
-	/** Manually dispose. Auto-runs on scope stop. */
-	dispose: () => void
+	/** Manually dispose; terminal. Settles once every remote cancel it sent has settled. Auto-runs on
+	 *  scope stop. */
+	dispose: () => Promise<void>
 }
 
 export function useFeeEstimationMap<TKey extends string | number, TParams, TResult>(

@@ -31,13 +31,14 @@ export interface FeeEstimationEngineOptions<TKey extends string | number, TParam
 	/** Called only for real errors, never for stale-counter or post-dispose settles. */
 	onError?: (key: TKey, err: unknown) => void
 	/**
-	 * Fire-and-forget remote cancel. Invoked for a superseded or abandoned
+	 * Remote cancel. Invoked for a superseded or abandoned
 	 * token whose RPC actually started — a debounce that never fired needs no
 	 * remote cancel. Never invoked for handed-off tokens (ownership
 	 * transferred to the execution path, which is about to consume the
-	 * stashed estimate).
+	 * stashed estimate). Only `dispose()` waits for a returned promise, which
+	 * must never reject: every other path drops it.
 	 */
-	cancelRemote?: (estimateToken: string) => void
+	cancelRemote?: (estimateToken: string) => unknown
 }
 
 export interface FeeEstimationEngine<TKey extends string | number, TParams> {
@@ -65,8 +66,12 @@ export interface FeeEstimationEngine<TKey extends string | number, TParams> {
 	handoffCompleted(collect: (key: TKey, token: string) => void): void
 	/** Undo a handoff after a FAILED approve — normal cancellation applies again. */
 	rearm(): void
-	/** Idempotent teardown: clears timers, remote-cancels every owned live token. */
-	dispose(): void
+	/**
+	 * Terminal teardown: clears timers, remote-cancels every owned live token, and refuses every
+	 * later `schedule`. Settles once each remote cancel it sent has settled; a repeated call returns
+	 * the first call's promise.
+	 */
+	dispose(): Promise<void>
 }
 
 export function createFeeEstimationEngine<TKey extends string | number, TParams, TResult>(
@@ -79,7 +84,7 @@ export function createFeeEstimationEngine<TKey extends string | number, TParams,
 	const inflight = new Map<TKey, { token: string; started: boolean; abort: AbortController }>()
 	const completed = new Map<TKey, string>()
 	const handedOff = new Set<string>()
-	let disposed = false
+	let disposed: Promise<void> | undefined
 
 	const clearTimerFor = (key: TKey) => {
 		const t = timers.get(key)
@@ -89,16 +94,14 @@ export function createFeeEstimationEngine<TKey extends string | number, TParams,
 		}
 	}
 
-	/** Remote-cancel every live token still owned for `key`. */
-	const cancelOwnedRemoteFor = (key: TKey) => {
+	/** Remote-cancel every live token still owned for `key`; returns what each cancel returned. */
+	const cancelOwnedRemoteFor = (key: TKey): unknown[] => {
 		const flight = inflight.get(key)
 		flight?.abort.abort()
 		const tokens = [flight?.started ? flight.token : null, completed.get(key) ?? null]
-		for (const token of tokens) {
-			if (token && !handedOff.has(token)) cancelRemote?.(token)
-		}
 		inflight.delete(key)
 		completed.delete(key)
+		return tokens.filter((token): token is string => !!token && !handedOff.has(token)).map((token) => cancelRemote?.(token))
 	}
 
 	const cancel = (key: TKey) => {
@@ -116,6 +119,7 @@ export function createFeeEstimationEngine<TKey extends string | number, TParams,
 	}
 
 	const schedule = (key: TKey, params: TParams) => {
+		if (disposed) return
 		clearTimerFor(key)
 		cancelOwnedRemoteFor(key)
 		onResult(key, null)
@@ -129,7 +133,7 @@ export function createFeeEstimationEngine<TKey extends string | number, TParams,
 		// Stale = disposed, or a newer schedule/cancel bumped this key's counter
 		// while our run was in flight. Every settle path re-checks it AFTER the
 		// awaited run, at the positions the pre-split callback checked.
-		const isStale = () => disposed || myCounter !== counters.get(key)
+		const isStale = () => disposed !== undefined || myCounter !== counters.get(key)
 		const settleSuccess = (r: TResult) => {
 			onResult(key, r)
 			completed.set(key, token)
@@ -179,14 +183,13 @@ export function createFeeEstimationEngine<TKey extends string | number, TParams,
 		handedOff.clear()
 	}
 
-	const dispose = () => {
-		if (disposed) return
+	const dispose = (): Promise<void> => {
+		if (disposed) return disposed
 		for (const t of timers.values()) clearTimeout(t)
 		timers.clear()
-		for (const key of new Set<TKey>([...inflight.keys(), ...completed.keys()])) {
-			cancelOwnedRemoteFor(key)
-		}
-		disposed = true
+		const keys = new Set<TKey>([...inflight.keys(), ...completed.keys()])
+		disposed = Promise.allSettled([...keys].flatMap((key) => cancelOwnedRemoteFor(key))).then(() => {})
+		return disposed
 	}
 
 	return { schedule, cancel, cancelAll, handoffInclusive, handoffCompleted, rearm, dispose }
