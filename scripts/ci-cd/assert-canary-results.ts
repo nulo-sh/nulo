@@ -65,7 +65,7 @@ export function canaryProblems(report: CanaryReport, files: readonly string[], e
 }
 
 /** `expectations` with an empty title list for each listed file it has no entry for. */
-export function allowUnlisted(expectations: CanaryExpectations, files: readonly string[]): CanaryExpectations {
+function allowUnlisted(expectations: CanaryExpectations, files: readonly string[]): CanaryExpectations {
 	return { ...Object.fromEntries(files.map((file) => [file, []])), ...expectations }
 }
 

@@ -232,3 +232,9 @@ Over the 150-line light target: the claims and the ledger carry evidence both le
   Opus found two more hollow files. Folded: `--allow-unlisted` keeping canary titles, the new step's own
   tokenizing, the flag parsed before the report path, D5 as a known limit.
 - Round 4 (Codex resumed, verify only): **approve**, no new material defect.
+
+Implementation review (arc A1, diff `4cc6e5c75..HEAD`):
+
+- Round 1: Codex (`01a16010`) changes needed, one finding (the title test bypassed the CLI); Opus
+  (general-purpose) changes needed, five (cancel misnamed in `Status`, two CI.md overstatements, the
+  `soak*` label claim only partly pinned, a header that restated the YAML). All six accepted and fixed.

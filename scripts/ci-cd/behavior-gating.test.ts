@@ -1285,6 +1285,22 @@ describe("network soak", () => {
 		for (const RETRY of ["abc", "10", "-1"]) refused({ ...named(NETWORK_FILE), RETRY })
 	})
 
+	// `startsWith` in Actions ignores case, so a lane job labelled `Soak…` would arm the strict read-back.
+	test("no network suite call but the soak's carries a soak* label", () => {
+		const callers = readdirSync(join(ROOT, ".github/workflows")).filter((file) => {
+			const jobs = Object.values(workflowOf(file).jobs ?? {}) as CallerJob[]
+			return (
+				file !== SOAK &&
+				jobs.some(
+					(job) => job.uses === `./.github/workflows/${NETWORK_LANE}` || job.uses === `./.github/workflows/${NETWORK_SUITE}`,
+				)
+			)
+		})
+		expect(callers.length, "the lane, its callers and nightly's in-browser leg").toBeGreaterThan(3)
+		for (const file of callers.filter((file) => file !== NETWORK_LANE))
+			for (const call of suiteCalls(file)) expect(String(call.inputs.shard_label), `${file} → ${call.name}`).not.toMatch(/^soak/i)
+	})
+
 	test("builds one iteration per repeat for named network files", () => {
 		const files = `${NETWORK_FILE}\n${EGRESS_GUARD}`
 		expect(prep({ TEST_FILES: files, REPEATS: "1", RETRY: "" })).toMatchObject({ code: 0, iterations: '["1"]' })

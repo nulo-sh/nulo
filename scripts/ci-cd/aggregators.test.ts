@@ -260,10 +260,14 @@ describe("extension-network-e2e-soak.yml status line", () => {
 		for (const retry of ["", "2"]) expect(said(soak(retry)), `retry '${retry}'`).not.toContain("zero test retries")
 	})
 
-	test("names prep's own result when the matrix was not built, never a flake", () => {
-		const cancelled = said({ ...soak("0"), "needs.prep.result": "cancelled" })
-		expect(cancelled).toContain("prep=cancelled")
-		expect(cancelled).not.toContain("flake")
+	test("names a cancel as a cancel, never a refusal or a flake", () => {
+		const prep = said({ ...soak("0"), "needs.prep.result": "cancelled" })
+		expect(prep).toContain("prep=cancelled")
+		expect(prep).not.toContain("flake")
+		const iteration = said({ ...soak("0"), "needs.soak.result": "cancelled" })
+		expect(iteration).toContain("soak=cancelled")
+		expect(iteration).not.toContain("flake")
+		expect(said({ ...soak("0"), "needs.soak.result": "failure" })).toContain("a flake to fix or breakage")
 	})
 })
 

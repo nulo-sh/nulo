@@ -1,14 +1,10 @@
 name: Extension network e2e soak
 
-# Manual repeat-runner: the named network test files, `repeats` times SEQUENTIALLY (max-parallel: 1)
-# on fresh runners, on Chrome, with `retry: "0"` by default so a test that passes only on a retry
-# FAILS its iteration ("zero test retries"). `fail-fast: false` runs every iteration so the pass rate
-# is visible even when one fails. Each iteration's vitest report is read back, so a test that skipped
-# (an unarmed opt-in, a browser-gated block) reds it too.
-#
-# The whole suite never fits one 30-minute job: a whole-suite run at retry 0 on a branch is a
-# dispatch of `Extension network e2e` and `Extension network e2e (Firefox)`, which run the lane.
-# `nightly.yml` builds dev only, at the config-default retries.
+# Manual repeat-runner: the named network test files, `repeats` iterations in sequence on Chrome.
+# Retry 0 by default, so a test that passes only on a retry fails its iteration; fail-fast off, so
+# every iteration reports. Each iteration's vitest report is read back, so a skipped test (an unarmed
+# opt-in, a browser-gated block) reds it too. The whole suite never fits one 30-minute job: on a
+# branch it is a dispatch of the two PR network workflows (nightly.yml builds dev only).
 
 on:
   workflow_dispatch:
@@ -125,11 +121,15 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$PREP" != "success" ]; then
-            echo "::error::The iteration matrix was not built (prep=$PREP): a refused input is named in its log."
+            echo "::error::The iteration matrix was not built (prep=$PREP); if prep refused an input, its log names it."
+            exit 1
+          fi
+          if [ "$SOAK" = "failure" ]; then
+            echo "::error::Soak NOT clean: a red iteration at retry=${RETRY:-default} is a flake to fix or breakage."
             exit 1
           fi
           if [ "$SOAK" != "success" ]; then
-            echo "::error::Soak NOT clean (soak=$SOAK): a red iteration at retry=${RETRY:-default} is a flake to fix or breakage."
+            echo "::error::Soak NOT clean (soak=$SOAK)."
             exit 1
           fi
           # The suite's one infra-boot retry (exit 86) reruns no test, so it is no test retry.

@@ -13,7 +13,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { allowUnlisted, type CanaryReport, canaryProblems, loadExpectations } from "./assert-canary-results"
+import { type CanaryReport, canaryProblems, loadExpectations } from "./assert-canary-results"
 
 const ROOT = join(import.meta.dir, "..", "..")
 const FIXTURES = join(import.meta.dir, "fixtures", "canary-results")
@@ -105,17 +105,27 @@ describe("assert-canary-results", () => {
 describe("assert-canary-results --allow-unlisted (the soak's read-back)", () => {
 	const UNLISTED = "tests/e2e/network/cap-request-basic.test.ts"
 	const cli = (...args: string[]) => Bun.spawnSync(["bun", SCRIPT, ...args], { stdout: "pipe", stderr: "pipe" })
-
-	test("a file with no entry passes only when it ran and every test passed; without the flag it fails", () => {
+	const withReport = (edit: (report: CanaryReport) => void, check: (path: string) => void) => {
 		const dir = mkdtempSync(join(tmpdir(), "soak-results-"))
 		try {
-			const soak = report("clean-chrome.json")
-			const [first] = CANARY_JOB_FILES
+			const edited = report("clean-chrome.json")
+			edit(edited)
+			const path = join(dir, "report.json")
+			writeFileSync(path, JSON.stringify(edited))
+			check(path)
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	}
+
+	test("a file with no entry passes only when it ran and every test passed; without the flag it fails", () => {
+		const [first] = CANARY_JOB_FILES
+		const rename = (soak: CanaryReport) => {
 			const file = soak.testResults.find((result) => result.name.endsWith(`/${first}`))
 			if (!file) throw new Error("the clean report carries the first canary job file")
 			file.name = file.name.replace(first, UNLISTED)
-			const path = join(dir, "soak.json")
-			writeFileSync(path, JSON.stringify(soak))
+		}
+		withReport(rename, (path) => {
 			expect(expectations[UNLISTED]).toBeUndefined()
 			expect(cli("--allow-unlisted", path, UNLISTED).exitCode).toBe(0)
 			const listedOnly = cli(path, UNLISTED)
@@ -127,19 +137,20 @@ describe("assert-canary-results --allow-unlisted (the soak's read-back)", () => 
 			const skipped = cli("--allow-unlisted", join(FIXTURES, "skipped-chrome.json"), PASSKEY)
 			expect(skipped.exitCode).toBe(1)
 			expect(skipped.stderr.toString()).toContain(`${PASSKEY}: "${CONTRACT_TEST}" skipped`)
-		} finally {
-			rmSync(dir, { recursive: true, force: true })
-		}
+		})
 	})
 
-	test("a listed file keeps its titles", () => {
-		const clean = report("clean-chrome.json")
-		const file = clean.testResults.find((result) => result.name.endsWith(`/${PASSKEY}`))
-		if (!file) throw new Error("the clean report carries the passkey canary")
-		file.assertionResults = file.assertionResults.filter((test) => test.title !== PASSKEY_TITLE)
-		expect(canaryProblems(clean, [PASSKEY], allowUnlisted(expectations, [PASSKEY]))).toEqual([
-			`${PASSKEY}: "${PASSKEY_TITLE}" not reported — the expected test is gone`,
-		])
+	test("a listed canary keeps its titles: its contract test alone does not pass it", () => {
+		const dropTitle = (clean: CanaryReport) => {
+			const file = clean.testResults.find((result) => result.name.endsWith(`/${PASSKEY}`))
+			if (!file) throw new Error("the clean report carries the passkey canary")
+			file.assertionResults = file.assertionResults.filter((test) => test.title !== PASSKEY_TITLE)
+		}
+		withReport(dropTitle, (path) => {
+			const red = cli("--allow-unlisted", path, PASSKEY)
+			expect(red.exitCode).toBe(1)
+			expect(red.stderr.toString()).toContain(`${PASSKEY}: "${PASSKEY_TITLE}" not reported — the expected test is gone`)
+		})
 	})
 })
 
