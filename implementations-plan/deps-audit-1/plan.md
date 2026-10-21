@@ -1,7 +1,7 @@
 ---
 plan: deps-audit-1
 tier: light
-status: planned, Codex approve; arc 1 Phase 1 done, review loop
+status: arc 1 blocked at Phase 3 (#987); owner ask OA-1
 issues: "#980 (closed by arc 1)"
 driver: claude-code
 claude_model: opus
@@ -81,14 +81,14 @@ None. The arc changes dependency files only; no screen, copy or layout.
   - `bun audit --audit-level=low --json > <scratch>/a.json; bun scripts/ci-cd/audit-gate.ts <scratch>/a.json --exit-code <its code> --mode enforce` exits 0 and prints `41 acknowledged, 0 unacknowledged, 0 stale, 0 unreadable`.
   - `bun run lint`, `bun run typecheck:all` exit 0. Layers: typecheck, lint, supply chain.
 
-### Phase 2: builds, artifacts, smoke
+### Phase 2: builds, artifacts, smoke ✓
 - First, merge `origin/dev` if it moved, then repeat Phase 1's fresh install and audit gate. This HEAD is the **candidate**: record its SHA and the `bun.lock` sha256.
 - **Commands:** `bun run audit:vue` (its `build` is the Chrome build); `bun run build:firefox`; `bun run --cwd apps/landing build`; `bun run --cwd apps/playground build`; `bun run --cwd apps/extension build-storybook`; `bun run test:ci-gating`.
 - **Artifact check**, both production builds, from the repo root: `apps/extension/dist/{chrome,firefox}/THIRD-PARTY-NOTICES.txt` names no `follow-redirects`; `grep -rlF` over `apps/extension/dist/chrome` and `apps/extension/dist/firefox` for follow-redirects' `Maximum number of redirects exceeded` and launch-editor's `UNC paths are not supported on Windows` (and vite's `__open-in-editor` route) exits 1 for each. Exit 0 or 2 fails the check. Record whether `axios` is listed.
 - **Smoke e2e, both browsers, one after the other:** build armed (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:chrome`), then `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- --retry=0`. Repeat with `build:firefox` and `NULO_E2E_BROWSER=firefox`. Poll each log in one bounded `until` loop; record each wall-clock.
 - **Pass criteria:** every command exits 0; the artifact check finds nothing; smoke has no failure on either browser. Network e2e runs in CI (all four lanes trip on `bun.lock`).
 
-### Phase 3: the soak matrix at the Phase 1 commit
+### Phase 3: the soak matrix at the Phase 1 commit (blocked: #987)
 - **Warning:** change no file in the repo and make no commit while it runs. Each `soak` call snapshots HEAD, the dirty state and the lockfile hash once, and `compare` checks agreement within its pair only. Keep every output and log in `<scratch>`. Start only when `git status --porcelain` is empty.
 - For each workspace whose `test` is `bun --bun vitest run …` (13: `apps/extension`, `apps/landing`, `infra/token-list`, and `packages/{aztec-runtime,design,extension-messaging,legal,third-party-notices,token-list,wallet-bridge,wallet-core,wallet-crypto,wallet-sdk-schema-patch}`): `bun scripts/ci-cd/test-soak/cli.ts soak --cwd <ws> --runtime node --runs 30 --out <scratch>/<ws>-node.json`, the same with `--runtime script` into `<ws>-bun.json`, then `cli.ts compare` on the pair. Run them in sequence from one background script; poll its log in bounded `until` loops under two hours each.
 - `bun run test:all` five times; each exits 0 with the Phase 1 base counts.
@@ -112,6 +112,7 @@ None. The arc changes dependency files only; no screen, copy or layout.
 - **D8 No doc change.** No doc names these versions; the acknowledged set (41) does not change.
 - **D9 The `reference/*/bun.lock` files stay.** They are frozen address-vector generators, installed by no workflow and audited by no gate, and they derive keys without network calls. Re-pinning one is an address-freeze change, outside this lane.
 - **D10 Local Firefox smoke stays.** The lane brief names smoke on both browsers; it costs one more run.
+- **D11 The `infra/token-list` red blocks the arc; the cause is #987.** Its Node reference fails one test on all 30 runs, and it fails the same way on the base. The cause: the test spawns `process.execPath` on a TypeScript script that Node's strip-only mode refuses. The fix is one line in `infra/token-list/test/live-check.test.ts`, outside this lane's files. Rejected: declaring the bar met with the red disclosed (Codex: the plan and CLAUDE.md require every compare to exit 0), and fixing the test in this arc without approval (Codex: scope expansion, the owner's call). The arc stops before its PR (OA-1).
 
 ## Review verdicts
 
@@ -123,6 +124,9 @@ None. The arc changes dependency files only; no screen, copy or layout.
 - **Arc 1 review, round 1, Codex (gpt-6.1-sol high, session 01a15c4b, on the Phase 1 diff): `approve with fixes`, confidence high.** It found no dependency-file defect: six lockfile lines, every other entry byte-identical, one range per manifest, integrity matching the registry. Accepted: recon said all ten changed files sit under `dist/` (nine do, plus `package.json`) and omitted three bundled moves; both corrected (F8, recon).
 - **Arc 1 review, Opus (general-purpose, same diff): `approve with fixes`, confidence high.** Accepted: (2) the full bundled list (F8, adds `@vitejs/devtools`); (3) Phase 1's evidence recorded in `lessons/phase-1.md`; the Security line narrowed to vite's own route. Its (1) is out of this lane's scope and went to the orchestrator.
 - **Arc 1 review, round 2, Codex resumed: `approve`, confidence high.** "No remaining findings." The loop converged before the candidate was chosen.
+
+- **Arc 1 review, round 3, Codex resumed (on the Phase 2-3 results): `reject` of the first D11, confidence high.** The evidence proves the red pre-existing and independent of the bump, but the written bar is unmet; prefer the engine-explicit spawn. The issue draft's counts corrected (24 tests in the file, 85 pass and 3 skip per Bun run, stdout empty, stderr the parse error).
+- **Arc 1 review, round 4, Codex resumed: `B`, confidence high.** The one-line fix is local in complexity but outside the lane's files, so it waits for the owner. Spawning `bun` is the right fix: on this setup, `bun` on PATH and Bun's `process.execPath` are the same 1.4.2 binary. After approval, run the file under both engines first, then Phases 1-gate, 2 and 3 in full at one new candidate.
 
 ## Delivery
 

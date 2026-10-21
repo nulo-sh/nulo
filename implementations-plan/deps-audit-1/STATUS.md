@@ -4,3 +4,4 @@
 - 2026-10-21 panel round 1: Codex conditional approve (7 accepted, incl. the soak: 8.2.4 changes the module runner); Opus conditional approve (6 accepted, D6 view rejected, Firefox-smoke drop rejected). Plan revised; Codex round 2 next.
 - 2026-10-21 Codex round 2 conditional approve (4 bounded corrections, accepted); round 3 approve. Plan committed; arc 1 next (auto-continue: no owner ask).
 - 2026-10-21 arc 1 on `deps-audit-1-a1` (off `origin/dev` `ef5336bbc`, plan commit cherry-picked). Phase 1 gate pass (lessons/phase-1.md); bumps committed `81e1e7303`. Review round 1: Codex and Opus approve with fixes (records only).
+- 2026-10-21 Phase 2 gate pass (builds, artifact check, smoke Chrome + Firefox, pr-quick dispatch). Phase 3: 12 of 13 compares OK, test:all ×5 green; infra/token-list red, pre-existing (#987). Codex r3 reject of disposing it, r4 stop for the owner (OA-1). Arc blocked; no PR.
