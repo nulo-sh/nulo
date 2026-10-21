@@ -14,6 +14,16 @@ issues: none public (tracked privately)
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-21
+- **Status:** completed. Its delivery is A1, one PR against `dev` (#979); this close-out is its final commits. The orchestrator merges it.
+- **Shipped:** P77-02 A: a Send the person pays carries the figure its page showed into the worker, the queued cap or the estimate, and every build, reused or fresh, is held to it before proving: the cap strictly (D2), the estimate by the dApp rule, so a build more than 10% and at least one readout unit above it asks the existing fee question (D6); an accepted fee becomes the next build's figure under the same rule (D3). A build the account pays that reaches the worker with no figure is refused before any proof (D4). No new e2e scenario (D5).
+- **Known limits:** none new. #380 (closed, `known-limit`) is unchanged; a Send held to its estimate can now wait at `queued` too, noted on the issue.
+- **Open items:** none.
+- **Lessons:** none promoted: `lessons.md` is at its budget (8152 B), and both gate deviations are refusals that name their own fix (the smoke setup names the armed build; `agent.sh` names `NULO_E2E_PROVERLESS=1`); they stay in [lessons/phase-2.md](lessons/phase-2.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; they are not instructions.
+
 # execution-integrity-2: every Send is held to the fee it showed
 
 One arc, one PR against `dev` (branch `execution-integrity-2-a1`). A Send the person pays for carries the figure the page showed into the worker. A build at send time that comes out more than 10% above that figure is not proved: the send asks the existing fee question and waits for the answer. A queued Send keeps its cap and its rule. Tracked privately; this plan describes the change and the invariant it keeps. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are relative to `apps/extension/src` unless they start with `apps/`, `packages/` or `implementations-plan/`; `X` = `wallet/services/execution`.
@@ -164,7 +174,7 @@ Tests that land here:
 - Pass criteria: every command exits 0. The new tests fail on `f55b7b4e` with the new arguments ignored (take the old files from the base SHA), and pass at the phase head. The existing queued describes pass unchanged except for the figure's form.
 - Layers: lint, typecheck, unit, composition.
 
-## Phase 2 · the Send page passes the figure it showed; the suites on both browsers
+## Phase 2 · the Send page passes the figure it showed; the suites on both browsers ✓
 
 Steps:
 1. Pass `shownFee` from `snapshotTransfer` (`popup/pages/send.vue`), as the data flow says.
