@@ -1143,7 +1143,7 @@ describe("network lane", () => {
 
 	// Pinned whole, not by fragment: a narrower condition, a `continue-on-error` or a commented-out call
 	// would each keep the fragment while disarming the step.
-	test("the reusable workflow asserts the results of every chaos job and every canary* label", () => {
+	test("the reusable workflow asserts the results of every chaos job, every canary* label and every soak* label", () => {
 		type Step = { name?: string; if?: string; run?: string; env?: Record<string, string>; "continue-on-error"?: unknown }
 		const job = workflowOf(NETWORK_SUITE).jobs["network-e2e"]
 		expect(job["continue-on-error"], "the suite job fails when a step does").toBeUndefined()
@@ -1155,9 +1155,17 @@ describe("network lane", () => {
 		expect(commandLines(results?.run)).toContain(
 			'bun scripts/ci-cd/assert-canary-results.ts "${RUNNER_TEMP}/canary-results.json" "${TEST_FILE_LIST[@]}"',
 		)
+		const soak = steps.find((step) => step.name === "Assert soak results")
+		expect(soak?.if).toBe("${{ always() && !cancelled() && startsWith(inputs.shard_label, 'soak') }}")
+		expect(soak?.["continue-on-error"], "a red soak assertion is a red job").toBeUndefined()
+		expect(soak?.env).toStrictEqual({ TEST_FILES: "${{ inputs.test_files }}" })
+		expect(commandLines(soak?.run)).toEqual([
+			`read -ra TEST_FILE_LIST <<< "\${TEST_FILES//$'\\n'/ }"`,
+			'bun scripts/ci-cd/assert-canary-results.ts --allow-unlisted "${RUNNER_TEMP}/canary-results.json" "${TEST_FILE_LIST[@]}"',
+		])
 		const run = steps.find((step) => step.name === "Run network e2e via agent")
-		expect(run?.env?.NULO_E2E_RESULTS_FILE, "a chaos or canary* run writes the report").toBe(
-			"${{ (inputs.chaos || startsWith(inputs.shard_label, 'canary')) && format('{0}/canary-results.json', runner.temp) || '' }}",
+		expect(run?.env?.NULO_E2E_RESULTS_FILE, "a chaos, canary* or soak* run writes the report").toBe(
+			"${{ (inputs.chaos || startsWith(inputs.shard_label, 'canary') || startsWith(inputs.shard_label, 'soak')) && format('{0}/canary-results.json', runner.temp) || '' }}",
 		)
 		expect(run?.["continue-on-error"]).toBeUndefined()
 		const presto = steps.find((step) => String(step.name).startsWith("Assert presto activity"))
@@ -1166,6 +1174,140 @@ describe("network lane", () => {
 			'if [ "$PROVE_SUCCESS" -eq 0 ] && [[ "$SHARD_LABEL" == canary* ]]; then',
 		)
 		expect(existsSync(join(ROOT, "scripts/ci-cd/assert-canary-results.ts"))).toBe(true)
+	})
+})
+
+/**
+ * The soak repeats named network files at retry 0, so `prep` must refuse every input it can judge
+ * before a build: a list that names no file or names something vitest would read as an option, a
+ * filter or a missing file, and a repeat count or retry the run would not honour. `gen` runs here as
+ * the runner runs it, and the first test holds the wiring that hands it exactly the dispatch inputs.
+ */
+describe("network soak", () => {
+	const SOAK = "extension-network-e2e-soak.yml"
+	const soak = workflowOf(SOAK)
+	const gen = soak.jobs.prep.steps.find((step: { id?: string }) => step.id === "gen")
+	const TOKENIZE = `read -ra TEST_FILE_LIST <<< "\${TEST_FILES//$'\\n'/ }"`
+	const NETWORK_FILE = "tests/e2e/network/cap-request-basic.test.ts"
+	const EGRESS_GUARD = "tests/e2e/egress-guard.test.ts"
+	type Dispatch = { TEST_FILES: string; REPEATS: string; RETRY: string }
+	const named = (files: string): Dispatch => ({ TEST_FILES: files, REPEATS: "5", RETRY: "0" })
+
+	function prep(dispatch: Dispatch): { code: number; iterations?: string; said: string } {
+		const dir = mkdtempSync(join(tmpdir(), "soak-prep-"))
+		try {
+			const output = join(dir, "output")
+			writeFileSync(output, "")
+			const env = { PATH: process.env.PATH ?? "/usr/bin:/bin", GITHUB_OUTPUT: output, ...dispatch }
+			const run = Bun.spawnSync(["bash", "--noprofile", "--norc", "-c", gen.run], { cwd: ROOT, env, stdout: "pipe", stderr: "pipe" })
+			const iterations = /^iterations=(.*)$/m.exec(readFileSync(output, "utf8"))?.[1]
+			return { code: run.exitCode, iterations, said: run.stdout.toString() }
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	}
+	function refused(dispatch: Dispatch): string {
+		const { code, iterations, said } = prep(dispatch)
+		expect(code, JSON.stringify(dispatch)).not.toBe(0)
+		expect(iterations, JSON.stringify(dispatch)).toBeUndefined()
+		return said
+	}
+
+	test("prep, the iterations and the status read exactly the dispatch inputs", () => {
+		const inputs = soak.on.workflow_dispatch.inputs
+		expect(Object.keys(inputs).sort()).toEqual(["disable_presto", "proverless", "repeats", "retry", "test_files"])
+		expect(inputs.test_files.required).toBe(true)
+		expect(inputs.test_files.default).toBeUndefined()
+		expect(soak.jobs.prep.steps[0]).toStrictEqual({
+			uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+			with: { "persist-credentials": false, "sparse-checkout": "apps/extension/tests/e2e" },
+		})
+		expect(gen.env).toStrictEqual({
+			TEST_FILES: "${{ inputs.test_files }}",
+			REPEATS: "${{ inputs.repeats }}",
+			RETRY: "${{ inputs.retry }}",
+		})
+		expect(soak.jobs.prep.outputs).toStrictEqual({ iterations: "${{ steps.gen.outputs.iterations }}" })
+		expect(soak.jobs.soak.needs).toBe("prep")
+		expect(soak.jobs.soak.strategy).toStrictEqual({
+			"fail-fast": false,
+			"max-parallel": 1,
+			matrix: { iteration: "${{ fromJSON(needs.prep.outputs.iterations) }}" },
+		})
+		expect(soak.jobs.soak.uses).toBe(`./.github/workflows/${NETWORK_SUITE}`)
+		expect(soak.jobs.soak.with).toStrictEqual({
+			ref: "${{ github.ref }}",
+			shard_label: "soak-${{ matrix.iteration }}",
+			test_files: "${{ inputs.test_files }}",
+			proverless: "${{ inputs.proverless }}",
+			disable_presto: "${{ inputs.disable_presto }}",
+			retry: "${{ inputs.retry }}",
+		})
+		const status = soak.jobs.status
+		expect(status.needs).toEqual(["prep", "soak"])
+		expect(status.if).toBe("always()")
+		expect(status.steps[0].env).toStrictEqual({
+			PREP: "${{ needs.prep.result }}",
+			SOAK: "${{ needs.soak.result }}",
+			REPEATS: "${{ inputs.repeats }}",
+			RETRY: "${{ inputs.retry }}",
+		})
+		const suite = workflowOf(NETWORK_SUITE).jobs["network-e2e"].steps as { name?: string; run?: string }[]
+		const suiteRun = suite.find((step) => step.name === "Run network e2e via agent")
+		for (const script of [gen.run, status.steps[0].run]) expect(script).not.toContain("${{")
+		for (const script of [gen.run, suiteRun?.run]) expect(commandLines(script)).toContain(TOKENIZE)
+	})
+
+	test("refuses a list that names no file, and names the whole-suite instruments", () => {
+		for (const files of ["", "   ", " \n\t "]) {
+			const said = refused(named(files))
+			for (const lane of ["pr-extension-network-e2e.yml", "pr-extension-network-e2e-firefox.yml"])
+				expect(said).toContain(`'${workflowOf(lane).name}'`)
+		}
+	})
+
+	test("refuses a token that is not a network test file at this commit", () => {
+		expect(existsSync(join(ROOT, "apps/extension/tests/e2e/accounts.test.ts")), "the smoke file exists").toBe(true)
+		for (const files of [
+			"--passWithNoTests",
+			`${NETWORK_FILE} --exclude=**`,
+			"tests/e2e/network",
+			"tests/e2e/network/../network/cap-request-basic.test.ts",
+			"tests/e2e/network/*.test.ts",
+			"tests/e2e/accounts.test.ts",
+			`${NETWORK_FILE} tests/e2e/network/cap-request-basci.test.ts`,
+		])
+			refused(named(files))
+	})
+
+	test("refuses a repeat count outside 1 to 25 and a retry beyond one digit", () => {
+		for (const REPEATS of ["0", "26", "5x", "05", ""]) refused({ ...named(NETWORK_FILE), REPEATS })
+		for (const RETRY of ["abc", "10", "-1"]) refused({ ...named(NETWORK_FILE), RETRY })
+	})
+
+	// `startsWith` in Actions ignores case, so a lane job labelled `Soak…` would arm the strict read-back.
+	test("no network suite call but the soak's carries a soak* label", () => {
+		const callers = readdirSync(join(ROOT, ".github/workflows")).filter((file) => {
+			const jobs = Object.values(workflowOf(file).jobs ?? {}) as CallerJob[]
+			return (
+				file !== SOAK &&
+				jobs.some(
+					(job) => job.uses === `./.github/workflows/${NETWORK_LANE}` || job.uses === `./.github/workflows/${NETWORK_SUITE}`,
+				)
+			)
+		})
+		expect(callers.length, "the lane, its callers and nightly's in-browser leg").toBeGreaterThan(3)
+		for (const file of callers.filter((file) => file !== NETWORK_LANE))
+			for (const call of suiteCalls(file)) expect(String(call.inputs.shard_label), `${file} → ${call.name}`).not.toMatch(/^soak/i)
+	})
+
+	test("builds one iteration per repeat for named network files", () => {
+		const files = `${NETWORK_FILE}\n${EGRESS_GUARD}`
+		expect(prep({ TEST_FILES: files, REPEATS: "1", RETRY: "" })).toMatchObject({ code: 0, iterations: '["1"]' })
+		const all = prep({ TEST_FILES: files, REPEATS: "25", RETRY: "9" })
+		expect(all.code).toBe(0)
+		expect(JSON.parse(String(all.iterations))).toEqual(Array.from({ length: 25 }, (_, i) => String(i + 1)))
+		expect(prep({ TEST_FILES: files, REPEATS: "3", RETRY: "0" }).iterations).toBe('["1","2","3"]')
 	})
 })
 

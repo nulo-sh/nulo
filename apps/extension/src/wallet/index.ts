@@ -24,6 +24,7 @@ import { TOKEN_LIST_REFRESH_ALARM_NAME, TokenListService } from "./services/toke
 import { isClientDisconnectRejection, isReceiverGoneRejection } from "@nulo/extension-messaging/errors"
 import { openOrFocusOnboardingTab } from "./utils/onboarding-tab"
 import { armPopupReturn, registerToolbarPopupMessage } from "./utils/toolbar-popup"
+import { registerToolbarSidebar } from "./utils/toolbar-sidebar"
 import { restrictToTrustedContexts } from "./utils/storage-access"
 import { recordCspViolationsInBackground } from "@/e2e/csp-report"
 
@@ -52,6 +53,7 @@ registerContentMessageRelay()
 void restrictToTrustedContexts(chrome.storage.local)
 
 const config = new ConfigStore()
+registerToolbarSidebar(config)
 const logger = new LoggerStore(config)
 const browserApi = new RealChromeBrowserApi()
 const clock = new SystemClock()
