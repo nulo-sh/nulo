@@ -767,6 +767,7 @@
     "useTicker": true,
     "useToast": true,
     "useTokenBalanceSnapshot": true,
+    "useTokenFlags": true,
     "useWalletTxEstimates": true,
     "vSnackFooter": true,
     "vSnackSheet": true,
