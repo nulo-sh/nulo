@@ -58,6 +58,7 @@ import { OperationJournalService, type OperationRecord } from "@/wallet/services
 import { SEND_CHECK_TICK_MS, SendCheck } from "@/wallet/services/operation-journal/send-check"
 import { TaskService } from "@/wallet/services/task/service"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
+import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import { rowKeysForEveryProfile, storedText } from "@/wallet/storage/sealed-entity-storage.testing"
 import type { ProofGate } from "@/e2e/proof-gate"
 import type { ExecutionLane } from "./execution-lane"
@@ -342,6 +343,7 @@ async function makeHarness() {
 		getAccountContract,
 		proveTx,
 		parkJournalWrite,
+		storedJournalRow: async (id: string) => (await api.storage.local.get(`nulo:journal@${id}`))[`nulo:journal@${id}`],
 		legalAssertCurrent,
 		lane: (service as unknown as { lane: ExecutionLane }).lane,
 		expiryDeferral: () => expiryDeferral,
@@ -555,6 +557,8 @@ async function expectEndedUnder(h: Harness, journalId: string, profileId: string
 	expect(record?.progress.stage).toBe("failed")
 	expect(record?.error?.kind).toBe("session_ended")
 	expect(record?.profileId).toBe(profileId)
+	// Written after the session ended, under the keys the worker keeps across it.
+	expect(parseEnvelope(JSON.parse(String(await h.storedJournalRow(journalId))))?.profileId).toBe(profileId)
 }
 
 describe("ExecutionService composition — work runs only while the session that authorized it lives", () => {
