@@ -36,6 +36,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [balance-fpc-cache](balance-fpc-cache/plan.md) — completed — one shared popup store for balance and FPC fetches, with a keyed cache
 - [balance-row-reconciliation](balance-row-reconciliation/plan.md) — completed — missing and stuck balance rows repaired through one idempotent ensure path
 - [bb-wasm-hardening](bb-wasm-hardening/plan.md) — completed — the bb.js WASM assets built from the installed package instead of vendored by hand
+- [block-time-1](block-time-1/plan.md) — completed — research: on the local network the slot is not the e2e lever; the 2 s pool age is the inclusion floor (about 1 min of the network envelope, an estimate), its lever did not hold, and no setting shipped
 - [bootstrap-route-decouple](bootstrap-route-decouple/plan.md) — completed — a bounded chain sync at the end of a backup import, with honest skip states
 - [bug-fixes-batch](bug-fixes-batch/plan.md) — completed — five user-reported issues shipped as one change, smallest risk first
 - [bun-1.4-adoption](bun-1.4-adoption/plan.md) — completed — the Bun 1.4 adoption split into four plans: the bump, the isolated linker, vitest on Bun, native tooling
@@ -397,4 +398,9 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [backup-restore-2](backup-restore-2/plan.md) — completed — a restored transaction row binds to the restored profile and one of its accounts; a dropped account's restored rows go with it (#970)
 - [refused-send-1](refused-send-1/plan.md) — completed — a send the network refused with an existing nullifier or an expiry reads "Refused by the network" once a read finds it Dropped, then once more at its expiry (#112)
 - [privacy-cache-line-1](privacy-cache-line-1/plan.md) — completed — privacy 1.2.2: §§ 5.11 and 5.2 say the list and price requests bypass the HTTP cache, and the price request carries no cookies or referrer (P77-13 C)
+- [shard-balance-1](shard-balance-1/plan.md) — completed — the e2e shards split by measured file time from a committed per-browser record; smoke's slowest shard −155 s Chrome, −304 s Firefox, network −119 s Chrome, Firefox within noise; a draft for the owner (#972)
 - [execution-integrity-2](execution-integrity-2/plan.md) — completed — every Send the person pays is held to the fee it showed: the queued cap strictly, the estimate by the dApp rule, a build more than 10% above it asks the existing fee question (P77-02 A, #979)
+- [exec-prices-1](exec-prices-1/plan.md) — completed — a dApp window reads cached prices and never asks for a refresh, whatever mounts in it (#982)
+- [bridge-nonce-1](bridge-nonce-1/plan.md) — completed — both e2e L1 signers sign as anvil index 1 through one module, off the local network's publisher account; a unit test pins it and refuses any other e2e L1 client (#988)
+- [fee-estimate-cancel-1](fee-estimate-cancel-1/plan.md) — completed — an accepted execute approval cancels the estimates it did not hand over and closes once the worker has handled them; admission before the request read; a cancelled build is never simulated (#989)
+- [floor-superseded-1](floor-superseded-1/plan.md) — completed — the token-list floor rule also reads the lists at publish PR and branch heads signed from the floor (P77-06 B, #973); a stopped run's artifact list is known limit #1001 (P78-06 A)

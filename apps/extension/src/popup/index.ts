@@ -17,6 +17,7 @@ import "./index.scss"
 
 import { initAppServiceContext, isServiceReady, managers, waitForServiceReady } from "@/utils/core"
 import { captureOwnWindow, followOwnRoute } from "@/utils/own-window"
+import { captureWindowDocument } from "@/utils/window-document"
 import { LEGACY_SETTINGS_REDIRECTS } from "./legacy-routes"
 import { createPopupGuard } from "./route-guard"
 import { createScrollMemory, pageScroller } from "./scroll-memory"
@@ -40,6 +41,7 @@ routes.push(...LEGACY_SETTINGS_REDIRECTS)
 
 // Read before the router rewrites the URL: the guard may redirect the first route.
 captureOwnWindow(window.location.hash)
+captureWindowDocument(window.location.hash)
 
 const scrollMemory = createScrollMemory(() => {
 	const position: unknown = window.history.state?.position

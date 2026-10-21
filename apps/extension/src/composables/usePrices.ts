@@ -11,6 +11,7 @@ import { getPriceMapEntry, FEE_JUICE_ENTRY, type PricedTokens } from "@/wallet/s
 import { tokenAmountToUsdMicro, formatUsdMicro } from "@/wallet/services/price/convert"
 import { knownDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
 import { isFlaggedToken } from "@/utils/token-flag"
+import { isWindowDocument } from "@/utils/window-document"
 
 /** A token as pricing reads it: priced only when its decimals are known (`knownDecimals`). */
 export type PricedToken = { chainId?: number; contract?: string; decimals?: number; hasDecimals?: boolean }
@@ -26,7 +27,7 @@ function listState() {
 	const flaggedTokens = ref<ReadonlySet<string>>(new Set())
 	/** The mapping has arrived. Until then no surface can tell a priced token from an unpriced one. */
 	const mapped = ref(false)
-	/** Bumped by each full snapshot, a broadcast or a refresh answer: a list read begun before one is older. */
+	/** Bumped by each full snapshot, a broadcast or a refresh answer: a read begun before one is older. */
 	let adopted = 0
 
 	const adopt = (snapshot: PriceSnapshot) => {
@@ -43,15 +44,18 @@ function listState() {
 			adopt(snapshot)
 		},
 		/** From a read that never touches the network: a refresh can wait on the price provider, and a
-		 *  surface must not wait with it to learn what the list says. */
-		read(priceService: PriceServiceClient) {
+		 *  surface must not wait with it to learn what the list says. Resolves with the snapshot it
+		 *  adopted, or undefined when a broadcast or refresh answer was adopted first or the read failed. */
+		read(priceService: PriceServiceClient): Promise<PriceSnapshot | undefined> {
 			const before = adopted
-			priceService
+			return priceService
 				.getQuotes()
 				.then((snapshot) => {
-					if (adopted === before) adopt(snapshot)
+					if (adopted !== before) return undefined
+					adopt(snapshot)
+					return snapshot
 				})
-				.catch(() => {})
+				.catch(() => undefined)
 		},
 	}
 }
@@ -64,11 +68,15 @@ function listState() {
  * Staleness is re-evaluated against a shared 30s ticker, not only on service
  * events — a quote crossing the 15-min TTL flips to absent without any
  * broadcast. Every fiat surface hides rather than showing a stale number.
+ *
+ * In a window document it reads the cache only and never asks the worker for a refresh: Privacy
+ * Policy § 5.2 keeps transaction execution from triggering a price fetch. A fetch made elsewhere
+ * still reaches it as a broadcast.
  */
 export function usePrices(priceService: PriceServiceClient) {
 	const quotes = ref<PriceState>({})
 	const list = listState()
-	/** The first price answer has arrived: a refresh result or failure, or a broadcast. */
+	/** The first price answer has arrived: a refresh or cache read, its failure, or a broadcast. */
 	const settled = ref(false)
 	const now = useTicker(30_000)
 
@@ -81,8 +89,8 @@ export function usePrices(priceService: PriceServiceClient) {
 
 	// Stale-on-connect refresh; the service no-ops when the cache is fresh
 	// (and returns {} when fiat display is disabled).
-	const resnapshot = () => {
-		list.read(priceService)
+	const refresh = () => {
+		void list.read(priceService)
 		priceService
 			.refreshIfStale()
 			.then(adopt)
@@ -90,6 +98,13 @@ export function usePrices(priceService: PriceServiceClient) {
 				settled.value = true
 			})
 	}
+	const readCache = () => {
+		void list.read(priceService).then((snapshot) => {
+			if (snapshot) quotes.value = snapshot.quotes
+			settled.value = true
+		})
+	}
+	const resnapshot = isWindowDocument() ? readCache : refresh
 	resnapshot()
 	// A worker restart drops the port and any broadcast sent meanwhile (a new list, the kill-switch).
 	priceService.onConnected.add(resnapshot)
@@ -173,7 +188,7 @@ export function usePrices(priceService: PriceServiceClient) {
  */
 export function useTokenFlags(priceService: PriceServiceClient) {
 	const list = listState()
-	const read = () => list.read(priceService)
+	const read = () => void list.read(priceService)
 	priceService.onQuotesUpdated.add(list.adoptFull)
 	priceService.onConnected.add(read)
 	read()

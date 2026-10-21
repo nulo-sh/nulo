@@ -4,3 +4,4 @@
 - 2026-10-20 review round 1: Codex (session 01a15ba9) approve with three low findings; Opus conditional approve with six; eight accepted, one rejected (plan § Review verdicts).
 - GitHub's REST list of PRs pages newest first, so a PR opened mid-listing shifts later pages: an existing item can repeat, and the new PR itself can be missed.
 - 2026-10-20 review round 2: Codex approve, one low comment correction (the paging guarantee), accepted.
+- 2026-10-21 close-out: P78-06 A filed as known limit #1001 (closed as not planned); the publishing notes and `SECURITY.md`'s accepted limits name it; the README and `SECURITY.md` sentence "a list signed but never served is retired" narrowed to the lists the rule reads.

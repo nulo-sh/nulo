@@ -5,13 +5,14 @@
  */
 
 import { flushPromises, mount } from "@vue/test-utils"
-import { afterEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { defineComponent, h } from "vue"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { QUOTE_TTL_MS, type PriceSnapshot, type PriceState } from "@/wallet/services/price/spec"
 import type { PriceServiceClient } from "@/wallet/services/price/client"
 import { usePrices, useTokenFlags } from "./usePrices"
+import { captureWindowDocument } from "@/utils/window-document"
 import { flaggedKeysOf } from "@/utils/token-flag"
 import { TEST_FLAGGED, TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
@@ -69,6 +70,8 @@ afterEach(() => {
 	for (const host of hosts.splice(0)) host.unmount()
 	vi.useRealTimers()
 })
+
+const reconnect = (client: ReturnType<typeof fakeClient>) => (client as unknown as { onConnected: EventHandler<void> }).onConnected.invoke()
 
 describe("composables/usePrices", () => {
 	test("initial mount refreshes stale-on-connect and adopts the result", async () => {
@@ -282,10 +285,54 @@ describe("composables/usePrices", () => {
 	})
 })
 
-describe("composables/useTokenFlags", () => {
-	const reconnect = (client: ReturnType<typeof fakeClient>) =>
-		(client as unknown as { onConnected: EventHandler<void> }).onConnected.invoke()
+describe("composables/usePrices in a window document", () => {
+	beforeEach(() => captureWindowDocument("#/windows/execute?requestId=r1"))
+	afterEach(() => captureWindowDocument(""))
 
+	test("mount and every reconnect read the cache whole and never ask for a refresh; a broadcast is adopted", async () => {
+		const client = fakeClient()
+		client.getQuotes.mockResolvedValue(snap(quoteState(Date.now())))
+		const { api } = await withPrices(client)
+		expect(client.getQuotes).toHaveBeenCalledTimes(1)
+		expect(Object.keys(api.usableQuotes.value).sort()).toEqual(["aztec", "usd-coin"])
+		expect(api.isFlagged(FLAGGED_ROW)).toBe(true)
+		expect(api.settled.value).toBe(true)
+
+		client.getQuotes.mockResolvedValue(snap({}, { flagged: [] }))
+		reconnect(client)
+		await flushPromises()
+		expect(client.getQuotes).toHaveBeenCalledTimes(2)
+		expect(api.usableQuotes.value).toEqual({})
+		expect(api.isFlagged(FLAGGED_ROW)).toBe(false)
+
+		client.onQuotesUpdated.invoke(snap(quoteState(Date.now())))
+		expect(api.quoteFor(CHAIN_IDS.TESTNET, TEST_USDC)).toBeDefined()
+		expect(client.refreshIfStale).not.toHaveBeenCalled()
+	})
+
+	test("a cache read begun before a broadcast is dropped, and a failed one settles token-only", async () => {
+		const client = fakeClient()
+		let answer: (s: PriceSnapshot) => void = () => {}
+		client.getQuotes.mockReturnValue(new Promise<PriceSnapshot>((resolve) => (answer = resolve)))
+		const { api } = await withPrices(client)
+		expect(api.settled.value).toBe(false)
+		client.onQuotesUpdated.invoke(snap(quoteState(Date.now()), { flagged: [] }))
+		answer(snap({}))
+		await flushPromises()
+		expect(Object.keys(api.usableQuotes.value)).toHaveLength(2)
+		expect(api.isFlagged(FLAGGED_ROW)).toBe(false)
+
+		const failed = fakeClient()
+		failed.getQuotes.mockRejectedValue(new Error("worker gone"))
+		const { api: offline } = await withPrices(failed)
+		expect(offline.settled.value).toBe(true)
+		expect(offline.usableQuotes.value).toEqual({})
+		expect(client.refreshIfStale).not.toHaveBeenCalled()
+		expect(failed.refreshIfStale).not.toHaveBeenCalled()
+	})
+})
+
+describe("composables/useTokenFlags", () => {
 	test("flags come from the network-free read, on mount and on every reconnect, and no refresh is ever asked", async () => {
 		const client = fakeClient()
 		const flags = useTokenFlags(client as unknown as PriceServiceClient)
