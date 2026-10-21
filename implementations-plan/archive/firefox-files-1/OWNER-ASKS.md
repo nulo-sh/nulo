@@ -11,6 +11,7 @@ The three picks (P74-05, P74-06, P74-07) are on decision page 74; the plan build
   - **B**: the title plus a passkey line, for example "Your passkey opens this file. Anyone who has the file can see your accounts, contacts and activity." New copy, yours to word.
   - **C**: no done state for a plain file: Download and Protect with Password stay, as today.
 - **What ships now**: C (today's page) until you answer.
+- **Answered** (page 78, 2026-10-21): P78-01 A, built in #964 (plan § Page 78).
 
 ## OA-2: what the wallet's window shows after an import
 
@@ -20,12 +21,14 @@ The three picks (P74-05, P74-06, P74-07) are on decision page 74; the plan build
   - **A (recommended)**: each page's usual next screen, in the window: Contacts stays on Contacts (its back arrow closes the window); an account import goes to the accounts list and Restore again's Continue goes Home, after which the window is an ordinary wallet window you close yourself. This is how the Full Backup restore's window behaves today.
   - **B**: the window closes by itself once the import or restore finishes.
 - **What ships now**: A.
+- **Answered** (page 78): P78-02, held at A for #964; the owner's note ties it to `design-ff-handoff-1`, which may change the window later.
 
 ## OA-3: two checks on your Mac
 
 - **Firefox (acceptance)**: from the toolbar panel, Import contacts, Settings → Accounts → Import account's Choose file, and Home's Restore again → choose the file: each opens the wallet's window, and pressing the same control there opens the file picker and imports. Headless Firefox cannot show a picker, so this is the only proof.
 - **Chrome (unknown today)**: from Chrome's toolbar popup, Import contacts: does the popup survive the file picker? Your #160 check covered Firefox only. If it closes, the same hand-off can cover Chrome in a later lane.
 - **What ships now**: the Firefox hand-off; Chrome unchanged.
+- **Answered, Firefox half** (page 78): P78-03, Import contacts works from the panel; the owner finds the look-alike window confusing, and `design-ff-handoff-1` designs the hand-off again (plan A7). The Chrome half is unanswered.
 
 ## OA-4: "Saved to your downloads" means the browser accepted the file
 

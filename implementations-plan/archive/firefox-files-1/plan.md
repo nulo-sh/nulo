@@ -16,16 +16,17 @@ standard: implementations-plan/README.md § Post-implementation standard, read a
 
 ## Outcome
 
-- **Date:** 2026-10-20.
-- **Status:** closed. One arc, #964 against `dev` from `firefox-files-1-a1`, out of draft per the orchestrator's brief (D11). Merging it, the owner's call, closes the plan and #160.
-- **Owner decisions:** P74-05 A, P74-06 B, P74-07 C, quoted in § Assumptions and the PR; each the option the plan was built on.
+- **Date:** 2026-10-20; page 78 applied 2026-10-21.
+- **Status:** closed. One arc, #964 against `dev` from `firefox-files-1-a1`, out of draft per the orchestrator's brief (D11) and kept ready under P78-16 A. Merging it, on the orchestrator's standing policy, closes the plan and #160.
+- **Owner decisions:** P74-05 A, P74-06 B, P74-07 C, each the option the plan was built on; then page 78 (2026-10-21): P78-01 A, built in the PR (D14); P78-02 A, the shipped form, held for this PR; P78-03, the owner's Mac check, a pass of the mechanism with a UX follow-up the design lane `design-ff-handoff-1` owns; P78-16 A, land #964 now. All quoted in § Assumptions and the PR.
 - **Shipped:**
   - P74-05 A: from Firefox's toolbar panel, Import contacts, Import account's file choice and Restore again's file choice reopen their page in the wallet's own window, where a second press picks. One guard, `leavePanelFor(route)`, serves them and the existing profile restore (D13). `closesOnFocusLoss` replaces `passkeyNeedsOwnWindow`. `armPanelDeath` records a file picker opened in the panel, and `toolbar-panel.test.ts` (renamed) drives the contacts hand-off.
   - P74-06 B: an accepted encrypted Full Backup reads "Saved to your downloads" over the reminder, with one focused Close in Download's place; the run's secrets go at that moment. Close shuts the toolbar popup, else acts as the back arrow through the shared `goBack`. I1 checked in Chrome (D12).
   - P74-07 C: the contacts export probes every network at once with a 5 s limit, shows `StatusCard` above the list and disables Export while it runs. A refused network's export fell from 12.05 s to about 0.2 s (I3).
+  - P78-01 A: a passkey profile's accepted plain file reaches the same done state with the title "Saved to your downloads" alone and Close; the run's secrets go at that moment, as for the sealed file (D14).
   - Evidence: lessons/phase-4.md, lessons/phase-5.md and lessons/phase-6.md (every phase's gate), and the PR's checks.
 - **Known limits:** #960 (a PXE built behind an answering node is not bounded by the probe), #961 ("Saved to your downloads" rests on the browser accepting the file).
-- **Open items:** none in the repo. OA-1, OA-2 and OA-4 ship their "what ships now" form; OA-3, the owner's Mac check, is listed as pending in #964.
+- **Open items:** none in the repo. OA-1 is answered by P78-01 A and OA-2 by P78-02 A; OA-3's Firefox half by P78-03 (the hand-off works; its redesign is `design-ff-handoff-1`'s), while its Chrome half (does the toolbar popup survive the picker) and OA-4 stay unanswered, OA-4 shipping its "what ships now" form.
 - **Dispositions:** D11 replaces the plan's draft-until-OA-3; the chrome-extension-debug route for I1 is replaced by the driver's CDP session (D12); the known limit 2 reproduction was not attemptable headless (lessons/phase-4.md).
 - **Lessons:** none promoted. The smoke-run collision is already the e2e-testing skill's ("Sharding smoke on one host"), the `Button` stub is `lessons.md`'s Vue line, and `lessons.md` is at its budget.
 - **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
@@ -64,7 +65,13 @@ One arc, one PR against `dev`, `Closes #160`, with the owner's three picks (page
 - A1 **P74-05**, where a file import runs on Firefox's toolbar panel: option A, "The wallet's own window: on Firefox's toolbar panel, Import contacts opens Contacts in the 380x660 window and you press Import contacts once more there. The same hand-off for the account-file import and a password profile's full-backup restore from the panel, the other file pickers." (phases 1, 2)
 - A2 **P74-06**, the full backup page after its download: option B, "A done state: the card reads "Saved to your downloads" with the password reminder, and one Close button replaces Download Backup; a second download is no longer offered." (phase 4)
 - A3 **P74-07**, the contacts export's wait: option C, "Both: the bounded check and the card." (phases 3, 5)
-- A4 → OA-1, OA-2, OA-3, OA-4 ([OWNER-ASKS.md](OWNER-ASKS.md)): what the page's records do not settle, unanswered. Each ships its "what ships now" form, which keeps today's behaviour.
+- A4 → OA-1, OA-2, OA-3, OA-4 ([OWNER-ASKS.md](OWNER-ASKS.md)): what the page's records do not settle. Until answered, each shipped its "what ships now" form, which keeps today's behaviour.
+
+**Decisions on the asks** (decision page 78, signed 2026-10-21 14:18Z):
+- A5 **P78-01** (OA-1), the done card after a passkey profile's plain file: option A, "The same done state with the title "Saved to your downloads" alone, and Close.". It differs from what shipped (C, today's page), so the PR builds it (§ Page 78, D14).
+- A6 **P78-02** (OA-2), what the window shows after an import: read option, held by the orchestrator at A for this PR, "Each page's usual next screen, in the window; you close it yourself." The owner's note: "This answer is more nuanced, it will depend on design-ff-handoff-1". It is what shipped; nothing changes here, and that lane's pick may change the window in a later PR.
+- A7 **P78-03** (OA-3, Firefox), the owner's Mac check from the toolbar panel, in their words: "So, I just tried "Import contacts" -- if needed, I can test the rest, but it feels like if one worked all should work. But, with that being said the UX is AWFUL. When pressing "import contracts" on Firefox, it opens another pop-up that looks exactly the same as the screen I was on. Do you understand how confusing that is for any user? I think it might be better for that "New pop-up" to be a transitory pop-up to select the file and process it? Or strictly open up the pop-up + open the file pickers? So the action from the user, gets already executed on the new pop-up?" Next step, theirs: "Design 4/5 flows on Claude Design as a proposal for improving the UX here. I wonder how do other extensions on Firefox deal with this." Recorded as a pass of the mechanism (I2 holds on a Mac for Import contacts) with a UX follow-up owned by the design lane `design-ff-handoff-1`; nothing in this PR changes for it.
+- A8 **P78-16**: option A, "Land #964 now: the pick works today; the redesigned hand-off ships as a follow-up once you pick a flow." The PR stays ready.
 
 ## Architecture & Implementation
 
@@ -83,7 +90,7 @@ A refused move falls through to today's pick: on a Mac the panel dies as today, 
 **The working card.** `components/composite/StatusCard.vue` (L3, no service or store import): props `title` (required), `description` (optional); today's `full.vue` markup and styles verbatim (`role="status" aria-live="polite" aria-atomic="true"`, the 28 px accent spinner `aria-hidden`, `type--row-title` at 16 px, a site-sized role, and `type--body`); `data-testid` falls through. `full.vue` drops its private block and CSS for it, keeping `backup-status-card` and both texts.
 
 **The done state (A2 B, an encrypted file).** In `useFullBackupExport.ts`:
-- `BackupStatus` gains `"downloaded"`. `runDownload`, on an accepted **encrypted** download of the current run: `markGetStarted` and the snack (unchanged), then `backupStatus = "downloaded"`, `isDownloading = false`, then `discardRun(ctx)`: the artifacts and passwords have no reader once no second download is offered. A plain passkey file keeps today's page (OA-1); a refused or superseded download changes nothing.
+- `BackupStatus` gains `"downloaded"`. `runDownload`, on an accepted **encrypted** download of the current run: `markGetStarted` and the snack (unchanged), then `backupStatus = "downloaded"`, `isDownloading = false`, then `discardRun(ctx)`: the artifacts and passwords have no reader once no second download is offered. A plain passkey file keeps today's page (OA-1; superseded by P78-01 A, § Page 78); a refused or superseded download changes nothing.
 - `canDownload` is false in `downloaded`; `onKeydown`'s switch starts nothing there.
 - `full.vue`: the done `Banner` shows in `encrypted` (today's title) and in `downloaded` with the title "Saved to your downloads"; the reminder text stays in both. In `downloaded` the bottom renders one `Button variant="cta" data-testid="backup-close-btn"` "Close" instead of Download.
 - Close: `isToolbarPopup()` → `window.close()`; otherwise `goBack(router, "/popup/settings/security/export")`, the page's back arrow (an own window closes, else history back, else the Backup page). `goBack` is `SubPageHeader`'s `handleBack` moved to `utils/page-back.ts`, which both call, so the two cannot drift. The page record's "the popup goes back to Settings → Security" (option A) and "back to Settings" (the side panel) name this route: its path is `settings/security/export`, titled Backup.
@@ -126,6 +133,15 @@ Gate: the fast layers; `bun run test:all`; Chrome and Firefox `contacts-import.t
 ### Phase 6 ✓: arc gate and pictures
 `bun run audit:vue`; `bun run test:all`; the full smoke suite and the full network suite (`bun run e2e:agent`, one run at a time) on Chrome and Firefox, each wall-clock recorded; `bun run check:plans` after staging. Pictures, light and dark: the own window on Contacts after the hand-off (Firefox); the done state (Chrome popup 360x600, Firefox panel); the running card (Chrome popup, held by the capture spec alone, for example a page-realm stub of the sender read; no hook in shipped code). The shots lane's specs (`~/.cache/nulo-backlog/shots-p74/specs/`) show how the panel is drawn. Pass: all exit 0; pictures attached to the PR.
 
+### Page 78 ✓: the plain file's done state (P78-01 A)
+After merging `origin/dev` (clean). Files: `composables/useFullBackupExport{,.test}.ts`, `export/full{,.test}.{vue,ts}`, `tests/e2e/passkey-backup.test.ts`.
+- The composable: an accepted download of either file ends the run: `downloaded`, the recommendation cleared, then the scrub; `savedPlain` records a plain file and `reset` clears it.
+- The page: the done banner drops the reminder for a plain file. `Banner` lays out an empty description in a column, so a lone title sits on one row (`direction="horizontal"`); the shared component is untouched, since a change there would move other screens.
+- Tests: the composable's plain path (status, flag, cleared recommendation, scrub, clients disconnected, `reset`) and a refused plain download keeping Download; the page through the real ceremony wiring (the title alone, no recommendation, Close focused in place of both CTAs); `SENTINELS` gains `savedPlain`. Mutation checks: the old `if (isEncrypted)` gate, the reminder slot and the cleared recommendation each turn a test red. E2E: `passkey-backup` asserts the done state after the plain file and shoots it; the encryption path, which the plain file now ends, runs in a second run (the test went 17.4 s → 22.5 s on Chrome and 26.1 s → 26.3 s on Firefox, locally under load).
+- The first capture showed "Backup is ready" and its "Protect it with a password" line still above the done banner; the run now clears it, and the tests pin that.
+
+Gate: the fast layers; the full smoke suite on Chrome and Firefox at retry 0 ([lessons/phase-6.md](lessons/phase-6.md) § Page 78).
+
 ## Security & Adversarial Considerations
 
 - **Threat model.** No new trust boundary. A picked file still passes `pickFile`'s byte caps and each page's parser. An own window's URL carries the route and the marker; the three new routes carry no query. The popup page is not web-accessible, and a marked URL in a tab never registers (`register` wants a popup-type window).
@@ -139,11 +155,11 @@ Gate: the fast layers; `bun run test:all`; Chrome and Firefox `contacts-import.t
 
 The lane brief's records are the whole visible budget:
 - Settings → Contacts, Settings → Accounts → Import account, Restore again, from Firefox's toolbar panel: P74-05 A, "The wallet's own window: on Firefox's toolbar panel, Import contacts opens Contacts in the 380x660 window and you press Import contacts once more there. The same hand-off for the account-file import and a password profile's full-backup restore from the panel, the other file pickers." After the import the window shows each page's existing next screen (OA-2).
-- Settings → Backup → Full Backup after an encrypted download: P74-06 B, "A done state: the card reads "Saved to your downloads" with the password reminder, and one Close button replaces Download Backup; a second download is no longer offered." Close's rule follows the record's surface text (Chrome's side panel "back to Settings"). A plain passkey file: today's page (OA-1).
+- Settings → Backup → Full Backup after an encrypted download: P74-06 B, "A done state: the card reads "Saved to your downloads" with the password reminder, and one Close button replaces Download Backup; a second download is no longer offered." Close's rule follows the record's surface text (Chrome's side panel "back to Settings"). After a passkey profile's plain file: P78-01 A, "The same done state with the title "Saved to your downloads" alone, and Close." On Firefox's toolbar panel a passkey export already runs in the own window, so that window is its Firefox surface.
 - Settings → Contacts during an export: P74-07 C, "Both: the bounded check and the card.", with A's "a working card above the list (copy is a placeholder) and Export contacts disabled while it runs."
 - Full Backup's working card (phase 3): none; the same markup and pixels.
 
-Pictures of the result, light and dark (`screenshots/`): `contacts-own-window-firefox-*.png` (the Contacts window the panel's Import contacts opens), `backup-done-chrome-*.png` and `backup-done-firefox-panel-*.png` (the done state, Close focused), `contacts-export-running-chrome-*.png` (the export's card, held 5 s by a node that never answers).
+Pictures of the result, light and dark (`screenshots/`): `contacts-own-window-firefox-*.png` (the Contacts window the panel's Import contacts opens), `backup-done-chrome-*.png` and `backup-done-firefox-panel-*.png` (the done state, Close focused), `contacts-export-running-chrome-*.png` (the export's card, held 5 s by a node that never answers), `backup-saved-plain-chrome-*.png` and `backup-saved-plain-firefox-window-*.png` (P78-01 A: the plain file's done state, Close focused, in Chrome's popup at 360x600 and Firefox's 380x660 own window).
 
 ## Decision ledger
 
@@ -162,6 +178,7 @@ Pictures of the result, light and dark (`screenshots/`): `contacts-own-window-fi
 | D11 | The PR leaves draft (`gh pr ready`) once CI starts, with OA-3's Mac check listed as pending in its body | draft until OA-3 passes (audit round 2) | the orchestrator's arc brief, which supersedes the plan; merging stays the owner's call |
 | D12 | I1 checked through the e2e driver's CDP session against the armed Chrome build | the chrome-extension-debug skill (no DevTools MCP in the implementing session) | same Chrome, same build; [lessons/phase-4.md](lessons/phase-4.md) |
 | D13 | `leavePanelFor(route)` in `own-window.ts` for the four panel hand-offs, the profile restore's included | the guard pasted on each page | implementation review, Opus Low 1 |
+| D14 | P78-01 A: every accepted download ends the run; a `savedPlain` flag drops the reminder; a lone title on one row; the recommendation cleared | a second status value (every `downloaded` check doubles); a `Banner` that skips an empty description (moves other screens) | the owner's pick, built after page 78 |
 
 ## Audit verdicts
 

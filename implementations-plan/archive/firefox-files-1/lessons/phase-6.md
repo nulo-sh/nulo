@@ -38,3 +38,16 @@
 - Phase 6: `audit:vue` pass; the full smoke and network suites on both browsers ran on the PR's CI
   (sharded) and locally, where a host at load ~210 on 188 cores slowed them to hours; their results
   are in the PR.
+
+## Page 78
+
+- 2026-10-21: `origin/dev` merged clean (16 commits, no index conflict). P78-01 A built (plan
+  § Page 78); P78-02, P78-03 and P78-16 change no code.
+- The first capture of the plain done state still showed "Backup is ready" and its password line
+  above it: only `runEncrypt` cleared the recommendation, and a plain file never runs it. The
+  picture caught what the unit tests had not asked; the run now clears it, and three layers pin it.
+- Gates, all at retry 0, at load 170 to 275 on 188 cores: lint, `typecheck:all`; `bun run test`
+  first failed two source-scan tests at vitest's 5 s limit while both armed builds ran beside it, then
+  passed alone (895 files); `passkey-backup` 3/3 on Chrome (48 s) and Firefox (62 s); the full smoke
+  suites, run side by side on their own dists: Chrome 60 passed, 7 skipped (268 tests, 2378 s),
+  Firefox 63 passed, 4 skipped (268 tests, 3629 s).
