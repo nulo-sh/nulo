@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { priceFake } from "../../../../../tests/helpers/price-client-fake"
+import { captureWindowDocument } from "@/utils/window-document"
 import FeeRaisedCard from "./FeeRaisedCard.vue"
 
 vi.mock("@/wallet/services/price/client", async () => (await import("../../../../../tests/helpers/price-client-fake")).priceClientModule())
@@ -29,7 +30,12 @@ const factory = (props: Record<string, unknown> = {}) =>
 	})
 const text = (w: ReturnType<typeof factory>, id: string) => w.find(`[data-testid="${id}"]`).text()
 
-beforeEach(() => priceFake.reset(undefined))
+// Mounted only by the dApp windows, where every price read is a cache read.
+beforeEach(() => {
+	priceFake.reset(undefined)
+	captureWindowDocument("#/windows/execute?requestId=r1")
+})
+afterEach(() => captureWindowDocument(""))
 
 describe("FeeRaisedCard", () => {
 	test("names the payer, what it holds, the approved and the new figure, and the speed", () => {
@@ -52,7 +58,7 @@ describe("FeeRaisedCard", () => {
 		const rows = w.get('[data-testid="fee-raised"]').element.children
 		expect([...rows].map((row) => row.getAttribute("data-testid"))).toEqual([null, "fee-raised-was", "fee-raised-now"])
 		expect(text(w, "fee-raised")).not.toContain("·")
-		expect(priceFake.refreshes()).toBe(1)
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([1, 0])
 	})
 
 	test("hands the new fee up as it prices it: the figure at once, its dollars once the quote lands", async () => {

@@ -35,6 +35,7 @@ const SNAP: TransferSnapshot = {
 	amount: 1_500_000_000_000_000_000n,
 	feeSettings: { paymentMethod: { kind: "fj" } },
 	precomputedEstimateId: "est-1",
+	shownFee: "16000000000000000",
 	contract: "0xtoken",
 	symbol: "USDC",
 	decimals: 18,
@@ -151,6 +152,7 @@ describe("send-submit", () => {
 			SNAP.feeSettings,
 			"est-1",
 			undefined,
+			"16000000000000000",
 		)
 		expect(submitTransfer(deps, SNAP)).not.toBe(id)
 	})

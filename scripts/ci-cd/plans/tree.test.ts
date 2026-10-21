@@ -42,6 +42,25 @@ describe("plan tree gate", () => {
 		expect(verdict(token("src/a.ts"), { GITHUB_ACTIONS: "true", GITHUB_EVENT_NAME: "push" })).toBe("pass")
 	})
 
+	test("only the archive index has a merge attribute, and it is union", () => {
+		const paths = [...createCtx({ cwd: ROOT }).tracked]
+		const res = spawnSync("git", ["-c", "core.attributesFile=/dev/null", "check-attr", "--cached", "--stdin", "-z", "merge"], {
+			cwd: ROOT,
+			env: { ...process.env, GIT_ATTR_NOSYSTEM: "1" },
+			input: `${paths.join("\0")}\0`,
+			encoding: "utf8",
+			maxBuffer: 64 * 1024 * 1024,
+		})
+		expect(res.status, res.stderr).toBe(0)
+		const fields = res.stdout.split("\0").slice(0, -1)
+		expect(fields).toHaveLength(paths.length * 3)
+		const assigned: string[] = []
+		for (let i = 0; i < fields.length; i += 3) if (fields[i + 2] !== "unspecified") assigned.push(`${fields[i]} ${fields[i + 2]}`)
+		expect(assigned, "a merge attribute changes how git resolves conflicts: add one only on purpose").toEqual([
+			"implementations-plan/archive/index.md union",
+		])
+	})
+
 	test("every held path-token mention is live, so a repointed one leaves the allowlist", () => {
 		const ctx = createCtx({ cwd: ROOT })
 		for (const held of PATH_TOKEN_ALLOWLIST) {

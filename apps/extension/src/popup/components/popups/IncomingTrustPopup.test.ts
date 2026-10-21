@@ -70,7 +70,8 @@ vi.mock("@/composables/toast", () => ({
 		openToast: openToastMock,
 	}),
 }))
-vi.mock("@/utils/string", () => ({
+vi.mock("@/utils/string", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/utils/string")>()),
 	trimAddress: (s: string, head: number, tail: number) => `${s.slice(0, head)}…${s.slice(-tail)}`,
 }))
 
@@ -265,6 +266,39 @@ describe("IncomingTrustPopup — the first-receive sentence names no amount", ()
 		await flushPromises()
 		expect(w.text()).toContain("You received TST from a contract you haven't seen before.")
 		cacheStoreState.incomingTrust.tokenDecimals = 18
+	})
+})
+
+describe("IncomingTrustPopup — a symbol of spaces reads as a noun", () => {
+	const mountShown = async () => {
+		const w = mount(IncomingTrustPopup, { props: { show: true }, global: { stubs: STUBS } })
+		await flushPromises()
+		return w
+	}
+
+	test("the title and the sentence", async () => {
+		const named = await mountShown()
+		expect(named.find("h2").text()).toBe("Allow TST?")
+		expect(named.find("strong").text()).toBe("TST")
+		cacheStoreState.incomingTrust.tokenSymbol = "   "
+		const w = await mountShown()
+		expect(w.find("h2").text()).toBe("Allow this token?")
+		expect(w.text()).toContain("You received a token from a contract you haven't seen before.")
+		expect(w.find("strong").exists()).toBe(false)
+	})
+
+	test("the Allow and Block snacks", async () => {
+		cacheStoreState.incomingTrust.tokenSymbol = "   "
+		allowMock.mockResolvedValueOnce(true)
+		await (await mountShown()).find('[data-testid="incoming-trust-allow"]').trigger("click")
+		await flushPromises()
+		expect(openToastMock).toHaveBeenCalledWith(
+			expect.objectContaining({ kind: "success", label: "Now showing receives for this token" }),
+		)
+		rejectMock.mockResolvedValueOnce(true)
+		await (await mountShown()).find('[data-testid="incoming-trust-reject"]').trigger("click")
+		await flushPromises()
+		expect(openToastMock).toHaveBeenCalledWith(expect.objectContaining({ kind: "success", label: "Hiding receives from this token" }))
 	})
 })
 

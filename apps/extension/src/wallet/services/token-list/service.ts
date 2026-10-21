@@ -212,7 +212,8 @@ export class TokenListService implements IService {
 				credentials: "omit",
 				referrerPolicy: "no-referrer",
 				redirect: "error",
-				cache: "no-cache",
+				// No request carries a cache validator: "no-cache" would revalidate with the stored one.
+				cache: "no-store",
 				signal: controller.signal,
 			})
 			if (!response.ok) throw new DownloadError("http-status")

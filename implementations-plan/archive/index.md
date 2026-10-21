@@ -36,6 +36,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [balance-fpc-cache](balance-fpc-cache/plan.md) — completed — one shared popup store for balance and FPC fetches, with a keyed cache
 - [balance-row-reconciliation](balance-row-reconciliation/plan.md) — completed — missing and stuck balance rows repaired through one idempotent ensure path
 - [bb-wasm-hardening](bb-wasm-hardening/plan.md) — completed — the bb.js WASM assets built from the installed package instead of vendored by hand
+- [block-time-1](block-time-1/plan.md) — completed — research: on the local network the slot is not the e2e lever; the 2 s pool age is the inclusion floor (about 1 min of the network envelope, an estimate), its lever did not hold, and no setting shipped
 - [bootstrap-route-decouple](bootstrap-route-decouple/plan.md) — completed — a bounded chain sync at the end of a backup import, with honest skip states
 - [bug-fixes-batch](bug-fixes-batch/plan.md) — completed — five user-reported issues shipped as one change, smallest risk first
 - [bun-1.4-adoption](bun-1.4-adoption/plan.md) — completed — the Bun 1.4 adoption split into four plans: the bump, the isolated linker, vitest on Bun, native tooling
@@ -74,6 +75,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [dapp-boundary-1](dapp-boundary-1/plan.md) — completed — an app-facing simulateTx result for dApps, and no dApp profileTx (OA-1 is #699)
 - [dapp-boundary-2](dapp-boundary-2/plan.md) — completed — a contract's key registers only its own account, one chain check per dApp call, no row for a connect that reaches no page
 - [dapp-boundary-3](dapp-boundary-3/plan.md) — completed — the authorization registry answers only the wallet's own action (P38-06 = A); the address row says it controls listing (P38-08)
+- [dapp-boundary-4](dapp-boundary-4/plan.md) — completed — dApp metadata reads answer from the session and the node, registrations bind the original class; each app's registrations counted per profile chain, one refusal once used up (P77-03 = A)
 - [dapp-results-1](dapp-results-1/plan.md) — completed — an app-facing `executeUtility` answer, and the log redactor denies `witness`, `newNotes` and `taggingIndexRanges`; the simulate side shipped in #701
 - [dapp-dispatch-hold](dapp-dispatch-hold/plan.md) — completed — hold an app's calls until They match: a per-session hold opened at establishment, released by the session's own hash, dropped on every session end; a lock ends unconfirmed sessions; 32 held calls then -32005
 - [dapp-grants](dapp-grants/plan.md) — completed — a refused dApp request tells no one more than it must
@@ -213,6 +215,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [network-e2e-required](network-e2e-required/plan.md) — completed — the network e2e check made reliably green, then required
 - [network-e2e-unquarantine](network-e2e-unquarantine/plan.md) — completed — the network suite restored to zero skips and no stretched waits
 - [network-identity-1](network-identity-1/plan.md) — completed — chain 0 is the local L1 on a loopback node; SECURITY.md says what adoption, promotion and use check (#659)
+- [network-identity-2](network-identity-2/plan.md) — completed — the token-list and price requests bypass the browser's HTTP cache; the price request omits credentials and the referrer
 - [network-playground-testing](network-playground-testing/plan.md) — completed — the wallet's dApp surface covered in the network suite through a local playground dApp
 - [network-test-triage](network-test-triage/plan.md) — completed — the failing network e2e tests diagnosed before any timeout was touched
 - [nightly-release](nightly-release/plan.md) — completed — one tagged nightly prerelease per day from the tip of dev
@@ -312,6 +315,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [structure-2](structure-2/plan.md) — completed — one settings control row, detail hero line, explorer name and hero observer (#735, with #817); an Allow's row bound to its profile (#680); Presto's onboarding leftovers and style hash removed (#730); #750 mapped, no split
 - [supply-chain-release](supply-chain-release/plan.md) — completed — release zips attested and published through a draft, a pinned CI toolchain, an import-free content script, a blocking audit gate (#21 #12 #22 #20)
 - [sw-wallet-protocol](sw-wallet-protocol/plan.md) — completed — the service-worker boot and wallet protocol path under the complexity budget
+- [symbol-sentences-1](symbol-sentences-1/plan.md) — completed — a blank token symbol inside a sentence reads as a noun: Send's hint, rate line and switch ("Token / USD"), the token page's empty line and Home-is-full sheet, the missing-token banner, the Allow sheet and its snacks; the dash in the Home-is-full list (#949, P75-01 D)
 - [testers-fixes-1](testers-fixes-1/plan.md) — completed — selectable text, the toolbar sentence, back keeps scroll, 2 s success toasts, a display-only Home hero (#580 #581 #582 #584 #586)
 - [testers-fixes-2](testers-fixes-2/plan.md) — completed — one-line dApp activity rows with a 96 px app chip, the details App row breaking anywhere, Home's hero fixed over a scrolling middle (#583, #592)
 - [testers-fixes-3](testers-fixes-3/plan.md) — completed — a dApp transfer's two chips on one line with the app chip smaller, a whole "…" at its floor, and the journal App row on the transaction page's shared rules (#583 P34-08 D, #629)
@@ -391,3 +395,11 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [test-infra-1](test-infra-1/plan.md) — completed — one source walker and TS tokenizer, one approval-window harness, one wait per test layer, shared builders (#561 #550 #540 #536)
 - [get-started-phrase-1](get-started-phrase-1/plan.md) — completed — a funded password wallet keeps its unsaved phrase in the Get started card (step 1, "of 4" on the first profile; the row alone on a later one); the banner only after Hide (#936, P73-01)
 - [proving-grant-row-1](proving-grant-row-1/plan.md) — completed — the Firefox Proving row follows the grant: all-sites access covers loopback, so the two 127.0.0.1 toggles alone withhold nothing; e2e pin and FIREFOX.md line; the owner's Mac check (P74-04) confirmed the panel survives the doorhanger and the grant lands (#572)
+- [index-union-1](index-union-1/plan.md) — completed — the archive index merges by union, so close-outs stop conflicting on it; a test keeps any merge attribute off every other path (#962, #957)
+- [backup-restore-2](backup-restore-2/plan.md) — completed — a restored transaction row binds to the restored profile and one of its accounts; a dropped account's restored rows go with it (#970)
+- [refused-send-1](refused-send-1/plan.md) — completed — a send the network refused with an existing nullifier or an expiry reads "Refused by the network" once a read finds it Dropped, then once more at its expiry (#112)
+- [privacy-cache-line-1](privacy-cache-line-1/plan.md) — completed — privacy 1.2.2: §§ 5.11 and 5.2 say the list and price requests bypass the HTTP cache, and the price request carries no cookies or referrer (P77-13 C)
+- [execution-integrity-2](execution-integrity-2/plan.md) — completed — every Send the person pays is held to the fee it showed: the queued cap strictly, the estimate by the dApp rule, a build more than 10% above it asks the existing fee question (P77-02 A, #979)
+- [exec-prices-1](exec-prices-1/plan.md) — completed — a dApp window reads cached prices and never asks for a refresh, whatever mounts in it (#982)
+- [bridge-nonce-1](bridge-nonce-1/plan.md) — completed — both e2e L1 signers sign as anvil index 1 through one module, off the local network's publisher account; a unit test pins it and refuses any other e2e L1 client (#988)
+- [fee-estimate-cancel-1](fee-estimate-cancel-1/plan.md) — completed — an accepted execute approval cancels the estimates it did not hand over and closes once the worker has handled them; admission before the request read; a cancelled build is never simulated (#989)

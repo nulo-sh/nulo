@@ -91,7 +91,7 @@ async function seedRowSymbols(page: Page): Promise<string[]> {
 }
 
 describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
-	test("accepting the Terms fetches the list, whose defaults show as placeholders; a forged list and an older one change nothing; no request carries a cookie or a referrer", {
+	test("accepting the Terms fetches the list, whose defaults show as placeholders; a forged list and an older one change nothing; no request carries a cookie, a referrer or a cache validator", {
 		timeout: 180_000,
 		retry: 0,
 	}, async ({ freshExtensionPerTest: ctx }) => {
@@ -134,6 +134,7 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 			for (const request of host.requests()) {
 				expect(request.cookie, "a list request carried a cookie").toBeUndefined()
 				expect(request.referer, "a list request carried a referrer").toBeUndefined()
+				expect(request.ifNoneMatch, "a list request carried a cache validator").toBeUndefined()
 			}
 			console.log(`[token-list] ${isFirefox ? "Firefox" : "Chrome"} sends Origin: ${host.requests()[0]?.origin ?? "(none)"}`)
 		} finally {

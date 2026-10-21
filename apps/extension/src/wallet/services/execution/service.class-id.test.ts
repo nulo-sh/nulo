@@ -1,8 +1,8 @@
 /**
  * Both contract registrations recompute the artifact's class id and refuse a mismatch before
  * anything is registered. The recompute is real Poseidon (bb.js), so it is mocked at the module
- * boundary, as in `register-contract-void-conformance.test.ts`; the ids are `toString`-only fakes,
- * which also pins that the comparison is by string.
+ * boundary, as in `register-contract-void-conformance.test.ts`; the recomputed id is a
+ * `toString`-only fake, which also pins that the artifact comparison is by string.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { ConfigStore } from "@/wallet/config"
@@ -42,10 +42,18 @@ const NETWORK = { id: "net1", profileId: "p1", chainId: 1, primaryEndpointId: "e
 const MISMATCH = "Contract artifact doesn't match instance's current class id"
 const ARTIFACT = { name: "Looked-up" }
 
-const instance = () => ({
+const classId = (hex: string) => ({ toString: () => hex, equals: (other: { toString(): string }) => other.toString() === hex })
+
+// `originalContractClassId` is a distinct object with the same string, so a lookup keyed on it is
+// told apart from one keyed on the current id by identity.
+const ORIGINAL = classId("0xclass")
+const instance = (current = classId("0xclass")) => ({
 	address: { toBigInt: () => 0x1234n, toString: () => ADDRESS },
-	currentContractClassId: { toString: () => "0xclass" },
+	currentContractClassId: current,
+	originalContractClassId: ORIGINAL,
 })
+
+const DAPP = { origin: "https://app.example", fence: { profileId: "p1", epoch: 0, session: 1 } }
 
 function makeService() {
 	const pxe = {
@@ -60,10 +68,12 @@ function makeService() {
 		networkService: unknown
 		pxeService: unknown
 		executeRegisterContract(op: unknown): Promise<unknown>
-		executeAztecRegisterContract(op: unknown): Promise<unknown>
+		dappSessionService: unknown
+		executeAztecRegisterContract(op: unknown, registrant: unknown): Promise<unknown>
 	}
 	internals.networkService = { getNetwork: async () => NETWORK }
 	internals.pxeService = pxe
+	internals.dappSessionService = { admitDappRegistration: async () => {} }
 	return { internals, pxe }
 }
 
@@ -94,13 +104,10 @@ const SITES = [
 		site: "aztec_registerContract (C2)",
 		accountsRegistered: 1,
 		run: (s: ReturnType<typeof makeService>["internals"], artifact?: unknown) =>
-			s.executeAztecRegisterContract({
-				kind: "aztec_registerContract",
-				networkId: NETWORK.id,
-				instance: instance(),
-				artifact,
-				secretKey: "0x05",
-			}),
+			s.executeAztecRegisterContract(
+				{ kind: "aztec_registerContract", networkId: NETWORK.id, instance: instance(), artifact, secretKey: "0x05" },
+				DAPP,
+			),
 	},
 ]
 
@@ -160,5 +167,39 @@ describe.each(SITES)("$site: the artifact must hash to the instance's class id",
 		expect(await rejectionOf(run(internals))).toBe(failure)
 		expect(pxe.registerContract).not.toHaveBeenCalled()
 		expect(pxe.registerAccount).not.toHaveBeenCalled()
+	})
+})
+
+describe("aztec_registerContract binds the artifact to the original class", () => {
+	const register = (s: ReturnType<typeof makeService>["internals"], current = classId("0xclass")) =>
+		s.executeAztecRegisterContract(
+			{ kind: "aztec_registerContract", networkId: NETWORK.id, instance: instance(current), secretKey: "0x05" },
+			DAPP,
+		)
+
+	test("the artifact is looked up by the original class id", async () => {
+		const { internals, pxe } = makeService()
+		await register(internals)
+		expect(pxe.getContractArtifact).toHaveBeenCalledWith(expect.anything(), ORIGINAL)
+		expect(pxe.registerContract).toHaveBeenCalledTimes(1)
+	})
+
+	test("a current class id other than the original is refused with the plain Error, before anything is registered", async () => {
+		// The artifact hashes to the current class id, so only the original-class binding refuses it.
+		stdlib.recompute.mockImplementation(async () => ({ id: { toString: () => "0xother" } }))
+		const { internals, pxe } = makeService()
+		const refused = (await rejectionOf(register(internals, classId("0xother")))) as Error
+		expect(refused.constructor).toBe(Error)
+		expect(refused.message).toBe(MISMATCH)
+		expect(pxe.registerContract).not.toHaveBeenCalled()
+		expect(pxe.registerAccount).not.toHaveBeenCalled()
+	})
+
+	test("an artifact of the original class does not admit a different current class id, so no account is registered", async () => {
+		const { internals, pxe } = makeService()
+		const refused = (await rejectionOf(register(internals, classId("0xother")))) as Error
+		expect(refused.message).toBe(MISMATCH)
+		expect(pxe.registerAccount).not.toHaveBeenCalled()
+		expect(pxe.registerContract).not.toHaveBeenCalled()
 	})
 })

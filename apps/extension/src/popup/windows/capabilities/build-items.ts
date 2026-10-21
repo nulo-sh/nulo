@@ -27,6 +27,7 @@ import {
 	holdsCallScope,
 	holdsCanCreateAuthWit,
 	isBroadRequest,
+	type KnownName,
 	type PermissionRowEntry,
 	privateEventsDefault,
 	privateEventsRow,
@@ -58,6 +59,8 @@ export type CapabilityWindowParams = {
 	consent: unknown
 	/** The dApp chain's name, which the contract-classes row names. */
 	networkName: string
+	/** The contracts the wallet names; a row never takes a name from the request. */
+	knownContracts: readonly KnownName[]
 }
 
 export function currentLine(row: WindowRow): SubSegment[] {
@@ -86,8 +89,8 @@ function newRows(params: CapabilityWindowParams, resulting: Capability[]): Windo
 		}
 		const fresh = { isNew: true, selected: true, reRequested: params.reRequested.has(cap.type) }
 		if (cap.type === "accounts") rows.push(...newAccountsRows(cap, params, resulting))
-		else if (cap.type === "data") rows.push(...newDataRows(cap, params, broad))
-		else rows.push(...plainRows(cap, params.networkName).map((entry) => ({ entry, capId: cap.type, ...fresh })))
+		else if (cap.type === "data") rows.push(...newDataRows(cap, params, broad, resulting))
+		else rows.push(...plainRows(cap, params).map((entry) => ({ entry, capId: cap.type, ...fresh })))
 	}
 	if (unknowns.length > 0) {
 		const reRequested = unknowns.some((cap) => params.reRequested.has(String(cap.type)))
@@ -98,18 +101,18 @@ function newRows(params: CapabilityWindowParams, resulting: Capability[]): Windo
 }
 
 /** The row a capability of a switchless type shows, whether new or held. */
-function plainRows(cap: Capability, networkName: string): PermissionRowEntry[] {
+function plainRows(cap: Capability, params: CapabilityWindowParams): PermissionRowEntry[] {
 	switch (cap.type) {
 		case "contracts": {
-			const entry = contractsRow(cap)
+			const entry = contractsRow(cap, params.knownContracts)
 			return entry ? [entry] : []
 		}
 		case "contractClasses":
-			return [contractClassesRow(networkName)]
+			return [contractClassesRow(params.networkName, cap.classes)]
 		case "simulation":
 			return [simulationRow(cap)]
 		case "transaction":
-			return [transactionRow(cap)]
+			return [transactionRow(cap, params.knownContracts)]
 		default:
 			return []
 	}
@@ -156,14 +159,18 @@ function newDataFields(cap: DataCapability, held: DataCapability | undefined): {
 	}
 }
 
-function newDataRows(cap: DataCapability, params: CapabilityWindowParams, broad: boolean): WindowRow[] {
+function newDataRows(cap: DataCapability, params: CapabilityWindowParams, broad: boolean, resulting: Capability[]): WindowRow[] {
 	const fresh = newDataFields(cap, heldData(params))
 	const base = { capId: "data", isNew: true, reRequested: params.reRequested.has("data") }
 	const rows: WindowRow[] = []
 	if (fresh.addressBook) rows.push({ ...base, entry: addressBookRow({ broadRequest: broad }), selected: true })
 	if (fresh.privateEvents && cap.privateEvents) {
 		const { contracts } = cap.privateEvents
-		rows.push({ ...base, entry: privateEventsRow(contracts), selected: privateEventsDefault(contracts) })
+		rows.push({
+			...base,
+			entry: privateEventsRow(contracts, params.knownContracts),
+			selected: privateEventsDefault(contracts, resulting),
+		})
 	}
 	return rows
 }
@@ -198,10 +205,10 @@ function heldEntries(cap: Capability, params: CapabilityWindowParams, broad: boo
 	if (cap.type === "data") {
 		return [
 			...(cap.addressBook === true ? [addressBookRow({ broadRequest: broad })] : []),
-			...(cap.privateEvents ? [privateEventsRow(cap.privateEvents.contracts)] : []),
+			...(cap.privateEvents ? [privateEventsRow(cap.privateEvents.contracts, params.knownContracts)] : []),
 		]
 	}
-	return plainRows(cap, params.networkName)
+	return plainRows(cap, params)
 }
 
 function heldAuthorizationsEntry(params: CapabilityWindowParams): PermissionRowEntry {

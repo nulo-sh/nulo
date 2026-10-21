@@ -4,7 +4,7 @@ import { feeDisplay } from "@/utils/fee-estimation"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { FpcType } from "@/wallet/services/fpc/spec"
-import { FEE_RISE_ASKS, feeRiseAsks, personalPayerOf } from "./fee-reask"
+import { FEE_RISE_ASKS, feeRiseAsks, figureAsks, personalPayerOf } from "./fee-reask"
 
 const APPROVED = 16_000_000_000_000_000n // 0.016 FJ
 
@@ -31,6 +31,17 @@ describe("feeRiseAsks", () => {
 
 	test("the first unit past the tolerance asks", () => {
 		expect(feeRiseAsks((APPROVED + (APPROVED * FEE_RISE_ASKS.percent) / 100n + 1n).toString(), APPROVED.toString())).toBe(true)
+	})
+})
+
+describe("figureAsks", () => {
+	test("one readout unit above a figure asks under a cap and not under an estimate; the figure itself asks under neither", () => {
+		const shown = APPROVED.toString()
+		const above = (APPROVED + FEE_RISE_ASKS.atLeast).toString()
+		expect(figureAsks(above, { fee: shown, rule: "cap" })).toBe(true)
+		expect(figureAsks(above, { fee: shown, rule: "estimate" })).toBe(false)
+		expect(figureAsks(shown, { fee: shown, rule: "cap" })).toBe(false)
+		expect(figureAsks(shown, { fee: shown, rule: "estimate" })).toBe(false)
 	})
 })
 

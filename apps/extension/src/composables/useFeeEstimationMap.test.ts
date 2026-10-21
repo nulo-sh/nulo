@@ -173,6 +173,49 @@ describe("useFeeEstimationMap — remote cancellation + handoff", () => {
 		expect(new Set(cancelRemote.mock.calls.map((c) => c[0]))).toEqual(new Set(calls.map((c) => c.token)))
 		scope.stop()
 	})
+
+	it("dispose() settles only once every remote cancel it sent has settled, a rejected one included; a second call returns the same promise", async () => {
+		let release: () => void = () => {}
+		const held = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		const cancelRemote = vi
+			.fn<(token: string) => Promise<void>>()
+			.mockImplementationOnce(() => held)
+			.mockImplementationOnce(() => Promise.reject(new Error("port closed")))
+		const scope = effectScope()
+		const composable = scope.run(() => useFeeEstimationMap<number, number, number>({ estimate: async (n) => n * 2, cancelRemote }))!
+		composable.estimate(0, 1)
+		composable.estimate(1, 2)
+		await vi.advanceTimersByTimeAsync(500)
+		await flushAll()
+		let settled = false
+		const first = composable.dispose()
+		void Promise.resolve(first).then(() => {
+			settled = true
+		})
+		await flushAll()
+		expect(cancelRemote).toHaveBeenCalledTimes(2)
+		expect(settled).toBe(false)
+		expect(composable.dispose()).toBe(first)
+		release()
+		await flushAll()
+		expect(settled).toBe(true)
+		expect(first).toBeInstanceOf(Promise)
+		expect(cancelRemote).toHaveBeenCalledTimes(2)
+		scope.stop()
+	})
+
+	it("estimate() after dispose() never runs the estimator and leaves its key idle", async () => {
+		const { scope, composable, calls } = make()
+		composable.dispose()
+		composable.estimate(0, 1)
+		await vi.advanceTimersByTimeAsync(500)
+		await flushAll()
+		expect(calls).toEqual([])
+		expect(composable.estimating.value[0]).toBeUndefined()
+		scope.stop()
+	})
 })
 
 const flush = async () => {

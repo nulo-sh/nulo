@@ -50,9 +50,11 @@ export function sentenceName(name: string, fallback: string): string {
 	return sanitizeString(name, 32).trim() || fallback
 }
 
-/** The empty-value "—" for a name, title or label that is absent, or only whitespace once the wire
- *  sanitizer's strip has run; any other value exactly as given. */
-export const dashIfBlank = (s: string | null | undefined): string => (stripWireControl(s ?? "").trim() === "" ? "—" : (s as string))
+/** Absent, or only whitespace once the wire sanitizer's strip has run. */
+export const isBlank = (s: string | null | undefined): boolean => stripWireControl(s ?? "").trim() === ""
+
+/** The empty-value "—" for a blank name, title or label; any other value exactly as given. */
+export const dashIfBlank = (s: string | null | undefined): string => (isBlank(s) ? "—" : (s as string))
 
 export function stringCompare(a: string, b: string): number {
 	return (a || "").localeCompare(b || "", undefined, { sensitivity: "base", numeric: true })
