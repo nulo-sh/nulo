@@ -945,6 +945,9 @@ async function expectImportedOnReset(page: Page): Promise<void> {
 	} finally {
 		await donor.close()
 	}
+	// The page still holds the previous file's preview, which a same-route navigation would keep.
+	await navigateByHash(page, "#/popup/settings/accounts", 10_000)
+	await page.waitForSelector(sel("accounts-new-btn"), VISIBLE)
 	expect(await previewImport(page, body)).toMatch(/^0x/)
 	await confirmImport(page, "Savings")
 	await closeStuckPopup(page)
