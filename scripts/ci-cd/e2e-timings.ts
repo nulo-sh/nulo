@@ -4,7 +4,7 @@
  * sequencer splits by, from CI: for each PR e2e lane, the newest first-attempt green run of each
  * branch among the lane's latest green runs, read from its shard jobs' logs.
  *
- *   bun run e2e:timings
+ *   bun scripts/ci-cd/e2e-timings.ts
  *
  * Needs a `gh` login that can read the repository's Actions logs. Logs are parsed in memory and
  * never written. It also prints each run's shard spread, which is how a stale record shows.

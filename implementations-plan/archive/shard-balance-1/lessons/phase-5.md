@@ -37,3 +37,10 @@ green at the first attempt. Job durations from GitHub's timestamps, setup includ
   effect of the new file mix (I1); the PR's own runs are the second sample.
 - Network Firefox's 1121 s sits inside its before range: no demonstrated gain on this sample. The
   smoke lanes land within 30 s of the projection.
+
+## The PR's first `quality-status` (2026-10-21)
+
+- Red in `bun audit`, not in this change: five advisories (follow-redirects ×2, vite ×3) had no
+  acknowledgement on `dev`. The gate enforces on any PR whose `package.json` changes beyond
+  `"version"` lines, and the root `e2e:timings` script was such a line. Fix: drop the script and
+  run the generator by path (D7); the PR then touches no dependency file and the gate reports.

@@ -33,7 +33,6 @@
     "baseline:complexity": "bun scripts/complexity-baseline/generate.ts",
     "baseline:rescore": "bun scripts/complexity-baseline/rescore.ts",
     "baseline:storage": "bun run --cwd apps/extension baseline:storage",
-    "e2e:timings": "bun scripts/ci-cd/e2e-timings.ts",
     "audit:dup": "bun scripts/dup-trend/report.ts",
     "check:imports": "biome check apps/ packages/",
     "check:plans": "bun scripts/ci-cd/plans/check.ts",

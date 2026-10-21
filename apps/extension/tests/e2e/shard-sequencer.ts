@@ -43,7 +43,7 @@ export function assignShards(files: readonly string[], costs: ShardCosts, count:
 /**
  * The sequencer of one e2e suite: vitest's own, except that `--shard=i/n` takes the i-th of the
  * shards `assignShards` builds from that suite's recorded costs for the browser under test, in
- * place of vitest's split by path hash. The record is `bun run e2e:timings`'s output.
+ * place of vitest's split by path hash. The record is `scripts/ci-cd/e2e-timings.ts`'s output.
  */
 export function shardSequencer(suite: Suite) {
 	const tables: Readonly<Record<BrowserKind, ShardCosts>> = timings[suite]

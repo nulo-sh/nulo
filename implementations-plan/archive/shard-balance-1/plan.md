@@ -17,10 +17,10 @@ post_implementation_hardening: not scheduled
 
 - **Date:** 2026-10-21.
 - **Status:** completed (pending the owner's merge). Delivered as one draft PR against `dev` with `Refs #972`, carrying this close-out; the owner merges or closes it, and the merge closes the plan.
-- **Shipped:** a vitest sequencer splits each e2e lane's `--shard=i/n` by a committed per-suite, per-browser record of measured file time (`shard-sequencer.ts`, `shard-timings.json`), written by `bun run e2e:timings` from green runs' job logs. No workflow step, matrix or shard count changed. A test drives each config's own sequencer and proves every real file list is handed out exactly once.
+- **Shipped:** a vitest sequencer splits each e2e lane's `--shard=i/n` by a committed per-suite, per-browser record of measured file time (`shard-sequencer.ts`, `shard-timings.json`), written by `bun scripts/ci-cd/e2e-timings.ts` from green runs' job logs (no root script, D7). No workflow step, matrix or shard count changed. A test drives each config's own sequencer and proves every real file list is handed out exactly once.
 - **Measured after** (one dispatch per lane at `f6e34b3e4`, all green; slowest job, s): smoke Chrome 606 (before 761, range 687–804), smoke Firefox 801 (1105), network Chrome 971 (1090), network Firefox 1121 (1143, inside its before range 1088–1293: no demonstrated gain on this sample). Shard spread 282 / 518 / 353 / 367 → 46 / 9 / 101 / 53. All 16 shard jobs ran exactly `assignShards`' files. Smoke file time matched the record within 0.7 %; network ran 5.4–5.8 % over it, evenly across files ([lessons/phase-5.md](lessons/phase-5.md)).
 - **Dispositions:** shapes (b)–(d) not taken (D1); no freshness gate (D4); four network shards and the heavy-long fold-back left to the owner ([OWNER-ASKS.md](OWNER-ASKS.md) OA-1, OA-2). **Known limits:** #977. **Open items:** none.
-- **Lessons:** none promoted: `lessons.md` sits at its budget (8152 B), and the vitest facts are version specific; they stay in [recon.md](recon.md) and the e2e README. **Size:** 160 lines against light's 150; the overage is this Outcome's measured result. **Seeds retired:** the `/goal` and `/loop` seeds below; they are not instructions.
+- **Lessons:** none promoted: `lessons.md` sits at its budget (8152 B), and the vitest facts are version specific; they stay in [recon.md](recon.md) and the e2e README. **Size:** 161 lines against light's 150; the overage is this Outcome's measured result. **Seeds retired:** the `/goal` and `/loop` seeds below; they are not instructions.
 
 # shard-balance-1: the e2e shards carry equal measured time
 
@@ -118,6 +118,7 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 - D4 no freshness gate: an unlisted file lands on the lightest shard, and a stale entry is ignored. A gate would force a `gh`-authenticated regeneration on whoever adds or renames a file.
 - D5 the generator parses the job logs rather than adding a json artifact: no workflow change.
 - D6 (implementation) the record's upkeep paragraph lives once, in the e2e README § CI sharding, beside the shard mechanics. CI.md states the split in one sentence and links there; the e2e-testing skill holds the refresh procedure.
+- D7 (delivery) no root `e2e:timings` script: any non-version line in a `package.json` puts the PR's `bun audit` gate in enforce mode, and five advisories published on 2026-10-21 had no acknowledgement on `dev`. The generator runs as `bun scripts/ci-cd/e2e-timings.ts`, so the PR touches no dependency file.
 
 ## Audit verdicts
 
