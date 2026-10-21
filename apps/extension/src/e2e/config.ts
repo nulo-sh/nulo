@@ -111,10 +111,8 @@ export const E2E_TOKEN_LIST_BUILD_STAMP: "NULO_E2E_TOKEN_LIST_BUILD_STAMP" | nul
 	: null
 
 /**
- * E2E-only wallet clocks: the incoming scan and the finality re-read run on the shorter
- * `E2E_WALLET_CLOCK_VALUES`, so the network suite stops waiting on the production cadence. A single
- * flag, like the migration fixture: shipped values would cost node traffic, not funds, and the
- * stamp below fails the release grep in every `_build-extension.yml` artifact.
+ * E2E-only wallet clocks. A single flag, like the migration fixture: shipped values would cost node
+ * traffic, not funds, and the stamp below fails the release grep.
  */
 const WALLET_CLOCKS = (import.meta.env.VITE_NULO_E2E_WALLET_CLOCKS ?? "") === "1"
 

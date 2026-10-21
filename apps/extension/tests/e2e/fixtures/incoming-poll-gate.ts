@@ -28,9 +28,9 @@ export async function holdIncomingPoll(extensionPage: Page, arm: IncomingPollArm
 	await extensionPage.evaluate((key, value) => chrome.storage.session.set({ [key]: value }), INCOMING_POLL_HOLD_KEY, arm)
 }
 
-/** Lock the wallet, run `deliver`, arm the gate for the tx hash it returns, unlock, and return that
- *  hash once Home shows. A locked wallet runs no incoming scheduler, so no scan can commit the note
- *  between its block and the arm at any tick; the unlock's own scan is the first that can find it. */
+/** Arms the hold for `deliver`'s tx hash while the wallet is locked, which runs no incoming
+ *  scheduler, so no tick can commit the note first; the unlock's own scan is the first that can find
+ *  it. Returns once Home shows; a failure leaves the file's shared wallet unlocked with no hold armed. */
 export async function deliverWhileLocked(
 	page: Page,
 	arm: Omit<IncomingPollArm, "txHash">,
@@ -38,11 +38,19 @@ export async function deliverWhileLocked(
 	password = TEST_PASSWORD,
 ): Promise<string> {
 	await lockWallet(page)
-	const txHash = await deliver()
-	await holdIncomingPoll(page, { ...arm, txHash })
-	await ensureUnlocked(page, password)
-	await waitForHash(page, "#/popup/general", 60_000)
-	return txHash
+	let armed = false
+	try {
+		const txHash = await deliver()
+		await holdIncomingPoll(page, { ...arm, txHash })
+		armed = true
+		await ensureUnlocked(page, password)
+		await waitForHash(page, "#/popup/general", 60_000)
+		return txHash
+	} catch (error) {
+		if (armed) await releaseIncomingPoll(page).catch(() => undefined)
+		await ensureUnlocked(page, password).catch(() => undefined)
+		throw error
+	}
 }
 
 /** Release a parked scan; the SW proceeds into the locked commit. */

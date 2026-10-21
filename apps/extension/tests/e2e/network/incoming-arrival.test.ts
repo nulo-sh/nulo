@@ -226,12 +226,12 @@ async function waitForRowOf(page: Page, account: string, txHash: string): Promis
 /** Drive the PXE until a scan discovers `txHash` and parks at the gate. */
 async function driveUntilHeld(page: Page, txHash: string): Promise<void> {
 	for (let i = 0; i < 40; i++) {
-		await refreshBalances(page).catch(() => undefined)
 		for (let j = 0; j < 15; j++) {
 			const status = await readIncomingPollStatus(page)
 			if (status?.phase === "discovery-held" && status.txHash === txHash) return
 			await new Promise((r) => setTimeout(r, 300))
 		}
+		await refreshBalances(page).catch(() => undefined)
 	}
 	throw new Error(`the scan never parked at the gate for ${txHash}`)
 }
@@ -428,15 +428,20 @@ test.skipIf(!hasConfig)(
 	{ timeout: 900_000, retry: 0 },
 	async ({ tokenReadyExtension }) => {
 		const config = aztecConfig as Config
-		const page = closeAtEnd(await openPopup(tokenReadyExtension))
-		await waitForHash(page, "#/popup/general", 30_000)
-		const triple = await activeTriple(page)
+		const delivering = closeAtEnd(await openPopup(tokenReadyExtension))
+		await waitForHash(delivering, "#/popup/general", 30_000)
+		const triple = await activeTriple(delivering)
 
 		const txHash = await deliverWhileLocked(
-			page,
+			delivering,
 			{ profileId: triple.profileId, networkId: triple.networkId, accountAddress: triple.account, contract: config.tokenAddress },
 			() => sendPrivate(config, triple.account, 7n * D),
 		)
+		// A lock resets a page's arrivals scope, so the first half runs in a page opened after the
+		// unlock: it seeds on its mount, and the second half covers the seed an unlock starts.
+		const page = closeAtEnd(await openPopup(tokenReadyExtension))
+		await waitForHash(page, "#/popup/general", 30_000)
+		await delivering.close()
 		await driveUntilHeld(page, txHash)
 		await clickNavTab(page, "settings")
 		await waitForHash(page, "#/popup/settings")

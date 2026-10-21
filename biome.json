@@ -387,7 +387,14 @@
 							"options": {
 								"patterns": [
 									{
-										"group": ["@/e2e/wallet-clocks", "**/wallet-clocks", "./wallet-clocks"],
+										"group": [
+											"@/e2e/wallet-clocks",
+											"@/e2e/wallet-clocks.*",
+											"**/wallet-clocks",
+											"**/wallet-clocks.*",
+											"./wallet-clocks",
+											"./wallet-clocks.*"
+										],
 										"message": "only src/e2e/config.ts reads the e2e wallet clocks; their release-gate stamp travels with its flag"
 									}
 								]
@@ -418,7 +425,14 @@
 								},
 								"patterns": [
 									{
-										"group": ["@/e2e/wallet-clocks", "**/wallet-clocks", "./wallet-clocks"],
+										"group": [
+											"@/e2e/wallet-clocks",
+											"@/e2e/wallet-clocks.*",
+											"**/wallet-clocks",
+											"**/wallet-clocks.*",
+											"./wallet-clocks",
+											"./wallet-clocks.*"
+										],
 										"message": "only src/e2e/config.ts reads the e2e wallet clocks; their release-gate stamp travels with its flag"
 									},
 									{
@@ -447,7 +461,14 @@
 							"options": {
 								"patterns": [
 									{
-										"group": ["@/e2e/wallet-clocks", "**/wallet-clocks", "./wallet-clocks"],
+										"group": [
+											"@/e2e/wallet-clocks",
+											"@/e2e/wallet-clocks.*",
+											"**/wallet-clocks",
+											"**/wallet-clocks.*",
+											"./wallet-clocks",
+											"./wallet-clocks.*"
+										],
 										"message": "only src/e2e/config.ts reads the e2e wallet clocks; their release-gate stamp travels with its flag"
 									},
 									{
@@ -475,7 +496,14 @@
 							"options": {
 								"patterns": [
 									{
-										"group": ["@/e2e/wallet-clocks", "**/wallet-clocks", "./wallet-clocks"],
+										"group": [
+											"@/e2e/wallet-clocks",
+											"@/e2e/wallet-clocks.*",
+											"**/wallet-clocks",
+											"**/wallet-clocks.*",
+											"./wallet-clocks",
+											"./wallet-clocks.*"
+										],
 										"message": "only src/e2e/config.ts reads the e2e wallet clocks; their release-gate stamp travels with its flag"
 									},
 									{

@@ -563,8 +563,7 @@ function registerServices(
 	services.add(new TokenService(logger, browserApi, undefined, seederOverrides))
 	// E2E_PROVERLESS injects the projection gate; tree-shaken from prod like the proof gate.
 	services.add(new TokenBalanceService(logger, browserApi, undefined, E2E_PROVERLESS ? new ChromeStorageProjectionGate() : undefined))
-	// E2E_WALLET_CLOCKS shortens the finality re-read and the incoming tick; unarmed, both services
-	// keep their production defaults. Its stamp is the release grep's handle on the values.
+	// The stamp is the release grep's handle on the e2e wallet clocks passed below.
 	if (E2E_WALLET_CLOCKS_BUILD_STAMP) {
 		;(globalThis as { __NULO_E2E_WALLET_CLOCKS_BUILD_STAMP__?: string }).__NULO_E2E_WALLET_CLOCKS_BUILD_STAMP__ =
 			E2E_WALLET_CLOCKS_BUILD_STAMP

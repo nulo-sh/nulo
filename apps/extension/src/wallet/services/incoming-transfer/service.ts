@@ -49,7 +49,7 @@ import {
 
 export * from "./spec"
 
-/** Production poll cadence per scheduler; the network e2e build passes a shorter one. */
+/** Production poll cadence per scheduler. */
 const DEFAULT_POLL_INTERVAL_MS = 30_000
 
 /** Every target runs on every fourth tick whatever the tips say, so a note the PXE delivers late or

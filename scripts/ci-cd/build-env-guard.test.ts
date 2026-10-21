@@ -45,12 +45,12 @@ describe("the build-env guard", () => {
 	})
 })
 
-/** Every build stamp the extension's source can bake into a bundle, read from the source so a new
- *  stamp is covered the day it lands. */
+/** Every `NULO_*_BUILD_STAMP` literal in the extension's source, read from the source so a new one
+ *  is covered the day it lands. */
 const STAMPS = [
 	...new Set(
-		[...new Bun.Glob("**/*.{ts,vue}").scanSync(join(ROOT, "apps/extension/src"))]
-			.filter((file) => !file.endsWith(".test.ts"))
+		[...new Bun.Glob("**/*.{ts,js,vue}").scanSync(join(ROOT, "apps/extension/src"))]
+			.filter((file) => !/\.test\.[jt]s$/.test(file))
 			.flatMap((file) => readFileSync(join(ROOT, "apps/extension/src", file), "utf8").match(/NULO_[A-Z0-9_]+_BUILD_STAMP/g) ?? []),
 	),
 ].sort()
