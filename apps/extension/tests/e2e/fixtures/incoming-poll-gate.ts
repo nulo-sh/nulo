@@ -30,7 +30,7 @@ export async function holdIncomingPoll(extensionPage: Page, arm: IncomingPollArm
 
 /** Arms the hold for `deliver`'s tx hash while the wallet is locked, which runs no incoming
  *  scheduler, so no tick can commit the note first; the unlock's own scan is the first that can find
- *  it. Returns once Home shows; a failure leaves the file's shared wallet unlocked with no hold armed. */
+ *  it. Returns once Home shows; on failure it tries to clear its hold and unlock before rethrowing. */
 export async function deliverWhileLocked(
 	page: Page,
 	arm: Omit<IncomingPollArm, "txHash">,
