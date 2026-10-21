@@ -54,6 +54,7 @@ None. The arc changes no file under `apps/extension/src` or `packages/`. The lan
 - **D7, each check asserts its state first** (Codex r1). The existing asserts read `textContent`, which a hidden banner still has. Each check therefore waits for its banner and its CTA to be visible. A banner hidden at both widths would otherwise pass as "not shown at 360".
 - **D8, a red control at every call site** (Codex r1, Opus r1). Each of the six sites gets a scratch control. The control injects `@media (width < 300px) { [data-testid="<target>"] { display: none } }`, which the check must report as fate `gone`. A `nowrap` alone proves nothing on a title that fits on one line (recon).
 - **D9, the ready state is checked** (Opus r1). Its bottom bar stacks Protect with Password over Download Backup, the shape the `encrypting` bar has. The spec already stands there, and the probe found it green.
+- **D10, deviations at implementation.** (a) D8's control injects its rule through a constructable stylesheet: the page's CSP refuses a `<style>` element, which left the first controls green. (b) D5's working-card picture hides the passkey dialog with a scratch stylesheet: the dialog covers the card whole, so a dimmed frame shows no card. Both in [lessons/phase-1.md](lessons/phase-1.md).
 
 ## Security & Adversarial Considerations
 
@@ -67,7 +68,7 @@ None. The arc changes no file under `apps/extension/src` or `packages/`. The lan
 - **Inferences**: I1 a held and released passkey request leaves the happy path's later steps as they were: the probe's full test passed with it. It says nothing on cancellation or abort timing. I2 the warning visit's done state fits at 240; the probe did not cover it, and Phase 1 measures it. I3 a headless run draws no classic scrollbar; with one, `scrollbar-gutter: stable` takes about 17 px (#1023).
 - **Asks**: none for the owner. To the orchestrator: A1, one set of pictures stands for before and after (D5); A2, D4's gate repair (#1023) as its own lane; A3, whether the page's agreement, unlock and password-field states need their own 240 check (D6).
 
-## Phase 1: the six 240 px checks (arc A1, branch `worktree-fit-240-2`)
+## Phase 1: the six 240 px checks (arc A1, branch `worktree-fit-240-2`) ✓
 
 **Assumptions**: F1 to F6, I1 to I3.
 
