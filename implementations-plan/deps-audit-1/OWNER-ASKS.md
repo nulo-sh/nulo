@@ -48,3 +48,4 @@
   - **B:** a separate lane fixes #1032 first. Arc 1 then merges `dev`, whose manifests trigger a new candidate, and runs Phases 2-3 once.
   - **C:** acknowledge both. Not compliant: storybook's fix has cleared the gate, and the policy is to fix before acknowledging.
 - **What ships now:** nothing. The branch is pushed at the merge, with no PR. #980, #987 and #1032 stay open. The orchestrator's window can be released.
+- **Answer:** A, the orchestrator's call, recorded on #1032. It runs in two steps (D13). Step 1, storybook, landed as `64d61e4bc` on one core while another lane's e2e held the host. Step 2, vitest 4.1.12, waits for the age gate at 2026-10-22T14:51Z and the orchestrator's window.

@@ -11,3 +11,23 @@ All commands from the repo root on branch `deps-audit-1-a1`, before 21:01Z, so b
 - `bun run lint` exit 0; `bun run typecheck:all` exit 0. Committed as `81e1e7303` (signed).
 - Review round 1: Codex (session 01a15c4b) approve with fixes, Opus approve with fixes; records only, no dependency file changed (plan § Review verdicts).
 - Review round 2: Codex approve; loop converged.
+
+## OA-4 step 1: storybook 10.6.2 (2026-10-22, one core)
+
+- Pin-then-restore: exact `10.6.2` in `apps/extension` (`storybook`, `@storybook/vue3-vite`) and `packages/design` (`@storybook/vue3-vite`), `bun install`, then `^10.6.2`, `bun install` ("no changes"). No age-gate refusal.
+- `bun.lock`:
+  - storybook, `@storybook/vue3-vite`, `vue3` and `builder-vite` move to 10.6.2;
+  - `@storybook/csf-plugin`, its nested `unplugin@2.3.11` and vue3-vite's nested `typescript@5.9.3` leave, and a nested `magic-string@1.2.0` arrives;
+  - `oxc-resolver` and its bindings go 11.24.2 → 11.21.2, storybook's exact pin; storybook is its only dependent.
+
+  All 27 new integrity strings match the registry, and the four storybook packages carry SLSA provenance and no install script.
+- `bun pm diff <pkg>@<old> <new>` prints the lock's version on the `-` side here (Bun 1.4.2), so read the direction from the `"version"` line. In storybook 10.6.2 the new `child_process`/`net` uses are:
+  - the CLI tools SDK's `fork` of its own child host;
+  - host-validation middleware (`net.isIP`);
+  - a 127.0.0.1 loopback listener;
+  - Windows-only `icacls` on `~/.storybook/instances`.
+- Every `node_modules` removed, then `bun install --frozen-lockfile`: exit 0, and the store holds only the new versions. Audit gate: 41 acknowledged, 1 unacknowledged (`@vitest/mocker` 1242767), 0 stale, 0 unreadable.
+- `build-storybook` (`apps/extension`; design has no script of its own): exit 0, with 217 index entries (182 stories, 35 docs) from all 36 story files, 8 of them design's.
+- `typecheck:all` exit 0 covers the extension's 28 story files. Design's tsconfig excludes its stories and nothing checks `.storybook/*.ts`, so the build is their check.
+- `lint` exit 0. Unit suites, one worker: design 538/538 (28 s); extension 906 files plus 3 skipped, 14996 passed, 5 skipped, 7 todo (1537 s).
+- Codex r8: approve with fixes, records only.

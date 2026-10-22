@@ -1,8 +1,8 @@
 ---
 plan: deps-audit-1
 tier: light
-status: arc 1 blocked at the Phase 2 audit gate: two new advisories (#1032); ask OA-4
-issues: "#980 (closed by arc 1)"
+status: arc 1 OA-4 step 1 done (storybook 10.6.2); step 2 (vitest 4.1.12) after 2026-10-22T14:51Z, then Phases 2-3
+issues: "#980, #987, #1032 (closed by arc 1)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -114,6 +114,7 @@ None. The arc changes dependency files only; no screen, copy or layout.
 - **D10 Local Firefox smoke stays.** The lane brief names smoke on both browsers; it costs one more run.
 - **D11 #987 is fixed in this arc.** At the first candidate (`57c35cec5`), `infra/token-list`'s Node reference failed one test on all 30 runs, the same on the base: the test spawned `process.execPath`, which is `node` under the reference, on a TypeScript script Node's strip-only mode refuses. That file sat outside the lane, so the arc stopped (OA-1). The orchestrator's call, under the owner's standing rules: "**option A**, 'arc 1 adds `test(token-list): spawn the live-check script with bun, as ci runs it` (`spawn("bun", …)`, closing #987 in the same PR). Then Phases 2-3 rerun in full at the new candidate, and the PR opens when every compare exits 0.'" Landed as `dc82d009d`, after a merge of `origin/dev` (`f5fa9f68c`, which brought #981 and #983). Red under the Node reference on its parent (1 of 1), green after it (3 of 3 on each engine, the same 24-test inventory). `dc82d009d` is the new candidate. Rejected: declaring the bar met with the red disclosed, because CLAUDE.md and this plan require every compare to exit 0.
 - **D12 The `apps/extension` soak pair stops after one saturation retry.** At `dc82d009d`, the other 12 compares exit 0, `infra/token-list` included. The extension pair failed twice, with other leads' runs holding load1 between 120 and 300 on this 188-core host. Every recorded failure is a vitest timeout at the default 5000 ms (`STACK_TRACE_ERROR`). They hit whole-repo filesystem scans and, twice, the same fee-read pin, which takes 8 to 24 ms alone. The common brief allows one retry after load falls, and it was used. Codex r6 found no code cause, but did not count saturation as proven either. Rejected: a third attempt without the orchestrator ("retry once" is the limit), a raised timeout or a skip, and declaring the step met. The arc stops before its PR (OA-2). A later attempt runs at a detached `dc82d009d`, so that all 26 summaries bind one candidate.
+- **D13 Arc 1 takes #1032's two advisories, in two steps (OA-4 A, the orchestrator's call, recorded on #1032).** Both arrived after this plan, and the enforced gate fails this PR without them. Step 1: `storybook` and `@storybook/vue3-vite` to `^10.6.2`, landed as D3 landed vite; 10.6.2 is past the age gate and 10.6.3 is not. Step 2: vitest and `@vitest/*` to 4.1.12 once it clears the gate at 2026-10-22T14:51Z, with the two vitest acknowledgements it makes stale removed. The bar then becomes 39/0/0/0. Phases 2-3 run once, after step 2. That soak is the one D7 deferred vitest to.
 
 ## Review verdicts
 
@@ -131,6 +132,7 @@ None. The arc changes dependency files only; no screen, copy or layout.
 - **Arc 1 review, round 5, Codex resumed (on `dc82d009d`): `approve`, confidence high.** "No findings. The authorized fix matches CI's invocation"; the assertions are unchanged, and 24 tests pass 3 of 3 on each engine with matching inventories. Its approval covers the fix only, not Phases 2-3.
 - **Arc 1 review, round 6, Codex resumed (on the extension soak): `b`, confidence high.** The allowed saturation retry is used up; "Three failures" is a hard stop, "not permission to exceed 'retry once.'" No code cause is shown, but saturation is still a hypothesis: a timeout proves that the deadline expired, not why. The lost failure names block classifying every red. Hand scheduling to the orchestrator, and keep every failure's name on any later attempt (D12).
 - **Arc 1 review, round 7, Codex resumed (on the close-out merge): `A-i`, confidence high.** The close-out's trunk merge (README step 4) brings `apps/extension/vitest.e2e.config.ts` and `vitest.e2e.network.config.ts` (#978's shard sequencer), which match Phase 3's `**/vitest*.config.*` trigger. So the merged HEAD is a new candidate and reruns Phases 2-3. Narrowing that rerun to the e2e smoke would document a change to an approved gate, not authorize it. Skipping the merge breaks step 4. After a pass, the PR may open at the pre-merge head, with the close-out waiting for the rerun (OA-3).
+- **Arc 1 review, round 8, Codex resumed (on OA-4 step 1, `64d61e4bc`): `approve with fixes`, records only, confidence high.** It found the dependency delta to be exactly as claimed, and matched all 27 integrity strings independently. The `oxc-resolver` downgrade to storybook's exact pin is acceptable (moderate): it reverts upstream resolver fixes, but nothing else depends on it and the build passes. It found no actionable issue in the new process and network paths, and 1242753 is closed. Accepted: (1) `typecheck:all` covers the extension's 28 story files only; design's tsconfig excludes its stories, and no config checks `.storybook/*.ts`, so the Storybook build is their only check; (2) `index.json` holds 217 entries, 182 stories and 35 docs.
 
 ## Delivery
 
