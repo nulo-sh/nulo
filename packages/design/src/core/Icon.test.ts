@@ -48,6 +48,15 @@ describe("Icon", () => {
 		expect([glyphs.private, glyphs.public]).not.toContainEqual(glyphs["network-edit"])
 	})
 
+	test("a hover colour is the hovered class over an inline --icon-hover; no hover colour sets neither", () => {
+		const hovered = render({ name: "close", hoverColor: "primary" })
+		const plain = render({ name: "close" })
+		expect(hovered.classes()).toContainEqual(expect.stringMatching(/hovered/))
+		expect((hovered.element as SVGElement).style.getPropertyValue("--icon-hover")).toBe("var(--txt-primary)")
+		expect(plain.classes()).not.toContainEqual(expect.stringMatching(/hovered/))
+		expect(plain.attributes("style")).not.toContain("--icon-hover")
+	})
+
 	test("rotate turns the glyph about its centre", () => {
 		expect(render({ name: "chevron", rotate: 90 }).attributes("style")).toContain("rotate(90deg)")
 		expect(render({ name: "chevron" }).attributes("style") ?? "").not.toContain("rotate")
