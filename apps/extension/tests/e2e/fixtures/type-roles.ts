@@ -539,9 +539,9 @@ export type InsideView = { view: number; scroll: number; past: PastView[]; sidew
  * the view counts whatever holds it: an ancestor that clips cuts it, and one that scrolls must not
  * scroll sideways, which `sideways` reports. A page scroller's `overflow-x` computes to `auto` from
  * its `overflow-y`, so style cannot tell it from a sideways one. A box inside one already reported
- * is not reported again; a field scrolls its own text. A scroller is named by the testid above it and
- * the first one it holds, as a shared wrapper rarely sits under one. `expectLaidOut` reads text only,
- * so a box with none, or one placed past the view, needs this.
+ * is not reported again; a field scrolls its own text. A scroller is named by its own or the nearest
+ * testid above it and by the first one it holds, as a shared wrapper rarely carries one. `expectLaidOut`
+ * reads text only, so a box with none, or one placed past the view, needs this.
  */
 export async function readInsideView(page: Page): Promise<InsideView> {
 	return page.evaluate(() => {

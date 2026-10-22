@@ -46,6 +46,7 @@ import {
 	atWidth,
 	expectFits,
 	expectFitsNarrow,
+	expectInsideView,
 	expectLaidOut,
 	expectSitesClean,
 	expectSweepClean,
@@ -111,7 +112,6 @@ async function withProbes<T>(page: Page, fn: () => Promise<T>): Promise<T> {
 
 type Planting = { host: string; html: string; styles: Record<string, Record<string, string>>; hostStyle?: Record<string, string> }
 
-/** A host over the page, the view's full width, in the identifiers' face at `line-height: 1`. */
 const OVER_PAGE = { position: "fixed", top: "0", left: "0", width: "100%", font: "13px/1 var(--font-mono)", zIndex: "9999" }
 
 /**
@@ -201,19 +201,8 @@ test("a site reads its value or its native field, a name shown is judged as name
 	registeredExtension: ctx,
 }) => {
 	const page = await openHome(ctx)
-	await page.evaluate((html: string) => {
-		const host = document.createElement("div")
-		host.setAttribute("data-testid", "tr-host")
-		host.innerHTML = html
-		// Through the CSSOM: `style-src` refuses a parsed `style` attribute.
-		for (const id of ["tr-mini-input", "tr-mini-data"]) {
-			const input = host.querySelector(`[data-testid="${id}"]`)
-			if (!(input instanceof HTMLElement)) throw new Error(`the fixture has no ${id}`)
-			input.style.fontSize = "12px"
-		}
-		document.body.appendChild(host)
-	}, FIXTURE_HTML)
-	try {
+	const styles = { "tr-mini-input": { fontSize: "12px" }, "tr-mini-data": { fontSize: "12px" } }
+	await withPlanted(page, { host: "tr-host", html: FIXTURE_HTML, styles }, async () => {
 		const failures = judgeTypography(await readPageTypography(page, { kind: "at", selector: '[data-testid="tr-host"] input' }))
 		expect(failures.map(({ testid, property }) => `${testid} ${property}`)).toEqual(["tr-mini-data font-size"])
 
@@ -230,9 +219,7 @@ test("a site reads its value or its native field, a name shown is judged as name
 		expect(observed.flatMap(({ failures }) => failures.map(({ property, actual }) => `${property}: ${actual}`))).toEqual([
 			"selector: 1 hidden",
 		])
-	} finally {
-		await page.evaluate(() => document.querySelector('[data-testid="tr-host"]')?.remove())
-	}
+	})
 	expect(ctx.pageErrors).toEqual([])
 })
 
@@ -252,7 +239,6 @@ const LAYOUT_HTML = `
 	<span data-testid="tr-positioned">0x1a...2b<i data-testid="tr-positioned-icon"></i></span>
 	<span data-testid="tr-hidden">Read aloud only</span>`
 
-/** Each control's style, set through the CSSOM: `style-src` refuses a parsed `style` attribute. */
 const LAYOUT_STYLES: Planting["styles"] = {
 	"tr-clip": { width: "40px", overflow: "hidden" },
 	"tr-clipped-input": { width: "200px" },
@@ -365,7 +351,8 @@ test("the narrow gate reports text its own width shows whole and the narrow widt
 /**
  * Two page scrollers, as every page has one: `overflow-y: auto` makes `overflow-x` compute to `auto`,
  * yet neither is meant to scroll sideways. A holds what the narrow width pushes past it; B holds what
- * stays inside: a box 0.5 px short of its edge, text under a box-less scroller, text below the fold.
+ * stays inside: a box 0.4 px past its edge, inside the half pixel the view allows, text under a
+ * box-less scroller, text below the fold.
  */
 const SIDEWAYS_HTML = `
 	<div data-testid="tr-side-a">
@@ -383,7 +370,7 @@ const SIDEWAYS_STYLES: Planting["styles"] = {
 	"tr-side-wide": { minWidth: "300px", height: "20px" },
 	"tr-side-pushed": { width: "60px", height: "20px", marginLeft: "250px" },
 	"tr-side-b": { overflowY: "auto", height: "120px" },
-	"tr-side-fits": { width: "calc(100% - 0.5px)", height: "20px" },
+	"tr-side-fits": { width: "calc(100% + 0.4px)", height: "20px" },
 	"tr-side-contents": { display: "contents", overflow: "auto" },
 	"tr-side-held": { display: "block", height: "20px" },
 	"tr-side-below": { marginTop: "400px", height: "20px" },
@@ -411,6 +398,13 @@ test("the narrow gate fails what a page scroller pushes sideways past the view, 
 			"gone tr-side-pushed",
 		])
 		expect(narrow).toEqual({ past: ["tr-side-wide", "tr-side-pushed"], sideways: ["tr-side-a"] })
+
+		// Narrower than the view, A keeps every box inside it, so only its sideways scroll fails the page.
+		await page.evaluate(() => {
+			;(document.querySelector('[data-testid="tr-side-a"]') as HTMLElement).style.width = "200px"
+		})
+		expect(await planted()).toEqual({ past: [], sideways: ["tr-side-a"] })
+		await expect(expectInsideView(page, "planted")).rejects.toThrow(/boxes that scroll sideways/)
 	})
 	expect(ctx.pageErrors).toEqual([])
 })
