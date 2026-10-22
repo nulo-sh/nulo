@@ -343,7 +343,8 @@ describe("send ordering composition: a dApp send waits outside the slot for the 
 	test("a silent-path record reads queued while it waits, and its claim takes it back", async () => {
 		const h = await makeHarness()
 		const { id, run } = await parkedSend(h, "pending")
-		expect((await h.journal.getOperation(id))?.progress.stage).toBe("queued")
+		// Nothing orders the record's `queued` write before the slot's hand-on.
+		await waitFor(async () => (await h.journal.getOperation(id))?.progress.stage === "queued")
 		h.pending.length = 0
 		expect(await run).toEqual(CLAIMED_THEN_FAILED)
 		expect(stagesOf(h, id)).toEqual(["pending", "queued", "pending", "failed"])
