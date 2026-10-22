@@ -1,7 +1,7 @@
 ---
 plan: fit-gate-1
 tier: light
-status: planned; Codex approve (r3), Opus conditional approve folded in; awaiting the orchestrator
+status: closed with its one PR; the merge closes the plan
 issues: "#1023 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,24 @@ base: origin/dev at 60ecd6cc3
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-22.
+- **Status:** closed with its one PR (`worktree-fit-gate-1` → `dev`, `Closes #1023`), which carries this close-out; the merge closes the plan.
+- **Shipped:**
+  - **The repaired gate.** At 240 px, `expectInsideView` fails every shown box past the view and every light-DOM scroller wider than its box. `textFates`' compare cuts at a sideways scroller that has a box.
+  - **The proof.** A planted page with its controls: it was red on the base, and now runs green on Chrome and Firefox. The four planted tests share `withPlanted`.
+  - **Two fits below 359 px:** the token metadata popup's capability marks, and Developer → Senders' row actions. The built CSS and a 360 px pixel compare show no change at 360 px. The 240 px sheets are in [screenshots/](screenshots/).
+- **Dispositions:**
+  - The orchestrator approved the plan as committed, with D1, D3 and D7 in force.
+  - Review round 1: Codex approved, and so did the Opus leg. Every finding was accepted, except Codex's request to delete the two Vue media-rule comments; they follow #986's narrow-rule comments.
+  - Round 2: Codex approved, with no new material finding.
+  - Details: [lessons/phase-3.md](lessons/phase-3.md).
+- **Lessons:** the one generalizable gotcha, a page scroller's `overflow-x` computing to `auto`, went to the `e2e-testing` skill's harness behaviours, its owning domain. `lessons.md` is unchanged at its budget.
+- **Known limits:** #1030 (a box positioned past a page scroller whose containing block lies outside it could read as cut at 240 px; a false red, no instance).
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` below.
 
 # fit-gate-1: the 240 px gate fails a page that scrolls sideways inside its own scroller
 
@@ -128,6 +146,9 @@ Test code and two CSS rules; no runtime logic, storage, message or permission ch
 | r1 | Opus 5.5, Plan | conditional approve | planted boxes sized and the controls in their own scroller; `sideways` gets `past`'s filter; Facts 1 and 3, D4, D7, citations; owner records quoted (D6); the future list keyed on the scroller's own testid; D5 stated as adding no case beyond `cutBy` | a step to restore the probe (restored before the commit); a known-limit issue for the `thin` list (measured: it fits) |
 | r2 | Codex, resumed (verify) | conditional approve | r1 conditions met; the compare's cut skips a box-less ancestor, so the record stays literally today's; the `display: contents` control wraps a sized span | none |
 | r3 | Codex, resumed (verify) | approve | none | none |
+| impl r1 | Codex, gpt-6.1-sol, high | approve | the planted test runs `expectInsideView` on a sideways-only case; `OVER_PAGE`'s restating doc deleted | deleting the two Vue media-rule comments (the #986 narrow-rule precedent; they say what 359 px means) |
+| impl r1 | Opus 5.5, general-purpose | approve | the control moved 0.4 px past its scroller's edge (`past`'s allowance proved; I2 measured on both engines); the scroller-naming comment; `LAYOUT_STYLES`' duplicated doc; the site test folded into `withPlanted`; the containing-block limit filed (#1030) | none (D5's missing control and the key's 10 px into the padding noted, no action) |
+| impl r2 | Codex, resumed (verify) | approve, no new material finding | none | none |
 
 ## Seeds
 
