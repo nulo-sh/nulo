@@ -139,7 +139,7 @@ Steps:
 - Pass criteria: the new file runs 5 tests, all green, each with its shipped-text and mutation assertions; every other command exits 0.
 - Layers: typecheck, lint, unit.
 
-### Phase 2: close-out text, published only after review
+### Phase 2: close-out text, published only after review ✓
 
 Steps:
 1. Merge `origin/dev`; read what changed in `index.md` and `lessons.md` (another plan may have landed; neither merges by union).
