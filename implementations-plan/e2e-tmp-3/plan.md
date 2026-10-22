@@ -11,7 +11,7 @@ base: origin/dev at 6da033705
 trunk: dev
 issues: "#1076 (A1 closes it); #1077 (filed in recon, A1 closes it, D2); #1078 (filed in recon, no arc: other runner and workspace)"
 post_implementation_hardening: not scheduled
-status: approved by Codex r3 (auto-continue); A1 next
+status: approved by Codex r3 (auto-continue); A1 phase 1 green, review loop
 ---
 
 # e2e-tmp-3: `test:release` leaves three temp dirs per run
@@ -49,6 +49,7 @@ None. Three root `scripts/` test files change; no extension, landing or playgrou
 | D2 | #1077 (tag-by-hand) in this arc | folded in: the same command, the same consequence, a few lines; the run-level count of `test:release` is this lane's proof and cannot read 0 without it. A separate lane would cost a plan, two audits and a PR for a few lines |
 | D3 | The proof | the run-level count, red on base (3) and green after (0), plus an opt-in run of each probe as the success control (D5). No committed self-test (Not taken d); the PR body says so |
 | D4 | #1078 (two vitest files, non-Linux hosts) | no arc: another runner, workspace and platform, not reachable from this host; filed for its own lane |
+| D6 | Deviation: step 4's skip count | 11, not 10. Bun 1.4.2 reports each hook of a skipped describe as a skipped entry, and `attach-assets-run`'s block gains a `beforeAll` (base 3 skipped, after 4; total 351 → 352). No test was added or skipped; the tree wins |
 | D5 | The release probe's opt-in run | run with `GH_TOKEN` unset (Opus r1): `realIO` then sends an empty bearer token, GitHub refuses, and the block's hooks still run, so the count proves the moved dir is made and removed. An agent does not move a credential into a command, so its passing path is not run |
 
 ## Security & Adversarial Considerations
@@ -68,7 +69,7 @@ None. Three root `scripts/` test files change; no extension, landing or playgrou
 
 ### Arc A1 (branch `worktree-e2e-tmp-3`, from the `origin/dev` head at its start)
 
-**Phase 1 — the three dirs and the proof.** Do these steps in order. Use scratch dirs under `~/.cache/nulo-backlog/e2e-tmp-3/`.
+**Phase 1 — the three dirs and the proof.** ✓ (2026-10-22, [lessons/phase-1.md](lessons/phase-1.md)) Do these steps in order. Use scratch dirs under `~/.cache/nulo-backlog/e2e-tmp-3/`.
 1. Merge `origin/dev` into the branch. Make an empty scratch dir `t0`.
 2. Before any edit, run `env -u NULO_RELEASE_PROBE -u NULO_PROVENANCE_PROBE TMPDIR=$T0 bun run test:release`. Count with `find "$T0" -mindepth 1 -maxdepth 1 ! -name node-compile-cache | wc -l` (expect 3).
 3. Make the three edits (Architecture).
