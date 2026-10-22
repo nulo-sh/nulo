@@ -11,6 +11,22 @@ base: 5c35ca934
 issues: "#1049 (known limit, closed as not planned; no arc closes it)"
 ---
 
+## Outcome
+
+- **Date:** 2026-10-22.
+- **Status:** completed with its one PR (`worktree-note-owner-1` → `dev`), which carries this close-out; the merge closes the plan.
+- **Shipped:**
+  - **The tripwire** (`packages/aztec-runtime/src/pxe/note-owner-scope.sources.test.ts`): five tests pin the rules that keep the PXE's own sync from storing a note under a scope lacking its owner's key (the key oracle's scope check, one scope per sync, and in each receipt class the owner-key nullifier and the discovery gate), each with mutation controls.
+  - **The coupling entry** (`UPDATE.md` § Types coupled to Aztec shapes): a red test, or a new amount-bearing class in `note-schemas.ts`, means retrace #1049 before the bump ships.
+- **Dispositions:**
+  - #1049 closed as a known limit: on 6.0.0-rc.3 the PXE's own per-scope sync never stores a receipt-class note under a non-owner scope (§ The path). The `owner: account` filter (outline B) and the docs-only close (outline C) were rejected (D1, D2).
+  - The lane brief's default for a known limit was a docs-only PR; the panel chose the tripwire instead (D2).
+  - Phase 1 green ([lessons/phase-1.md](lessons/phase-1.md)); no e2e ran, as no runtime file changed (D3).
+- **Lessons:** nothing promoted: `lessons.md` is at its budget, and the coupling lives where the next bump reads it, in `UPDATE.md` and the test.
+- **Known limits:** #1049.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
+
 # note-owner-1: a note in two of a profile's accounts' scopes
 
 #1049 says an incoming receipt can land under the wrong account of a profile: the wallet reads notes by scope with no `owner` filter, and the receipt id names no account. The path needs one note stored under two scopes of one profile. On the pinned line (6.0.0-rc.3), the reviewed honest discovery paths never store a note that can become a receipt under any scope but its owner's (§ The path). So #1049 is a known limit. This plan ships no runtime change. It ships one test that pins the upstream rules the conclusion rests on, so the Aztec bump that changes one of them fails a test instead of reopening #1049 silently.
@@ -110,7 +126,7 @@ None. No screen, copy or stored shape changes.
 
 ## Phases
 
-### Phase 1: the tripwire test and the coupling entry
+### Phase 1: the tripwire test and the coupling entry ✓
 
 Steps:
 1. Merge `origin/dev` into the branch. Read what changed in `implementations-plan/index.md` and `lessons.md`.
