@@ -9,7 +9,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 6da033705 (carries e2e-tmp-1, #1074)
 trunk: dev
-issues: "#1071 (A1 closes it); #1076 (filed in recon, no arc: other owner)"
+issues: "#1071 (A1 closes it); #1076 (filed in recon, no arc: other owner; closed by #1081)"
 post_implementation_hardening: not scheduled
 status: approved by Codex r3 (auto-continue); A1 implementing
 ---
@@ -51,7 +51,7 @@ None. Test code and a harness self-test only; no extension source changes. No or
 | D3 | Module name | rename `backup-temp` to `test-temp-dir` (helper and self-test, `git mv`): the module's first export is no longer about backups. Two import lines change |
 | D4 | e2e scope | the whole smoke suite at retry 0, Chrome then Firefox, each under a scratch `TMPDIR` (lane brief). No local network run: the extraction keeps `writeBackupToTemp`'s order (register, create, write), smoke calls it at 18 sites in 10 files, and the PR's network workflows run on any `apps/extension/**` change |
 | D5 | Killed workers | accepted residue under the closed known limit #1075 (its class: a killed worker skips `onTestFinished`); no new issue |
-| D6 | The neighbour leak in `test:release` | #1076, filed in recon; other owner, no arc |
+| D6 | The neighbour leak in `test:release` | #1076, filed in recon; other owner, no arc. #1081 closed it on `dev` during A1 |
 
 ## Security & Adversarial Considerations
 
@@ -84,7 +84,7 @@ Gate: step 2 prints 3 and step 5 prints 0, each run exit 0; in step 4 exactly th
 
 ## Post-implementation
 
-`implementations-plan/README.md` § Post-implementation standard at `6da033705`; step 1 absent (`code_review: off`). After Phase 2: the Codex loop over the arc's diff against `6da033705` (`~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`), the two verbatim rules in every prompt, hard stop at three rounds; one Opus review (`Agent`, `model: "opus"`, `general-purpose`) beside round 1; each round in `lessons/phase-1.md` and § Audit verdicts. A fix that changes the helper or the file reruns Phase 1's gate, and Phase 2's when a smoke file changes. Then the PR, then the close-out as its final commits: merge `origin/dev` first and read what changed in `index.md` and `lessons.md`; the Outcome (`Known limits: none`, #1075 already covers killed workers; `Open items:` #1076); a lessons pass; `STATUS.md` deleted; `git mv` into `archive/` in its own commit, index line moved. Teardown once `implementations-plan/archive/e2e-tmp-2/plan.md` is on `origin/dev`: `agent-worktree done e2e-tmp-2 --merged`.
+`implementations-plan/README.md` § Post-implementation standard at `6da033705`; step 1 absent (`code_review: off`). After Phase 2: the Codex loop over the arc's diff against `6da033705` (`~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`), the two verbatim rules in every prompt, hard stop at three rounds; one Opus review (`Agent`, `model: "opus"`, `general-purpose`) beside round 1; each round in `lessons/phase-1.md` and § Audit verdicts. A fix that changes the helper or the file reruns Phase 1's gate, and Phase 2's when a smoke file changes. Then the PR, then the close-out as its final commits: merge `origin/dev` first and read what changed in `index.md` and `lessons.md`; the Outcome (`Known limits: none`, #1075 already covers killed workers; `Open items: none`, #1076 closed by #1081); a lessons pass; `STATUS.md` deleted; `git mv` into `archive/` in its own commit, index line moved. Teardown once `implementations-plan/archive/e2e-tmp-2/plan.md` is on `origin/dev`: `agent-worktree done e2e-tmp-2 --merged`.
 
 ## Delivery
 
