@@ -5,3 +5,4 @@
 - `bun run lint` exit 0 (4 infos, all in files the arc does not touch); `bun run typecheck:all` exit 0 (the extension's `tsconfig.scripts.json` types the three files).
 - **Review loop**: Codex r1 (fresh) no bug, one low comment suggestion rejected (the 107-byte check fails loudly with its own remedy); Opus clean; Codex r2 (resumed) clean. Converged at round 2 with no code change.
 - **Phase 2 gates on `c18f9ff3b`** (the code unchanged since): `bun run test` 917 files passed, 3 skipped; `bun run test:all` every workspace exit 0.
+- **D7** (after the PR opened): `origin/dev` landed e2e-tmp-2's `testTempDir`; merged (no conflict in the arc's files; GitHub had flagged the union-merged `archive/index.md`), and `outside` takes the helper. Gate rerun on `e2feee6e0`: stubbed 2/42, 0 dirs; default `TMPDIR` 50 passed and 1 expected fail with the helper's self-test; long `TMPDIR` the same 4 failures, 0 dirs; lint and typecheck:all exit 0. Codex r3 clean.

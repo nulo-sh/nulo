@@ -21,12 +21,13 @@ status: closed with its one PR; the merge closes the plan
 - **Shipped:**
   - **The two env-reading files** (`webdriver-ownership.test.ts`, `owned-processes.test.ts`): the dir's name is fixed at import with a 6-character random suffix; the Linux block's `beforeAll` makes it (`mkdirSync`, mode `0o700`), and its `afterAll` removes it only once made.
   - **`reconcile-lock.test.ts`**: `boot-guard.test.ts`'s shape, the dir made and removed by the Linux block.
-  - **`outside`** (`owned-processes.test.ts`): removed by `onTestFinished`, so a failed case no longer leaves it.
+  - **`outside`** (`owned-processes.test.ts`): a `testTempDir`, removed when its test ends, so a failed case no longer leaves it (D7).
   - **The proof:** stubbed non-Linux 3 → 0; Linux under a long scratch `TMPDIR` 1 → 0 with the same 4 named failures; Linux default `TMPDIR` 44 passed ([lessons/phase-1.md](lessons/phase-1.md)). No native macOS run.
 - **Dispositions:**
   - The plan passed its own gate on auto-continue: Codex approve at r2, no owner ask.
   - D2 (`reconcile-lock`) and D3 (`outside`) were folded in and recorded on #1078 by a comment.
-  - The review loop converged at round 2 with no code change: Codex r1 one low comment suggestion (rejected), Opus clean, Codex r2 clean.
+  - D7, an implementation deviation: e2e-tmp-2's `testTempDir` landed on `dev` while the PR was open, and `outside` takes it instead of the inline `onTestFinished` pair.
+  - The review loop converged at round 3: Codex r1 one low comment suggestion (rejected), Opus clean, Codex r2 clean, Codex r3 clean on D7.
 - **Lessons:** nothing promoted. `lessons.md` is at its budget (8,192 bytes) and nothing in it is superseded. The all-skipped-file rule stays in the three block comments and in this plan's F2.
 - **Known limits:** #1082 (an `owned-processes` case leaves an idle `sleep 120`); #1075 already covers a killed worker.
 - **Open items:** none.
@@ -72,6 +73,7 @@ None. Three test files under `apps/extension/scripts/e2e/` change; no extension,
 | D4 | The proof | the stubbed count, red on base (3) and green after (0); and a Linux run under a scratch `TMPDIR` too long for 4 socket-path cases, red on base (1, `outside`) and green after (0). Those 4 failures are the input condition, named in the gate, on base and after; no assertion changes. A short private `TMPDIR` (Codex r1) would have to sit under `/tmp`, which the lane's scratch rule excludes; the `/tmp` run has no attribution and only proves the 44 cases pass. No committed self-test (Not taken d) |
 | D5 | The stub is honest | it changes one input, the value the `skipIf`s and `SOCKET_PATH_MAX` read, on the real files with the real config; the cases it runs are the ones macOS runs. It simulates the branch, not the kernel: the PR says no native macOS run was made |
 | D6 | The orphaned `sleep` (Opus r1) | a known limit, #1082, filed closed: no dir, no resource, ends within 120 s |
+| D7 | Deviation: `outside` | e2e-tmp-2 (#1084) landed `tests/e2e/helpers/test-temp-dir.ts` on `dev` after recon; its `testTempDir(prefix)` is the same `onTestFinished` plus `mkdtempSync` pair, so `outside` takes it (`e2feee6e0`). The tree wins |
 
 ## Security & Adversarial Considerations
 
@@ -124,7 +126,8 @@ Opened ready, without labels, after the loop converges. No e2e label: the change
 - **Codex r2** (resumed `01a16532`): **approve**. Ran the plan's edits as an in-memory transform: stubbed 3 → 0 with 2 passed and 42 skipped; long Linux `TMPDIR` 1 → 0 with the same 4 named failures and their message; default `TMPDIR` 44 passed. Verified the 90-byte arithmetic, `rootMade`, and D4's rejection of a `/tmp` parent under the scratch rule. No new finding.
 - **Post-implementation, Codex r1** (gpt-6.1-sol, high, fresh session `01a16543`, the code diff against `421bf33b4`): no bug. Probed collisions (`rootMade` kept both planted dirs), the kill-then-remove order, lazy `DIR` reads, the `outside` hook placement, and reproduced the gate (3 → 0, 1 → 0, 44 passed). One low suggestion, a comment on the suffix's length at `owned-processes.test.ts:11`: rejected, since a longer suffix fails four cases with `nodeTmpDir`'s own message naming the cause and the remedy.
 - **Post-implementation, Opus 5.5** (general-purpose, beside r1): **clean**. Nothing touches the filesystem under `ROOT` or `DIR` before its block's `beforeAll`; a failed `beforeAll` skips the block's tests; imports and comments clean; judged the suffix note duplicative. Side effect it found: on the base, a `-t` run of a later block alone leaked `ROOT`; it no longer does.
-- **Post-implementation, Codex r2** (resumed `01a16543`): **clean**. The suggestion is not material; no regression. The loop converged.
+- **Post-implementation, Codex r2** (resumed `01a16543`): **clean**. The suggestion is not material; no regression.
+- **Post-implementation, Codex r3** (resumed `01a16543`, the D7 fix diff after merging `origin/dev`): **clean**. The helper's module graph reads no `E2E_DATA_ROOT`; its hook is registered before `createRunDir(outside)` can throw; reproduced the gate. The loop converged.
 
 ## Seeds
 
