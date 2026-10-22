@@ -31,6 +31,7 @@ import {
 	getStartedAztecOpenedKey,
 	getStartedBackupSavedKey,
 	getStartedFeeJuiceHeldKey,
+	getStartedPrestoOpenedKey,
 	getStartedHiddenKey,
 	getStartedPhraseSavedKey,
 	pinnedTokensKey,
@@ -435,6 +436,7 @@ describe("what each writer stores parses back to itself", () => {
 			["aztecOpened", "uiGetStartedAztecOpened", getStartedAztecOpenedKey],
 			["hidden", "uiGetStartedHidden", getStartedHiddenKey],
 			["feeJuiceHeld", "uiGetStartedFeeJuiceHeld", getStartedFeeJuiceHeldKey],
+			["prestoOpened", "uiGetStartedPrestoOpened", getStartedPrestoOpenedKey],
 		] as const
 		for (const [flag, name, keyOf] of marks) {
 			await markGetStarted("p1", flag)

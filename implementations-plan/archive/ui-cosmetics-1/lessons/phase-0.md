@@ -1,0 +1,19 @@
+# Phase 0: planning log
+
+## Icon pixel probe (2026-10-21)
+
+- **Question.** What makes the glyphs read "hand-drawn, with a weird opacity on some lines" (#1019 item 2)?
+- **Method.** A scratch Bun script, kept outside the repository (`~/.cache/nulo-backlog/ui-cosmetics-1/probe/icons.ts`), imports `glyphs` from `packages/design/src/core/glyphs.ts` and writes each glyph as `Icon.vue` draws it: `viewBox="0 0 24 24"`, `stroke-width="2"`, round caps and joins, paint from `currentColor`. Puppeteer's Chrome renders it headless at device pixel ratio 1 and 2, on each theme's `--app-bg`. Per pixel, coverage = (pixel − background) / (opaque foreground − background), averaged over the channels.
+- **Candidates.** C0, today: one `<path>` per glyph path. C1: one `<path>` for all stroke paths (the `d` strings joined) and one for all fill paths. C2: C1 plus `shape-rendering="crispEdges"`.
+- **Result** (`screenshots/coverage.txt`, Holdings and Settings at 14, 16, 18, 22 and 24 px in the 56 % `tertiary` paint):
+  - C0: the maximum coverage reaches 0.805 dark and 0.807 light, which is 1 − 0.44². That is the alpha of two paints. From 6 to 100 pixels per glyph exceed 0.60, on both themes and both ratios.
+  - C1: the maximum is 0.558 dark and 0.559 light everywhere, one paint. No pixel exceeds 0.60, and the outline is otherwise the same.
+  - C2: no partial pixels at all. Curves turn into stairs, and a stroke reads 1 px in some places and 2 px in others.
+- **Reading.** The "weird opacity" is demonstrated. A translucent paint is applied once per `<path>` element, so wherever two of a glyph's paths overlap (a round cap on a curve, a knob on its line, a coin's edge on the next coin) the overlap is painted twice and shows darker on light, brighter on dark. This happens at every size and ratio. Sub-pixel softness is a second, smaller effect at 1x: Settings' lines at 22 px land on 5.5, 11 and 16.5 px with a 1.83 px stroke. Only a 24 px drawing (a 1:1 scale) puts Tabler's integer lines on whole pixels.
+- **Claim that did not hold.** #1019 and the lane brief call the set "in-house, filled rectangles and 2.5-unit square-capped strokes, no third-party library". Since #790 every glyph is Tabler Icons 3.49.0, drawn verbatim (`packages/design/README.md` § Icons). The owner's own recollection holds: the set comes from an icon library. Holdings is Tabler's `coins` and Settings is `adjustments-horizontal`. The "Holdings' bars at y 4.25, 10.125, 16" do not exist at this revision.
+
+## Consults
+
+- **Codex audit, round 1** (gpt-6.1-sol, high, session 01a16023): conditional approve. Seven findings, all verified against the tree and accepted: the Presto fixtures (`useGetStarted.test.ts`, `get-started.test.ts`'s key list and `NONE`); a base-build control that reds on a missing selector, not on geometry; the generator guard aimed at an impossible case (the parser already splits stroke from fill) while the join's real precondition is an absolute `M`; the full smoke suites; the header's width on done's centred page and the measured `H − B`; waiting for each step before reading; spacing under the title kept as today. Minor: 0.807/0.559 on light, the title at 88 characters, done's hero is a `Flex`. One call changed: the Presto mark is started, not awaited, before the push (no navigation waits on storage after Home unmounts).
+- **Codex verification** (resume of 01a16023): all six conditions met. One new defect, demonstrated by trace and accepted: the plan claimed the unawaited Presto write is issued before the push, but `storageLocalSet` awaits `migrationIdle()` first, so the write lands after the push. Wording and test corrected: the mark starts first; the test holds the write pending, sees the route, then sees the flag.
+- **Opus leg** (Plan agent, opus): conditional approve; findings in the plan's Audit verdicts. One rejected: dropping every glyph refusal (D8).

@@ -12,6 +12,7 @@ export const RESTORE_OUTCOME_ROOT = "nulo:ui:restoreOutcome"
 export const GET_STARTED_PHRASE_SAVED_ROOT = "nulo:ui:getStartedPhraseSaved"
 export const GET_STARTED_BACKUP_SAVED_ROOT = "nulo:ui:getStartedBackupSaved"
 export const GET_STARTED_AZTEC_OPENED_ROOT = "nulo:ui:getStartedAztecOpened"
+export const GET_STARTED_PRESTO_OPENED_ROOT = "nulo:ui:getStartedPrestoOpened"
 export const GET_STARTED_HIDDEN_ROOT = "nulo:ui:getStartedHidden"
 export const GET_STARTED_FEE_JUICE_HELD_ROOT = "nulo:ui:getStartedFeeJuiceHeld"
 export const PROFILE_IMPORTED_ROOT = "nulo:ui:profileImported"
@@ -24,6 +25,7 @@ const RESTORE_OUTCOME_PREFIX = `${RESTORE_OUTCOME_ROOT}@`
 const GET_STARTED_PHRASE_SAVED_PREFIX = `${GET_STARTED_PHRASE_SAVED_ROOT}@`
 const GET_STARTED_BACKUP_SAVED_PREFIX = `${GET_STARTED_BACKUP_SAVED_ROOT}@`
 const GET_STARTED_AZTEC_OPENED_PREFIX = `${GET_STARTED_AZTEC_OPENED_ROOT}@`
+const GET_STARTED_PRESTO_OPENED_PREFIX = `${GET_STARTED_PRESTO_OPENED_ROOT}@`
 const GET_STARTED_HIDDEN_PREFIX = `${GET_STARTED_HIDDEN_ROOT}@`
 const GET_STARTED_FEE_JUICE_HELD_PREFIX = `${GET_STARTED_FEE_JUICE_HELD_ROOT}@`
 const PROFILE_IMPORTED_PREFIX = `${PROFILE_IMPORTED_ROOT}@`
@@ -38,6 +40,7 @@ export const PROFILE_UI_KEY_PREFIXES: readonly string[] = [
 	GET_STARTED_PHRASE_SAVED_PREFIX,
 	GET_STARTED_BACKUP_SAVED_PREFIX,
 	GET_STARTED_AZTEC_OPENED_PREFIX,
+	GET_STARTED_PRESTO_OPENED_PREFIX,
 	GET_STARTED_HIDDEN_PREFIX,
 	GET_STARTED_FEE_JUICE_HELD_PREFIX,
 	PROFILE_IMPORTED_PREFIX,
@@ -60,6 +63,7 @@ export const restoreOutcomeKey = (profileId: string) => `${RESTORE_OUTCOME_PREFI
 export const getStartedPhraseSavedKey = (profileId: string) => `${GET_STARTED_PHRASE_SAVED_PREFIX}${profileId}`
 export const getStartedBackupSavedKey = (profileId: string) => `${GET_STARTED_BACKUP_SAVED_PREFIX}${profileId}`
 export const getStartedAztecOpenedKey = (profileId: string) => `${GET_STARTED_AZTEC_OPENED_PREFIX}${profileId}`
+export const getStartedPrestoOpenedKey = (profileId: string) => `${GET_STARTED_PRESTO_OPENED_PREFIX}${profileId}`
 export const getStartedHiddenKey = (profileId: string) => `${GET_STARTED_HIDDEN_PREFIX}${profileId}`
 export const getStartedFeeJuiceHeldKey = (profileId: string) => `${GET_STARTED_FEE_JUICE_HELD_PREFIX}${profileId}`
 
