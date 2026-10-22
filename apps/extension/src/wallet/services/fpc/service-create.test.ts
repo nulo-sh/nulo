@@ -3,6 +3,9 @@
  * capture the deletion fence and a network liveness mark at their entry and
  * assert both flush against the row write — a deletion, network delete or
  * reset completing during the PXE work must never land a row.
+ *
+ * A purge or sweep is awaited while a registration is parked, so one that
+ * waited on the registration times the case out instead of racing a timer.
  */
 import { describe, expect, test, vi } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
@@ -107,13 +110,6 @@ function setPxe(h: Harness, pxe: Record<string, unknown>) {
 
 type Registration = { instance: { address: { toString(): string } } }
 
-/** `settled` turns true once `promise` settles; `FakeBrowserApi` storage settles on microtasks,
- *  so a section that awaits only storage has settled after one macrotask. */
-function track(promise: Promise<unknown>) {
-	const tracked = { settled: false, promise: promise.finally(() => (tracked.settled = true)) }
-	return tracked
-}
-
 const macrotask = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 async function fpcRowCount(api: FakeBrowserApi): Promise<number> {
@@ -176,20 +172,16 @@ describe("FPC creation fences", () => {
 		const writes = recordWrites(h.api.storage.local, "nulo:core:fpcs@")
 
 		const run = h.service.getFpcs(1)
-		let purge: ReturnType<typeof track> | undefined
 		try {
 			await reached.promise
 			h.deletionState.beginDeletion("p1")
-			purge = track(h.service.purgeForProfile("p1"))
-			await macrotask()
-			expect(purge.settled).toBe(true)
+			await h.service.purgeForProfile("p1")
 			h.deletionState.release("p1")
 		} finally {
 			gate.resolve()
 		}
 
 		await run
-		await purge?.promise
 		writes.restore()
 		expect(writes.log).toEqual([])
 		expect(await fpcRowCount(h.api)).toBe(0)
@@ -223,21 +215,17 @@ describe("FPC creation fences", () => {
 		})
 
 		const run = h.service.getFpcs(1)
-		let sweep: ReturnType<typeof track> | undefined
 		try {
 			await reached.promise
 			expect(await fpcRowCount(h.api)).toBe(1)
 			h.reservations.reserve()
-			sweep = track(h.service.clearChainState("p1", 1))
-			await macrotask()
-			expect(sweep.settled).toBe(true)
+			await h.service.clearChainState("p1", 1)
 			h.reservations.release()
 		} finally {
 			gate.resolve()
 		}
 
 		const fpcs = await run
-		await sweep?.promise
 		expect(fpcs).toEqual([])
 		expect(await fpcRowCount(h.api)).toBe(0)
 	})

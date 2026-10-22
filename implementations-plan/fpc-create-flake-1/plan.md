@@ -73,7 +73,7 @@ Test-only: no product code, dependency, workflow, permission, key or crypto chan
 
 **UI impact:** none. The arc touches no surface a person sees.
 
-## Phase 1: the order proof ✗
+## Phase 1: the order proof ✓
 
 **Assumptions:** F1-F10; I1 is not relied on.
 
