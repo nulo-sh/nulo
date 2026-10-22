@@ -14,7 +14,6 @@
  * phrase, A still exists, so the warn-and-confirm fires and the CONFIRM path is what proceeds —
  * the seed-path legs live in `duplicate-phrase-import.test.ts`.
  */
-import { rmSync } from "node:fs"
 import { expect } from "vitest"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import {
@@ -84,103 +83,99 @@ test("a full backup carries an imported account; restoring it (dup-confirmed) re
 	expect((parsedBackup.data?.["imported-account-keys"] as unknown[] | undefined)?.length).toBe(1)
 
 	const filePath = writeBackupToTemp(JSON.stringify(parsedBackup), "backup-with-imported-account.json")
-	try {
-		// ── Stage 3: import the backup into the SAME extension → dup-phrase warn → confirm ──
-		await navigateByHash(page, "#/popup/import", 15_000)
-		await waitForServiceReady(page, 15_000)
-		await page.waitForSelector('[data-testid="import-option-full-backup"]', { visible: true, timeout: 15_000 })
-		await clickByTestId(page, "import-option-full-backup")
-		await pickFileByTestId(page, "import-full-backup-pick-file", filePath)
-		await page.waitForSelector('[data-testid="import-full-backup-password-input"] input', { visible: true, timeout: 30_000 })
-		await replaceInputValue(page, '[data-testid="import-full-backup-password-input"]', RESTORE_PASSWORD)
-		await replaceInputValue(page, '[data-testid="import-full-backup-password-confirm-input"]', RESTORE_PASSWORD)
-		await page.waitForFunction(
-			() => {
-				const btn = document.querySelector<HTMLButtonElement>('[data-testid="import-full-backup-submit-btn"]')
-				return !!btn && !btn.disabled
-			},
-			{ timeout: 10_000 },
-		)
-		await clickByTestId(page, "import-full-backup-submit-btn")
+	// ── Stage 3: import the backup into the SAME extension → dup-phrase warn → confirm ──
+	await navigateByHash(page, "#/popup/import", 15_000)
+	await waitForServiceReady(page, 15_000)
+	await page.waitForSelector('[data-testid="import-option-full-backup"]', { visible: true, timeout: 15_000 })
+	await clickByTestId(page, "import-option-full-backup")
+	await pickFileByTestId(page, "import-full-backup-pick-file", filePath)
+	await page.waitForSelector('[data-testid="import-full-backup-password-input"] input', { visible: true, timeout: 30_000 })
+	await replaceInputValue(page, '[data-testid="import-full-backup-password-input"]', RESTORE_PASSWORD)
+	await replaceInputValue(page, '[data-testid="import-full-backup-password-confirm-input"]', RESTORE_PASSWORD)
+	await page.waitForFunction(
+		() => {
+			const btn = document.querySelector<HTMLButtonElement>('[data-testid="import-full-backup-submit-btn"]')
+			return !!btn && !btn.disabled
+		},
+		{ timeout: 10_000 },
+	)
+	await clickByTestId(page, "import-full-backup-submit-btn")
 
-		// The guard fires on the BACKUP path: profile A holds this exact phrase.
-		await page.waitForSelector('[data-testid="confirm-submit"]', { visible: true, timeout: 60_000 })
-		const dialogText = await page.evaluate(() => document.body.textContent ?? "")
-		expect(dialogText).toMatch(/recovery phrase/i)
-		await acceptConfirmPopup(page)
+	// The guard fires on the BACKUP path: profile A holds this exact phrase.
+	await page.waitForSelector('[data-testid="confirm-submit"]', { visible: true, timeout: 60_000 })
+	const dialogText = await page.evaluate(() => document.body.textContent ?? "")
+	expect(dialogText).toMatch(/recovery phrase/i)
+	await acceptConfirmPopup(page)
 
-		// ── Stage 4: settle into the restored profile (backup-roundtrip's actionable-screen
-		// idiom: general/auth are terminal; the finished-with-errors screen is acknowledged
-		// via Continue, exactly as a real user proceeds) ──
+	// ── Stage 4: settle into the restored profile (backup-roundtrip's actionable-screen
+	// idiom: general/auth are terminal; the finished-with-errors screen is acknowledged
+	// via Continue, exactly as a real user proceeds) ──
+	await page.waitForFunction(
+		() => {
+			const h = window.location.hash
+			if (h.includes("/popup/general") || h.includes("/popup/auth")) return true
+			return !!document.querySelector('[data-testid="import-full-backup-continue-btn"]')
+		},
+		{ timeout: 120_000, polling: 250 },
+	)
+	const continueVisible = await page.evaluate(() => !!document.querySelector('[data-testid="import-full-backup-continue-btn"]'))
+	if (continueVisible) {
+		await clickByTestId(page, "import-full-backup-continue-btn")
 		await page.waitForFunction(
 			() => {
 				const h = window.location.hash
-				if (h.includes("/popup/general") || h.includes("/popup/auth")) return true
-				return !!document.querySelector('[data-testid="import-full-backup-continue-btn"]')
+				return h.includes("/popup/general") || h.includes("/popup/auth")
 			},
-			{ timeout: 120_000, polling: 250 },
+			{ timeout: 60_000, polling: 250 },
 		)
-		const continueVisible = await page.evaluate(() => !!document.querySelector('[data-testid="import-full-backup-continue-btn"]'))
-		if (continueVisible) {
-			await clickByTestId(page, "import-full-backup-continue-btn")
-			await page.waitForFunction(
-				() => {
-					const h = window.location.hash
-					return h.includes("/popup/general") || h.includes("/popup/auth")
-				},
-				{ timeout: 60_000, polling: 250 },
-			)
-		}
-		await closeStuckPopup(page)
-		await reopenAndRecoverAfterImport(page, RESTORE_PASSWORD)
-
-		// Both profiles exist — the restore added one, replaced none.
-		const profileCount = await page.evaluate(async () => {
-			const all = await chrome.storage.local.get(null)
-			return Object.keys(all).filter((k) => k.startsWith("nulo:core:profiles@")).length
-		})
-		expect(profileCount).toBe(2)
-
-		// ── Stage 5: THE rewrap proof — the imported account decrypts in the restored profile ──
-		await gotoAccounts(page)
-		await page.waitForSelector('[data-testid="account-imported-badge"]', { visible: true, timeout: 30_000 })
-		const reExported = await exportImportedAccountBody(page, false, RESTORE_PASSWORD)
-		const reviewed = await previewImport(page, reExported)
-		expect(reviewed).toBe(importedAddress)
-
-		// ── Stage 6: a key row that no longer opens is named on the export page, which still
-		// gives out the file ──
-		const restoredProfile = (await readSessionRow(page))?.profile
-		const corrupted = await page.evaluate(async (profileId) => {
-			const all = await chrome.storage.local.get(null)
-			const garbage = btoa(String.fromCharCode(...new Uint8Array(45).fill(1)))
-			let count = 0
-			for (const [key, raw] of Object.entries(all)) {
-				if (!key.startsWith("nulo:core:imported-account-keys@")) continue
-				const row = JSON.parse(raw as string) as { profileId: string; encryptedSigningKey: string }
-				if (row.profileId !== profileId) continue
-				await chrome.storage.local.set({ [key]: JSON.stringify({ ...row, encryptedSigningKey: garbage }) })
-				count++
-			}
-			return count
-		}, restoredProfile)
-		expect(corrupted).toBe(1)
-		await navigateByHash(page, "#/popup/settings/security/export/full")
-		await clickByTestId(page, "agree-continue-btn")
-		await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 10_000 })
-		await replaceInputValue(page, '[data-testid="unlock-password-input"]', RESTORE_PASSWORD)
-		await clickByTestId(page, "unlock-submit-btn")
-		await page.waitForSelector('[data-testid="backup-imported-unopened-banner"]', { visible: true, timeout: 120_000 })
-		expect(await page.$eval('[data-testid="backup-imported-unopened-banner"]', (el) => (el as HTMLElement).innerText)).toContain(
-			"1 imported account could not be opened, so it will not be restored.",
-		)
-		expect(await page.$('[data-testid="backup-keys-lost-banner"]')).toBeNull()
-		const withUnopened = await openEncryptedBackup(await downloadEncryptedBackup(page), RESTORE_PASSWORD)
-		expect((withUnopened.data?.["imported-account-keys"] as unknown[] | undefined)?.length).toBe(1)
-		for (const id of ["backup-close-btn", "backup-done-banner", "backup-imported-unopened-banner"])
-			await page.waitForSelector(`[data-testid="${id}"]`, { visible: true, timeout: 10_000 })
-		await expectFitsNarrow(page, "the done state under a warning")
-	} finally {
-		rmSync(filePath, { force: true })
 	}
+	await closeStuckPopup(page)
+	await reopenAndRecoverAfterImport(page, RESTORE_PASSWORD)
+
+	// Both profiles exist — the restore added one, replaced none.
+	const profileCount = await page.evaluate(async () => {
+		const all = await chrome.storage.local.get(null)
+		return Object.keys(all).filter((k) => k.startsWith("nulo:core:profiles@")).length
+	})
+	expect(profileCount).toBe(2)
+
+	// ── Stage 5: THE rewrap proof — the imported account decrypts in the restored profile ──
+	await gotoAccounts(page)
+	await page.waitForSelector('[data-testid="account-imported-badge"]', { visible: true, timeout: 30_000 })
+	const reExported = await exportImportedAccountBody(page, false, RESTORE_PASSWORD)
+	const reviewed = await previewImport(page, reExported)
+	expect(reviewed).toBe(importedAddress)
+
+	// ── Stage 6: a key row that no longer opens is named on the export page, which still
+	// gives out the file ──
+	const restoredProfile = (await readSessionRow(page))?.profile
+	const corrupted = await page.evaluate(async (profileId) => {
+		const all = await chrome.storage.local.get(null)
+		const garbage = btoa(String.fromCharCode(...new Uint8Array(45).fill(1)))
+		let count = 0
+		for (const [key, raw] of Object.entries(all)) {
+			if (!key.startsWith("nulo:core:imported-account-keys@")) continue
+			const row = JSON.parse(raw as string) as { profileId: string; encryptedSigningKey: string }
+			if (row.profileId !== profileId) continue
+			await chrome.storage.local.set({ [key]: JSON.stringify({ ...row, encryptedSigningKey: garbage }) })
+			count++
+		}
+		return count
+	}, restoredProfile)
+	expect(corrupted).toBe(1)
+	await navigateByHash(page, "#/popup/settings/security/export/full")
+	await clickByTestId(page, "agree-continue-btn")
+	await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 10_000 })
+	await replaceInputValue(page, '[data-testid="unlock-password-input"]', RESTORE_PASSWORD)
+	await clickByTestId(page, "unlock-submit-btn")
+	await page.waitForSelector('[data-testid="backup-imported-unopened-banner"]', { visible: true, timeout: 120_000 })
+	expect(await page.$eval('[data-testid="backup-imported-unopened-banner"]', (el) => (el as HTMLElement).innerText)).toContain(
+		"1 imported account could not be opened, so it will not be restored.",
+	)
+	expect(await page.$('[data-testid="backup-keys-lost-banner"]')).toBeNull()
+	const withUnopened = await openEncryptedBackup(await downloadEncryptedBackup(page), RESTORE_PASSWORD)
+	expect((withUnopened.data?.["imported-account-keys"] as unknown[] | undefined)?.length).toBe(1)
+	for (const id of ["backup-close-btn", "backup-done-banner", "backup-imported-unopened-banner"])
+		await page.waitForSelector(`[data-testid="${id}"]`, { visible: true, timeout: 10_000 })
+	await expectFitsNarrow(page, "the done state under a warning")
 })
