@@ -12,3 +12,5 @@
 - 2026-10-22 mid step 4: final fresh Codex pass approve (after four local conditions); plan committed, awaiting the orchestrator's approval.
 - 2026-10-22 A1 phase 1 gate: pass (the two new cases red on base, on the PING and close assertions; 27 others green).
 - 2026-10-22 A1 phase 2 gate: pass (lint, typecheck, unit 76/76, test, test:all on rerun; mutations red as named).
+- 2026-10-22 A1 review loop: Codex r1 approve + Opus r1 conditional (fixes in 345a6fdb0), Codex r2 approve; converged.
+- 2026-10-22 A1 phase 3: smoke chrome 271/272 (network-arrival load flake, 3/3 alone), smoke firefox 276/276; network runs in progress.

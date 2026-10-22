@@ -31,3 +31,13 @@ Findings:
 4. *Information.* The readiness-phase part of the failed-send case and the re-send counts are contract pins that no change to the override can break. Kept as pins.
 
 The Opus leg ran its mutations on `offscreen.ts` while this session swapped the same file for a base run. Both restored their copies, and `git diff HEAD` on the two source files was checked empty afterwards. Next time, give a reviewer that mutates a scratch copy of the worktree.
+
+## Codex r2 (resumed), on `345a6fdb0`
+
+**Approve, high confidence; no new finding, blocking or not.**
+- The tightened reproducer now proves its name on base: A is admitted, then holds the document, and B's expired ping closes it with A outstanding.
+- The successor case pins the clears in aggregate, not each site on its own.
+- The §6 wording is correct.
+- The adversarial conclusions of r1 are unchanged, since this round changed no runtime code.
+
+The loop converged at round 2 of 3.
