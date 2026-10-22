@@ -11,3 +11,19 @@ Host: shared, load1 125-177 throughout (no deps-audit-1 soak running). Dist buil
 ## Smoke, Firefox
 
 The same build and run under `NULO_E2E_BROWSER=firefox`: 2,990 s, 276 passed, 20 skipped, 0 failed.
+
+## Network, each file alone
+
+`NULO_E2E_BROWSER=<browser> NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<file>.test.ts`, from `af337ad54`'s source. These runs are prover-on with no Presto on the host, so the wallet proves in WASM. That keeps the document busy for longer than CI's proverless shards do, which is the case this change targets. Every run passed at retry 0.
+
+| Browser | File | Tests | File time | Wall (with build and sandbox) | load1 at start | Recorded median (recon) |
+|---|---|---|---|---|---|---|
+| Chrome | `incoming-transfers` | 3/3 | 54 s | 135 s | 138 | 37 s |
+| Chrome | `execute-scope-account` | 1/1 | 65 s | 146 s | 55 | 46 s |
+| Chrome | `pxe-host-state` | 1/1 | 35 s | 170 s | 41 | 25 s |
+| Firefox | `incoming-transfers` | 3/3 | 104 s | 243 s | 49 | 47 s |
+| Firefox | `execute-scope-account` | 1/1 | 189 s | 358 s | 123 | 56 s |
+| Firefox | `pxe-host-state` | 1/1 | 95 s | 225 s | 119 | 28 s |
+| Firefox | `firefox-background-restart` | 1/1 | 153 s | 297 s | 142 | 41 s |
+
+The medians come from `shard-timings.json` (CI, mostly proverless, 4-core runners). The times here are a prover-on build on a shared host and measure no regression. The change adds no e2e scenario (D7), so the suites' wall-clock is unchanged by construction.

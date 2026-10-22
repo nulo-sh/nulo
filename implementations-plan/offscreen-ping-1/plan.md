@@ -9,9 +9,36 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 5711a1bc3
 trunk: dev
+status: closed with its one PR; the merge closes the plan
 issues: "#1035 (closed by A1)"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-22.
+- **Status:** closed with its one PR (`worktree-offscreen-ping-1` → `dev`, `Closes #1035`), which carries this close-out; the merge closes the plan.
+- **Shipped:**
+  - **The answer token** (`apps/extension/src/wallet/utils/offscreen.ts`). It is issued on each READY that ends a create pass and on each PONG, and cleared on every close and create attempt. A request skips the ping while a token is current.
+  - **Withdrawing trust** (`apps/extension/src/wallet/services/pxe/client.ts`). `requestTag` carries the token as `{ answer, inner }`. `onTerminal` clears it on `timeout_fired` or `send_failed`, but only under the same token, and forwards `inner` to the base.
+  - **A typed READY timeout:** `RpcTimeoutError` replaces the bare string.
+  - **The docs:** `ARCHITECTURE.md` §6 states the rule and the D2 sequence.
+  - **The tests:** the busy-document reproducer (`apps/extension/src/wallet/services/pxe/busy-document.test.ts`, five cases) and three new `offscreen.test.ts` cases. The two Phase 1 cases were red on base ([lessons/phase-1.md](lessons/phase-1.md)), and four mutations went red as named ([lessons/phase-2.md](lessons/phase-2.md)).
+- **Dispositions:**
+  - The orchestrator approved the plan as committed, with the D2 recovery policy and K1-K4.
+  - The review loop converged at round 2 of 3 ([lessons/phase-4.md](lessons/phase-4.md)):
+    - Codex r1 approved, with two non-blocking test fixes, both applied. One of them corrected the Phase 1 evidence: the busy call now reaches the document before the thread blocks.
+    - The Opus leg conditionally approved. Its three items were applied: a test for the token clears, the §6 wording, and "no later than their deadline".
+    - Codex r2 approved, with no new finding.
+  - The reviews ran beside the Phase 3 runs, not after them, as the Post-implementation section planned. Every change they caused was test-only or docs-only, so the e2e dist stayed current.
+  - Phase 3 ran at retry 0 ([lessons/phase-3.md](lessons/phase-3.md)):
+    - Smoke on Firefox: 276/276.
+    - Smoke on Chrome: 271/272. `network-arrival` stalled on a popup route that reads no PXE, then passed 3/3 alone; read as a load flake.
+    - The six network runs plus `firefox-background-restart`: all green, prover-on.
+- **Lessons:** nothing promoted. `lessons.md` is at its budget, and its existing "take a red/green proof's old copy from the base SHA" line covers the reproducer correction. The race between a reviewer that mutates files and this session's own base swap is recorded in [lessons/phase-4.md](lessons/phase-4.md).
+- **Known limits:** #1044 (K1), #1045 (K2), #1046 (K3), #1047 (K4).
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # offscreen-ping-1: a busy PXE document is not a dead one
 
@@ -184,6 +211,9 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 - **Opus r3** (resumed): *conditional approve*. #1 type the tag (`PxeRequestTag`) so `tag?.inner` compiles; #2 the fake document needs "drop one request" and "remove without `closeDocument`" for step 5 (a) and (c), with F sent between D and D's deadline; #3 step 1 names `requestTag`. All accepted.
 - **Opus r4** (resumed): *approve*. The three r3 fixes verified; one wording leftover in D2 (a send-time phrase), corrected.
 - **Final Codex pass** (fresh session, Sol, high): *conditional approve*. #1 qualify Outcome (1) and widen K3 to mixed deadlines, with the sequence case keeping a long request pending across the replacement; #2 record the amplified ghost-message limit (K4); #3 nine construction sites, recon's boolean wording; #4 the seed's five failures become three. All accepted. It judged D8's token the smallest correct design, D2's sequence correctly stated, D5/K2 acceptable and D7 proportionate. Resumed on the applied conditions: **approve**.
+- **Implementation, Codex r1** (fresh, Sol, high, over `5711a1bc3..af337ad54`): *approve*. Two non-blocking findings, both accepted: the busy reproducer now admits its call before the thread blocks, which corrected the Phase 1 evidence; and the test comments were cut. Its adversarial walk found no re-send and no double broadcast, and no page can issue or clear a token; K1-K4 stand as filed.
+- **Implementation, Opus r1** (fresh, general-purpose, beside Codex r1): *conditional approve*. Accepted: a test pinning the token clears; three §6 wording fixes; "no later than their deadline" for a send pending when its document goes. The two contract-pin assertions were kept.
+- **Implementation, Codex r2** (resumed, on `345a6fdb0`): *approve*, no new finding. The loop converged at round 2.
 
 ## Seeds (draft; not run by this planner)
 
