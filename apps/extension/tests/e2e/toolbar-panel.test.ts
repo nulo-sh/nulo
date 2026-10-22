@@ -33,7 +33,7 @@ import { waitForMainFrame, waitForPopupClosed } from "./fixtures/popups"
 import { PollTimeoutError, pollUntil } from "./fixtures/poll"
 import { refusePasskeyStep, registerPasskeyProfile } from "./fixtures/passkey"
 import { downloadPlainPasskeyBackup } from "./helpers/backup-export"
-import { contactsFiles } from "./helpers/contacts"
+import { contactsFiles, LONG_IMPORT_ROWS, longImportContacts, storedContacts } from "./helpers/contacts"
 import { completeResetRitual } from "./helpers/crash-truth"
 import {
 	buildSyntheticPasskeyBackup,
@@ -330,14 +330,15 @@ const returnState = (control: Page, windowId: number) =>
 const sessionProfile = (control: Page) =>
 	control.evaluate(async () => JSON.parse((await chrome.storage.session.get("nulo:core:session"))["nulo:core:session"]).profile as string)
 
-// Wire-shaped: 0x + 64 hex, each the x coordinate of a Grumpkin point.
-const TWO_CONTACTS = {
-	version: 2,
-	contacts: [
-		{ name: "Ana", address: "0x01904dba18e847d163097ce15dcd8597e763fb11fe19ef1273d266d6e959ec4a" },
-		{ name: "Dev", address: "0x09c1c9d2ce72c53c2451f8e9add86ccb8cb284dd4dc4f0eaf301b40b38a9459b" },
-	],
-}
+/** The window's running import as it shows it: the progress line's count, or null when none shows,
+ *  and whether each card button is off. */
+const importInWindow = (page: Page) =>
+	page.evaluate((rows: number) => {
+		const line = document.querySelector('[data-testid="snackbar"][data-kind="info"] [data-testid="snackbar-title"]')
+		const match = new RegExp(`^Importing contacts · (\\d+) of ${rows}$`).exec(line?.textContent ?? "")
+		const off = (id: string) => (document.querySelector(`[data-testid="${id}"]`) as HTMLButtonElement | null)?.disabled ?? null
+		return { written: match ? Number(match[1]) : null, choose: off("handoff-card-choose"), cancel: off("handoff-card-cancel") }
+	}, LONG_IMPORT_ROWS)
 
 type GetProbe = Window & { __credentialGets?: Array<{ prf: boolean }> }
 
@@ -559,10 +560,21 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 
 			await watchHandback(control)
 			const profile = await sessionProfile(control)
-			await pickFileByTestId(contactsWindow, "handoff-card-choose", files.write(TWO_CONTACTS))
+			await pickFileByTestId(contactsWindow, "handoff-card-choose", files.write(longImportContacts()))
 			await contactsWindow.waitForSelector(sel("import-contact-row"), { visible: true, timeout: 15_000 })
 			expect(await contactsWindow.$(sel("header-lock")), "the header, with the session open").toBeNull()
 			await clickByTestId(contactsWindow, "import-contacts-submit")
+
+			// A long import is read and written in the window, which shows its progress with both buttons
+			// off; nothing is handed back, and no panel opens, while the line still counts.
+			const running = await pollUntil(
+				() => importInWindow(contactsWindow),
+				(state) => (state.written ?? 0) > 0,
+				{ label: "the window's progress line counting", timeoutMs: 30_000, intervalMs: 50, show: JSON.stringify },
+			)
+			expect(running).toMatchObject({ choose: true, cancel: true })
+			expect(await returnState(control, cardWindowId)).toMatchObject({ windowOpen: true, record: null, panels: 0, handbacks: [] })
+			expect((await importInWindow(contactsWindow)).written, "still counting after the read").toBeLessThan(LONG_IMPORT_ROWS)
 
 			// Read from the control page before any read in the panel, which would move focus.
 			const returned = await pollUntil(
@@ -570,7 +582,7 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 				(state) => !state.windowOpen && state.record === null && state.panels === 1,
 				{
 					label: "the window closed, the record consumed, one panel open",
-					timeoutMs: 30_000,
+					timeoutMs: 120_000,
 					intervalMs: 100,
 					show: JSON.stringify,
 				},
@@ -590,6 +602,7 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			)
 			await sleep(POPUP_RETURN_FOCUS_MS)
 			expect(await control.evaluate(() => chrome.extension.getViews({ type: "popup" }).length), "panels after the return").toBe(1)
+			expect(await storedContacts(control)).toHaveLength(LONG_IMPORT_ROWS)
 			await closeActionPopup(browser)
 			await openActionPopup(browser)
 			await panelOn(browser, "#/popup/general")
