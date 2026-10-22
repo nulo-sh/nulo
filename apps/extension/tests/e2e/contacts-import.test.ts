@@ -32,6 +32,8 @@ import {
 	exportContactsFile,
 	importRow,
 	listedAddress,
+	LONG_IMPORT_ROWS,
+	longImportContacts,
 	pickContactsFile,
 	pressRow,
 	refuseTestnet,
@@ -74,30 +76,7 @@ const files = contactsFiles()
 afterAll(files.cleanup)
 const contactsFile = (contacts: unknown[]) => files.write({ version: 2, contacts })
 
-/** `count` distinct on-curve addresses from a fixed seed, so every run imports the same file. */
-function onCurveAddresses(count: number): string[] {
-	let state = 0x9e3779b9
-	const next = () => {
-		state ^= state << 13
-		state ^= state >>> 17
-		state ^= state << 5
-		return state >>> 0
-	}
-	const found = new Set<string>()
-	while (found.size < count) {
-		// A leading zero byte keeps the value below the field modulus.
-		const address = `0x00${Array.from({ length: 8 }, () => next().toString(16).padStart(8, "0"))
-			.join("")
-			.slice(2)}`
-		if (isValidAztecAddress(address)) found.add(address)
-	}
-	return [...found]
-}
-
-/** Enough rows that an import is still writing seconds after its first row is stored. */
-const LONG_IMPORT_ROWS = 500
-const longImportFile = () =>
-	contactsFile(onCurveAddresses(LONG_IMPORT_ROWS).map((address, i) => ({ name: `Contact ${String(i + 1).padStart(3, "0")}`, address })))
+const longImportFile = () => files.write(longImportContacts())
 const lockChipDisabled = (page: Page) => page.$eval(sel("header-lock"), (button) => (button as HTMLButtonElement).disabled)
 
 /** How a review taller than the frame fits it: the list scrolls inside the card, the card does not,

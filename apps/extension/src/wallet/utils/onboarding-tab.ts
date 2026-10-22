@@ -29,6 +29,16 @@ export interface OpenToolbarPopupAnswer {
 	ok: boolean
 }
 
+/** Sent by a hand-off window as its flow ends: the background closes it and reopens the toolbar
+ *  panel on `opener`, the browser window the panel handed the flow from. Answered `{ ok: true }`, or
+ *  `{ ok: false }` when the sender is in no popup-type window. */
+export const RETURN_TO_PANEL = "nulo:return-to-panel"
+
+export interface ReturnToPanelMessage {
+	type: typeof RETURN_TO_PANEL
+	opener: number | undefined
+}
+
 /** The onboarding page's document, without the route its fragment carries. */
 export function onboardingDocumentUrl(): string {
 	return chrome.runtime.getURL(ONBOARDING_DOCUMENT)
