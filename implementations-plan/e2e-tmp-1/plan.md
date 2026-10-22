@@ -11,7 +11,28 @@ base: origin/dev at 5c35ca934
 trunk: dev
 issues: "#1064 (A1 closes it); #1071 (filed in recon, not this lane's scope)"
 post_implementation_hardening: not scheduled
+status: closed with its one PR; the merge closes the plan
 ---
+
+## Outcome
+
+- **Date:** 2026-10-22.
+- **Status:** closed with its one PR, #1074 (`worktree-e2e-tmp-1` → `dev`, `Closes #1064`), which carries this close-out; the merge closes the plan.
+- **Shipped:**
+  - **The owner** (`apps/extension/tests/e2e/helpers/backup-temp.ts`, re-exported from `import-drivers.ts`): `writeBackupToTemp` registers its dir's removal with `onTestFinished` before it writes, so the dir goes at the end of the calling test's attempt, pass or fail, and a call with no current test throws before writing.
+  - **The cache** (`crash-truth.ts`): `exportFundedBackup` caches the sealed text and writes a file per call.
+  - **One owner per dir:** the eight callers that removed the file or its dir themselves no longer do.
+  - **The self-test** (`apps/extension/scripts/e2e/backup-temp.test.ts`): the refusal writes nothing; the dir is gone after a passing and after a failing test.
+- **Dispositions:**
+  - The plan passed its own gate on auto-continue: Codex approve at r2, no owner ask.
+  - D7, an implementation deviation: the helper moved to its own module, since `tsconfig.scripts.json` cannot type `import-drivers.ts`'s fixture graph ([lessons/phase-1.md](lessons/phase-1.md)).
+  - The A1 review found that eight callers, not one, removed their own file or dir; all eight removals were dropped (§ Audit verdicts).
+  - Phase 2 at retry 0 under scratch `TMPDIR`s, with 0 `nulo-e2e-backup-*` dirs left after each run ([lessons/phase-2.md](lessons/phase-2.md)): smoke Chrome 61 passed, 9 skipped; smoke Firefox 65 passed, 5 skipped; network Chrome, the eight caller files, 17 passed.
+  - The review loop converged at round 2: Codex r1 clean, Opus 3 findings (applied), Codex r2 clean.
+- **Lessons:** nothing promoted. `lessons.md` is at its budget (8,174 bytes). The `tsconfig.scripts.json` gotcha stays in [lessons/phase-1.md](lessons/phase-1.md), and the helper's TSDoc states the hook's lifetime.
+- **Known limits:** #1075 (a worker killed mid-test leaves that test's dirs).
+- **Open items:** #1071 (`import-stage-timing` leaves three `nulo-stage-log-*` dirs per smoke run).
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # e2e-tmp-1: every backup a test imports leaves a temp dir behind
 
