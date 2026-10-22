@@ -46,10 +46,15 @@ describe("@aztec-labs/pxe scope sources", () => {
 		const helpers = read("@aztec-labs/pxe", "dest/contract/helpers.js")
 		const call = /utilityExecutor\(syncStateFunctionCall, \[\s*scope\s*\]\)/
 		const rule =
-			/export async function syncScope\((?:(?!\n\s*(?:export\s+)?(?:async\s+)?function\b)[\s\S])*?await utilityExecutor\(syncStateFunctionCall,\s*\[\s*scope\s*\]\s*\);/
+			/export async function syncScope\(contractAddress, contractStore, contractClassService, anchorBlockHeader, functionToInvokeAfterSync, utilityExecutor, scope\)\s*\{\s*if \(isSkipSyncContract\(contractAddress\)\)\s*\{\s*return;\s*\}\s*const classId = await contractClassService\.getCurrentClassId\(contractAddress, anchorBlockHeader\);\s*if \(!classId\)\s*\{\s*throw new Error\(`[^`]*`\);\s*\}\s*const syncStateFunctionCall = await contractStore\.getFunctionCall\('sync_state', \[\s*scope\s*\], contractAddress, classId\);\s*if \(functionToInvokeAfterSync && functionToInvokeAfterSync\.equals\(syncStateFunctionCall\.selector\)\)\s*\{\s*throw new Error\('[^']*'\);\s*\}\s*await utilityExecutor\(syncStateFunctionCall, \[\s*scope\s*\]\);\s*\}/
 		expectPinned(rule, helpers, [
 			mutate(helpers, call, "utilityExecutor(syncStateFunctionCall, scopes)"),
 			mutate(helpers, "export async function syncScope(", "export async function syncScopes("),
+			mutate(
+				helpers,
+				/await utilityExecutor\(syncStateFunctionCall, \[\s*scope\s*\]\);/,
+				"if (false) { $& } await utilityExecutor(syncStateFunctionCall, scopes);",
+			),
 			`${mutate(helpers, call, "utilityExecutor(syncStateFunctionCall, [])")}
 async function unusedHelper(utilityExecutor, syncStateFunctionCall, scope) {
     await utilityExecutor(syncStateFunctionCall, [
@@ -84,9 +89,10 @@ describe("receipt-class aztec-nr sources", () => {
 
 		const discovery = embeddedSource(pkg, path, "aztec/src/messages/discovery/nonce_discovery.nr")
 		const gate =
-			/unconstrained fn attempt_note_nonce_discovery\((?:(?!\n\s*(?:pub(?:\(crate\))?\s+)?(?:unconstrained\s+)?fn\b)[\s\S])*?if maybe_inner_nullifier_for_i\.is_none\(\)\s*\{(?:(?!\.push\(|\}\s*else\s*\{)[\s\S])*\}\s*else\s*\{\s*discovered_notes\.push\(/
+			/unconstrained fn attempt_note_nonce_discovery\((?:(?!\n\s*(?:pub(?:\(crate\))?\s+)?(?:unconstrained\s+)?fn\b)[\s\S])*?if maybe_inner_nullifier_for_i\.is_none\(\)\s*\{\s*aztecnr_warn_log_format!\(\s*"[^"]*",?\s*\)\(\s*\[unique_note_hash_for_i, note_type_id, owner\.to_field\(\)\],?\s*\);\s*\}\s*else\s*\{\s*discovered_notes\.push\(/
 		expectPinned(gate, discovery, [
 			mutate(discovery, /(if maybe_inner_nullifier_for_i\.is_none\(\) \{)/, "$1\n discovered_notes.push(note);"),
+			mutate(discovery, /(if maybe_inner_nullifier_for_i\.is_none\(\) \{)/, "$1\n if false {} else { discovered_notes.push(note); }"),
 			`${mutate(discovery, "if maybe_inner_nullifier_for_i.is_none() {", "if false {")}
 unconstrained fn sibling() {
     if maybe_inner_nullifier_for_i.is_none() {
