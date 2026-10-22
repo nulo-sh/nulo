@@ -19,6 +19,7 @@ import {
 	type ShapeRecord,
 	type Stamp,
 	currentShapes,
+	wire,
 	zodVersion,
 } from "./baseline"
 import { canonical, canonicalText, emitSchema, type Json } from "./emit"
@@ -188,7 +189,7 @@ describe("justify", () => {
 	})
 
 	test("no migration may change a structured, engine, authenticated or sealed shape", () => {
-		for (const name of ["uiPinnedTokens", "schemaBlocked", "dappSessions", "contacts"]) {
+		for (const name of ["uiRestoreOutcome", "schemaBlocked", "dappSessions", "contacts"]) {
 			const shapes = withShape(name, widened)
 			const ref = shapes[name]?.ref
 			const root = ref?.kind === "root" ? ref.root : (ref?.key ?? "")
@@ -215,6 +216,7 @@ describe("justify", () => {
 			["contacts", (r) => ({ ...r, read: "described" }), "contacts stops reading through its codec"],
 			["schemaVersion", ({ engine: _, ...r }) => r, "schemaVersion stops being engine state"],
 			["contacts", ({ sealed: _, ...r }) => r, "contacts drops its seal"],
+			["uiPinnedTokens", ({ legacy: _, ...r }) => r, "uiPinnedTokens stops reading its rows from before the seal"],
 		]
 		for (const [name, change, problem] of cases) {
 			const problems = justify(base, stampOf(withShape(name, change), { additive: { names: [name], reason: "test" } }), [])
@@ -262,6 +264,17 @@ describe("preservationProblems", () => {
 })
 
 describe("decodeGoldens", () => {
+	test("a pre-seal golden of a shape whose old rows were stored as is is seeded as is and reads to its value", async () => {
+		const value = { "7": [`0x${"a1".repeat(32)}`] }
+		const golden: Golden = { id: "uiPinnedTokens.full", stamp: 0, shape: "uiPinnedTokens", key: "nulo:ui:pinnedTokens@0a1b2c3d", value }
+		expect(wire(golden)).toBe(value)
+		expect(wire({ ...golden, sealed: true })).toBe(JSON.stringify(value))
+		expect(wire(contactGolden)).toBe(JSON.stringify(contactGolden.value))
+		const decoding = await decodeGoldens([golden], [{ version: 1 }], [])
+		expect(decoding.live[golden.id]).toEqual(value)
+		expect(decoding.stored[golden.id]).toEqual(value)
+	})
+
 	test("an acknowledged import-blocking migration refuses each backup-sliced golden; an unacknowledged one throws", async () => {
 		const goldens = committedBaseline().goldens.filter((golden) => golden.stamp === 0)
 		const imperative = migrationOver(2, CONTACT_STORAGE_ROOT)

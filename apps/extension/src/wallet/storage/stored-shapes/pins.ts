@@ -2,29 +2,14 @@ import type { Pin } from "./baseline"
 
 /**
  * One pin per stamp of `snapshot.json`, added by hand from the line `bun run baseline:storage`
- * prints. Stamp 0 is the baseline 1.0.0 stores; the stamps are append-only, and a pin is never
- * edited or removed.
+ * prints. Stamp 0 is the baseline 1.0.0 stores, re-cut once before any stable release carried a
+ * later stamp (CLAUDE.md § Persisted-storage shape changes); the stamps are append-only, and a pin
+ * is never edited or removed.
  */
 export const PINNED_STAMPS: readonly Pin[] = [
 	{
-		stamp: "27dc0de69827668974b26630bcebd39383ab673fdb9682164102a083ab2c5c9f",
-		goldens: "ee9cf595a340013f09c090ffac14aae9a07b57ca8db91da595bfabadc3c80afd",
-	},
-	{
-		stamp: "c39893d8df581e4645ac55b047a67d16719cb2179053b82e6d673b79f2485fa9",
-		goldens: "8d66d1cc634f8110d5ef37b7abbf60e2b6ed8776e4654facedb6f73aa058026b",
-	},
-	{
-		stamp: "9ce4c0c9ca7322124dcd0b4288fdec4e46a596ec0c9fa1bfb5b7464446d8efd9",
-		goldens: "84690b8f0e93f97651a52227a3352466b64b2ab600124a949beea2373e1342c2",
-	},
-	{
-		stamp: "22675f421bdd0de3d78ad63e968f15c22d01650648629b82d1510b9b0a287b0d",
-		goldens: "f362931f2c6740d04c5c802353008c1ea91e2e80ec2697b6797d7cb6d6a3f114",
-	},
-	{
-		stamp: "bec965b098ec77bb6705470c00ec5dcc498698271648ab27e558138a19753ed4",
-		goldens: "5f45b5d2a1cac5eae2490bae37041e0e0fa8043c14d18158d9596ed4d28edfc9",
+		stamp: "ada97fe9dc71a73a3325823558c889ed6e6909ca86f73511a9a1773f3c9c82d6",
+		goldens: "336b9cdcbb9910eb5012d446a877f162773d1072454220ab1aff9842025335c8",
 	},
 ]
 

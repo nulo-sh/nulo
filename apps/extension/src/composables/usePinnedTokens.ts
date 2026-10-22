@@ -1,57 +1,17 @@
-import { type EventHandler, isRecord } from "@nulo/wallet-core/utils"
+import type { EventHandler } from "@nulo/wallet-core/utils"
 import { createRunFence } from "@/composables/runFence"
 import { type ComputedRef, computed, ref } from "vue"
 import { pinnedTokensKey } from "@/utils/profile-ui-keys"
 import { storageLocalGet, storageLocalSet } from "@/utils/storage"
-import { HOME_TOKEN_ROWS } from "@/utils/token-order"
+import { PINNED_TOKENS_MAX, PINNED_TOKENS_MAX_CHAINS, type PinMap, sanitizePinMap } from "@/utils/pinned-tokens"
 import type { TokenDeleted } from "@/wallet/services/token/spec"
 
-/** Pins fill Home's row budget, never more. */
-export const PINNED_TOKENS_MAX = HOME_TOKEN_ROWS
-/** Chains a profile can hold pins for; other chains are evicted in key iteration order past it. */
-export const PINNED_TOKENS_MAX_CHAINS = 32
-
-const CONTRACT_RE = /^0x[0-9a-f]{64}$/
-
-/** Chain id (as a string) → lowercase contracts, at most `PINNED_TOKENS_MAX` each. */
-export type PinMap = Record<string, string[]>
 export type PinScope = { profileId: string; chainId: number }
 export type PinResult = "pinned" | "full" | "already" | "stale"
 
 /** The store's profile and chain as a pin scope, or undefined while either is missing. */
 export const pinScopeOf = (profileId: string | undefined, chainId: number | undefined): PinScope | undefined =>
 	profileId !== undefined && chainId !== undefined ? { profileId, chainId } : undefined
-
-/** A chain key is the canonical decimal form of a safe integer: no sign, no leading zero, no exponent. */
-const isChainKey = (key: string) => {
-	const n = Number(key)
-	return Number.isSafeInteger(n) && n >= 0 && String(n) === key
-}
-
-function sanitizeContracts(value: unknown): string[] {
-	if (!Array.isArray(value)) return []
-	const contracts: string[] = []
-	for (const entry of value) {
-		if (contracts.length >= PINNED_TOKENS_MAX) break
-		if (typeof entry !== "string") continue
-		const c = entry.toLowerCase()
-		if (CONTRACT_RE.test(c) && !contracts.includes(c)) contracts.push(c)
-	}
-	return contracts
-}
-
-/** The stored map is untrusted bytes (a backup import or another context wrote it): rebuild it on every read. */
-export function sanitizePinMap(raw: unknown): PinMap {
-	if (!isRecord(raw)) return {}
-	const out: PinMap = {}
-	for (const [key, value] of Object.entries(raw)) {
-		if (Object.keys(out).length >= PINNED_TOKENS_MAX_CHAINS) break
-		if (!isChainKey(key)) continue
-		const contracts = sanitizeContracts(value)
-		if (contracts.length > 0) out[key] = contracts
-	}
-	return out
-}
 
 const readPinMap = async (profileId: string): Promise<PinMap> => {
 	const key = pinnedTokensKey(profileId)

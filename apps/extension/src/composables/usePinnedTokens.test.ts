@@ -7,7 +7,8 @@ import { SCHEMA_RUNNING_KEY } from "@nulo/wallet-core/migration"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { nextTick, reactive } from "vue"
 import { pinnedTokensKey } from "@/utils/profile-ui-keys"
-import { PINNED_TOKENS_MAX_CHAINS, type PinScope, sanitizePinMap, type UsePinnedTokensDeps, usePinnedTokens } from "./usePinnedTokens"
+import { PINNED_TOKENS_MAX_CHAINS } from "@/utils/pinned-tokens"
+import { type PinScope, type UsePinnedTokensDeps, usePinnedTokens } from "./usePinnedTokens"
 
 type Change = Record<string, { oldValue?: unknown; newValue?: unknown }>
 type Listener = (changes: Change, area: string) => void
@@ -152,36 +153,6 @@ beforeEach(() => {
 	;(chrome.storage as any).local = storage.local
 	// biome-ignore lint/suspicious/noExplicitAny: chrome stub assignment
 	;(chrome.storage as any).onChanged = storage.onChanged
-})
-
-describe("sanitizePinMap", () => {
-	test("rejects every non-map root", () => {
-		for (const raw of [undefined, null, 3, "x", [], [A], [[A]]]) expect(sanitizePinMap(raw)).toEqual({})
-	})
-
-	test("drops non-canonical chain keys, non-array values, non-string and non-address entries", () => {
-		expect(
-			sanitizePinMap({
-				"00": [A],
-				"1e3": [A],
-				"-1": [A],
-				"12345678901234567": [A],
-				"9999999999999999": [A],
-				"7": "not-a-list",
-				"8": [1, null, "0xzz", `0x${"a".repeat(63)}`, A.toUpperCase(), A, B],
-			}),
-		).toEqual({ "8": [A, B] })
-	})
-
-	test("caps a list at three and the map at 32 chains; an empty list is dropped", () => {
-		const big: Record<string, string[]> = {}
-		for (let i = 1; i <= PINNED_TOKENS_MAX_CHAINS + 2; i++) big[String(i)] = [A]
-		big["999"] = []
-		const out = sanitizePinMap({ ...big, "5": [A, B, C, D] })
-		expect(Object.keys(out)).toHaveLength(PINNED_TOKENS_MAX_CHAINS)
-		expect(out["5"]).toEqual([A, B, C])
-		expect(out["999"]).toBeUndefined()
-	})
 })
 
 describe("usePinnedTokens", () => {

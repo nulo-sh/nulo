@@ -50,6 +50,10 @@ export type SealedRootOptions = {
 	 *  profile's keys may seal it while its owner is unknown, so every profile's lookup of that id
 	 *  finds it. Such a row is updated in place; nothing creates one. */
 	ownerless?: "plaintext"
+	/** Natural roots only. A non-string value at a row's key is that row's plaintext, stored as is
+	 *  before the root was sealed: read through the codec, never as an envelope, and sealed at the
+	 *  same key by `sealLegacy`. */
+	legacy?: "structured"
 }
 
 /** One sealed write, prepared: the caller runs its own liveness checks after `prepare` resolves
@@ -122,6 +126,19 @@ const defaultOwner = (row: unknown): string | undefined => {
 	return typeof owner === "string" ? owner : undefined
 }
 
+/** A structured value's JSON text, or `undefined` when JSON cannot carry it (a BigInt, which
+ *  Firefox's structured clone stores). */
+function jsonText(value: unknown): string | undefined {
+	try {
+		return JSON.stringify(value)
+	} catch {
+		return undefined
+	}
+}
+
+/** A stored value that may be a legacy row, as the text its seal covers. */
+type LegacyCandidate = { storageId: string; text: string; structured: boolean }
+
 function tryParse(raw: unknown): { ok: true; value: unknown } | { ok: false } {
 	if (typeof raw !== "string") return { ok: false }
 	try {
@@ -145,6 +162,7 @@ export class SealedEntityStorage<T> {
 		this.prefix = `${root}@`
 		this.ownerOf = options.ownerOf ?? defaultOwner
 		if (options.ownerless && !options.keyed) throw new Error(`${root}: only a keyed root keeps ownerless rows`)
+		if (options.legacy && options.keyed) throw new Error(`${root}: a keyed root keeps no structured legacy rows`)
 	}
 
 	public async get(id: string, owner?: string): Promise<T | undefined> {
@@ -333,7 +351,8 @@ export class SealedEntityStorage<T> {
 	 * row is written under its sealed key first, then its legacy key is removed; a crash between
 	 * leaves both, which reads dedupe and the next pass finishes. A row commits only while
 	 * the profile still holds the keys the pass began with, so a pass outliving the profile's
-	 * deletion writes nothing after the deletion's keyless sweep. Returns the rows sealed.
+	 * deletion writes nothing after the deletion's keyless sweep. A structured legacy row seals its
+	 * JSON text in place, only while the stored value still serializes to it. Returns the rows sealed.
 	 */
 	public async sealLegacy(
 		profileId: string,
@@ -344,17 +363,27 @@ export class SealedEntityStorage<T> {
 		const keys = this.keysFor(profileId)
 		if (!keys) return 0
 		let converted = 0
-		for (const [storageId, text] of await this.inner.rawStringEntries()) {
+		for (const { storageId, text, structured } of await this.legacyCandidates()) {
 			const parsed = tryParse(text)
-			if (!parsed.ok || parseEnvelope(parsed.value) || this.ownerOf(parsed.value, storageId) !== profileId) continue
+			if (!parsed.ok || (!structured && parseEnvelope(parsed.value)) || this.ownerOf(parsed.value, storageId) !== profileId) continue
 			const sealRow = async (isCurrent: () => boolean) => {
-				const seal = await this.prepareLegacySeal(keys, profileId, storageId, text, skip)
+				const seal = await this.prepareLegacySeal(keys, profileId, storageId, text, skip, structured)
 				const others = companions ? await companions(storageId) : []
 				return commitLegacyTogether(this.area, [seal, ...others], isCurrent)
 			}
 			if (await withLock(sealRow, storageId)) converted++
 		}
 		return converted
+	}
+
+	private async legacyCandidates(): Promise<LegacyCandidate[]> {
+		if (this.options.legacy !== "structured")
+			return (await this.inner.rawStringEntries()).map(([storageId, text]) => ({ storageId, text, structured: false }))
+		return prefixedEntries(await this.area.get(), this.prefix).flatMap(([, storageId, raw]): LegacyCandidate[] => {
+			if (typeof raw === "string") return [{ storageId, text: raw, structured: false }]
+			const text = jsonText(raw)
+			return text === undefined ? [] : [{ storageId, text, structured: true }]
+		})
 	}
 
 	/** The conversion of `profileId`'s legacy row at `naturalId`, when it is stored there in
@@ -377,9 +406,11 @@ export class SealedEntityStorage<T> {
 		naturalId: string,
 		text: string,
 		skip?: (naturalId: string) => boolean,
+		structured = false,
 	): Promise<LegacySeal> {
 		const legacyKey = this.prefix + naturalId
-		const current = (stored: unknown) => stored === text && this.keysFor(owner) === keys && !skip?.(naturalId)
+		const unchanged = (stored: unknown) => (structured ? typeof stored !== "string" && jsonText(stored) === text : stored === text)
+		const current = (stored: unknown) => unchanged(stored) && this.keysFor(owner) === keys && !skip?.(naturalId)
 		if (!this.options.keyed) {
 			return { items: { [legacyKey]: await this.envelope(keys, owner, legacyKey, text) }, legacyKey, removals: [], current }
 		}
@@ -500,8 +531,9 @@ export class SealedEntityStorage<T> {
 	/** One stored value, through the envelope when it is one, else through the plain codec. */
 	private async decode(key: string, raw: unknown): Promise<{ located: Located; row: T } | undefined> {
 		const storageId = key.slice(this.prefix.length)
-		const parsed = tryParse(raw)
-		const envelope = parsed.ok ? parseEnvelope(parsed.value) : undefined
+		const structured = this.options.legacy === "structured" && typeof raw !== "string"
+		const parsed = structured ? { ok: true as const, value: raw } : tryParse(raw)
+		const envelope = parsed.ok && !structured ? parseEnvelope(parsed.value) : undefined
 		if (!envelope) {
 			if (!parsed.ok) {
 				// The codec's own path logs a malformed string with no payload. A value that is not a

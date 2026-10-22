@@ -55,6 +55,7 @@ export type ShapeRecord = {
 	authenticated?: true
 	engine?: true
 	sealed?: true
+	legacy?: "structured"
 	schema: Json
 }
 
@@ -128,6 +129,7 @@ export function shapeRecord(name: StoredShapeName): ShapeRecord {
 		...(shape.authenticated ? { authenticated: true as const } : {}),
 		...(shape.engine ? { engine: true as const } : {}),
 		...(shape.sealed ? { sealed: true as const } : {}),
+		...(shape.legacy ? { legacy: shape.legacy } : {}),
 		schema: emitSchema(name, shape.schema),
 	}
 }
@@ -143,7 +145,13 @@ function idOf(shape: StoredShape, key: string): string {
 	return key.slice(shape.ref.root.length + 1)
 }
 
-const wire = (shape: StoredShape, value: Json): unknown => (shape.encoding === "json" ? JSON.stringify(value) : value)
+/** A golden as `chrome.storage.local` holds it: a json shape's row as its text, except a pre-seal
+ *  row of a shape whose rows before the seal were stored as is. */
+export function wire(golden: Pick<Golden, "shape" | "value" | "sealed">): unknown {
+	const shape: StoredShape = STORED_SHAPES[golden.shape]
+	const asIs = shape.encoding === "structured" || (shape.legacy === "structured" && !golden.sealed)
+	return asIs ? golden.value : JSON.stringify(golden.value)
+}
 const unwire = (shape: StoredShape, stored: unknown): Json =>
 	stored === undefined ? null : canonical(shape.encoding === "json" && typeof stored === "string" ? JSON.parse(stored) : stored)
 
@@ -277,7 +285,7 @@ async function decodeLive(
 	migrations: Migration[],
 ): Promise<{ decoded: Decoded; keys: string[]; stored: Decoded }> {
 	const area = new MemoryStorageArea().seed({ [SCHEMA_VERSION_KEY]: version })
-	for (const golden of goldens) area.seed({ [golden.key]: wire(STORED_SHAPES[golden.shape], golden.value) })
+	for (const golden of goldens) area.seed({ [golden.key]: wire(golden) })
 	const run = async () => {
 		const result = await new Migrator({ store: area, migrations, baselineVersion: BASELINE_VERSION }).run()
 		if (result.kind !== "noop" && result.kind !== "migrated")
@@ -422,6 +430,7 @@ function downgradeOf(name: string, prev: ShapeRecord, cur: ShapeRecord): string 
 	if (prev.authenticated && !cur.authenticated) return `${name} drops its MAC check`
 	if (prev.engine && !cur.engine) return `${name} stops being engine state`
 	if (prev.sealed && !cur.sealed) return `${name} drops its seal`
+	if (prev.legacy && !cur.legacy) return `${name} stops reading its rows from before the seal`
 	if (prev.read === "codec" && cur.read === "described") return `${name} stops reading through its codec`
 	if (prev.encoding !== cur.encoding) return `${name} changes its encoding from ${prev.encoding} to ${cur.encoding}`
 	if (prev.options !== undefined && canonicalText(prev.options) !== canonicalText(cur.options ?? null))

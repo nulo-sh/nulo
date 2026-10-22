@@ -9,6 +9,7 @@
 import type { StorageRef } from "@nulo/wallet-core/migration"
 import { EntityStorage, type MinimalStorageArea, ValueStorage } from "@nulo/wallet-core/storage"
 import type { z } from "zod"
+import { FEE_PICKS_ROOT, PINNED_TOKENS_ROOT, SEND_FEE_PICKS_ROOT } from "@/utils/profile-ui-keys"
 import { CONFIG_STORAGE_KEY } from "@/wallet/config/config"
 import {
 	ACCOUNT_STORAGE_ROOT,
@@ -54,6 +55,7 @@ import { SeedMarkerRowSchema, TOKEN_SEEDED_STORAGE_ROOT, TOKEN_STORAGE_ROOT, Tok
 import { TOKEN_BALANCE_STORAGE_ROOT, TokenBalanceRawSchema } from "@/wallet/services/token-balance/spec"
 import { TOKEN_LIST_STORAGE_KEY } from "@/wallet/services/token-list/spec"
 import { TRANSACTION_STORAGE_ROOT, TxSchema } from "@/wallet/services/transaction/spec"
+import { PreferenceRowSchema } from "@/wallet/services/ui-preference/spec"
 import { type RowKeysSource, SealedEntityStorage, type SealedRootOptions } from "./sealed-entity-storage"
 
 export type KeyIdentityOptions = { requireKeyIdentityMatch: true; keyIdentityMode?: "numeric" }
@@ -174,6 +176,10 @@ const ACCOUNT_LAYOUT: SealedRootOptions = {
 /** One row per profile, stored at the profile's id: the id alone names the owner. */
 const PROFILE_ROW_LAYOUT: SealedRootOptions = { ownerOf: (_row, naturalId) => naturalId }
 
+/** A popup preference map, one row per profile; before the root was sealed the popup stored it as
+ *  a bare object. */
+const PREFERENCE_LAYOUT: SealedRootOptions = { ...PROFILE_ROW_LAYOUT, legacy: "structured" }
+
 export const STORES = {
 	accounts: sealedCodec(ACCOUNT_STORAGE_ROOT, AccountSchema, ACCOUNT_LAYOUT),
 	importedAccountKeys: sealedCodec(IMPORTED_KEYS_STORAGE_ROOT, ImportedAccountKeySchema, ACCOUNT_LAYOUT),
@@ -209,6 +215,9 @@ export const STORES = {
 		incomingLayout({ hashTail: async (tail, keyedHash) => `${await keyedHash(tail[0])}|${tail[1]}`, tailLength: 2 }),
 	),
 	incomingArrivals: sealedCodec(INCOMING_ARRIVALS_STORAGE_ROOT, ArrivalRowSchema, incomingLayout(ONE_SEGMENT)),
+	uiPinnedTokens: sealedCodec(PINNED_TOKENS_ROOT, PreferenceRowSchema, PREFERENCE_LAYOUT),
+	uiFeePicks: sealedCodec(FEE_PICKS_ROOT, PreferenceRowSchema, PREFERENCE_LAYOUT),
+	uiSendFeePicks: sealedCodec(SEND_FEE_PICKS_ROOT, PreferenceRowSchema, PREFERENCE_LAYOUT),
 	// Every sealed-slot, MAC and fingerprint decision trusts the row fetched by its id.
 	profiles: plainEntity(PROFILE_STORAGE_ROOT, { requireKeyIdentityMatch: true }),
 	config: value(CONFIG_STORAGE_KEY),
