@@ -28,6 +28,7 @@ import {
 	waitForPopup,
 	waitForPopupClosed,
 } from "../fixtures/popups"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import { serializeInstance } from "../fixtures/selfpay-phase"
 import { trimAddress } from "@/utils/string"
 import {
@@ -469,15 +470,11 @@ async function rigDelegatedSend(ctx: Connected): Promise<Rig> {
 }
 
 async function tokenRowOf(page: Page, contract: string): Promise<{ id: number; contract: string }> {
-	return page.evaluate(async (target: string) => {
-		const all = await chrome.storage.local.get(null)
-		const row = Object.entries(all)
-			.filter(([key]) => key.startsWith("nulo:core:tokens@"))
-			.map(([, value]) => JSON.parse(value as string) as { id: number; contract: string })
-			.find((r) => r.contract.toLowerCase() === target.toLowerCase())
-		if (!row) throw new Error(`no token row for ${target}`)
-		return { id: row.id, contract: row.contract }
-	}, contract)
+	const row = (await readSealedRows<{ id: number; contract: string }>(page, "tokens")).find(
+		(r) => r.row.contract.toLowerCase() === contract.toLowerCase(),
+	)?.row
+	if (!row) throw new Error(`no token row for ${contract}`)
+	return { id: row.id, contract: row.contract }
 }
 
 test.skipIf(!hasConfig)(

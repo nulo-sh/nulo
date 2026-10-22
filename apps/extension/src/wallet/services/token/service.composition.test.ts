@@ -38,6 +38,11 @@ import { PinMismatchError, TokenSeeder, type TokenSeederDeps } from "./seeder"
 import { TOKEN_LIST_SERVICE_NAME, type TokenListSnapshot } from "@/wallet/services/token-list/spec"
 import type { Token, TokenInterface } from "./spec"
 import { txAmount } from "@/utils/tx-amount"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { advanceSeeders, markerStore } from "./seeder.harness"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 /** The default-token paths run against a fixture list entry, served by a stubbed token list. */
 const FIXTURE_SEED = {
@@ -93,6 +98,7 @@ async function makeHarness(fakeConfig?: ShallowPxeFakeConfig) {
 	const collection = new ServiceCollection()
 	collection.add(
 		svc(ProfileService.name, {
+			...ROW_KEY_FAKE,
 			getActiveProfile: async () => ({ id: "p1" }),
 			onProfileDeleted: { add: () => {} },
 			onActiveProfileChanged: new EventHandler(),
@@ -249,6 +255,7 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 		const collection = new ServiceCollection()
 		collection.add(
 			svc(ProfileService.name, {
+				...ROW_KEY_FAKE,
 				getActiveProfile: async () => ({ id: "p1" }),
 				onProfileDeleted: { add: () => {} },
 				onActiveProfileChanged,
@@ -409,8 +416,7 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 		})
 		await tokenService.deleteToken(info.id)
 
-		const res = await fakeBrowser.storage.local.get("nulo:core:token-seeded@p1")
-		const marker = JSON.parse(res["nulo:core:token-seeded@p1"] as string)
+		const marker = (await markerStore(fakeBrowser.storage.local).get("p1")) as Record<string, { outcome?: string }>
 		expect(marker[`${FIXTURE_SEED.chainId}:${CUSD.toLowerCase()}`].outcome).toBe("deleted")
 	})
 
@@ -426,8 +432,7 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 			decimals: 18,
 		})
 		await tokenService.deleteToken(info.id)
-		const res = await fakeBrowser.storage.local.get("nulo:core:token-seeded@p1")
-		const marker = JSON.parse(res["nulo:core:token-seeded@p1"] as string)
+		const marker = (await markerStore(fakeBrowser.storage.local).get("p1")) as Record<string, { outcome?: string }>
 		expect(marker[`${NETWORK.chainId}:${CONTRACT.toLowerCase()}`].outcome).toBe("deleted")
 	})
 
@@ -500,10 +505,10 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 			await tokenService.resumeSeeding()
 			await tokenService.resumeSeeding()
 			expect(preview).not.toHaveBeenCalled()
-			await vi.advanceTimersByTimeAsync(1_000)
+			await advanceSeeders(1_000)
 			expect(preview).toHaveBeenCalledTimes(1)
-			const stored = (await fakeBrowser.storage.local.get(markerKey))[markerKey] as string
-			expect(JSON.parse(stored)[seedKey].attempts).toBe(2)
+			const stored = (await markerStore(fakeBrowser.storage.local).get("p1")) as Record<string, { attempts: number }>
+			expect(stored[seedKey].attempts).toBe(2)
 			expect((await tokenService.getSeedStatus(seed.chainId)).entries).toEqual([
 				expect.objectContaining({ contract: seed.contract, status: "pending" }),
 			])
@@ -529,10 +534,10 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 			})
 			await tokenService.resumeSeeding()
 			await tokenService.ensureSeeding()
-			await vi.advanceTimersByTimeAsync(120_000)
+			await advanceSeeders(120_000)
 			expect(preview).not.toHaveBeenCalled()
-			const stored = (await fakeBrowser.storage.local.get(markerKey))[markerKey] as string
-			expect(JSON.parse(stored)[seedKey].attempts).toBe(1)
+			const stored = (await markerStore(fakeBrowser.storage.local).get("p1")) as Record<string, { attempts: number }>
+			expect(stored[seedKey].attempts).toBe(1)
 			const { seeder } = tokenService as unknown as { seeder: TokenSeeder }
 			seeder.dispose()
 		} finally {

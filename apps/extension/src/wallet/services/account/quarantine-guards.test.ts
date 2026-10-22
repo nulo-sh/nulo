@@ -15,6 +15,10 @@ import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { svc } from "../composition-harness"
 import { AccountService } from "./service"
 import { AccountType, accountRowId } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 const STALE = 1
 const LIVE = 2
@@ -53,6 +57,7 @@ async function makeHarness() {
 	const services = new ServiceCollection()
 	services.add(
 		svc(PROFILE_SERVICE_NAME, {
+			...ROW_KEY_FAKE,
 			onProfileDeleted: new EventHandler(),
 			getDeletionState: () => new ProfileDeletionState(),
 			getProfileDek: touch("getProfileDek", new Uint8Array(32)),

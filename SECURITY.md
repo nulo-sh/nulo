@@ -73,8 +73,8 @@ existing keys and profiles.
   - Forks repurposing this extension under a different domain MUST
     change BOTH the constant and the manifest entry atomically. There
     is no migration path for WebAuthn credentials.
-- **Row-seal labels, frame and AAD** — every sealed row (contacts, dApp
-  sessions) is `{ profileId, sealed }`, `sealed` being the AES-256-GCM frame
+- **Row-seal labels, frame and AAD** — every sealed row (§ Storage privacy)
+  is `{ profileId, sealed }`, `sealed` being the AES-256-GCM frame
   `[1 version byte = 1][12 byte IV][ciphertext ‖ tag]`, base64, that the
   DEK-rooted imported-key boxes share (`packages/wallet-crypto/src/aes-gcm-frame.ts`).
   Its key and the keyed-id HMAC key are HKDF-SHA256 over the 32-byte master,
@@ -387,62 +387,96 @@ explicit and per-Network.
 Encrypted at rest:
 - `profile.secret` — master secret (AES-GCM)
 - `profile.guard` — password verification sentinel (AES-GCM)
-- Contacts, dApp sessions, the operation journal, the transaction history,
-  token balances, the authwit registry and its enable flags, and incoming
-  receipts with their trust, scan cursors, balance-refresh outbox and
-  arrival rows — sealed per row under the profile's row-seal key
-  (§ Crypto-bound invariants). The envelope names the profile; the row, its
-  names, addresses, origins, grants, amounts, balances, fees, errors and
-  hashes are ciphertext. A transaction row is stored at the keyed id of its
-  hash, so no storage key names a transaction, and two profiles holding one
-  hash keep two rows. An incoming key keeps its profile and network and
-  replaces the note, transaction, account or contract it named with its
-  keyed hash, so a profile or network wipe still deletes by prefix with no
-  key; an enable flag's key keeps its profile and chain and hashes the
-  account. The AAD binds each
-  row to its root, its storage key, its profile and, through the key, the
-  profile's incarnation: a row moved, swapped between profiles or kept from a
-  deleted profile whose id is reused never opens. A row that fails to open
-  reads as absent and is kept; the log names a fixed category
-  (`sealed-authentication`, `sealed-format`, `sealed-identity`), never the row.
+- Every profile-scoped root but the profile row itself: contacts, dApp
+  sessions and registration counts, the operation journal, the transaction
+  history, accounts and imported keys, tokens and the default-token seeder's
+  marker, networks, fee payers, token balances, the authwit registry and its
+  enable flags, and incoming receipts with their trust, scan cursors,
+  balance-refresh outbox and arrival rows — sealed per row under the
+  profile's row-seal key (§ Crypto-bound invariants). The envelope names the
+  profile; the row, its names, addresses, origins, grants, amounts, balances,
+  fees, endpoints, errors and hashes are ciphertext. An imported key's
+  signing key is sealed again inside it, under the password-derived key.
+- Storage keys name no address or hash. A transaction row is stored at the
+  keyed id of its hash, so two profiles holding one hash keep two rows. An
+  account and its imported key keep their profile and chain and replace the
+  address with its keyed hash, one id in both roots. An incoming key keeps
+  its profile and network and replaces the note, transaction, account or
+  contract it named with its keyed hash, so a profile or network wipe still
+  deletes by prefix with no key; an enable flag's key keeps its profile and
+  chain and hashes the account.
+- The AAD binds each row to its root, its storage key, its profile and,
+  through the key, the profile's incarnation: a row moved, swapped between
+  profiles or kept from a deleted profile whose id is reused never opens. A
+  row that fails to open reads as absent and is kept; the log names a fixed
+  category (`sealed-authentication`, `sealed-format`, `sealed-identity`),
+  never the row.
+- The account-integrity stamp and the stale-network record keep a keyed
+  digest of the account set, `HMAC(K_idx, accountSetDigest)`, never the
+  address list.
 
-Plaintext at rest (`chrome.storage.local`):
-- Profile metadata, networks, accounts, tokens, FPC definitions, config,
-  storage version.
-- dApp registration counts (`nulo:core:dappRegistrations@<profile>`): per
-  chain, the origin of each app that registered with the profile and how many
-  times, though not its accounts or grants.
+Plaintext at rest (`chrome.storage.local`), each family with the reason it is
+read without a row key in `apps/extension/src/wallet/storage/root-census.test.ts`,
+which fails on a family that is neither sealed nor reviewed:
+- Profile rows (name, type, the sealed master and its supporting key
+  material), config, the storage version and the migration engine's state,
+  cached prices, the signed token list, the Terms-acceptance record.
+- Per-profile records the pre-unlock gates read: the active network's id, the
+  default network kinds a profile was offered, the stale-network record and
+  the integrity stamp (network and chain ids and the keyed digest), and the
+  torn-restore gate.
+- Records that name accounts only while their work runs: a profile deletion's
+  tombstone (addresses, token and network ids), the network-reset journal
+  (accounts and the probed endpoint) and an account-integrity block.
+- The popup's `nulo:ui:*` preferences: pinned token contracts, fee-payer
+  picks and the last-selected account's address (known limit #1062, follow-up #1051), plus
+  per-profile Get Started flags and how the last restore ended.
 - A note's nullifier is never stored; it stays in the PXE's encrypted store.
 
 What sealing does not hide or prevent:
 - Root names, row ids, the `profileId` in each envelope (so per-profile row
   counts), ciphertext length and write times. A balance or authwit row's id
-  is a local sequence number; an incoming key shows its profile and network
-  (so per-network row counts) and an outbox key its local token id.
+  is a local sequence number; an account, imported-key or authwit-flag key
+  shows its profile and chain (so per-chain account counts), an incoming key
+  its profile and network (so per-network row counts) and an outbox key its
+  local token id (known limit #1056).
 - A profile's rows written before this build stay plaintext until that
-  profile's next unlock seals them; until then they read as before.
+  profile's next unlock seals them; until then they read as before (known
+  limit #1060). The browser may keep the replaced plaintext in its storage
+  files until it compacts them (#1058). A build from before the seal reads
+  none of them (#1059).
 - A transaction row written before this build that names no profile stays
   plaintext at its hash, served to every profile, until a profile that alone
   holds its account on its chain adopts and seals it at unlock. One whose
   account two profiles hold, or whose ownership a locked profile's unreadable
-  accounts leave unknown, stays plaintext.
+  accounts leave unknown, stays plaintext (known limit #1057).
 - An offline writer can delete a sealed row, roll it back to an earlier
   sealed value at the same key, or plant a plaintext row, which the wallet
   reads and seals at the next unlock. dApp sessions are the exception: each
   keeps its HMAC (keyed `HKDF(master ‖ dek)`) inside the seal, so a planted or
-  edited grant is dropped on read.
+  edited grant is dropped on read (known limits #1052, #1053).
 - The row-seal keys come from the master alone, so a same-phrase sibling
   profile, or anyone holding the recovery phrase and a copy of the disk, can
-  open the rows; neither can forge a dApp grant.
+  open the rows; neither can forge a dApp grant (known limit #1054).
 - The service worker holds the row-seal keys of every profile it has opened
   until it ends or the profile is deleted, a lock included, so work that lands
   after a lock still seals. Code running inside the extension can use them,
-  never the master (`packages/wallet-crypto/ATTACK-SURFACE.md`).
+  never the master (`packages/wallet-crypto/ATTACK-SURFACE.md`, known limit #1055).
 
 Each dApp-session row carries a MAC keyed from the profile's keys: it stops a
 forged row and a row replayed under another id or profile, not a writer with
 storage access putting back an earlier authentic row under the same key
 (known limit #967).
+
+Who reads what, by capability:
+
+| | Attacker | What it gets from the sealed roots |
+|---|---|---|
+| T1 | Reads storage: a disk image, a synced browser profile, an extension with storage access | Ciphertext. Its work factor is the password, as for the master; a passkey profile has no offline path |
+| T2 | A same-phrase sibling profile, or anyone with the recovery phrase and a copy of the disk | Every sealed row of every profile that phrase made, since the row keys come from the master alone. Never a dApp grant it could forge, nor an imported signing key, sealed again under the profile's DEK |
+| T3 | Writes storage offline | Deletes, rollbacks to an earlier value at the same key, and planted plaintext rows, as above. Never a row moved across keys, roots, profiles or incarnations, nor a forged one |
+| T4 | Runs code inside the extension | Out of scope (`packages/wallet-crypto/ATTACK-SURFACE.md`). On a locked, live worker: the row keys of every profile opened in its lifetime, never the master |
+| T5 | A Firefox content script sharing `storage.local` | Ciphertext, as T1 |
 
 ### External price feed (CoinGecko)
 

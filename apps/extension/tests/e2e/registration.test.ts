@@ -69,7 +69,7 @@ test("create profile with password", async ({ extension }) => {
 	// Past bug: app.vue's `initAccount()` and `watch(network)` both ran an
 	// auto-create-default-account branch. During profile creation both fired
 	// concurrently and raced, sometimes producing 2 accounts at indices 0 and 1.
-	// EntityStorage shape: each account stored at `nulo:core:accounts@<address>`.
+	// One stored row per account under `nulo:core:accounts@`, sealed or not.
 	const accountCount = await page.evaluate(async () => {
 		const all = await new Promise<Record<string, unknown>>((resolve) => chrome.storage.local.get(null, resolve))
 		return Object.keys(all).filter((k) => k.startsWith("nulo:core:accounts@")).length

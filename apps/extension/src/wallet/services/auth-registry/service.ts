@@ -163,7 +163,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 			await this.authwits.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
 			await this.statuses.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
 		} catch (error) {
-			this.logWarn("sealing the profile's plaintext authorizations failed; the next unlock retries", { error })
+			this.logWarn("sealing the profile's plaintext authorizations failed; the next worker retries", { error })
 		}
 	}
 

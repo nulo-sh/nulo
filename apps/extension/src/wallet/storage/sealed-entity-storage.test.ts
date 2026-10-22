@@ -6,7 +6,7 @@ import { type Contact, ContactSchema } from "@/wallet/services/contact/spec"
 import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
 import { TRANSACTION_STORAGE_ROOT, TxStatus, type Tx } from "@/wallet/services/transaction/service"
 import { type KeyedIds, type RowKeysSource, SealedEntityStorage } from "./sealed-entity-storage"
-import { TestRowKeys } from "./sealed-entity-storage.testing"
+import { TestRowKeys, readsKey } from "./sealed-entity-storage.testing"
 import { sealedEntityStorage } from "./stores"
 
 const ROOT = "nulo:core:contacts"
@@ -221,7 +221,7 @@ describe("SealedEntityStorage", () => {
 			const racing: MinimalStorageArea = {
 				get: async (keys) => {
 					const got = await area.get(keys)
-					if (keys === key && current) {
+					if (readsKey(keys, key) && current) {
 						// The lock passes to a purge, which deletes the row while this read is out.
 						current = false
 						await area.remove(key)
@@ -273,8 +273,8 @@ describe("SealedEntityStorage", () => {
 			await area.set({ [`${ROOT}@c-4`]: (await raw(area))[`${ROOT}@c-1`] })
 			expect(await store().rawRowsOf("p")).toEqual({
 				rows: [
-					{ storageId: "c-1", row: contact("c-1", "p") },
-					{ storageId: "c-2", row: contact("c-2", "p") },
+					{ storageId: "c-1", naturalId: "c-1", row: contact("c-1", "p") },
+					{ storageId: "c-2", naturalId: "c-2", row: contact("c-2", "p") },
 				],
 				unopened: ["c-4"],
 				keyless: [],
@@ -282,7 +282,7 @@ describe("SealedEntityStorage", () => {
 
 			keys.drop("p")
 			expect(await store().rawRowsOf("p")).toEqual({
-				rows: [{ storageId: "c-2", row: contact("c-2", "p") }],
+				rows: [{ storageId: "c-2", naturalId: "c-2", row: contact("c-2", "p") }],
 				unopened: [],
 				keyless: ["c-1", "c-4"],
 			})

@@ -1,7 +1,6 @@
 import { ScopeViolationError } from "@nulo/extension-messaging/errors"
-import type { MinimalStorageArea } from "@nulo/wallet-core/storage"
 import { z } from "zod"
-import { valueStorage } from "@/wallet/storage/stores"
+import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
 import { Lock } from "@/wallet/utils"
 
 export const APP_REGISTRATIONS_PER_CHAIN = 32
@@ -41,7 +40,13 @@ export function decodeRegistrationCounts(stored: unknown): RegistrationCounts {
 export class RegistrationAllowance {
 	private readonly lock = new Lock()
 
-	public constructor(private readonly area: MinimalStorageArea) {}
+	/** `rows` is the sealed counts root, one row per profile at the profile's id. */
+	public constructor(private readonly rows: SealedEntityStorage<unknown>) {}
+
+	/** Seals the profile's plaintext counts under the lock every writer holds. */
+	public sealLegacy(profileId: string): Promise<number> {
+		return this.rows.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+	}
 
 	/** Spends one of `origin`'s registrations on the chain, or refuses, writing nothing, once the app's
 	 *  share or the chain's total is used up. `assertLive` runs under the lock `purgeProfile` takes, so
@@ -55,7 +60,7 @@ export class RegistrationAllowance {
 			if (used >= APP_REGISTRATIONS_PER_CHAIN || chain.total >= DAPP_REGISTRATIONS_PER_CHAIN) {
 				throw new ScopeViolationError(REGISTRATIONS_USED_UP)
 			}
-			await this.store(profileId).set({
+			await this.rows.set(profileId, {
 				...counts,
 				[String(chainId)]: { total: chain.total + 1, apps: { ...chain.apps, [origin]: used + 1 } },
 			})
@@ -67,25 +72,17 @@ export class RegistrationAllowance {
 			const counts = await this.read(profileId)
 			if (!Object.hasOwn(counts, String(chainId))) return
 			const { [String(chainId)]: _cleared, ...rest } = counts
-			await (Object.keys(rest).length ? this.store(profileId).set(rest) : this.store(profileId).delete())
+			await (Object.keys(rest).length ? this.rows.set(profileId, rest) : this.rows.delete(profileId))
 		})
 	}
 
 	public purgeProfile(profileId: string): Promise<void> {
-		return this.lock.withLock(() => this.store(profileId).delete())
+		return this.lock.withLock(() => this.rows.delete(profileId))
 	}
 
-	/** Malformed JSON reads as none; a failed storage read propagates, so it never resets the counts. */
+	/** A row that does not parse or open reads as none; a failed storage read propagates, so it never
+	 *  resets the counts. With no row keys every write refuses, so no reset follows a keyless read. */
 	private async read(profileId: string): Promise<RegistrationCounts> {
-		try {
-			return decodeRegistrationCounts(await this.store(profileId).get())
-		} catch (error) {
-			if (error instanceof SyntaxError) return {}
-			throw error
-		}
-	}
-
-	private store(profileId: string) {
-		return valueStorage<RegistrationCounts>("dappRegistrations", this.area, profileId)
+		return decodeRegistrationCounts(await this.rows.get(profileId))
 	}
 }

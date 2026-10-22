@@ -201,7 +201,7 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 				(id) => this.invalidatedBalanceIds.has(id),
 			)
 		} catch (error) {
-			this.logWarn("sealing the profile's plaintext balances failed; the next unlock retries", { error })
+			this.logWarn("sealing the profile's plaintext balances failed; the next worker retries", { error })
 		}
 	}
 

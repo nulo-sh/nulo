@@ -48,7 +48,7 @@ destination the user chooses (the node) or installs (the local prover) is still 
 | Recovery entropy, master secret, signing keys | Extension local storage, encrypted | Only when the user exports a backup file, or an account file (one account's signing key) | The file the user saves (`downloads`) |
 | Passkey credential id and sealed key material | Extension local storage | Only when the user exports a backup file | The file the user saves (`downloads`) |
 | Passkey label (profile name + short handle) | Handed to WebAuthn at creation, `wallet/utils/passkey-ceremony.ts:47-57` | Yes | The browser and the user's authenticator; the authenticator's provider may sync it (`legal/privacy.md` § 5.4) |
-| Account addresses | Extension local storage | Yes | The configured Aztec node (queries name the address); approved applications; the files the user exports |
+| Account addresses | Extension local storage, encrypted | Yes | The configured Aztec node (queries name the address); approved applications; the files the user exports |
 | Balances, transactions, proofs | Extension local storage; private state in the browser's OPFS, encrypted | Yes | The configured Aztec node; approved applications for what the user confirms; a backup file the user exports (balances and transactions) |
 | Proving inputs (witnesses) | Process memory | Only with the optional local prover installed | `127.0.0.1` (`legal/privacy.md` § 5.8) |
 | Public proving parameters | Browser cache | Downloaded, never uploaded | `crs.aztec-cdn.foundation`, fallback `crs.aztec-labs.com` (§ 5.9) |
@@ -66,8 +66,9 @@ One heading per manifest entry (`manifest/manifest.config.ts`; Firefox drops `of
 
 #### `storage`
 
-Keeps profiles, accounts, contacts, settings, granted app permissions and encrypted key material on
-the device. The wallet has no server; this is its only persistent store.
+Keeps profiles, accounts, contacts, settings and granted app permissions on the device, encrypted
+under each profile's key except profile names, settings and a few display preferences. The wallet
+has no server; this is its only persistent store.
 
 #### `unlimitedStorage`
 

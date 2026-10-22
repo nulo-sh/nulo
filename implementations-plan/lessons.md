@@ -26,7 +26,7 @@
 - A closing extension window runs no Vue teardown: await what it owes, bounded, as `endAndClose` does; a person's close leaves the page only a best-effort `beforeunload`. [Evidence](archive/fee-estimate-cancel-1/plan.md)
 - `EventHandler.invoke` drops an async handler's promise: awaiting it waits for nothing, and a rejection escapes. [Evidence](archive/backup-restore-corruption-fix/plan.md#async-events)
 - A typed error survives only hops that name it (`walletErrorFromPayload`, `classifyOperationCatch`, `toWalletResponseError`); `viaPxe` rethrows `Error`. [Evidence](archive/harden-security-prerelease/plan.md#typed-errors)
-- EntityStorage's `getAll()` hides undecodable rows, so a purge, dedupe or max+1 id misses them: key off `getKeys()`. [Evidence](archive/backup-restore-security-hardening/plan.md#hidden-rows)
+- `getAll()` hides undecodable rows and a sealed root's unopened ones, so a purge, dedupe or max+1 id misses them: key off `getKeys()`. [Evidence](archive/backup-restore-security-hardening/plan.md#hidden-rows)
 - The local network's chain id is 0, so a truthiness guard on `chainId` skips every network e2e's chain: test `chainId === undefined`. [Evidence](archive/ux-owner-picks/plan.md#chain-zero)
 - An error message carries text the log redactor never sees (`JSON.parse` quotes its input): log a fixed category. [Evidence](archive/backup-log-hygiene/plan.md#error-text)
 - Classify a dApp call by address, selector and arguments, never its name; validate both sides before comparing normalised keys. [Evidence](archive/dapp-preexisting-fee/plan.md#classify), [more](archive/grant-check-address-case/plan.md#normalise)
