@@ -1,6 +1,6 @@
 # pxe-limits-1 recon
 
-Base: origin/dev at `cef87d9de`. Aztec `6.0.0-rc.3`. `<pxe>` is `@aztec-labs/pxe/dest` as the extension bundles it (identical to the installed toolchain's but for a Nulo patch to account-key healing). Two Sonnet explorers plus the planner's own reads; every line here was read in code or, where marked *run*, observed. Pattern and baseline: [block-time-1](../archive/block-time-1/plan.md).
+Base: origin/dev at `cef87d9de`. Aztec `6.0.0-rc.3`. `<pxe>` is `@aztec-labs/pxe/dest` as the extension bundles it (identical to the installed toolchain's but for a Nulo patch to account-key healing). Two Sonnet explorers plus the planner's own reads; every line here was read in code or, where marked *run*, observed. Pattern and baseline: [block-time-1](../block-time-1/plan.md).
 
 ## The offscreen PXE
 

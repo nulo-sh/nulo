@@ -35,7 +35,7 @@ post_implementation_hardening: not scheduled
 
 # pxe-limits-1: where the PXE and the wallet hit their limits, measured (#1016)
 
-A research lane after [block-time-1](../archive/block-time-1/plan.md): measurements, a findings document, a plain-language report for the owner's explainer, one issue per lever or ceiling, and this record. **No product change.** One arc: one docs-only PR against `dev`. Facts and their lines: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+A research lane after [block-time-1](../block-time-1/plan.md): measurements, a findings document, a plain-language report for the owner's explainer, one issue per lever or ceiling, and this record. **No product change.** One arc: one docs-only PR against `dev`. Facts and their lines: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 Size as planned: about 170 lines against the light target of 150, because each of the four questions needs its own arms, budget and gate; the shared steps are cited from the README standard, not restated.
 
