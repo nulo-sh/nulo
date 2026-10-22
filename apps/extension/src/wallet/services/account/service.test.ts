@@ -5,6 +5,7 @@
  */
 
 import { beforeEach, describe, expect, test, vi } from "vitest"
+import { keyedSegment } from "@nulo/wallet-crypto"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
@@ -17,8 +18,14 @@ import { ERR_UNATTENDED_LIVE_CHECK, NETWORK_SERVICE_NAME } from "@/wallet/servic
 import { loggedAfter } from "../../../../tests/helpers/logged"
 import { svc } from "../composition-harness"
 import { recordWrites } from "../storage-write-log"
+import { ImportedKeysRepository } from "./imported-keys-repository"
 import { AccountService } from "./service"
-import { accountRowId } from "./spec"
+import { accountRowId, accountRowIdOf } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
+const SEALED_0xI = accountRowId("p1", 1, await keyedSegment(ROW_KEY_FAKE.rowKeys("p1")!, "0xI"))
 
 const mkAccount = (address: string, over: Record<string, unknown> = {}) =>
 	({ profileId: "p1", chainId: 1, address, index: 0, type: 0, l1ChainId: 1, name: "A", visible: true, ...over }) as never
@@ -52,6 +59,7 @@ describe("AccountService.createAccount — deletion fence", () => {
 		let liveCalls = 0
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
 				onProfileDeleted: new EventHandler(),
 				getDeletionState: () => deletion,
 				getProfileSecret: () => over.secret ?? Promise.resolve(master),
@@ -144,6 +152,7 @@ describe("AccountService restore writers — deletion fence", () => {
 		const services = new ServiceCollection()
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
 				onProfileDeleted: new EventHandler(),
 				getDeletionState: () => deletion,
 				consumeDekRewrapContext: async () => ({ sourceDek: {} as never, destinationDek: {} as never }),
@@ -235,7 +244,11 @@ describe("AccountService.restore — a chain the profile has no network for", ()
 		api.reset()
 		const services = new ServiceCollection()
 		services.add(
-			svc(PROFILE_SERVICE_NAME, { onProfileDeleted: new EventHandler(), getDeletionState: () => new ProfileDeletionState() }),
+			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
+				onProfileDeleted: new EventHandler(),
+				getDeletionState: () => new ProfileDeletionState(),
+			}),
 		)
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
@@ -269,8 +282,9 @@ describe("AccountService.restore — a chain the profile has no network for", ()
 			undefined,
 		])
 		const stored = Object.keys(await api.storage.local.get(null)).filter((k) => k.startsWith("nulo:core:accounts@"))
-		expect(stored.sort()).toEqual(
-			[accountRowId("p1", 1337, "0xheld"), accountRowId("p1", 1, "0xok")].map((id) => `nulo:core:accounts@${id}`).sort(),
+		expect(stored).toHaveLength(2)
+		expect((await service.getAccountsRaw("p1")).map(accountRowIdOf).sort()).toEqual(
+			[accountRowId("p1", 1337, "0xheld"), accountRowId("p1", 1, "0xok")].sort(),
 		)
 	})
 })
@@ -284,7 +298,11 @@ describe("AccountService.restore — validation + provenance", () => {
 		api.reset()
 		const services = new ServiceCollection()
 		services.add(
-			svc(PROFILE_SERVICE_NAME, { onProfileDeleted: new EventHandler(), getDeletionState: () => new ProfileDeletionState() }),
+			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
+				onProfileDeleted: new EventHandler(),
+				getDeletionState: () => new ProfileDeletionState(),
+			}),
 		)
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
@@ -343,8 +361,9 @@ describe("AccountService.restore — validation + provenance", () => {
 	test("a well-formed unique account restores cleanly", async () => {
 		const [res] = await accountService.restore([mkAccount("0x111")])
 		expect(res.restoreError).toBeUndefined()
-		const raw = await api.storage.local.get(null)
-		expect(Object.keys(raw).some((k) => k.includes("0x111"))).toBe(true)
+		expect(await accountService.getAccount("p1", 1, "0x111")).toMatchObject({ address: "0x111" })
+		// Sealed: the address is in no stored key or value.
+		expect(JSON.stringify(await api.storage.local.get(null))).not.toContain("0x111")
 	})
 
 	test("two concurrent restores of the SAME account — the lock lets exactly ONE win", async () => {
@@ -486,19 +505,22 @@ describe("AccountService.restore — validation + provenance", () => {
 })
 
 describe("AccountService.sweepOrphanImportedKeys", () => {
-	// The sweep runs awaited inside init(), so each case seeds raw storage FIRST
-	// and then boots a fresh service — survival/deletion after start() is the
-	// assertion. The live-set must come from the PHYSICAL key space: a codec-
-	// hidden (or even non-string-valued) account row still counts as occupied,
-	// so a data-integrity failure can never cascade into deleting the sealed
-	// imported signing key behind it.
+	// The sweep runs when a profile's row keys arrive, after its conversion, so each case seeds
+	// storage, boots a service and announces p1's keys. An account counts in either form, readable
+	// or not: a codec-hidden or non-string account row still keeps the signing key behind it.
 	const ACCOUNT_KEY = (address: string) => `nulo:core:accounts@${accountRowId("p1", 1, address)}`
 	const IMPORTED_KEY = (address: string) => `nulo:core:imported-account-keys@${accountRowId("p1", 1, address)}`
+	const keyRow = (address: string) => JSON.stringify({ profileId: "p1", chainId: 1, address, encryptedSigningKey: "sealed" })
 
 	const boot = async (api: FakeBrowserApi) => {
+		const keys = await rowKeysForEveryProfile()
 		const services = new ServiceCollection()
 		services.add(
-			svc(PROFILE_SERVICE_NAME, { onProfileDeleted: new EventHandler(), getDeletionState: () => new ProfileDeletionState() }),
+			svc(PROFILE_SERVICE_NAME, {
+				...keys,
+				onProfileDeleted: new EventHandler(),
+				getDeletionState: () => new ProfileDeletionState(),
+			}),
 		)
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
@@ -511,16 +533,19 @@ describe("AccountService.sweepOrphanImportedKeys", () => {
 		const logger = new LoggerStore(new ConfigStore())
 		services.add(new AccountService(logger, api))
 		await services.start()
-		return logger
+		keys.onRowKeysReady.invoke("p1")
+		const keyRows = new ImportedKeysRepository(api.storage.local, keys.rowKeys)
+		return { logger, hasKeyRow: async (address: string) => (await keyRows.get("p1", 1, address)) !== undefined }
 	}
+	const keyRowsLeft = async (api: FakeBrowserApi) =>
+		Object.keys(await api.storage.local.get(null)).filter((k) => k.startsWith("nulo:core:imported-account-keys@")).length
 
-	test("a TRUE orphan key row (no account key at all) is reaped — proves the sweep ran", async () => {
+	test("a TRUE orphan key row (no account in either form) is reaped, sealed or not — proves the sweep ran", async () => {
 		const api = new FakeBrowserApi()
 		api.reset()
-		await api.storage.local.set({ [IMPORTED_KEY("0xorphan")]: JSON.stringify({ sealed: "AAAA" }) })
+		await api.storage.local.set({ [IMPORTED_KEY("0xorphan")]: keyRow("0xorphan") })
 		await boot(api)
-		const raw = await api.storage.local.get(null)
-		expect(raw[IMPORTED_KEY("0xorphan")]).toBeUndefined()
+		await vi.waitFor(async () => expect(await keyRowsLeft(api)).toBe(0))
 	})
 
 	test("a codec-hidden (malformed string) account row keeps its imported-key row alive", async () => {
@@ -528,40 +553,42 @@ describe("AccountService.sweepOrphanImportedKeys", () => {
 		api.reset()
 		await api.storage.local.set({
 			[ACCOUNT_KEY("0xhidden")]: "{ not json at all",
-			[IMPORTED_KEY("0xhidden")]: JSON.stringify({ sealed: "AAAA" }),
-			[IMPORTED_KEY("0xorphan")]: JSON.stringify({ sealed: "BBBB" }), // control: sweep still reaps
+			[IMPORTED_KEY("0xhidden")]: keyRow("0xhidden"),
+			[IMPORTED_KEY("0xorphan")]: keyRow("0xorphan"), // control: sweep still reaps
 		})
-		await boot(api)
-		const raw = await api.storage.local.get(null)
-		expect(raw[IMPORTED_KEY("0xhidden")]).toBeDefined() // survived
-		expect(raw[IMPORTED_KEY("0xorphan")]).toBeUndefined() // control reaped
+		const { hasKeyRow } = await boot(api)
+		await vi.waitFor(async () => expect(await hasKeyRow("0xorphan")).toBe(false))
+		expect(await hasKeyRow("0xhidden")).toBe(true)
 	})
 
-	test("a sweep that throws is logged as the error's projection, and service start still completes", async () => {
+	test("a sweep that throws is logged as the error's projection", async () => {
 		const api = new FakeBrowserApi()
 		api.reset()
-		await api.storage.local.set({ [IMPORTED_KEY("0xorphan")]: JSON.stringify({ sealed: "AAAA" }) })
+		await api.storage.local.set({ [IMPORTED_KEY("0xorphan")]: keyRow("0xorphan") })
 		api.storage.local.remove = async () => {
 			throw new Error("storage unavailable")
 		}
-		const logger = await boot(api)
-		expect(loggedAfter(logger, "imported-key orphan sweep failed")).toEqual([
-			{ error: { name: "Error", message: "storage unavailable" } },
-		])
+		const { logger } = await boot(api)
+		await vi.waitFor(() =>
+			expect(loggedAfter(logger, "converting or sweeping the profile's accounts failed; the next unlock retries")).toEqual([
+				{ error: { name: "Error", message: "storage unavailable" } },
+			]),
+		)
 	})
 
-	test("a non-string-VALUED account row keeps its imported-key row alive (the getKeys discriminator)", async () => {
-		// rawStringEntries skips non-string values — only the physical key space
-		// (getKeys) sees this row. A live-set built any narrower deletes the key.
+	test("a non-string-VALUED account row keeps its imported-key row alive (the physical-key discriminator)", async () => {
+		// rawStringEntries skips non-string values: only the physical key sees this row. A live-set
+		// built any narrower deletes the key.
 		const api = new FakeBrowserApi()
 		api.reset()
 		await api.storage.local.set({
 			[ACCOUNT_KEY("0xobj")]: { not: "a string" },
-			[IMPORTED_KEY("0xobj")]: JSON.stringify({ sealed: "AAAA" }),
+			[IMPORTED_KEY("0xobj")]: keyRow("0xobj"),
+			[IMPORTED_KEY("0xorphan")]: keyRow("0xorphan"),
 		})
-		await boot(api)
-		const raw = await api.storage.local.get(null)
-		expect(raw[IMPORTED_KEY("0xobj")]).toBeDefined()
+		const { hasKeyRow } = await boot(api)
+		await vi.waitFor(async () => expect(await hasKeyRow("0xorphan")).toBe(false))
+		expect(await hasKeyRow("0xobj")).toBe(true)
 	})
 })
 
@@ -573,6 +600,7 @@ describe("AccountService — same-row field editors serialize", () => {
 		const services = new ServiceCollection()
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
 				onProfileDeleted: new EventHandler(),
 				getDeletionState: () => deletion,
 			}),
@@ -616,16 +644,17 @@ describe("AccountService — same-row field editors serialize", () => {
 		;(parked as (() => void) | null)?.()
 		await Promise.all([nameRun, visRun])
 
-		const raw = await realGet(null)
-		const row = JSON.parse((raw as Record<string, string>)[`nulo:core:accounts@${rowId}`])
-		expect(row.name).toBe("B")
-		expect(row.visible).toBe(false)
+		api.storage.local.get = realGet as typeof api.storage.local.get
+		const row = await service.getAccount("p1", 1, "0xaa")
+		expect(row?.name).toBe("B")
+		expect(row?.visible).toBe(false)
 	})
 })
 
 describe("AccountService.importAccount — deletion fence", () => {
-	const accountKey = `nulo:core:accounts@${accountRowId("p1", 1, "0xI")}`
-	const keyRowKey = `nulo:core:imported-account-keys@${accountRowId("p1", 1, "0xI")}`
+	// Where the service seals the pair: both roots hash the address alike.
+	const accountKey = `nulo:core:accounts@${SEALED_0xI}`
+	const keyRowKey = `nulo:core:imported-account-keys@${SEALED_0xI}`
 	const staleText = /^profile p1 is being deleted — write rejected \(epoch 0 → 1\)$/
 
 	async function makeHarness(
@@ -644,6 +673,7 @@ describe("AccountService.importAccount — deletion fence", () => {
 		const services = new ServiceCollection()
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
 				onProfileDeleted: new EventHandler(),
 				getDeletionState: () => deletion,
 				getProfileDek: async () => {
@@ -854,7 +884,11 @@ describe("AccountService purges wait for a rename holding the same row", () => {
 		api.reset()
 		const services = new ServiceCollection()
 		services.add(
-			svc(PROFILE_SERVICE_NAME, { onProfileDeleted: new EventHandler(), getDeletionState: () => new ProfileDeletionState() }),
+			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
+				onProfileDeleted: new EventHandler(),
+				getDeletionState: () => new ProfileDeletionState(),
+			}),
 		)
 		services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, isChainLive: async () => true }))
 		const service = new AccountService(new LoggerStore(new ConfigStore()), api)
@@ -929,6 +963,7 @@ describe("AccountService.provisionDefaultAccount — unattended rule", () => {
 		const services = new ServiceCollection()
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
 				onProfileDeleted: new EventHandler(),
 				getDeletionState: () => deletion,
 				getProfileSecret: () => Promise.resolve(new Fr(42n)),
@@ -1016,6 +1051,7 @@ describe("AccountService keyed reads bind the row body to the requested address"
 		const services = new ServiceCollection()
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
 				onProfileDeleted: new EventHandler(),
 				getDeletionState: () => deletion,
 				getProfileDek: async () => undefined,
@@ -1066,24 +1102,17 @@ describe("AccountService keyed reads bind the row body to the requested address"
 		expect(await service.getAccount("p1", 1, "0xA")).toBeUndefined()
 	})
 
-	test("an omitted profile id with no row throws the engine's own TypeError, naming the local `account`", async () => {
-		// In-process calls skip the RPC params check, so `undefined === undefined` passes the first
-		// check and the second read throws; the text is whatever this engine says for that expression.
-		const reference = (() => {
-			// Read through `Reflect.get` so no transpiler folds the local into `(void 0)`.
-			const account = Reflect.get({}, "absent") as { chainId: number }
-			try {
-				return String(account.chainId)
-			} catch (err) {
-				return (err as Error).message
-			}
-		})()
-		const { service } = await makeHarness()
+	test("an omitted profile id is refused before any read: the keyed root names no owner", async () => {
+		// In-process calls skip the RPC params check; the sealed root cannot hash an id that names no
+		// profile, so it refuses rather than reading or guessing one.
+		const { api, service } = await makeHarness()
+		const { log } = recordWrites(api.storage.local, "nulo:core:")
 		const missing = undefined as unknown as string
-		await expect(service.getAccount(missing, 1, "0xA")).rejects.toThrow(reference)
-		await expect(service.getAccountContract(missing, 1, "0xA")).rejects.toThrow(reference)
-		await expect(service.exportAccount(missing, 1, "0xA", "pw", false)).rejects.toThrow(reference)
-		await expect(service.changeAccountName(missing, 1, "0xA", "x")).rejects.toThrow(reference)
-		await expect(service.getAccount(missing, 1, "0xA")).rejects.toBeInstanceOf(TypeError)
+		const refusal = /^nulo:core:accounts is keyed per profile: name the owner$/
+		await expect(service.getAccount(missing, 1, "0xA")).rejects.toThrow(refusal)
+		await expect(service.getAccountContract(missing, 1, "0xA")).rejects.toThrow(refusal)
+		await expect(service.exportAccount(missing, 1, "0xA", "pw", false)).rejects.toThrow(refusal)
+		await expect(service.changeAccountName(missing, 1, "0xA", "x")).rejects.toThrow(refusal)
+		expect(log).toEqual([])
 	})
 })

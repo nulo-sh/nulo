@@ -356,7 +356,7 @@ async function startReset(h: H) {
 }
 
 describe("a stale network reset through the real service graph", () => {
-	test("wipes every store's rows for the old chain, leaves the other chain byte-identical, and re-creates the accounts", async () => {
+	test("wipes every store's rows for the old chain, leaves the other chain's rows as they were, and re-creates the accounts", async () => {
 		const h = await harness()
 		const { stale, local } = await twoChains(h)
 		await scansSettled(h)
@@ -381,7 +381,12 @@ describe("a stale network reset through the real service graph", () => {
 			for (const k of arrivals)
 				expect(JSON.parse(JSON.parse((await storedText(k, now[k], rowKeys)) ?? "{}").r)).toMatchObject({ played: [] })
 		})
-		expect(Object.fromEntries(local.map((k) => [k, after[k]]))).toEqual(Object.fromEntries(local.map((k) => [k, before[k]])))
+		// A scan that reruns after the reset rewrites the other chain's cursor with the same content,
+		// and a sealed write takes a fresh IV, so its rows compare by the text they open to.
+		const opened = async (rows: Record<string, unknown>) =>
+			Object.fromEntries(await Promise.all(local.map(async (k) => [k, await storedText(k, rows[k], rowKeys)] as const)))
+		expect(local.every((k) => k in after)).toBe(true)
+		expect(await opened(after)).toEqual(await opened(before))
 		expect(h.pxeClears).toEqual([["p1", OLD]])
 
 		const moved = (await h.account.getAccountsRaw("p1")).filter((a) => a.chainId === NEW)

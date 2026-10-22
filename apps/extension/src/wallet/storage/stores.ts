@@ -10,7 +10,14 @@ import type { StorageRef } from "@nulo/wallet-core/migration"
 import { EntityStorage, type MinimalStorageArea, ValueStorage } from "@nulo/wallet-core/storage"
 import type { z } from "zod"
 import { CONFIG_STORAGE_KEY } from "@/wallet/config/config"
-import { ACCOUNT_STORAGE_ROOT, AccountSchema, IMPORTED_KEYS_STORAGE_ROOT, ImportedAccountKeySchema } from "@/wallet/services/account/spec"
+import {
+	ACCOUNT_STORAGE_ROOT,
+	AccountSchema,
+	accountRowId,
+	IMPORTED_KEYS_STORAGE_ROOT,
+	ImportedAccountKeySchema,
+	parseAccountRowId,
+} from "@/wallet/services/account/spec"
 import {
 	AUTH_REGISTRY_ENABLED_STORAGE_ROOT,
 	AUTH_REGISTRY_STORAGE_ROOT,
@@ -144,9 +151,25 @@ const REGISTRY_FLAG_LAYOUT: SealedRootOptions = {
 	},
 }
 
+/** An account or imported-key id, `["account", profileId, chainId, address]`, keeps its profile
+ *  and chain and replaces the address with its keyed hash. The hash takes the address alone, so
+ *  both roots store an account and its signing key at one id. The key alone names the profile, as
+ *  it already did for a row its codec hides; the service still serves a row only where its body
+ *  agrees with its key. */
+const ACCOUNT_LAYOUT: SealedRootOptions = {
+	ownerOf: (_row, naturalId) => parseAccountRowId(naturalId)?.profileId,
+	keyed: {
+		physicalId: async (naturalId, keyedHash) => {
+			const id = parseAccountRowId(naturalId)
+			if (!id) throw new Error("not an account id")
+			return accountRowId(id.profileId, id.chainId, await keyedHash(id.address))
+		},
+	},
+}
+
 export const STORES = {
-	accounts: codec(ACCOUNT_STORAGE_ROOT, AccountSchema),
-	importedAccountKeys: codec(IMPORTED_KEYS_STORAGE_ROOT, ImportedAccountKeySchema),
+	accounts: sealedCodec(ACCOUNT_STORAGE_ROOT, AccountSchema, ACCOUNT_LAYOUT),
+	importedAccountKeys: sealedCodec(IMPORTED_KEYS_STORAGE_ROOT, ImportedAccountKeySchema, ACCOUNT_LAYOUT),
 	authRegistry: sealedCodec(AUTH_REGISTRY_STORAGE_ROOT, AuthwitSchema, undefined, NUMERIC_ID),
 	authRegistryEnabled: sealedCodec(AUTH_REGISTRY_ENABLED_STORAGE_ROOT, AuthwitStatusSchema, REGISTRY_FLAG_LAYOUT),
 	contacts: sealedCodec(CONTACT_STORAGE_ROOT, ContactSchema),

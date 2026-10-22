@@ -24,6 +24,10 @@ import { svc } from "../composition-harness"
 import { AccountType } from "./spec"
 import { AccountService } from "./service"
 import { collectUnhandledRejections } from "../../../../tests/helpers/unhandled-rejections"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 describe("AccountService.serializePerTuple — rejection emits NO unhandledrejection", () => {
 	let accountService: AccountService
@@ -34,6 +38,7 @@ describe("AccountService.serializePerTuple — rejection emits NO unhandledrejec
 		const services = new ServiceCollection()
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
 				onProfileDeleted: new EventHandler(),
 				getDeletionState: () => new ProfileDeletionState(),
 				// The reject lever: an absent master secret makes createAccountInternal

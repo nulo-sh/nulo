@@ -33,7 +33,7 @@ import { BalanceRepository } from "./balance-repository"
 import { reconcilePlan } from "./reconcile-pairs"
 import { TokenBalanceService } from "./service"
 import type { TokenBalanceRaw } from "./spec"
-import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { rowKeysForEveryProfile, readsKey } from "@/wallet/storage/sealed-entity-storage.testing"
 
 /** One key for every profile, as the profile fakes hold it. */
 const { rowKeys: ROW_KEYS } = await rowKeysForEveryProfile()
@@ -156,10 +156,10 @@ describe("TokenBalanceService sealing at rest", () => {
 		const reached = deferred()
 		const release = deferred()
 		let parkFinalRead = true
-		// The conversion's only single-key read of the row is its last one, inside its hold.
+		// The conversion's only read naming the row's key is its last one, inside its hold.
 		area.get = async (keys) => {
 			const got = await realGet(keys)
-			if (parkFinalRead && keys === key(1)) {
+			if (parkFinalRead && readsKey(keys, key(1))) {
 				parkFinalRead = false
 				reached.resolve()
 				await release.promise
