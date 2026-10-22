@@ -17,7 +17,7 @@ const emit = defineEmits<{ saved: []; later: [] }>()
 const { openToast } = useToast()
 const { isCopied, copySecret } = useSecretClipboardCopy({ toastLabel: "Recovery phrase copied", openToast })
 
-const title = useTemplateRef<HTMLElement>("title")
+const title = useTemplateRef<{ focus: (options?: FocusOptions) => void }>("title")
 
 onMounted(() => {
 	// A stage of Create, not a route: no router scroll reset runs, and focus must leave the Create
@@ -29,11 +29,15 @@ onMounted(() => {
 
 <template>
 	<OnboardingPage data-testid="onboarding-phrase-page">
-		<StepIndicator current="phrase" path="password" />
-		<header ref="title" tabindex="-1" :class="$style.hero" data-testid="onboarding-phrase-title">
-			<BrutalistTitle main="Your recovery" sub="Phrase" />
-			<div :class="$style.hero_bar" />
-		</header>
+		<OnboardingStepHeader
+			ref="title"
+			current="phrase"
+			path="password"
+			main="Your recovery"
+			sub="Phrase"
+			tabindex="-1"
+			data-testid="onboarding-phrase-title"
+		/>
 
 		<Text variant="body" color="secondary" height="150">
 			Write these 24 words on paper and keep them offline. They bring your wallet back if you forget your password.
@@ -79,15 +83,6 @@ onMounted(() => {
 </template>
 
 <style module>
-.hero {
-	padding: 8px 0 0;
-}
-
-/* A focus target, not a control: no ring. */
-.hero:focus {
-	outline: none;
-}
-
 .mark {
 	height: 18px;
 	flex-shrink: 0;
@@ -98,12 +93,5 @@ onMounted(() => {
 	grid-template-columns: 1fr 1fr;
 	gap: 12px;
 	width: 100%;
-}
-
-.hero_bar {
-	width: 40px;
-	height: 2px;
-	background: var(--nulo-accent);
-	margin-top: 12px;
 }
 </style>
