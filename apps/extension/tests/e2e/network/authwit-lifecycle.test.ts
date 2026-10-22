@@ -5,6 +5,7 @@ import { assertPgOk, formatPgMismatch, selectPgAccount, snapshotResultSeq, waitF
 import { approveExecute, pickFeeAndSubmitAuthwitPopup, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { mintPublicTokensForAccount, waitForTxMined, type AztecTestConfig } from "../fixtures/aztec"
 import { pollUntil } from "../fixtures/poll"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import { createAztecNodeClient } from "@aztec-labs/aztec.js/node"
 import { isAuthRegistryEnabled, isAuthwitConsumable } from "@/wallet/utils/auth-registry"
 
@@ -138,13 +139,10 @@ test.skipIf(!hasConfig)(
 		// hash (tx-request-builder passes ONE messageHash to both trackAuthwit + set_authorized).
 		const trackedHashesForA = async (): Promise<{ account: string; hash: string }[]> => {
 			const p = await openPopup(ctx)
-			const rows = await p.evaluate(async () => {
-				const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-				return Object.entries(all)
-					.filter(([k]) => k.startsWith("nulo:core:auth-registry@"))
-					.map(([, v]) => JSON.parse(v as string) as { account: string; hash: string })
-					.map((a) => ({ account: a.account, hash: a.hash }))
-			})
+			const rows = (await readSealedRows<{ account: string; hash: string }>(p, "authRegistry")).map(({ row }) => ({
+				account: row.account,
+				hash: row.hash,
+			}))
 			await p.close()
 			return rows.filter((r) => r.account === ownerA)
 		}

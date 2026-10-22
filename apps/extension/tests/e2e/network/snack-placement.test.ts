@@ -238,11 +238,12 @@ async function waitFor(what: string, done: () => Promise<boolean>, timeoutMs = 1
 /** The wallet acted on the public receipt `txHash`: its record exists and no balance refresh it
  *  asked for is still owed. */
 async function receiptSettled(page: Page, txHash: string): Promise<boolean> {
-	return page.evaluate(async (hash: string) => {
-		const keys = Object.keys(await chrome.storage.local.get(null))
-		const recorded = keys.some((k) => k.startsWith("nulo:core:incoming-transfers@pub:") && k.includes(hash))
-		return recorded && !keys.some((k) => k.startsWith("nulo:core:incoming-balance-outbox@"))
-	}, txHash)
+	const records = await readSealedRows<{ kind?: string; txHash?: string }>(page, "incomingTransfers")
+	const recorded = records.some(({ row }) => row.kind === "public-event" && row.txHash === txHash)
+	const owed = await page.evaluate(async () =>
+		Object.keys(await chrome.storage.local.get(null)).some((k) => k.startsWith("nulo:core:incoming-balance-outbox@")),
+	)
+	return recorded && !owed
 }
 
 /** Waits, without asking for a refresh, for the balance row's next write to carry `expectedRaw`, then

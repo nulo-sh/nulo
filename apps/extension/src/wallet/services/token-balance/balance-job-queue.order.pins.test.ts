@@ -1,7 +1,7 @@
 /**
  * Pre-extraction pin: a successful
- * projection lands in the frozen order `repo.set → tasks.completeTask →
- * onBalanceUpdated`, and the emit is gated by a post-write `isRowEmittable`
+ * projection lands in the frozen order `repo.prepare → repo.set → tasks.completeTask →
+ * onBalanceUpdated`, sealed before the fences so no await separates them from the write, and the emit is gated by a post-write `isRowEmittable`
  * re-check that reads the row AFTER the awaited write. A refactor that
  * reordered the write and the task completion, or emitted before the write
  * settled, changes what a crash between the steps leaves behind.
@@ -32,9 +32,15 @@ function makeHarness() {
 	const repo = {
 		get: async (id: number) => store.get(id),
 		getAll: async () => Array.from(store.values()),
-		set: async (b: TokenBalanceRaw) => {
-			log.push("repo.set")
-			store.set(b.id, b)
+		prepare: async (b: TokenBalanceRaw) => {
+			log.push("repo.prepare")
+			return {
+				items: {},
+				commit: async () => {
+					log.push("repo.set")
+					store.set(b.id, b)
+				},
+			}
 		},
 		delete: async () => {},
 		allocateId: async () => 2,
@@ -62,7 +68,7 @@ function makeHarness() {
 }
 
 describe("BalanceJobQueue — success commit order", () => {
-	test("repo.set → completeTask → onBalanceUpdated, with the emit reading the row post-write", async () => {
+	test("repo.prepare → repo.set → completeTask → onBalanceUpdated, with the emit reading the row post-write", async () => {
 		const h = makeHarness()
 		const emittable: string[] = []
 		const queue = new BalanceJobQueue(new FakeBackgroundTicker(), h.repo, h.projector, h.tasks, {
@@ -80,7 +86,7 @@ describe("BalanceJobQueue — success commit order", () => {
 		await queue.tick()
 		// Pre-write ownership check, the write, task completion, the post-write
 		// re-check, then the emit — nothing emits before the row is durable.
-		expect(h.log).toEqual(["isRowEmittable", "repo.set", "completeTask", "isRowEmittable", "emit"])
+		expect(h.log).toEqual(["repo.prepare", "isRowEmittable", "repo.set", "completeTask", "isRowEmittable", "emit"])
 		expect(emittable).toEqual(["7/9"])
 		expect(h.store.get(1)?.privateBalance).toBe("7")
 	})
@@ -97,7 +103,7 @@ describe("BalanceJobQueue — success commit order", () => {
 		})
 		queue.enqueue(raw(1))
 		await queue.tick()
-		expect(h.log).toEqual(["repo.set", "completeTask"])
+		expect(h.log).toEqual(["repo.prepare", "repo.set", "completeTask"])
 		expect(onBalanceUpdated).not.toHaveBeenCalled()
 	})
 })

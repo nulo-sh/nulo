@@ -33,6 +33,10 @@ import { recordWrites } from "../storage-write-log"
 import { GRANT_BLOCK_WAIT_MS } from "./grant-block"
 import { AuthRegistryService, MAX_TRACKED_AUTHWITS_PER_ACCOUNT } from "./service"
 import { type Authwit, authwitStatusRowId } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile; the conversion event stays inert. */
+const ROW_KEY_SURFACE = await rowKeysForEveryProfile()
 
 const noopLogger = { log: () => {} }
 const A = "0xowner"
@@ -47,7 +51,13 @@ function makeService(): AuthRegistryService {
 	// reset() clears the global fake-browser backing between tests.
 	const api = new FakeBrowserApi()
 	api.reset()
-	return new AuthRegistryService(noopLogger as never, api)
+	return withRowKeys(new AuthRegistryService(noopLogger as never, api))
+}
+
+/** A service built without `init()` still seals: its stores read the profile service's keys. */
+function withRowKeys(s: AuthRegistryService): AuthRegistryService {
+	;(s as unknown as { profileService: unknown }).profileService = ROW_KEY_SURFACE
+	return s
 }
 
 /** Direct-storage read (no active-profile gate) — the unit tests below construct the service
@@ -85,7 +95,7 @@ describe("AuthRegistryService — pending/reconcile/cap", () => {
 
 	test("recordPendingAuthwits allocates ids over the PHYSICAL key space — a codec-hidden row is never overwritten", async () => {
 		const api = new FakeBrowserApi()
-		const s = new AuthRegistryService(noopLogger as never, api)
+		const s = withRowKeys(new AuthRegistryService(noopLogger as never, api))
 		await api.storage.local.set({ "nulo:core:auth-registry@1": JSON.stringify({ id: 1, account: A, hash: "0xhidden", content: null }) })
 		await s.recordPendingAuthwits(P1, [{ hash: "0xnew", content }], "0xtx")
 		const raw = (await api.storage.local.get(null)) as Record<string, string>
@@ -171,7 +181,12 @@ async function makeHarness(opts: { node?: unknown; grantNode?: unknown; activePr
 		return { profileId: active.id, epoch: deletionState.capture(active.id), session }
 	})
 	services.add(
-		svc(PROFILE_SERVICE_NAME, { getDeletionState: () => deletionState, getActiveProfile: async () => active, captureExecutionFence }),
+		svc(PROFILE_SERVICE_NAME, {
+			...ROW_KEY_SURFACE,
+			getDeletionState: () => deletionState,
+			getActiveProfile: async () => active,
+			captureExecutionFence,
+		}),
 	)
 	const getNetwork = vi.fn(async () => network)
 	services.add(
@@ -394,6 +409,66 @@ describe("AuthRegistryService purges — each method's scope, survivors and orde
 	})
 })
 
+describe("AuthRegistryService sealing at rest", () => {
+	const ROOT = "nulo:core:auth-registry@"
+	const STATUS_ROOT = "nulo:core:auth-registry-enabled@"
+	const B = "0xotheraccount"
+	const flagKey = (profileId: string, account: string) => `${STATUS_ROOT}${authwitStatusRowId(profileId, 1, account)}`
+
+	/** p1's and p2's plaintext authwits and disabled flags, then p1's unlock-time conversion. */
+	async function converted() {
+		const h = await makeHarness()
+		await h.api.storage.local.set({
+			[`${ROOT}1`]: JSON.stringify({ id: 1, profileId: "p1", chainId: 1, account: A, hash: "0xh1", content }),
+			[`${ROOT}2`]: JSON.stringify({ id: 2, profileId: "p2", chainId: 1, account: A, hash: "0xh2", content }),
+			[flagKey("p1", A)]: "false",
+			[flagKey("p1", B)]: "false",
+			[flagKey("p2", A)]: "false",
+		})
+		await (h.service as unknown as { sealLegacyRows(profileId: string): Promise<void> }).sealLegacyRows("p1")
+		const stored = async () => (await h.api.storage.local.get(null)) as Record<string, string>
+		return { h, stored }
+	}
+
+	test("unlock seals the profile's authwits and flags, and no flag key of it names an account", async () => {
+		const { h, stored } = await converted()
+		const all = await stored()
+		expect(Object.keys(JSON.parse(all[`${ROOT}1`]))).toEqual(["profileId", "sealed"])
+		expect(JSON.parse(all[`${ROOT}2`]).profileId).toBe("p2")
+		const flags = Object.keys(all).filter((k) => k.startsWith(STATUS_ROOT))
+		const mine = flags.filter((k) => JSON.parse(k.slice(STATUS_ROOT.length))[1] === "p1")
+		expect(mine).toHaveLength(2)
+		for (const key of mine) {
+			expect(key).not.toContain(A)
+			expect(key).not.toContain(B)
+			expect(Object.keys(JSON.parse(all[key]))).toEqual(["profileId", "sealed"])
+		}
+		expect(all[flagKey("p2", A)]).toBe("false")
+		expect(await h.service.getRegistryEnabled(1, A)).toBe(false)
+		expect(await h.service.getAuthwits(1, A)).toMatchObject([{ id: 1, hash: "0xh1" }])
+	})
+
+	test("an account purge after the conversion removes that account's sealed authwits and flag only", async () => {
+		const { h, stored } = await converted()
+		await h.service.purgeForAccounts([{ chainId: 1, address: A }], "p1")
+		const all = await stored()
+		expect(all[`${ROOT}1`]).toBeUndefined()
+		expect(all[`${ROOT}2`]).toBeDefined()
+		expect(await h.service.getRegistryEnabled(1, A)).toBe(true)
+		expect(await h.service.getRegistryEnabled(1, B)).toBe(false)
+		expect(all[flagKey("p2", A)]).toBe("false")
+	})
+
+	test("clearing a flag still plaintext removes it: a bare boolean row is the profile's own twin", async () => {
+		const h = await makeHarness()
+		await h.api.storage.local.set({ [flagKey("p1", A)]: "false" })
+		const flags = (h.service as unknown as { statuses: { delete(id: string, owner: string): Promise<void> } }).statuses
+		await flags.delete(authwitStatusRowId("p1", 1, A), "p1")
+		expect(await h.service.getRegistryEnabled(1, A)).toBe(true)
+		expect(Object.keys(await h.api.storage.local.get(null)).filter((k) => k.startsWith(STATUS_ROOT))).toEqual([])
+	})
+})
+
 describe("AuthRegistryService revoke and registry toggle — refusals, settlement order, cancel", () => {
 	const FEE = { paymentMethod: { kind: "fj" } } as never
 
@@ -608,8 +683,8 @@ describe("AuthRegistryService.revokeAuthwits waits for each grant's block, then 
 				.mockResolvedValue({ status: AztecTxStatus.PROPOSED, blockNumber: 3 })
 			const { h, revoke } = await revoking(grantNode)
 			const run = revoke()
-			await vi.advanceTimersByTimeAsync(0)
-			expect(grantNode.getTxReceipt).toHaveBeenCalledTimes(1)
+			// The rows open through real WebCrypto, which no fake timer advances.
+			await vi.waitFor(() => expect(grantNode.getTxReceipt).toHaveBeenCalledTimes(1))
 			expect(h.executeSendTransaction).not.toHaveBeenCalled()
 			await vi.advanceTimersByTimeAsync(1_000)
 			await run
@@ -645,6 +720,7 @@ describe("AuthRegistryService.revokeAuthwits waits for each grant's block, then 
 			await h.api.storage.local.set({ [`nulo:core:auth-registry@${row.id}`]: JSON.stringify({ ...row, txHash: undefined }) })
 		}
 		const run = revoke().catch((error: unknown) => error)
+		if (kind !== "untracked") await vi.waitFor(() => expect(grantNode.getTxReceipt).toHaveBeenCalled())
 		await vi.advanceTimersByTimeAsync(GRANT_BLOCK_WAIT_MS + 1_000)
 		expect(await run).toEqual(new Error(NOT_IN_BLOCK))
 		expect(h.executeSendTransaction).not.toHaveBeenCalled()
@@ -666,6 +742,7 @@ describe("AuthRegistryService.revokeAuthwits waits for each grant's block, then 
 			await h.service.recordPendingAuthwits(P1, [{ hash: "0xh2", content }], TX2)
 			await h.service.reconcileAuthwits(P1, TX2, "mined")
 			const run = h.service.revokeAuthwits("net-1", A, [1, 2], FEE).catch((error: unknown) => error)
+			await vi.waitFor(() => expect(grantNode.getTxReceipt).toHaveBeenCalled())
 			await vi.advanceTimersByTimeAsync(GRANT_BLOCK_WAIT_MS + 1_000)
 			expect(await run).toEqual(new Error(NOT_IN_BLOCK))
 			expect(h.executeSendTransaction).toHaveBeenCalledOnce()

@@ -49,6 +49,7 @@ import {
 import { type PasskeyAuthSetup, registerPasskeyProfile, setupPasskeyVirtualAuth } from "../fixtures/passkey"
 import { holdAccountRegistration, isAccountRegistrationHeld, releaseAccountRegistration } from "../fixtures/projection-gate"
 import { pollUntil } from "../fixtures/poll"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import {
 	accountChainId,
 	downloadEncryptedBackup,
@@ -243,19 +244,11 @@ export async function waitForHeldProjection(page: Page): Promise<void> {
 	)
 }
 
-/** The incoming-transfer scan's committed record of the note, read from storage: the card has no per-hash testid. */
+/** The incoming-transfer scan's committed record of the note, as the wallet reads it: the card has no per-hash testid. */
 async function waitForIncomingRecord(page: Page, account: string, txHash: string): Promise<void> {
-	const found = () =>
-		page.evaluate(
-			async (want: { account: string; txHash: string }) => {
-				for (const [key, value] of Object.entries(await chrome.storage.local.get(null))) {
-					if (!key.startsWith("nulo:core:incoming-transfers@") || typeof value !== "string") continue
-					const rec = JSON.parse(value) as { txHash?: string; accountAddress?: string }
-					if (rec.txHash === want.txHash && rec.accountAddress === want.account) return true
-				}
-				return false
-			},
-			{ account, txHash },
+	const found = async () =>
+		(await readSealedRows<{ txHash?: string; accountAddress?: string }>(page, "incomingTransfers")).some(
+			({ row }) => row.txHash === txHash && row.accountAddress === account,
 		)
 	await pollUntil(found, (seen) => seen, {
 		label: "the incoming-transfer scan discovering the receiver's note while its projections are held",

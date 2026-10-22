@@ -60,3 +60,45 @@ export async function openStoredText(area: MinimalStorageArea, storageKey: strin
 	if (text === undefined) throw new Error(`${storageKey} holds no envelope these keys open`)
 	return text
 }
+
+/** Captured at import, before a test can fake it: a real turn drains every queued microtask. */
+const realSetImmediate = globalThis.setImmediate
+
+const SUBTLE_METHODS = ["encrypt", "decrypt", "sign", "verify", "digest", "importKey", "deriveBits", "deriveKey"] as const
+
+/** Tracks the WebCrypto calls a sealed store makes. They answer on a later event-loop turn, which
+ *  a microtask flush or a fake-timer advance never waits for, so a test that asserts after either
+ *  would read a write still in flight. `settled()` returns once a full drain leaves none pending. */
+export function trackSubtleCrypto(): { settled(): Promise<void>; restore(): void } {
+	const subtle = globalThis.crypto.subtle as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>
+	const pending = new Set<Promise<unknown>>()
+	const originals = SUBTLE_METHODS.map((name) => [name, subtle[name], Object.getOwnPropertyDescriptor(subtle, name)] as const)
+	for (const [name, original] of originals) {
+		Object.defineProperty(subtle, name, {
+			configurable: true,
+			writable: true,
+			value: (...args: unknown[]) => {
+				const call = original.apply(subtle, args)
+				pending.add(call)
+				const done = () => pending.delete(call)
+				call.then(done, done)
+				return call
+			},
+		})
+	}
+	return {
+		async settled() {
+			for (;;) {
+				await new Promise<void>((resolve) => realSetImmediate(resolve))
+				if (pending.size === 0) return
+				await Promise.allSettled([...pending])
+			}
+		},
+		restore() {
+			for (const [name, , own] of originals) {
+				if (own) Object.defineProperty(subtle, name, own)
+				else delete subtle[name]
+			}
+		},
+	}
+}
