@@ -5194,7 +5194,12 @@ describe("IncomingTransferService — arrival floors", () => {
 	})
 
 	test("adding a token floors its history before the scan commits it", async () => {
-		const noteSvc = makeNoteStub({ [tokenB.contract]: [note({ contract: tokenB.contract, l2BlockNumber: 50 })] })
+		const noteSvc = makeNoteStub()
+		// A note has one recipient, as the PXE scopes it: a record id names no account, so a note both
+		// accounts were handed would go to whichever account's scan committed it first.
+		noteSvc.getNotesRaw.mockImplementation(async (_n: string, account: string, contract: string) =>
+			account === "0xa" && contract === tokenB.contract ? [note({ contract: tokenB.contract, l2BlockNumber: 50 })] : [],
+		)
 		const { service, token } = await bootArrivals(60, { note: noteSvc })
 		await repo.setArrivalRow("p1", "n1", "0xa", { sinceBlock: 10, played: [] })
 		token.getTokensRaw.mockResolvedValue([tokenA, tokenB])
@@ -5202,10 +5207,8 @@ describe("IncomingTransferService — arrival floors", () => {
 		await internals(service).onTokenAdded(tokenAdd(tokenB))
 		await flushPromises()
 
-		const history = (await repo.listRecords()).filter(
-			(r) => r.contract === tokenB.contract && r.networkId === "n1" && r.accountAddress === "0xa",
-		)
-		expect(history.length).toBeGreaterThan(0)
+		const history = (await repo.listRecords()).filter((r) => r.contract === tokenB.contract && r.networkId === "n1")
+		expect(history.map((r) => r.accountAddress)).toEqual(["0xa"])
 		const state = await service.getArrivalState("p1", "n1", "0xa")
 		expect(history.filter((r) => isArrivalEligible(r, state))).toEqual([])
 	})
