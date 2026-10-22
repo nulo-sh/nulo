@@ -234,3 +234,61 @@ serves later callers; what remains is the pre-change race of one overlapping rea
 expire for every caller. One assertion was weak and is fixed: the quarantined second verdict's
 scenario counted class reads, which the class-gate cache would also leave at two; it now counts
 transfer-page fetches (red when the verdict is ignored).
+
+### Confirmation at K = 4 (`p3-confirm-*`): the wave fails in every pair
+
+`tools/confirm.sh`: `diag-base` (A) and `diag2-k4` (B, `b743e075f`) in the order A B B A A B, each at
+10, 100 and 1,000 seeded tokens, then one run of each at 64 deployed tokens. The 1,000-token points
+(ms from `unlockAt`; load1 at that point's start):
+
+| pair | run | load1 | Home (10-token) | heartbeat (10-token) | wave end | Retry | episode writes (MB) |
+|---|---|---|---|---|---|---|---|
+| 1 | A1 | 138 | 51,277 (643) | 62,941 (30) | **30,774** | 49,615 | 1,000 (154.2) |
+| 1 | B2 | 142 | 1,081 (856) | 275 (23) | **41,667** | 41,709 | 904 (82.3) |
+| 2 | B3 | 196 | 1,069 (479) | 202 (6) | **34,198** | 45,677 | 895 (79.4) |
+| 2 | A4 | 111 | 20,157 (438) | 18,504 (20) | **25,849** | 34,063 | 1,000 (80.6) |
+| 3 | A5 | 74 | 33,640 (726) | 22,017 (17) | **30,601** | 31,124 | 1,000 (154.5) |
+| 3 | B6 | 167 | 1,236 (447) | 140 (3) | **33,737** | 42,020 | 979 (91.0) |
+
+- Responsiveness holds in every head run (Home +225, +590, +789 ms; heartbeat under 300 ms); Retry
+  ends under 46 s. **The wave fails all three pairs**, by 10.9, 8.3 and 3.1 s.
+- Every head run met heavier host load than its base. A K = 4 slot held 133-163 ms at load
+  140-215 against 80 ms at load 57 (`p3-screen5-diag2-k4`): quarantine 46-56 ms, the class-read path
+  94-106 ms, the PXE's own class read 17-23 ms. The base overlaps all 1,000 scans and hides that
+  latency (its wave: 26.9 s at load 70, 25.8-30.8 s here).
+- D4a qualifies the chosen K by the balanced runs, so K = 4 is not qualified. K = 8 is the next value
+  the screen qualified: the same balanced runs for it follow (`tools/confirm-k8.sh`), with the base
+  deployed run of this confirmation as its deployed reference. No rule moved.
+
+Deployed 64 (`p3-confirm-depA`, `p3-confirm-depB`): base wave 1,104 ms, Home 834 ms; K = 4 wave
+**1,631 ms**, Home 646 ms (10-token 466), Retry 616 ms. The deployed wave fails too, by 0.53 s (in
+the first screen the base's deployed wave was 2,354 ms and K = 4's 1,545 ms).
+
+### Confirmation at K = 8 (`p3-confirm8-*`): responsiveness misses once
+
+`tools/confirm-k8.sh`: `diag-base` (A) and `diag2-k8` (B) in the order A B B A A B, then one deployed
+run of B, read against `p3-confirm-depA`. The 1,000-token points:
+
+| pair | run | load1 | Home (10-token) | heartbeat (10-token) | wave end | Retry | episode writes (MB) |
+|---|---|---|---|---|---|---|---|
+| 1 | A1 | 153 | 51,659 (855) | 57,178 (20) | **31,073** | 49,954 | 998 (160.7) |
+| 1 | B2 | 84 | **1,509 (453)** | 203 (5) | **24,906** | 32,143 | 743 (56.9) |
+| 2 | B3 | 147 | 1,157 (1,285) | 267 (48) | **23,219** | 28,303 | 682 (50.0) |
+| 2 | A4 | 141 | 43,675 (665) | 40,700 (6) | **30,803** | 40,652 | 926 (142.5) |
+| 3 | A5 | 126 | 44,548 (701) | 50,166 (6) | **30,923** | 42,791 | 991 (159.6) |
+| 3 | B6 | 151 | 1,241 (742) | 233 (24) | **28,432** | 28,552 | 763 (60.9) |
+
+- The wave holds in all three pairs (2.5-7.6 s before the base); Retry ends under 33 s; heartbeat
+  under 270 ms.
+- **Responsiveness misses in B2**: Home 1,509 ms against that run's 10-token 453 ms, +1,056 ms (the
+  other two: -128 and +499 ms). The three head runs' 10-token Home ranged 453-1,285 ms.
+- Deployed 64 (`p3-confirm8-depB`): wave **1,475 ms** against the base's 1,104 ms (+0.37 s); Home
+  716 ms (10-token 665); Retry 856 ms.
+- Slot hold at K = 8 under this load: 180-254 ms mean.
+
+### The stop
+
+No K in {4, 8, 16} passes phase 3's gate: K = 16 fails responsiveness in the screen; K = 4 fails the
+wave in every balanced pair and at 64 deployed tokens; K = 8 fails one responsiveness point by 56 ms
+and the deployed wave by 0.37 s. Nothing was loosened; the committed constant stays at 4; the arc
+stops for the owner's decision on a rule. The base fails responsiveness in every run by 19-51 s.
