@@ -27,6 +27,7 @@ import { IllegalTransitionError, JobCancelledSentinel, normalizeError } from "@n
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import type { LegalAdmission } from "@/wallet/services/legal/spec"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { profileKeysStub } from "@/wallet/services/composition-harness"
 import { ExecutionCoordinator, type ProveAndSendContext } from "./execution-coordinator"
 
 const fakeTask = { complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), startSubtask: vi.fn() } as unknown as WrappedTask
@@ -214,6 +215,7 @@ describe("proveAndSend: the submitting write is the send's precondition", () => 
 		api.reset()
 		const journal = new OperationJournalService(new LoggerStore(new ConfigStore()), api)
 		const services = new ServiceCollection()
+		services.add(await profileKeysStub("p1"))
 		services.add(journal)
 		await services.start()
 		const { id } = await journal.createOperation({ kind: "transfer", origin: "popup", profileId: "p1" })
@@ -231,13 +233,18 @@ describe("proveAndSend: the submitting write is the send's precondition", () => 
 	}
 
 	test("a refused submitting write sends nothing, and the row then fails from proving", async () => {
-		const { ctx, node, api, journal, id, failRow } = await journaled()
+		const { ctx, node, pxe, provedTx, api, journal, id, failRow } = await journaled()
 		const write = api.storage.local.set.bind(api.storage.local)
-		let refused = false
+		// Rows are sealed, so the submitting write is told apart by order: the first journal write
+		// after the proof.
+		let armed = false
+		;(pxe.proveTx as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+			armed = true
+			return provedTx
+		})
 		vi.spyOn(api.storage.local, "set").mockImplementation(async (entries) => {
-			const submitting = Object.values(entries).some((v) => typeof v === "string" && v.includes('"stage":"submitting"'))
-			if (submitting && !refused) {
-				refused = true
+			if (armed && `nulo:journal@${id}` in entries) {
+				armed = false
 				throw new Error("storage write failed")
 			}
 			return write(entries)

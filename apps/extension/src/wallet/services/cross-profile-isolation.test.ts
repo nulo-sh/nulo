@@ -613,7 +613,8 @@ describe("cross-profile isolation (standing gate)", () => {
 				open()
 				expect(await run).toEqual([{ chainId: 1, address: X }])
 				await new Promise((r) => setTimeout(r, 0))
-				expect((await txService.getTransactions(X)).map((t) => t.hash).sort()).toEqual(["hx-chain2", "hx-p2"])
+				const kept = [...(await txService.transactionsOf(X, p1.id)), ...(await txService.transactionsOf(X, p2.id))]
+				expect(kept.map((t) => t.hash).sort()).toEqual(["hx-chain2", "hx-p2"])
 			})
 
 			test("a failed purge of those rows stops the reconcile with the account row kept", async () => {

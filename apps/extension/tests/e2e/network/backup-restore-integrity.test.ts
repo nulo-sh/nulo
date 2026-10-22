@@ -55,6 +55,7 @@ import {
 import { accountChainId, exportBackupContent, keepChainAccountState } from "../helpers/backup-export"
 import { sealPlainBackup } from "../helpers/backup-seal"
 import { gotoPopupImport, importFullBackup, POPUP_IMPORT_SHELL, TEST_PASSWORD, writeBackupToTemp } from "../helpers/import-drivers"
+import { readSealedRows } from "../fixtures/sealed-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -154,13 +155,13 @@ test.skipIf(!hasConfig)(
 			}, fundedToken)
 			expect(restoredToken).toMatchObject(chainMetadata)
 
-			// ── 4. Provenance assertion via RAW chrome.storage ──────────────
-			const txAccounts = await page2.evaluate(async () => {
-				const all = await chrome.storage.local.get()
-				return Object.entries(all)
-					.filter(([k]) => k.startsWith("nulo:core:txs@"))
-					.map(([, v]) => (JSON.parse(v as string) as { account: string }).account)
-			})
+			// ── 4. Provenance assertion over every stored tx row ────────────
+			const txAccounts = (await readSealedRows<{ account: string }>(page2, "txs")).map(({ row }) => row.account)
+			// Every stored row is one the wallet reads: none is hidden from the assertion below.
+			const storedTxRows = await page2.evaluate(
+				async () => Object.keys(await chrome.storage.local.get()).filter((k) => k.startsWith("nulo:core:txs@")).length,
+			)
+			expect(storedTxRows).toBe(txAccounts.length)
 			// The funded-account tx (its account WAS imported) survived; the
 			// foreign-account tx was dropped before restore could write it.
 			expect(txAccounts).toContain(funded)

@@ -3950,6 +3950,4073 @@
 				"uiLoggerWindowId.full": 1847,
 				"onboardingCompleted.full": true
 			}
+		},
+		{
+			"version": 1,
+			"zod": "4.4.3",
+			"shapes": {
+				"accountIntegrityBlocked": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:account-integrity-blocked"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"accountIndex": {
+								"type": "number"
+							},
+							"chainId": {
+								"type": "number"
+							},
+							"derivedAddress": {
+								"type": "string"
+							},
+							"detectedAt": {
+								"type": "number"
+							},
+							"profileId": {
+								"type": "string"
+							},
+							"regimeId": {
+								"type": "string"
+							},
+							"storedAddress": {
+								"type": "string"
+							},
+							"walletVersion": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"accountIndex",
+							"chainId",
+							"derivedAddress",
+							"detectedAt",
+							"profileId",
+							"regimeId",
+							"storedAddress",
+							"walletVersion"
+						],
+						"type": "object"
+					}
+				},
+				"accountIntegrityVerified": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:account-integrity-verified"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"accountSetDigest": {
+								"type": "string"
+							},
+							"walletVersion": {
+								"type": "string"
+							}
+						},
+						"required": ["accountSetDigest", "walletVersion"],
+						"type": "object"
+					}
+				},
+				"accounts": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:accounts"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"address": {
+								"type": "string"
+							},
+							"chainId": {
+								"type": "number"
+							},
+							"index": {
+								"exclusiveMaximum": 9007199254740991,
+								"minimum": 0,
+								"type": "integer"
+							},
+							"l1ChainId": {
+								"maximum": 4294967295,
+								"minimum": 0,
+								"type": "integer"
+							},
+							"name": {
+								"type": "string"
+							},
+							"profileId": {
+								"type": "string"
+							},
+							"type": {
+								"enum": [0, 1],
+								"type": "number"
+							},
+							"visible": {
+								"type": "boolean"
+							}
+						},
+						"required": ["address", "chainId", "index", "l1ChainId", "name", "profileId", "type", "visible"],
+						"type": "object"
+					}
+				},
+				"activeNetwork": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:active-network"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"type": "string"
+					}
+				},
+				"authRegistry": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:auth-registry"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"options": {
+						"keyIdentityMode": "numeric",
+						"requireKeyIdentityMatch": true
+					},
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"account": {
+								"type": "string"
+							},
+							"chainId": {
+								"type": "number"
+							},
+							"content": {
+								"description": "any non-null object, kept as stored",
+								"x-custom": "any non-null object, kept as stored"
+							},
+							"hash": {
+								"type": "string"
+							},
+							"id": {
+								"type": "number"
+							},
+							"pending": {
+								"type": "boolean"
+							},
+							"profileId": {
+								"type": "string"
+							},
+							"txHash": {
+								"type": "string"
+							}
+						},
+						"required": ["account", "chainId", "content", "hash", "id", "profileId"],
+						"type": "object"
+					}
+				},
+				"authRegistryEnabled": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:auth-registry-enabled"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"type": "boolean"
+					}
+				},
+				"config": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:config"
+					},
+					"encoding": "json",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"debugMode": {
+								"default": false,
+								"type": "boolean"
+							},
+							"defaultExplorer": {
+								"anyOf": [
+									{
+										"enum": ["aztecscan"],
+										"type": "string"
+									},
+									{
+										"type": "null"
+									}
+								],
+								"default": "aztecscan"
+							},
+							"developerMode": {
+								"default": false,
+								"type": "boolean"
+							},
+							"disableAnimations": {
+								"default": false,
+								"type": "boolean"
+							},
+							"incomingDustUsdThreshold": {
+								"default": 0,
+								"maximum": 1000000,
+								"minimum": 0,
+								"type": "number"
+							},
+							"incomingTransfersVisible": {
+								"default": true,
+								"type": "boolean"
+							},
+							"indicateFailures": {
+								"default": false,
+								"type": "boolean"
+							},
+							"prestoReached": {
+								"default": false,
+								"type": "boolean"
+							},
+							"privacyMode": {
+								"default": false,
+								"type": "boolean"
+							},
+							"sessionTtl": {
+								"default": 1800000,
+								"type": "number"
+							},
+							"showFiatValues": {
+								"default": true,
+								"type": "boolean"
+							},
+							"showNode": {
+								"default": true,
+								"type": "boolean"
+							},
+							"sidePanel": {
+								"default": false,
+								"type": "boolean"
+							},
+							"strictSecurityMode": {
+								"default": true,
+								"type": "boolean"
+							},
+							"theme": {
+								"default": "system",
+								"enum": ["dark", "light", "system"],
+								"type": "string"
+							}
+						},
+						"type": "object"
+					}
+				},
+				"contacts": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:contacts"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"sealed": true,
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"abbr": {
+								"type": "string"
+							},
+							"address": {
+								"type": "string"
+							},
+							"id": {
+								"type": "string"
+							},
+							"name": {
+								"type": "string"
+							},
+							"profileId": {
+								"type": "string"
+							}
+						},
+						"required": ["abbr", "address", "id", "name", "profileId"],
+						"type": "object"
+					}
+				},
+				"dappRegistrations": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:dappRegistrations"
+					},
+					"encoding": "json",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"additionalProperties": {
+							"properties": {
+								"apps": {
+									"additionalProperties": {
+										"maximum": 9007199254740991,
+										"minimum": 0,
+										"type": "integer"
+									},
+									"propertyNames": {
+										"type": "string"
+									},
+									"type": "object"
+								},
+								"total": {
+									"maximum": 9007199254740991,
+									"minimum": 0,
+									"type": "integer"
+								}
+							},
+							"required": ["apps", "total"],
+							"type": "object"
+						},
+						"propertyNames": {
+							"type": "string"
+						},
+						"type": "object"
+					}
+				},
+				"dappSessions": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:dappSessions"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"authenticated": true,
+					"sealed": true,
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"accountAliases": {
+								"additionalProperties": {
+									"type": "string"
+								},
+								"propertyNames": {
+									"type": "string"
+								},
+								"type": "object"
+							},
+							"accounts": {
+								"items": {
+									"type": "string"
+								},
+								"type": "array"
+							},
+							"authorizationsWithoutAsking": {
+								"additionalProperties": false,
+								"properties": {
+									"broad": {
+										"type": "boolean"
+									}
+								},
+								"required": ["broad"],
+								"type": "object"
+							},
+							"capabilityGrants": {
+								"items": {
+									"description": "any non-null object, kept as stored",
+									"x-custom": "any non-null object, kept as stored"
+								},
+								"type": "array"
+							},
+							"capabilityRejections": {
+								"items": {
+									"description": "any non-null object, kept as stored",
+									"x-custom": "any non-null object, kept as stored"
+								},
+								"type": "array"
+							},
+							"chainId": {
+								"type": "string"
+							},
+							"confirmationLevel": {
+								"enum": [0, 1, 2, 3, 4, 5],
+								"type": "number"
+							},
+							"dappMetadata": {
+								"properties": {
+									"description": {
+										"type": "string"
+									},
+									"logo": {
+										"type": "string"
+									},
+									"name": {
+										"type": "string"
+									},
+									"url": {
+										"type": "string"
+									}
+								},
+								"type": "object"
+							},
+							"expiry": {
+								"type": "number"
+							},
+							"id": {
+								"type": "string"
+							},
+							"mac": {
+								"type": "string"
+							},
+							"permissions": {
+								"items": {
+									"properties": {
+										"events": {
+											"items": {
+												"type": "string"
+											},
+											"type": "array"
+										},
+										"methods": {
+											"items": {
+												"type": "string"
+											},
+											"type": "array"
+										}
+									},
+									"type": "object"
+								},
+								"type": "array"
+							},
+							"profileId": {
+								"type": "string"
+							},
+							"trustedVerification": {
+								"type": "boolean"
+							},
+							"verificationHash": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"accounts",
+							"chainId",
+							"confirmationLevel",
+							"dappMetadata",
+							"expiry",
+							"id",
+							"permissions",
+							"profileId"
+						],
+						"type": "object"
+					}
+				},
+				"fpcs": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:fpcs"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"address": {
+								"type": "string"
+							},
+							"chainId": {
+								"type": "number"
+							},
+							"id": {
+								"type": "string"
+							},
+							"name": {
+								"type": "string"
+							},
+							"profileId": {
+								"type": "string"
+							},
+							"type": {
+								"enum": [1, 2],
+								"type": "number"
+							}
+						},
+						"required": ["address", "chainId", "id", "profileId", "type"],
+						"type": "object"
+					}
+				},
+				"importedAccountKeys": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:imported-account-keys"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"address": {
+								"type": "string"
+							},
+							"chainId": {
+								"type": "number"
+							},
+							"encryptedSigningKey": {
+								"type": "string"
+							},
+							"profileId": {
+								"type": "string"
+							}
+						},
+						"required": ["address", "chainId", "encryptedSigningKey", "profileId"],
+						"type": "object"
+					}
+				},
+				"incomingArrivals": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:incoming-arrivals"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"played": {
+								"items": {
+									"prefixItems": [
+										{
+											"maxLength": 200,
+											"type": "string"
+										},
+										{
+											"maximum": 9007199254740991,
+											"minimum": 0,
+											"type": "integer"
+										}
+									],
+									"type": "array"
+								},
+								"maxItems": 500,
+								"type": "array"
+							},
+							"sinceBlock": {
+								"maximum": 9007199254740991,
+								"minimum": 0,
+								"type": "integer"
+							}
+						},
+						"required": ["played", "sinceBlock"],
+						"type": "object"
+					}
+				},
+				"incomingBalanceOutbox": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:incoming-balance-outbox"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"dirtyAt": {
+								"type": "number"
+							},
+							"pendingTaskId": {
+								"type": "string"
+							}
+						},
+						"required": ["dirtyAt"],
+						"type": "object"
+					}
+				},
+				"incomingPublicCursors": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:incoming-public-cursors"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"backfill": {
+								"properties": {
+									"high": {
+										"type": "number"
+									},
+									"low": {
+										"type": "number"
+									},
+									"position": {
+										"anyOf": [
+											{
+												"properties": {
+													"blockNumber": {
+														"maximum": 9007199254740991,
+														"minimum": 0,
+														"type": "integer"
+													},
+													"logIndexWithinTx": {
+														"maximum": 9007199254740991,
+														"minimum": 0,
+														"type": "integer"
+													},
+													"txIndexWithinBlock": {
+														"maximum": 9007199254740991,
+														"minimum": 0,
+														"type": "integer"
+													}
+												},
+												"required": ["blockNumber", "logIndexWithinTx", "txIndexWithinBlock"],
+												"type": "object"
+											},
+											{
+												"type": "null"
+											}
+										]
+									}
+								},
+								"required": ["high", "low", "position"],
+								"type": "object"
+							},
+							"cursor": {
+								"anyOf": [
+									{
+										"properties": {
+											"blockNumber": {
+												"maximum": 9007199254740991,
+												"minimum": 0,
+												"type": "integer"
+											},
+											"logIndexWithinTx": {
+												"maximum": 9007199254740991,
+												"minimum": 0,
+												"type": "integer"
+											},
+											"txIndexWithinBlock": {
+												"maximum": 9007199254740991,
+												"minimum": 0,
+												"type": "integer"
+											}
+										},
+										"required": ["blockNumber", "logIndexWithinTx", "txIndexWithinBlock"],
+										"type": "object"
+									},
+									{
+										"type": "null"
+									}
+								]
+							},
+							"lastScanFinalized": {
+								"anyOf": [
+									{
+										"type": "number"
+									},
+									{
+										"type": "null"
+									}
+								]
+							},
+							"lastSyncedBlockHash": {
+								"anyOf": [
+									{
+										"type": "string"
+									},
+									{
+										"type": "null"
+									}
+								]
+							},
+							"pendingPage": {
+								"properties": {
+									"fromCursor": {
+										"anyOf": [
+											{
+												"properties": {
+													"blockNumber": {
+														"maximum": 9007199254740991,
+														"minimum": 0,
+														"type": "integer"
+													},
+													"logIndexWithinTx": {
+														"maximum": 9007199254740991,
+														"minimum": 0,
+														"type": "integer"
+													},
+													"txIndexWithinBlock": {
+														"maximum": 9007199254740991,
+														"minimum": 0,
+														"type": "integer"
+													}
+												},
+												"required": ["blockNumber", "logIndexWithinTx", "txIndexWithinBlock"],
+												"type": "object"
+											},
+											{
+												"type": "null"
+											}
+										]
+									},
+									"toScannedThrough": {
+										"properties": {
+											"blockNumber": {
+												"maximum": 9007199254740991,
+												"minimum": 0,
+												"type": "integer"
+											},
+											"logIndexWithinTx": {
+												"maximum": 9007199254740991,
+												"minimum": 0,
+												"type": "integer"
+											},
+											"txIndexWithinBlock": {
+												"maximum": 9007199254740991,
+												"minimum": 0,
+												"type": "integer"
+											}
+										},
+										"required": ["blockNumber", "logIndexWithinTx", "txIndexWithinBlock"],
+										"type": "object"
+									},
+									"upperHash": {
+										"type": "string"
+									}
+								},
+								"required": ["fromCursor", "toScannedThrough", "upperHash"],
+								"type": "object"
+							},
+							"reconciling": {
+								"properties": {
+									"lowerBound": {
+										"type": "number"
+									},
+									"progress": {
+										"anyOf": [
+											{
+												"properties": {
+													"blockNumber": {
+														"maximum": 9007199254740991,
+														"minimum": 0,
+														"type": "integer"
+													},
+													"logIndexWithinTx": {
+														"maximum": 9007199254740991,
+														"minimum": 0,
+														"type": "integer"
+													},
+													"txIndexWithinBlock": {
+														"maximum": 9007199254740991,
+														"minimum": 0,
+														"type": "integer"
+													}
+												},
+												"required": ["blockNumber", "logIndexWithinTx", "txIndexWithinBlock"],
+												"type": "object"
+											},
+											{
+												"type": "null"
+											}
+										]
+									},
+									"seen": {
+										"items": {
+											"prefixItems": [
+												{
+													"type": "number"
+												},
+												{
+													"type": "string"
+												}
+											],
+											"type": "array"
+										},
+										"type": "array"
+									},
+									"upperBound": {
+										"type": "number"
+									},
+									"upperBoundHash": {
+										"type": "string"
+									}
+								},
+								"required": ["lowerBound", "progress", "seen", "upperBound", "upperBoundHash"],
+								"type": "object"
+							},
+							"startBlock": {
+								"type": "number"
+							}
+						},
+						"required": ["cursor", "lastScanFinalized", "lastSyncedBlockHash", "startBlock"],
+						"type": "object"
+					}
+				},
+				"incomingTransfers": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:incoming-transfers"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"oneOf": [
+							{
+								"properties": {
+									"accountAddress": {
+										"type": "string"
+									},
+									"amountRaw": {
+										"type": "string"
+									},
+									"blockTimestamp": {
+										"type": "number"
+									},
+									"contract": {
+										"type": "string"
+									},
+									"discoveredAt": {
+										"type": "number"
+									},
+									"hidden": {
+										"type": "boolean"
+									},
+									"id": {
+										"type": "string"
+									},
+									"indexInTx": {
+										"type": "number"
+									},
+									"kind": {
+										"const": "note",
+										"type": "string"
+									},
+									"l2BlockNumber": {
+										"type": "number"
+									},
+									"networkId": {
+										"type": "string"
+									},
+									"noteHash": {
+										"type": "string"
+									},
+									"owner": {
+										"type": "string"
+									},
+									"profileId": {
+										"type": "string"
+									},
+									"settled": {
+										"const": true,
+										"type": "boolean"
+									},
+									"tokenId": {
+										"type": "number"
+									},
+									"txHash": {
+										"type": "string"
+									},
+									"txIndexInBlock": {
+										"type": "number"
+									}
+								},
+								"required": [
+									"accountAddress",
+									"amountRaw",
+									"contract",
+									"discoveredAt",
+									"hidden",
+									"id",
+									"indexInTx",
+									"kind",
+									"l2BlockNumber",
+									"networkId",
+									"noteHash",
+									"owner",
+									"profileId",
+									"txHash",
+									"txIndexInBlock"
+								],
+								"type": "object"
+							},
+							{
+								"properties": {
+									"accountAddress": {
+										"type": "string"
+									},
+									"amountRaw": {
+										"type": "string"
+									},
+									"blockHash": {
+										"type": "string"
+									},
+									"blockTimestamp": {
+										"type": "number"
+									},
+									"contract": {
+										"type": "string"
+									},
+									"discoveredAt": {
+										"type": "number"
+									},
+									"from": {
+										"type": "string"
+									},
+									"hidden": {
+										"type": "boolean"
+									},
+									"id": {
+										"type": "string"
+									},
+									"indexInTx": {
+										"type": "number"
+									},
+									"kind": {
+										"const": "public-event",
+										"type": "string"
+									},
+									"l2BlockNumber": {
+										"type": "number"
+									},
+									"networkId": {
+										"type": "string"
+									},
+									"profileId": {
+										"type": "string"
+									},
+									"tokenId": {
+										"type": "number"
+									},
+									"txHash": {
+										"type": "string"
+									},
+									"txIndexInBlock": {
+										"type": "number"
+									}
+								},
+								"required": [
+									"accountAddress",
+									"amountRaw",
+									"blockHash",
+									"contract",
+									"discoveredAt",
+									"from",
+									"hidden",
+									"id",
+									"indexInTx",
+									"kind",
+									"l2BlockNumber",
+									"networkId",
+									"profileId",
+									"txHash",
+									"txIndexInBlock"
+								],
+								"type": "object"
+							}
+						]
+					}
+				},
+				"incomingTrust": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:incoming-trust"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"arrivalFloor": {
+								"maximum": 9007199254740991,
+								"minimum": 0,
+								"type": "integer"
+							},
+							"arrivalFloorPending": {
+								"const": true,
+								"type": "boolean"
+							},
+							"contract": {
+								"type": "string"
+							},
+							"networkId": {
+								"type": "string"
+							},
+							"profileId": {
+								"type": "string"
+							},
+							"state": {
+								"enum": ["unknown", "pending", "trusted", "blocked"],
+								"type": "string"
+							},
+							"updatedAt": {
+								"type": "number"
+							}
+						},
+						"required": ["contract", "networkId", "profileId", "state", "updatedAt"],
+						"type": "object"
+					}
+				},
+				"journal": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:journal"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"sealed": true,
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"accountAddress": {
+								"type": "string"
+							},
+							"amountRaw": {
+								"type": "string"
+							},
+							"attempts": {
+								"maximum": 9007199254740991,
+								"minimum": 0,
+								"type": "integer"
+							},
+							"call": {
+								"properties": {
+									"argCount": {
+										"maximum": 65535,
+										"minimum": 0,
+										"type": "integer"
+									},
+									"classId": {
+										"description": "0x-hex below the field modulus",
+										"type": "string",
+										"x-refine": "0x-hex below the field modulus"
+									},
+									"contract": {
+										"description": "0x-hex below the field modulus",
+										"type": "string",
+										"x-refine": "0x-hex below the field modulus"
+									}
+								},
+								"required": ["argCount", "contract"],
+								"type": "object"
+							},
+							"contractAddress": {
+								"type": "string"
+							},
+							"createdAt": {
+								"type": "number"
+							},
+							"error": {
+								"anyOf": [
+									{
+										"properties": {
+											"kind": {
+												"minLength": 1,
+												"type": "string"
+											},
+											"message": {
+												"type": "string"
+											},
+											"normalizedRaw": {
+												"anyOf": [
+													{
+														"maxLength": 4096,
+														"type": "string"
+													},
+													{
+														"type": "null"
+													}
+												]
+											}
+										},
+										"required": ["kind", "message", "normalizedRaw"],
+										"type": "object"
+									},
+									{
+										"type": "null"
+									}
+								]
+							},
+							"id": {
+								"type": "string"
+							},
+							"kind": {
+								"enum": ["transfer", "dapp_execute", "token_import"],
+								"type": "string"
+							},
+							"networkId": {
+								"type": "string"
+							},
+							"origin": {
+								"enum": ["popup", "dapp", "seed"],
+								"type": "string"
+							},
+							"profileId": {
+								"minLength": 1,
+								"type": "string"
+							},
+							"progress": {
+								"oneOf": [
+									{
+										"properties": {
+											"reask": {
+												"properties": {
+													"cap": {
+														"description": "a positive decimal integer of at most 39 digits",
+														"type": "string",
+														"x-refine": "a positive decimal integer of at most 39 digits"
+													},
+													"fee": {
+														"description": "a positive decimal integer of at most 39 digits",
+														"type": "string",
+														"x-refine": "a positive decimal integer of at most 39 digits"
+													},
+													"payer": {
+														"properties": {
+															"fpcId": {
+																"type": "string"
+															},
+															"isProtocol": {
+																"type": "boolean"
+															},
+															"type": {
+																"enum": ["fj", "private_fpc", "fpc"],
+																"type": "string"
+															}
+														},
+														"required": ["isProtocol", "type"],
+														"type": "object"
+													}
+												},
+												"required": ["cap", "fee", "payer"],
+												"type": "object"
+											},
+											"stage": {
+												"const": "queued",
+												"type": "string"
+											}
+										},
+										"required": ["stage"],
+										"type": "object"
+									},
+									{
+										"properties": {
+											"stage": {
+												"const": "pending",
+												"type": "string"
+											}
+										},
+										"required": ["stage"],
+										"type": "object"
+									},
+									{
+										"properties": {
+											"stage": {
+												"const": "simulating",
+												"type": "string"
+											}
+										},
+										"required": ["stage"],
+										"type": "object"
+									},
+									{
+										"properties": {
+											"backend": {
+												"enum": ["presto", "browser"],
+												"type": "string"
+											},
+											"enteredProveAt": {
+												"type": "number"
+											},
+											"stage": {
+												"const": "proving",
+												"type": "string"
+											}
+										},
+										"required": ["enteredProveAt", "stage"],
+										"type": "object"
+									},
+									{
+										"properties": {
+											"expiry": {
+												"properties": {
+													"nullifier": {
+														"type": "string"
+													},
+													"timestamp": {
+														"type": "number"
+													}
+												},
+												"required": ["nullifier", "timestamp"],
+												"type": "object"
+											},
+											"stage": {
+												"const": "submitting",
+												"type": "string"
+											},
+											"submittedEndpointUrl": {
+												"type": "string"
+											},
+											"txHash": {
+												"type": "string"
+											}
+										},
+										"required": ["stage"],
+										"type": "object"
+									},
+									{
+										"properties": {
+											"stage": {
+												"const": "succeeded",
+												"type": "string"
+											},
+											"txHash": {
+												"type": "string"
+											}
+										},
+										"required": ["stage"],
+										"type": "object"
+									},
+									{
+										"properties": {
+											"check": {
+												"enum": ["sent", "reverted", "unconfirmed", "expired", "refused"],
+												"type": "string"
+											},
+											"checkSince": {
+												"type": "number"
+											},
+											"expiry": {
+												"properties": {
+													"nullifier": {
+														"type": "string"
+													},
+													"timestamp": {
+														"type": "number"
+													}
+												},
+												"required": ["nullifier", "timestamp"],
+												"type": "object"
+											},
+											"from": {
+												"enum": ["queued", "pending", "simulating", "proving", "submitting"],
+												"type": "string"
+											},
+											"inclusion": {
+												"properties": {
+													"block": {
+														"type": "number"
+													},
+													"hash": {
+														"type": "string"
+													}
+												},
+												"required": ["block", "hash"],
+												"type": "object"
+											},
+											"stage": {
+												"const": "failed",
+												"type": "string"
+											},
+											"submittedEndpointUrl": {
+												"type": "string"
+											},
+											"txHash": {
+												"type": "string"
+											}
+										},
+										"required": ["stage"],
+										"type": "object"
+									},
+									{
+										"properties": {
+											"stage": {
+												"const": "cancelled",
+												"type": "string"
+											}
+										},
+										"required": ["stage"],
+										"type": "object"
+									}
+								]
+							},
+							"recipientAddress": {
+								"type": "string"
+							},
+							"sessionId": {
+								"type": "string"
+							},
+							"subtitle": {
+								"type": "string"
+							},
+							"terminalAt": {
+								"anyOf": [
+									{
+										"type": "number"
+									},
+									{
+										"type": "null"
+									}
+								]
+							},
+							"title": {
+								"type": "string"
+							},
+							"tokenId": {
+								"type": "number"
+							},
+							"transferType": {
+								"enum": [0, 1, 2, 3],
+								"type": "number"
+							},
+							"updatedAt": {
+								"type": "number"
+							}
+						},
+						"required": [
+							"attempts",
+							"createdAt",
+							"error",
+							"id",
+							"kind",
+							"origin",
+							"profileId",
+							"progress",
+							"terminalAt",
+							"updatedAt"
+						],
+						"type": "object"
+					}
+				},
+				"legacyStorageVersion": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:core:storage-version"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"engine": true,
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"description": "any value: read by presence only"
+					}
+				},
+				"legalAccepted": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:legal:accepted"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"acceptedAt": {
+								"type": "number"
+							},
+							"history": {
+								"items": {
+									"properties": {
+										"acceptedAt": {
+											"type": "number"
+										},
+										"privacyVersionShown": {
+											"type": "string"
+										},
+										"surface": {
+											"enum": ["onboarding", "popup"],
+											"type": "string"
+										},
+										"termsVersion": {
+											"type": "string"
+										}
+									},
+									"required": ["acceptedAt", "privacyVersionShown", "surface", "termsVersion"],
+									"type": "object"
+								},
+								"type": "array"
+							},
+							"privacyVersionShown": {
+								"type": "string"
+							},
+							"surface": {
+								"enum": ["onboarding", "popup"],
+								"type": "string"
+							},
+							"termsVersion": {
+								"type": "string"
+							}
+						},
+						"required": ["acceptedAt", "history", "privacyVersionShown", "surface", "termsVersion"],
+						"type": "object"
+					}
+				},
+				"networkReset": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:network-reset"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"accounts": {
+								"items": {
+									"properties": {
+										"done": {
+											"type": "boolean"
+										},
+										"encryptedSigningKey": {
+											"type": "string"
+										},
+										"index": {
+											"maximum": 9007199254740991,
+											"minimum": 0,
+											"type": "integer"
+										},
+										"name": {
+											"type": "string"
+										},
+										"newAddress": {
+											"type": "string"
+										},
+										"oldAddress": {
+											"type": "string"
+										},
+										"type": {
+											"anyOf": [
+												{
+													"const": 0,
+													"type": "number"
+												},
+												{
+													"const": 1,
+													"type": "number"
+												}
+											]
+										},
+										"visible": {
+											"type": "boolean"
+										}
+									},
+									"required": ["done", "index", "name", "oldAddress", "type", "visible"],
+									"type": "object"
+								},
+								"type": "array"
+							},
+							"cause": {
+								"properties": {
+									"addressesMoved": {
+										"type": "boolean"
+									},
+									"networkReset": {
+										"type": "boolean"
+									}
+								},
+								"required": ["addressesMoved", "networkReset"],
+								"type": "object"
+							},
+							"fromChainId": {
+								"type": "number"
+							},
+							"l1ChainId": {
+								"maximum": 4294967295,
+								"minimum": 0,
+								"type": "integer"
+							},
+							"networkId": {
+								"type": "string"
+							},
+							"probedEndpoint": {
+								"anyOf": [
+									{
+										"properties": {
+											"id": {
+												"type": "string"
+											},
+											"url": {
+												"type": "string"
+											}
+										},
+										"required": ["id", "url"],
+										"type": "object"
+									},
+									{
+										"type": "null"
+									}
+								]
+							},
+							"profileId": {
+								"type": "string"
+							},
+							"purged": {
+								"type": "boolean"
+							},
+							"switchToSeedNode": {
+								"type": "boolean"
+							},
+							"toChainId": {
+								"type": "number"
+							},
+							"unmovable": {
+								"items": {
+									"type": "string"
+								},
+								"type": "array"
+							}
+						},
+						"required": [
+							"accounts",
+							"cause",
+							"fromChainId",
+							"l1ChainId",
+							"networkId",
+							"probedEndpoint",
+							"profileId",
+							"purged",
+							"switchToSeedNode",
+							"toChainId"
+						],
+						"type": "object"
+					}
+				},
+				"networkResetDone": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:network-reset-done"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"addressesMoved": {
+								"type": "boolean"
+							},
+							"networkId": {
+								"type": "string"
+							}
+						},
+						"required": ["addressesMoved", "networkId"],
+						"type": "object"
+					}
+				},
+				"networkSeeded": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:network-seeded"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"announce": {
+								"items": {
+									"enum": ["mainnet", "testnet", "devnet", "local", "custom"],
+									"type": "string"
+								},
+								"type": "array"
+							},
+							"offered": {
+								"items": {
+									"enum": ["mainnet", "testnet", "devnet", "local", "custom"],
+									"type": "string"
+								},
+								"type": "array"
+							}
+						},
+						"required": ["offered"],
+						"type": "object"
+					}
+				},
+				"networks": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:networks"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"chainId": {
+								"type": "number"
+							},
+							"endpoints": {
+								"items": {
+									"properties": {
+										"id": {
+											"type": "string"
+										},
+										"label": {
+											"type": "string"
+										},
+										"rpcUrl": {
+											"type": "string"
+										}
+									},
+									"required": ["id", "rpcUrl"],
+									"type": "object"
+								},
+								"type": "array"
+							},
+							"id": {
+								"type": "string"
+							},
+							"kind": {
+								"enum": ["mainnet", "testnet", "devnet", "local", "custom"],
+								"type": "string"
+							},
+							"l1ChainId": {
+								"maximum": 4294967295,
+								"minimum": 0,
+								"type": "integer"
+							},
+							"name": {
+								"type": "string"
+							},
+							"primaryEndpointId": {
+								"type": "string"
+							},
+							"profileId": {
+								"type": "string"
+							}
+						},
+						"required": ["chainId", "endpoints", "id", "l1ChainId", "name", "primaryEndpointId", "profileId"],
+						"type": "object"
+					}
+				},
+				"onboardingCompleted": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:onboarding:completed"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"type": "boolean"
+					}
+				},
+				"profileTombstones": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:profile-tombstones"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"addresses": {
+								"items": {
+									"type": "string"
+								},
+								"type": "array"
+							},
+							"epoch": {
+								"type": "number"
+							},
+							"networkIds": {
+								"items": {
+									"type": "string"
+								},
+								"type": "array"
+							},
+							"profileId": {
+								"type": "string"
+							},
+							"pxeGeneration": {
+								"type": "string"
+							},
+							"tokenIds": {
+								"items": {
+									"type": "number"
+								},
+								"type": "array"
+							}
+						},
+						"required": ["addresses", "epoch", "networkIds", "profileId", "pxeGeneration", "tokenIds"],
+						"type": "object"
+					}
+				},
+				"profiles": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:profiles"
+					},
+					"encoding": "json",
+					"read": "described",
+					"options": {
+						"requireKeyIdentityMatch": true
+					},
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"oneOf": [
+							{
+								"properties": {
+									"dekSealed": {
+										"type": "string"
+									},
+									"entropy": {
+										"type": "string"
+									},
+									"envelopeMac": {
+										"type": "string"
+									},
+									"guard": {
+										"type": "string"
+									},
+									"id": {
+										"type": "string"
+									},
+									"name": {
+										"type": "string"
+									},
+									"pxeGeneration": {
+										"type": "string"
+									},
+									"secret": {
+										"type": "string"
+									},
+									"type": {
+										"const": "password",
+										"type": "string"
+									},
+									"walletFingerprint": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"dekSealed",
+									"entropy",
+									"envelopeMac",
+									"guard",
+									"id",
+									"name",
+									"pxeGeneration",
+									"secret",
+									"type",
+									"walletFingerprint"
+								],
+								"type": "object"
+							},
+							{
+								"properties": {
+									"credentialId": {
+										"type": "string"
+									},
+									"dekSealed": {
+										"type": "string"
+									},
+									"id": {
+										"type": "string"
+									},
+									"name": {
+										"type": "string"
+									},
+									"pxeGeneration": {
+										"type": "string"
+									},
+									"type": {
+										"const": "passkey",
+										"type": "string"
+									},
+									"walletFingerprint": {
+										"type": "string"
+									}
+								},
+								"required": ["credentialId", "dekSealed", "id", "name", "pxeGeneration", "type", "walletFingerprint"],
+								"type": "object"
+							}
+						]
+					}
+				},
+				"restorePending": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:restore-pending"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"at": {
+								"type": "number"
+							},
+							"profileId": {
+								"type": "string"
+							},
+							"pxeGeneration": {
+								"type": "string"
+							}
+						},
+						"required": ["at", "profileId", "pxeGeneration"],
+						"type": "object"
+					}
+				},
+				"schemaAttempts": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:schema:attempts"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"engine": true,
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"count": {
+								"type": "number"
+							},
+							"phase": {
+								"enum": ["up", "restore"],
+								"type": "string"
+							},
+							"version": {
+								"type": "number"
+							}
+						},
+						"required": ["count", "phase", "version"],
+						"type": "object"
+					}
+				},
+				"schemaBackup": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:schema:backup"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"engine": true,
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"counted": {
+								"const": true,
+								"type": "boolean"
+							},
+							"entries": {
+								"additionalProperties": {},
+								"propertyNames": {
+									"type": "string"
+								},
+								"type": "object"
+							},
+							"refs": {
+								"items": {
+									"oneOf": [
+										{
+											"properties": {
+												"kind": {
+													"const": "root",
+													"type": "string"
+												},
+												"root": {
+													"type": "string"
+												}
+											},
+											"required": ["kind", "root"],
+											"type": "object"
+										},
+										{
+											"properties": {
+												"key": {
+													"type": "string"
+												},
+												"kind": {
+													"const": "value",
+													"type": "string"
+												}
+											},
+											"required": ["key", "kind"],
+											"type": "object"
+										}
+									]
+								},
+								"type": "array"
+							},
+							"version": {
+								"type": "number"
+							}
+						},
+						"required": ["entries", "refs", "version"],
+						"type": "object"
+					}
+				},
+				"schemaBlocked": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:schema:blocked"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"engine": true,
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"atExtensionVersion": {
+								"type": "string"
+							},
+							"backstopRuns": {
+								"type": "number"
+							},
+							"claimedAt": {
+								"type": "number"
+							},
+							"detail": {
+								"type": "string"
+							},
+							"gestureRuns": {
+								"type": "number"
+							},
+							"kind": {
+								"enum": ["needs-recovery", "failed"],
+								"type": "string"
+							},
+							"lastAttemptAt": {
+								"type": "number"
+							},
+							"terminal": {
+								"type": "boolean"
+							}
+						},
+						"required": ["atExtensionVersion", "backstopRuns", "detail", "gestureRuns", "kind", "lastAttemptAt", "terminal"],
+						"type": "object"
+					}
+				},
+				"schemaDegraded": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:schema:degraded"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"engine": true,
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"error": {
+								"type": "string"
+							},
+							"version": {
+								"type": "number"
+							}
+						},
+						"required": ["error", "version"],
+						"type": "object"
+					}
+				},
+				"schemaRetryRequested": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:schema:retry-requested"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"engine": true,
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"requestedAt": {
+								"type": "number"
+							}
+						},
+						"required": ["requestedAt"],
+						"type": "object"
+					}
+				},
+				"schemaRunning": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:schema:running"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"engine": true,
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"type": "number"
+					}
+				},
+				"schemaVersion": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:schema:version"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"engine": true,
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"type": "number"
+					}
+				},
+				"staleNetworks": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:stale-networks"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"accountSetDigest": {
+								"type": "string"
+							},
+							"entries": {
+								"items": {
+									"properties": {
+										"addressesMoved": {
+											"type": "boolean"
+										},
+										"chainId": {
+											"type": "number"
+										},
+										"networkId": {
+											"type": "string"
+										},
+										"networkReset": {
+											"type": "boolean"
+										}
+									},
+									"required": ["addressesMoved", "chainId", "networkId", "networkReset"],
+									"type": "object"
+								},
+								"type": "array"
+							},
+							"profileId": {
+								"type": "string"
+							}
+						},
+						"required": ["accountSetDigest", "entries", "profileId"],
+						"type": "object"
+					}
+				},
+				"tokenBalances": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:token-balances"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"options": {
+						"keyIdentityMode": "numeric",
+						"requireKeyIdentityMatch": true
+					},
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"account": {
+								"type": "string"
+							},
+							"chainId": {
+								"type": "number"
+							},
+							"contract": {
+								"type": "string"
+							},
+							"id": {
+								"type": "number"
+							},
+							"privateBalance": {
+								"type": "string"
+							},
+							"profileId": {
+								"type": "string"
+							},
+							"publicBalance": {
+								"type": "string"
+							},
+							"syncFailure": {
+								"properties": {
+									"at": {
+										"type": "number"
+									},
+									"message": {
+										"description": "any string, cut to the sync-failure bound",
+										"type": "string",
+										"x-transform": "any string, cut to the sync-failure bound"
+									}
+								},
+								"required": ["at", "message"],
+								"type": "object"
+							},
+							"token": {
+								"type": "number"
+							},
+							"updatedAt": {
+								"type": "number"
+							}
+						},
+						"required": ["account", "chainId", "contract", "id", "profileId", "token", "updatedAt"],
+						"type": "object"
+					}
+				},
+				"tokenList": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:core:token-list"
+					},
+					"encoding": "json",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"envelope": {
+								"type": "string"
+							},
+							"failures": {
+								"type": "number"
+							},
+							"lastSuccessAt": {
+								"type": "number"
+							},
+							"nextAttemptAt": {
+								"type": "number"
+							}
+						},
+						"required": ["failures"],
+						"type": "object"
+					}
+				},
+				"tokenPrices": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:core:token-prices"
+					},
+					"encoding": "json",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"additionalProperties": {
+							"properties": {
+								"coingeckoId": {
+									"type": "string"
+								},
+								"fetchedAt": {
+									"type": "number"
+								},
+								"providerUpdatedAt": {
+									"anyOf": [
+										{
+											"type": "number"
+										},
+										{
+											"type": "null"
+										}
+									]
+								},
+								"usd": {
+									"type": "number"
+								}
+							},
+							"required": ["coingeckoId", "fetchedAt", "providerUpdatedAt", "usd"],
+							"type": "object"
+						},
+						"propertyNames": {
+							"type": "string"
+						},
+						"type": "object"
+					}
+				},
+				"tokenSeeded": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:token-seeded"
+					},
+					"encoding": "json",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"additionalProperties": {
+							"properties": {
+								"attempts": {
+									"type": "number"
+								},
+								"cappedAtVersion": {
+									"type": "string"
+								},
+								"nextAttemptAt": {
+									"type": "number"
+								},
+								"observedDecimals": {
+									"type": "number"
+								},
+								"outcome": {
+									"enum": ["seeded", "deleted"],
+									"type": "string"
+								},
+								"rejectedAtVersion": {
+									"type": "string"
+								},
+								"verifiedPins": {
+									"type": "string"
+								}
+							},
+							"required": ["attempts"],
+							"type": "object"
+						},
+						"propertyNames": {
+							"type": "string"
+						},
+						"type": "object"
+					}
+				},
+				"tokens": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:tokens"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"balanceOfPrivateFn": {
+								"properties": {
+									"impl": {
+										"type": "number"
+									},
+									"name": {
+										"type": "string"
+									}
+								},
+								"required": ["impl", "name"],
+								"type": "object"
+							},
+							"balanceOfPublicFn": {
+								"properties": {
+									"impl": {
+										"type": "number"
+									},
+									"name": {
+										"type": "string"
+									}
+								},
+								"required": ["impl", "name"],
+								"type": "object"
+							},
+							"chainId": {
+								"type": "number"
+							},
+							"classId": {
+								"type": "string"
+							},
+							"contract": {
+								"type": "string"
+							},
+							"decimals": {
+								"type": "number"
+							},
+							"getDecimalsFn": {
+								"properties": {
+									"impl": {
+										"type": "number"
+									},
+									"name": {
+										"type": "string"
+									}
+								},
+								"required": ["impl", "name"],
+								"type": "object"
+							},
+							"getNameFn": {
+								"properties": {
+									"impl": {
+										"type": "number"
+									},
+									"name": {
+										"type": "string"
+									}
+								},
+								"required": ["impl", "name"],
+								"type": "object"
+							},
+							"getSymbolFn": {
+								"properties": {
+									"impl": {
+										"type": "number"
+									},
+									"name": {
+										"type": "string"
+									}
+								},
+								"required": ["impl", "name"],
+								"type": "object"
+							},
+							"id": {
+								"type": "number"
+							},
+							"name": {
+								"type": "string"
+							},
+							"profileId": {
+								"type": "string"
+							},
+							"symbol": {
+								"type": "string"
+							},
+							"transferPrivateFn": {
+								"properties": {
+									"impl": {
+										"type": "number"
+									},
+									"name": {
+										"type": "string"
+									}
+								},
+								"required": ["impl", "name"],
+								"type": "object"
+							},
+							"transferPrivateToPublicFn": {
+								"properties": {
+									"impl": {
+										"type": "number"
+									},
+									"name": {
+										"type": "string"
+									}
+								},
+								"required": ["impl", "name"],
+								"type": "object"
+							},
+							"transferPublicFn": {
+								"properties": {
+									"impl": {
+										"type": "number"
+									},
+									"name": {
+										"type": "string"
+									}
+								},
+								"required": ["impl", "name"],
+								"type": "object"
+							},
+							"transferPublicToPrivateFn": {
+								"properties": {
+									"impl": {
+										"type": "number"
+									},
+									"name": {
+										"type": "string"
+									}
+								},
+								"required": ["impl", "name"],
+								"type": "object"
+							}
+						},
+						"required": ["chainId", "contract", "decimals", "id", "name", "profileId", "symbol"],
+						"type": "object"
+					}
+				},
+				"txs": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:core:txs"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"sealed": true,
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"account": {
+								"type": "string"
+							},
+							"ambiguous": {
+								"type": "boolean"
+							},
+							"awaitingFinality": {
+								"type": "boolean"
+							},
+							"block": {
+								"properties": {
+									"hash": {
+										"type": "string"
+									},
+									"number": {
+										"type": "number"
+									}
+								},
+								"required": ["hash", "number"],
+								"type": "object"
+							},
+							"calls": {
+								"items": {
+									"description": "an object with string contract and method, an args array, and transfers, if present, each with string from and to",
+									"x-custom": "an object with string contract and method, an args array, and transfers, if present, each with string from and to"
+								},
+								"type": "array"
+							},
+							"chainId": {
+								"type": "number"
+							},
+							"createdAt": {
+								"type": "number"
+							},
+							"error": {
+								"type": "string"
+							},
+							"estimatedFee": {
+								"type": "string"
+							},
+							"executionResult": {
+								"enum": [0, 1, 2, 3],
+								"type": "number"
+							},
+							"fee": {
+								"type": "string"
+							},
+							"feeChoice": {
+								"description": "anything else reads as absent",
+								"enum": ["wallet", "app", "app_protocol_sponsor"],
+								"type": "string",
+								"x-catch": "anything else reads as absent"
+							},
+							"feePaymentMethod": {
+								"description": "any number",
+								"x-custom": "any number"
+							},
+							"feeSpender": {
+								"type": "string"
+							},
+							"gasDetails": {
+								"description": "any non-null object, kept as stored",
+								"x-custom": "any non-null object, kept as stored"
+							},
+							"hash": {
+								"type": "string"
+							},
+							"networkId": {
+								"type": "string"
+							},
+							"nonce": {
+								"type": "string"
+							},
+							"origin": {
+								"description": "any non-null object, kept as stored",
+								"x-custom": "any non-null object, kept as stored"
+							},
+							"priorityLevel": {
+								"description": "anything else reads as absent",
+								"x-catch": "anything else reads as absent",
+								"x-custom": "a priority level name"
+							},
+							"profileId": {
+								"type": "string"
+							},
+							"status": {
+								"enum": [0, 1, 2, 3, 4, 5],
+								"type": "number"
+							},
+							"submittedEndpointUrl": {
+								"type": "string"
+							},
+							"updatedAt": {
+								"type": "number"
+							}
+						},
+						"required": [
+							"account",
+							"calls",
+							"chainId",
+							"createdAt",
+							"feePaymentMethod",
+							"hash",
+							"nonce",
+							"origin",
+							"status",
+							"updatedAt"
+						],
+						"type": "object"
+					}
+				},
+				"uiActiveAccount": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:ui:activeAccount"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"type": "string"
+					}
+				},
+				"uiFeePicks": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:feePaymentMethods"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"additionalProperties": {
+							"properties": {
+								"fpc": {
+									"properties": {
+										"id": {
+											"type": "string"
+										},
+										"isProtocol": {
+											"type": "boolean"
+										}
+									},
+									"required": ["id"],
+									"type": "object"
+								},
+								"subtitle": {
+									"type": "string"
+								},
+								"title": {
+									"type": "string"
+								},
+								"type": {
+									"enum": ["fj", "private_fpc", "fpc"],
+									"type": "string"
+								}
+							},
+							"required": ["type"],
+							"type": "object"
+						},
+						"propertyNames": {
+							"type": "string"
+						},
+						"type": "object"
+					}
+				},
+				"uiGetStartedAztecOpened": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:getStartedAztecOpened"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"const": true,
+						"type": "boolean"
+					}
+				},
+				"uiGetStartedBackupSaved": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:getStartedBackupSaved"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"const": true,
+						"type": "boolean"
+					}
+				},
+				"uiGetStartedFeeJuiceHeld": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:getStartedFeeJuiceHeld"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"const": true,
+						"type": "boolean"
+					}
+				},
+				"uiGetStartedHidden": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:getStartedHidden"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"const": true,
+						"type": "boolean"
+					}
+				},
+				"uiGetStartedPhraseSaved": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:getStartedPhraseSaved"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"const": true,
+						"type": "boolean"
+					}
+				},
+				"uiLastActiveProfile": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:ui:lastActiveProfile"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"type": "string"
+					}
+				},
+				"uiLoggerWindowId": {
+					"ref": {
+						"kind": "value",
+						"key": "nulo:ui:loggerWindowId"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				"uiPinnedTokens": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:pinnedTokens"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"additionalProperties": {
+							"items": {
+								"type": "string"
+							},
+							"type": "array"
+						},
+						"propertyNames": {
+							"type": "string"
+						},
+						"type": "object"
+					}
+				},
+				"uiProfileImported": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:profileImported"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"const": true,
+						"type": "boolean"
+					}
+				},
+				"uiProfileNotFirst": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:profileNotFirst"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"const": true,
+						"type": "boolean"
+					}
+				},
+				"uiRestoreOutcome": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:restoreOutcome"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"backup": {
+								"type": "string"
+							},
+							"leaseUntil": {
+								"type": "number"
+							},
+							"networkIds": {
+								"items": {
+									"type": "string"
+								},
+								"type": "array"
+							},
+							"run": {
+								"type": "string"
+							}
+						},
+						"required": ["backup", "leaseUntil", "networkIds", "run"],
+						"type": "object"
+					}
+				},
+				"uiSendFeePicks": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:sendFeePaymentMethods"
+					},
+					"encoding": "structured",
+					"read": "described",
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"additionalProperties": {
+							"properties": {
+								"private": {
+									"properties": {
+										"fpc": {
+											"anyOf": [
+												{
+													"properties": {
+														"id": {
+															"type": "string"
+														},
+														"name": {
+															"type": "string"
+														}
+													},
+													"required": ["id"],
+													"type": "object"
+												},
+												{
+													"type": "null"
+												}
+											]
+										},
+										"type": {
+											"enum": ["fj", "private_fpc", "fpc"],
+											"type": "string"
+										}
+									},
+									"required": ["type"],
+									"type": "object"
+								},
+								"public": {
+									"properties": {
+										"fpc": {
+											"anyOf": [
+												{
+													"properties": {
+														"id": {
+															"type": "string"
+														},
+														"name": {
+															"type": "string"
+														}
+													},
+													"required": ["id"],
+													"type": "object"
+												},
+												{
+													"type": "null"
+												}
+											]
+										},
+										"type": {
+											"enum": ["fj", "private_fpc", "fpc"],
+											"type": "string"
+										}
+									},
+									"required": ["type"],
+									"type": "object"
+								}
+							},
+							"type": "object"
+						},
+						"propertyNames": {
+							"type": "string"
+						},
+						"type": "object"
+					}
+				}
+			},
+			"expected": {
+				"accounts.full": {
+					"address": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"chainId": 3415328944,
+					"index": 0,
+					"l1ChainId": 11155111,
+					"name": "Account 1",
+					"profileId": "3f9a2c71",
+					"type": 0,
+					"visible": true
+				},
+				"accounts.minimal": {
+					"address": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+					"chainId": 0,
+					"index": 0,
+					"l1ChainId": 31337,
+					"name": "Imported account",
+					"profileId": "b04e6d18",
+					"type": 1,
+					"visible": false
+				},
+				"importedAccountKeys.full": {
+					"address": "0x1b3dc854e29f6ccfd0b81a0ce8b7f94835d125b1ae7cfcbfa7bc655f84b0adab",
+					"chainId": 3415328944,
+					"encryptedSigningKey": "/pKuId03MpvBePn/eiUFLvq2ESAOua+KIkWETNZAXb96Wi5sNlmuxQDbNMCFuOhMS6r/F1Hfi6jYU9dS",
+					"profileId": "3f9a2c71"
+				},
+				"importedAccountKeys.minimal": {
+					"address": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+					"chainId": 0,
+					"encryptedSigningKey": "WFHibwYNWPVZcnNHmlxkLpUH/tqtzsb5Y/PmW7YJd189Qxeg+3nZgap1XJQAyyurZgK4oLMHMUKlSIR1",
+					"profileId": "b04e6d18"
+				},
+				"authRegistry.full": {
+					"account": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"chainId": 3415328944,
+					"content": {
+						"args": [
+							"0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+							"0x150ae560f32c87bec863666832fb11f4ed1c7f4e32f075302eba569bc6bacde2",
+							"500000",
+							"0x1cf60d2dfe8a4dd72e7bba7d0c3cf8c57c4214ec5e5a8a0a50efdd121d46c34c"
+						],
+						"caller": "0x150ae560f32c87bec863666832fb11f4ed1c7f4e32f075302eba569bc6bacde2",
+						"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+						"kind": "call",
+						"method": "transfer_public_to_public"
+					},
+					"hash": "0x14c7bce20483e7becc9096c2fd67d491f78f55c1f2b2550920e5277f6efc07d2",
+					"id": 1,
+					"pending": true,
+					"profileId": "3f9a2c71",
+					"txHash": "0x1e7856fa5a2c93d6d59178501de0e375df21c059af29c56d8dfcc93f21dc6767"
+				},
+				"authRegistry.minimal": {
+					"account": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+					"chainId": 0,
+					"content": {
+						"kind": "message_hash",
+						"messageHash": "0x165c57a428b35001a444fcb2a2208921f604eedb2f41d0cfc64c93a85ccb95cd"
+					},
+					"hash": "0x2664e4b35adf78a10ec5db6b3e0ad6ccfeab37d2280977c16bd20f13c4487ec7",
+					"id": 2,
+					"profileId": "b04e6d18"
+				},
+				"authRegistryEnabled.full": false,
+				"authRegistryEnabled.minimal": false,
+				"contacts.full": {
+					"abbr": "AM",
+					"address": "0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+					"id": "9d3e7a10",
+					"name": "Alice Moreno",
+					"profileId": "3f9a2c71"
+				},
+				"contacts.minimal": {
+					"abbr": "B",
+					"address": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"id": "1c84f2b5",
+					"name": "B",
+					"profileId": "b04e6d18"
+				},
+				"contacts.sealed": {
+					"abbr": "CR",
+					"address": "0x2c1f7e4a9b3d5c6e8f0a1b2c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e4f5a6",
+					"id": "5e7c2a90",
+					"name": "Carla Ruiz",
+					"profileId": "3f9a2c71"
+				},
+				"fpcs.full": {
+					"address": "0x150ae560f32c87bec863666832fb11f4ed1c7f4e32f075302eba569bc6bacde2",
+					"chainId": 3415328944,
+					"id": "2b6c9e41",
+					"name": "Sponsored FPC",
+					"profileId": "3f9a2c71",
+					"type": 1
+				},
+				"fpcs.minimal": {
+					"address": "0x261442f769babc690b9ceed102d19aa02a7f2f9d49e1fc8c94e5b877071e630c",
+					"chainId": 0,
+					"id": "8f05d3a7",
+					"profileId": "b04e6d18",
+					"type": 2
+				},
+				"dappSessions.full": {
+					"accountAliases": {
+						"aztec:3415328944:0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458": "Main"
+					},
+					"accounts": ["aztec:3415328944:0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458"],
+					"authorizationsWithoutAsking": {
+						"broad": false
+					},
+					"capabilityGrants": [
+						{
+							"capability": {
+								"accounts": [
+									{
+										"alias": "Main",
+										"item": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458"
+									}
+								],
+								"canCreateAuthWit": true,
+								"canGet": true,
+								"type": "accounts"
+							},
+							"grantedAt": 1790640000000
+						},
+						{
+							"capability": {
+								"scope": [
+									{
+										"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+										"function": "transfer_private_to_private"
+									}
+								],
+								"type": "transaction"
+							},
+							"grantedAt": 1790640000000
+						}
+					],
+					"capabilityRejections": [
+						{
+							"capabilityType": "data",
+							"rejectedAt": 1790640000000
+						}
+					],
+					"chainId": "3415328944",
+					"confirmationLevel": 5,
+					"dappMetadata": {
+						"description": "Swap private tokens on Aztec",
+						"logo": "https://app.example.org/logo.png",
+						"name": "Token Swap",
+						"url": "https://app.example.org"
+					},
+					"expiry": 1791244800000,
+					"id": "39433e6db4c616cb4812acd668a9698a6025fd16666375fa309cd05c5c23c75b",
+					"mac": "S6n5OWoFU0lSkFm17GAbAbosnApT0gvgVYEcrhUEvoU=",
+					"permissions": [
+						{
+							"events": ["accountsChanged"],
+							"methods": ["aztec_sendTx", "aztec_simulateTx"]
+						}
+					],
+					"profileId": "3f9a2c71",
+					"trustedVerification": true,
+					"verificationHash": "e6161f0f41e6b00bb212e8c0c1f09ea29ffbf7915704bbe88698fcc657ccf690"
+				},
+				"dappSessions.minimal": {
+					"accounts": [],
+					"chainId": "0",
+					"confirmationLevel": 5,
+					"dappMetadata": {},
+					"expiry": 1791331200000,
+					"id": "4b007a791fa627a5c644c6d97280276311b6e25ba7869a8435bcac437d935905",
+					"mac": "90b2lvjrZm2kMI/REpK1oqo+gN5oVbQUM/DCnRZj/oc=",
+					"permissions": [
+						{
+							"methods": []
+						}
+					],
+					"profileId": "b04e6d18"
+				},
+				"dappSessions.sealed": {
+					"accountAliases": {
+						"aztec:3415328944:0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458": "Main"
+					},
+					"accounts": ["aztec:3415328944:0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458"],
+					"authorizationsWithoutAsking": {
+						"broad": false
+					},
+					"capabilityGrants": [
+						{
+							"capability": {
+								"accounts": [
+									{
+										"alias": "Main",
+										"item": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458"
+									}
+								],
+								"canCreateAuthWit": true,
+								"canGet": true,
+								"type": "accounts"
+							},
+							"grantedAt": 1790640000000
+						},
+						{
+							"capability": {
+								"scope": [
+									{
+										"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+										"function": "transfer_private_to_private"
+									}
+								],
+								"type": "transaction"
+							},
+							"grantedAt": 1790640000000
+						}
+					],
+					"capabilityRejections": [
+						{
+							"capabilityType": "data",
+							"rejectedAt": 1790640000000
+						}
+					],
+					"chainId": "3415328944",
+					"confirmationLevel": 5,
+					"dappMetadata": {
+						"description": "Swap private tokens on Aztec",
+						"logo": "https://app.example.org/logo.png",
+						"name": "Token Swap",
+						"url": "https://app.example.org"
+					},
+					"expiry": 1791244800000,
+					"id": "6a1d0c7e3b5f49a28c0e1d7f6b3a5c9e2d4f6a8b0c1e3d5f7a9b2c4d6e8f0a1b",
+					"mac": "uHGZ4FIZ2d8K3etnVWUWiEqn7gRRc7AMEJVH+POAw80=",
+					"permissions": [
+						{
+							"events": ["accountsChanged"],
+							"methods": ["aztec_sendTx", "aztec_simulateTx"]
+						}
+					],
+					"profileId": "3f9a2c71",
+					"trustedVerification": true,
+					"verificationHash": "e6161f0f41e6b00bb212e8c0c1f09ea29ffbf7915704bbe88698fcc657ccf690"
+				},
+				"journal.full": {
+					"accountAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"amountRaw": "1250000",
+					"attempts": 1,
+					"call": {
+						"argCount": 4,
+						"classId": "0x0f4760c9595980d657422b564cb908f54fcf0aff11a8f0b7803c25c5a96852ef",
+						"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0"
+					},
+					"contractAddress": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+					"createdAt": 1790798400000,
+					"error": {
+						"kind": "dapp_execute",
+						"message": "Transaction reverted in app logic",
+						"normalizedRaw": "{\"name\":\"Error\",\"message\":\"Transaction reverted in app logic\"}"
+					},
+					"id": "ec3486c835814251",
+					"kind": "dapp_execute",
+					"networkId": "e41b9d02",
+					"origin": "dapp",
+					"profileId": "3f9a2c71",
+					"progress": {
+						"check": "reverted",
+						"checkSince": 1790802000000,
+						"expiry": {
+							"nullifier": "0x2698e9456e61875133340d4eea1d0b3e493be648417235c94cb3358ce6d77f51",
+							"timestamp": 1790805600
+						},
+						"from": "submitting",
+						"inclusion": {
+							"block": 81234,
+							"hash": "0x15248642522e44f73a1a28d8b5e924a945f6146130b0c232e4f19e9f93e7814b"
+						},
+						"stage": "failed",
+						"submittedEndpointUrl": "https://aztec-testnet.example.org",
+						"txHash": "0x0125856d7c1793f7a77241d1dcdc4c8fc375ee15405b2b60e00b789ce3e3dc79"
+					},
+					"recipientAddress": "0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+					"sessionId": "39433e6db4c616cb4812acd668a9698a6025fd16666375fa309cd05c5c23c75b",
+					"subtitle": "app.example.org",
+					"terminalAt": 1790802000000,
+					"title": "Transfer USDC",
+					"tokenId": 1,
+					"transferType": 0,
+					"updatedAt": 1790802000000
+				},
+				"journal.queued": {
+					"attempts": 0,
+					"createdAt": 1790812500000,
+					"error": null,
+					"id": "4ab1ef61fba6b2a3",
+					"kind": "dapp_execute",
+					"origin": "dapp",
+					"profileId": "3f9a2c71",
+					"progress": {
+						"reask": {
+							"cap": "8420000000000",
+							"fee": "4210000000000",
+							"payer": {
+								"fpcId": "2b6c9e41",
+								"isProtocol": false,
+								"type": "fpc"
+							}
+						},
+						"stage": "queued"
+					},
+					"sessionId": "39433e6db4c616cb4812acd668a9698a6025fd16666375fa309cd05c5c23c75b",
+					"terminalAt": null,
+					"updatedAt": 1790812500000
+				},
+				"journal.refused": {
+					"accountAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"amountRaw": "12500000",
+					"attempts": 1,
+					"contractAddress": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+					"createdAt": 1790805540000,
+					"error": {
+						"kind": "transfer",
+						"message": "Invalid tx: Existing nullifier",
+						"normalizedRaw": "{\"name\":\"Error\",\"message\":\"Invalid tx: Existing nullifier\"}"
+					},
+					"id": "7c2e95d04ab813f6",
+					"kind": "transfer",
+					"networkId": "e41b9d02",
+					"origin": "popup",
+					"profileId": "3f9a2c71",
+					"progress": {
+						"check": "refused",
+						"expiry": {
+							"nullifier": "0x0b7d2e4f6a8c1e3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a",
+							"timestamp": 1790892000
+						},
+						"from": "submitting",
+						"stage": "failed",
+						"submittedEndpointUrl": "https://aztec-testnet.example.org",
+						"txHash": "0x1e40c3a9d7b25f6084e1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7"
+					},
+					"recipientAddress": "0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+					"terminalAt": 1790805600000,
+					"tokenId": 1,
+					"transferType": 0,
+					"updatedAt": 1790805605000
+				},
+				"journal.minimal": {
+					"attempts": 0,
+					"createdAt": 1790812200000,
+					"error": null,
+					"id": "e2afe39e34ff7c79",
+					"kind": "token_import",
+					"origin": "seed",
+					"profileId": "b04e6d18",
+					"progress": {
+						"stage": "pending"
+					},
+					"terminalAt": null,
+					"updatedAt": 1790812200000
+				},
+				"networks.full": {
+					"chainId": 3415328944,
+					"endpoints": [
+						{
+							"id": "6d1a0f93",
+							"label": "dRPC",
+							"rpcUrl": "https://aztec-testnet.example.org"
+						},
+						{
+							"id": "a07e52c4",
+							"rpcUrl": "https://rpc.testnet.example.net/aztec"
+						}
+					],
+					"id": "e41b9d02",
+					"kind": "testnet",
+					"l1ChainId": 11155111,
+					"name": "Testnet",
+					"primaryEndpointId": "6d1a0f93",
+					"profileId": "3f9a2c71"
+				},
+				"networks.minimal": {
+					"chainId": 0,
+					"endpoints": [
+						{
+							"id": "f3b8264e",
+							"rpcUrl": "http://localhost:8080"
+						}
+					],
+					"id": "5a7f03c6",
+					"l1ChainId": 31337,
+					"name": "Local Network",
+					"primaryEndpointId": "f3b8264e",
+					"profileId": "b04e6d18"
+				},
+				"tokens.full": {
+					"balanceOfPrivateFn": {
+						"impl": 0,
+						"name": "balance_of_private"
+					},
+					"balanceOfPublicFn": {
+						"impl": 0,
+						"name": "balance_of_public"
+					},
+					"chainId": 3415328944,
+					"classId": "0x0f4760c9595980d657422b564cb908f54fcf0aff11a8f0b7803c25c5a96852ef",
+					"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+					"decimals": 6,
+					"getDecimalsFn": {
+						"impl": 0,
+						"name": "public_get_decimals"
+					},
+					"getNameFn": {
+						"impl": 0,
+						"name": "public_get_name"
+					},
+					"getSymbolFn": {
+						"impl": 0,
+						"name": "public_get_symbol"
+					},
+					"id": 1,
+					"name": "Test USDC",
+					"profileId": "3f9a2c71",
+					"symbol": "USDC",
+					"transferPrivateFn": {
+						"impl": 1,
+						"name": "transfer_private_to_private"
+					},
+					"transferPrivateToPublicFn": {
+						"impl": 0,
+						"name": "transfer_private_to_public"
+					},
+					"transferPublicFn": {
+						"impl": 0,
+						"name": "transfer_public_to_public"
+					},
+					"transferPublicToPrivateFn": {
+						"impl": 0,
+						"name": "transfer_public_to_private"
+					}
+				},
+				"tokens.minimal": {
+					"chainId": 0,
+					"contract": "0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311",
+					"decimals": 18,
+					"id": 2,
+					"name": "Local Token",
+					"profileId": "b04e6d18",
+					"symbol": "LTK"
+				},
+				"tokenBalances.full": {
+					"account": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"chainId": 3415328944,
+					"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+					"id": 1,
+					"privateBalance": "48000000",
+					"profileId": "3f9a2c71",
+					"publicBalance": "1250000000",
+					"syncFailure": {
+						"at": 1790812680000,
+						"message": "Simulation failed: node returned 503"
+					},
+					"token": 1,
+					"updatedAt": 1790811600000
+				},
+				"tokenBalances.minimal": {
+					"account": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+					"chainId": 0,
+					"contract": "0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311",
+					"id": 2,
+					"profileId": "b04e6d18",
+					"token": 2,
+					"updatedAt": 1790811000000
+				},
+				"txs.full": {
+					"account": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"ambiguous": false,
+					"awaitingFinality": true,
+					"block": {
+						"hash": "0x099c9d518185c0ab773663034e0ded91c5d444b33d9ecbe36f9c1cb4392f694f",
+						"number": 81190
+					},
+					"calls": [
+						{
+							"args": [
+								"0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+								"0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+								"1250000",
+								"0x0000000000000000000000000000000000000000000000000000000000000000"
+							],
+							"classId": "0x0f4760c9595980d657422b564cb908f54fcf0aff11a8f0b7803c25c5a96852ef",
+							"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+							"method": "transfer_private_to_private",
+							"transfers": [
+								{
+									"amount": "1250000",
+									"from": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+									"to": "0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+									"token": {
+										"decimals": 6,
+										"name": "Test USDC",
+										"symbol": "USDC"
+									},
+									"type": 0
+								}
+							]
+						}
+					],
+					"chainId": 3415328944,
+					"createdAt": 1790791200000,
+					"error": "Assertion failed: Balance too low 'subtracted > 0'",
+					"estimatedFee": "4210000000000",
+					"executionResult": 1,
+					"fee": "3120000000000",
+					"feeChoice": "app",
+					"feePaymentMethod": 2,
+					"feeSpender": "0x261442f769babc690b9ceed102d19aa02a7f2f9d49e1fc8c94e5b877071e630c",
+					"gasDetails": {
+						"daGasLimit": 786432,
+						"feePerDaGas": "0",
+						"feePerL2Gas": "1250000",
+						"l2GasLimit": 6540000,
+						"teardownDaGasLimit": 131072,
+						"teardownL2GasLimit": 1000000
+					},
+					"hash": "0x1b48092039e7b1f8a06a2cde8e04795ac717c768dc978beb530582591864d920",
+					"networkId": "e41b9d02",
+					"nonce": "0x030b39a27b74f15a25cf7a35a696f06ac52688a59ed0acd33f1940d7ca09a8fd",
+					"origin": {
+						"name": "https://app.example.org",
+						"type": 1
+					},
+					"priorityLevel": "fast",
+					"profileId": "3f9a2c71",
+					"status": 4,
+					"submittedEndpointUrl": "https://aztec-testnet.example.org",
+					"updatedAt": 1790794800000
+				},
+				"txs.minimal": {
+					"account": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+					"calls": [],
+					"chainId": 0,
+					"createdAt": 1790809800000,
+					"feePaymentMethod": 0,
+					"hash": "0x01303ffd0da7a6f97b6fcd6204c1ad598aa00c759035cb533df1703918717fc3",
+					"nonce": "0x2657ae4740b0403ade0553f98a7869ff9f596a47cf80b7d8006cd0dcca9fa2f3",
+					"origin": {
+						"type": 0
+					},
+					"status": 0,
+					"updatedAt": 1790809800000
+				},
+				"txs.ambiguous": {
+					"account": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"ambiguous": true,
+					"block": {
+						"hash": "0x14b943e2c57af6c31c46c8b4d3d82974729669c80484bb9e817e401cf8230d2f",
+						"number": 64002
+					},
+					"calls": [
+						{
+							"args": [
+								"0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+								"0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+								"10",
+								"0x00"
+							],
+							"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+							"method": "transfer_public_to_public"
+						}
+					],
+					"chainId": 3415328944,
+					"createdAt": 1790035200000,
+					"executionResult": 0,
+					"feePaymentMethod": 0,
+					"hash": "0x042db31f5f3cc445e6446bda6a256777ab3b2eba7674d7599116ffda88a7057a",
+					"nonce": "0x0765270e183a847a3203724076161d748d6dbe83625ce23295eb7b6dd2bcf311",
+					"origin": {
+						"type": 0
+					},
+					"status": 5,
+					"updatedAt": 1790035200000
+				},
+				"incomingTransfers.full": {
+					"accountAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"amountRaw": "2500000",
+					"blockTimestamp": 1790807100,
+					"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+					"discoveredAt": 1790807400000,
+					"hidden": false,
+					"id": "note:3f9a2c71|e41b9d02|0x062756421d9c1dc3f7cfb1683bcd51d19a1d1dc20eefcfbb24c5ee3b3f5b23ed",
+					"indexInTx": 0,
+					"kind": "note",
+					"l2BlockNumber": 81201,
+					"networkId": "e41b9d02",
+					"noteHash": "0x278e98263523cba17a972720cfea824c83d968e733b60580a51a3be8e50404a1",
+					"owner": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"profileId": "3f9a2c71",
+					"settled": true,
+					"tokenId": 1,
+					"txHash": "0x0893ab99a5fca101b805ca85fcdfda2141c26e8a2afff6af9be0ecb9442262ca",
+					"txIndexInBlock": 3
+				},
+				"incomingTransfers.public": {
+					"accountAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"amountRaw": "700000",
+					"blockHash": "0x0f05dc4049174c88aa37a7401fcecf93272c8b6ef6b86f64a734e0a008bb7e6a",
+					"blockTimestamp": 1790808480,
+					"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+					"discoveredAt": 1790808600000,
+					"from": "0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+					"hidden": false,
+					"id": "pub:3f9a2c71|e41b9d02|0x089d23a6d23f6d6186ea1a0a01c464ca35f1f12634be0129dbd6b876b1ef0966|2",
+					"indexInTx": 2,
+					"kind": "public-event",
+					"l2BlockNumber": 81215,
+					"networkId": "e41b9d02",
+					"profileId": "3f9a2c71",
+					"tokenId": 1,
+					"txHash": "0x089d23a6d23f6d6186ea1a0a01c464ca35f1f12634be0129dbd6b876b1ef0966",
+					"txIndexInBlock": 1
+				},
+				"incomingTransfers.minimal": {
+					"accountAddress": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+					"amountRaw": "1000000000000000000",
+					"contract": "0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311",
+					"discoveredAt": 1790810400000,
+					"hidden": true,
+					"id": "note:b04e6d18|5a7f03c6|0x141a6b04cfb11c041d95f9cc6b6ec68c5827feca3c04af1302289267ef97e51e",
+					"indexInTx": 1,
+					"kind": "note",
+					"l2BlockNumber": 17,
+					"networkId": "5a7f03c6",
+					"noteHash": "0x01166f132845369283aca273ab3064a30f52847d24d9cc10a74c3345bcfa62d4",
+					"owner": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+					"profileId": "b04e6d18",
+					"txHash": "0x1500d52e2aa73fe3b23fa795e9b35a7b9fe412a81a659fe5cbe7290da422d9d5",
+					"txIndexInBlock": 0
+				},
+				"incomingTrust.full": {
+					"arrivalFloor": 81000,
+					"arrivalFloorPending": true,
+					"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+					"networkId": "e41b9d02",
+					"profileId": "3f9a2c71",
+					"state": "trusted",
+					"updatedAt": 1790640000000
+				},
+				"incomingTrust.minimal": {
+					"contract": "0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311",
+					"networkId": "5a7f03c6",
+					"profileId": "b04e6d18",
+					"state": "unknown",
+					"updatedAt": 1790726400000
+				},
+				"incomingPublicCursors.full": {
+					"backfill": {
+						"high": 80500,
+						"low": 79000,
+						"position": {
+							"blockNumber": 79850,
+							"logIndexWithinTx": 0,
+							"txIndexWithinBlock": 2
+						}
+					},
+					"cursor": {
+						"blockNumber": 81215,
+						"logIndexWithinTx": 2,
+						"txIndexWithinBlock": 1
+					},
+					"lastScanFinalized": 81180,
+					"lastSyncedBlockHash": "0x018aa5f9ddceb3f37cc8434910c8fb594004fc0028edab2c491db33a00bd87b2",
+					"pendingPage": {
+						"fromCursor": {
+							"blockNumber": 81215,
+							"logIndexWithinTx": 2,
+							"txIndexWithinBlock": 1
+						},
+						"toScannedThrough": {
+							"blockNumber": 81240,
+							"logIndexWithinTx": 0,
+							"txIndexWithinBlock": 0
+						},
+						"upperHash": "0x0fa952dd49e27b38cac2b3409a15bc2d7f722775d2af8fd65d3bf58499dc1f0f"
+					},
+					"reconciling": {
+						"lowerBound": 81180,
+						"progress": {
+							"blockNumber": 81200,
+							"logIndexWithinTx": 1,
+							"txIndexWithinBlock": 4
+						},
+						"seen": [
+							[81190, "0x17b04333e091fede5c7413c471b6a2e810b456e2c5d2d4c6785cbfbedd78f737"],
+							[81200, "0x2bc4584b9ba896acfe83ff80723d0ff13b546602b35ecc0405334463c99cf17b"]
+						],
+						"upperBound": 81240,
+						"upperBoundHash": "0x0678338a7bbb3068de813a95f06924bee11614e25cac7a203bd3fffd4f411a07"
+					},
+					"startBlock": 80500
+				},
+				"incomingPublicCursors.minimal": {
+					"cursor": null,
+					"lastScanFinalized": null,
+					"lastSyncedBlockHash": null,
+					"startBlock": 0
+				},
+				"incomingBalanceOutbox.full": {
+					"dirtyAt": 1790812620000,
+					"pendingTaskId": "a3f09c2e"
+				},
+				"incomingBalanceOutbox.minimal": {
+					"dirtyAt": 1790812320000
+				},
+				"incomingArrivals.full": {
+					"played": [
+						["pub:3f9a2c71|e41b9d02|0x089d23a6d23f6d6186ea1a0a01c464ca35f1f12634be0129dbd6b876b1ef0966|2", 81215],
+						["note:3f9a2c71|e41b9d02|0x062756421d9c1dc3f7cfb1683bcd51d19a1d1dc20eefcfbb24c5ee3b3f5b23ed", 81201]
+					],
+					"sinceBlock": 81000
+				},
+				"incomingArrivals.minimal": {
+					"played": [],
+					"sinceBlock": 0
+				},
+				"profileTombstones.full": {
+					"addresses": [
+						"0x2f5c81b33f9f8996a498cf0602d9dbdf555de6d7d1bdf4eefa9d33c92fb6974d",
+						"0x29c18b9adb0fbb85f71b2c3338d6a0d9b23e89dd0701cbb7f369d5739c855f48"
+					],
+					"epoch": 2,
+					"networkIds": ["7e3d10b2", "c58a96f1"],
+					"profileId": "d2a6f480",
+					"pxeGeneration": "ca950a9ae2fe52cd08298e3afe6d1af7",
+					"tokenIds": [3, 4]
+				},
+				"profileTombstones.minimal": {
+					"addresses": [],
+					"epoch": 1,
+					"networkIds": [],
+					"profileId": "61e0b3c9",
+					"pxeGeneration": "9b4c9a35e75e998d74f6c6bf14c4a9c1",
+					"tokenIds": []
+				},
+				"restorePending.full": {
+					"at": 1790812560000,
+					"profileId": "3f9a2c71",
+					"pxeGeneration": "00f35de084b327c18ba1a12f94295965"
+				},
+				"restorePending.minimal": {
+					"at": 1790812440000,
+					"profileId": "b04e6d18",
+					"pxeGeneration": "47cba0c40e105ae8afcff8685dea0e3a"
+				},
+				"accountIntegrityBlocked.full": {
+					"accountIndex": 0,
+					"chainId": 3415328944,
+					"derivedAddress": "0x19a08f9d12d1b4825a476e8843264b88ebc6ad907be8c302467e25e0ee8c9e38",
+					"detectedAt": 1790811900000,
+					"profileId": "3f9a2c71",
+					"regimeId": "nulo-v6.1",
+					"storedAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"walletVersion": "0.31.0"
+				},
+				"accountIntegrityBlocked.minimal": {
+					"accountIndex": 1,
+					"chainId": 0,
+					"derivedAddress": "0x1c241160282a5dc317c392130671b7d7f41af146973e7fb540cbca60278e202b",
+					"detectedAt": 1790811300000,
+					"profileId": "b04e6d18",
+					"regimeId": "nulo-v6.1",
+					"storedAddress": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+					"walletVersion": "0.31.0"
+				},
+				"accountIntegrityVerified.full": {
+					"accountSetDigest": "[\"3415328944:11155111:0:0:0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458\",\"3415328944:11155111:0:1:0x1b3dc854e29f6ccfd0b81a0ce8b7f94835d125b1ae7cfcbfa7bc655f84b0adab\"]",
+					"walletVersion": "0.31.0"
+				},
+				"accountIntegrityVerified.minimal": {
+					"accountSetDigest": "[\"0:31337:0:1:0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab\"]",
+					"walletVersion": "0.31.0"
+				},
+				"staleNetworks.full": {
+					"accountSetDigest": "[\"3415328944:11155111:0:0:0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458\",\"3415328944:11155111:0:1:0x1b3dc854e29f6ccfd0b81a0ce8b7f94835d125b1ae7cfcbfa7bc655f84b0adab\"]",
+					"entries": [
+						{
+							"addressesMoved": false,
+							"chainId": 3415328944,
+							"networkId": "e41b9d02",
+							"networkReset": true
+						},
+						{
+							"addressesMoved": true,
+							"chainId": 2286515393,
+							"networkId": "0c9d4e7b",
+							"networkReset": false
+						}
+					],
+					"profileId": "3f9a2c71"
+				},
+				"staleNetworks.minimal": {
+					"accountSetDigest": "[\"0:31337:0:1:0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab\"]",
+					"entries": [],
+					"profileId": "b04e6d18"
+				},
+				"networkReset.full": {
+					"accounts": [
+						{
+							"done": true,
+							"index": 0,
+							"name": "Account 1",
+							"oldAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+							"type": 0,
+							"visible": true
+						},
+						{
+							"done": false,
+							"encryptedSigningKey": "2k9f6TppTd4BDO/RYNTfEJ+KLgZYT85LWqGJTz11llYUQ40vUa26iTK5O+8/v4DrOCsoMBcgUN+Fa1CC",
+							"index": 0,
+							"name": "Imported account",
+							"newAddress": "0x0f307ab7b60312124c0a0ccefe654b1a25d0ae005fe7ea342fd89883fb686f27",
+							"oldAddress": "0x1b3dc854e29f6ccfd0b81a0ce8b7f94835d125b1ae7cfcbfa7bc655f84b0adab",
+							"type": 1,
+							"visible": true
+						}
+					],
+					"cause": {
+						"addressesMoved": false,
+						"networkReset": true
+					},
+					"fromChainId": 2286515393,
+					"l1ChainId": 11155111,
+					"networkId": "e41b9d02",
+					"probedEndpoint": {
+						"id": "6d1a0f93",
+						"url": "https://aztec-testnet.example.org"
+					},
+					"profileId": "3f9a2c71",
+					"purged": true,
+					"switchToSeedNode": false,
+					"toChainId": 3415328944,
+					"unmovable": ["Old imported"]
+				},
+				"networkReset.minimal": {
+					"accounts": [],
+					"cause": {
+						"addressesMoved": true,
+						"networkReset": false
+					},
+					"fromChainId": 1,
+					"l1ChainId": 31337,
+					"networkId": "5a7f03c6",
+					"probedEndpoint": null,
+					"profileId": "b04e6d18",
+					"purged": false,
+					"switchToSeedNode": true,
+					"toChainId": 0
+				},
+				"networkResetDone.full": {
+					"addressesMoved": true,
+					"networkId": "c3d8a614"
+				},
+				"networkResetDone.minimal": {
+					"addressesMoved": false,
+					"networkId": "9e21b7f0"
+				},
+				"networkSeeded.full": {
+					"announce": ["mainnet"],
+					"offered": ["custom", "devnet", "local", "mainnet", "testnet"]
+				},
+				"networkSeeded.minimal": {
+					"offered": []
+				},
+				"profiles.full": {
+					"dekSealed": "LOsyobbwKxTww4CuZ8N6+nFigEl5PcGsKPd/5Cwr9shUgPAspwMM9qqcYJefWVEixLkjFk3ATudEbMOK",
+					"entropy": "UCWtCDABfCstVgvZoS9ciLYrMBdvf4GgK8Wh8b338rO7XkD8XC+zO8H2o11T39TeovhCvHXSf7Aasrav",
+					"envelopeMac": "YMMHg5xeUleK3BiR01I6JM1D2dU0utQ4fVYyxHCZ/bE=",
+					"guard": "AfSh8AOo3nhq5JLTTb5PZJX5J+Q9dfrQ58Q3suOdj8tM5DsN7LvyC4UyNDZYIuOtwJNKNObH3G4ZOgpX",
+					"id": "3f9a2c71",
+					"name": "Main wallet",
+					"pxeGeneration": "8a65ccadefc61f00bf915652b0f0f552",
+					"secret": "5DYWNr/qVwDTA48rXvCpT87cTmixf4RPrANGVjXboz9hi5RJCIF7RA3y3NVDOz/4c+WbrHZNykK2Cg/W6OxA/tgBJz6MSmmLJ3Aea8KszI4riN3VDOiV926XJ3A=",
+					"type": "password",
+					"walletFingerprint": "25079caaa352dc46871988e43e5868b109ccba56023c5f805f674f02806bb6d7"
+				},
+				"profiles.minimal": {
+					"dekSealed": "Ov4A+hdBzT56IClOIuti+oA2QPIMrLExqjlbjBrZD4EkitGRBMQrrNOO28htkVV46GUWd/+ur2u7QHJI",
+					"entropy": "j99SHK2o3AIr7VBuKAILRFWDPJPZDhTi8FrjVN2jo1npj8ldpZZVXOYQRB6WsVu/Pi0yzd6H0OEjal9X",
+					"envelopeMac": "0zx/00y8xy8/Imq64lnAt9vAZWsPZCH75zjG+juVJhY=",
+					"guard": "uYd+jDnsDV0c2Ewbdgm1htMCTmgCrtUYLol3h1vXblfWRANsOBQvuigsDndWCmwxGq6SThz7BmCnShF/",
+					"id": "b04e6d18",
+					"name": "B",
+					"pxeGeneration": "6ed03791c094f9127b5188be57e2d499",
+					"secret": "b9phqn7907gBl9pA2tkVDUyCQqO5Pth1oBWwO2LmYWiFxem06RejXxnBqOzgRzXkC4tRzx7xABmFbefyiUpnfhmS/VL3ggWT2CgdYGl1GqqcuFZFLAwa5u/rXAs=",
+					"type": "password",
+					"walletFingerprint": "fe40100014c8ac7f3d3ed249f0adb10964acd7c802259eeb6d064762bd659e64"
+				},
+				"profiles.passkey": {
+					"credentialId": "6_sXxtADI41nWQx4GrZaoBdYZnouHc_zbDplcQ4xpZM",
+					"dekSealed": "50cc5hVkUrrclMF4Z7/2Mo4Jp5Q32CQ9EDQBHApYWAlZ+gifZty85k4CRn9iJOuRobYJpWO34KSf8/1X",
+					"id": "7c21e5a9",
+					"name": "Passkey wallet",
+					"pxeGeneration": "f5382119f54b54ed8f4c08fdc8abba56",
+					"type": "passkey",
+					"walletFingerprint": "5c64e73b17ad2a3ac10531f196eb5cc7024f7ee52539170182e0a31853e7cea5"
+				},
+				"config.minimal": {
+					"debugMode": false,
+					"defaultExplorer": "aztecscan",
+					"developerMode": false,
+					"disableAnimations": false,
+					"incomingDustUsdThreshold": 0,
+					"incomingTransfersVisible": true,
+					"indicateFailures": false,
+					"prestoReached": false,
+					"privacyMode": false,
+					"sessionTtl": 1800000,
+					"showFiatValues": true,
+					"showNode": true,
+					"sidePanel": false,
+					"strictSecurityMode": true,
+					"theme": "system"
+				},
+				"tokenPrices.minimal": {
+					"usd-coin": {
+						"coingeckoId": "usd-coin",
+						"fetchedAt": 1790812620000,
+						"providerUpdatedAt": null,
+						"usd": 0.9998
+					}
+				},
+				"tokenList.minimal": {
+					"failures": 2
+				},
+				"tokenSeeded.full": {
+					"3415328944:0x01a4f2b9fafbaed65d7937f9a8dc197654c827d5c61c61bd471d49f48e83c6b0": {
+						"attempts": 1,
+						"rejectedAtVersion": "0.31.0+14"
+					},
+					"3415328944:0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0": {
+						"attempts": 1,
+						"observedDecimals": 6,
+						"outcome": "seeded",
+						"verifiedPins": "0x0f4760c9595980d657422b564cb908f54fcf0aff11a8f0b7803c25c5a96852ef|USDC|6"
+					},
+					"3415328944:0x252d6f4bd1dd457c99e92d84dbc15960240d64d77590ebb52243229320cb510e": {
+						"attempts": 0,
+						"outcome": "deleted"
+					},
+					"3415328944:0x2b7da434d23aef0d7d6c6e047d0d84da781b9411b668830263dff380812fc75d": {
+						"attempts": 3,
+						"cappedAtVersion": "0.31.0+14",
+						"nextAttemptAt": 1790811600000
+					}
+				},
+				"tokenSeeded.minimal": {
+					"0:0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311": {
+						"attempts": 1
+					}
+				},
+				"dappRegistrations.full": {
+					"1": {
+						"apps": {
+							"http://localhost:5173": 1
+						},
+						"total": 1
+					},
+					"3415328944": {
+						"apps": {
+							"https://app.example": 32,
+							"https://swap.example": 5
+						},
+						"total": 37
+					}
+				},
+				"dappRegistrations.minimal": {
+					"0": {
+						"apps": {},
+						"total": 0
+					}
+				},
+				"activeNetwork.full": "e41b9d02",
+				"activeNetwork.minimal": "5a7f03c6",
+				"legalAccepted.minimal": {
+					"acceptedAt": 1790640000000,
+					"history": [
+						{
+							"acceptedAt": 1790640000000,
+							"privacyVersionShown": "1.2.1",
+							"surface": "onboarding",
+							"termsVersion": "1.0"
+						}
+					],
+					"privacyVersionShown": "1.2.1",
+					"surface": "onboarding",
+					"termsVersion": "1.0"
+				},
+				"uiActiveAccount.minimal": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+				"uiLastActiveProfile.minimal": "b04e6d18",
+				"uiLoggerWindowId.minimal": 12,
+				"onboardingCompleted.minimal": false,
+				"uiPinnedTokens.full": {
+					"0": ["0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311"],
+					"3415328944": [
+						"0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+						"0x2b7da434d23aef0d7d6c6e047d0d84da781b9411b668830263dff380812fc75d"
+					]
+				},
+				"uiPinnedTokens.minimal": {
+					"0": ["0x0a70b03a232d2020df385dba14d2f3fdf15a2686bb28b987203ec318ba89a311"]
+				},
+				"uiFeePicks.full": {
+					"0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458": {
+						"fpc": {
+							"id": "2b6c9e41",
+							"isProtocol": true
+						},
+						"subtitle": "FPC",
+						"title": "Sponsored",
+						"type": "fpc"
+					},
+					"0x1b3dc854e29f6ccfd0b81a0ce8b7f94835d125b1ae7cfcbfa7bc655f84b0adab": {
+						"fpc": {
+							"id": "8f05d3a7",
+							"isProtocol": false
+						},
+						"type": "private_fpc"
+					}
+				},
+				"uiFeePicks.minimal": {
+					"0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab": {
+						"type": "fj"
+					}
+				},
+				"uiSendFeePicks.full": {
+					"0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458": {
+						"private": {
+							"fpc": {
+								"id": "2b6c9e41",
+								"name": "Sponsored FPC"
+							},
+							"type": "fpc"
+						},
+						"public": {
+							"type": "fj"
+						}
+					}
+				},
+				"uiSendFeePicks.minimal": {
+					"0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab": {
+						"public": {
+							"type": "private_fpc"
+						}
+					}
+				},
+				"uiRestoreOutcome.full": {
+					"backup": "30e76e214c6e366e226b77b64a46ccb89e70e6d787dbf51bbb89be4202372e41",
+					"leaseUntil": 1790812830000,
+					"networkIds": ["e41b9d02", "0c9d4e7b"],
+					"run": "ed36c1c573262b4406f4c7e18d4d8c06"
+				},
+				"uiRestoreOutcome.minimal": {
+					"backup": "e5abbc9c85809fe09190a54ed124ee0adaa1d05c0460152268fdb2f94a88a381",
+					"leaseUntil": 0,
+					"networkIds": ["5a7f03c6"],
+					"run": "ba1187dd7a33daae4a32df860ad3a287"
+				},
+				"uiGetStartedPhraseSaved.full": true,
+				"uiGetStartedPhraseSaved.minimal": true,
+				"uiGetStartedBackupSaved.full": true,
+				"uiGetStartedBackupSaved.minimal": true,
+				"uiGetStartedAztecOpened.full": true,
+				"uiGetStartedAztecOpened.minimal": true,
+				"uiGetStartedHidden.full": true,
+				"uiGetStartedHidden.minimal": true,
+				"uiGetStartedFeeJuiceHeld.full": true,
+				"uiGetStartedFeeJuiceHeld.minimal": true,
+				"uiProfileImported.full": true,
+				"uiProfileImported.minimal": true,
+				"uiProfileNotFirst.full": true,
+				"uiProfileNotFirst.minimal": true,
+				"config.full": {
+					"debugMode": true,
+					"defaultExplorer": null,
+					"developerMode": true,
+					"disableAnimations": true,
+					"incomingDustUsdThreshold": 2.5,
+					"incomingTransfersVisible": false,
+					"indicateFailures": true,
+					"prestoReached": true,
+					"privacyMode": true,
+					"sessionTtl": 3600000,
+					"showFiatValues": false,
+					"showNode": false,
+					"sidePanel": true,
+					"strictSecurityMode": false,
+					"theme": "dark"
+				},
+				"tokenPrices.full": {
+					"aztec": {
+						"coingeckoId": "aztec",
+						"fetchedAt": 1790812620000,
+						"providerUpdatedAt": 1790812560000,
+						"usd": 0.0147
+					},
+					"euro-coin": {
+						"coingeckoId": "euro-coin",
+						"fetchedAt": 1790812620000,
+						"providerUpdatedAt": 1790812500000,
+						"usd": 1.0832
+					},
+					"tether": {
+						"coingeckoId": "tether",
+						"fetchedAt": 1790812620000,
+						"providerUpdatedAt": null,
+						"usd": 1.0001
+					},
+					"usd-coin": {
+						"coingeckoId": "usd-coin",
+						"fetchedAt": 1790812620000,
+						"providerUpdatedAt": 1790812560000,
+						"usd": 0.9998
+					}
+				},
+				"tokenList.full": {
+					"envelope": "{\"format\":\"nulo-token-list-envelope/1\",\"keyId\":\"nulo-prod-1\",\"payload\":\"EtpvBh7frCoFXNg7gkjkms3jIhHJZY4Jxg16B-jNnoY1TClFyaXrAehUseY3-h1cPHsOPpJWd996J5ptGRxaAYDTfW5HntmbhLspITtfh9BAljHmySitTTEMjI0nehHT7Uc2-klO3-ieFz1daIzS9hYMdjv1CNGgRTbJwBmPX69-JY9cFRy2a3LxcxIlsbaFv_7d94N7IN80hHooV8Rmyt3i6ubNRI9zdFFSRyDuu1lihDQUjtKPNEJrUMQj_tEEDm4rBLUvYLRmygZOuuYyq4cnwumYXQzI43i2ZDoPYNwiEkOAxv6Z2Qu0is_bIkapHcqj7YyxZNAQWK5xPrSA_lxZQctaJ51lHSWKVOWWph5AoVDnXVCGgGA923yuuz5eONgDtN7jWG5CArKV0Xmdj_zg4ejB_W5QPluSyKljKy1YxW4FkpNqEsCZNioshsjO4UbOOPyv_sRED0SoMnccatvgBPQwNSAgSuzpcB3b9EYKXV-OkYm_LsYYFfHaAGtbtiG_z2JFAjY7cfXfxaZMkrIhVyY84IsfZwmPN8zN0_DY3Hog\",\"signature\":\"6XmHo2VutcQogv_dqXVYNfBOEXK7ljf9MkZI3xpUtwblo-0ULOTDjjEwDzP3AtFq3-yFCZWezKaljpOcBf_2xw\"}",
+					"failures": 0,
+					"lastSuccessAt": 1790791200000,
+					"nextAttemptAt": 1790881200000
+				},
+				"legalAccepted.full": {
+					"acceptedAt": 1790726400000,
+					"history": [
+						{
+							"acceptedAt": 1789084800000,
+							"privacyVersionShown": "1.1",
+							"surface": "onboarding",
+							"termsVersion": "1.0"
+						},
+						{
+							"acceptedAt": 1790726400000,
+							"privacyVersionShown": "1.2.1",
+							"surface": "popup",
+							"termsVersion": "1.0"
+						}
+					],
+					"privacyVersionShown": "1.2.1",
+					"surface": "popup",
+					"termsVersion": "1.0"
+				},
+				"uiActiveAccount.full": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+				"uiLastActiveProfile.full": "3f9a2c71",
+				"uiLoggerWindowId.full": 1847,
+				"onboardingCompleted.full": true,
+				"journal.sealed": {
+					"accountAddress": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"amountRaw": "1250000",
+					"attempts": 1,
+					"call": {
+						"argCount": 4,
+						"classId": "0x0f4760c9595980d657422b564cb908f54fcf0aff11a8f0b7803c25c5a96852ef",
+						"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0"
+					},
+					"contractAddress": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+					"createdAt": 1790798400000,
+					"error": {
+						"kind": "dapp_execute",
+						"message": "Transaction reverted in app logic",
+						"normalizedRaw": "{\"name\":\"Error\",\"message\":\"Transaction reverted in app logic\"}"
+					},
+					"id": "3d6f1a9c27e4b508",
+					"kind": "dapp_execute",
+					"networkId": "e41b9d02",
+					"origin": "dapp",
+					"profileId": "3f9a2c71",
+					"progress": {
+						"check": "reverted",
+						"checkSince": 1790802000000,
+						"expiry": {
+							"nullifier": "0x2698e9456e61875133340d4eea1d0b3e493be648417235c94cb3358ce6d77f51",
+							"timestamp": 1790805600
+						},
+						"from": "submitting",
+						"inclusion": {
+							"block": 81234,
+							"hash": "0x15248642522e44f73a1a28d8b5e924a945f6146130b0c232e4f19e9f93e7814b"
+						},
+						"stage": "failed",
+						"submittedEndpointUrl": "https://aztec-testnet.example.org",
+						"txHash": "0x0125856d7c1793f7a77241d1dcdc4c8fc375ee15405b2b60e00b789ce3e3dc79"
+					},
+					"recipientAddress": "0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+					"sessionId": "39433e6db4c616cb4812acd668a9698a6025fd16666375fa309cd05c5c23c75b",
+					"subtitle": "app.example.org",
+					"terminalAt": 1790802000000,
+					"title": "Transfer USDC",
+					"tokenId": 1,
+					"transferType": 0,
+					"updatedAt": 1790802000000
+				},
+				"txs.sealed": {
+					"account": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"ambiguous": false,
+					"awaitingFinality": true,
+					"block": {
+						"hash": "0x099c9d518185c0ab773663034e0ded91c5d444b33d9ecbe36f9c1cb4392f694f",
+						"number": 81190
+					},
+					"calls": [
+						{
+							"args": [
+								"0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+								"0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+								"1250000",
+								"0x0000000000000000000000000000000000000000000000000000000000000000"
+							],
+							"classId": "0x0f4760c9595980d657422b564cb908f54fcf0aff11a8f0b7803c25c5a96852ef",
+							"contract": "0x1d5a6fba4cfb719edda097a2254f003bad379e890350f830ee0b05a3ecf85ea0",
+							"method": "transfer_private_to_private",
+							"transfers": [
+								{
+									"amount": "1250000",
+									"from": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+									"to": "0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+									"token": {
+										"decimals": 6,
+										"name": "Test USDC",
+										"symbol": "USDC"
+									},
+									"type": 0
+								}
+							]
+						}
+					],
+					"chainId": 3415328944,
+					"createdAt": 1790791200000,
+					"error": "Assertion failed: Balance too low 'subtracted > 0'",
+					"estimatedFee": "4210000000000",
+					"executionResult": 1,
+					"fee": "3120000000000",
+					"feeChoice": "app",
+					"feePaymentMethod": 2,
+					"feeSpender": "0x261442f769babc690b9ceed102d19aa02a7f2f9d49e1fc8c94e5b877071e630c",
+					"gasDetails": {
+						"daGasLimit": 786432,
+						"feePerDaGas": "0",
+						"feePerL2Gas": "1250000",
+						"l2GasLimit": 6540000,
+						"teardownDaGasLimit": 131072,
+						"teardownL2GasLimit": 1000000
+					},
+					"hash": "0x2f41c741c741c741c741c741c741c741c741c741c741c741c741c741c741c79b",
+					"networkId": "e41b9d02",
+					"nonce": "0x030b39a27b74f15a25cf7a35a696f06ac52688a59ed0acd33f1940d7ca09a8fd",
+					"origin": {
+						"name": "https://app.example.org",
+						"type": 1
+					},
+					"priorityLevel": "fast",
+					"profileId": "3f9a2c71",
+					"status": 4,
+					"submittedEndpointUrl": "https://aztec-testnet.example.org",
+					"updatedAt": 1790794800000
+				}
+			},
+			"additive": {
+				"names": ["journal", "txs"],
+				"reason": "journal and txs rows are sealed per profile; a plaintext row still reads through the dual read and is sealed at its profile's next unlock"
+			}
 		}
 	]
 }

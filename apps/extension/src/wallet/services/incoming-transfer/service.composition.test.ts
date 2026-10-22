@@ -123,7 +123,7 @@ async function startService(api: FakeBrowserApi, notes: Record<string, unknown> 
 			getTokensRaw: async () => scope.tokens ?? [TOKEN],
 		}),
 	)
-	collection.add(svc(TransactionService.name, { onTransactionAdded: new EventHandler(), getTransactions: async () => [] }))
+	collection.add(svc(TransactionService.name, { onTransactionAdded: new EventHandler(), transactionsOf: async () => [] }))
 	collection.add(svc(OperationJournalService.name, { getOperations: async () => [] }))
 	collection.add(svc(NoteService.name, notes))
 	collection.add(

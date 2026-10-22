@@ -146,7 +146,7 @@ function makeHarness(overrides: Partial<TransferExecutorDeps> = {}) {
 			async () => ({ infoData: { type: FpcType.DefaultSponsoredFpc, isProtocol: true, chainId: 7, address: "0xsponsor" } }) as never,
 		),
 		// One mined tx: the account is initialized.
-		getTransactions: vi.fn(async () => [{ chainId: 7, status: 2, executionResult: 0, calls: [] }] as never),
+		transactionsOf: vi.fn(async () => [{ chainId: 7, status: 2, executionResult: 0, calls: [] }] as never),
 		lane: {
 			registerInFlight: vi.fn(() => ({ live: true })),
 			deleteController: vi.fn(),
@@ -1364,7 +1364,7 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 	test("an estimate answers queued, with its token spent, instead of building while a send holds its keys", async () => {
 		const sequencer = sequencerOnPendingMap()
 		const { executor, deps } = makeHarness({ sequencer })
-		const sequence = await executor.sequence(makeReq())
+		const sequence = await executor.sequence(makeReq(), FENCE.profileId)
 		expect([...sequence.keys].sort()).toEqual([...REQ_KEYS].sort())
 		sequencer.enter(SCOPE, new Set([`seq:${TOKEN_CONTRACT}:0xme`]))
 		expect(await executor.estimateFee(makeReq(), undefined, sequence)).toEqual({ queued: true, tokenSpent: true })
@@ -1396,7 +1396,7 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 		let release: () => void = () => {}
 		const h = makeHarness({ sequencer })
 		h.deps.buildAndEstimate = vi.fn(() => new Promise<never>((r) => (release = () => r(h.built as never))))
-		const sequence = await h.executor.sequence(makeReq())
+		const sequence = await h.executor.sequence(makeReq(), FENCE.profileId)
 		const estimate = h.executor.estimateFee(makeReq(), undefined, sequence)
 		await vi.waitFor(() => expect(h.deps.buildAndEstimate).toHaveBeenCalled())
 		const later = sequencer.enter(SCOPE, new Set([`seq:${TOKEN_CONTRACT}:0xme`]))
@@ -1416,16 +1416,16 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 	test("a fee contract that is not the protocol sponsor is a key; the protocol sponsor is not", async () => {
 		const fpcReq = makeReq({ transferType: TransferType.Public, feeSettings: { paymentMethod: { kind: "fpc", fpcId: "f" } } as never })
 		const sponsor = makeHarness()
-		expect([...(await sponsor.executor.sequence(fpcReq)).keys]).toEqual([])
+		expect([...(await sponsor.executor.sequence(fpcReq, FENCE.profileId)).keys]).toEqual([])
 		const privateFpc = makeHarness({
 			getFpcImpl: vi.fn(async () => ({ infoData: { type: FpcType.PrivateFpc, chainId: 7, address: "0xPRIV" } }) as never),
 		})
-		expect([...(await privateFpc.executor.sequence(fpcReq)).keys]).toEqual(["fpc:0xpriv"])
+		expect([...(await privateFpc.executor.sequence(fpcReq, FENCE.profileId)).keys]).toEqual(["fpc:0xpriv"])
 	})
 
 	test("until a tx of the account is mined, every send may initialize it", async () => {
-		const fresh = makeHarness({ getTransactions: vi.fn(async () => []) })
-		expect([...(await fresh.executor.sequence(makeReq({ transferType: TransferType.Public }))).keys]).toEqual(["init"])
+		const fresh = makeHarness({ transactionsOf: vi.fn(async () => []) })
+		expect([...(await fresh.executor.sequence(makeReq({ transferType: TransferType.Public }), FENCE.profileId)).keys]).toEqual(["init"])
 	})
 })
 
@@ -1569,7 +1569,7 @@ async function heldBehind(req: TransferRequest, overrides: Partial<TransferExecu
 		releases.push(release)
 		return release
 	})
-	const { scope, keys } = await h.executor.sequence(req)
+	const { scope, keys } = await h.executor.sequence(req, FENCE.profileId)
 	const earlier = sequencer.enter(scope, keys)
 	const waiting = async () => {
 		await vi.waitFor(() => expect(h.deps.lane.beginQueuedWait).toHaveBeenCalledWith("j1"))
@@ -1617,7 +1617,7 @@ describe("TransferExecutor: a queued send Nulo's sponsor pays, with no cap", () 
 		// The refusal holds the slot it was granted and the ticket it re-entered with; both go back.
 		expect(releases.length).toBeGreaterThan(0)
 		for (const release of releases) expect(release).toHaveBeenCalled()
-		expect(sequencer.isBlocked(SCOPE, (await executor.sequence(SPONSORED)).keys)).toBe(false)
+		expect(sequencer.isBlocked(SCOPE, (await executor.sequence(SPONSORED, FENCE.profileId)).keys)).toBe(false)
 	})
 
 	test.each([undefined, "est-1"])("control: a self-paid send held the same way, estimate id %s, still builds", async (estimateId) => {
@@ -1658,7 +1658,7 @@ describe("TransferExecutor: a send bound to the token contract it was approved w
 		expect(proveAndSend).not.toHaveBeenCalled()
 		expect(releases.length).toBeGreaterThan(0)
 		for (const release of releases) expect(release).toHaveBeenCalled()
-		const { scope, keys } = await executor.sequence(makeReq())
+		const { scope, keys } = await executor.sequence(makeReq(), FENCE.profileId)
 		expect(sequencer.isBlocked(scope, keys)).toBe(false)
 	})
 
@@ -1793,7 +1793,11 @@ describe("TransferExecutor: a send held to its fee figure", () => {
 		vi.useFakeTimers({ now: T0, toFake: ["Date"] })
 		try {
 			const { executor, deps, proveAndSend, answers, asked, reuse } = capHarness()
-			const estimate = (await executor.estimateFee(makeReq(), undefined, await executor.sequence(makeReq()))) as TransferFeeEstimate
+			const estimate = (await executor.estimateFee(
+				makeReq(),
+				undefined,
+				await executor.sequence(makeReq(), FENCE.profileId),
+			)) as TransferFeeEstimate
 			vi.setSystemTime(T0 + 100_000)
 			const run = executor.execute(makeReq(), estimate.estimateId, FENCE, cap(BELOW))
 			await vi.waitFor(() => expect(asked()).toHaveLength(1))
@@ -1957,7 +1961,7 @@ describe("TransferExecutor: a send held to its fee figure", () => {
 				const shown = (await h.executor.estimateFee(
 					makeReq(),
 					undefined,
-					await h.executor.sequence(makeReq()),
+					await h.executor.sequence(makeReq(), FENCE.profileId),
 				)) as TransferFeeEstimate
 				expect(shown.maxFee).toBe(SHOWN)
 				vi.setSystemTime(T0 + 121_000)

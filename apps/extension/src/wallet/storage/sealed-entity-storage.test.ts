@@ -4,6 +4,7 @@ import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { asMasterSecretBytes, deriveRowKeys, sealRow } from "@nulo/wallet-crypto"
 import { type Contact, ContactSchema } from "@/wallet/services/contact/spec"
 import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
+import { TRANSACTION_STORAGE_ROOT, TxStatus, type Tx } from "@/wallet/services/transaction/service"
 import { type KeyedIds, type RowKeysSource, SealedEntityStorage } from "./sealed-entity-storage"
 import { TestRowKeys } from "./sealed-entity-storage.testing"
 import { sealedEntityStorage } from "./stores"
@@ -285,6 +286,22 @@ describe("SealedEntityStorage", () => {
 			expect(await keyedStore().get(id, "q")).toEqual(contact(id, "q", "other"))
 		})
 
+		test("a write, a pass or an adoption whose sealed write is refused keeps the plaintext original", async () => {
+			await legacy(area, contact(id, "p"))
+			const txKey = `${TRANSACTION_STORAGE_ROOT}@0x${"11".repeat(32)}`
+			const ownerless = JSON.stringify({ hash: `0x${"11".repeat(32)}`, account: "0xab", chainId: 1 })
+			await area.set({ [txKey]: ownerless })
+			const before = await area.get()
+			vi.spyOn(area, "set").mockRejectedValue(new Error("disk full"))
+
+			await expect(keyedStore().set(id, contact(id, "p", "renamed"))).rejects.toThrow("disk full")
+			await expect(keyedStore().sealLegacy("p", (fn) => fn())).rejects.toThrow("disk full")
+			await expect(
+				sealedEntityStorage("txs", area, keys.source).adoptOwnerless(`0x${"11".repeat(32)}`, ownerless, "p"),
+			).rejects.toThrow("disk full")
+			expect(await area.get()).toEqual(before)
+		})
+
 		test("a write, or a pass, replaces the row's plaintext twin, and a leftover twin never doubles a read", async () => {
 			await legacy(area, contact(id, "p"))
 			expect(await keyedStore().get(id, "p")).toEqual(contact(id, "p"))
@@ -296,6 +313,101 @@ describe("SealedEntityStorage", () => {
 			expect(await keyedStore().sealLegacy("p", (fn) => fn())).toBe(1)
 			expect(Object.keys(await raw(area))).toEqual(Object.keys(sealedOnly.items))
 			expect(await keyedStore().get(id, "p")).toEqual(contact(id, "p", "renamed"))
+		})
+	})
+
+	describe("rows that name no profile (the transaction root)", () => {
+		const HASH = `0x${"11".repeat(32)}`
+		const tx = (overrides: Partial<Tx> = {}): Tx => ({
+			chainId: 1,
+			account: `0x${"ab".repeat(32)}`,
+			nonce: "0",
+			feePaymentMethod: 0 as never,
+			hash: HASH,
+			createdAt: 1,
+			updatedAt: 1,
+			status: TxStatus.Proposed,
+			origin: { type: 0 } as never,
+			calls: [],
+			...overrides,
+		})
+		const txs = () => sealedEntityStorage("txs", area, keys.source)
+		const legacyKey = `${TRANSACTION_STORAGE_ROOT}@${HASH}`
+		const stored = async () =>
+			Object.fromEntries(Object.entries(await area.get()).filter(([key]) => key.startsWith(TRANSACTION_STORAGE_ROOT)))
+
+		test("one reads for every profile and is rewritten in place as plaintext; nothing creates one", async () => {
+			await area.set({ [legacyKey]: JSON.stringify(tx()) })
+			expect(await txs().get(HASH, "p")).toEqual(tx())
+			expect(await txs().get(HASH, "q")).toEqual(tx())
+			expect(await txs().contains(HASH, "q")).toBe(true)
+
+			await txs().set(HASH, tx({ status: TxStatus.Finalized }))
+			expect(await stored()).toEqual({ [legacyKey]: JSON.stringify(tx({ status: TxStatus.Finalized })) })
+
+			await area.remove(legacyKey)
+			await expect(txs().set(HASH, tx())).rejects.toThrow(/only a stored ownerless row/)
+			expect(await stored()).toEqual({})
+		})
+
+		test("its adoption seals it to the profile at a keyed id and removes the plaintext key", async () => {
+			const text = JSON.stringify(tx())
+			await area.set({ [legacyKey]: text })
+			expect(await txs().adoptOwnerless(HASH, text, "p")).toBe(true)
+
+			const keysNow = Object.keys(await stored())
+			expect(keysNow).toHaveLength(1)
+			expect(keysNow[0]).not.toContain(HASH.slice(2))
+			expect(await txs().get(HASH, "p")).toEqual({ ...tx(), profileId: "p" })
+			expect(await txs().get(HASH, "q")).toBeUndefined()
+		})
+
+		test("its adoption keeps a sealed row the profile already holds and drops only the plaintext", async () => {
+			await txs().set(HASH, tx({ profileId: "p", status: TxStatus.Finalized }))
+			const sealedOnly = await stored()
+			const planted = JSON.stringify(tx({ status: TxStatus.Dropped }))
+			await area.set({ [legacyKey]: planted })
+
+			expect(await txs().adoptOwnerless(HASH, planted, "p")).toBe(true)
+			expect(await stored()).toEqual(sealedOnly)
+			expect(await txs().get(HASH, "p")).toEqual(tx({ profileId: "p", status: TxStatus.Finalized }))
+		})
+
+		test.each([
+			[
+				"the stored text changed since it was read",
+				() => JSON.stringify(tx()),
+				() => JSON.stringify(tx({ status: TxStatus.Pending })),
+			],
+			["the row names a profile", () => JSON.stringify(tx({ profileId: "q" })), () => JSON.stringify(tx({ profileId: "q" }))],
+			["the row is not one", () => "{", () => "{"],
+		])("an adoption refuses when %s, and writes nothing", async (_label, storedText, readText) => {
+			await area.set({ [legacyKey]: storedText() })
+			const before = await stored()
+			expect(await txs().adoptOwnerless(HASH, readText(), "p")).toBe(false)
+			expect(await stored()).toEqual(before)
+		})
+
+		test("a profile with no keys adopts nothing", async () => {
+			const text = JSON.stringify(tx())
+			await area.set({ [legacyKey]: text })
+			expect(await txs().adoptOwnerless(HASH, text, "locked")).toBe(false)
+			expect(await stored()).toEqual({ [legacyKey]: text })
+		})
+
+		test("only a keyed root may keep ownerless rows", () => {
+			expect(
+				() =>
+					new SealedEntityStorage(
+						new EntityStorage<Contact>(ROOT, area, (row) => ContactSchema.parse(row)),
+						area,
+						ROOT,
+						keys.source,
+						{
+							ownerless: "plaintext",
+						},
+					),
+			).toThrow()
 		})
 	})
 })

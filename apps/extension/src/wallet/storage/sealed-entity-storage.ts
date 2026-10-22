@@ -38,13 +38,19 @@ export type SealedRootOptions = {
 	 *  `row.profileId`. Must accept anything a raw legacy row parses to. */
 	ownerOf?: (row: unknown, naturalId: string) => string | undefined
 	keyed?: KeyedIds
+	/** Keyed roots only. A legacy row that names no profile stays plaintext at its natural id: no
+	 *  profile's keys may seal it while its owner is unknown, so every profile's lookup of that id
+	 *  finds it. Such a row is updated in place; nothing creates one. */
+	ownerless?: "plaintext"
 }
 
 /** One sealed write, prepared: the caller runs its own liveness checks after `prepare` resolves
  *  and then calls `commit` with no `await` in between, so nothing interleaves after a check. */
 export type PreparedWrite = { items: Record<string, string>; commit(): Promise<void> }
 
-type Located = { storageId: string; naturalId: string; owner: string | undefined; sealed: boolean }
+/** Where a readable row is stored: its storage id, the natural id it answers to, the profile it
+ *  belongs to (none for an ownerless row) and whether it is sealed. */
+export type Located = { storageId: string; naturalId: string; owner: string | undefined; sealed: boolean }
 
 const defaultOwner = (row: unknown): string | undefined => {
 	const owner = typeof row === "object" && row !== null ? (row as { profileId?: unknown }).profileId : undefined
@@ -73,6 +79,7 @@ export class SealedEntityStorage<T> {
 	) {
 		this.prefix = `${root}@`
 		this.ownerOf = options.ownerOf ?? defaultOwner
+		if (options.ownerless && !options.keyed) throw new Error(`${root}: only a keyed root keeps ownerless rows`)
 	}
 
 	public async get(id: string, owner?: string): Promise<T | undefined> {
@@ -81,23 +88,30 @@ export class SealedEntityStorage<T> {
 		const sealed = await this.readKey(this.prefix + (await this.physicalId(id, ownerId)))
 		if (sealed && sealed.located.naturalId === id) return sealed.row
 		const legacy = await this.readKey(this.prefix + id)
-		return legacy && !legacy.located.sealed && legacy.located.owner === ownerId ? legacy.row : undefined
+		return legacy && !legacy.located.sealed && this.servesLegacy(legacy.located.owner, ownerId) ? legacy.row : undefined
+	}
+
+	/** The readable row stored at exactly `storageId`, whatever its form. */
+	public async readStorageId(storageId: string): Promise<{ located: Located; row: T } | undefined> {
+		return this.readKey(this.prefix + storageId)
 	}
 
 	/** Whether `id` is taken: by any stored row of a natural root, readable or not; for a keyed root,
-	 *  by `owner`'s sealed row or its legacy twin. */
+	 *  by `owner`'s sealed row, its legacy twin, or an ownerless legacy row at `id`. */
 	public async contains(id: string, owner?: string): Promise<boolean> {
 		if (!this.options.keyed) return this.inner.contains(id)
 		const ownerId = this.requireOwner(owner)
 		if (await this.inner.contains(await this.physicalId(id, ownerId))) return true
-		return (await this.legacyOwner(id)) === ownerId
+		const legacy = await this.legacyAt(id)
+		return legacy !== undefined && this.servesLegacy(legacy.owner, ownerId)
 	}
 
 	/** Seals `row` for the profile it belongs to. Throws `WalletLockedError` when that profile has
-	 *  no row keys in this worker: nothing writes a plaintext row. */
+	 *  no row keys in this worker: nothing writes a plaintext row, except an update of an ownerless
+	 *  row that is already one. */
 	public async prepare(id: string, row: T): Promise<PreparedWrite> {
 		const owner = this.ownerOf(row, id)
-		if (owner === undefined) throw new Error(`${this.root}: a sealed row must name its profile`)
+		if (owner === undefined) return this.prepareOwnerless(id, row)
 		const keys = this.keysFor(owner)
 		if (!keys) throw new WalletLockedError()
 		const text = JSON.stringify(row)
@@ -110,6 +124,27 @@ export class SealedEntityStorage<T> {
 		const items = { [storageKey]: await this.envelope(keys, owner, storageKey, JSON.stringify({ k: id, r: text })) }
 		const legacyTwin = (await this.legacyOwner(id)) === owner ? [this.prefix + id] : []
 		return { items, commit: () => this.whileHeld(owner, keys, () => this.commitWithRemovals(items, legacyTwin)) }
+	}
+
+	/** An ownerless row is written back in place and in plaintext, only over the ownerless row it
+	 *  updates, checked again at commit: a new row, or one a profile has sealed or adopted meanwhile,
+	 *  is never written in plaintext. */
+	private async prepareOwnerless(id: string, row: T): Promise<PreparedWrite> {
+		if (this.options.ownerless !== "plaintext") throw new Error(`${this.root}: a sealed row must name its profile`)
+		const key = this.prefix + id
+		const items = { [key]: JSON.stringify(row) }
+		const ownerless = async () => {
+			const legacy = await this.legacyAt(id)
+			return legacy !== undefined && legacy.owner === undefined
+		}
+		if (!(await ownerless())) throw new Error(`${this.root}: only a stored ownerless row is written in plaintext`)
+		return {
+			items,
+			commit: async () => {
+				if (!(await ownerless())) throw new Error(`${this.root}: the ownerless row changed before its write`)
+				await this.area.set(items)
+			},
+		}
 	}
 
 	/** Dispatches a prepared write only while its profile still holds the keys it was sealed under,
@@ -145,6 +180,12 @@ export class SealedEntityStorage<T> {
 
 	public async getValues(): Promise<T[]> {
 		return (await this.getAll()).map(([, row]) => row)
+	}
+
+	/** Every readable row where it is stored, legacy twins included, for a caller that deletes or
+	 *  rewrites by storage id. */
+	public async entries(): Promise<Array<{ located: Located; row: T }>> {
+		return this.readAll()
 	}
 
 	/** Every storage id under the root, readable or not: what id allocation must avoid. */
@@ -242,10 +283,37 @@ export class SealedEntityStorage<T> {
 		return true
 	}
 
-	private commitWithRemovals(items: Record<string, string>, removals: string[]): Promise<void> {
-		const writes = [Object.keys(items).length > 0 ? this.area.set(items) : Promise.resolve()]
-		if (removals.length > 0) writes.push(this.area.remove(removals))
-		return Promise.all(writes).then(() => undefined)
+	/**
+	 * Gives the ownerless legacy row at `naturalId` to `profileId`: seals it, stamped with the
+	 * profile, under the profile's keyed id and removes the plaintext original in the same dispatch,
+	 * only while the original still holds `text` and the profile the keys it was sealed under. A
+	 * sealed row the profile already holds at that id is kept and only the original removed: an
+	 * unauthenticated row never replaces an authenticated one. The caller decides the profile owns it
+	 * and holds the lock its root's writers hold. Returns whether it was adopted.
+	 */
+	public async adoptOwnerless(naturalId: string, text: string, profileId: string): Promise<boolean> {
+		const keys = this.keysFor(profileId)
+		const parsed = tryParse(text)
+		if (!this.options.ownerless || !keys || !parsed.ok || typeof parsed.value !== "object" || parsed.value === null) return false
+		if (parseEnvelope(parsed.value) || this.ownerOf(parsed.value, naturalId) !== undefined) return false
+		const adopted = JSON.stringify({ ...parsed.value, profileId })
+		const legacyKey = this.prefix + naturalId
+		const sealedKey = this.prefix + (await this.physicalId(naturalId, profileId, keys))
+		const twin = (await this.area.get(sealedKey))[sealedKey]
+		const items =
+			twin === undefined
+				? { [sealedKey]: await this.envelope(keys, profileId, sealedKey, JSON.stringify({ k: naturalId, r: adopted })) }
+				: {}
+		if ((await this.area.get(legacyKey))[legacyKey] !== text || this.keysFor(profileId) !== keys) return false
+		await this.commitWithRemovals(items, [legacyKey])
+		return true
+	}
+
+	/** The write is dispatched at once; the removal waits for it, so a rejected write leaves the
+	 *  original, and an interrupted pair leaves both copies, which the next pass resolves. */
+	private async commitWithRemovals(items: Record<string, string>, removals: string[]): Promise<void> {
+		if (Object.keys(items).length > 0) await this.area.set(items)
+		if (removals.length > 0) await this.area.remove(removals)
 	}
 
 	private async envelope(keys: RowKeys, profileId: string, storageKey: string, text: string): Promise<string> {
@@ -268,9 +336,21 @@ export class SealedEntityStorage<T> {
 
 	/** The owner of the legacy row stored at the natural id itself, if one is. */
 	private async legacyOwner(naturalId: string): Promise<string | undefined> {
+		return (await this.legacyAt(naturalId))?.owner
+	}
+
+	/** The legacy row stored at the natural id itself, with its owner (none when ownerless). */
+	private async legacyAt(naturalId: string): Promise<{ owner: string | undefined } | undefined> {
 		const key = this.prefix + naturalId
 		const parsed = tryParse((await this.area.get(key))[key])
-		return parsed.ok && !parseEnvelope(parsed.value) ? this.ownerOf(parsed.value, naturalId) : undefined
+		if (!parsed.ok || typeof parsed.value !== "object" || parsed.value === null || parseEnvelope(parsed.value)) return undefined
+		return { owner: this.ownerOf(parsed.value, naturalId) }
+	}
+
+	/** Whether a lookup by `owner` is served a legacy row owned by `rowOwner`: its own, or, on a root
+	 *  that keeps them, an ownerless one. */
+	private servesLegacy(rowOwner: string | undefined, owner: string): boolean {
+		return rowOwner === owner || (rowOwner === undefined && this.options.ownerless === "plaintext")
 	}
 
 	private async readKey(key: string): Promise<{ located: Located; row: T } | undefined> {

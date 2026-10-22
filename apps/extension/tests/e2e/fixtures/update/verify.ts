@@ -1,5 +1,6 @@
 import type { Page } from "puppeteer"
 import type { StoredShapeName } from "@/wallet/storage/stored-shapes"
+import { STORES } from "@/wallet/storage/stores"
 import { FIXTURE_PREFIX, shapeOfKey, unreadRows } from "./stored-rows"
 
 /** Every overlay a boot raises instead of opening the wallet, except the reset's takeover. */
@@ -53,6 +54,11 @@ export const HELD: readonly StoredShapeName[] = [
 export const missingFamilies = (entries: Record<string, unknown>): StoredShapeName[] =>
 	HELD.filter((name) => !Object.keys(entries).some((key) => shapeOfKey(key) === name))
 
+/** Roots whose rows move key when the unlock seals them, so they are counted rather than matched by key. */
+const REKEYED: ReadonlySet<string> = new Set(
+	Object.entries(STORES).flatMap(([name, store]) => ("sealedRoot" in store && store.sealedRoot?.keyed ? [name] : [])),
+)
+
 /** Queues a running wallet drains: a row is deleted once its balance refresh succeeds. */
 const QUEUES: ReadonlySet<StoredShapeName> = new Set<StoredShapeName>(["incomingBalanceOutbox"])
 
@@ -72,14 +78,19 @@ export async function updateProblems(
 		const name = shapeOfKey(key)
 		return opts.balancesAsserted === true && name !== undefined && QUEUES.has(name)
 	}
+	const rekeyed = (key: string) => REKEYED.has(shapeOfKey(key) ?? "")
 	const lost = Object.keys(before)
-		.filter((key) => !key.startsWith(FIXTURE_PREFIX) && !(key in after) && !drained(key))
+		.filter((key) => !key.startsWith(FIXTURE_PREFIX) && !(key in after) && !drained(key) && !rekeyed(key))
 		.map((key) => `${key}: lost in the update`)
+	const rowsOf = (entries: Record<string, unknown>, name: string) => Object.keys(entries).filter((key) => shapeOfKey(key) === name).length
+	const shrunk = [...REKEYED]
+		.filter((name) => rowsOf(after, name) < rowsOf(before, name))
+		.map((name) => `${name}: ${rowsOf(before, name) - rowsOf(after, name)} row(s) lost in the update`)
 	const refused = Object.keys(after)
 		.filter((key) => {
 			const name = shapeOfKey(key)
 			return name !== undefined && REFUSALS.has(name)
 		})
 		.map((key) => `${key}: the boot refused what it found`)
-	return [...lost, ...refused, ...(await unreadRows(after))]
+	return [...lost, ...shrunk, ...refused, ...(await unreadRows(after))]
 }

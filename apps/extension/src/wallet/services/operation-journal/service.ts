@@ -9,8 +9,8 @@ import type { ILogger } from "@/wallet/logger"
 import { NetworkService } from "@/wallet/services/network/service"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
-import type { EntityStorage } from "@/wallet/storage"
-import { entityStorage } from "@/wallet/storage/stores"
+import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { nextRandomId } from "@/wallet/services/id-allocators"
 import {
 	type Events,
@@ -55,7 +55,9 @@ export class OperationJournalService extends Service<Methods, Events> implements
 	public readonly onOperationUpdated = new EventHandler<OperationRecord>()
 	public readonly onOperationDeleted = new EventHandler<OperationRecord>()
 
-	private readonly storage: EntityStorage<OperationRecord>
+	/** Sealed at rest under each record's profile's row keys, which `ProfileService` holds; with no
+	 *  `ProfileService` registered no profile has keys, so nothing is written. */
+	private readonly storage: SealedEntityStorage<OperationRecord>
 
 	/**
 	 * Serializes `transitionOperation` calls across ALL records.
@@ -101,7 +103,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		// (users expect to keep it). The reaper's boot-sweep still marks
 		// surviving non-terminal records as failed on SW restart — same
 		// behavior as before, just the durability layer changed.
-		this.storage = entityStorage("journal", browserApi.storage.local)
+		this.storage = sealedEntityStorage("journal", browserApi.storage.local, (profileId) => this.profileService?.rowKeys(profileId))
 		// Instantiated in the constructor (not as a field initializer) so the
 		// logger reference is guaranteed to be the same instance the base
 		// Service stores on `this`. See class field comment above for the
@@ -162,13 +164,23 @@ export class OperationJournalService extends Service<Methods, Events> implements
 			// NetworkService not registered in this collection — skip cascade wiring.
 			this.networkService = null
 		}
-		// Same optionality for the profile-existence fence in `createOperation`:
-		// absent ProfileService (minimal fixtures) means no fence, matching the
-		// pre-fence behavior those fixtures pin.
+		// Absent ProfileService means no profile-existence fence and no row keys,
+		// so every write refuses and only plaintext rows read.
 		try {
 			this.profileService = services.get(ProfileService.name) as ProfileService
 		} catch {
 			this.profileService = null
+		}
+		this.profileService?.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+	}
+
+	/** Seals the profile's plaintext records under the transition lock, which every journal writer
+	 *  holds, so no transition lands between a row's read and its sealed commit. */
+	private async sealLegacyRows(profileId: string): Promise<void> {
+		try {
+			await this.storage.sealLegacy(profileId, (fn) => this.transitionLock.withLock(fn))
+		} catch (error) {
+			this.logWarn("sealing the profile's plaintext journal failed; the next unlock retries", { error })
 		}
 	}
 

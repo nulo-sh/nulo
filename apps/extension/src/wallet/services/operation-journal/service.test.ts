@@ -16,6 +16,8 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
+import { openStoredText, rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { profileKeysStub } from "../composition-harness"
 import { OperationJournalService } from "./service"
 import {
 	type JournalMetadata,
@@ -38,6 +40,7 @@ async function started(): Promise<{ api: FakeBrowserApi; service: OperationJourn
 	const logger = new LoggerStore(new ConfigStore())
 	const service = new OperationJournalService(logger, api)
 	const services = new ServiceCollection()
+	services.add(await profileKeysStub("p", "p-a", "p-b", "p1", "profile-a", "profile-b"))
 	services.add(service)
 	await services.start()
 	return { api, service }
@@ -105,7 +108,7 @@ describe("OperationJournalService", () => {
 		const rec = await service.createOperation({ ...VALID_INPUT, ...metadata, profileEpoch: 3, initialStage: { stage: "pending" } })
 
 		const key = `nulo:journal@${rec.id}`
-		const stored = JSON.parse((await api.storage.local.get(key))[key] as string)
+		const stored = JSON.parse(await openStoredText(api.storage.local, key, (await rowKeysForEveryProfile()).rowKeys))
 		expect(await service.getOperation(rec.id)).toMatchObject(metadata)
 		expect(stored).toMatchObject(metadata)
 		expect(stored).not.toHaveProperty("profileEpoch")
@@ -143,6 +146,7 @@ describe("OperationJournalService", () => {
 		// A fresh instance re-parses the stored row: a schema that dropped the field would lose it here.
 		const reread = new OperationJournalService(new LoggerStore(new ConfigStore()), api)
 		const services = new ServiceCollection()
+		services.add(await profileKeysStub("p", "p-a", "p-b", "p1", "profile-a", "profile-b"))
 		services.add(reread)
 		await services.start()
 		expect((await reread.getOperation(op.id))?.progress).toEqual({ stage: "proving", enteredProveAt: 5, backend: "presto" })
@@ -411,6 +415,7 @@ describe("OperationJournalService", () => {
 		const logger = new LoggerStore(new ConfigStore())
 		const fresh = new OperationJournalService(logger, api)
 		const services = new ServiceCollection()
+		services.add(await profileKeysStub("p", "p-a", "p-b", "p1", "profile-a", "profile-b"))
 		services.add(fresh)
 		await services.start()
 
@@ -469,6 +474,7 @@ describe("OperationJournalService", () => {
 			name: "profile",
 			dependencies: [],
 			getProfiles: async () => profiles,
+			...(await rowKeysForEveryProfile()),
 			async start() {},
 		}
 		const collection = new ServiceCollection()
@@ -496,6 +502,7 @@ describe("OperationJournalService", () => {
 			dependencies: [],
 			getProfiles: async () => [{ id: "profile-a" }],
 			getDeletionState: () => ({ isCurrent: (_id: string, captured: number) => captured === epoch }),
+			...(await rowKeysForEveryProfile()),
 			async start() {},
 		}
 		const collection = new ServiceCollection()
@@ -526,6 +533,7 @@ describe("OperationJournalService", () => {
 		const svc = new OperationJournalService(new LoggerStore(new ConfigStore()), api)
 		collection.add(svc)
 		collection.add(networkStub as never)
+		collection.add(await profileKeysStub("p", "p-a", "p-b", "p1", "profile-a", "profile-b"))
 		await collection.start()
 
 		await svc.createOperation({ ...VALID_INPUT, networkId: "net-live" })
@@ -1124,7 +1132,11 @@ describe("a dApp record's call: one schema at every writer and the reader", () =
 
 		await service.setOperationMeta(id, { title: "transfer_in_public", call: { contract: TOKEN, argCount: 4, classId: CLASS } })
 		const key = `nulo:journal@${id}`
-		expect(JSON.parse((await api.storage.local.get(key))[key] as string).call).toEqual({ contract: TOKEN, argCount: 4, classId: CLASS })
+		expect(JSON.parse(await openStoredText(api.storage.local, key, (await rowKeysForEveryProfile()).rowKeys)).call).toEqual({
+			contract: TOKEN,
+			argCount: 4,
+			classId: CLASS,
+		})
 		expect((await service.getOperation(id))?.call).toEqual({ contract: TOKEN, argCount: 4, classId: CLASS })
 	})
 

@@ -22,6 +22,7 @@ import { type SendRecordView, readSendRecords, waitForSendRecord } from "../fixt
 import { setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { PROOF_GATE_HOLD_MS, holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
+import { isSealedEnvelope, readStoredValue } from "../fixtures/sealed-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -75,6 +76,8 @@ test.skipIf(!hasConfig)(
 		await ensureUnlocked(wallet)
 		await waitForHash(wallet, "#/popup/general", 30_000)
 		expect((await readSendRecords(wallet)).find((r) => r.id === send.id)?.stage).toBe("cancelled")
+		// Written after the session ended, it is still sealed under the keys the worker kept.
+		expect(isSealedEnvelope(await readStoredValue(wallet, `nulo:journal@${send.id}`))).toBe(true)
 		// The cancelled send renders as a terminal card; a broadcast would have added a transaction card.
 		await wallet.waitForSelector('[data-testid="tx-terminal-card"]', { visible: true, timeout: 30_000 })
 		expect(await wallet.evaluate(() => document.querySelectorAll('[data-testid="tx-card"]').length)).toBe(0)

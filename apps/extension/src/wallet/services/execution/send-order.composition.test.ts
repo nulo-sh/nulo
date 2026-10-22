@@ -30,6 +30,7 @@ import { LegalAcceptanceService } from "@/wallet/services/legal/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { TaskService } from "@/wallet/services/task/service"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import { NOOP_PROOF_GATE } from "@/e2e/proof-gate"
 import type { ExecutionLane } from "./execution-lane"
 import type { ExecutionMutex } from "./execution-mutex"
@@ -100,6 +101,7 @@ async function makeHarness() {
 		svc(ProfileService.name, {
 			getActiveProfile: async () => ({ id: "p1" }),
 			getProfiles: async () => [{ id: "p1" }],
+			...(await rowKeysForEveryProfile()),
 			getDeletionState: () => deletionState,
 			captureExecutionFence,
 			assertFence: async () => {
@@ -117,7 +119,7 @@ async function makeHarness() {
 		svc(TransactionService.name, {
 			getPendingForAccount: (account: string) => pending.filter((row) => row.account.toLowerCase() === account.toLowerCase()),
 			// One mined tx: the account is initialized, so a public send here holds only its fee contract.
-			getTransactions: async () => [
+			transactionsOf: async () => [
 				{ chainId: NETWORK.chainId, status: TxStatus.Proposed, executionResult: TxExecutionResult.Success, calls: [] },
 				pendingRow,
 			],
@@ -255,7 +257,7 @@ describe("send ordering composition: a restarted worker still orders by the reco
 				f.feeSettings,
 			),
 		).toEqual({ queued: true, tokenSpent: false })
-		const onG = await h.internals.transferExecutor.sequence(request("fpc-g"))
+		const onG = await h.internals.transferExecutor.sequence(request("fpc-g"), "p1")
 		expect([...onG.keys]).toEqual([`fpc:${G.toLowerCase()}`])
 		expect(h.internals.sendSequencer.isBlocked(onG.scope, onG.keys)).toBe(false)
 		expect(h.getPXE).not.toHaveBeenCalled()
