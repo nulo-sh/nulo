@@ -49,7 +49,7 @@ Every code claim holds at 6.0.0-rc.3 (recon.md § Upstream behaviour): `global-s
 
 ## Phases
 
-### Phase 1: the store check (red)
+### Phase 1: the store check (red) ✓
 
 1. In `boot-guard.ts`, make the fd read a private helper that tells a gone process from an unreadable one; keep `socketInodes`'s results.
 2. Add `nodeStores`; call it from `setup()` as Architecture says.
@@ -57,7 +57,7 @@ Every code claim holds at 6.0.0-rc.3 (recon.md § Upstream behaviour): `global-s
 
 **Validation gate**: `bun run lint`, `bun run typecheck:all`, `bun run test` exit 0. Red probe (Warning: not during deps-audit-1's soak). Make a fresh scratch dir under `~/.cache/nulo-backlog/e2e-stores-1/` and run `TMPDIR=<scratch> NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/meta-getChainInfo.test.ts`. It exits 1, not 86, and the error names `.mdb` paths under the scratch dir. Warning: delete the scratch dir only when `apps/extension/.e2e-state/owned.json` is absent (teardown cleared it). If it is present, run `bun run e2e:reap` and check the file again. If it is still present, keep the scratch dir and report it. Layers: lint, typecheck, unit, network e2e.
 
-### Phase 2: the node's TMPDIR (green)
+### Phase 2: the node's TMPDIR (green) ✓
 
 1. Add `nodeTmpDir`, make `createRunDir` create `tmp` and return `{ data, tmp }`, and call `nodeTmpDir` in `setup()` before `markBootStarted()`.
 2. Make `spawnAztecNode` pass `data` to `--data-directory` and set `TMPDIR` to `tmp`.
@@ -66,7 +66,7 @@ Every code claim holds at 6.0.0-rc.3 (recon.md § Upstream behaviour): `global-s
 
 **Validation gate**: the Phase 1 commands exit 0, and the probe, run without the scratch `TMPDIR`, exits 0 and logs `node stores: <n> open, all inside <run dir>`. After it exits, that run dir is gone from `E2E_DATA_ROOT`. Layers: lint, typecheck, unit, network e2e.
 
-### Phase 3: the suites at retry 0, both browsers
+### Phase 3: the suites at retry 0, both browsers ✓
 
 Run each command on Chrome, then again with `NULO_E2E_BROWSER=firefox` (Warning: not during deps-audit-1's soak; poll each run's log in a bounded loop, under two hours per call):
 
@@ -85,6 +85,8 @@ Run each command on Chrome, then again with `NULO_E2E_BROWSER=firefox` (Warning:
 - D5 scope: no `TMPDIR` for anvil or the playground (no demonstrated leak). Neighbour filed at close-out: `helpers/import-drivers.ts:589` leaves `nulo-e2e-backup-*` dirs (11,299 on this host).
 - Phase 3 (Opus): the browser never sees `TMPDIR`, so the Firefox network run adds no evidence about this change. Kept: the lane brief requires both browsers. The `bb-batch` FIFO appears only under real proofs; the PR's prover-ON canary job covers it (Codex: deferral proportionate).
 - Rejected (Codex, Opus): a lifetime census of stores; hostile same-UID tampering. Both need unsupported conditions or a new design.
+- Implementation review (net diff from `5711a1bc3`, Codex gpt-6.1-sol high, Opus 5.5 beside round 1). Codex r1 `findings: 4`, all low: (1) the budget refuses a bare run that would adopt a hand-started node, rejected as a known limit (an explicit refusal naming its remedy; after the adoption probe it would be a retried 86 for agent runs, which never adopt); (2) the pid-1 test assumed its owner, fixed to assert that init's fd list is refused (no CI job runs unit tests as root; a `node:fs` mock rejected as coupling the test to the fd path); (3) the fixture was made at collection, fixed in `beforeAll`; (4) a pid reused between the scan and the fd read, a known limit (needs the pid space to wrap within milliseconds; Opus concurs). Opus `findings: 6`, all applied: the same fixture fix, held-open children that end on their own, an empty-root guard, the budget case run on every platform, comments under 100 columns, docs that say what the node gets; and its suggestion to name the count of escaped files. Codex r2 `findings: 1` (a comment overstated that an outside store outlives every run; upstream closes some), applied. Codex r3 `clean`.
+- Deviations: the review ran beside the Chrome network suite, so that suite ran on the pre-review head (the review's fixes are tests, comments, docs and one failure string; the other three suites ran on the reviewed head). The agent tool stops a background command after two hours, which cut the first Firefox network run at 110 of 128 files with none red; `e2e:reap` cleared what it left, and the 18 files left ran in a second run.
 - Recorded trade-off (Opus): on a host whose `/tmp` is tmpfs the stores move to disk, and `openTmpStore` syncs every commit; this host and CI keep both on one disk, so their timings cannot show it. Plausible, unverified; no issue unless a slower local run is reported.
 
 ## Delivery
