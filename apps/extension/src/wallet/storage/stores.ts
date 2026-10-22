@@ -78,6 +78,37 @@ const perProfileValue = (root: string) => ({ kind: "value", ref: { kind: "root",
  *  The default string mode would hide every numeric row while `getKeys()` still saw its key. */
 const NUMERIC_ID = { requireKeyIdentityMatch: true, keyIdentityMode: "numeric" } as const
 
+type KeyedHash = (segment: string) => Promise<string>
+
+/** An incoming key, `[kind:]profileId|networkId|…`, split at its scope. */
+function incomingScope(id: string, kinded: boolean): { scope: string; profileId: string; tail: string[] } | undefined {
+	const kind = kinded ? /^(?:note|pub):/.exec(id)?.[0] : ""
+	if (kind === undefined) return undefined
+	const [profileId, networkId, ...tail] = id.slice(kind.length).split("|")
+	if (networkId === undefined || tail.length === 0) return undefined
+	return { scope: `${kind}${profileId}|${networkId}|`, profileId, tail }
+}
+
+/** An incoming root's key keeps its kind, profile and network, so a scope wipe needs no key, and
+ *  `hashTail` replaces what names a note, transaction, account or contract. */
+function incomingLayout(hashTail: (tail: string[], keyedHash: KeyedHash) => Promise<string>, kinded = false): SealedRootOptions {
+	return {
+		ownerOf: (_row, naturalId) => incomingScope(naturalId, kinded)?.profileId,
+		keyed: {
+			physicalId: async (naturalId, keyedHash) => {
+				const parsed = incomingScope(naturalId, kinded)
+				if (!parsed) throw new Error("not an incoming id")
+				return parsed.scope + (await hashTail(parsed.tail, keyedHash))
+			},
+		},
+	}
+}
+
+const oneSegment = (tail: string[], keyedHash: KeyedHash): Promise<string> => {
+	if (tail.length !== 1) throw new Error("not an incoming id")
+	return keyedHash(tail[0])
+}
+
 /** A flag's key keeps its profile and chain and replaces the account with its keyed hash; the
  *  flag is a bare boolean, so its key alone names the profile. */
 const REGISTRY_FLAG_LAYOUT: SealedRootOptions = {
@@ -109,11 +140,24 @@ export const STORES = {
 		keyed: { physicalId: (hash, keyedHash) => keyedHash(hash) },
 		ownerless: "plaintext",
 	}),
-	incomingTransfers: codec(INCOMING_RECORDS_STORAGE_ROOT, IncomingTransferRecordSchema),
-	incomingTrust: codec(INCOMING_TRUST_STORAGE_ROOT, IncomingTrustRecordSchema),
-	incomingPublicCursors: codec(INCOMING_CURSORS_STORAGE_ROOT, PublicScanCursorSchema),
-	incomingBalanceOutbox: codec(INCOMING_OUTBOX_STORAGE_ROOT, IncomingBalanceOutboxRowSchema),
-	incomingArrivals: codec(INCOMING_ARRIVALS_STORAGE_ROOT, ArrivalRowSchema),
+	// A record's id ends in its note hash, or its transaction hash and log index.
+	incomingTransfers: sealedCodec(
+		INCOMING_RECORDS_STORAGE_ROOT,
+		IncomingTransferRecordSchema,
+		incomingLayout((tail, keyedHash) => keyedHash(tail.join("|")), true),
+	),
+	incomingTrust: sealedCodec(INCOMING_TRUST_STORAGE_ROOT, IncomingTrustRecordSchema, incomingLayout(oneSegment)),
+	incomingPublicCursors: sealedCodec(INCOMING_CURSORS_STORAGE_ROOT, PublicScanCursorSchema, incomingLayout(oneSegment)),
+	// The account is hashed; the token id is a local sequence number.
+	incomingBalanceOutbox: sealedCodec(
+		INCOMING_OUTBOX_STORAGE_ROOT,
+		IncomingBalanceOutboxRowSchema,
+		incomingLayout(async (tail, keyedHash) => {
+			if (tail.length !== 2) throw new Error("not an incoming id")
+			return `${await keyedHash(tail[0])}|${tail[1]}`
+		}),
+	),
+	incomingArrivals: sealedCodec(INCOMING_ARRIVALS_STORAGE_ROOT, ArrivalRowSchema, incomingLayout(oneSegment)),
 	// Every sealed-slot, MAC and fingerprint decision trusts the row fetched by its id.
 	profiles: plainEntity(PROFILE_STORAGE_ROOT, { requireKeyIdentityMatch: true }),
 	config: value(CONFIG_STORAGE_KEY),

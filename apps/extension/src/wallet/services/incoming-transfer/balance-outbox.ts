@@ -98,7 +98,7 @@ export class BalanceRefreshOutbox {
 		if (current.pendingTaskId) {
 			const action = anchoredRowAction(this.readTaskState(current.pendingTaskId))
 			// pending → keep waiting for the anchored task.
-			if (action !== "wait" && isCurrent()) await this.settleAnchoredRow(row, current, action)
+			if (action !== "wait" && isCurrent()) await this.settleAnchoredRow(row, current, action, isCurrent)
 			return
 		}
 		const result = await this.requestRefreshOrKeep(tokenId, accountAddress)
@@ -114,13 +114,19 @@ export class BalanceRefreshOutbox {
 	}
 
 	/** Terminal-success → delete the row; terminal-failure/missing → clear the
-	 *  anchor so the next drain re-requests. Entered only after `isCurrent()`. */
-	private async settleAnchoredRow(row: OutboxRowKey, current: IncomingBalanceOutboxRow, action: "delete" | "clear"): Promise<void> {
+	 *  anchor so the next drain re-requests. Entered only after `isCurrent()`, read again after the
+	 *  clear's row is sealed. */
+	private async settleAnchoredRow(
+		row: OutboxRowKey,
+		current: IncomingBalanceOutboxRow,
+		action: "delete" | "clear",
+		isCurrent: () => boolean,
+	): Promise<void> {
 		const { profileId, networkId, accountAddress, tokenId } = row
 		if (action === "delete") {
 			await this.deps.repo.deleteOutbox(profileId, networkId, accountAddress, tokenId)
 		} else {
-			await this.deps.repo.setOutbox(profileId, networkId, accountAddress, tokenId, { dirtyAt: current.dirtyAt })
+			await this.deps.repo.setOutbox(profileId, networkId, accountAddress, tokenId, { dirtyAt: current.dirtyAt }, isCurrent)
 		}
 	}
 
@@ -156,10 +162,14 @@ export class BalanceRefreshOutbox {
 		const fresh = await this.deps.repo.getOutbox(profileId, networkId, accountAddress, tokenId)
 		if (!fresh || fresh.dirtyAt !== current.dirtyAt) return
 		if (!isCurrent()) return
-		await this.deps.repo.setOutbox(profileId, networkId, accountAddress, tokenId, {
-			dirtyAt: current.dirtyAt,
-			pendingTaskId: taskId,
-		})
+		await this.deps.repo.setOutbox(
+			profileId,
+			networkId,
+			accountAddress,
+			tokenId,
+			{ dirtyAt: current.dirtyAt, pendingTaskId: taskId },
+			isCurrent,
+		)
 	}
 
 	/** Terminal state of an anchored refresh task via the TaskService ledger (`missing` = expired/gone). */

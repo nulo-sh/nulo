@@ -20,8 +20,10 @@ function makeOutbox(opts: { revokeOnReRead: boolean }) {
 			if (reads === 2 && opts.revokeOnReRead) current = false
 			return rows.get(balanceOutboxKey(p, n, a, t))
 		},
-		setOutbox: vi.fn(async (p: string, n: string, a: string, t: number, row: IncomingBalanceOutboxRow) => {
+		setOutbox: vi.fn(async (p: string, n: string, a: string, t: number, row: IncomingBalanceOutboxRow, fence?: () => boolean) => {
+			if (fence && !fence()) return false
 			rows.set(balanceOutboxKey(p, n, a, t), row)
+			return true
 		}),
 		deleteOutbox: async (p, n, a, t) => {
 			rows.delete(balanceOutboxKey(p, n, a, t))

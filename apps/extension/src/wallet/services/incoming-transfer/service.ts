@@ -28,7 +28,15 @@ import { BalanceRefreshOutbox } from "./balance-outbox"
 import { PublicEventIndexer, type PublicEventReader, type PublicScanResult } from "./public-event-indexer"
 import { ScanEpisodeStore, scanEpisodeKey, scanEpisodeNetworkPrefix } from "./scan-episodes"
 import { isScanSuccess, type ScanOutcome } from "./scan-health"
-import { ARRIVAL_ID_MAX, ARRIVAL_PLAYED_CAP, type ArrivalState, arrivalStateOf, claimPlayed, isArrivalEligible } from "./arrival-state"
+import {
+	ARRIVAL_ID_MAX,
+	ARRIVAL_PLAYED_CAP,
+	type ArrivalRow,
+	type ArrivalState,
+	arrivalStateOf,
+	claimPlayed,
+	isArrivalEligible,
+} from "./arrival-state"
 import { type NoteRowDecision, decideNoteRow, isVerifiedBracket, movedRows, needsBracket, notesById } from "./note-reconcile"
 import {
 	INCOMING_TRANSFER_SERVICE_NAME,
@@ -285,6 +293,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  without stopping a displaced section, so a displaced deleter keeps deleting while the
 	 *  successor's ticket is current; receipt and acceptance writes stand down while this is not 0. */
 	private deletersRunning = 0
+	/** Account additions run one at a time: each bumps the epoch inside its section, which would
+	 *  refuse a concurrent addition's baseline fenced on the epoch it read with its tips. */
+	private accountAdds: Promise<void> = Promise.resolve()
 
 	private readonly pollIntervalMs: number
 	/** Test seam: inject a fake public-event reader (unit tests drive the scan arm without a real
@@ -314,7 +325,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		incomingPollGate?: IncomingPollGate,
 	) {
 		super(INCOMING_TRANSFER_SERVICE_NAME, logger)
-		this.repo = new IncomingTransferRepository(browserApi)
+		this.repo = new IncomingTransferRepository(browserApi, (profileId) => this.profileService.rowKeys(profileId))
 		this.pollIntervalMs = pollIntervalMs
 		this.injectedPublicReader = publicReader
 		this.serviceLock = new Lock(INCOMING_TRANSFER_SERVICE_NAME, logger)
@@ -328,6 +339,23 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  acquisition still owns the lock — false after a watchdog handoff. */
 	private async withServiceLock<T>(fn: (isCurrent: () => boolean) => Promise<T>): Promise<T> {
 		return this.serviceLock.withLock(fn)
+	}
+
+	/** Seals the profile's plaintext incoming rows, one service-lock section per row. A row commits
+	 *  only while its section still owns the lock and no deleter runs, as a receipt does, so a wipe
+	 *  that a watchdog handoff let in never finds a sealed copy it did not list. */
+	private async sealLegacyRows(profileId: string): Promise<void> {
+		let ticket: () => boolean = () => false
+		const withLock = <R>(fn: () => Promise<R>) =>
+			this.withServiceLock((isCurrent) => {
+				ticket = isCurrent
+				return fn()
+			})
+		try {
+			await this.repo.sealLegacy(profileId, withLock, () => ticket() && this.deletersRunning === 0)
+		} catch (error) {
+			this.logWarn("sealing the profile's plaintext incoming rows failed; the next unlock retries", { error })
+		}
 	}
 
 	/** Bump the lifecycle epoch — call from clear / delete paths so any
@@ -376,6 +404,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			tasks: services.get<TaskService>(TaskService.name),
 			warn: (...data) => this.logWarn(...data),
 		})
+		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
 
 		// Public-event scan arm: its own PXE client + the injected indexer collaborator.
 		// The reader curries `networkId → NetworkInfo` (via the same `networkInfoFrom` the note arm
@@ -458,7 +487,13 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		await this.hydrateSchedulers()
 	}
 
-	private onAccountAdded = async (account: { chainId: number; address: string }): Promise<void> => {
+	private onAccountAdded = (account: { chainId: number; address: string }): Promise<void> => {
+		const added = this.accountAdds.then(() => this.addAccount(account))
+		this.accountAdds = added.catch(() => {})
+		return added
+	}
+
+	private async addAccount(account: { chainId: number; address: string }): Promise<void> {
 		// A new account means the per-(network, contract) public cursors have already scanned PAST
 		// its historical receipts (one stream serves all accounts). Reset both halves of those cursors
 		// so the next scan re-indexes public history, newest first, and discovers the new account's
@@ -749,9 +784,11 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			// reads below could have deleted a record this write would put back.
 			if (this.deletersRunning !== 0) return false
 			const acceptance = await this.readAcceptanceLocked(profileId, networkId, contract, tip, epochAtTip)
+			if (!acceptance) return false
+			const commit = await this.repo.prepareAcceptance(acceptance.trust, acceptance.unhidden)
 			// Nothing awaits between this read and the dispatch, so no handoff can fall between them.
-			if (!acceptance || !trustFence(isCurrent).live() || this.deletersRunning !== 0) return false
-			await this.repo.commitAcceptance(acceptance.trust, acceptance.unhidden)
+			if (!trustFence(isCurrent).live() || this.deletersRunning !== 0) return false
+			await commit()
 			if (!isCurrent()) return true
 			this.emit("onIncomingTrustChanged", acceptance.trust)
 			if (acceptance.visible) for (const record of acceptance.unhidden) this.emit("onIncomingTransferAdded", record)
@@ -899,8 +936,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			const fenced = () => this.serviceEpoch === epochAtStart && isCurrent()
 			let live = await this.repo.getArrivalRow(profileId, networkId, accountAddress)
 			if (!live && baseline && fenced()) {
-				live = { sinceBlock: tip, played: [] }
-				await this.repo.setArrivalRow(profileId, networkId, accountAddress, live)
+				const row: ArrivalRow = { sinceBlock: tip, played: [] }
+				if (await this.repo.setArrivalRow(profileId, networkId, accountAddress, row, fenced)) live = row
 			}
 			await this.resolvePendingFloorsLocked(profileId, networkId, pendingAtStart, tip, fenced)
 			return arrivalStateOf(live, await this.networkTrust(profileId, networkId))
@@ -918,17 +955,27 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			const row = await this.repo.getArrivalRow(profileId, networkId, accountAddress)
 			if (!row) return []
 			const state = arrivalStateOf(row, await this.networkTrust(profileId, networkId))
-			const claimed: IncomingTransferRecord[] = []
-			for (const id of wanted) {
-				const record = await this.repo.getRecord(id)
-				if (!record || record.profileId !== profileId || record.networkId !== networkId) continue
-				if (record.accountAddress === accountAddress && isArrivalEligible(record, state)) claimed.push(record)
-			}
+			const claimed = await this.eligibleArrivals(wanted, { profileId, networkId, accountAddress }, state)
 			// A claim that read before a purge or a watchdog handoff must not write after it.
-			if (claimed.length === 0 || this.serviceEpoch !== epochAtStart || !isCurrent()) return []
-			await this.repo.setArrivalRow(profileId, networkId, accountAddress, claimPlayed(row, claimed))
+			const fenced = () => this.serviceEpoch === epochAtStart && isCurrent()
+			if (claimed.length === 0 || !fenced()) return []
+			if (!(await this.repo.setArrivalRow(profileId, networkId, accountAddress, claimPlayed(row, claimed), fenced))) return []
 			return claimed.map((r) => r.id)
 		})
+	}
+
+	private async eligibleArrivals(
+		ids: string[],
+		scope: { profileId: string; networkId: string; accountAddress: string },
+		state: ArrivalState,
+	): Promise<IncomingTransferRecord[]> {
+		const eligible: IncomingTransferRecord[] = []
+		for (const id of ids) {
+			const record = await this.repo.getRecord(id)
+			if (!record || record.profileId !== scope.profileId || record.networkId !== scope.networkId) continue
+			if (record.accountAddress === scope.accountAddress && isArrivalEligible(record, state)) eligible.push(record)
+		}
+		return eligible
 	}
 
 	/** The chain tip, or undefined when it cannot be read. Read outside the lock, as the scans read
@@ -976,7 +1023,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (tip === undefined) return
 		if (await this.repo.getArrivalRow(profileId, networkId, accountAddress)) return
 		if (!fenced()) return
-		await this.repo.setArrivalRow(profileId, networkId, accountAddress, { sinceBlock: tip, played: [] })
+		await this.repo.setArrivalRow(profileId, networkId, accountAddress, { sinceBlock: tip, played: [] }, fenced)
 	}
 
 	/** Resolves false, writing nothing, when `isCurrent` refuses. */
@@ -990,8 +1037,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (!move.isCurrent()) return false
 		if (!stored) return true
 		const epochMoved = this.serviceEpoch !== move.epochAtTip
-		await this.repo.setArrivalFloor(stored, nextArrivalFloor(stored, { tip: move.tip, lowerBound: move.lowerBound, epochMoved }))
-		return true
+		const floor = nextArrivalFloor(stored, { tip: move.tip, lowerBound: move.lowerBound, epochMoved })
+		return this.repo.setArrivalFloor(stored, floor, move.isCurrent)
 	}
 
 	/** Resolves only floors that were pending before `tip` was read and still are: a floor marked
@@ -1006,7 +1053,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		for (const contract of pendingAtStart) {
 			const stored = await this.repo.getTrust(profileId, networkId, contract)
 			if (!stored?.arrivalFloorPending || !fenced()) continue
-			await this.repo.setArrivalFloor(stored, { arrivalFloor: maxDefined(stored.arrivalFloor, tip), pending: false })
+			await this.repo.setArrivalFloor(stored, { arrivalFloor: maxDefined(stored.arrivalFloor, tip), pending: false }, fenced)
 		}
 	}
 
@@ -1728,7 +1775,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			if (!fenced()) return false
 			const current = await this.repo.getRecord(row.id)
 			if (!fenced() || !current || !sameRow(current, row)) return false
-			await this.repo.upsertRecord(next)
+			if (!(await this.repo.upsertRecord(next, fenced))) return false
 			this.noteStrikes.delete(row.id)
 			if (shownChange) await this.emitUpdatedIfShown(next, fenced)
 			return fenced()
@@ -1799,7 +1846,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		fenced: () => boolean,
 	): Promise<void> {
 		const ts = ctx.cachedBlockTimestamp(note.l2BlockNumber)
-		if (ts !== undefined && fenced()) await this.repo.upsertRecord({ ...existing, blockTimestamp: ts })
+		if (ts !== undefined && fenced()) await this.repo.upsertRecord({ ...existing, blockTimestamp: ts }, fenced)
 	}
 
 	/** Trust read inside the lock; a first receipt moves `unknown` to `pending` and prompts behind
@@ -1851,8 +1898,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			blockTimestamp,
 		})
 		await this.outbox.markDirty(profileId, networkId, accountAddress, token.id)
-		if (!fenced()) return
-		await this.repo.upsertRecord(record)
+		if (!fenced() || !(await this.repo.upsertRecord(record, fenced))) return
 
 		if (trustState === "trusted" && (await this.isVisibilityEnabled()) && fenced()) {
 			this.emit("onIncomingTransferAdded", record)
@@ -1977,9 +2023,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		epochAtStart: number,
 	): Promise<boolean> {
 		return this.withServiceLock(async () => {
-			if (this.serviceEpoch !== epochAtStart) return false
-			await this.repo.setCursor(profileId, networkId, contract, cursor)
-			return true
+			const fenced = () => this.serviceEpoch === epochAtStart
+			if (!fenced()) return false
+			return this.repo.setCursor(profileId, networkId, contract, cursor, fenced)
 		})
 	}
 
@@ -2542,11 +2588,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 		const existing = await this.repo.getRecord(publicRecordId(profileId, networkId, ev.txHash, ev.logIndexWithinTx))
 		if (!fenced()) return "revoked"
-		if (existing) {
-			const moved = opts?.reconcile ? await this.rewriteMovedRecord(existing, ev) : null
-			if (moved) await this.emitUpdatedIfShown(moved, fenced)
-			return "processed"
-		}
+		if (existing) return opts?.reconcile ? this.reconcileExistingRecord(existing, ev, fenced) : "processed"
 
 		if (await this.isOwnSend(ctx, ev.txHash)) return "processed"
 		if (!fenced()) return "revoked"
@@ -2557,10 +2599,26 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		return this.commitPublicRecord(ctx, ev, token, trustState, fenced)
 	}
 
+	private async reconcileExistingRecord(
+		existing: IncomingTransferRecord,
+		ev: PublicTransferEvent,
+		fenced: () => boolean,
+	): Promise<PublicCommit> {
+		const moved = await this.rewriteMovedRecord(existing, ev, fenced)
+		if (moved === "revoked") return "revoked"
+		if (moved) await this.emitUpdatedIfShown(moved, fenced)
+		return "processed"
+	}
+
 	/** A reorg can re-mine the same tx (same PK) at a NEW block: update the chain fields so the
-	 *  reconciliation's blockHash comparison keeps the record instead of deleting it. The caller read
-	 *  `fenced()` with no await since. Resolves the rewritten record, or null when nothing moved. */
-	private async rewriteMovedRecord(existing: IncomingTransferRecord, ev: PublicTransferEvent): Promise<IncomingTransferRecord | null> {
+	 *  reconciliation's blockHash comparison keeps the record instead of deleting it. `fenced` is read
+	 *  after the seal. Resolves the rewritten record, null when nothing moved, or `revoked` when the
+	 *  fence refused the write. */
+	private async rewriteMovedRecord(
+		existing: IncomingTransferRecord,
+		ev: PublicTransferEvent,
+		fenced: () => boolean,
+	): Promise<IncomingTransferRecord | null | "revoked"> {
 		if (existing.kind !== "public-event" || existing.blockHash === ev.blockHash) return null
 		const moved: IncomingPublicEventRecord = {
 			...existing,
@@ -2570,8 +2628,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			indexInTx: ev.logIndexWithinTx,
 			blockTimestamp: ev.blockTimestamp,
 		}
-		await this.repo.upsertRecord(moved)
-		return moved
+		return (await this.repo.upsertRecord(moved, fenced)) ? moved : "revoked"
 	}
 
 	/** Updated passes the gate Added does, so a hidden record never reaches a screen through it. */
@@ -2606,7 +2663,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		await this.outbox.markDirty(profileId, networkId, accountAddress, token.id)
 		if (!fenced()) return "revoked"
 		const record = this.buildPublicRecord({ ev, profileId, networkId, account: accountAddress, token, trustState })
-		await this.repo.upsertRecord(record)
+		if (!(await this.repo.upsertRecord(record, fenced))) return "revoked"
 		if (trustState === "trusted" && (await this.isVisibilityEnabled()) && fenced()) {
 			this.emit("onIncomingTransferAdded", record)
 		}
