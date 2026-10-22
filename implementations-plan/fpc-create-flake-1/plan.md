@@ -13,6 +13,15 @@ issues: "#1086 (arc 1 closes it)"
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-22. **Status:** completed.
+- **Shipped:** #1088 (arc 1, closes #1086): the purge and reset cases in `fpc/service-create.test.ts` await the sweep while the registration is parked, so a sweep that waited on it times the case out; `track` deleted; one file-header sentence. No product change.
+- **Dispositions:** T2's `macrotask` and the `addFpc` case's zero timer kept (D3); the reproduction and the mutation kept as scratch, not committed (D4); review r1's `onTestFinished` cleanup rejected (it only runs in a run already red, which exits in 22 s). No `lessons.md` promotion: it is at its 8 KiB budget and no entry is superseded; the gotcha (Bun runs WebCrypto off the main thread, so a sealed read can settle after a zero timer) stays in [lessons/phase-0.md](lessons/phase-0.md) and #1089.
+- **Known limits:** #1090.
+- **Open items:** #1089.
+- **Seeds retired:** the `/goal` and `/loop` below; never run them.
+
 # fpc-create-flake-1: the FPC reset and purge pins prove order, not time
 
 One arc, one PR against `dev`, test-only. Two cases in `apps/extension/src/wallet/services/fpc/service-create.test.ts` prove "a sweep never waits on a parked registration" by asserting the sweep settled after one zero timer. Since the fee-payer rows are sealed, the sweep decrypts through WebCrypto, which Bun runs off the main thread, so the bound can fail under load. The arc awaits the sweep with the registration still parked: a sweep that waited hangs the case into its timeout. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none).
