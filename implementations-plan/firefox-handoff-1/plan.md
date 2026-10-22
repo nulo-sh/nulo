@@ -22,7 +22,7 @@ One arc, one PR against `dev`, `Closes #1007` (related #160). The owner's pick i
 
 - **For whom**: a person on Firefox (a Mac first) who starts Import contacts, Import account's file or Restore again's file from the toolbar panel.
 - **Excellent**:
-  1. The window that opens shows one card and nothing else: the pick's title, one line of why, Choose file, Cancel. One press on Choose file opens the picker.
+  1. The window that opens shows one card and nothing else: the pick's title, Choose file, Cancel (P81-01 C; the plan drafted a line of why, which the owner dropped). One press on Choose file opens the picker.
   2. The loop closes: when the import ends, or on Cancel, the window closes itself and the panel comes back on the pick's page with the flow's own outcome snack. When Firefox refuses the reopen, the next panel the person sees lands there once, never twice.
 - **Good enough**: after a pick, the account import and Restore again go on in their own page in the same window (OA-1); the card copy is the design lane's draft until the owner words it; Chrome does not change.
 
@@ -105,7 +105,10 @@ The no-ask record, quoted: P79-01 B, "One card in the window ("Pick the contacts
 - **Firefox toolbar panel after a hand-off**: before, a click opened Home. After, it reopens by itself on the pick's page with the flow's outcome snack (Contacts; Accounts; Home after a full restore), or lands there next time.
 - **The Cancel path**: the panel reopens on the page the pick started from, no snack (OA-2).
 - **Account import and Restore again after a pick**: their page in the same window, as today (OA-1). Chrome: none.
-- The PR stays a draft until the owner signs the copies on a decision page.
+- **Signed** on decision page 81, 2026-10-22 (recorded on #1007):
+  - P81-01, the card's words: C, "The titles and the two buttons only, no line of why."
+  - P81-02 (OA-1), P81-03 (OA-2), P81-04 (OA-3) and P81-05 (OA-4): approve, as built, with no note.
+  - P81-06, the Mac check: "Yeap. Worked as described by you, perfectly."
 
 ## Decision ledger
 
@@ -119,7 +122,7 @@ The no-ask record, quoted: P79-01 B, "One card in the window ("Pick the contacts
 | D6 | Consume on first arrival on an open session; I6 measured a preload as `visible`, so no visibility wait | consume at boot (an abandoned press loses it) | Codex 1 taken; Opus had judged hover preloads harmless |
 | D7 | Accessibility (2026-10-19 delegation): Choose file focused on mount; native buttons; Tab goes Choose, Cancel | no initial focus | both agree |
 | D8 | E2E proves activation at the input click; the OS picker is the Mac check | the `FileChooser` event (never fires on Firefox); dropping the press | Codex 5 and Opus 3, merged |
-| D9 | Orchestrator condition 1: the outcome snack names its profile and is dropped unread when another profile is active at the reopen; checked at arrival against the live profile, since a boot-time read of the last active profile waits on a running migration (`storageLocalGet`); a return with no snack names no profile and only lands on the page | a known limit (round 1's disposition, superseded) | orchestrator; Codex round 4 |
+| D9 | Orchestrator condition 1: the outcome snack names its profile and is dropped unread when another profile is active at the reopen; checked at arrival against the live profile, since a boot-time read of the last active profile waits on a running migration (`storageLocalGet`); a return with no snack names no profile and only lands on the page | a known limit (round 1's disposition, superseded) | orchestrator; Codex round 4; as built accepted by the orchestrator on 2026-10-22: the route still lands, since a route from the closed set names nothing of that profile |
 | D10 | Orchestrator condition 2: OA-1..OA-4 ship as A and go on the decision page with the card copies, the reopened panel and the Cancel path, as items the owner can change; the PR stays draft until it is signed | waiting for answers | orchestrator |
 
 ## Audit verdicts

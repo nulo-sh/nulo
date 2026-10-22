@@ -45,3 +45,12 @@
 - On the merged tree: `lint`, `typecheck:all` and `test:all` exit 0 (extension 907 files, 15009 tests). Firefox at retry 0: `toolbar-panel`, `own-window`, `contacts-import` and `firefox-sidebar` 20/20 in 303 s; the changed test took 25.3 s.
 - Full smoke at retry 0 on the merged tree: Firefox 273 passed, 0 failed, 17 skipped, 3433 s; Chrome 269 passed, 0 failed, 21 skipped, 2254 s. `toolbar-panel.test.ts` took 161.3 s in the Firefox run, with the changed test at 30.3 s.
 - Four more dev commits landed before the push, among them #986 (every page fits down to 240 px). They merged clean (`6c01882e3`). On that tree: `lint`, `typecheck:all` and `test:all` exit 0; the targeted Firefox files passed 20/20 in 409 s; a re-shoot left the card pictures byte-identical and the panel pictures different only in the new wallet's address. The full smoke on that tree is the PR's CI.
+
+## After the owner's sign-off (page 81)
+
+- P81-01 C dropped the line of why. The card now shows its title, Choose file and Cancel; its test pins those as its only words. All four card pictures were re-shot, light and dark.
+- The owner asked how a very long contacts import behaves across the hand-off. The file is read, reviewed and written in the hand-off window. The window's progress line counts there ("Importing contacts · k of 500") while both card buttons are off. Nothing is handed back and no panel opens until the import ends; then the window closes and the panel reopens on Contacts with the final line.
+  - No Firefox e2e covered the long path, so the toolbar-panel contacts step now imports the 500-row file. It asserts the count in the window, both buttons off, no record and no panel, and all 500 stored after the return.
+  - The step took 25 to 30 s before and 52 to 55 s after (local, load average ~150); CI is in the PR. The shared file builder moved to `helpers/contacts.ts`.
+  - The run showed no defect. While the import runs, the card keeps its title "Pick the contacts file" with greyed buttons; changing that wording would be a new owner ask (picture `card-contacts-importing-*`).
+- #1022's hand-off half: the card now passes `expectFitsNarrow` at 240 px in the same step, the longest title of the three, since a person can drag the window that narrow. The pages after a pick already had 240 px checks: the account import in the type-roles sweep, Restore again in `restore-outcome.test.ts`, and the lock screen's full-backup window from #1025.
