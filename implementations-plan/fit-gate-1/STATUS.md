@@ -7,3 +7,4 @@
 - 2026-10-22: approved by the orchestrator (D1, D3, D7 in force; the two fits below 359 px only, 360 px proven unchanged). Base `type-roles` times and the base red recorded; before pictures captured.
 - 2026-10-22: Phase 1 done: the repaired rule and the planted test, gate met on both browsers (token metadata red as planned).
 - 2026-10-22: Phase 2 done: both fits below 359 px; built CSS and the 360 px pixel compare show no change at 360; 240 px sheets committed; gate met on both browsers.
+- 2026-10-22: Phase 3 done: `origin/dev` merged; D7's files green on both browsers at retry 0; local gates green. Review loop next.
