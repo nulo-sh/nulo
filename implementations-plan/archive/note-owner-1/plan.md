@@ -15,7 +15,7 @@ issues: "#1049 (known limit, closed as not planned; no arc closes it)"
 
 - **Date:** 2026-10-22.
 - **Status:** completed with its one PR (`worktree-note-owner-1` → `dev`), which carries this close-out; the merge closes the plan.
-- **Shipped:**
+- **Shipped:** #1073.
   - **The tripwire** (`packages/aztec-runtime/src/pxe/note-owner-scope.sources.test.ts`): five tests pin the rules that keep the PXE's own sync from storing a receipt-class note under a scope lacking its owner's key (the key oracle's scope check, one scope per sync and its per-scope caller, and in each receipt class the owner-key nullifier and the discovery gate), each with mutation controls.
   - **The coupling entry** (`UPDATE.md` § Types coupled to Aztec shapes): a red test, or a new amount-bearing class in `note-schemas.ts`, means retrace #1049 before the bump ships.
 - **Dispositions:**
