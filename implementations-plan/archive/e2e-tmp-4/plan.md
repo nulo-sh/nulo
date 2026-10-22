@@ -30,7 +30,7 @@ status: closed with its one PR; the merge closes the plan
   - The review loop converged at round 3: Codex r1 one low comment suggestion (rejected), Opus clean, Codex r2 clean, Codex r3 clean on D7.
 - **Lessons:** nothing promoted. `lessons.md` is at its budget (8,192 bytes) and nothing in it is superseded. The all-skipped-file rule stays in the three block comments and in this plan's F2.
 - **Known limits:** #1082 (an `owned-processes` case leaves an idle `sleep 120`); #1075 already covers a killed worker.
-- **Open items:** none.
+- **Open items:** #1086 (a unit flake in `fpc/service-create.test.ts`, seen while gating, outside this arc).
 - **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # e2e-tmp-4: three e2e-script unit tests leave their temp dir on a non-Linux host
