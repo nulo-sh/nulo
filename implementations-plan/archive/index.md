@@ -427,3 +427,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [e2e-tmp-1](e2e-tmp-1/plan.md) — completed — the test that writes a backup owns its temp dir through `onTestFinished`, so none outlives a passing or failing test; a harness self-test proves it (#1064)
 - [note-owner-1](note-owner-1/plan.md) — completed — #1049 is a known limit: on 6.0.0-rc.3 the PXE's own sync never stores a receipt note under a non-owner scope; a sources test pins the rules that keep it so
 - [e2e-tmp-3](e2e-tmp-3/plan.md) — completed — the two opt-in probes make their temp dir in a hook a skipped block never runs, and tag-by-hand's runner test kills its runner before it removes the fake-tools dir, so `test:release` leaves none (#1076, #1077)
+- [e2e-tmp-2](e2e-tmp-2/plan.md) — completed — the stage-log cases take a temp dir their test owns through `testTempDir`, the dir half of e2e-tmp-1's owner, so none outlives its test; the self-test proves the owner (#1071)
