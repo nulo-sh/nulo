@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, spyOn, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -403,7 +403,11 @@ describe("inputs", () => {
 describe.skipIf(!process.env.NULO_RELEASE_PROBE)("the REST boundary against a published release", () => {
 	const PROBE = "v0.30.2"
 	const io = realIO(process.env.GITHUB_REPOSITORY ?? "nulo-sh/nulo", process.env.GH_TOKEN ?? "")
-	const dir = mkdtempSync(join(tmpdir(), "nulo-release-probe-"))
+	let dir = ""
+	// A skipped describe runs its body but no hook: the dir is made in one.
+	beforeAll(() => {
+		dir = mkdtempSync(join(tmpdir(), "nulo-release-probe-"))
+	})
 	afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
 	test("reads the release and its tag, and downloads an asset whose bytes match GitHub's digest", async () => {
