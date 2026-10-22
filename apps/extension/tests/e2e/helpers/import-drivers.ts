@@ -9,9 +9,7 @@
  * `ImportShell`.
  */
 import { createHash } from "node:crypto"
-import { mkdtempSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { basename, join } from "node:path"
+import { basename } from "node:path"
 import { type Page, TimeoutError } from "puppeteer"
 import { expect } from "vitest"
 import { defaultProfileName } from "@/utils/profile-name"
@@ -44,6 +42,7 @@ import {
 	type StageEvent,
 } from "./import-stage-timing"
 export { TEST_PASSWORD } from "../fixtures/constants"
+export { writeBackupToTemp } from "./backup-temp"
 
 /** Per-fork measurement identity (vitest runs one fork per test file). */
 const RUN_ID = `${process.pid}-${Date.now()}`
@@ -582,12 +581,4 @@ export async function refusePasskeyRestore(page: Page, auth: VirtualAuthenticato
 	}))
 	expect(form.chosen).toContain(basename(filePath))
 	expect(form.errorBox).toBe(false)
-}
-
-/** Drop a JSON string onto disk so puppeteer's `FileChooser.accept(paths)` can pick it up. */
-export function writeBackupToTemp(content: string, filename = "backup.json"): string {
-	const dir = mkdtempSync(join(tmpdir(), "nulo-e2e-backup-"))
-	const file = join(dir, filename)
-	writeFileSync(file, content)
-	return file
 }

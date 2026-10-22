@@ -15,7 +15,7 @@
  */
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
+import { join } from "node:path"
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { CHAIN_IDS, TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION } from "@/utils/chain-ids"
@@ -218,8 +218,6 @@ test.skipIf(!hasConfig)(
 			} finally {
 				await stub.close()
 				rmSync(profileDir, { recursive: true, force: true })
-				// The doctored file embeds the wallet's real (local-chain test) master key.
-				rmSync(dirname(filePath), { recursive: true, force: true })
 			}
 		}
 	},
