@@ -27,6 +27,7 @@ import { IncomingTransferRepository } from "./repository"
 import { BalanceRefreshOutbox } from "./balance-outbox"
 import { PublicEventIndexer, type PublicEventReader, type PublicScanResult } from "./public-event-indexer"
 import { ScanEpisodeStore, scanEpisodeKey, scanEpisodeNetworkPrefix } from "./scan-episodes"
+import { ScanGate } from "./scan-gate"
 import { isScanSuccess, type ScanOutcome } from "./scan-health"
 import {
 	ARRIVAL_ID_MAX,
@@ -59,6 +60,10 @@ export * from "./spec"
 
 /** Production poll cadence per scheduler. */
 const DEFAULT_POLL_INTERVAL_MS = 30_000
+
+/** Public scans that run at once. Every target is kicked together on install and ticks in phase, so
+ *  unbounded, a wallet with many watched tokens starts them all at once and starves the popup. */
+export const PUBLIC_SCAN_CONCURRENCY = 4
 
 /** Every target runs on every fourth tick whatever the tips say, so a note the PXE delivers late or
  *  a balance refresh retried after a failure still lands when no block comes. */
@@ -259,6 +264,16 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	private readonly publicPolling = new Set<string>()
 	/** `${networkId}|${contract}` → the scan target (profile and epoch bound at installation). */
 	private readonly publicWatched = new Map<string, { profileId: string; networkId: string; contract: string; epoch: number }>()
+	/** Every public scan runs through this gate. A retried request clears its target's backoff at
+	 *  admission, after any earlier run of the key has recorded its outcome, and only for a target
+	 *  still installed in the current epoch. */
+	private readonly publicScans = new ScanGate(PUBLIC_SCAN_CONCURRENCY, (key, { force, retry }) => {
+		const target = this.publicWatched.get(key)
+		if (retry && target?.epoch === this.serviceEpoch) {
+			this.episodes.clearRetryGate(scanEpisodeKey(target.profileId, target.networkId, target.contract))
+		}
+		return this.pollPublic(key, force || retry)
+	})
 	/** Class-gate verdict cached by the FINALIZED tip — one `getContract` per finalized advance,
 	 *  not per tick. Keyed `${profileId}|${networkId}|${contract}`; `unresolved` is never cached. */
 	private readonly classGateCache = new Map<string, { finalizedTip: number; checkpointHash: string; status: PublicTokenClassStatus }>()
@@ -1149,6 +1164,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		for (const id of this.publicSchedulers.values()) clearInterval(id)
 		this.publicSchedulers.clear()
 		this.publicWatched.clear()
+		this.publicScans.clear()
 		// Every installed target runs at once, so no earlier run's mark carries over.
 		this.noteScannedAt.clear()
 		this.publicScannedAt.clear()
@@ -1206,7 +1222,12 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const key = this.publicSchedulerKey(networkId, contract)
 		this.publicWatched.set(key, { profileId, networkId, contract, epoch: this.serviceEpoch })
 		if (this.publicSchedulers.has(key)) return
-		this.startPollScheduler(this.publicSchedulers, key, (force) => this.pollPublic(key, force), {
+		// The returned promise covers only the enqueue: `pollPublic` reports a scan's own failure.
+		const enqueue = (force: boolean) => {
+			this.publicScans.request(key, { force, retry: false })
+			return Promise.resolve()
+		}
+		this.startPollScheduler(this.publicSchedulers, key, enqueue, {
 			tick: "Public poll failed",
 			initial: "Initial public poll failed",
 		})
@@ -1251,23 +1272,24 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			}
 			await this.outbox.drain()
 		} catch (error) {
-			this.logWarn(`Public scan failed for ${key}`, error)
+			this.logWarn("Public scan failed", { error })
 		} finally {
 			this.publicPolling.delete(key)
 		}
 	}
 
 	/** Run one scan tick, unless the checkpoint has not moved since the target last reached it, and
-	 *  fold its outcome into the contract's episode. The write is fenced by the epoch captured BEFORE
-	 *  the scan, inside the service lock, so an outcome that lands after a lock / purge / profile
-	 *  switch cannot recreate the episode that transition cleared. */
+	 *  fold its outcome into the contract's episode. Every write is fenced by the target's install
+	 *  epoch, not the epoch at entry: `pollPublic` checked it before awaiting the quarantine read, so
+	 *  a delete, lock or profile switch during that await still fences the cursor, the mark and the
+	 *  episode, and cannot recreate what that transition cleared. */
 	private async scanAndRecord(
 		key: string,
-		target: { profileId: string; networkId: string; contract: string },
+		target: { profileId: string; networkId: string; contract: string; epoch: number },
 		episodeKey: string,
 		force: boolean,
 	): Promise<void> {
-		const epochAtStart = this.serviceEpoch
+		const epochAtStart = target.epoch
 		const tips = await this.sharedTips(target.networkId)
 		if (tips && !force && this.publicScannedAt.get(key) === tips.checkpointedBlockHash) return
 		const tick = tips
@@ -1354,12 +1376,16 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		await this.ensureInitialized()
 		const profile = await this.profileService.getActiveProfile()
 		if (!profile || typeof networkId !== "string") return
+		// Cleared up front as well, so a rebuild that drops the requests below still leaves the fresh
+		// install kicks past backoff.
 		this.episodes.clearRetryGate(scanEpisodeNetworkPrefix(profile.id, networkId))
-		const polls: Promise<void>[] = []
+		const scans: Promise<void>[] = []
 		for (const [key, target] of this.publicWatched) {
-			if (target.profileId === profile.id && target.networkId === networkId) polls.push(this.pollPublic(key, true))
+			if (target.profileId === profile.id && target.networkId === networkId) {
+				scans.push(this.publicScans.requestAndWait(key, { force: true, retry: true }))
+			}
 		}
-		await Promise.all(polls)
+		await Promise.all(scans)
 	}
 
 	private onTokenAdded = async (token: TokenAdded): Promise<void> => {

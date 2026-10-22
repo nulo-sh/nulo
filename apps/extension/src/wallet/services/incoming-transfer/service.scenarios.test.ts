@@ -31,7 +31,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from "vit
 // test's 5s budget. Under Vite 8 that cold transform can exceed 5s on CI's
 // shared runner, which timed out the first `bootService()` when the import was
 // dynamic.
-import { IncomingTransferService } from "./service"
+import { IncomingTransferService, PUBLIC_SCAN_CONCURRENCY } from "./service"
 import { IncomingTransferRepository } from "./repository"
 import type { BalanceRefreshOutbox } from "./balance-outbox"
 import { PublicScanCursorSchema, noteRecordId } from "./spec"
@@ -3373,6 +3373,115 @@ describe("IncomingTransferService — public-arm lifecycle", () => {
 
 		expect(await cursorFor()).toBeUndefined()
 		expect(await outboxFor()).toBeUndefined()
+	})
+})
+
+describe("IncomingTransferService — bounded public scans", () => {
+	type Held = { contract: string; release: (status: PublicTokenClassStatus) => void; fail: (error: Error) => void; done?: boolean }
+
+	/** Holds every class read on its own deferred promise, so a public scan stops there until released. */
+	function holdClassReads(reader: PublicEventReader) {
+		const held: Held[] = []
+		reader.getTokenClassStatus = (_networkId, contract) =>
+			new Promise((release, fail) => {
+				held.push({ contract, release, fail })
+			})
+		const inFlight = () => held.filter((h) => !h.done)
+		const reads = (contract: string) => held.filter((h) => h.contract === contract).length
+		const settle = async (h: Held, outcome: PublicTokenClassStatus | Error) => {
+			h.done = true
+			if (outcome instanceof Error) h.fail(outcome)
+			else h.release(outcome)
+			await flushPromises()
+		}
+		return { held, inFlight, reads, settle }
+	}
+
+	function settledFlag(p: Promise<unknown>) {
+		const state = { settled: false }
+		void p.then(() => {
+			state.settled = true
+		})
+		return state
+	}
+
+	test("with 2K + 1 tokens, at most K scans run at once, and every token's first scan runs exactly once", async () => {
+		const tokens = Array.from({ length: 2 * PUBLIC_SCAN_CONCURRENCY + 1 }, (_, i) => ({
+			id: 100 + i,
+			chainId: 1,
+			contract: `0xbound${i}`,
+			symbol: `B${i}`,
+			decimals: 18,
+		}))
+		const { reader } = makePublicReader()
+		const classReads = holdClassReads(reader)
+		await bootService({ account: makeAccountStub([]), token: makeTokenStub(tokens), publicReader: reader })
+		await flushPromises()
+
+		while (classReads.inFlight().length > 0) {
+			expect(classReads.inFlight().length).toBeLessThanOrEqual(PUBLIC_SCAN_CONCURRENCY)
+			await classReads.settle(classReads.inFlight()[0], "non-standard")
+		}
+		expect(classReads.held.map((h) => h.contract).sort()).toEqual(tokens.map((t) => t.contract).sort())
+	})
+
+	test("a rebuild while a token's install scan is held: once it ends, that token scans again with no interval tick", async () => {
+		const { reader } = makePublicReader()
+		const classReads = holdClassReads(reader)
+		const token = makeTokenStub([tokenA])
+		await bootService({ account: makeAccountStub([]), token, publicReader: reader })
+		await flushPromises()
+		expect(classReads.reads(tokenA.contract)).toBe(1)
+
+		token.getTokensRaw.mockResolvedValue([tokenA, tokenB])
+		await token.onTokenAdded.invoke(tokenAdd(tokenB) as never)
+		await flushPromises()
+		await classReads.settle(classReads.held[0], "non-standard")
+
+		expect(classReads.reads(tokenA.contract)).toBe(2)
+		for (const h of classReads.inFlight()) await classReads.settle(h, "non-standard")
+	})
+
+	test("Retry while a token's scan is held: that scan fails into backoff, and Retry still gets a fresh forced scan and waits for it", async () => {
+		const { reader } = makePublicReader()
+		const classReads = holdClassReads(reader)
+		const { service } = await bootService({ account: makeAccountStub([]), token: makeTokenStub([tokenA]), publicReader: reader })
+		await flushPromises()
+
+		const retry = settledFlag(service.retryIncomingScan("n1"))
+		await flushPromises()
+		expect(retry.settled).toBe(false)
+
+		await classReads.settle(classReads.held[0], new Error("node down"))
+		expect(classReads.reads(tokenA.contract)).toBe(2)
+		expect(retry.settled).toBe(false)
+
+		await classReads.settle(classReads.held[1], "non-standard")
+		expect(retry.settled).toBe(true)
+	})
+
+	test("a token deleted while its scan waits on the quarantine read: that scan writes no cursor afterwards", async () => {
+		const { reader, state } = makePublicReader()
+		const network = makeNetworkStub()
+		const token = makeTokenStub([tokenA])
+		const { service } = await bootPublic(reader, state, { network, token })
+		let releaseQuarantine: (quarantined: boolean) => void = () => {}
+		network.isChainQuarantined = () =>
+			new Promise<boolean>((resolve) => {
+				releaseQuarantine = resolve
+			})
+
+		const retry = service.retryIncomingScan("n1")
+		await flushPromises()
+		network.isChainQuarantined = async () => false
+		token.getTokensRaw.mockResolvedValue([])
+		await token.onTokenDeleted.invoke({ ...tokenA, profileId: "p1" } as never)
+		await flushPromises()
+
+		releaseQuarantine(false)
+		await retry
+		await flushPromises()
+		expect(await cursorFor()).toBeUndefined()
 	})
 })
 

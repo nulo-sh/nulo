@@ -230,12 +230,60 @@ describe("ScanEpisodeStore", () => {
 		}
 		const store = new ScanEpisodeStore(area as never, vi.fn())
 		store.record(KEY, "failed", NOW)
-		store.deleteWhere(() => true)
 		await vi.waitFor(() => expect(calls).toEqual(["set-start"]))
+		store.deleteWhere(() => true)
 		release()
 		await store.settled()
 		expect(calls).toEqual(["set-start", "set-done", "remove"])
 		expect(await stored()).toBeUndefined()
+	})
+
+	test("changes made while a write is in flight queue one successor; settled() waits for it, and storage ends equal to memory", async () => {
+		const writes: string[] = []
+		const releases: (() => void)[] = []
+		const held = () =>
+			new Promise<void>((r) => {
+				releases.push(r)
+			})
+		const area = {
+			get: (key: string) => api.storage.session.get(key),
+			set: vi.fn(async (items: Record<string, unknown>) => {
+				writes.push("set")
+				await held()
+				await api.storage.session.set(items)
+			}),
+			remove: vi.fn(async (key: string) => {
+				writes.push("remove")
+				await held()
+				await api.storage.session.remove(key)
+			}),
+		}
+		const store = new ScanEpisodeStore(area as never, vi.fn())
+		const other = scanEpisodeKey("p1", "n1", "0xd")
+		store.record(KEY, "failed", NOW)
+		await vi.waitFor(() => expect(writes).toEqual(["set"]))
+
+		store.record(other, "failed", NOW)
+		store.record(other, "failed", NOW + MIN)
+		store.deleteWhere((key) => key === KEY)
+		store.setAnnounced(N1, true)
+		let settled = false
+		const settling = store.settled().then(() => {
+			settled = true
+		})
+
+		releases[0]()
+		await vi.waitFor(() => expect(writes).toEqual(["set", "set"]))
+		await new Promise((r) => setTimeout(r, 0))
+		expect(settled).toBe(false)
+		releases[1]()
+		await settling
+
+		expect(writes).toEqual(["set", "set"])
+		expect(await storedBlob()).toEqual({
+			episodes: { [other]: { failures: 2, failingSince: NOW, nextAttemptAt: NOW + MIN + 60_000 } },
+			announced: [N1],
+		})
 	})
 
 	test("hydrate resolves only after its repair write has landed", async () => {

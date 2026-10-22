@@ -49,15 +49,17 @@ export function parseStoredEpisode(raw: unknown, now: number): StoredScanEpisode
  *
  * Memory is the source of truth and every mutation is synchronous; the session area is a write-behind
  * copy so an alarm-woken worker resumes the streak — and does not re-announce the stall — instead of
- * starting over on every wake. Writes are chained, each carrying the full snapshot taken at mutation
- * time, so within a running worker a removal can never be overtaken by an older write. A write that
- * fails, or a worker that dies first, leaves the previous snapshot; hydration re-validates whatever it
- * finds. The blob names which (profile, network, contract) triples are failing and nothing else.
+ * starting over on every wake. Writes are chained and at most one waits: it takes its snapshot when it
+ * starts, so it carries every change made before it, a burst of changes costs one write rather than one
+ * per change, and within a running worker a removal can never be overtaken by an older write. A write
+ * that fails, or a worker that dies first, leaves the previous snapshot; hydration re-validates whatever
+ * it finds. The blob names which (profile, network, contract) triples are failing and nothing else.
  */
 export class ScanEpisodeStore {
 	private readonly episodes = new Map<string, StoredScanEpisode>()
 	private readonly announced = new Set<string>()
 	private readonly writes = createSerialQueue({ onError: (error) => this.onPersistError(error) })
+	private writeWaiting = false
 
 	public constructor(
 		private readonly area: StorageArea,
@@ -155,7 +157,7 @@ export class ScanEpisodeStore {
 		return true
 	}
 
-	/** Resolves once every queued write has landed. */
+	/** Resolves once a write that started after every change made before this call has landed. */
 	public settled(): Promise<unknown> {
 		return this.writes.tail
 	}
@@ -169,10 +171,14 @@ export class ScanEpisodeStore {
 		return { episodes: Object.fromEntries(this.episodes), announced: [...this.announced] }
 	}
 
+	/** Queues a write unless one is already waiting; a write in flight gets one successor. */
 	private persist(): void {
-		const snapshot = this.snapshot()
-		const isEmpty = this.episodes.size === 0 && this.announced.size === 0
-		const write = () => (isEmpty ? this.area.remove(SCAN_EPISODES_KEY) : this.area.set({ [SCAN_EPISODES_KEY]: snapshot }))
-		void this.writes.run(write)
+		if (this.writeWaiting) return
+		this.writeWaiting = true
+		void this.writes.run(() => {
+			this.writeWaiting = false
+			if (this.episodes.size === 0 && this.announced.size === 0) return this.area.remove(SCAN_EPISODES_KEY)
+			return this.area.set({ [SCAN_EPISODES_KEY]: this.snapshot() })
+		})
 	}
 }
