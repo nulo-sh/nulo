@@ -45,7 +45,7 @@ None. The lane brief's records are the whole budget: #1036 "Rendering is pixel-i
 
 ## Architecture & Implementation
 
-**Icon (D1, D2).** `styles` gains `"--icon-hover": var(--txt-<hoverColor>)` only when `hoverColor` is set; `.hovered:hover` reads `color: var(--icon-hover)`; `hoverColorVar` goes. The value resolves on the same element as before. `css-v-bind-ban.test.ts` refuses any SFC under `SCAN_ROOTS` whose `parse(...).descriptor.cssVars` is non-empty, unless its reviewed list names that file and that exact `cssVars` list with a reason; an entry that no longer matches fails too, so the list only shrinks.
+**Icon (D1, D2).** `styles` gains `"--icon-hover": var(--txt-<hoverColor>)` only when `hoverColor` is set; `.hovered:hover` reads `color: var(--icon-hover)`; `hoverColorVar` goes. The value resolves on the same element as before. `css-v-bind-ban.test.ts` refuses any SFC under `SCAN_ROOTS` whose `parse(...).descriptor.cssVars` is non-empty, and any hand-written `useCssVars` call there (D12), unless a reviewed entry names that file and that expression (or the call) with a reason; an entry that no longer matches fails too, so the list only shrinks.
 
 **The window (D3-D8; out of this arc, D11).** A pure helper beside `recipient-search.ts`:
 
@@ -91,7 +91,7 @@ nearestScrollTop({ index, scrollTop, rowPx, viewPx }): number
 
 Kept as audited for that lane. 1. Add `suggestion-window.ts` and edit `RecipientField.vue` as in Architecture. 2. `suggestion-window.test.ts`, one table: unmeasured; top; middle; end; `scrollTop` past the end; a list shorter than the view; `nearestScrollTop` above, below and inside the view. 3. One `RecipientField.test.ts` block with stubbed geometry (row 54 px, view 156 px, 40 candidates): at most 12 rows render; a scroll event moves the window and ids stay full indices; Up from no highlight renders the last row (`optionId(39)`, `aria-posinset="40"`) and scrolls it into view; a scroll away drops `aria-activedescendant`, and Enter still picks that candidate; scrolled near the end, a narrower term renders its matches from the tail, and a click picks the right one. 4. One smoke scenario in `send-keyboard.test.ts` (D9), testid-only: 40 seeded contacts plus "Account 1" match "Acc"; the row pitch from two consecutive `recipient-suggestion-address` tops; wait until `scrollHeight` equals `Math.round(41 * pitch)`, then fewer than 41 address rows render; sweep in whole rows, keying each address by its row index from its box, the 41 texts equal as a multiset the seeded addresses' and the account's trimmed forms; back at the top after two frames the account's address is not rendered; Up from no highlight shows the row `aria-activedescendant` names, `aria-posinset="41"`; Enter sets the destination to the account's address.
 
-### Phase 3 — Evidence and full gates (3 h)
+### Phase 3 — Evidence and full gates (3 h) ✓
 
 1. **Pixel sheets.** Copy pxe-limits-1's probe tooling into `~/.cache/nulo-backlog/list-perf-1/`; re-point `run-tree.sh`'s namespace and recorded SHA. Export the base SHA and the arc head with `git archive`; add a scratch smoke probe to both. Import one fixed recovery phrase (the flow `import-paths.test.ts` drives) and seed fixed contacts, so captures compare unmasked. If the address cannot be fixed, mask only its element box, read by its testid in the same capture. Capture with `page.screenshot` and a clip, the pointer off any list, animations frozen the same way in both arms, two frames after any scroll.
    - Home, Holdings, Settings → Contacts with 5 contacts, and the bottom bar, at DPR 1 and 2, light and dark, Chrome and Firefox. Also the EditFpc copy icon, hovered after the probe strips `icon_btn` from it in both arms, so `Icon`'s own rule paints; record its computed `color` against `--txt-primary`.
@@ -116,6 +116,7 @@ Kept as audited for that lane. 1. Add `suggestion-window.ts` and edit `Recipient
 | D9 | (window) One new smoke scenario, both browsers: spacers, scroll events, the keyboard reveal and the pick in a real engine | jsdom has no layout; estimated 8 s on Chrome, 13 s on Firefox (5.0 / 9.2 s launch) | none (the pixel sheet proves it once, not on later changes) |
 | D10 | (window) Fade (delegated): a row the keyboard brings in from outside the window shows its highlight at once instead of fading 0.2 s | it is created already highlighted; avoiding it would add an ordering step to `moveHighlight` | that ordering step; a `known-limit` issue (with Opus P8: an unlaid-out list would show 12 rows), filed by the lane that ships the window |
 | D11 | #1037 leaves this plan for recipient-cap-1, with Phase 2, D3-D10 and the 1,000-contact seeds | that lane measured with real captures and holds the owner's pick between a cap and a window (decision page 84); building the window here would ship a choice the owner is making; its arc reuses Phase 2 if the window wins; D10's known limit needs the window's code, so it is filed only where that ships (orchestrator, 2026-10-22) | keeping Phase 2 here; filing D10's limit against code this arc does not ship |
+| D12 | The ban also refuses a hand-written `useCssVars` call, found by syntax (`callsTo`) in `.vue`, `.ts` and `.js` sources under `SCAN_ROOTS` | the auto-imported helper costs the same per instance and the compiler's `cssVars` cannot see it (Opus r1); a text match refused comments and strings and missed `useCssVars /* c */ (` (Codex r2) | a regex over script text; leaving hand calls unguarded |
 
 ## Audit verdicts
 
@@ -124,6 +125,7 @@ Kept as audited for that lane. 1. Add `suggestion-window.ts` and edit `Recipient
 - **Codex r2** (resumed `01a162a2`, verification): *conditional approve* (D9 must return to the top and show the account row unrendered before Up). Accepted: Phase 2 step 4. Every r1 condition verified met; D6 checked against the unit mock and the 4-row scenario.
 - **Codex r3** (resumed `01a162a2`): *approve*; the r2 condition met, no regression.
 - **Orchestrator** (2026-10-22): approved as committed; A3 confirmed; A4 approved with the reviewed allowlist; D7 and D10 stand; #1037 moved out (D11).
+- **Post-implementation** ([lessons/phase-4.md](lessons/phase-4.md); Codex session `01a164bf`, Opus beside r1). Codex r1 *approve*; Opus r1 *conditional approve*: the Icon test ties the inline property to its rule, `review()`'s open path tested, a comment reworded, hand-written `useCssVars` calls refused (D12). Codex r2 *conditional approve*: the hand-call check by syntax, not text. Codex r3 *approve*, no new material finding. Rejected (both legs, shared by every source guard): SFCs outside `SCAN_ROOTS`; an aliased or computed callee.
 
 ## Delivery
 
