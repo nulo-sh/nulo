@@ -4,3 +4,4 @@
 - 2026-10-22 plan drafted (light): D1–D5; audit pending.
 - 2026-10-22 audit r1: Codex and Opus conditional approve; plan revised (6-char suffix, `rootMade`, private-scratch Linux proof); #1082 filed closed; #1078 commented.
 - 2026-10-22 audit r2: Codex approve; plan gate passed (auto-continue).
+- 2026-10-22 A1 phase 1 gate green: stub 3 → 0, long TMPDIR 1 → 0, Linux 44 pass, lint and typecheck:all exit 0 (`7cdb55421`).

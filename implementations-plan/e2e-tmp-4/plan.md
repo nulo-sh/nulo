@@ -11,7 +11,7 @@ base: origin/dev at 2afb3260e
 trunk: dev
 issues: "#1078 (A1 closes it, with the third file and the failure-path dir recon added to it, D2, D3); #1082 (known limit, filed closed in planning)"
 post_implementation_hardening: not scheduled
-status: planned, Codex approve at r2
+status: A1 Phase 1 green, in the review loop
 ---
 
 # e2e-tmp-4: three e2e-script unit tests leave their temp dir on a non-Linux host
@@ -71,7 +71,7 @@ None. Three test files under `apps/extension/scripts/e2e/` change; no extension,
 
 ### Arc A1 (branch `worktree-e2e-tmp-4`, from the `origin/dev` head at its start)
 
-**Phase 1 — the three dirs, the failure-path dir and the proof.** Assumptions: F1–F6, I1, I2. Put scratch files under `~/.cache/nulo-backlog/e2e-tmp-4/`. Run each vitest command from `apps/extension`; run `bun run lint` and `bun run typecheck:all` from the repo root.
+**Phase 1 — the three dirs, the failure-path dir and the proof.** ✓ (2026-10-22, [lessons/phase-1.md](lessons/phase-1.md)) Assumptions: F1–F6, I1, I2. Put scratch files under `~/.cache/nulo-backlog/e2e-tmp-4/`. Run each vitest command from `apps/extension`; run `bun run lint` and `bun run typecheck:all` from the repo root.
 1. Merge `origin/dev` into the branch.
 2. Write the setup file `platform-darwin.setup.ts`: `Object.defineProperty(process, "platform", { value: "darwin" })`.
 3. Write `vitest.darwin.config.mts`. It imports `<worktree>/apps/extension/vitest.config.ts` as `base` and exports `{ ...base, root: "<worktree>/apps/extension", test: { ...base.test, setupFiles: [base.test.setupFiles, "<the setup file>"] } }`.
