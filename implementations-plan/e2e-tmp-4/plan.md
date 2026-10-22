@@ -11,8 +11,26 @@ base: origin/dev at 2afb3260e
 trunk: dev
 issues: "#1078 (A1 closes it, with the third file and the failure-path dir recon added to it, D2, D3); #1082 (known limit, filed closed in planning)"
 post_implementation_hardening: not scheduled
-status: A1 Phase 1 green, review loop converged
+status: closed with its one PR; the merge closes the plan
 ---
+
+## Outcome
+
+- **Date:** 2026-10-22.
+- **Status:** closed with its one PR, #1085 (`worktree-e2e-tmp-4` → `dev`, `Closes #1078`), which carries this close-out; the merge closes the plan.
+- **Shipped:**
+  - **The two env-reading files** (`webdriver-ownership.test.ts`, `owned-processes.test.ts`): the dir's name is fixed at import with a 6-character random suffix; the Linux block's `beforeAll` makes it (`mkdirSync`, mode `0o700`), and its `afterAll` removes it only once made.
+  - **`reconcile-lock.test.ts`**: `boot-guard.test.ts`'s shape, the dir made and removed by the Linux block.
+  - **`outside`** (`owned-processes.test.ts`): removed by `onTestFinished`, so a failed case no longer leaves it.
+  - **The proof:** stubbed non-Linux 3 → 0; Linux under a long scratch `TMPDIR` 1 → 0 with the same 4 named failures; Linux default `TMPDIR` 44 passed ([lessons/phase-1.md](lessons/phase-1.md)). No native macOS run.
+- **Dispositions:**
+  - The plan passed its own gate on auto-continue: Codex approve at r2, no owner ask.
+  - D2 (`reconcile-lock`) and D3 (`outside`) were folded in and recorded on #1078 by a comment.
+  - The review loop converged at round 2 with no code change: Codex r1 one low comment suggestion (rejected), Opus clean, Codex r2 clean.
+- **Lessons:** nothing promoted. `lessons.md` is at its budget (8,192 bytes) and nothing in it is superseded. The all-skipped-file rule stays in the three block comments and in this plan's F2.
+- **Known limits:** #1082 (an `owned-processes` case leaves an idle `sleep 120`); #1075 already covers a killed worker.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # e2e-tmp-4: three e2e-script unit tests leave their temp dir on a non-Linux host
 
@@ -85,7 +103,7 @@ None. Three test files under `apps/extension/scripts/e2e/` change; no extension,
 
 Gate: steps 4 and 6 exit 0 with 1 file passed and 2 skipped, 2 tests passed and 42 skipped; step 4 prints 3, step 6 prints 0. Step 7 exits 0 with 3 files and 44 tests passed. Steps 4 and 8 each fail exactly these 4 cases of `owned-processes`, each with "would exceed 107 bytes; set NULO_E2E_DATA_ROOT to a shorter directory", and pass the other 40; step 4 prints 1 (`nulo-aztec-outside-*`), step 8 prints 0. The 4 cases start at `:163`, `:180`, `:236` and `:256` on the base. Any other failure is breakage. `bun run lint` and `bun run typecheck:all` exit 0. A rerun after a fix is steps 6, 7 and 8 under new empty dirs.
 
-**Phase 2 — close-out.** As Post-implementation. Gate: from the repo root, `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all` and `bun run check:plans` after staging exit 0; Phase 1 steps 6 and 8 on the final head print 0. Then remove the scratch dirs and the two scratch files.
+**Phase 2 — close-out.** ✓ (2026-10-22) As Post-implementation. Gate: from the repo root, `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all` and `bun run check:plans` after staging exit 0; Phase 1 steps 6 and 8 on the final head print 0. Then remove the scratch dirs and the two scratch files.
 
 ## Post-implementation
 
