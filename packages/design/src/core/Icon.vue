@@ -26,9 +26,9 @@ const styles = computed<CSSProperties>(() => ({
 	transformBox: "view-box",
 	transformOrigin: "center center",
 	transform: props.rotate ? `rotate(${props.rotate}deg)` : "",
+	// Inline, never a CSS `v-bind`, which costs every icon a document-wide query on each render.
+	...(props.hoverColor ? { "--icon-hover": `var(--txt-${props.hoverColor})` } : {}),
 }))
-
-const hoverColorVar = computed(() => `var(--txt-${props.hoverColor})`)
 </script>
 
 <template>
@@ -55,7 +55,7 @@ const hoverColorVar = computed(() => `var(--txt-${props.hoverColor})`)
 	transition: all 0.3s var(--bezier);
 
 	&:hover {
-		color: v-bind(hoverColorVar);
+		color: var(--icon-hover);
 	}
 }
 
