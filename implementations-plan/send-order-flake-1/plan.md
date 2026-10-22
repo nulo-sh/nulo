@@ -57,7 +57,7 @@ For a maintainer reading a red `test:all`: this test is red only when the produc
 - **Commit the gate as a permanent pin** (D4): with `requeue` moved before `keep`, the gated write would hold the slot and `parkedSend` would never return. The pin would fix the current order as a contract, against D1. It stays the negative control.
 - **An event-promise helper, fake timers, or a fixed sleep**: one caller, or a sleep. Rejected.
 
-## Phase 1: wait for the stored stage (branch `send-order-flake-1-a1`)
+## Phase 1: wait for the stored stage (branch `send-order-flake-1-a1`) ✓
 
 1. Edit the composition test, add the D7 lane test, and edit the two TSDoc sentences (D2), as above.
 2. Negative control, never committed. Take the test file from `421bf33b4` with `git show 421bf33b4:apps/extension/src/wallet/services/execution/send-order.composition.test.ts` into a scratch `*.composition.test.ts` copy. Add lessons/phase-0.md's `gate(h)` as the first line of the silent-path test. Run it 5 times: each must be red with `expected 'pending' to be 'queued'`. Make the same copy of the fixed file and run it 5 times: each must be green. In the fixed copy, stub the `queued` transition to `{ outcome: "stage", stage: "pending" }` (no write): 5 runs, each red with `waitFor timeout`. Delete the copies. Then, in a scratch edit of `execution-lane.ts`, drop the `await` before `this.requeue`: the D7 test must be red; restore it. Then `git status` must show only the intended files.
@@ -90,7 +90,7 @@ Test code and one doc sentence: no product behaviour, permission, storage, wire,
 - D4 The gate stays a negative control, not a committed pin.
 - D5 No local e2e. The product change is a TSDoc sentence with no runtime effect. The PR's `apps/extension/**` change trips the smoke and network lanes on both browsers in CI anyway.
 - D6 Scope: this one test. No other reader in the file, or any unit test (they mock the lane), reads a parked record's stage at an unordered point.
-- D7 One lane unit test pins write-before-`wait`, the order the claim depends on; nothing pinned it (Opus finding 1, Codex finding 2).
+- D7 One lane unit test pins write-before-`wait`; nothing pinned it (Opus finding 1, Codex finding 2). The claim needs only write-before-return; write-before-`wait` is the stronger, documented order, which also makes the record read `queued` from the start of the wait.
 
 ## UI impact
 
@@ -113,6 +113,8 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `421b
 **Round 2, Codex** (resume): conditional approve, 1 finding, accepted: the gate required the base test count, which D7 makes base plus one. D7 judged a correct, sufficient pin by code trace, inside the lane's scope, and neutral on the hand-on order. No new product or security defect.
 
 **Round 3, Codex** (resume): **approve**, high confidence: the count fix verified, no regressions or new findings. Light tier: this resumed verdict is the final pass.
+
+**Implementation rounds** (diff `3cb3a0822..0317ba973`). Round 1, Codex (gpt-6.1-sol, high, session 01a16561): approve, no findings. Opus diff review: approve, 3 nits, all fixed: the test comment and `parkSlot`'s TSDoc stated today's hand-on order as fact; the lane test's held write now goes in after the acquire. Round 2 (resume): approve, no findings; the loop converged. Gates and soak: [lessons/phase-1.md](lessons/phase-1.md).
 
 ## Seeds
 
