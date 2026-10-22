@@ -41,7 +41,7 @@ import {
 	type StageEvent,
 } from "./import-stage-timing"
 export { TEST_PASSWORD } from "../fixtures/constants"
-export { writeBackupToTemp } from "./backup-temp"
+export { writeBackupToTemp } from "./test-temp-dir"
 
 /** Per-fork measurement identity (vitest runs one fork per test file). */
 const RUN_ID = `${process.pid}-${Date.now()}`
