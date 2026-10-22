@@ -28,9 +28,9 @@ type Listener = (message: unknown, sender: chrome.runtime.MessageSender) => bool
 
 class FakeDocument {
 	public busy = false
-	/** Requests to receive and never answer. */
+	/** The next request starts work that holds the document's thread until `free()`. */
+	public holdOnNext = false
 	public dropNext = 0
-	/** Requests to answer with a refusal instead of a result. */
 	public refuseNext = 0
 	public readonly queue: Array<typeof OFFSCREEN_PING | Envelope> = []
 }
@@ -56,7 +56,6 @@ function answer(current: FakeDocument, envelope: Envelope): void {
 	deliver({ type: MessageType.Response, from: "pxe", to: envelope.from, content })
 }
 
-/** The document answers what it queued, in order, unless it is busy or gone. */
 function pump(): void {
 	const current = doc
 	if (!current || current.busy) return
@@ -87,6 +86,10 @@ function receive(current: FakeDocument, message: unknown): void {
 		wire.push(message)
 		if (current.dropNext > 0) current.dropNext -= 1
 		else current.queue.push(message)
+		if (current.holdOnNext) {
+			current.holdOnNext = false
+			current.busy = true
+		}
 	}
 	queueMicrotask(pump)
 }
@@ -165,10 +168,11 @@ async function clientWithDocument(): Promise<PxeServiceClient> {
 describe("a busy offscreen document", () => {
 	test("a busy document finishes the call it runs and the next one", async () => {
 		const c = await clientWithDocument()
-		;(doc as FakeDocument).busy = true
+		;(doc as FakeDocument).holdOnNext = true
 
 		const a = outcome(c.getNoteSchemas())
 		await vi.advanceTimersByTimeAsync(1_000)
+		expect(sentOf("getNoteSchemas")).toHaveLength(2)
 		const b = outcome(c.getNoteSchemas())
 		await vi.advanceTimersByTimeAsync(3_100)
 		expect(closeDocument).not.toHaveBeenCalled()

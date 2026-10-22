@@ -118,7 +118,7 @@ describe("ensureOffscreenRunning (cold-start single-flight)", () => {
 			getContexts.mockResolvedValue([{}])
 			closeDocument.mockRejectedValueOnce(new Error("No current offscreen document"))
 			createDocument.mockRejectedValueOnce(new Error("create failed"))
-			markOffscreenUnanswered(offscreenAnswer()) // a request to it went unanswered
+			markOffscreenUnanswered(offscreenAnswer()) // A request to it went unanswered.
 			const failed = ensureOffscreenRunning().catch(() => undefined)
 			await vi.advanceTimersByTimeAsync(3_100)
 			deliver(OFFSCREEN_READY_MESSAGE)
@@ -296,6 +296,32 @@ describe("ensureOffscreenRunning (cold-start single-flight)", () => {
 		expect(sendMessage).toHaveBeenCalledTimes(1)
 		expect(closeDocument).not.toHaveBeenCalled()
 		expect(createDocument).toHaveBeenCalledTimes(1)
+	})
+
+	test("a successor that never sent READY does not inherit the trust its predecessor earned", async () => {
+		vi.useFakeTimers()
+		try {
+			const cold = ensureOffscreenRunning()
+			await vi.advanceTimersByTimeAsync(0)
+			deliver(OFFSCREEN_READY_MESSAGE)
+			await cold
+
+			// The browser dropped the trusted document; its successor never starts and survives the close.
+			getContexts.mockResolvedValue([])
+			closeDocument.mockRejectedValue(new Error("No current offscreen document"))
+			const failed = ensureOffscreenRunning().catch(readyTimeout)
+			await vi.advanceTimersByTimeAsync(10_000)
+			expect(await failed).toBe("Offscreen is not responding")
+
+			getContexts.mockResolvedValue([{}])
+			sendMessage.mockImplementation(async (m: unknown) => {
+				if (m === OFFSCREEN_PING) queueMicrotask(() => deliver(OFFSCREEN_PONG))
+			})
+			await ensureOffscreenRunning()
+			expect(sendMessage).toHaveBeenCalledExactlyOnceWith(OFFSCREEN_PING)
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	test("createDocument hanging past the 10s gate: all joiners reject, NO post-timeout retry, next pass recovers", async () => {
@@ -665,7 +691,7 @@ describe("ensureOffscreenRunning — Firefox background-page frame", () => {
 			const first = liveGeneration()
 			await readyAndAwait(p1)
 
-			markOffscreenUnanswered(offscreenAnswer()) // a request to it went unanswered
+			markOffscreenUnanswered(offscreenAnswer()) // A request to it went unanswered.
 			const p2 = ensureOffscreenRunning()
 			await vi.advanceTimersByTimeAsync(3_100)
 			expect(sendMessage).toHaveBeenCalledWith(OFFSCREEN_PING)
@@ -685,7 +711,7 @@ describe("ensureOffscreenRunning — Firefox background-page frame", () => {
 			await readyAndAwait(p1)
 			const before = offscreenEpoch()
 
-			markOffscreenUnanswered(offscreenAnswer()) // a request to it went unanswered
+			markOffscreenUnanswered(offscreenAnswer()) // A request to it went unanswered.
 			const p2 = ensureOffscreenRunning()
 			await vi.advanceTimersByTimeAsync(3_100)
 			await readyAndAwait(p2)
@@ -704,7 +730,7 @@ describe("ensureOffscreenRunning — Firefox background-page frame", () => {
 			if (m === OFFSCREEN_PING) queueMicrotask(() => deliver(OFFSCREEN_PONG, frameSender(generation)))
 		})
 
-		markOffscreenUnanswered(offscreenAnswer()) // a request to it went unanswered
+		markOffscreenUnanswered(offscreenAnswer()) // A request to it went unanswered.
 		await ensureOffscreenRunning()
 		expect(sendMessage).toHaveBeenCalledWith(OFFSCREEN_PING)
 		expect(frames()).toHaveLength(1)
@@ -746,7 +772,7 @@ describe("ensureOffscreenRunning — Firefox background-page frame", () => {
 				if (m === OFFSCREEN_PING) queueMicrotask(() => deliver(OFFSCREEN_PONG, frameSender("a-generation-that-was-removed")))
 			})
 
-			markOffscreenUnanswered(offscreenAnswer()) // a request to it went unanswered
+			markOffscreenUnanswered(offscreenAnswer()) // A request to it went unanswered.
 			const p2 = ensureOffscreenRunning()
 			await vi.advanceTimersByTimeAsync(3_100)
 			expect(liveGeneration()).not.toBe(generation)
