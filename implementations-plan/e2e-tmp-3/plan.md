@@ -11,7 +11,7 @@ base: origin/dev at 6da033705
 trunk: dev
 issues: "#1076 (A1 closes it); #1077 (filed in recon, A1 closes it, D2); #1078 (filed in recon, no arc: other runner and workspace)"
 post_implementation_hardening: not scheduled
-status: approved by Codex r3 (auto-continue); A1 phase 1 green, review loop
+status: approved by Codex r3 (auto-continue); A1 reviewed (loop converged), delivery
 ---
 
 # e2e-tmp-3: `test:release` leaves three temp dirs per run
@@ -100,6 +100,9 @@ Opened ready, without labels, after the loop converges; no e2e label (nothing un
 - **Opus 5.5 r1** (Plan): **conditional approve**. Kept D2, D3, D4, create-then-register at the probes. Accepted: on a timeout Bun SIGTERMs the runner and then runs `onTestFinished`; the runner traps SIGTERM and runs `close()` through `PATH`, so removing the fakes first would reach the owner's real `gh` (probed in parts; trace `tag-by-hand-run.ts:50,241-246`): the hook now kills and awaits the runner before it removes the dir (D1, Security); `finally` in a timed-out test runs late or never (Not taken c); the skip count is 10; `test:all` runs no root script test; step 5's rerun rule reads the stderr; the release probe runs with `GH_TOKEN` unset (D5; GitHub answers 401 to an empty bearer token, checked).
 - **Codex r2** (resumed `01a164fc`): **conditional approve**. Verified the kill, await, remove order (once `child.exited` resolves the runner starts no command; a fake script already running does not switch to the real `gh`), the probes' lifetime, I1, the gates. Accepted: with `GH_TOKEN` unset both probe tests fail with `HTTP 401`, since `attested` also calls the REST API (`attach-assets-run.ts:430-433`; step 6's criterion fixed); the close-out names #1079. Rejected: the fake `gh`'s `sleep 30` descendant may outlive a timed-out test; it is not a defect (it ends itself within 30 s, writes nothing that recreates the dir, reaches no real tool), and the base behaves the same.
 - **Codex r3** (resumed `01a164fc`): **approve**. Both round-2 conditions verified; no new finding or regression; the descendant disposition stands.
+- **Post-implementation, Codex r1** (gpt-6.1-sol, high, fresh session `01a16510`, the arc's code diff against `6da033705`): **clean**. Verified the kill, await, remove order, that `rmSync` only ever receives `mkdtempSync`'s path or `""`, and that the probes keep their conditions, assertions, timeouts and lifetime.
+- **Post-implementation, Opus 5.5** (general-purpose, beside r1): no bug; strace and sentinel probes confirmed `Bun.spawn` resolves the command in the parent (a child mid-spawn after the fakes go fails with ENOENT, no `PATH` fallback) and a kill of a reaped child sends nothing. One accepted wording fix: the tag-by-hand comment now states the consequence (the real `gh`), the one reason not to reduce the hook to `rmSync` (`6d2a6216e`).
+- **Post-implementation, Codex r2** (resumed `01a16510`): **clean**. The loop converged.
 - **The one divergence**: Codex r1 placed the fake-tools removal in `fakeTools()` after `mkdtempSync`; Opus showed that placement removes the fakes before the runner is dead. Opus's order taken.
 
 ## Seeds
