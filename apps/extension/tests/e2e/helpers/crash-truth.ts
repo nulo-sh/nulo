@@ -92,20 +92,20 @@ export async function reimportToTerminal(page: Page, filePath: string): Promise<
 	return summaryText
 }
 
-/** Stage 1: export a REAL backup from the funded wallet once per test file
- *  and reuse the file (module-level cache — each vitest file gets its own
- *  module registry, so the two crash-truth files each export once). Only the
- *  funded chain's account-state survives, so the import dials no public node. */
-let exported: { filePath: string; funded: string } | null = null
+/** Stage 1: export a REAL backup from the funded wallet once per test file (module-level cache —
+ *  each vitest file gets its own module registry) and write it to a file the calling test owns.
+ *  Only the funded chain's account-state survives, so the import dials no public node. */
+let exported: { sealed: string; funded: string } | null = null
 export async function exportFundedBackup(
 	ctx: ExtensionContext & { accountAddress: string },
 	tokenAddress: string,
 ): Promise<{ filePath: string; funded: string }> {
-	if (exported) return exported
-	const backup = await exportBackupContent(ctx)
-	keepChainAccountState(backup.data, accountChainId(backup, ctx.accountAddress), tokenAddress)
-	exported = { filePath: writeBackupToTemp(sealPlainBackup(backup)), funded: ctx.accountAddress }
-	return exported
+	if (!exported) {
+		const backup = await exportBackupContent(ctx)
+		keepChainAccountState(backup.data, accountChainId(backup, ctx.accountAddress), tokenAddress)
+		exported = { sealed: sealPlainBackup(backup), funded: ctx.accountAddress }
+	}
+	return { filePath: writeBackupToTemp(exported.sealed), funded: exported.funded }
 }
 
 /** Drive the popup import flow up to (and including) submit, WITHOUT the
