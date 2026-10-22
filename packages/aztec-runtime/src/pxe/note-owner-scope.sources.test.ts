@@ -68,12 +68,22 @@ async function unusedHelper(utilityExecutor, syncStateFunctionCall, scope) {
 		const service = read("@aztec-labs/pxe", "dest/contract/contract_sync_service.js")
 		const perScope =
 			/async #startSyncIfNeeded\(contractAddress, functionToInvokeAfterSync, utilityExecutor, anchorBlockHeader, changeSetId, scopes\)\s*\{\s*const scopesToSync = scopes\.filter\(\(scope\)=>!this\.syncedContracts\.has\(toKey\(contractAddress, scope\)\)\);\s*if \(scopesToSync\.length > 0\)\s*\{\s*this\.log\.debug\(`[^`]*`\);\s*const syncNullifiersPromise = this\.#syncNoteNullifiers\(contractAddress, anchorBlockHeader, changeSetId, scopesToSync\);\s*const syncSlot = new Semaphore\(MAX_CONCURRENT_SCOPE_SYNCS\);\s*for \(const scope of scopesToSync\)\s*\{\s*const key = toKey\(contractAddress, scope\);\s*const syncScopePromise = runBounded\(syncSlot, \(\)=>syncScope\(contractAddress, this\.contractStore, this\.contractClassService, anchorBlockHeader, functionToInvokeAfterSync, utilityExecutor, scope\)\);/
-		expectPinned(perScope, service, [
-			mutate(service, "utilityExecutor, scope));", "utilityExecutor, scopesToSync));"),
+		/** The service runs `sync_state` only through that one call: it never invokes the executor itself. */
+		const onlyPerScope = (text: string) =>
+			perScope.test(text) && !/\butilityExecutor\s*\(/.test(text) && text.match(/\bsyncScope\s*\(/g)?.length === 1
+		const pinnedCall = "utilityExecutor, scope));"
+		expectPinned(onlyPerScope, service, [
+			mutate(service, pinnedCall, "utilityExecutor, scopesToSync));"),
 			mutate(
 				service,
 				"const syncSlot = new Semaphore(MAX_CONCURRENT_SCOPE_SYNCS);",
 				"$& await syncScopes(contractAddress, scopesToSync);",
+			),
+			mutate(service, pinnedCall, "$&\n await utilityExecutor(syncStateFunctionCall, scopesToSync);"),
+			mutate(
+				service,
+				pinnedCall,
+				"$&\n await syncScope(contractAddress, this.contractStore, this.contractClassService, anchorBlockHeader, functionToInvokeAfterSync, utilityExecutor, scopesToSync);",
 			),
 		])
 	})
@@ -105,12 +115,21 @@ describe("receipt-class aztec-nr sources", () => {
 			/unconstrained fn attempt_note_nonce_discovery\((?:(?!\n\s*(?:pub(?:\(crate\))?\s+)?(?:unconstrained\s+)?fn\b)[\s\S])*/
 		const gate =
 			/if maybe_inner_nullifier_for_i\.is_none\(\)\s*\{\s*aztecnr_warn_log_format!\(\s*"[^"]*",?\s*\)\(\s*\[unique_note_hash_for_i, note_type_id, owner\.to_field\(\)\],?\s*\);\s*\}\s*else\s*\{\s*discovered_notes\.push\(/
-		/** The vector is declared, pushed once in the gate's else, and returned; any other use is a new way in. */
+		/** The vector starts empty, is pushed once in the gate's else, and is returned; any other use is a new way in. */
 		const gated = (text: string) => {
 			const body = text.match(discoveryFn)?.[0] ?? ""
-			return gate.test(body) && body.match(/\bdiscovered_notes\b/g)?.length === 3
+			return (
+				/let discovered_notes = &mut BoundedVec::new\(\);/.test(body) &&
+				gate.test(body) &&
+				body.match(/\bdiscovered_notes\b/g)?.length === 3
+			)
 		}
 		expectPinned(gated, discovery, [
+			mutate(
+				discovery,
+				"let discovered_notes = &mut BoundedVec::new();",
+				"let discovered_notes = &mut BoundedVec::from_array([note]);",
+			),
 			mutate(discovery, /(if maybe_inner_nullifier_for_i\.is_none\(\) \{)/, "$1\n discovered_notes.push(note);"),
 			mutate(discovery, /(if maybe_inner_nullifier_for_i\.is_none\(\) \{)/, "$1\n if false {} else { discovered_notes.push(note); }"),
 			mutate(
