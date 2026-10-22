@@ -9,7 +9,29 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: 5711a1bc3 (origin/dev)
 issues: "#1041"
+status: closed with its one PR; the merge closes the plan
 ---
+
+## Outcome
+
+- **Date:** 2026-10-22.
+- **Status:** closed with its one PR, #1063 (`worktree-e2e-stores-1` → `dev`, `Closes #1041`), which carries this close-out; the merge closes the plan.
+- **Shipped:**
+  - **The node's `TMPDIR`** (`apps/extension/tests/e2e/global-setup.ts`, `sandbox-ownership.ts`): `<run dir>/tmp` beside `data`, inherited by every child the node spawns, so teardown and `e2e:reap` remove every store, socket, log and the foundry copy with the run dir.
+  - **The socket budget** (`nodeTmpDir`): a run dir whose socket paths would overflow `sun_path` is refused before the boot window, naming `NULO_E2E_DATA_ROOT`.
+  - **The boot check** (`nodeStores` in `boot-guard.ts`, called after `markBootReady()` on Linux when the run started the node): exit 1 on a store outside the run dir, a marked process whose fds cannot be read, or no store inside; else `node stores: <n> open, all inside <run dir>`.
+  - **The docs:** the e2e README, the `lockfile.ts` comments and the e2e-testing skill (the run dir's `tmp`, the budget, the check, and the two-hour command limit).
+  - **The tests:** three `node stores` cases in `boot-guard.test.ts` and the byte-counted budget case in `owned-processes.test.ts`.
+- **Dispositions:**
+  - The orchestrator approved the plan as committed.
+  - Phase 1's red probe exited 1 (not 86) naming `.mdb` paths under its scratch `TMPDIR`; Phase 2's probe exited 0 with `node stores: 26 open` and its run dir removed ([lessons/phase-1.md](lessons/phase-1.md), [lessons/phase-2.md](lessons/phase-2.md)).
+  - Phase 3 at retry 0 ([lessons/phase-3.md](lessons/phase-3.md)): network Chrome 122 passed, 6 skipped; network Firefox 121 passed, 7 skipped across two runs (the agent tool's two-hour limit cut the first at 110 of 128 files, none red); smoke Chrome 61 passed, 9 skipped; smoke Firefox 65 passed, 5 skipped.
+  - The review loop converged at round 3 of 3: Codex r1 4 low (two fixed, two known limits), Opus 6 (all applied), Codex r2 1 (applied), Codex r3 clean (§ Audit verdicts and decision ledger).
+  - The host's existing leftovers stay the owner's ([lessons/phase-0.md](lessons/phase-0.md) § Host one-off, documented and unrun).
+- **Lessons:** nothing promoted: `lessons.md` is at its budget, and both gotchas belong to the e2e-testing skill, which records them (the node writes under `TMPDIR` in local-network mode; one browser's network suite can outlast a two-hour command limit). The boot check fails a run if an Aztec bump moves the stores again.
+- **Known limits:** #1065 (the budget refuses a bare run that would adopt a hand-started node), #1066 (a pid reused between the scan and the fd read).
+- **Open items:** #1064 (the e2e backup helper's `nulo-e2e-backup-*` dirs in `os.tmpdir()`).
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # e2e-stores-1: the local network's temp files inside the run dir
 
