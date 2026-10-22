@@ -240,7 +240,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			)
 			await this.seeder.sealLegacyMarker(profileId)
 		} catch (error) {
-			this.logWarn("sealing the profile's plaintext tokens failed; the next unlock retries", { error })
+			this.logWarn("sealing the profile's plaintext tokens failed; the next worker retries", { error })
 		}
 	}
 
@@ -515,6 +515,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			throw new Error("network deleted")
 		}
 		if (!attempt.ownsLock()) return { stage: "fetched", metadata }
+		this.profiles.getDeletionState().assertCurrent(input.fence.profileId, input.fence.epoch)
 		await attempt.track(write.commit())
 		const stored = storedText(write)
 		// The set itself awaits — re-check before making the row observable. Released during it,
@@ -1078,7 +1079,6 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	}
 }
 
-/** The one value a token row's sealed write stores. */
 function storedText(write: PreparedWrite): string {
 	const [stored] = Object.values(write.items)
 	if (stored === undefined) throw new Error("a sealed token write stores one value")

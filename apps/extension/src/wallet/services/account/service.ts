@@ -193,13 +193,14 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/** Converts the profile's plaintext rows, then sweeps its orphan key rows: both need the row
-	 *  keys, so both wait for the profile's unlock. A failure is logged; the next unlock retries. */
+	 *  keys, so both wait for the profile's unlock. A failure is logged; the next worker retries,
+	 *  since a later unlock in this one finds the keys held and announces nothing. */
 	private async onRowKeysReady(profileId: string): Promise<void> {
 		try {
 			await this.sealLegacyRows(profileId)
 			await this.sweepOrphanImportedKeys(profileId)
 		} catch (error) {
-			this.logWarn("converting or sweeping the profile's accounts failed; the next unlock retries", { error })
+			this.logWarn("converting or sweeping the profile's accounts failed; the next worker retries", { error })
 		}
 	}
 
@@ -777,7 +778,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	/**
 	 * The duplicate check and both writes share one hold of the row's lock, the lock a create of the
 	 * same address takes, so neither can land between the other's check and write. Key row first:
-	 * a crash between the two writes leaves an orphan key (swept on init), never an account that
+	 * a crash between the two writes leaves an orphan key (swept at the next unlock), never an account that
 	 * cannot sign. A failure after the key write removes it; the duplicate refusal writes nothing.
 	 */
 	private async commitImportedAccount(account: Account, sealed: string, epoch: number): Promise<void> {
@@ -1102,7 +1103,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 
 	/**
 	 * Accounts are read before the key rows: an import that lands between the two reads can add a
-	 * key row with no account, which the restored wallet's orphan sweep removes at its next start,
+	 * key row with no account, which the orphan sweep removes at the profile's next unlock,
 	 * but never an account without its key. The fence is asserted again after the last seal, so a lock, switch, deletion or
 	 * worker restart during the export throws instead of returning another session's material.
 	 */

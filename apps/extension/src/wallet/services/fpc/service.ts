@@ -86,7 +86,7 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		try {
 			await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
 		} catch (error) {
-			this.logWarn("sealing the profile's plaintext fee payers failed; the next unlock retries", { error })
+			this.logWarn("sealing the profile's plaintext fee payers failed; the next worker retries", { error })
 		}
 	}
 

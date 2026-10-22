@@ -72,7 +72,7 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 		try {
 			await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
 		} catch (error) {
-			this.logWarn("sealing the profile's plaintext contacts failed; the next unlock retries", { error })
+			this.logWarn("sealing the profile's plaintext contacts failed; the next worker retries", { error })
 		}
 	}
 

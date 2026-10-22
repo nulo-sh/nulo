@@ -14,7 +14,7 @@ const ENGINE = "the migration engine's own state, read before any unlock"
 const UI_FLAG = "a per-profile flag of the popup, no content"
 
 const PLAINTEXT: Partial<Record<StoredShapeName, string>> = {
-	profiles: "the row keys' source; the picker and lock screen show the name (OA-1)",
+	profiles: "the row keys' source; the picker and lock screen show the name",
 	profileTombstones: "reserves the id and resumes a deletion before unlock; names addresses and token ids only while it runs",
 	restorePending: "the torn-restore gate runs before unlock: a profile id, a generation and a time",
 	accountIntegrityBlocked: "read before unlock by the integrity barrier; names addresses only while a block stands",
@@ -26,7 +26,7 @@ const PLAINTEXT: Partial<Record<StoredShapeName, string>> = {
 	config: "device-wide settings the boot reads before any unlock",
 	tokenPrices: "device-wide prices of listed tokens: public data",
 	tokenList: "the signed public token list",
-	activeNetwork: "a random network id, meaningless without its sealed row, read by the pre-unlock gates (D22)",
+	activeNetwork: "a random network id, meaningless without its sealed row, read by the pre-unlock gates",
 	legalAccepted: "device-wide terms acceptance, read before unlock and never in a backup",
 	uiActiveAccount: KL_12,
 	uiLastActiveProfile: "the profile id the lock screen opens on",

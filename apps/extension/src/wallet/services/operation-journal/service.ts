@@ -180,7 +180,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		try {
 			await this.storage.sealLegacy(profileId, (fn) => this.transitionLock.withLock(fn))
 		} catch (error) {
-			this.logWarn("sealing the profile's plaintext journal failed; the next unlock retries", { error })
+			this.logWarn("sealing the profile's plaintext journal failed; the next worker retries", { error })
 		}
 	}
 

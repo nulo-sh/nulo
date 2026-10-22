@@ -330,8 +330,8 @@ export class SealedEntityStorage<T> {
 	 * Converts `profileId`'s legacy rows, one `withLock` section per row so no lock is held for the
 	 * whole pass. Each row seals the exact stored text (a codec-invalid row too, so nothing stays
 	 * readable and nothing is lost) and commits only while its key still holds that text. A keyed
-	 * row is written under its sealed key and its legacy key removed in the same dispatch; a crash
-	 * between leaves both, which reads dedupe and the next pass finishes. A row commits only while
+	 * row is written under its sealed key first, then its legacy key is removed; a crash between
+	 * leaves both, which reads dedupe and the next pass finishes. A row commits only while
 	 * the profile still holds the keys the pass began with, so a pass outliving the profile's
 	 * deletion writes nothing after the deletion's keyless sweep. Returns the rows sealed.
 	 */

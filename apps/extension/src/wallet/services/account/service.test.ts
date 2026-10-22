@@ -570,7 +570,7 @@ describe("AccountService.sweepOrphanImportedKeys", () => {
 		}
 		const { logger } = await boot(api)
 		await vi.waitFor(() =>
-			expect(loggedAfter(logger, "converting or sweeping the profile's accounts failed; the next unlock retries")).toEqual([
+			expect(loggedAfter(logger, "converting or sweeping the profile's accounts failed; the next worker retries")).toEqual([
 				{ error: { name: "Error", message: "storage unavailable" } },
 			]),
 		)
