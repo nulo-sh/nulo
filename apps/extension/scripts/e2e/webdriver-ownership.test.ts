@@ -1,13 +1,15 @@
 import { spawn } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { randomBytes } from "node:crypto"
+import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { afterAll, describe, expect, test, vi } from "vitest"
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest"
 
 // Set before the module loads: `E2E_DATA_ROOT` is read at import time, and these cases write
 // ownership records that must never land in a real run's state directory.
-const ROOT = mkdtempSync(path.join(tmpdir(), "nulo-ownership-test-"))
+const ROOT = path.join(tmpdir(), `nulo-ownership-test-${randomBytes(4).toString("base64url")}`)
 process.env.NULO_E2E_DATA_ROOT = ROOT
+let rootMade = false
 
 const {
 	disownProfile,
@@ -100,6 +102,11 @@ async function until(condition: () => boolean, timeoutMs = 3_000): Promise<void>
 // `releaseLaunch` may spend its whole grace (5 s, then 2 s after SIGKILL) on a loaded host, which
 // is already past the runner's 5 s default.
 describe.skipIf(process.platform !== "linux")("webdriver launch ownership", { timeout: 20_000 }, () => {
+	// Made and removed by this block, so a host that skips it makes nothing.
+	beforeAll(() => {
+		mkdirSync(ROOT, { mode: 0o700 })
+		rootMade = true
+	})
 	afterAll(() => {
 		for (const pid of markers.flatMap((marker) => ownedProcesses(marker))) {
 			try {
@@ -108,7 +115,7 @@ describe.skipIf(process.platform !== "linux")("webdriver launch ownership", { ti
 				// Already reaped by the case under test.
 			}
 		}
-		rmSync(ROOT, { recursive: true, force: true })
+		if (rootMade) rmSync(ROOT, { recursive: true, force: true })
 	})
 
 	test("a start time identifies the owning run, and a dead pid has none", () => {
