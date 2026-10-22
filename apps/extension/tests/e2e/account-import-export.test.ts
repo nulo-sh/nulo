@@ -16,7 +16,6 @@
  * `registerProfile`), NOT the in-session profile picker: that in-page path has never been driven
  * end-to-end by a test (`auth-flows.test.ts` only asserts its route).
  */
-import { rmSync } from "node:fs"
 import { expect } from "vitest"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import {
@@ -149,43 +148,38 @@ test("the file-chooser import path accepts a written export file", { timeout: 18
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general", 30_000)
 	const body = await exportAccountBody(page, FIRST_ACCOUNT_NAME, false)
-	// A plaintext export carries a REAL signing key — clean the temp file up.
 	const filePath = writeBackupToTemp(body, "account-export.json")
-	try {
-		// Enter the page the way a user does: the Manage Accounts button routes to it.
-		await gotoAccounts(page)
-		await clickByTestId(page, "accounts-import-btn")
-		await page.waitForSelector('[data-testid="import-account-pick-file"]', { visible: true, timeout: 15_000 })
-		await pickFileByTestId(page, "import-account-pick-file", filePath)
-		// The chip reflects the picked file; Continue then decodes it.
-		await page.waitForFunction(
-			(name: string) => (document.querySelector('[data-testid="import-account-pick-file"]')?.textContent ?? "").includes(name),
-			{ timeout: 15_000, polling: 200 },
-			"account-export.json",
-		)
-		await clickByTestId(page, "import-account-submit")
-		await page.waitForFunction(
-			() =>
-				document.querySelector('[data-testid="import-account-preview"]') !== null ||
-				document.querySelector('[data-testid="import-account-error"]') !== null,
-			{ timeout: 30_000, polling: 200 },
-		)
-		// Same profile ⇒ the account already exists, so this previews fine and would reject at
-		// write; the point here is that the FILE PATH produced a decodable body.
-		const previewed = await page.evaluate(() => {
-			const row = document.querySelector('[data-testid="import-account-preview"]')
-			const el = document.querySelector('[data-testid="import-account-preview-address"]') as HTMLElement | null
-			return {
-				address: row?.getAttribute("data-account-address") ?? null,
-				text: el?.textContent?.trim() ?? null,
-				clipped: el ? el.scrollWidth > el.clientWidth : null,
-			}
-		})
-		expect(previewed.address).toBeTruthy()
-		// The preview renders the WHOLE address, wrapped, at the popup's width — never an ellipsis.
-		expect(previewed.text).toBe(previewed.address)
-		expect(previewed.clipped).toBe(false)
-	} finally {
-		rmSync(filePath, { force: true })
-	}
+	// Enter the page the way a user does: the Manage Accounts button routes to it.
+	await gotoAccounts(page)
+	await clickByTestId(page, "accounts-import-btn")
+	await page.waitForSelector('[data-testid="import-account-pick-file"]', { visible: true, timeout: 15_000 })
+	await pickFileByTestId(page, "import-account-pick-file", filePath)
+	// The chip reflects the picked file; Continue then decodes it.
+	await page.waitForFunction(
+		(name: string) => (document.querySelector('[data-testid="import-account-pick-file"]')?.textContent ?? "").includes(name),
+		{ timeout: 15_000, polling: 200 },
+		"account-export.json",
+	)
+	await clickByTestId(page, "import-account-submit")
+	await page.waitForFunction(
+		() =>
+			document.querySelector('[data-testid="import-account-preview"]') !== null ||
+			document.querySelector('[data-testid="import-account-error"]') !== null,
+		{ timeout: 30_000, polling: 200 },
+	)
+	// Same profile ⇒ the account already exists, so this previews fine and would reject at
+	// write; the point here is that the FILE PATH produced a decodable body.
+	const previewed = await page.evaluate(() => {
+		const row = document.querySelector('[data-testid="import-account-preview"]')
+		const el = document.querySelector('[data-testid="import-account-preview-address"]') as HTMLElement | null
+		return {
+			address: row?.getAttribute("data-account-address") ?? null,
+			text: el?.textContent?.trim() ?? null,
+			clipped: el ? el.scrollWidth > el.clientWidth : null,
+		}
+	})
+	expect(previewed.address).toBeTruthy()
+	// The preview renders the WHOLE address, wrapped, at the popup's width — never an ellipsis.
+	expect(previewed.text).toBe(previewed.address)
+	expect(previewed.clipped).toBe(false)
 })

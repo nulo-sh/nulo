@@ -92,9 +92,9 @@ export async function reimportToTerminal(page: Page, filePath: string): Promise<
 	return summaryText
 }
 
-/** Stage 1: export a REAL backup from the funded wallet once per test file (module-level cache —
- *  each vitest file gets its own module registry) and write it to a file the calling test owns.
- *  Only the funded chain's account-state survives, so the import dials no public node. */
+/** Export a REAL backup from the funded wallet once per test file (module-level cache — each
+ *  vitest file gets its own module registry) and write it to a file the calling test owns. Only
+ *  the funded chain's account-state survives, so the import dials no public node. */
 let exported: { sealed: string; funded: string } | null = null
 export async function exportFundedBackup(
 	ctx: ExtensionContext & { accountAddress: string },

@@ -18,7 +18,7 @@ Base: `origin/dev` at `5c35ca934` (#1063 not yet merged, so `nodeTmpDir` and the
 
 Smoke (`tests/e2e/`): `account-import-export.test.ts:153`; `backup-imported-account.test.ts:86`; `backup-migration.test.ts:51,100`; `import-paths.test.ts:103` (before its `try`); `import-dead-rpc.test.ts:194,208,234`; `import-errors-scroll.test.ts:53` (local `backupFile`); `passkey-backup.test.ts:328`; `passkey-retry.test.ts:37` (local helper); `restore-outcome.test.ts:165` (before `withExtension`), `:216`, `:220`, `:232`, `:267`; `toolbar-panel.test.ts:565,608`.
 
-Network (`tests/e2e/network/`): `account-balance-orphans.test.ts:146`; `backup-import-stalled-network.test.ts:63` (local helper); `backup-restore-integrity.test.ts:141`; `backup-migration-roundtrip.test.ts:85`; `profile-reimport-matrix.test.ts:112` (picked twice; its `finally` already removes `dirname(backupPath)` at `:170`); `restore-again.test.ts:62` (local helper).
+Network (`tests/e2e/network/`): `account-balance-orphans.test.ts:146`; `backup-import-stalled-network.test.ts:63` (local helper); `backup-restore-integrity.test.ts:141`; `backup-migration-roundtrip.test.ts:85`; `profile-reimport-matrix.test.ts:112` (picked twice); `restore-again.test.ts:62` (local helper).
 
 Through `helpers/crash-truth.ts:107` (`exportFundedBackup`, a module-level cache of the path, `:97-110`): `network/hero-prices-unavailable.test.ts:25` (one test); `network/backup-restore-sw-restart.test.ts:236,366` (two tests share the cached path; each re-imports it up to three times: `:263`, `:313`, `:336`).
 
@@ -31,7 +31,7 @@ Chrome: `chooser.accept([path])` (`fixtures/browser/chrome.ts:320-323`). Firefox
 ## Claims in #1064
 
 - Holds: the helper at `import-drivers.ts:588-593`; nothing removes the dir; no teardown or `e2e:reap` looks under `os.tmpdir()`. Host count on 2026-10-22 at 15:2xZ: 1,334 `nulo-e2e-backup-*` dirs again after the morning's removal.
-- **Did not hold:** the caller list. The issue names five call sites; there are 25 in 17 files, plus two network test files through `crash-truth.ts` (eight network test files in all, above); `profile-reimport-matrix` already removes its dir.
+- **Did not hold:** the caller list. The issue names five call sites; there are 25 in 17 files, plus two network test files through `crash-truth.ts` (eight network test files in all, above). Six network files already remove the dir in their `finally`, and two smoke files remove only the file (found in the A1 review).
 
 ## Neighbours
 

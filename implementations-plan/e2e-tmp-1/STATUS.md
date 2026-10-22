@@ -5,3 +5,4 @@
 - 2026-10-22: Codex r1 and Opus r1 conditional approve; conditions applied; Codex r2 running.
 - 2026-10-22: Codex r2 approve; plan committed; auto-continue into A1 (OWNER-ASKS: none).
 - 2026-10-22: A1 phase 1 green (self-test red on base, green after; lint, typecheck:all, test, test:all); D7 module split.
+- 2026-10-22: A1 Codex r1 clean; Opus review 3 findings fixed (eight redundant caller removals dropped); smoke Chrome running.

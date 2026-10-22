@@ -37,7 +37,7 @@
  */
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
+import { join } from "node:path"
 import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { type ExtensionContext, launchExtension, openPopup, registerProfile, test } from "../fixtures/extension"
@@ -253,12 +253,7 @@ test.skipIf(!hasConfig)(
 			try {
 				await ctx2?.close()
 			} finally {
-				try {
-					rmSync(profileDir, { recursive: true, force: true })
-				} finally {
-					// The doctored file embeds the wallet's REAL (local-chain test) master-key.
-					rmSync(dirname(filePath), { recursive: true, force: true })
-				}
+				rmSync(profileDir, { recursive: true, force: true })
 			}
 		}
 	},
