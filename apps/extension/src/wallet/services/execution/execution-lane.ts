@@ -356,8 +356,8 @@ export class ExecutionLane {
 	 * Hands a granted dApp send's slot on while `wait` runs, then re-enters at the tail in the
 	 * origin's bucket with the place it was admitted under, so no re-entry is refused for capacity.
 	 * The record stays vouched for and keeps the controller `acquireSlot` registered; a silent-path
-	 * record's `queued` write settles before `wait` runs, after the slot is handed on. Errors map as
-	 * `acquireSlot`'s.
+	 * record's `queued` write settles before `wait` runs, possibly after the slot is handed on. Errors
+	 * map as `acquireSlot`'s.
 	 */
 	public async parkSlot(
 		release: ExecutionMutexRelease,
