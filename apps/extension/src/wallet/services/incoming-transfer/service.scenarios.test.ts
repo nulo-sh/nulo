@@ -37,6 +37,7 @@ import type { BalanceRefreshOutbox } from "./balance-outbox"
 import { PublicScanCursorSchema, noteRecordId } from "./spec"
 import type { IncomingNoteRecord, IncomingPublicEventRecord, IncomingTransferRecord, IncomingTrustRecord, PublicScanCursor } from "./spec"
 import { TaskStatus } from "@/wallet/services/task/spec"
+import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import type { SyncedBlock } from "@/wallet/services/note/spec"
 import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { type PublicEventReader, comparePublicPositions } from "./public-event-indexer"
@@ -180,6 +181,7 @@ function makeNetworkStub(
 		}),
 		getNetwork: vi.fn().mockImplementation(async (id: string) => networks.find((n) => n.id === id)),
 		isChainQuarantined: async () => false,
+		onNetworkUpdated: eh<unknown>(),
 		registerChainPurgeSubscriber(sub: typeof purgeSub) {
 			purgeSub = sub
 		},
@@ -3503,6 +3505,8 @@ describe("IncomingTransferService — bounded public scans", () => {
 })
 
 describe("IncomingTransferService — reads the public scans of a tick share", () => {
+	afterEach(() => vi.restoreAllMocks())
+
 	const pollPublicOf = (service: unknown) => {
 		const pollPublic = Reflect.get(service as object, "pollPublic") as (key: string, force: boolean) => Promise<void>
 		return (contract: string) => pollPublic.call(service, `n1|${contract}`, true)
@@ -3532,8 +3536,9 @@ describe("IncomingTransferService — reads the public scans of a tick share", (
 		const again = poll(tokenA.contract)
 		await flushPromises()
 		expect(isChainQuarantined).toHaveBeenCalledTimes(2)
-		release(false)
+		release(true)
 		await again
+		expect(state.classCalls).toBe(2)
 	})
 
 	test("the scans of a tick resolve their network once, and a scheduler commit forgets it", async () => {
@@ -3557,12 +3562,37 @@ describe("IncomingTransferService — reads the public scans of a tick share", (
 		expect(network.getNetwork).toHaveBeenCalledTimes(2)
 	})
 
+	test("the PXE transport's next class read carries an endpoint edited since the last one", async () => {
+		const rpcUrls: string[] = []
+		vi.spyOn(PxeServiceClient.prototype, "getPublicScanTips").mockResolvedValue({
+			checkpointedBlockNumber: 100,
+			checkpointedBlockHash: "0xcheckpoint",
+			finalizedBlockNumber: 50,
+			proposedBlockHash: "0xproposed",
+		} as PublicScanTips)
+		vi.spyOn(PxeServiceClient.prototype, "getPublicTokenClassStatus").mockImplementation(async (info: { rpcUrl: string }) => {
+			rpcUrls.push(info.rpcUrl)
+			return "unresolved"
+		})
+		const network = makeNetworkStub()
+		const { service } = await bootService({ network, account: makeAccountStub([]), token: makeTokenStub([tokenA]) })
+		await flushPromises()
+
+		const edited = { ...network.networks[0], endpoints: [{ id: "e2", rpcUrl: "http://n1-new" }], primaryEndpointId: "e2" }
+		network.getNetwork.mockImplementation(async () => edited)
+		network.onNetworkUpdated.invoke(edited)
+		await service.retryIncomingScan("n1")
+		expect(rpcUrls).toEqual(["http://n1", "http://n1-new"])
+	})
+
 	test("ticks over an empty outbox: only the note targets list it, never a public scan", async () => {
 		vi.useFakeTimers()
 		try {
 			const f = await bootTicking({ token: makeTokenStub([tokenA, tokenB]) })
 			const list = vi.spyOn(Reflect.get(f.service, "repo") as IncomingTransferRepository, "listOutbox")
+			const publicPolls = vi.spyOn(f.service as unknown as { pollPublic: () => Promise<void> }, "pollPublic")
 			await tick()
+			expect(publicPolls).toHaveBeenCalledTimes(2)
 			expect(list).toHaveBeenCalledTimes(2)
 		} finally {
 			vi.useRealTimers()

@@ -120,6 +120,7 @@ async function startService(api: FakeBrowserApi, notes: Record<string, unknown> 
 			getNetworksRaw: async () => [NETWORK],
 			registerChainPurgeSubscriber: () => {},
 			isChainQuarantined: async () => false,
+			onNetworkUpdated: new EventHandler(),
 		}),
 	)
 	collection.add(

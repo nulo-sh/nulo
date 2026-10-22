@@ -446,6 +446,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 		this.tokenService.onTokenAdded.add(this.onTokenAdded)
 		this.tokenService.onTokenDeleted.add(this.onTokenDeleted)
+		// An edited endpoint reaches the next PXE call: one carrying the replaced endpoint would rebind
+		// the chain's runtime to it.
+		this.networkService.onNetworkUpdated.add(() => this.networkReads.clear())
 		this.transactionService.onTransactionAdded.add(this.onTransactionAdded)
 		// Profile lifecycle: re-hydrate the scheduler set when the active
 		// profile changes (otherwise we keep scanning the old profile's tokens).
@@ -1331,7 +1334,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	}
 
 	/** Read through `getNetwork`, so the row is the active profile's when read; a profile switch
-	 *  commits a rebuild, which forgets it. */
+	 *  commits a rebuild, and a network update clears it. */
 	private sharedNetwork(networkId: string): Promise<Network> {
 		return this.networkReads.get(networkId, () => this.networkService.getNetwork(networkId))
 	}

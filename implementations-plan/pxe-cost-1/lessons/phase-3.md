@@ -161,3 +161,67 @@ processing; their assertions are unchanged and hold for any number of drains.
 
 Gates: incoming-transfer suite 492 green, `bun run lint`, `bun run typecheck:all`, `bun run test`
 (15,047 passed), `bun run test:all` (15 workspaces) all exit 0.
+
+### The second screen: K in {4, 8, 16} on `b743e075f`
+
+Exports `diag2-k4`, `diag2-k8`, `diag2-k16` (`tools/make-export.sh` with `DIAG=1`: the same
+instruments as `diag-base`, per-phase timers included, the probe unchanged, sha `b046a4cd`); the base
+arm is `diag-base` again. One run each, in the order base, 4, 8, 16, at 10 and 1,000 seeded tokens
+(`p3-screen5-*`). Every arm recorded 1,000 first-scan outcomes before Retry; no head run skipped a
+scan (the base's 1,000 backoff skips are its interval ticks after its wave, before Retry).
+
+| run | point | load1 | Home | heartbeat | wave end | Retry | episode writes (MB) |
+|---|---|---|---|---|---|---|---|
+| base (`p3-screen5-diag-base`) | 10 | 80 | 618 | 10 | 479 | 125 | 10 (0.0) |
+| base | **1,000** | 70 | **22,863** | **14,160** | **26,892** | 28,533 | 1,000 (80.6) |
+| K = 4 (`p3-screen5-diag2-k4`) | 10 | 57 | 649 | 39 | 795 | 41 | 7 (0.0) |
+| K = 4 | **1,000** | 57 | **730** | **57** | **20,440** | 24,200 | 732 (57.8) |
+| K = 8 (`p3-screen5-diag2-k8`) | 10 | 66 | 650 | 3 | 561 | 43 | 6 (0.0) |
+| K = 8 | **1,000** | 56 | **901** | **225** | **20,415** | 24,102 | 777 (61.4) |
+| K = 16 (`p3-screen5-diag2-k16`) | 10 | 110 | 626 | 15 | 501 | 62 | 2 (0.0) |
+| K = 16 | **1,000** | 72 | **1,848** | **381** | **16,599** | 17,419 | 779 (60.9) |
+
+The rule, applied at 1,000 seeded tokens:
+
+- K = 4: Home +81 ms and heartbeat +18 ms of its 10-token values; the wave ends at 20.4 s against
+  the base's 26.9 s; Retry 24.2 s. **Meets all three.**
+- K = 8: Home +251 ms, heartbeat +222 ms; wave 20.4 s; Retry 24.1 s. Meets all three.
+- K = 16: Home +1,222 ms: **fails responsiveness**; wave 16.6 s; Retry 17.4 s.
+- The smallest K that meets all three is **4**, the value already committed. Doubling it to 8 bought
+  no wave time: a slot's hold doubled with it.
+
+What a slot holds, the same timers before (`p3-screen4-diag-k4`, `941c2620a`) and after
+(`p3-screen5-diag*`, `b743e075f`), the 1,000-token wave, mean per poll in ms:
+
+| build, K | slot hold (mean / p50 / p90) | quarantine read | `scanAndRecord` | outbox drain |
+|---|---|---|---|---|
+| `941c2620a`, 4 | 208 / 196 / 281 | 47 | 118 | 41 |
+| `b743e075f`, 4 | 80 / 67 / 130 | 27 | 52 | 0 (skipped: no rows) |
+| `b743e075f`, 8 | 159 / 151 / 215 | 35 | 124 | 0 |
+| `b743e075f`, 16 | 254 / 241 / 335 | 30 | 224 | 0 |
+
+The host ran lighter than in the first screen (load1 56-110 against 79-169); both comparisons are
+within one screen.
+
+### Review round 2 (Codex, high, session 01a1647c) on `b743e075f`: reject, two local fixes
+
+- **An endpoint edit left the cached network row in use** (demonstrated with a probe of the default
+  reader: endpoints A, A, B across warm-up, edit, clear). `NetworkService` emits `onNetworkUpdated`
+  in process right after it writes; nothing here listened, so for up to 5 s a PXE call could carry
+  the replaced endpoint and rebind the chain's runtime to it. Fix: the service clears the shared
+  network reads on that event. Test: the default PXE transport (the client's prototype stubbed, no
+  injected reader) carries the edited endpoint on the next class read; red without the listener.
+- **A clock set back reused a settled read** (demonstrated in memory: a TTL-0 quarantine verdict
+  served after `Date.now()` moved back; a 5 s read would serve until the clock caught up). Fix: a
+  negative age counts as expired. Tests: both TTLs, red without the guard.
+- Not blocking, taken: the TTL test now holds the read past the TTL before it settles (red when the
+  TTL runs from the start); the `clear()` test settles the forgotten reads after their replacement
+  (red when a late success repopulates the cache); the quarantine scenario's second verdict is
+  "quarantined" and suppresses the class read; the empty-outbox scenario counts the public polls it
+  claims to have watched.
+- The two fixture changes: realistic, not loosened (`BalanceJobQueue.enqueue` creates the task
+  before `requestBalanceRefresh` returns its id; missing-task recovery keeps its own scenario).
+- Measurement: the screen and the confirmation run `b743e075f`; the fixes change nothing the probe
+  exercises (no network update, no clock change).
+- The confirmation's run 2B overlapped about six minutes of local unit-test and typecheck runs (the
+  mutation checks); its numbers are read with that in mind.

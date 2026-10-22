@@ -1,7 +1,8 @@
 /**
  * One read per key for every caller that asks while it is in flight. A read that succeeded keeps
  * serving for `ttlMs` after it settled (0: never past its own flight); a failed one is shared only
- * while in flight, so the next caller reads again.
+ * while in flight, so the next caller reads again. A clock set back counts as expired, so a settled
+ * read is never served longer than `ttlMs` of wall time.
  */
 export class SharedReads<V> {
 	private readonly reads = new Map<string, { read: Promise<V>; settledAt?: number }>()
@@ -10,7 +11,7 @@ export class SharedReads<V> {
 
 	public get(key: string, read: () => Promise<V>): Promise<V> {
 		const recent = this.reads.get(key)
-		if (recent && (recent.settledAt === undefined || Date.now() - recent.settledAt < this.ttlMs)) return recent.read
+		if (recent && (recent.settledAt === undefined || isFresh(Date.now() - recent.settledAt, this.ttlMs))) return recent.read
 		const entry: { read: Promise<V>; settledAt?: number } = {
 			read: read().then(
 				(value) => {
@@ -31,4 +32,8 @@ export class SharedReads<V> {
 	public clear(): void {
 		this.reads.clear()
 	}
+}
+
+function isFresh(ageMs: number, ttlMs: number): boolean {
+	return ageMs >= 0 && ageMs < ttlMs
 }

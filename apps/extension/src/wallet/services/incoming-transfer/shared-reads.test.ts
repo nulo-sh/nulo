@@ -17,6 +17,7 @@ describe("SharedReads", () => {
 		const { read, pending } = heldRead<number>()
 
 		const first = reads.get("n1", read)
+		vi.advanceTimersByTime(8_000)
 		const second = reads.get("n1", read)
 		expect(read).toHaveBeenCalledTimes(1)
 		pending[0].resolve(7)
@@ -57,15 +58,40 @@ describe("SharedReads", () => {
 		expect(read).toHaveBeenCalledTimes(2)
 	})
 
-	test("keys never share, and clear() makes the next caller read again even while a read is in flight", async () => {
+	test("keys never share; after clear() the next caller reads again, and a forgotten read ending later never displaces it", async () => {
 		const reads = new SharedReads<number>(5_000)
-		const { read } = heldRead<number>()
+		const { read, pending } = heldRead<number>()
 
-		void reads.get("n1", read)
+		const failing = reads.get("n1", read)
 		void reads.get("n2", read)
 		expect(read).toHaveBeenCalledTimes(2)
 		reads.clear()
-		void reads.get("n1", read)
-		expect(read).toHaveBeenCalledTimes(3)
+		const replacing = reads.get("n1", read)
+		pending[0].reject(new Error("node down"))
+		await expect(failing).rejects.toThrow("node down")
+		expect(reads.get("n1", read)).toBe(replacing)
+
+		reads.clear()
+		const latest = reads.get("n1", read)
+		pending[3].resolve(4)
+		await latest
+		pending[2].resolve(9)
+		await replacing
+		expect(await reads.get("n1", read)).toBe(4)
+		expect(read).toHaveBeenCalledTimes(4)
+	})
+
+	test.each([0, 5_000])("with a ttl of %i ms, a clock set back after a read settled makes the next caller read again", async (ttlMs) => {
+		vi.useFakeTimers()
+		vi.setSystemTime(10_000)
+		const reads = new SharedReads<boolean>(ttlMs)
+		const { read, pending } = heldRead<boolean>()
+
+		const first = reads.get("p1|n1", read)
+		pending[0].resolve(false)
+		await first
+		vi.setSystemTime(9_999)
+		void reads.get("p1|n1", read)
+		expect(read).toHaveBeenCalledTimes(2)
 	})
 })
