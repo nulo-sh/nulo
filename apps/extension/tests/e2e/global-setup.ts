@@ -308,7 +308,7 @@ async function finishBoot(project: TestProject): Promise<void> {
 }
 
 /** Teardown and `e2e:reap` remove the run dir and nothing else, so a store the node opens outside
- *  it outlives every run. A scan that sees no store inside proves nothing and fails too. */
+ *  it escapes their cleanup. A scan that sees no store inside proves nothing and fails too. */
 function assertNodeStoresInRunDir(): void {
 	if (!weStartedNode || process.platform !== "linux") return
 	const { inside, outside, unreadable } = nodeStores(AZTEC_RUN_DIR, MARKERS.aztec)
