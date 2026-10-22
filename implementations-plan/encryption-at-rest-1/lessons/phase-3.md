@@ -1,0 +1,42 @@
+# Arc A3 (P6–P7): balances, authorizations and incoming receipts
+
+## Where the code differs from the plan, and why
+
+- **Every write seals first and checks its fence after the seal.** The plan's D9 rule is prepare, check, commit with no await between the check and the dispatch. The balance queue, balance creation and restore, the auth-registry writes and every incoming write now `prepare` (seal), read their fence, then `commit`; a refused fence writes nothing and the incoming repository's writers resolve `false`, which each caller maps to the refusal it already had (`revoked`, a skipped emit, an unclaimed arrival).
+- **The incoming keys keep their scope.** A key stays `[kind:]profileId|networkId|` and only its tail is keyed-hashed: the record's note hash, or its transaction hash and log index, joined; the trust, cursor and arrival row's contract or account; the outbox row's account, with the token id (a local sequence number) left as it is. `clearScope` still deletes by prefix with no row key, and a prefix test proves it with every profile's keys dropped.
+- **`commitAcceptance` became `prepareAcceptance`.** It seals the trusted row and every un-hidden receipt, and returns a commit that writes them in one `storage.set` (`commitSealedTogether`), so an Allow is still one write. The service reads its fence between the seal and that commit.
+- **Account additions run one at a time.** `onAccountAdded` captured its epoch before reading the tips and each addition bumps the epoch inside its own section, so a concurrent addition refused the next one's arrival baseline. The window was a few storage calls before; a sealed section made it every time in `network-reset/service.composition.test.ts`, whose reset re-creates three accounts. The queue is the smallest change that keeps the baseline fence as it was.
+- **The bare enable flag is owned by its key.** `authRegistryEnabled` rows are a boolean, so `ownerOf` reads the profile from the key; `legacyAt` lets a non-object row through when its key names the owner. The golden sealer does the same (`sealedOwnerOf`), which the flag, cursor, outbox and arrival goldens need.
+- **The re-stamp is stamp 2.** One additive stamp for all eight roots (a plaintext row still reads through the dual read and is sealed at its profile's next unlock) introduces one sealed golden per root, sealed by the generator from the root's `.full` golden and inserted by hand, as in A2; the generator's rerun reports the shapes unchanged. The two numeric roots' sealed goldens take id 3, so no two goldens share a storage key.
+- **Unit tests wait for the crypto.** Sealed writes answer on a later event-loop turn, which `flushPromises` and fake-timer advances never wait for. `trackSubtleCrypto` (`sealed-entity-storage.testing.ts`) counts the WebCrypto calls in flight; the incoming scenarios' flush and clock advance wait until a full drain leaves none, which also keeps their "nothing happened" assertions from passing before anything ran.
+- **E2E readers.** The balance wait falls back to raw rows on a build without the seam (`readRowsOnAnyBuild`), since `update-in-place` populates on a release build. The pending-trust seed waits for the sealed trust row by its natural id, writes its plaintext replacement, then removes the sealed copy, which a keyed root would otherwise prefer. The update verifier counts a keyed queue's rows and excuses a drained outbox row under `balancesAsserted`, as it did by key.
+
+## Attempts
+
+- **143 unit failures after P6's wiring**: profile fakes lacked `rowKeys` / `onRowKeysReady`, and services started without `init` had no profile service. The fakes gained both; the parking and interleaving tests hook `prepare` now that the queue and creation no longer call `repo.set`.
+- **Fake-timer auth-registry tests timed out**: WebCrypto does not advance with fake timers. They wait for the first receipt read (`vi.waitFor`) before advancing.
+- **70 incoming scenario failures after P7's wiring**, all timing: assertions ran before sealed writes settled. `trackSubtleCrypto` brought them to 2, both on the removed `commitAcceptance`.
+- **The reset composition test**: the arrival baseline of the second and third re-created accounts was refused (above). Serializing additions fixed it; reverting the queue fails the test again.
+- **Two functions went over the cognitive budget** with the fence plumbing (`claimArrivals`, `commitPublicEventLocked`); each lost a helper (`eligibleArrivals`, `reconcileExistingRecord`). No suppression.
+- **`type-roles` re-attested** the auth-registry digest: the registry's reads name the profile, which moved the digested lines.
+- **Mutation checks**: hashing the whole incoming key fails the prefix-clear test; dropping the deleter guard from the incoming conversion fails its test; removing the balance conversion's lock fails the conversion-against-purge test; reverting `legacyAt` fails the bare-flag test.
+
+## Downgrade to the A2 build
+
+Measured on Chrome with the update replay's recorded v0.31.0 profile (7 rows in A3's roots: one balance, two receipts, one trust, one cursor, one outbox, one arrival row), its network endpoints made unreachable as the replay does. The A3 candidate unlocked and sealed it; that storage was then written into the A2 build (`b88606651`, the A2 candidate, identical to `#1029` in every storage path), which was unlocked and left on Home for 40 s. The A2 build logged **17** `failed validation — KEEPING (not deleting)` lines at error level: 9 before Home, 8 in the 40 s on Home (balances 4, trust 6, receipts 4, outbox 3). The same profile sealed by the A2 build itself logs none. So A3 adds about one line per sealed row per read on top of the ~220 lines in 40 s update-check-2 counted for A2's own roots; with a reachable node the incoming scan reads its rows on every tick and the rate grows with it. The cursor and arrival rows log nothing: the A2 build looks them up by natural key, finds nothing at the keyed id, and starts them again.
+
+**A quieter read, proposed, not built.** No released build can be changed, so the quieter read helps only a rollback onto a build that already carries it. Inside the plan's storage layer: `EntityStorage.decodeParsed` (wallet-core) recognises a value that is exactly a seal envelope (`{ profileId, sealed }`, `parseEnvelope`) and treats it as "sealed by a newer build", logging once per root per worker at `debug` instead of once per row per read at `error`, and still keeping the row. It adds no state and changes no stored shape. Landed in A4 (or alongside it), it would make a rollback from any later sealing release onto an A4 build quiet for the roots that release seals; it does nothing for a rollback onto A2 or A3.
+
+**Known limit, not new to A3.** A keyed root prefers its sealed copy (A2's decision, so an offline plaintext row cannot displace a sealed one). On a rollback the old build writes plaintext rows at natural keys; on the next upgrade the conversion keeps the older sealed copy and removes the newer plaintext one. For incoming rows that means a trust decision made on the rolled-back build is lost, and a cursor or arrival floor moves back (rescans are idempotent). The plan supports no downgrade, so this stays a known limit.
+
+## Concurrency inventory (D9)
+
+| Root | Conversion runs under | Delete vs open |
+|---|---|---|
+| `nulo:core:token-balances` | the balance service's `Lock`, one row per hold, skipping an id a purge fenced | compare-and-commit on the stored text and the held keys; a purge waits for the row's commit and deletes the sealed copy |
+| `nulo:core:auth-registry`, `nulo:core:auth-registry-enabled` | the registry's `Lock`, one row per section | the same compare-and-commit |
+| the five `nulo:core:incoming-*` roots | the incoming service lock, one row per section; a row commits only while its section still owns the lock and no scope wipe runs | the same compare-and-commit, plus the section ticket and the deleter count |
+
+## Measured
+
+To be filled in by the gates.
