@@ -6,7 +6,7 @@
 
 **What you saw.** Most icons are several strokes, and the wallet paints each stroke on its own. The inactive colour is 56 % opaque. Where two strokes of one icon overlap (a cap on a curve, a knob on its line, one coin's edge on the next), that spot is painted twice. It shows brighter on dark and darker on light, which reads as ink blots, or "a weird opacity on some lines". This holds at every size, both themes, and both normal and Retina screens, measured in Chrome; Firefox follows the same painting rules, and the arc adds a Firefox crop. At 22 px on a normal-density screen the lines also land between pixels and look soft.
 
-**Pictures** (`implementations-plan/ui-cosmetics-1/screenshots/`, each a sheet of Home, Holdings, History and Settings at 14, 16, 18, 22 and 24 px, inactive then active colour, zoomed 4x with each pixel kept square):
+**Pictures** (`screenshots/`, each a sheet of Home, Holdings, History and Settings at 14, 16, 18, 22 and 24 px, inactive then active colour, zoomed 4x with each pixel kept square):
 - `c0-today-*`: today.
 - `c1-one-path-*`: each icon painted once.
 - `c2-crisp-edges-*`: C1 with anti-aliasing turned off.

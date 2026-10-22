@@ -702,7 +702,9 @@ the pattern.
 - **The extension pages' CSP refuses `page.addStyleTag`** (`style-src-elem`; the CSP record then
   fails the launch), and so a `<style>` element a spec appends itself: its rule never applies, so a
   scratch control built on it stays green. Test CSS goes through CSSOM: `new CSSStyleSheet()`,
-  `replaceSync`, then `document.adoptedStyleSheets`. To stop a theme flip's transitions before a quick shot, `finish()` each of
+  `replaceSync`, then `document.adoptedStyleSheets`. A `style` attribute copied in the page fails it too
+  (`style-src-attr`): `cloneNode` of an element Vue styled records one, so a probe that lifts markup
+  builds it from the element's other attributes. To stop a theme flip's transitions before a quick shot, `finish()` each of
   `document.getAnimations()`; a looping one throws and is left alone. A popup's `document.body` can
   still be null when `waitForPopup` resolves: observe `document.documentElement`.
 - **A mouse drag can select nothing.** Chrome 152 starts no selection from a press between a

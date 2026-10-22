@@ -1,8 +1,8 @@
 ---
 plan: ui-cosmetics-1
 tier: light
-status: planned, Codex approve, awaiting the orchestrator's approval
-issues: "#1019 (one arc; item 2's code waits for OA-1)"
+status: completed
+issues: "#1019 (Closes)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,21 @@ base: origin/dev at 6d507c611
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-22.
+- **Status:** completed as one PR against `dev`, #1027, with `Closes #1019`; this close-out is its final commits.
+- **Shipped:** item 1, one header geometry on every onboarding step after welcome: `OnboardingStepHeader` (`apps/extension/src/onboarding/components/OnboardingStepHeader.vue`) draws the back row, step row and title on terms, create, import, the phrase step and done, so the title reads 261 px and the step row 160 px on all five in Chrome and Firefox; `legal-acceptance` S1 and S3 fail on any difference. Item 3, the Presto step is done once opened: a per-profile `prestoOpened` flag beside `aztecOpened` (`apps/extension/src/utils/get-started.ts`, `utils/profile-ui-keys.ts`, `popup/pages/general.vue`), registered as additive stored-shape stamp 3. Item 2, P80-01 C: `packages/design/src/core/Icon.vue` strokes a glyph's paths as one path, so a translucent colour paints each spot once; `packages/design/src/internal/render-glyphs.ts` refuses a path that does not open with an absolute `M`; the bottom bar's icons are 24 px (`apps/extension/src/popup/components/Navigation.vue`).
+- **Sign-off:** items 1 and 3 by the owner's words in #1019 (2026-10-21). Item 2, decision page 80 (2026-10-21 20:56Z): "P80-01: C", "B, plus the bottom bar's four icons at 24 px instead of 22: their straight lines also land on whole pixels on a normal screen; they grow by 2 px." The pictures, decision page 82 (2026-10-22), recorded on #1019: "P82-01, the onboarding titles held still: approved as pictured"; "P82-02, the Presto step done on open: approved as pictured"; "P82-03, the bottom bar at 24 px with its 1 px shifts: approved as pictured".
+- **Review loop:** Codex round 1 `clean` with one comment trim, beside an Opus diff review (no bug, two test gaps, both added); round 2 `clean`; round 3, resumed over Phase 3, `clean`, high confidence. Three rounds; converged.
+- **Gates at the head** (`462339ecc`, `origin/dev` at `5c35ca934` merged): `lint`, `typecheck:all` and `test:all` (15029 extension tests) exit 0; the storage tests 113/113 with the flag at stamp 3; full smoke at `--retry=0` on fresh armed builds, Chrome 61 files passed, 9 skipped, 272 tests, 1997 s; Firefox 65 passed, 5 skipped, 276 tests, 3008 s. At the icon commit (`b4f949e11`) `build-storybook` also exit 0.
+- **Deviations:** Phase 3 followed the draft PR, as the owner's pick gated it. The whole-pixel check is a measurement, not a test (D12). The flag's stamp moved twice as `dev`'s frozen baseline grew: a stamp-0 rewrite became additive stamp 1 after #938, then stamp 3 after #1029 and #1043.
+- **Dropped or rejected:** OA-1's C0 (keep) and C2 (crisp edges, curves turn to stairs) were not picked; dropping every glyph refusal was rejected (D8); the mixed-paint refusal was dropped as impossible (D8).
+- **Lessons:** nothing promoted to `lessons.md`, whose budget is spent and which holds nothing this supersedes. The painting invariant lives at `Icon.vue`'s comment and `Icon.test.ts`; the probe's two harness snags went to their owners: a copied `style` attribute fails the CSP record (the `e2e-testing` skill), and Firefox cuts a page screenshot's clip to the document's height (`apps/extension/tests/e2e/FIREFOX.md`).
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # ui-cosmetics-1: onboarding titles hold still; the Presto step is done on open; icons paint once
 
