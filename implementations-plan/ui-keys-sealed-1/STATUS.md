@@ -10,3 +10,4 @@
 - 2026-10-22: Codex final pass conditional approve (F1-F3 plus OA-1/OA-2 sign-off), all folded in; plan committed, report written.
 - 2026-10-22: arc started; OA-1 and OA-2 still unanswered, so the arc builds the three maps only (no pointer) and the privacy text as drafted, toward a draft PR. Merged `origin/dev` at `2b856d1a` (merge `0514e413`); `baseline:storage` unchanged there.
 - 2026-10-22: P1 gate pass (maps only): the targeted unit run (27 files, 555 tests), lint, `typecheck:all`, `test` (one rerun: `fpc/service-create.test.ts` timed out under load 280, green at 75), the other `test:all` packages green, step 5 equal, `baseline:storage` unchanged.
+- 2026-10-22: P2 gate pass (maps only): unit suites, lint, `typecheck:all`, `test:all`, smoke at retry 0 on Chrome (1845 s, 5 shards) and Firefox (2777 s, 7 shards).

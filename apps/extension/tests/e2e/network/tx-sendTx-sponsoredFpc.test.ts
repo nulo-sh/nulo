@@ -1,6 +1,5 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
-import { feePicksKey } from "@/utils/profile-ui-keys"
 import { clickByTestId, openPopup, test } from "../fixtures/extension"
 import { captureSoleProfileId, readActiveNetwork } from "../fixtures/helpers"
 import { pollUntil } from "../fixtures/poll"
@@ -8,6 +7,7 @@ import { readSealedRows } from "../fixtures/sealed-rows"
 import { snapshotResultSeq } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { waitForDappExecuteWorked } from "../fixtures/journal"
+import { savedAppPick } from "../helpers/ui-preferences"
 import { getSponsoredFpcAddress, mintPublicTokensForAccount, type AztecTestConfig } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -25,13 +25,6 @@ async function fpcIdAt(page: Page, address: string): Promise<string> {
 		(id) => typeof id === "string",
 		{ label: `the active network's FPC row at ${address}`, timeoutMs: 10_000, intervalMs: 200 },
 	)) as string
-}
-
-/** The app windows' saved fee pick for `account`, or null; runs in an extension page. The card keys
- *  the map by the account's address, so the lookup ignores hex case. */
-async function savedFeePick(key: string, account: string): Promise<{ type?: string; fpc?: { id?: string } } | null> {
-	const saved = ((await chrome.storage.local.get(key))[key] ?? {}) as Record<string, { type?: string; fpc?: { id?: string } }>
-	return Object.entries(saved).find(([address]) => address.toLowerCase() === account.toLowerCase())?.[1] ?? null
 }
 
 /**
@@ -79,8 +72,7 @@ test.skipIf(!hasConfig)(
 
 		// Only an explicit pick saves, so an empty record here makes the readback below this pick's.
 		const sponsorFpcId = await fpcIdAt(execPopup, await getSponsoredFpcAddress())
-		const feeKey = feePicksKey(await captureSoleProfileId(execPopup))
-		expect(await execPopup.evaluate(savedFeePick, feeKey, accountAddress)).toBeNull()
+		expect(await savedAppPick(execPopup, accountAddress)).toBeNull()
 
 		// Use the existing FeeSettingsCard's send-fee-method-* testids via approveExecute.
 		// "sponsored" is the typical default + reasserted via the override flow.
@@ -94,7 +86,7 @@ test.skipIf(!hasConfig)(
 
 		// The confirm does not wait for the save, and the window closes on it: read it back here.
 		await expect
-			.poll(() => walletPopup.evaluate(savedFeePick, feeKey, accountAddress), { timeout: 10_000, interval: 200 })
+			.poll(() => savedAppPick(walletPopup, accountAddress), { timeout: 10_000, interval: 200 })
 			.toMatchObject({ type: "fpc", fpc: { id: sponsorFpcId } })
 	},
 )

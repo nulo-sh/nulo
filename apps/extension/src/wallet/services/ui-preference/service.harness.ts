@@ -10,6 +10,12 @@ import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error
 import { TestRowKeys } from "@/wallet/storage/sealed-entity-storage.testing"
 import { UiPreferenceService } from "./service"
 
+function emptiedFakeBrowser(): BrowserApi {
+	const api = new FakeBrowserApi()
+	api.reset()
+	return api
+}
+
 /** The session surface of `ProfileService` the preference service reads: one live session at a
  *  time, whose serial moves on every lock, switch and unlock, over real row keys that outlive them. */
 export class FakeSession {
@@ -53,8 +59,9 @@ export class FakeSession {
 	}
 }
 
-/** A started `UiPreferenceService` over `api`'s local area and a fresh {@link FakeSession}. */
-export async function startUiPreferences(api: BrowserApi = new FakeBrowserApi()) {
+/** A started `UiPreferenceService` over `api`'s local area (by default an emptied fake browser's,
+ *  which every `FakeBrowserApi` shares) and a fresh {@link FakeSession}. */
+export async function startUiPreferences(api: BrowserApi = emptiedFakeBrowser()) {
 	const session = new FakeSession()
 	const service = new UiPreferenceService(new LoggerStore(new ConfigStore()), api)
 	const services = new ServiceCollection()

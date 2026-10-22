@@ -4,7 +4,6 @@
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { interceptRpc } from "./fixtures/browser"
 import { clickByTestId, launchExtension, openPopup, registerProfile, test, waitForHash, type ExtensionContext } from "./fixtures/extension"
@@ -14,6 +13,7 @@ import { skipUnlessListPrices } from "./fixtures/token-list"
 import { readSendInputs, shotSend } from "./fixtures/send-page"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
 import { SEEDED_FPC_IDS, SEEDED_SPONSOR_FPC_ID, fpcRowIds, seedProtocolFpcs } from "./helpers/fpc-seeds"
+import { savedFeePicks } from "./helpers/ui-preferences"
 import { activeTestId, coveredAt, focusRing, pressEscape, tabAround, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -240,19 +240,9 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 		row.replace("send-fee-method-", ""),
 	)
 	// The pick may land on the row already showing, so only the saved pick tells Enter from a no-op.
-	await page.waitForFunction(
-		async (key: string, address: string, want: string) => {
-			const saved = (await chrome.storage.local.get(key))[key] as
-				| Record<string, { private?: { type?: string; fpc?: { id?: string } | null } }>
-				| undefined
-			const pick = saved?.[address]?.private
-			return pick?.type === "fpc" && pick.fpc?.id === want
-		},
-		{ timeout: 10_000 },
-		sendFeePicksKey(await captureSoleProfileId(page)),
-		account,
-		SEEDED_SPONSOR_FPC_ID,
-	)
+	await expect
+		.poll(async () => (await savedFeePicks(page)).send[account]?.private, { timeout: 10_000, interval: 200 })
+		.toMatchObject({ type: "fpc", fpc: { id: SEEDED_SPONSOR_FPC_ID } })
 	await waitForFocus(page, "send-fee-method-trigger")
 
 	await page.keyboard.press(" ")

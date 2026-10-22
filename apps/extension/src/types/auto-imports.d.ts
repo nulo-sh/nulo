@@ -659,7 +659,7 @@ declare global {
   export type { UseNetworkArrivalOptions, NetworkArrivalState } from '../composables/useNetworkArrival'
   import('../composables/useNetworkArrival')
   // @ts-ignore
-  export type { PinScope, PinResult, UsePinnedTokensDeps } from '../composables/usePinnedTokens'
+  export type { PinScope, PinResult, PinStore, UsePinnedTokensDeps } from '../composables/usePinnedTokens'
   import('../composables/usePinnedTokens')
   // @ts-ignore
   export type { UsePopupEntityHandlers, UsePopupEntityOptions } from '../composables/usePopupEntity'

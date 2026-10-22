@@ -2,8 +2,7 @@ import type { EventHandler } from "@nulo/wallet-core/utils"
 import { createRunFence } from "@/composables/runFence"
 import { type ComputedRef, computed, ref } from "vue"
 import { pinnedTokensKey } from "@/utils/profile-ui-keys"
-import { storageLocalGet, storageLocalSet } from "@/utils/storage"
-import { PINNED_TOKENS_MAX, PINNED_TOKENS_MAX_CHAINS, type PinMap, sanitizePinMap } from "@/utils/pinned-tokens"
+import { PINNED_TOKENS_MAX, PINNED_TOKENS_MAX_CHAINS, type PinMap } from "@/utils/pinned-tokens"
 import type { TokenDeleted } from "@/wallet/services/token/spec"
 
 export type PinScope = { profileId: string; chainId: number }
@@ -13,10 +12,10 @@ export type PinResult = "pinned" | "full" | "already" | "stale"
 export const pinScopeOf = (profileId: string | undefined, chainId: number | undefined): PinScope | undefined =>
 	profileId !== undefined && chainId !== undefined ? { profileId, chainId } : undefined
 
-const readPinMap = async (profileId: string): Promise<PinMap> => {
-	const key = pinnedTokensKey(profileId)
-	const result = await storageLocalGet([key])
-	return sanitizePinMap(result[key])
+/** The pin I/O the parent's preference client serves: each map is sanitized by the service. */
+export type PinStore = {
+	getPinnedTokens(profileId: string): Promise<PinMap>
+	setPinnedTokens(profileId: string, map: PinMap): Promise<boolean>
 }
 
 /** The chain's list with dangling contracts dropped when the token set is known. */
@@ -61,6 +60,7 @@ const enqueue = <T>(key: string, op: () => Promise<T>): Promise<T> => {
 
 type WriteCtx = {
 	scope: PinScope
+	read: () => Promise<PinMap>
 	live: () => boolean
 	known: () => Promise<ReadonlySet<string> | undefined>
 	write: (next: PinMap, unless: () => boolean) => Promise<boolean>
@@ -70,7 +70,7 @@ async function pinOp(ctx: WriteCtx, contract: string): Promise<PinResult> {
 	if (!ctx.live()) return "stale"
 	const c = contract.toLowerCase()
 	const chainKey = String(ctx.scope.chainId)
-	const next = await readPinMap(ctx.scope.profileId)
+	const next = await ctx.read()
 	if (!ctx.live()) return "stale"
 	const stored = next[chainKey] ?? []
 	if (stored.includes(c)) return "already"
@@ -87,7 +87,7 @@ async function unpinOp(ctx: WriteCtx, contract: string): Promise<void> {
 	if (!ctx.live()) return
 	const c = contract.toLowerCase()
 	const chainKey = String(ctx.scope.chainId)
-	const next = await readPinMap(ctx.scope.profileId)
+	const next = await ctx.read()
 	if (!ctx.live()) return
 	const stored = next[chainKey] ?? []
 	const known = await ctx.known()
@@ -105,6 +105,8 @@ export interface UsePinnedTokensDeps {
 	 * next write, so read-only surfaces may omit it.
 	 */
 	tokenService?: { onTokenDeleted: Pick<EventHandler<TokenDeleted>, "add" | "remove"> }
+	/** The parent's connected preference client. */
+	preferences: PinStore
 	getScope: () => PinScope | undefined
 	/**
 	 * The current chain's token contracts (any case), read at WRITE time so a token added elsewhere
@@ -115,12 +117,12 @@ export interface UsePinnedTokensDeps {
 }
 
 /**
- * Per-profile "Pin to Home" state behind the storage facade. Every write captures its scope and
- * requires it to equal the store's at each checkpoint after an await (so a scope that changed and
- * changed back still lands, on the scope it captured); after `dispose()` an ordinary write stops at
- * its next checkpoint, while a queued deletion cleanup may still finish. Two contexts writing at
- * once are last-writer-wins on the whole map (accepted). The parent calls `refresh()` on a profile
- * switch and `dispose()` on unmount.
+ * Per-profile "Pin to Home" state, kept by the worker's preference service. Every write captures
+ * its scope and requires it to equal the store's at each checkpoint after an await (so a scope that
+ * changed and changed back still lands, on the scope it captured); after `dispose()` an ordinary
+ * write stops at its next checkpoint, while a queued deletion cleanup may still finish. Two contexts
+ * writing at once are last-writer-wins on the whole map (accepted). The parent calls `refresh()` on
+ * a profile switch and `dispose()` on unmount.
  */
 export function usePinnedTokens(deps: UsePinnedTokensDeps) {
 	const map = ref<PinMap>({})
@@ -133,9 +135,10 @@ export function usePinnedTokens(deps: UsePinnedTokensDeps) {
 		return scope !== undefined && now !== undefined && now.profileId === scope.profileId && now.chainId === scope.chainId
 	}
 
-	/** `unless` is read once the migration barrier clears, just before the write; `false` = skipped. */
+	/** `unless` is read right before the call; `false` = skipped or refused. */
 	const writeMap = async (profileId: string, next: PinMap, unless?: () => boolean) => {
-		const written = await storageLocalSet({ [pinnedTokensKey(profileId)]: next }, { unless })
+		if (unless?.()) return false
+		const written = await deps.preferences.setPinnedTokens(profileId, next)
 		if (written && !disposed && loadedProfile.value === profileId) map.value = next
 		return written
 	}
@@ -157,7 +160,7 @@ export function usePinnedTokens(deps: UsePinnedTokensDeps) {
 			loadedProfile.value = undefined
 			return
 		}
-		const next = await readPinMap(scope.profileId)
+		const next = await deps.preferences.getPinnedTokens(scope.profileId)
 		if (disposed || !isCurrent() || deps.getScope()?.profileId !== scope.profileId) return
 		map.value = next
 		loadedProfile.value = scope.profileId
@@ -165,6 +168,7 @@ export function usePinnedTokens(deps: UsePinnedTokensDeps) {
 
 	const writeCtx = (scope: PinScope): WriteCtx => ({
 		scope,
+		read: () => deps.preferences.getPinnedTokens(scope.profileId),
 		live: () => !disposed && scopeStillIs(scope),
 		known: async () => deps.knownContracts(),
 		write: (next, unless) => writeMap(scope.profileId, next, unless),
@@ -187,7 +191,7 @@ export function usePinnedTokens(deps: UsePinnedTokensDeps) {
 		void enqueue(pinnedTokensKey(token.profileId), async () => {
 			const c = token.contract.toLowerCase()
 			const chainKey = String(token.chainId)
-			const next = await readPinMap(token.profileId)
+			const next = await deps.preferences.getPinnedTokens(token.profileId)
 			const list = next[chainKey]
 			if (!list?.includes(c)) return
 			await writeMap(

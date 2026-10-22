@@ -10,6 +10,10 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 import { defineComponent, h, reactive } from "vue"
 
 const router = vi.hoisted(() => ({ push: vi.fn() }))
+vi.mock("@/utils/core", async (importOriginal) => {
+	const { chromeUiPreferences } = await import("../../../tests/helpers/ui-preference-fake")
+	return { ...(await importOriginal<typeof import("@/utils/core")>()), managers: { uiPreference: chromeUiPreferences() } }
+})
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({}) }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {

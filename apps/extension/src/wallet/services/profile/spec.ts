@@ -10,7 +10,6 @@ import type {
 } from "@nulo/wallet-crypto"
 import type { Restored } from "@/wallet/base"
 import type { ExecutionFence } from "./profile-deletion-state"
-import type { FeePickUpdate } from "@/utils/fee-picks"
 
 export const PROFILE_SERVICE_NAME = "profile"
 
@@ -298,12 +297,6 @@ export type Methods = {
 	 * @param newName New display name.
 	 */
 	changeProfileName(id: string, newName: string): ProfileInfo
-
-	/**
-	 * Saves one fee-method pick, or drops every pick naming a deleted FPC, in the profile's own keys.
-	 * Resolves `false`, writing nothing, once the profile is gone or its deletion has begun.
-	 */
-	saveFeePick(profileId: string, update: FeePickUpdate): boolean
 
 	/**
 	 * Changes profile password and returns the updated profile.

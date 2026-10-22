@@ -111,6 +111,65 @@ describe("reads and writes", () => {
 	})
 })
 
+describe("concurrent writers", () => {
+	const FJ = { type: "fj", title: "Public Fee Juice", subtitle: "public" } as const
+	const appPick = (address: string) => ({ kind: "app", address, pick: FJ }) as const
+
+	test("two windows saving picks for different accounts at once keep both", async () => {
+		const { service, session } = await startUiPreferences()
+		await session.unlock("p")
+
+		await Promise.all([service.saveFeePick("p", appPick("0xa")), service.saveFeePick("p", appPick("0xb"))])
+
+		expect((await service.getFeePicks("p")).app).toEqual({ "0xa": FJ, "0xb": FJ })
+	})
+
+	test("a pick is the profile's own: another profile holding the same address keeps its own", async () => {
+		const { service, session } = await startUiPreferences()
+		await session.unlock("p")
+		await service.saveFeePick("p", appPick("0xsame"))
+		await session.unlock("q")
+		await service.saveFeePick("q", { kind: "send", address: "0xsame", side: "public", pick: { type: "private_fpc" } })
+
+		expect(await service.getFeePicks("q")).toEqual({ app: {}, send: { "0xsame": { public: { type: "private_fpc" } } } })
+		session.open("p")
+		expect(await service.getFeePicks("p")).toEqual({ app: { "0xsame": FJ }, send: {} })
+	})
+
+	test("a writer the lock's watchdog displaced writes nothing; the one after it lands", async () => {
+		const memory = new MemoryStorageArea()
+		let releaseRead = () => {}
+		const stalled = new Promise<void>((resolve) => (releaseRead = resolve))
+		let stall = true
+		const local = {
+			get: async (keys?: string | string[]) => {
+				if (stall && readsKey(keys, feePicksKey("p"))) {
+					stall = false
+					await stalled
+				}
+				return memory.get(keys)
+			},
+			set: (items: Record<string, unknown>) => memory.set(items),
+			remove: (keys: string | string[]) => memory.remove(keys),
+		}
+		const { service, session } = await startUiPreferences({ storage: { local } } as unknown as BrowserApi)
+		await session.unlock("p")
+
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		try {
+			const displaced = service.saveFeePick("p", appPick("0xa"))
+			await vi.advanceTimersByTimeAsync(5 * 60_000)
+			vi.useRealTimers()
+			expect(await service.saveFeePick("p", appPick("0xb"))).toBe(true)
+			releaseRead()
+			expect(await displaced).toBe(false)
+		} finally {
+			vi.useRealTimers()
+		}
+		expect((await service.getFeePicks("p")).app).toEqual({ "0xb": FJ })
+	})
+})
+
 describe("refusals", () => {
 	const write = (service: Awaited<ReturnType<typeof startUiPreferences>>["service"]) =>
 		Promise.all([service.setPinnedTokens("p", { "7": [A] }), service.saveFeePick("p", { kind: "forgetFpc", fpcId: "f" })])
