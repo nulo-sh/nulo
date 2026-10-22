@@ -136,7 +136,7 @@ Test code and two CSS rules; no runtime logic, storage, message or permission ch
 
 ## Post-implementation
 
-[README § Post-implementation standard](../README.md#post-implementation-standard) at `60ecd6cc3` binds. Plan-specific parts: single arc, so the review loop runs once over the diff from the base after Phase 3 is green. Consult: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; hard stop at three rounds. Log each round in `lessons/phase-3.md` and § Audit verdicts. Teardown after the merge: `agent-worktree done fit-gate-1 --merged`, trunk `dev`.
+[README § Post-implementation standard](../../README.md#post-implementation-standard) at `60ecd6cc3` binds. Plan-specific parts: single arc, so the review loop runs once over the diff from the base after Phase 3 is green. Consult: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; hard stop at three rounds. Log each round in `lessons/phase-3.md` and § Audit verdicts. Teardown after the merge: `agent-worktree done fit-gate-1 --merged`, trunk `dev`.
 
 ## Audit verdicts
 
