@@ -48,7 +48,10 @@ export const HELD: readonly StoredShapeName[] = [
 	"tokens",
 	"txs",
 	"uiActiveAccount",
+	"uiFeePicks",
 	"uiLastActiveProfile",
+	"uiPinnedTokens",
+	"uiSendFeePicks",
 ]
 
 export const missingFamilies = (entries: Record<string, unknown>): StoredShapeName[] =>

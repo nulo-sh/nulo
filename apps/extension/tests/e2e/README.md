@@ -72,7 +72,7 @@ The **STUB** tests (`cancel-mid-prove`, `concurrent-sendtx-{approve,confirm}`, `
 
 ### Sealed roots
 
-The wallet stores every profile-scoped root but the profile row sealed per row (contacts, dApp sessions, the journal, the transaction history, accounts and imported keys, tokens, networks, fee payers, balances, authwits, the incoming roots), so a raw `chrome.storage.local` read sees envelopes, not records. Contacts, dApp sessions, tokens, networks and accounts are read through their services' RPCs (`callService`), as the wallet reads them, on any build. The account service reads accounts while locked too, from a worker that holds the profile's keys; the network service serves networks only unlocked, so a stale-network seed run locked on a smoke build takes the networks `readNetworkRows` read before the lock (`helpers/identity-rows.ts`, `helpers/stale-network.ts`). The other readers (`fixtures/journal.ts`, `fixtures/journal-page.ts`, `fixtures/send-burst.ts`, `fixtures/tokens.ts`, `helpers/activity-seeds.ts` and the network specs) need more than the active profile while unlocked, so `VITE_NULO_E2E_SEALED_READ=1` (set by `agent.sh` only) builds in `src/e2e/sealed-read.ts`: the background answers `nulo:e2e:sealed-read` from an extension page, for a sealed root, with every row its held keys open, its storage key and its owner, while locked too (`fixtures/sealed-rows.ts`). A row of a profile the background has not unlocked since it started is absent, so a spec that reads after a worker restart unlocks first. A keyed root (the transactions, accounts and imported keys, the authwit flags, the five incoming roots) stores a row at a keyed id, so a spec finds it by the id its service names it by (`readSealedRow`, or the `naturalId` of each answered row), never by its storage key. A spec that changes a row writes plaintext at the row's natural key and removes the sealed row when it sits at another key, since the dual read prefers the sealed copy; an account's sealed key cannot be matched to its address, so `rewriteAccount` writes back every account of the scope and drops its stored rows. Smoke builds and release artifacts do not carry the seam, and `_build-extension.yml` greps release bundles for its key; the update replay reads history and receipts through RPC for that reason, and the balance wait (`waitForFreshBalanceRow`) reads raw rows on a build without the seam (`readRowsOnAnyBuild`), as the release an update starts from is.
+The wallet stores every profile-scoped root but the profile row sealed per row (contacts, dApp sessions, the journal, the transaction history, accounts and imported keys, tokens, networks, fee payers, balances, authwits, the incoming roots, the pins and fee picks), so a raw `chrome.storage.local` read sees envelopes, not records. Contacts, dApp sessions, tokens, networks, accounts, pins and fee picks are read through their services' RPCs (`callService`; the pins and fee picks through `helpers/ui-preferences.ts`), as the wallet reads them, on any build. The account service reads accounts while locked too, from a worker that holds the profile's keys; the network service serves networks only unlocked, so a stale-network seed run locked on a smoke build takes the networks `readNetworkRows` read before the lock (`helpers/identity-rows.ts`, `helpers/stale-network.ts`). The other readers (`fixtures/journal.ts`, `fixtures/journal-page.ts`, `fixtures/send-burst.ts`, `fixtures/tokens.ts`, `helpers/activity-seeds.ts` and the network specs) need more than the active profile while unlocked, so `VITE_NULO_E2E_SEALED_READ=1` (set by `agent.sh` only) builds in `src/e2e/sealed-read.ts`: the background answers `nulo:e2e:sealed-read` from an extension page, for a sealed root, with every row its held keys open, its storage key and its owner, while locked too (`fixtures/sealed-rows.ts`). A row of a profile the background has not unlocked since it started is absent, so a spec that reads after a worker restart unlocks first. A keyed root (the transactions, accounts and imported keys, the authwit flags, the five incoming roots) stores a row at a keyed id, so a spec finds it by the id its service names it by (`readSealedRow`, or the `naturalId` of each answered row), never by its storage key. A spec that changes a row writes plaintext at the row's natural key and removes the sealed row when it sits at another key, since the dual read prefers the sealed copy; an account's sealed key cannot be matched to its address, so `rewriteAccount` writes back every account of the scope and drops its stored rows. Smoke builds and release artifacts do not carry the seam, and `_build-extension.yml` greps release bundles for its key; the update replay reads history and receipts through RPC for that reason, and the balance wait (`waitForFreshBalanceRow`) reads raw rows on a build without the seam (`readRowsOnAnyBuild`), as the release an update starts from is.
 
 ### CSP violations
 
@@ -109,6 +109,20 @@ What an e2e build does instead of each outside host:
 
 Not covered: UDP and WebRTC, which the wallet does not use. The stand-in answers every node call with an error, so no smoke spec but the live one sees a node that answers: a value only a node gives is seeded, or proven in the network suite. A host on a driver's `ownHosts` that the wallet starts calling is refused but does not fail the run; reviewing a new list entry is what catches that.
 
+### Home open timing (opt-in)
+
+`NULO_E2E_HOME_TIMING=1` runs the second case of `sealed-storage.test.ts`: popup open → Home ready
+and Home's first contentful paint, median of 5 after one unmeasured open, over a profile holding
+pins and fee picks. It times whichever build the run loads, so a base comparison points
+`EXTENSION_PATH` at a base build's armed `dist/<browser>` and runs the same file, rounds alternating
+which build goes first:
+
+```bash
+cd apps/extension
+NULO_E2E_HOME_TIMING=1 NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- \
+  --retry=0 tests/e2e/sealed-storage.test.ts -t "Home's open"
+```
+
 ### Store captures (opt-in)
 
 `tests/e2e/network/store-captures.test.ts` is skipped unless `STORE_CAPTURES=1`, and always on
@@ -139,11 +153,12 @@ uncommitted changes a build reads, is refused, so commit before you build it.
 
 - The live scenario populates the release through its own UI: a password profile with a second and
   an imported account and two contacts on Testnet, then a network on the run's sandbox with a
-  token, a public and a private receipt, a connected playground and one send from the wallet. It
-  requires every key family `HELD` names before it updates. After the update it checks that no key
-  was lost, no barrier shows, every key is registered and read by its read code, the profile
-  unlocks, the UI reads it all, the imported key opens and the playground's stored session still
-  answers. `NULO_E2E_UPDATE_RECORD=1` on Chrome also writes the release's storage to
+  token it pins, a Send fee pick, a public and a private receipt, a connected playground and one
+  send from the wallet whose fee payer it picks. It requires every key family `HELD` names before it
+  updates. After the update it checks that no key was lost, no barrier shows, every key is
+  registered and read by its read code, the profile unlocks, the release's pins and fee picks are
+  sealed and read back through the service, the UI reads it all, the imported key opens and the
+  playground's stored session still answers. `NULO_E2E_UPDATE_RECORD=1` on Chrome also writes the release's storage to
   `fixtures/update/<tag>.storage.json`, the replay's recording.
 - The replay writes that recording into the release, offline, and updates it. While the
   candidate's Testnet seed equals the recorded one the update opens with no takeover; once it

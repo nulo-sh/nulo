@@ -12,8 +12,11 @@
  * Testnet is the stand-in node, so it holds only what a person can hold there without one: derived
  * and imported accounts. Everything that needs a chain lives on a network added on the run's sandbox.
  *
- * Not populated: fee picks, pinned tokens, the auth registry, a deleted profile, a restore, and the
- * token list and prices (the egress guard blocks both).
+ * On the sandbox it also pins the token, picks a Send fee payer and an app window's fee payer, so
+ * the release's own maps meet the candidate's unlock, which seals them in place.
+ *
+ * Not populated: the auth registry, a deleted profile, a restore, and the token list and prices
+ * (the egress guard blocks both).
  *
  * Runtime: estimated 6 min on Chrome, 9 min on Firefox; measured 102 to 162 s and 182 to 186 s, the
  * release's real proof of the account's deployment included.
@@ -39,6 +42,7 @@ import {
 import {
 	addContact,
 	captureBalanceBaseline,
+	captureSoleProfileId,
 	closeStuckPopup,
 	contactRow,
 	createAccount,
@@ -48,15 +52,19 @@ import {
 	importToken,
 	navigateByHash,
 	navigateToTokenDetail,
+	pinFromTokenPage,
+	selectFeeMethod,
 	setDeveloperMode,
 	switchToNetwork,
 	waitForFreshBalanceRow,
 	waitForToast,
 } from "../fixtures/helpers"
 import { openPlayground, setPgInputs, txHashOf } from "../fixtures/playground"
+import { openSend } from "../fixtures/send-page"
 import { pollUntil } from "../fixtures/poll"
 import { reconnectPlayground, runApprovedPgCall } from "../fixtures/send"
 import { inPlaceUpdate, readLocalStorage, updateBuilds } from "../fixtures/update/in-place"
+import { expectReleasePreferences } from "../fixtures/update/preferences"
 import { writeRecording } from "../fixtures/update/recording"
 import { approveReleaseConnect } from "../fixtures/update/release-ui"
 import { BARRIERS, missingFamilies, shownOverlays, updateProblems } from "../fixtures/update/verify"
@@ -193,6 +201,7 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 		timeoutMs: 180_000,
 	})
 	const incoming = await incomingCards(page, 2)
+	await pickPreferences(page)
 	await page.close()
 
 	const dapp = await connectPlayground(ctx, { chainInfo }, approveReleaseConnect)
@@ -207,7 +216,20 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 	return { before, chainInfo, account, imported, incoming }
 }
 
-/** The account's first send, which deploys it and leaves the wallet's transaction row. */
+/** Pins the sandbox token and picks Send's fee payer for a private send, each through the release's
+ *  own UI, which saves both maps; the app window's pick is the send's below. */
+async function pickPreferences(page: Page): Promise<void> {
+	await navigateByHash(page, "#/popup/general", 15_000)
+	await navigateToTokenDetail(page)
+	await pinFromTokenPage(page)
+	await navigateByHash(page, "#/popup/general", 15_000)
+	await openSend(page)
+	await selectFeeMethod(page, "sponsored")
+	await navigateByHash(page, "#/popup/general", 15_000)
+}
+
+/** The account's first send, which deploys it and leaves the wallet's transaction row; its fee
+ *  payer is picked by hand, which saves the app window's pick. */
 async function sendFromWallet(ctx: ExtensionContext, dapp: Page, cfg: AztecTestConfig, account: string): Promise<void> {
 	const popup = await openPopup(ctx)
 	await waitForHash(popup, "#/popup/general", 30_000)
@@ -219,6 +241,7 @@ async function sendFromWallet(ctx: ExtensionContext, dapp: Page, cfg: AztecTestC
 		method: "sendTx",
 		label: "update-in-place:send",
 		popupTimeoutMs: 180_000,
+		feeMethod: "sponsored",
 	})
 	const { waitForTxMined } = await import("../fixtures/aztec")
 	await waitForTxMined(cfg, txHashOf(sent.resultJson), 300_000)
@@ -251,6 +274,7 @@ async function verify(ctx: ExtensionContext, populated: Populated): Promise<void
 	await waitForHash(page, "#/popup/general", 30_000)
 	expect(await shownOverlays(page, BARRIERS)).toEqual([])
 	expect(await getAccountAddress(page)).toBe(populated.account)
+	await expectReleasePreferences(ctx, page, populated.before, await captureSoleProfileId(page))
 
 	await navigateToTokenDetail(page)
 	const balances = await getTokenDetailBalances(page)

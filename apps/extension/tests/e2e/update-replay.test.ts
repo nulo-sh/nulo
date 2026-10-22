@@ -33,7 +33,7 @@ import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import { STORES } from "@/wallet/storage/stores"
 import { BROWSER } from "./fixtures/browser"
 import { type ExtensionContext, clickByTestId, launchExtension, openPopup, test, waitForHash } from "./fixtures/extension"
-import { contactRow, ensureUnlocked, navigateByHash, waitForToast } from "./fixtures/helpers"
+import { captureSoleProfileId, contactRow, ensureUnlocked, navigateByHash, waitForToast } from "./fixtures/helpers"
 import { pollUntil } from "./fixtures/poll"
 import { callService } from "./fixtures/session"
 import { registerPasskeyProfile, setupPasskeyVirtualAuth } from "./fixtures/passkey"
@@ -45,6 +45,7 @@ import {
 	updateCandidate,
 	writeLocalStorage,
 } from "./fixtures/update/in-place"
+import { expectReleasePreferences } from "./fixtures/update/preferences"
 import { type PinnedBackup, type Recording, readRecording, writePinnedBackup } from "./fixtures/update/recording"
 import { unreadRows } from "./fixtures/update/stored-rows"
 import { BARRIERS, missingFamilies, shownOverlays, updateProblems } from "./fixtures/update/verify"
@@ -377,6 +378,7 @@ async function opensWithoutTakeover(ctx: ExtensionContext, page: Page, recording
 	await expectHistory(ctx, page, recording)
 	await expectProjections(ctx, page, recording)
 	await expectIdentity(ctx, page, recording)
+	await expectReleasePreferences(ctx, page, recording.entries, await captureSoleProfileId(page))
 	expect(await shownOverlays(page)).toEqual([])
 	expect(await updateProblems(stored, await readLocalStorage(ctx))).toEqual([])
 }
@@ -419,6 +421,7 @@ async function throughTheReset(ctx: ExtensionContext, page: Page, recording: Rec
 	await expectHistory(ctx, page, recording)
 	await expectProjections(ctx, page, recording, testnetNetworkId(recording))
 	await expectIdentity(ctx, page, recording, oldChain)
+	await expectReleasePreferences(ctx, page, recording.entries, await captureSoleProfileId(page))
 	expect(await shownOverlays(page)).toEqual([])
 	expect(await unreadRows(await readLocalStorage(ctx))).toEqual([])
 }
