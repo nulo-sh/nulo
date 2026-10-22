@@ -70,7 +70,7 @@ nearestScrollTop({ index, scrollTop, rowPx, viewPx }): number
 
 ## Phases
 
-### Phase 0 — Start after #1027 (0.3 h)
+### Phase 0 — Start after #1027 (0.3 h) ✓
 
 1. Run `gh pr view 1027 --json state -q .state`. If it is not `MERGED`, stop and report waiting.
 2. Commit the scope amendment (D11).
