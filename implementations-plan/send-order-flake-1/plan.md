@@ -1,7 +1,7 @@
 ---
 plan: send-order-flake-1
 tier: light
-status: planned, Codex approve
+status: completed
 issues: "#1083 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,15 @@ base: origin/dev at 421bf33b4
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-22. **Status:** completed.
+- **Shipped:** #1087 (arc 1, closes #1083): the silent-path composition test waits for its record's stored stage; one lane unit test pins that `wait` runs only after the requeue write settles; two TSDoc sentences state that order, that the write is best effort, and that the hand-on order is not promised.
+- **Dispositions:** writing `queued` before the hand-on, rejected (D1); the gate as a committed pin, rejected (D4). No `lessons.md` promotion: it is at its 8 KiB budget, and the reproduction technique (hold the write until the test's next read) stays in [lessons/phase-0.md](lessons/phase-0.md).
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` below; never run them.
 
 # send-order-flake-1: the parked-send test waits for its record to read queued
 
