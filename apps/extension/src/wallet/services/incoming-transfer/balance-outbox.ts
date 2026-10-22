@@ -39,10 +39,10 @@ export class BalanceRefreshOutbox {
 	/**
 	 * Write-side: mark a balance dirty (written BEFORE the record). A new receipt OVERWRITES
 	 * `dirtyAt` and CLEARS any prior task anchor — the old anchor is stale w.r.t. the newer receipt.
-	 * The drain reads these rows and issues the causal refresh.
+	 * The drain reads these rows and issues the causal refresh. False when `fence` refused the write.
 	 */
-	public async markDirty(profileId: string, networkId: string, account: string, tokenId: number): Promise<void> {
-		await this.deps.repo.setOutbox(profileId, networkId, account, tokenId, { dirtyAt: Date.now() })
+	public markDirty(profileId: string, networkId: string, account: string, tokenId: number, fence?: () => boolean): Promise<boolean> {
+		return this.deps.repo.setOutbox(profileId, networkId, account, tokenId, { dirtyAt: Date.now() }, fence)
 	}
 
 	/**

@@ -60,3 +60,13 @@ describe("BalanceRefreshOutbox — the anchor's ticket check", () => {
 		expect(rows.get(KEY)).toEqual({ dirtyAt: 100, pendingTaskId: "T1" })
 	})
 })
+
+describe("BalanceRefreshOutbox — the dirty mark's fence", () => {
+	test("a mark its caller's fence refuses writes nothing", async () => {
+		const { outbox, rows } = makeOutbox({ revokeOnReRead: false })
+
+		expect(await outbox.markDirty("p1", "n1", "0xa", 1, () => false)).toBe(false)
+
+		expect(rows.get(KEY)).toEqual({ dirtyAt: 100 })
+	})
+})

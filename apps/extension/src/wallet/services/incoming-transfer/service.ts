@@ -1792,7 +1792,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			if (!fenced()) return false
 			const current = await this.repo.getRecord(row.id)
 			if (!fenced() || !current || !sameRow(current, row)) return false
-			if (row.tokenId !== undefined) await this.outbox.markDirty(profileId, networkId, accountAddress, row.tokenId)
+			if (row.tokenId !== undefined && !(await this.outbox.markDirty(profileId, networkId, accountAddress, row.tokenId, fenced))) {
+				return false
+			}
 			if (!(await this.repo.deleteRecord(row.id, fenced))) return false
 			this.noteStrikes.delete(row.id)
 			this.emit("onIncomingTransferDeleted", row)
@@ -1896,7 +1898,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			trustState,
 			blockTimestamp,
 		})
-		await this.outbox.markDirty(profileId, networkId, accountAddress, token.id)
+		if (!(await this.outbox.markDirty(profileId, networkId, accountAddress, token.id, fenced))) return
 		if (!fenced() || !(await this.repo.upsertRecord(record, fenced))) return
 
 		if (trustState === "trusted" && (await this.isVisibilityEnabled()) && fenced()) {
@@ -2522,7 +2524,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		for (const record of await this.repo.listByContract(profileId, networkId, contract)) {
 			if (!orphaned(record)) continue
 			if (!fenced()) return false
-			if (record.tokenId !== undefined) await this.outbox.markDirty(profileId, networkId, record.accountAddress, record.tokenId)
+			const { accountAddress, tokenId } = record
+			if (tokenId !== undefined && !(await this.outbox.markDirty(profileId, networkId, accountAddress, tokenId, fenced))) return false
 			if (!(await this.repo.deleteRecord(record.id, fenced))) return false
 			this.emit("onIncomingTransferDeleted", record)
 		}
@@ -2647,7 +2650,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	/** Write-side: the outbox row is written BEFORE the record (ordering +
 	 *  idempotent replay substitute for a multi-key transaction).
 	 *  Written for a hidden receipt too: it still changed the chain balance. A
-	 *  wipe admitted during the dirty-mark's await must not land the record AFTER
+	 *  wipe admitted after the dirty-mark's dispatch must not land the record AFTER
 	 *  the purge enumerated rows; aborting there leaves dirty-without-record,
 	 *  which the outbox ordering already tolerates (the drain heals it). */
 	private async commitPublicRecord(
@@ -2658,8 +2661,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		fenced: () => boolean,
 	): Promise<PublicCommit> {
 		const { profileId, networkId, accountAddress } = ctx
-		await this.outbox.markDirty(profileId, networkId, accountAddress, token.id)
-		if (!fenced()) return "revoked"
+		if (!(await this.outbox.markDirty(profileId, networkId, accountAddress, token.id, fenced)) || !fenced()) return "revoked"
 		const record = this.buildPublicRecord({ ev, profileId, networkId, account: accountAddress, token, trustState })
 		if (!(await this.repo.upsertRecord(record, fenced))) return "revoked"
 		if (trustState === "trusted" && (await this.isVisibilityEnabled()) && fenced()) {

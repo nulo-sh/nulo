@@ -379,6 +379,29 @@ describe("IncomingTransferRepository — sealed at rest", () => {
 		expect(await api.storage.local.get()).toEqual(stored)
 	})
 
+	test("a key of another shape than its root's belongs to no profile, and conversion seals around it", async () => {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const malformed = {
+			"nulo:core:incoming-trust@p1|n1|x|y": JSON.stringify({ profileId: "p1", networkId: "n1" }),
+			"nulo:core:incoming-balance-outbox@p1|n1|0xa": "{}",
+		}
+		const trust = `nulo:core:incoming-trust@${trustKey("p1", "n1", CONTRACT)}`
+		await api.storage.local.set({ ...malformed, [trust]: JSON.stringify(scopeRows("p1", "n1").trust) })
+		const repo = new IncomingTransferRepository(api, (await new TestRowKeys().unlock("p1")).source)
+
+		await repo.sealLegacy(
+			"p1",
+			(fn) => fn(),
+			() => true,
+		)
+
+		const stored = await api.storage.local.get()
+		expect(stored).toMatchObject(malformed)
+		expect(stored).not.toHaveProperty(trust)
+		expect(await repo.getTrust("p1", "n1", CONTRACT)).toEqual(scopeRows("p1", "n1").trust)
+	})
+
 	test("a record or trust row whose body names another scope than its key is no profile's", async () => {
 		const api = new FakeBrowserApi()
 		api.reset()

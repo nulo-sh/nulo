@@ -82,12 +82,13 @@ type KeyedHash = (segment: string) => Promise<string>
 
 type IncomingScope = { scope: string; profileId: string; networkId: string; tail: string[] }
 
-/** An incoming key, `[kind:]profileId|networkId|…`, split at its scope. */
-function incomingScope(id: string, kinded: boolean): IncomingScope | undefined {
+/** An incoming key, `[kind:]profileId|networkId|…`, split at its scope; with `tailLength`, only a
+ *  key with exactly that many segments after its scope is one. */
+function incomingScope(id: string, kinded: boolean, tailLength?: number): IncomingScope | undefined {
 	const kind = kinded ? /^(?:note|pub):/.exec(id)?.[0] : ""
 	if (kind === undefined) return undefined
 	const [profileId, networkId, ...tail] = id.slice(kind.length).split("|")
-	if (networkId === undefined || tail.length === 0) return undefined
+	if (networkId === undefined || tail.length === 0 || (tailLength !== undefined && tail.length !== tailLength)) return undefined
 	return { scope: `${kind}${profileId}|${networkId}|`, profileId, networkId, tail }
 }
 
@@ -99,22 +100,28 @@ function bodyOwner(row: unknown, scope: IncomingScope): string | undefined {
 	return profileId === scope.profileId && networkId === scope.networkId ? scope.profileId : undefined
 }
 
+type IncomingLayout = {
+	hashTail: (tail: string[], keyedHash: KeyedHash) => Promise<string>
+	tailLength?: number
+	kinded?: boolean
+	/** The row names its profile and network: a record or trust row. */
+	scoped?: boolean
+}
+
 /** An incoming root's key keeps its kind, profile and network, so a scope wipe needs no key, and
- *  `hashTail` replaces what names a note, transaction, account or contract. The rows that carry
+ *  `hashTail` replaces what names a note, transaction, account or contract. A key of another shape
+ *  belongs to no profile, so conversion skips it rather than failing on it. The rows that carry
  *  no scope (cursor, outbox, arrival) are owned by their key alone. */
-function incomingLayout(
-	hashTail: (tail: string[], keyedHash: KeyedHash) => Promise<string>,
-	{ kinded = false, scoped = false } = {},
-): SealedRootOptions {
+function incomingLayout({ hashTail, tailLength, kinded = false, scoped = false }: IncomingLayout): SealedRootOptions {
 	return {
 		ownerOf: (row, naturalId) => {
-			const parsed = incomingScope(naturalId, kinded)
+			const parsed = incomingScope(naturalId, kinded, tailLength)
 			if (!parsed) return undefined
 			return scoped && row !== undefined ? bodyOwner(row, parsed) : parsed.profileId
 		},
 		keyed: {
 			physicalId: async (naturalId, keyedHash) => {
-				const parsed = incomingScope(naturalId, kinded)
+				const parsed = incomingScope(naturalId, kinded, tailLength)
 				if (!parsed) throw new Error("not an incoming id")
 				return parsed.scope + (await hashTail(parsed.tail, keyedHash))
 			},
@@ -122,10 +129,7 @@ function incomingLayout(
 	}
 }
 
-const oneSegment = (tail: string[], keyedHash: KeyedHash): Promise<string> => {
-	if (tail.length !== 1) throw new Error("not an incoming id")
-	return keyedHash(tail[0])
-}
+const ONE_SEGMENT = { hashTail: (tail: string[], keyedHash: KeyedHash) => keyedHash(tail[0]), tailLength: 1 }
 
 /** A flag's key keeps its profile and chain and replaces the account with its keyed hash; the
  *  flag is a bare boolean, so its key alone names the profile. */
@@ -162,20 +166,17 @@ export const STORES = {
 	incomingTransfers: sealedCodec(
 		INCOMING_RECORDS_STORAGE_ROOT,
 		IncomingTransferRecordSchema,
-		incomingLayout((tail, keyedHash) => keyedHash(tail.join("|")), { kinded: true, scoped: true }),
+		incomingLayout({ hashTail: (tail, keyedHash) => keyedHash(tail.join("|")), kinded: true, scoped: true }),
 	),
-	incomingTrust: sealedCodec(INCOMING_TRUST_STORAGE_ROOT, IncomingTrustRecordSchema, incomingLayout(oneSegment, { scoped: true })),
-	incomingPublicCursors: sealedCodec(INCOMING_CURSORS_STORAGE_ROOT, PublicScanCursorSchema, incomingLayout(oneSegment)),
+	incomingTrust: sealedCodec(INCOMING_TRUST_STORAGE_ROOT, IncomingTrustRecordSchema, incomingLayout({ ...ONE_SEGMENT, scoped: true })),
+	incomingPublicCursors: sealedCodec(INCOMING_CURSORS_STORAGE_ROOT, PublicScanCursorSchema, incomingLayout(ONE_SEGMENT)),
 	// The account is hashed; the token id is a local sequence number.
 	incomingBalanceOutbox: sealedCodec(
 		INCOMING_OUTBOX_STORAGE_ROOT,
 		IncomingBalanceOutboxRowSchema,
-		incomingLayout(async (tail, keyedHash) => {
-			if (tail.length !== 2) throw new Error("not an incoming id")
-			return `${await keyedHash(tail[0])}|${tail[1]}`
-		}),
+		incomingLayout({ hashTail: async (tail, keyedHash) => `${await keyedHash(tail[0])}|${tail[1]}`, tailLength: 2 }),
 	),
-	incomingArrivals: sealedCodec(INCOMING_ARRIVALS_STORAGE_ROOT, ArrivalRowSchema, incomingLayout(oneSegment)),
+	incomingArrivals: sealedCodec(INCOMING_ARRIVALS_STORAGE_ROOT, ArrivalRowSchema, incomingLayout(ONE_SEGMENT)),
 	// Every sealed-slot, MAC and fingerprint decision trusts the row fetched by its id.
 	profiles: plainEntity(PROFILE_STORAGE_ROOT, { requireKeyIdentityMatch: true }),
 	config: value(CONFIG_STORAGE_KEY),
