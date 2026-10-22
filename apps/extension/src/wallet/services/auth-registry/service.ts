@@ -23,8 +23,8 @@ import type { WrappedTask } from "@/wallet/services/task/wrapped-task"
 import { TaskService, RevokeAuthwitsContent, StepContent } from "@/wallet/services/task/service"
 import { TransactionService, OriginType } from "@/wallet/services/transaction/service"
 import { type Tx, TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
-import type { EntityStorage } from "@/wallet/storage"
-import { entityStorage } from "@/wallet/storage/stores"
+import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { array_max, Lock, sleep } from "@/wallet/utils"
 import { getAuthRegistryAddress, isAuthRegistryEnabled, isAuthwitConsumable } from "@/wallet/utils/auth-registry"
 import { EventHandler } from "@nulo/wallet-core/utils"
@@ -102,8 +102,8 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	public readonly onRegistryDisabled = new EventHandler<AuthwitRegistryScope>()
 	public readonly onSendStarted = new EventHandler<SendStarted>()
 
-	private readonly authwits: EntityStorage<Authwit>
-	private readonly statuses: EntityStorage<boolean>
+	private readonly authwits: SealedEntityStorage<Authwit>
+	private readonly statuses: SealedEntityStorage<boolean>
 	private readonly lock = new Lock()
 
 	private profileService: ProfileService = null!
@@ -119,8 +119,9 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		// storage key from the row's embedded id — so a raw-storage row copied under a foreign
 		// key (id aliasing) would make revoke/delete/reconcile operate on the wrong row. The
 		// id/key guard hides such rows at read time; honest rows always agree.
-		this.authwits = entityStorage("authRegistry", browserApi.storage.local)
-		this.statuses = entityStorage("authRegistryEnabled", browserApi.storage.local)
+		const rowKeys = (profileId: string) => this.profileService.rowKeys(profileId)
+		this.authwits = sealedEntityStorage("authRegistry", browserApi.storage.local, rowKeys)
+		this.statuses = sealedEntityStorage("authRegistryEnabled", browserApi.storage.local, rowKeys)
 	}
 
 	/** An unknown speed level is refused before the method runs; fee math never reads one. */
@@ -153,6 +154,17 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		this.transactionService.onTransactionUpdated.add((tx) => {
 			void this.reconcileFromTx(tx).catch(() => {})
 		})
+		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+	}
+
+	/** Seals the profile's plaintext authwits and flags under the lock every writer of both holds. */
+	private async sealLegacyRows(profileId: string): Promise<void> {
+		try {
+			await this.authwits.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+			await this.statuses.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+		} catch (error) {
+			this.logWarn("sealing the profile's plaintext authorizations failed; the next unlock retries", { error })
+		}
 	}
 
 	/** Map a tx's settled on-chain outcome to a pending-authwit reconcile, scoped to the tx's own
@@ -404,7 +416,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	public async getRegistryEnabled(chainId: number, account: string): Promise<boolean> {
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
-		return (await this.statuses.get(authwitStatusRowId(profile.id, chainId, account))) ?? true
+		return (await this.statuses.get(authwitStatusRowId(profile.id, chainId, account), profile.id)) ?? true
 	}
 
 	public async setRegistryEnabled(
@@ -603,10 +615,10 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		const rowId = authwitStatusRowId(scope.profileId, scope.chainId, scope.account)
 		const isEnabled = await isAuthRegistryEnabled(node, scope.account)
 		await this.lock.withLock(async () => {
-			const enabled = (await this.statuses.get(rowId)) ?? true
+			const enabled = (await this.statuses.get(rowId, scope.profileId)) ?? true
 			if (enabled !== isEnabled) {
 				if (isEnabled) {
-					await this.statuses.delete(rowId)
+					await this.statuses.delete(rowId, scope.profileId)
 					this.emit("onRegistryEnabled", scope)
 				} else {
 					await this.statuses.set(rowId, isEnabled)
@@ -702,13 +714,14 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		await this.purgeStatuses(match.status)
 	}
 
-	/** Delete every registry-enabled row whose canonical tuple key matches `keep`. Attribution is
-	 *  off the byte-canonical KEY, never a value (a status row's value is a bare boolean with no
-	 *  identity), so a non-canonical/foreign key is left untouched. Caller holds the lock. */
+	/** Delete every readable registry-enabled row whose canonical tuple id matches `keep`, legacy
+	 *  twins included. Attribution is off the byte-canonical natural id, never a value (a status
+	 *  row's value is a bare boolean with no identity), so a non-canonical/foreign key is left
+	 *  untouched; a sealed row no key opens is left to its profile's deletion. Caller holds the lock. */
 	private async purgeStatuses(keep: (scope: { profileId: string; chainId: number; account: string }) => boolean): Promise<void> {
-		for (const key of await this.statuses.getKeys()) {
-			const scope = parseAuthwitStatusRowId(key)
-			if (scope && keep(scope)) await this.statuses.delete(key)
+		for (const { located } of await this.statuses.entries()) {
+			const scope = parseAuthwitStatusRowId(located.naturalId)
+			if (scope && keep(scope)) await this.statuses.deleteStorageId(located.storageId)
 		}
 	}
 
@@ -728,22 +741,14 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 			// payloads — decoded reads hide malformed rows whose tuples must still block
 			// duplicates; a row too corrupt to yield its fields has no identity to collide with.
 			// NO cap check: these are already-granted authorizations, and rejecting a unique row
-			// would destroy the only revocation index.
+			// would destroy the only revocation index. The profile's sealed rows are opened, with no
+			// codec, through the keys the restore commit put in the keyring.
 			const pairKeyOf = (chainId: number, account: string, hash: string) => JSON.stringify([profileId, chainId, account, hash])
 			const seen = new Set<string>()
-			for (const [, raw] of await this.authwits.rawStringEntries()) {
-				try {
-					const v = JSON.parse(raw) as { profileId?: unknown; chainId?: unknown; account?: unknown; hash?: unknown }
-					if (
-						v.profileId === profileId &&
-						typeof v.chainId === "number" &&
-						typeof v.account === "string" &&
-						typeof v.hash === "string"
-					) {
-						seen.add(pairKeyOf(v.chainId, v.account, v.hash))
-					}
-				} catch {
-					// No extractable identity — nothing to dedupe against.
+			for (const { row } of (await this.authwits.rawRowsOf(profileId)).rows) {
+				const v = row as { chainId?: unknown; account?: unknown; hash?: unknown }
+				if (typeof v.chainId === "number" && typeof v.account === "string" && typeof v.hash === "string") {
+					seen.add(pairKeyOf(v.chainId, v.account, v.hash))
 				}
 			}
 			// Occupancy from the PHYSICAL key space: the cursor must never land on
@@ -777,8 +782,9 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 				if (seen.has(pairKey)) {
 					throw new Error("authwit already exists (profile+chain+account+hash)")
 				}
+				const write = await this.authwits.prepare(`${id}`, row)
 				assertRestoreEpoch(deletion, epochs, profileId)
-				await this.authwits.set(`${id}`, row)
+				await write.commit()
 				occupied.add(`${id}`)
 				seen.add(pairKey)
 				id++

@@ -2,6 +2,11 @@ import { describe, test, expect, beforeEach } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { BalanceRepository } from "./balance-repository"
 import type { TokenBalanceRaw } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
+
+/** One key for every profile, as the profile fakes hold it. */
+const { rowKeys: ROW_KEYS } = await rowKeysForEveryProfile()
 
 /** The repo uses EntityStorage<TokenBalanceRaw> backed by the injected
  *  `browserApi.storage.local`; tests pass an in-memory `FakeBrowserApi`. */
@@ -26,7 +31,7 @@ describe("BalanceRepository", () => {
 	beforeEach(() => {
 		api = new FakeBrowserApi()
 		api.reset()
-		repo = new BalanceRepository(api)
+		repo = new BalanceRepository(api, ROW_KEYS)
 	})
 
 	test("set then get round-trips a balance", async () => {
@@ -59,6 +64,46 @@ describe("BalanceRepository", () => {
 		await repo.set(balance(7))
 		await repo.set(balance(3))
 		expect(await repo.allocateId()).toBe(8)
+	})
+
+	test("a row is stored sealed: no balance, account or contract in its stored value", async () => {
+		await repo.set(balance(1, { account: "0xfeedface", contract: "0xc0ffee", privateBalance: "987654321" }))
+		const raw = (await api.storage.local.get("nulo:core:token-balances@1"))["nulo:core:token-balances@1"] as string
+		expect(Object.keys(JSON.parse(raw))).toEqual(["profileId", "sealed"])
+		for (const marker of ["feedface", "c0ffee", "987654321"]) expect(raw).not.toContain(marker)
+	})
+
+	test("numeric key identity is checked inside the seal: a sealed row embedding another id is hidden and kept", async () => {
+		const store = sealedEntityStorage("tokenBalances", api.storage.local, ROW_KEYS)
+		await store.set("1", balance(2))
+		expect(await repo.get(1)).toBeUndefined()
+		expect(await repo.getAll()).toEqual([])
+		expect(await api.storage.local.get("nulo:core:token-balances@1")).toHaveProperty(["nulo:core:token-balances@1"])
+	})
+
+	test("the raw purge pass never matches a sealed row, whatever its predicate", async () => {
+		await repo.set(balance(1))
+		await api.storage.local.set({ "nulo:core:token-balances@2": JSON.stringify({ junk: true }) })
+		expect(await repo.purgeMalformed(() => true)).toBe(1)
+		expect(Object.keys(await api.storage.local.get())).toEqual(["nulo:core:token-balances@1"])
+	})
+
+	test("sealLegacy leaves a row whose id the caller fences at commit, and seals the rest", async () => {
+		await api.storage.local.set({
+			"nulo:core:token-balances@1": JSON.stringify(balance(1)),
+			"nulo:core:token-balances@2": JSON.stringify(balance(2)),
+		})
+		expect(
+			await repo.sealLegacy(
+				"p1",
+				(fn) => fn(),
+				(id) => id === 1,
+			),
+		).toBe(1)
+		const stored = await api.storage.local.get()
+		expect(stored["nulo:core:token-balances@1"]).toBe(JSON.stringify(balance(1)))
+		expect(Object.keys(JSON.parse(stored["nulo:core:token-balances@2"] as string))).toEqual(["profileId", "sealed"])
+		expect(await repo.getAll()).toEqual([balance(1), balance(2)])
 	})
 
 	test("storage key is nulo:core:token-balances (frozen invariant)", async () => {

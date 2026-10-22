@@ -16,6 +16,8 @@ import {
 	AUTH_REGISTRY_STORAGE_ROOT,
 	AuthwitSchema,
 	AuthwitStatusSchema,
+	authwitStatusRowId,
+	parseAuthwitStatusRowId,
 } from "@/wallet/services/auth-registry/spec"
 import { CONTACT_STORAGE_ROOT, ContactSchema } from "@/wallet/services/contact/spec"
 import { DAPP_REGISTRATIONS_STORAGE_ROOT, DAPP_SESSION_STORAGE_ROOT, DappSessionSchema } from "@/wallet/services/dapp-session/spec"
@@ -66,8 +68,8 @@ export type Store = CodecStore | PlainEntityStore | PlainValueStore
 
 const codec = <S extends z.ZodType>(root: string, schema: S, options?: KeyIdentityOptions) =>
 	({ kind: "entity", ref: { kind: "root", root }, schema, ...(options ? { options } : {}) }) as const
-const sealedCodec = <S extends z.ZodType>(root: string, schema: S, sealedRoot?: SealedRootOptions) =>
-	({ ...codec(root, schema), sealed: true, ...(sealedRoot ? { sealedRoot } : {}) }) as const
+const sealedCodec = <S extends z.ZodType>(root: string, schema: S, sealedRoot?: SealedRootOptions, options?: KeyIdentityOptions) =>
+	({ ...codec(root, schema, options), sealed: true, ...(sealedRoot ? { sealedRoot } : {}) }) as const
 const plainEntity = (root: string, options: KeyIdentityOptions) => ({ kind: "entity", ref: { kind: "root", root }, options }) as const
 const value = (key: string) => ({ kind: "value", ref: { kind: "value", key } }) as const
 const perProfileValue = (root: string) => ({ kind: "value", ref: { kind: "root", root } }) as const
@@ -76,18 +78,31 @@ const perProfileValue = (root: string) => ({ kind: "value", ref: { kind: "root",
  *  The default string mode would hide every numeric row while `getKeys()` still saw its key. */
 const NUMERIC_ID = { requireKeyIdentityMatch: true, keyIdentityMode: "numeric" } as const
 
+/** A flag's key keeps its profile and chain and replaces the account with its keyed hash; the
+ *  flag is a bare boolean, so its key alone names the profile. */
+const REGISTRY_FLAG_LAYOUT: SealedRootOptions = {
+	ownerOf: (_row, naturalId) => parseAuthwitStatusRowId(naturalId)?.profileId,
+	keyed: {
+		physicalId: async (naturalId, keyedHash) => {
+			const scope = parseAuthwitStatusRowId(naturalId)
+			if (!scope) throw new Error("not a registry-flag id")
+			return authwitStatusRowId(scope.profileId, scope.chainId, await keyedHash(scope.account))
+		},
+	},
+}
+
 export const STORES = {
 	accounts: codec(ACCOUNT_STORAGE_ROOT, AccountSchema),
 	importedAccountKeys: codec(IMPORTED_KEYS_STORAGE_ROOT, ImportedAccountKeySchema),
-	authRegistry: codec(AUTH_REGISTRY_STORAGE_ROOT, AuthwitSchema, NUMERIC_ID),
-	authRegistryEnabled: codec(AUTH_REGISTRY_ENABLED_STORAGE_ROOT, AuthwitStatusSchema),
+	authRegistry: sealedCodec(AUTH_REGISTRY_STORAGE_ROOT, AuthwitSchema, undefined, NUMERIC_ID),
+	authRegistryEnabled: sealedCodec(AUTH_REGISTRY_ENABLED_STORAGE_ROOT, AuthwitStatusSchema, REGISTRY_FLAG_LAYOUT),
 	contacts: sealedCodec(CONTACT_STORAGE_ROOT, ContactSchema),
 	dappSessions: sealedCodec(DAPP_SESSION_STORAGE_ROOT, DappSessionSchema),
 	fpcs: codec(FPC_STORAGE_ROOT, StoredFpcSchema),
 	journal: sealedCodec(OPERATION_JOURNAL_STORAGE_ROOT, OperationRecordSchema),
 	networks: codec(NETWORK_STORAGE_ROOT, NetworkRowSchema),
 	tokens: codec(TOKEN_STORAGE_ROOT, TokenSchema),
-	tokenBalances: codec(TOKEN_BALANCE_STORAGE_ROOT, TokenBalanceRawSchema, NUMERIC_ID),
+	tokenBalances: sealedCodec(TOKEN_BALANCE_STORAGE_ROOT, TokenBalanceRawSchema, undefined, NUMERIC_ID),
 	// A tx hash links a row to on-chain activity, so no key carries one; rows written before rows
 	// named their profile keep their hash until a profile is shown to own them.
 	txs: sealedCodec(TRANSACTION_STORAGE_ROOT, TxSchema, {

@@ -252,23 +252,36 @@ export class SealedEntityStorage<T> {
 	 * the profile still holds the keys the pass began with, so a pass outliving the profile's
 	 * deletion writes nothing after the deletion's keyless sweep. Returns the rows sealed.
 	 */
-	public async sealLegacy(profileId: string, withLock: <R>(fn: () => Promise<R>) => Promise<R>): Promise<number> {
+	public async sealLegacy(
+		profileId: string,
+		withLock: <R>(fn: () => Promise<R>) => Promise<R>,
+		skip?: (naturalId: string) => boolean,
+	): Promise<number> {
 		const keys = this.keysFor(profileId)
 		if (!keys) return 0
 		let converted = 0
 		for (const [storageId, text] of await this.inner.rawStringEntries()) {
 			const parsed = tryParse(text)
 			if (!parsed.ok || parseEnvelope(parsed.value) || this.ownerOf(parsed.value, storageId) !== profileId) continue
-			if (await withLock(() => this.sealLegacyRow(keys, profileId, storageId, text))) converted++
+			if (await withLock(() => this.sealLegacyRow(keys, profileId, storageId, text, skip))) converted++
 		}
 		return converted
 	}
 
-	private async sealLegacyRow(keys: RowKeys, owner: string, naturalId: string, text: string): Promise<boolean> {
+	/** `skip` is asked after the row's last read, synchronously before its commit. */
+	private async sealLegacyRow(
+		keys: RowKeys,
+		owner: string,
+		naturalId: string,
+		text: string,
+		skip?: (naturalId: string) => boolean,
+	): Promise<boolean> {
 		const legacyKey = this.prefix + naturalId
+		// Checked in the continuation that dispatches the commit, with no await between.
+		const stillHeld = (stored: unknown) => stored === text && this.keysFor(owner) === keys && !skip?.(naturalId)
 		if (!this.options.keyed) {
 			const items = { [legacyKey]: await this.envelope(keys, owner, legacyKey, text) }
-			if ((await this.area.get(legacyKey))[legacyKey] !== text || this.keysFor(owner) !== keys) return false
+			if (!stillHeld((await this.area.get(legacyKey))[legacyKey])) return false
 			await this.area.set(items)
 			return true
 		}
@@ -278,7 +291,7 @@ export class SealedEntityStorage<T> {
 			twin === undefined
 				? { [sealedKey]: await this.envelope(keys, owner, sealedKey, JSON.stringify({ k: naturalId, r: text })) }
 				: {}
-		if ((await this.area.get(legacyKey))[legacyKey] !== text || this.keysFor(owner) !== keys) return false
+		if (!stillHeld((await this.area.get(legacyKey))[legacyKey])) return false
 		await this.commitWithRemovals(items, [legacyKey])
 		return true
 	}
@@ -339,12 +352,16 @@ export class SealedEntityStorage<T> {
 		return (await this.legacyAt(naturalId))?.owner
 	}
 
-	/** The legacy row stored at the natural id itself, with its owner (none when ownerless). */
+	/** The legacy row stored at the natural id itself, with its owner (none when ownerless). A row
+	 *  that is not an object counts only where its id names the owner (a bare flag): no other row
+	 *  is ever one, so an ownerless non-object is debris. */
 	private async legacyAt(naturalId: string): Promise<{ owner: string | undefined } | undefined> {
 		const key = this.prefix + naturalId
 		const parsed = tryParse((await this.area.get(key))[key])
-		if (!parsed.ok || typeof parsed.value !== "object" || parsed.value === null || parseEnvelope(parsed.value)) return undefined
-		return { owner: this.ownerOf(parsed.value, naturalId) }
+		if (!parsed.ok || parseEnvelope(parsed.value)) return undefined
+		const owner = this.ownerOf(parsed.value, naturalId)
+		if (owner === undefined && (typeof parsed.value !== "object" || parsed.value === null)) return undefined
+		return { owner }
 	}
 
 	/** Whether a lookup by `owner` is served a legacy row owned by `rowOwner`: its own, or, on a root

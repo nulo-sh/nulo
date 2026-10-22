@@ -40,6 +40,9 @@ import type { BackgroundTickerPort } from "@nulo/wallet-core/ports"
 import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import type { RowKeysSource } from "@/wallet/storage/sealed-entity-storage"
 
+/** One key for every profile, as the profile fakes hold it. */
+const { rowKeys: ROW_KEYS } = await rowKeysForEveryProfile()
+
 /**
  * Minimal ProfileService fake (golden reference: contact/service.test.ts). Carries
  * `onProfileDeleted` + `onActiveProfileChanged` (some services subscribe to the
@@ -226,7 +229,7 @@ describe("cross-profile isolation (standing gate)", () => {
 			profile = new FakeProfileService()
 			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
-			seedRepo = new BalanceRepository(api)
+			seedRepo = new BalanceRepository(api, ROW_KEYS)
 			const services = new ServiceCollection()
 			services.add(profile)
 			services.add(svc(NetworkService.name, {}))

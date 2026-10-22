@@ -88,6 +88,12 @@ function makeRepo(seeded: TokenBalanceRaw[] = []): BalanceRepository {
 		set: async (b: TokenBalanceRaw) => {
 			store.set(b.id, b)
 		},
+		prepare: async (b: TokenBalanceRaw) => ({
+			items: {},
+			commit: async () => {
+				store.set(b.id, b)
+			},
+		}),
 		delete: async (id: number) => {
 			store.delete(id)
 		},
@@ -451,10 +457,13 @@ describe("BalanceJobQueue", () => {
 		const base = makeRepo([raw(1, { token: 1 }), raw(2, { token: 2 })])
 		const repo = {
 			...base,
-			set: async (b: TokenBalanceRaw) => {
-				await base.set(b)
-				if (b.token === 1) emittable.delete(1)
-			},
+			prepare: async (b: TokenBalanceRaw) => ({
+				items: {},
+				commit: async () => {
+					await base.set(b)
+					if (b.token === 1) emittable.delete(1)
+				},
+			}),
 		} as BalanceRepository
 		const tasks = makeTaskService()
 		const onBalanceUpdated = vi.fn()

@@ -25,6 +25,10 @@ import { svc } from "../composition-harness"
 import { BalanceRepository } from "./balance-repository"
 import { TokenBalanceService } from "./service"
 import type { TokenBalanceRaw } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const { rowKeys: ROW_KEYS } = await rowKeysForEveryProfile()
 
 const A = "0xalice"
 const B = "0xbob"
@@ -62,11 +66,13 @@ describe("onTransactionUpdated pins", () => {
 	beforeEach(async () => {
 		const api = new FakeBrowserApi()
 		api.reset()
-		seedRepo = new BalanceRepository(api)
+		seedRepo = new BalanceRepository(api, ROW_KEYS)
 		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
 		const services = new ServiceCollection()
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
+				rowKeys: ROW_KEYS,
+				onRowKeysReady: new EventHandler<string>(),
 				onActiveProfileChanged: new EventHandler(),
 				getActiveProfile: async () => undefined,
 				getDeletionState: () => new ProfileDeletionState(),
