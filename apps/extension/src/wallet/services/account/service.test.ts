@@ -916,8 +916,8 @@ describe("AccountService purges wait for a rename holding the same row", () => {
 		return keys.filter((k) => k.startsWith("nulo:core:accounts@") || k.startsWith("nulo:core:imported-account-keys@"))
 	}
 
-	/** Parks a rename at its read of the row, starts `purge`, and releases the rename once the purge
-	 *  has queued on the row's lock, which it reaches only after awaits of its own. */
+	/** Parks a rename at its read of the row, starts `purge`, and fails unless the purge is queued
+	 *  behind it on the row's lock, reached only after awaits of its own, before releasing the rename. */
 	async function purgeBehindRename<T>(api: FakeBrowserApi, service: AccountService, purge: () => Promise<T>) {
 		const gate = parkRowRead(api, rowKey)
 		const rename = service.changeAccountName("p1", 1, "0xaa", "renamed")
