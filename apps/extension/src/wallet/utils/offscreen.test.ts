@@ -240,6 +240,28 @@ describe("ensureOffscreenRunning (cold-start single-flight)", () => {
 		expect(closeDocument).not.toHaveBeenCalled()
 	})
 
+	test("a document this worker heard answer is not pinged again", async () => {
+		vi.useFakeTimers()
+		try {
+			const cold = ensureOffscreenRunning()
+			await vi.advanceTimersByTimeAsync(0)
+			deliver(OFFSCREEN_READY_MESSAGE)
+			await cold
+
+			// Busy: it is listed, but a PING gets no PONG.
+			getContexts.mockResolvedValue([{}])
+			const busy = ensureOffscreenRunning()
+			// Finish any pass before asserting, so a failure here leaves no pass in flight for the next test.
+			await vi.advanceTimersByTimeAsync(3_100)
+			deliver(OFFSCREEN_READY_MESSAGE)
+			await busy
+			expect(sendMessage).not.toHaveBeenCalledWith(OFFSCREEN_PING)
+			expect(closeDocument).not.toHaveBeenCalled()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	test("createDocument hanging past the 10s gate: all joiners reject, NO post-timeout retry, next pass recovers", async () => {
 		vi.useFakeTimers()
 		try {
