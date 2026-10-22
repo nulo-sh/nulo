@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { keyedSegment } from "@nulo/wallet-crypto"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
-import { deferred, EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler, type KeyedLock } from "@nulo/wallet-core/utils"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { ServiceCollection } from "@/wallet/base"
@@ -884,8 +884,9 @@ describe("AccountService.importAccount — deletion fence", () => {
 })
 
 describe("AccountService purges wait for a rename holding the same row", () => {
-	const rowKey = `nulo:core:accounts@${accountRowId("p1", 1, "0xaa")}`
-	const keyRowKey = `nulo:core:imported-account-keys@${accountRowId("p1", 1, "0xaa")}`
+	const rowId = accountRowId("p1", 1, "0xaa")
+	const rowKey = `nulo:core:accounts@${rowId}`
+	const keyRowKey = `nulo:core:imported-account-keys@${rowId}`
 
 	async function makeHarness() {
 		const api = new FakeBrowserApi()
@@ -909,34 +910,75 @@ describe("AccountService purges wait for a rename holding the same row", () => {
 		return { api, service }
 	}
 
+	/** Every key left under either root, sealed rows included. */
+	async function rowsLeft(api: FakeBrowserApi): Promise<string[]> {
+		const keys = Object.keys(await api.storage.local.get(null))
+		return keys.filter((k) => k.startsWith("nulo:core:accounts@") || k.startsWith("nulo:core:imported-account-keys@"))
+	}
+
+	/** Parks a rename at its read of the row, starts `purge`, and releases the rename once the purge
+	 *  has queued on the row's lock, which it reaches only after awaits of its own. */
+	async function purgeBehindRename<T>(api: FakeBrowserApi, service: AccountService, purge: () => Promise<T>) {
+		const gate = parkRowRead(api, rowKey)
+		const rename = service.changeAccountName("p1", 1, "0xaa", "renamed")
+		await gate.parked
+		const locks = (service as unknown as { tupleLocks: KeyedLock }).tupleLocks
+		const withLock = locks.withLock.bind(locks)
+		const requested = deferred()
+		// `withLock` queues its caller before it returns, so the signal marks a request already waiting.
+		locks.withLock = ((key: string, fn: () => unknown) => {
+			const queued = withLock(key, fn)
+			if (key === rowId) requested.resolve()
+			return queued
+		}) as KeyedLock["withLock"]
+		const purging = purge()
+		// A purge that settles without asking for the row's lock fails the queue check at once.
+		await Promise.race([requested.promise, purging])
+		expect(locks.waiting(rowId)).toBe(1)
+		gate.release()
+		return Promise.all([rename, purging])
+	}
+
 	test.each([
 		["clearChainState", (s: AccountService) => s.clearChainState("p1", 1)],
 		["purgeForProfile", (s: AccountService) => s.purgeForProfile("p1")],
 	])("%s: the renamed row is not written back after the delete", async (_name, purge) => {
 		const { api, service } = await makeHarness()
-		const gate = parkRowRead(api, rowKey)
-		const rename = service.changeAccountName("p1", 1, "0xaa", "renamed")
-		await gate.parked
-		const purging = purge(service)
-		await new Promise((r) => setTimeout(r, 0))
-		gate.release()
-		await Promise.all([rename, purging])
-		const keys = Object.keys(await api.storage.local.get(null))
-		expect(keys.filter((k) => k === rowKey || k === keyRowKey)).toEqual([])
+		const [renamed] = await purgeBehindRename(api, service, () => purge(service))
+		expect(renamed?.name).toBe("renamed")
+		expect(await rowsLeft(api)).toEqual([])
 	})
 
 	test("reconcileImportedAccounts: a keyless row is not written back by a rename parked on it", async () => {
 		const { api, service } = await makeHarness()
 		await api.storage.local.remove(keyRowKey)
-		const gate = parkRowRead(api, rowKey)
-		const rename = service.changeAccountName("p1", 1, "0xaa", "renamed")
-		await gate.parked
-		const reconciling = service.reconcileImportedAccounts("p1")
-		await new Promise((r) => setTimeout(r, 0))
-		gate.release()
-		const [, dropped] = await Promise.all([rename, reconciling])
+		const [renamed, dropped] = await purgeBehindRename(api, service, () => service.reconcileImportedAccounts("p1"))
+		expect(renamed?.name).toBe("renamed")
 		expect(dropped).toEqual([{ chainId: 1, address: "0xaa" }])
-		expect(Object.keys(await api.storage.local.get(null)).filter((k) => k === rowKey)).toEqual([])
+		expect(await rowsLeft(api)).toEqual([])
+	})
+
+	test("reconcileImportedAccounts: a rename started after the keyless check is not written back", async () => {
+		const { api, service } = await makeHarness()
+		await api.storage.local.remove(keyRowKey)
+		// Held in a purge subscriber, the reconcile is past its keyless check, so only the delete's
+		// own lock can order it behind the rename.
+		const inSubscriber = deferred()
+		const resume = deferred()
+		service.registerAccountPurgeSubscriber(async () => {
+			inSubscriber.resolve()
+			await resume.promise
+		})
+		const reconciling = service.reconcileImportedAccounts("p1")
+		const staged = await Promise.race([inSubscriber.promise.then(() => "subscriber"), reconciling.then(() => "settled")])
+		expect(staged).toBe("subscriber")
+		const [renamed, dropped] = await purgeBehindRename(api, service, () => {
+			resume.resolve()
+			return reconciling
+		})
+		expect(renamed?.name).toBe("renamed")
+		expect(dropped).toEqual([{ chainId: 1, address: "0xaa" }])
+		expect(await rowsLeft(api)).toEqual([])
 	})
 })
 
