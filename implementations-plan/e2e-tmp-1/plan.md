@@ -100,6 +100,7 @@ Opened ready, without labels, after the loop converges; then add `e2e:extension-
 
 - **A1 Codex r1** (gpt-6.1-sol, high, session `01a1644f`, diff `origin/dev...HEAD`): **clean**.
 - **A1 Opus review** (general-purpose): **findings: 3**, no correctness bug. Accepted: seven more callers removed the file or dir themselves, two in smoke removing only the file (all eight now dropped, one owner per dir; plan and recon corrected); a stale `Stage 1:` label; the TSDoc named Chrome's `FileChooser.accept` and said "test" where the hook runs per attempt.
+- **A1 Codex r2** (resumed `01a1644f`, fix commit `4a95e6650`): **clean**. Loop converged.
 
 ## Seeds
 

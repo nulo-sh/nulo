@@ -6,3 +6,4 @@
 - 2026-10-22: Codex r2 approve; plan committed; auto-continue into A1 (OWNER-ASKS: none).
 - 2026-10-22: A1 phase 1 green (self-test red on base, green after; lint, typecheck:all, test, test:all); D7 module split.
 - 2026-10-22: A1 Codex r1 clean; Opus review 3 findings fixed (eight redundant caller removals dropped); smoke Chrome running.
+- 2026-10-22: smoke Chrome retry 0 green (61 passed, 9 skipped, 31 min, residue 0); the two re-indented smoke files green again at 4a95e6650.
