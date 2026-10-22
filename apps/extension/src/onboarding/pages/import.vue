@@ -134,13 +134,9 @@ onBeforeUnmount(() => {
 
 <template>
 	<OnboardingPage :gap="24" data-testid="onboarding-import-page" :data-name-field="nameFieldState" :data-restore-stage="restoreStage">
-		<OnboardingBackLink testid="onboarding-import-back" />
-		<StepIndicator current="wallet" path="import" />
-		<header :class="$style.hero">
-			<BrutalistTitle main="Import" sub="Wallet" />
-			<div :class="$style.hero_bar" />
+		<OnboardingStepHeader current="wallet" path="import" back="onboarding-import-back" main="Import" sub="Wallet" :class="$style.hero">
 			<Text variant="body" color="secondary" height="150">Restore from a recovery phrase, passkey, or full backup.</Text>
-		</header>
+		</OnboardingStepHeader>
 
 		<OnboardingProfileNameField
 			v-if="nameFieldState === 'shown'"
@@ -287,16 +283,7 @@ onBeforeUnmount(() => {
 
 <style module>
 .hero {
-	padding: 8px 0 16px;
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-}
-
-.hero_bar {
-	width: 40px;
-	height: 2px;
-	background: var(--nulo-accent);
+	padding-bottom: 16px;
 }
 
 .ctas {

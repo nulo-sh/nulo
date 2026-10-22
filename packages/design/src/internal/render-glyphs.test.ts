@@ -51,6 +51,11 @@ describe("tablerGlyph", () => {
 		["no path", svg(OUTLINE_ROOT), "draws nothing"],
 		["an empty path", svg(OUTLINE_ROOT, '<path d="" />'), "draws nothing"],
 		["a blank path", svg(OUTLINE_ROOT, '<path d="  " />'), "draws nothing"],
+		[
+			"a path opening with a relative move",
+			svg(OUTLINE_ROOT, '<path d="M6 6l12 12" />', '<path d="m6 18l12 -12" />'),
+			"opens a path with other than an absolute M",
+		],
 	])("refuses %s", (_, text, reason) => {
 		const source = text.includes(FILLED_ROOT) ? "filled/x" : "x"
 		expect(() => tablerGlyph(source, text)).toThrow(`${source}: ${reason}`)

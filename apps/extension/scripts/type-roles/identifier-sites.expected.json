@@ -218,7 +218,7 @@
 		{
 			"file": "apps/extension/src/components/Header.vue",
 			"expression": "appStore.account?.address ? trimAddress(appStore.account.address, 6, 4, \"...\") : \"\"",
-			"branch": "!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader && appStore.isLogined && accountState === 'shown'",
+			"branch": "!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader && !isCardWindow() && appStore.isLogined && accountState === 'shown'",
 			"ordinal": 0,
 			"role": "data-lead",
 			"selector": "[data-testid=\"account-address-text\"]",
@@ -701,7 +701,7 @@
 		{
 			"file": "apps/extension/src/popup/pages/settings/accounts/import.vue",
 			"expression": "previewAddress",
-			"branch": "!(!needsConfirm)",
+			"branch": "!(showCard) && !(!needsConfirm)",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"import-account-preview-address\"]",

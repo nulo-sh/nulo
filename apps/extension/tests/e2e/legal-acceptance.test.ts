@@ -54,6 +54,7 @@ describe("onboarding: the Terms gate", () => {
 		const page = await openOnboarding(extension, { legal: "missing" })
 		await clickByTestId(page, "onboarding-welcome-create")
 		await waitForTermsGate(page, "create")
+		const tops = [await titleTop(page, "legal-consent-checkbox")]
 		expect(await page.$$eval('[data-testid="legal-point"]', (rows) => rows.length)).toBe(4)
 		expect(await isContinueDisabled(page)).toBe(true)
 		expect(await page.$eval('[data-testid="legal-consent-checkbox"]', (el) => el.getAttribute("aria-checked"))).toBe("false")
@@ -69,14 +70,19 @@ describe("onboarding: the Terms gate", () => {
 		expect(record?.acceptedAt).toBeGreaterThanOrEqual(before)
 		expect(record?.history).toHaveLength(1)
 
+		tops.push(await titleTop(page, "onboarding-create-page"))
 		await expectNoNameField(page, "onboarding-create-page", "onboarding-name-input")
 		await clickByTestId(page, "onboarding-method-password")
 		await replaceInputValue(page, '[data-testid="onboarding-password-input"]', TEST_PASSWORD)
 		await replaceInputValue(page, '[data-testid="onboarding-password-confirm"]', TEST_PASSWORD)
 		await clickByTestId(page, "onboarding-submit-create")
 		await page.waitForSelector('[data-testid="onboarding-phrase-later"]', { visible: true, timeout: 30_000 })
+		tops.push(await titleTop(page, "onboarding-phrase-later"))
 		await clickByTestId(page, "onboarding-phrase-later")
 		await waitForHash(page, "#/onboarding/done", 10_000)
+		tops.push(await titleTop(page, "onboarding-done-open"))
+		// Terms, Create, the phrase and Ready draw their titles on one line.
+		expect(tops).toEqual(tops.map(() => tops[0]))
 
 		expect(extension.pageErrors).toEqual([])
 		await page.close()
@@ -97,7 +103,10 @@ describe("onboarding: the Terms gate", () => {
 	test("S3 the import path passes the same gate and resumes at import", async ({ freshExtensionPerTest: extension }) => {
 		const page = await openOnboarding(extension, { legal: "missing" })
 		await clickByTestId(page, "onboarding-welcome-import")
+		await waitForTermsGate(page, "import")
+		const termsTop = await titleTop(page, "legal-consent-checkbox")
 		await acceptOnboardingTerms(page, "import")
+		expect(await titleTop(page, "onboarding-import-page")).toBe(termsTop)
 		expect(await readLegalRecord(page)).toMatchObject({ termsVersion: CURRENT_TERMS, surface: "onboarding" })
 
 		await importSeed(page, CANONICAL_SEED_24, TEST_PASSWORD, ONBOARDING_IMPORT_SHELL)
@@ -107,6 +116,18 @@ describe("onboarding: the Terms gate", () => {
 		await page.close()
 	}, 90_000)
 })
+
+/** The step's title top with the page at its top and its fonts loaded, read once `stepTestid` shows. */
+async function titleTop(page: Page, stepTestid: string): Promise<number> {
+	await page.waitForSelector(`[data-testid="${stepTestid}"]`, { visible: true, timeout: 10_000 })
+	return page.evaluate(async () => {
+		await document.fonts.ready
+		window.scrollTo(0, 0)
+		const title = document.querySelector('[data-testid="onboarding-step-title"]')
+		if (!title) throw new Error("no onboarding-step-title")
+		return title.getBoundingClientRect().top
+	})
+}
 
 const textOf = (page: Page, testid: string) =>
 	page.$eval(`[data-testid="${testid}"]`, (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim())

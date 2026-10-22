@@ -42,7 +42,7 @@ const navigationLinks: { name: string; path: string; icon: GlyphName; label: str
 			:data-testid="`nav-${link.name}`"
 			:class="[$style.tab, route.path.includes(link.path) && $style.active]"
 		>
-			<Icon :name="link.icon" :size="22" :color="route.path.includes(link.path) ? 'primary' : 'tertiary'" />
+			<Icon :name="link.icon" :size="24" :color="route.path.includes(link.path) ? 'primary' : 'tertiary'" />
 			<span :class="$style.label">{{ link.label }}</span>
 		</RouterLink>
 	</nav>

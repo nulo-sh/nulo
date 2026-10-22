@@ -122,6 +122,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [e2e-reliability-fixes](e2e-reliability-fixes/plan.md) — completed — a wave of test-reliability follow-ups closed at their root causes
 - [e2e-skill-refresh](e2e-skill-refresh/plan.md) — completed — one service-worker kill helper and a procedure-first e2e-testing skill
 - [e2e-stabilization](e2e-stabilization/plan.md) — completed — the network suite's remaining flakes fixed, iterating locally first
+- [e2e-stores-1](e2e-stores-1/plan.md) — completed — the local network's stores, sockets, logs and foundry copy under the run dir via the node's `TMPDIR`; a boot check fails a run whose node holds a store outside it (#1041)
 - [embedded-fpc-firsttx-cosmetic](embedded-fpc-firsttx-cosmetic/plan.md) — completed — embedded FPC cap and first-transaction cleanups after the simulation fast path
 - [emoji-match-1](emoji-match-1/plan.md) — completed — the emoji check on every connection, remembered apps too (#587, P28-04 A); "Skip this check next time" removed; every verify admission reserves a slot
 - [enter-gate-and-ping](enter-gate-and-ping/plan.md) — completed — one submit-validity computed for the profile-edit popup, and a ping message type
@@ -421,3 +422,5 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [fit-gate-1](fit-gate-1/plan.md) — completed — at 240 px nothing in the page scrolls sideways: the gate fails a scroller wider than its box and every box past the view; the token metadata and Senders rows wrap (#1023)
 - [pxe-limits-1](pxe-limits-1/plan.md) — completed — where the PXE and the wallet hit their limits, measured: each block's tag scan grows with senders × watched tokens, proving is 81-97 % of a send, list pages grow superlinearly through `Icon`'s CSS `v-bind`, the sandbox includes 80 tx/min; eight open issues and one known limit (#1016)
 - [encryption-at-rest-1](encryption-at-rest-1/plan.md) — completed — every profile-scoped root but the profile row sealed per row under a key only an unlocked profile derives, in four arcs: contacts and dApp sessions, history, balances and incoming receipts, accounts, tokens, networks and fee payers; keyed ids and digests, a root census, privacy 1.2.3 (#522)
+- [ui-cosmetics-1](ui-cosmetics-1/plan.md) — completed — onboarding titles hold still on every step after welcome; the Presto step is done once opened; each icon paints once and the bottom bar's icons are 24 px, all approved as pictured (#1019)
+- [firefox-handoff-1](firefox-handoff-1/plan.md) — completed — on Firefox a file pick from the toolbar panel opens one card (title, Choose file, Cancel) in a window that runs the flow, closes itself and reopens the panel on the result (#1007, #1022)

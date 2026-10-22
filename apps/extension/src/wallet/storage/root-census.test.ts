@@ -41,6 +41,7 @@ const PLAINTEXT: Partial<Record<StoredShapeName, string>> = {
 	uiGetStartedAztecOpened: UI_FLAG,
 	uiGetStartedHidden: UI_FLAG,
 	uiGetStartedFeeJuiceHeld: UI_FLAG,
+	uiGetStartedPrestoOpened: UI_FLAG,
 	uiProfileImported: UI_FLAG,
 	uiProfileNotFirst: UI_FLAG,
 	schemaVersion: ENGINE,

@@ -34,7 +34,7 @@
 		},
 		{
 			"id": "accounts.sealed",
-			"stamp": 3,
+			"stamp": 4,
 			"shape": "accounts",
 			"key": "nulo:core:accounts@[\"account\",\"3f9a2c71\",3415328944,\"e39MZlQaRQjwmMFcEhDtyQkvRuK-n7WBkCF9cQMlET4\"]",
 			"value": {
@@ -69,7 +69,7 @@
 		},
 		{
 			"id": "importedAccountKeys.sealed",
-			"stamp": 3,
+			"stamp": 4,
 			"shape": "importedAccountKeys",
 			"key": "nulo:core:imported-account-keys@[\"account\",\"3f9a2c71\",3415328944,\"en3pp8w2ezrnEXOFEwXIVc1mCfQA-b8JSC91_z4j_hk\"]",
 			"value": {
@@ -224,7 +224,7 @@
 		},
 		{
 			"id": "fpcs.sealed",
-			"stamp": 3,
+			"stamp": 4,
 			"shape": "fpcs",
 			"key": "nulo:core:fpcs@7d4e1a35",
 			"value": {
@@ -534,7 +534,7 @@
 		},
 		{
 			"id": "networks.sealed",
-			"stamp": 3,
+			"stamp": 4,
 			"shape": "networks",
 			"key": "nulo:core:networks@c93f0b18",
 			"value": {
@@ -612,7 +612,7 @@
 		},
 		{
 			"id": "tokens.sealed",
-			"stamp": 3,
+			"stamp": 4,
 			"shape": "tokens",
 			"key": "nulo:core:tokens@3",
 			"value": {
@@ -1501,7 +1501,7 @@
 		},
 		{
 			"id": "tokenSeeded.sealed",
-			"stamp": 3,
+			"stamp": 4,
 			"shape": "tokenSeeded",
 			"key": "nulo:core:token-seeded@5c8e1f27",
 			"value": {
@@ -1529,7 +1529,7 @@
 		},
 		{
 			"id": "dappRegistrations.sealed",
-			"stamp": 3,
+			"stamp": 4,
 			"shape": "dappRegistrations",
 			"key": "nulo:core:dappRegistrations@5c8e1f27",
 			"value": {
@@ -1836,6 +1836,20 @@
 			"stamp": 0,
 			"shape": "uiGetStartedFeeJuiceHeld",
 			"key": "nulo:ui:getStartedFeeJuiceHeld@b04e6d18",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedPrestoOpened.full",
+			"stamp": 3,
+			"shape": "uiGetStartedPrestoOpened",
+			"key": "nulo:ui:getStartedPrestoOpened@3f9a2c71",
+			"value": true
+		},
+		{
+			"id": "uiGetStartedPrestoOpened.minimal",
+			"stamp": 3,
+			"shape": "uiGetStartedPrestoOpened",
+			"key": "nulo:ui:getStartedPrestoOpened@b04e6d18",
 			"value": true
 		},
 		{

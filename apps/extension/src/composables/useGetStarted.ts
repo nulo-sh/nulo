@@ -6,6 +6,7 @@ const NOTHING_DONE: GetStartedFlags = {
 	backupSaved: false,
 	aztecOpened: false,
 	feeJuiceHeld: false,
+	prestoOpened: false,
 	hidden: false,
 	imported: false,
 	notFirst: false,
