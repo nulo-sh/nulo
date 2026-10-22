@@ -1,6 +1,7 @@
 ---
 plan: pxe-limits-1
 tier: light
+status: closed (arc 1, measured; no product change)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -12,6 +13,25 @@ trunk: dev
 issues: "#1016 (research; the docs-only PR closes it)"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-22.
+- **Status:** closed. Arc 1 measured on `worktree-pxe-limits-1` with scratch instruments and probes, never committed, and on CI through the Chrome soak on `pxe-limits-1-measure-*` branches, all deleted. This docs-only PR carries the record and archives the plan from `docs/pxe-limits-1`, cut from `dev`, not from `worktree-pxe-limits-1` as Delivery planned, so its history holds the published record only; its merge closes the plan and #1016.
+- **Shipped:** no code. The findings are #1016's `## Findings` comment and the nine issues below.
+- **Measured** (each against its falsifier):
+  - H1 holds through 1,000 blocks: 58 PXE-side node calls and 594 tags over the whole test at 100 and at 1,000 blocks, empty or each carrying another account's transfer. At 10,000 the times stay flat (tip 1.16 s) and the count is not split from a late token's import ([lessons/phase-3.md](lessons/phase-3.md)).
+  - H2 holds: per block, private-log tags = 84 × (watched tokens + 1) × scopes × (senders + own accounts) + scopes + 86 × handshakes, plus one public-log tag per watched token, exactly at every point; 128 senders cost 21,674 tags and 15 s a block at load1 206.
+  - H3: the OPFS half holds (3.0 and 3.1 KiB a note at 100 and 1,000); the memory half is inconclusive (one step).
+  - H4a and H4b hold: proving is 81-97 % of a prover-on send's `proveTx` total; WASM is 2.2-3.2 × native on CI. Firefox proves on one thread, 2.8-3.8 × Chrome's total ([lessons/phase-2.md](lessons/phase-2.md)).
+  - H5 holds on CI, 3 of 3 iterations in a fixed order. The page opens grow superlinearly; in an A/B on one export, removing `Icon`'s CSS `v-bind` took 79-90 % off the 5,000-row opens ([lessons/phase-5.md](lessons/phase-5.md)).
+  - H6 held.
+  - H7: the burst half is inconclusive (no block reached the gas budget; one fee payer's balance stopped a 256 burst at 151); the sustained half holds (80 tx/min all included); the growth half holds (`aztecDebug_mineBlock` +7.3 ms per 1,000 blocks, after load) ([lessons/phase-4.md](lessons/phase-4.md)).
+- **Dispositions:** the seal (#924) was not compared at equal host load, so no per-row cost is claimed; A2's pinned 2-core run, a removal run for the unlock, an upstream PXE patch for the balance read and a run without a debugger session were not tried.
+- **Known limits:** #1040 (the sandbox keeps one fee payer's pending txs only while their max fees fit its balance), labelled `known-limit` and closed as not planned.
+- **Open items:** #1033 (the balance read), #1034 (senders × watched tokens per block), #1035 (the health ping closes a slow PXE document, bug), #1036 (`Icon`'s CSS `v-bind`), #1037 (the recipient suggestions), #1038 (the unlock against watched tokens), #1039 (Firefox's one-thread prover, `blocked:external`), #1041 (the local network's stores outlive the e2e run, bug).
+- **Lessons:** none promoted. `lessons.md` holds 8,174 of its 8,192 bytes and nothing there is superseded. The one candidate, that a CSS `v-bind()` costs each instance a page-wide query (Vue 3.5.42), is #1036's subject, and a guard against it belongs in that fix.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # pxe-limits-1: where the PXE and the wallet hit their limits, measured (#1016)
 
