@@ -1,7 +1,7 @@
 ---
 plan: deps-audit-1
 tier: light
-status: arc 1 blocked at Phase 3 (the extension soak pair, host load); OA-2 attempt stopped by its load rule; ask OA-3
+status: arc 1 blocked at the Phase 2 audit gate: two new advisories (#1032); ask OA-4
 issues: "#980 (closed by arc 1)"
 driver: claude-code
 claude_model: opus

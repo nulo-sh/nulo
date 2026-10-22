@@ -35,3 +35,15 @@ Candidate `57c35cec5` (`bun.lock` sha256 `7076bcbe…af2284`); `dev` had not mov
 - `apps/extension` node: runs 1-10 passed, 14770 tests each, 245 to 315 s.
 - Five-minute samples of load5: 72.8, 105.6, 128.7, 141.1, 163.9, 129.2, 124.5, 114.2, 158.2, 178.0, 170.2. The last three tripped the rule, which stopped the group at 01:32:01Z; nothing of the run was left. A CPU sample at 00:57Z put this run at about 100% against 450% for encryption-at-rest-1, plus fit-gate-1 and pxe-limits-1.
 - The close-out's trunk merge: `origin/dev` (`60ecd6cc3`) changes no dependency file, `bunfig.toml`, `vitest.base.mts`, unit vitest config or the soak tool. It does change `apps/extension/vitest.e2e.config.ts` and `vitest.e2e.network.config.ts` (#978), which match the trigger. `git merge-tree` conflicts only in `index.md`, on our added row. Codex r7: A-i (OA-3).
+
+## OA-3 window, 2026-10-22
+
+- Window from 05:29:44Z (load5 101.4; about 37% of the CPU was niced time from processes outside this session's view, and visible lanes used about 2 cores).
+- `origin/dev` `11439b1be` merged as `f9da1bd3c` (signed). `index.md` conflicted only on this lane's row, resolved as dev's file plus that row. The diff against `origin/dev` is exactly this arc: four manifests, `bun.lock` (the same 6 lines), the live-check test and the plan.
+- Same 13 soak workspaces and the same three `BUN_ONLY_FILES`. `pr-quick` dispatched at `f9da1bd3c`.
+- Every `node_modules` removed, then `bun install --frozen-lockfile`: exit 0, the tree clean, the store holding `vite@8.2.4` and `follow-redirects@1.16.1` only.
+- The audit gate failed: `41 acknowledged, 2 unacknowledged`:
+  - `@vitest/mocker` 1242767, moderate, fixed in 4.1.12, which clears the age gate at 14:51Z today;
+  - `storybook` 1242753, critical, fixed in 10.6.2, past the gate.
+
+  Both were published after this plan. Filed #1032 after a dedupe search. The run stopped at that gate, so no build or test ran (OA-4).

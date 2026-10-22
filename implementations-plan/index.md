@@ -4,4 +4,4 @@ Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 
 - [launch-prep-1](launch-prep-1/plan.md) — planned, Codex approve, A1 in review — the 1.0.0 checklist boxes the stores meet and the Mainnet line (A1); four known-limit dispositions; Terms 1.1 and the README banner after the owner signs (A2) (#864)
 - [encryption-at-rest-1](encryption-at-rest-1/plan.md) — A1 in review, draft PR #924 (lands after #938, the owner's build test and one green nightly soak; the 1.0.0 promote waits for it); A4 waits for OA-3 — seal each profile's rows in `chrome.storage.local` under a master-derived per-profile key: contacts and dApp sessions, history, private-state projections, accounts and tokens (#522)
-- [deps-audit-1](deps-audit-1/plan.md) — OA-3 granted (A), A1 rerunning Phases 2-3 at the merged head — the five new advisories fixed, none acknowledged: vite 8.2.4 and follow-redirects 1.16.1 (#980)
+- [deps-audit-1](deps-audit-1/plan.md) — A1 blocked at the audit gate: two new advisories (#1032), OA-4 — the five new advisories fixed, none acknowledged: vite 8.2.4 and follow-redirects 1.16.1 (#980)

@@ -28,3 +28,23 @@
   - **C:** B, plus an approved narrowing of Phase 3's trigger. The two e2e configs feed only the e2e runners, so the close-out reruns only Phase 2 (about 1.4 h). It needs the orchestrator's or the owner's explicit approval: the lead may not narrow an approved gate.
 - **What ships now:** nothing. The branch is pushed, with no PR. #980 and #987 stay open.
 - **Answer:** A, granted by the orchestrator. It holds the window: no other lead runs a unit or e2e suite until this lane reports, and one measurement lane keeps about one core. The window opened at the resume, 2026-10-22T05:29:44Z, at load5 101.4 (load1 121.8). Processes outside this session's view were using about 37% of the CPU as niced time. Plan: merge `origin/dev` first, then run Phases 2-3 in full at the merged HEAD under the same soak and load rules.
+- **Run:** `origin/dev` (`11439b1be`) merged as `f9da1bd3c`, the candidate. `index.md` kept every lane's row: the four rows dev removed are in dev's `archive/index.md`. The fresh frozen install passed, and the store holds only `vite@8.2.4` and `follow-redirects@1.16.1`. The audit gate then failed at 05:32:45Z: `41 acknowledged, 2 unacknowledged, 0 stale, 0 unreadable` (OA-4). The run stopped there, before any build or test.
+
+## OA-4: two new advisories; may arc 1 fix them too?
+
+- **Surface:** none a person sees. The ask concerns scope: two packages outside #980's five.
+- **Why:** both advisories were published after this plan, and #1032 tracks them:
+  - `@vitest/mocker` 4.1.10: [1242767](https://github.com/advisories/GHSA-qxg6-89mg-rqv8), moderate, fixed in 4.1.12;
+  - `storybook` 10.5.8: [1242753](https://github.com/advisories/GHSA-f2ph-cmg5-wxc8), critical, fixed in 10.6.2.
+
+  `quality-status` enforces the gate on every PR that changes a dependency file, this one included, so this PR cannot reach its bar (41/0/0/0) without them. Fixing them changes `package.json` and `bun.lock`, so Phases 2-3 must run after the fix either way. Running them at `f9da1bd3c` would be spent.
+- **Age:** storybook 10.6.2 (2026-10-12T18:22Z) is past the 7-day gate; 10.6.3 is not. vitest and `@vitest/mocker` 4.1.12 (2026-10-15T14:51Z) clear it at 2026-10-22T14:51Z. 4.1.12 also fixes the two vitest advisories acknowledged today (D7), so those two entries leave `audit-acks.json` and the bar becomes 39/0/0/0.
+- **Options:**
+  - **A (recommended):** arc 1 takes both.
+    - storybook and every `@storybook/*` the tree locks go to 10.6.2, landed as D3 landed vite.
+    - vitest and `@vitest/*` go to 4.1.12 after 14:51Z, with the two stale acknowledgements removed.
+    - Codex reviews the diff, and then Phases 2-3 run once at the new candidate (about 6.5 h). The soak this arc runs is the soak D7 deferred vitest to. The PR closes #980, #987 and #1032.
+    - Before 14:51Z the vitest half needs SECURITY.md's per-package bypass, an uncommitted `--config=` exclude as in D4, for a moderate advisory. Waiting is cheaper.
+  - **B:** a separate lane fixes #1032 first. Arc 1 then merges `dev`, whose manifests trigger a new candidate, and runs Phases 2-3 once.
+  - **C:** acknowledge both. Not compliant: storybook's fix has cleared the gate, and the policy is to fix before acknowledging.
+- **What ships now:** nothing. The branch is pushed at the merge, with no PR. #980, #987 and #1032 stay open. The orchestrator's window can be released.
