@@ -2,31 +2,49 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { parse } from "@vue/compiler-sfc"
 import { describe, expect, test } from "vitest"
-import { REPO_ROOT, SCAN_ROOTS, type SourcePolicy, sourceFiles } from "../../scripts/type-roles/source-scan"
+import {
+	DECLARATION,
+	GENERATED_TYPES,
+	REPO_ROOT,
+	SCAN_ROOTS,
+	type SourcePolicy,
+	STORY_FILE,
+	sourceFiles,
+	TEST_FILE,
+} from "../../scripts/type-roles/source-scan"
 
 /**
- * Static ban: no component reads a value through a CSS `v-bind`. The compiler turns one into
- * `useCssVars`, which on every mount and update of each instance queries the whole document and
- * watches its parent's children, so a list of such components pays once per row on every render.
- * Set a custom property inline through `:style` and read it with `var()`.
+ * Static ban: no component runs `useCssVars`, which on every mount and update of each instance
+ * queries the whole document and watches its parent's children, so a list of such components pays
+ * once per row on every render. The compiler injects it for any CSS `v-bind`: set a custom property
+ * inline through `:style` and read it with `var()` instead.
  *
- * Findings are the compiler's own `descriptor.cssVars`, so a commented-out `v-bind` is none and a
- * template `v-bind` never is. They match `REVIEWED` by file and expression as a multiset.
+ * Findings are the compiler's own `descriptor.cssVars` (a commented-out `v-bind` is none, a template
+ * `v-bind` never one) and any `useCssVars(` in a script; each matches one `REVIEWED` entry by file and text.
  */
 
-const POLICY: SourcePolicy = { roots: SCAN_ROOTS, exts: ["vue"] }
+const POLICY: SourcePolicy = {
+	roots: SCAN_ROOTS,
+	exts: ["vue", "ts", "js"],
+	skip: [TEST_FILE, STORY_FILE, DECLARATION, GENERATED_TYPES],
+}
+const HAND_CALL = /\buseCssVars\s*\(/
 
 type Finding = { file: string; text: string }
 type Reviewed = Finding & { why: string }
 
-/** A CSS `v-bind` kept by a recorded decision, the reason in `why`; one entry per finding. */
+/** A `useCssVars` kept by a recorded decision, the reason in `why`; one entry per finding. */
 const REVIEWED: Reviewed[] = []
 
 function scan(file: string, source: string): Finding[] {
-	return parse(source, { filename: file, sourceMap: false }).descriptor.cssVars.map((expression) => ({
-		file,
-		text: `v-bind(${expression})`,
-	}))
+	const handCall = (scripts: string[]): Finding[] =>
+		scripts.some((script) => HAND_CALL.test(script)) ? [{ file, text: "useCssVars(" }] : []
+	if (!file.endsWith(".vue")) return handCall([source])
+	const { descriptor } = parse(source, { filename: file, sourceMap: false })
+	return [
+		...descriptor.cssVars.map((expression) => ({ file, text: `v-bind(${expression})` })),
+		...handCall([descriptor.script, descriptor.scriptSetup].flatMap((block) => (block ? [block.content] : []))),
+	]
 }
 
 const treeFiles = (): string[] => sourceFiles(POLICY)
@@ -47,13 +65,13 @@ function review(findings: Finding[], reviewed: readonly Reviewed[] = REVIEWED): 
 	return { open, stale: [...pending.values()].flat() }
 }
 
-describe("css v-bind ban (static)", () => {
-	test("no component reads a value through a CSS v-bind", () => {
+describe("css vars ban (static)", () => {
+	test("no component runs useCssVars: no CSS v-bind, no hand-written call", () => {
 		expect(treeFiles().length).toBeGreaterThan(200)
 		const open = review(scanTree()).open.map(({ file, text }) => `${file}  ${text}`)
 		expect(
 			open,
-			`A CSS \`v-bind\` costs every instance a document-wide query per render: set a custom property through \`:style\` instead. A reviewed entry is only for a recorded decision:\n${open.join("\n")}`,
+			`\`useCssVars\` (which every CSS \`v-bind\` compiles to) costs each instance a document-wide query per render: set a custom property through \`:style\` instead. A reviewed entry is only for a recorded decision:\n${open.join("\n")}`,
 		).toEqual([])
 	})
 
@@ -63,19 +81,33 @@ describe("css v-bind ban (static)", () => {
 	})
 
 	test.each([
-		["a v-bind in a style", "<template><span /></template><style module>.e { &:hover { color: v-bind(x); } }</style>", ["v-bind(x)"]],
+		[
+			"a v-bind in a style",
+			"x.vue",
+			"<template><span /></template><style module>.e { &:hover { color: v-bind(x); } }</style>",
+			["v-bind(x)"],
+		],
+		["a hand-written call in a component", "x.vue", "<script setup>useCssVars(() => ({ x: 1 }))</script>", ["useCssVars("]],
+		[
+			"a hand-written call in a composable",
+			"x.ts",
+			'import { useCssVars } from "vue"\nexport const use = () => useCssVars(() => ({}))',
+			["useCssVars("],
+		],
 		[
 			"a template v-bind spread and an inline custom property",
+			"x.vue",
 			`<template><span v-bind="attrs" :style="{ '--x': x }" /></template><style module>.e { color: var(--x); }</style>`,
 			[],
 		],
-	])("%s", (_case, source, findings) => {
-		expect(scan("x.vue", source).map(({ text }) => text)).toEqual(findings)
+	])("%s", (_case, file, source, findings) => {
+		expect(scan(file, source).map(({ text }) => text)).toEqual(findings)
 	})
 
-	test("an entry no finding consumes is stale, and a matched one is not", () => {
+	test("a finding no entry matches is open, an entry no finding consumes is stale, and a matched pair is neither", () => {
 		const entry = { file: "x.vue", text: "v-bind(x)", why: "a recorded decision" }
 		const finding = { file: "x.vue", text: "v-bind(x)" }
+		expect(review([finding], []).open).toEqual([finding])
 		expect(review([], [entry]).stale).toEqual([entry])
 		expect(review([finding], [entry])).toEqual({ open: [], stale: [] })
 	})
