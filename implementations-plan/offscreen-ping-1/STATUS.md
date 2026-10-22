@@ -11,3 +11,4 @@
 - 2026-10-22 mid step 2: Opus r4 approve; dual audit converged (Codex r3 approve, Opus r4 approve).
 - 2026-10-22 mid step 4: final fresh Codex pass approve (after four local conditions); plan committed, awaiting the orchestrator's approval.
 - 2026-10-22 A1 phase 1 gate: pass (the two new cases red on base, on the PING and close assertions; 27 others green).
+- 2026-10-22 A1 phase 2 gate: pass (lint, typecheck, unit 76/76, test, test:all on rerun; mutations red as named).
