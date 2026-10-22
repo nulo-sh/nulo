@@ -63,7 +63,7 @@ describe("the e2e sealed-read seam", () => {
 	})
 
 	test.each([
-		["a root that is not sealed", { type: SEALED_READ_MESSAGE, root: "networks" }, `${ORIGIN}popup.html`],
+		["a root that is not sealed", { type: SEALED_READ_MESSAGE, root: "profiles" }, `${ORIGIN}popup.html`],
 		["a root no store names", { type: SEALED_READ_MESSAGE, root: "__proto__" }, `${ORIGIN}popup.html`],
 		["a web page", { type: SEALED_READ_MESSAGE, root: "txs" }, "https://dapp.example/"],
 		["another message", { type: "nulo:other", root: "txs" }, `${ORIGIN}popup.html`],

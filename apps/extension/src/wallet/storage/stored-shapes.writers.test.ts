@@ -79,6 +79,8 @@ import {
 	type StoredShapeName,
 	TokenListStateSchema,
 } from "./stored-shapes"
+import { isSealedText } from "./sealed-entity-storage"
+import { rowKeysForEveryProfile } from "./sealed-entity-storage.testing"
 
 const bootMigrations = vi.hoisted((): Migration[] => [])
 vi.mock("./migrations", async (importOriginal) => ({
@@ -296,9 +298,12 @@ describe("what each writer stores parses back to itself", () => {
 		for (const scenario of scenarios) {
 			await fakeBrowser.reset()
 			await scenario()
+			// Sealed at rest: the registered schema describes the opened row.
 			const raw = (await fakeBrowser.storage.local.get("nulo:core:token-seeded@p1"))["nulo:core:token-seeded@p1"]
-			expectDescribed("tokenSeeded", raw)
-			markers.push(await readMarker())
+			expect(isSealedText(raw)).toBe(true)
+			const marker = await readMarker()
+			expectDescribed("tokenSeeded", JSON.stringify(marker))
+			markers.push(marker)
 		}
 		const fields = new Set(markers.flatMap((m) => Object.values(m).flatMap((entry) => Object.keys(entry))))
 		expect([...fields].sort()).toEqual(
@@ -324,6 +329,7 @@ describe("what each writer stores parses back to itself", () => {
 		Object.assign(service, {
 			initialized: true,
 			profileService: {
+				...(await rowKeysForEveryProfile()),
 				captureExecutionFence: async () => ({ profileId: "p1", epoch: deletion.capture("p1") }),
 				getDeletionState: () => deletion,
 			},

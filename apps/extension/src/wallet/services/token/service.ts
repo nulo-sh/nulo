@@ -22,8 +22,8 @@ import { TaskService, StepContent, type WrappedTask } from "@/wallet/services/ta
 import { canonicalNumericStorageId, purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { ContractResolver, ensureRegistered } from "@/wallet/services/execution/contract-resolver"
 import { batchedViewSimulation } from "@/wallet/services/execution/helpers/batched-view-simulation"
-import type { EntityStorage } from "@/wallet/storage"
-import { entityStorage } from "@/wallet/storage/stores"
+import type { PreparedWrite, SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
@@ -91,7 +91,7 @@ type AddProgress =
 	| { stage: "start" }
 	| { stage: "started" }
 	| { stage: "fetched"; metadata: TokenMetadata }
-	| { stage: "written"; token: Token }
+	| { stage: "written"; token: Token; stored: string }
 	| { stage: "done"; info: TokenInfo }
 type ResumableProgress = Exclude<AddProgress, { stage: "done" }>
 
@@ -142,8 +142,12 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	public readonly onTokenUpdated = new EventHandler<TokenUpdated>()
 	public readonly onSeedStatusChanged = new EventHandler<SeedScope>()
 
-	private readonly tokens: EntityStorage<Token>
+	private readonly tokens: SealedEntityStorage<Token>
 	private readonly lock = new Lock()
+	/** Chain sweeps running, and sweeps ever begun: the sweep takes no token lock, so a conversion
+	 *  commits a row only while none has run since its section began. */
+	private chainSweeps = 0
+	private chainSweepEpoch = 0
 	/** Token-row writes, and a token add's journal writes, not yet settled. A holder the lock's
 	 *  watchdog released keeps running, so every admission waits for these before it reads. */
 	private readonly pendingWrites = new Set<Promise<unknown>>()
@@ -171,7 +175,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		this.browserApi = browserApi
 		this.seederOverrides = seederOverrides
 		this.contractResolver = new ContractResolver(logger)
-		this.tokens = entityStorage("tokens", browserApi.storage.local)
+		this.tokens = sealedEntityStorage("tokens", browserApi.storage.local, (profileId) => this.profiles?.rowKeys(profileId))
 	}
 
 	protected async init(services: ServiceCollection) {
@@ -184,6 +188,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		this.tokenList = services.get(TokenListService.name)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.networks.registerChainPurgeSubscriber(async (profileId, chainId) => this.clearChainState(profileId, chainId))
+		this.profiles.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
 
 		// Default-token seeding: lazy, single-flight, TOFU-pinned (see
 		// default-tokens.ts + seeder.ts). Triggered on unlock, on active-network
@@ -205,7 +210,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 				},
 				onStatusChanged: (scope) => this.emit("onSeedStatusChanged", scope),
 			},
-			this.browserApi.storage.local,
+			sealedEntityStorage("tokenSeeded", this.browserApi.storage.local, (profileId) => this.profiles.rowKeys(profileId)),
 			this.logger,
 			// A new list is a new version, so a default it re-pinned gets a fresh round.
 			this.seederOverrides?.getVersion ??
@@ -216,6 +221,26 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			this.profiles.onActiveProfileChanged.add(this.onActiveProfileChangedSeed)
 			this.networks.onActiveNetworkChanged.add(this.onActiveNetworkChangedSeed)
 			this.accounts.onAccountAdded.add(this.onAccountAddedSeed)
+		}
+	}
+
+	/**
+	 * Seals the profile's plaintext tokens, each under the token lock, and its seeder marker under
+	 * the marker lock. The chain sweep takes neither, so a token commits only while no sweep has run
+	 * since its section began: a sweep's delete landing between the row's last read and its sealed
+	 * write would otherwise be undone.
+	 */
+	private async sealLegacyRows(profileId: string): Promise<void> {
+		try {
+			await this.tokens.sealLegacy(profileId, (fn) =>
+				this.withTokenLock((ownsLock) => {
+					const sweeps = this.chainSweepEpoch
+					return fn(() => ownsLock() && this.chainSweeps === 0 && this.chainSweepEpoch === sweeps)
+				}),
+			)
+			await this.seeder.sealLegacyMarker(profileId)
+		} catch (error) {
+			this.logWarn("sealing the profile's plaintext tokens failed; the next unlock retries", { error })
 		}
 	}
 
@@ -254,6 +279,16 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	 */
 	public async clearChainState(profileId: string, chainId: number): Promise<void> {
 		await this.ensureInitialized()
+		this.chainSweeps++
+		this.chainSweepEpoch++
+		try {
+			await this.sweepChain(profileId, chainId)
+		} finally {
+			this.chainSweeps--
+		}
+	}
+
+	private async sweepChain(profileId: string, chainId: number): Promise<void> {
 		// Seeder fence FIRST, and OUTSIDE the token lock: it bumps the seeder's
 		// purge epoch and waits on the marker lock, so an in-flight seed pass
 		// either aborts or fully commits BEFORE the row purge below. (Taking it
@@ -460,7 +495,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	}
 
 	private async advanceAdd(attempt: AddAttempt, progress: ResumableProgress): Promise<AddProgress> {
-		if (progress.stage === "written") return await this.resumeWritten(attempt, progress.token)
+		if (progress.stage === "written") return await this.resumeWritten(attempt, progress.token, progress.stored)
 		const { input } = attempt
 		if (progress.stage === "start") await attempt.track(this.journal.transitionOperation(attempt.opId, { stage: "simulating" }))
 		const carried: ResumableProgress = progress.stage === "start" ? { stage: "started" } : progress
@@ -470,6 +505,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		if (existing) return attempt.ownsLock() ? await this.journalSucceeded(attempt, existing) : carried
 		const metadata = carried.stage === "fetched" ? carried.metadata : await this.addMetadata(attempt)
 		const token = buildToken(input.profileId, input.tokenInterface, metadata, await nextNumericId(this.tokens))
+		const write = await this.tokens.prepare(`${token.id}`, token)
 		// Assert authority flush against the write: the metadata fetch
 		// can span a profile deletion or the network's purge cascade —
 		// landing the row afterwards creates an orphan the cascade's own
@@ -479,7 +515,8 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			throw new Error("network deleted")
 		}
 		if (!attempt.ownsLock()) return { stage: "fetched", metadata }
-		await attempt.track(this.tokens.set(`${token.id}`, token))
+		await attempt.track(write.commit())
+		const stored = storedText(write)
 		// The set itself awaits — re-check before making the row observable. Released during it,
 		// the add leaves the row to the purge, which drains this set before its snapshot.
 		const { fence } = input
@@ -487,7 +524,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			if (attempt.ownsLock()) await attempt.track(this.tokens.delete(`${token.id}`))
 			throw profileDeletedError(fence.profileId)
 		}
-		return await this.finishAdd(attempt, token)
+		return await this.finishAdd(attempt, token, stored)
 	}
 
 	private async addMetadata({ input, opId, track }: AddAttempt): Promise<TokenMetadata> {
@@ -513,10 +550,10 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	 * during the set may have snapshotted before this row existed. Self-compensating here is what
 	 * makes the lockless sweep complete.
 	 */
-	private async finishAdd(attempt: AddAttempt, token: Token): Promise<AddProgress> {
+	private async finishAdd(attempt: AddAttempt, token: Token, stored: string): Promise<AddProgress> {
 		const { fence, networkId } = attempt.input
-		if (!(await this.networks.isNetworkLive(networkId))) return await this.dropOnDeadChain(attempt, token)
-		if (!attempt.ownsLock()) return { stage: "written", token }
+		if (!(await this.networks.isNetworkLive(networkId))) return await this.dropOnDeadChain(attempt, token, stored)
+		if (!attempt.ownsLock()) return { stage: "written", token, stored }
 		// A deletion that began meanwhile: the add's handlers would act for the successor incarnation.
 		if (!this.profiles.getDeletionState().isCurrent(fence.profileId, fence.epoch)) {
 			await attempt.track(this.tokens.delete(`${token.id}`))
@@ -528,24 +565,24 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 
 	/** Deletes only under an owned ticket and only when no live network holds the chain: a
 	 *  replacement network's restore can hold a row byte-identical to the add's own. */
-	private async dropOnDeadChain(attempt: AddAttempt, token: Token): Promise<AddProgress> {
+	private async dropOnDeadChain(attempt: AddAttempt, token: Token, stored: string): Promise<AddProgress> {
 		const chainLive = await this.networks.isChainLive(token.profileId, token.chainId)
-		if (!attempt.ownsLock()) return { stage: "written", token }
+		if (!attempt.ownsLock()) return { stage: "written", token, stored }
 		if (!chainLive) await attempt.track(this.tokens.delete(`${token.id}`))
 		throw new Error("network deleted")
 	}
 
 	/** A fresh ticket after a release that followed the set: a sweep or the person may have removed
 	 *  the row since, and its id may hold a successor's token. */
-	private async resumeWritten(attempt: AddAttempt, token: Token): Promise<AddProgress> {
+	private async resumeWritten(attempt: AddAttempt, token: Token, stored: string): Promise<AddProgress> {
 		const { fence, networkId } = attempt.input
 		// The purge owns a deleted profile's rows.
 		if (!this.profiles.getDeletionState().isCurrent(fence.profileId, fence.epoch)) throw profileDeletedError(fence.profileId)
-		const [own] = Object.values(this.tokens.item(`${token.id}`, token))
-		if ((await this.tokens.rawValue(`${token.id}`)) === own) return await this.finishAdd(attempt, token)
+		// The exact sealed value the add wrote: a successor's row at the id never matches it.
+		if ((await this.tokens.rawValue(`${token.id}`)) === stored) return await this.finishAdd(attempt, token, stored)
 		// The add completed and whatever removed its row announced that itself.
 		if (!(await this.networks.isNetworkLive(networkId))) throw new Error("network deleted")
-		return attempt.ownsLock() ? await this.journalSucceeded(attempt, token) : { stage: "written", token }
+		return attempt.ownsLock() ? await this.journalSucceeded(attempt, token) : { stage: "written", token, stored }
 	}
 
 	/** Success means "token added to watchlist"; the balance load is the caller's (NewTokenPopup's
@@ -949,9 +986,10 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 				return
 			const next = { ...current, ...read.value }
 			if (!refreshedFieldsDiffer(current, next) || !(await this.networks.isChainLive(row.profileId, row.chainId))) return
+			const write = await this.tokens.prepare(`${row.id}`, next)
 			// A read that landed after the deadline, or a session that ended since, writes nothing.
 			if (!ownsLock() || Date.now() >= deadlineAt || !this.profiles.isFenceLive(fence)) return
-			await this.track(this.tokens.set(`${row.id}`, next))
+			await this.track(write.commit())
 			// The chain sweep takes no token lock, so its delete can land before this set.
 			if (!(await this.networks.isChainLive(row.profileId, row.chainId))) {
 				if (ownsLock()) await this.track(this.tokens.delete(`${row.id}`))
@@ -1026,8 +1064,10 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		if (!(await this.networks.isChainLive(row.profileId, row.chainId))) {
 			throw new Error("network deleted")
 		}
+		const write = await this.tokens.prepare(`${id}`, row)
 		if (!ownsLock()) throw tokenLockLost()
-		await this.track(this.tokens.set(`${id}`, row))
+		assertRestoreEpoch(deletion, epochs, row.profileId)
+		await this.track(write.commit())
 		// The set awaits — a purge whose reservation + snapshot landed during
 		// it would miss this row; self-compensate, mirroring persistToken. A
 		// released restore leaves it: listed again if its chain comes back.
@@ -1036,6 +1076,13 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		await this.track(this.tokens.delete(`${id}`))
 		throw new Error("network deleted")
 	}
+}
+
+/** The one value a token row's sealed write stores. */
+function storedText(write: PreparedWrite): string {
+	const [stored] = Object.values(write.items)
+	if (stored === undefined) throw new Error("a sealed token write stores one value")
+	return stored
 }
 
 /** The fields a restored row takes from its chain; its identity stays the row's. */

@@ -12,8 +12,8 @@ import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { nextRandomId } from "@/wallet/services/id-allocators"
 import { requireOwnedRow } from "@/wallet/services/require-owned-row"
 import { ensureRegistered } from "@/wallet/services/execution/contract-resolver"
-import type { EntityStorage } from "@/wallet/storage"
-import { entityStorage } from "@/wallet/storage/stores"
+import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { resolveNetworkByChainId } from "@/wallet/utils/caip"
 import { EventHandler } from "@nulo/wallet-core/utils"
@@ -54,7 +54,7 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 	public readonly onFpcUpdated = new EventHandler<FpcInfo>()
 	public readonly onFpcDeleted = new EventHandler<FpcInfo>()
 
-	private readonly storage: EntityStorage<StoredFpc>
+	private readonly storage: SealedEntityStorage<StoredFpc>
 	private readonly lock = new Lock("fpc", this.logger)
 
 	/** Per-chain cache of deterministic protocol addresses. Populated lazily
@@ -68,7 +68,7 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 
 	public constructor(logger: ILogger, browserApi: BrowserApi) {
 		super(FPC_SERVICE_NAME, logger)
-		this.storage = entityStorage("fpcs", browserApi.storage.local)
+		this.storage = sealedEntityStorage("fpcs", browserApi.storage.local, (profileId) => this.profileService?.rowKeys(profileId))
 	}
 
 	protected async init(services: ServiceCollection) {
@@ -77,6 +77,17 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		this.networkService = services.get(NetworkService.name)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.networkService.registerChainPurgeSubscriber(async (profileId, chainId) => this.clearChainState(profileId, chainId))
+		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+	}
+
+	/** Seals the profile's plaintext fee payers under the lock every fee-payer writer holds, so no
+	 *  write lands between a row's read and its sealed commit. */
+	private async sealLegacyRows(profileId: string): Promise<void> {
+		try {
+			await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+		} catch (error) {
+			this.logWarn("sealing the profile's plaintext fee payers failed; the next unlock retries", { error })
+		}
 	}
 
 	/**
@@ -226,10 +237,12 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 	private async writeFencedRow(fpc: StoredFpc, scope: WriteScope): Promise<void> {
 		const { fence, deletion } = scope
 		deletion.assertCurrent(fence.profileId, fence.epoch)
+		const write = await this.storage.prepare(fpc.id, fpc)
 		if (!(await this.networkService.isNetworkLive(scope.networkId, scope.since))) {
 			throw new Error("network deleted")
 		}
-		await this.storage.set(fpc.id, fpc)
+		deletion.assertCurrent(fence.profileId, fence.epoch)
+		await write.commit()
 		// The set awaits — compensate before the row becomes observable.
 		if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
 			await this.storage.delete(fpc.id)

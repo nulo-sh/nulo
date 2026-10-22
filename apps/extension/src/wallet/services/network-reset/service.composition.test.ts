@@ -396,7 +396,7 @@ describe("a stale network reset through the real service graph", () => {
 			[1, 0, "Imported 1", true, IMPORTED],
 		])
 		await expect(h.account.getAccountContract("p1", NEW, IMPORTED)).resolves.toBeDefined()
-		expect(JSON.parse(after["nulo:core:networks@tn"] as string)).toMatchObject({
+		expect(JSON.parse((await storedText("nulo:core:networks@tn", after["nulo:core:networks@tn"], rowKeys)) ?? "null")).toMatchObject({
 			id: "tn",
 			name: "Testnet",
 			chainId: NEW,

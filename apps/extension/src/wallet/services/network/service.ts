@@ -18,8 +18,8 @@ import { requireOwnedRow } from "@/wallet/services/require-owned-row"
 import { nextRandomId, randomIdNotIn } from "@/wallet/services/id-allocators"
 import { purgeMalformedRows } from "@/wallet/services/purge-rows"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
-import type { EntityStorage } from "@/wallet/storage"
-import { entityStorage } from "@/wallet/storage/stores"
+import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { EventHandler, isLoopbackHost } from "@nulo/wallet-core/utils"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
@@ -221,7 +221,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	public readonly onPrimaryEndpointChanged = new EventHandler<{ networkId: string; endpointId: string }>()
 	public readonly onChainPurged = new EventHandler<{ profileId: string; chainId: number }>()
 
-	private readonly storage: EntityStorage<Network>
+	private readonly storage: SealedEntityStorage<Network>
 	private readonly staleNetworks: StaleNetworkRepository
 	private readonly nodes = new Map<number, AztecNode>()
 	/** URL-keyed transient cache for pending-tx polling pin. */
@@ -240,7 +240,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		nodeFactory?: NodeFactory,
 	) {
 		super(NETWORK_SERVICE_NAME, logger)
-		this.storage = entityStorage("networks", browserApi.storage.local)
+		this.storage = sealedEntityStorage("networks", browserApi.storage.local, (profileId) => this.profileService?.rowKeys(profileId))
 		this.staleNetworks = new StaleNetworkRepository(browserApi.storage.local)
 		// Watchdog DISABLED: deleteNetwork legitimately holds this lock across
 		// purgeChain → clearChainState, which rides the 30-minute prove-tx
@@ -254,8 +254,19 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	protected async init(services: ServiceCollection) {
 		this.profileService = services.get(ProfileService.name)
 		this.profileService.onActiveProfileChanged.add(this.onActiveProfileChanged)
+		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.pxeServiceClient = new PxeServiceClient(this.logger)
+	}
+
+	/** Seals the profile's plaintext networks under the lock every network writer holds, so no write
+	 *  lands between a row's read and its sealed commit. */
+	private async sealLegacyRows(profileId: string): Promise<void> {
+		try {
+			await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+		} catch (error) {
+			this.logWarn("sealing the profile's plaintext networks failed; the next unlock retries", { error })
+		}
 	}
 
 	// ── Read paths ───────────────────────────────────────────────────────
@@ -389,8 +400,9 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			seed.kind,
 			seed.endpointLabel,
 		)
+		const write = await this.storage.prepare(network.id, network)
 		deletion.assertCurrent(fence.profileId, fence.epoch)
-		await this.storage.set(network.id, network)
+		await write.commit()
 		if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
 			await this.storage.delete(network.id)
 			throw profileDeletedError(fence.profileId)
@@ -570,8 +582,9 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 				throw new Error(`Name '${name}' already in use.`)
 			}
 			const network = await this._buildNetwork(fence.profileId, name, rpcUrl, chainId, l1ChainId, "custom")
+			const write = await this.storage.prepare(network.id, network)
 			deletion.assertCurrent(fence.profileId, fence.epoch)
-			await this.storage.set(network.id, network)
+			await write.commit()
 			// The set awaits — compensate before the row becomes observable.
 			if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
 				await this.storage.delete(network.id)
