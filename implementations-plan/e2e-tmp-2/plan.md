@@ -9,10 +9,29 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 6da033705 (carries e2e-tmp-1, #1074)
 trunk: dev
-issues: "#1071 (A1 closes it); #1076 (filed in recon, no arc: other owner; closed by #1081)"
+issues: "#1071 (A1 closes it); #1076 (filed in recon, closed by #1081); #1083 (filed in A1, not this lane's scope)"
 post_implementation_hardening: not scheduled
-status: approved by Codex r3 (auto-continue); A1 implementing
+status: closed with its one PR; the merge closes the plan
 ---
+
+## Outcome
+
+- **Date:** 2026-10-22.
+- **Status:** closed with its one PR, #1084 (`worktree-e2e-tmp-2` → `dev`, `Closes #1071`), which carries this close-out; the merge closes the plan.
+- **Shipped:**
+  - **The owner** (`apps/extension/tests/e2e/helpers/test-temp-dir.ts`, renamed from `backup-temp.ts`): `testTempDir(prefix)` registers the dir's removal with `onTestFinished` before it creates it; `writeBackupToTemp` builds on it with its order and signature kept.
+  - **The cases:** the three `records + persistence` cases in `import-stage-timing.test.ts` take their dirs from `testTempDir("nulo-stage-log-")`.
+  - **The self-test** (`apps/extension/scripts/e2e/test-temp-dir.test.ts`): the owner on its own prefix (refusal, gone after a pass and after a fail) and `writeBackupToTemp`'s control and removal.
+- **Dispositions:**
+  - The plan passed its own gate on auto-continue: Codex approve at r3, no owner ask.
+  - D2 departs from the lane brief's literal proof: the file's proof is the run-level count (3 → 0), not a committed test; a nested vitest per `bun run test` was judged too costly (Not taken c).
+  - Phase 1: the unmodified file left 3 dirs, the changed file 0; the mutation failed exactly four cases. Phase 2 at retry 0 under scratch `TMPDIR`s, 0 dirs left: smoke Chrome 61 passed, 9 skipped, 32 min; smoke Firefox 65 passed, 5 skipped, 55 min ([lessons/phase-2.md](lessons/phase-2.md)).
+  - The review loop converged at round 1: Codex clean, Opus clean.
+  - #1076 (found in recon) was closed on `dev` by #1081 during A1.
+- **Lessons:** nothing promoted. `lessons.md` is at its budget (8,192 bytes); the Bun `describe.skipIf` collect-time gotcha is in [lessons/phase-0.md](lessons/phase-0.md) and #1081's record.
+- **Known limits:** none new; a worker killed mid-test stays #1075.
+- **Open items:** #1083 (a send-order composition test reads a parked record before its requeue lands; seen during A1's `test:all`, not this lane's scope).
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # e2e-tmp-2: the stage-log cases leave three temp dirs per smoke run
 
