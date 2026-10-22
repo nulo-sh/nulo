@@ -1,0 +1,7 @@
+# Phase 4: docs, legal (drafted; the close waits for OA-1 and OA-2)
+
+- Privacy 1.2.4 as OWNER-ASKS § OA-2 drafts it. § 3 drops "pinned tokens, fee-payer choices and the last-selected account" from its exceptions. The history row and the manifest entry (`material: false`) carry the drafted line. 1.2.3 is archived byte-identical (`cp` of `legal/privacy.md` at `d208a4fd`'s parent), and `BEFORE-LAUNCH.md` gains the 1.2.4 dating checklist. The line names the last-selected account, which this build still stores plaintext: with OA-1 A or B the pointer lands before the PR is ready, and with C both the line and § 3 keep it among the exceptions.
+- SECURITY.md § Storage privacy, ATTACK-SURFACE.md, ARCHITECTURE.md § 5, CLAUDE.md's sealed-roots list and the e2e README name the two maps (pins and fee picks) as sealed. The pointer stays on the plaintext line with #1062 until OA-1.
+- CLAUDE.md § Persisted-storage records the one re-cut with the owner's words and the four folded stamps. The release skill's frozen-baseline check points at it. The note's "<and, unless OA-1 is C, the selected account>" clause waits for OA-1.
+- `src/utils/fee-picks.ts`' header named the profile service as the maps' one writer; it names the ui preference service now.
+- Gate: `bun run --cwd packages/legal test` (59 passed), `test:ci-gating` (687 pass), `check:plans` (0 findings), `test:all` after the merge of `dev` (exit 0).

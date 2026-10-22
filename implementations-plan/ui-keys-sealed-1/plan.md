@@ -145,6 +145,11 @@ In the decision ledger. The competing outline B put each preference in its domai
 | D9 | e2e | no new scenario: the live update populates the three maps, the replay is re-recorded, `sealed-storage.test.ts` seeds all four | a new smoke spec |
 | D10 | A planted non-envelope JSON string at a map root | the dual read serves it and the unlock seals it, as at every sealed root (#1053) | unreadable (Codex F1: a second legacy rule for three roots; a planted structured map is read today, so the writer gains nothing) |
 | D11 | The follow's `unless` | checked right before the call, which the client's request deadline bounds; the worker's session fence; KL-1, signed with OA-1 | a worker-side journal check or a cancel message (a new contract and coordination for one caller); waiting for `onConnected` before the call (plan r1: no request exists yet, so no deadline fires and an approved window can hang: Codex R2-3) |
+| D12 | Building before OA-1 and OA-2 are answered | the three maps, P1 to P3, and the privacy text as drafted, in a draft PR. The pointer waits, and so do the re-run of § The gate change steps 3 to 5 for its ids, its network files and the exact-pointer update checks (the orchestrator's placeholder rule) | waiting for the answers with the maps unbuilt |
+| D13 | The Home timing | an opt-in second case of `sealed-storage.test.ts` (`NULO_E2E_HOME_TIMING=1`), run on both builds through `EXTENSION_PATH` | timing inside the conversion case on every smoke run: about 30 s per browser per PR for a printout that proves no failure mode, and the base build cannot pass that case |
+| D14 | Step 5's reader | `jq --slurpfile`, read as `$x[0]` | `--argjson`, which fails with "argument list too long" on the base snapshot |
+| D15 | `usePinnedTokens`' two migration-barrier pins | replaced by "a write the worker refuses reports stale"; the refusal itself is pinned in the service's tests | kept: the composable no longer goes through the storage facade, so the barrier they held is not on its path |
+| D16 | The log viewer's source filter | gains `ui-preference` and `ui-preference-client` (`useLogFilters.scan.test.ts` requires a row per service and client); a developer surface, named under the PR's UI impact | an exemption in the scan |
 
 ## Security & Adversarial Considerations
 

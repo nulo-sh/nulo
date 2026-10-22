@@ -26,3 +26,39 @@ Firefox: three rounds at load1 between 103 and 152 spread by about 1 s within on
 ## Network files (retry 0, `e2e:agent`)
 
 - Chrome: `fee-methods` (8 tests, 314 s), `tx-sendTx-sponsoredFpc` (20 s), `pin-to-home` (31 s), green; the run took 495 s, build and sandbox included.
+- Firefox: `fee-methods` (8 tests, 560 s), `pin-to-home` (47 s), `tx-sendTx-sponsoredFpc` (28 s), green; 721 s with build and sandbox.
+
+## The update (`NULO_E2E_UPDATE_FROM=v0.31.0`, retry 0)
+
+| | Chrome | Firefox |
+|---|---|---|
+| `update-in-place.test.ts` (live; Chrome recorded) | 133 s | 200 s |
+| `update-replay.test.ts` (3 cases) | 50 s | 69 s |
+| `default-network-arrival-update.test.ts` (`--extra-seed`, 2 cases) | 36 s | 46 s |
+
+The live scenario's estimate (+40 s Chrome, +60 s Firefox) sits inside its earlier measured range (102 to 162 s, 182 to 186 s). The Biome pre-commit hook refused the raw recording: `writeRecording` expands arrays, and Biome folds short ones. `biome format --write` on the file changes only whitespace, and the replay reads the same JSON.
+
+## The measurement, Firefox at a quieter load
+
+The pair is the same: base `2b856d1a` and the candidate at `d208a4fd`, both armed and built before the merge of `dev` at `c49430a6`. That merge brings #1080's icon change, which a base at `2b856d1a` does not have. The round started at load1 161 was skipped.
+
+| Firefox, 7 rounds, medians | base → candidate |
+|---|---|
+| open to Home ready | 952 → 958 ms |
+| first contentful paint | 400 → 413 ms |
+| load1 | 40 to 98 |
+
+Within the 50 ms rule. Per-round ready spans 853 to 1109 ms on the base and 853 to 1249 ms on the candidate. The candidate's two slowest rounds came last and ran at load1 46 to 52, where the base gave 853 and 1066 ms. The difference stays inside the host's noise. What the path adds is one RPC that opens one sealed row, where before it was one `chrome.storage.local.get`.
+
+## Smoke runtime: the one smoke file this arc changes
+
+`sealed-storage.test.ts`, conversion case only (the timing case skips without its flag), retry 0. The base runs its own file on its own build.
+
+| | base | candidate |
+|---|---|---|
+| Chrome | 28.7 s (load1 35) | 34.3 s (load1 40) |
+| Firefox | 59.6 s (load1 39) | 68.9 s (load1 160) |
+
+Chrome adds +5.6 s against the +5 s estimate. The Firefox pair ran at different loads, and the candidate's earlier run gave 84.3 s, so its +9 s is an upper reading.
+
+The full smoke suite, retry 0, at P2 (`c29ed290d`): Chrome 1845 s in 5 shards and Firefox 2777 s in 7. A base run of the full suite was not taken: only this file changed between P2 and P3, and P2 changed no smoke spec.
