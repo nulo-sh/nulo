@@ -58,6 +58,8 @@ import { OperationJournalService, type OperationRecord } from "@/wallet/services
 import { SEND_CHECK_TICK_MS, SendCheck } from "@/wallet/services/operation-journal/send-check"
 import { TaskService } from "@/wallet/services/task/service"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
+import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
+import { rowKeysForEveryProfile, storedText } from "@/wallet/storage/sealed-entity-storage.testing"
 import type { ProofGate } from "@/e2e/proof-gate"
 import type { ExecutionLane } from "./execution-lane"
 import { DEFAULT_FEE_MULTIPLIER } from "./fee/fee-strategy"
@@ -155,6 +157,7 @@ async function makeHarness() {
 	})
 	journal.onOperationUpdated.add((rec) => stages.push(rec.progress.stage))
 	/** Parks the first journal write that stores a record matching `match`, until released. */
+	const journalKeys = (await rowKeysForEveryProfile()).rowKeys
 	const parkJournalWrite = (match: (record: { progress: { stage: string } }) => boolean) => {
 		let release: () => void = () => {}
 		const gate = new Promise<void>((resolve) => {
@@ -164,9 +167,11 @@ async function makeHarness() {
 		const area = api.storage.local
 		const write = area.set.bind(area)
 		vi.spyOn(area, "set").mockImplementation(async (entries) => {
-			const hit = Object.entries(entries).some(
-				([key, value]) => key.startsWith("nulo:journal@") && typeof value === "string" && match(JSON.parse(value)),
-			)
+			let hit = false
+			for (const [key, value] of Object.entries(entries)) {
+				const text = key.startsWith("nulo:journal@") ? await storedText(key, value, journalKeys) : undefined
+				hit ||= text !== undefined && match(JSON.parse(text))
+			}
 			if (hit && !parked) {
 				parked = true
 				await gate
@@ -209,6 +214,7 @@ async function makeHarness() {
 			// The journal's create fence checks membership here — the fake must
 			// list the profile the flow files under or every create is refused.
 			getProfiles: async () => [{ id: "p1" }, { id: "p2" }],
+			...(await rowKeysForEveryProfile()),
 			getDeletionState: () => deletionState,
 			captureExecutionFence,
 			assertFence: async (fence: ExecutionFence) => {
@@ -236,7 +242,7 @@ async function makeHarness() {
 		svc(TransactionService.name, {
 			getPendingForAccount: () => [],
 			// One mined tx: the account is initialized, so concurrent transfers here share no chain state.
-			getTransactions: async () => [{ chainId: NETWORK.chainId, status: 2, executionResult: 0, calls: [] }],
+			transactionsOf: async () => [{ chainId: NETWORK.chainId, status: 2, executionResult: 0, calls: [] }],
 			addTransaction: vi.fn(),
 			onTransactionUpdated: { add: () => {} },
 		}),
@@ -337,6 +343,7 @@ async function makeHarness() {
 		getAccountContract,
 		proveTx,
 		parkJournalWrite,
+		storedJournalRow: async (id: string) => (await api.storage.local.get(`nulo:journal@${id}`))[`nulo:journal@${id}`],
 		legalAssertCurrent,
 		lane: (service as unknown as { lane: ExecutionLane }).lane,
 		expiryDeferral: () => expiryDeferral,
@@ -550,6 +557,8 @@ async function expectEndedUnder(h: Harness, journalId: string, profileId: string
 	expect(record?.progress.stage).toBe("failed")
 	expect(record?.error?.kind).toBe("session_ended")
 	expect(record?.profileId).toBe(profileId)
+	// Written after the session ended, under the keys the worker keeps across it.
+	expect(parseEnvelope(JSON.parse(String(await h.storedJournalRow(journalId))))?.profileId).toBe(profileId)
 }
 
 describe("ExecutionService composition — work runs only while the session that authorized it lives", () => {
@@ -1279,7 +1288,11 @@ describe("ExecutionService composition — a send whose answer was lost is check
 		const check = new SendCheck({
 			journal: h.journal,
 			network,
-			profile: { captureExecutionFence: h.captureExecutionFence, isFenceLive: h.isFenceLive },
+			profile: {
+				captureExecutionFence: h.captureExecutionFence,
+				isFenceLive: h.isFenceLive,
+				onRowKeysReady: new EventHandler<string>(),
+			},
 			balances,
 			logger: new LoggerStore(new ConfigStore()),
 			clock,

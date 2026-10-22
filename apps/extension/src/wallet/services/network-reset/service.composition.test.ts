@@ -25,6 +25,7 @@ vi.mock("@nulo/aztec-runtime/account", async (importOriginal) => ({
 }))
 
 import { asImportedKeysDek, sealImportedSigningKeyV2 } from "@nulo/wallet-crypto"
+import { readImportedAccounts } from "@/popup/pages/settings/security/imported-accounts"
 import type { RestoreGateHoldPoint } from "@/e2e/restore-gate"
 import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
 import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
@@ -61,6 +62,7 @@ import { TransactionService } from "@/wallet/services/transaction/service"
 import { TxStatus } from "@/wallet/services/transaction/spec"
 import { NetworkResetService } from "./service"
 import type { StaleNetworkChanged } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 
 const OLD = 4321
 const NEW = CHAIN_IDS.TESTNET
@@ -98,6 +100,16 @@ function holdAt(at: RestoreGateHoldPoint): Hold {
 	return hold
 }
 
+/** A run that stops at `at`, as one the worker dropped: its journal stays and the reset is paused. */
+function stopAt(at: RestoreGateHoldPoint): Hold {
+	let stop: (error: Error) => void = () => {}
+	const released = new Promise<void>((_, reject) => {
+		stop = reject
+	})
+	released.catch(() => {})
+	return { at, reached: Promise.resolve(), hit: () => stop(new Error("stopped")), released, release: () => {} }
+}
+
 /** `balances: "real"` runs the real balance service, whose refreshes drain the incoming outbox. */
 async function harness(hold?: Hold, opts: { balances?: "real" } = {}) {
 	const api = new FakeBrowserApi()
@@ -125,6 +137,7 @@ async function harness(hold?: Hold, opts: { balances?: "real" } = {}) {
 			getProfileSecret: async () => new Fr(42n),
 			getProfileDek: async () => dekOf(),
 			deriveDappSessionMacKey: async () => macKey,
+			...(await rowKeysForEveryProfile()),
 		}),
 	)
 	const network = new NetworkService(logger(), api, new FakeNodeFactory())
@@ -141,7 +154,8 @@ async function harness(hold?: Hold, opts: { balances?: "real" } = {}) {
 	services.add(journal)
 	const sessions = new DappSessionService(logger(), api)
 	services.add(sessions)
-	services.add(new IncomingTransferService(logger(), api, 1_000_000, reader))
+	const incoming = new IncomingTransferService(logger(), api, 1_000_000, reader)
+	services.add(incoming)
 	services.add(svc(ExecutionService.name, {}))
 	services.add(svc(TaskService.name, { startNewTask: () => task, getTaskSync: () => ({ status: 0 }) }))
 	services.add(svc(NoteService.name, { getNotesRaw: async () => [], getBlockTimestamp: async () => undefined }))
@@ -167,12 +181,20 @@ async function harness(hold?: Hold, opts: { balances?: "real" } = {}) {
 	;(network as any).pxeServiceClient = {
 		clearChainState: async (profileId: string, chainId: number) => pxeClears.push([profileId, chainId]),
 	}
-	return { api, network, account, journal, sessions, reset, pxeClears }
+	return { api, network, account, journal, sessions, reset, pxeClears, incoming }
 }
 
 type H = Awaited<ReturnType<typeof harness>>
 
 const snapshot = async (h: H) => (await h.api.storage.local.get(null)) as Record<string, unknown>
+
+/** Waits out in-flight incoming scans: every account change rebuilds the scan targets and rescans
+ *  every network, the one the reset leaves alone included. */
+async function scansSettled(h: H): Promise<void> {
+	// biome-ignore lint/suspicious/noExplicitAny: the in-flight scan sets are private state
+	const { polling, publicPolling } = h.incoming as any as { polling: Set<string>; publicPolling: Set<string> }
+	await vi.waitFor(() => expect(polling.size + publicPolling.size).toBe(0))
+}
 
 /** The storage keys `write` adds, so rows a service writes through its own API can be tagged. */
 async function keysAddedBy(h: H, write: () => Promise<unknown>): Promise<string[]> {
@@ -219,7 +241,8 @@ async function seedChain(h: H, networkId: string, chainId: number, l1ChainId: nu
 		await h.sessions.addDappSession({ url: `https://dapp${n}.example` }, [], [address], AccessLevel.Transactions, String(chainId), "p1")
 		const repo = new IncomingTransferRepository(h.api)
 		await repo.setTrust("p1", networkId, CONTRACT, "pending")
-		await repo.setCursor("p1", networkId, CONTRACT, { cursor: null, lastSyncedBlockHash: null, lastScanFinalized: null, startBlock: 0 })
+		// At the reader's finalized tip: a scan of a chain the reset leaves alone rewrites it unchanged.
+		await repo.setCursor("p1", networkId, CONTRACT, { cursor: null, lastSyncedBlockHash: null, lastScanFinalized: 1, startBlock: 0 })
 		await repo.setOutbox("p1", networkId, address, n, { dirtyAt: 1 })
 		await repo.setArrivalRow("p1", networkId, address, { sinceBlock: 0, played: [[`note:${n}`, 1]] })
 		await repo.upsertRecord({
@@ -336,6 +359,7 @@ describe("a stale network reset through the real service graph", () => {
 	test("wipes every store's rows for the old chain, leaves the other chain byte-identical, and re-creates the accounts", async () => {
 		const h = await harness()
 		const { stale, local } = await twoChains(h)
+		await scansSettled(h)
 		const before = await snapshot(h)
 		expect(stale.length).toBeGreaterThanOrEqual(12)
 		expect(local.length).toBe(stale.length - 3)
@@ -343,6 +367,7 @@ describe("a stale network reset through the real service graph", () => {
 		const { ended } = await startReset(h)
 		await expect(ended).resolves.toMatchObject({ completed: { addressesMoved: false } })
 
+		await scansSettled(h)
 		const after = await snapshot(h)
 		// An arrival row is keyed by network id and address, which the reset keeps: the re-created
 		// account's watch writes a fresh baseline under the same key, with none of the old chain's receipts.
@@ -414,6 +439,42 @@ describe("a stale network reset through the real service graph", () => {
 		await vi.waitFor(async () => expect((await snapshot(h))["nulo:core:token-balances@1"]).toBeUndefined())
 		const kept = (await snapshot(h))["nulo:core:token-balances@2"]
 		expect(JSON.parse(kept as string)).toMatchObject({ token: 2, chainId: LOCAL, account: derived(LOCAL_L1_CHAIN_ID, 0) })
+	})
+
+	test("Delete Profile names a paused reset's import once, on its network's chain, and the same key imported elsewhere apart", async () => {
+		const h = await harness(stopAt("network-reset-account"))
+		await twoChains(h)
+		const cold = {
+			profileId: "p1",
+			chainId: LOCAL,
+			address: IMPORTED,
+			index: 0,
+			type: 1,
+			l1ChainId: LOCAL_L1_CHAIN_ID,
+			name: "Cold",
+			visible: true,
+		}
+		await h.api.storage.local.set({ [`nulo:core:accounts@${accountRowId("p1", LOCAL, IMPORTED)}`]: JSON.stringify(cold) })
+		const { ended } = await startReset(h)
+		await expect(ended).resolves.toMatchObject({ failed: true })
+		expect(await h.reset.getPendingReset()).toEqual({ networkId: "tn", running: false })
+
+		const named = await readImportedAccounts(
+			{
+				getNetworks: () => h.network.getNetworks(),
+				getAccounts: (profileId, chainId, all) => h.account.getAccounts(profileId, chainId, all),
+				getPendingReset: () => h.reset.getPendingReset(),
+				getStaleNetwork: (networkId) => h.reset.getStaleNetwork(networkId),
+			},
+			"p1",
+		)
+		expect(named).toEqual({
+			accounts: [
+				{ name: "Imported 1", address: IMPORTED, chainId: NEW },
+				{ name: "Cold", address: IMPORTED, chainId: LOCAL },
+			],
+			resetPending: true,
+		})
 	})
 
 	test("deleting a network keeps its dApp sessions: only a reset deletes them, and the next connect drops these", async () => {

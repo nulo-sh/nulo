@@ -210,11 +210,11 @@ function makeTransactionStub(txs: { hash: string; account: string; chainId: numb
 		name: "transaction",
 		dependencies: [],
 		onTransactionAdded: eh<{ hash: string; account: string; chainId: number; calls: unknown[] }>(),
-		// Real surface: `getTransactions(accountAddress)` returns all txs for
-		// the address ACROSS profiles and networks; the service must filter to
-		// the scanned scope locally. Pinning the argspec here keeps the test
+		// Real surface: `transactionsOf(accountAddress, profileId)` returns the
+		// profile's txs for the address across networks, plus any row naming no
+		// profile; the service must filter to the scanned scope locally. Pinning the argspec here keeps the test
 		// honest with what scanContract calls.
-		getTransactions: vi.fn().mockImplementation(async (account: string) => {
+		transactionsOf: vi.fn().mockImplementation(async (account: string) => {
 			return txs.filter((t) => t.account === account)
 		}),
 		async start() {},
@@ -358,10 +358,12 @@ async function bootService(
 	}
 	const logger = new LoggerStore(new ConfigStore())
 	// Huge poll interval so scheduler doesn't fire during tests; we exercise
-	// the scan path via the public surface or via direct method calls.
+	// the scan path via the public surface or via direct method calls. An explicit `undefined` boots
+	// the constructor's own default, the production cadence.
 	// Every boot shares the suite's storage, so a second boot in a test models a service-worker restart.
 	const browserApi = new FakeBrowserApi()
-	const service = new IncomingTransferService(logger, browserApi, opts.pollIntervalMs ?? 1_000_000, stubs.publicReader)
+	const pollIntervalMs = "pollIntervalMs" in opts ? opts.pollIntervalMs : 1_000_000
+	const service = new IncomingTransferService(logger, browserApi, pollIntervalMs, stubs.publicReader)
 	const collection = new ServiceCollection()
 	for (const stub of Object.values(fixture)) collection.add(stub as never)
 	collection.add(service)
@@ -5745,7 +5747,7 @@ type CollaboratorMap = Record<string, (...args: unknown[]) => Promise<unknown>>
 const RECEIPT_COLLABORATORS: Array<[keyof ReceiptFixture | "repo", string, string]> = [
 	["note", "getNotesRaw", "notes"],
 	["token", "getTokensRaw", "tokens"],
-	["transaction", "getTransactions", "outgoing"],
+	["transaction", "transactionsOf", "outgoing"],
 	["journal", "getOperations", "inflight"],
 	["repo", "getRecord", "getRecord"],
 	["repo", "getTrust", "getTrust"],
@@ -6057,7 +6059,7 @@ describe("IncomingTransferService — a note's block time is read outside the se
 
 	test("a locked commit whose own-send read disagrees with the one before the lock reads no block time", async () => {
 		const f = await bootNoteReceipt("trusted")
-		f.transaction.getTransactions
+		f.transaction.transactionsOf
 			.mockResolvedValueOnce([{ hash: "0xtx1", account: "0xa", chainId: 1, profileId: "p1", networkId: "n1" }])
 			.mockRejectedValueOnce(new Error("transactions unavailable"))
 		await scan(f.service)
@@ -6450,11 +6452,12 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 
 // ── Block-gated ticks ─────────────────────────────────────────────────────────
 
+/** The production tick, which these schedulers run on by the constructor's default. */
 const TICK_MS = 30_000
 const PUBLIC_KEY = `p1|n1|${tokenA.contract}`
 
-/** Boots real-cadence schedulers on fake timers for two accounts and one token, after the install
- *  run has marked every target; the reader's counters and the notes reads start at zero. */
+/** Boots production-cadence schedulers on fake timers for two accounts and one token, after the
+ *  install run has marked every target; the reader's counters and the notes reads start at zero. */
 async function bootTicking(
 	stubs: Parameters<typeof bootService>[0] = {},
 	opts: { tips?: Partial<PublicScanTips>; chain?: PublicTransferEvent[] } = {},
@@ -6468,7 +6471,7 @@ async function bootTicking(
 	]
 	const booted = await bootService(
 		{ account: makeAccountStub(accounts), token: makeTokenStub([tokenA]), ...stubs, note, publicReader: reader },
-		{ pollIntervalMs: TICK_MS },
+		{ pollIntervalMs: undefined },
 	)
 	await vi.advanceTimersByTimeAsync(0)
 	state.reset()
@@ -6485,6 +6488,15 @@ describe("IncomingTransferService — block-gated ticks", () => {
 	})
 	afterEach(() => {
 		vi.useRealTimers()
+	})
+
+	test("a default-built service ticks at the production 30 s, not before", async () => {
+		const { state } = await bootTicking()
+
+		await vi.advanceTimersByTimeAsync(29_999)
+		expect(state.tipsCalls).toBe(0)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(state.tipsCalls).toBe(1)
 	})
 
 	test("one tips read serves every target of a tick, and a tick with no new block scans nothing", async () => {

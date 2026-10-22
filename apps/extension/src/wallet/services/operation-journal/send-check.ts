@@ -25,7 +25,7 @@ const LOG_SOURCE = OPERATION_JOURNAL_SERVICE_NAME
 export type SendCheckDeps = {
 	journal: Pick<OperationJournalService, "getOperation" | "getOperations" | "setSendCheck" | "onOperationUpdated" | "onOperationDeleted">
 	network: Pick<NetworkService, "getSingleAttemptNodeForUrl">
-	profile: Pick<ProfileService, "captureExecutionFence" | "isFenceLive">
+	profile: Pick<ProfileService, "captureExecutionFence" | "isFenceLive" | "onRowKeysReady">
 	balances: Pick<TokenBalanceService, "refreshAccountBalances">
 	logger: ILogger
 	clock: ClockPort
@@ -74,8 +74,21 @@ export class SendCheck {
 		const generation = this.generation
 		journal.onOperationUpdated.add(this.onUpdated)
 		journal.onOperationDeleted.add(this.onDeleted)
+		this.deps.profile.onRowKeysReady.add(this.onRowKeysReady)
 		this.timer = clock.setInterval(() => void this.tick(), SEND_CHECK_TICK_MS)
-		const failed = await journal.getOperations({ stage: "failed" })
+		await this.watchFailed(generation)
+	}
+
+	/** A profile's sealed rows read only once its keys are in this worker, so its open rows are
+	 *  found then. */
+	private readonly onRowKeysReady = (profileId: string): void => {
+		void this.watchFailed(this.generation, profileId).catch(() => {
+			this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check scan failed", { stage: "scan-error" })
+		})
+	}
+
+	private async watchFailed(generation: number, profileId?: string): Promise<void> {
+		const failed = await this.deps.journal.getOperations({ stage: "failed", ...(profileId === undefined ? {} : { profileId }) })
 		if (generation !== this.generation) return
 		for (const op of failed) this.watch(op)
 	}
@@ -87,6 +100,7 @@ export class SendCheck {
 		this.timer = undefined
 		journal.onOperationUpdated.remove(this.onUpdated)
 		journal.onOperationDeleted.remove(this.onDeleted)
+		this.deps.profile.onRowKeysReady.remove(this.onRowKeysReady)
 		this.watches.clear()
 	}
 

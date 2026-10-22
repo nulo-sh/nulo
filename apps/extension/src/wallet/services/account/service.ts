@@ -171,8 +171,8 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	 * not, leaving an account that renders but cannot sign. Ignoring them
 	 * uniformly lets `ensureDefaultAccount` recreate a canonical row instead.
 	 *
-	 * This is deliberately not a migration: the repo is pre-production, where a
-	 * shape change redefines the baseline and a stale install is reinstalled.
+	 * This is deliberately not a migration: no released build wrote a row under the older key, and
+	 * rows written before 1.0.0 get none.
 	 */
 	private async liveRows(): Promise<Account[]> {
 		const rows: Account[] = []
@@ -873,6 +873,15 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	public async getAccountsByAddress(address: string): Promise<Account[]> {
 		await this.ensureInitialized()
 		return (await this.liveRows()).filter((x) => x.address === address)
+	}
+
+	/** Whether an account row of a profile other than `profileId` is stored but not readable here
+	 *  (hidden by its codec or its key check), so the owners of an address cannot be known from the
+	 *  readable rows alone. A row whose key names no profile counts. */
+	public async hasUnreadAccountsBesides(profileId: string): Promise<boolean> {
+		await this.ensureInitialized()
+		const readable = new Set((await this.liveRows()).map(accountRowIdOf))
+		return (await this.storage.getKeys()).some((id) => !readable.has(id) && parseAccountRowId(id)?.profileId !== profileId)
 	}
 
 	/** Lock-free, profileId-parameterized account read — for the deletion

@@ -49,9 +49,7 @@ import {
 
 export * from "./spec"
 
-/** Default poll cadence per (networkId, accountAddress) scheduler. Start
- *  conservative (30s); a future PR can tune based on SW restart frequency
- *  + PXE sync cadence. */
+/** Production poll cadence per scheduler. */
 const DEFAULT_POLL_INTERVAL_MS = 30_000
 
 /** Every target runs on every fourth tick whatever the tips say, so a note the PXE delivers late or
@@ -2685,18 +2683,18 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		accountAddress: string,
 	): Promise<Set<string>> {
 		try {
-			// Positive scope match only: `getTransactions` is address-wide, and two
-			// same-seed profiles (or two networks on one chainId) share addresses.
+			// Positive scope match only: a row that names no profile is served to
+			// every profile, and two networks on one chainId share addresses.
 			// A foreign profile's outgoing must NOT suppress this scope's incoming —
 			// same-seed activity from another silo deliberately surfaces as incoming
 			// (see the visibility escape hatch in `getIncomingTransfers`), exactly
 			// like another device's outgoing does.
-			const txs = await this.transactionService.getTransactions(accountAddress)
+			const txs = await this.transactionService.transactionsOf(accountAddress, profileId)
 			return new Set(
 				txs.filter((t) => t.profileId === profileId && t.networkId === networkId && t.chainId === chainId).map((t) => t.hash),
 			)
 		} catch (error) {
-			this.logWarn("getTransactions failed", error)
+			this.logWarn("transactionsOf failed", error)
 			return new Set()
 		}
 	}

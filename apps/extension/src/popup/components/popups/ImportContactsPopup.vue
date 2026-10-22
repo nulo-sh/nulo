@@ -250,7 +250,7 @@ watch(
 											:id="`${uid}-${item.row.idx}-detail`"
 											:align="item.row.addressText?.full ? 'start' : 'center'"
 											gap="6"
-											:class="item.row.addressText?.full && $style.detail_full"
+											:class="[$style.detail, item.row.addressText?.full && $style.detail_full]"
 										>
 											<template v-if="item.row.addressText">
 												<Text variant="meta" color="tertiary" data-testid="import-contact-address-saved" :class="$style.address_saved">
@@ -400,6 +400,15 @@ watch(
 
 .arrow {
 	flex-shrink: 0;
+}
+
+/* Below the popup's width a changed address's two shortened forms wrap rather than run past the row,
+   each whole. Two classes outrank the global `gap--6`. */
+@media (width < 359px) {
+	.detail.detail:not(.detail_full) {
+		flex-wrap: wrap;
+		row-gap: 2px;
+	}
 }
 
 /* Two full addresses, broken anywhere: the saved one on its own lines, the arrow leading the

@@ -366,6 +366,44 @@ const rel = computed(() => {
 	padding: 14px 0;
 }
 
+/* Below the popup's width a label wraps to a second line rather than being cut, and its button
+ * grows to hold it. Each selector matches the rule it overrides, so it wins by order. */
+@media (width < 359px) {
+	.wrapper {
+		white-space: normal;
+		text-align: center;
+	}
+
+	.wrapper.large {
+		height: auto;
+		min-height: 48px;
+	}
+
+	.wrapper.small {
+		height: auto;
+		min-height: 32px;
+	}
+
+	.wrapper.mini {
+		height: auto;
+		min-height: 26px;
+	}
+
+	.wrapper.micro {
+		height: auto;
+		min-height: 20px;
+	}
+
+	.wrapper.cta,
+	.wrapper.cta_outline,
+	.wrapper.cta_destructive,
+	.wrapper.cta.compact,
+	.wrapper.cta_outline.compact,
+	.wrapper.cta_destructive.compact {
+		padding-inline: 8px;
+	}
+}
+
 /** CTA — full-width brutalist call-to-action for primary page-level
  *  submits (Continue, Decrypt Backup, Import, Confirm). */
 .wrapper.cta {

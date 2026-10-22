@@ -33,11 +33,14 @@ describe("Popover", () => {
 		popoverRoot = document.createElement("div")
 		popoverRoot.id = "popover"
 		document.body.appendChild(popoverRoot)
+		// jsdom has no `matchMedia`; the page is as wide as the popup unless a case says otherwise.
+		vi.stubGlobal("matchMedia", (query: string) => ({ matches: false, media: query }))
 	})
 
 	afterEach(() => {
 		for (const w of mounted.splice(0)) if (w.exists()) w.unmount()
 		popoverRoot.remove()
+		vi.unstubAllGlobals()
 	})
 
 	test("renders the default slot (trigger)", () => {
@@ -55,6 +58,25 @@ describe("Popover", () => {
 		await flushPromises()
 		expect(popoverRoot.textContent).toContain("Popover body")
 	})
+
+	test.each([
+		{ narrow: false, triggerRight: 600, left: "400px" },
+		{ narrow: false, triggerRight: 132, left: "-68px" },
+		{ narrow: true, triggerRight: 600, left: "400px" },
+		{ narrow: true, triggerRight: 132, left: "8px" },
+	])(
+		"a left-side panel ends at its trigger's right edge; below 359px it starts no further left than 8px (narrow $narrow, $left)",
+		async ({ narrow, triggerRight, left }) => {
+			vi.stubGlobal("matchMedia", (query: string) => ({ matches: narrow && query === "(width < 359px)", media: query }))
+			const w = mountPopover({ open: false, side: "left" })
+			vi.spyOn(w.element.firstElementChild as HTMLElement, "getBoundingClientRect").mockReturnValue(
+				new DOMRect(triggerRight - 80, 10, 80, 30),
+			)
+			await w.setProps({ open: true })
+			await flushPromises()
+			expect(popoverRoot.querySelector<HTMLElement>("[style*='top']")?.style.left).toBe(left)
+		},
+	)
 
 	test("closing emits onClose when Escape is pressed", async () => {
 		const w = mountPopover({ open: false })

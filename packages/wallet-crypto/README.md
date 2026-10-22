@@ -19,6 +19,8 @@ Depends only on `wallet-core` for the `ILogger` interface and `Web Crypto` (avai
 | `src/session-secret-box.ts` | `SessionSecretBox` — the lenient-mode silent-restore bearer: the master secret and the imported-keys key in one AES-256-GCM frame under a key HKDF-derived from a fresh random token, bound to the profile id. The session record holds nothing derived from the password. |
 | `src/passkey-credential.ts` | `PasskeyCredential` — WebAuthn PRF → HKDF master-secret. Exposes `recoverFromCredentialData()` for the in-page modal Path A flow. |
 | `src/backup-mac.ts` | `computeBackupMac` / `verifyBackupMac` — a passkey backup's check: HMAC-SHA256 over the body's checksum under `PasskeyCredential.deriveBackupMacKey()` (`nulo:backup-mac:v1`). |
+| `src/aes-gcm-frame.ts` | `sealFrame` / `openFrame` — the `version ‖ IV ‖ ciphertext` AES-GCM frame every DEK-rooted box and the row seal share, random 96-bit IV per seal. |
+| `src/row-seal.ts` | `deriveRowKeys` / `sealRow` / `openRow` / `keyedSegment` — the per-profile row-seal keys (HKDF over the master, bound to the profile's incarnation) and the AAD binding a sealed row to its root, storage key and profile. |
 | `src/constants.ts` | `ENCRYPTION_GUARD` (frozen by the V8 vector), `PASSKEY_PRF_LABEL`. |
 | `src/zeroize.ts` | `zeroize()` helper for explicit secret-buffer wipes. |
 | `src/index.ts` | Public exports. |
@@ -55,6 +57,7 @@ Treat that file as a contract. **A vector/KDF change is NOT an ordinary storage 
 ## Key invariants
 
 - **`ENCRYPTION_GUARD`** (`src/constants.ts`) is the V8-vector-frozen GCM associated-data tag. Changing it bricks every existing wallet.
+- **`ROW_SEAL_LABELS`** and the row AAD (`src/row-seal.ts`) are frozen by V12, the shared frame by V13. Changing one hides every sealed row of every profile.
 - **Buffer ownership.** Secret material is allocated as `Uint8Array<ArrayBuffer>`, never `Buffer`. Callers own the lifecycle and call `zeroize()` on drop. The package never mutates a buffer it didn't allocate, and never returns a buffer it expects to keep alive.
 - **`PasswordSecretBox.seal()` and `unseal()` are not symmetric across the passhash boundary.** `seal()` produces both an `EncryptedProfileSecret` (the on-disk record) and a `passhash`, which callers use in memory and wipe; it is never persisted (the silent-restore bearer is `SessionSecretBox`). `unsealWithPasshash()` and `unseal(password, …)` produce the same plaintext via different routes; both must remain in lock-step with the V2/V8 vectors.
 - **WebAuthn PRF non-portability.** Passkey credentials are tied to the registering browser context (per Chromium's FrameTreeNode scope). Cross-extension export+import of a passkey-typed backup is not supported. See `apps/extension/tests/e2e/PRF-NON-PORTABLE.md`.

@@ -22,14 +22,14 @@ const target = ref(null)
 	<div :class="$style.row" data-testid="contact-row" :data-contact-name="contact.name">
 		<RowTarget ref="target" :to="`/popup/send?contact=${encodeURIComponent(contact.id)}`" :labelledby="titleId" />
 
-		<Flex align="center" gap="12" wide>
+		<Flex align="center" gap="12" wide :class="$style.line">
 			<div :class="$style.avatar">
 				<span :class="$style.avatar_text">{{ contact.abbr }}</span>
 			</div>
 
 			<Flex direction="column" gap="2" wide :class="$style.row_text">
 				<span :id="titleId" :class="$style.row_name">{{ contact.name }}</span>
-				<Flex align="center" gap="6">
+				<Flex align="center" gap="6" :class="$style.address_line">
 					<span :class="$style.row_address" data-testid="contact-row-address">{{ trimAddress(contact.address) }}</span>
 					<!-- Raised above the target so its title shows; `.stop` so a press opens the row once. -->
 					<span
@@ -117,5 +117,29 @@ const target = ref(null)
 
 .actions {
 	composes: row_actions from "../../../../../components/ui/Settings/settings-row.module.css";
+}
+
+/* Below the popup's width the actions go under the name and address, which keep the row's width, and
+ * the sender mark goes under the address when the two do not fit. */
+@media (width < 359px) {
+	.row .address_line {
+		flex-wrap: wrap;
+	}
+
+	.row > .line {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 6px 12px;
+	}
+
+	.line > .actions {
+		grid-column: 1 / -1;
+		justify-self: end;
+	}
+
+	.row .row_name {
+		white-space: normal;
+		overflow-wrap: break-word;
+	}
 }
 </style>

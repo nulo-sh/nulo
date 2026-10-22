@@ -24,7 +24,13 @@ exists at all:
 
 - **The disk reader.** Has the ciphertexts, no password.
 - **The same-phrase sibling.** Legitimately owns a second profile created from the *same* recovery
-  phrase, so they hold the same master, and want to reach the first profile's imported keys.
+  phrase, so they hold the same master, and want to reach the first profile's imported keys. The
+  row-seal key derives from the master alone, so they can read the first profile's contacts, dApp
+  sessions and history; they cannot forge a dApp grant, whose MAC takes the DEK.
+
+Code execution inside the extension stays out of scope, with one consequence worth stating: a
+running service worker holds, even while locked, the row-seal keys of every profile it has opened,
+until it ends or the profile is deleted. Never the master.
 
 ## What is on disk
 
@@ -38,6 +44,7 @@ exists at all:
 | `profiles@<id>.walletFingerprint` | `sha256("nulo:wallet-fingerprint:v1" ‖ master)` | **nothing — plaintext by design** |
 | `profiles@<id>.credentialId` | WebAuthn credential id (passkey profiles) | nothing — it is a public identifier |
 | imported-key rows | an external account's Grumpkin signing key | AES-256-GCM under `HKDF(dek, chainId ‖ address)` |
+| contact, dApp-session, journal and transaction rows | the row, as `{ profileId, sealed }`: names, addresses, origins, grants, amounts, fees, errors, hashes | AES-256-GCM under `HKDF(master, profileId ‖ pxeGeneration)`, the AAD binding root, storage key and profile; a transaction row's key is the HMAC of its hash under the same derivation's index key; a session also keeps its `HKDF(master ‖ dek)` MAC inside |
 | `storage.session` bearer | `master ‖ dek` **and** the random token that unwraps it | nothing, jointly — see below |
 | password full backup file | the master, the entropy, and a key made for this backup alone, under which its imported-key rows open (never the profile's DEK) | the profile's password at export time (a later password change does not touch the file) |
 | passkey full backup file | the credential id, the profile's own DEK sealed under the passkey's wrap key, the imported-key rows | the keys open only with the passkey; without the optional password, everything but the keys is readable |
@@ -122,7 +129,15 @@ strength of the profile's password; see the known limit below for older files.
   unencrypted.** A password change rewraps the DEK and never rotates it, so whoever can open such a
   file and later reads the source profile's storage can open imported-key rows created after the
   export. Since v0.31.0 the file is always encrypted under the profile's password and carries a key
-  made for that backup alone. Accepted while the wallet has no production users (known limit #709).
+  made for that backup alone. Kept as a known limit at 1.0.0 (#709): such files still restore,
+  only builds before PR #51 made them (v0.30.2 the last release), and the limit reopens only if
+  such a file is known to have leaked.
+- **A sealed row authenticates where it is, not when it was written.** Someone who can write the
+  disk offline can delete a sealed row, put back an earlier sealed value at the same key, or plant a
+  plaintext row, which the wallet reads and seals at the next unlock (a dApp session's MAC refuses
+  a planted grant; a planted transaction row that names no profile is shown to every profile until
+  one that alone holds its account adopts it). The envelope's profile id, the row ids and each
+  row's size stay visible.
 - **This is a custom derivation scheme.** It is built entirely from standard primitives — PBKDF2,
   HMAC-SHA512, HKDF, AES-256-GCM, SHA-256 — with no hand-rolled cryptography, and the primitives
   are pinned against published test vectors (all 24 official BIP-39 vectors, RFC 5869 A.1 for
@@ -141,3 +156,5 @@ strength of the profile's password; see the known limit below for older files.
 | Derived addresses never drift | `packages/aztec-runtime/src/account/derivation-vectors.test.ts` |
 | Secrets are wiped after use | `src/zeroize.test.ts` |
 | A sibling profile cannot reach imported keys | `src/imported-account-key-box.test.ts`, `src/entropy-mac.test.ts` |
+| A sealed row opens only at its own root, key, profile and incarnation | `src/row-seal.test.ts`, `apps/extension/src/wallet/storage/sealed-entity-storage.test.ts` |
+| The row-seal labels and frame never drift | `apps/extension/src/wallet/crypto/key-vectors.test.ts` (V12, V13) |

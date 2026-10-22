@@ -54,6 +54,18 @@
 	align-items: baseline;
 }
 
+/* Below the popup's width each value goes under its key and takes the card's width. */
+@media (width < 359px) {
+	.kv_grid {
+		grid-template-columns: 1fr;
+		gap: 2px;
+	}
+
+	.kv_grid > .kv_key:not(:first-child) {
+		margin-top: 8px;
+	}
+}
+
 .kv_key {
 	composes: type--label-section from global;
 	color: var(--nulo-secondary);

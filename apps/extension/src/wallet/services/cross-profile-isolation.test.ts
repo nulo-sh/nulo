@@ -37,6 +37,8 @@ import type { TokenBalanceRaw } from "./token-balance/spec"
 import { TransactionService } from "./transaction/service"
 import { ExecutionService } from "./execution/service"
 import type { BackgroundTickerPort } from "@nulo/wallet-core/ports"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import type { RowKeysSource } from "@/wallet/storage/sealed-entity-storage"
 
 /**
  * Minimal ProfileService fake (golden reference: contact/service.test.ts). Carries
@@ -47,6 +49,8 @@ class FakeProfileService implements IService {
 	public static readonly name = PROFILE_SERVICE_NAME
 	public readonly name = PROFILE_SERVICE_NAME
 	public readonly onProfileDeleted = new EventHandler<ProfileInfo>()
+	public readonly onRowKeysReady = new EventHandler<string>()
+	public rowKeys: RowKeysSource = () => undefined
 	public readonly onActiveProfileChanged = new EventHandler<ProfileInfo | undefined>()
 	private active: ProfileInfo | undefined
 	// Shared with TransactionService for the execution fence — no deletion is
@@ -118,6 +122,7 @@ describe("cross-profile isolation (standing gate)", () => {
 
 		beforeEach(async () => {
 			profile = new FakeProfileService()
+			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
 			const services = new ServiceCollection()
 			services.add(profile)
@@ -153,6 +158,7 @@ describe("cross-profile isolation (standing gate)", () => {
 
 		beforeEach(async () => {
 			profile = new FakeProfileService()
+			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
 			const services = new ServiceCollection()
 			services.add(profile)
@@ -218,6 +224,7 @@ describe("cross-profile isolation (standing gate)", () => {
 
 		beforeEach(async () => {
 			profile = new FakeProfileService()
+			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
 			seedRepo = new BalanceRepository(api)
 			const services = new ServiceCollection()
@@ -275,6 +282,7 @@ describe("cross-profile isolation (standing gate)", () => {
 
 		beforeEach(async () => {
 			profile = new FakeProfileService()
+			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
 			const services = new ServiceCollection()
 			services.add(profile)
@@ -303,6 +311,7 @@ describe("cross-profile isolation (standing gate)", () => {
 
 		beforeEach(async () => {
 			profile = new FakeProfileService()
+			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
 			const services = new ServiceCollection()
 			services.add(profile)
@@ -333,6 +342,7 @@ describe("cross-profile isolation (standing gate)", () => {
 
 		beforeEach(async () => {
 			profile = new FakeProfileService()
+			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
 			accountPurgeSubs = []
 			chainPurgeSubs = []
@@ -521,6 +531,7 @@ describe("cross-profile isolation (standing gate)", () => {
 		beforeEach(async () => {
 			chainPurgeSubs.length = 0
 			profile = new FakeProfileService()
+			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
 			const services = new ServiceCollection()
 			services.add(profile)
@@ -602,7 +613,8 @@ describe("cross-profile isolation (standing gate)", () => {
 				open()
 				expect(await run).toEqual([{ chainId: 1, address: X }])
 				await new Promise((r) => setTimeout(r, 0))
-				expect((await txService.getTransactions(X)).map((t) => t.hash).sort()).toEqual(["hx-chain2", "hx-p2"])
+				const kept = [...(await txService.transactionsOf(X, p1.id)), ...(await txService.transactionsOf(X, p2.id))]
+				expect(kept.map((t) => t.hash).sort()).toEqual(["hx-chain2", "hx-p2"])
 			})
 
 			test("a failed purge of those rows stops the reconcile with the account row kept", async () => {

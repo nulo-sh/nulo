@@ -11,6 +11,7 @@ import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { type ArmedInterception, interceptRpc, pickFile } from "../fixtures/browser"
 import { clickByTestId, clickSelector, type ExtensionContext, withTimeoutMessage } from "../fixtures/extension"
 import { contactRow, senderChip } from "../fixtures/helpers"
+import { callService } from "../fixtures/session"
 import { settleClosedPopup } from "../fixtures/popup-leave"
 import { armDownloadCapture, readCapturedDownload } from "./download-capture"
 
@@ -227,14 +228,20 @@ export async function shownToast(page: Page, text: string, timeout = 15_000): Pr
 
 export type StoredContact = { id: string; profileId: string; name: string; address: string; abbr: string }
 
-/** Every stored contact row, ordered by id. */
-export function storedContacts(page: Page): Promise<StoredContact[]> {
+/** Every contact the active profile stores, as the wallet reads them (rows are sealed at rest),
+ *  ordered by id. */
+export async function storedContacts(page: Page): Promise<StoredContact[]> {
+	const contacts = await callService<StoredContact[]>(page, "contact", "getContacts")
+	return contacts.sort((x, y) => x.id.localeCompare(y.id))
+}
+
+/** Every stored contact row as the raw string an at-rest reader of storage sees. */
+export function rawContactRows(page: Page): Promise<string[]> {
 	return page.evaluate(async () => {
 		const all = await chrome.storage.local.get()
 		return Object.entries(all)
 			.filter(([key]) => key.startsWith("nulo:core:contacts@"))
-			.map(([, value]) => JSON.parse(value as string) as StoredContact)
-			.sort((x, y) => x.id.localeCompare(y.id))
+			.map(([, value]) => String(value))
 	})
 }
 

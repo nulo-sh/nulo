@@ -29,12 +29,11 @@ import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee"
 import { L1FeeJuicePortalManager } from "@aztec-labs/aztec.js/ethereum"
 import { isL1ToL2MessageReady } from "@aztec-labs/aztec.js/messaging"
 import { ProtocolContractAddress } from "@aztec-labs/aztec.js/protocol"
-import { createExtendedL1Client } from "@aztec-labs/ethereum/client"
 import { SponsoredFPCContractArtifact } from "@aztec-labs/noir-contracts.js/SponsoredFPC"
 import { TokenContract } from "@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js"
 import type { Logger } from "@aztec-labs/foundation/log"
 import type { ILogger } from "@nulo/wallet-core/logger"
-import type { Chain } from "@aztec/viem"
+import { createFixtureL1Client } from "./l1-signer"
 import { PollTimeoutError, pollUntil } from "./poll"
 
 /**
@@ -424,13 +423,12 @@ export async function transferPublicToPrivateTokens(
  * for parallel runs (e.g. `ANVIL_URL=http://localhost:18545`).
  */
 const ANVIL_URL = process.env.ANVIL_URL ?? "http://localhost:8545"
-const ANVIL_MNEMONIC = "test test test test test test test test test test test junk"
 
 /** Bridge FeeJuice from L1 (Anvil) to an L2 address. Mints test FJ on L1, deposits to portal.
  *  Note: the L1 FeeAssetHandler has a fixed mint amount of 1000 FJ per call. */
 export async function bridgeFeeJuice(node: ReturnType<typeof createAztecNodeClient>, toAddress: string, amount = 1000n * 10n ** 18n) {
 	const nodeInfo = await node.getNodeInfo()
-	const l1Client = createExtendedL1Client([ANVIL_URL], ANVIL_MNEMONIC, { id: nodeInfo.l1ChainId, name: "anvil" } as Chain)
+	const l1Client = createFixtureL1Client([ANVIL_URL], nodeInfo.l1ChainId)
 	// Console stand-ins for the only part of a Logger the portal manager reads: its level methods.
 	const logger = {
 		info: console.log,

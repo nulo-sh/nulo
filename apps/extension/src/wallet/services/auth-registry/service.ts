@@ -380,7 +380,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 				fence,
 			)
 
-			await this.transactionService.waitForTx(txHash, task)
+			await this.transactionService.waitForTx(txHash, fence.profileId, task)
 
 			const node = await this.nodeFor(network)
 			// `waitForTx` only confirms the tx left the pending queue (submitted),
@@ -429,7 +429,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 				fence,
 			)
 
-			await this.transactionService.waitForTx(txHash, task)
+			await this.transactionService.waitForTx(txHash, fence.profileId, task)
 
 			const node = await this.nodeFor(network)
 			// Ensure the registry toggle is mined + visible before returning, so a

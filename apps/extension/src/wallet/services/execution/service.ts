@@ -453,7 +453,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			sequencer: this.sendSequencer,
 			chainTip: this.chainTipGate,
 			getFpcImpl: (fpcId) => this.fpcService.getFpcImpl(fpcId),
-			getTransactions: (account) => this.transactionService.getTransactions(account),
+			transactionsOf: (account, profileId) => this.transactionService.transactionsOf(account, profileId),
 			getActiveProfile: () => this.profileService.getActiveProfile(),
 			captureExecutionFence: () => this.captureFence(),
 			assertFence: (fence) => this.profileService.assertFence(fence),
@@ -655,11 +655,11 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		const contract = tokenContractKey("estimateTransferFee", tokenContract)
 		amount = coerceAmount(amount)
 		const req = { networkId, accountAddress, tokenId, tokenContract: contract, transferType, recipientAddress, amount, feeSettings }
+		const profile = await requireActiveProfile(this.profileService, "Wallet locked")
 		// Before admission: a queued answer spends no slot and leaves the token unused, so the popup asks again with it.
-		const sequence = await this.transferExecutor.sequence(req)
+		const sequence = await this.transferExecutor.sequence(req, profile.id)
 		// A send holding the slot is proving: the PXE runs one operation at a time, so this estimate
 		// would wait behind that proof anyway, past its RPC deadline on a real prover.
-		const profile = await requireActiveProfile(this.profileService, "Wallet locked")
 		const slotBusy = this.lane.isSlotBusy(profile.id, sequence.scope.chainId)
 		const lagging = this.chainTipGate.unconfirmed(sequence.scope, sequence.keys, networkId)
 		// The popup asks again every 2 s; the read it starts is what lets that answer change.
@@ -675,7 +675,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	private async queuedFeeCapFor(req: TransferRequest, profileId: string, sequence: TransferSequence): Promise<QueuedFeeCap | undefined> {
 		const shape = sendShapeOf(req.feeSettings, req.transferType, sequence.feeSpender)
 		if (!shape) return undefined
-		const rows = await this.transactionService.getTransactions(req.accountAddress)
+		const rows = await this.transactionService.transactionsOf(req.accountAddress, profileId)
 		const basis = queuedFeeBasis(rows, profileId, sequence.scope.chainId, req.tokenContract, shape, Date.now())
 		const cap = basis ? queuedFeeCap(basis) : undefined
 		return basis && cap ? { basis, cap } : undefined
@@ -793,12 +793,14 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		flowKey?: string,
 	): Promise<TransferFeeEstimate> {
 		await this.ensureInitialized()
-		return this.refusalBound(interactionId, async () => {
-			const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
-			return this.withEstimateAdmission(estimateToken, flowKey ?? "op", (signal) =>
-				this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index }),
-			)
-		})
+		// Admitted before the stored request is read: a cancel then either finds the estimate or comes
+		// after the approval that deleted the request, which the read then refuses.
+		return this.refusalBound(interactionId, () =>
+			this.withEstimateAdmission(estimateToken, flowKey ?? "op", async (signal) => {
+				const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
+				return this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index })
+			}),
+		)
 	}
 
 	public async previewOperationAuthwits(
@@ -808,12 +810,13 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		flowKey?: string,
 	): Promise<OperationAuthwitPreview> {
 		await this.ensureInitialized()
-		return this.refusalBound(interactionId, async () => {
-			const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index)
-			return this.withEstimateAdmission(estimateToken, flowKey ?? "op", (signal) =>
-				this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal),
-			)
-		})
+		// Admitted before the read, as `estimateOperationFee` is.
+		return this.refusalBound(interactionId, () =>
+			this.withEstimateAdmission(estimateToken, flowKey ?? "op", async (signal) => {
+				const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index)
+				return this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal)
+			}),
+		)
 	}
 
 	/** A refusal is the request's, not one attempt's: the attempt that met it may be one the window

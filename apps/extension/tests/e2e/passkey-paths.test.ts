@@ -13,7 +13,7 @@
  *      popup, same FTN, same authenticator = same PRF = same master.
  *
  * Each step also proves it stayed in the page on both browsers: the passkey card mounted and no
- * window opened. Only Firefox's toolbar panel hands it to a window (`passkey-toolbar-panel.test.ts`).
+ * window opened. Only Firefox's toolbar panel hands it to a window (`toolbar-panel.test.ts`).
  *
  * NOT covered (still blocked, see apps/extension/tests/e2e/PRF-NON-PORTABLE.md):
  *   - Passkey IMPORT in a FRESH extension instance. PRF state is per-

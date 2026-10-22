@@ -52,7 +52,7 @@ function makeDeps(overrides: Partial<TransferExecutorDeps>): TransferExecutorDep
 			async () => ({ infoData: { type: FpcType.DefaultSponsoredFpc, isProtocol: true, chainId: 7, address: "0xsponsor" } }) as never,
 		),
 		// One mined tx: the account is initialized.
-		getTransactions: vi.fn(async () => [{ chainId: 7, status: 2, executionResult: 0, calls: [] }] as never),
+		transactionsOf: vi.fn(async () => [{ chainId: 7, status: 2, executionResult: 0, calls: [] }] as never),
 		lane: {
 			registerInFlight: vi.fn(() => ({ live: true })),
 			deleteController: vi.fn(),

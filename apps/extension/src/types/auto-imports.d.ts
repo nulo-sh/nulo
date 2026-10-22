@@ -142,6 +142,7 @@ declare global {
   const clearRestoreOutcome: typeof import('../utils/restore-outcome').clearRestoreOutcome
   const closeCurrentWindow: typeof import('../utils/close-current-window').closeCurrentWindow
   const closeOwnWindow: typeof import('../utils/own-window').closeOwnWindow
+  const closesOnFocusLoss: typeof import('../utils/browser-surface').closesOnFocusLoss
   const coalesce: typeof import('../utils/coalesce').coalesce
   const collectRestoreErrors: typeof import('../utils/full-backup-helpers').collectRestoreErrors
   const combineHoldings: typeof import('../utils/get-started').combineHoldings
@@ -219,11 +220,13 @@ declare global {
   const getTransaction: typeof import('../utils/core').getTransaction
   const getTxCategory: typeof import('../utils/tx-enrichment').getTxCategory
   const getTxTitle: typeof import('../utils/tx-enrichment').getTxTitle
+  const goBack: typeof import('../utils/page-back').goBack
   const h: typeof import('vue').h
   const handleCancelOrUnconfirmed: typeof import('../utils/passkey-copy').handleCancelOrUnconfirmed
   const hasInFlightSend: typeof import('../utils/in-flight-send').hasInFlightSend
   const hasReachedPresto: typeof import('../utils/presto-ui-state').hasReachedPresto
   const hasRowsBeyondRetry: typeof import('../composables/useFullBackupImport').hasRowsBeyondRetry
+  const hasSidePanelSurface: typeof import('../utils/browser-surface').hasSidePanelSurface
   const heroRoom: typeof import('../utils/hero-ruler').heroRoom
   const holdHeroFit: typeof import('../utils/hero-fit').holdHeroFit
   const hubValues: typeof import('../utils/settings-labels').hubValues
@@ -244,6 +247,7 @@ declare global {
   const isComposing: typeof import('../composables/usePopupEntity').isComposing
   const isEmptyContactName: typeof import('../utils/contact-name').isEmptyContactName
   const isFirefox: typeof import('../utils/browser-surface').isFirefox
+  const isFirefoxSidebar: typeof import('../utils/browser-surface').isFirefoxSidebar
   const isFlaggedToken: typeof import('../utils/token-flag').isFlaggedToken
   const isForeignProfile: typeof import('../utils/activity-rows').isForeignProfile
   const isHiddenHolding: typeof import('../utils/token-fold').isHiddenHolding
@@ -262,6 +266,7 @@ declare global {
   const isServiceReady: typeof import('../utils/core').isServiceReady
   const isSettingsRowVisible: typeof import('../utils/settings-search').isSettingsRowVisible
   const isShallow: typeof import('vue').isShallow
+  const isToolbarPopup: typeof import('../utils/browser-surface').isToolbarPopup
   const isUnknownParsedRow: typeof import('../utils/token-amount').isUnknownParsedRow
   const isUnknownRow: typeof import('../utils/token-amount').isUnknownRow
   const isValidAztecAddress: typeof import('../utils/aztec-address').isValidAztecAddress
@@ -280,6 +285,7 @@ declare global {
   const journalTerminalDisplay: typeof import('../utils/journal-state').journalTerminalDisplay
   const journalUpdated: typeof import('../utils/journal-mirror').journalUpdated
   const knownDecimals: typeof import('../utils/token-amount').knownDecimals
+  const leavePanelFor: typeof import('../utils/own-window').leavePanelFor
   const legalAboutRow: typeof import('../utils/legal-about').legalAboutRow
   const managers: typeof import('../utils/core').managers
   const markGetStarted: typeof import('../utils/get-started').markGetStarted
@@ -327,7 +333,6 @@ declare global {
   const passkeyBackupAuthenticator: typeof import('../utils/full-backup-helpers').passkeyBackupAuthenticator
   const passkeyFailureCopy: typeof import('../utils/passkey-copy').passkeyFailureCopy
   const passkeyImportFailedNotice: typeof import('../utils/profile-flow-notices').passkeyImportFailedNotice
-  const passkeyNeedsOwnWindow: typeof import('../utils/browser-surface').passkeyNeedsOwnWindow
   const passkeyTag: typeof import('../utils/passkey-copy').passkeyTag
   const persistThemeHint: typeof import('../utils/general').persistThemeHint
   const pickFile: typeof import('../utils/files').pickFile
@@ -339,6 +344,7 @@ declare global {
   const plainMethodName: typeof import('../utils/tx-enrichment').plainMethodName
   const planImportWrites: typeof import('../utils/contact-import-rows').planImportWrites
   const planRestoreAgain: typeof import('../composables/full-backup-restore').planRestoreAgain
+  const pointToolbarAtSidebar: typeof import('../utils/browser-surface').pointToolbarAtSidebar
   const postAuthRoute: typeof import('../utils/own-window').postAuthRoute
   const preflightNetworkConnectivity: typeof import('../composables/importPreflight').preflightNetworkConnectivity
   const pricesUnavailable: typeof import('../utils/token-aggregate').pricesUnavailable
@@ -430,6 +436,7 @@ declare global {
   const showsDecryptCta: typeof import('../utils/full-backup-ctas').showsDecryptCta
   const showsRestoreCta: typeof import('../utils/full-backup-ctas').showsRestoreCta
   const showsRestoreErrorCtas: typeof import('../utils/full-backup-ctas').showsRestoreErrorCtas
+  const sidebarAction: typeof import('../utils/browser-surface').sidebarAction
   const smallFieldDecimal: typeof import('../utils/transfer-intent').smallFieldDecimal
   const snackInset: typeof import('../composables/snackInset').snackInset
   const stageSubtitle: typeof import('../utils/card-subtitle').stageSubtitle
@@ -952,6 +959,7 @@ declare module 'vue' {
     readonly clearRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['clearRestoreOutcome']>
     readonly closeCurrentWindow: UnwrapRef<typeof import('../utils/close-current-window')['closeCurrentWindow']>
     readonly closeOwnWindow: UnwrapRef<typeof import('../utils/own-window')['closeOwnWindow']>
+    readonly closesOnFocusLoss: UnwrapRef<typeof import('../utils/browser-surface')['closesOnFocusLoss']>
     readonly coalesce: UnwrapRef<typeof import('../utils/coalesce')['coalesce']>
     readonly collectRestoreErrors: UnwrapRef<typeof import('../utils/full-backup-helpers')['collectRestoreErrors']>
     readonly combineHoldings: UnwrapRef<typeof import('../utils/get-started')['combineHoldings']>
@@ -1029,11 +1037,13 @@ declare module 'vue' {
     readonly getTransaction: UnwrapRef<typeof import('../utils/core')['getTransaction']>
     readonly getTxCategory: UnwrapRef<typeof import('../utils/tx-enrichment')['getTxCategory']>
     readonly getTxTitle: UnwrapRef<typeof import('../utils/tx-enrichment')['getTxTitle']>
+    readonly goBack: UnwrapRef<typeof import('../utils/page-back')['goBack']>
     readonly h: UnwrapRef<typeof import('vue')['h']>
     readonly handleCancelOrUnconfirmed: UnwrapRef<typeof import('../utils/passkey-copy')['handleCancelOrUnconfirmed']>
     readonly hasInFlightSend: UnwrapRef<typeof import('../utils/in-flight-send')['hasInFlightSend']>
     readonly hasReachedPresto: UnwrapRef<typeof import('../utils/presto-ui-state')['hasReachedPresto']>
     readonly hasRowsBeyondRetry: UnwrapRef<typeof import('../composables/useFullBackupImport')['hasRowsBeyondRetry']>
+    readonly hasSidePanelSurface: UnwrapRef<typeof import('../utils/browser-surface')['hasSidePanelSurface']>
     readonly heroRoom: UnwrapRef<typeof import('../utils/hero-ruler')['heroRoom']>
     readonly holdHeroFit: UnwrapRef<typeof import('../utils/hero-fit')['holdHeroFit']>
     readonly hubValues: UnwrapRef<typeof import('../utils/settings-labels')['hubValues']>
@@ -1054,6 +1064,7 @@ declare module 'vue' {
     readonly isComposing: UnwrapRef<typeof import('../composables/usePopupEntity')['isComposing']>
     readonly isEmptyContactName: UnwrapRef<typeof import('../utils/contact-name')['isEmptyContactName']>
     readonly isFirefox: UnwrapRef<typeof import('../utils/browser-surface')['isFirefox']>
+    readonly isFirefoxSidebar: UnwrapRef<typeof import('../utils/browser-surface')['isFirefoxSidebar']>
     readonly isFlaggedToken: UnwrapRef<typeof import('../utils/token-flag')['isFlaggedToken']>
     readonly isForeignProfile: UnwrapRef<typeof import('../utils/activity-rows')['isForeignProfile']>
     readonly isHiddenHolding: UnwrapRef<typeof import('../utils/token-fold')['isHiddenHolding']>
@@ -1072,6 +1083,7 @@ declare module 'vue' {
     readonly isServiceReady: UnwrapRef<typeof import('../utils/core')['isServiceReady']>
     readonly isSettingsRowVisible: UnwrapRef<typeof import('../utils/settings-search')['isSettingsRowVisible']>
     readonly isShallow: UnwrapRef<typeof import('vue')['isShallow']>
+    readonly isToolbarPopup: UnwrapRef<typeof import('../utils/browser-surface')['isToolbarPopup']>
     readonly isUnknownParsedRow: UnwrapRef<typeof import('../utils/token-amount')['isUnknownParsedRow']>
     readonly isUnknownRow: UnwrapRef<typeof import('../utils/token-amount')['isUnknownRow']>
     readonly isValidAztecAddress: UnwrapRef<typeof import('../utils/aztec-address')['isValidAztecAddress']>
@@ -1090,6 +1102,7 @@ declare module 'vue' {
     readonly journalTerminalDisplay: UnwrapRef<typeof import('../utils/journal-state')['journalTerminalDisplay']>
     readonly journalUpdated: UnwrapRef<typeof import('../utils/journal-mirror')['journalUpdated']>
     readonly knownDecimals: UnwrapRef<typeof import('../utils/token-amount')['knownDecimals']>
+    readonly leavePanelFor: UnwrapRef<typeof import('../utils/own-window')['leavePanelFor']>
     readonly legalAboutRow: UnwrapRef<typeof import('../utils/legal-about')['legalAboutRow']>
     readonly managers: UnwrapRef<typeof import('../utils/core')['managers']>
     readonly markGetStarted: UnwrapRef<typeof import('../utils/get-started')['markGetStarted']>
@@ -1137,7 +1150,6 @@ declare module 'vue' {
     readonly passkeyBackupAuthenticator: UnwrapRef<typeof import('../utils/full-backup-helpers')['passkeyBackupAuthenticator']>
     readonly passkeyFailureCopy: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyFailureCopy']>
     readonly passkeyImportFailedNotice: UnwrapRef<typeof import('../utils/profile-flow-notices')['passkeyImportFailedNotice']>
-    readonly passkeyNeedsOwnWindow: UnwrapRef<typeof import('../utils/browser-surface')['passkeyNeedsOwnWindow']>
     readonly passkeyTag: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyTag']>
     readonly persistThemeHint: UnwrapRef<typeof import('../utils/general')['persistThemeHint']>
     readonly pickFile: UnwrapRef<typeof import('../utils/files')['pickFile']>
@@ -1149,6 +1161,7 @@ declare module 'vue' {
     readonly plainMethodName: UnwrapRef<typeof import('../utils/tx-enrichment')['plainMethodName']>
     readonly planImportWrites: UnwrapRef<typeof import('../utils/contact-import-rows')['planImportWrites']>
     readonly planRestoreAgain: UnwrapRef<typeof import('../composables/full-backup-restore')['planRestoreAgain']>
+    readonly pointToolbarAtSidebar: UnwrapRef<typeof import('../utils/browser-surface')['pointToolbarAtSidebar']>
     readonly postAuthRoute: UnwrapRef<typeof import('../utils/own-window')['postAuthRoute']>
     readonly preflightNetworkConnectivity: UnwrapRef<typeof import('../composables/importPreflight')['preflightNetworkConnectivity']>
     readonly pricesUnavailable: UnwrapRef<typeof import('../utils/token-aggregate')['pricesUnavailable']>
@@ -1240,6 +1253,7 @@ declare module 'vue' {
     readonly showsDecryptCta: UnwrapRef<typeof import('../utils/full-backup-ctas')['showsDecryptCta']>
     readonly showsRestoreCta: UnwrapRef<typeof import('../utils/full-backup-ctas')['showsRestoreCta']>
     readonly showsRestoreErrorCtas: UnwrapRef<typeof import('../utils/full-backup-ctas')['showsRestoreErrorCtas']>
+    readonly sidebarAction: UnwrapRef<typeof import('../utils/browser-surface')['sidebarAction']>
     readonly smallFieldDecimal: UnwrapRef<typeof import('../utils/transfer-intent')['smallFieldDecimal']>
     readonly snackInset: UnwrapRef<typeof import('../composables/snackInset')['snackInset']>
     readonly stageSubtitle: UnwrapRef<typeof import('../utils/card-subtitle')['stageSubtitle']>

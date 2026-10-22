@@ -21,7 +21,7 @@
 				}
 			],
 			"digests": {
-				"apps/extension/src/wallet/services/auth-registry/service.ts": "216d4b91918b80d354f26921f9bed97116f125f3876502a19990bfc2b85a1ccd",
+				"apps/extension/src/wallet/services/auth-registry/service.ts": "48352348ddea06eb4ee8e0693892002662de49927198214ca713df981f8caf7a",
 				"apps/extension/src/wallet/services/execution/operation-planner.ts": "bbcaf06f67030ba2a7b26bc54a4671db80d11059f0b0b50ce0142a7cf16b5185",
 				"packages/wallet-bridge/src/dispatcher.ts": "078a3db852a84faef2b28c7874ba0de05084ac0cfe72e88cd603a1b127a8914c"
 			},
@@ -807,6 +807,16 @@
 			"selector": "[data-testid=\"export-account-row\"] [data-testid=\"setting-description\"]",
 			"surface": "popup-settings-security-export-account",
 			"state": ""
+		},
+		{
+			"file": "apps/extension/src/popup/pages/settings/security/reset.vue",
+			"expression": "trimAddress(account.address, 6, 4, '…')",
+			"branch": "importedAccounts.length",
+			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"reset-imported-account\"] [data-testid=\"setting-description\"]",
+			"surface": "popup-settings-security-reset",
+			"state": "an imported account"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/tx/[id].vue",

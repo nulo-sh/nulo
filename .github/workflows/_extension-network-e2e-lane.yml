@@ -44,9 +44,8 @@ jobs:
       # A red shard never cancels the others: the per-shard picture tells one bad file from a broken suite.
       fail-fast: false
       matrix:
-        # N=5, not 4: vitest's SHA-1-of-path sharder puts the two slow files multi-account-from and
-        # tx-sendTx-multicall on one shard at N=4. `label` is `id` without the `/` that
-        # actions/upload-artifact refuses in a name.
+        # Files go to shards by their recorded time (apps/extension/tests/e2e/shard-sequencer.ts).
+        # `label` is `id` without the `/` that actions/upload-artifact refuses in a name.
         shard:
           - { id: "1/5", label: "1-of-5" }
           - { id: "2/5", label: "2-of-5" }
@@ -60,8 +59,7 @@ jobs:
       shard: ${{ matrix.shard.id }}
       shard_label: ${{ matrix.shard.label }}
       retry: ${{ inputs.retry }}
-      # Exactly the files the jobs below run: an excluded file would still take a slot in the
-      # SHA-1 distribution, and one left in would run twice.
+      # Exactly the files the jobs below run: one left in the pool would run twice.
       exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
       proverless: true
 
@@ -93,8 +91,8 @@ jobs:
       test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
       proverless: true
 
-  # About 8 and 4.5 minutes on Firefox. The sharder weighs no runtime, and the shard that drew both
-  # reached its 30-minute limit with every test green.
+  # Dedicated for wall time alone: folded into the five-shard pool, these two files made the lane end
+  # later on both browsers when measured.
   network-e2e-heavy-long:
     name: heavy / snack-placement + failed-send-check
     uses: ./.github/workflows/_extension-network-e2e.yml

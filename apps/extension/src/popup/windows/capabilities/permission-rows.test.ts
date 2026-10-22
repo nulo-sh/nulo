@@ -102,15 +102,24 @@ describe("the row list, row by row", () => {
 		expect(any.flagged).toBe(true)
 	})
 
-	test("contract classes name the network and count a list", () => {
-		expect(cells(contractClassesRow("Testnet", "*"))).toEqual([
+	test("contract classes name the network, count a list, and name both answers a lookup gives", () => {
+		expect(cells(contractClassesRow("Testnet", [A]))).toEqual([
 			"Without asking",
-			"Look up contract code on Testnet",
-			"Public information any node can give it.",
+			"Look up the code of 1 contract class on Testnet",
+			"Whether it is on chain, and if this wallet has its code.",
 		])
-		expect(contractClassesRow("Testnet", [A]).title).toBe("Look up the code of 1 contract class on Testnet")
 		expect(contractClassesRow("Testnet", [A, A_UPPER, B]).title).toBe("Look up the code of 2 contract classes on Testnet")
 		expect(contractClassesRow("Testnet", [A]).flagged).toBe(false)
+	})
+
+	test("every class is flagged like adding any contract", () => {
+		const any = contractClassesRow("Testnet", "*")
+		expect(cells(any)).toEqual([
+			"Without asking",
+			"Look up contract code on Testnet · Any class",
+			"Whether it is on chain, and if this wallet has its code.",
+		])
+		expect(any.flagged).toBe(true)
 	})
 
 	test("authorizations, with the B lines and their switch", () => {

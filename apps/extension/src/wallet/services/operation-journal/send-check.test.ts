@@ -130,6 +130,11 @@ class FakeJournal {
 		return true
 	}
 
+	/** A row that becomes readable with no write, as a sealed one does when its keys arrive. */
+	public reveal(row: OperationRecord): void {
+		this.rows.set(row.id, row)
+	}
+
 	/** Another writer's transition, as the reaper's lands. */
 	public put(row: OperationRecord): void {
 		this.rows.set(row.id, row)
@@ -164,6 +169,7 @@ function makeHarness(rows: OperationRecord[] = [failedRow()]) {
 			return { profileId: session.profileId, epoch: 0, session: session.serial }
 		}),
 		isFenceLive: (fence: ExecutionFence) => session?.serial === fence.session && session.profileId === fence.profileId,
+		onRowKeysReady: new EventHandler<string>(),
 	}
 	const getTxReceipt = vi.fn(async (_hash: { toString(): string }): Promise<unknown> => pending())
 	const getBlockData = vi.fn(async (_tag: string): Promise<unknown> => finalizedAt(EXPIRY.timestamp + 1))
@@ -438,6 +444,18 @@ describe("SendCheck: where it dials", () => {
 		await h.tick(3)
 		expect(h.network.getSingleAttemptNodeForUrl).not.toHaveBeenCalled()
 		h.unlock("p2")
+		await h.tick()
+		expect(h.network.getSingleAttemptNodeForUrl).toHaveBeenCalledTimes(1)
+	})
+
+	test("a row sealed under keys this worker gains later is watched when they arrive, never before", async () => {
+		const h = makeHarness([])
+		await h.check.start()
+		h.journal.reveal(failedRow())
+		await h.tick(3)
+		expect(h.network.getSingleAttemptNodeForUrl).not.toHaveBeenCalled()
+		h.profile.onRowKeysReady.invoke("p1")
+		await settle()
 		await h.tick()
 		expect(h.network.getSingleAttemptNodeForUrl).toHaveBeenCalledTimes(1)
 	})

@@ -3,8 +3,5 @@
 Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 
 - [launch-prep-1](launch-prep-1/plan.md) — planned, Codex approve, A1 in review — the 1.0.0 checklist boxes the stores meet and the Mainnet line (A1); four known-limit dispositions; Terms 1.1 and the README banner after the owner signs (A2) (#864)
-- [mainnet-arrival-1](mainnet-arrival-1/plan.md) — A1 in review; A2 waits on OA-1 and migration-rule-1 — a default network a later build adds reaches every existing profile: the offer record and pass (A1), the arrival flow after OA-1 and the real update e2e (A2) (#875)
-- [migration-rule-1](migration-rule-1/plan.md) — A1 merged, A3 in review — from 1.0.0 every stored-shape change ships a migration: a registry of stored shapes and its snapshot guard, a passkey-backup refusal, a 0.31.0 in-place update test, the flip (#865)
-- [floor-superseded-1](floor-superseded-1/plan.md) — planned, Codex approve, A1 in review — the token-list floor rule also reads the lists at publish PR and branch heads, signed at or above the floor (P77-06 B)
-- [consent-display-2](consent-display-2/plan.md) — planned, panel approved, A1 in review — the capability window counts each grant's reach, a PrivateFPC fee reads as the person's, a flagged token add asks for a tick (A1); deletion warnings name imported accounts (A2, after #964)
-- [deps-audit-1](deps-audit-1/plan.md) — A1 blocked: the extension soak stopped by the load rule (OA-2), OA-3 open — the five new advisories fixed, none acknowledged: vite 8.2.4 and follow-redirects 1.16.1 (#980)
+- [encryption-at-rest-1](encryption-at-rest-1/plan.md) — A1 in review, draft PR #924 (lands after #938, the owner's build test and one green nightly soak; the 1.0.0 promote waits for it); A4 waits for OA-3 — seal each profile's rows in `chrome.storage.local` under a master-derived per-profile key: contacts and dApp sessions, history, private-state projections, accounts and tokens (#522)
+- [deps-audit-1](deps-audit-1/plan.md) — OA-3 granted (A), A1 rerunning Phases 2-3 at the merged head — the five new advisories fixed, none acknowledged: vite 8.2.4 and follow-redirects 1.16.1 (#980)

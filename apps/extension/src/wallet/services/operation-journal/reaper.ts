@@ -109,6 +109,8 @@ export class JournalReaper {
 	 *  this-lifetime and live. When omitted (unit tests / legacy), `start()` falls
 	 *  back to `this.now()` at its first statement. */
 	private readonly bootCutoff?: number
+	/** The cutoff the boot sweep ran with, kept for the sweep of each profile unlocked later. */
+	private sweepCutoff: number | undefined
 
 	public constructor(journal: OperationJournalService, alarms: AlarmsPort, logger: ILogger, now?: () => number, bootCutoff?: number) {
 		this.journal = journal
@@ -131,6 +133,7 @@ export class JournalReaper {
 		// composition-root-supplied cutoff (captured before services.start(), so it
 		// also predates any popup-RPC replayed mid-startup).
 		const bootCutoff = this.bootCutoff ?? this.now()
+		this.sweepCutoff = bootCutoff
 		// The caller owns the diagnostic, so this stays byte-identical to the
 		// pre-adoption `reap().catch(err => log("reap tick threw", …))`.
 		this.dispatcher.listen(
@@ -159,6 +162,22 @@ export class JournalReaper {
 	}
 
 	/**
+	 * The boot sweep of one profile, run when its row keys arrive in this worker. The boot sweep
+	 * itself saw only rows it could read: a sealed record of a profile with no keys yet is invisible,
+	 * never absent or terminal. Nothing writes a profile's journal before its keys exist in this
+	 * worker, so every record of it created before the cutoff belongs to a dead worker. A no-op
+	 * before `start()`.
+	 */
+	public async reapUnlocked(profileId: string): Promise<void> {
+		if (this.sweepCutoff === undefined) return
+		try {
+			await this.reap({ unconditional: true, bootCutoff: this.sweepCutoff, profileId })
+		} catch (err) {
+			this.logger.log(LOG_SOURCE, LogLevel.Error, "unlock reap threw; continuing", err)
+		}
+	}
+
+	/**
 	 * Single reap pass. Reads all non-terminal records via
 	 * `getOperations({ isTerminal: false })` and transitions each one
 	 * that has exceeded its stage's grace window.
@@ -176,8 +195,11 @@ export class JournalReaper {
 	 * window — a proving op started 10s ago in THIS SW instance should
 	 * NOT be reaped.
 	 */
-	public async reap(opts?: { unconditional?: boolean; bootCutoff?: number }): Promise<void> {
-		const inflight = await this.journal.getOperations({ isTerminal: false })
+	public async reap(opts?: { unconditional?: boolean; bootCutoff?: number; profileId?: string }): Promise<void> {
+		const inflight = await this.journal.getOperations({
+			isTerminal: false,
+			...(opts?.profileId === undefined ? {} : { profileId: opts.profileId }),
+		})
 		const now = this.now()
 		const unconditional = opts?.unconditional === true
 		const bootCutoff = opts?.bootCutoff

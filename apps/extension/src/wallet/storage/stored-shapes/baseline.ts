@@ -9,10 +9,12 @@ import { fileURLToPath } from "node:url"
 import { type Migration, Migrator, SCHEMA_RESERVED_PREFIX, SCHEMA_VERSION_KEY, type StorageRef } from "@nulo/wallet-core/migration"
 import type { StorageArea } from "@nulo/wallet-core/ports"
 import { MemoryStorageArea, type MinimalStorageArea } from "@nulo/wallet-core/storage"
+import { asMasterSecretBytes, deriveRowKeys, type RowKeys } from "@nulo/wallet-crypto"
 import { z } from "zod"
 import { DummyLogger } from "@/wallet/logger/utils"
 import { BACKUP_SLICE_REGISTRY, normalizeBackupData } from "@/wallet/services/backup/backup-migration-registry"
 import { migrateBackupData } from "@/wallet/services/backup/backup-migrator"
+import { IMPORT_BLOCKING_ACK } from "@/wallet/services/backup/import-blocking-ack"
 import { signDappSession } from "@/wallet/services/dapp-session/integrity"
 import { DappSessionMacStorage } from "@/wallet/services/dapp-session/mac-storage"
 import type { DappSession } from "@/wallet/services/dapp-session/spec"
@@ -25,21 +27,26 @@ import { RestorePendingRepository } from "@/wallet/services/profile/restore-pend
 import { TombstoneRepository } from "@/wallet/services/profile/tombstone-repository"
 import { StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
 import { BASELINE_VERSION } from "../migrations"
+import { parseEnvelope, type RowKeysSource } from "../sealed-entity-storage"
 import { STORED_SHAPES, type StoredShape, type StoredShapeName } from "../stored-shapes"
 import {
 	type CodecStoreName,
 	entityStorage,
 	type PerProfileValueStoreName,
 	type PlainEntityStoreName,
+	type SealedStoreName,
 	STORES,
+	sealedEntityStorage,
 	type ValueStoreName,
 	valueStorage,
 } from "../stores"
 import { canonical, canonicalText, emitSchema, type Json } from "./emit"
 
 /** One stored row as a build wrote it. `value` is the stored value; a json shape stores its
- *  `JSON.stringify`. `stamp` is the index of the stamp whose build wrote it. */
-export type Golden = { id: string; stamp: number; shape: StoredShapeName; key: string; value: Json }
+ *  `JSON.stringify`. `stamp` is the index of the stamp whose build wrote it. `sealed`: authored as
+ *  the plaintext row, which the generator replaces with its envelope under the golden row keys; a
+ *  golden without it is a row as a build before the seal wrote it, and keeps that plaintext form. */
+export type Golden = { id: string; stamp: number; shape: StoredShapeName; key: string; value: Json; sealed?: true }
 export type GoldensFile = { goldens: Golden[] }
 
 export type ShapeRecord = {
@@ -49,6 +56,7 @@ export type ShapeRecord = {
 	options?: Json
 	authenticated?: true
 	engine?: true
+	sealed?: true
 	schema: Json
 }
 
@@ -84,6 +92,25 @@ const GOLDEN_MAC_KEY_BYTES = new Uint8Array(32).fill(0x4e)
 const goldenMacKey = (): Promise<CryptoKey> =>
 	crypto.subtle.importKey("raw", GOLDEN_MAC_KEY_BYTES, { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"])
 
+/** The fixed master the sealed goldens are sealed and read with, under {@link GOLDEN_GENERATION}. */
+const GOLDEN_MASTER = asMasterSecretBytes(new Uint8Array(32).fill(0x53) as Uint8Array<ArrayBuffer>)
+const GOLDEN_GENERATION = "golden-generation"
+const goldenRowKeys = (profileId: string): Promise<RowKeys> => deriveRowKeys(GOLDEN_MASTER, profileId, GOLDEN_GENERATION)
+
+/** The golden row keys of the profile whose envelope `stored` is, as a keyring holding that one
+ *  profile; none for a plaintext value. */
+async function goldenKeysFor(stored: unknown): Promise<RowKeysSource> {
+	let envelope: ReturnType<typeof parseEnvelope>
+	try {
+		envelope = typeof stored === "string" ? parseEnvelope(JSON.parse(stored)) : undefined
+	} catch {
+		envelope = undefined
+	}
+	if (!envelope) return () => undefined
+	const keys = await goldenRowKeys(envelope.profileId)
+	return (profileId) => (profileId === envelope.profileId ? keys : undefined)
+}
+
 export function zodVersion(): string {
 	const { major, minor, patch } = z.core.version
 	return `${major}.${minor}.${patch}`
@@ -102,6 +129,7 @@ export function shapeRecord(name: StoredShapeName): ShapeRecord {
 		...(shape.options ? { options: canonical(shape.options) } : {}),
 		...(shape.authenticated ? { authenticated: true as const } : {}),
 		...(shape.engine ? { engine: true as const } : {}),
+		...(shape.sealed ? { sealed: true as const } : {}),
 		schema: emitSchema(name, shape.schema),
 	}
 }
@@ -121,9 +149,9 @@ const wire = (shape: StoredShape, value: Json): unknown => (shape.encoding === "
 const unwire = (shape: StoredShape, stored: unknown): Json =>
 	stored === undefined ? null : canonical(shape.encoding === "json" && typeof stored === "string" ? JSON.parse(stored) : stored)
 
-async function macStorage(area: MinimalStorageArea): Promise<DappSessionMacStorage> {
+async function macStorage(area: MinimalStorageArea, keys: RowKeysSource): Promise<DappSessionMacStorage> {
 	const key = await goldenMacKey()
-	return new DappSessionMacStorage(entityStorage("dappSessions", area), async () => key, new DummyLogger())
+	return new DappSessionMacStorage(sealedEntityStorage("dappSessions", area, keys), async () => key, new DummyLogger())
 }
 
 async function readOrAbsent(read: () => Promise<unknown>): Promise<unknown> {
@@ -169,7 +197,9 @@ const repositoryArea = (area: MinimalStorageArea): StorageArea => ({
 export async function readStored(name: StoredShapeName, area: MinimalStorageArea, key: string, now: number): Promise<unknown> {
 	const shape: StoredShape = STORED_SHAPES[name]
 	if (shape.engine) throw new Error(`${name} is the engine's own state: it has no goldens`)
-	if (shape.authenticated) return (await macStorage(area)).get(idOf(shape, key))
+	const keys = shape.sealed ? await goldenKeysFor((await area.get(key))[key]) : () => undefined
+	if (shape.authenticated) return (await macStorage(area, keys)).get(idOf(shape, key))
+	if (shape.sealed) return (await sealedEntityStorage(name as SealedStoreName, area, keys).readStorageId(idOf(shape, key)))?.row
 	const store = name in STORES ? STORES[name as keyof typeof STORES] : undefined
 	if (shape.read === "codec") {
 		if (store) return entityStorage(name as CodecStoreName, area).get(idOf(shape, key))
@@ -185,16 +215,41 @@ export async function readStored(name: StoredShapeName, area: MinimalStorageArea
 	return shape.read(value, now)
 }
 
-/** Fills the MAC of every authenticated golden that has none, with the real signer. */
+/** Fills the MAC of every authenticated golden that has none, with the real signer, then seals
+ *  every sealed golden still in its plaintext form with the real sealing store. */
 export async function signGoldens(goldens: readonly Golden[]): Promise<Golden[]> {
+	return sealGoldens(await macGoldens(goldens))
+}
+
+const isSealedForm = (golden: Golden) => golden.sealed === true && parseEnvelope(golden.value) !== undefined
+
+async function macGoldens(goldens: readonly Golden[]): Promise<Golden[]> {
 	const key = await goldenMacKey()
 	return Promise.all(
 		goldens.map(async (golden) => {
 			const shape: StoredShape = STORED_SHAPES[golden.shape]
 			const row = golden.value as Record<string, Json>
-			if (!shape.authenticated || typeof row.mac === "string") return golden
+			if (!shape.authenticated || isSealedForm(golden) || typeof row.mac === "string") return golden
 			const { mac: _unsigned, ...signable } = row
 			return { ...golden, value: { ...signable, mac: await signDappSession(key, signable as unknown as Omit<DappSession, "mac">) } }
+		}),
+	)
+}
+
+async function sealGoldens(goldens: readonly Golden[]): Promise<Golden[]> {
+	return Promise.all(
+		goldens.map(async (golden) => {
+			if (!golden.sealed || isSealedForm(golden)) return golden
+			const shape: StoredShape = STORED_SHAPES[golden.shape]
+			const row = golden.value as Record<string, Json>
+			if (!shape.sealed || typeof row.profileId !== "string")
+				throw new Error(`${golden.id}: only a sealed shape's row with a profile seals`)
+			const keys = await goldenRowKeys(row.profileId)
+			const area = new MemoryStorageArea()
+			await sealedEntityStorage(golden.shape as SealedStoreName, area, () => keys).set(idOf(shape, golden.key), row as never)
+			// A keyed root stores the row under its keyed id, not the natural key it was authored at.
+			const [[key, value]] = [...area.data]
+			return { ...golden, key, value: JSON.parse(value as string) as Json }
 		}),
 	)
 }
@@ -243,7 +298,9 @@ function sliceOf(shape: StoredShape): string | undefined {
 	return undefined
 }
 
-export const isBackupSliced = (golden: Golden): boolean => sliceOf(STORED_SHAPES[golden.shape]) !== undefined
+/** A sealed golden is never sliced: a backup carries a profile's rows as its services decrypt them,
+ *  which the shape's plaintext goldens already prove. */
+export const isBackupSliced = (golden: Golden): boolean => !golden.sealed && sliceOf(STORED_SHAPES[golden.shape]) !== undefined
 
 /** A full backup carries every required slice, so one a store holds no golden of is carried empty,
  *  as a migration reading it requires. */
@@ -257,7 +314,7 @@ export const emptyBackup = (): Record<string, unknown[]> =>
 /** The goldens as the slices of a full backup's `data`. */
 function backupData(goldens: readonly Golden[]): Record<string, unknown[]> {
 	const data = emptyBackup()
-	for (const golden of goldens) {
+	for (const golden of goldens.filter(isBackupSliced)) {
 		const service = sliceOf(STORED_SHAPES[golden.shape])
 		const slice = service ? BACKUP_SLICE_REGISTRY[service] : undefined
 		if (!service || !slice) continue
@@ -272,9 +329,31 @@ function backupData(goldens: readonly Golden[]): Record<string, unknown[]> {
 	return data
 }
 
+/** The migration in `ack` that refuses every backup exported at `version` on purpose, if any: the
+ *  lowest acknowledged one above it, which the import names. */
+export function acknowledgedBlock(
+	version: number,
+	migrations: readonly Migration[],
+	ack: ReadonlySet<number> = IMPORT_BLOCKING_ACK,
+): number | undefined {
+	const blocking = migrations.map((m) => m.version).filter((v) => v > version && ack.has(v))
+	return blocking.length > 0 ? Math.min(...blocking) : undefined
+}
+
+/** A backup-sliced golden's backup decoding when an acknowledged migration refuses its stamp's backups. */
+export const REFUSED_BY_ACK = "refused by an acknowledged import-blocking migration"
+
 /** The same goldens as a full backup's slices, through the backup-import migrator and back. */
-async function decodeBackup(goldens: readonly Golden[], version: number, migrations: Migration[]): Promise<Decoded> {
+async function decodeBackup(
+	goldens: readonly Golden[],
+	version: number,
+	migrations: Migration[],
+	ack: ReadonlySet<number>,
+): Promise<Decoded> {
 	const migrated = await migrateBackupData({ data: backupData(goldens), backupSchemaVersion: version, migrations })
+	const block = acknowledgedBlock(version, migrations, ack)
+	if (block !== undefined && migrated.kind === "incompatible" && migrated.reason.includes(`migration ${block} `))
+		return Object.fromEntries(goldens.filter(isBackupSliced).map((golden) => [golden.id, REFUSED_BY_ACK]))
 	if (migrated.kind !== "noop" && migrated.kind !== "migrated")
 		throw new Error(`the backup migrator refused goldens at v${version}: ${JSON.stringify(migrated)}`)
 	const normalized = normalizeBackupData(migrated.data)
@@ -294,6 +373,7 @@ export async function decodeGoldens(
 	goldens: readonly Golden[],
 	stamps: readonly Pick<Stamp, "version">[],
 	migrations: Migration[],
+	ack: ReadonlySet<number> = IMPORT_BLOCKING_ACK,
 ): Promise<Decoding> {
 	const out: Decoding = { live: {}, backup: {}, keys: {}, stored: {} }
 	for (const [index, stamp] of stamps.entries()) {
@@ -302,7 +382,7 @@ export async function decodeGoldens(
 			Object.assign(out.live, live.decoded)
 			Object.assign(out.stored, live.stored)
 			out.keys[index] = [...new Set([...(out.keys[index] ?? []), ...live.keys])].sort()
-			Object.assign(out.backup, await decodeBackup(round, stamp.version, migrations))
+			Object.assign(out.backup, await decodeBackup(round, stamp.version, migrations, ack))
 		}
 	}
 	return out
@@ -328,12 +408,13 @@ export function changedShapes(prev: Pick<Stamp, "shapes">, cur: Pick<Stamp, "sha
 
 const sameRef = (a: StorageRef, b: StorageRef) => canonicalText(a) === canonicalText(b)
 const restricted = (record: ShapeRecord | undefined) =>
-	record !== undefined && (record.encoding === "structured" || record.engine || record.authenticated)
+	record !== undefined && (record.encoding === "structured" || record.engine || record.authenticated || record.sealed)
 
 /** What a downgrade of `name` from `prev` to `cur` would weaken, or `undefined`. */
 function downgradeOf(name: string, prev: ShapeRecord, cur: ShapeRecord): string | undefined {
 	if (prev.authenticated && !cur.authenticated) return `${name} drops its MAC check`
 	if (prev.engine && !cur.engine) return `${name} stops being engine state`
+	if (prev.sealed && !cur.sealed) return `${name} drops its seal`
 	if (prev.read === "codec" && cur.read === "described") return `${name} stops reading through its codec`
 	if (prev.encoding !== cur.encoding) return `${name} changes its encoding from ${prev.encoding} to ${cur.encoding}`
 	if (prev.options !== undefined && canonicalText(prev.options) !== canonicalText(cur.options ?? null))
@@ -355,9 +436,9 @@ function migrationProblems(prev: Stamp, cur: Stamp, changed: readonly string[], 
 		return ref && !changed.includes(name) && migration.writes.some((write) => sameRef(write, ref))
 	})
 	return [
-		...written.map((name) => `migration ${cur.version} writes ${name}, which is structured, engine or authenticated`),
+		...written.map((name) => `migration ${cur.version} writes ${name}, which is structured, engine, authenticated or sealed`),
 		...changed.flatMap((name) => {
-			if (restrictedNames.has(name)) return [`${name} is structured, engine or authenticated: no migration may change it`]
+			if (restrictedNames.has(name)) return [`${name} is structured, engine, authenticated or sealed: no migration may change it`]
 			const { ref } = cur.shapes[name] ?? prev.shapes[name] ?? {}
 			return ref && footprint.some((covered) => sameRef(covered, ref))
 				? []
@@ -381,8 +462,8 @@ function additiveProblems(cur: Stamp, changed: readonly string[]): string[] {
 
 /**
  * Why `cur` may not follow `prev`, empty when it may: a `+1` version names its registered migration,
- * whose footprint covers every changed or removed shape and none of them structured, engine or
- * authenticated; a same version carries an additive mark naming exactly the changed shapes and
+ * whose footprint covers every changed or removed shape and none of them structured, engine,
+ * authenticated or sealed; a same version carries an additive mark naming exactly the changed shapes and
  * removes none. No step weakens how a shape it keeps is read. Both stamps' restrictions apply.
  */
 export function justify(prev: Stamp, cur: Stamp, migrations: readonly Migration[]): string[] {
@@ -423,7 +504,7 @@ export async function pinOf(stamp: Stamp, goldens: readonly Golden[], index: num
 	return { stamp: await sha256(canonicalText(stamp)), goldens: await sha256(canonicalText(introducedBy(goldens, index))) }
 }
 
-/** The shapes a migration's footprint covers; a structured, engine or authenticated one never is. */
+/** The shapes a migration's footprint covers; a structured, engine, authenticated or sealed one never is. */
 function coveredBy(migration: Migration | undefined, stamp: Stamp): Set<string> {
 	const refs = migration ? [...migration.reads, ...migration.writes] : []
 	return new Set(
