@@ -33,7 +33,7 @@ PXE paths are under `@aztec-labs/pxe` `src/`; aztec-nr paths are the embedded v6
 - `storage/note_store/note_store.ts:52-63`: `addNotes(notes, scope)` keys a note by its siloed nullifier and adds `scope` to its scope set. `:104-198` `getNotes` filters by `owner` and by scope intersection, deduplicated.
 - `contract/helpers.ts:9-35`: `syncScope` runs `sync_state(scope)` with execution scopes `[scope]`; `contract/contract_sync_service.ts:150-220` syncs each scope apart. `debug/pxe_debug_utils.ts:64-87`: `getNotes` syncs `filter.scopes`, then reads the store.
 - `contract_function_simulator/oracle/utility_execution_oracle.ts:245-256`: `getKeyValidationRequest` throws unless an account in the execution's scopes holds the key.
-- `uint-note/src/uint_note.nr:73-82` (the same text in all three UintNote artifacts): `compute_nullifier_unconstrained` reads the owner's nullifier hiding key through that oracle. `aztec/src/messages/discovery/nonce_discovery.nr:98-120`: a note with no nullifier is skipped; a refused key throws, so discovery stores nothing either way.
+- `uint-note/src/uint_note.nr:73-82` (the same text in all three UintNote artifacts): `compute_nullifier_unconstrained` reads the owner's nullifier hiding key through that oracle. `aztec/src/messages/discovery/nonce_discovery.nr:98-120`: a note with no nullifier is skipped, so without the owner's key discovery stores nothing.
 - `aztec/src/note/note_message.nr:51-55`: `deliver` sends to the note's owner. The four schema classes deliver every note with `deliver` or `partial(to, ctx, to, completer)`.
 - Accounts: one frozen Schnorr class, salt 0 (`packages/aztec-runtime/src/account/instantiation-descriptor.ts:26`), each account's secret key from its own account seed (`address-freeze.ts:58-66`), so two accounts of a profile never share keys.
 
@@ -41,5 +41,5 @@ PXE paths are under `@aztec-labs/pxe` `src/`; aztec-nr paths are the embedded v6
 
 - `encryption-at-rest-1` A4 (`origin/encryption-at-rest-1-a4`) and `pxe-cost-1` A1 (#1038) touch `incoming-transfer/` and `token/`; this plan touches neither.
 - `e2e-stores-1` (#1063) is merging; no overlap.
-- `c71f43287` (test only) made the scenarios stub hand the note to one account, as the PXE scopes it.
+- #1043 (test side) made the scenarios stub hand the note to one account, as the PXE scopes it.
 - Closed known limits searched (`gh issue list --state closed --label known-limit --search "note scope owner"`): #384, #597, #1034; none covers note attribution.

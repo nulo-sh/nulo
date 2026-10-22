@@ -3,8 +3,8 @@
 ## Path consult (Codex gpt-6.1-sol, high, read-only)
 
 - **r0**: the first run returned a provider error before any review. Reworded and rerun.
-- **r1**: the facts hold (NoteStore scopes, per-scope sync, the key oracle's scope check, UintNote's owner-key nullifier, owner-only delivery). A refused key throws during discovery rather than returning none; either way nothing is stored. Partial-note completion and the offchain inbox pass the same gate. Recommended `owner: account` on the incoming reads, the developer viewer kept scope-only.
-- **r2**: pushback: the filter closes no path the honest-discovery trace leaves open, and the house rule fixes causes, not payloads. Codex withdrew the filter: `approve (a)`, #1049 a known limit, its public reopening conditions as written in plan.md.
+- **r1**: the facts hold (NoteStore scopes, per-scope sync, the key oracle's scope check, UintNote's owner-key nullifier, owner-only delivery). Without the owner's key no nullifier is computed, so nothing is stored. Partial-note completion and the offchain inbox pass the same gate. Recommended `owner: account` on the incoming reads, the developer viewer kept scope-only.
+- **r2**: pushback: the filter closes no path the per-scope sync trace leaves open, and the house rule fixes causes, not payloads. Codex withdrew the filter: `approve (a)`, #1049 a known limit, its public reopening conditions as written in plan.md.
 - Decision: D1 adopted. The tripwire (D2) came after, from the `*.sources.test.ts` precedent found while drafting.
 
 ## Dual audit

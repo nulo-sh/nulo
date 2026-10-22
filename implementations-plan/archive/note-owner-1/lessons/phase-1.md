@@ -5,3 +5,5 @@
 - Gate, 2026-10-22: focused run 5/5 green; `bun run lint` 0; `bun run typecheck:all` 0; `bun run test:all` RC=0, every package `Exited with code 0`, no `FAIL`.
 - Close-out order: a refused `git rm` (STATUS.md had local edits) let the rename-only archive commit land before the Outcome commit; the move still sits alone in its commit, and the Outcome, this log and the index lines follow it.
 - Phase 2 gate, 2026-10-22: `bun run check:plans` 0 findings; `bun run test:ci-gating` 687 pass, 0 fail.
+- Review loop r1 (Codex, beside one Opus review): dead-branch edits passed the sync and gate rules; the rules now match `syncScope`'s whole body, its caller's per-scope loop and the whole none branch, with controls for the `if (false)` call, the nested dead `else` push, the service passing `scopesToSync` and a batched call before the loop.
+- Review loop r2 (Codex): a push in a new branch before the gate passed; the gate now also counts the result vector's three uses, with that mutant as a control. Focused run 5/5 green.
