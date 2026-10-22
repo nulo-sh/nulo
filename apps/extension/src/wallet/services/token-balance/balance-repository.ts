@@ -12,7 +12,13 @@
  *   identical to the old `array_max(map(+)) + 1` on every legitimate store.
  */
 
-import { type PreparedWrite, parseEnvelope, type RowKeysSource, type SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import {
+	type ConversionLock,
+	type PreparedWrite,
+	parseEnvelope,
+	type RowKeysSource,
+	type SealedEntityStorage,
+} from "@/wallet/storage/sealed-entity-storage"
 import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { type NumericIdBatch, nextNumericId, numericIdBatch } from "@/wallet/services/id-allocators"
 import { canonicalNumericStorageId, purgeMalformedRows } from "@/wallet/services/purge-rows"
@@ -45,11 +51,7 @@ export class BalanceRepository {
 
 	/** Seals the profile's plaintext rows, one `withLock` section per row; a row `skip` names at
 	 *  its commit is left as it is. */
-	public sealLegacy(
-		profileId: string,
-		withLock: <R>(fn: () => Promise<R>) => Promise<R>,
-		skip: (id: number) => boolean,
-	): Promise<number> {
+	public sealLegacy(profileId: string, withLock: ConversionLock, skip: (id: number) => boolean): Promise<number> {
 		return this.storage.sealLegacy(profileId, withLock, (storageId) => {
 			const id = canonicalNumericStorageId(storageId)
 			return id !== undefined && skip(id)

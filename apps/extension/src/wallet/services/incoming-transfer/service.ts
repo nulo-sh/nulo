@@ -345,14 +345,12 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  only while its section still owns the lock and no deleter runs, as a receipt does, so a wipe
 	 *  that a watchdog handoff let in never finds a sealed copy it did not list. */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		let ticket: () => boolean = () => false
-		const withLock = <R>(fn: () => Promise<R>) =>
-			this.withServiceLock((isCurrent) => {
-				ticket = isCurrent
-				return fn()
-			})
 		try {
-			await this.repo.sealLegacy(profileId, withLock, () => ticket() && this.deletersRunning === 0)
+			await this.repo.sealLegacy(
+				profileId,
+				(fn) => this.withServiceLock(fn),
+				() => this.deletersRunning === 0,
+			)
 		} catch (error) {
 			this.logWarn("sealing the profile's plaintext incoming rows failed; the next unlock retries", { error })
 		}

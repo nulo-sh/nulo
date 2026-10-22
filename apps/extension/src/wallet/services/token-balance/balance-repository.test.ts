@@ -96,7 +96,7 @@ describe("BalanceRepository", () => {
 		expect(
 			await repo.sealLegacy(
 				"p1",
-				(fn) => fn(),
+				(fn) => fn(() => true),
 				(id) => id === 1,
 			),
 		).toBe(1)

@@ -71,6 +71,10 @@ export function commitSealedTogether(area: MinimalStorageArea, writes: readonly 
 	return removals.length > 0 ? written.then(() => area.remove(removals)) : written
 }
 
+/** A lock section for one row's conversion; `isCurrent` holds while the section still owns the
+ *  lock, as `Lock.withLock` passes it. */
+export type ConversionLock = <R>(fn: (isCurrent: () => boolean) => Promise<R>) => Promise<R>
+
 /** Where a readable row is stored: its storage id, the natural id it answers to, the profile it
  *  belongs to (none for an ownerless row) and whether it is sealed. */
 export type Located = { storageId: string; naturalId: string; owner: string | undefined; sealed: boolean }
@@ -292,33 +296,31 @@ export class SealedEntityStorage<T> {
 	 * the profile still holds the keys the pass began with, so a pass outliving the profile's
 	 * deletion writes nothing after the deletion's keyless sweep. Returns the rows sealed.
 	 */
-	public async sealLegacy(
-		profileId: string,
-		withLock: <R>(fn: () => Promise<R>) => Promise<R>,
-		skip?: (naturalId: string) => boolean,
-	): Promise<number> {
+	public async sealLegacy(profileId: string, withLock: ConversionLock, skip?: (naturalId: string) => boolean): Promise<number> {
 		const keys = this.keysFor(profileId)
 		if (!keys) return 0
 		let converted = 0
 		for (const [storageId, text] of await this.inner.rawStringEntries()) {
 			const parsed = tryParse(text)
 			if (!parsed.ok || parseEnvelope(parsed.value) || this.ownerOf(parsed.value, storageId) !== profileId) continue
-			if (await withLock(() => this.sealLegacyRow(keys, profileId, storageId, text, skip))) converted++
+			if (await withLock((isCurrent) => this.sealLegacyRow(keys, profileId, storageId, text, isCurrent, skip))) converted++
 		}
 		return converted
 	}
 
-	/** `skip` is asked after the row's last read, synchronously before its commit. */
+	/** `isCurrent` and `skip` are asked after the row's last read, synchronously before its commit:
+	 *  a section the lock's watchdog displaced may have read the row before a purge deleted it. */
 	private async sealLegacyRow(
 		keys: RowKeys,
 		owner: string,
 		naturalId: string,
 		text: string,
+		isCurrent: () => boolean,
 		skip?: (naturalId: string) => boolean,
 	): Promise<boolean> {
 		const legacyKey = this.prefix + naturalId
 		// Checked in the continuation that dispatches the commit, with no await between.
-		const stillHeld = (stored: unknown) => stored === text && this.keysFor(owner) === keys && !skip?.(naturalId)
+		const stillHeld = (stored: unknown) => stored === text && this.keysFor(owner) === keys && isCurrent() && !skip?.(naturalId)
 		if (!this.options.keyed) {
 			const items = { [legacyKey]: await this.envelope(keys, owner, legacyKey, text) }
 			if (!stillHeld((await this.area.get(legacyKey))[legacyKey])) return false

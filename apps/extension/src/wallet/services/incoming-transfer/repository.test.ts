@@ -336,7 +336,7 @@ describe("IncomingTransferRepository — sealed at rest", () => {
 
 		await repo.sealLegacy(
 			"p1",
-			(fn) => fn(),
+			(fn) => fn(() => true),
 			() => true,
 		)
 
@@ -392,7 +392,7 @@ describe("IncomingTransferRepository — sealed at rest", () => {
 
 		await repo.sealLegacy(
 			"p1",
-			(fn) => fn(),
+			(fn) => fn(() => true),
 			() => true,
 		)
 
@@ -416,7 +416,7 @@ describe("IncomingTransferRepository — sealed at rest", () => {
 
 		await repo.sealLegacy(
 			"p1",
-			(fn) => fn(),
+			(fn) => fn(() => true),
 			() => true,
 		)
 

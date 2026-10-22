@@ -21,7 +21,12 @@
  * nothing.
  */
 
-import { commitSealedTogether, type RowKeysSource, type SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import {
+	commitSealedTogether,
+	type ConversionLock,
+	type RowKeysSource,
+	type SealedEntityStorage,
+} from "@/wallet/storage/sealed-entity-storage"
 import { sealedEntityStorage } from "@/wallet/storage/stores"
 import type { MinimalStorageArea } from "@nulo/wallet-core/storage"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
@@ -61,7 +66,7 @@ export class IncomingTransferRepository {
 
 	/** Seals `profileId`'s plaintext rows of all five tables, one `withLock` section per row; a row
 	 *  commits only while `stillHeld` holds at its commit. */
-	public async sealLegacy(profileId: string, withLock: <R>(fn: () => Promise<R>) => Promise<R>, stillHeld: () => boolean): Promise<void> {
+	public async sealLegacy(profileId: string, withLock: ConversionLock, stillHeld: () => boolean): Promise<void> {
 		for (const store of [this.trust, this.records, this.cursors, this.outbox, this.arrivals] as const) {
 			await (store as SealedEntityStorage<unknown>).sealLegacy(profileId, withLock, () => !stillHeld())
 		}
