@@ -7,3 +7,5 @@
 - 2026-10-22: A1 phase 1 green (self-test red on base, green after; lint, typecheck:all, test, test:all); D7 module split.
 - 2026-10-22: A1 Codex r1 clean; Opus review 3 findings fixed (eight redundant caller removals dropped); smoke Chrome running.
 - 2026-10-22: smoke Chrome retry 0 green (61 passed, 9 skipped, 31 min, residue 0); the two re-indented smoke files green again at 4a95e6650.
+- 2026-10-22: smoke Firefox retry 0 green (65 passed, 5 skipped, 51 min, residue 0).
+- 2026-10-22: network Chrome retry 0, eight caller files green (17 passed, 9 min, residue 0). Phase 2 green.
