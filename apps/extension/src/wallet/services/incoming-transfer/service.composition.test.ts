@@ -6,7 +6,7 @@
  * schedulers too and record each arm's reads by contract. See
  * `apps/extension/tests/COMPOSITION-TESTS.md`.
  */
-import { afterEach, describe, expect, test, vi } from "vitest"
+import { afterAll, afterEach, describe, expect, test, vi } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import type { ConfigProp, IConfig } from "@/wallet/config"
@@ -27,13 +27,20 @@ import { TaskService } from "@/wallet/services/task/service"
 import { PriceService } from "@/wallet/services/price/service"
 import type { RawNote } from "@/wallet/services/note/spec"
 import type { PublicEventReader } from "./public-event-indexer"
-import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { rowKeysForEveryProfile, trackSubtleCrypto } from "@/wallet/storage/sealed-entity-storage.testing"
 import { IncomingTransferRepository } from "./repository"
 import { IncomingTransferService } from "./service"
 import { type IncomingNoteRecord, type IncomingPublicEventRecord, noteRecordId, publicRecordId } from "./spec"
 
 /** One key for every profile, as the profile fake holds it. */
 const { rowKeys: ROW_KEYS } = await rowKeysForEveryProfile()
+// Every row is sealed, so a fake-clock step waits for the crypto behind the writes it lets run.
+const subtleCalls = trackSubtleCrypto()
+afterAll(() => subtleCalls.restore())
+const advance = async (ms: number) => {
+	await vi.advanceTimersByTimeAsync(ms)
+	await subtleCalls.settled()
+}
 
 const CONTRACT = `0x${"c3".repeat(32)}`
 const TOKEN = { id: 7, profileId: "p1", chainId: 1, contract: CONTRACT, symbol: "TKA", decimals: 18 }
@@ -206,12 +213,12 @@ describe("IncomingTransferService composition — the Allow, in-process", () => 
 		vi.useFakeTimers()
 		const { release, held } = parkVisibility()
 		const call = service.setTrustAllow("p1", "n1", CONTRACT)
-		for (let i = 0; i < 20 && !held.reached; i++) await vi.advanceTimersByTimeAsync(0)
+		for (let i = 0; i < 20 && !held.reached; i++) await advance(0)
 		expect(held.reached).toBe(true)
 
-		await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
+		await advance(5 * 60_000 + 1)
 		release()
-		await vi.advanceTimersByTimeAsync(0)
+		await advance(0)
 
 		expect(await call).toBe(false)
 		expect(await repo.getTrust("p1", "n1", CONTRACT)).toMatchObject({ state: "pending" })
