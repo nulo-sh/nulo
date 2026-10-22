@@ -212,7 +212,7 @@ Every gate also runs `bun run lint` and `bun run typecheck:all` (exit 0), and `b
 
 ## Post-implementation
 
-The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `2f591ddd`. Specific to this plan:
+The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `2f591ddd`. Specific to this plan:
 - **While implementing:** comments to CLAUDE.md § Code-comment style; attempts in `lessons/phase-N.md`; `agent-worktree status mainnet-arrival-1 "<arc> phase N green: <next>"` at each gate; three failures on one step ends the arc as `ARC_FAILED`.
 - **Review loop, per arc:** `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol` over `git diff origin/dev...HEAD`, with this plan, the ledger, the arc map ("arc N of 3: A1 the offer record and pass, A2 the arrival, A3 the update e2e and the close-out"), the adversarial ask and the standard's two rules verbatim; `resume-codex.sh` until a round has no new material finding, hard stop at three rounds. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) beside round 1. Not stacked, so no cross-arc pass; each later arc's prompt also asks for drift from the earlier ones.
 - **Delivery:** as above, then `gh pr checks <n> --watch` once; a known flake one rerun, breakage a fix and the loop again. Never merge.
