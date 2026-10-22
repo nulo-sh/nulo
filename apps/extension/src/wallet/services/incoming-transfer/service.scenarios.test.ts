@@ -5195,8 +5195,8 @@ describe("IncomingTransferService — arrival floors", () => {
 
 	test("adding a token floors its history before the scan commits it", async () => {
 		const noteSvc = makeNoteStub()
-		// A note has one recipient, as the PXE scopes it: a record id names no account, so a note both
-		// accounts were handed would go to whichever account's scan committed it first.
+		// Only 0xa is handed the note. A record id names no account and the first commit keeps it, so
+		// a note handed to both accounts would land on whichever account's scan committed first.
 		noteSvc.getNotesRaw.mockImplementation(async (_n: string, account: string, contract: string) =>
 			account === "0xa" && contract === tokenB.contract ? [note({ contract: tokenB.contract, l2BlockNumber: 50 })] : [],
 		)
