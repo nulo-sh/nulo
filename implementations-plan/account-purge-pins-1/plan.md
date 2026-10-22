@@ -14,6 +14,15 @@ budget: one Explore recon agent (sonnet); in-place probes; one Codex audit (gpt-
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-22. **Status:** completed.
+- **Shipped:** #1094 (arc 1, closes #1091): the three purge pins list both roots, assert the rename's write landed and release it on the purge's observed lock request instead of a zero timer; a fourth case pins reconcile's delete lock on its own. No product change.
+- **Dispositions:** exact sealed keys rejected for root prefixes (D1); a timer or poll rejected for the observed request (D2); `:1281` alone left unpinned, with no consequence (D5); the controls stay scratch (D6). No `lessons.md` promotion: it is at its 8 KiB budget and no entry is superseded; the technique (wrap `withLock` to see a request queue, race it against the caller settling) stays in D2 and [lessons/phase-1.md](lessons/phase-1.md).
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` below; never run them.
+
 # account-purge-pins-1: the purge pins see the sealed row and wait on the lock, not a timer
 
 One arc, one PR against `dev`, test-only. The three pins "AccountService purges wait for a rename holding the same row" (`apps/extension/src/wallet/services/account/service.test.ts:878-956`) look for the plaintext keys only, which a rename always removes, and give the purge a zero-timer head start. The arc makes them check both roots, orders the release on the purge's observed lock request, and adds one case for reconcile's delete lock. Recon: [recon.md](recon.md). Probes and consults: [lessons/phase-0.md](lessons/phase-0.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none).

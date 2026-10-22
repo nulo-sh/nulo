@@ -1,8 +1,0 @@
-# account-purge-pins-1 status
-
-- 2026-10-22 adopted the lane worktree at `c49430a6d`; recon done (one Sonnet explorer); probes on a scratch copy with #1089's helper applied, reverted.
-- 2026-10-22 plan drafted (tier light, one arc, test-only).
-- 2026-10-22 round 1: Codex conditional approve (the #1089 wait, the soak); Opus conditional approve (pin `:1291`, four low). Codex r2 took the fourth case; plan revised; Codex r3 verifying.
-- 2026-10-22 Codex r3 approve; plan committed. Arc 1 waits for #1089 on `dev` (auto-continue).
-- 2026-10-22 Phase 1 gate: pass (BASE `50eac0012`; C1-C4 as expected; soak 100/100 at 63 passed; account unit files, test:all, lint, typecheck:all exit 0). Review loop next.
-- 2026-10-22 review loop converged: Codex r1 clean, Opus clean (one doc nit applied), Codex r2 clean. Final gates next.
