@@ -1,7 +1,7 @@
 ---
 plan: list-perf-1
 tier: light
-status: approved by the orchestrator (A3, A4); #1037 moved to recipient-cap-1 (D11); arc 1 in progress
+status: completed with its one PR; #1037 moved to recipient-cap-1 (D11)
 issues: "#1036 (arc 1); #1037 moved to recipient-cap-1"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,24 @@ base: origin/dev at 5711a1bc3 (the arc rebases its evidence on dev after #1027)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-22.
+- **Status:** closed with its one PR (`worktree-list-perf-1` → `dev`, `Closes #1036`), which carries this close-out; the merge closes the plan. #1037 left the plan for recipient-cap-1 (D11) and stays open there.
+- **Shipped:**
+  - **`Icon` without CSS `v-bind`.** The hover colour reaches the `<svg>` as an inline `--icon-hover`, the same value on the same element, so no icon runs `useCssVars`. 40 base/head pixel pairs (Home, Holdings, Contacts, the bottom bar, the hovered FPC copy icon; light and dark; DPR 1 and 2; Chrome and Firefox) differ in 0 pixels: [screenshots/pixel-compare.md](screenshots/pixel-compare.md).
+  - **The speed-up**, A/B/A on Chrome: the 5,000-row Contacts page opens in 6.06 s and 4.80 s against base's 62.2 s, Activity in 8.05 s and 5.38 s against 63.3 s ([lessons/phase-3.md](lessons/phase-3.md)).
+  - **The ban.** `css-v-bind-ban.test.ts` refuses any CSS `v-bind` (the compiler's own `cssVars`) and any hand-written `useCssVars` call (by syntax) under `SCAN_ROOTS`, against a reviewed list (content-keyed, a reason per entry, it only shrinks; empty at landing). It is red on the base `Icon.vue`.
+- **Dispositions:**
+  - The orchestrator approved the plan with A3 and A4. #1037, Phase 2 and D3-D10 moved to recipient-cap-1 (D11), and #1037 carries a comment saying so. D10's known limit needs the window's code, so the lane that ships the window files it.
+  - Review: Codex r1 approved; the Opus leg's four points were folded as test changes (D12); Codex r2's text-match finding was fixed by syntax; Codex r3 approved ([lessons/phase-4.md](lessons/phase-4.md)).
+  - Rejected: SFCs outside `SCAN_ROOTS` and an aliased `useCssVars` callee, limits every source guard shares; no such source exists.
+  - Size: 169 lines, over the light target by the window design kept for recipient-cap-1.
+- **Lessons:** none promoted. `lessons.md` sits at its budget, and the one new gotcha (the popup's CSP refuses an injected `<style>`, so a spec restyles through a constructed sheet) is in [lessons/phase-3.md](lessons/phase-3.md).
+- **Known limits:** none.
+- **Open items:** none (#1037 is recipient-cap-1's).
+- **Seeds retired:** the `/goal` and `/loop` below.
 
 # list-perf-1: long lists in the popup
 
