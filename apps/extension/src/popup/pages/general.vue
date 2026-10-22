@@ -112,6 +112,8 @@ function openPhrase() {
  *  still in flight would close with it. */
 async function onGetStartedSelect(item) {
 	if (ITEM_ROUTES[item]) {
+		// Unawaited: a route push keeps the popup, and the write, alive.
+		if (item === "presto") void getStarted.mark("prestoOpened")
 		router.push(ITEM_ROUTES[item])
 		return
 	}
