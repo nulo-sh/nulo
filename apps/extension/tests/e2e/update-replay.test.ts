@@ -52,6 +52,7 @@ import { BACKUP_SLICE_REGISTRY } from "@/wallet/services/backup/backup-migration
 import { backupProblems } from "@/wallet/storage/stored-shapes/backups"
 import {
 	PREVIOUS_TESTNET_CHAIN_ID,
+	type ChainSnapshot,
 	type StoredAccount,
 	readAccounts,
 	readNetwork,
@@ -132,22 +133,24 @@ const otherChains = (recording: Recording): Array<{ id: string; chainId: number 
 		.filter((network) => network.kind !== "testnet")
 		.map((network) => ({ id: network.id as string, chainId: network.chainId as number }))
 
-/** Every stored row of each network but Testnet: the rows naming its chain id, and the incoming
- *  rows, whose keys name its network id instead. A sealed root's rows are left out: the unlock seals
- *  them, which changes how they are stored, and {@link expectHistory} reads them back. */
-function otherNetworks(page: Page, recording: Recording): Promise<Array<Record<string, unknown>>> {
+/** What the wallet reads of each network but Testnet: its row and accounts as their services read
+ *  them, and every other stored row naming its chain id or, for the incoming roots, its network id.
+ *  A sealed root's stored rows are left out: the unlock seals them, which changes how they are
+ *  stored, and {@link expectHistory} reads them back. */
+function otherNetworks(page: Page, recording: Recording): Promise<ChainSnapshot[]> {
 	return Promise.all(
 		otherChains(recording).map(async ({ id, chainId }) => {
-			const rows = {
-				...(await snapshotChain(page, chainId, id)),
-				...(await page.evaluate(async (network: string) => {
-					const all = await chrome.storage.local.get(null)
-					return Object.fromEntries(
-						Object.entries(all).filter(([key]) => key.startsWith("nulo:core:incoming-") && key.includes(`|${network}|`)),
-					)
-				}, id)),
-			}
-			return Object.fromEntries(Object.entries(rows).filter(([key]) => !SEALED_ROOTS.some((root) => key.startsWith(`${root}@`))))
+			const { rows, ...read } = await snapshotChain(page, chainId, id)
+			const incoming = await page.evaluate(async (network: string) => {
+				const all = await chrome.storage.local.get(null)
+				return Object.fromEntries(
+					Object.entries(all).filter(([key]) => key.startsWith("nulo:core:incoming-") && key.includes(`|${network}|`)),
+				)
+			}, id)
+			const stored = Object.entries({ ...rows, ...incoming }).filter(
+				([key]) => !SEALED_ROOTS.some((root) => key.startsWith(`${root}@`)),
+			)
+			return { ...read, rows: Object.fromEntries(stored) as Record<string, string> }
 		}),
 	)
 }

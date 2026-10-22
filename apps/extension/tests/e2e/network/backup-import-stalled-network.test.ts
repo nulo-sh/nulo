@@ -40,6 +40,7 @@ import { readStage } from "../helpers/crash-truth"
 import { gotoPopupImport, POPUP_IMPORT_SHELL, submitFullBackupImport, TEST_PASSWORD, writeBackupToTemp } from "../helpers/import-drivers"
 import { pressEscape } from "../helpers/pointer-probes"
 import { nodeInfoResult, startStub } from "../helpers/rpc-stub"
+import { readSealedRows } from "../fixtures/sealed-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -64,15 +65,8 @@ function stalledTestnetBackup(backup: PlainBackup, funded: string, tokenAddress:
 }
 
 async function networkIdOfChain(page: Page, chainId: number): Promise<string> {
-	const id = await page.evaluate(async (chain: number) => {
-		const all = await chrome.storage.local.get(null)
-		for (const [key, value] of Object.entries(all)) {
-			if (!key.startsWith("nulo:core:networks@")) continue
-			const row = JSON.parse(value as string) as { id?: string; chainId?: number }
-			if (row.chainId === chain) return row.id ?? null
-		}
-		return null
-	}, chainId)
+	const id = (await readSealedRows<{ id?: string; chainId?: number }>(page, "networks")).find(({ row }) => row.chainId === chainId)?.row
+		.id
 	if (!id) throw new Error(`no seeded network serves chain ${chainId}`)
 	return id
 }

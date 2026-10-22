@@ -1,7 +1,14 @@
 import { expect, inject } from "vitest"
 import { openPopup, test, waitForHash } from "../fixtures/extension"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { INCOMING_SCAN_INTERVAL_MS, getAccountAddress, lockWallet, switchToLocalNetwork, unlockUntilIncomingRow } from "../fixtures/helpers"
+import {
+	INCOMING_SCAN_INTERVAL_MS,
+	getAccountAddress,
+	lockWallet,
+	readActiveNetwork,
+	switchToLocalNetwork,
+	unlockUntilIncomingRow,
+} from "../fixtures/helpers"
 import { readSealedRows } from "../fixtures/sealed-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -152,19 +159,9 @@ test.skipIf(!hasConfig)("C2 — trust prompt re-fires after popup close + reopen
 	// `appStore.network.id` and passes to `replayPendingPrompts` (filtered at
 	// service.ts:712). Taking the first `nulo:core:networks@*` key picks the
 	// first-SEEDED network, which need not be the active one, and then the
-	// pending-trust filter finds 0 rows and the prompt never fires. Read the
-	// per-profile active-network pointer instead.
-	const network = await seedPage.evaluate(async (profileId: string) => {
-		const activeKey = `nulo:core:active-network@${profileId}`
-		const activeId = (await chrome.storage.local.get(activeKey))[activeKey]
-		if (typeof activeId !== "string") return null
-		const rowKey = `nulo:core:networks@${activeId}`
-		const raw = (await chrome.storage.local.get(rowKey))[rowKey]
-		if (typeof raw !== "string") return null
-		const chainId = (JSON.parse(raw) as { chainId: number }).chainId
-		return { id: activeId, chainId }
-	}, triple.profileId)
-	if (!network) throw new Error("could not resolve the active network id")
+	// pending-trust filter finds 0 rows and the prompt never fires. Ask the
+	// network service for the active network instead.
+	const network = await readActiveNetwork(seedPage)
 	const networkId = network.id
 
 	const contract = `0x${"cc".repeat(32)}`

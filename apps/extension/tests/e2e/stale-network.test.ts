@@ -38,6 +38,7 @@ import {
 	PREVIOUS_TESTNET_CHAIN_ID,
 	readAccounts,
 	readNetwork,
+	readNetworkRows,
 	readTakeoverTrace,
 	TAKEOVER,
 	takeoverScreen,
@@ -92,9 +93,10 @@ describe("stale network", () => {
 		])
 		const local = await readNetwork(page, "local")
 		const localBefore = await snapshotChain(page, local.chainId, local.id)
+		const networks = await readNetworkRows(page)
 
 		await lockWallet(page)
-		await seedStaleNetwork(page, "network-reset")
+		await seedStaleNetwork(page, "network-reset", { networks })
 		await ensureUnlocked(page)
 		expect(await takeoverScreen(page)).toBe("network-reset")
 		expect(await page.$('[data-testid="account-address-copy"]')).toBeNull()
@@ -156,9 +158,10 @@ describe("stale network", () => {
 		await closeStuckPopup(page)
 		const before = await readAccounts(page, CHAIN_IDS.TESTNET)
 		expect(before.map((a) => a.type).sort()).toEqual([0, 0, 1])
+		const networks = await readNetworkRows(page)
 
 		await lockWallet(page)
-		await seedStaleNetwork(page, "address-change", { hideIndex: 1 })
+		await seedStaleNetwork(page, "address-change", { hideIndex: 1, networks })
 		await ensureUnlocked(page)
 		expect(await takeoverScreen(page)).toBe("new-addresses")
 
@@ -181,8 +184,9 @@ describe("stale network", () => {
 	}, async ({ registeredExtensionPerTest: ctx }) => {
 		const page = await openPopup(ctx)
 		await waitForHash(page, "#/popup/general", 30_000)
+		const networks = await readNetworkRows(page)
 		await lockWallet(page)
-		const { networkId } = await seedStaleMainnet(page)
+		const { networkId } = await seedStaleMainnet(page, networks)
 		const mainnetBefore = await snapshotChain(page, E2E_MAINNET_CHAIN_ID, networkId)
 		await ensureUnlocked(page)
 
@@ -202,16 +206,21 @@ describe("stale network", () => {
 	}, async ({ registeredExtensionPerTest: ctx }) => {
 		const page = await openPopup(ctx)
 		await waitForHash(page, "#/popup/general", 30_000)
+		const networks = await readNetworkRows(page)
 		await lockWallet(page)
-		await seedStaleNetwork(page, "network-reset")
-		await addNetwork(page, {
-			name: "My Testnet",
-			kind: "custom",
-			chainId: CHAIN_IDS.TESTNET,
-			l1ChainId: TESTNET_L1_CHAIN_ID,
-			movedAccount: false,
-			active: false,
-		})
+		await seedStaleNetwork(page, "network-reset", { networks })
+		await addNetwork(
+			page,
+			{
+				name: "My Testnet",
+				kind: "custom",
+				chainId: CHAIN_IDS.TESTNET,
+				l1ChainId: TESTNET_L1_CHAIN_ID,
+				movedAccount: false,
+				active: false,
+			},
+			networks,
+		)
 		await ensureUnlocked(page)
 		expect(await takeoverScreen(page)).toBe("already-added")
 

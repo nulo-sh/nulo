@@ -146,13 +146,9 @@ test.skipIf(!hasConfig)(
 			await importFullBackup(page2, filePath, TEST_PASSWORD, POPUP_IMPORT_SHELL)
 
 			// ── 4a. The token row holds the chain's metadata once the import ends ──
-			const restoredToken = await page2.evaluate(async (contract) => {
-				const all = await chrome.storage.local.get()
-				return Object.entries(all)
-					.filter(([k]) => k.startsWith("nulo:core:tokens@"))
-					.map(([, v]) => JSON.parse(v as string) as Record<string, unknown>)
-					.find((row) => String(row.contract).toLowerCase() === contract)
-			}, fundedToken)
+			const restoredToken = (await readSealedRows(page2, "tokens")).find(
+				({ row }) => String(row.contract).toLowerCase() === fundedToken,
+			)?.row
 			expect(restoredToken).toMatchObject(chainMetadata)
 
 			// ── 4. Provenance assertion over every stored tx row ────────────

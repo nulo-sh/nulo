@@ -34,6 +34,7 @@ import { seedLegalAcceptance } from "./fixtures/wallet-pages"
 import { FIRST_ACCOUNT_NAME, gotoAccounts } from "./helpers/account-io"
 import { pointerClick, waitForSheet } from "./helpers/legal-drivers"
 import { ARRIVAL, readSurfaceTrace, type Surfaces, traceSurfaces } from "./helpers/network-arrival"
+import { ACCOUNTS, accountRows, accountScope, readNetworkRows, storedEntries } from "./helpers/identity-rows"
 import { seedStaleNetwork, takeoverScreen } from "./helpers/stale-network"
 
 const HOME = '[data-testid="tokens-menu-trigger"]'
@@ -76,6 +77,21 @@ function accountsByChain(entries: Entries): Record<string, Row[]> {
 	for (const { chainId, address, name, index, type, visible } of rowsOf(entries, "accounts")) {
 		byChain[String(chainId)] ??= []
 		byChain[String(chainId)]?.push({ address, name, index, type, visible })
+	}
+	return byChain
+}
+
+/** The networks the unlocked wallet reads, by id, as the release's stored rows sort. */
+const readNetworks = async (page: Page): Promise<Row[]> => (await readNetworkRows(page)).sort((a, b) => a.id.localeCompare(b.id))
+
+/** {@link accountsByChain} as the unlocked wallet reads them, once the update has sealed the rows. */
+async function readAccountsByChain(page: Page): Promise<Record<string, Row[]>> {
+	const chains = new Set(Object.keys(await storedEntries(page, [ACCOUNTS])).flatMap((key) => accountScope(key)?.chainId ?? []))
+	const byChain: Record<string, Row[]> = {}
+	for (const chainId of chains) {
+		const rows = (await accountRows(page, chainId)).sort((a, b) => a.address.localeCompare(b.address))
+		if (rows.length > 0)
+			byChain[String(chainId)] = rows.map(({ address, name, index, type, visible }) => ({ address, name, index, type, visible }))
 	}
 	return byChain
 }
@@ -161,10 +177,11 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM)(
 
 				const arrived = await readLocalStorage(ctx)
 				expect(offerRecords(arrived)).toEqual([ANNOUNCED])
-				const added = networks(arrived).filter((row) => row.kind === E2E_EXTRA_SEED.kind)
+				const read = await readNetworks(page)
+				const added = read.filter((row) => row.kind === E2E_EXTRA_SEED.kind)
 				expect(added.map(identity)).toEqual([identity(E2E_EXTRA_SEED)])
 				// The deleted default stays deleted, and the release's own row is left as it was.
-				expect(networks(arrived).filter((row) => row.kind !== E2E_EXTRA_SEED.kind)).toEqual(networks(before))
+				expect(read.filter((row) => row.kind !== E2E_EXTRA_SEED.kind)).toEqual(networks(before))
 
 				// Closed unanswered, it is back at the next open.
 				page = await reopen(ctx, page)
@@ -175,7 +192,7 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM)(
 				const answered = await readLocalStorage(ctx)
 				expect(offerRecords(answered)).toEqual([OFFERED])
 				expect(valuesOf(answered, "activeNetwork")).toEqual(valuesOf(before, "activeNetwork"))
-				expect(accountsByChain(answered)).toEqual(accountsByChain(before))
+				expect(await readAccountsByChain(page)).toEqual(accountsByChain(before))
 				expect(await updateProblems(before, answered)).toEqual([])
 				await navigateByHash(page, "#/popup/settings/networks", 15_000)
 				for (const name of [E2E_EXTRA_SEED.name, "Testnet"]) {
@@ -233,8 +250,8 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM)(
 
 				const arrived = await readLocalStorage(ctx)
 				expect(offerRecords(arrived)).toEqual([ANNOUNCED])
-				expect(chainOf(arrived, "testnet")).toBe(CHAIN_IDS.TESTNET)
-				expect(accountsByChain(arrived)).toEqual({ [CHAIN_IDS.TESTNET]: accountsByChain(before)[String(releaseTestnet)] })
+				expect((await readNetworks(page)).find((row) => row.kind === "testnet")?.chainId).toBe(CHAIN_IDS.TESTNET)
+				expect(await readAccountsByChain(page)).toEqual({ [CHAIN_IDS.TESTNET]: accountsByChain(before)[String(releaseTestnet)] })
 				await stay(page)
 				expect(offerRecords(await readLocalStorage(ctx))).toEqual([OFFERED])
 				await page.close()

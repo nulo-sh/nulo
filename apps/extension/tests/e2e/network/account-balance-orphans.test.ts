@@ -81,16 +81,16 @@ async function waitForBalanceRow(page: import("puppeteer").Page, address: string
 	)
 }
 
+/** How many account rows the wallet reads at `address`; fails when a stored account row is one the
+ *  wallet cannot read, which the count could then not see. */
 async function accountRowCountFor(page: import("puppeteer").Page, address: string): Promise<number> {
-	return await page.evaluate(
-		async (root: string, addr: string) => {
-			const all = await chrome.storage.local.get(null)
-			return Object.entries(all).filter(([k, v]) => k.startsWith(`${root}@`) && typeof v === "string" && (v as string).includes(addr))
-				.length
-		},
+	const rows = await readSealedRows<{ address?: string }>(page, "accounts")
+	const stored = await page.evaluate(
+		async (root: string) => Object.keys(await chrome.storage.local.get(null)).filter((k) => k.startsWith(`${root}@`)).length,
 		ACCOUNT_ROOT,
-		address,
 	)
+	expect(stored).toBe(rows.length)
+	return rows.filter(({ row }) => row.address === address).length
 }
 
 test("agent-runner contract: a live sandbox must be configured (no false skip)", () => {
