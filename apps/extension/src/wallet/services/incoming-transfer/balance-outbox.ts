@@ -34,6 +34,10 @@ function anchoredRowAction(state: "success" | "failure" | "pending" | "missing")
  * it once per row. The rows belong to the repository, so scope and token wipes delete them there.
  */
 export class BalanceRefreshOutbox {
+	/** False only while the last drain to start listed no row and no dirty write has landed since it
+	 *  started. True at start, and after a drain that could not list. */
+	private mayHaveRows = true
+
 	public constructor(private readonly deps: BalanceRefreshOutboxDeps) {}
 
 	/**
@@ -41,14 +45,29 @@ export class BalanceRefreshOutbox {
 	 * `dirtyAt` and CLEARS any prior task anchor — the old anchor is stale w.r.t. the newer receipt.
 	 * The drain reads these rows and issues the causal refresh. False when `fence` refused the write.
 	 */
-	public markDirty(profileId: string, networkId: string, account: string, tokenId: number, fence?: () => boolean): Promise<boolean> {
-		return this.deps.repo.setOutbox(profileId, networkId, account, tokenId, { dirtyAt: Date.now() }, fence)
+	public async markDirty(
+		profileId: string,
+		networkId: string,
+		account: string,
+		tokenId: number,
+		fence?: () => boolean,
+	): Promise<boolean> {
+		const written = await this.deps.repo.setOutbox(profileId, networkId, account, tokenId, { dirtyAt: Date.now() }, fence)
+		// Set only once the row landed: a drain that starts before then could list without it.
+		if (written) this.mayHaveRows = true
+		return written
+	}
+
+	/** `drain`, skipped while the outbox is known to be empty, so a wave of scans with nothing to
+	 *  refresh lists no rows. */
+	public drainIfMayHaveRows(): Promise<void> {
+		return this.mayHaveRows ? this.drain() : Promise.resolve()
 	}
 
 	/**
 	 * Causal task-anchored drain of the balance-refresh outbox. Runs on init + every scan
-	 * tick. ACTIVE-PROFILE-SCOPED — `TokenBalanceService`'s balance map is active-profile-only, so
-	 * draining a background profile's row would look up a missing balance and false-classify it
+	 * tick (`drainIfMayHaveRows` skips it while the outbox is known empty). ACTIVE-PROFILE-SCOPED —
+	 * `TokenBalanceService`'s balance map is active-profile-only, so draining a background profile's row would look up a missing balance and false-classify it
 	 * stale. Per row (re-read under the lock so a concurrent receipt's `dirtyAt` overwrite / anchor
 	 * clear wins):
 	 *  - anchored + terminal-SUCCESS → the task was minted strictly after this `dirtyAt`, so its
@@ -62,15 +81,23 @@ export class BalanceRefreshOutbox {
 	 *    refresh marker.
 	 */
 	public async drain(): Promise<void> {
+		// Cleared before the first await: a dirty write that lands after this either is in the list
+		// below or sets the flag again.
+		this.mayHaveRows = false
 		const profile = await this.deps.activeProfile()
-		if (!profile) return
+		if (!profile) {
+			this.mayHaveRows = true
+			return
+		}
 		let rows: Array<[string, IncomingBalanceOutboxRow]>
 		try {
 			rows = await this.deps.repo.listOutbox()
 		} catch (error) {
+			this.mayHaveRows = true
 			this.deps.warn("drainBalanceOutbox: listOutbox failed", error)
 			return
 		}
+		if (rows.length > 0) this.mayHaveRows = true
 		for (const [key] of rows) {
 			const parts = key.split("|")
 			if (parts.length !== 4) continue

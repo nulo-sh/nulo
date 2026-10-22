@@ -79,3 +79,85 @@ which the PXE class read runs about 8 ms, 26 ms outbox drain), mostly service-wo
 work. The base overlaps all 1,000 of those, which finishes the wave sooner while it starves every
 other RPC (Home 24.6 s, heartbeat 19.6 s). Coalescing bounds the episode backlog, not the write
 count: each arm writes about one full map per failure (80-113 MB per wave), as D8 states.
+
+## After the stop: shorten a slot's hold, then widen the screen
+
+The orchestrator kept the three rules and asked for two steps: make a slot's work the scan itself,
+then screen K in {4, 8, 16} and take the smallest K that meets all three (K = 4 if it does).
+
+### What a slot holds (before)
+
+`p3-screen4-diag-k4`, the 1,000-token wave: mean slot hold (the whole `pollPublic`) 208 ms; per poll,
+quarantine read 47 ms, `scanAndRecord` 118 ms (`scanPublicContract` 113 ms, the episode lock section
+3 ms), outbox drain 41 ms. At 10 tokens the quarantine read and the drain take 3-4 ms each: storage
+reads inflated by the wave's contention. The one PXE call a seeded scan makes,
+`getPublicTokenClassStatus`, runs p50 13 ms, mean 18 ms in the offscreen document. Around it a slot
+makes about ten storage reads: the quarantine check (network rows twice, the quarantine state),
+`getNetwork` in `scanPublicContract` and again in the reader's class-read transport, the PXE client's
+chain guard (`isChainQuarantined`, the chokepoint, which stays), and the drain (active profile, every
+outbox row).
+
+### Consult (Codex, high, session 01a16454): build with amendments
+
+Proposed: one per-network read per tick carrying the quarantine verdict (5 s, like the tips), the
+network row and the tips; the public slot drains only after a `markDirty`, the note arm and `init`
+keep their unconditional drains; the network row passed to the class read; the screen at {4, 8, 16}.
+
+- **Quarantine shared only while in flight, never for 5 s after.** Trace: a cached "live" verdict, the
+  chain classified as quarantined, another scan admitted inside the 5 s; the PXE guard refuses, and
+  `scanAndRecord` records a failed episode, which the quarantine policy says a refusal never does,
+  and an existing failure streak can then announce a stall. Catching `ChainNotSupportedError` around
+  the scan is not enough (the tips read swallows errors; a forward-scan failure can start
+  reconciliation). The network row and the successful tips keep a 5 s cache, cleared before the
+  schedulers install.
+- **The drain flag must be conservative.** Trace against the proposal: note descriptors skip hidden
+  accounts (`getAccounts` without `all`), public recipients include them; with only hidden accounts a
+  receipt's first drain gets `{ busy }`, no later receipt comes, no note scheduler exists, and the
+  refresh is never requested. So a "may have rows" flag: true at start, set after a dirty write
+  lands, cleared synchronously when a drain starts, set again on a non-empty snapshot, a failed read
+  or no active profile.
+- **The network row reaches the class read too** (the reader's transport resolves it per call).
+- The note arm's epoch must still be captured before any shared read it awaits; the health
+  announcements stay (in memory).
+- The screen: record the range and the selection rule before running; same instruments, warm-up and
+  backoff wait in every arm; check that every target scanned; seeded-only screens leave the 64
+  deployed tokens and the balanced confirmation runs to qualify the chosen K.
+
+Taken as given. The orchestrator's "once per network per tick" for the quarantine verdict becomes
+"once per read in flight": a verdict kept past its read is the trace above. The note arm keeps its
+order (its quarantine read is the shared one; nothing new is awaited before its epoch capture).
+
+### What landed (step 2)
+
+- `incoming-transfer/shared-reads.ts`: one read per key for every caller while it is in flight; a
+  success serves for a TTL after it settled (0: never), a failure only while in flight. The tips read
+  moved onto it (same rule as before), joined by the network row (5 s) and the quarantine verdict
+  (TTL 0). `commitSchedulers` clears all three.
+- `scanPublicContract` and the reader's four PXE-bound transport calls resolve the network through
+  the shared read. The PXE chain guard is unchanged. The note arm keeps its order and its own
+  `getNetwork`; its quarantine read is the shared one, awaited where it was.
+- `BalanceRefreshOutbox`: a `mayHaveRows` flag (true at start; set after a dirty write lands; cleared
+  before a drain's first await; set again on a non-empty listing, a failed listing or no active
+  profile) and `drainIfMayHaveRows`, which `pollPublic` calls in place of `drain`. The note arm and
+  `init` still drain unconditionally.
+
+Tests (each red on HEAD's product code, 8 of them, or by mutation): `shared-reads.test.ts` (4);
+`balance-outbox.test.ts` "drainIfMayHaveRows" (5: skip after an empty listing until a dirty write;
+rows left keep it running; a write landing during a listing; a failed listing and no profile);
+scenarios "reads the public scans of a tick share" (one quarantine read in flight and not kept past
+it; one network read per tick, forgotten at a commit; ticks over an empty outbox list it only from
+the note targets) and, in the causal-ack block, the hidden-account case (passes on HEAD; red when
+the flag is not set again on a non-empty listing). Seven mutations (a 5 s quarantine TTL, no network
+clear at commit, the flag cleared after the listing, no rearm on rows, no rearm on a stop, the public
+slot draining unconditionally, `markDirty` not setting the flag): each turns at least one of these red.
+
+Two existing scenarios changed their fixture, not their assertions: "drain-on-init after simulated
+SW death" and "quiet chain: ticks with no new block drain the outbox". Each anchors a refresh task
+`T1` the stub task ledger did not hold, so every extra drain read `T1` as missing, cleared the anchor,
+and the next re-anchored it; they passed on HEAD because the boot (or the tick) ran an odd number of
+drains (three: anchor, clear, anchor), and failed once the public slot skipped one. A real refresh's
+task is in the ledger the moment `requestBalanceRefresh` returns it, so both now register `T1` as
+processing; their assertions are unchanged and hold for any number of drains.
+
+Gates: incoming-transfer suite 492 green, `bun run lint`, `bun run typecheck:all`, `bun run test`
+(15,047 passed), `bun run test:all` (15 workspaces) all exit 0.

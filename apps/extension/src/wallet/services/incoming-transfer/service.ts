@@ -28,6 +28,7 @@ import { BalanceRefreshOutbox } from "./balance-outbox"
 import { PublicEventIndexer, type PublicEventReader, type PublicScanResult } from "./public-event-indexer"
 import { ScanEpisodeStore, scanEpisodeKey, scanEpisodeNetworkPrefix } from "./scan-episodes"
 import { ScanGate } from "./scan-gate"
+import { SharedReads } from "./shared-reads"
 import { isScanSuccess, type ScanOutcome } from "./scan-health"
 import {
 	ARRIVAL_ID_MAX,
@@ -69,9 +70,9 @@ export const PUBLIC_SCAN_CONCURRENCY = 4
  *  a balance refresh retried after a failure still lands when no block comes. */
 const FALLBACK_EVERY_TICKS = 4
 
-/** How long one tips read serves every target of its network. Targets are installed together and
- *  tick in phase, so a tick's targets share one read. */
-const SHARED_TIPS_TTL_MS = 5_000
+/** How long one tips read, or one network-row read, serves every target of its network. Targets are
+ *  installed together and tick in phase, so a tick's targets share one read. */
+const SHARED_READ_TTL_MS = 5_000
 
 /** Public history at or below the first scan's floor is read in windows of this many blocks, newest
  *  window first. At one transfer a block, a window fits one tick's five pages of 20 logs. */
@@ -284,9 +285,10 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  has not moved. */
 	private readonly noteScannedAt = new Map<string, string>()
 	private readonly publicScannedAt = new Map<string, string>()
-	/** One in-flight or recent tips read per network, shared by every target of a tick. `settledAt`
-	 *  is set once the read succeeded; a pending read is shared whatever its age. */
-	private readonly tipsReads = new Map<string, { read: Promise<PublicScanTips | undefined>; settledAt?: number }>()
+	/** Reads a tick's targets share, per network; every scheduler commit forgets them. */
+	private readonly tipsReads = new SharedReads<PublicScanTips>(SHARED_READ_TTL_MS)
+	private readonly networkReads = new SharedReads<Network>(SHARED_READ_TTL_MS)
+	private readonly quarantineReads = new SharedReads<boolean>(0)
 	private pxeService: PxeServiceClient = null!
 	private reader: PublicEventReader = null!
 	private indexer: PublicEventIndexer = null!
@@ -426,21 +428,12 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		this.pxeService = new PxeServiceClient(this.logger)
 		this.reader = this.injectedPublicReader ?? {
 			fetchTransferPage: async (networkId, contract, args) =>
-				this.pxeService.getPublicTokenTransferEvents(
-					networkInfoFrom(await this.networkService.getNetwork(networkId)),
-					contract,
-					args,
-				),
-			getScanTips: async (networkId) =>
-				this.pxeService.getPublicScanTips(networkInfoFrom(await this.networkService.getNetwork(networkId))),
+				this.pxeService.getPublicTokenTransferEvents(networkInfoFrom(await this.sharedNetwork(networkId)), contract, args),
+			getScanTips: async (networkId) => this.pxeService.getPublicScanTips(networkInfoFrom(await this.sharedNetwork(networkId))),
 			getTokenClassStatus: async (networkId, contract, checkpointHash) =>
-				this.pxeService.getPublicTokenClassStatus(
-					networkInfoFrom(await this.networkService.getNetwork(networkId)),
-					contract,
-					checkpointHash,
-				),
+				this.pxeService.getPublicTokenClassStatus(networkInfoFrom(await this.sharedNetwork(networkId)), contract, checkpointHash),
 			getLatestBlockNumber: async (networkId) =>
-				this.pxeService.getLatestBlockNumber(networkInfoFrom(await this.networkService.getNetwork(networkId))),
+				this.pxeService.getLatestBlockNumber(networkInfoFrom(await this.sharedNetwork(networkId))),
 			getChainTipOnce: async (networkId) => {
 				const network = await this.networkService.getNetwork(networkId)
 				if (await this.networkService.isChainQuarantined(network.profileId, network.chainId)) throw new ChainNotSupportedError()
@@ -1165,6 +1158,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		this.publicSchedulers.clear()
 		this.publicWatched.clear()
 		this.publicScans.clear()
+		this.tipsReads.clear()
+		this.networkReads.clear()
+		this.quarantineReads.clear()
 		// Every installed target runs at once, so no earlier run's mark carries over.
 		this.noteScannedAt.clear()
 		this.publicScannedAt.clear()
@@ -1270,7 +1266,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 				await this.scanAndRecord(key, target, episodeKey, force)
 				this.announceHealth(target.profileId, target.networkId)
 			}
-			await this.outbox.drain()
+			await this.outbox.drainIfMayHaveRows()
 		} catch (error) {
 			this.logWarn("Public scan failed", { error })
 		} finally {
@@ -1322,23 +1318,22 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  Then a note target runs ungated and a public tick fails, as it did on its own failed read. A
 	 *  failed read is shared only while in flight, so a Retry right after it reads again. */
 	private sharedTips(networkId: string): Promise<PublicScanTips | undefined> {
-		const recent = this.tipsReads.get(networkId)
-		if (recent && (recent.settledAt === undefined || Date.now() - recent.settledAt < SHARED_TIPS_TTL_MS)) return recent.read
-		const entry: { read: Promise<PublicScanTips | undefined>; settledAt?: number } = {
-			read: this.indexer.getTips(networkId).then(
-				(tips) => {
-					entry.settledAt = Date.now()
-					return tips
-				},
-				(error) => {
-					if (this.tipsReads.get(networkId) === entry) this.tipsReads.delete(networkId)
+		return this.tipsReads
+			.get(networkId, async () => {
+				try {
+					return await this.indexer.getTips(networkId)
+				} catch (error) {
 					this.logDebug("public scan: tips failed", { networkId, error })
-					return undefined
-				},
-			),
-		}
-		this.tipsReads.set(networkId, entry)
-		return entry.read
+					throw error
+				}
+			})
+			.catch(() => undefined)
+	}
+
+	/** Read through `getNetwork`, so the row is the active profile's when read; a profile switch
+	 *  commits a rebuild, which forgets it. */
+	private sharedNetwork(networkId: string): Promise<Network> {
+		return this.networkReads.get(networkId, () => this.networkService.getNetwork(networkId))
 	}
 
 	/** Emit `onIncomingSyncHealthChanged` when the network's health differs from the last announced
@@ -1548,8 +1543,14 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	}
 
 	/** A quarantined chain is skipped before any read, so its refusals never reach a warn line or a
-	 *  scan episode; the skip itself is a debug line. */
-	private async isQuarantined(profileId: string, networkId: string): Promise<boolean> {
+	 *  scan episode; the skip itself is a debug line. Concurrent checks share one read, whose verdict
+	 *  is never kept past it: a kept "live" verdict would admit a scan after the chain was quarantined,
+	 *  and the PXE guard's refusal would be recorded as a failed episode. */
+	private isQuarantined(profileId: string, networkId: string): Promise<boolean> {
+		return this.quarantineReads.get(`${profileId}|${networkId}`, () => this.readQuarantined(profileId, networkId))
+	}
+
+	private async readQuarantined(profileId: string, networkId: string): Promise<boolean> {
 		const network = (await this.networkService.getNetworksRaw(profileId)).find((n) => n.id === networkId)
 		if (!network || !(await this.networkService.isChainQuarantined(profileId, network.chainId))) return false
 		this.logDebug("incoming scan skipped: quarantined chain", { networkId })
@@ -2070,7 +2071,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	): Promise<PublicTick> {
 		let network: Network
 		try {
-			network = await this.networkService.getNetwork(networkId)
+			network = await this.sharedNetwork(networkId)
 		} catch (error) {
 			this.logDebug("public scan: network resolve failed", { networkId }, error)
 			return notAtTip("failed")

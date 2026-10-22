@@ -2699,7 +2699,7 @@ async function bootPublic(
 	// them so each test starts cold.
 	const warmed = booted.service as unknown as Record<
 		"classGateCache" | "tipsReads" | "noteScannedAt" | "publicScannedAt",
-		Map<string, unknown>
+		{ clear(): void }
 	>
 	for (const cache of [warmed.classGateCache, warmed.tipsReads, warmed.noteScannedAt, warmed.publicScannedAt]) cache.clear()
 	state.reset()
@@ -3502,6 +3502,74 @@ describe("IncomingTransferService — bounded public scans", () => {
 	})
 })
 
+describe("IncomingTransferService — reads the public scans of a tick share", () => {
+	const pollPublicOf = (service: unknown) => {
+		const pollPublic = Reflect.get(service as object, "pollPublic") as (key: string, force: boolean) => Promise<void>
+		return (contract: string) => pollPublic.call(service, `n1|${contract}`, true)
+	}
+
+	test("concurrent scans of one network share one quarantine read, and its verdict is not kept past it", async () => {
+		const { reader, state } = makePublicReader()
+		const network = makeNetworkStub()
+		const { service } = await bootPublic(reader, state, { network, token: makeTokenStub([tokenA, tokenB]) })
+		let release: (quarantined: boolean) => void = () => {}
+		const isChainQuarantined = vi.fn(
+			() =>
+				new Promise<boolean>((resolve) => {
+					release = resolve
+				}),
+		)
+		network.isChainQuarantined = isChainQuarantined
+		const poll = pollPublicOf(service)
+
+		const both = Promise.all([poll(tokenA.contract), poll(tokenB.contract)])
+		await flushPromises()
+		expect(isChainQuarantined).toHaveBeenCalledTimes(1)
+		release(false)
+		await both
+		expect(state.classCalls).toBe(2)
+
+		const again = poll(tokenA.contract)
+		await flushPromises()
+		expect(isChainQuarantined).toHaveBeenCalledTimes(2)
+		release(false)
+		await again
+	})
+
+	test("the scans of a tick resolve their network once, and a scheduler commit forgets it", async () => {
+		const { reader, state } = makePublicReader()
+		const network = makeNetworkStub()
+		const { service } = await bootPublic(reader, state, {
+			network,
+			account: makeAccountStub([]),
+			token: makeTokenStub([tokenA, tokenB]),
+		})
+		;(Reflect.get(service, "networkReads") as { clear: () => void }).clear()
+		network.getNetwork.mockClear()
+		const poll = pollPublicOf(service)
+
+		await poll(tokenA.contract)
+		await poll(tokenB.contract)
+		expect(network.getNetwork).toHaveBeenCalledTimes(1)
+
+		await (Reflect.get(service, "hydrateSchedulers") as () => Promise<void>).call(service)
+		await flushPromises()
+		expect(network.getNetwork).toHaveBeenCalledTimes(2)
+	})
+
+	test("ticks over an empty outbox: only the note targets list it, never a public scan", async () => {
+		vi.useFakeTimers()
+		try {
+			const f = await bootTicking({ token: makeTokenStub([tokenA, tokenB]) })
+			const list = vi.spyOn(Reflect.get(f.service, "repo") as IncomingTransferRepository, "listOutbox")
+			await tick()
+			expect(list).toHaveBeenCalledTimes(2)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+})
+
 // ── Balance-refresh outbox drain (causal task-anchored ack) ─────────────────
 
 async function drain(service: unknown): Promise<void> {
@@ -3711,11 +3779,47 @@ describe("IncomingTransferService — balance-refresh drain (causal ack)", () =>
 		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
 		const tokenBalance = makeTokenBalanceStub()
 		tokenBalance.setResult({ taskId: "T1" })
-		await bootService({ account: publicAccountStub(), token: makeTokenStub([tokenA]), tokenBalance })
+		// The minted task is in the ledger, still running, as a real refresh's is: a drain that finds the
+		// anchor keeps it, however many drains the boot runs.
+		const task = makeTaskStub()
+		task.setTask("T1", TaskStatus.Processing)
+		await bootService({ account: publicAccountStub(), token: makeTokenStub([tokenA]), tokenBalance, task })
 		await flushPromises()
 
 		expect(tokenBalance.requestBalanceRefresh).toHaveBeenCalledWith(1, "0xa")
 		expect((await outboxFor())?.pendingTaskId).toBe("T1")
+	})
+
+	test("with no note target to drain it, a row a busy refresh left is refreshed and settled by later public ticks", async () => {
+		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
+		// A hidden account: a public recipient, but no note target.
+		const account = makeAccountStub([{ profileId: "p1", chainId: 1, address: "0xa" }])
+		account.getAccounts.mockImplementation(async (_p: string, chainId: number, all?: boolean) =>
+			all && chainId === 1 ? [{ profileId: "p1", chainId: 1, address: "0xa" }] : [],
+		)
+		const tokenBalance = makeTokenBalanceStub()
+		const task = makeTaskStub()
+		const { reader } = makePublicReader()
+		vi.useFakeTimers()
+		try {
+			await bootService(
+				{ account, token: makeTokenStub([tokenA]), tokenBalance, task, publicReader: reader },
+				{ pollIntervalMs: undefined },
+			)
+			await advance(0)
+			expect(await outboxFor()).toEqual({ dirtyAt: 100 })
+
+			tokenBalance.setResult({ taskId: "T2" })
+			task.setTask("T2", TaskStatus.Processing)
+			await tick()
+			expect((await outboxFor())?.pendingTaskId).toBe("T2")
+
+			task.setTask("T2", TaskStatus.Completed, Date.now())
+			await tick()
+			expect(await outboxFor()).toBeUndefined()
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })
 
@@ -6921,6 +7025,7 @@ describe("IncomingTransferService — liveness on the real cadence", () => {
 		const f = await bootTicking({ tokenBalance, task })
 		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
 		tokenBalance.setResult({ taskId: "T1" })
+		task.setTask("T1", TaskStatus.Processing)
 		await tick()
 		expect((await outboxFor())?.pendingTaskId).toBe("T1")
 		task.setTask("T1", TaskStatus.Completed, Date.now())
