@@ -391,8 +391,9 @@ Encrypted at rest:
   sessions and registration counts, the operation journal, the transaction
   history, accounts and imported keys, tokens and the default-token seeder's
   marker, networks, fee payers, token balances, the authwit registry and its
-  enable flags, and incoming receipts with their trust, scan cursors,
-  balance-refresh outbox and arrival rows — sealed per row under the
+  enable flags, incoming receipts with their trust, scan cursors,
+  balance-refresh outbox and arrival rows, and the popup's pinned tokens and
+  fee-payer picks (one row per profile each) — sealed per row under the
   profile's row-seal key (§ Crypto-bound invariants). The envelope names the
   profile; the row, its names, addresses, origins, grants, amounts, balances,
   fees, endpoints, errors and hashes are ciphertext. An imported key's
@@ -428,9 +429,10 @@ which fails on a family that is neither sealed nor reviewed:
 - Records that name accounts only while their work runs: a profile deletion's
   tombstone (addresses, token and network ids), the network-reset journal
   (accounts and the probed endpoint) and an account-integrity block.
-- The popup's `nulo:ui:*` preferences: pinned token contracts, fee-payer
-  picks and the last-selected account's address (known limit #1062, follow-up #1051), plus
-  per-profile Get Started flags and how the last restore ended.
+- The popup's `nulo:ui:*` preferences: the last-selected account's address
+  (known limit #1062, follow-up #1051), per-profile Get Started flags and how
+  the last restore ended. A pin or fee-pick map an earlier build stored is
+  plaintext until its profile's next unlock seals it in place.
 - A note's nullifier is never stored; it stays in the PXE's encrypted store.
 
 What sealing does not hide or prevent:
