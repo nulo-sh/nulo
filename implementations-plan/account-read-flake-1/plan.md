@@ -128,6 +128,8 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 
 Light tier: Codex r2, resumed after every finding was taken, is the final pass.
 
+**Implementation rounds** (diff `origin/dev...HEAD -- apps/`). Review r1, Codex (`gpt-6.1-sol`, high, fresh session): `clean`; it found no schedule that reds a correct product, and the hoist leaves the purge cases unchanged. Review r1, Opus (`general-purpose`, beside it): two comment findings, both taken in `a5f8ba20f`: the case's comment claimed read order where the assertion proves queuing (its hoist and lock-only-the-read mutants pass the queue check and are caught by the outcome assertions, red 5 of 5, by race: the Security section's stated limit), and the helper's TSDoc now says it parks an exact `get(rowKey)`. Review r2, Codex (resumed): `clean`; the loop converged.
+
 ## Seeds (not run; the orchestrator drives this lane)
 
 `/goal Phase 1 of implementations-plan/account-read-flake-1/plan.md is ✓ with its gate passing in the transcript (steps 2, 4, 5 as expected; the soak 100 ok, or every red outside the serialize case read and filed, never rerun for a clean count; test:all, lint, typecheck:all and lint:actions exit 0); the Codex loop converged (a resumed pass with no new material finding, quoted); the PR against dev exists with Closes #1089 and the close-out commits.`
