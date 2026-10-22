@@ -7,7 +7,6 @@ import HandoffCard from "./HandoffCard.vue"
 const SOURCE = "apps/extension/src/components/composite/HandoffCard.vue"
 const IconStub = { name: "Icon", props: ["name", "size"], template: "<i data-icon :data-name='name' :data-size='size' />" }
 const PROPS = { title: "Pick the contacts file" }
-const WHY = "Firefox closes the panel when a file picker opens, so the pick runs here."
 
 let mounted: VueWrapper | undefined
 
@@ -36,10 +35,10 @@ describe("HandoffCard", () => {
 		expect(w.get('[data-testid="handoff-card"]').attributes("aria-labelledby")).toBe(heading.attributes("id"))
 	})
 
-	test("the line under the title says why the pick runs here, unless the page words its own", () => {
-		expect(mountCard().get("p").text()).toBe(WHY)
-		mounted?.unmount()
-		expect(mountCard({ description: "Another line." }).get("p").text()).toBe("Another line.")
+	test("the card's only words are its title and its two buttons", () => {
+		const card = mountCard().get('[data-testid="handoff-card"]')
+		expect(card.find("p").exists()).toBe(false)
+		expect(card.text().replace(/\s+/g, " ")).toBe(`${PROPS.title} Choose file Cancel`)
 	})
 
 	test("Choose file then Cancel, as real buttons in that order", () => {
@@ -99,9 +98,8 @@ describe("HandoffCard", () => {
 		expect(cancelButton.props()).toMatchObject({ variant: "secondary", size: "large", wide: true })
 	})
 
-	test("the title is the row-title role at 16px, the line the body role", () => {
+	test("the title is the row-title role at 16px", () => {
 		const scan = parseSource(SOURCE)
 		expect(declarationsOf(scan, ".title")).toMatchObject({ composes: "type--row-title from global", "font-size": "16px" })
-		expect(declarationsOf(scan, ".description")).toMatchObject({ composes: "type--body from global", "max-width": "280px" })
 	})
 })

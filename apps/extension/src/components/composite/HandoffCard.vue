@@ -7,10 +7,7 @@ import { onMounted, ref, useId } from "vue"
 import Button from "@/components/ui/Button.vue"
 
 const emit = defineEmits<{ choose: []; cancel: [] }>()
-withDefaults(defineProps<{ title: string; description?: string; busy?: boolean }>(), {
-	description: "Firefox closes the panel when a file picker opens, so the pick runs here.",
-	busy: false,
-})
+withDefaults(defineProps<{ title: string; busy?: boolean }>(), { busy: false })
 
 const titleId = useId()
 const chooseRef = ref<{ $el?: HTMLElement }>()
@@ -23,7 +20,6 @@ onMounted(() => chooseRef.value?.$el?.focus())
 		<section :class="$style.card" :aria-labelledby="titleId" data-testid="handoff-card">
 			<Icon name="upload" :size="24" aria-hidden="true" />
 			<h1 :id="titleId" :class="$style.title">{{ title }}</h1>
-			<p :class="$style.description">{{ description }}</p>
 			<div :class="$style.actions">
 				<Button ref="chooseRef" variant="cta" size="compact" :disabled="busy" data-testid="handoff-card-choose" @click="emit('choose')">
 					Choose file
@@ -62,14 +58,6 @@ onMounted(() => chooseRef.value?.$el?.focus())
 	font-size: 16px;
 	color: var(--txt-primary);
 	margin: 0;
-}
-
-.description {
-	composes: type--body from global;
-	line-height: 1.5;
-	color: var(--nulo-secondary);
-	margin: 0;
-	max-width: 280px;
 }
 
 .actions {
