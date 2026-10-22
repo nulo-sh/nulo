@@ -131,6 +131,14 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 
 Light tier: Codex r3, resumed after every finding was taken, is the final pass.
 
+Post-implementation review loop, over `git diff origin/dev...HEAD` at `6f2840cac`:
+
+| Round | Verdict | Taken | Rejected or kept |
+|---|---|---|---|
+| Codex r1 (`gpt-6.1-sol`, high, fresh) | `clean` | — | — |
+| Opus (`general-purpose`) | `clean`; one nit: the helper's TSDoc hid that it asserts the queue | the TSDoc says it fails unless the purge is queued behind the rename (`fb8d31c00`) | the `as KeyedLock["withLock"]` cast kept: a changed signature still fails to compile |
+| Codex r2 (resumed, fix diff) | `clean` | — | — |
+
 ## Seeds (not run; the orchestrator drives this lane)
 
 `/goal Phase 1 of implementations-plan/account-purge-pins-1/plan.md is ✓ with its gate passing in the transcript (C1-C4 as expected; the soak's 100 logs pass, or every other red is outside the describe, read and filed, never rerun for a clean count; test:all, lint and typecheck:all exit 0); the Codex loop converged (a resumed pass with no new material finding, quoted); the PR against dev exists with Closes #1091 and the close-out commits.`

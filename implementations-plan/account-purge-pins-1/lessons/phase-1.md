@@ -19,3 +19,6 @@
   - The product, reverted: 4 of 4 green.
 - Step 5, the soak beside the running lanes: 100 runs of the file at retry 0, `-P4`; 100 logs read
   `Tests  63 passed (63)`. load1 136 at the start, 117 at the end; file durations 5.4 s to 36.5 s.
+- Review loop over `origin/dev...6f2840cac`: Codex r1 (gpt-6.1-sol, high, session `01a165f1`) clean;
+  Opus (general-purpose) clean with one doc nit, applied in `fb8d31c00`; Codex r2 (resumed on the
+  fix diff) clean. Converged after one fix.
