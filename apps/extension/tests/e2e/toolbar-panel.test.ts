@@ -34,6 +34,7 @@ import { PollTimeoutError, pollUntil } from "./fixtures/poll"
 import { refusePasskeyStep, registerPasskeyProfile } from "./fixtures/passkey"
 import { downloadPlainPasskeyBackup } from "./helpers/backup-export"
 import { contactsFiles, LONG_IMPORT_ROWS, longImportContacts, storedContacts } from "./helpers/contacts"
+import { expectFitsNarrow } from "./fixtures/type-roles"
 import { completeResetRitual } from "./helpers/crash-truth"
 import {
 	buildSyntheticPasskeyBackup,
@@ -544,6 +545,8 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await waitForHash(contactsWindow, CONTACTS, 60_000)
 			await contactsWindow.waitForSelector(sel("handoff-card"), { visible: true, timeout: 15_000 })
 			expect(await contactsWindow.$(sel("contacts-menu-trigger")), "the page behind the card").toBeNull()
+			// The longest of the three titles; a person can drag the window as narrow as the sidebar.
+			await expectFitsNarrow(contactsWindow, "the contacts card")
 			const cardWindowId = await windowIdOf(contactsWindow)
 
 			// Only a press in this window opens the picker, so the input's click must still carry it.
