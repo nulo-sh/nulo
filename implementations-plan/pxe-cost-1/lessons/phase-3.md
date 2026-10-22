@@ -225,3 +225,12 @@ within one screen.
   exercises (no network update, no clock change).
 - The confirmation's run 2B overlapped about six minutes of local unit-test and typecheck runs (the
   mutation checks); its numbers are read with that in mind.
+
+### Review round 3 (Codex, high, session 01a16488) on `6bd21664e`: approve
+
+Both findings closed: all six `onNetworkUpdated` sites (rename, endpoint add/update/delete, primary,
+reset) emit after the write; a read started before the edit settles into a detached entry and never
+serves later callers; what remains is the pre-change race of one overlapping read. Negative ages
+expire for every caller. One assertion was weak and is fixed: the quarantined second verdict's
+scenario counted class reads, which the class-gate cache would also leave at two; it now counts
+transfer-page fetches (red when the verdict is ignored).

@@ -3532,13 +3532,14 @@ describe("IncomingTransferService — reads the public scans of a tick share", (
 		release(false)
 		await both
 		expect(state.classCalls).toBe(2)
+		const fetched = state.fetchArgs.length
 
 		const again = poll(tokenA.contract)
 		await flushPromises()
 		expect(isChainQuarantined).toHaveBeenCalledTimes(2)
 		release(true)
 		await again
-		expect(state.classCalls).toBe(2)
+		expect(state.fetchArgs.length).toBe(fetched)
 	})
 
 	test("the scans of a tick resolve their network once, and a scheduler commit forgets it", async () => {
