@@ -531,47 +531,65 @@ export async function expectLaidOut(page: Page, label: string, accepted: Readonl
 }
 
 export type PastView = { testid: string | null; tag: string; left: number; right: number }
+export type Sideways = { testid: string | null; holds: string | null; tag: string; scrollWidth: number; clientWidth: number }
+export type InsideView = { view: number; scroll: number; past: PastView[]; sideways: Sideways[] }
 
 /**
- * Boxes past the view's sides, and a page that scrolls sideways. A box counts unless an ancestor that
- * scrolls sideways, itself inside the view, holds it; one that clips or hides its overflow cuts what
- * crosses the view's edge, so it excuses nothing. A box inside one already reported is not reported
- * again. `expectLaidOut` reads text only, so a box with none, or one placed past the view, needs this.
+ * Boxes past the view's sides, boxes that scroll sideways, and how wide the page scrolls. A box past
+ * the view counts whatever holds it: an ancestor that clips cuts it, and one that scrolls must not
+ * scroll sideways, which `sideways` reports. A page scroller's `overflow-x` computes to `auto` from
+ * its `overflow-y`, so style cannot tell it from a sideways one. A box inside one already reported
+ * is not reported again; a field scrolls its own text. A scroller is named by its own or the nearest
+ * testid above it and by the first one it holds, as a shared wrapper rarely carries one. `expectLaidOut`
+ * reads text only, so a box with none, or one placed past the view, needs this.
  */
-export async function expectInsideView(page: Page, label: string): Promise<void> {
-	const reading = await page.evaluate(() => {
+export async function readInsideView(page: Page): Promise<InsideView> {
+	return page.evaluate(() => {
 		const view = document.documentElement.clientWidth
-		const past = (box: DOMRect) => box.left < -0.5 || box.right > view + 0.5
-		const scrolledInView = (el: Element): boolean => {
-			for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
-				if (/^(auto|scroll)$/.test(getComputedStyle(up).overflowX) && !past(up.getBoundingClientRect())) return true
-			}
-			return false
-		}
-		const pastBox = (el: Element): DOMRect | null => {
+		const shownBox = (el: Element): DOMRect | null => {
 			const style = getComputedStyle(el)
 			if (style.display === "none" || style.visibility === "hidden") return null
 			const box = el.getBoundingClientRect()
-			if (box.width < 2 || box.height < 2 || !past(box)) return null
-			return scrolledInView(el) ? null : box
+			return box.width < 2 || box.height < 2 ? null : box
 		}
-		const found: { testid: string | null; tag: string; left: number; right: number }[] = []
+		const scrollsSideways = (el: Element) =>
+			/^(auto|scroll)$/.test(getComputedStyle(el).overflowX) && !el.matches("input, textarea") && el.scrollWidth > el.clientWidth
+		const past: PastView[] = []
+		const sideways: Sideways[] = []
 		const reported: Element[] = []
 		for (const el of document.body.querySelectorAll("*")) {
-			if (reported.some((outer) => outer.contains(el))) continue
-			const box = pastBox(el)
+			const box = shownBox(el)
 			if (!box) continue
-			reported.push(el)
 			const testid = el.closest("[data-testid]")?.getAttribute("data-testid") ?? null
-			found.push({ testid, tag: el.tagName.toLowerCase(), left: Math.round(box.left), right: Math.round(box.right) })
+			const tag = el.tagName.toLowerCase()
+			if (scrollsSideways(el)) {
+				const holds = el.querySelector("[data-testid]")?.getAttribute("data-testid") ?? null
+				sideways.push({ testid, holds, tag, scrollWidth: el.scrollWidth, clientWidth: el.clientWidth })
+			}
+			if ((box.left >= -0.5 && box.right <= view + 0.5) || reported.some((outer) => outer.contains(el))) continue
+			reported.push(el)
+			past.push({ testid, tag, left: Math.round(box.left), right: Math.round(box.right) })
 		}
-		return { view, scroll: document.documentElement.scrollWidth, found }
+		return { view, scroll: document.documentElement.scrollWidth, past, sideways }
 	})
-	expect(reading.found satisfies PastView[], `${label}: boxes past the ${reading.view} px view`).toEqual([])
-	expect(reading.scroll, `${label}: the page scrolls sideways`).toBeLessThanOrEqual(reading.view)
 }
 
-/** Text the narrow width is allowed to drop or cut, by the testid it sits under. */
+/** Nothing past the view's sides, and nothing in the page, the page included, scrolls sideways. */
+export async function expectInsideView(page: Page, label: string): Promise<void> {
+	const { view, scroll, past, sideways } = await readInsideView(page)
+	expect({ past, sideways }, `${label}: boxes past the ${view} px view, and boxes that scroll sideways`).toEqual({
+		past: [],
+		sideways: [],
+	})
+	expect(scroll, `${label}: the page scrolls sideways`).toBeLessThanOrEqual(view)
+}
+
+/**
+ * Text the narrow width is allowed to drop or cut, by the testid it sits under. No scroller in the
+ * page is meant to scroll sideways, so none is accepted for it: the logs and JSON viewers' editors
+ * scroll sideways inside shadow roots these readers never enter (`viewers-csp.test.ts` reads the
+ * log's box in its root), and the capabilities Details table narrows its columns instead.
+ */
 export const NARROW_ACCEPTED: readonly { testid: string; why: string }[] = [
 	{ testid: "header-lock", why: "below 359 px the Lock chip keeps its icon; the button's name stays Lock wallet" },
 	{ testid: "network-name", why: "the network chip keeps the ellipsis it has, down to its status dot; the button names the network" },
@@ -604,7 +622,7 @@ export async function textFates(page: Page, mode: "record" | "compare"): Promise
 		const testidOf = (el: Element) => el.closest("[data-testid]")?.getAttribute("data-testid") ?? null
 		const clips = (overflow: string) => overflow === "hidden" || overflow === "clip"
 		const scrolls = (overflow: string) => overflow === "auto" || overflow === "scroll"
-		type Edge = { lo: number; hi: number; overflow: string }
+		type Edge = { lo: number; hi: number; overflow: string; box: boolean }
 		// The edges, per axis, of the ancestors that can clip a box: none past a fixed one, which no
 		// ancestor above it holds.
 		const holders = (el: Element) => {
@@ -612,26 +630,29 @@ export async function textFates(page: Page, mode: "record" | "compare"): Promise
 			for (let up = getComputedStyle(el).position === "fixed" ? null : el.parentElement; up; up = up.parentElement) {
 				const style = getComputedStyle(up)
 				const box = up.getBoundingClientRect()
-				chain.x.push({ lo: box.left, hi: box.right, overflow: style.overflowX })
-				chain.y.push({ lo: box.top, hi: box.bottom, overflow: style.overflowY })
+				const boxed = style.display !== "contents"
+				chain.x.push({ lo: box.left, hi: box.right, overflow: style.overflowX, box: boxed })
+				chain.y.push({ lo: box.top, hi: box.bottom, overflow: style.overflowY, box: boxed })
 				if (style.position === "fixed") break
 			}
 			return chain
 		}
 		// The length of a span that no hidden or clipped overflow cuts away. Past an ancestor that
-		// scrolls on that axis the span is reachable, so nothing above it cuts it.
-		const span = (from: number, to: number, edges: Edge[]) => {
+		// scrolls on that axis the span is reachable, so nothing above it cuts it; but where nothing may
+		// scroll sideways (`sidewaysCuts`, the compare), a scroller with a box cuts sideways like a clip.
+		const span = (from: number, to: number, edges: Edge[], sidewaysCuts: boolean) => {
 			let [lo, hi] = [from, to]
 			for (const edge of edges) {
-				if (clips(edge.overflow)) [lo, hi] = [Math.max(lo, edge.lo), Math.min(hi, edge.hi)]
-				if (scrolls(edge.overflow)) break
+				const cuts = clips(edge.overflow) || (sidewaysCuts && edge.box && scrolls(edge.overflow))
+				if (cuts) [lo, hi] = [Math.max(lo, edge.lo), Math.min(hi, edge.hi)]
+				else if (scrolls(edge.overflow)) break
 			}
 			return hi - lo
 		}
 		const painted = (el: Element) => {
 			const box = el.getBoundingClientRect()
 			const chain = holders(el)
-			return span(box.left, box.right, chain.x) >= 1 && span(box.top, box.bottom, chain.y) >= 1
+			return span(box.left, box.right, chain.x, !recording) >= 1 && span(box.top, box.bottom, chain.y, false) >= 1
 		}
 		const cut = (el: Element, style: CSSStyleDeclaration) => {
 			const clamp = style.getPropertyValue("-webkit-line-clamp")
@@ -720,7 +741,7 @@ export async function atWidth(page: Page, width: number, check: () => Promise<vo
 
 const narrowAccepted: ReadonlySet<string> = new Set(NARROW_ACCEPTED.map(({ testid }) => testid))
 
-/** At the narrow width: the layout gate but under what `NARROW_ACCEPTED` names, and nothing past the view. */
+/** At the narrow width: the layout gate but under what `NARROW_ACCEPTED` names, nothing past the view, and nothing scrolling sideways. */
 export async function expectFits(page: Page, label: string): Promise<void> {
 	await expectLaidOut(page, label, narrowAccepted)
 	await expectInsideView(page, label)

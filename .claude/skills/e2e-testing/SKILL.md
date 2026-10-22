@@ -716,6 +716,10 @@ the pattern.
   `CdpTarget.asPage`'s fallback with a `null` viewport (puppeteer-core 25.8.0, `cdp/Target.js:54-70`;
   a target whose page already exists returns that page instead), so it renders at the window's
   native size; `browser.newPage()` pages get the 800×600 default.
+- **A vertical scroller reads as a sideways one.** `overflow-y: auto` makes `overflow-x` compute to
+  `auto`, so every page scroller looks like a sideways scroller to a style check. Compare its
+  `scrollWidth` with its `clientWidth` instead (`fixtures/type-roles.ts`'s `readInsideView`; the
+  240 px gate excused boxes past the view this way until #1023).
 - **Under mobile emulation, `innerWidth` grows to the content** (Puppeteer 25.8): a width check
   compares `scrollWidth` with the width the spec set
   (`implementations-plan/archive/landing-store-buttons/plan.md#mobile-emulation-width`).
