@@ -15,6 +15,7 @@ import { ProfileServiceClient } from "@/wallet/services/profile/client"
 
 /** Components */
 import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
+import HandoffCard from "@/components/composite/HandoffCard.vue"
 import ImportFullBackupForm from "@/components/composite/import/ImportFullBackupForm.vue"
 
 /** Composables */
@@ -26,7 +27,7 @@ import { useRestoreAgain } from "@/composables/useRestoreAgain"
 /** Utils */
 import { restoreAgainIntroText, withNetworkNames } from "@/components/composite/import/restore-warning"
 import { restoreCtaBlocked, showsDecryptCta, showsRestoreCta } from "@/utils/full-backup-ctas"
-import { OWN_WINDOW_ROUTES, leavePanelFor } from "@/utils/own-window"
+import { OWN_WINDOW_ROUTES, closeOwnWindow, isCardWindow, leavePanelFor, returnToPanel } from "@/utils/own-window"
 
 /** Stores */
 import { useAppStore } from "@/stores/app.store"
@@ -78,14 +79,24 @@ const {
 		cacheStore.viewerData = withNetworkNames(errors, namesById)
 		popupStore.open("data_viewer")
 	},
-	leave: () => router.replace("/popup/general"),
+	leave: (outcome) => void leaveToHome(outcome),
 })
+
+/** The hand-off window shows only the card until a backup is picked or refused. */
+const cardWindow = isCardWindow()
+const showCard = computed(() => cardWindow && !selectedBackup.value && !error.value.title)
 
 const cta = readonly({
 	selectedBackup,
 	restoreStatus,
 	isAllowedToImportBackup: isAllowedToRestore,
 })
+
+/** A hand-off window hands every end back to the panel, which opens on Home. */
+async function leaveToHome(outcome) {
+	if (await returnToPanel("/popup/general", outcome)) return
+	await router.replace("/popup/general")
+}
 
 /** From Firefox's toolbar panel the pick moves to this page's own window, where a second press picks. */
 const handlePickFile = async () => {
@@ -108,7 +119,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+	<HandoffCard v-if="showCard" title="Pick the backup file" @choose="pickBackupFile" @cancel="closeOwnWindow" />
 	<CollapsingHeroLayout
+		v-else
 		heroMain="Restore"
 		heroSub="Again"
 		collapsingLabel="Restore again"
