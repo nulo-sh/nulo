@@ -1,10 +1,10 @@
 import { type ChildProcess, spawn } from "node:child_process"
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import http from "node:http"
 import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { afterAll, afterEach, describe, expect, test } from "vitest"
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest"
 import { probeAnvil } from "../../tests/e2e/anvil-probe"
 import { assertPackFree, listenerIsOurs, mayAdopt, nodeStores, waitWhileAlive } from "../../tests/e2e/boot-guard"
 import { LAUNCH_ENV, launchEnv, newMarker, readEnviron } from "../../tests/e2e/owned-processes"
@@ -150,12 +150,17 @@ describe("boot guard", () => {
 	})
 
 	describe.skipIf(process.platform !== "linux")("node stores", () => {
-		const root = mkdtempSync(path.join(tmpdir(), "nulo-node-stores-test-"))
-		const run = path.join(root, "nulo-aztec-1-1")
+		let root = ""
+		let run = ""
 		const children: ChildProcess[] = []
+		beforeAll(() => {
+			root = mkdtempSync(path.join(tmpdir(), "nulo-node-stores-test-"))
+			run = path.join(root, "nulo-aztec-1-1")
+			mkdirSync(run)
+		})
 		afterAll(() => {
 			for (const child of children) child.kill("SIGKILL")
-			rmSync(root, { recursive: true, force: true })
+			if (root) rmSync(root, { recursive: true, force: true })
 		})
 
 		const store = (...parts: string[]) => {
@@ -173,7 +178,7 @@ describe("boot guard", () => {
 				for (const f of ${JSON.stringify(files)}) fs.openSync(f, "r")
 				for (const f of ${JSON.stringify(unlinked)}) fs.unlinkSync(f)
 				console.log("ready")
-				setInterval(() => {}, 60_000)`,
+				setTimeout(() => {}, 60_000)`,
 			])
 			children.push(child)
 			await new Promise((resolve) => child.stdout?.once("data", resolve))
@@ -199,8 +204,8 @@ describe("boot guard", () => {
 		})
 
 		test("a marked process whose open files /proc will not list is reported", () => {
-			// pid 1 is root's on any non-root host, so its fd list refuses this user.
-			expect(statSync("/proc/1").uid).not.toBe(process.getuid?.())
+			// The suite runs unprivileged, where init's fd list is refused.
+			expect(() => readdirSync("/proc/1/fd")).toThrow(expect.objectContaining({ code: "EACCES" }))
 			const marker = newMarker()
 			const read = (pid: number) => (pid === 1 ? new Map([[LAUNCH_ENV, marker]]) : ("gone" as const))
 			expect(nodeStores(run, marker, read)).toEqual({ inside: [], outside: [], unreadable: [1] })

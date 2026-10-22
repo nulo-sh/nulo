@@ -307,13 +307,13 @@ async function finishBoot(project: TestProject): Promise<void> {
 	assertNodeStoresInRunDir()
 }
 
-/** Teardown and `e2e:reap` remove the run dir and nothing else, so a store the node opens outside it
- *  outlives every run. A scan that sees no store inside proves nothing and fails too. */
+/** Teardown and `e2e:reap` remove the run dir and nothing else, so a store the node opens outside
+ *  it outlives every run. A scan that sees no store inside proves nothing and fails too. */
 function assertNodeStoresInRunDir(): void {
 	if (!weStartedNode || process.platform !== "linux") return
 	const { inside, outside, unreadable } = nodeStores(AZTEC_RUN_DIR, MARKERS.aztec)
 	const fail = (fault: string) => new Error(`[e2e-setup] FATAL: the local Aztec node ${fault} (run dir ${AZTEC_RUN_DIR})`)
-	if (outside.length > 0) throw fail(`holds stores outside its run dir: ${outside.slice(0, 5).join(", ")}`)
+	if (outside.length > 0) throw fail(`holds ${outside.length} store files outside its run dir: ${outside.slice(0, 5).join(", ")}`)
 	if (unreadable.length > 0) throw fail(`has processes whose open files cannot be read: ${unreadable.join(", ")}`)
 	if (inside.length === 0) throw fail("holds no store under its run dir")
 	console.log(`[e2e-setup] node stores: ${inside.length} open, all inside ${AZTEC_RUN_DIR}`)

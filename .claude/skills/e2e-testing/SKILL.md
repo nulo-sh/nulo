@@ -94,9 +94,10 @@ trusted to run with `--slots-in-an-epoch 1`), which an `e2e:agent` run never doe
   Rebuild armed (§ Build-armed tests) before the next run
   (`implementations-plan/archive/isolated-linker-store/plan.md#dev-server-dist`).
 - **Reap at session end**, not at the next run: `bun run e2e:reap`. Orphans hold their LMDB store
-  open; the run dir, where the node's `TMPDIR` puts every store, is on real disk (`~/.cache/nulo-e2e`,
-  `lockfile.ts` `E2E_DATA_ROOT`), so RAM is not pinned, but ports and CPU are. It stops only processes whose own environment names this
-  worktree's markers and a dead owner; a sandbox a live run holds or reused is left alone.
+  open; the run dir, where the node's `TMPDIR` puts every store, is on real disk
+  (`~/.cache/nulo-e2e`, `lockfile.ts` `E2E_DATA_ROOT`), so RAM is not pinned, but ports and CPU
+  are. It stops only processes whose own environment names this worktree's markers and a dead
+  owner; a sandbox a live run holds or reused is left alone.
 
 ### The agent runner — `apps/extension/scripts/e2e/agent.sh`
 

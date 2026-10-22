@@ -64,7 +64,8 @@ function listeningInodes(port: number): Set<string> | undefined {
 	return readable ? inodes : undefined
 }
 
-/** What each of `pid`'s open fds points at; `unreadable` when `/proc` refuses a live process's list. */
+/** What each of `pid`'s open fds points at; `unreadable` when `/proc` refuses a live process's
+ *  list. */
 function fdTargets(pid: number, read: EnvironReader): string[] | "gone" | "unreadable" {
 	let fds: string[]
 	try {

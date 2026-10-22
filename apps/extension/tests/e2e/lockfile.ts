@@ -62,8 +62,9 @@ export interface OwnedState {
 	pids: Partial<Record<SandboxService, number>>
 	/** Each recorded pid's `/proc` start time, which tells the service from a later holder of its pid. */
 	starts?: Partial<Record<SandboxService, string>>
-	/** The node's run dir, stamped with its marker; the node writes under `<dir>/data` and
-	 *  `<dir>/tmp`. A lock written before markers existed names the data dir itself, unstamped. */
+	/** The node's run dir, stamped with its marker; its `--data-directory` is `<dir>/data` and its
+	 *  `TMPDIR` `<dir>/tmp`. A lock written before markers existed names the data dir itself,
+	 *  unstamped. */
 	aztecDataDir: string
 	/** Each service's launch marker. Absent on a lock written before markers existed, which no
 	 *  sweep ever signals. */
