@@ -50,7 +50,9 @@ Pictures: with A, both screens stay as they are today, so this run attaches none
 
 Ships as described. Say "drop keys at lock" if you want the stricter version. It costs a more complex design for little gain.
 
-## OA-3. The privacy policy and the store listing (A4 waits for this)
+## OA-3. The privacy policy and the store listing (answered: A)
+
+**Answered (P70-07, decision page 70, 2026-10-20): A.** "A patch bump with these words: not material, nothing new is collected or shared." Privacy 1.2.3 ships the proposed wording below as written, with the "what changed" line as its manifest `changes` text; the listing's account-address row and storage line say "encrypted". The effective date and every other BEFORE-LAUNCH blank stay the owner's.
 
 Today `legal/privacy.md` § 4 says contacts, history, balances, networks and app permissions are "Stored without application-level encryption". After A4 that is no longer true. The store listing does not say it, but it can now say "encrypted".
 

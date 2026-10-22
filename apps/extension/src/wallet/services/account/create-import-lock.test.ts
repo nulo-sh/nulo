@@ -17,8 +17,14 @@ import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { svc } from "../composition-harness"
 import { recordWrites } from "../storage-write-log"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
+import { ImportedKeysRepository } from "./imported-keys-repository"
 import { AccountService } from "./service"
 import { AccountType, accountRowId, type Account } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 const SHARED = "0xshared"
 const NEXT = "0xnext"
@@ -73,6 +79,7 @@ async function makeHarness(over: { chainLive?: (call: number) => boolean | Promi
 	const services = new ServiceCollection()
 	services.add(
 		svc(PROFILE_SERVICE_NAME, {
+			...ROW_KEY_FAKE,
 			onProfileDeleted: new EventHandler(),
 			getDeletionState: () => new ProfileDeletionState(),
 			getProfileSecret: async () => new Fr(42n),
@@ -96,16 +103,20 @@ async function makeHarness(over: { chainLive?: (call: number) => boolean | Promi
 		address: SHARED,
 	})
 	const raw = async () => (await api.storage.local.get(null)) as Record<string, string>
+	const accounts = sealedEntityStorage("accounts", api.storage.local, ROW_KEY_FAKE.rowKeys)
+	const keys = new ImportedKeysRepository(api.storage.local, ROW_KEY_FAKE.rowKeys)
 	return {
 		api,
 		service,
 		create: () => service.createAccount("p1", 1, AccountType.Nulo_v1, "Account 1"),
 		importShared: () => service.importAccount("p1", 1, "body", SHARED, "pw", "Mine"),
+		// The row at an address in whichever form stands: a plaintext seed at its natural key, or
+		// what the service sealed at its keyed id.
 		row: async (address: string): Promise<Account | undefined> => {
 			const value = (await raw())[accountKey(address)]
-			return value === undefined ? undefined : JSON.parse(value)
+			return value === undefined ? accounts.get(accountRowId("p1", 1, address)) : JSON.parse(value)
 		},
-		hasKey: async (address: string) => keyRowKey(address) in (await raw()),
+		hasKey: async (address: string) => keyRowKey(address) in (await raw()) || (await keys.get("p1", 1, address)) !== undefined,
 		seed: (entries: Record<string, unknown>) =>
 			api.storage.local.set(Object.fromEntries(Object.entries(entries).map(([k, v]) => [k, JSON.stringify(v)]))),
 	}
@@ -132,7 +143,7 @@ describe("create and import of one address", () => {
 		const held = gate()
 		let armed = true
 		area.set = async (entries) => {
-			if (armed && keyRowKey(SHARED) in entries) {
+			if (armed && Object.keys(entries).some((key) => key.startsWith("nulo:core:imported-account-keys@"))) {
 				armed = false
 				held.reached()
 				await held.opened

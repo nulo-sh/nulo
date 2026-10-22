@@ -38,6 +38,7 @@ import {
 import { deliverWhileLocked, readIncomingPollStatus, releaseIncomingPoll, waitForIncomingPollPhase } from "../fixtures/incoming-poll-gate"
 import { pollUntil } from "../fixtures/poll"
 import { readSealedRow, readSealedRows } from "../fixtures/sealed-rows"
+import { findAccount, rewriteAccount } from "../helpers/identity-rows"
 import { confirmImport, exportAccountBody, previewImport } from "../helpers/account-io"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -523,20 +524,7 @@ test.skipIf(!hasConfig)(
 		let page = closeAtEnd(await openPopup(tokenReadyExtension))
 		await waitForHash(page, "#/popup/general", 30_000)
 		const account = await getAccountAddress(page)
-		await page.evaluate(
-			async (addr: string, name: string) => {
-				const all = await chrome.storage.local.get(null)
-				const rows: Record<string, string> = {}
-				for (const [key, value] of Object.entries(all)) {
-					if (!key.startsWith("nulo:core:accounts@") || typeof value !== "string") continue
-					const row = JSON.parse(value)
-					if (row.address === addr) rows[key] = JSON.stringify({ ...row, name })
-				}
-				await chrome.storage.local.set(rows)
-			},
-			account,
-			HOSTILE_NAME,
-		)
+		await rewriteAccount(page, account, (row) => ({ ...row, name: HOSTILE_NAME }))
 		await page.close()
 		await stopBackground(tokenReadyExtension)
 		page = closeAtEnd(await openPopup(tokenReadyExtension))
@@ -608,15 +596,7 @@ test.skipIf(!hasConfig)(
 		const page = closeAtEnd(await openPopup(tokenReadyExtension))
 		await waitForHash(page, "#/popup/general", 30_000)
 		const source = await getAccountAddress(page)
-		const name = await page.evaluate(async (addr: string) => {
-			const all = await chrome.storage.local.get(null)
-			for (const [key, value] of Object.entries(all)) {
-				if (!key.startsWith("nulo:core:accounts@") || typeof value !== "string") continue
-				const row = JSON.parse(value)
-				if (row.address === addr) return row.name as string
-			}
-			return ""
-		}, source)
+		const name = (await findAccount(page, undefined, source))?.name ?? ""
 		const body = await exportAccountBody(page, name, false)
 
 		await navigateByHash(page, "#/popup/general", 10_000)

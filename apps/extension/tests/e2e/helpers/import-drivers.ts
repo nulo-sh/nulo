@@ -31,6 +31,7 @@ import { openOnboarding, openPopup, waitForServiceReady } from "../fixtures/wall
 import { refusePasskeyStep } from "../fixtures/passkey"
 import { readSwLogTrail } from "../fixtures/journal"
 import { sealPasskeyBackup } from "./backup-seal"
+import { findAccount } from "./identity-rows"
 import {
 	appendImportRecord,
 	buildImportRecord,
@@ -505,20 +506,19 @@ export interface RegisteredPasskey {
 
 /** The one passkey profile in storage, with the row of the active account. */
 export async function readRegisteredPasskey(page: Page): Promise<RegisteredPasskey> {
-	return await page.evaluate(async () => {
+	const { profile, active } = await page.evaluate(async () => {
 		const all = await chrome.storage.local.get(null)
-		const rows = (prefix: string) =>
-			Object.entries(all)
-				.filter(([key]) => key.startsWith(prefix))
-				.map(([, raw]) => (typeof raw === "string" ? JSON.parse(raw) : raw))
-		const profile = rows("nulo:core:profiles@").find((row) => row?.type === "passkey")
+		const profile = Object.entries(all)
+			.filter(([key]) => key.startsWith("nulo:core:profiles@"))
+			.map(([, raw]) => (typeof raw === "string" ? JSON.parse(raw) : raw))
+			.find((row) => row?.type === "passkey")
 		if (!profile) throw new Error("no passkey profile in storage")
-		const active = all["nulo:ui:activeAccount"]
-		const row = rows("nulo:core:accounts@").find((r) => r?.address === active)
-		if (!row) throw new Error(`no account row for the active account ${String(active)}`)
-		const { address, chainId, l1ChainId, index, type } = row
-		return { credentialId: profile.credentialId, dekSealed: profile.dekSealed, account: { address, chainId, l1ChainId, index, type } }
+		return { profile: profile as { id: string; credentialId: string; dekSealed: string }, active: String(all["nulo:ui:activeAccount"]) }
 	})
+	const row = await findAccount(page, profile.id, active)
+	if (!row) throw new Error(`no account row for the active account ${active}`)
+	const { address, chainId, l1ChainId, index, type } = row
+	return { credentialId: profile.credentialId, dekSealed: profile.dekSealed, account: { address, chainId, l1ChainId, index, type } }
 }
 
 /** The PRF output the wallet's ceremony reads from `credentialId`, asked in `page`, where the

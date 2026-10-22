@@ -1,6 +1,4 @@
-import type { MinimalStorageArea } from "@nulo/wallet-core/storage"
-import type { ValueStorage } from "@/wallet/storage"
-import { valueStorage } from "@/wallet/storage/stores"
+import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
 import { LogLevel } from "@nulo/wallet-core/logger"
 import { createSerialQueue } from "@nulo/wallet-core/utils"
 import type { ILogger } from "@/wallet/logger"
@@ -191,7 +189,7 @@ export interface TokenSeederDeps {
  */
 export class TokenSeeder {
 	private readonly deps: TokenSeederDeps
-	private readonly storageArea: MinimalStorageArea
+	private readonly markers: SealedEntityStorage<unknown>
 	private readonly logger: ILogger
 	private readonly getVersion: () => string
 	private inflight: Promise<void> | undefined
@@ -217,9 +215,10 @@ export class TokenSeeder {
 	private armGeneration = 0
 	private disposed = false
 
-	public constructor(deps: TokenSeederDeps, storageArea: MinimalStorageArea, logger: ILogger, getVersion?: () => string) {
+	/** `markers` is the sealed marker root, one row per profile at the profile's id. */
+	public constructor(deps: TokenSeederDeps, markers: SealedEntityStorage<unknown>, logger: ILogger, getVersion?: () => string) {
 		this.deps = deps
-		this.storageArea = storageArea
+		this.markers = markers
 		this.logger = logger
 		this.getVersion = getVersion ?? (() => chrome.runtime.getManifest().version)
 	}
@@ -305,7 +304,7 @@ export class TokenSeeder {
 			if (this.epoch !== epoch) return undefined
 			const state = await this.readMarkerState(profile.id)
 			state[key] = { attempts: 0 }
-			await this.markerStorage(profile.id).set(state)
+			await this.markers.set(profile.id, state)
 			this.reserved.add(flight)
 			return { profileId: profile.id, flight }
 		})
@@ -387,7 +386,7 @@ export class TokenSeeder {
 			const next = update(existing)
 			if (existing.outcome === "deleted" && next.outcome !== "deleted") return
 			state[key] = next
-			await this.markerStorage(profileId).set(state)
+			await this.markers.set(profileId, state)
 		})
 	}
 
@@ -403,14 +402,19 @@ export class TokenSeeder {
 				delete state[key]
 				changed = true
 			}
-			if (changed) await this.markerStorage(profileId).set(state)
+			if (changed) await this.markers.set(profileId, state)
 		})
+	}
+
+	/** Seals the profile's plaintext marker under the lock every marker writer holds. */
+	public sealLegacyMarker(profileId: string): Promise<number> {
+		return this.markers.sealLegacy(profileId, (fn) => this.withMarkerLock(() => fn(() => true)))
 	}
 
 	/** Profile deletion cascade: drop the whole marker blob. */
 	public purgeForProfile(profileId: string): Promise<void> {
 		this.invalidate((scope) => scope.startsWith(`${profileId}|`))
-		return this.withMarkerLock(() => this.markerStorage(profileId).delete())
+		return this.withMarkerLock(() => this.markers.delete(profileId))
 	}
 
 	/** A purge fences every in-flight pass (epoch) and forgets what this lifetime
@@ -626,7 +630,7 @@ export class TokenSeeder {
 			const state = await this.readMarkerState(profile.id)
 			const existing = state[key] ?? { attempts: 0 }
 			state[key] = { ...existing, outcome: "seeded", observedDecimals: preview.decimals, verifiedPins, nextAttemptAt: undefined }
-			await this.markerStorage(profile.id).set(state)
+			await this.markers.set(profile.id, state)
 			return true
 		})
 	}
@@ -756,10 +760,6 @@ export class TokenSeeder {
 		while (this.inflight) await this.inflight
 	}
 
-	private markerStorage(profileId: string): ValueStorage<SeedMarkerState> {
-		return valueStorage<SeedMarkerState>("tokenSeeded", this.storageArea, profileId)
-	}
-
 	/**
 	 * The marker blob lives in extension-shared storage — treat its shape as
 	 * hostile. A non-object blob (e.g. `[]`, where assigned string keys are
@@ -771,7 +771,7 @@ export class TokenSeeder {
 	private async readMarkerState(profileId: string): Promise<SeedMarkerState> {
 		let stored: unknown
 		try {
-			stored = await this.markerStorage(profileId).get()
+			stored = await this.markers.get(profileId)
 		} catch {
 			return {}
 		}

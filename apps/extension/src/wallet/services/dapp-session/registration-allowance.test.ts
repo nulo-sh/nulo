@@ -1,6 +1,9 @@
 import { describe, expect, test, vi } from "vitest"
 import { ScopeViolationError } from "@nulo/extension-messaging/errors"
 import { MemoryStorageArea } from "@nulo/wallet-core/storage"
+import { isSealedText } from "@/wallet/storage/sealed-entity-storage"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import {
 	APP_REGISTRATIONS_PER_CHAIN,
 	DAPP_REGISTRATIONS_PER_CHAIN,
@@ -11,13 +14,15 @@ import {
 const APP = "https://app.example"
 const KEY = "nulo:core:dappRegistrations@p1"
 
+/** One key for every profile, as an unlocked worker holds it. */
+const ROW_KEYS = await rowKeysForEveryProfile()
+
 function setup() {
 	const area = new MemoryStorageArea()
-	const allowance = new RegistrationAllowance(area)
-	const stored = async (key = KEY) => {
-		const raw = (await area.get(key))[key]
-		return raw === undefined ? undefined : JSON.parse(raw as string)
-	}
+	const rows = sealedEntityStorage("dappRegistrations", area, ROW_KEYS.rowKeys)
+	const allowance = new RegistrationAllowance(rows)
+	// biome-ignore lint/suspicious/noExplicitAny: the counts are asserted field by field
+	const stored = async (profileId = "p1"): Promise<any> => rows.get(profileId)
 	const spend = async (times: number, origin = APP, chainId = 1, profileId = "p1") => {
 		for (let i = 0; i < times; i++) await allowance.admit(profileId, chainId, origin)
 	}
@@ -97,6 +102,17 @@ describe("RegistrationAllowance", () => {
 		await allowance.clearChain("p1", 2)
 		expect(await stored()).toBeUndefined()
 		await allowance.purgeProfile("p2")
-		expect(await stored("nulo:core:dappRegistrations@p2")).toBeUndefined()
+		expect(await stored("p2")).toBeUndefined()
+	})
+
+	test("a profile's plaintext counts seal at its unlock and read the same; a write seals too", async () => {
+		const { area, allowance, spend, stored } = setup()
+		const counts = { "1": { total: 2, apps: { [APP]: 2 } } }
+		await area.set({ [KEY]: JSON.stringify(counts) })
+		expect(await allowance.sealLegacy("p1")).toBe(1)
+		expect(isSealedText((await area.get(KEY))[KEY])).toBe(true)
+		expect(await stored()).toEqual(counts)
+		await spend(1, APP, 1, "p2")
+		expect(isSealedText((await area.get("nulo:core:dappRegistrations@p2"))["nulo:core:dappRegistrations@p2"])).toBe(true)
 	})
 })

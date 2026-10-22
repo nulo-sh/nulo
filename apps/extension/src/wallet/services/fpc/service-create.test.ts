@@ -15,6 +15,7 @@ import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { svc } from "../composition-harness"
 import { recordWrites } from "../storage-write-log"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 
 vi.mock("@/wallet/services/execution/contract-resolver", () => ({
 	ensureRegistered: async () => {},
@@ -33,6 +34,9 @@ vi.mock("@aztec-labs/stdlib/contract", async (importOriginal) => ({
 
 import { FpcService, FpcType } from "./service"
 import { FPC_STORAGE_ROOT } from "./spec"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 const SPONSOR_ARTIFACT = { functions: [{ name: "sponsor_unconditionally", parameters: [], returnTypes: [] }] }
 const NETWORK = {
@@ -69,6 +73,7 @@ async function makeHarness() {
 	const services = new ServiceCollection()
 	services.add(
 		svc(PROFILE_SERVICE_NAME, {
+			...ROW_KEY_FAKE,
 			getDeletionState: () => deletionState,
 			getActiveProfile: async () => ({ id: "p1" }),
 			captureExecutionFence: async () => ({ profileId: "p1", epoch: deletionState.capture("p1") }),

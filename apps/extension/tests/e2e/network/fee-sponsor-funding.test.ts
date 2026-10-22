@@ -36,7 +36,9 @@ import {
 	snapshotResultSeq,
 	waitForPgResult,
 } from "../fixtures/playground"
+import { pollUntil } from "../fixtures/poll"
 import { approveExecute, rejectExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import { serializeInstance } from "../fixtures/selfpay-phase"
 import { openSend, shotSend, waitForFee } from "../fixtures/send-page"
 
@@ -126,20 +128,14 @@ async function addUnfundedSponsor(ctx: ExtensionContext, address: string, instan
 		timeout: 10_000,
 	})
 	await clickByTestId(page, "new-fpc-submit")
-	const id = await page.waitForFunction(
-		async (addr: string) => {
-			const rows = (await chrome.storage.local.get(null)) as Record<string, unknown>
-			for (const [key, raw] of Object.entries(rows)) {
-				if (!key.startsWith("nulo:core:fpcs@")) continue
-				const row = (typeof raw === "string" ? JSON.parse(raw) : raw) as { id?: string; address?: string }
-				if (row?.address?.toLowerCase() === addr.toLowerCase()) return row.id
-			}
-			return false
-		},
-		{ timeout: 60_000, polling: 500 },
-		address,
-	)
-	const fpcId = (await id.jsonValue()) as string
+	const fpcId = (await pollUntil(
+		async () =>
+			(
+				await readSealedRows<{ id?: string; address?: string }>(page, "fpcs")
+			).find(({ row }) => row.address?.toLowerCase() === address.toLowerCase())?.row.id,
+		(id) => typeof id === "string",
+		{ label: `the FPC row at ${address}`, timeoutMs: 60_000, intervalMs: 500 },
+	)) as string
 	await page.close()
 	return fpcId
 }

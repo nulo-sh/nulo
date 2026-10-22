@@ -10,8 +10,13 @@ export const TOKEN_SERVICE_NAME = "token"
  *  renaming detaches every existing row; the backup-migration registry pins it. */
 export const TOKEN_STORAGE_ROOT = "nulo:core:tokens"
 
-/** Per-profile ValueStorage root of the default-token seeder's markers (`${root}@${profileId}`). */
+/** Sealed root of the default-token seeder's markers, one row per profile at the profile's id
+ *  (`${root}@${profileId}`). */
 export const TOKEN_SEEDED_STORAGE_ROOT = "nulo:core:token-seeded"
+
+/** A marker row as its store reads it: any JSON. The seeder's own decoder is its read, so a corrupt
+ *  entry drops only itself, never the profile's tombstones. */
+export const SeedMarkerRowSchema = z.unknown()
 
 export type Token = {
 	id: number
