@@ -1,6 +1,6 @@
 # mainnet-arrival-1: owner asks
 
-A1 depends on none of these and ships no visible change. OA-1 is answered (P66-01, D). A2's PR stays a draft until OA-2 is signed.
+Both are answered: OA-1 as P66-01 D, OA-2 as P70-12 A.
 
 ## OA-1: what an existing profile sees when a new default network (Mainnet) arrives (answered)
 
@@ -22,7 +22,9 @@ A1 depends on none of these and ships no visible change. OA-1 is answered (P66-0
 - **What ships now.** A (A1: the record and the pass; no default is new in A1's build, so nothing appears at all).
 - **Recommendation.** D with "Switch to Mainnet" and "Stay on <current network>", never switching by itself: a person moved to Mainnet silently sees empty balances and may not notice which network a send uses; a full screen that names both networks once is proportionate to an event that happens once or twice in a wallet's life, and reuses the reset takeover the owner liked.
 
-## OA-2: the arrival's words
+## OA-2: the arrival's words (answered)
+
+**Answered, decision page 70, P70-12, 2026-10-20:** A, as the table below gives it; it ships in `copy.ts`.
 
 - **Surface.** The arrival (OA-1's D), full screen in place of Home, the first time a profile opens on the build that adds Mainnet, and at every open until the person presses a button. Layout: the reset takeover's, with its top bar (the active network's chip, LOCK), an eyebrow, a title, a body, a box with three checked lines, and two buttons. Behaviour, already decided: "Switch" only moves the active network (no transaction, nothing created on chain; Nulo derives the Mainnet account on the device, as on any switch); "Stay" keeps the person where they are; both end the arrival for good.
 - **Constraint from P66-01's note.** No word may suggest that pressing a button creates something on chain or sends a transaction. Neither variant says "create"; both say outright that switching sends nothing.

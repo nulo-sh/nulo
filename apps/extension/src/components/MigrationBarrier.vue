@@ -23,7 +23,7 @@ const blockedCopy = computed(() => {
 	return blocked.value.terminal
 		? {
 				title: "UPDATE FAILED",
-				sub: "Your funds are safe. Your secret phrase still recovers your accounts. It does not recover imported accounts or passkey profiles. Reinstall the extension to start clean.",
+				sub: "Your funds are safe. Your secret phrase still recovers your accounts. It does not recover imported accounts or passkey profiles. Keep the extension installed. A later update may be able to repair this.",
 			}
 		: {
 				title: "UPDATE INTERRUPTED",

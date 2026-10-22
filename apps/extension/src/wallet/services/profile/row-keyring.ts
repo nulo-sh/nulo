@@ -29,7 +29,7 @@ export class RowKeyring {
 	 *  when that incarnation's keys are already held. The master stays caller-owned. */
 	public async fill(profileId: string, generation: string, master: MasterSecretBytes): Promise<boolean> {
 		if (typeof generation !== "string" || generation === "") {
-			throw new Error("profile predates the pxe-generation fence. Reinstall the extension (pre-production, no migration)")
+			throw new Error("profile predates the pxe-generation fence, which every released build writes")
 		}
 		if (this.#entries.get(profileId)?.generation === generation) return false
 		const keys = await deriveRowKeys(master, profileId, generation)

@@ -129,7 +129,9 @@ strength of the profile's password; see the known limit below for older files.
   unencrypted.** A password change rewraps the DEK and never rotates it, so whoever can open such a
   file and later reads the source profile's storage can open imported-key rows created after the
   export. Since v0.31.0 the file is always encrypted under the profile's password and carries a key
-  made for that backup alone. Accepted while the wallet has no production users (known limit #709).
+  made for that backup alone. Kept as a known limit at 1.0.0 (#709): such files still restore,
+  only builds before PR #51 made them (v0.30.2 the last release), and the limit reopens only if
+  such a file is known to have leaked.
 - **A sealed row authenticates where it is, not when it was written.** Someone who can write the
   disk offline can delete a sealed row, put back an earlier sealed value at the same key, or plant a
   plaintext row, which the wallet reads and seals at the next unlock (a dApp session's MAC refuses

@@ -43,6 +43,11 @@ export async function openEncryptedBackup(text: string, password = TEST_PASSWORD
 /** Exports the unlocked password profile's full backup through Settings on a page of its own, which
  *  it closes, and returns its content. */
 export async function exportBackupContent(ctx: ExtensionContext): Promise<PlainBackup> {
+	return await openEncryptedBackup(await exportBackupFile(ctx))
+}
+
+/** {@link exportBackupContent}'s file, encrypted, as the browser downloaded it. */
+export async function exportBackupFile(ctx: ExtensionContext): Promise<string> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general")
 	await navigateByHash(page, "#/popup/settings/security/export/full")
@@ -52,7 +57,7 @@ export async function exportBackupContent(ctx: ExtensionContext): Promise<PlainB
 	await clickByTestId(page, "unlock-submit-btn")
 	const exported = await downloadEncryptedBackup(page)
 	await page.close()
-	return await openEncryptedBackup(exported)
+	return exported
 }
 
 /** The chain `address`'s account row names; the wallet seeds several networks, and the funded

@@ -171,8 +171,8 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	 * not, leaving an account that renders but cannot sign. Ignoring them
 	 * uniformly lets `ensureDefaultAccount` recreate a canonical row instead.
 	 *
-	 * This is deliberately not a migration: the repo is pre-production, where a
-	 * shape change redefines the baseline and a stale install is reinstalled.
+	 * This is deliberately not a migration: no released build wrote a row under the older key, and
+	 * rows written before 1.0.0 get none.
 	 */
 	private async liveRows(): Promise<Account[]> {
 		const rows: Account[] = []

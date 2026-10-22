@@ -296,6 +296,20 @@ then measured runtime, with each browser's suite wall-clock before and after in 
   shares one account across files on network: not built
   (`implementations-plan/archive/e2e-fixed-cost-1/plan.md`, D1). A network fork's aztec.js import is
   4-6 s inlined against 2 s native; native loading is known limit #997.
+- **Two onboarding levers, measured and not built** (2026-10). Switching to Local on the
+  registration popup, instead of closing it and opening another, saves 0.75 s (Chrome) / 0.77 s
+  (Firefox) a call on CI over about 105 calls a run. Three P/F pairs cannot show that on a shard
+  whose file time moves 150-200 s between runs, and a local probe on a loaded host had put
+  Firefox's saving at 2.0 s. A profile injected into storage (the production `ProfileService`'s
+  rows rendered in the fork, then the UI unlock) saved nothing more: an unlock runs the creation's
+  PBKDF2 work, and the fork's import of the renderer costs 18-27 s
+  (`implementations-plan/archive/warm-stack-1/plan.md`, known limit #1006).
+- **Measuring on CI beside other lanes:** every agent's `gh` draws on the account's one
+  5000-an-hour REST limit, and `gh api rate_limit` showed this token's bucket almost unused while
+  every call was refused with 403. So a dispatcher polls one `gh run list` per workflow every 45 s
+  or slower. Another lane's dispatcher may not see
+  a run you just started: check again a minute after dispatching, and on a clash cancel yours and
+  wait.
 - **A cost guard** (a latency ratio between builds, timed by a probe spec on builds chosen by
   `EXTENSION_PATH`) runs its variants interleaved in one pass, a fresh browser per sample, each
   sample started under a load ceiling well below the run gate's, with the load logged. A loaded
@@ -570,8 +584,9 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   Over a completed onboarding the page replaces itself with a popup window on `src/popup/index.html`
   and drops the id, often before the first read; there the fixture closes that window, found as a page
   target (Chrome's `windows.getAll` hides its tab URL without the `tabs` permission). A fresh profile
-  requires the id, a reused one the id or the window, within 5s; the launch fails otherwise.
-  Onboarding specs open their own tab via `openOnboarding`.
+  requires the id, a reused one the id or the window, within 5s; the launch fails otherwise. Only a
+  swap inside the running browser reports `update` (e2e README § In-place update). Onboarding specs
+  open their own tab via `openOnboarding`.
 - **Passkeys: the virtual authenticator is per FrameTreeNode**, not per browser context, and PRF
   state is not serialisable over CDP. Register, lock/unlock and reset→import are drivable in the SAME
   popup (`fixtures/passkey.ts` `setupPasskeyVirtualAuth`); cross-popup and cross-authenticator flows
@@ -683,7 +698,9 @@ the pattern.
 ### Harness behaviours that look like product bugs
 
 - **The extension pages' CSP refuses `page.addStyleTag`** (`style-src-elem`; the CSP record then
-  fails the launch). To stop a theme flip's transitions before a quick shot, `finish()` each of
+  fails the launch), and so a `<style>` element a spec appends itself: its rule never applies, so a
+  scratch control built on it stays green. Test CSS goes through CSSOM: `new CSSStyleSheet()`,
+  `replaceSync`, then `document.adoptedStyleSheets`. To stop a theme flip's transitions before a quick shot, `finish()` each of
   `document.getAnimations()`; a looping one throws and is left alone. A popup's `document.body` can
   still be null when `waitForPopup` resolves: observe `document.documentElement`.
 - **A mouse drag can select nothing.** Chrome 152 starts no selection from a press between a

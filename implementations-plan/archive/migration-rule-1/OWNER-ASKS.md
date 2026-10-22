@@ -1,6 +1,6 @@
 # migration-rule-1: owner asks
 
-A1 and A3 depend on none of these. A2 ships OA-1's D on all three pages (answered: P70-11 D, P70-13 A). A4 ships OA-2's and OA-3's "what ships now"; OA-2 B can land in A4 if answered by then.
+A1 and A3 depend on none of these. A2 ships OA-1's D on all three pages (answered: P70-11 D, P70-13 A). A4 ships OA-2's answer (P66-03 B, P70-10 B) and OA-3's (P62-11 A).
 
 ## OA-1: the words that refuse a passkey backup with no passkey check (P62-05)
 
@@ -35,6 +35,8 @@ A1 and A3 depend on none of these. A2 ships OA-1's D on all three pages (answere
 
 ## OA-2: the update-failed screen once real migrations exist
 
+- **Answered.** P66-03 B, with the owner's note that a later update MAY repair it; P70-10 B: "Soften: "Keep the extension installed. A later update may be able to repair this."" Ships in A4. Pictures, before and after, Chrome popup at 400×600: [before light](screenshots/oa2-before-light-chrome.png), [before dark](screenshots/oa2-before-dark-chrome.png), [after light](screenshots/oa2-after-light-chrome.png), [after dark](screenshots/oa2-after-dark-chrome.png).
+
 - **Surface.** `MigrationBarrier.vue`'s terminal screen ("UPDATE FAILED"), shown when a migration fails on every retry and the wallet refuses to start. Its sub line today: "Your funds are safe. Your secret phrase still recovers your accounts. It does not recover imported accounts or passkey profiles. Reinstall the extension to start clean." (P38-10 B). Below it, the engine's reason in small type.
 - **Why it is open.** Before 1.0 a reinstall lost nothing that mattered. After 1.0 it deletes a person's imported accounts, contacts and history, which the screen itself says the phrase does not recover. A 1.0.0 user can reach the screen with no migration shipped: a corrupt or out-of-range stored schema version, or a rollback past a later migration, ends in it (`packages/wallet-core/src/migration/migrator.ts:244-249`, `apps/extension/src/wallet/runtime.ts:409`). In each case the engine has deleted nothing, so a fixed update can still read the data.
 - **Options.**
@@ -44,6 +46,8 @@ A1 and A3 depend on none of these. A2 ships OA-1's D on all three pages (answere
 - **Recommendation.** B, before 1.0.0 if the owner answers in time: the engine keeps its backup and the rows on every failure, so the data a fixed update can repair stays only while the extension stays installed. B is one string and its test pin.
 
 ## OA-3: #709 at 1.0.0
+
+- **Answered.** P62-11 A: "Keep accepting them; the known limit stays, reopened only by a leaked old backup." #709 stays closed; A4 restates its line in `packages/wallet-crypto/ATTACK-SURFACE.md`.
 
 - **Surface.** None on screen: `packages/wallet-crypto/ATTACK-SURFACE.md` § Known limitations and issue #709. A password full backup made before PR #51 (v0.30.2 and earlier) still restores and carries the source profile's long-lived key for imported accounts. P38-12 = A accepted it "while the wallet has no production users", reopened "on the first production user".
 - **Why it is open.** 1.0.0 is that condition. No 1.0.0 build makes such a file; only someone who exported one from a pre-release build holds one.
