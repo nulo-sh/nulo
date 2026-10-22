@@ -12,6 +12,7 @@ import {
 	sourceFiles,
 	TEST_FILE,
 } from "../../scripts/type-roles/source-scan"
+import { callsTo } from "../../scripts/type-roles/source-code"
 
 /**
  * Static ban: no component runs `useCssVars`, which on every mount and update of each instance
@@ -20,7 +21,7 @@ import {
  * inline through `:style` and read it with `var()` instead.
  *
  * Findings are the compiler's own `descriptor.cssVars` (a commented-out `v-bind` is none, a template
- * `v-bind` never one) and any `useCssVars(` in a script; each matches one `REVIEWED` entry by file and text.
+ * `v-bind` never one) and each call to `useCssVars` in a script; each matches one `REVIEWED` entry by file and text.
  */
 
 const POLICY: SourcePolicy = {
@@ -28,7 +29,7 @@ const POLICY: SourcePolicy = {
 	exts: ["vue", "ts", "js"],
 	skip: [TEST_FILE, STORY_FILE, DECLARATION, GENERATED_TYPES],
 }
-const HAND_CALL = /\buseCssVars\s*\(/
+const HAND_CALL = /(^|\.)useCssVars$/
 
 type Finding = { file: string; text: string }
 type Reviewed = Finding & { why: string }
@@ -37,14 +38,10 @@ type Reviewed = Finding & { why: string }
 const REVIEWED: Reviewed[] = []
 
 function scan(file: string, source: string): Finding[] {
-	const handCall = (scripts: string[]): Finding[] =>
-		scripts.some((script) => HAND_CALL.test(script)) ? [{ file, text: "useCssVars(" }] : []
-	if (!file.endsWith(".vue")) return handCall([source])
-	const { descriptor } = parse(source, { filename: file, sourceMap: false })
-	return [
-		...descriptor.cssVars.map((expression) => ({ file, text: `v-bind(${expression})` })),
-		...handCall([descriptor.script, descriptor.scriptSetup].flatMap((block) => (block ? [block.content] : []))),
-	]
+	const calls = callsTo(file, source, HAND_CALL).map(() => ({ file, text: "useCssVars(…)" }))
+	if (!file.endsWith(".vue")) return calls
+	const vars = parse(source, { filename: file, sourceMap: false }).descriptor.cssVars
+	return [...vars.map((expression) => ({ file, text: `v-bind(${expression})` })), ...calls]
 }
 
 const treeFiles = (): string[] => sourceFiles(POLICY)
@@ -87,13 +84,14 @@ describe("css vars ban (static)", () => {
 			"<template><span /></template><style module>.e { &:hover { color: v-bind(x); } }</style>",
 			["v-bind(x)"],
 		],
-		["a hand-written call in a component", "x.vue", "<script setup>useCssVars(() => ({ x: 1 }))</script>", ["useCssVars("]],
+		["a hand-written call in a component", "x.vue", "<script setup>useCssVars(() => ({ x: 1 }))</script>", ["useCssVars(…)"]],
 		[
-			"a hand-written call in a composable",
+			"a hand-written call in a composable, a comment before its arguments",
 			"x.ts",
-			'import { useCssVars } from "vue"\nexport const use = () => useCssVars(() => ({}))',
-			["useCssVars("],
+			'import { useCssVars } from "vue"\nexport const use = () => useCssVars /* why */ (() => ({}))',
+			["useCssVars(…)"],
 		],
+		["a comment and a string naming it", "x.ts", '// useCssVars()\nexport const hint = "useCssVars()"', []],
 		[
 			"a template v-bind spread and an inline custom property",
 			"x.vue",
