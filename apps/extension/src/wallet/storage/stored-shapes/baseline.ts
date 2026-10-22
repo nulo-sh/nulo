@@ -31,7 +31,6 @@ import { parseEnvelope, type RowKeysSource, type SealedRootOptions } from "../se
 import { STORED_SHAPES, type StoredShape, type StoredShapeName } from "../stored-shapes"
 import {
 	entityStorage,
-	type PerProfileValueStoreName,
 	type PlainEntityStoreName,
 	type SealedStoreName,
 	STORES,
@@ -210,8 +209,7 @@ export async function readStored(name: StoredShapeName, area: MinimalStorageArea
 	}
 	let value: unknown
 	if (store?.kind === "entity") value = await entityStorage<unknown>(name as PlainEntityStoreName, area).get(idOf(shape, key))
-	else if (store?.ref.kind === "value") value = await readOrAbsent(() => valueStorage(name as ValueStoreName, area).get())
-	else if (store) value = await readOrAbsent(() => valueStorage(name as PerProfileValueStoreName, area, idOf(shape, key)).get())
+	else if (store) value = await readOrAbsent(() => valueStorage(name as ValueStoreName, area).get())
 	else value = (await area.get(key))[key]
 	return shape.read(value, now)
 }

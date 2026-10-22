@@ -2,7 +2,7 @@ import { MemoryStorageArea } from "@nulo/wallet-core/storage"
 import { beforeAll, describe, expect, test } from "vitest"
 import { realMigrations } from "./migrations"
 import { committedBaseline, type Decoding, decodeGoldens } from "./stored-shapes/baseline"
-import { entityStorage, type SealedStoreName, STORES, sealedEntityStorage, valueStorage } from "./stores"
+import { entityStorage, type SealedStoreName, STORES, sealedEntityStorage } from "./stores"
 
 const { snapshot, goldens } = committedBaseline()
 const codecNames = (Object.keys(STORES) as (keyof typeof STORES)[]).filter((name): name is SealedStoreName => "schema" in STORES[name])
@@ -46,12 +46,5 @@ describe("the store factories", () => {
 		const profile = fullRow("profiles").row
 		const area = new MemoryStorageArea().seed({ [`${STORES.profiles.ref.root}@ffffffff`]: JSON.stringify(profile) })
 		expect(await entityStorage<unknown>("profiles", area).get("ffffffff")).toBeUndefined()
-	})
-
-	test("a per-profile value store needs its profile id and writes under it", async () => {
-		const area = new MemoryStorageArea()
-		await valueStorage<{ a: number }>("dappRegistrations", area, "0a1b2c3d").set({ a: 1 })
-		expect([...area.data.keys()]).toEqual(["nulo:core:dappRegistrations@0a1b2c3d"])
-		expect(() => valueStorage("dappRegistrations" as never, area)).toThrow("a profile id is required")
 	})
 })

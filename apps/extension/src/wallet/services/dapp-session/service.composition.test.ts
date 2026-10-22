@@ -21,6 +21,7 @@ import { svc } from "@/wallet/services/composition-harness"
 import { DappSessionService } from "./service"
 import { AccessLevel, type GrantedCapabilityRecord } from "./spec"
 import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 
 const _waitFor = async (pred: () => Promise<boolean>, ms = 1000) => {
 	const deadline = Date.now() + ms
@@ -56,11 +57,8 @@ async function makeHarness() {
 	const service = new DappSessionService(logger, api)
 	collection.add(service)
 	await collection.start()
-	const registrations = async (profileId: string) => {
-		const key = `nulo:core:dappRegistrations@${profileId}`
-		const raw = (await api.storage.local.get(key))[key]
-		return raw === undefined ? undefined : JSON.parse(raw as string)
-	}
+	const rowKeys = (await rowKeysForEveryProfile()).rowKeys
+	const registrations = (profileId: string) => sealedEntityStorage("dappRegistrations", api.storage.local, rowKeys).get(profileId)
 	return { service, onProfileDeleted, registrations }
 }
 

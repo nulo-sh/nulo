@@ -27,7 +27,12 @@ import {
 	parseAuthwitStatusRowId,
 } from "@/wallet/services/auth-registry/spec"
 import { CONTACT_STORAGE_ROOT, ContactSchema } from "@/wallet/services/contact/spec"
-import { DAPP_REGISTRATIONS_STORAGE_ROOT, DAPP_SESSION_STORAGE_ROOT, DappSessionSchema } from "@/wallet/services/dapp-session/spec"
+import {
+	DAPP_REGISTRATIONS_STORAGE_ROOT,
+	DAPP_SESSION_STORAGE_ROOT,
+	DappSessionSchema,
+	RegistrationCountsRowSchema,
+} from "@/wallet/services/dapp-session/spec"
 import { FPC_STORAGE_ROOT, StoredFpcSchema } from "@/wallet/services/fpc/spec"
 import { ArrivalRowSchema } from "@/wallet/services/incoming-transfer/arrival-state"
 import {
@@ -69,8 +74,8 @@ export type CodecStore<S extends z.ZodType = z.ZodType> = {
 }
 /** An EntityStorage root read with no codec: its service checks every row it uses. */
 export type PlainEntityStore = { kind: "entity"; ref: RootRef; options?: KeyIdentityOptions }
-/** A ValueStorage key read with no codec; a `root` ref is one key per profile, `${root}@${id}`. */
-export type PlainValueStore = { kind: "value"; ref: RootRef | ValueRef }
+/** A ValueStorage key read with no codec. */
+export type PlainValueStore = { kind: "value"; ref: ValueRef }
 export type Store = CodecStore | PlainEntityStore | PlainValueStore
 
 const codec = <S extends z.ZodType>(root: string, schema: S, options?: KeyIdentityOptions) =>
@@ -79,7 +84,6 @@ const sealedCodec = <S extends z.ZodType>(root: string, schema: S, sealedRoot?: 
 	({ ...codec(root, schema, options), sealed: true, ...(sealedRoot ? { sealedRoot } : {}) }) as const
 const plainEntity = (root: string, options: KeyIdentityOptions) => ({ kind: "entity", ref: { kind: "root", root }, options }) as const
 const value = (key: string) => ({ kind: "value", ref: { kind: "value", key } }) as const
-const perProfileValue = (root: string) => ({ kind: "value", ref: { kind: "root", root } }) as const
 
 /** Ids minted `max + 1` over the key space: every identity decision downstream trusts the embedded id.
  *  The default string mode would hide every numeric row while `getKeys()` still saw its key. */
@@ -177,6 +181,7 @@ export const STORES = {
 	authRegistryEnabled: sealedCodec(AUTH_REGISTRY_ENABLED_STORAGE_ROOT, AuthwitStatusSchema, REGISTRY_FLAG_LAYOUT),
 	contacts: sealedCodec(CONTACT_STORAGE_ROOT, ContactSchema),
 	dappSessions: sealedCodec(DAPP_SESSION_STORAGE_ROOT, DappSessionSchema),
+	dappRegistrations: sealedCodec(DAPP_REGISTRATIONS_STORAGE_ROOT, RegistrationCountsRowSchema, PROFILE_ROW_LAYOUT),
 	fpcs: sealedCodec(FPC_STORAGE_ROOT, StoredFpcSchema),
 	journal: sealedCodec(OPERATION_JOURNAL_STORAGE_ROOT, OperationRecordSchema),
 	networks: sealedCodec(NETWORK_STORAGE_ROOT, NetworkRowSchema),
@@ -209,7 +214,6 @@ export const STORES = {
 	config: value(CONFIG_STORAGE_KEY),
 	tokenPrices: value(TOKEN_PRICES_STORAGE_KEY),
 	tokenList: value(TOKEN_LIST_STORAGE_KEY),
-	dappRegistrations: perProfileValue(DAPP_REGISTRATIONS_STORAGE_ROOT),
 } as const satisfies Record<string, Store>
 
 type Stores = typeof STORES
@@ -218,8 +222,7 @@ type NamesWhere<C> = { [N in StoreName]: Stores[N] extends C ? N : never }[Store
 /** A sealed root is built only by {@link sealedEntityStorage}: no plain store reads or writes it. */
 export type SealedStoreName = NamesWhere<{ sealed: true }>
 export type PlainEntityStoreName = Exclude<NamesWhere<{ kind: "entity" }>, SealedStoreName>
-export type ValueStoreName = NamesWhere<{ kind: "value"; ref: ValueRef }>
-export type PerProfileValueStoreName = NamesWhere<{ kind: "value"; ref: RootRef }>
+export type ValueStoreName = NamesWhere<{ kind: "value" }>
 
 /** The value a sealed root reads: its schema's output. */
 export type StoredRow<N extends SealedStoreName> = z.output<Stores[N]["schema"]>
@@ -248,15 +251,6 @@ export function sealedEntityStorage<N extends SealedStoreName>(
 	return new SealedEntityStorage(inner, area, store.ref.root, keys, store.sealedRoot)
 }
 
-export function valueStorage<T>(name: ValueStoreName, area: MinimalStorageArea): ValueStorage<T>
-export function valueStorage<T>(name: PerProfileValueStoreName, area: MinimalStorageArea, profileId: string): ValueStorage<T>
-export function valueStorage<T>(
-	name: ValueStoreName | PerProfileValueStoreName,
-	area: MinimalStorageArea,
-	profileId?: string,
-): ValueStorage<T> {
-	const { ref } = STORES[name]
-	if (ref.kind === "value") return new ValueStorage<T>(ref.key, area)
-	if (profileId === undefined) throw new Error(`${name} is one key per profile: a profile id is required`)
-	return new ValueStorage<T>(`${ref.root}@${profileId}`, area)
+export function valueStorage<T>(name: ValueStoreName, area: MinimalStorageArea): ValueStorage<T> {
+	return new ValueStorage<T>(STORES[name].ref.key, area)
 }

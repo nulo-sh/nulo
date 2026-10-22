@@ -235,7 +235,7 @@ export const STORED_SHAPES = {
 	tokenPrices: described("tokenPrices", PriceStateSchema, usableQuotes),
 	tokenList: described("tokenList", TokenListStateSchema, decodeTokenListState),
 	tokenSeeded: sealedDescribed("tokenSeeded", SeedMarkersSchema, decodeSeedMarkers),
-	dappRegistrations: described("dappRegistrations", RegistrationCountsSchema, decodeRegistrationCounts),
+	dappRegistrations: sealedDescribed("dappRegistrations", RegistrationCountsSchema, decodeRegistrationCounts),
 
 	activeNetwork: { ref: root(ACTIVE_NETWORK_STORAGE_ROOT), encoding: "structured", schema: z.string(), read: decodeActiveNetworkId },
 	legalAccepted: { ref: value(LEGAL_ACCEPTANCE_KEY), encoding: "structured", schema: LegalAcceptanceSchema, read: parseAcceptanceRecord },

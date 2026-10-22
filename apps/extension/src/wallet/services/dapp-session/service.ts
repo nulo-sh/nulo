@@ -112,7 +112,9 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 			(profileId) => this.profileService.deriveDappSessionMacKey(profileId),
 			logger,
 		)
-		this.registrations = new RegistrationAllowance(browserApi.storage.local)
+		this.registrations = new RegistrationAllowance(
+			sealedEntityStorage("dappRegistrations", browserApi.storage.local, (profileId) => this.profileService.rowKeys(profileId)),
+		)
 	}
 
 	protected async init(services: ServiceCollection) {
@@ -121,11 +123,12 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
 	}
 
-	/** Seals the profile's plaintext rows under the lock every session writer holds, so no write
-	 *  lands between a row's read and its sealed commit. */
+	/** Seals the profile's plaintext sessions and registration counts, each under the lock every
+	 *  writer of it holds, so no write lands between a row's read and its sealed commit. */
 	private async sealLegacyRows(profileId: string): Promise<void> {
 		try {
 			await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+			await this.registrations.sealLegacy(profileId)
 		} catch (error) {
 			this.logWarn("sealing the profile's plaintext dApp sessions failed; the next unlock retries", { error })
 		}
