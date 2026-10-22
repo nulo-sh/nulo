@@ -162,8 +162,8 @@ uncommitted changes a build reads, is refused, so commit before you build it.
   Network, node-free. Its first case meets the arrival after the Terms sheet and never after Stay;
   its second moves Testnet first, so the reset's takeover goes ahead of both. The candidate records
   its kind in `update-candidate.json`, and each scenario refuses the other kind, so run this one by
-  file. No other build may carry the extra seed: `agent.sh` and the smoke setup refuse a bundle
-  with its stamp, and the release marker step refuses it too.
+  file. `agent.sh`, the smoke setup and the release marker step each refuse a bundle with the extra
+  seed's stamp.
 
 ```bash
 bash apps/extension/scripts/e2e/build-update-candidate.sh chrome   # writes .e2e-state/update-candidate/chrome

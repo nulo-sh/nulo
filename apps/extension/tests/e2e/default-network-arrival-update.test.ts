@@ -1,7 +1,7 @@
 /**
  * A release install updated in place to a candidate that seeds one more default network meets that
- * network's arrival once: after the barriers, the reset's takeover and the Terms sheet, never beside
- * one, and never again once answered. Opt-in, as the other update scenarios:
+ * network's arrival once: with no barrier raised, after the reset's takeover and the Terms sheet,
+ * never beside one, and never again once answered. Opt-in, as the other update scenarios:
  * `NULO_E2E_UPDATE_FROM=<tag>` with `NULO_E2E_UPDATE_TO` the candidate
  * `build-update-candidate.sh <browser> --extra-seed` wrote. Run it by file: the other update
  * scenarios refuse that candidate, and this one refuses theirs.
@@ -17,7 +17,7 @@
  * after the update, while the candidate is still locked, as the replay moves its Testnet: what is
  * proven is the first unlock over them, not a candidate boot that found them already in place.
  *
- * Runtime: estimated 3 min on Chrome, 5 min on Firefox.
+ * Runtime: estimated 3 min on Chrome, 5 min on Firefox; measured 38 s and 49 s, the release cached.
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
@@ -94,11 +94,8 @@ async function released(ctx: ExtensionContext): Promise<Entries> {
 
 const textOf = (page: Page, testid: string) => page.$eval(`[data-testid="${testid}"]`, (el) => el.textContent?.trim())
 
-/**
- * Plants what `plant` writes through a page of its own, then opens the updated wallet, still locked,
- * traces it and unlocks it. The Terms sheet reads its status once, as the popup mounts, so a value
- * planted through an open popup can miss it.
- */
+/** The Terms sheet reads its status once, as the popup mounts, so a value planted through an open
+ *  popup can miss it: plant first, through a page of its own. */
 async function openAndUnlock(ctx: ExtensionContext, plant: (page: Page) => Promise<void>): Promise<Page> {
 	const scratch = await openScratchPage(ctx.browser, ctx.extensionId)
 	try {
@@ -119,7 +116,6 @@ async function acceptTerms(page: Page): Promise<void> {
 	await pointerClick(page, "legal-continue")
 }
 
-/** The arrival, showing, names the new default and the network the person stays on. */
 async function expectArrival(page: Page, current: string): Promise<void> {
 	await page.waitForSelector(ARRIVAL, { visible: true, timeout: 30_000 })
 	expect(await textOf(page, "network-arrival-title")).toBe(`${E2E_EXTRA_SEED.name} is in your wallet`)

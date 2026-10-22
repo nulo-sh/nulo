@@ -30,3 +30,14 @@ Each mutation of the candidate's source, built and run at retry 0, turns the nam
 - M2, `KINDS_SEEDED_BEFORE_RECORD` emptied: both, "Local Network is in your wallet" (the deleted default came back and announced).
 - M3, `answerNetworkArrival` writes nothing: both, the record keeps `announce` after Stay.
 - M4, the Terms sheet no longer waits for the takeover: (b) only, the one case with a takeover.
+
+## Review round 1, 2026-10-22
+
+- **Codex** (`gpt-6.1-sol`, high, session `01a160eb`): `clean`. "No material correctness or security findings." One low: a doc comment narrating the wait below it. Removed.
+- **Opus** (diff review): `findings`, all low, each checked against the tree.
+  1. The header claimed ordering against the barriers, which neither case raises. Reworded: "with no barrier raised".
+  2. The measured runtime was in no committed file. Added to the header and the plan.
+  3. Case (b)'s account check proves the scope move, not names or visibility (one default account). The plan's wording narrowed; the replay proves what the reset carries.
+  4. The README's "no other build" overstated: `test:e2e:all` loads `dist/` unchecked. Narrowed to the three refusals that exist; the builder's exit trap already removes the armed `dist/`.
+  5. Two comments: the arm's "both flags required" restated the throw; `openAndUnlock`'s doc narrated its body. Both cut to the invariant.
+- Gates before round 1: `test:all`, `typecheck:all`, `test:ci-gating` exit 0; the release Chrome and Firefox builds hold neither the stamp nor the seed's chainId or node; with the marker removed from `_build-extension.yml`, `build-env-guard.test.ts` fails on the new stamp. Chrome smoke at retry 0, `network-arrival`, `stale-network`, `legal-acceptance`: 19 pass (242 s).

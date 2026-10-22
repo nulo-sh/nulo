@@ -128,8 +128,7 @@ export const E2E_WALLET_CLOCKS_BUILD_STAMP: "NULO_E2E_WALLET_CLOCKS_BUILD_STAMP"
 /**
  * E2E-only extra default network, for the update candidate the in-place update scenarios run.
  * Double opt-in, like the token-seed source: a seed is offered to every person who opens the
- * wallet, so a stray single flag would not be inert, it would ship a network nobody runs. Both
- * flags required, exactly-one throws.
+ * wallet, so a stray single flag would not be inert, it would ship a network nobody runs.
  */
 const EXTRA_SEED = (import.meta.env.VITE_NULO_E2E_EXTRA_SEED ?? "") === "1"
 const EXTRA_SEED_CONFIRM = (import.meta.env.VITE_NULO_E2E_EXTRA_SEED_CONFIRM ?? "") === "1"
