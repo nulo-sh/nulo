@@ -356,7 +356,8 @@ export class ExecutionLane {
 	 * Hands a granted dApp send's slot on while `wait` runs, then re-enters at the tail in the
 	 * origin's bucket with the place it was admitted under, so no re-entry is refused for capacity.
 	 * The record stays vouched for and keeps the controller `acquireSlot` registered; a silent-path
-	 * record reads `queued` while it waits. Errors map as `acquireSlot`'s.
+	 * record's `queued` write settles before `wait` runs, after the slot is handed on. Errors map as
+	 * `acquireSlot`'s.
 	 */
 	public async parkSlot(
 		release: ExecutionMutexRelease,
@@ -419,8 +420,9 @@ export class ExecutionLane {
 		}
 	}
 
-	/** A silent-path record reads `pending` before it runs; it reads `queued` while it waits, and
-	 *  the claim takes it back. A `queued` or ended record is left as it is. */
+	/** A silent-path record reads `pending` before it runs; this best-effort write makes it read
+	 *  `queued` while it waits, and the claim takes it back. A `queued` or ended record is left
+	 *  as it is. */
 	private async requeue(journalId: string): Promise<void> {
 		try {
 			await this.deps.operationJournal.transitionIfStage(journalId, ["pending"], { stage: "queued" })
