@@ -11,7 +11,7 @@ base: origin/dev at 2afb3260e
 trunk: dev
 issues: "#1078 (A1 closes it, with the third file and the failure-path dir recon added to it, D2, D3); #1082 (known limit, filed closed in planning)"
 post_implementation_hardening: not scheduled
-status: A1 Phase 1 green, in the review loop
+status: A1 Phase 1 green, review loop converged
 ---
 
 # e2e-tmp-4: three e2e-script unit tests leave their temp dir on a non-Linux host
@@ -104,6 +104,9 @@ Opened ready, without labels, after the loop converges. No e2e label: the change
 - **Codex r1** (gpt-6.1-sol, high, session `01a16532`): **conditional approve**. Reproduced F2. Accepted: `randomUUID()` pushes the socket path to 114–120 bytes and breaks 4 Linux cases (demonstrated; a 6-character suffix, Name length); the `afterAll` removed a planted entry after `mkdirSync` threw (demonstrated in a probe; `rootMade`); a `find -newer` on `/tmp` cannot attribute a dir (D4 now counts private scratch dirs); gate working dirs named; F6 reworded. Rejected: a short private `TMPDIR` under `/tmp` (D4); a shorter prefix (Not taken f); the comment wording (Opus's invariant taken instead).
 - **Opus 5.5 r1** (Plan): **conditional approve**. Same suffix finding (traced through the real `nodeTmpDir`). Accepted: the base64url suffix, `rootMade`, step 8 as D3's after-proof, scratch removal moved after Phase 2's gate with a defined rerun, the import wording per file, the invariant comment, `env -u TMPDIR`, F2's skipped-tests clause, the two cross-platform tests. The orphaned `sleep` (demonstrated, no dir): known limit #1082.
 - **Codex r2** (resumed `01a16532`): **approve**. Ran the plan's edits as an in-memory transform: stubbed 3 → 0 with 2 passed and 42 skipped; long Linux `TMPDIR` 1 → 0 with the same 4 named failures and their message; default `TMPDIR` 44 passed. Verified the 90-byte arithmetic, `rootMade`, and D4's rejection of a `/tmp` parent under the scratch rule. No new finding.
+- **Post-implementation, Codex r1** (gpt-6.1-sol, high, fresh session `01a16543`, the code diff against `421bf33b4`): no bug. Probed collisions (`rootMade` kept both planted dirs), the kill-then-remove order, lazy `DIR` reads, the `outside` hook placement, and reproduced the gate (3 → 0, 1 → 0, 44 passed). One low suggestion, a comment on the suffix's length at `owned-processes.test.ts:11`: rejected, since a longer suffix fails four cases with `nodeTmpDir`'s own message naming the cause and the remedy.
+- **Post-implementation, Opus 5.5** (general-purpose, beside r1): **clean**. Nothing touches the filesystem under `ROOT` or `DIR` before its block's `beforeAll`; a failed `beforeAll` skips the block's tests; imports and comments clean; judged the suffix note duplicative. Side effect it found: on the base, a `-t` run of a later block alone leaked `ROOT`; it no longer does.
+- **Post-implementation, Codex r2** (resumed `01a16543`): **clean**. The suggestion is not material; no regression. The loop converged.
 
 ## Seeds
 
