@@ -45,6 +45,35 @@ Measured on Chrome with the update replay's recorded v0.31.0 profile (7 rows in 
 - **Codex r2: CHANGES, one medium.** The four fixes hold. The shared conversion checked the row's bytes and keys but not its lock ticket: a section the watchdog displaced during its last read could write back a row a purge had deleted meanwhile (its reproducer brought a purged authwit back). Every section now reads `isCurrent` with its other checks before the commit, which covers every converting service, A2's included. `574f7c78b`, mutation-checked.
 - **Left as it was**: such a planted row now belongs to no profile and no read serves it. It stays in plaintext under A's prefix, so A's scope wipe removes it and B's never did, as before A3.
 
+## Home's balance load: over the 50 ms rule, stopped for a decision
+
+`sealed-storage.test.ts` seeds 2 000 balance rows for the active account (naming no live token, so Home renders none of them) and times `getTokenBalances(undefined, account)`, Home's read, as the median of 5 from a fresh popup, plaintext and then sealed in the same run.
+
+| Run | Chrome, plaintext → sealed | Firefox, plaintext → sealed | load1 |
+|---|---|---|---|
+| full smoke, both browsers in parallel | 91 → 154 ms (+63) | timed out earlier in the test (below) | 89 → 268 |
+| alone, 1 | 90 → 145 ms (+55) | 309 → 358 ms (+49) | 124–178 |
+| alone, 2 | 71 → 161 ms (+90) | 252 → 370 ms (+118) | 124–204 |
+| alone, 3 | 74 → 178 ms (+104) | | 204 → 198 |
+| full Firefox smoke, alone | | 386 → 302 ms (−84) | 151 → 89 |
+
+Chrome is over the rule in every run; Firefox in one of three, and its samples swing by more than the rule either way. The read opens every row: the root is numeric and the account and token sit inside the seal, so nothing can be skipped before the open. Under Bun, 2 000 opens cost the same for balances and contacts (plaintext 13 and 8 ms, sealed 63–75 and 66 ms); of `openRow`'s 36–37 ms, AES-GCM is 19–20 ms, base64, AAD and the UTF-8 decode 4–7 ms, and the rest is the per-row promise chain. No part dominates, so no local change buys the 50 ms back. The options, each a plan change:
+
+1. **Accept.** The cost is linear in balance rows, one per (token, account) pair. At 2 000 pairs it is 55–118 ms; a wallet with 50 pairs pays about 1–3 ms.
+2. **Keep opened rows in memory per worker**, keyed by the stored ciphertext and dropped with the profile's keys: no stored state, but a cache with its own lifecycle.
+3. **Key the balance root by profile and the account's keyed hash**, so Home opens only its account's rows: a layout change, a stamp and a migration of a numeric root.
+
+Recommended: 1, with 2 as a follow-up if a real wallet's Home ever approaches the rule.
+
+**The conversion wait in the same spec.** With A3's balances the unlock seals 4 500 rows (A2: 2 500). Alone, Firefox seals them in 27–36 s and Chrome in about 15 s, inside the spec's 120 s wait. In the full smoke with both browsers in parallel at load1 near 250, Firefox overran the wait once; alone it passed 3 of 3 (27–36 s), the third inside the full Firefox smoke run again alone.
+
 ## Measured
 
-To be filled in by the gates.
+All at retry 0, on one host shared with other agents; load1 is the 1-minute load average on 188 cores at a run's start and end.
+
+- **Unit**, at HEAD: `test:all` green (extension 906 files, 15 015 tests; load1 134 → 53), `test:ci-gating` 687 pass (load1 53 → 47), `lint` and `typecheck` green, complexity check green. `test:all` was also green after round 1's fixes (extension 15 014 tests; load1 99 → 91). `audit:vue` green before the review fixes (extension 15 010 tests; load1 33 → 41). The A3 suites (incoming, storage, network-reset, token-balance, auth-registry) 864 tests, five times.
+- **Network, Chrome, at HEAD**, the gate's six (`incoming-arrival`, `incoming-public-transfers`, `incoming-transfers`, `balance-row-reconciliation`, `authwit-lifecycle`, `account-balance-orphans`) and the seven other specs whose readers changed or that read incoming rows (`account-switch-isolation`, `backup-restore-integrity`, `snack-placement`, `token-add-auto-trust`, `import-handshake-note`, `import-handshake-note-matrix`, `same-token-concurrent-sends`): 13 files, 45 tests, 1 649 s (load1 129 → 55). The same set before round 2's fix: 1 555 s (load1 139 → 43).
+- **Network, Firefox, at HEAD**, the same 13 files: 45 tests, 1 931 s (load1 32 → 181).
+- **Update replay** from v0.31.0, candidates built at HEAD: Chrome 3 passed, 55 s (load1 115 → 84); Firefox 3 passed, 77 s (load1 81 → 125).
+- **Full smoke**, fresh armed builds at HEAD, both browsers in parallel: Chrome 61 files passed, 9 skipped, 2 376 s (load1 89 → 268). Firefox 64 passed, 5 skipped, 1 failed (`sealed-storage`'s conversion wait, above), 3 676 s (load1 → 139). Firefox again, alone: 65 passed, 5 skipped, 3 038 s (load1 151 → 89).
+- **Soak**: `extension-network-e2e-soak.yml` run 39746628699, the 8 network files this arc changes, 5 repeats, retry 0, proverless: success, 11–13 min an iteration.
