@@ -63,7 +63,7 @@
  */
 import { defineMigration } from "@nulo/wallet-core/migration"
 import { defineRowMapMigration } from "@/wallet/services/backup/row-map-migration"
-import { PROFILE_STORAGE_ROOT } from "@/wallet/services/profile/spec"
+import { PROFILE_TOMBSTONE_ROOT } from "@/wallet/services/profile/tombstone-repository"
 
 /** PREFERRED: the backup-safe declarative form. Finite data-only clauses
  *  (`rename` / `drop` / `retype` / `remapValues` / `addDefault`), applied per
@@ -72,9 +72,9 @@ import { PROFILE_STORAGE_ROOT } from "@/wallet/services/profile/spec"
  *  idempotency is inherent (and still harness-verified). */
 export const exampleRowMapMigration = defineRowMapMigration({
 	version: 2,
-	description: "example: add a default `pinned` flag to every profile row",
+	description: "example: add a default `attempts` count to every deletion tombstone",
 	rowMaps: {
-		[PROFILE_STORAGE_ROOT]: { addDefault: { pinned: false } },
+		[PROFILE_TOMBSTONE_ROOT]: { addDefault: { attempts: 0 } },
 	},
 })
 
@@ -83,18 +83,18 @@ export const exampleRowMapMigration = defineRowMapMigration({
  *  per the hostile-input rule. */
 export const exampleMigration = defineMigration({
 	version: 2,
-	description: "example: add a default `pinned` flag to every profile row",
-	reads: [{ kind: "root", root: "nulo:core:profiles" }],
-	writes: [{ kind: "root", root: "nulo:core:profiles" }],
+	description: "example: add a default `attempts` count to every deletion tombstone",
+	reads: [{ kind: "root", root: "nulo:core:profile-tombstones" }],
+	writes: [{ kind: "root", root: "nulo:core:profile-tombstones" }],
 	up: async (ctx) => {
 		// Declare the PRE-migration shape once via the type parameter. It is an
 		// assertion over untrusted JSON, not a validation — keep field access
 		// guarded (spread + default below is presence-safe and idempotent).
-		type ProfileRow = { pinned?: boolean; [k: string]: unknown }
-		const rows = await ctx.local.rows<ProfileRow>("nulo:core:profiles")
-		await ctx.local.setRows<ProfileRow>(
-			"nulo:core:profiles",
-			rows.map(([id, row]) => [id, { pinned: false, ...row }]),
+		type TombstoneRow = { attempts?: number; [k: string]: unknown }
+		const rows = await ctx.local.rows<TombstoneRow>("nulo:core:profile-tombstones")
+		await ctx.local.setRows<TombstoneRow>(
+			"nulo:core:profile-tombstones",
+			rows.map(([id, row]) => [id, { attempts: 0, ...row }]),
 		)
 	},
 })
