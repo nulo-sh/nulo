@@ -61,6 +61,7 @@ import {
 	PROBE_TEXT,
 	placeTypeRoleProbes,
 	readHexOutsideMono,
+	readInsideView,
 	readPageTypography,
 	type SiteEntry,
 	siteSuite,
@@ -105,6 +106,38 @@ async function withProbes<T>(page: Page, fn: () => Promise<T>): Promise<T> {
 	} finally {
 		await clearTypeRoleProbes(page)
 		expect(await page.evaluate((prefix: string) => document.querySelectorAll(`[data-testid^="${prefix}"]`).length, PROBE)).toBe(0)
+	}
+}
+
+type Planting = { host: string; html: string; styles: Record<string, Record<string, string>>; hostStyle?: Record<string, string> }
+
+/** A host over the page, the view's full width, in the identifiers' face at `line-height: 1`. */
+const OVER_PAGE = { position: "fixed", top: "0", left: "0", width: "100%", font: "13px/1 var(--font-mono)", zIndex: "9999" }
+
+/**
+ * Runs `fn` with `html` planted on the page under its host, each named element styled through the
+ * CSSOM (`style-src` refuses a parsed `style` attribute), and removes the host after.
+ */
+async function withPlanted<T>(page: Page, { host, html, styles, hostStyle = {} }: Planting, fn: () => Promise<T>): Promise<T> {
+	await page.evaluate(
+		(id: string, markup: string, elStyles: Planting["styles"], own: Record<string, string>) => {
+			const el = document.createElement("div")
+			el.setAttribute("data-testid", id)
+			el.innerHTML = markup
+			Object.assign(el.style, own)
+			for (const [testid, style] of Object.entries(elStyles))
+				Object.assign((el.querySelector(`[data-testid="${testid}"]`) as HTMLElement).style, style)
+			document.body.appendChild(el)
+		},
+		host,
+		html,
+		styles,
+		hostStyle,
+	)
+	try {
+		return await fn()
+	} finally {
+		await page.evaluate((id: string) => document.querySelector(`[data-testid="${id}"]`)?.remove(), host)
 	}
 }
 
@@ -220,7 +253,7 @@ const LAYOUT_HTML = `
 	<span data-testid="tr-hidden">Read aloud only</span>`
 
 /** Each control's style, set through the CSSOM: `style-src` refuses a parsed `style` attribute. */
-const LAYOUT_STYLES: Record<string, Record<string, string>> = {
+const LAYOUT_STYLES: Planting["styles"] = {
 	"tr-clip": { width: "40px", overflow: "hidden" },
 	"tr-clipped-input": { width: "200px" },
 	"tr-scrolling-input": { width: "100px" },
@@ -248,19 +281,7 @@ test("the layout gate reports text an ancestor cuts or that runs past the box it
 	registeredExtension: ctx,
 }) => {
 	const page = await openHome(ctx)
-	await page.evaluate(
-		(html: string, styles: Record<string, Record<string, string>>) => {
-			const host = document.createElement("div")
-			host.setAttribute("data-testid", "tr-layout")
-			host.innerHTML = html
-			for (const [testid, style] of Object.entries(styles))
-				Object.assign((host.querySelector(`[data-testid="${testid}"]`) as HTMLElement).style, style)
-			document.body.appendChild(host)
-		},
-		LAYOUT_HTML,
-		LAYOUT_STYLES,
-	)
-	try {
+	await withPlanted(page, { host: "tr-layout", html: LAYOUT_HTML, styles: LAYOUT_STYLES }, async () => {
 		const { readings } = await readPageTypography(page, { kind: "laid-out" })
 		const fixture = readings.filter((reading) => reading.testid?.startsWith("tr-"))
 		// The screen-reader span paints nothing, so it is not read at all.
@@ -293,9 +314,7 @@ test("the layout gate reports text an ancestor cuts or that runs past the box it
 			"tr-flex-cut",
 			"tr-block-cut",
 		])
-	} finally {
-		await page.evaluate(() => document.querySelector('[data-testid="tr-layout"]')?.remove())
-	}
+	})
 	expect(ctx.pageErrors).toEqual([])
 })
 
@@ -311,7 +330,7 @@ const FATES_HTML = `
  * In the identifiers' own face at `line-height: 1`, as `AddressDisplay` draws them: a 20-character
  * line fits 50% of a 360 px view, not of a 240 px one.
  */
-const FATES_STYLES: Record<string, Record<string, string>> = {
+const FATES_STYLES: Planting["styles"] = {
 	"tr-fate-split-box": { width: "50%" },
 	"tr-fate-split": { overflowWrap: "anywhere" },
 	"tr-fate-presplit-box": { width: "40px" },
@@ -327,27 +346,7 @@ test("the narrow gate reports text its own width shows whole and the narrow widt
 	registeredExtension: ctx,
 }) => {
 	const page = await openHome(ctx)
-	await page.evaluate(
-		(html: string, styles: Record<string, Record<string, string>>) => {
-			const host = document.createElement("div")
-			host.setAttribute("data-testid", "tr-fates")
-			host.innerHTML = html
-			Object.assign(host.style, {
-				position: "fixed",
-				top: "0",
-				left: "0",
-				width: "100%",
-				font: "13px/1 var(--font-mono)",
-				zIndex: "9999",
-			})
-			for (const [testid, style] of Object.entries(styles))
-				Object.assign((host.querySelector(`[data-testid="${testid}"]`) as HTMLElement).style, style)
-			document.body.appendChild(host)
-		},
-		FATES_HTML,
-		FATES_STYLES,
-	)
-	try {
+	await withPlanted(page, { host: "tr-fates", html: FATES_HTML, styles: FATES_STYLES, hostStyle: OVER_PAGE }, async () => {
 		await textFates(page, "record")
 		let fates: TextFate[] = []
 		await atWidth(page, NARROW_WIDTH, async () => {
@@ -359,9 +358,60 @@ test("the narrow gate reports text its own width shows whole and the narrow widt
 			"cut tr-fate-cut",
 			"gone tr-fate-gone",
 		])
-	} finally {
-		await page.evaluate(() => document.querySelector('[data-testid="tr-fates"]')?.remove())
+	})
+	expect(ctx.pageErrors).toEqual([])
+})
+
+/**
+ * Two page scrollers, as every page has one: `overflow-y: auto` makes `overflow-x` compute to `auto`,
+ * yet neither is meant to scroll sideways. A holds what the narrow width pushes past it; B holds what
+ * stays inside: a box 0.5 px short of its edge, text under a box-less scroller, text below the fold.
+ */
+const SIDEWAYS_HTML = `
+	<div data-testid="tr-side-a">
+		<div data-testid="tr-side-wide"></div>
+		<div data-testid="tr-side-pushed">Pushed</div>
+	</div>
+	<div data-testid="tr-side-b">
+		<div data-testid="tr-side-fits"></div>
+		<div data-testid="tr-side-contents"><span data-testid="tr-side-held">Held</span></div>
+		<div data-testid="tr-side-below">Below the fold</div>
+	</div>`
+
+const SIDEWAYS_STYLES: Planting["styles"] = {
+	"tr-side-a": { overflowY: "auto", height: "120px" },
+	"tr-side-wide": { minWidth: "300px", height: "20px" },
+	"tr-side-pushed": { width: "60px", height: "20px", marginLeft: "250px" },
+	"tr-side-b": { overflowY: "auto", height: "120px" },
+	"tr-side-fits": { width: "calc(100% - 0.5px)", height: "20px" },
+	"tr-side-contents": { display: "contents", overflow: "auto" },
+	"tr-side-held": { display: "block", height: "20px" },
+	"tr-side-below": { marginTop: "400px", height: "20px" },
+}
+
+test("the narrow gate fails what a page scroller pushes sideways past the view, and nothing it holds inside", async ({
+	registeredExtension: ctx,
+}) => {
+	const page = await openHome(ctx)
+	const planted = async () => {
+		const { past, sideways } = await readInsideView(page)
+		const ours = ({ testid }: { testid: string | null }) => testid?.startsWith("tr-side") === true
+		return { past: past.filter(ours).map(({ testid }) => testid), sideways: sideways.filter(ours).map(({ testid }) => testid) }
 	}
+	await withPlanted(page, { host: "tr-side", html: SIDEWAYS_HTML, styles: SIDEWAYS_STYLES, hostStyle: OVER_PAGE }, async () => {
+		expect(await planted()).toEqual({ past: [], sideways: [] })
+		await textFates(page, "record")
+		let fates: TextFate[] = []
+		let narrow = {}
+		await atWidth(page, NARROW_WIDTH, async () => {
+			fates = await textFates(page, "compare")
+			narrow = await planted()
+		})
+		expect(fates.filter(({ testid }) => testid?.startsWith("tr-side")).map(({ fate, testid }) => `${fate} ${testid}`)).toEqual([
+			"gone tr-side-pushed",
+		])
+		expect(narrow).toEqual({ past: ["tr-side-wide", "tr-side-pushed"], sideways: ["tr-side-a"] })
+	})
 	expect(ctx.pageErrors).toEqual([])
 })
 

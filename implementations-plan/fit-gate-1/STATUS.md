@@ -4,3 +4,5 @@
 - 2026-10-21: base moved to `60ecd6cc3` (fit-240-2's #1025 landed); the worktree branch fast-forwarded before any commit.
 - 2026-10-21: plan drafted; Codex r1 (gpt-6.1-sol, high) and the Opus Plan leg running.
 - 2026-10-21: Codex r1 conditional approve and the Opus leg conditional approve, folded in; Codex r2 conditional approve (two local edits), r3 approve. Plan committed; awaiting the orchestrator's approval.
+- 2026-10-22: approved by the orchestrator (D1, D3, D7 in force; the two fits below 359 px only, 360 px proven unchanged). Base `type-roles` times and the base red recorded; before pictures captured.
+- 2026-10-22: Phase 1 done: the repaired rule and the planted test, gate met on both browsers (token metadata red as planned).
