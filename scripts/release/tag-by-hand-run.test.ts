@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test"
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { describe, expect, onTestFinished, test } from "bun:test"
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
@@ -217,6 +217,12 @@ describe("the runner process", () => {
 			env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
 			stdout: "pipe",
 			stderr: "pipe",
+		})
+		// On SIGTERM the runner still closes through PATH: kill it first, or it reaches the real gh.
+		onTestFinished(async () => {
+			child.kill("SIGKILL")
+			await child.exited
+			rmSync(dir, { recursive: true, force: true })
 		})
 		const calls = () => readFileSync(log, "utf8")
 		for (let i = 0; i < 100 && !/body .*User/.test(calls()); i++) await Bun.sleep(30)

@@ -1,0 +1,9 @@
+# e2e-tmp-4 phase 1: the dirs and the proof
+
+- **Base** (`origin/dev` at `421bf33b4` merged; the merge touched none of the arc's files): step 4 under the stub exit 0, 1 file passed and 2 skipped, 2 tests passed and 42 skipped, 3 dirs left; under the long scratch `TMPDIR` exit 1, the 4 named `owned-processes` cases failed with the socket-path message, 40 passed, 1 dir left (`nulo-aztec-outside-*`).
+- **After the edits** (`7cdb55421`): step 6 the same counts, 0 dirs; step 7 (`env -u TMPDIR`) 3 files and 44 tests passed; step 8 the same 4 failures and message, 40 passed, 0 dirs.
+- `bun run lint` exit 0 (4 infos, all in files the arc does not touch); `bun run typecheck:all` exit 0 (the extension's `tsconfig.scripts.json` types the three files).
+- **Review loop**: Codex r1 (fresh) no bug, one low comment suggestion rejected (the 107-byte check fails loudly with its own remedy); Opus clean; Codex r2 (resumed) clean. Converged at round 2 with no code change.
+- **Phase 2 gates on `c18f9ff3b`** (the code unchanged since): `bun run test` 917 files passed, 3 skipped; `bun run test:all` every workspace exit 0.
+- **D7** (after the PR opened): `origin/dev` landed e2e-tmp-2's `testTempDir`; merged (no conflict in the arc's files; GitHub had flagged the union-merged `archive/index.md`), and `outside` takes the helper. Gate rerun on `e2feee6e0`: stubbed 2/42, 0 dirs; default `TMPDIR` 50 passed and 1 expected fail with the helper's self-test; long `TMPDIR` the same 4 failures, 0 dirs; lint and typecheck:all exit 0. Codex r3 clean.
+- **Final `test:all`** on `393b7b59b`: one red outside the arc, `fpc/service-create.test.ts:233` (a sweep asserted settled after one `setTimeout(0)`), at load ~120; the file passed 3 of 3 alone and `test:all` passed on its one rerun (15 of 15 workspaces). Filed as #1086.

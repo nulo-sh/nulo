@@ -759,6 +759,20 @@ describe("ExecutionLane.parkSlot", () => {
 		}
 	})
 
+	test("runs the wait only once the record's queued write settles", async () => {
+		const { lane, deps } = makeLane()
+		const parked = await lane.acquireSlot("net-1", "q-1", FENCE, undefined, ORIGIN)
+		const written = deferred<unknown>()
+		;(deps.operationJournal.transitionIfStage as ReturnType<typeof vi.fn>).mockReturnValueOnce(written.promise)
+		const wait = vi.fn(async () => {})
+		const back = lane.parkSlot(parked.release, "net-1", "q-1", FENCE, parked.preController, ORIGIN, wait)
+		await flushMicrotasks()
+		expect(wait).not.toHaveBeenCalled()
+		written.resolve({ outcome: "transitioned", record: {} })
+		;(await back)()
+		expect(wait).toHaveBeenCalledTimes(1)
+	})
+
 	/** A journal whose transitions obey the stages the FSM allows from pre-submit. */
 	function sessionLane(assertFence: ExecutionLaneDeps["assertFence"]) {
 		const stages: Record<string, string> = { "q-1": "queued" }

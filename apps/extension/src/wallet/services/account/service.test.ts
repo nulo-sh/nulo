@@ -49,6 +49,30 @@ const readFailsOnSecondCall = (call: number): boolean => {
 	return true
 }
 
+/** Parks the first `get(rowKey)` after it returns, so the parked run holds a row it has already
+ *  read; parked before the read, its resumed read would see fresh state. */
+function parkRowRead(api: FakeBrowserApi, rowKey: string): { release: () => void; parked: Promise<void> } {
+	const realGet = api.storage.local.get.bind(api.storage.local)
+	let release!: () => void
+	let reached!: () => void
+	const parked = new Promise<void>((r) => {
+		reached = r
+	})
+	let armed = true
+	api.storage.local.get = (async (key: unknown) => {
+		const value = await realGet(key as never)
+		if (armed && key === rowKey) {
+			armed = false
+			reached()
+			await new Promise<void>((r) => {
+				release = r
+			})
+		}
+		return value
+	}) as typeof api.storage.local.get
+	return { release: () => release(), parked }
+}
+
 describe("AccountService.createAccount — deletion fence", () => {
 	async function makeHarness(over: { secret?: Promise<unknown>; probe?: Promise<number>; chainLive?: (call: number) => boolean } = {}) {
 		const api = new FakeBrowserApi()
@@ -617,34 +641,18 @@ describe("AccountService — same-row field editors serialize", () => {
 		await services.start()
 
 		const rowId = accountRowId("p1", 1, "0xaa")
-		await api.storage.local.set({ [`nulo:core:accounts@${rowId}`]: JSON.stringify(mkAccount("0xaa")) })
+		const rowKey = `nulo:core:accounts@${rowId}`
+		await api.storage.local.set({ [rowKey]: JSON.stringify(mkAccount("0xaa")) })
 
-		// Park the FIRST row read AFTER it returns — the parked name change then
-		// holds its already-read (soon stale) row snapshot while the visibility
-		// change tries to run to completion. Parking before the read would let
-		// the resumed read see fresh state and prove nothing.
-		const realGet = api.storage.local.get.bind(api.storage.local)
-		let parked: (() => void) | null = null
-		let armed = true
-		api.storage.local.get = (async (key: unknown) => {
-			const value = await realGet(key as never)
-			if (armed && typeof key === "string" && key.includes(rowId)) {
-				armed = false
-				await new Promise<void>((resolve) => {
-					parked = resolve
-				})
-			}
-			return value
-		}) as typeof api.storage.local.get
-
+		const gate = parkRowRead(api, rowKey)
 		const nameRun = service.changeAccountName("p1", 1, "0xaa", "B")
-		await new Promise((resolve) => setTimeout(resolve, 0))
+		await gate.parked
 		const visRun = service.changeAccountVisibility("p1", 1, "0xaa", false)
-		await new Promise((resolve) => setTimeout(resolve, 0))
-		;(parked as (() => void) | null)?.()
+		// An editor takes the row's lock before its first await, so the visibility change is queued here.
+		expect((service as unknown as { tupleLocks: { waiting(key: string): number } }).tupleLocks.waiting(rowId)).toBe(1)
+		gate.release()
 		await Promise.all([nameRun, visRun])
 
-		api.storage.local.get = realGet as typeof api.storage.local.get
 		const row = await service.getAccount("p1", 1, "0xaa")
 		expect(row?.name).toBe("B")
 		expect(row?.visible).toBe(false)
@@ -901,35 +909,12 @@ describe("AccountService purges wait for a rename holding the same row", () => {
 		return { api, service }
 	}
 
-	/** Parks the first keyed read of the row after it returns, as a rename's read. */
-	function parkRowRead(api: FakeBrowserApi): { release: () => void; parked: Promise<void> } {
-		const realGet = api.storage.local.get.bind(api.storage.local)
-		let release!: () => void
-		let reached!: () => void
-		const parked = new Promise<void>((r) => {
-			reached = r
-		})
-		let armed = true
-		api.storage.local.get = (async (key: unknown) => {
-			const value = await realGet(key as never)
-			if (armed && key === rowKey) {
-				armed = false
-				reached()
-				await new Promise<void>((r) => {
-					release = r
-				})
-			}
-			return value
-		}) as typeof api.storage.local.get
-		return { release: () => release(), parked }
-	}
-
 	test.each([
 		["clearChainState", (s: AccountService) => s.clearChainState("p1", 1)],
 		["purgeForProfile", (s: AccountService) => s.purgeForProfile("p1")],
 	])("%s: the renamed row is not written back after the delete", async (_name, purge) => {
 		const { api, service } = await makeHarness()
-		const gate = parkRowRead(api)
+		const gate = parkRowRead(api, rowKey)
 		const rename = service.changeAccountName("p1", 1, "0xaa", "renamed")
 		await gate.parked
 		const purging = purge(service)
@@ -943,7 +928,7 @@ describe("AccountService purges wait for a rename holding the same row", () => {
 	test("reconcileImportedAccounts: a keyless row is not written back by a rename parked on it", async () => {
 		const { api, service } = await makeHarness()
 		await api.storage.local.remove(keyRowKey)
-		const gate = parkRowRead(api)
+		const gate = parkRowRead(api, rowKey)
 		const rename = service.changeAccountName("p1", 1, "0xaa", "renamed")
 		await gate.parked
 		const reconciling = service.reconcileImportedAccounts("p1")

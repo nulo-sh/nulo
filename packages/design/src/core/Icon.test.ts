@@ -2,6 +2,7 @@ import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import { glyphs } from "./glyphs"
 import Icon from "./Icon.vue"
+import iconSource from "./Icon.vue?raw"
 
 const render = (props: Record<string, unknown>) => mount(Icon, { props: props as { name: "close" } })
 
@@ -46,6 +47,16 @@ describe("Icon", () => {
 		expect(pub.map((p) => [p.attributes("d"), p.attributes("fill")])).toEqual([[glyphs.public.s.join(" "), "none"]])
 		expect([glyphs.private, glyphs.public]).not.toContainEqual(glyphs.lock)
 		expect([glyphs.private, glyphs.public]).not.toContainEqual(glyphs["network-edit"])
+	})
+
+	test("a hover colour is the hovered class over the inline --icon-hover its rule reads; no hover colour sets neither", () => {
+		const hovered = render({ name: "close", hoverColor: "primary" })
+		const plain = render({ name: "close" })
+		expect(hovered.classes()).toContainEqual(expect.stringMatching(/hovered/))
+		expect((hovered.element as SVGElement).style.getPropertyValue("--icon-hover")).toBe("var(--txt-primary)")
+		expect(plain.classes()).not.toContainEqual(expect.stringMatching(/hovered/))
+		expect(plain.attributes("style")).not.toContain("--icon-hover")
+		expect(iconSource).toContain("color: var(--icon-hover);")
 	})
 
 	test("rotate turns the glyph about its centre", () => {

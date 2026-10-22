@@ -1,14 +1,17 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { randomBytes } from "node:crypto"
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import ts from "typescript"
-import { afterAll, describe, expect, test, vi } from "vitest"
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest"
+import { testTempDir } from "../../tests/e2e/helpers/test-temp-dir"
 
 // Set before the modules load: `E2E_DATA_ROOT` is read at import time, and these cases create and
 // delete run dirs that must never be a real run's.
-const ROOT = mkdtempSync(path.join(tmpdir(), "nulo-owned-processes-test-"))
+const ROOT = path.join(tmpdir(), `nulo-owned-processes-test-${randomBytes(4).toString("base64url")}`)
 process.env.NULO_E2E_DATA_ROOT = ROOT
+let rootMade = false
 
 const {
 	LAUNCH_ENV,
@@ -137,6 +140,11 @@ function spyKill() {
 const fast = { graceMs: 1_500, killGraceMs: 1_000, pollMs: 50 }
 
 describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { timeout: 20_000 }, () => {
+	// Made and removed by this block, so a host that skips it makes nothing.
+	beforeAll(() => {
+		mkdirSync(ROOT, { mode: 0o700 })
+		rootMade = true
+	})
 	afterAll(() => {
 		for (const pid of [...spawned, ...markers.flatMap((m) => ownedProcesses(m))]) {
 			try {
@@ -145,7 +153,7 @@ describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { t
 				// Already stopped by the case under test.
 			}
 		}
-		rmSync(ROOT, { recursive: true, force: true })
+		if (rootMade) rmSync(ROOT, { recursive: true, force: true })
 	})
 
 	test("teardown stops a leaderless group's marked member and leaves an unmarked sibling", async () => {
@@ -235,7 +243,7 @@ describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { t
 
 	test("a run dir is deleted only directly under the root, with the prefix, stamped with the lock's marker", async () => {
 		const m = marker()
-		const outside = mkdtempSync(path.join(tmpdir(), "nulo-aztec-outside-"))
+		const outside = testTempDir("nulo-aztec-outside-")
 		createRunDir(outside, m)
 		const unprefixed = path.join(ROOT, "other-run")
 		createRunDir(unprefixed, m)
@@ -250,7 +258,6 @@ describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { t
 		expect(deletableRunDir(own, m)).toBeDefined()
 		expect(await reapPriorRun(lock({ markers: { aztec: m }, owner: DEAD, aztecDataDir: own }), fast)).toEqual({ cleared: true })
 		expect(existsSync(own)).toBe(false)
-		rmSync(outside, { recursive: true, force: true })
 	})
 
 	test("a lock naming no owner is never signalled: all pids dead clears it and its stamped run dir, one live pid refuses", async () => {
