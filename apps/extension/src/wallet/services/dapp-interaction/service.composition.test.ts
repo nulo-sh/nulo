@@ -85,6 +85,8 @@ async function makeHarness() {
 	await collection.start()
 
 	const storage = (dapp as unknown as { storage: Map<string, DappInteraction> }).storage
+	// A window's URL names its request, as in the browser.
+	vi.mocked(chrome.runtime.getURL).mockImplementation((path) => path)
 	const createSpy = vi.spyOn(api.windows, "create")
 	const removeSpy = vi.spyOn(api.windows, "remove")
 
@@ -99,6 +101,8 @@ async function makeHarness() {
 	const execute = (queuedJournalId: string) =>
 		settleOf(dapp.execute({ sessionId: SESSION.id, operations: [] }, undefined, { queuedJournalId }))
 	const windowIdOf = async (createIndex: number) => (await createSpy.mock.results[createIndex]?.value)?.id as number | undefined
+	const windowOf = (interaction: DappInteraction) =>
+		windowIdOf(createSpy.mock.calls.findIndex(([options]) => options.url?.endsWith(`requestId=${interaction.id}`)))
 	const interactionFor = (journalId: string) => [...storage.values()].find((x) => x.hooks?.queuedJournalId === journalId)
 
 	return {
@@ -109,6 +113,7 @@ async function makeHarness() {
 		queuedRecord,
 		execute,
 		windowIdOf,
+		windowOf,
 		interactionFor,
 		/** Parks `execute()` at the gate; `reached` settles once it waits there. */
 		parkProfile: () => {
@@ -130,21 +135,25 @@ describe("DappInteractionService × OperationJournalService × WindowManager (fe
 		const recA = await h.queuedRecord()
 		const recB = await h.queuedRecord()
 
-		const outcomeA = h.execute(recA.id)
+		// Concurrent requests open in whichever order their sealed journal reads settle, so B opens
+		// first here and the cancel must follow A's interaction, not the opening order.
+		const openedWindow = async (journalId: string) => {
+			let windowId: number | undefined
+			await vi.waitFor(async () => {
+				const interaction = h.interactionFor(journalId)
+				expect(interaction).toBeDefined()
+				windowId = await h.windowOf(interaction as DappInteraction)
+				expect(windowId).toBeTypeOf("number")
+			})
+			return windowId
+		}
 		const outcomeB = h.execute(recB.id)
-		// Journal reads open sealed rows through real WebCrypto, which settles past a fixed tick count.
-		await vi.waitFor(async () => {
-			expect(await h.windowIdOf(1)).toBeTypeOf("number")
-			expect(h.interactionFor(recA.id)).toBeDefined()
-			expect(h.interactionFor(recB.id)).toBeDefined()
-		})
-		const windowA = await h.windowIdOf(0)
-		const windowB = await h.windowIdOf(1)
-		expect(windowA).toBeTypeOf("number")
-		expect(windowB).toBeTypeOf("number")
+		const windowB = await openedWindow(recB.id)
+		const outcomeA = h.execute(recA.id)
+		const windowA = await openedWindow(recA.id)
+		expect(await h.windowIdOf(0)).toBe(windowB)
+		expect(windowA).not.toBe(windowB)
 		const interactionA = h.interactionFor(recA.id)
-		expect(interactionA).toBeDefined()
-		expect(h.interactionFor(recB.id)).toBeDefined()
 
 		await h.journal.transitionOperation(recA.id, { stage: "cancelled" })
 
