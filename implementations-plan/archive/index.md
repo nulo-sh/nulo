@@ -122,6 +122,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [e2e-reliability-fixes](e2e-reliability-fixes/plan.md) — completed — a wave of test-reliability follow-ups closed at their root causes
 - [e2e-skill-refresh](e2e-skill-refresh/plan.md) — completed — one service-worker kill helper and a procedure-first e2e-testing skill
 - [e2e-stabilization](e2e-stabilization/plan.md) — completed — the network suite's remaining flakes fixed, iterating locally first
+- [e2e-stores-1](e2e-stores-1/plan.md) — completed — the local network's stores, sockets, logs and foundry copy under the run dir via the node's `TMPDIR`; a boot check fails a run whose node holds a store outside it (#1041)
 - [embedded-fpc-firsttx-cosmetic](embedded-fpc-firsttx-cosmetic/plan.md) — completed — embedded FPC cap and first-transaction cleanups after the simulation fast path
 - [emoji-match-1](emoji-match-1/plan.md) — completed — the emoji check on every connection, remembered apps too (#587, P28-04 A); "Skip this check next time" removed; every verify admission reserves a slot
 - [enter-gate-and-ping](enter-gate-and-ping/plan.md) — completed — one submit-validity computed for the profile-edit popup, and a ping message type

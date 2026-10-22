@@ -33,7 +33,7 @@ const LOCK_PATH = path.join(E2E_STATE_DIR, "owned.json")
 const RECONCILE_PATH = path.join(E2E_STATE_DIR, "reconcile.lock")
 
 /**
- * Real-disk root for per-run aztec data dirs. Deliberately NOT tmpdir()/`/tmp` — that is
+ * Real-disk root for per-run aztec run dirs. Deliberately NOT tmpdir()/`/tmp` — that is
  * RAM-backed tmpfs, so a run killed before teardown orphans a process holding its multi-GB LMDB
  * store open as a deleted-but-open file, pinning that RAM until the holder dies (fills swap,
  * thrashes the box, breaks the agent's own tooling). Disk + the OS page cache gives RAM-speed hot
@@ -62,8 +62,9 @@ export interface OwnedState {
 	pids: Partial<Record<SandboxService, number>>
 	/** Each recorded pid's `/proc` start time, which tells the service from a later holder of its pid. */
 	starts?: Partial<Record<SandboxService, string>>
-	/** The node's run dir, stamped with its marker; the node writes under `<dir>/data`. A lock
-	 *  written before markers existed names the data dir itself, unstamped. */
+	/** The node's run dir, stamped with its marker; its `--data-directory` is `<dir>/data` and its
+	 *  `TMPDIR` `<dir>/tmp`. A lock written before markers existed names the data dir itself,
+	 *  unstamped. */
 	aztecDataDir: string
 	/** Each service's launch marker. Absent on a lock written before markers existed, which no
 	 *  sweep ever signals. */
