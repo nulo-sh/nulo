@@ -43,8 +43,10 @@ declare global {
   const GET_STARTED_FEE_JUICE_HELD_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_FEE_JUICE_HELD_ROOT
   const GET_STARTED_HIDDEN_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_HIDDEN_ROOT
   const GET_STARTED_PHRASE_SAVED_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_PHRASE_SAVED_ROOT
+  const GET_STARTED_PRESTO_OPENED_ROOT: typeof import('../utils/profile-ui-keys').GET_STARTED_PRESTO_OPENED_ROOT
   const GLOSSARY: typeof import('../utils/glossary').GLOSSARY
   const GLOSSARY_SECTIONS: typeof import('../utils/glossary').GLOSSARY_SECTIONS
+  const HANDBACK_KEY: typeof import('../utils/panel-handback').HANDBACK_KEY
   const HERO_MIN_SCALE: typeof import('../utils/hero-fit').HERO_MIN_SCALE
   const HOME_TOKEN_ROWS: typeof import('../utils/token-order').HOME_TOKEN_ROWS
   const HOSTNAME_WARNING: typeof import('../composables/useDappOrigin').HOSTNAME_WARNING
@@ -166,6 +168,7 @@ declare global {
   const customRef: typeof import('vue').customRef
   const dashIfBlank: typeof import('../utils/string').dashIfBlank
   const debounce: typeof import('../utils/general').debounce
+  const decodeHandback: typeof import('../utils/panel-handback').decodeHandback
   const decodeRestoreOutcome: typeof import('../utils/restore-outcome').decodeRestoreOutcome
   const decompressData: typeof import('../utils/files').decompressData
   const defaultProfileName: typeof import('../utils/profile-name').defaultProfileName
@@ -176,6 +179,7 @@ declare global {
   const displaySymbol: typeof import('../utils/tx-amount').displaySymbol
   const downloadFile: typeof import('../utils/files').downloadFile
   const effectScope: typeof import('vue').effectScope
+  const endLanding: typeof import('../utils/panel-handback').endLanding
   const endsSelection: typeof import('../utils/selection').endsSelection
   const errorLogWriters: typeof import('../composables/useFullBackupImport').errorLogWriters
   const estimateWhenClear: typeof import('../utils/estimate-when-clear').estimateWhenClear
@@ -215,6 +219,7 @@ declare global {
   const getStartedHiddenKey: typeof import('../utils/profile-ui-keys').getStartedHiddenKey
   const getStartedKeys: typeof import('../utils/get-started').getStartedKeys
   const getStartedPhraseSavedKey: typeof import('../utils/profile-ui-keys').getStartedPhraseSavedKey
+  const getStartedPrestoOpenedKey: typeof import('../utils/profile-ui-keys').getStartedPrestoOpenedKey
   const getStartedView: typeof import('../utils/get-started').getStartedView
   const getThousandSeparator: typeof import('../utils/amount').getThousandSeparator
   const getTransaction: typeof import('../utils/core').getTransaction
@@ -244,6 +249,7 @@ declare global {
   const isAmountAboveDustThreshold: typeof import('../utils/incoming-dust').isAmountAboveDustThreshold
   const isApprovedSendInFlight: typeof import('../utils/in-flight-send').isApprovedSendInFlight
   const isBlank: typeof import('../utils/string').isBlank
+  const isCardWindow: typeof import('../utils/own-window').isCardWindow
   const isComposing: typeof import('../composables/usePopupEntity').isComposing
   const isEmptyContactName: typeof import('../utils/contact-name').isEmptyContactName
   const isFirefox: typeof import('../utils/browser-surface').isFirefox
@@ -285,6 +291,7 @@ declare global {
   const journalTerminalDisplay: typeof import('../utils/journal-state').journalTerminalDisplay
   const journalUpdated: typeof import('../utils/journal-mirror').journalUpdated
   const knownDecimals: typeof import('../utils/token-amount').knownDecimals
+  const landingRoute: typeof import('../utils/panel-handback').landingRoute
   const leavePanelFor: typeof import('../utils/own-window').leavePanelFor
   const legalAboutRow: typeof import('../utils/legal-about').legalAboutRow
   const managers: typeof import('../utils/core').managers
@@ -324,6 +331,7 @@ declare global {
   const openThirdPartyNotices: typeof import('../utils/legal-links').openThirdPartyNotices
   const orderTokenRows: typeof import('../utils/token-order').orderTokenRows
   const ownWindowRoute: typeof import('../utils/own-window').ownWindowRoute
+  const ownWindowSettled: typeof import('../utils/own-window').ownWindowSettled
   const parseAmountToBaseUnits: typeof import('../utils/amount').parseAmountToBaseUnits
   const parseContactsExport: typeof import('../utils/contacts-export-format').parseContactsExport
   const parseEncryptedBackup: typeof import('../utils/full-backup-helpers').parseEncryptedBackup
@@ -334,6 +342,7 @@ declare global {
   const passkeyFailureCopy: typeof import('../utils/passkey-copy').passkeyFailureCopy
   const passkeyImportFailedNotice: typeof import('../utils/profile-flow-notices').passkeyImportFailedNotice
   const passkeyTag: typeof import('../utils/passkey-copy').passkeyTag
+  const pendingLanding: typeof import('../utils/panel-handback').pendingLanding
   const persistThemeHint: typeof import('../utils/general').persistThemeHint
   const pickFile: typeof import('../utils/files').pickFile
   const pickPrimaryIndex: typeof import('../utils/primary-method').pickPrimaryIndex
@@ -361,6 +370,7 @@ declare global {
   const readAppPicks: typeof import('../utils/fee-picks').readAppPicks
   const readBackupFile: typeof import('../utils/full-backup-helpers').readBackupFile
   const readGetStarted: typeof import('../utils/get-started').readGetStarted
+  const readHandback: typeof import('../utils/panel-handback').readHandback
   const readLiveness: typeof import('../utils/background-liveness').readLiveness
   const readRestoreOutcome: typeof import('../utils/restore-outcome').readRestoreOutcome
   const readSendPicks: typeof import('../utils/fee-picks').readSendPicks
@@ -375,6 +385,7 @@ declare global {
   const relinkRestoredTokenBalances: typeof import('../composables/full-backup-restore').relinkRestoredTokenBalances
   const remapByMap: typeof import('../utils/full-backup-helpers').remapByMap
   const remapNetworkIdByChain: typeof import('../utils/full-backup-helpers').remapNetworkIdByChain
+  const removeHandbackIfUnchanged: typeof import('../utils/panel-handback').removeHandbackIfUnchanged
   const requireAccount: typeof import('../utils/core').requireAccount
   const requireNetwork: typeof import('../utils/core').requireNetwork
   const reseedNetworksStage: typeof import('../composables/full-backup-restore').reseedNetworksStage
@@ -394,6 +405,7 @@ declare global {
   const restoredNetworkIds: typeof import('../composables/full-backup-restore').restoredNetworkIds
   const retryAccountStateStage: typeof import('../composables/full-backup-restore').retryAccountStateStage
   const retryReplacedRows: typeof import('../composables/full-backup-restore').retryReplacedRows
+  const returnToPanel: typeof import('../utils/own-window').returnToPanel
   const rollbackCreatedProfile: typeof import('../composables/full-backup-restore').rollbackCreatedProfile
   const rowDescriptionFor: typeof import('../utils/presto-ui-state').rowDescriptionFor
   const rowOnToken: typeof import('../utils/activity-rows').rowOnToken
@@ -427,12 +439,14 @@ declare global {
   const settingsResultTo: typeof import('../utils/settings-search').settingsResultTo
   const settingsRow: typeof import('../utils/settings-search').settingsRow
   const settleHeldAccounts: typeof import('../composables/full-backup-restore').settleHeldAccounts
+  const settleLanding: typeof import('../composables/panelLanding').settleLanding
   const settledCallTitle: typeof import('../utils/tx-enrichment').settledCallTitle
   const settledReading: typeof import('../utils/tx-amount').settledReading
   const shallowReactive: typeof import('vue').shallowReactive
   const shallowReadonly: typeof import('vue').shallowReadonly
   const shallowRef: typeof import('vue').shallowRef
   const shouldShowLegalSheet: typeof import('../utils/legal-sheet').shouldShowLegalSheet
+  const showSnack: typeof import('../utils/snack').showSnack
   const showsDecryptCta: typeof import('../utils/full-backup-ctas').showsDecryptCta
   const showsRestoreCta: typeof import('../utils/full-backup-ctas').showsRestoreCta
   const showsRestoreErrorCtas: typeof import('../utils/full-backup-ctas').showsRestoreErrorCtas
@@ -581,6 +595,9 @@ declare global {
   // @ts-ignore
   export type { PreflightVerdict, PreflightOptions } from '../composables/importPreflight'
   import('../composables/importPreflight')
+  // @ts-ignore
+  export type { LandingState } from '../composables/panelLanding'
+  import('../composables/panelLanding')
   // @ts-ignore
   export type { RunFence } from '../composables/runFence'
   import('../composables/runFence')
@@ -780,6 +797,9 @@ declare global {
   export type { LegalSheetContext } from '../utils/legal-sheet'
   import('../utils/legal-sheet')
   // @ts-ignore
+  export type { HandbackRoute, HandbackSnack, Handback } from '../utils/panel-handback'
+  import('../utils/panel-handback')
+  // @ts-ignore
   export type { PasskeyTitle, WindowStep, PasskeyFailure } from '../utils/passkey-copy'
   import('../utils/passkey-copy')
   // @ts-ignore
@@ -800,6 +820,9 @@ declare global {
   // @ts-ignore
   export type { SettingsContext, SettingsRow, SettingsResultGroup, SettingsRowId } from '../utils/settings-search'
   import('../utils/settings-search')
+  // @ts-ignore
+  export type { Snack, Outcome } from '../utils/snack'
+  import('../utils/snack')
   // @ts-ignore
   export type { Aggregate, PriceMapping } from '../utils/token-aggregate'
   import('../utils/token-aggregate')
@@ -860,8 +883,10 @@ declare module 'vue' {
     readonly GET_STARTED_FEE_JUICE_HELD_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_FEE_JUICE_HELD_ROOT']>
     readonly GET_STARTED_HIDDEN_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_HIDDEN_ROOT']>
     readonly GET_STARTED_PHRASE_SAVED_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_PHRASE_SAVED_ROOT']>
+    readonly GET_STARTED_PRESTO_OPENED_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['GET_STARTED_PRESTO_OPENED_ROOT']>
     readonly GLOSSARY: UnwrapRef<typeof import('../utils/glossary')['GLOSSARY']>
     readonly GLOSSARY_SECTIONS: UnwrapRef<typeof import('../utils/glossary')['GLOSSARY_SECTIONS']>
+    readonly HANDBACK_KEY: UnwrapRef<typeof import('../utils/panel-handback')['HANDBACK_KEY']>
     readonly HERO_MIN_SCALE: UnwrapRef<typeof import('../utils/hero-fit')['HERO_MIN_SCALE']>
     readonly HOME_TOKEN_ROWS: UnwrapRef<typeof import('../utils/token-order')['HOME_TOKEN_ROWS']>
     readonly HOSTNAME_WARNING: UnwrapRef<typeof import('../composables/useDappOrigin')['HOSTNAME_WARNING']>
@@ -983,6 +1008,7 @@ declare module 'vue' {
     readonly customRef: UnwrapRef<typeof import('vue')['customRef']>
     readonly dashIfBlank: UnwrapRef<typeof import('../utils/string')['dashIfBlank']>
     readonly debounce: UnwrapRef<typeof import('../utils/general')['debounce']>
+    readonly decodeHandback: UnwrapRef<typeof import('../utils/panel-handback')['decodeHandback']>
     readonly decodeRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['decodeRestoreOutcome']>
     readonly decompressData: UnwrapRef<typeof import('../utils/files')['decompressData']>
     readonly defaultProfileName: UnwrapRef<typeof import('../utils/profile-name')['defaultProfileName']>
@@ -993,6 +1019,7 @@ declare module 'vue' {
     readonly displaySymbol: UnwrapRef<typeof import('../utils/tx-amount')['displaySymbol']>
     readonly downloadFile: UnwrapRef<typeof import('../utils/files')['downloadFile']>
     readonly effectScope: UnwrapRef<typeof import('vue')['effectScope']>
+    readonly endLanding: UnwrapRef<typeof import('../utils/panel-handback')['endLanding']>
     readonly endsSelection: UnwrapRef<typeof import('../utils/selection')['endsSelection']>
     readonly errorLogWriters: UnwrapRef<typeof import('../composables/useFullBackupImport')['errorLogWriters']>
     readonly estimateWhenClear: UnwrapRef<typeof import('../utils/estimate-when-clear')['estimateWhenClear']>
@@ -1032,6 +1059,7 @@ declare module 'vue' {
     readonly getStartedHiddenKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedHiddenKey']>
     readonly getStartedKeys: UnwrapRef<typeof import('../utils/get-started')['getStartedKeys']>
     readonly getStartedPhraseSavedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedPhraseSavedKey']>
+    readonly getStartedPrestoOpenedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['getStartedPrestoOpenedKey']>
     readonly getStartedView: UnwrapRef<typeof import('../utils/get-started')['getStartedView']>
     readonly getThousandSeparator: UnwrapRef<typeof import('../utils/amount')['getThousandSeparator']>
     readonly getTransaction: UnwrapRef<typeof import('../utils/core')['getTransaction']>
@@ -1061,6 +1089,7 @@ declare module 'vue' {
     readonly isAmountAboveDustThreshold: UnwrapRef<typeof import('../utils/incoming-dust')['isAmountAboveDustThreshold']>
     readonly isApprovedSendInFlight: UnwrapRef<typeof import('../utils/in-flight-send')['isApprovedSendInFlight']>
     readonly isBlank: UnwrapRef<typeof import('../utils/string')['isBlank']>
+    readonly isCardWindow: UnwrapRef<typeof import('../utils/own-window')['isCardWindow']>
     readonly isComposing: UnwrapRef<typeof import('../composables/usePopupEntity')['isComposing']>
     readonly isEmptyContactName: UnwrapRef<typeof import('../utils/contact-name')['isEmptyContactName']>
     readonly isFirefox: UnwrapRef<typeof import('../utils/browser-surface')['isFirefox']>
@@ -1102,6 +1131,7 @@ declare module 'vue' {
     readonly journalTerminalDisplay: UnwrapRef<typeof import('../utils/journal-state')['journalTerminalDisplay']>
     readonly journalUpdated: UnwrapRef<typeof import('../utils/journal-mirror')['journalUpdated']>
     readonly knownDecimals: UnwrapRef<typeof import('../utils/token-amount')['knownDecimals']>
+    readonly landingRoute: UnwrapRef<typeof import('../utils/panel-handback')['landingRoute']>
     readonly leavePanelFor: UnwrapRef<typeof import('../utils/own-window')['leavePanelFor']>
     readonly legalAboutRow: UnwrapRef<typeof import('../utils/legal-about')['legalAboutRow']>
     readonly managers: UnwrapRef<typeof import('../utils/core')['managers']>
@@ -1141,6 +1171,7 @@ declare module 'vue' {
     readonly openThirdPartyNotices: UnwrapRef<typeof import('../utils/legal-links')['openThirdPartyNotices']>
     readonly orderTokenRows: UnwrapRef<typeof import('../utils/token-order')['orderTokenRows']>
     readonly ownWindowRoute: UnwrapRef<typeof import('../utils/own-window')['ownWindowRoute']>
+    readonly ownWindowSettled: UnwrapRef<typeof import('../utils/own-window')['ownWindowSettled']>
     readonly parseAmountToBaseUnits: UnwrapRef<typeof import('../utils/amount')['parseAmountToBaseUnits']>
     readonly parseContactsExport: UnwrapRef<typeof import('../utils/contacts-export-format')['parseContactsExport']>
     readonly parseEncryptedBackup: UnwrapRef<typeof import('../utils/full-backup-helpers')['parseEncryptedBackup']>
@@ -1151,6 +1182,7 @@ declare module 'vue' {
     readonly passkeyFailureCopy: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyFailureCopy']>
     readonly passkeyImportFailedNotice: UnwrapRef<typeof import('../utils/profile-flow-notices')['passkeyImportFailedNotice']>
     readonly passkeyTag: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyTag']>
+    readonly pendingLanding: UnwrapRef<typeof import('../utils/panel-handback')['pendingLanding']>
     readonly persistThemeHint: UnwrapRef<typeof import('../utils/general')['persistThemeHint']>
     readonly pickFile: UnwrapRef<typeof import('../utils/files')['pickFile']>
     readonly pickPrimaryIndex: UnwrapRef<typeof import('../utils/primary-method')['pickPrimaryIndex']>
@@ -1178,6 +1210,7 @@ declare module 'vue' {
     readonly readAppPicks: UnwrapRef<typeof import('../utils/fee-picks')['readAppPicks']>
     readonly readBackupFile: UnwrapRef<typeof import('../utils/full-backup-helpers')['readBackupFile']>
     readonly readGetStarted: UnwrapRef<typeof import('../utils/get-started')['readGetStarted']>
+    readonly readHandback: UnwrapRef<typeof import('../utils/panel-handback')['readHandback']>
     readonly readLiveness: UnwrapRef<typeof import('../utils/background-liveness')['readLiveness']>
     readonly readRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['readRestoreOutcome']>
     readonly readSendPicks: UnwrapRef<typeof import('../utils/fee-picks')['readSendPicks']>
@@ -1192,6 +1225,7 @@ declare module 'vue' {
     readonly relinkRestoredTokenBalances: UnwrapRef<typeof import('../composables/full-backup-restore')['relinkRestoredTokenBalances']>
     readonly remapByMap: UnwrapRef<typeof import('../utils/full-backup-helpers')['remapByMap']>
     readonly remapNetworkIdByChain: UnwrapRef<typeof import('../utils/full-backup-helpers')['remapNetworkIdByChain']>
+    readonly removeHandbackIfUnchanged: UnwrapRef<typeof import('../utils/panel-handback')['removeHandbackIfUnchanged']>
     readonly requireAccount: UnwrapRef<typeof import('../utils/core')['requireAccount']>
     readonly requireNetwork: UnwrapRef<typeof import('../utils/core')['requireNetwork']>
     readonly reseedNetworksStage: UnwrapRef<typeof import('../composables/full-backup-restore')['reseedNetworksStage']>
@@ -1211,6 +1245,7 @@ declare module 'vue' {
     readonly restoredNetworkIds: UnwrapRef<typeof import('../composables/full-backup-restore')['restoredNetworkIds']>
     readonly retryAccountStateStage: UnwrapRef<typeof import('../composables/full-backup-restore')['retryAccountStateStage']>
     readonly retryReplacedRows: UnwrapRef<typeof import('../composables/full-backup-restore')['retryReplacedRows']>
+    readonly returnToPanel: UnwrapRef<typeof import('../utils/own-window')['returnToPanel']>
     readonly rollbackCreatedProfile: UnwrapRef<typeof import('../composables/full-backup-restore')['rollbackCreatedProfile']>
     readonly rowDescriptionFor: UnwrapRef<typeof import('../utils/presto-ui-state')['rowDescriptionFor']>
     readonly rowOnToken: UnwrapRef<typeof import('../utils/activity-rows')['rowOnToken']>
@@ -1244,12 +1279,14 @@ declare module 'vue' {
     readonly settingsResultTo: UnwrapRef<typeof import('../utils/settings-search')['settingsResultTo']>
     readonly settingsRow: UnwrapRef<typeof import('../utils/settings-search')['settingsRow']>
     readonly settleHeldAccounts: UnwrapRef<typeof import('../composables/full-backup-restore')['settleHeldAccounts']>
+    readonly settleLanding: UnwrapRef<typeof import('../composables/panelLanding')['settleLanding']>
     readonly settledCallTitle: UnwrapRef<typeof import('../utils/tx-enrichment')['settledCallTitle']>
     readonly settledReading: UnwrapRef<typeof import('../utils/tx-amount')['settledReading']>
     readonly shallowReactive: UnwrapRef<typeof import('vue')['shallowReactive']>
     readonly shallowReadonly: UnwrapRef<typeof import('vue')['shallowReadonly']>
     readonly shallowRef: UnwrapRef<typeof import('vue')['shallowRef']>
     readonly shouldShowLegalSheet: UnwrapRef<typeof import('../utils/legal-sheet')['shouldShowLegalSheet']>
+    readonly showSnack: UnwrapRef<typeof import('../utils/snack')['showSnack']>
     readonly showsDecryptCta: UnwrapRef<typeof import('../utils/full-backup-ctas')['showsDecryptCta']>
     readonly showsRestoreCta: UnwrapRef<typeof import('../utils/full-backup-ctas')['showsRestoreCta']>
     readonly showsRestoreErrorCtas: UnwrapRef<typeof import('../utils/full-backup-ctas')['showsRestoreErrorCtas']>

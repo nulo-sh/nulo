@@ -6,6 +6,7 @@ const store: { profile?: { type: string } } = {}
 vi.mock("@/stores/app.store", () => ({ useAppStore: () => ({ setOnboardingCompleted: vi.fn(), profile: store.profile }) }))
 
 import { BrutalistTitle, Flex, Icon, Text } from "@nulo/design"
+import OnboardingStepHeader from "../components/OnboardingStepHeader.vue"
 import { doneRoute } from "../steps"
 import Done from "./done.vue"
 
@@ -23,7 +24,7 @@ async function mountDone(getUserSettings: () => Promise<{ isOnToolbar?: boolean 
 	vi.stubGlobal("chrome", { action: { getUserSettings } })
 	const w = mount(Done, {
 		global: {
-			components: { BrutalistTitle, Flex, Icon, Text },
+			components: { BrutalistTitle, Flex, Icon, OnboardingStepHeader, Text },
 			stubs: { Button: true, OnboardingPage: { template: "<div><slot /></div>" }, StepIndicator: true },
 		},
 	})

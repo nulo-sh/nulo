@@ -24,6 +24,7 @@ import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { BACKUP_MAC_FIELD } from "@/utils/full-backup-helpers"
+import { INCOMING_TRANSFER_SERVICE_NAME, IncomingTransferRecordSchema } from "@/wallet/services/incoming-transfer/spec"
 import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
 import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
 import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
@@ -120,6 +121,12 @@ const recordedTestnet = (recording: Recording): number => {
 	return row.chainId as number
 }
 
+const testnetNetworkId = (recording: Recording): string => {
+	const row = rowsOf(recording.entries, "nulo:core:networks").find((network) => network.kind === "testnet")
+	if (!row) throw new Error(`the recording of ${recording.tag} holds no Testnet network`)
+	return row.id as string
+}
+
 const otherChains = (recording: Recording): Array<{ id: string; chainId: number }> =>
 	rowsOf(recording.entries, "nulo:core:networks")
 		.filter((network) => network.kind !== "testnet")
@@ -173,6 +180,61 @@ async function expectHistory(ctx: ExtensionContext, page: Page, recording: Recor
 	}
 	for (const record of rowsOf(entries, STORES.journal.ref.root)) {
 		expect(await callService(page, OPERATION_JOURNAL_SERVICE_NAME, "getOperation", [record.id])).toEqual(record)
+	}
+}
+
+const PROJECTION_ROOTS = (
+	[
+		"tokenBalances",
+		"authRegistry",
+		"authRegistryEnabled",
+		"incomingTransfers",
+		"incomingTrust",
+		"incomingPublicCursors",
+		"incomingBalanceOutbox",
+		"incomingArrivals",
+	] as const
+).map((name) => STORES[name].ref.root)
+
+/** The 32-byte values a recorded projection row names: accounts, contracts, notes, transactions. */
+function namedHex(rows: Row[]): string[] {
+	const fields = ["account", "accountAddress", "owner", "from", "contract", "noteHash", "txHash"]
+	const values = rows.flatMap((row) => [...fields.map((field) => row[field]), String(row.id ?? "").split("|")[2]])
+	return [...new Set(values.filter((v): v is string => typeof v === "string" && /^0x[0-9a-f]{64}$/i.test(v)))].map((v) =>
+		v.slice(2).toLowerCase(),
+	)
+}
+
+/**
+ * The recorded balances, authorizations and incoming rows are stored sealed once the unlock has
+ * converted them, at keys that name none of their accounts, contracts, notes or transactions, and
+ * the recorded receipts and trust of every network the update kept read back through the wallet.
+ */
+async function expectProjections(ctx: ExtensionContext, page: Page, recording: Recording, resetNetwork?: string): Promise<void> {
+	const entries = offline(recording.entries)
+	const named = namedHex(PROJECTION_ROOTS.flatMap((root) => rowsOf(entries, root)))
+	expect(named).not.toEqual([])
+	await pollUntil(
+		() => readLocalStorage(ctx),
+		(all) =>
+			Object.entries(all).every(([key, raw]) => {
+				if (!PROJECTION_ROOTS.some((root) => key.startsWith(`${root}@`))) return true
+				const lower = key.toLowerCase()
+				return typeof raw === "string" && parseEnvelope(JSON.parse(raw)) !== undefined && !named.some((hex) => lower.includes(hex))
+			}),
+		{ label: "the recorded projections sealed", timeoutMs: 30_000, intervalMs: 500 },
+	)
+	const kept = (row: Row) => row.networkId !== resetNetwork
+	const records = rowsOf(entries, STORES.incomingTransfers.ref.root).filter(kept)
+	const trust = rowsOf(entries, STORES.incomingTrust.ref.root).filter(kept)
+	expect(records.length + trust.length).toBeGreaterThan(0)
+	for (const record of records) {
+		const read = await callService(page, INCOMING_TRANSFER_SERVICE_NAME, "getIncomingTransferById", [record.id])
+		expect(read).toEqual(IncomingTransferRecordSchema.parse(record))
+	}
+	for (const row of trust) {
+		const state = await callService(page, INCOMING_TRANSFER_SERVICE_NAME, "getTrustState", [row.profileId, row.networkId, row.contract])
+		expect(state).toBe(row.state)
 	}
 }
 
@@ -262,6 +324,7 @@ async function opensWithoutTakeover(ctx: ExtensionContext, page: Page, recording
 	await expectConnectedApps(page, recording)
 	await expectContacts(page, recording)
 	await expectHistory(ctx, page, recording)
+	await expectProjections(ctx, page, recording)
 	expect(await shownOverlays(page)).toEqual([])
 	expect(await updateProblems(stored, await readLocalStorage(ctx))).toEqual([])
 }
@@ -302,6 +365,7 @@ async function throughTheReset(ctx: ExtensionContext, page: Page, recording: Rec
 	await expectConnectedApps(page, recording)
 	await expectContacts(page, recording)
 	await expectHistory(ctx, page, recording)
+	await expectProjections(ctx, page, recording, testnetNetworkId(recording))
 	expect(await shownOverlays(page)).toEqual([])
 	expect(await unreadRows(await readLocalStorage(ctx))).toEqual([])
 }

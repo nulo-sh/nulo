@@ -38,6 +38,7 @@ describe("get started flags (storage)", () => {
 			"nulo:ui:getStartedBackupSaved@p1",
 			"nulo:ui:getStartedAztecOpened@p1",
 			"nulo:ui:getStartedFeeJuiceHeld@p1",
+			"nulo:ui:getStartedPrestoOpened@p1",
 			"nulo:ui:getStartedHidden@p1",
 			"nulo:ui:profileImported@p1",
 			"nulo:ui:profileNotFirst@p1",
@@ -50,6 +51,7 @@ describe("get started flags (storage)", () => {
 			backupSaved: false,
 			aztecOpened: false,
 			feeJuiceHeld: false,
+			prestoOpened: false,
 			hidden: false,
 			imported: false,
 			notFirst: false,
@@ -70,6 +72,7 @@ describe("get started flags (storage)", () => {
 			backupSaved: false,
 			aztecOpened: true,
 			feeJuiceHeld: false,
+			prestoOpened: false,
 			hidden: false,
 			imported: false,
 			notFirst: false,
@@ -110,6 +113,7 @@ describe("get started view (pure)", () => {
 		backupSaved: false,
 		aztecOpened: false,
 		feeJuiceHeld: false,
+		prestoOpened: false,
 		hidden: false,
 		imported: false,
 		notFirst: false,
@@ -175,11 +179,13 @@ describe("get started view (pure)", () => {
 		expect(drawn({ type: "passkey" }, { backupSaved: true })).toEqual(["backup done", "aztec", "feeJuice", "presto"])
 	})
 
-	test("an opened Aztec page, a Fee Juice balance and a reached Presto each check their step; an unread balance does not", () => {
+	test("an opened Aztec page, a Fee Juice balance, and an opened or reached Presto each check their step; an unread balance does not", () => {
 		expect(drawn({}, { aztecOpened: true })).toEqual(["phrase", "aztec done", "feeJuice", "presto"])
 		expect(drawn({ feeJuice: "some" })).toEqual(["phrase", "aztec", "feeJuice done", "presto"])
 		expect(drawn({ feeJuice: "unknown" })).toEqual(["phrase", "aztec", "feeJuice", "presto"])
 		expect(drawn({ prestoReached: true })).toEqual(["phrase", "aztec", "feeJuice", "presto done"])
+		expect(drawn({}, { prestoOpened: true })).toEqual(["phrase", "aztec", "feeJuice", "presto done"])
+		expect(drawn({ prestoReached: false }, { prestoOpened: false })).toEqual(["phrase", "aztec", "feeJuice", "presto"])
 	})
 
 	test("Fee Juice once held stays done: a later empty read, as on a new chain, does not reopen it", () => {

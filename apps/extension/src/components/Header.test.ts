@@ -4,8 +4,8 @@
  * active address (not the truncated display text) to the clipboard, except on a pointer click that
  * ends a selection inside it; both switcher affordances open the accounts popup; the lock chip runs
  * the shared lock (its behavior: `useLockWallet.test.ts`); the network chip's `data-status` follows
- * the store's status; the chip shows the network name only while Show network name is on; and a
- * failure log marks the settings badge.
+ * the store's status; the chip shows the network name only while Show network name is on; a
+ * failure log marks the settings badge; and a hand-off window's card shows no header.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
@@ -26,6 +26,7 @@ const H = vi.hoisted(() => ({
 	configListeners: new Set<(prop: { key: string; value: unknown }) => void>(),
 	app: {} as Record<string, unknown>,
 	cache: {} as { confirm: Record<string, unknown> } & Record<string, unknown>,
+	cardWindow: false,
 }))
 
 const FULL_ADDRESS = "0x018d47f656a0d242e28e5d15b5c965f39529bd860f2eaae947527b5094d800f6"
@@ -80,6 +81,11 @@ vi.mock("vue-router", async (importOriginal) => {
 	return { ...mod, useRoute: () => ({ name: "popup-general", meta: {} }), useRouter: () => ({ push: vi.fn() }) }
 })
 
+vi.mock("@/utils/own-window", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/utils/own-window")>()),
+	isCardWindow: () => H.cardWindow,
+}))
+
 import Header from "./Header.vue"
 
 const STUBS = {
@@ -125,6 +131,15 @@ beforeEach(() => {
 		contactImports: new Set(),
 	})
 	H.cache = { failureLog: null, confirm: {} }
+	H.cardWindow = false
+})
+
+describe("Header — hand-off window", () => {
+	test("a card window shows no header; any other page keeps it", () => {
+		expect(mountHeader().find("header").exists()).toBe(true)
+		H.cardWindow = true
+		expect(mountHeader().find("header").exists()).toBe(false)
+	})
 })
 
 describe("Header — avatar/name/address split", () => {

@@ -59,6 +59,8 @@ function readPaths(source: string, body: string): string[] {
 	if (rest.replace(PATH, "").trim() !== "") throw new Error(`${source}: holds content other than bare <path d>`)
 	if (paths.length === 0 || paths.some((d) => d.trim() === "")) throw new Error(`${source}: draws nothing`)
 	if (new Set(paths).size !== paths.length) throw new Error(`${source}: repeats a path`)
+	// `Icon.vue` joins a glyph's strokes into one path, where a relative first move would start from the last path's end.
+	if (paths.some((d) => !d.startsWith("M"))) throw new Error(`${source}: opens a path with other than an absolute M`)
 	return paths
 }
 

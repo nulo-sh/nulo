@@ -9,6 +9,7 @@ import {
 } from "@/components/composite/import/restore-warning"
 import type { ToastOptions } from "@/composables/toast"
 import { FilePickCanceledError } from "@/utils/files"
+import { type Outcome, showSnack, type Snack } from "@/utils/snack"
 import { type BackupSelection, openSelection, readBackupFile } from "@/utils/full-backup-helpers"
 import { admitRestoreOutcome, readRestoreOutcome, type RestoreOutcome } from "@/utils/restore-outcome"
 import type { Network } from "@/wallet/services/network/spec"
@@ -52,8 +53,8 @@ export interface UseRestoreAgainOptions {
 	clearError: () => void
 	openToast: (toast: ToastOptions) => void
 	showErrorLog: (errors: Record<string, unknown[]>, namesById: ReadonlyMap<string, string>) => void
-	/** Returns Home. */
-	leave: () => void
+	/** Returns Home; a full restore passes the outcome it showed. */
+	leave: (outcome?: Outcome) => void
 }
 
 interface AgainRefs {
@@ -105,11 +106,11 @@ function dropRun(state: AgainRefs) {
 	state.retryFailedAgain.value = false
 }
 
-function end(state: AgainRefs, opts: UseRestoreAgainOptions) {
+function end(state: AgainRefs, opts: UseRestoreAgainOptions, outcome?: Outcome) {
 	if (state.ended.value) return
 	state.ended.value = true
 	state.retry.value = null
-	opts.leave()
+	opts.leave(outcome)
 }
 
 /** The reminder's networks among the open profile's rows; undefined until both are read. A row is
@@ -219,8 +220,10 @@ function settleRun(state: AgainRefs, opts: UseRestoreAgainOptions, tail: Account
 		state.restoreStatus.value = "finished"
 		return
 	}
-	opts.openToast({ kind: "success", label: restoreAgainDoneText(state.carried.value.map((network) => network.name)) })
-	end(state, opts)
+	const snack: Snack = { kind: "success", label: restoreAgainDoneText(state.carried.value.map((network) => network.name)) }
+	showSnack(opts.openToast, snack)
+	const fence = state.fence.value
+	end(state, opts, fence ? { snack, profileId: fence.profileId } : undefined)
 }
 
 async function runRestore(state: AgainRefs, opts: UseRestoreAgainOptions, writers: LogWriters) {
