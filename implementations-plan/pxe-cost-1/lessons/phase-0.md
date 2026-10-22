@@ -69,3 +69,10 @@ Asked: #1033, a wallet-side balance sum for pinned Token classes or an upstream 
   write-count threshold should stay rejected.
 - Verification resume: one stale clock phrase in the issue notes; fixed.
 - Verification resume 2: **approve**.
+
+## Step U (2026-10-22)
+
+The orchestrator kept Ask A1 for the owner (decision page): nothing posted on
+`AztecProtocol/aztec-packages`. Fallback done: #1033's `## Possible fix` now carries the upstream
+draft (title, version, mechanism with source lines, reproduction, measured figures, the ask) and
+the reopening condition; label `blocked:external` added; #1033 stays open.
