@@ -16,3 +16,14 @@
   - **B:** an exception: open the PR now with the extension pair stated as unpassed. Not recommended, for the same reason as OA-1's C.
 - **What ships now:** nothing. The branch `deps-audit-1-a1` is pushed, with no PR. #980 and #987 stay open, and the audit gate keeps failing dependency PRs.
 - **Answer:** A, granted by the orchestrator. The window opened at the resume, 2026-10-22T00:39Z, after ten minutes with load5 under 80 (load5 56.0 at the resume). The soak rules are unchanged: 30 retry-0 runs per engine of the extension pair at a detached `dc82d009d`, then `test:all` ×5, with no timeout, retry or config change. Load5 above 150 on three consecutive five-minute samples stops the attempt, and the orchestrator schedules the next window.
+- **Attempt:** started 00:42:01Z at the detached `dc82d009d`. Node runs 1-10 passed (14770 tests each, 245 to 315 s). The load rule stopped it at 01:32:01Z, after load5 read 158.2, 178.0 and 170.2 on three consecutive samples. Other leads' suites carried that load: fit-gate-1, encryption-at-rest-1 and pxe-limits-1. No failure was recorded, and the 30-run bar is unmet.
+
+## OA-3: one window for the whole remaining bar
+
+- **Surface:** none a person sees. The ask is host time and the order of the remaining runs.
+- **Why:** the close-out must merge `dev` first (README step 4). `dev` now carries #978's two e2e vitest configs, which match Phase 3's trigger, so the merged HEAD reruns Phases 2-3 (Codex r7). Rerunning only the extension pair at `dc82d009d` therefore buys a PR, not a close-out. Measured on this host when it was quiet, the full rerun takes about 6 h: Phase 2 with both smokes 1.4 h, the 12 smaller soak pairs 0.75 h, the extension pair 3.5 h, `test:all` ×5 0.4 h.
+- **Options:**
+  - **A (recommended):** at the next window, merge `origin/dev` first. The merged HEAD becomes the candidate, and Phases 2-3 run in full there in one window of about 6 h, under the same load rule. On a pass, the PR opens and the close-out follows. The close-out reruns only if a later trunk merge touches a trigger file again.
+  - **B:** keep `dc82d009d`. One window of about 4 h for the extension pair and `test:all` ×5, then the PR opens at the pre-merge head. The close-out then needs a second window of about 6 h after its merge (Codex r7, A-i).
+  - **C:** B, plus an approved narrowing of Phase 3's trigger. The two e2e configs feed only the e2e runners, so the close-out reruns only Phase 2 (about 1.4 h). It needs the orchestrator's or the owner's explicit approval: the lead may not narrow an approved gate.
+- **What ships now:** nothing. The branch is pushed, with no PR. #980 and #987 stay open.

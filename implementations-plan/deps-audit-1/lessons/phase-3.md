@@ -27,3 +27,11 @@ Candidate `57c35cec5` (`bun.lock` sha256 `7076bcbe…af2284`); `dev` had not mov
 - Attempt 2, the one saturation retry, started 13:42Z at load1 78. Node runs 1-11 passed (272 to 347 s each). Run 12 failed 1 test in 391 s at load1 about 300. It was stopped, and the name is lost: the tool deletes each run's raw report.
 - Diagnostics, no repo change: three plain `bun run test` runs of `apps/extension` at load1 170 to 250 passed 14771 with 5 skipped and 7 todo, the base counts. The twice-failed pin file alone under the Node launcher took 80 to 170 ms, and none of its tests took over 24 ms. A 5 s timeout there means a stall more than 200 times its cost.
 - Codex r6 (b, high): the allowed retry is used up, no code cause is shown, and saturation is still a hypothesis. Hand scheduling to the orchestrator (OA-2). A later attempt must keep each failing test's name.
+
+## OA-2 attempt, 2026-10-22
+
+- The window opened at the resume, 00:39Z (load5 56.0). Recorded as `980b67c43`, then the worktree was detached at `dc82d009d` with a clean tree.
+- A watcher copied each failing run's raw vitest report before the soak deleted it, and none was written.
+- `apps/extension` node: runs 1-10 passed, 14770 tests each, 245 to 315 s.
+- Five-minute samples of load5: 72.8, 105.6, 128.7, 141.1, 163.9, 129.2, 124.5, 114.2, 158.2, 178.0, 170.2. The last three tripped the rule, which stopped the group at 01:32:01Z; nothing of the run was left. A CPU sample at 00:57Z put this run at about 100% against 450% for encryption-at-rest-1, plus fit-gate-1 and pxe-limits-1.
+- The close-out's trunk merge: `origin/dev` (`60ecd6cc3`) changes no dependency file, `bunfig.toml`, `vitest.base.mts`, unit vitest config or the soak tool. It does change `apps/extension/vitest.e2e.config.ts` and `vitest.e2e.network.config.ts` (#978), which match the trigger. `git merge-tree` conflicts only in `index.md`, on our added row. Codex r7: A-i (OA-3).

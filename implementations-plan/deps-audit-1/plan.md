@@ -1,7 +1,7 @@
 ---
 plan: deps-audit-1
 tier: light
-status: arc 1 blocked at Phase 3 (the extension soak pair, host saturation); ask OA-2
+status: arc 1 blocked at Phase 3 (the extension soak pair, host load); OA-2 attempt stopped by its load rule; ask OA-3
 issues: "#980 (closed by arc 1)"
 driver: claude-code
 claude_model: opus
@@ -130,6 +130,7 @@ None. The arc changes dependency files only; no screen, copy or layout.
 - **Arc 1 review, round 4, Codex resumed: `B`, confidence high.** The one-line fix is local in complexity but outside the lane's files, so it waits for the owner. Spawning `bun` is the right fix: on this setup, `bun` on PATH and Bun's `process.execPath` are the same 1.4.2 binary. After approval, run the file under both engines first, then Phases 1-gate, 2 and 3 in full at one new candidate.
 - **Arc 1 review, round 5, Codex resumed (on `dc82d009d`): `approve`, confidence high.** "No findings. The authorized fix matches CI's invocation"; the assertions are unchanged, and 24 tests pass 3 of 3 on each engine with matching inventories. Its approval covers the fix only, not Phases 2-3.
 - **Arc 1 review, round 6, Codex resumed (on the extension soak): `b`, confidence high.** The allowed saturation retry is used up; "Three failures" is a hard stop, "not permission to exceed 'retry once.'" No code cause is shown, but saturation is still a hypothesis: a timeout proves that the deadline expired, not why. The lost failure names block classifying every red. Hand scheduling to the orchestrator, and keep every failure's name on any later attempt (D12).
+- **Arc 1 review, round 7, Codex resumed (on the close-out merge): `A-i`, confidence high.** The close-out's trunk merge (README step 4) brings `apps/extension/vitest.e2e.config.ts` and `vitest.e2e.network.config.ts` (#978's shard sequencer), which match Phase 3's `**/vitest*.config.*` trigger. So the merged HEAD is a new candidate and reruns Phases 2-3. Narrowing that rerun to the e2e smoke would document a change to an approved gate, not authorize it. Skipping the merge breaks step 4. After a pass, the PR may open at the pre-merge head, with the close-out waiting for the rerun (OA-3).
 
 ## Delivery
 
