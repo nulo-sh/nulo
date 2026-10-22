@@ -1,7 +1,7 @@
 ---
 plan: firefox-handoff-1
 tier: light
-status: approved 2026-10-21 with two conditions (D9, D10); A1 in progress
+status: completed 2026-10-22 (pending the merge of #1026)
 issues: "#1007"
 trunk: dev
 driver: claude-code
@@ -13,6 +13,24 @@ eli5_mode: skipped (orchestrator-owned)
 base: dev @ 1362efab8
 standard: implementations-plan/README.md § Post-implementation standard, read at 1362efab8
 ---
+
+## Outcome
+
+- **Date:** 2026-10-22.
+- **Status:** completed (pending the merge of #1026).
+- **Shipped:** #1026, which closes #1007 and #1022.
+  - On Firefox, Import contacts, Import account's file and Restore again's file, started from the toolbar panel, open one card in a popup window: the title, Choose file and Cancel (P81-01 C).
+  - The window runs the flow, including a long import with its progress line, then closes itself. The panel reopens on the pick's page with the flow's result line, shown only to the profile that ran it (D9).
+  - The card fits at 240 px.
+- **Dispositions:**
+  - OA-1 to OA-4 approved as built (P81-02 to P81-05).
+  - P81-01 C dropped the drafted line of why.
+  - D9 accepted as built by the orchestrator.
+  - The Mac check passed (P81-06).
+- **Known limits:** #1070 (I6, D6), #1067 (D4), #1068 (the sidebar setting, #889) and #1069 (F1), each closed as not planned with its reopening condition.
+- **Open items:** none.
+- **Lessons:** none promoted, since `lessons.md` sits at its budget (8174 B). The panel-picture technique went to `apps/extension/tests/e2e/FIREFOX.md` § Picturing the toolbar panel.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are not instructions.
 
 # firefox-handoff-1: one card in the Firefox hand-off window; it closes itself and the panel reopens on the result
 
