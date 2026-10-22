@@ -62,7 +62,7 @@ import { TransactionService } from "@/wallet/services/transaction/service"
 import { TxStatus } from "@/wallet/services/transaction/spec"
 import { NetworkResetService } from "./service"
 import type { StaleNetworkChanged } from "./spec"
-import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { rowKeysForEveryProfile, storedText } from "@/wallet/storage/sealed-entity-storage.testing"
 
 const OLD = 4321
 const NEW = CHAIN_IDS.TESTNET
@@ -239,7 +239,7 @@ async function seedChain(h: H, networkId: string, chainId: number, l1ChainId: nu
 	const viaServices = await keysAddedBy(h, async () => {
 		await h.journal.createOperation({ kind: "transfer", origin: "popup", profileId: "p1", networkId })
 		await h.sessions.addDappSession({ url: `https://dapp${n}.example` }, [], [address], AccessLevel.Transactions, String(chainId), "p1")
-		const repo = new IncomingTransferRepository(h.api)
+		const repo = new IncomingTransferRepository(h.api, (await rowKeysForEveryProfile()).rowKeys)
 		await repo.setTrust("p1", networkId, CONTRACT, "pending")
 		// At the reader's finalized tip: a scan of a chain the reset leaves alone rewrites it unchanged.
 		await repo.setCursor("p1", networkId, CONTRACT, { cursor: null, lastSyncedBlockHash: null, lastScanFinalized: 1, startBlock: 0 })
@@ -374,7 +374,13 @@ describe("a stale network reset through the real service graph", () => {
 		const arrivals = stale.filter((k) => k.startsWith("nulo:core:incoming-arrivals@"))
 		expect(arrivals).toHaveLength(1)
 		expect(stale.filter((k) => k in after && !arrivals.includes(k))).toEqual([])
-		for (const k of arrivals) expect(JSON.parse(after[k] as string)).toMatchObject({ played: [] })
+		const { rowKeys } = await rowKeysForEveryProfile()
+		await vi.waitFor(async () => {
+			const now = await snapshot(h)
+			// A keyed row seals its natural key beside the row: `{ k, r }`.
+			for (const k of arrivals)
+				expect(JSON.parse(JSON.parse((await storedText(k, now[k], rowKeys)) ?? "{}").r)).toMatchObject({ played: [] })
+		})
 		expect(Object.fromEntries(local.map((k) => [k, after[k]]))).toEqual(Object.fromEntries(local.map((k) => [k, before[k]])))
 		expect(h.pxeClears).toEqual([["p1", OLD]])
 

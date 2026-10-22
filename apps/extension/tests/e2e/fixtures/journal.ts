@@ -173,7 +173,7 @@ async function extCtxEvaluate<A extends unknown[], F extends EvaluateFunc<A>>(
  * F1 measurement capture (measure, NO fix). Test-side, so it can never ship in
  * a build. At the authwits settings step it dumps the decisive bucket evidence
  * under `[authwit-measure]`:
- *   - stored `nulo:core:auth-registry` rows (their `account` keys + hashes),
+ *   - the `nulo:core:auth-registry` rows the wallet reads (their `account` keys + hashes),
  *   - stored `nulo:core:accounts` rows (the address the page queries with),
  *   - the authwits page render state + the revoke-all disabled state.
  * Classifies bucket A (rows exist but their `account` ≠ the queried address —
@@ -183,18 +183,25 @@ async function extCtxEvaluate<A extends unknown[], F extends EvaluateFunc<A>>(
  */
 export async function dumpAuthwitMeasurement(page: Page, label: string): Promise<void> {
 	try {
-		const storage = await extCtxEvaluate(page, async () => {
-			const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-			const pick = (match: (k: string) => boolean) =>
-				Object.entries(all)
-					.filter(([k]) => match(k))
-					.map(([key, value]) => ({ key, value }))
-			return {
-				authwits: pick((k) => k.startsWith("nulo:core:auth-registry") && !k.startsWith("nulo:core:auth-registry-enabled")),
-				authwitsEnabled: pick((k) => k.startsWith("nulo:core:auth-registry-enabled")),
-				accounts: pick((k) => k.startsWith("nulo:core:accounts")),
-			}
-		})
+		const storage = await extCtxEvaluate(
+			page,
+			async (message: string) => {
+				const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
+				// Both authwit roots are sealed: read them as the wallet does, through the seam.
+				const sealed = async (root: string) =>
+					(((await chrome.runtime.sendMessage({ type: message, root })) ?? []) as { storageKey: string; row: unknown }[]).map(
+						({ storageKey, row }) => ({ key: storageKey, value: row }),
+					)
+				return {
+					authwits: await sealed("authRegistry"),
+					authwitsEnabled: await sealed("authRegistryEnabled"),
+					accounts: Object.entries(all)
+						.filter(([k]) => k.startsWith("nulo:core:accounts"))
+						.map(([key, value]) => ({ key, value })),
+				}
+			},
+			SEALED_READ_MESSAGE,
+		)
 		const dom = await page
 			.evaluate(() => {
 				const body = document.body.textContent ?? ""

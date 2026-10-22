@@ -2,7 +2,7 @@ import { MemoryStorageArea } from "@nulo/wallet-core/storage"
 import { beforeAll, describe, expect, test } from "vitest"
 import { realMigrations } from "./migrations"
 import { committedBaseline, type Decoding, decodeGoldens } from "./stored-shapes/baseline"
-import { type CodecStoreName, entityStorage, STORES, valueStorage } from "./stores"
+import { type CodecStoreName, entityStorage, STORES, sealedEntityStorage, valueStorage } from "./stores"
 
 const { snapshot, goldens } = committedBaseline()
 const codecNames = (Object.keys(STORES) as (keyof typeof STORES)[]).filter((name): name is CodecStoreName => "schema" in STORES[name])
@@ -38,7 +38,7 @@ describe("the store factories", () => {
 	test("a store built by name applies its key-identity options: a row under another key reads as absent", async () => {
 		for (const name of ["authRegistry", "tokenBalances"] as const) {
 			const area = new MemoryStorageArea().seed({ [`${STORES[name].ref.root}@999999`]: JSON.stringify(fullRow(name).row) })
-			expect(await entityStorage(name, area).get("999999"), name).toBeUndefined()
+			expect(await sealedEntityStorage(name, area, () => undefined).get("999999"), name).toBeUndefined()
 		}
 		const profile = fullRow("profiles").row
 		const area = new MemoryStorageArea().seed({ [`${STORES.profiles.ref.root}@ffffffff`]: JSON.stringify(profile) })

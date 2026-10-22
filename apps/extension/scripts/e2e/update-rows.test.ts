@@ -45,7 +45,12 @@ describe("updateProblems", () => {
 			"nulo:unknown: no registered shape claims it",
 		]
 		const lost = (keys: string[]) => keys.sort().map((key) => `${key}: lost in the update`)
-		expect(await updateProblems(before, after)).toEqual([...lost([outbox, "nulo:core:profiles@b04e6d18"]), ...others])
+		// The outbox root is keyed, so its rows are counted rather than matched by key.
+		expect(await updateProblems(before, after)).toEqual([
+			...lost(["nulo:core:profiles@b04e6d18"]),
+			"incomingBalanceOutbox: 1 row(s) lost in the update",
+			...others,
+		])
 		// A drained outbox row is excused only where the caller asserts the balances it refreshes.
 		expect(await updateProblems(before, after, { balancesAsserted: true })).toEqual([
 			...lost(["nulo:core:profiles@b04e6d18"]),

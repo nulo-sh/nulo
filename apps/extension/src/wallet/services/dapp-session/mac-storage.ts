@@ -1,5 +1,5 @@
 import { type ILogger, LogLevel } from "@/wallet/logger"
-import type { PreparedWrite, SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import type { ConversionLock, PreparedWrite, SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
 import { signDappSession, verifyDappSession } from "./integrity"
 import type { DappSession } from "./spec"
 
@@ -91,7 +91,7 @@ export class DappSessionMacStorage {
 
 	/** Seals `profileId`'s plaintext rows byte for byte, MAC included and unchecked: every read
 	 *  still verifies it, and recovery mode, which has no MAC key, converts too. */
-	public sealLegacy(profileId: string, withLock: <R>(fn: () => Promise<R>) => Promise<R>): Promise<number> {
+	public sealLegacy(profileId: string, withLock: ConversionLock): Promise<number> {
 		return this.inner.sealLegacy(profileId, withLock)
 	}
 
