@@ -1,10 +1,13 @@
-import { spawn } from "node:child_process"
+import { type ChildProcess, spawn } from "node:child_process"
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs"
 import http from "node:http"
 import type { AddressInfo } from "node:net"
-import { afterEach, describe, expect, test } from "vitest"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { afterAll, afterEach, describe, expect, test } from "vitest"
 import { probeAnvil } from "../../tests/e2e/anvil-probe"
-import { assertPackFree, listenerIsOurs, mayAdopt, waitWhileAlive } from "../../tests/e2e/boot-guard"
-import { launchEnv, newMarker, readEnviron } from "../../tests/e2e/owned-processes"
+import { assertPackFree, listenerIsOurs, mayAdopt, nodeStores, waitWhileAlive } from "../../tests/e2e/boot-guard"
+import { LAUNCH_ENV, launchEnv, newMarker, readEnviron } from "../../tests/e2e/owned-processes"
 
 const servers: http.Server[] = []
 afterEach(async () => {
@@ -39,6 +42,26 @@ async function freePorts(n: number): Promise<number[]> {
 		await new Promise((resolve) => srv.close(resolve))
 	}
 	return ports
+}
+
+const environShown = (pid: number | undefined) => {
+	const env = pid ? readEnviron(pid) : "gone"
+	return typeof env !== "string" && env.size > 0
+}
+
+/** A detached process carrying `marker`, once its environ shows it (a child in execve reads empty). */
+async function spawnMarked(marker: string, args: string[]) {
+	const child = spawn(process.execPath, args, {
+		detached: true,
+		stdio: ["ignore", "pipe", "ignore"],
+		env: { ...process.env, ...launchEnv(marker) },
+	})
+	const deadline = Date.now() + 5_000
+	while (!environShown(child.pid)) {
+		if (Date.now() > deadline) throw new Error("the marked child never became readable")
+		await new Promise((resolve) => setTimeout(resolve, 20))
+	}
+	return child
 }
 
 describe("boot guard", () => {
@@ -83,26 +106,6 @@ describe("boot guard", () => {
 	})
 
 	describe.skipIf(process.platform !== "linux")("listener ownership", () => {
-		const environShown = (pid: number | undefined) => {
-			const env = pid ? readEnviron(pid) : "gone"
-			return typeof env !== "string" && env.size > 0
-		}
-
-		/** A detached process carrying `marker`, once its environ shows it (a child in execve reads empty). */
-		async function spawnMarked(marker: string, args: string[]) {
-			const child = spawn(process.execPath, args, {
-				detached: true,
-				stdio: ["ignore", "pipe", "ignore"],
-				env: { ...process.env, ...launchEnv(marker) },
-			})
-			const deadline = Date.now() + 5_000
-			while (!environShown(child.pid)) {
-				if (Date.now() > deadline) throw new Error("the marked child never became readable")
-				await new Promise((resolve) => setTimeout(resolve, 20))
-			}
-			return child
-		}
-
 		test("a stranger answering while the live, still-unbound child starts is refused", async () => {
 			const port = await strangerAnvil()
 			const marker = newMarker()
@@ -143,6 +146,64 @@ describe("boot guard", () => {
 			} finally {
 				child.kill("SIGKILL")
 			}
+		})
+	})
+
+	describe.skipIf(process.platform !== "linux")("node stores", () => {
+		const root = mkdtempSync(path.join(tmpdir(), "nulo-node-stores-test-"))
+		const run = path.join(root, "nulo-aztec-1-1")
+		const children: ChildProcess[] = []
+		afterAll(() => {
+			for (const child of children) child.kill("SIGKILL")
+			rmSync(root, { recursive: true, force: true })
+		})
+
+		const store = (...parts: string[]) => {
+			const file = path.join(root, ...parts, "data.mdb")
+			mkdirSync(path.dirname(file), { recursive: true })
+			writeFileSync(file, "")
+			return file
+		}
+
+		/** A process carrying `marker` that holds `files` open, `unlinked` already removed from disk. */
+		async function holding(marker: string, files: string[], unlinked: string[] = []) {
+			const child = await spawnMarked(marker, [
+				"-e",
+				`const fs = require("node:fs")
+				for (const f of ${JSON.stringify(files)}) fs.openSync(f, "r")
+				for (const f of ${JSON.stringify(unlinked)}) fs.unlinkSync(f)
+				console.log("ready")
+				setInterval(() => {}, 60_000)`,
+			])
+			children.push(child)
+			await new Promise((resolve) => child.stdout?.once("data", resolve))
+		}
+
+		test("a store under the run dir is inside; a sibling dir's and an unlinked one's are outside", async () => {
+			const marker = newMarker()
+			const inside = store("nulo-aztec-1-1", "tmp", "archiver-a")
+			const sibling = store("nulo-aztec-1-1-other", "p2p-b")
+			const unlinked = store("elsewhere", "sentinel-c")
+			await holding(marker, [inside, sibling, unlinked], [unlinked])
+			const found = nodeStores(run, marker)
+			expect(found.inside).toEqual([inside])
+			expect([...found.outside].sort()).toEqual([sibling, unlinked].sort())
+			expect(found.unreadable).toEqual([])
+		})
+
+		test("another run's open store is not this node's, and a node with none open has none inside", async () => {
+			const marker = newMarker()
+			await holding(newMarker(), [store("stranger", "archiver-d")])
+			await holding(marker, [])
+			expect(nodeStores(run, marker)).toEqual({ inside: [], outside: [], unreadable: [] })
+		})
+
+		test("a marked process whose open files /proc will not list is reported", () => {
+			// pid 1 is root's on any non-root host, so its fd list refuses this user.
+			expect(statSync("/proc/1").uid).not.toBe(process.getuid?.())
+			const marker = newMarker()
+			const read = (pid: number) => (pid === 1 ? new Map([[LAUNCH_ENV, marker]]) : ("gone" as const))
+			expect(nodeStores(run, marker, read)).toEqual({ inside: [], outside: [], unreadable: [1] })
 		})
 	})
 })
