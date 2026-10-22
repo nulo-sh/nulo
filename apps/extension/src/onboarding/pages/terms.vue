@@ -43,13 +43,15 @@ const handleAccept = async () => {
 
 <template>
 	<OnboardingPage :gap="28">
-		<OnboardingBackLink testid="legal-terms-back" />
-		<StepIndicator current="terms" :path="path" />
-
-		<header :class="$style.hero" data-testid="legal-terms-page">
-			<BrutalistTitle main="Before" sub="you start" />
-			<div :class="$style.hero_bar" />
-		</header>
+		<OnboardingStepHeader
+			current="terms"
+			:path="path"
+			back="legal-terms-back"
+			main="Before"
+			sub="you start"
+			:class="$style.hero"
+			data-testid="legal-terms-page"
+		/>
 
 		<LegalConsent
 			:points="RISK_POINTS"
@@ -63,13 +65,6 @@ const handleAccept = async () => {
 
 <style module>
 .hero {
-	padding: 8px 0 16px;
-}
-
-.hero_bar {
-	width: 40px;
-	height: 2px;
-	background: var(--nulo-accent);
-	margin-top: 12px;
+	padding-bottom: 16px;
 }
 </style>

@@ -6,7 +6,7 @@
  */
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AccountAddressInconsistencyError } from "@nulo/extension-messaging/errors"
-import { asMasterSecretBytes } from "@nulo/wallet-crypto"
+import { asMasterSecretBytes, keyedSegment } from "@nulo/wallet-crypto"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { describe, expect, test } from "vitest"
 import { ServiceCollection } from "@/wallet/base"
@@ -22,8 +22,13 @@ import { svc } from "../composition-harness"
 import { AccountIntegrityBlockedRepository, AccountIntegrityVerifiedStampRepository } from "./blocked-repository"
 import { AccountIntegrityCoordinator, type DeriveAddress } from "./coordinator"
 import { accountSetDigest } from "./types"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 
 const MASTER = asMasterSecretBytes(new Uint8Array(32).fill(7) as Uint8Array<ArrayBuffer>)
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
+/** What the coordinator stores for an account set: its digest, keyed under p1's row keys. */
+const keyedDigestOf = (rows: Account[]) => keyedSegment(ROW_KEY_FAKE.rowKeys("p1")!, accountSetDigest(rows))
 
 function row(overrides: Partial<Account> = {}): Account {
 	return {
@@ -60,6 +65,7 @@ async function build(opts: {
 	const repo = new AccountIntegrityBlockedRepository(api.storage.local)
 	services.add(
 		svc(ProfileService.name, {
+			...ROW_KEY_FAKE,
 			setIntegrityDelegate: () => {},
 			lockProfileIfActive: async (id: string) => {
 				locks.push(id)
@@ -249,6 +255,19 @@ describe("AccountIntegrityCoordinator", () => {
 		expect(c.n).toBe(3) // 1 (first boot) + 2 (both rows re-derived on the second boot)
 	})
 
+	test("boot verify: a stamp holding the plain digest a 1.0.x build wrote re-derives once, then keys it", async () => {
+		const c = { n: 0 }
+		const derive = greenDerive(c)
+		const { api, stamps } = await build({ rows: [row()], derive, activeProfileId: "p1" })
+		const stamp = await stamps.get("p1")
+		await stamps.set("p1", { walletVersion: stamp!.walletVersion, accountSetDigest: accountSetDigest([row()]) })
+		await build({ rows: [row()], derive, activeProfileId: "p1", api })
+		expect(c.n).toBe(2)
+		expect((await stamps.get("p1"))?.accountSetDigest).toBe(await keyedDigestOf([row()]))
+		await build({ rows: [row()], derive, activeProfileId: "p1", api })
+		expect(c.n).toBe(2)
+	})
+
 	test("boot verify: an UNCHANGED account set on the same build skips (digest match)", async () => {
 		const c = { n: 0 }
 		const derive = greenDerive(c)
@@ -363,8 +382,8 @@ describe("AccountIntegrityCoordinator — chain-aware verdicts", () => {
 			derive: async () => "0xmoved",
 		})
 		await coordinator.verifyBeforeSessionOpen("p1", MASTER)
-		expect((await stale.getRecord("p1"))?.accountSetDigest).toBe(accountSetDigest(second))
-		expect((await stamps.get("p1"))?.accountSetDigest).toBe(accountSetDigest(second))
+		expect((await stale.getRecord("p1"))?.accountSetDigest).toBe(await keyedDigestOf(second))
+		expect((await stamps.get("p1"))?.accountSetDigest).toBe(await keyedDigestOf(second))
 	})
 
 	test("an account set that changes twice refuses the open and clears, stamps and writes nothing", async () => {
@@ -429,6 +448,44 @@ describe("AccountIntegrityCoordinator — operation-time classification", () => 
 		expect(await stale.getRecord("p1")).toBeUndefined()
 		expect(locks).toEqual([])
 		expect(await repo.isBlocked("p1")).toBe(false)
+	}, 30_000)
+
+	test("both digest writers store a keyed digest that names no address, and an account-set change still invalidates it", async () => {
+		const accounts = [onTestnet({ address: "0xMARKER" }), row({ l1ChainId: 31337, address: "0xOTHERMARKER" })]
+		let current = accounts
+		const local: Network = { ...TESTNET_ROW, id: "ln", chainId: 0, l1ChainId: 31337, kind: "local" }
+		const derive: DeriveAddress = async (_m, a) => (a.l1ChainId === TESTNET_ROW.l1ChainId ? "0xmoved" : "0xOTHERMARKER")
+		const { coordinator, api, stale, stamps } = await build({
+			rows: accounts,
+			accountsRaw: async () => current,
+			networks: [TESTNET_ROW, local],
+			derive,
+		})
+		const noMarker = async () => expect(JSON.stringify(await api.storage.local.get(null))).not.toMatch(/MARKER/i)
+
+		await coordinator.verifyBeforeSessionOpen("p1", MASTER)
+		expect((await stamps.get("p1"))?.accountSetDigest).toBe(await keyedDigestOf(accounts))
+		expect((await stale.getRecord("p1"))?.accountSetDigest).toBe(await keyedDigestOf(accounts))
+		await noMarker()
+
+		await stale.clearProfile("p1")
+		expect(await coordinator.classifyRuntimeMismatch("p1", TESTNET_ROW.chainId)).toBe(true)
+		expect((await stale.getRecord("p1"))?.accountSetDigest).toBe(await keyedDigestOf(accounts))
+		await noMarker()
+
+		// One more account: the stored digest no longer matches the set, so the record is not rewritten.
+		await stale.clearProfile("p1")
+		current = [...accounts, onTestnet({ index: 1, address: "0xTHIRDMARKER" })]
+		const reads = [accounts]
+		const merged = await build({
+			rows: accounts,
+			accountsRaw: async () => reads.shift() ?? current,
+			networks: [TESTNET_ROW, local],
+			derive,
+			api,
+		})
+		expect(await merged.coordinator.classifyRuntimeMismatch("p1", TESTNET_ROW.chainId)).toBe(true)
+		expect(await stale.getRecord("p1")).toBeUndefined()
 	}, 30_000)
 
 	test("a mixed chain, or a chain with no network row, is not confined", async () => {

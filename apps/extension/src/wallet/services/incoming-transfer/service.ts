@@ -352,7 +352,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 				() => this.deletersRunning === 0,
 			)
 		} catch (error) {
-			this.logWarn("sealing the profile's plaintext incoming rows failed; the next unlock retries", { error })
+			this.logWarn("sealing the profile's plaintext incoming rows failed; the next worker retries", { error })
 		}
 	}
 

@@ -6,6 +6,7 @@
 import type { Page } from "puppeteer"
 import type { TokenListEntry } from "@nulo/token-list"
 import { captureSoleProfileId, getAccountAddress } from "../fixtures/helpers"
+import { readActiveNetwork } from "../fixtures/networks"
 import { SEALED_READ_MESSAGE } from "../fixtures/sealed-rows"
 import { E2E_LIST_TOKENS, heldListEntries } from "../fixtures/token-list"
 
@@ -30,13 +31,8 @@ export type ActivityScope = {
 export async function readScopeIdentity(page: Page): Promise<Omit<ActivityScope, "token">> {
 	const profileId = await captureSoleProfileId(page)
 	const account = await getAccountAddress(page)
-	const { networkId, chainId } = await page.evaluate(async (pid: string) => {
-		const all = await chrome.storage.local.get(null)
-		const networkId = all[`nulo:core:active-network@${pid}`] as string
-		const network = JSON.parse(all[`nulo:core:networks@${networkId}`] as string) as { chainId: number }
-		return { networkId, chainId: network.chainId }
-	}, profileId)
-	return { profileId, networkId, chainId, account }
+	const network = await readActiveNetwork(page)
+	return { profileId, networkId: network.id, chainId: network.chainId, account }
 }
 
 /**

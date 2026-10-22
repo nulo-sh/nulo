@@ -35,6 +35,7 @@ import { TokenService } from "@/wallet/services/token/service"
 import { TransactionService } from "@/wallet/services/transaction/service"
 import { toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
 import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { ExecutionService } from "./service"
 
 const NETWORK = {
@@ -120,10 +121,9 @@ async function makeHarness() {
 			batch: (address: string) => dispatcher.dispatch("batch", [[{ name: "registerSender", args: [address] }]], ctx),
 		}
 	}
-	const counts = async () => {
-		const key = "nulo:core:dappRegistrations@p1"
-		return JSON.parse((await api.storage.local.get(key))[key] as string)
-	}
+	// biome-ignore lint/suspicious/noExplicitAny: the counts are asserted field by field
+	const counts = async (): Promise<any> =>
+		sealedEntityStorage("dappRegistrations", api.storage.local, (await rowKeysForEveryProfile()).rowKeys).get("p1")
 	const holdNetwork = () => {
 		let release = () => {}
 		networkHeld = new Promise((resolve) => {

@@ -21,7 +21,7 @@
 				}
 			],
 			"digests": {
-				"apps/extension/src/wallet/services/auth-registry/service.ts": "21114cb49cda60dec37b1077a57ce64af8a2ea8a28120ea0774f1f90aa9d103e",
+				"apps/extension/src/wallet/services/auth-registry/service.ts": "f7e7cc5fbacfba22652cd192c3ce2c12577b1228bd33343ac6cd967a72bb0d26",
 				"apps/extension/src/wallet/services/execution/operation-planner.ts": "bbcaf06f67030ba2a7b26bc54a4671db80d11059f0b0b50ce0142a7cf16b5185",
 				"packages/wallet-bridge/src/dispatcher.ts": "078a3db852a84faef2b28c7874ba0de05084ac0cfe72e88cd603a1b127a8914c"
 			},
@@ -218,7 +218,7 @@
 		{
 			"file": "apps/extension/src/components/Header.vue",
 			"expression": "appStore.account?.address ? trimAddress(appStore.account.address, 6, 4, \"...\") : \"\"",
-			"branch": "!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader && appStore.isLogined && accountState === 'shown'",
+			"branch": "!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader && !isCardWindow() && appStore.isLogined && accountState === 'shown'",
 			"ordinal": 0,
 			"role": "data-lead",
 			"selector": "[data-testid=\"account-address-text\"]",
@@ -701,7 +701,7 @@
 		{
 			"file": "apps/extension/src/popup/pages/settings/accounts/import.vue",
 			"expression": "previewAddress",
-			"branch": "!(!needsConfirm)",
+			"branch": "!(showCard) && !(!needsConfirm)",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"import-account-preview-address\"]",

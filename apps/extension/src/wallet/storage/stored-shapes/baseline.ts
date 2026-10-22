@@ -30,9 +30,7 @@ import { BASELINE_VERSION } from "../migrations"
 import { parseEnvelope, type RowKeysSource, type SealedRootOptions } from "../sealed-entity-storage"
 import { STORED_SHAPES, type StoredShape, type StoredShapeName } from "../stored-shapes"
 import {
-	type CodecStoreName,
 	entityStorage,
-	type PerProfileValueStoreName,
 	type PlainEntityStoreName,
 	type SealedStoreName,
 	STORES,
@@ -199,18 +197,19 @@ export async function readStored(name: StoredShapeName, area: MinimalStorageArea
 	if (shape.engine) throw new Error(`${name} is the engine's own state: it has no goldens`)
 	const keys = shape.sealed ? await goldenKeysFor((await area.get(key))[key]) : () => undefined
 	if (shape.authenticated) return (await macStorage(area, keys)).get(idOf(shape, key))
-	if (shape.sealed) return (await sealedEntityStorage(name as SealedStoreName, area, keys).readStorageId(idOf(shape, key)))?.row
+	if (shape.sealed) {
+		const row = (await sealedEntityStorage(name as SealedStoreName, area, keys).readStorageId(idOf(shape, key)))?.row
+		return shape.read === "codec" || row === undefined ? row : shape.read(row, now)
+	}
 	const store = name in STORES ? STORES[name as keyof typeof STORES] : undefined
 	if (shape.read === "codec") {
-		if (store) return entityStorage(name as CodecStoreName, area).get(idOf(shape, key))
 		const reader = RAW_REPOSITORY_READS[name]
-		if (!reader) throw new Error(`${name} has a codec but neither a store nor a repository read`)
+		if (!reader) throw new Error(`${name} has a codec but neither a sealed store nor a repository read`)
 		return reader(repositoryArea(area), idOf(shape, key))
 	}
 	let value: unknown
 	if (store?.kind === "entity") value = await entityStorage<unknown>(name as PlainEntityStoreName, area).get(idOf(shape, key))
-	else if (store?.ref.kind === "value") value = await readOrAbsent(() => valueStorage(name as ValueStoreName, area).get())
-	else if (store) value = await readOrAbsent(() => valueStorage(name as PerProfileValueStoreName, area, idOf(shape, key)).get())
+	else if (store) value = await readOrAbsent(() => valueStorage(name as ValueStoreName, area).get())
 	else value = (await area.get(key))[key]
 	return shape.read(value, now)
 }

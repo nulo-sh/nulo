@@ -10,7 +10,7 @@
 import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
-import { afterEach, describe, expect, test, vi } from "vitest"
+import { afterAll, afterEach, describe, expect, test, vi } from "vitest"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
@@ -23,7 +23,37 @@ import { ProfileService } from "@/wallet/services/profile/service"
 import { TaskService } from "@/wallet/services/task/service"
 import { recordWrites } from "@/wallet/services/storage-write-log"
 import { TOKEN_DETAILS_CHANGED, TokenService } from "./service"
-import type { TokenInterface } from "./spec"
+import type { Token, TokenInterface } from "./spec"
+import { isSealedText } from "@/wallet/storage/sealed-entity-storage"
+import { rowKeysForEveryProfile, storedText, trackSubtleCrypto } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
+
+const crypto = trackSubtleCrypto()
+afterAll(() => crypto.restore())
+
+/** Runs every timer due now and every in-flight WebCrypto call, until a step parks: a row's seal
+ *  resolves outside the fake clock. */
+async function settleSteps(): Promise<void> {
+	for (let round = 0; round < 5; round++) {
+		await vi.advanceTimersByTimeAsync(0)
+		await crypto.settled()
+	}
+}
+
+/** Every stored token row as `[storage key, row]`, sealed rows opened. */
+async function storedTokenRows(area: { get(keys: null): Promise<Record<string, unknown>> }): Promise<Array<[string, Token]>> {
+	const entries = Object.entries(await area.get(null)).filter(([key]) => key.startsWith("nulo:core:tokens@"))
+	return Promise.all(
+		entries.map(
+			async ([key, value]): Promise<[string, Token]> => [
+				key,
+				JSON.parse((await storedText(key, value, ROW_KEY_FAKE.rowKeys)) ?? "null"),
+			],
+		),
+	)
+}
 
 const NETWORK = { id: "net1", chainId: 1, primaryEndpointId: "ep1", endpoints: [{ id: "ep1", rpcUrl: "http://fake" }] }
 
@@ -51,6 +81,7 @@ async function makeHarness() {
 	const collection = new ServiceCollection()
 	collection.add(
 		svc(ProfileService.name, {
+			...ROW_KEY_FAKE,
 			getActiveProfile: async () => ({ id: "p1" }),
 			onProfileDeleted: { add: () => {} },
 			onActiveProfileChanged: new EventHandler(),
@@ -443,8 +474,8 @@ describe("TokenService.refreshRestoredTokens — the chain's metadata over the b
 		})
 		await tokenService.refreshRestoredTokens(FENCE, later())
 		expect(preview).toHaveBeenCalledOnce()
-		const rows = Object.entries(await api.storage.local.get(null)).filter(([key]) => key.startsWith("nulo:core:tokens@"))
-		expect(rows.map(([, v]) => JSON.parse(v as string))).toEqual([expect.objectContaining({ profileId: "p2", symbol: "USDT" })])
+		const rows = await storedTokenRows(api.storage.local)
+		expect(rows.map(([, row]) => row)).toEqual([expect.objectContaining({ profileId: "p2", symbol: "USDT" })])
 		expect(updated).not.toHaveBeenCalled()
 	})
 
@@ -490,9 +521,7 @@ describe("TokenService.refreshRestoredTokens — the chain's metadata over the b
 	})
 
 	const tokenRows = async (api: { storage: { local: { get: (k: null) => Promise<Record<string, unknown>> } } }) =>
-		Object.entries(await api.storage.local.get(null))
-			.filter(([key]) => key.startsWith("nulo:core:tokens@"))
-			.map(([, v]) => JSON.parse(v as string))
+		(await storedTokenRows(api.storage.local)).map(([, row]) => row)
 
 	test("a chain swept during the read is never written", async () => {
 		const { tokenService, api, preview, networkLive, updated } = await restored()
@@ -817,11 +846,11 @@ describe("TokenService.addToken — creation fences", () => {
 			if (checks === 2) await lastCheck.promise
 			return networkLive.value
 		}
-		const tokenRows = async () => Object.entries(await api.storage.local.get(null)).filter(([k]) => k.startsWith("nulo:core:tokens@"))
+		const tokenRows = () => storedTokenRows(api.storage.local)
 		vi.useFakeTimers()
 		try {
 			const run = tokenService.addToken("p1", NETWORK.id, "0xacc", ti("0xbeef"), { origin: "popup" }).catch((error: unknown) => error)
-			await vi.advanceTimersByTimeAsync(0)
+			await settleSteps()
 			expect(checks).toBe(2)
 			const [[addKey]] = await tokenRows()
 
@@ -842,7 +871,7 @@ describe("TokenService.addToken — creation fences", () => {
 		}
 		const rows = await tokenRows()
 		expect(rows).toHaveLength(1)
-		expect(String(rows[0][1])).toContain("0xcafe")
+		expect(rows[0][1].contract).toBe("0xcafe")
 		expect(emitted).toHaveLength(0)
 	})
 })
@@ -871,13 +900,11 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 	})
 
 	const add = (h: Harness, contract: string) => h.tokenService.addToken("p1", NETWORK.id, "0xacc", ti(contract), { origin: "popup" })
-	const settle = () => vi.advanceTimersByTimeAsync(0)
+	const settle = settleSteps
 	const release = () => vi.advanceTimersByTimeAsync(WATCHDOG_MS)
 	async function rows(h: Harness): Promise<Record<string, string>> {
 		const out: Record<string, string> = {}
-		for (const [key, raw] of Object.entries(await h.api.storage.local.get(null))) {
-			if (key.startsWith("nulo:core:tokens@")) out[key.slice("nulo:core:tokens@".length)] = JSON.parse(raw as string).contract
-		}
+		for (const [key, row] of await storedTokenRows(h.api.storage.local)) out[key.slice("nulo:core:tokens@".length)] = row.contract
 		return out
 	}
 	const stagesOf = (h: Harness, opId: string) =>
@@ -1085,25 +1112,27 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		expect(Object.values(await rows(h))).toEqual(["0xa11"])
 	})
 
+	// Each seal draws a fresh IV, so even the same token restored at the id is stored as other bytes.
 	test.each([
-		{ name: "another token", identical: false, replacement: () => mk("0xccc") },
-		{ name: "the same token, byte for byte", identical: true, replacement: (own: string) => JSON.parse(own) },
-	])("released after its set, it keeps a restore's row at its id on a replaced network: $name", async ({ identical, replacement }) => {
+		{ name: "another token", replacement: () => mk("0xccc") },
+		{ name: "the same token, field for field", replacement: (own: Token) => own },
+	])("released after its set, it keeps a restore's row at its id on a replaced network: $name", async ({ replacement }) => {
 		const h = await setup()
 		const check = holdNetworkCheck(h, 2)
 		networksOf(h).isChainLive = async () => true
 		const run = add(h, "0xa11").catch((error: unknown) => error)
 		await settle()
 		expect(check.calls()).toBe(2)
-		const [[key, own]] = Object.entries(await h.api.storage.local.get(null)).filter(([k]) => k.startsWith("nulo:core:tokens@"))
+		const [[key, ownRow]] = await storedTokenRows(h.api.storage.local)
+		const own = (await h.api.storage.local.get(key))[key]
 		await release()
 
 		h.networkLive.value = false
 		await h.tokenService.clearChainState("p1", 1)
-		const [restored] = await h.tokenService.restore([replacement(own as string)])
+		const [restored] = await h.tokenService.restore([replacement(ownRow)])
 		expect(`nulo:core:tokens@${restored.id}`).toBe(key)
 		const written = (await h.api.storage.local.get(key))[key]
-		expect(written === own).toBe(identical)
+		expect(written).not.toBe(own)
 		check.release(false)
 
 		expect(await run).toEqual(expect.objectContaining({ message: "network deleted" }))
@@ -1180,6 +1209,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 			initialized: true,
 			pxeServiceClient: { clearChainState: async () => {} },
 			profileService: {
+				...ROW_KEY_FAKE,
 				getActiveProfile: async () => ({ id: "p1" }),
 				getDeletionState: () => h.deletionState,
 				captureExecutionFence: async () => ({ profileId: "p1", epoch: h.deletionState.capture("p1"), session: 1 }),
@@ -1315,5 +1345,56 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 
 		expect(await purging).toEqual(expect.objectContaining({ message: "token lock lost" }))
 		expect(await rows(h)).toEqual({ [`${a.id}`]: "0xa11", [`${b.id}`]: "0xccc" })
+	})
+})
+
+describe("TokenService — sealing a profile's plaintext tokens at unlock", () => {
+	const sealLegacy = (h: Harness) =>
+		(h.tokenService as unknown as { sealLegacyRows(profileId: string): Promise<void> }).sealLegacyRows("p1")
+	const plainRow = {
+		id: 1,
+		profileId: "p1",
+		chainId: NETWORK.chainId,
+		contract: `0x${"0a".repeat(32)}`,
+		name: "T",
+		symbol: "T",
+		decimals: 9,
+	}
+
+	test("each row and the seeder marker are sealed and still read", async () => {
+		const h = await makeHarness()
+		await h.api.storage.local.set({
+			"nulo:core:tokens@1": JSON.stringify(plainRow),
+			"nulo:core:token-seeded@p1": JSON.stringify({ [`${NETWORK.chainId}:0xab`]: { attempts: 0, outcome: "deleted" } }),
+		})
+		await sealLegacy(h)
+		const raw = await h.api.storage.local.get(null)
+		expect(isSealedText(raw["nulo:core:tokens@1"])).toBe(true)
+		expect(isSealedText(raw["nulo:core:token-seeded@p1"])).toBe(true)
+		expect(await h.tokenService.getTokenRaw(1)).toEqual(plainRow)
+	})
+
+	test("a row a chain sweep deleted after the conversion's last read is not written back", async () => {
+		const h = await makeHarness()
+		const area = h.api.storage.local
+		await area.set({ "nulo:core:tokens@1": JSON.stringify(plainRow) })
+		const realGet = area.get.bind(area)
+		let swept = false
+		const get = vi.spyOn(area, "get").mockImplementation(async (keys) => {
+			const read = await realGet(keys)
+			// Only the conversion's commit check reads this key in a list: the sweep lands right after it.
+			if (!swept && Array.isArray(keys) && keys.includes("nulo:core:tokens@1")) {
+				swept = true
+				await h.tokenService.clearChainState("p1", NETWORK.chainId)
+			}
+			return read
+		})
+		try {
+			await sealLegacy(h)
+		} finally {
+			get.mockRestore()
+		}
+		expect(swept).toBe(true)
+		expect((await area.get(null))["nulo:core:tokens@1"]).toBeUndefined()
 	})
 })

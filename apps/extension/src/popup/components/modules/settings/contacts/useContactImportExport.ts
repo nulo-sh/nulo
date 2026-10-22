@@ -20,6 +20,7 @@ import type { RunFence } from "@/wallet/services/profile/spec"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
+import { type Outcome, type Snack, showSnack } from "@/utils/snack"
 
 interface ContactRecord {
 	id: string
@@ -64,9 +65,11 @@ export function useContactImportExport(opts: UseContactImportExportOptions) {
 				exporting.value = false
 			}
 		},
-		// One import per window, so its one selection slot has one owner; the menu's disabled item is
-		// this rule's visible part.
-		importContacts: () => (deps.appStore.contactImports.size > 0 ? Promise.resolve() : importContacts(deps)),
+		/** `undefined` until the selection settled: a cancelled pick or a refused file, whose snack is
+		 *  already shown, or another import holding the slot. One import per window, so its one
+		 *  selection slot has one owner; the menu's disabled item is this rule's visible part. */
+		importContacts: (): Promise<Outcome | undefined> =>
+			deps.appStore.contactImports.size > 0 ? Promise.resolve(undefined) : importContacts(deps),
 	}
 }
 
@@ -155,11 +158,12 @@ async function exportContacts(deps: ContactIoServices): Promise<void> {
 	}
 }
 
-async function importContacts(deps: ContactIoServices): Promise<void> {
+async function importContacts(deps: ContactIoServices): Promise<Outcome | undefined> {
 	const { openToast } = deps
 	const profileService = new ProfileServiceClient()
 	const contactService = new ContactServiceClient()
 	const accountStateService = new AccountStateServiceClient()
+	let run: ImportRun | undefined
 	try {
 		// The `.json` accept filter is UI guidance, not a boundary — a
 		// `.gz`-named pick still auto-decompresses inside pickFile, so the
@@ -186,24 +190,9 @@ async function importContacts(deps: ContactIoServices): Promise<void> {
 
 		// Captured before the rows are shown, so the import writes to the session they were reviewed in.
 		profileService.connect()
-		const run: ImportRun = { fence: await profileService.captureRunFence(), profileService }
-
-		const selection = openImportSelection(deps, importedContacts)
-		if (!selection) return
-		let res: SelectedRow[]
-		try {
-			res = await selection
-		} catch {
-			openToast({ kind: "success", label: "Contact import canceled" })
-			return
-		}
-
-		if (!res.length) {
-			openToast({ kind: "error", label: "No contacts selected for import" })
-			return
-		}
-
-		await applyHoldingLock({ ...deps, contactService, accountStateService, run }, res)
+		run = { fence: await profileService.captureRunFence(), profileService }
+		const snack = await importSelected({ ...deps, contactService, accountStateService, run }, importedContacts)
+		return snack && { snack, profileId: run.fence.profileId }
 	} catch (err) {
 		if (err instanceof FilePickCanceledError) return
 		if (err instanceof FileTooLargeError) {
@@ -212,12 +201,35 @@ async function importContacts(deps: ContactIoServices): Promise<void> {
 		}
 		// The message can quote the file (JSON.parse does), and the file holds names and addresses.
 		console.error("Error occurred during import", err instanceof Error ? err.name : typeof err)
-		openToast({ kind: "error", label: "Error occurred during import" })
+		const snack: Snack = { kind: "error", label: "Error occurred during import" }
+		showSnack(openToast, snack)
+		return run && { snack, profileId: run.fence.profileId }
 	} finally {
 		profileService.disconnect()
 		contactService.disconnect()
 		accountStateService.disconnect()
 	}
+}
+
+/** Opens the selection and writes the rows picked there: the snack shown for the outcome, or
+ *  `undefined` when the selection could not open. */
+async function importSelected(deps: ContactIoDeps, rows: ImportRow[]): Promise<Snack | undefined> {
+	const selection = openImportSelection(deps, rows)
+	if (!selection) return undefined
+	let res: SelectedRow[]
+	try {
+		res = await selection
+	} catch {
+		const canceled: Snack = { kind: "success", label: "Contact import canceled" }
+		showSnack(deps.openToast, canceled)
+		return canceled
+	}
+	if (!res.length) {
+		const empty: Snack = { kind: "error", label: "No contacts selected for import" }
+		showSnack(deps.openToast, empty)
+		return empty
+	}
+	return applyHoldingLock(deps, res)
 }
 
 /** Opens the selection, which rejects on cancel, or returns `undefined` while an import runs or
@@ -246,7 +258,9 @@ function openImportSelection(
 	})
 }
 
-async function applyHoldingLock(deps: ContactIoDeps, res: SelectedRow[]): Promise<void> {
+/** The outcome snack shows while the hold is still on: a lock waiting for the import's end must find
+ *  it open, and close it with the session. */
+async function applyHoldingLock(deps: ContactIoDeps, res: SelectedRow[]): Promise<Snack> {
 	const endHold = deps.appStore.beginContactImport()
 	try {
 		const progress = showProgress(deps, res.length)
@@ -256,8 +270,10 @@ async function applyHoldingLock(deps: ContactIoDeps, res: SelectedRow[]): Promis
 		} finally {
 			progress.stop()
 		}
-		if (tally.stopped) toastStoppedImport(deps.openToast, tally, res.length)
-		else toastImportOutcome(deps.openToast, tally)
+		logImportErrors(tally.errors)
+		const snack = tally.stopped ? stoppedImportSnack(tally, res.length) : importOutcomeSnack(tally)
+		showSnack(deps.openToast, snack)
+		return snack
 	} finally {
 		endHold()
 	}
@@ -435,18 +451,15 @@ function logImportErrors(errors: UpsertError[]): void {
 
 /** `written` counts confirmed writes, so a write whose reply the stop cut off may be saved uncounted.
  *  `selected` counts every row the person chose, refused ones included. */
-function toastStoppedImport(openToast: ContactIoDeps["openToast"], tally: ImportTally, selected: number): void {
-	logImportErrors(tally.errors)
+function stoppedImportSnack(tally: ImportTally, selected: number): Snack {
 	const noun = selected === 1 ? "contact" : "contacts"
-	openToast({ kind: "error", label: `Import incomplete · ${tally.written} of ${selected} ${noun} written` })
+	return { kind: "error", label: `Import incomplete · ${tally.written} of ${selected} ${noun} written` }
 }
 
-function toastImportOutcome(openToast: ContactIoDeps["openToast"], tally: ImportTally): void {
+function importOutcomeSnack(tally: ImportTally): Snack {
 	const { errors, senderTotal, senderOk, senderSkippedNoNetwork } = tally
-	if (errors.length) {
-		logImportErrors(errors)
-		openToast({ kind: "error", label: "Import ended with errors" })
-	} else if (senderTotal > 0 && senderOk < senderTotal) {
+	if (errors.length) return { kind: "error", label: "Import ended with errors" }
+	if (senderTotal > 0 && senderOk < senderTotal) {
 		// "Skipped" ≠ "failed": the no-network case was announced as a
 		// skip by the import banner — the toast must say the same thing.
 		const allSkipped = senderSkippedNoNetwork === senderTotal - senderOk && senderOk === 0
@@ -455,10 +468,9 @@ function toastImportOutcome(openToast: ContactIoDeps["openToast"], tally: Import
 			: senderOk === 0
 				? "sender registration failed"
 				: `${senderOk} of ${senderTotal} senders registered`
-		openToast({ kind: "error", label: `Contacts imported · ${detail}` })
-	} else if (senderTotal > 0) {
-		openToast({ kind: "success", label: `Contacts imported · ${senderOk} ${senderOk === 1 ? "sender" : "senders"} registered` })
-	} else {
-		openToast({ kind: "success", label: "Import completed successfully" })
+		return { kind: "error", label: `Contacts imported · ${detail}` }
 	}
+	if (senderTotal > 0)
+		return { kind: "success", label: `Contacts imported · ${senderOk} ${senderOk === 1 ? "sender" : "senders"} registered` }
+	return { kind: "success", label: "Import completed successfully" }
 }

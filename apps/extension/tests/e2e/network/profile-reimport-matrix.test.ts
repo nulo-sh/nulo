@@ -22,8 +22,6 @@
  * renders an FJ amount, never the failed-read em-dash) and a WRITE (token
  * import registers the contract and toasts).
  */
-import { rmSync } from "node:fs"
-import { dirname } from "node:path"
 import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { launchExtension, test, waitForHash } from "../fixtures/extension"
@@ -167,7 +165,6 @@ test.skipIf(!hasConfig)(
 			// assertions above are the real proof. Page errors stay asserted (popup-side truth).
 			expect(ctx.pageErrors).toEqual([])
 		} finally {
-			rmSync(dirname(backupPath), { recursive: true, force: true })
 			await ctx.close()
 		}
 	},

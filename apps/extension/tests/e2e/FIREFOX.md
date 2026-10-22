@@ -61,6 +61,7 @@ A classic window handle and a BiDi browsing-context id are the same string in Fi
 | An **overflowing scroll area is a Tab stop**. | A Tab-order assertion meets the scroll area before the first control while the window overflows (in `cap-window.test.ts`, a re-request's five "previously denied" rows run the window 27px over). | Not absorbed: a window that overflows by design expects the stop first (`cap-window.test.ts`'s busiest first request scrolls 12px, the `scrollStop` it expects on Firefox); a flow that needs a first request after a rejection gets its own connect. |
 | `windows.getLastFocused({ windowTypes: ["normal"] })` **ignores `windowTypes`** and can answer with a focused approval popup (Firefox 153.0.4; Chrome 152.0.7977.42 honours the filter). | The wallet anchors a new window on its own popup instead of the dApp's window. | `ChromeWindowsAdapter` tracks normal-window focus itself on Firefox (`src/core/adapters/chrome-browser-api.ts:200-245`), pinned by `chrome-browser-api.test.ts:60`. |
 | Firefox's remote agent counts a press as part of a **double-click only inside one action chain**, and starts the count again on every pointer move, with 640 ms between presses at most (`Actions.sys.mjs`, `ClickTracker`). Puppeteer's BiDi mouse (puppeteer-core 25.8.0) sends every `down` and `up` as a chain of its own and drops `clickCount`. | Two `mouse.down` / `mouse.up` pairs reach the page as two clicks of `detail` 1, so a test of what a double-click does proves nothing. | `doubleClick` is a driver method. Firefox sends move, press, pause, press as one `input.performActions` chain on the page's browsing context; Chrome passes `clickCount` to CDP's `Input.dispatchMouseEvent`. |
+| A page screenshot's **`clip` is cut to the document's height** (Firefox 153.0.4, BiDi `captureScreenshot`), and a page whose only content is absolutely positioned has none. | `unable to capture screen … got width: 48 and height: 0`. | Not absorbed: screenshot the element (`ElementHandle.screenshot`), or give the page in-flow height. |
 
 ## CSP violations
 
@@ -85,6 +86,16 @@ A Firefox launch owns more than a browser process: geckodriver, the Firefox it s
 3. A stuck transition, a missing rAF or a 1 Hz timer means a hidden document. A `NotAllowedError` at 0 ms means focus, and so does a key whose events fire but whose action does not. A timeout on a picker or a permission prompt means user activation.
 4. An error matching `no such frame | Browsing Context … not found | DiscardedBrowsingContext | Browsing context already closed` is a closed window (`targetGone`); on an approval click that is the expected end. The last wording is Puppeteer's own, for a realm disposed before the command fails.
 5. Measure in the page before changing a fixture. Three of this suite's wrong turns were fixes for symptoms; the cause each time was a page opened in the wrong window (above). A fourth masked the PXE's timer throttling with launch prefs instead of moving the host.
+
+## Picturing the toolbar panel
+
+The toolbar panel has no Puppeteer target, so `page.screenshot` cannot take it. Draw it from the privileged scope instead (`session.chromeScript`):
+
+1. Find the open panel's browser: the `.webextension-popup-browser` that is not `.webextension-preload-browser`, under a `panel` whose `state` is `open`.
+2. Call `browsingContext.currentWindowGlobal.drawSnapshot(null, 2, "white")` on it.
+3. Draw the bitmap on a canvas made from the browser's `ownerDocument`. `ownerGlobal` reads `undefined` in that scope, and a throw inside the promise's callback leaves the script hanging until its timeout.
+
+A hand-off window opened by hand must name the last-focused normal window as its opener, as the panel does. The background reopens the panel only where focus returns.
 
 ## CI
 

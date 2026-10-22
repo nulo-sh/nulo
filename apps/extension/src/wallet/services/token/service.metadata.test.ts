@@ -25,6 +25,10 @@ import { TaskService } from "@/wallet/services/task/service"
 import { feeJuiceAddress, feeJuiceName, feeJuiceSymbol } from "@/wallet/utils/fee-juice"
 import { TokenService } from "./service"
 import type { TokenInterface } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 vi.mock("@/wallet/services/execution/helpers/batched-view-simulation", () => ({ batchedViewSimulation: vi.fn() }))
 
@@ -73,6 +77,7 @@ async function makeFetch(): Promise<Fetch> {
 	const collection = new ServiceCollection()
 	collection.add(
 		svc(ProfileService.name, {
+			...ROW_KEY_FAKE,
 			getActiveProfile: async () => ({ id: "p1" }),
 			onProfileDeleted: { add: () => {} },
 			onActiveProfileChanged: new EventHandler(),

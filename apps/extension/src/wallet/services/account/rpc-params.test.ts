@@ -18,6 +18,10 @@ import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { svc } from "../composition-harness"
 import { AccountService } from "./service"
 import { AccountMethodSchemas, type Methods } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 type Port = {
 	name: string
@@ -31,7 +35,13 @@ async function started() {
 	const api = new FakeBrowserApi()
 	api.reset()
 	const services = new ServiceCollection()
-	services.add(svc(PROFILE_SERVICE_NAME, { onProfileDeleted: new EventHandler(), getDeletionState: () => new ProfileDeletionState() }))
+	services.add(
+		svc(PROFILE_SERVICE_NAME, {
+			...ROW_KEY_FAKE,
+			onProfileDeleted: new EventHandler(),
+			getDeletionState: () => new ProfileDeletionState(),
+		}),
+	)
 	services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, isChainLive: async () => true }))
 	const service = new AccountService(new LoggerStore(new ConfigStore()), api)
 	services.add(service)

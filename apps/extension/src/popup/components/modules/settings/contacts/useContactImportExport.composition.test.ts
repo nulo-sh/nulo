@@ -226,7 +226,7 @@ function openContactsPage() {
 type ContactsPage = ReturnType<typeof openContactsPage>
 
 /** Picks `content` and waits until the popup shows its rows. `done` settles when the import ends. */
-async function pick(page: ContactsPage, content: string): Promise<{ done: Promise<void> }> {
+async function pick(page: ContactsPage, content: string): Promise<{ done: Promise<unknown> }> {
 	boundary.file = { size: new TextEncoder().encode(content).length, text: async () => content }
 	boundary.opened.length = 0
 	const done = page.io.importContacts()
@@ -265,7 +265,7 @@ async function saveEdit(popup: VueWrapper, name: string, change: { name?: string
 	await flushPromises()
 }
 
-async function confirm(page: ContactsPage, done: Promise<void>): Promise<string | undefined> {
+async function confirm(page: ContactsPage, done: Promise<unknown>): Promise<string | undefined> {
 	await page.popup.find(SUBMIT).trigger("click")
 	await done
 	await flushPromises()

@@ -17,7 +17,7 @@ async function seeded() {
 	await area.set({
 		"nulo:core:contacts@c-3": JSON.stringify(contact("c-3", "p")),
 		"nulo:core:dappSessions@s-1": JSON.stringify({ id: "s-1", profileId: "p" }),
-		"nulo:core:tokens@t-1": JSON.stringify({ id: "t-1", profileId: "p" }),
+		"nulo:core:profile-tombstones@p": JSON.stringify({ profileId: "p" }),
 	})
 	return area
 }
@@ -27,7 +27,7 @@ describe("purgeSealedRowsOf", () => {
 		const area = await seeded()
 
 		expect(await purgeSealedRowsOf(area, "p")).toBe(3)
-		expect(Object.keys(await area.get()).sort()).toEqual(["nulo:core:contacts@c-2", "nulo:core:tokens@t-1"])
+		expect(Object.keys(await area.get()).sort()).toEqual(["nulo:core:contacts@c-2", "nulo:core:profile-tombstones@p"])
 		expect(await purgeSealedRowsOf(area, "p")).toBe(0)
 	})
 
