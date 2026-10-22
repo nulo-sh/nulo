@@ -78,7 +78,7 @@ nearestScrollTop({ index, scrollTop, rowPx, viewPx }): number
 
 **Gate.** `bun run lint && bun run typecheck:all && bun run test` exit 0 at the merged base. Layers: lint, typecheck, unit.
 
-### Phase 1 — `Icon` without CSS `v-bind` (#1036, 1 h)
+### Phase 1 — `Icon` without CSS `v-bind` (#1036, 1 h) ✓
 
 1. Edit `Icon.vue` as in Architecture.
 2. Add one `Icon.test.ts` test: with `hoverColor: "primary"` the root has the `hovered` class and `--icon-hover: var(--txt-primary)`; without it, neither.
