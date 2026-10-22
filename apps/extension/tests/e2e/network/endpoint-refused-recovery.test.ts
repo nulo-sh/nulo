@@ -7,7 +7,7 @@ import { expect, inject } from "vitest"
 import type { Page } from "puppeteer"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { clickByTestId, openPopup, replaceInputValue, test, waitForHash } from "../fixtures/extension"
-import { captureSoleProfileId, navigateToSettings, openNetworkDetail, waitForToast } from "../fixtures/helpers"
+import { navigateToSettings, openNetworkDetail, rewriteActiveNetwork, waitForToast } from "../fixtures/helpers"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 
@@ -34,26 +34,13 @@ test("a saved http://[::1] Local Network endpoint reads inactive until it is edi
 
 	const first = await openPopup(localNetworkExtension)
 	await waitForHash(first, "#/popup/general")
-	const profileId = await captureSoleProfileId(first)
-	const rewritten = await first.evaluate(
-		async (pid: string, url: string) => {
-			const all = await chrome.storage.local.get(null)
-			const key = `nulo:core:networks@${all[`nulo:core:active-network@${pid}`]}`
-			const row = JSON.parse(all[key] as string) as {
-				kind?: string
-				primaryEndpointId: string
-				endpoints: { id: string; rpcUrl: string }[]
-			}
-			const primary = row.endpoints.find((e) => e.id === row.primaryEndpointId)
-			if (row.kind !== "local" || !primary) return false
-			primary.rpcUrl = url
-			await chrome.storage.local.set({ [key]: JSON.stringify(row) })
-			return true
-		},
-		profileId,
-		v6.origin,
-	)
-	expect(rewritten, "the active network is the Local Network").toBe(true)
+	const rewritten = await rewriteActiveNetwork(first, (row) => {
+		const primary = row.endpoints.find((e) => e.id === row.primaryEndpointId)
+		if (row.kind !== "local" || !primary) return false
+		primary.rpcUrl = v6.origin
+		return true
+	})
+	expect(rewritten, "the active network is the Local Network").toBeDefined()
 	await first.close()
 
 	const refused = await openPopup(localNetworkExtension)

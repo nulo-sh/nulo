@@ -68,6 +68,7 @@ import {
 	gotoAccounts,
 	previewImport,
 } from "../helpers/account-io"
+import { accountRows } from "../helpers/identity-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 
@@ -137,8 +138,7 @@ async function addSandboxNetwork(page: Page, nodeUrl: string, chainInfo: ChainIn
 	return pollUntil(
 		async () => {
 			const active = await getAccountAddress(page)
-			const keys = Object.keys(await page.evaluate(() => chrome.storage.local.get(null)))
-			const onSandbox = keys.some((key) => key.startsWith("nulo:core:accounts@") && key.includes(`,${chainId},"${active}"]`))
+			const onSandbox = (await accountRows(page, chainId)).some((row) => row.address === active)
 			return onSandbox ? active : undefined
 		},
 		(address) => address !== undefined,

@@ -19,6 +19,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { recordWrites } from "../storage-write-log"
+import { rowKeysForEveryProfile, storedText } from "@/wallet/storage/sealed-entity-storage.testing"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
@@ -44,6 +46,9 @@ import type { Network, NetworkEndpoint } from "./spec"
 import { classifyChains } from "@/wallet/services/stale-network/classify"
 import { seedOffersKey } from "./seed-offers"
 import { DEFAULT_SEEDS, type DefaultSeed, seedForKind } from "./seeds"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 type NodeInfo = {
 	l1ChainId: number
@@ -82,6 +87,7 @@ function harness(seeded: Record<string, NodeInfo | Error>): {
 	const fakeProfile = { id: "p1", name: "p1", type: "password" } as const
 	const deletionState = new ProfileDeletionState()
 	const fakeProfileService = {
+		...ROW_KEY_FAKE,
 		getActiveProfile: async () => fakeProfile,
 		onActiveProfileChanged: { add: vi.fn(), remove: vi.fn() },
 		onProfileDeleted: { add: vi.fn(), remove: vi.fn() },
@@ -569,6 +575,7 @@ function setupServiceWithStorage(seeded: Record<string, NodeInfo | Error>): {
 	const deletionState = new ProfileDeletionState()
 	// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
 	;(service as any).profileService = {
+		...ROW_KEY_FAKE,
 		getActiveProfile: async () => fakeProfile,
 		onActiveProfileChanged: { add: vi.fn(), remove: vi.fn() },
 		onProfileDeleted: { add: vi.fn(), remove: vi.fn() },
@@ -1835,7 +1842,8 @@ describe("NetworkService.servesChain (a dApp asking to connect)", () => {
 		const set = local.set.bind(local)
 		let releaseWrite: (() => void) | undefined
 		local.set = async (items) => {
-			if (!releaseWrite && JSON.stringify(items).includes("Local Network")) {
+			const texts = await Promise.all(Object.entries(items).map(([key, value]) => storedText(key, value, ROW_KEY_FAKE.rowKeys)))
+			if (!releaseWrite && texts.some((text) => text?.includes("Local Network"))) {
 				await new Promise<void>((resolve) => {
 					releaseWrite = resolve
 				})
@@ -2536,7 +2544,8 @@ describe("NetworkService in-place reset", () => {
 			],
 			...over,
 		})
-	const stored = (local: FakeStorageArea, id: string): Network => JSON.parse(local.store.get(`nulo:core:networks@${id}`) as string)
+	const stored = async (local: FakeStorageArea, id: string): Promise<Network> =>
+		(await sealedEntityStorage("networks", local, ROW_KEY_FAKE.rowKeys).get(id)) as Network
 	const journalFor = (networkId: string) =>
 		JSON.stringify({
 			profileId: "p1",
@@ -2595,7 +2604,7 @@ describe("NetworkService in-place reset", () => {
 			}),
 		)
 		expect(pxeStub).toHaveBeenCalledWith("p1", OLD)
-		const row = stored(local, "tn")
+		const row = await stored(local, "tn")
 		expect(row).toMatchObject({ id: "tn", name: "Testnet", chainId: CHAIN_IDS.TESTNET, l1ChainId: TESTNET_L1_CHAIN_ID })
 		expect(row.endpoints.map((e) => e.rpcUrl)).toEqual([MY_NODE, "https://other.example", TESTNET_RPC_URL])
 		expect(findPrimaryEndpoint(row)?.rpcUrl).toBe(TESTNET_RPC_URL)
@@ -2623,7 +2632,7 @@ describe("NetworkService in-place reset", () => {
 		const { service, local } = setupServiceWithStorage({})
 		staleTestnet(local, row)
 		await service.resetChainInPlace(request(req), hooks())
-		const after = stored(local, "tn")
+		const after = await stored(local, "tn")
 		expect(findPrimaryEndpoint(after)?.rpcUrl).toBe(primaryUrl)
 		expect(after.endpoints.filter((e) => e.rpcUrl === TESTNET_RPC_URL).length).toBeLessThanOrEqual(1)
 	})
@@ -2634,7 +2643,7 @@ describe("NetworkService in-place reset", () => {
 		pxeStub.mockRejectedValueOnce(new Error("offscreen down"))
 		const onPurged = vi.fn(async () => {})
 		await expect(service.resetChainInPlace(request(), hooks({ onPurged }))).rejects.toThrow(/offscreen down/)
-		expect(stored(local, "tn")).toMatchObject({ chainId: OLD, primaryEndpointId: "u1" })
+		expect(await stored(local, "tn")).toMatchObject({ chainId: OLD, primaryEndpointId: "u1" })
 		expect(onPurged).not.toHaveBeenCalled()
 		expect(await service.isNetworkLive("tn")).toBe(true)
 	})
@@ -2644,13 +2653,13 @@ describe("NetworkService in-place reset", () => {
 		staleTestnet(local, { chainId: CHAIN_IDS.TESTNET })
 		await service.resetChainInPlace(request({ fromChainId: CHAIN_IDS.TESTNET }), hooks())
 		expect(pxeStub).toHaveBeenCalledWith("p1", CHAIN_IDS.TESTNET)
-		expect(stored(local, "tn")).toMatchObject({ chainId: CHAIN_IDS.TESTNET, primaryEndpointId: "u1" })
+		expect(await stored(local, "tn")).toMatchObject({ chainId: CHAIN_IDS.TESTNET, primaryEndpointId: "u1" })
 
 		const second = setupServiceWithStorage({})
 		staleTestnet(second.local)
 		await second.service.resetChainInPlace(request({ purged: true }), hooks())
 		expect(second.pxeStub).not.toHaveBeenCalled()
-		expect(stored(second.local, "tn").chainId).toBe(CHAIN_IDS.TESTNET)
+		expect((await stored(second.local, "tn")).chainId).toBe(CHAIN_IDS.TESTNET)
 	})
 
 	test("refuses, purging nothing, a row not on the chain it names; the rewrite refuses a target another row holds", async () => {
@@ -2660,7 +2669,7 @@ describe("NetworkService in-place reset", () => {
 		expect(pxeStub).not.toHaveBeenCalled()
 		storeRow(local, { id: "mine", chainId: CHAIN_IDS.TESTNET })
 		await expect(service.resetChainInPlace(request({ purged: true }), hooks())).rejects.toThrow(/^ERR_NOT_RESETTABLE/)
-		expect(stored(local, "tn").chainId).toBe(OLD)
+		expect((await stored(local, "tn")).chainId).toBe(OLD)
 	})
 
 	test("deleteNetwork refuses while the network's reset runs; idle, it takes the journal and the verdict with the row", async () => {
@@ -2754,7 +2763,10 @@ describe("NetworkService in-place reset", () => {
 	test("commitResetCapture writes nothing while another row holds the target chain", async () => {
 		const { service, local } = setupServiceWithStorage({})
 		staleTestnet(local)
-		local.store.set("nulo:core:networks@held", JSON.stringify({ ...stored(local, "tn"), id: "held", chainId: CHAIN_IDS.TESTNET }))
+		local.store.set(
+			"nulo:core:networks@held",
+			JSON.stringify({ ...(await stored(local, "tn")), id: "held", chainId: CHAIN_IDS.TESTNET }),
+		)
 		const write = vi.fn(async () => {})
 		await expect(
 			service.commitResetCapture("p1", "tn", { chainId: OLD, toChainId: CHAIN_IDS.TESTNET, primary: null }, write),
@@ -2789,7 +2801,7 @@ describe("NetworkService in-place reset", () => {
 		await service.updateEndpoint("tn", added.id, "Renamed", ADDED)
 		await service.setPrimaryEndpoint("tn", "u2")
 		await service.deleteEndpoint("tn", added.id)
-		expect(stored(local, "tn")).toMatchObject({
+		expect(await stored(local, "tn")).toMatchObject({
 			primaryEndpointId: "u2",
 			endpoints: [
 				{ id: "u1", rpcUrl: MY_NODE },
@@ -2805,7 +2817,7 @@ describe("NetworkService in-place reset", () => {
 		local.store.set("nulo:core:active-network@p1", "ln")
 		local.store.set("nulo:core:network-reset@p1", journalFor("tn"))
 		await service.resetChainInPlace(request({ purged: true }), hooks())
-		expect(stored(local, "tn").chainId).toBe(CHAIN_IDS.TESTNET)
+		expect((await stored(local, "tn")).chainId).toBe(CHAIN_IDS.TESTNET)
 		await expect(service.setPrimaryEndpoint("tn", "u2")).rejects.toThrow(/^ERR_RESET_PENDING: /)
 		await service.deleteNetwork("tn")
 		expect(local.store.has("nulo:core:networks@tn")).toBe(false)

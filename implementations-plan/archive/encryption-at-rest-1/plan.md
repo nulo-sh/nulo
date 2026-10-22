@@ -9,9 +9,26 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 2f591ddd
 trunk: dev
+status: completed (delivered as #924, #1029, #1043 and the A4 PR)
 issues: "#522 (Closes, last arc)"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-22.
+- **Status:** delivered in four PRs against `dev`, none stacked: A1 #924 (`6d507c611`), A2 #1029 (`11439b1be`), A3 #1043 (`5c35ca934`), and A4, which carries this close-out and `Closes #522`; its merge closes the plan.
+- **Shipped:** every profile-scoped root but the profile row is sealed per row under keys derived from the profile's master, with the dual read for legacy rows and conversion at the profile's unlock: contacts and dApp sessions (A1); the journal and the transaction history (A2); balances, the authwit registry and its flags, the five incoming roots (A3); accounts and imported keys, tokens and the seeder's marker, networks, fee payers and the dApp registration counts (A4). Ids that named an address or a hash take its keyed hash; the integrity stamp and the stale-network record store a keyed digest; the root census refuses an unreviewed plaintext family; the lane's stamps (1, 2 and 4) are additive and pinned; privacy 1.2.3 and the store listing say what is encrypted (OA-3).
+- **Review loop:** the plan took the contradiction check, the double audit and the final pass below. The arcs: A1 Codex 3 medium and Opus 3 low, then Codex approve; A2 Codex 1 medium and Opus 1 low, Codex 1 medium, then approve; A3 Codex 2 medium and Opus 3 low, Codex 1 medium, then approve; A4 Codex approve with 2 low and Opus approve with 4 low, Codex 2 low, then approve. Every finding and its fix is in `lessons/phase-1.md` to `phase-4.md`.
+- **Gates at the A4 head** (code at `4bc9dc78e`, retry 0): lint, `typecheck:all`, `test:all`, `test:ci-gating` and `check:plans` green; the network gate (`backup-restore-integrity`, `backup-migration-roundtrip`, `profile-reimport-matrix` and nine specs whose readers changed) proverless on Chrome and Firefox, 33 of 33 each; `frozen-account-canary` prover-ON on both; the update replay from v0.31.0 on both, with the identity scan; the full smoke from fresh armed builds on both (Chrome 61 files, Firefox 65, none failed). The table is in `lessons/phase-4.md`; the CI soak of the changed network files is run 39805838159, reported in the PR body.
+- **Measured against the 50 ms rule:** A1's contacts list over 2 000 rows, over on Firefox, accepted (P74-03); A3's Home balance read over 2 000 rows, over on Chrome, awaiting the owner (P83-03, below); A4's unlock to Home and incoming load on the recorded install, within it on both browsers (`lessons/phase-4.md`).
+- **Deviations:** A1 landed inside 1.0.0 (P74-01); the dApp registration counts, disclosed as plaintext until A4, were sealed in A4 as app permissions; the per-profile value store kind left once no store used it; a failed conversion pass waits for the next worker, not the next unlock (`lessons/phase-4.md` § Review).
+- **Dropped:** the `nulo:ui:*` keys left the lane (D26: #1051, #1062); the quieter downgrade read stays proposed, not built (`lessons/phase-3.md`, `phase-4.md`).
+- **Owner decisions:** P74-01, P74-02 (OA-4), P74-03 (OA-5) and P70-07 (OA-3), all A, under Outcome & Quality Bar; OA-1 shipped its default A; OA-2 needed no answer.
+- **Known limits:** #1052 (KL-1), #1053 (KL-2), #1054 (KL-3), #1055 (KL-4), #1056 (KL-5), #1057 (KL-6), #1058 (KL-7), #1059 (KL-9), #1060 (KL-10), #1061 (KL-11), #1062 (KL-12), each closed with its reopening condition; #1059 records the measured rollback round trip.
+- **Open items:** #1050 (the unlock-time migration pass, KL-8) and #1051 (the `nulo:ui:*` keys behind the worker); `BEFORE-LAUNCH.md` § 4's item for the release that publishes privacy 1.2.3; P83-03, the owner's call on A3's Home balance read, on the orchestrator's decision page.
+- **Lessons:** one line in `lessons.md` extended (`getAll()` hides a sealed root's unopened rows); the rest stay in `lessons/phase-0.md` to `phase-4.md`.
+- **Seeds retired:** the `/goal` and `/loop` under Seeds; they are no live instructions.
 
 # encryption-at-rest-1: seal each profile's rows in `chrome.storage.local` under a key only an unlocked profile derives
 
@@ -68,10 +85,11 @@ Path notation:
   - a same-phrase sibling profile can derive the row keys;
   - a profile not opened since the update stays plaintext until it is opened;
   - the `nulo:ui:*` preference keys stay plaintext (KL-12).
-- **Owner decisions** (decision page 74, 2026-10-20, recorded on #522):
+- **Owner decisions** (decision page 74, recorded on #522, and page 70; both 2026-10-20):
   - **P74-01, when A1 lands: A.** "In 1.0.0: #924 lands after #938, after your own build test and one green nightly soak; the promote waits for it." It replaces the merge bar's "after the 1.0.0 promote" for A1 only. To the owner's question about people on an earlier 0.3x build: no uninstall or reinstall. Their rows still read, the first unlock on the new build seals them in the background, an in-place update keeps the data (the update replay), and old backups restore.
   - **P74-02 = OA-4, refusing an app right after the wallet restarted: A, accept** (the orchestrator's call, which the owner delegated). The case is only "They don't match" on the emoji-check window after a background restart. The Allow window is not affected: it answers a request a restart ends, and it reads and deletes no saved connection. #944 (merged on `dev` as `bf6a25f2`) closes the connect and emoji-check windows at every background restart, so that press can no longer happen. What remains is an app listed in Connected apps until the person removes it or it reconnects and passes the check, and nothing is granted meanwhile.
   - **P74-03 = OA-5, a very long contacts list opens a little slower on Firefox: A.** "Accept: only Firefox pays, only with thousands of contacts, and the list still opens in under a third of a second."
+  - **P70-07 = OA-3, the privacy text and the listing: A** (decision page 70, 2026-10-20). "A patch bump with these words: not material, nothing new is collected or shared." Privacy 1.2.3 carries the signed wording; the manifest's `changes` is the owner's line.
 
 ## UI impact
 
@@ -732,21 +750,21 @@ Every gate runs `bun run lint` and `bun run typecheck:all` (exit 0), `bun run te
 
 ## Known limits
 
-Each is filed as a closed `known-limit` issue at close-out, with its reopening condition.
+Each is a closed `known-limit` issue, with its reopening condition. KL-8, the unlock-time migration pass, is open work: #1050.
 
-| | Limit | Label | Reopen if |
-|---|---|---|---|
-| KL-1 | A row rolled back to an earlier value at its own key, or a whole-storage rollback, is accepted | demonstrated, accepted: T3 is in the threat model, and no trusted monotonic store exists to anchor freshness | a trusted monotonic store becomes available |
-| KL-2 | Plaintext rows planted offline are read and then sealed at the next unlock (dApp sessions exempt through their MAC) | demonstrated, accepted: today every row is plaintext and trusted, so this is no regression | a release can drop the legacy reader |
-| KL-3 | A same-phrase sibling, or a phrase holder with the disk, derives the row keys | demonstrated by construction (D4) | recovery mode and the pre-open checks stop needing master-only reads |
-| KL-4 | Row keys of opened profiles stay in a locked, live worker's memory | needs unsupported conditions (T4) | memory readers come into scope, or OA-2 asks to drop at lock |
-| KL-5 | Counts, owners, sizes and timing are visible; no padding | demonstrated | a size-correlation attack on a sealed root is shown |
-| KL-6 | Legacy tx rows with no `profileId` stay plaintext while their owner cannot be established: shared by several profiles, or on a chain where another profile's accounts cannot be read yet (A4 on), or after a converted profile was deleted from a worker that never opened it | demonstrated | a user report |
-| KL-7 | Old plaintext pages remain in browser storage files until compaction | plausible but unverified | a disk scan shows them after compaction |
-| KL-9 | A rollback to a 1.0.x build hides every sealed row until the newer build returns | demonstrated | a rollback release is planned |
-| KL-10 | A profile not opened since the update stays plaintext | demonstrated | a way to convert without the password exists |
-| KL-11 | A "They don't match" refusal made after the background restarted while the check page was open finds no row key, reports `unavailable`, and leaves the app's remembered grants; the next connect still shows the emoji check, so nothing is granted silently (OA-4) | demonstrated, needs a background restart with the check page open | a user report, or the refusal gains a keyless path that needs no origin filter. Accepted (P74-02 A); #944 (merged as `bf6a25f2`) closes the check window at every background restart, which removes the path |
-| KL-12 | The `nulo:ui:*` keys stay plaintext: pinned token contracts, fee-payer picks, the last-selected account address | demonstrated | #865 gains a reviewed retirement path for a structured shape (the follow-up issue) |
+| | Issue | Limit | Label | Reopen if |
+|---|---|---|---|---|
+| KL-1 | #1052 | A row rolled back to an earlier value at its own key, or a whole-storage rollback, is accepted | demonstrated, accepted: T3 is in the threat model, and no trusted monotonic store exists to anchor freshness | a trusted monotonic store becomes available |
+| KL-2 | #1053 | Plaintext rows planted offline are read and then sealed at the next unlock (dApp sessions exempt through their MAC) | demonstrated, accepted: today every row is plaintext and trusted, so this is no regression | a release can drop the legacy reader |
+| KL-3 | #1054 | A same-phrase sibling, or a phrase holder with the disk, derives the row keys | demonstrated by construction (D4) | recovery mode and the pre-open checks stop needing master-only reads |
+| KL-4 | #1055 | Row keys of opened profiles stay in a locked, live worker's memory | needs unsupported conditions (T4) | memory readers come into scope, or OA-2 asks to drop at lock |
+| KL-5 | #1056 | Counts, owners, sizes and timing are visible; no padding | demonstrated | a size-correlation attack on a sealed root is shown |
+| KL-6 | #1057 | Legacy tx rows with no `profileId` stay plaintext while their owner cannot be established: shared by several profiles, or on a chain where another profile's accounts cannot be read yet (A4 on), or after a converted profile was deleted from a worker that never opened it | demonstrated | a user report |
+| KL-7 | #1058 | Old plaintext pages remain in browser storage files until compaction | plausible but unverified | a disk scan shows them after compaction |
+| KL-9 | #1059 | A rollback to a 1.0.x build hides every sealed row until the newer build returns | demonstrated | a rollback release is planned |
+| KL-10 | #1060 | A profile not opened since the update stays plaintext | demonstrated | a way to convert without the password exists |
+| KL-11 | #1061 | A "They don't match" refusal made after the background restarted while the check page was open finds no row key, reports `unavailable`, and leaves the app's remembered grants; the next connect still shows the emoji check, so nothing is granted silently (OA-4) | demonstrated, needs a background restart with the check page open | a user report, or the refusal gains a keyless path that needs no origin filter. Accepted (P74-02 A); #944 (merged as `bf6a25f2`) closes the check window at every background restart, which removes the path |
+| KL-12 | #1062 | The `nulo:ui:*` keys stay plaintext: pinned token contracts, fee-payer picks, the last-selected account address | demonstrated | #865 gains a reviewed retirement path for a structured shape (the follow-up issue) |
 
 ## Seeds
 

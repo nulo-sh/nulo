@@ -8,7 +8,7 @@ import { describe, expect } from "vitest"
 import { TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { clickByTestId, openPopup, test, waitForHash } from "./fixtures/extension"
 import { ensureUnlocked, lockWallet } from "./fixtures/helpers"
-import { addNetwork } from "./helpers/stale-network"
+import { addNetwork, readNetworkRows } from "./helpers/stale-network"
 
 /** A chainId no seed carries, so no stored account matches it. */
 const CUSTOM_CHAIN_ID = 777_000_001
@@ -20,15 +20,20 @@ describe("start on a dead custom node", () => {
 	}, async ({ registeredExtensionPerTest: ctx }) => {
 		const page = await openPopup(ctx)
 		await waitForHash(page, "#/popup/general", 30_000)
+		const networks = await readNetworkRows(page)
 		await lockWallet(page)
-		await addNetwork(page, {
-			name: "My Node",
-			kind: "custom",
-			chainId: CUSTOM_CHAIN_ID,
-			l1ChainId: TESTNET_L1_CHAIN_ID,
-			movedAccount: false,
-			active: true,
-		})
+		await addNetwork(
+			page,
+			{
+				name: "My Node",
+				kind: "custom",
+				chainId: CUSTOM_CHAIN_ID,
+				l1ChainId: TESTNET_L1_CHAIN_ID,
+				movedAccount: false,
+				active: true,
+			},
+			networks,
+		)
 		await ensureUnlocked(page)
 
 		await page.waitForSelector('[data-testid="network-button"][data-status="inactive"]', { visible: true, timeout: 15_000 })

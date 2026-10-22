@@ -239,28 +239,16 @@ export async function captureBalanceBaseline(page: Page, account: string, tokenC
 	return max
 }
 
-const TOKEN_ROWS_PREFIX = "nulo:core:tokens@"
-
 type BalanceRow = { account?: string; token?: number; publicBalance?: string; privateBalance?: string; updatedAt?: number }
 
-/** Runs IN THE PAGE (Puppeteer serializes it, so it must not reference module scope): the raw
- *  `chrome.storage.local` values under each prefix, all from ONE snapshot, decoded by nothing —
- *  the hostile rows are parsed on the Node side by the same guarded loops that used to run here. */
-async function readStorageValuesByPrefixes({ prefixes }: { prefixes: string[] }): Promise<unknown[][]> {
-	const all = await chrome.storage.local.get(null)
-	const entries = Object.entries(all)
-	return prefixes.map((prefix) => entries.filter(([k]) => k.startsWith(prefix)).map(([, v]) => v))
-}
-
-/** Numeric ids of the token rows bound to `contract` (case-insensitive). Each raw value is decoded
- *  inside its own try: a malformed row, or one whose shape makes the predicate throw, is skipped —
- *  hostile-input discipline, never fatal. */
-function tokenIdsForContract(tokenValues: unknown[], contract: string): Set<number> {
+/** Numeric ids of the token rows bound to `contract` (case-insensitive). A row whose shape makes
+ *  the predicate throw is skipped: hostile-input discipline, never fatal. */
+function tokenIdsForContract(tokenRows: unknown[], contract: string): Set<number> {
 	const tokenIds = new Set<number>()
-	for (const v of tokenValues) {
+	for (const row of tokenRows) {
 		try {
-			const row = JSON.parse(v as string) as { id?: number; contract?: string }
-			if (typeof row.id === "number" && row.contract?.toLowerCase() === contract.toLowerCase()) tokenIds.add(row.id)
+			const { id, contract: bound } = row as { id?: number; contract?: string }
+			if (typeof id === "number" && bound?.toLowerCase() === contract.toLowerCase()) tokenIds.add(id)
 		} catch {
 			// Malformed row: skip.
 		}
@@ -279,9 +267,9 @@ function balanceRowsFor(balanceRows: BalanceRow[], account: string, tokenIds: Se
  *  the token row itself can land later than the first read. Tokens are read before balances, so a
  *  balance whose token lands between the two reads waits for the next poll. */
 async function readScopedBalanceRows(page: Page, account: string, tokenContract: string): Promise<BalanceRow[]> {
-	const [tokenValues] = await page.evaluate(readStorageValuesByPrefixes, { prefixes: [TOKEN_ROWS_PREFIX] })
+	const tokenRows = (await readRowsOnAnyBuild(page, "tokens")).map(({ row }) => row)
 	const balanceRows = (await readRowsOnAnyBuild<BalanceRow>(page, "tokenBalances")).map(({ row }) => row)
-	return balanceRowsFor(balanceRows, account, tokenIdsForContract(tokenValues, tokenContract))
+	return balanceRowsFor(balanceRows, account, tokenIdsForContract(tokenRows, tokenContract))
 }
 
 /** Wait for a balance row for `account` that is both FRESH (`updatedAt` past the

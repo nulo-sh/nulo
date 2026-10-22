@@ -19,6 +19,10 @@ import { svc } from "../composition-harness"
 import { ImportedKeysRepository } from "./imported-keys-repository"
 import { AccountService } from "./service"
 import { ACCOUNT_STORAGE_ROOT, type Account, AccountType, type ImportedAccountKey, accountRowId } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 const FENCE: RunFence = { profileId: "p1", epoch: 0, session: 1, incarnation: "w1" }
 const CREDENTIAL = { id: "cred", prf: "prf" } as unknown as PasskeyCredentialData
@@ -30,6 +34,7 @@ async function build(count: (rows: readonly ImportedAccountKey[]) => Promise<Pas
 	const steps: string[] = []
 	let live = true
 	const profile = {
+		...ROW_KEY_FAKE,
 		onProfileDeleted: new EventHandler(),
 		getDeletionState: () => new ProfileDeletionState(),
 		assertRunFence: vi.fn(async () => {
@@ -51,7 +56,7 @@ async function build(count: (rows: readonly ImportedAccountKey[]) => Promise<Pas
 		[`0x${"0a".repeat(32)}`, 1],
 		[`0x${"0b".repeat(32)}`, 2],
 	] as const) {
-		await new ImportedKeysRepository(api.storage.local).set({
+		await new ImportedKeysRepository(api.storage.local, ROW_KEY_FAKE.rowKeys).set({
 			profileId: "p1",
 			chainId: 0,
 			address,

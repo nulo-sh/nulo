@@ -42,6 +42,7 @@ import { LoggerStore } from "@/wallet/logger"
 import { AccountService, AccountType, type Account } from "@/wallet/services/account/service"
 import { NetworkService } from "@/wallet/services/network/service"
 import { ProfileService } from "@/wallet/services/profile/service"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import { svc } from "../composition-harness"
 import { AccountIntegrityCoordinator } from "./coordinator"
 
@@ -64,6 +65,7 @@ async function buildWithDefaultDeriver(rows: Account[]) {
 	const services = new ServiceCollection()
 	services.add(
 		svc(ProfileService.name, {
+			...(await rowKeysForEveryProfile()),
 			setIntegrityDelegate: () => {},
 			lockProfileIfActive: async () => {},
 			persistIntegrityBlockIfLive: async () => {},

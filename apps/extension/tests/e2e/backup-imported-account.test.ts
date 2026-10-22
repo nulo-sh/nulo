@@ -29,6 +29,7 @@ import {
 } from "./fixtures/extension"
 import { acceptConfirmPopup, closeStuckPopup, navigateByHash, readSessionRow, reopenAndRecoverAfterImport } from "./fixtures/helpers"
 import { expectFitsNarrow } from "./fixtures/type-roles"
+import { corruptImportedKeys } from "./helpers/identity-rows"
 import {
 	confirmImport,
 	exportAccountBody,
@@ -149,19 +150,8 @@ test("a full backup carries an imported account; restoring it (dup-confirmed) re
 	// ── Stage 6: a key row that no longer opens is named on the export page, which still
 	// gives out the file ──
 	const restoredProfile = (await readSessionRow(page))?.profile
-	const corrupted = await page.evaluate(async (profileId) => {
-		const all = await chrome.storage.local.get(null)
-		const garbage = btoa(String.fromCharCode(...new Uint8Array(45).fill(1)))
-		let count = 0
-		for (const [key, raw] of Object.entries(all)) {
-			if (!key.startsWith("nulo:core:imported-account-keys@")) continue
-			const row = JSON.parse(raw as string) as { profileId: string; encryptedSigningKey: string }
-			if (row.profileId !== profileId) continue
-			await chrome.storage.local.set({ [key]: JSON.stringify({ ...row, encryptedSigningKey: garbage }) })
-			count++
-		}
-		return count
-	}, restoredProfile)
+	if (!restoredProfile) throw new Error("no unlocked profile")
+	const corrupted = await corruptImportedKeys(page, restoredProfile)
 	expect(corrupted).toBe(1)
 	await navigateByHash(page, "#/popup/settings/security/export/full")
 	await clickByTestId(page, "agree-continue-btn")
