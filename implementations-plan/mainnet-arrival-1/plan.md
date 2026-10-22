@@ -13,6 +13,19 @@ issues: "#875 (A3 Closes; A1, A2 Refs)"
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-22.
+- **Status:** completed as three PRs against `dev`, not stacked: A1 #882 and A2 #905 merged; A3 carries this close-out and `Closes #875`.
+- **Shipped:** every default a profile was never offered is added when it opens, keyed by kind, recorded per profile, and served to a dApp at the unlock that follows (`apps/extension/src/wallet/services/network/seed-offers.ts`, `service.ts`) (A1); the owner's arrival, P66-01 D in the words of P70-12 A, a full screen after the barriers, the takeover and the Terms sheet, until answered (`apps/extension/src/components/network-arrival/`, `apps/extension/src/popup/network-arrival.ts`) (A2); a test default armed in the update candidate alone (`apps/extension/src/e2e/extra-seed.ts`, `build-update-candidate.sh --extra-seed`) and a real in-place update from v0.31.0 meeting the arrival on Chrome and Firefox (`apps/extension/tests/e2e/default-network-arrival-update.test.ts`) (A3).
+- **Review loop (A3):** Codex r1 `clean` (one low comment) beside Opus (five low), all fixed (D32); Codex r2 `clean`, "no new findings or regressions". A1's and A2's loops: D14, D15, D23, D24, D25.
+- **Gates at the head (`4be04289`, `origin/dev` at `60ecd6cc`):** lint, `typecheck:all`, `test:all`, `test:ci-gating` and `check:plans` exit 0; the release builds carry neither the stamp nor the seed. At retry 0 on candidates of that commit: the scenario, Chrome 36 s, Firefox 46 s; `network-arrival` on both, and `stale-network` and `legal-acceptance` on Firefox, green; without the opt-in the file reports itself skipped.
+- **Deviations:** A3's gate ran in the smoke lane, not through `agent.sh`: the node-free scenario needs no sandbox (D27, Codex's call on the fork); the pair is v0.31.0 to this branch, the v1.0.0 pair being the release-day rerun (D-orch-4); no imported account or contact in the populated case (the live update scenario's failure mode).
+- **Lessons:** nothing promoted to `lessons.md`, whose budget is spent and which holds nothing this supersedes; the two durable facts live at their code: `KINDS_SEEDED_BEFORE_RECORD`'s pin in `seed-offers.test.ts`, and the arm's retirement pin in `config.test.ts`.
+- **Known limits:** #904.
+- **Open items:** the Mainnet seed itself, #80, after the 6.0.0 execution canaries on both browsers (Phase 4); its PR retires or re-kinds the test arm, which `config.test.ts` refuses beside a shipped seed of its kind (commented on #80).
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
+
 # mainnet-arrival-1: a default network a later build adds reaches every existing profile
 
 Three arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1, D-orch-2). **A1** (#882, merged) adds every default network a profile was never offered when the profile opens, and records the offer (phase 1); no default is new in this build, so nothing a person sees changes. **A2** builds the arrival the owner picked (phase 2). **A3** proves a real in-place update on Chrome and Firefox (phase 3) once migration-rule-1's update harness is on `dev`, then closes the plan. Phase 4 is the freeze rule for the Mainnet seed itself (#80, out of scope). Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). `X` = `apps/extension/src`, `S` = `X/wallet/services`.
@@ -185,7 +198,7 @@ Every gate also runs `bun run lint` and `bun run typecheck:all` (exit 0), and `b
 - E2E (D22): `tests/e2e/network-arrival.test.ts`, one scenario. Failure mode: the shell's real boot (`app.vue` has no harness) mounting the arrival after the Terms sheet, again at an unanswered reopen, and never after Stay. Estimate 40 s per browser; measured 8.1 s Chrome, 17.6 s Firefox (retry 0).
 - Gate: `bun run lint`, `typecheck:all`, `audit:vue`, `test:all` exit 0; the new file plus `stale-network.test.ts` and `legal-acceptance.test.ts`, smoke at retry 0, Chrome and Firefox; screenshots in [screenshots/](screenshots/) (360×600 at 2×, both themes, Chrome).
 
-### Phase 3 (A3) · the update e2e
+### Phase 3 (A3) · the update e2e — done
 - Steps: (1) the armed extra seed, its stamp, grep and runner wiring, with `bun run test:ci-gating`; (2) the scenario; (3) fixes at their cause.
 - Gate (amended, D27): per browser, `build-update-candidate.sh <browser> --extra-seed`, the armed smoke build, then `NULO_E2E_UPDATE_FROM=v0.31.0 NULO_E2E_UPDATE_TO=<the extra-seed candidate> bun run test:e2e -- tests/e2e/default-network-arrival-update.test.ts --retry=0` green on Chrome and Firefox (was: `e2e:agent` with `v1.0.0`); without the opt-in the file reports itself skipped; per-browser wall-clock recorded; a release build greps clean of the stamp; `network-arrival.test.ts` green on both browsers (its trace helper changed); `bun run test:ci-gating`, lint, `typecheck:all`, `test:all` exit 0.
 

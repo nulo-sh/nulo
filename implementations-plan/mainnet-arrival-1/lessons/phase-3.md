@@ -41,3 +41,9 @@ Each mutation of the candidate's source, built and run at retry 0, turns the nam
   4. The README's "no other build" overstated: `test:e2e:all` loads `dist/` unchecked. Narrowed to the three refusals that exist; the builder's exit trap already removes the armed `dist/`.
   5. Two comments: the arm's "both flags required" restated the throw; `openAndUnlock`'s doc narrated its body. Both cut to the invariant.
 - Gates before round 1: `test:all`, `typecheck:all`, `test:ci-gating` exit 0; the release Chrome and Firefox builds hold neither the stamp nor the seed's chainId or node; with the marker removed from `_build-extension.yml`, `build-env-guard.test.ts` fails on the new stamp. Chrome smoke at retry 0, `network-arrival`, `stale-network`, `legal-acceptance`: 19 pass (242 s).
+
+## Review round 2 and the final gates, 2026-10-22
+
+- **Codex** (resumed `01a160eb`): `clean`, "no new findings or regressions". The loop converged.
+- Head `4be04289` (`origin/dev` at `60ecd6cc`): lint, `typecheck:all`, `test:all` (extension 903 files, 14969 tests), `test:ci-gating` (687) exit 0.
+- Candidates of `4be04289`, retry 0: Chrome, the scenario 36 s (21.7 s and 14.3 s) and `network-arrival` green; Firefox, the scenario 46 s (22.3 s and 24.1 s), `network-arrival`, `stale-network` and `legal-acceptance` green (21 tests, 319 s). Without the opt-in the file reports both cases skipped. `update-replay.test.ts` given the extra-seed candidate refuses it: "build it without --extra-seed".
