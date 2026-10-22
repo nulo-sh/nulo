@@ -1,10 +1,11 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process"
 import { randomBytes } from "node:crypto"
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import ts from "typescript"
-import { afterAll, beforeAll, describe, expect, onTestFinished, test, vi } from "vitest"
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest"
+import { testTempDir } from "../../tests/e2e/helpers/test-temp-dir"
 
 // Set before the modules load: `E2E_DATA_ROOT` is read at import time, and these cases create and
 // delete run dirs that must never be a real run's.
@@ -242,8 +243,7 @@ describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { t
 
 	test("a run dir is deleted only directly under the root, with the prefix, stamped with the lock's marker", async () => {
 		const m = marker()
-		const outside = mkdtempSync(path.join(tmpdir(), "nulo-aztec-outside-"))
-		onTestFinished(() => rmSync(outside, { recursive: true, force: true }))
+		const outside = testTempDir("nulo-aztec-outside-")
 		createRunDir(outside, m)
 		const unprefixed = path.join(ROOT, "other-run")
 		createRunDir(unprefixed, m)
