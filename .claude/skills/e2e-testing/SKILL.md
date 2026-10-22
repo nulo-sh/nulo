@@ -161,10 +161,12 @@ runtime env var can never arm a build-time flag.
   `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1`.
   `migration.test.ts` skips without the declaration; `backup-migration.test.ts` throws with the
   remedy.
-- Journal and transaction rows are sealed: read them through `fixtures/sealed-rows.ts` (armed by
-  `VITE_NULO_E2E_SEALED_READ=1`, network builds only), never `chrome.storage.local`. An unarmed
-  build throws with the remedy on the first read. A spec that reads after `stopBackground`
-  unlocks first: the successor holds no keys until then (`tests/e2e/README.md` § Sealed roots).
+- Journal, transaction, balance, authwit and incoming rows are sealed: read them through
+  `fixtures/sealed-rows.ts` (armed by `VITE_NULO_E2E_SEALED_READ=1`, network builds only), never
+  `chrome.storage.local`, and find a keyed root's row (transactions, authwit flags, the incoming
+  roots) by its `naturalId`, never its storage key. An unarmed build throws with the remedy on the
+  first read. A spec that reads after `stopBackground` unlocks first: the successor holds no keys
+  until then (`tests/e2e/README.md` § Sealed roots).
 - Every e2e launch, smoke or network, refuses every outside host but the ones it sends direct
   (both setups provide `egressGuard: true`; only an artifact smoke provides `liveLeg`). Each launch
   routes HTTP, HTTPS and WebSocket to a loopback guard that answers 403 and records the host, proves

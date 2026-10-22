@@ -165,7 +165,7 @@ describe("SealedEntityStorage", () => {
 	})
 
 	describe("sealLegacy", () => {
-		const unlocked = <R>(fn: () => Promise<R>) => fn()
+		const unlocked = <R>(fn: (isCurrent: () => boolean) => Promise<R>) => fn(() => true)
 
 		test("seals one profile's plaintext rows to equal values, once", async () => {
 			await legacy(area, contact("c-1", "p"))
@@ -188,9 +188,9 @@ describe("SealedEntityStorage", () => {
 		test("a row changed after the scan is left for the next pass", async () => {
 			await legacy(area, contact("c-1", "p"))
 			const newer = contact("c-1", "p", "renamed")
-			const writerFirst = async <R>(fn: () => Promise<R>) => {
+			const writerFirst = async <R>(fn: (isCurrent: () => boolean) => Promise<R>) => {
 				await legacy(area, newer)
-				return fn()
+				return fn(() => true)
 			}
 
 			expect(await store().sealLegacy("p", writerFirst)).toBe(0)
@@ -203,10 +203,10 @@ describe("SealedEntityStorage", () => {
 			await legacy(area, contact("c-1", "p"))
 			await legacy(area, contact("c-2", "p"))
 			const newer = contact("c-2", "p", "renamed")
-			const writers = async <R>(fn: () => Promise<R>) => {
+			const writers = async <R>(fn: (isCurrent: () => boolean) => Promise<R>) => {
 				await store().delete("c-1")
 				await store().set("c-2", newer)
-				return fn()
+				return fn(() => true)
 			}
 
 			expect(await store().sealLegacy("p", writers)).toBe(0)
@@ -214,11 +214,34 @@ describe("SealedEntityStorage", () => {
 			expect(await store().get("c-2")).toEqual(newer)
 		})
 
+		test("a section the watchdog displaced during its last read brings back no row a purge deleted", async () => {
+			await legacy(area, contact("c-1", "p"))
+			const key = `${ROOT}@c-1`
+			let current = true
+			const racing: MinimalStorageArea = {
+				get: async (keys) => {
+					const got = await area.get(keys)
+					if (keys === key && current) {
+						// The lock passes to a purge, which deletes the row while this read is out.
+						current = false
+						await area.remove(key)
+					}
+					return got
+				},
+				set: area.set.bind(area),
+				remove: area.remove.bind(area),
+			}
+			const displaced = <R>(fn: (isCurrent: () => boolean) => Promise<R>) => fn(() => current)
+
+			expect(await sealedEntityStorage("contacts", racing, keys.source).sealLegacy("p", displaced)).toBe(0)
+			expect(await raw(area)).toEqual({})
+		})
+
 		test("a pass whose profile's keys go mid-pass writes nothing more", async () => {
 			await legacy(area, contact("c-1", "p"))
-			const deletedFirst = async <R>(fn: () => Promise<R>) => {
+			const deletedFirst = async <R>(fn: (isCurrent: () => boolean) => Promise<R>) => {
 				keys.drop("p")
-				return fn()
+				return fn(() => true)
 			}
 
 			expect(await store().sealLegacy("p", deletedFirst)).toBe(0)
@@ -295,7 +318,7 @@ describe("SealedEntityStorage", () => {
 			vi.spyOn(area, "set").mockRejectedValue(new Error("disk full"))
 
 			await expect(keyedStore().set(id, contact(id, "p", "renamed"))).rejects.toThrow("disk full")
-			await expect(keyedStore().sealLegacy("p", (fn) => fn())).rejects.toThrow("disk full")
+			await expect(keyedStore().sealLegacy("p", (fn) => fn(() => true))).rejects.toThrow("disk full")
 			await expect(
 				sealedEntityStorage("txs", area, keys.source).adoptOwnerless(`0x${"11".repeat(32)}`, ownerless, "p"),
 			).rejects.toThrow("disk full")
@@ -310,7 +333,7 @@ describe("SealedEntityStorage", () => {
 			await area.set(sealedOnly.items)
 			expect(await keyedStore().getValues()).toEqual([contact(id, "p", "renamed")])
 
-			expect(await keyedStore().sealLegacy("p", (fn) => fn())).toBe(1)
+			expect(await keyedStore().sealLegacy("p", (fn) => fn(() => true))).toBe(1)
 			expect(Object.keys(await raw(area))).toEqual(Object.keys(sealedOnly.items))
 			expect(await keyedStore().get(id, "p")).toEqual(contact(id, "p", "renamed"))
 		})

@@ -60,7 +60,7 @@ const REKEYED: ReadonlySet<string> = new Set(
 )
 
 /** Queues a running wallet drains: a row is deleted once its balance refresh succeeds. */
-const QUEUES: ReadonlySet<StoredShapeName> = new Set<StoredShapeName>(["incomingBalanceOutbox"])
+const QUEUES: ReadonlySet<string> = new Set<string>(["incomingBalanceOutbox"] satisfies StoredShapeName[])
 
 /**
  * Why `after`, the storage a build booted over `before`, does not still hold and read `before`: a
@@ -74,17 +74,14 @@ export async function updateProblems(
 	after: Record<string, unknown>,
 	opts: { balancesAsserted?: true } = {},
 ): Promise<string[]> {
-	const drained = (key: string) => {
-		const name = shapeOfKey(key)
-		return opts.balancesAsserted === true && name !== undefined && QUEUES.has(name)
-	}
+	const drained = (name: string | undefined) => opts.balancesAsserted === true && name !== undefined && QUEUES.has(name)
 	const rekeyed = (key: string) => REKEYED.has(shapeOfKey(key) ?? "")
 	const lost = Object.keys(before)
-		.filter((key) => !key.startsWith(FIXTURE_PREFIX) && !(key in after) && !drained(key) && !rekeyed(key))
+		.filter((key) => !key.startsWith(FIXTURE_PREFIX) && !(key in after) && !drained(shapeOfKey(key)) && !rekeyed(key))
 		.map((key) => `${key}: lost in the update`)
 	const rowsOf = (entries: Record<string, unknown>, name: string) => Object.keys(entries).filter((key) => shapeOfKey(key) === name).length
 	const shrunk = [...REKEYED]
-		.filter((name) => rowsOf(after, name) < rowsOf(before, name))
+		.filter((name) => !drained(name) && rowsOf(after, name) < rowsOf(before, name))
 		.map((name) => `${name}: ${rowsOf(before, name) - rowsOf(after, name)} row(s) lost in the update`)
 	const refused = Object.keys(after)
 		.filter((key) => {

@@ -46,6 +46,7 @@ import {
 	waitForTxConfirmation,
 } from "../fixtures/helpers"
 import { deliverWhileLocked, readIncomingPollStatus, releaseIncomingPoll, waitForIncomingPollPhase } from "../fixtures/incoming-poll-gate"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import type { Page } from "puppeteer"
 
@@ -74,27 +75,14 @@ const hasConfig = aztecConfig !== undefined
 /** Minimal projection of the persisted incoming record we correlate on. */
 type StoredIncomingRecord = { txHash?: string; accountAddress?: string; hidden?: boolean }
 
-/** Scan `chrome.storage.local` for the committed incoming record whose
- *  `txHash` matches. Returns null while none exists. Storage-level (not DOM)
- *  because the incoming card exposes no per-hash `data-testid` — correlating in
- *  the DOM would require a text-based selector, which the e2e selector rule
- *  forbids. The record's `txHash` is `note.txHash.toString()`, the SAME value
- *  the delivery helper returns, so the correlation is exact. */
+/** The committed incoming record whose `txHash` matches, as the wallet reads it; null while none
+ *  exists. Storage-level (not DOM) because the incoming card exposes no per-hash `data-testid` —
+ *  correlating in the DOM would require a text-based selector, which the e2e selector rule forbids.
+ *  The record's `txHash` is `note.txHash.toString()`, the SAME value the delivery helper returns, so
+ *  the correlation is exact. */
 async function findIncomingRecordByHash(page: Page, txHash: string): Promise<StoredIncomingRecord | null> {
-	return page.evaluate(async (want: string) => {
-		const all = await chrome.storage.local.get(null)
-		for (const [key, value] of Object.entries(all)) {
-			if (!key.startsWith("nulo:core:incoming-transfers@")) continue
-			if (typeof value !== "string") continue
-			try {
-				const rec = JSON.parse(value) as { txHash?: string; accountAddress?: string; hidden?: boolean }
-				if (rec && rec.txHash === want) return rec
-			} catch {
-				// Non-JSON value under this root — ignore.
-			}
-		}
-		return null
-	}, txHash)
+	const records = await readSealedRows<StoredIncomingRecord>(page, "incomingTransfers")
+	return records.find(({ row }) => row.txHash === txHash)?.row ?? null
 }
 
 test.skipIf(!hasConfig)(
