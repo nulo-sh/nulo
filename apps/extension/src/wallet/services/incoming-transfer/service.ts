@@ -1793,8 +1793,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			const current = await this.repo.getRecord(row.id)
 			if (!fenced() || !current || !sameRow(current, row)) return false
 			if (row.tokenId !== undefined) await this.outbox.markDirty(profileId, networkId, accountAddress, row.tokenId)
-			if (!fenced()) return false
-			await this.repo.deleteRecord(row.id)
+			if (!(await this.repo.deleteRecord(row.id, fenced))) return false
 			this.noteStrikes.delete(row.id)
 			this.emit("onIncomingTransferDeleted", row)
 			return true
@@ -2524,8 +2523,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			if (!orphaned(record)) continue
 			if (!fenced()) return false
 			if (record.tokenId !== undefined) await this.outbox.markDirty(profileId, networkId, record.accountAddress, record.tokenId)
-			if (!fenced()) return false
-			await this.repo.deleteRecord(record.id)
+			if (!(await this.repo.deleteRecord(record.id, fenced))) return false
 			this.emit("onIncomingTransferDeleted", record)
 		}
 		return fenced()

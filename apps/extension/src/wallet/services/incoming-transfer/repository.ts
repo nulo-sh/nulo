@@ -75,6 +75,14 @@ export class IncomingTransferRepository {
 		return true
 	}
 
+	/** Removes `id`'s row while `fence` (when given) still holds once its storage keys are resolved. */
+	private async remove<T>(store: SealedEntityStorage<T>, id: string, fence?: () => boolean): Promise<boolean> {
+		const prepared = await store.prepareDelete(id)
+		if (fence && !fence()) return false
+		await prepared.commit()
+		return true
+	}
+
 	// --- Records (keyed by `id`) ---
 
 	public async getRecord(id: string): Promise<IncomingTransferRecord | undefined> {
@@ -89,8 +97,8 @@ export class IncomingTransferRepository {
 		return this.write(this.records, record.id, record, fence)
 	}
 
-	public async deleteRecord(id: string): Promise<void> {
-		await this.records.delete(id)
+	public deleteRecord(id: string, fence?: () => boolean): Promise<boolean> {
+		return this.remove(this.records, id, fence)
 	}
 
 	public async listRecords(): Promise<IncomingTransferRecord[]> {
@@ -218,8 +226,14 @@ export class IncomingTransferRepository {
 		return this.write(this.outbox, balanceOutboxKey(profileId, networkId, accountAddress, tokenId), row, fence)
 	}
 
-	public async deleteOutbox(profileId: string, networkId: string, accountAddress: string, tokenId: number): Promise<void> {
-		await this.outbox.delete(balanceOutboxKey(profileId, networkId, accountAddress, tokenId))
+	public deleteOutbox(
+		profileId: string,
+		networkId: string,
+		accountAddress: string,
+		tokenId: number,
+		fence?: () => boolean,
+	): Promise<boolean> {
+		return this.remove(this.outbox, balanceOutboxKey(profileId, networkId, accountAddress, tokenId), fence)
 	}
 
 	public async listOutbox(): Promise<Array<[string, IncomingBalanceOutboxRow]>> {

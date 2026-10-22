@@ -360,4 +360,47 @@ describe("IncomingTransferRepository — sealed at rest", () => {
 		expect(await repo.setArrivalRow("p1", "n1", ACCOUNT, { sinceBlock: 1, played: [] }, () => false)).toBe(false)
 		expect(await api.storage.local.get()).toEqual({})
 	})
+
+	test("a delete whose fence fails while its keys are resolved removes nothing", async () => {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const repo = new IncomingTransferRepository(api, ROW_KEYS)
+		await writeScope(repo, "p1", "n1")
+		const stored = await api.storage.local.get()
+		let current = true
+		const deletions = [
+			repo.deleteOutbox("p1", "n1", ACCOUNT, 4, () => current),
+			repo.deleteRecord(scopeRows("p1", "n1").records[0].id, () => current),
+		]
+		// A watchdog handoff flips the ticket while the keyed ids are hashed.
+		current = false
+
+		expect(await Promise.all(deletions)).toEqual([false, false])
+		expect(await api.storage.local.get()).toEqual(stored)
+	})
+
+	test("a record or trust row whose body names another scope than its key is no profile's", async () => {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const rows = scopeRows("p2", "n1")
+		const noteId = noteRecordId("p1", "n1", UNIQUE_NOTE_HASH)
+		const planted = {
+			[`nulo:core:incoming-trust@${trustKey("p1", "n1", CONTRACT)}`]: JSON.stringify(rows.trust),
+			[`${RECORDS_ROOT}@${noteId}`]: JSON.stringify({ ...rows.records[0], id: noteId }),
+		}
+		await api.storage.local.set(planted)
+		const repo = new IncomingTransferRepository(api, (await new TestRowKeys().unlock("p1", "p2")).source)
+
+		await repo.sealLegacy(
+			"p1",
+			(fn) => fn(),
+			() => true,
+		)
+
+		expect(await api.storage.local.get()).toEqual(planted)
+		expect(await repo.getTrust("p1", "n1", CONTRACT)).toBeUndefined()
+		expect(await repo.getRecord(noteId)).toBeUndefined()
+		expect(await repo.listTrust()).toEqual([])
+		expect(await repo.listRecords()).toEqual([])
+	})
 })

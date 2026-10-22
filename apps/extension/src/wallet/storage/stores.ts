@@ -80,20 +80,38 @@ const NUMERIC_ID = { requireKeyIdentityMatch: true, keyIdentityMode: "numeric" }
 
 type KeyedHash = (segment: string) => Promise<string>
 
+type IncomingScope = { scope: string; profileId: string; networkId: string; tail: string[] }
+
 /** An incoming key, `[kind:]profileId|networkId|…`, split at its scope. */
-function incomingScope(id: string, kinded: boolean): { scope: string; profileId: string; tail: string[] } | undefined {
+function incomingScope(id: string, kinded: boolean): IncomingScope | undefined {
 	const kind = kinded ? /^(?:note|pub):/.exec(id)?.[0] : ""
 	if (kind === undefined) return undefined
 	const [profileId, networkId, ...tail] = id.slice(kind.length).split("|")
 	if (networkId === undefined || tail.length === 0) return undefined
-	return { scope: `${kind}${profileId}|${networkId}|`, profileId, tail }
+	return { scope: `${kind}${profileId}|${networkId}|`, profileId, networkId, tail }
+}
+
+/** A record or trust row names its scope; one naming another than its key's belongs to no
+ *  profile, so no lookup serves it and no profile's keys seal or open it. */
+function bodyOwner(row: unknown, scope: IncomingScope): string | undefined {
+	if (typeof row !== "object" || row === null) return undefined
+	const { profileId, networkId } = row as { profileId?: unknown; networkId?: unknown }
+	return profileId === scope.profileId && networkId === scope.networkId ? scope.profileId : undefined
 }
 
 /** An incoming root's key keeps its kind, profile and network, so a scope wipe needs no key, and
- *  `hashTail` replaces what names a note, transaction, account or contract. */
-function incomingLayout(hashTail: (tail: string[], keyedHash: KeyedHash) => Promise<string>, kinded = false): SealedRootOptions {
+ *  `hashTail` replaces what names a note, transaction, account or contract. The rows that carry
+ *  no scope (cursor, outbox, arrival) are owned by their key alone. */
+function incomingLayout(
+	hashTail: (tail: string[], keyedHash: KeyedHash) => Promise<string>,
+	{ kinded = false, scoped = false } = {},
+): SealedRootOptions {
 	return {
-		ownerOf: (_row, naturalId) => incomingScope(naturalId, kinded)?.profileId,
+		ownerOf: (row, naturalId) => {
+			const parsed = incomingScope(naturalId, kinded)
+			if (!parsed) return undefined
+			return scoped && row !== undefined ? bodyOwner(row, parsed) : parsed.profileId
+		},
 		keyed: {
 			physicalId: async (naturalId, keyedHash) => {
 				const parsed = incomingScope(naturalId, kinded)
@@ -144,9 +162,9 @@ export const STORES = {
 	incomingTransfers: sealedCodec(
 		INCOMING_RECORDS_STORAGE_ROOT,
 		IncomingTransferRecordSchema,
-		incomingLayout((tail, keyedHash) => keyedHash(tail.join("|")), true),
+		incomingLayout((tail, keyedHash) => keyedHash(tail.join("|")), { kinded: true, scoped: true }),
 	),
-	incomingTrust: sealedCodec(INCOMING_TRUST_STORAGE_ROOT, IncomingTrustRecordSchema, incomingLayout(oneSegment)),
+	incomingTrust: sealedCodec(INCOMING_TRUST_STORAGE_ROOT, IncomingTrustRecordSchema, incomingLayout(oneSegment, { scoped: true })),
 	incomingPublicCursors: sealedCodec(INCOMING_CURSORS_STORAGE_ROOT, PublicScanCursorSchema, incomingLayout(oneSegment)),
 	// The account is hashed; the token id is a local sequence number.
 	incomingBalanceOutbox: sealedCodec(

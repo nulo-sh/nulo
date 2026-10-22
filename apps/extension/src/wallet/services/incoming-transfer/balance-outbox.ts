@@ -105,8 +105,7 @@ export class BalanceRefreshOutbox {
 		if (!result) return
 		if ("missing" in result) {
 			// The (token, account) balance pair is positively gone (removed) → delete the stale row.
-			if (!isCurrent()) return
-			await this.deps.repo.deleteOutbox(profileId, networkId, accountAddress, tokenId)
+			await this.deps.repo.deleteOutbox(profileId, networkId, accountAddress, tokenId, isCurrent)
 			return
 		}
 		if ("taskId" in result) await this.anchorFreshTask(row, current, result.taskId, isCurrent)
@@ -114,8 +113,8 @@ export class BalanceRefreshOutbox {
 	}
 
 	/** Terminal-success → delete the row; terminal-failure/missing → clear the
-	 *  anchor so the next drain re-requests. Entered only after `isCurrent()`, read again after the
-	 *  clear's row is sealed. */
+	 *  anchor so the next drain re-requests. Entered only after `isCurrent()`, read again once the
+	 *  delete's keys are resolved or the clear's row is sealed. */
 	private async settleAnchoredRow(
 		row: OutboxRowKey,
 		current: IncomingBalanceOutboxRow,
@@ -124,7 +123,7 @@ export class BalanceRefreshOutbox {
 	): Promise<void> {
 		const { profileId, networkId, accountAddress, tokenId } = row
 		if (action === "delete") {
-			await this.deps.repo.deleteOutbox(profileId, networkId, accountAddress, tokenId)
+			await this.deps.repo.deleteOutbox(profileId, networkId, accountAddress, tokenId, isCurrent)
 		} else {
 			await this.deps.repo.setOutbox(profileId, networkId, accountAddress, tokenId, { dirtyAt: current.dirtyAt }, isCurrent)
 		}

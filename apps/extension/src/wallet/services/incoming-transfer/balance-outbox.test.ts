@@ -25,8 +25,9 @@ function makeOutbox(opts: { revokeOnReRead: boolean }) {
 			rows.set(balanceOutboxKey(p, n, a, t), row)
 			return true
 		}),
-		deleteOutbox: async (p, n, a, t) => {
-			rows.delete(balanceOutboxKey(p, n, a, t))
+		deleteOutbox: async (p, n, a, t, fence) => {
+			if (fence && !fence()) return false
+			return rows.delete(balanceOutboxKey(p, n, a, t))
 		},
 		listOutbox: async () => [...rows],
 	}

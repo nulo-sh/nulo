@@ -35,7 +35,8 @@ export type KeyedIds = { physicalId(naturalId: string, hash: (segment: string) =
 
 export type SealedRootOptions = {
 	/** The profile a row belongs to, read from the parsed row or its natural id. Default:
-	 *  `row.profileId`. Must accept anything a raw legacy row parses to. */
+	 *  `row.profileId`. Must accept anything a raw legacy row parses to; given no row, it answers
+	 *  the profile the id alone names, if it names one. */
 	ownerOf?: (row: unknown, naturalId: string) => string | undefined
 	keyed?: KeyedIds
 	/** Keyed roots only. A legacy row that names no profile stays plaintext at its natural id: no
@@ -189,20 +190,31 @@ export class SealedEntityStorage<T> {
 
 	/** Removes the row of `id`; for a keyed root, `owner`'s sealed row and its legacy twin. */
 	public async delete(id: string, owner?: string): Promise<void> {
-		if (!this.options.keyed) return this.area.remove(this.prefix + id)
+		await (await this.prepareDelete(id, owner)).commit()
+	}
+
+	/** The removal of `id`'s row with its storage keys resolved: a fenced caller checks its fence
+	 *  after this resolves and calls `commit`, which dispatches at once, with no `await` between. */
+	public async prepareDelete(id: string, owner?: string): Promise<{ commit(): Promise<void> }> {
+		if (!this.options.keyed) {
+			const key = this.prefix + id
+			return { commit: () => this.area.remove(key) }
+		}
 		const ownerId = this.requireOwner(id, owner)
 		const keys = [this.prefix + (await this.physicalId(id, ownerId))]
 		if ((await this.legacyOwner(id)) === ownerId) keys.push(this.prefix + id)
-		return this.area.remove(keys)
+		return { commit: () => this.area.remove(keys) }
 	}
 
 	/** Every readable row as `[naturalId, row]`. A keyed root yields one row per (profile, natural
-	 *  id), the sealed copy over its legacy twin. */
+	 *  id), the sealed copy over its legacy twin, and an ownerless row only where `get` serves one. */
 	public async getAll(): Promise<Array<[string, T]>> {
 		const rows = await this.readAll()
 		const sealed = new Set(rows.filter(({ located }) => located.sealed).map(({ located }) => `${located.owner}|${located.naturalId}`))
+		const unowned = this.options.keyed !== undefined && this.options.ownerless === undefined
 		return rows
 			.filter(({ located }) => located.sealed || !sealed.has(`${located.owner}|${located.naturalId}`))
+			.filter(({ located }) => !unowned || located.owner !== undefined)
 			.map(({ located, row }) => [located.naturalId, row])
 	}
 
