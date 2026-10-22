@@ -49,10 +49,11 @@ describe("ScanGate", () => {
 		expect(running()).toEqual([])
 	})
 
-	test("a request for a waiting key merges into one run, its intents ORed, and its waiters settle after that run", async () => {
+	test("a request for a waiting key merges into one run in its place, its intents ORed, and its waiters settle after that run", async () => {
 		const { gate, runs, running, release } = heldGate(1)
 		gate.request("a", plain)
 		const first = settledFlag(gate.requestAndWait("b", { force: true, retry: false }))
+		gate.request("c", plain)
 		gate.request("b", plain)
 		const second = settledFlag(gate.requestAndWait("b", { force: false, retry: true }))
 
@@ -64,7 +65,8 @@ describe("ScanGate", () => {
 
 		await release("b")
 		expect([first.settled, second.settled]).toEqual([true, true])
-		expect(runs.map((r) => r.key)).toEqual(["a", "b"])
+		expect(running()).toEqual(["c"])
+		expect(runs.map((r) => r.key)).toEqual(["a", "b", "c"])
 	})
 
 	test("a request for a running key waits behind that run while other keys pass it, and owns its own waiters", async () => {
@@ -88,7 +90,7 @@ describe("ScanGate", () => {
 		expect(successor.settled).toBe(true)
 	})
 
-	test("a run that rejects frees its slot and settles its waiters", async () => {
+	test("a run that rejects, or whose runner throws, frees its slot and settles its waiters", async () => {
 		const { gate, running, release } = heldGate(1)
 		const waiter = settledFlag(gate.requestAndWait("a", plain))
 		gate.request("b", plain)
@@ -96,6 +98,18 @@ describe("ScanGate", () => {
 		await release("a", "reject")
 		expect(waiter.settled).toBe(true)
 		expect(running()).toEqual(["b"])
+
+		const started: string[] = []
+		const throwing = new ScanGate(1, (key) => {
+			started.push(key)
+			if (key === "x") throw new Error("runner threw")
+			return Promise.resolve()
+		})
+		const thrown = settledFlag(throwing.requestAndWait("x", plain))
+		throwing.request("y", plain)
+		await flush()
+		expect(thrown.settled).toBe(true)
+		expect(started).toEqual(["x", "y"])
 	})
 
 	test("clear() settles every waiting request and starts none; a running key keeps its slot and a new request waits behind it", async () => {

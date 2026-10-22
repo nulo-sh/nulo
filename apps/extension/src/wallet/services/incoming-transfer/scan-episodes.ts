@@ -157,7 +157,7 @@ export class ScanEpisodeStore {
 		return true
 	}
 
-	/** Resolves once a write that started after every change made before this call has landed. */
+	/** Resolves once a write that started after every change made before this call has settled, landed or failed. */
 	public settled(): Promise<unknown> {
 		return this.writes.tail
 	}

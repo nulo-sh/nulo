@@ -3460,6 +3460,23 @@ describe("IncomingTransferService — bounded public scans", () => {
 		expect(retry.settled).toBe(true)
 	})
 
+	test("Retry while a token's scan is held: that scan reaches the tip and marks it, and Retry still scans past the mark", async () => {
+		const { reader } = makePublicReader()
+		const classReads = holdClassReads(reader)
+		const { service } = await bootService({ account: makeAccountStub([]), token: makeTokenStub([tokenA]), publicReader: reader })
+		await flushPromises()
+		// The held install scan is already inside it, so this counts only the scans Retry admits.
+		const scans = vi.spyOn(service as unknown as { scanPublicContract: () => Promise<unknown> }, "scanPublicContract")
+
+		const retry = settledFlag(service.retryIncomingScan("n1"))
+		await flushPromises()
+		expect(retry.settled).toBe(false)
+
+		await classReads.settle(classReads.held[0], "standard")
+		await vi.waitFor(() => expect(retry.settled).toBe(true))
+		expect(scans).toHaveBeenCalledTimes(1)
+	})
+
 	test("a token deleted while its scan waits on the quarantine read: that scan writes no cursor afterwards", async () => {
 		const { reader, state } = makePublicReader()
 		const network = makeNetworkStub()

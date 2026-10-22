@@ -63,6 +63,7 @@ import { TxStatus } from "@/wallet/services/transaction/spec"
 import { NetworkResetService } from "./service"
 import type { StaleNetworkChanged } from "./spec"
 import { rowKeysForEveryProfile, storedText } from "@/wallet/storage/sealed-entity-storage.testing"
+import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 
 const OLD = 4321
 const NEW = CHAIN_IDS.TESTNET
@@ -381,15 +382,24 @@ describe("a stale network reset through the real service graph", () => {
 			for (const k of arrivals)
 				expect(JSON.parse(JSON.parse((await storedText(k, now[k], rowKeys)) ?? "{}").r)).toMatchObject({ played: [] })
 		})
-		// The other chain's post-reset install scan re-seals its public cursor under a fresh IV; that row
-		// must open to the same cursor. Every other row of that chain stays byte-identical.
+		// The other chain's post-reset install scan re-seals its public cursor under a fresh IV: that row
+		// stays an envelope of the same profile and opens to the same cursor. Every other row of that
+		// chain stays byte-identical.
 		const rescanned = (k: string) => k.startsWith("nulo:core:incoming-public-cursors@")
-		expect(local.filter(rescanned)).toHaveLength(1)
-		const opened = async (rows: Record<string, unknown>) =>
-			Object.fromEntries(
-				await Promise.all(local.map(async (k) => [k, rescanned(k) ? await storedText(k, rows[k], rowKeys) : rows[k]])),
-			)
-		expect(await opened(after)).toEqual(await opened(before))
+		const cursors = local.filter(rescanned)
+		expect(cursors).toHaveLength(1)
+		const opened = async (k: string, value: unknown) => ({
+			profileId: parseEnvelope(JSON.parse(String(value)))?.profileId,
+			text: await storedText(k, value, rowKeys),
+		})
+		for (const k of cursors) {
+			const was = await opened(k, before[k])
+			expect(was.profileId).toBe("p1")
+			expect(was.text).toBeDefined()
+			expect(await opened(k, after[k])).toEqual(was)
+		}
+		const untouched = local.filter((k) => !rescanned(k))
+		expect(Object.fromEntries(untouched.map((k) => [k, after[k]]))).toEqual(Object.fromEntries(untouched.map((k) => [k, before[k]])))
 		expect(h.pxeClears).toEqual([["p1", OLD]])
 
 		const moved = (await h.account.getAccountsRaw("p1")).filter((a) => a.chainId === NEW)
