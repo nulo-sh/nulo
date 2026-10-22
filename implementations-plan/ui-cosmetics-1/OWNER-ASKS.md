@@ -19,3 +19,5 @@
 - **C2, C1 plus crisp edges.** No soft pixels, but circles turn into stairs and lines vary between 1 and 2 px. Not recommended.
 
 **What ships now.** The PR opens as a draft with the onboarding titles and the Presto step. The icons stay as they are until you pick; the pick is quoted in the PR body, then built.
+
+**Answer** (decision page 80, 2026-10-21 20:56Z): "P80-01: C", "B, plus the bottom bar's four icons at 24 px instead of 22: their straight lines also land on whole pixels on a normal screen; they grow by 2 px." The page's B is C1 above and its C is C3. Built in the same PR.

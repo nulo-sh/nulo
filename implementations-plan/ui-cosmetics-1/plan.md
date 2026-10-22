@@ -98,7 +98,7 @@ Warning: run every e2e through its runner at `--retry=0`: smoke through `bun run
 
 **Validation gate.** `bun run lint`, `bun run typecheck:all`, `bun run audit:vue`. Then from `apps/extension`, at `--retry=0` on Chrome and on Firefox (`NULO_E2E_BROWSER=firefox`): `legal-acceptance`, `onboarding-tab`, `onboarding-import`, `keyboard-guards`, `passkey-retry` and `import-paths`. These files give fast feedback. Before delivery, run the full smoke suite once per browser: `bun run test:e2e --retry=0`, and the same with `NULO_E2E_BROWSER=firefox`. Pass: each exits 0, and the S1 control reds on unequal numbers. Record each touched file's wall-clock and each suite's, before and after, per browser.
 
-### Phase 3 — the icon pick (#1019 item 2), only after OA-1 is answered
+### Phase 3 — the icon pick (#1019 item 2), only after OA-1 is answered ✓
 
 1. Read OA-1's answer in `OWNER-ASKS.md` or the orchestrator's message.
 2. C0: no code; the PR body records the answer.
@@ -114,7 +114,7 @@ Warning: run every e2e through its runner at `--retry=0`: smoke through `bun run
 Items 1 and 3 are signed by the owner's words in #1019 (2026-10-21), within the lane's no-ask budget. Item 2 waits for OA-1. Below, `B` is create's back link height today and `H` the fixed row (`H − B` under 1 px):
 - **Onboarding, every step after welcome** ("the titles move around instead of being fixed"). Shifts down, of the step row then the title: create `H − B` and `H − B`; terms `H − B + 4` and `H − B + 8`; import `H − B + 8` and `H − B + 16`; phrase `H + 32` and `H + 32` (about 55 px); done `H + 32` (about 55 px) and `H − 16` (about 7 px), as it loses its 48 px top padding. Done's title stays centred, so at Ready it still sits mid-page; the owner asked about the vertical place only. On phrase and done an empty back row sits above the step row. The spacing under each title block does not change. Welcome does not change.
 - **Home → Get started → "Make proofs faster"** ("if the user clicks on it … we should mark it as done"). Once opened, the row shows Done, as How Aztec works does, and counts in "N of M done". The card closes when every step is done, as today. The copy does not change.
-- **Every glyph** (item 2): only the OA-1 pick, with its pictures in the PR.
+- **Every glyph** (item 2): OA-1 answered on decision page 80 (2026-10-21 20:56Z), "P80-01: C": "B, plus the bottom bar's four icons at 24 px instead of 22: their straight lines also land on whole pixels on a normal screen; they grow by 2 px." Every icon paints each spot once, with its drawing, weight and size unchanged. The bar's four icons are 24 px; the bar centres its tabs, so each label moves down 1 px and the active tab's accent line up 1 px (lessons/phase-3.md, pictures in `screenshots/arc1/bottom-bar-*`).
 
 ## Security & Adversarial Considerations
 
@@ -142,6 +142,7 @@ No new input, message, permission or log line. `prestoOpened` is a per-profile b
 - D9: the title read pins the scroll and reads `rect.top` in one `evaluate` (Opus), after waiting for the step's own testid (Codex). Exact equality per browser, no tolerance (both legs).
 - D11 (implementation): `B` measured 22 px on both browsers, so `H` = 22 px and create moves 0; the shifts land as UI impact says (lessons/phase-2.md).
 - D10: spacing under the title block stays each page's own (Codex); the empty back row on phrase and done is the alignment itself, shown in the PR's screenshots (Opus).
+- D12 (implementation): the whole-pixel check is a measurement, not a test. Chrome and Firefox both snap an `<svg>` box to device pixels at any offset, so the bar's icons land on whole pixels wherever the layout puts them; a layout assertion would only restate the 24, and a pixel assertion would pin anti-aliasing (lessons/phase-3.md).
 
 ## Delivery
 
@@ -166,6 +167,7 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `6d50
 - **Fix loop round 1, Codex** (gpt-6.1-sol, high, session 01a1606b): clean. One non-material comment trim on `OnboardingStepHeader.vue`, accepted.
 - **Fix loop round 1, Opus diff review** (general-purpose, opus): no bug, nothing seen beyond UI impact. Two test gaps, accepted: the phrase row must not mark Presto (a never-happens row beside the Presto test; it reds with the `item === "presto"` guard dropped), and `align` must reach the title.
 - **Fix loop round 2, Codex** (resume of 01a1606b): the accepted fixes verified, no regression; **clean**. The loop converged on Phases 1–2.
+- **Fix loop round 3, Codex** (resume of 01a1606b, over Phase 3's commit): **clean**, high confidence. It checked the 58 glyphs against installed Tabler (159 stroke and 3 fill paths, each opening with an absolute `M`, no `Z` or uppercase `A` in a stroke), that the join keeps subpaths, caps, joins and `.01` dots, that unknown names still draw nothing, and that no consumer relies on one element per stroke. Three rounds in all; the loop stops here.
 - No high-severity finding is open. Security: both legs found nothing material; a forged flag only hides an optional reminder.
 
 ## Seeds
