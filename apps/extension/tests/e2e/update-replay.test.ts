@@ -24,9 +24,16 @@ import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { BACKUP_MAC_FIELD } from "@/utils/full-backup-helpers"
+import { INCOMING_TRANSFER_SERVICE_NAME, IncomingTransferRecordSchema } from "@/wallet/services/incoming-transfer/spec"
+import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
+import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
+import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
+import { STORES } from "@/wallet/storage/stores"
 import { BROWSER } from "./fixtures/browser"
 import { type ExtensionContext, clickByTestId, launchExtension, openPopup, test, waitForHash } from "./fixtures/extension"
 import { contactRow, ensureUnlocked, navigateByHash, waitForToast } from "./fixtures/helpers"
+import { pollUntil } from "./fixtures/poll"
+import { callService } from "./fixtures/session"
 import { registerPasskeyProfile, setupPasskeyVirtualAuth } from "./fixtures/passkey"
 import {
 	inPlaceUpdate,
@@ -114,25 +121,121 @@ const recordedTestnet = (recording: Recording): number => {
 	return row.chainId as number
 }
 
+const testnetNetworkId = (recording: Recording): string => {
+	const row = rowsOf(recording.entries, "nulo:core:networks").find((network) => network.kind === "testnet")
+	if (!row) throw new Error(`the recording of ${recording.tag} holds no Testnet network`)
+	return row.id as string
+}
+
 const otherChains = (recording: Recording): Array<{ id: string; chainId: number }> =>
 	rowsOf(recording.entries, "nulo:core:networks")
 		.filter((network) => network.kind !== "testnet")
 		.map((network) => ({ id: network.id as string, chainId: network.chainId as number }))
 
 /** Every stored row of each network but Testnet: the rows naming its chain id, and the incoming
- *  rows, whose keys name its network id instead. */
+ *  rows, whose keys name its network id instead. A sealed root's rows are left out: the unlock seals
+ *  them, which changes how they are stored, and {@link expectHistory} reads them back. */
 function otherNetworks(page: Page, recording: Recording): Promise<Array<Record<string, unknown>>> {
 	return Promise.all(
-		otherChains(recording).map(async ({ id, chainId }) => ({
-			...(await snapshotChain(page, chainId, id)),
-			...(await page.evaluate(async (network: string) => {
-				const all = await chrome.storage.local.get(null)
-				return Object.fromEntries(
-					Object.entries(all).filter(([key]) => key.startsWith("nulo:core:incoming-") && key.includes(`|${network}|`)),
-				)
-			}, id)),
-		})),
+		otherChains(recording).map(async ({ id, chainId }) => {
+			const rows = {
+				...(await snapshotChain(page, chainId, id)),
+				...(await page.evaluate(async (network: string) => {
+					const all = await chrome.storage.local.get(null)
+					return Object.fromEntries(
+						Object.entries(all).filter(([key]) => key.startsWith("nulo:core:incoming-") && key.includes(`|${network}|`)),
+					)
+				}, id)),
+			}
+			return Object.fromEntries(Object.entries(rows).filter(([key]) => !SEALED_ROOTS.some((root) => key.startsWith(`${root}@`))))
+		}),
 	)
+}
+
+const SEALED_ROOTS = Object.values(STORES).flatMap((store) => ("sealed" in store ? [store.ref.root] : []))
+const HISTORY_ROOTS = [STORES.txs.ref.root, STORES.journal.ref.root]
+
+/**
+ * The recorded transactions and journal records read back through the wallet as recorded, and are
+ * stored sealed once the unlock has converted them, at keys that name no transaction hash.
+ */
+async function expectHistory(ctx: ExtensionContext, page: Page, recording: Recording): Promise<void> {
+	const entries = offline(recording.entries)
+	const hashes = rowsOf(entries, STORES.txs.ref.root).map((tx) => tx.hash as string)
+	await pollUntil(
+		() => readLocalStorage(ctx),
+		(all) =>
+			Object.entries(all).every(([key, raw]) => {
+				if (!HISTORY_ROOTS.some((root) => key.startsWith(`${root}@`))) return true
+				return (
+					typeof raw === "string" &&
+					parseEnvelope(JSON.parse(raw)) !== undefined &&
+					!hashes.some((hash) => key.includes(hash.slice(2)))
+				)
+			}),
+		{ label: "the recorded history sealed", timeoutMs: 30_000, intervalMs: 500 },
+	)
+	for (const tx of rowsOf(entries, STORES.txs.ref.root)) {
+		expect(await callService(page, TRANSACTION_SERVICE_NAME, "getTransaction", [tx.hash])).toEqual(tx)
+	}
+	for (const record of rowsOf(entries, STORES.journal.ref.root)) {
+		expect(await callService(page, OPERATION_JOURNAL_SERVICE_NAME, "getOperation", [record.id])).toEqual(record)
+	}
+}
+
+const PROJECTION_ROOTS = (
+	[
+		"tokenBalances",
+		"authRegistry",
+		"authRegistryEnabled",
+		"incomingTransfers",
+		"incomingTrust",
+		"incomingPublicCursors",
+		"incomingBalanceOutbox",
+		"incomingArrivals",
+	] as const
+).map((name) => STORES[name].ref.root)
+
+/** The 32-byte values a recorded projection row names: accounts, contracts, notes, transactions. */
+function namedHex(rows: Row[]): string[] {
+	const fields = ["account", "accountAddress", "owner", "from", "contract", "noteHash", "txHash"]
+	const values = rows.flatMap((row) => [...fields.map((field) => row[field]), String(row.id ?? "").split("|")[2]])
+	return [...new Set(values.filter((v): v is string => typeof v === "string" && /^0x[0-9a-f]{64}$/i.test(v)))].map((v) =>
+		v.slice(2).toLowerCase(),
+	)
+}
+
+/**
+ * The recorded balances, authorizations and incoming rows are stored sealed once the unlock has
+ * converted them, at keys that name none of their accounts, contracts, notes or transactions, and
+ * the recorded receipts and trust of every network the update kept read back through the wallet.
+ */
+async function expectProjections(ctx: ExtensionContext, page: Page, recording: Recording, resetNetwork?: string): Promise<void> {
+	const entries = offline(recording.entries)
+	const named = namedHex(PROJECTION_ROOTS.flatMap((root) => rowsOf(entries, root)))
+	expect(named).not.toEqual([])
+	await pollUntil(
+		() => readLocalStorage(ctx),
+		(all) =>
+			Object.entries(all).every(([key, raw]) => {
+				if (!PROJECTION_ROOTS.some((root) => key.startsWith(`${root}@`))) return true
+				const lower = key.toLowerCase()
+				return typeof raw === "string" && parseEnvelope(JSON.parse(raw)) !== undefined && !named.some((hex) => lower.includes(hex))
+			}),
+		{ label: "the recorded projections sealed", timeoutMs: 30_000, intervalMs: 500 },
+	)
+	const kept = (row: Row) => row.networkId !== resetNetwork
+	const records = rowsOf(entries, STORES.incomingTransfers.ref.root).filter(kept)
+	const trust = rowsOf(entries, STORES.incomingTrust.ref.root).filter(kept)
+	expect(records.length + trust.length).toBeGreaterThan(0)
+	for (const record of records) {
+		const read = await callService(page, INCOMING_TRANSFER_SERVICE_NAME, "getIncomingTransferById", [record.id])
+		expect(read).toEqual(IncomingTransferRecordSchema.parse(record))
+	}
+	for (const row of trust) {
+		const state = await callService(page, INCOMING_TRANSFER_SERVICE_NAME, "getTrustState", [row.profileId, row.networkId, row.contract])
+		expect(state).toBe(row.state)
+	}
 }
 
 const identity = ({ address, name, index, type, visible }: StoredAccount) => ({ address, name, index, type, visible })
@@ -220,6 +323,8 @@ async function opensWithoutTakeover(ctx: ExtensionContext, page: Page, recording
 	await expectImportedKeyOpens(page, imported(before)[0] ?? "")
 	await expectConnectedApps(page, recording)
 	await expectContacts(page, recording)
+	await expectHistory(ctx, page, recording)
+	await expectProjections(ctx, page, recording)
 	expect(await shownOverlays(page)).toEqual([])
 	expect(await updateProblems(stored, await readLocalStorage(ctx))).toEqual([])
 }
@@ -259,6 +364,8 @@ async function throughTheReset(ctx: ExtensionContext, page: Page, recording: Rec
 	if (importedOpens) await expectImportedKeyOpens(page, imported(before)[0] ?? "")
 	await expectConnectedApps(page, recording)
 	await expectContacts(page, recording)
+	await expectHistory(ctx, page, recording)
+	await expectProjections(ctx, page, recording, testnetNetworkId(recording))
 	expect(await shownOverlays(page)).toEqual([])
 	expect(await unreadRows(await readLocalStorage(ctx))).toEqual([])
 }

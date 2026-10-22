@@ -27,7 +27,7 @@ import { RestorePendingRepository } from "@/wallet/services/profile/restore-pend
 import { TombstoneRepository } from "@/wallet/services/profile/tombstone-repository"
 import { StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
 import { BASELINE_VERSION } from "../migrations"
-import { parseEnvelope, type RowKeysSource } from "../sealed-entity-storage"
+import { parseEnvelope, type RowKeysSource, type SealedRootOptions } from "../sealed-entity-storage"
 import { STORED_SHAPES, type StoredShape, type StoredShapeName } from "../stored-shapes"
 import {
 	type CodecStoreName,
@@ -199,7 +199,7 @@ export async function readStored(name: StoredShapeName, area: MinimalStorageArea
 	if (shape.engine) throw new Error(`${name} is the engine's own state: it has no goldens`)
 	const keys = shape.sealed ? await goldenKeysFor((await area.get(key))[key]) : () => undefined
 	if (shape.authenticated) return (await macStorage(area, keys)).get(idOf(shape, key))
-	if (shape.sealed) return sealedEntityStorage(name as SealedStoreName, area, keys).get(idOf(shape, key))
+	if (shape.sealed) return (await sealedEntityStorage(name as SealedStoreName, area, keys).readStorageId(idOf(shape, key)))?.row
 	const store = name in STORES ? STORES[name as keyof typeof STORES] : undefined
 	if (shape.read === "codec") {
 		if (store) return entityStorage(name as CodecStoreName, area).get(idOf(shape, key))
@@ -236,18 +236,28 @@ async function macGoldens(goldens: readonly Golden[]): Promise<Golden[]> {
 	)
 }
 
+/** The profile a sealed row belongs to, as its store reads it: the row's own, or its natural id's. */
+function sealedOwnerOf(name: SealedStoreName, row: Json, naturalId: string): string | undefined {
+	const ownerOf = (STORES[name] as { sealedRoot?: SealedRootOptions }).sealedRoot?.ownerOf
+	if (ownerOf) return ownerOf(row, naturalId)
+	const profileId = row !== null && typeof row === "object" && !Array.isArray(row) ? row.profileId : undefined
+	return typeof profileId === "string" ? profileId : undefined
+}
+
 async function sealGoldens(goldens: readonly Golden[]): Promise<Golden[]> {
 	return Promise.all(
 		goldens.map(async (golden) => {
 			if (!golden.sealed || isSealedForm(golden)) return golden
 			const shape: StoredShape = STORED_SHAPES[golden.shape]
-			const row = golden.value as Record<string, Json>
-			if (!shape.sealed || typeof row.profileId !== "string")
-				throw new Error(`${golden.id}: only a sealed shape's row with a profile seals`)
-			const keys = await goldenRowKeys(row.profileId)
+			const id = idOf(shape, golden.key)
+			const owner = shape.sealed ? sealedOwnerOf(golden.shape as SealedStoreName, golden.value, id) : undefined
+			if (owner === undefined) throw new Error(`${golden.id}: only a sealed shape's row with a profile seals`)
+			const keys = await goldenRowKeys(owner)
 			const area = new MemoryStorageArea()
-			await sealedEntityStorage(golden.shape as SealedStoreName, area, () => keys).set(idOf(shape, golden.key), row as never)
-			return { ...golden, value: JSON.parse(area.data.get(golden.key) as string) as Json }
+			await sealedEntityStorage(golden.shape as SealedStoreName, area, () => keys).set(id, golden.value as never)
+			// A keyed root stores the row under its keyed id, not the natural key it was authored at.
+			const [[key, value]] = [...area.data]
+			return { ...golden, key, value: JSON.parse(value as string) as Json }
 		}),
 	)
 }

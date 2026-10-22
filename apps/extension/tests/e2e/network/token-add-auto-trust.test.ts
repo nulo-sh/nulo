@@ -2,6 +2,7 @@ import { expect, inject } from "vitest"
 import { openPopup, test, waitForHash } from "../fixtures/extension"
 import { getAccountAddress, importToken, switchToLocalNetwork } from "../fixtures/helpers"
 import type { AztecTestConfig } from "../fixtures/aztec"
+import { readSealedRows } from "../fixtures/sealed-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -106,21 +107,10 @@ test.skipIf(!hasConfig)(
 		// reach the scanner (e.g. PXE sync didn't catch up before this
 		// test's window), the onTokenAdded handler MUST have flipped the
 		// trust row to "trusted" — that step runs synchronously inside
-		// the handler, before any scheduler is kicked. EntityStorage key
-		// shape: `nulo:core:incoming-trust@<profileId>|<networkId>|<contract>`.
-		const trustState = await page.evaluate(async (contract: string) => {
-			const all = await chrome.storage.local.get(null)
-			const prefix = "nulo:core:incoming-trust@"
-			const keys = Object.keys(all).filter((k) => k.startsWith(prefix) && k.endsWith(`|${contract}`))
-			if (keys.length === 0) return null
-			const raw = all[keys[0]] as string
-			try {
-				const parsed = JSON.parse(raw) as { state?: string }
-				return parsed.state ?? null
-			} catch {
-				return null
-			}
-		}, aztecConfig!.tokenAddress)
+		// the handler, before any scheduler is kicked. The row is sealed at a keyed id, so it is found
+		// by the id it answers to, `<profileId>|<networkId>|<contract>`.
+		const trustRows = await readSealedRows<{ state?: string }>(page, "incomingTrust")
+		const trustState = trustRows.find(({ naturalId }) => naturalId.endsWith(`|${aztecConfig!.tokenAddress}`))?.row.state ?? null
 		expect(trustState).toBe("trusted")
 
 		// Note on Bug 2 (Token-placeholder UI cache staleness): the e2e

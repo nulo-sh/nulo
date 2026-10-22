@@ -38,7 +38,10 @@ async function readRow(name: StoredShapeName, entries: Record<string, unknown>, 
 	// A read may delete what it refuses, so each one gets its own copy of the area.
 	const area = new MemoryStorageArea().seed(structuredClone(entries))
 	if ("sealed" in shape)
-		return envelopeOf(entries[key]) ?? sealedEntityStorage(name as SealedStoreName, area, () => undefined).get(idOf(key))
+		return (
+			envelopeOf(entries[key]) ??
+			(await sealedEntityStorage(name as SealedStoreName, area, () => undefined).readStorageId(idOf(key)))?.row
+		)
 	return readStored(name, area, key, now)
 }
 

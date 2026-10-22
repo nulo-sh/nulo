@@ -70,6 +70,10 @@ A spec that measures anything below Home's token list first waits for `tokens-li
 
 The **STUB** tests (`cancel-mid-prove`, `concurrent-sendtx-{approve,confirm}`, `lock-cancels-dapp-send`, `auto-lock-defers-while-proving`, `profile-switch-sweeps-transfer`, `failed-send-check`, `in-flight-send-guard`, `inflight-call-background-death`, `same-token-concurrent-sends`, `tx-sendTx-noFrom`) hold the tx at `proving` via a `ProofGate` barrier (`holdProofGate`/`releaseProofGate` in `fixtures/proof-gate.ts`, backed by `chrome.storage.session` key `nulo:e2e:proof-gate`) so the sub-second proverless prove still gives a deterministic window. Real BB proving is guarded by the prover-ON `network-e2e-canary` CI job (`transfers`, `tx-sendTx-default`, `frozen-account-canary`, `passkey-execution-canary`, `delete-after-prove`); see [CI.md § Proverless network e2e](../../../../CI.md). Full design: [`implementations-plan/archive/e2e-proverless-stub/`](../../../../implementations-plan/archive/e2e-proverless-stub/plan.md).
 
+### Sealed roots
+
+The wallet stores contacts, dApp sessions, the operation journal, the transaction history, token balances, the authwit registry and its flags, and the incoming receipts with their trust, cursor, outbox and arrival rows sealed per row, so a raw `chrome.storage.local` read sees envelopes, not records. Contacts and dApp sessions are read through their services' RPCs (`callService`): the active profile's rows, as the wallet reads them. The other readers (`fixtures/journal.ts`, `fixtures/journal-page.ts`, `fixtures/send-burst.ts`, `fixtures/tokens.ts`, `helpers/activity-seeds.ts` and the network specs) need more than the active profile while unlocked, so `VITE_NULO_E2E_SEALED_READ=1` (set by `agent.sh` only) builds in `src/e2e/sealed-read.ts`: the background answers `nulo:e2e:sealed-read` from an extension page, for a sealed root, with every row its held keys open, its storage key and its owner, while locked too (`fixtures/sealed-rows.ts`). A row of a profile the background has not unlocked since it started is absent, so a spec that reads after a worker restart unlocks first. A keyed root (the transactions, the authwit flags, the five incoming roots) stores a row at a keyed id, so a spec finds it by the id its service names it by (`readSealedRow`, or the `naturalId` of each answered row), never by its storage key. A spec that changes a row writes plaintext at the row's natural key and removes the sealed row when it sits at another key, since the dual read prefers the sealed copy. Smoke builds and release artifacts do not carry the seam, and `_build-extension.yml` greps release bundles for its key; the update replay reads history and receipts through RPC for that reason, and the balance wait (`waitForFreshBalanceRow`) reads raw rows on a build without the seam (`readRowsOnAnyBuild`), as the release an update starts from is.
+
 ### CSP violations
 
 Every launch answers for the Content-Security-Policy violations recorded while it ran. `VITE_NULO_E2E_CSP_REPORT=1` (set by `agent.sh` and by the source build in `_extension-smoke-e2e.yml`) builds in `src/e2e/csp-report.ts`: the background and every document listen for `securitypolicyviolation`, the documents forward theirs over `runtime.sendMessage`, and the background alone appends them to `chrome.storage.session` key `nulo:e2e:csp-violations`, which it creates as an empty list when it loads. With `NULO_E2E_CSP_REPORT=1` at run time, `launchExtension`'s `close` flushes the background, reads the list from a scratch page, closes the browser, and then fails the launch on a missing list (a build without the recorder) or on any entry, printing each one's context, directive, blocked origin and source line. A test that reloads the extension calls `ctx.checkCspViolations()` first, since the reload discards the record; `close` then only closes. A close that throws inside a test's `finally` replaces the test's own error: when a red run names only the CSP check, rerun with `NULO_E2E_CSP_REPORT` unset to see what the test itself reported. A local smoke run needs both flags. An artifact run sets neither: a release build refuses the flag, and `_build-extension.yml` greps release bundles for the key.
@@ -155,6 +159,15 @@ uncommitted changes a build reads, is refused, so commit before you build it.
   replaced.
 - The live scenario needs a sandbox on the release's Aztec line, so once `dev` moves off it only
   the replay runs.
+- `tests/e2e/default-network-arrival-update.test.ts` updates into a candidate that seeds one more
+  default network, a test Mainnet (`src/e2e/extra-seed.ts`), which `build-update-candidate.sh
+  <browser> --extra-seed` arms for its own build only, writing `<browser>-extra-seed/` and removing
+  `dist/<browser>` on exit. The release's UI populates Testnet, a second account and a deleted Local
+  Network, node-free. Its first case meets the arrival after the Terms sheet and never after Stay;
+  its second moves Testnet first, so the reset's takeover goes ahead of both. The candidate records
+  its kind in `update-candidate.json`, and each scenario refuses the other kind, so run this one by
+  file. `agent.sh`, the smoke setup and the release marker step each refuse a bundle with the extra
+  seed's stamp.
 
 ```bash
 bash apps/extension/scripts/e2e/build-update-candidate.sh chrome   # writes .e2e-state/update-candidate/chrome
@@ -162,6 +175,13 @@ NULO_E2E_RETRY=0 NULO_E2E_UPDATE_FROM=v0.31.0 NULO_E2E_UPDATE_TO=$PWD/apps/exten
   NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/update-in-place.test.ts
 cd apps/extension && NULO_E2E_ARTIFACT_RUN=1 NULO_E2E_UPDATE_FROM=v0.31.0 \
   NULO_E2E_UPDATE_TO=$PWD/.e2e-state/update-candidate/chrome bun run test:e2e -- tests/e2e/update-replay.test.ts --retry=0
+```
+
+```bash
+bash apps/extension/scripts/e2e/build-update-candidate.sh chrome --extra-seed   # writes .e2e-state/update-candidate/chrome-extra-seed
+VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome
+cd apps/extension && NULO_E2E_UPDATE_FROM=v0.31.0 NULO_E2E_UPDATE_TO=$PWD/.e2e-state/update-candidate/chrome-extra-seed \
+  bun run test:e2e -- tests/e2e/default-network-arrival-update.test.ts --retry=0
 ```
 
 On Firefox, set `NULO_E2E_BROWSER=firefox` and pass the firefox candidate. The candidate script

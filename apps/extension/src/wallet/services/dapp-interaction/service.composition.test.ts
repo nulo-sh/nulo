@@ -19,14 +19,13 @@ import { ExecutionService } from "@/wallet/services/execution/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { WindowManager } from "@/wallet/services/window-manager/window-manager"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import { DappInteractionService } from "./service"
 import type { DappInteraction } from "./spec"
 
 function svc(name: string, methods: Record<string, unknown>) {
 	return { name, dependencies: [], async start() {}, ...methods } as never
 }
-
-const flush = () => new Promise((r) => setTimeout(r, 0))
 
 type Outcome = { ok: unknown } | { err: unknown }
 const settleOf = (p: Promise<unknown>): Promise<Outcome> =>
@@ -59,15 +58,18 @@ async function makeHarness() {
 	// `isConfirmationNeeded` awaits this; parking it holds `execute()` between
 	// its pre-popup journal read and the interaction's registration.
 	let profileGate: Promise<void> = Promise.resolve()
+	let reachedGate = () => {}
 
 	const collection = new ServiceCollection()
 	collection.add(
 		svc(ProfileService.name, {
 			getActiveProfile: async () => {
+				reachedGate()
 				await profileGate
 				return { id: "p1" }
 			},
 			getProfiles: async () => [{ id: "p1" }],
+			...(await rowKeysForEveryProfile()),
 			refreshSession: async () => {},
 			captureExecutionFence: async () => ({ profileId: "p1", epoch: 0 }),
 		}),
@@ -83,6 +85,8 @@ async function makeHarness() {
 	await collection.start()
 
 	const storage = (dapp as unknown as { storage: Map<string, DappInteraction> }).storage
+	// A window's URL names its request, as in the browser.
+	vi.mocked(chrome.runtime.getURL).mockImplementation((path) => path)
 	const createSpy = vi.spyOn(api.windows, "create")
 	const removeSpy = vi.spyOn(api.windows, "remove")
 
@@ -97,6 +101,8 @@ async function makeHarness() {
 	const execute = (queuedJournalId: string) =>
 		settleOf(dapp.execute({ sessionId: SESSION.id, operations: [] }, undefined, { queuedJournalId }))
 	const windowIdOf = async (createIndex: number) => (await createSpy.mock.results[createIndex]?.value)?.id as number | undefined
+	const windowOf = (interaction: DappInteraction) =>
+		windowIdOf(createSpy.mock.calls.findIndex(([options]) => options.url?.endsWith(`requestId=${interaction.id}`)))
 	const interactionFor = (journalId: string) => [...storage.values()].find((x) => x.hooks?.queuedJournalId === journalId)
 
 	return {
@@ -107,13 +113,18 @@ async function makeHarness() {
 		queuedRecord,
 		execute,
 		windowIdOf,
+		windowOf,
 		interactionFor,
+		/** Parks `execute()` at the gate; `reached` settles once it waits there. */
 		parkProfile: () => {
 			let release!: () => void
 			profileGate = new Promise<void>((r) => {
 				release = r
 			})
-			return release
+			const reached = new Promise<void>((r) => {
+				reachedGate = r
+			})
+			return { release, reached }
 		},
 	}
 }
@@ -124,17 +135,25 @@ describe("DappInteractionService × OperationJournalService × WindowManager (fe
 		const recA = await h.queuedRecord()
 		const recB = await h.queuedRecord()
 
-		const outcomeA = h.execute(recA.id)
+		// Concurrent requests open in whichever order their sealed journal reads settle, so B opens
+		// first here and the cancel must follow A's interaction, not the opening order.
+		const openedWindow = async (journalId: string) => {
+			let windowId: number | undefined
+			await vi.waitFor(async () => {
+				const interaction = h.interactionFor(journalId)
+				expect(interaction).toBeDefined()
+				windowId = await h.windowOf(interaction as DappInteraction)
+				expect(windowId).toBeTypeOf("number")
+			})
+			return windowId
+		}
 		const outcomeB = h.execute(recB.id)
-		await flush()
-		await flush()
-		const windowA = await h.windowIdOf(0)
-		const windowB = await h.windowIdOf(1)
-		expect(windowA).toBeTypeOf("number")
-		expect(windowB).toBeTypeOf("number")
+		const windowB = await openedWindow(recB.id)
+		const outcomeA = h.execute(recA.id)
+		const windowA = await openedWindow(recA.id)
+		expect(await h.windowIdOf(0)).toBe(windowB)
+		expect(windowA).not.toBe(windowB)
 		const interactionA = h.interactionFor(recA.id)
-		expect(interactionA).toBeDefined()
-		expect(h.interactionFor(recB.id)).toBeDefined()
 
 		await h.journal.transitionOperation(recA.id, { stage: "cancelled" })
 
@@ -143,8 +162,7 @@ describe("DappInteractionService × OperationJournalService × WindowManager (fe
 		expect(("err" in resultA ? (resultA.err as JobCancelledError) : undefined)?.details).toEqual({ jobId: recA.id })
 		expect(h.removeSpy).toHaveBeenCalledTimes(1)
 		expect(h.removeSpy).toHaveBeenCalledWith(windowA)
-		await flush()
-		expect(h.interactionFor(recA.id)).toBeUndefined()
+		await vi.waitFor(() => expect(h.interactionFor(recA.id)).toBeUndefined())
 		expect(h.interactionFor(recB.id)).toBeDefined()
 
 		// The popup's own unload-time reject after the SW closed it: harmless.
@@ -162,10 +180,9 @@ describe("DappInteractionService × OperationJournalService × WindowManager (fe
 		const h = await makeHarness()
 		const recC = await h.queuedRecord()
 
-		const release = h.parkProfile()
+		const { release, reached } = h.parkProfile()
 		const outcomeC = h.execute(recC.id)
-		await flush()
-		await flush()
+		await reached
 		// Parked inside isConfirmationNeeded: past the pre-popup short-circuit,
 		// before registration. The subscription fires here and finds nothing.
 		expect(h.interactionFor(recC.id)).toBeUndefined()
@@ -177,10 +194,8 @@ describe("DappInteractionService × OperationJournalService × WindowManager (fe
 		expect("err" in resultC && resultC.err).toBeInstanceOf(JobCancelledError)
 		expect(("err" in resultC ? (resultC.err as JobCancelledError) : undefined)?.details).toEqual({ jobId: recC.id })
 		// Reconciliation closes the window that was opened after the cancellation.
-		await flush()
-		await flush()
-		const windowC = await h.windowIdOf(0)
-		expect(h.removeSpy).toHaveBeenCalledWith(windowC)
+		await vi.waitFor(async () => expect(h.removeSpy).toHaveBeenCalledWith(await h.windowIdOf(0)))
+		expect(await h.windowIdOf(0)).toBeTypeOf("number")
 		expect(h.interactionFor(recC.id)).toBeUndefined()
 	})
 })

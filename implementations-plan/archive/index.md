@@ -212,6 +212,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [light-theme-fix](light-theme-fix/plan.md) — completed — the light theme repaired at its root, and a theme toggle for the faucet
 - [lock-ownership](lock-ownership/plan.md) — completed — ticketed lock release and two post-await ownership fixes
 - [mac-identity-binding](mac-identity-binding/plan.md) — completed — the envelope MAC binds the row's storage id and the wallet fingerprint
+- [mainnet-arrival-1](mainnet-arrival-1/plan.md) — completed — a default network a later build adds reaches every existing profile once: the offer record, the owner's arrival, a real in-place update on both browsers
 - [method-metadata-registry](method-metadata-registry/plan.md) — completed — one wallet method descriptor table replaces six hand-synchronized tables
 - [migration-lifecycle](migration-lifecycle/plan.md) — completed — a migration retry budget and kill-loop bound before the first real migration
 - [monorepo-restructure](monorepo-restructure/plan.md) — completed — the workspace reorganized into apps, packages and contracts directories
@@ -223,6 +224,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [network-test-triage](network-test-triage/plan.md) — completed — the failing network e2e tests diagnosed before any timeout was touched
 - [nightly-release](nightly-release/plan.md) — completed — one tagged nightly prerelease per day from the tip of dev
 - [nulo-v6](nulo-v6/plan.md) — completed — the dependency line and the chain identity moved to Aztec V6 as Nulo V6
+- [offscreen-ping-1](offscreen-ping-1/plan.md) — completed — the worker stops pinging a PXE document it heard answer, so a busy document is no longer replaced mid-call; the READY timeout becomes a typed `RpcTimeoutError`
 - [on-camera-landing](on-camera-landing/plan.md) — completed — the landing replaced with a character-drawn CCTV-style feed
 - [onboarding-3](onboarding-3/plan.md) — completed — the fast-lane tab, the recovery phrase step and Home's Get started card (#588 #585 #581 #636); held for the owner's build test
 - [onboarding-3-arc2](onboarding-3-arc2/plan.md) — completed — the owner's later rounds on #743: P50-01 B folded in, the Get started matrix pinned, Fee Juice done for good once held, and the card as numbered steps (#769 #881); #936 asks the owner about the funded-banner count
@@ -416,3 +418,5 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [lessons-1](lessons-1/plan.md) — completed — lessons.md gains the extension-window close lesson (no Vue teardown runs as a window closes; `endAndClose`, `beforeunload`) and drops the CodeMirror line its code states; five candidates declined with reasons (#1017)
 - [soak-mode-1](soak-mode-1/plan.md) — completed — the network soak runs only named files, refuses what it cannot run, reads each report back and says what it proved; the docs name the whole-suite instruments (#1014)
 - [warm-stack-1](warm-stack-1/plan.md) — completed — the network files' onboarding cost, measured on CI: switching on the registration popup saves 0.75 s (Chrome) and 0.77 s (Firefox) a call but missed its ship rule on Firefox, so nothing shipped; an injected profile saved nothing over it (#1006, a known limit)
+- [fit-gate-1](fit-gate-1/plan.md) — completed — at 240 px nothing in the page scrolls sideways: the gate fails a scroller wider than its box and every box past the view; the token metadata and Senders rows wrap (#1023)
+- [pxe-limits-1](pxe-limits-1/plan.md) — completed — where the PXE and the wallet hit their limits, measured: each block's tag scan grows with senders × watched tokens, proving is 81-97 % of a send, list pages grow superlinearly through `Icon`'s CSS `v-bind`, the sandbox includes 80 tx/min; eight open issues and one known limit (#1016)

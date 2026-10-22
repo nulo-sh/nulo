@@ -6,7 +6,12 @@ import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { svc } from "../composition-harness"
 import type { TryCreateQueuedJournalDeps } from "./queued-journal"
+
+const ROW_KEYS = await rowKeysForEveryProfile()
 
 export function makeSession(sessionId = "session-A"): ActiveSession {
 	return {
@@ -29,6 +34,7 @@ export function makeDeps(overrides: Partial<TryCreateQueuedJournalDeps> = {}): {
 	const logger = new LoggerStore(new ConfigStore())
 	const journal = new OperationJournalService(logger, api)
 	const services = new ServiceCollection()
+	services.add(svc(PROFILE_SERVICE_NAME, { getProfiles: async () => [{ id: "profile-1" }, { id: "profile-2" }], ...ROW_KEYS }))
 	services.add(journal)
 	void services.start()
 

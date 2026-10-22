@@ -24,10 +24,7 @@ const ARMED_BUILD = `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS
  * spec (`fixtures/token-list.ts`), so no source profile holds a list it did not ask for. The
  * token-seed stamp is what `_extension-smoke-e2e.yml` greps for after its armed build.
  */
-function assertArmedSmokeBuild(): void {
-	const scripts = fs.readdirSync(EXTENSION_PATH, { recursive: true, encoding: "utf8" }).filter((file) => file.endsWith(".js"))
-	const texts = scripts.map((file) => fs.readFileSync(path.join(EXTENSION_PATH, file), "utf8"))
-	const stamped = (stamp: string) => texts.some((text) => text.includes(stamp))
+function assertArmedSmokeBuild(stamped: (stamp: string) => boolean): void {
 	if (stamped("NULO_E2E_TOKEN_SEEDS_BUILD_STAMP") && stamped("NULO_E2E_TOKEN_LIST_BUILD_STAMP")) return
 	throw new Error(
 		[
@@ -56,7 +53,14 @@ export async function setup(project: TestProject) {
 	// Every smoke run is guarded. Only a release build pins the production keys, so only an artifact
 	// run may start the live spec's launch, which checks the published list against the live chain.
 	const liveLeg = process.env.NULO_E2E_ARTIFACT_RUN === "1"
-	if (!liveLeg) assertArmedSmokeBuild()
+	const scripts = fs.readdirSync(EXTENSION_PATH, { recursive: true, encoding: "utf8" }).filter((file) => file.endsWith(".js"))
+	const texts = scripts.map((file) => fs.readFileSync(path.join(EXTENSION_PATH, file), "utf8"))
+	const stamped = (stamp: string) => texts.some((text) => text.includes(stamp))
+	// A third default would change what every fresh profile holds: it is the update candidate's alone.
+	if (stamped("NULO_E2E_EXTRA_SEED_BUILD_STAMP")) {
+		throw new Error(`${EXTENSION_PATH} seeds the update candidate's extra default network. Rebuild it with:\n  ${ARMED_BUILD}`)
+	}
+	if (!liveLeg) assertArmedSmokeBuild(stamped)
 	project.provide("extensionPath", EXTENSION_PATH)
 	project.provide("egressGuard", true)
 	project.provide("liveLeg", liveLeg)

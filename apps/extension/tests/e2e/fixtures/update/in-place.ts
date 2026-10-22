@@ -11,20 +11,29 @@ import { FIXTURE_PREFIX } from "./stored-rows"
 
 export type UpdateBuilds = { tag: string; from: string; to: string }
 
+/** Which candidate a scenario updates into: `extraSeed` is the one `--extra-seed` builds. */
+export type CandidateKind = { extraSeed?: true }
+
 /**
  * The candidate `build-update-candidate.sh` wrote, which `NULO_E2E_UPDATE_TO` names. Throws when
- * it is missing or was built from another commit than the checkout's.
+ * it is missing, was built from another commit than the checkout's, or is not of `kind`.
  */
-export function updateCandidate(browser: BrowserKind): string {
+export function updateCandidate(browser: BrowserKind, kind: CandidateKind = {}): string {
 	const to = process.env.NULO_E2E_UPDATE_TO
 	if (!to || !existsSync(path.join(to, "manifest.json"))) {
 		throw new Error(`NULO_E2E_UPDATE_TO must name a ${browser} candidate from scripts/e2e/build-update-candidate.sh`)
 	}
 	const built = path.join(to, "update-candidate.json")
-	const { commit } = existsSync(built) ? (JSON.parse(readFileSync(built, "utf8")) as { commit?: string }) : { commit: undefined }
+	const { commit, extraSeed } = existsSync(built)
+		? (JSON.parse(readFileSync(built, "utf8")) as { commit?: string; extraSeed?: boolean })
+		: { commit: undefined, extraSeed: undefined }
 	const head = candidateSource().commit
 	if (commit !== head) {
 		throw new Error(`the candidate at ${to} was built from ${commit ?? "an unknown commit"}, not ${head}: build it again`)
+	}
+	if ((extraSeed === true) !== (kind.extraSeed === true)) {
+		const flag = kind.extraSeed ? "with" : "without"
+		throw new Error(`the candidate at ${to} is not the one this scenario updates into: build it ${flag} --extra-seed`)
 	}
 	return to
 }
@@ -34,10 +43,10 @@ export function updateCandidate(browser: BrowserKind): string {
  * and {@link updateCandidate} the candidate. Undefined when the run did not opt in; throws on a
  * candidate it refuses or one that does not rise above the release.
  */
-export function updateBuilds(browser: BrowserKind): UpdateBuilds | undefined {
+export function updateBuilds(browser: BrowserKind, kind: CandidateKind = {}): UpdateBuilds | undefined {
 	const tag = process.env.NULO_E2E_UPDATE_FROM
 	if (!tag) return undefined
-	const to = updateCandidate(browser)
+	const to = updateCandidate(browser, kind)
 	const from = releaseBuild(tag, browser, path.join(runDir(), "release"))
 	if (compareVersions(manifestVersion(to), manifestVersion(from)) <= 0) {
 		throw new Error(`the candidate at ${to} (${manifestVersion(to)}) does not rise above ${tag} (${manifestVersion(from)})`)

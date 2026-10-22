@@ -74,7 +74,8 @@ export async function storeActiveNetwork(page: Page, kind: string): Promise<void
 	)
 }
 
-/** Every stored row that names `chainId`, and the network row `networkId`, exactly as stored. */
+/** Every stored row that names `chainId`, and the network row `networkId`, exactly as stored. A
+ *  sealed row names its chain only inside its envelope, so none is here. */
 export async function snapshotChain(page: Page, chainId: number, networkId: string): Promise<Record<string, string>> {
 	return page.evaluate(
 		async (chain: number, id: string, networks: string) => {
@@ -105,7 +106,8 @@ export async function snapshotChain(page: Page, chainId: number, networkId: stri
  * row of its chain to an older chainId; `address-change` moves every derived (Nulo_v1) address on
  * it and hides the account at `hideIndex`; `both` does the two. Run it locked: an unlocked worker
  * would act on half the writes. A moved imported key no longer opens, since its seal binds its
- * chainId, so after `network-reset` or `both` every imported account reads unmovable.
+ * chainId, so after `network-reset` or `both` every imported account reads unmovable. A sealed row
+ * names its chain only inside its envelope, so it stays as it is: seed before any send on Testnet.
  */
 export async function seedStaleNetwork(
 	page: Page,

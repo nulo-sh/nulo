@@ -55,6 +55,7 @@ import {
 import { accountChainId, exportBackupContent, keepChainAccountState } from "../helpers/backup-export"
 import { sealPlainBackup } from "../helpers/backup-seal"
 import { gotoPopupImport, importFullBackup, POPUP_IMPORT_SHELL, TEST_PASSWORD, writeBackupToTemp } from "../helpers/import-drivers"
+import { readSealedRows } from "../fixtures/sealed-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -154,31 +155,33 @@ test.skipIf(!hasConfig)(
 			}, fundedToken)
 			expect(restoredToken).toMatchObject(chainMetadata)
 
-			// ── 4. Provenance assertion via RAW chrome.storage ──────────────
-			const txAccounts = await page2.evaluate(async () => {
-				const all = await chrome.storage.local.get()
-				return Object.entries(all)
-					.filter(([k]) => k.startsWith("nulo:core:txs@"))
-					.map(([, v]) => (JSON.parse(v as string) as { account: string }).account)
-			})
+			// ── 4. Provenance assertion over every stored tx row ────────────
+			const txAccounts = (await readSealedRows<{ account: string }>(page2, "txs")).map(({ row }) => row.account)
+			// Every stored row is one the wallet reads: none is hidden from the assertion below.
+			const storedTxRows = await page2.evaluate(
+				async () => Object.keys(await chrome.storage.local.get()).filter((k) => k.startsWith("nulo:core:txs@")).length,
+			)
+			expect(storedTxRows).toBe(txAccounts.length)
 			// The funded-account tx (its account WAS imported) survived; the
 			// foreign-account tx was dropped before restore could write it.
 			expect(txAccounts).toContain(funded)
 			expect(txAccounts).not.toContain(FOREIGN_ACCOUNT)
 
-			// Authwit + token-balance provenance via RAW chrome.storage: a foreign
-			// account's auth/balance rows were dropped before restore wrote them.
-			const readAccounts = (prefix: string) =>
-				page2.evaluate(async (p) => {
-					const all = await chrome.storage.local.get()
-					return Object.entries(all)
-						.filter(([k]) => k.startsWith(p))
-						.map(([, v]) => (JSON.parse(v as string) as { account: string }).account)
-				}, prefix)
-			const authAccounts = await readAccounts("nulo:core:auth-registry@")
+			// Authwit + token-balance provenance: a foreign account's auth/balance rows were dropped
+			// before restore wrote them, and every stored row is one the wallet reads.
+			const readAccounts = async (root: "authRegistry" | "tokenBalances", prefix: string) => {
+				const accounts = (await readSealedRows<{ account: string }>(page2, root)).map(({ row }) => row.account)
+				const stored = await page2.evaluate(
+					async (p) => Object.keys(await chrome.storage.local.get()).filter((k) => k.startsWith(p)).length,
+					prefix,
+				)
+				expect(stored).toBe(accounts.length)
+				return accounts
+			}
+			const authAccounts = await readAccounts("authRegistry", "nulo:core:auth-registry@")
 			expect(authAccounts).toContain(funded)
 			expect(authAccounts).not.toContain(FOREIGN_ACCOUNT)
-			const balanceAccounts = await readAccounts("nulo:core:token-balances@")
+			const balanceAccounts = await readAccounts("tokenBalances", "nulo:core:token-balances@")
 			expect(balanceAccounts).not.toContain(FOREIGN_ACCOUNT)
 
 			// ── 5. On-chain functionality ───────────────────────────────────

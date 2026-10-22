@@ -117,13 +117,14 @@ trusted to run with `--slots-in-an-epoch 1`), which an `e2e:agent` run never doe
    which break a lock older than 15 s); this client never breaks it and fails closed after 30 s.
 3. Builds the wallet armed: `VITE_LOCAL_NETWORK_RPC_URL` (this sandbox),
    `VITE_NULO_E2E_PRICE_MAP=1`, `VITE_NULO_E2E_MIGRATION_FIXTURE=1`,
-   `VITE_NULO_E2E_TOKEN_SEEDS=1` + `_CONFIRM=1`, `VITE_NULO_E2E_CSP_REPORT=1`, plus the proverless
-   pair and `VITE_NULO_E2E_WALLET_CLOCKS=1` (incoming tick and finality re-read every 10 s) when
-   asked; the prover-ON build passes `VITE_NULO_E2E_WALLET_CLOCKS=0`. Then asserts the bundle before
-   spending a sandbox (exit 2 on a miss): the sandbox URL literal, the migration-fixture stamp, the
-   token-seed stamp and key, the CSP recorder's key, the presto stamp when armed, the proverless and
-   wallet-clocks stamps when armed (and the wallet-clocks stamp's absence otherwise), the fee
-   multiplier when set. The price map has no stamp check.
+   `VITE_NULO_E2E_TOKEN_SEEDS=1` + `_CONFIRM=1`, `VITE_NULO_E2E_CSP_REPORT=1`,
+   `VITE_NULO_E2E_SEALED_READ=1`, plus the proverless pair and `VITE_NULO_E2E_WALLET_CLOCKS=1`
+   (incoming tick and finality re-read every 10 s) when asked; the prover-ON build passes
+   `VITE_NULO_E2E_WALLET_CLOCKS=0`. Then asserts the bundle before spending a sandbox (exit 2 on a
+   miss): the sandbox URL literal, the migration-fixture stamp, the token-seed stamp and key, the
+   CSP recorder's key, the sealed reader's message, the presto stamp when armed, the proverless and wallet-clocks stamps when
+   armed (and the wallet-clocks stamp's absence otherwise), the fee multiplier when set. The price
+   map has no stamp check.
 4. Runs vitest with `E2E_REQUIRE_SETUP=1` (a sandbox or deploy failure is `FATAL`, never a silent
    `describe.skipIf` — the suite once showed `61 skipped, exit 0` for weeks) and the runtime
    declarations the tests read (`NULO_E2E_MIGRATION_FIXTURE=1`, `NULO_E2E_CSP_REPORT=1`, the `*_URL`s).
@@ -144,7 +145,7 @@ port fails identity). The reuse rewrites the lock's `owner` to the adopting run.
 
 Several fixtures are compiled INTO the bundle by `VITE_NULO_E2E_*` flags and tree-shaken out
 otherwise: the proverless `ProofGate`, the restore and incoming-poll gates, the migration fixture,
-the token-seed reader, the price map. Against an unarmed dist nothing raises by itself — the hook is
+the token-seed reader, the price map, the sealed-root reader. Against an unarmed dist nothing raises by itself — the hook is
 gone, optional chaining no-ops, and an unguarded test polls into a multi-minute timeout
 that looks exactly like a product bug (a guarded one fails fast in its `beforeAll` stamp check). A
 runtime env var can never arm a build-time flag.
@@ -160,6 +161,12 @@ runtime env var can never arm a build-time flag.
   `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1`.
   `migration.test.ts` skips without the declaration; `backup-migration.test.ts` throws with the
   remedy.
+- Journal, transaction, balance, authwit and incoming rows are sealed: read them through
+  `fixtures/sealed-rows.ts` (armed by `VITE_NULO_E2E_SEALED_READ=1`, network builds only), never
+  `chrome.storage.local`, and find a keyed root's row (transactions, authwit flags, the incoming
+  roots) by its `naturalId`, never its storage key. An unarmed build throws with the remedy on the
+  first read. A spec that reads after `stopBackground` unlocks first: the successor holds no keys
+  until then (`tests/e2e/README.md` § Sealed roots).
 - Every e2e launch, smoke or network, refuses every outside host but the ones it sends direct
   (both setups provide `egressGuard: true`; only an artifact smoke provides `liveLeg`). Each launch
   routes HTTP, HTTPS and WebSocket to a loopback guard that answers 403 and records the host, proves
@@ -716,6 +723,10 @@ the pattern.
   `CdpTarget.asPage`'s fallback with a `null` viewport (puppeteer-core 25.8.0, `cdp/Target.js:54-70`;
   a target whose page already exists returns that page instead), so it renders at the window's
   native size; `browser.newPage()` pages get the 800×600 default.
+- **A vertical scroller reads as a sideways one.** `overflow-y: auto` makes `overflow-x` compute to
+  `auto`, so every page scroller looks like a sideways scroller to a style check. Compare its
+  `scrollWidth` with its `clientWidth` instead (`fixtures/type-roles.ts`'s `readInsideView`; the
+  240 px gate excused boxes past the view this way until #1023).
 - **Under mobile emulation, `innerWidth` grows to the content** (Puppeteer 25.8): a width check
   compares `scrollWidth` with the width the spec set
   (`implementations-plan/archive/landing-store-buttons/plan.md#mobile-emulation-width`).

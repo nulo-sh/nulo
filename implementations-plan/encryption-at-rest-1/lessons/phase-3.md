@@ -1,0 +1,79 @@
+# Arc A3 (P6–P7): balances, authorizations and incoming receipts
+
+## Where the code differs from the plan, and why
+
+- **Every write seals first and checks its fence after the seal.** The plan's D9 rule is prepare, check, commit with no await between the check and the dispatch. The balance queue, balance creation and restore, the auth-registry writes and every incoming write now `prepare` (seal), read their fence, then `commit`; a refused fence writes nothing and the incoming repository's writers resolve `false`, which each caller maps to the refusal it already had (`revoked`, a skipped emit, an unclaimed arrival). A keyed delete hashes its id before it removes anything, so a fenced one takes the same shape: `prepareDelete` resolves the keys, the fence is read, the removal dispatches.
+- **A record or trust row answers to its key only when its body agrees.** Both name their profile and network; one whose body names another scope than its key belongs to no profile (not served, not listed, not sealed, refused at open). A trust, cursor, arrival or outbox key with the wrong number of segments belongs to no profile too, so conversion skips it.
+- **The incoming keys keep their scope.** A key stays `[kind:]profileId|networkId|` and only its tail is keyed-hashed: the record's note hash, or its transaction hash and log index, joined; the trust, cursor and arrival row's contract or account; the outbox row's account, with the token id (a local sequence number) left as it is. `clearScope` still deletes by prefix with no row key, and a prefix test proves it with every profile's keys dropped.
+- **`commitAcceptance` became `prepareAcceptance`.** It seals the trusted row and every un-hidden receipt, and returns a commit that writes them in one `storage.set` (`commitSealedTogether`), so an Allow is still one write. The service reads its fence between the seal and that commit.
+- **Account additions run one at a time.** `onAccountAdded` captured its epoch before reading the tips and each addition bumps the epoch inside its own section, so a concurrent addition refused the next one's arrival baseline. The window was a few storage calls before; a sealed section made it every time in `network-reset/service.composition.test.ts`, whose reset re-creates three accounts. The queue is the smallest change that keeps the baseline fence as it was.
+- **The bare enable flag is owned by its key.** `authRegistryEnabled` rows are a boolean, so `ownerOf` reads the profile from the key; `legacyAt` lets a non-object row through when its key names the owner. The golden sealer does the same (`sealedOwnerOf`), which the flag, cursor, outbox and arrival goldens need.
+- **The re-stamp is stamp 2.** One additive stamp for all eight roots (a plaintext row still reads through the dual read and is sealed at its profile's next unlock) introduces one sealed golden per root, sealed by the generator from the root's `.full` golden and inserted by hand, as in A2; the generator's rerun reports the shapes unchanged. The two numeric roots' sealed goldens take id 3, so no two goldens share a storage key.
+- **Unit tests wait for the crypto.** Sealed writes answer on a later event-loop turn, which `flushPromises` and fake-timer advances never wait for. `trackSubtleCrypto` (`sealed-entity-storage.testing.ts`) counts the WebCrypto calls in flight; the incoming scenarios' flush and clock advance wait until a full drain leaves none, which also keeps their "nothing happened" assertions from passing before anything ran.
+- **E2E readers.** The balance wait falls back to raw rows on a build without the seam (`readRowsOnAnyBuild`), since `update-in-place` populates on a release build. The pending-trust seed waits for the sealed trust row by its natural id, writes its plaintext replacement, then removes the sealed copy, which a keyed root would otherwise prefer. The update verifier counts a keyed queue's rows and excuses a drained outbox row under `balancesAsserted`, as it did by key.
+
+## Attempts
+
+- **143 unit failures after P6's wiring**: profile fakes lacked `rowKeys` / `onRowKeysReady`, and services started without `init` had no profile service. The fakes gained both; the parking and interleaving tests hook `prepare` now that the queue and creation no longer call `repo.set`.
+- **Fake-timer auth-registry tests timed out**: WebCrypto does not advance with fake timers. They wait for the first receipt read (`vi.waitFor`) before advancing.
+- **70 incoming scenario failures after P7's wiring**, all timing: assertions ran before sealed writes settled. `trackSubtleCrypto` brought them to 2, both on the removed `commitAcceptance`.
+- **The reset composition test**: the arrival baseline of the second and third re-created accounts was refused (above). Serializing additions fixed it; reverting the queue fails the test again.
+- **Two functions went over the cognitive budget** with the fence plumbing (`claimArrivals`, `commitPublicEventLocked`); each lost a helper (`eligibleArrivals`, `reconcileExistingRecord`). No suppression.
+- **`type-roles` re-attested** the auth-registry digest: the registry's reads name the profile, which moved the digested lines.
+- **Mutation checks**: hashing the whole incoming key fails the prefix-clear test; dropping the deleter guard from the incoming conversion fails its test; removing the balance conversion's lock fails the conversion-against-purge test; reverting `legacyAt` fails the bare-flag test.
+
+## Downgrade to the A2 build
+
+Measured on Chrome with the update replay's recorded v0.31.0 profile (7 rows in A3's roots: one balance, two receipts, one trust, one cursor, one outbox, one arrival row), its network endpoints made unreachable as the replay does. The A3 candidate unlocked and sealed it; that storage was then written into the A2 build (`b88606651`, the A2 candidate, identical to `#1029` in every storage path), which was unlocked and left on Home for 40 s. The A2 build logged **17** `failed validation — KEEPING (not deleting)` lines at error level: 9 before Home, 8 in the 40 s on Home (balances 4, trust 6, receipts 4, outbox 3). The same profile sealed by the A2 build itself logs none. So A3 adds about one line per sealed row per read on top of the ~220 lines in 40 s update-check-2 counted for A2's own roots; with a reachable node the incoming scan reads its rows on every tick and the rate grows with it. The cursor and arrival rows log nothing: the A2 build looks them up by natural key, finds nothing at the keyed id, and starts them again.
+
+**A quieter read, proposed, not built.** No released build can be changed, so the quieter read helps only a rollback onto a build that already carries it. Inside the plan's storage layer: `EntityStorage.decodeParsed` (wallet-core) recognises a value that is exactly a seal envelope (`{ profileId, sealed }`, `parseEnvelope`) and treats it as "sealed by a newer build", logging once per root per worker at `debug` instead of once per row per read at `error`, and still keeping the row. It adds no state and changes no stored shape. Landed in A4 (or alongside it), it would make a rollback from any later sealing release onto an A4 build quiet for the roots that release seals; it does nothing for a rollback onto A2 or A3.
+
+**Known limit, not new to A3.** A keyed root prefers its sealed copy (A2's decision, so an offline plaintext row cannot displace a sealed one). On a rollback the old build writes plaintext rows at natural keys; on the next upgrade the conversion keeps the older sealed copy and removes the newer plaintext one. For incoming rows that means a trust decision made on the rolled-back build is lost, and a cursor or arrival floor moves back (rescans are idempotent). The plan supports no downgrade, so this stays a known limit.
+
+## Concurrency inventory (D9)
+
+| Root | Conversion runs under | Delete vs open |
+|---|---|---|
+| `nulo:core:token-balances` | the balance service's `Lock`, one row per hold, skipping an id a purge fenced | compare-and-commit on the stored text and the held keys; a purge waits for the row's commit and deletes the sealed copy |
+| `nulo:core:auth-registry`, `nulo:core:auth-registry-enabled` | the registry's `Lock`, one row per section | the same compare-and-commit |
+| the five `nulo:core:incoming-*` roots | the incoming service lock, one row per section; a row commits only while its section still owns the lock and no scope wipe runs | the same compare-and-commit, plus the section ticket and the deleter count |
+
+## Review
+
+- **Codex r1 (gpt-6.1-sol, high): CHANGES, two medium.** (1) Incoming rows were attributed by key alone, so a planted trust row at A's key naming B in its body was served to A's lookup and sealed under A's keys. Fixed: `bodyOwner` in `storage/stores.ts`. (2) A displaced outbox drain could delete a newer receipt's refresh marker: the keyed delete awaited its HMAC and twin lookup after the drain's `isCurrent()`. Fixed: `prepareDelete`, and the repository reads the fence after it. Both in `95c4ff1e8`, each with a mutation-checked test.
+- **Opus (xhigh): CHANGES, three low.** (1) The same delete gap, plus `markDirty` still unfenced: it now takes its caller's fence and every caller stands down on a refusal. (2) A planted key with the wrong number of segments threw in `physicalId` and stopped the profile's whole incoming conversion on every unlock: such a key now belongs to no profile. (3) The same finding as Codex (1). Fixed in `95c4ff1e8` and `25d0b6129`, mutation-checked. Its check of the account-addition queue found a stuck addition delays the next by at most the PXE timeout plus the lock watchdog, with nothing lost.
+- **Codex r2: CHANGES, one medium.** The four fixes hold. The shared conversion checked the row's bytes and keys but not its lock ticket: a section the watchdog displaced during its last read could write back a row a purge had deleted meanwhile (its reproducer brought a purged authwit back). Every section now reads `isCurrent` with its other checks before the commit, which covers every converting service, A2's included. `574f7c78b`, mutation-checked.
+- **Left as it was**: such a planted row now belongs to no profile and no read serves it. It stays in plaintext under A's prefix, so A's scope wipe removes it and B's never did, as before A3.
+
+## Home's balance load: over the 50 ms rule, stopped for a decision
+
+`sealed-storage.test.ts` seeds 2 000 balance rows for the active account (naming no live token, so Home renders none of them) and times `getTokenBalances(undefined, account)`, Home's read, as the median of 5 from a fresh popup, plaintext and then sealed in the same run.
+
+| Run | Chrome, plaintext → sealed | Firefox, plaintext → sealed | load1 |
+|---|---|---|---|
+| full smoke, both browsers in parallel | 91 → 154 ms (+63) | timed out earlier in the test (below) | 89 → 268 |
+| alone, 1 | 90 → 145 ms (+55) | 309 → 358 ms (+49) | 124–178 |
+| alone, 2 | 71 → 161 ms (+90) | 252 → 370 ms (+118) | 124–204 |
+| alone, 3 | 74 → 178 ms (+104) | | 204 → 198 |
+| full Firefox smoke, alone | | 386 → 302 ms (−84) | 151 → 89 |
+
+Chrome is over the rule in every run; Firefox in one of three, and its samples swing by more than the rule either way. The read opens every row: the root is numeric and the account and token sit inside the seal, so nothing can be skipped before the open. Under Bun, 2 000 opens cost the same for balances and contacts (plaintext 13 and 8 ms, sealed 63–75 and 66 ms); of `openRow`'s 36–37 ms, AES-GCM is 19–20 ms, base64, AAD and the UTF-8 decode 4–7 ms, and the rest is the per-row promise chain. No part dominates, so no local change buys the 50 ms back. The options, each a plan change:
+
+1. **Accept.** The cost is linear in balance rows, one per (token, account) pair. At 2 000 pairs it is 55–118 ms; a wallet with 50 pairs pays about 1–3 ms.
+2. **Keep opened rows in memory per worker**, keyed by the stored ciphertext and dropped with the profile's keys: no stored state, but a cache with its own lifecycle.
+3. **Key the balance root by profile and the account's keyed hash**, so Home opens only its account's rows: a layout change, a stamp and a migration of a numeric root.
+
+Recommended: 1, with 2 as a follow-up if a real wallet's Home ever approaches the rule.
+
+**The conversion wait in the same spec.** With A3's balances the unlock seals 4 500 rows (A2: 2 500). Alone, Firefox seals them in 27–36 s and Chrome in about 15 s, inside the spec's 120 s wait. In the full smoke with both browsers in parallel at load1 near 250, Firefox overran the wait once; alone it passed 3 of 3 (27–36 s), the third inside the full Firefox smoke run again alone.
+
+## Measured
+
+All at retry 0, on one host shared with other agents; load1 is the 1-minute load average on 188 cores at a run's start and end.
+
+- **Unit**, at HEAD: `test:all` green (extension 906 files, 15 015 tests; load1 134 → 53), `test:ci-gating` 687 pass (load1 53 → 47), `lint` and `typecheck` green, complexity check green. `test:all` was also green after round 1's fixes (extension 15 014 tests; load1 99 → 91). `audit:vue` green before the review fixes (extension 15 010 tests; load1 33 → 41). The A3 suites (incoming, storage, network-reset, token-balance, auth-registry) 864 tests, five times.
+- **Network, Chrome, at HEAD**, the gate's six (`incoming-arrival`, `incoming-public-transfers`, `incoming-transfers`, `balance-row-reconciliation`, `authwit-lifecycle`, `account-balance-orphans`) and the seven other specs whose readers changed or that read incoming rows (`account-switch-isolation`, `backup-restore-integrity`, `snack-placement`, `token-add-auto-trust`, `import-handshake-note`, `import-handshake-note-matrix`, `same-token-concurrent-sends`): 13 files, 45 tests, 1 649 s (load1 129 → 55). The same set before round 2's fix: 1 555 s (load1 139 → 43).
+- **Network, Firefox, at HEAD**, the same 13 files: 45 tests, 1 931 s (load1 32 → 181).
+- **Update replay** from v0.31.0, candidates built at HEAD: Chrome 3 passed, 55 s (load1 115 → 84); Firefox 3 passed, 77 s (load1 81 → 125).
+- **Full smoke**, fresh armed builds at HEAD, both browsers in parallel: Chrome 61 files passed, 9 skipped, 2 376 s (load1 89 → 268). Firefox 64 passed, 5 skipped, 1 failed (`sealed-storage`'s conversion wait, above), 3 676 s (load1 → 139). Firefox again, alone: 65 passed, 5 skipped, 3 038 s (load1 151 → 89).
+- **Soak**: `extension-network-e2e-soak.yml` run 39746628699, the 8 network files this arc changes, 5 repeats, retry 0, proverless: success, 11–13 min an iteration.

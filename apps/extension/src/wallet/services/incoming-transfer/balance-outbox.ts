@@ -39,10 +39,10 @@ export class BalanceRefreshOutbox {
 	/**
 	 * Write-side: mark a balance dirty (written BEFORE the record). A new receipt OVERWRITES
 	 * `dirtyAt` and CLEARS any prior task anchor — the old anchor is stale w.r.t. the newer receipt.
-	 * The drain reads these rows and issues the causal refresh.
+	 * The drain reads these rows and issues the causal refresh. False when `fence` refused the write.
 	 */
-	public async markDirty(profileId: string, networkId: string, account: string, tokenId: number): Promise<void> {
-		await this.deps.repo.setOutbox(profileId, networkId, account, tokenId, { dirtyAt: Date.now() })
+	public markDirty(profileId: string, networkId: string, account: string, tokenId: number, fence?: () => boolean): Promise<boolean> {
+		return this.deps.repo.setOutbox(profileId, networkId, account, tokenId, { dirtyAt: Date.now() }, fence)
 	}
 
 	/**
@@ -98,15 +98,14 @@ export class BalanceRefreshOutbox {
 		if (current.pendingTaskId) {
 			const action = anchoredRowAction(this.readTaskState(current.pendingTaskId))
 			// pending → keep waiting for the anchored task.
-			if (action !== "wait" && isCurrent()) await this.settleAnchoredRow(row, current, action)
+			if (action !== "wait" && isCurrent()) await this.settleAnchoredRow(row, current, action, isCurrent)
 			return
 		}
 		const result = await this.requestRefreshOrKeep(tokenId, accountAddress)
 		if (!result) return
 		if ("missing" in result) {
 			// The (token, account) balance pair is positively gone (removed) → delete the stale row.
-			if (!isCurrent()) return
-			await this.deps.repo.deleteOutbox(profileId, networkId, accountAddress, tokenId)
+			await this.deps.repo.deleteOutbox(profileId, networkId, accountAddress, tokenId, isCurrent)
 			return
 		}
 		if ("taskId" in result) await this.anchorFreshTask(row, current, result.taskId, isCurrent)
@@ -114,13 +113,19 @@ export class BalanceRefreshOutbox {
 	}
 
 	/** Terminal-success → delete the row; terminal-failure/missing → clear the
-	 *  anchor so the next drain re-requests. Entered only after `isCurrent()`. */
-	private async settleAnchoredRow(row: OutboxRowKey, current: IncomingBalanceOutboxRow, action: "delete" | "clear"): Promise<void> {
+	 *  anchor so the next drain re-requests. Entered only after `isCurrent()`, read again once the
+	 *  delete's keys are resolved or the clear's row is sealed. */
+	private async settleAnchoredRow(
+		row: OutboxRowKey,
+		current: IncomingBalanceOutboxRow,
+		action: "delete" | "clear",
+		isCurrent: () => boolean,
+	): Promise<void> {
 		const { profileId, networkId, accountAddress, tokenId } = row
 		if (action === "delete") {
-			await this.deps.repo.deleteOutbox(profileId, networkId, accountAddress, tokenId)
+			await this.deps.repo.deleteOutbox(profileId, networkId, accountAddress, tokenId, isCurrent)
 		} else {
-			await this.deps.repo.setOutbox(profileId, networkId, accountAddress, tokenId, { dirtyAt: current.dirtyAt })
+			await this.deps.repo.setOutbox(profileId, networkId, accountAddress, tokenId, { dirtyAt: current.dirtyAt }, isCurrent)
 		}
 	}
 
@@ -156,10 +161,14 @@ export class BalanceRefreshOutbox {
 		const fresh = await this.deps.repo.getOutbox(profileId, networkId, accountAddress, tokenId)
 		if (!fresh || fresh.dirtyAt !== current.dirtyAt) return
 		if (!isCurrent()) return
-		await this.deps.repo.setOutbox(profileId, networkId, accountAddress, tokenId, {
-			dirtyAt: current.dirtyAt,
-			pendingTaskId: taskId,
-		})
+		await this.deps.repo.setOutbox(
+			profileId,
+			networkId,
+			accountAddress,
+			tokenId,
+			{ dirtyAt: current.dirtyAt, pendingTaskId: taskId },
+			isCurrent,
+		)
 	}
 
 	/** Terminal state of an anchored refresh task via the TaskService ledger (`missing` = expired/gone). */

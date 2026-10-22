@@ -36,22 +36,46 @@ export async function readSeedOffers(page: Page, profileId: string): Promise<{ o
 	return typeof raw === "string" ? JSON.parse(raw) : null
 }
 
-/** Records, from now on, whether the arrival ever mounted and whether it ever shared the page with
- *  the Terms sheet. */
-export async function traceArrival(page: Page): Promise<void> {
-	await page.evaluate((arrival: string) => {
-		const trace = { mounted: false, stacked: false }
-		;(window as unknown as { __arrivalTrace: typeof trace }).__arrivalTrace = trace
-		const check = () => {
-			const shown = document.querySelector(arrival) !== null
-			trace.mounted ||= shown
-			trace.stacked ||= shown && document.querySelector('[data-testid="legal-sheet"]') !== null
-		}
-		new MutationObserver(check).observe(document.body, { childList: true, subtree: true })
-		check()
-	}, ARRIVAL)
+/** The testids each full-screen surface mounts, by surface: it shows while any one is in the page. */
+export type Surfaces = Readonly<Record<string, readonly string[]>>
+
+export const ARRIVAL_SURFACES: Surfaces = { sheet: ["legal-sheet"], arrival: ["network-arrival-takeover"] }
+
+export type SurfaceTrace = {
+	/** Every set of surfaces the page showed, in order, as their names joined by "+": two at once
+	 *  reads "a+b". An empty set and a repeat of the set before it are left out. */
+	shown: string[]
+	/** How many arrival elements mounted: a remount counts again. */
+	arrivals: number
 }
 
-export async function readArrivalTrace(page: Page): Promise<{ mounted: boolean; stacked: boolean }> {
-	return page.evaluate(() => (window as unknown as { __arrivalTrace: { mounted: boolean; stacked: boolean } }).__arrivalTrace)
+/** Records, from now on, every set of `surfaces` the page shows and every arrival mount. */
+export async function traceSurfaces(page: Page, surfaces: Surfaces = ARRIVAL_SURFACES): Promise<void> {
+	await page.evaluate(
+		(all: Surfaces, arrival: string) => {
+			const trace: SurfaceTrace = { shown: [], arrivals: 0 }
+			;(window as unknown as { __surfaceTrace: SurfaceTrace }).__surfaceTrace = trace
+			const mounted = new WeakSet<Element>()
+			const check = () => {
+				const now = Object.entries(all)
+					.filter(([, ids]) => ids.some((id) => document.querySelector(`[data-testid="${id}"]`) !== null))
+					.map(([name]) => name)
+					.join("+")
+				if (now !== "" && trace.shown[trace.shown.length - 1] !== now) trace.shown.push(now)
+				const element = document.querySelector(arrival)
+				if (element && !mounted.has(element)) {
+					mounted.add(element)
+					trace.arrivals++
+				}
+			}
+			new MutationObserver(check).observe(document.body, { childList: true, subtree: true })
+			check()
+		},
+		surfaces,
+		ARRIVAL,
+	)
+}
+
+export async function readSurfaceTrace(page: Page): Promise<SurfaceTrace> {
+	return page.evaluate(() => (window as unknown as { __surfaceTrace: SurfaceTrace }).__surfaceTrace)
 }

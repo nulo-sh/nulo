@@ -107,7 +107,7 @@ onBeforeUnmount(() => {
 					<!-- <Text @click="handleCopyAddress(sender)" size="14" weight="600" color="secondary"> {{ trimAddress(sender, 8, 8) }} </Text> -->
 				</Flex>
 
-				<Flex align="center" gap="8">
+				<Flex align="center" gap="8" :class="$style.actions">
 					<Tooltip position="end" delay="350">
 						<!-- Inline styles keep the check's own look through the action's pointer and hover colour. -->
 						<RowAction
@@ -150,5 +150,18 @@ onBeforeUnmount(() => {
 	border: 1px solid var(--nulo-border);
 
 	padding: 12px;
+}
+
+/* Below the popup's width a sender's actions go under its address, at the right, when the two do not
+ * fit side by side. */
+@media (width < 359px) {
+	.card {
+		flex-wrap: wrap;
+		row-gap: 6px;
+	}
+
+	.card > .actions {
+		margin-left: auto;
+	}
 }
 </style>

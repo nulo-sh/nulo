@@ -62,7 +62,7 @@ import { TransactionService } from "@/wallet/services/transaction/service"
 import { TxStatus } from "@/wallet/services/transaction/spec"
 import { NetworkResetService } from "./service"
 import type { StaleNetworkChanged } from "./spec"
-import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { rowKeysForEveryProfile, storedText } from "@/wallet/storage/sealed-entity-storage.testing"
 
 const OLD = 4321
 const NEW = CHAIN_IDS.TESTNET
@@ -154,7 +154,8 @@ async function harness(hold?: Hold, opts: { balances?: "real" } = {}) {
 	services.add(journal)
 	const sessions = new DappSessionService(logger(), api)
 	services.add(sessions)
-	services.add(new IncomingTransferService(logger(), api, 1_000_000, reader))
+	const incoming = new IncomingTransferService(logger(), api, 1_000_000, reader)
+	services.add(incoming)
 	services.add(svc(ExecutionService.name, {}))
 	services.add(svc(TaskService.name, { startNewTask: () => task, getTaskSync: () => ({ status: 0 }) }))
 	services.add(svc(NoteService.name, { getNotesRaw: async () => [], getBlockTimestamp: async () => undefined }))
@@ -180,12 +181,20 @@ async function harness(hold?: Hold, opts: { balances?: "real" } = {}) {
 	;(network as any).pxeServiceClient = {
 		clearChainState: async (profileId: string, chainId: number) => pxeClears.push([profileId, chainId]),
 	}
-	return { api, network, account, journal, sessions, reset, pxeClears }
+	return { api, network, account, journal, sessions, reset, pxeClears, incoming }
 }
 
 type H = Awaited<ReturnType<typeof harness>>
 
 const snapshot = async (h: H) => (await h.api.storage.local.get(null)) as Record<string, unknown>
+
+/** Waits out in-flight incoming scans: every account change rebuilds the scan targets and rescans
+ *  every network, the one the reset leaves alone included. */
+async function scansSettled(h: H): Promise<void> {
+	// biome-ignore lint/suspicious/noExplicitAny: the in-flight scan sets are private state
+	const { polling, publicPolling } = h.incoming as any as { polling: Set<string>; publicPolling: Set<string> }
+	await vi.waitFor(() => expect(polling.size + publicPolling.size).toBe(0))
+}
 
 /** The storage keys `write` adds, so rows a service writes through its own API can be tagged. */
 async function keysAddedBy(h: H, write: () => Promise<unknown>): Promise<string[]> {
@@ -230,9 +239,10 @@ async function seedChain(h: H, networkId: string, chainId: number, l1ChainId: nu
 	const viaServices = await keysAddedBy(h, async () => {
 		await h.journal.createOperation({ kind: "transfer", origin: "popup", profileId: "p1", networkId })
 		await h.sessions.addDappSession({ url: `https://dapp${n}.example` }, [], [address], AccessLevel.Transactions, String(chainId), "p1")
-		const repo = new IncomingTransferRepository(h.api)
+		const repo = new IncomingTransferRepository(h.api, (await rowKeysForEveryProfile()).rowKeys)
 		await repo.setTrust("p1", networkId, CONTRACT, "pending")
-		await repo.setCursor("p1", networkId, CONTRACT, { cursor: null, lastSyncedBlockHash: null, lastScanFinalized: null, startBlock: 0 })
+		// At the reader's finalized tip: a scan of a chain the reset leaves alone rewrites it unchanged.
+		await repo.setCursor("p1", networkId, CONTRACT, { cursor: null, lastSyncedBlockHash: null, lastScanFinalized: 1, startBlock: 0 })
 		await repo.setOutbox("p1", networkId, address, n, { dirtyAt: 1 })
 		await repo.setArrivalRow("p1", networkId, address, { sinceBlock: 0, played: [[`note:${n}`, 1]] })
 		await repo.upsertRecord({
@@ -349,6 +359,7 @@ describe("a stale network reset through the real service graph", () => {
 	test("wipes every store's rows for the old chain, leaves the other chain byte-identical, and re-creates the accounts", async () => {
 		const h = await harness()
 		const { stale, local } = await twoChains(h)
+		await scansSettled(h)
 		const before = await snapshot(h)
 		expect(stale.length).toBeGreaterThanOrEqual(12)
 		expect(local.length).toBe(stale.length - 3)
@@ -356,13 +367,20 @@ describe("a stale network reset through the real service graph", () => {
 		const { ended } = await startReset(h)
 		await expect(ended).resolves.toMatchObject({ completed: { addressesMoved: false } })
 
+		await scansSettled(h)
 		const after = await snapshot(h)
 		// An arrival row is keyed by network id and address, which the reset keeps: the re-created
 		// account's watch writes a fresh baseline under the same key, with none of the old chain's receipts.
 		const arrivals = stale.filter((k) => k.startsWith("nulo:core:incoming-arrivals@"))
 		expect(arrivals).toHaveLength(1)
 		expect(stale.filter((k) => k in after && !arrivals.includes(k))).toEqual([])
-		for (const k of arrivals) expect(JSON.parse(after[k] as string)).toMatchObject({ played: [] })
+		const { rowKeys } = await rowKeysForEveryProfile()
+		await vi.waitFor(async () => {
+			const now = await snapshot(h)
+			// A keyed row seals its natural key beside the row: `{ k, r }`.
+			for (const k of arrivals)
+				expect(JSON.parse(JSON.parse((await storedText(k, now[k], rowKeys)) ?? "{}").r)).toMatchObject({ played: [] })
+		})
 		expect(Object.fromEntries(local.map((k) => [k, after[k]]))).toEqual(Object.fromEntries(local.map((k) => [k, before[k]])))
 		expect(h.pxeClears).toEqual([["p1", OLD]])
 

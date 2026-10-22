@@ -1,6 +1,6 @@
 {
 	"biomeVersion": "2.5.13",
-	"generated": "2026-10-20",
+	"generated": "2026-10-21",
 	"rules": {
 		"noExcessiveCognitiveComplexity": {
 			"apps/extension/src/popup/components/modules/send/FeeSettingsCard.test.ts": 1,
@@ -10,7 +10,6 @@
 			"apps/extension/src/wallet/services/backup/row-map-migration.ts": 3,
 			"apps/extension/src/wallet/services/execution/fee/fee-strategy-clamp-properties.test.ts": 1,
 			"apps/extension/src/wallet/services/execution/operation-fingerprint.ts": 1,
-			"apps/extension/tests/e2e/fixtures/journal.ts": 3,
 			"packages/wallet-core/src/base/topology.ts": 1,
 			"packages/wallet-core/src/utils/serialization.ts": 1,
 			"scripts/ci-cd/test-soak/cli.ts": 2,
@@ -84,27 +83,6 @@
 			"anchor": "function encodeValue(value: unknown, depth: number): string | null {",
 			"accepted": 25,
 			"sentence": "recursive type-tagged encoding must reject unsupported shapes while canonicalizing arrays and objects"
-		},
-		{
-			"file": "apps/extension/tests/e2e/fixtures/journal.ts",
-			"rule": "noExcessiveCognitiveComplexity",
-			"anchor": "async (sid: string | null, minA: number, minQ: number, minIF: number) => {",
-			"accepted": 26,
-			"sentence": "parse, session filter, stage classification and three threshold checks form one polling predicate"
-		},
-		{
-			"file": "apps/extension/tests/e2e/fixtures/journal.ts",
-			"rule": "noExcessiveCognitiveComplexity",
-			"anchor": "return extCtxEvaluate(page, async () => {",
-			"accepted": 18,
-			"sentence": "one tolerant scan applies the diagnostic allowlist before data crosses into CI artifacts"
-		},
-		{
-			"file": "apps/extension/tests/e2e/fixtures/journal.ts",
-			"rule": "noExcessiveCognitiveComplexity",
-			"anchor": "return page.evaluate(async () => {",
-			"accepted": 16,
-			"sentence": "one tolerant in-browser journal scan projecting the exact lean record view"
 		},
 		{
 			"file": "packages/wallet-core/src/base/topology.ts",

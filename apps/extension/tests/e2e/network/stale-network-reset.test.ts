@@ -20,6 +20,7 @@ import {
 	waitForToast,
 	waitForTxConfirmation,
 } from "../fixtures/helpers"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import { seedTransaction } from "../helpers/activity-seeds"
 import {
 	deriveNuloAccountAddress,
@@ -37,15 +38,10 @@ const hasConfig = aztecConfig !== undefined
 const MINTED = 1000n * 10n ** 18n
 const OLD_SEND = `0x${"0d".repeat(32)}`
 
-/** Every stored transaction row's chain, account and hash. */
+/** Every readable transaction row's chain, account and hash. */
 async function transactionRows(page: Page): Promise<{ chainId: number; account: string; hash: string }[]> {
-	return page.evaluate(async () => {
-		const all = await chrome.storage.local.get(null)
-		return Object.entries(all)
-			.filter(([key, raw]) => key.startsWith("nulo:core:txs@") && typeof raw === "string")
-			.map(([, raw]) => JSON.parse(raw as string))
-			.map((row) => ({ chainId: row.chainId, account: row.account, hash: row.hash }))
-	})
+	type Row = { chainId: number; account: string; hash: string }
+	return (await readSealedRows<Row>(page, "txs")).map(({ row }) => ({ chainId: row.chainId, account: row.account, hash: row.hash }))
 }
 
 describe("stale network on a live node", () => {
