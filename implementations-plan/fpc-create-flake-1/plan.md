@@ -120,6 +120,9 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 | Opus (Plan) | `conditional approve`: watchdog in F3, a spy-gone gate line, step 6 as smoke | all three; F1 call sites; F8's stronger reason; F10's full path; D7 known limit | the same optional `addFpc` deferred (D3); D5 kept as written, which it endorsed |
 | Codex r2 (resumed) | `conditional approve`: the quoted spy's `const` is out of scope in `finally` | `let spy` before the `try`, `spy?.mockRestore()`; the `grep -c` exit note | D7 confirmed as a known limit; D3 settled |
 | Codex r3 (resumed) | `approve` | | |
+| Review r1 (Codex, fresh, on the diff) | `findings: 1`: a timed-out case skips its `finally`, leaving the gate, the discovery and the lock watchdog pending | | rejected: only a run already red on a regression; the timed mutation exits 1 in 22 s with no hang; T1's recorder is case-local; T6 has the same shape on `dev` |
+| Review r1 (Opus, diff) | `clean` | | |
+| Review r2 (Codex, resumed) | `clean`: the rejection accepted, no new finding | | |
 
 ## Seeds (not run; the orchestrator drives this lane)
 
