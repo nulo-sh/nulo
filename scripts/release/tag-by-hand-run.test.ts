@@ -218,7 +218,7 @@ describe("the runner process", () => {
 			stdout: "pipe",
 			stderr: "pipe",
 		})
-		// The runner traps SIGTERM and goes on to close: kill it before its fake gh and git leave PATH.
+		// On SIGTERM the runner still closes through PATH: kill it first, or it reaches the real gh.
 		onTestFinished(async () => {
 			child.kill("SIGKILL")
 			await child.exited
