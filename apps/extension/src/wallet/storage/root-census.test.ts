@@ -9,7 +9,7 @@ import { describe, expect, test } from "vitest"
 import { STORED_SHAPES, type StoredShapeName } from "./stored-shapes"
 import { SEALED_ROOTS } from "./stores"
 
-const KL_12 = "a structured popup preference #865 lets no migration move, disclosed as KL-12"
+const KL_12 = "a structured popup preference the stored-shape guard lets no migration move: known limit #1062"
 const ENGINE = "the migration engine's own state, read before any unlock"
 const UI_FLAG = "a per-profile flag of the popup, no content"
 
