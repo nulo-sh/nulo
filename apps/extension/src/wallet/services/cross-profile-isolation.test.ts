@@ -40,6 +40,9 @@ import type { BackgroundTickerPort } from "@nulo/wallet-core/ports"
 import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import type { RowKeysSource } from "@/wallet/storage/sealed-entity-storage"
 
+/** One key for every profile, as the profile fakes hold it. */
+const { rowKeys: ROW_KEYS } = await rowKeysForEveryProfile()
+
 /**
  * Minimal ProfileService fake (golden reference: contact/service.test.ts). Carries
  * `onProfileDeleted` + `onActiveProfileChanged` (some services subscribe to the
@@ -226,7 +229,7 @@ describe("cross-profile isolation (standing gate)", () => {
 			profile = new FakeProfileService()
 			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
-			seedRepo = new BalanceRepository(api)
+			seedRepo = new BalanceRepository(api, ROW_KEYS)
 			const services = new ServiceCollection()
 			services.add(profile)
 			services.add(svc(NetworkService.name, {}))
@@ -613,7 +616,8 @@ describe("cross-profile isolation (standing gate)", () => {
 				open()
 				expect(await run).toEqual([{ chainId: 1, address: X }])
 				await new Promise((r) => setTimeout(r, 0))
-				expect((await txService.getTransactions(X)).map((t) => t.hash).sort()).toEqual(["hx-chain2", "hx-p2"])
+				const kept = [...(await txService.transactionsOf(X, p1.id)), ...(await txService.transactionsOf(X, p2.id))]
+				expect(kept.map((t) => t.hash).sort()).toEqual(["hx-chain2", "hx-p2"])
 			})
 
 			test("a failed purge of those rows stops the reconcile with the account row kept", async () => {

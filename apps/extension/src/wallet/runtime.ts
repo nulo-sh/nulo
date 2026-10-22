@@ -29,6 +29,7 @@ import { DappInteractionService } from "./services/dapp-interaction/service"
 import { DappSessionService } from "./services/dapp-session/service"
 import { ExecutionService } from "./services/execution/service"
 import {
+	E2E_EXTRA_SEED_BUILD_STAMP,
 	E2E_PROVERLESS,
 	E2E_TOKEN_LIST,
 	E2E_TOKEN_LIST_BUILD_STAMP,
@@ -43,6 +44,7 @@ import { ChromeStorageIncomingPollGate } from "@/e2e/chrome-storage-incoming-pol
 import { ChromeStorageProjectionGate } from "@/e2e/chrome-storage-projection-gate"
 import { ChromeStorageTokenSeeds } from "@/e2e/chrome-storage-token-seeds"
 import { ChromeStorageTokenListSource } from "@/e2e/chrome-storage-token-list"
+import { answerSealedReads } from "@/e2e/sealed-read"
 import { FpcService } from "./services/fpc/service"
 import { LogViewerService } from "./services/log-viewer/service"
 import { LoggerService } from "./services/logger/service"
@@ -287,6 +289,15 @@ async function bootRuntime(deps: WalletRuntimeDeps, services: ServiceCollection,
 	state.reaper = armed.reaper
 	state.sendCheck = armed.sendCheck
 	state.journalGc = armed.journalGc
+	if (import.meta.env.VITE_NULO_E2E_SEALED_READ === "1") {
+		const profileService = services.get(ProfileService.name) as ProfileService
+		answerSealedReads({
+			area: browserApi.storage.local,
+			keys: (profileId) => profileService.rowKeys(profileId),
+			addMessageListener: (listener) => chrome.runtime.onMessage.addListener(listener),
+			extensionOrigin: browserApi.runtime.getURL(""),
+		})
+	}
 
 	// Wallet-sdk protocol handler (discovery, key exchange, encrypted channel).
 	// Still reaches for chrome.runtime.onMessage internally; will be
@@ -530,6 +541,11 @@ function registerServices(
 	services.add(new FpcService(logger, browserApi))
 	services.add(new LogViewerService(logger))
 	services.add(new LoggerService(logger))
+	// The stamp is the release grep's handle on the extra default network `DEFAULT_SEEDS` carries
+	// in an armed build.
+	if (E2E_EXTRA_SEED_BUILD_STAMP) {
+		;(globalThis as { __NULO_E2E_EXTRA_SEED_BUILD_STAMP__?: string }).__NULO_E2E_EXTRA_SEED_BUILD_STAMP__ = E2E_EXTRA_SEED_BUILD_STAMP
+	}
 	const networkService = new NetworkService(logger, browserApi)
 	services.add(networkService)
 	registerPxeScopeRegistrar(createScopeRegistrar(accountService, networkService))
@@ -662,9 +678,9 @@ export async function providePxeStoreKey(
  *  (fire-and-forget, idempotent — the cutoff is the same pre-start instant as
  *  the journal's, so an import RPC racing startup is never touched), the
  *  durable-job reaper (construct → `start()`, adjacent), the send check (same), the
- *  terminal-record GC (same), then the boot-time storage-usage probe (races the sweeps, so its
- *  count is the pre-cleanup snapshot — telemetry, not authoritative), then the
- *  default-token seed resume. Returns
+ *  replay of the row keys already held to both, the terminal-record GC (same), then the
+ *  boot-time storage-usage probe (races the sweeps, so its count is the pre-cleanup
+ *  snapshot — telemetry, not authoritative), then the default-token seed resume. Returns
  *  the three instances `stop()` reads. Exported as a test seam for the order pin. */
 export function armPostStartWork(
 	services: ServiceCollection,
@@ -676,23 +692,25 @@ export function armPostStartWork(
 	void deletionCoordinator
 		.resumePending(journalBootCutoff)
 		.catch((error) => logger.log("wallet", LogLevel.Error, "resumePendingDeletions failed", error))
-	// An unlock that completed during `services.start()` announced its keys before every
-	// subscriber attached; each handler is idempotent, so a replay is safe.
-	;(services.get(ProfileService.name) as ProfileService).replayRowKeysReady()
+	const profileService = services.get(ProfileService.name) as ProfileService
 
 	const journalService = services.get(OperationJournalService.name) as OperationJournalService
 	const reaper = new JournalReaper(journalService, browserApi.alarms, logger, undefined, journalBootCutoff)
 	reaper.start().catch((error) => logger.log("wallet", LogLevel.Error, "JournalReaper start failed", error))
+	profileService.onRowKeysReady.add((profileId) => void reaper.reapUnlocked(profileId))
 
 	const sendCheck = new SendCheck({
 		journal: journalService,
 		network: services.get(NetworkService.name) as NetworkService,
-		profile: services.get(ProfileService.name) as ProfileService,
+		profile: profileService,
 		balances: services.get(TokenBalanceService.name) as TokenBalanceService,
 		logger,
 		clock,
 	})
 	sendCheck.start().catch((error) => logger.log("wallet", LogLevel.Error, "SendCheck start failed", error))
+	// An unlock that completed during `services.start()` announced its keys before the reaper and
+	// the send check attached; each handler is idempotent, so a replay is safe.
+	profileService.replayRowKeysReady()
 
 	const journalGc = new JournalGC(journalService, browserApi.alarms, logger)
 	journalGc.start().catch((error) => logger.log("wallet", LogLevel.Error, "JournalGC start failed", error))

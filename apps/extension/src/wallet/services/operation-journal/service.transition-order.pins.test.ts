@@ -9,6 +9,7 @@ import { describe, expect, test, vi } from "vitest"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
+import { profileKeysStub } from "../composition-harness"
 import { OperationJournalService } from "./service"
 
 async function started(): Promise<{ api: FakeBrowserApi; service: OperationJournalService }> {
@@ -16,6 +17,7 @@ async function started(): Promise<{ api: FakeBrowserApi; service: OperationJourn
 	api.reset()
 	const service = new OperationJournalService(new LoggerStore(new ConfigStore()), api)
 	const services = new ServiceCollection()
+	services.add(await profileKeysStub("profile-a"))
 	services.add(service)
 	await services.start()
 	return { api, service }

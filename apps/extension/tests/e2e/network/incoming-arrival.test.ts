@@ -37,6 +37,7 @@ import {
 } from "../fixtures/helpers"
 import { deliverWhileLocked, readIncomingPollStatus, releaseIncomingPoll, waitForIncomingPollPhase } from "../fixtures/incoming-poll-gate"
 import { pollUntil } from "../fixtures/poll"
+import { readSealedRow, readSealedRows } from "../fixtures/sealed-rows"
 import { confirmImport, exportAccountBody, previewImport } from "../helpers/account-io"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -113,15 +114,10 @@ async function activeTriple(page: Page): Promise<Triple> {
 
 type StoredRecord = { id: string; txHash: string; contract: string; l2BlockNumber: number; discoveredAt: number }
 
-/** Every committed incoming record of `account`, from storage. */
+/** Every committed incoming record of `account`, as the wallet reads it. */
 async function storedRecords(page: Page, account: string): Promise<StoredRecord[]> {
-	return page.evaluate(async (want: string) => {
-		const all = await chrome.storage.local.get(null)
-		return Object.entries(all)
-			.filter(([key, value]) => key.startsWith("nulo:core:incoming-transfers@") && typeof value === "string")
-			.map(([, value]) => JSON.parse(value as string))
-			.filter((rec) => rec.accountAddress === want)
-	}, account)
+	const records = await readSealedRows<StoredRecord & { accountAddress?: string }>(page, "incomingTransfers")
+	return records.map(({ row }) => row).filter((rec) => rec.accountAddress === account)
 }
 
 /** The first record of `account` whose id `known` does not hold, polled from storage. */
@@ -132,11 +128,6 @@ async function waitForNewRecord(page: Page, account: string, known: Set<string>,
 		{ label: `a new incoming record for ${account}`, timeoutMs: RECEIPT_BUDGET_MS, intervalMs: 1_000 },
 	)
 	return fresh as StoredRecord
-}
-
-async function readJson<T>(page: Page, key: string): Promise<T | undefined> {
-	const raw = await page.evaluate(async (k: string) => (await chrome.storage.local.get(k))[k], key)
-	return typeof raw === "string" ? (JSON.parse(raw) as T) : undefined
 }
 
 type Recording = {
@@ -363,9 +354,10 @@ test.skipIf(!hasConfig)(
 		const page = closeAtEnd(await openPopup(tokenReadyExtension))
 		await waitForHash(page, "#/popup/general", 30_000)
 		const triple = await activeTriple(page)
-		const arrival = await readJson<{ sinceBlock: number }>(
+		const arrival = await readSealedRow<{ sinceBlock: number }>(
 			page,
-			`nulo:core:incoming-arrivals@${triple.profileId}|${triple.networkId}|${triple.account}`,
+			"incomingArrivals",
+			`${triple.profileId}|${triple.networkId}|${triple.account}`,
 		)
 
 		const { deployTestToken, mintPublicTokens } = await import("../fixtures/aztec")
@@ -374,9 +366,10 @@ test.skipIf(!hasConfig)(
 		await mintPublicTokens(s.wallet, hostileToken, config.minterAddress, 3n * 10n ** 38n, config.minterAddress, s.feeOptions)
 
 		await importToken(page, hostileToken)
-		const trust = await readJson<{ arrivalFloor?: number }>(
+		const trust = await readSealedRow<{ arrivalFloor?: number }>(
 			page,
-			`nulo:core:incoming-trust@${triple.profileId}|${triple.networkId}|${hostileToken}`,
+			"incomingTrust",
+			`${triple.profileId}|${triple.networkId}|${hostileToken}`,
 		)
 		const floor = trust?.arrivalFloor
 		expect(typeof floor).toBe("number")

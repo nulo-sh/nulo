@@ -11,6 +11,7 @@ import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import { svc } from "../composition-harness"
 import { OperationJournalService } from "./service"
 import type { OperationKind, OperationRecord } from "./spec"
@@ -40,6 +41,7 @@ async function started(withProfileService = true) {
 			svc(PROFILE_SERVICE_NAME, {
 				getActiveProfile: async () => active,
 				getProfiles: async () => [{ id: "p1" }, { id: "p2" }],
+				...(await rowKeysForEveryProfile()),
 			}),
 		)
 	services.add(service)
@@ -62,7 +64,7 @@ async function started(withProfileService = true) {
 	}
 	const seed = (profileId: string, kind: OperationKind = "transfer") =>
 		service.createOperation({ kind, origin: "popup", profileId, accountAddress: "0xshared" })
-	return { service, port, call, seed }
+	return { api, service, port, call, seed }
 }
 
 beforeEach(() => {
@@ -92,12 +94,25 @@ describe("journal RPC boundary — active-profile ownership", () => {
 		expect((await call("getOperation", p1.id))?.result).toBeUndefined()
 	})
 
-	test("no ProfileService wired → fail closed ([] / undefined), while the in-process reads still work", async () => {
-		const { call, seed, service } = await started(false)
-		const p1 = await seed("p1")
+	test("no ProfileService wired → no row keys, so writes refuse and the boundary fails closed; a plaintext row still reads in-process", async () => {
+		const { api, call, seed, service } = await started(false)
+		await expect(seed("p1")).rejects.toThrow()
+		const legacy: OperationRecord = {
+			id: "legacy",
+			kind: "transfer",
+			origin: "popup",
+			profileId: "p1",
+			progress: { stage: "pending" },
+			error: null,
+			terminalAt: null,
+			attempts: 0,
+			createdAt: 1,
+			updatedAt: 1,
+		}
+		await api.storage.local.set({ "nulo:journal@legacy": JSON.stringify(legacy) })
 		expect((await call("getOperations", {}))?.result).toEqual([])
-		expect((await call("getOperation", p1.id))?.result).toBeUndefined()
-		expect((await service.getOperations()).map((r) => r.id)).toEqual([p1.id])
+		expect((await call("getOperation", "legacy"))?.result).toBeUndefined()
+		expect((await service.getOperations()).map((r) => r.id)).toEqual(["legacy"])
 	})
 
 	test("each removed write is an invalid method (dropped, no response); backup/restore still reach the framework defaults", async () => {

@@ -387,9 +387,19 @@ explicit and per-Network.
 Encrypted at rest:
 - `profile.secret` — master secret (AES-GCM)
 - `profile.guard` — password verification sentinel (AES-GCM)
-- Contacts and dApp sessions — sealed per row under the profile's row-seal
-  key (§ Crypto-bound invariants). The envelope names the profile; the row,
-  its names, addresses, origins and grants are ciphertext. The AAD binds each
+- Contacts, dApp sessions, the operation journal, the transaction history,
+  token balances, the authwit registry and its enable flags, and incoming
+  receipts with their trust, scan cursors, balance-refresh outbox and
+  arrival rows — sealed per row under the profile's row-seal key
+  (§ Crypto-bound invariants). The envelope names the profile; the row, its
+  names, addresses, origins, grants, amounts, balances, fees, errors and
+  hashes are ciphertext. A transaction row is stored at the keyed id of its
+  hash, so no storage key names a transaction, and two profiles holding one
+  hash keep two rows. An incoming key keeps its profile and network and
+  replaces the note, transaction, account or contract it named with its
+  keyed hash, so a profile or network wipe still deletes by prefix with no
+  key; an enable flag's key keeps its profile and chain and hashes the
+  account. The AAD binds each
   row to its root, its storage key, its profile and, through the key, the
   profile's incarnation: a row moved, swapped between profiles or kept from a
   deleted profile whose id is reused never opens. A row that fails to open
@@ -397,20 +407,25 @@ Encrypted at rest:
   (`sealed-authentication`, `sealed-format`, `sealed-identity`), never the row.
 
 Plaintext at rest (`chrome.storage.local`):
-- Profile metadata, networks, accounts, tokens, token balances, tx history,
-  auth registry state, FPC definitions, config, storage version.
+- Profile metadata, networks, accounts, tokens, FPC definitions, config,
+  storage version.
 - dApp registration counts (`nulo:core:dappRegistrations@<profile>`): per
   chain, the origin of each app that registered with the profile and how many
   times, though not its accounts or grants.
-- Incoming receipts: account, token, amount, transaction hash and, for a
-  private one, the note's hashes. A note's nullifier is never stored; it stays
-  in the PXE's encrypted store.
+- A note's nullifier is never stored; it stays in the PXE's encrypted store.
 
 What sealing does not hide or prevent:
 - Root names, row ids, the `profileId` in each envelope (so per-profile row
-  counts), ciphertext length and write times.
+  counts), ciphertext length and write times. A balance or authwit row's id
+  is a local sequence number; an incoming key shows its profile and network
+  (so per-network row counts) and an outbox key its local token id.
 - A profile's rows written before this build stay plaintext until that
   profile's next unlock seals them; until then they read as before.
+- A transaction row written before this build that names no profile stays
+  plaintext at its hash, served to every profile, until a profile that alone
+  holds its account on its chain adopts and seals it at unlock. One whose
+  account two profiles hold, or whose ownership a locked profile's unreadable
+  accounts leave unknown, stays plaintext.
 - An offline writer can delete a sealed row, roll it back to an earlier
   sealed value at the same key, or plant a plaintext row, which the wallet
   reads and seals at the next unlock. dApp sessions are the exception: each

@@ -14,6 +14,7 @@ import { z } from "zod"
 import { DummyLogger } from "@/wallet/logger/utils"
 import { BACKUP_SLICE_REGISTRY, normalizeBackupData } from "@/wallet/services/backup/backup-migration-registry"
 import { migrateBackupData } from "@/wallet/services/backup/backup-migrator"
+import { IMPORT_BLOCKING_ACK } from "@/wallet/services/backup/import-blocking-ack"
 import { signDappSession } from "@/wallet/services/dapp-session/integrity"
 import { DappSessionMacStorage } from "@/wallet/services/dapp-session/mac-storage"
 import type { DappSession } from "@/wallet/services/dapp-session/spec"
@@ -26,7 +27,7 @@ import { RestorePendingRepository } from "@/wallet/services/profile/restore-pend
 import { TombstoneRepository } from "@/wallet/services/profile/tombstone-repository"
 import { StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
 import { BASELINE_VERSION } from "../migrations"
-import { parseEnvelope, type RowKeysSource } from "../sealed-entity-storage"
+import { parseEnvelope, type RowKeysSource, type SealedRootOptions } from "../sealed-entity-storage"
 import { STORED_SHAPES, type StoredShape, type StoredShapeName } from "../stored-shapes"
 import {
 	type CodecStoreName,
@@ -198,7 +199,7 @@ export async function readStored(name: StoredShapeName, area: MinimalStorageArea
 	if (shape.engine) throw new Error(`${name} is the engine's own state: it has no goldens`)
 	const keys = shape.sealed ? await goldenKeysFor((await area.get(key))[key]) : () => undefined
 	if (shape.authenticated) return (await macStorage(area, keys)).get(idOf(shape, key))
-	if (shape.sealed) return sealedEntityStorage(name as SealedStoreName, area, keys).get(idOf(shape, key))
+	if (shape.sealed) return (await sealedEntityStorage(name as SealedStoreName, area, keys).readStorageId(idOf(shape, key)))?.row
 	const store = name in STORES ? STORES[name as keyof typeof STORES] : undefined
 	if (shape.read === "codec") {
 		if (store) return entityStorage(name as CodecStoreName, area).get(idOf(shape, key))
@@ -235,18 +236,28 @@ async function macGoldens(goldens: readonly Golden[]): Promise<Golden[]> {
 	)
 }
 
+/** The profile a sealed row belongs to, as its store reads it: the row's own, or its natural id's. */
+function sealedOwnerOf(name: SealedStoreName, row: Json, naturalId: string): string | undefined {
+	const ownerOf = (STORES[name] as { sealedRoot?: SealedRootOptions }).sealedRoot?.ownerOf
+	if (ownerOf) return ownerOf(row, naturalId)
+	const profileId = row !== null && typeof row === "object" && !Array.isArray(row) ? row.profileId : undefined
+	return typeof profileId === "string" ? profileId : undefined
+}
+
 async function sealGoldens(goldens: readonly Golden[]): Promise<Golden[]> {
 	return Promise.all(
 		goldens.map(async (golden) => {
 			if (!golden.sealed || isSealedForm(golden)) return golden
 			const shape: StoredShape = STORED_SHAPES[golden.shape]
-			const row = golden.value as Record<string, Json>
-			if (!shape.sealed || typeof row.profileId !== "string")
-				throw new Error(`${golden.id}: only a sealed shape's row with a profile seals`)
-			const keys = await goldenRowKeys(row.profileId)
+			const id = idOf(shape, golden.key)
+			const owner = shape.sealed ? sealedOwnerOf(golden.shape as SealedStoreName, golden.value, id) : undefined
+			if (owner === undefined) throw new Error(`${golden.id}: only a sealed shape's row with a profile seals`)
+			const keys = await goldenRowKeys(owner)
 			const area = new MemoryStorageArea()
-			await sealedEntityStorage(golden.shape as SealedStoreName, area, () => keys).set(idOf(shape, golden.key), row as never)
-			return { ...golden, value: JSON.parse(area.data.get(golden.key) as string) as Json }
+			await sealedEntityStorage(golden.shape as SealedStoreName, area, () => keys).set(id, golden.value as never)
+			// A keyed root stores the row under its keyed id, not the natural key it was authored at.
+			const [[key, value]] = [...area.data]
+			return { ...golden, key, value: JSON.parse(value as string) as Json }
 		}),
 	)
 }
@@ -326,9 +337,31 @@ function backupData(goldens: readonly Golden[]): Record<string, unknown[]> {
 	return data
 }
 
+/** The migration in `ack` that refuses every backup exported at `version` on purpose, if any: the
+ *  lowest acknowledged one above it, which the import names. */
+export function acknowledgedBlock(
+	version: number,
+	migrations: readonly Migration[],
+	ack: ReadonlySet<number> = IMPORT_BLOCKING_ACK,
+): number | undefined {
+	const blocking = migrations.map((m) => m.version).filter((v) => v > version && ack.has(v))
+	return blocking.length > 0 ? Math.min(...blocking) : undefined
+}
+
+/** A backup-sliced golden's backup decoding when an acknowledged migration refuses its stamp's backups. */
+export const REFUSED_BY_ACK = "refused by an acknowledged import-blocking migration"
+
 /** The same goldens as a full backup's slices, through the backup-import migrator and back. */
-async function decodeBackup(goldens: readonly Golden[], version: number, migrations: Migration[]): Promise<Decoded> {
+async function decodeBackup(
+	goldens: readonly Golden[],
+	version: number,
+	migrations: Migration[],
+	ack: ReadonlySet<number>,
+): Promise<Decoded> {
 	const migrated = await migrateBackupData({ data: backupData(goldens), backupSchemaVersion: version, migrations })
+	const block = acknowledgedBlock(version, migrations, ack)
+	if (block !== undefined && migrated.kind === "incompatible" && migrated.reason.includes(`migration ${block} `))
+		return Object.fromEntries(goldens.filter(isBackupSliced).map((golden) => [golden.id, REFUSED_BY_ACK]))
 	if (migrated.kind !== "noop" && migrated.kind !== "migrated")
 		throw new Error(`the backup migrator refused goldens at v${version}: ${JSON.stringify(migrated)}`)
 	const normalized = normalizeBackupData(migrated.data)
@@ -348,6 +381,7 @@ export async function decodeGoldens(
 	goldens: readonly Golden[],
 	stamps: readonly Pick<Stamp, "version">[],
 	migrations: Migration[],
+	ack: ReadonlySet<number> = IMPORT_BLOCKING_ACK,
 ): Promise<Decoding> {
 	const out: Decoding = { live: {}, backup: {}, keys: {}, stored: {} }
 	for (const [index, stamp] of stamps.entries()) {
@@ -356,7 +390,7 @@ export async function decodeGoldens(
 			Object.assign(out.live, live.decoded)
 			Object.assign(out.stored, live.stored)
 			out.keys[index] = [...new Set([...(out.keys[index] ?? []), ...live.keys])].sort()
-			Object.assign(out.backup, await decodeBackup(round, stamp.version, migrations))
+			Object.assign(out.backup, await decodeBackup(round, stamp.version, migrations, ack))
 		}
 	}
 	return out

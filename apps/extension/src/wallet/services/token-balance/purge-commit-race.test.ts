@@ -24,6 +24,10 @@ import type { ProjectedBalance } from "./balance-projector"
 import { BalanceRepository } from "./balance-repository"
 import { TokenBalanceService } from "./service"
 import { TOKEN_BALANCE_STORAGE_ROOT, type TokenBalanceRaw } from "./spec"
+import { rowKeysForEveryProfile, storedText } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const { rowKeys: ROW_KEYS } = await rowKeysForEveryProfile()
 
 const TOKEN = { id: 100, profileId: "A", chainId: 1, contract: "0xtok100", name: "T", symbol: "T", decimals: 18 }
 const ROW: TokenBalanceRaw = {
@@ -51,11 +55,13 @@ const purgeAccounts: Purge = (s) => s.purgeForAccounts([{ chainId: 1, address: "
 async function world(project: (b: TokenBalanceRaw) => ProjectedBalance = ok) {
 	const api = new FakeBrowserApi()
 	api.reset()
-	await new BalanceRepository(api).set(ROW)
+	await new BalanceRepository(api, ROW_KEYS).set(ROW)
 	const failures: string[] = []
 	const services = new ServiceCollection()
 	services.add(
 		svc(PROFILE_SERVICE_NAME, {
+			rowKeys: ROW_KEYS,
+			onRowKeysReady: new EventHandler<string>(),
 			onActiveProfileChanged: new EventHandler(),
 			getActiveProfile: async () => ({ id: "A", name: "A" }),
 			getDeletionState: () => new ProfileDeletionState(),
@@ -102,7 +108,12 @@ async function world(project: (b: TokenBalanceRaw) => ProjectedBalance = ok) {
 	internals.queue.projector = { project: async (batch: TokenBalanceRaw[]) => batch.map(project) }
 	const repo = internals.repo as BalanceRepository
 	const stored = async (id: string) => (await api.storage.local.get(key(id)))[key(id)]
-	return { api, service, repo, queue: internals.queue as { tick(): Promise<void> }, failures, emitted, stored }
+	/** The stored row as the wallet's keys open it, sealed or plaintext. */
+	const opened = async (id: string) => {
+		const raw = await stored(id)
+		return raw === undefined ? undefined : JSON.parse((await storedText(key(id), raw, ROW_KEYS)) as string)
+	}
+	return { api, service, repo, queue: internals.queue as { tick(): Promise<void> }, failures, emitted, stored, opened }
 }
 
 /** Parks the commit's re-read after storage answered, runs `during`, then lets the commit go on. */
@@ -131,7 +142,7 @@ describe("a purge racing a balance commit", () => {
 	test("control: with no purge the commit writes the row and emits once", async () => {
 		const w = await world()
 		await syncWithReReadParked(w, async () => {})
-		expect(JSON.parse((await w.stored("1")) as string)).toMatchObject({ privateBalance: "7" })
+		expect(await w.opened("1")).toMatchObject({ privateBalance: "7" })
 		expect(w.emitted).toEqual([1])
 		expect(w.failures).toEqual([])
 	})
@@ -150,11 +161,17 @@ describe("a purge racing a balance commit", () => {
 	])("storage applying the purge's delete before %s's write: the write is undone and not emitted", async (_, project) => {
 		const w = await world(project)
 		await w.service.refreshTokenBalance(ROW.id)
-		const realSet = w.repo.set.bind(w.repo)
-		w.repo.set = async (row) => {
-			w.repo.set = realSet
-			await purgeTokens(w.service)
-			await realSet(row)
+		const realPrepare = w.repo.prepare.bind(w.repo)
+		w.repo.prepare = async (row) => {
+			w.repo.prepare = realPrepare
+			const write = await realPrepare(row)
+			return {
+				...write,
+				commit: async () => {
+					await purgeTokens(w.service)
+					await write.commit()
+				},
+			}
 		}
 		await w.queue.tick()
 		expect(await w.stored("1")).toBeUndefined()
@@ -176,15 +193,21 @@ describe("a purge racing a balance commit", () => {
 					announced.push(internals.invalidatedBalanceIds.has(ROW.id))
 				})
 				await w.service.refreshTokenBalance(ROW.id)
-				const realSet = w.repo.set.bind(w.repo)
+				const realPrepare = w.repo.prepare.bind(w.repo)
 				let purged: Promise<void> = Promise.resolve()
-				w.repo.set = (row) => {
-					w.repo.set = realSet
-					const written = realSet(row)
-					let landed: Promise<void> = written
-					for (let i = 0; i < hops; i++) landed = landed.then(() => {})
-					purged = landed.then(() => internals.invalidateAndDelete(row.id))
-					return written
+				w.repo.prepare = async (row) => {
+					w.repo.prepare = realPrepare
+					const write = await realPrepare(row)
+					return {
+						...write,
+						commit: () => {
+							const written = write.commit()
+							let landed: Promise<void> = written
+							for (let i = 0; i < hops; i++) landed = landed.then(() => {})
+							purged = landed.then(() => internals.invalidateAndDelete(row.id))
+							return written
+						},
+					}
 				}
 				await w.queue.tick()
 				await purged
@@ -233,7 +256,7 @@ describe("a purge racing a balance commit", () => {
 			purging = purge(w.service)
 			await taken
 		})
-		expect(JSON.parse((await w.stored("1")) as string)).toMatchObject({ privateBalance: "7" })
+		expect(await w.opened("1")).toMatchObject({ privateBalance: "7" })
 		releaseSnapshot()
 		await purging
 		expect(await w.stored("1")).toBeUndefined()
@@ -244,7 +267,7 @@ describe("a purge racing a balance commit", () => {
 		await w.api.storage.local.set({ [key("01")]: JSON.stringify({ ...MALFORMED, token: 200 }) })
 		await syncWithReReadParked(w, () => w.service.purgeForTokens([200], "A"))
 		expect(await w.stored("01")).toBeUndefined()
-		expect(JSON.parse((await w.stored("1")) as string)).toMatchObject({ privateBalance: "7" })
+		expect(await w.opened("1")).toMatchObject({ privateBalance: "7" })
 		expect(w.emitted).toEqual([1])
 	})
 })

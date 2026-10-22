@@ -8,7 +8,7 @@ import { BlockHash } from "@aztec-labs/stdlib/block"
 import { BlockHeader, GlobalVariables } from "@aztec-labs/stdlib/tx"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { EventHandler, type Lock } from "@nulo/wallet-core/utils"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
@@ -16,6 +16,7 @@ import { ACCOUNT_SERVICE_NAME } from "@/wallet/services/account/spec"
 import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import { svc } from "../composition-harness"
 import { FINALITY_READ_INTERVAL_MS } from "./inclusion"
 import { TRANSACTION_STORAGE_ROOT, TransactionService, TxExecutionResult, TxStatus, type Tx } from "./service"
@@ -66,6 +67,7 @@ const storedRow = (overrides: Partial<Tx> = {}): Tx => ({
 describe("TransactionService — a mined row until its block is final", () => {
 	let api: FakeBrowserApi
 	let service: TransactionService
+	let builtServices: TransactionService[]
 	let getTxReceipt: ReturnType<typeof vi.fn>
 	let getBlockData: ReturnType<typeof vi.fn>
 	let findLeavesIndexes: ReturnType<typeof vi.fn>
@@ -73,13 +75,18 @@ describe("TransactionService — a mined row until its block is final", () => {
 	const buildService = async (finalityReadMs?: number) => {
 		const services = new ServiceCollection()
 		services.add(
-			svc(PROFILE_SERVICE_NAME, { getActiveProfile: async () => ({ id: "p1" }), getDeletionState: () => new ProfileDeletionState() }),
+			svc(PROFILE_SERVICE_NAME, {
+				getActiveProfile: async () => ({ id: "p1" }),
+				getDeletionState: () => new ProfileDeletionState(),
+				...(await rowKeysForEveryProfile()),
+			}),
 		)
 		services.add(
 			svc(ACCOUNT_SERVICE_NAME, {
 				onAccountDeleted: new EventHandler(),
 				registerAccountPurgeSubscriber: () => {},
-				getAccount: async () => undefined,
+				getAccount: async (profileId: string) => ({ profileId, address: ACCOUNT }),
+				hasUnreadAccountsBesides: async () => false,
 				getAccounts: async () => [{ address: ACCOUNT }],
 				getAccountsRaw: async (profileId: string) => (profileId === "p1" ? [{ profileId, chainId: 1, address: ACCOUNT }] : []),
 				getAccountsByAddress: async () => [
@@ -101,11 +108,13 @@ describe("TransactionService — a mined row until its block is final", () => {
 		const built = new TransactionService(new LoggerStore(new ConfigStore()), api, finalityReadMs)
 		services.add(built)
 		await services.start()
+		builtServices.push(built)
 		return built
 	}
 
 	beforeEach(async () => {
 		vi.useFakeTimers()
+		builtServices = []
 		api = new FakeBrowserApi()
 		api.reset()
 		getTxReceipt = vi.fn(async (): Promise<unknown> => minedIn())
@@ -128,8 +137,16 @@ describe("TransactionService — a mined row until its block is final", () => {
 			feePaymentMethod: 0 as never,
 			hash: HASH,
 			submittedEndpointUrl: ENDPOINT,
+			fence: { profileId: "p1", epoch: 0, session: 1 },
 		})
-	const tick = (ms: number) => vi.advanceTimersByTimeAsync(ms)
+	/** One worker poll per second of fake time. A poll's write seals on real WebCrypto, which settles
+	 *  outside fake time, under the tx lock: queuing behind every built service's lock lets it land. */
+	const tick = async (ms: number) => {
+		for (let elapsed = 0; elapsed < ms || elapsed === 0; elapsed += 1_000) {
+			await vi.advanceTimersByTimeAsync(Math.min(1_000, ms - elapsed))
+			for (const built of builtServices) await (built as unknown as { lock: Lock }).lock.withLock(async () => {})
+		}
+	}
 	const minedAndMarked = async () => {
 		await add()
 		await tick(1_000)
@@ -254,15 +271,24 @@ describe("TransactionService — a mined row until its block is final", () => {
 		expect(exported?.find((tx) => tx.hash === chosen)?.feeChoice).toBe("app_protocol_sponsor")
 	})
 
-	test.each([
-		["a purge", (s: TransactionService) => s.purgeForAccounts([ACCOUNT])],
-		["the ambiguous marking", (s: TransactionService) => s.purgeForAccounts([ACCOUNT], "p1")],
-	])("%s ends the watch", async (_label, purge) => {
+	test("a purge ends the watch", async () => {
 		await minedAndMarked()
-		await purge(service)
+		await service.purgeForAccounts([ACCOUNT], "p1")
 		getBlockData.mockResolvedValue(finalizedAt(BLOCK.number))
 		await tick(FINALITY_READ_INTERVAL_MS * 2)
 		expect(getBlockData).not.toHaveBeenCalled()
+	})
+
+	test("the ambiguous marking of a row that names no profile ends its watch", async () => {
+		await api.storage.local.set({ [`${TRANSACTION_STORAGE_ROOT}@${HASH}`]: JSON.stringify(storedRow({ awaitingFinality: true })) })
+		service = await buildService()
+		await service.purgeForAccounts([ACCOUNT], "p1")
+		expect((await service.getTransaction(HASH)).ambiguous).toBe(true)
+		const readsAtMarking = getBlockData.mock.calls.length
+		getBlockData.mockResolvedValue(finalizedAt(BLOCK.number))
+		await tick(FINALITY_READ_INTERVAL_MS * 2)
+		expect(getBlockData).toHaveBeenCalledTimes(readsAtMarking)
+		expect((await service.getTransaction(HASH)).status).toBe(TxStatus.Proposed)
 	})
 
 	test("a purge while the finalized block is read: the block hash is never sent", async () => {

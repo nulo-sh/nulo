@@ -2,6 +2,7 @@ import { expect, inject } from "vitest"
 import { openPopup, test, waitForHash } from "../fixtures/extension"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { INCOMING_SCAN_INTERVAL_MS, getAccountAddress, lockWallet, switchToLocalNetwork, unlockUntilIncomingRow } from "../fixtures/helpers"
+import { readSealedRows } from "../fixtures/sealed-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -71,6 +72,19 @@ test.skipIf(!hasConfig)(
 			const elapsed = await unlockUntilIncomingRow(page, "Received privately", "+9")
 			console.log(`[install-run] private receipt shown ${elapsed} ms after the unlock`)
 			expect(elapsed).toBeLessThan(INCOMING_SCAN_INTERVAL_MS)
+
+			// The receipt is stored sealed: no key or value at rest names its note or its transaction.
+			type Receipt = { kind?: string; accountAddress?: string; amountRaw?: string; noteHash?: string; txHash?: string }
+			const receipt = (await readSealedRows<Receipt>(page, "incomingTransfers")).find(
+				({ row }) =>
+					row.kind === "note" &&
+					row.accountAddress?.toLowerCase() === walletAddress.toLowerCase() &&
+					row.amountRaw === (9n * 10n ** 18n).toString(),
+			)
+			if (!receipt) throw new Error("the wallet reads no stored record of the receipt it shows")
+			const named = [receipt.naturalId.split("|").at(-1), receipt.row.noteHash, receipt.row.txHash]
+			const atRest = JSON.stringify(await page.evaluate(() => chrome.storage.local.get(null))).toLowerCase()
+			for (const hex of named) expect(atRest).not.toContain(String(hex).slice(2).toLowerCase())
 		} finally {
 			await cleanup()
 			await page.close()

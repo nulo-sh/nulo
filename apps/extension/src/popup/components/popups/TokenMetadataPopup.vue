@@ -141,13 +141,18 @@ watch(
 							<Text variant="label-section" color="secondary">{{ section.title }}</Text>
 						</Flex>
 
-						<Flex v-for="row in section.rows" :key="row.key" align="center" justify="between">
+						<Flex v-for="row in section.rows" :key="row.key" align="center" justify="between" :class="$style.capability">
 							<Flex direction="column" gap="6">
 								<Text variant="label-section" color="tertiary"> {{ row.label }} </Text>
 								<Text variant="meta" color="secondary"> {{ row.key }} </Text>
 							</Flex>
 
-							<Icon :name="token[row.key] ? 'square-check' : 'square-cross'" size="12" :color="token[row.key] ? 'green' : 'red'" />
+							<Icon
+								:name="token[row.key] ? 'square-check' : 'square-cross'"
+								size="12"
+								:color="token[row.key] ? 'green' : 'red'"
+								:class="$style.mark"
+							/>
 						</Flex>
 					</template>
 				</Flex>
@@ -161,5 +166,18 @@ watch(
 <style module>
 .wrapper {
 	composes: body from "./popup-shared.module.css";
+}
+
+/* Below the popup's width a capability's mark goes under its key, at the right, when the two do not
+ * fit side by side. */
+@media (width < 359px) {
+	.capability {
+		flex-wrap: wrap;
+		row-gap: 6px;
+	}
+
+	.capability > .mark {
+		margin-left: auto;
+	}
 }
 </style>

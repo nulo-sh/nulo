@@ -11,7 +11,7 @@ import { describe, expect } from "vitest"
 import { isFirefox } from "./fixtures/browser"
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "./fixtures/extension"
 import { pointerClick, reloadWithLegalState, waitForSheet } from "./helpers/legal-drivers"
-import { ARRIVAL, readArrivalTrace, readSeedOffers, seedNetworkArrival, traceArrival } from "./helpers/network-arrival"
+import { ARRIVAL, readSeedOffers, readSurfaceTrace, seedNetworkArrival, traceSurfaces } from "./helpers/network-arrival"
 import { CAPTURE_VIEWPORT, capture } from "./helpers/stale-network-capture"
 
 const CAPTURES = process.env.NETWORK_ARRIVAL_CAPTURES === "1"
@@ -34,7 +34,7 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 		await waitForHash(page, "#/popup/general", 30_000)
 		const { profileId } = await seedNetworkArrival(page)
 		await reloadWithLegalState(page, "stale")
-		await traceArrival(page)
+		await traceSurfaces(page)
 
 		await waitForSheet(page, "changed")
 		expect(await page.$(ARRIVAL)).toBeNull()
@@ -42,7 +42,7 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 		await pointerClick(page, "legal-continue")
 		await page.waitForSelector(ARRIVAL, { visible: true, timeout: 15_000 })
 		expect(await textOf(page, "network-arrival-title")).toBe("Mainnet is in your wallet")
-		expect(await readArrivalTrace(page)).toEqual({ mounted: true, stacked: false })
+		expect(await readSurfaceTrace(page)).toEqual({ shown: ["sheet", "arrival"], arrivals: 1 })
 
 		// Closed unanswered, it is back at the next open.
 		page = await reopen(extension, page)
@@ -54,9 +54,9 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 		expect(await readSeedOffers(page, profileId)).toEqual({ offered: ["local", "mainnet", "testnet"] })
 
 		page = await reopen(extension, page)
-		await traceArrival(page)
+		await traceSurfaces(page)
 		await page.waitForSelector(HOME, { visible: true, timeout: 15_000 })
-		expect(await readArrivalTrace(page)).toEqual({ mounted: false, stacked: false })
+		expect(await readSurfaceTrace(page)).toEqual({ shown: [], arrivals: 0 })
 		await page.close()
 	}, 180_000)
 })

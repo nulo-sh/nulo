@@ -17,6 +17,7 @@ import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../f
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { armRestoreGate, clearRestoreGate, readRestoreGate, waitForRestoreGateHeld } from "../fixtures/restore-gate"
 import { SESSION_KEY_PREFIX } from "../fixtures/dappSession"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import {
 	PREVIOUS_TESTNET_CHAIN_ID,
 	readAccounts,
@@ -146,7 +147,7 @@ describe("stale network beside a live one", () => {
 			expect(await readAccounts(page, PREVIOUS_TESTNET_CHAIN_ID)).toEqual([])
 			const localAfter = await snapshotChain(page, local.chainId, local.id)
 			expect(Object.keys(localBefore).filter((key) => !(key in localAfter))).toEqual([])
-			expect(Object.keys(localAfter).some((key) => key.startsWith("nulo:core:txs@"))).toBe(true)
+			expect((await readSealedRows<{ chainId: number }>(page, "txs")).some(({ row }) => row.chainId === local.chainId)).toBe(true)
 			expect(await sessionRows(page)).toEqual(sessionsBefore)
 		},
 	)

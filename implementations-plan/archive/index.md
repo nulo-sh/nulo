@@ -145,6 +145,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [firefox-first-class-spike](firefox-first-class-spike/plan.md) — completed — Firefox gets the same smoke and network suites as Chrome
 - [firefox-passkey-unlock](firefox-passkey-unlock/plan.md) — completed — passkey steps started in Firefox's toolbar panel run in a window, and every passkey failure shows a way out
 - [first-account-token-seeding](first-account-token-seeding/plan.md) — completed — default tokens seeded on the first account through an account-added subscription
+- [fit-240-2](fit-240-2/plan.md) — completed — the full backup's working card, ready, encrypted and done states checked at 240 px inside existing smoke visits; tests only
 - [fix-account-generation-fence](fix-account-generation-fence/plan.md) — completed — stale account activation fenced by generation
 - [fix-cold-wake-discovery-loss](fix-cold-wake-discovery-loss/plan.md) — completed — a module-scope relay keeps dApp messages that wake a dead service worker
 - [fix-discovery-restart-durability](fix-discovery-restart-durability/plan.md) — completed — queued dApp discoveries lost on a worker restart stay the accepted behaviour, pinned by a spec
@@ -211,6 +212,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [light-theme-fix](light-theme-fix/plan.md) — completed — the light theme repaired at its root, and a theme toggle for the faucet
 - [lock-ownership](lock-ownership/plan.md) — completed — ticketed lock release and two post-await ownership fixes
 - [mac-identity-binding](mac-identity-binding/plan.md) — completed — the envelope MAC binds the row's storage id and the wallet fingerprint
+- [mainnet-arrival-1](mainnet-arrival-1/plan.md) — completed — a default network a later build adds reaches every existing profile once: the offer record, the owner's arrival, a real in-place update on both browsers
 - [method-metadata-registry](method-metadata-registry/plan.md) — completed — one wallet method descriptor table replaces six hand-synchronized tables
 - [migration-lifecycle](migration-lifecycle/plan.md) — completed — a migration retry budget and kill-loop bound before the first real migration
 - [monorepo-restructure](monorepo-restructure/plan.md) — completed — the workspace reorganized into apps, packages and contracts directories
@@ -222,6 +224,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [network-test-triage](network-test-triage/plan.md) — completed — the failing network e2e tests diagnosed before any timeout was touched
 - [nightly-release](nightly-release/plan.md) — completed — one tagged nightly prerelease per day from the tip of dev
 - [nulo-v6](nulo-v6/plan.md) — completed — the dependency line and the chain identity moved to Aztec V6 as Nulo V6
+- [offscreen-ping-1](offscreen-ping-1/plan.md) — completed — the worker stops pinging a PXE document it heard answer, so a busy document is no longer replaced mid-call; the READY timeout becomes a typed `RpcTimeoutError`
 - [on-camera-landing](on-camera-landing/plan.md) — completed — the landing replaced with a character-drawn CCTV-style feed
 - [onboarding-3](onboarding-3/plan.md) — completed — the fast-lane tab, the recovery phrase step and Home's Get started card (#588 #585 #581 #636); held for the owner's build test
 - [onboarding-3-arc2](onboarding-3-arc2/plan.md) — completed — the owner's later rounds on #743: P50-01 B folded in, the Get started matrix pinned, Fee Juice done for good once held, and the card as numbered steps (#769 #881); #936 asks the owner about the funded-banner count
@@ -406,6 +409,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [exec-prices-1](exec-prices-1/plan.md) — completed — a dApp window reads cached prices and never asks for a refresh, whatever mounts in it (#982)
 - [bridge-nonce-1](bridge-nonce-1/plan.md) — completed — both e2e L1 signers sign as anvil index 1 through one module, off the local network's publisher account; a unit test pins it and refuses any other e2e L1 client (#988)
 - [fee-estimate-cancel-1](fee-estimate-cancel-1/plan.md) — completed — an accepted execute approval cancels the estimates it did not hand over and closes once the worker has handled them; admission before the request read; a cancelled build is never simulated (#989)
+- [migration-rule-1](migration-rule-1/plan.md) — completed — from 1.0.0 every stored-shape change ships a migration: every stored key registered and its snapshot frozen, two 1.0.0 backups pinned, a passkey-backup refusal, a 0.31.0 in-place update on both browsers (#865); open #934, known limit #935
 - [floor-superseded-1](floor-superseded-1/plan.md) — completed — the token-list floor rule also reads the lists at publish PR and branch heads signed from the floor (P77-06 B, #973); a stopped run's artifact list is known limit #1001 (P78-06 A)
 - [firefox-sidebar-1](firefox-sidebar-1/plan.md) — completed — a Firefox sidebar with the popup shell where a passkey step runs in place, and the Display row's toolbar choice (#889, #596); every page and window fits down to 240 px, the popup unchanged at 360 (#986, #985); known limits #1004 and #1005 (P78-12 A, P78-13 A)
 - [e2e-fixed-cost-1](e2e-fixed-cost-1/plan.md) — completed — every e2e launch settles its first-run tab or the popup window it became, and fails on neither; liveness at 200 ms; no per-worker reuse (measured) and native `@aztec` loading a known limit (#991, #997)
@@ -414,3 +418,5 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [lessons-1](lessons-1/plan.md) — completed — lessons.md gains the extension-window close lesson (no Vue teardown runs as a window closes; `endAndClose`, `beforeunload`) and drops the CodeMirror line its code states; five candidates declined with reasons (#1017)
 - [soak-mode-1](soak-mode-1/plan.md) — completed — the network soak runs only named files, refuses what it cannot run, reads each report back and says what it proved; the docs name the whole-suite instruments (#1014)
 - [warm-stack-1](warm-stack-1/plan.md) — completed — the network files' onboarding cost, measured on CI: switching on the registration popup saves 0.75 s (Chrome) and 0.77 s (Firefox) a call but missed its ship rule on Firefox, so nothing shipped; an injected profile saved nothing over it (#1006, a known limit)
+- [fit-gate-1](fit-gate-1/plan.md) — completed — at 240 px nothing in the page scrolls sideways: the gate fails a scroller wider than its box and every box past the view; the token metadata and Senders rows wrap (#1023)
+- [pxe-limits-1](pxe-limits-1/plan.md) — completed — where the PXE and the wallet hit their limits, measured: each block's tag scan grows with senders × watched tokens, proving is 81-97 % of a send, list pages grow superlinearly through `Icon`'s CSS `v-bind`, the sandbox includes 80 tx/min; eight open issues and one known limit (#1016)
