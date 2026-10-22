@@ -49,7 +49,7 @@ const readFailsOnSecondCall = (call: number): boolean => {
 	return true
 }
 
-/** Parks the first read of `rowKey` after it returns, so the parked run holds a row it has already
+/** Parks the first `get(rowKey)` after it returns, so the parked run holds a row it has already
  *  read; parked before the read, its resumed read would see fresh state. */
 function parkRowRead(api: FakeBrowserApi, rowKey: string): { release: () => void; parked: Promise<void> } {
 	const realGet = api.storage.local.get.bind(api.storage.local)
@@ -648,8 +648,7 @@ describe("AccountService — same-row field editors serialize", () => {
 		const nameRun = service.changeAccountName("p1", 1, "0xaa", "B")
 		await gate.parked
 		const visRun = service.changeAccountVisibility("p1", 1, "0xaa", false)
-		// An editor takes the row's lock before any await, so the visibility change is queued here and
-		// reads the row only after the name change has written it.
+		// An editor takes the row's lock before its first await, so the visibility change is queued here.
 		expect((service as unknown as { tupleLocks: { waiting(key: string): number } }).tupleLocks.waiting(rowId)).toBe(1)
 		gate.release()
 		await Promise.all([nameRun, visRun])
