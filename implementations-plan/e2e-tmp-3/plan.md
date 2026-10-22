@@ -11,8 +11,26 @@ base: origin/dev at 6da033705
 trunk: dev
 issues: "#1076 (A1 closes it); #1077 (filed in recon, A1 closes it, D2); #1078 (filed in recon, no arc: other runner and workspace)"
 post_implementation_hardening: not scheduled
-status: approved by Codex r3 (auto-continue); A1 reviewed (loop converged), delivery
+status: closed with its one PR; the merge closes the plan
 ---
+
+## Outcome
+
+- **Date:** 2026-10-22.
+- **Status:** closed with its one PR, #1081 (`worktree-e2e-tmp-3` → `dev`, `Closes #1076`, `Closes #1077`), which carries this close-out; the merge closes the plan.
+- **Shipped:**
+  - **The probes** (`scripts/release/attach-assets-run.test.ts`, `scripts/publish/verify-provenance.test.ts`): each dir is made in its block's `beforeAll` and removed by the `afterAll` it already had, so a skipped block makes nothing and a running one keeps the base's lifetime.
+  - **Tag-by-hand's runner test** (`scripts/release/tag-by-hand-run.test.ts`): `onTestFinished` kills and awaits the runner, then removes the fake-tools dir; a forced timeout with sentinel tools reached no real `gh` (the naive order did).
+  - **The proof:** `test:release` under a scratch `TMPDIR` left 3 dirs on the base and 0 after; both opt-in probes leave 0 ([lessons/phase-1.md](lessons/phase-1.md)).
+- **Dispositions:**
+  - The plan passed its own gate on auto-continue: Codex approve at r3, no owner ask.
+  - D2: #1077, found in recon, folded into the arc. D4: #1078, no arc (other runner and platform).
+  - D6, an implementation deviation: the skip count reads 11, not 10; Bun lists each hook of a skipped describe as a skipped entry.
+  - The review loop converged at round 2: Codex r1 clean, Opus one comment fix (applied), Codex r2 clean.
+- **Lessons:** nothing promoted. `lessons.md` is at its budget (8,174 bytes). The skipped-body rule stays in F2 and in the two probe comments.
+- **Known limits:** #1079 (an opt-in release probe whose download outlives its block can rewrite its dir, as on the base).
+- **Open items:** #1078 (two e2e-script unit tests leave their `ROOT` dir on a non-Linux host).
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # e2e-tmp-3: `test:release` leaves three temp dirs per run
 
