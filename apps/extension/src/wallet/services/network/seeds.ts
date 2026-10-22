@@ -1,3 +1,4 @@
+import { E2E_EXTRA_SEED } from "@/e2e/config"
 import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import type { ChainKind } from "./spec"
@@ -57,6 +58,7 @@ export const DEFAULT_SEEDS: DefaultSeed[] = [
 		kind: "local",
 		isPrimaryActive: false,
 	},
+	...(E2E_EXTRA_SEED ? [E2E_EXTRA_SEED] : []),
 ]
 
 /** Whether this build seeds a network on `chainId`: the only networks a new profile, and so a
@@ -70,8 +72,8 @@ export function isSeedChain(chainId: number): boolean {
  *  `getPrimaryNetwork` (the import/bootstrap fallback), so the two can't disagree. */
 export const PRIMARY_SEED = DEFAULT_SEEDS.find((s) => s.isPrimaryActive)
 
-/** The build's seed for a row's kind; `undefined` for custom, devnet and Mainnet, which this build
- *  seeds no identity for. */
+/** The build's seed for a row's kind; `undefined` for custom, devnet and every kind no seed of
+ *  this build carries (a shipped build seeds no Mainnet). */
 export function seedForKind(kind: ChainKind | undefined): DefaultSeed | undefined {
 	return kind === undefined ? undefined : DEFAULT_SEEDS.find((s) => s.kind === kind)
 }

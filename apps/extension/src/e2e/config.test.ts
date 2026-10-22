@@ -128,3 +128,56 @@ describe("e2e-wallet-clocks config", () => {
 		expect(mod.E2E_WALLET_CLOCKS_BUILD_STAMP).toBe("NULO_E2E_WALLET_CLOCKS_BUILD_STAMP")
 	})
 })
+
+/**
+ * The extra default network: an armed build offers it to every person, so it takes both flags and
+ * exactly one fails closed, like the token-seed source.
+ */
+describe("e2e-extra-seed config (layer-1 fail-closed guard)", () => {
+	beforeEach(() => {
+		vi.resetModules()
+	})
+	afterEach(() => {
+		vi.unstubAllEnvs()
+		vi.resetModules()
+	})
+
+	test("default (neither flag) → no extra seed, no build stamp", async () => {
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED", "")
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED_CONFIRM", "")
+		const mod = await import("./config")
+		expect(mod.E2E_EXTRA_SEED).toBeNull()
+		expect(mod.E2E_EXTRA_SEED_BUILD_STAMP).toBeNull()
+	})
+
+	test("both flags set → the extra seed and the build stamp", async () => {
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED", "1")
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED_CONFIRM", "1")
+		const mod = await import("./config")
+		const { E2E_EXTRA_SEED } = await import("./extra-seed")
+		expect(mod.E2E_EXTRA_SEED).toEqual(E2E_EXTRA_SEED)
+		expect(mod.E2E_EXTRA_SEED_BUILD_STAMP).toBe("NULO_E2E_EXTRA_SEED_BUILD_STAMP")
+	})
+
+	test("only the primary flag → throws (fail-closed)", async () => {
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED", "1")
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED_CONFIRM", "")
+		await expect(import("./config")).rejects.toThrow(/both are required|double opt-in/i)
+	})
+
+	test("only the confirm flag → throws (fail-closed)", async () => {
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED", "")
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED_CONFIRM", "1")
+		await expect(import("./config")).rejects.toThrow(/both are required|double opt-in/i)
+	})
+
+	test("no shipped seed has the extra seed's kind or chainId", async () => {
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED", "")
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED_CONFIRM", "")
+		const { DEFAULT_SEEDS } = await import("@/wallet/services/network/seeds")
+		const { E2E_EXTRA_SEED } = await import("./extra-seed")
+		// It stands in for a default no shipped build seeds yet. Once one ships with its kind, an armed
+		// build would seed two of that kind: retire the arm, or give it a kind no shipped seed has.
+		expect(DEFAULT_SEEDS.filter(({ kind, chainId }) => kind === E2E_EXTRA_SEED.kind || chainId === E2E_EXTRA_SEED.chainId)).toEqual([])
+	})
+})

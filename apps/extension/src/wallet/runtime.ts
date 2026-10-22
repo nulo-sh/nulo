@@ -29,6 +29,7 @@ import { DappInteractionService } from "./services/dapp-interaction/service"
 import { DappSessionService } from "./services/dapp-session/service"
 import { ExecutionService } from "./services/execution/service"
 import {
+	E2E_EXTRA_SEED_BUILD_STAMP,
 	E2E_PROVERLESS,
 	E2E_TOKEN_LIST,
 	E2E_TOKEN_LIST_BUILD_STAMP,
@@ -530,6 +531,11 @@ function registerServices(
 	services.add(new FpcService(logger, browserApi))
 	services.add(new LogViewerService(logger))
 	services.add(new LoggerService(logger))
+	// The stamp is the release grep's handle on the extra default network `DEFAULT_SEEDS` carries
+	// in an armed build.
+	if (E2E_EXTRA_SEED_BUILD_STAMP) {
+		;(globalThis as { __NULO_E2E_EXTRA_SEED_BUILD_STAMP__?: string }).__NULO_E2E_EXTRA_SEED_BUILD_STAMP__ = E2E_EXTRA_SEED_BUILD_STAMP
+	}
 	const networkService = new NetworkService(logger, browserApi)
 	services.add(networkService)
 	registerPxeScopeRegistrar(createScopeRegistrar(accountService, networkService))
