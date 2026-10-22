@@ -14,6 +14,15 @@ budget: one Explore recon agent (sonnet); in-place probes; one Codex audit (gpt-
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-22. **Status:** completed.
+- **Shipped:** #1092 (arc 1, closes #1089): the case awaits its parked read through `parkRowRead`, hoisted and keyed by row, and asserts the visibility change is queued on the row lock, instead of two zero timers. No product change.
+- **Dispositions:** keeping the second timer, a wrapper-only absence check and a sign spy, rejected (D2); the file's other zero timers kept (D4); the purge pins left to #1091 (D6). No `lessons.md` promotion: it is at its 8 KiB budget and no entry is superseded; the technique (assert a lock's queue synchronously when the caller locks before its first await) stays in D2 and [lessons/phase-0.md](lessons/phase-0.md).
+- **Known limits:** none.
+- **Open items:** #1091.
+- **Seeds retired:** the `/goal` and `/loop` below; never run them.
+
 # account-read-flake-1: the rename-and-visibility case proves order, not time
 
 One arc, one PR against `dev`, test-only. The case "a name change parked at its read cannot revert a concurrent visibility change" (`apps/extension/src/wallet/services/account/service.test.ts:595-652`) bounds two steps by zero timers. The first bound can red a correct product; the second only decides whether the case can catch a broken one. The arc replaces both with order facts. Recon: [recon.md](recon.md). Probes and consults: [lessons/phase-0.md](lessons/phase-0.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none).
