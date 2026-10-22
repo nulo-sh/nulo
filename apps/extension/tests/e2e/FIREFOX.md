@@ -86,6 +86,16 @@ A Firefox launch owns more than a browser process: geckodriver, the Firefox it s
 4. An error matching `no such frame | Browsing Context … not found | DiscardedBrowsingContext | Browsing context already closed` is a closed window (`targetGone`); on an approval click that is the expected end. The last wording is Puppeteer's own, for a realm disposed before the command fails.
 5. Measure in the page before changing a fixture. Three of this suite's wrong turns were fixes for symptoms; the cause each time was a page opened in the wrong window (above). A fourth masked the PXE's timer throttling with launch prefs instead of moving the host.
 
+## Picturing the toolbar panel
+
+The toolbar panel has no Puppeteer target, so `page.screenshot` cannot take it. Draw it from the privileged scope instead (`session.chromeScript`):
+
+1. Find the open panel's browser: the `.webextension-popup-browser` that is not `.webextension-preload-browser`, under a `panel` whose `state` is `open`.
+2. Call `browsingContext.currentWindowGlobal.drawSnapshot(null, 2, "white")` on it.
+3. Draw the bitmap on a canvas made from the browser's `ownerDocument`. `ownerGlobal` reads `undefined` in that scope, and a throw inside the promise's callback leaves the script hanging until its timeout.
+
+A hand-off window opened by hand must name the last-focused normal window as its opener, as the panel does. The background reopens the panel only where focus returns.
+
 ## CI
 
 `pr-extension-{smoke,network}-e2e-firefox.yml` are twins of the Chrome callers with `browser: firefox`; `nightly.yml` and `release.yml` carry Firefox jobs too. The two PR aggregators are required on `dev`, and the smoke one on `main` (the network one is advisory there); the nightly Firefox jobs gate the nightly's publish. Outside the PR lanes' own aggregators, a Firefox job is in the `needs` of two workflows' gates: `nightly.yml`'s `publish-nightly` and `status` wait on every nightly Firefox job, and `release.yml`'s `attach-assets` and `status` wait on its smoke of the shipped zip. The lanes are not free: the PR lanes start nineteen more jobs (thirteen suites, six control) on a PR that trips both filters, drafts included, and queue against the required lanes for the same runners, and `release.yml`'s Firefox smoke holds the `release` concurrency slot until it ends (a 45-minute execution timeout; time queued for a runner is on top). `scripts/ci-cd/behavior-gating.test.ts` pins that wiring and the parity with the Chrome lanes. geckodriver is pinned by tarball and binary SHA-256 in `.github/actions/setup-geckodriver`; Firefox itself is whatever the locked Puppeteer pins. The network lane's promotion on `main` is the owner's call (root `CLAUDE.md`, staged-rollout switches).

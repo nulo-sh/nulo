@@ -7,6 +7,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
+import { isValidAztecAddress } from "@/utils/aztec-address"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { type ArmedInterception, interceptRpc, pickFile } from "../fixtures/browser"
 import { clickByTestId, clickSelector, type ExtensionContext, withTimeoutMessage } from "../fixtures/extension"
@@ -31,6 +32,35 @@ export function contactsFiles(): { write: (content: unknown) => string; cleanup:
 		cleanup: () => rmSync(dir, { recursive: true, force: true }),
 	}
 }
+
+/** `count` distinct on-curve addresses from a fixed seed, so every run imports the same file. */
+function onCurveAddresses(count: number): string[] {
+	let state = 0x9e3779b9
+	const next = () => {
+		state ^= state << 13
+		state ^= state >>> 17
+		state ^= state << 5
+		return state >>> 0
+	}
+	const found = new Set<string>()
+	while (found.size < count) {
+		// A leading zero byte keeps the value below the field modulus.
+		const address = `0x00${Array.from({ length: 8 }, () => next().toString(16).padStart(8, "0"))
+			.join("")
+			.slice(2)}`
+		if (isValidAztecAddress(address)) found.add(address)
+	}
+	return [...found]
+}
+
+/** Enough rows that an import is still writing seconds after its first row is stored. */
+export const LONG_IMPORT_ROWS = 500
+
+/** The same version-2 file on every run: `LONG_IMPORT_ROWS` named, on-curve contacts. */
+export const longImportContacts = () => ({
+	version: 2,
+	contacts: onCurveAddresses(LONG_IMPORT_ROWS).map((address, i) => ({ name: `Contact ${String(i + 1).padStart(3, "0")}`, address })),
+})
 
 /** Refuses the Testnet RPC for the rest of the launch: the Contacts page asks every network's PXE
  *  for its senders, and the export probes every network, so a run would otherwise depend on the
