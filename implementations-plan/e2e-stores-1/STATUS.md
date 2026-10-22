@@ -10,3 +10,4 @@
 - 2026-10-22 Phase 3: network Firefox green: the first run was stopped by the agent tool's 2-hour background limit at 110/128 files (108 passed, 2 skipped, 0 failed); `e2e:reap` then cleared its lock and its 53 MB run dir; the 18 files left ran green (13 passed, 5 skipped). Total 121 passed, 7 skipped, 127 min.
 - 2026-10-22 Phase 3: smoke Chrome green (61 passed, 9 skipped, 33 min).
 - 2026-10-22 Phase 3: smoke Firefox green (65 passed, 5 skipped, 46 min). Phase 3 gate green.
+- 2026-10-22 final gates on the merged head (a4fd22fe7): lint, typecheck:all, test:all exit 0.
