@@ -28,6 +28,7 @@ const {
 	chromesUnclaimed,
 	createRunDir,
 	deletableRunDir,
+	nodeTmpDir,
 	reapPriorRun,
 	stopService,
 	stopServiceOnExit,
@@ -230,6 +231,17 @@ describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { t
 	test("unreadable strangers do not make a sweep unknown", async () => {
 		const outcome = await reapPriorRun(lock({ markers: { anvil: marker() }, owner: DEAD }), fast)
 		expect(outcome).toEqual({ cleared: true })
+	})
+
+	test("the node's tmp dir is refused once a socket path in it would overflow sun_path, counted in bytes", () => {
+		const limit = (process.platform === "darwin" ? 103 : 107) - 28
+		// `/<filler>/tmp`, the filler two-byte characters with one ASCII byte when odd.
+		const runDir = (bytes: number) => {
+			const filler = bytes - "//tmp".length
+			return `/${"\u00e9".repeat(filler >> 1)}${"a".repeat(filler & 1)}`
+		}
+		expect(Buffer.byteLength(nodeTmpDir(runDir(limit)))).toBe(limit)
+		expect(() => nodeTmpDir(runDir(limit + 1))).toThrow("set NULO_E2E_DATA_ROOT to a shorter directory")
 	})
 
 	test("a run dir is deleted only directly under the root, with the prefix, stamped with the lock's marker", async () => {

@@ -204,7 +204,7 @@ What keeps them apart:
 
 - **Ports.** `resolve-ports.ts` skips every port `~/.agents/ports.md` lists and claims its pack there (`nulo-e2e-<service>` rows, owner `agent.sh`'s pid) under the file's lock, which other tools on the host share (`tests/e2e/port-registry.ts` states the contract). `cat ~/.agents/ports.md` shows who holds what. Under a run id, setup bind-tests the pack after `markBootStarted()` and never adopts a listener on it. Every readiness wait fails once the child it spawned exits, even with a probe still pending, and on Linux accepts an answer only from a socket a process carrying the service's marker holds, so a stranger on a claimed port is a boot failure (exit 86), not a sandbox.
 - **Processes.** Each service carries a launch marker and its owner in its environment, and every process of an agent run (forks, Firefox, geckodriver) inherits the run's marker, owner and worktree (`tests/e2e/owned-processes.ts`). Chrome inherits them too but overwrites its environ region with its process title, in the browser and every child, so no Chrome ever shows a marker: Chromes are found by the extension path on their command line instead. Teardown stops a service's group, then every process with its marker, a leaderless group's included. An orphan sweep stops a process only when the owner named in its own environment is dead, so a run never signals another's processes, whatever a lock or record on disk says.
-- **Data.** The node's run dir sits on real disk under `~/.cache/nulo-e2e`, stamped with its marker, and is deleted only directly under that root.
+- **Data.** The node's run dir sits on real disk under `~/.cache/nulo-e2e`, stamped with its marker, and is deleted only directly under that root. A local network ignores `--data-directory` and opens every store, socket and log under `os.tmpdir()`, so the node's `TMPDIR` is the run dir's `tmp`, which its children inherit. On Linux, setup fails a run whose node holds a store outside the run dir, once boot is ready, and otherwise logs `node stores: <n> open, all inside <run dir>`.
 
 A run killed with `kill -9` leaves its sandbox and browsers running: `bun run e2e:reap` in that worktree stops them by marker once the run's owner is gone, removes its run dir and drops its registry rows. The next run in the worktree does the same at setup.
 
@@ -365,7 +365,7 @@ The network suite is a required PR gate at retry 0 (`extension-network-e2e-statu
 | Resource | Per-worktree isolated? | How |
 |---|---|---|
 | Anvil, aztec, playground | Yes | spawned by setup with a launch marker and owner in their environment, recorded in the lockfile; stopped by group, then by marker |
-| Aztec run dir | Yes | `~/.cache/nulo-e2e/nulo-aztec-<pid>-<ts>` on real disk (NOT tmpfs — see `lockfile.ts` `E2E_DATA_ROOT`; override `NULO_E2E_DATA_ROOT`), stamped with the node's marker; the node writes `<dir>/data` |
+| Aztec run dir | Yes | `~/.cache/nulo-e2e/nulo-aztec-<pid>-<ts>` on real disk (NOT tmpfs — see `lockfile.ts` `E2E_DATA_ROOT`; override `NULO_E2E_DATA_ROOT`), stamped with the node's marker; the node's `--data-directory` is `<dir>/data` and its `TMPDIR` `<dir>/tmp`, where its stores, sockets and logs land |
 | Ports | Yes | claimed in `~/.agents/ports.md` under the run id before the build; bind-tested again at boot |
 | Forks, Firefox | Yes | inherit the run marker; a dead run's forks are stopped by `e2e:reap` and the next run's setup, its Firefox launches by the next Firefox launch or `e2e:reap` |
 | Wallet build artifact | Yes | `dist/chrome/` lives inside the worktree |

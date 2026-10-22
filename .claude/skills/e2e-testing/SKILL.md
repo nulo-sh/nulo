@@ -94,8 +94,8 @@ trusted to run with `--slots-in-an-epoch 1`), which an `e2e:agent` run never doe
   Rebuild armed (§ Build-armed tests) before the next run
   (`implementations-plan/archive/isolated-linker-store/plan.md#dev-server-dist`).
 - **Reap at session end**, not at the next run: `bun run e2e:reap`. Orphans hold their LMDB store
-  open; the data dir is on real disk (`~/.cache/nulo-e2e`, `lockfile.ts` `E2E_DATA_ROOT`), so RAM is
-  not pinned, but ports and CPU are. It stops only processes whose own environment names this
+  open; the run dir, where the node's `TMPDIR` puts every store, is on real disk (`~/.cache/nulo-e2e`,
+  `lockfile.ts` `E2E_DATA_ROOT`), so RAM is not pinned, but ports and CPU are. It stops only processes whose own environment names this
   worktree's markers and a dead owner; a sandbox a live run holds or reused is left alone.
 
 ### The agent runner — `apps/extension/scripts/e2e/agent.sh`
@@ -208,7 +208,7 @@ runtime env var can never arm a build-time flag.
 | `NULO_E2E_SHOT_DIR` | capture mode: `shotSend` writes light and dark PNGs there; CI never sets it. The shot page must be shown: Chrome's `newPage` opens a tab, which hides the tab before it, and a hidden page draws no frame, so `shotSend` refuses it; bring the page to front where the spec acts on it. A wallet whose token arrives untrusted (a backup import) opens the first-receive sheet over Home's middle, so a frame of Home's card comes from a fixture that imports its token through the UI (`tokenReadyExtension`) |
 | `NULO_E2E_ARTIFACT_RUN=1` | smoke against a built artifact (release/nightly): guarded with the node stand-in like a source run, skips the encrypted `backup-roundtrip` spec and the armed-dist check, and provides `liveLeg`, which runs `shipped-token-list.test.ts`, the one launch that reaches the live Testnet node; set for BOTH artifact paths, never keyed on bare `EXTENSION_PATH` |
 | `EXTENSION_PATH` | smoke: load this unpacked dir instead of `dist/chrome` |
-| `NULO_E2E_DATA_ROOT` | sandbox data-dir root (default `~/.cache/nulo-e2e`) |
+| `NULO_E2E_DATA_ROOT` | sandbox run-dir root (default `~/.cache/nulo-e2e`); short enough that `<run dir>/tmp` plus the node's 28-byte socket names fits `sun_path`, which setup checks |
 | `NULO_E2E_STAGE_LOG=1` (+`_OUT`) | append per-import stage-trajectory records (`helpers/import-stage-timing.ts`) |
 | `NULO_E2E_OPENPOPUP_LOG=1` | log `openPopup`'s fast-path/fallback timing |
 | `NULO_E2E_CONSOLE_PROBE=1`, `NULO_E2E_PROBE=1` | enable the two `_probe-*` files (skipped by default; probes, not gates) |
