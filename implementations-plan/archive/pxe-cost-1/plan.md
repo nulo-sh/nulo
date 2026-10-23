@@ -42,7 +42,7 @@ Chrome, ms from the unlock, base `b9c5586a6`; "fails" names the rules a run miss
 
 # pxe-cost-1: the wallet's PXE cost levers (#1038, #1033, #1034)
 
-pxe-limits-1 (#1042, [archive](../archive/pxe-limits-1/plan.md)) measured three places where the wallet's own choices multiply the PXE's work. This plan takes each one:
+pxe-limits-1 (#1042, [archive](../pxe-limits-1/plan.md)) measured three places where the wallet's own choices multiply the PXE's work. This plan takes each one:
 
 - **#1038, A1 (one PR against `dev`):** the public scans start through a small bounded gate, not all at once, and the scan-health record keeps at most one write waiting instead of one full copy per failed scan. A1 edits `incoming-transfer/service.ts`, which encryption-at-rest-1 A3 seals, so A1 branches from `dev` only after A3 is on `dev`.
 - **#1033, no arc:** the slow balance read is a PXE algorithm; the panel rejected a wallet-side copy of the contract's balance (D3). Step U drafts the upstream issue and marks #1033 `blocked:external`, with no PR.
