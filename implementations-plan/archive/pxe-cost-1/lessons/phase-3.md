@@ -292,3 +292,27 @@ No K in {4, 8, 16} passes phase 3's gate: K = 16 fails responsiveness in the scr
 wave in every balanced pair and at 64 deployed tokens; K = 8 fails one responsiveness point by 56 ms
 and the deployed wave by 0.37 s. Nothing was loosened; the committed constant stays at 4; the arc
 stops for the owner's decision on a rule. The base fails responsiveness in every run by 19-51 s.
+
+## Close-out (the owner's P84-08: C)
+
+The owner's decision page 84, P84-08 (the token scan queue after unlock: which rule gives), signed
+2026-10-23: **C**, "Keep the rules as written: nothing ships, #1038 closes as a known limit with the
+work kept on its branch, and Home stays at 25 s after unlock with 1,000 watched tokens." The work is
+kept on `kept/pxe-cost-1-scan-queue` at `015af103d97db95172d8ab4cd2e943d7556d8c67`.
+
+Consult (Codex, high, read-only, session 01a16628) on the Outcome, the archive index line, the
+draft closing comment for #1038 and the reopening condition: **conditional approve**. Every number,
+SHA and run order matched these records. Taken:
+
+- The index line and the comment said the queue kept Home within 1 s at 1,000 tokens: true of K = 4
+  in every recorded run, not of K = 8 (once +1,056 ms) or K = 16 (+1,222 ms). Both now name K = 4,
+  and the index line says no tested K passed the full gate instead of naming the wave alone.
+- The comment's sentence on why a bounded wave loses under load was cut: the records show the
+  association, not an isolated cause. The Outcome calls it an observed association, and its slot
+  holds are labelled K = 4 means, with K = 8's beside them.
+- The reopening condition now names its clock (#1038's: from `unlockAt` to Home) and "a person's
+  real profile (not a seeded probe)"; the thresholds are unchanged.
+- `Known limits:` lists #1034 beside #1038.
+- The `lessons.md` disposition gives its reason: the file is at its 8 KiB budget with no entry this
+  supersedes.
+- #1038's closure (comment, `known-limit`, not planned) is posted after this pass.

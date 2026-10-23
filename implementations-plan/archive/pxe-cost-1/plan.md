@@ -19,12 +19,12 @@ post_implementation_hardening: not scheduled
 - **The owner's call:** decision page 84, P84-08 (the token scan queue after unlock: which rule gives), signed 2026-10-23: **C**, "Keep the rules as written: nothing ships, #1038 closes as a known limit with the work kept on its branch, and Home stays at 25 s after unlock with 1,000 watched tokens."
 - **The rules, as written** (phase 3 step 2, fixed before the runs, at 1,000 seeded tokens and at 64 deployed): Home and the heartbeat's worst sample each within 1 s of that run's 10-token values; the first-scan wave ends no later than its base run's; Retry ends under 60 s. No K in {1, 2, 4, 8, 16} met all three in every run (table below).
 - **Kept branch:** `kept/pxe-cost-1-scan-queue` at `015af103d97db95172d8ab4cd2e943d7556d8c67`, with no PR: the bounded gate and coalesced episode writes (`941c2620a`), the shared reads and the outbox drain flag (`b743e075f`), the review fixes (`6bd21664e`, `1775a8293`), their tests, and these records.
-- **Known limits:** #1038. Reopening condition: a real profile past about 300 watched tokens, or an unlock over 3 s with 100 or fewer watched tokens, measured on CI's 4-core runners.
-- **Dispositions:** #1033 closed not planned on the owner's P83-02 (nothing posted upstream; the draft stays in its body). #1034 closed as a known limit on the owner's P83-01 (option A). No `lessons.md` promotion: the measurement lessons (the probe's five corrections, a bounded wave's sensitivity to host load) stay in [lessons/phase-3.md](lessons/phase-3.md).
+- **Known limits:** #1038, #1034. #1038's reopening condition: a person's real profile (not a seeded probe) past about 300 watched tokens, or an unlock over 3 s with 100 or fewer watched tokens, measured on CI's 4-core runners with the unlock clock of #1038's table (from `unlockAt`, before the password is typed, until the popup reaches Home).
+- **Dispositions:** #1033 closed not planned on the owner's P83-02 (nothing posted upstream; the draft stays in its body). #1034 closed as a known limit on the owner's P83-01 (option A). No `lessons.md` promotion: it is at its 8 KiB budget with no entry this supersedes, and this close-out is scoped to the owner's call; the probe corrections (wait for the lock's commit, for scans in flight and for backoff to expire before an arm counts) and the observed association between host load and a bounded wave stay in [lessons/phase-3.md](lessons/phase-3.md).
 - **Open items:** none.
 - **Seeds retired:** the `/goal` and `/loop` below; never run them.
 
-Chrome, ms from the unlock, base `b9c5586a6`; "fails" names the rules a run missed. A slot (one gated scan) held 208 ms at `941c2620a`, 80 ms at `b743e075f` at load1 about 60, and 133-163 ms at load1 140-215.
+Chrome, ms from the unlock, base `b9c5586a6`; "fails" names the rules a run missed. At K = 4 a slot (one gated scan) held 208 ms on average at `941c2620a`, 80 ms at `b743e075f` at load1 about 60, and 133-163 ms at load1 140-215; at K = 8, 180-254 ms in the balanced runs.
 
 | runs | K | Home (10-token) | heartbeat | wave end | base wave | Retry | 64 deployed wave (base) | fails |
 |---|---|---|---|---|---|---|---|---|
