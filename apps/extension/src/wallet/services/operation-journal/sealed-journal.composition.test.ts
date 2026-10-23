@@ -118,7 +118,8 @@ describe("the sealed journal — the real service graph", () => {
 
 	test("a restarted worker's boot sweep leaves sealed records alone; the unlock fails its profile's dead ones, and nothing else", async () => {
 		// A restart's cutoff is later than every record of the dead worker, which a real clock does
-		// not guarantee within a millisecond: the clock is held and moved once, by the least that holds.
+		// not guarantee within a millisecond. The clock is held, then moved 1 ms: the dead worker's
+		// records sit one below the cutoff, the restart's at it.
 		vi.setSystemTime(Date.now())
 		onTestFinished(() => {
 			vi.useRealTimers()

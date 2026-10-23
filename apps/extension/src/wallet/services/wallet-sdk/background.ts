@@ -366,17 +366,11 @@ function admitContentMessage(
 	deps: ContentWrapperDeps,
 ): (message: unknown, sender: chrome.runtime.MessageSender) => undefined {
 	const { logger } = deps
-	// Feature flag to allow iframe (subframe) dApps to talk to the wallet. Default `false`: the
-	// wrapper rejects content-script messages from subframes. Override by setting
-	// `VITE_NULO_ALLOW_IFRAME_DAPPS=1` at build time (rare; research found no legitimate iframe-dApp
-	// use cases in the Nulo ecosystem). Even with it on, a key exchange completes only from a frame
-	// of the origin the session is credited to, the top frame's: a cross-origin subframe cannot
-	// connect.
-	//
-	// Why a build-time env flag (not a runtime config): runtime config opens a widening primitive
-	// that an attacker could try to flip via storage poisoning or popup compromise. Build-time keeps
-	// the policy immutable per release. Vite inlines the literal here as it would at module scope;
-	// read when the wrapper is built, a test can set it without re-evaluating this module.
+	// Build-time, immutable per release: a runtime config would be a widening primitive an attacker
+	// could try to flip by storage poisoning or popup compromise. Vite inlines the literal here as at
+	// module scope; it is read when the wrapper is built, so a test can set it without re-evaluating
+	// this module. Even on, a key exchange completes only from a frame of the origin its session is
+	// credited to, the top frame's: a cross-origin subframe cannot connect.
 	const allowIframeDapps = import.meta.env?.VITE_NULO_ALLOW_IFRAME_DAPPS === "1"
 	return (message, sender) => {
 		// Subframe rejection. Upstream `BackgroundConnectionHandler`
@@ -387,12 +381,12 @@ function admitContentMessage(
 		//
 		// Nulo-side defense-in-depth: reject content-script messages
 		// from subframes at the wrapper layer. `sender.frameId === 0`
-		// is the top frame; any other value (or undefined for
-		// non-tab senders) is a subframe.
+		// is the top frame; a tab sender with any other defined
+		// `frameId` is a subframe.
 		//
-		// Feature flag: `allowIframeDapps` (env / build-time)
-		// disables this check. Default is "reject subframes" because
-		// research found NO legitimate iframe-dApp use cases in the
+		// Feature flag: `allowIframeDapps` (`VITE_NULO_ALLOW_IFRAME_DAPPS=1`
+		// at build time) disables this check. Default is "reject subframes"
+		// because research found NO legitimate iframe-dApp use cases in the
 		// Nulo ecosystem. If a counterexample surfaces, set the env
 		// var rather than removing this check.
 		//
