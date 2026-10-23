@@ -1,7 +1,7 @@
 ---
 plan: recipient-cap-1
 tier: light
-status: arc 1 built on the owner's pick (A, 50, the proposed line, today's order, exact names first; page 84); fix loop converged (Codex approve r2)
+status: completed with its one PR (the owner's pick A on page 84); known limit #1098
 issues: "#1037 (arc 1, the owner's pick)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,21 @@ base: origin/dev at 5c35ca934
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-23.
+- **Status:** closed with its one PR (`worktree-recipient-cap-1` → `dev`, `Closes #1037`), which carries this close-out; the merge closes the plan.
+- **Shipped:** on the owner's page 84 answers (signoff-P84: A, 50 rows, the proposed line, today's order, exact whole names first):
+  - **The cap.** Send's recipient suggestions draw at most 50 rows; under them, only when more match, "Keep typing to narrow 951 more matches." (grouped, "1 more match" for one), `aria-hidden`, with a visually hidden polite status mounted empty with the field (D8). Arrows, Enter and a click reach only the drawn rows. One keystroke at 5,000 contacts: median 61-72 ms against today's 1,615-1,791 ms, inside today's 50-contact range in both sessions ([lessons/phase-1.md](lessons/phase-1.md), [lessons/phase-2.md](lessons/phase-2.md)).
+  - **Exact whole names first** (O5): `matchRecipients` lists names whose whole key is the term ahead of the rest; initials stay in place.
+  - **From the fix loop**: rows keyed by candidate and address (D10, a pre-existing rebinding under a held press), and Enter picks nothing after a list change took the highlight (D9).
+  - **Tests**: five `RecipientField` cases over 1,051 candidates plus the keyed-row case, two `recipient-search` cases, and the "z" segment in the keyboard smoke scenario on both browsers (D7); screenshots in [screenshots/](screenshots/).
+- **Dispositions:** B (the window) and C (the silent cap) not picked; O4 kept today's order. Review: Codex r1 conditional approve, Opus r1 sound, Codex r2 approve ([lessons/phase-3.md](lessons/phase-3.md)). The planned "Enter picks row 0 after a late load" reversed (D9). Size: 159 lines, over the light target by this Outcome and the loop's two decisions.
+- **Lessons:** none promoted: `lessons.md` sits at its 8 KiB budget, and the keyed-row rule lives at the code it guards, with its test.
+- **Known limits:** #1098 (a name 50 others share exactly is reachable only by its address; the owner's O5 trade-off).
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` below.
 
 # recipient-cap-1: the recipient field renders a row for every match
 
@@ -74,7 +89,7 @@ Five samples per cell at different loads do not prove the arms equal; this probe
 
 ## Phases
 
-### Phase 0 — Start on the pick (0.3 h)
+### Phase 0 — Start on the pick (0.3 h) ✓
 
 1. Read the orchestrator's decision record. With no pick recorded, stop and report waiting.
 2. Confirm Z1: the orchestrator's record names this lane for #1037, and `git show worktree-list-perf-1:implementations-plan/list-perf-1/plan.md` (or its merged copy) no longer plans #1037. Both, or stop.
@@ -82,7 +97,7 @@ Five samples per cell at different loads do not prove the arms equal; this probe
 
 **Gate.** `bun run lint && bun run typecheck:all && bun run test` exit 0. Layers: lint, typecheck, unit.
 
-### Phase 1 — Build the pick (3 h)
+### Phase 1 — Build the pick (3 h) ✓
 
 1. Edit `RecipientField.vue` (and `recipient-search.ts` with O5) as in Architecture, with the owner's N and words.
 2. `RecipientField.test.ts`, one block over N + 1,001 candidates that one term all matches: N options and only options in the listbox; the line and the status read "…1,001 more matches."; the status is empty before typing and again at N matches or fewer, with no line (the success control); Up from no highlight goes to `optionId(N - 1)` and scrolls it into view, then Enter picks candidate N - 1; Down from there wraps to row 0; at N + 1 matches "1 more match"; a highlighted last row that a prop change pushes past the cap clears `aria-activedescendant`, and Enter picks row 0. With O5, `recipient-search.test.ts` gains two cases: the I1 list puts "Account 1" first for the term "Account 1", and 50 "Alice LongNN" (initials "AL") stay after a contact named "Al" for the term "Al".
@@ -91,7 +106,7 @@ Five samples per cell at different loads do not prove the arms equal; this probe
 
 **Gate.** `bun run lint && bun run typecheck:all && bun run test` exit 0 (the copy-dash, red-text and type-role bans run in it); the pick's 5,000-contact median sits within the range of today's build at 50 contacts from the same session. Layers: lint, typecheck, unit, component.
 
-### Phase 2 — Full gates (1.5 h)
+### Phase 2 — Full gates (1.5 h) ✓
 
 1. Run `bun run audit:vue` and `bun run test:all`.
 2. Build the armed smoke build. Run `cd apps/extension && bun run test:e2e -- --retry=0`, then `NULO_E2E_BROWSER=firefox bun run test:e2e -- tests/e2e/send-keyboard.test.ts tests/e2e/type-roles.test.ts --retry=0`. Write the per-file and per-browser durations, before and after, to `lessons/phase-2.md`.
