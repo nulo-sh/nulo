@@ -494,7 +494,6 @@ async function setupActiveAccountRun(deps: AccountActionDeps, activation: { epoc
 	return true
 }
 
-/** Records `address` as the device's last account selection, made by `profileId`. */
 async function rememberSelection(profileId: string | undefined, address: string | undefined): Promise<void> {
 	if (profileId === undefined || address === undefined) return
 	await managers.uiPreference.setSelectedAccount(profileId, address)

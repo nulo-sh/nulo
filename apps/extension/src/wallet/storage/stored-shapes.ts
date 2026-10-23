@@ -256,7 +256,7 @@ export const STORED_SHAPES = {
 
 	activeNetwork: { ref: root(ACTIVE_NETWORK_STORAGE_ROOT), encoding: "structured", schema: z.string(), read: decodeActiveNetworkId },
 	legalAccepted: { ref: value(LEGAL_ACCEPTANCE_KEY), encoding: "structured", schema: LegalAcceptanceSchema, read: parseAcceptanceRecord },
-	// No build writes it any more: the worker moves it into a profile holding that account.
+	// Only earlier builds wrote it; the worker moves it into the profile holding that account.
 	uiActiveAccount: { ref: value(LEGACY_SELECTED_ACCOUNT_KEY), encoding: "structured", schema: z.string(), read: asStored },
 	uiLastActiveProfile: { ref: value(LAST_ACTIVE_PROFILE_KEY), encoding: "structured", schema: z.string(), read: asStored },
 	// `useSyncedRef("loggerWindowId")`: the log viewer's window id, or null with none open.

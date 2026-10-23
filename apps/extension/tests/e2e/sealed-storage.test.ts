@@ -8,7 +8,7 @@ import { feePicksKey, pinnedTokensKey, sendFeePicksKey } from "@/utils/profile-u
 import { ensureUnlocked } from "./fixtures/auth"
 import { BROWSER } from "./fixtures/browser"
 import { type ExtensionContext, launchExtension, openPopup, registerProfile, waitForHash } from "./fixtures/extension"
-import { addContact, getAccountAddress, navigateByHash, navigateToSettings } from "./fixtures/helpers"
+import { addContact, getAccountAddress, navigateByHash, navigateToSettings, readActiveNetwork } from "./fixtures/helpers"
 import { pollUntil } from "./fixtures/poll"
 import { callService } from "./fixtures/session"
 
@@ -362,8 +362,10 @@ test.skipIf(process.env.NULO_E2E_HOME_TIMING !== "1")(
 			let page = await openPopup(ctx)
 			await waitForHash(page, "#/popup/general", 30_000)
 			const profile = await callService<{ id: string }>(page, "profile", "getActiveProfile")
-			const account = await getAccountAddress(page)
-			await seedPreferences(page, profile.id, preferenceMaps(account, validAddress()))
+			// A fresh profile opens on its first account; the base build has no preference service.
+			const { chainId } = await readActiveNetwork(page)
+			const [first] = await callService<Array<{ address: string }>>(page, "account", "getAccounts", [profile.id, chainId, true])
+			await seedPreferences(page, profile.id, preferenceMaps(first.address, validAddress()))
 			await page.close()
 			await ctx.close()
 

@@ -126,8 +126,8 @@ export class UiPreferenceService extends Service<Methods, Events> implements Ser
 		return row?.profileId === profileId ? row.address : undefined
 	}
 
-	/** Seals the pre-seal selection as `profileId`'s row and removes it in one commit, only while it
-	 *  still holds what was read and the session and the lock section are still the live ones. */
+	/** Seals the pre-seal selection as `profileId`'s row, then removes it, only while it still holds
+	 *  what was read and the session and the lock section are still the live ones. */
 	private async moveLegacySelection(
 		profileId: string,
 		legacy: unknown,
@@ -163,13 +163,15 @@ export class UiPreferenceService extends Service<Methods, Events> implements Ser
 	 * A deletion's removal of the device's selection when `profileId` made it, read with no key so
 	 * a resumed deletion finds it; a row naming no profile stays. Runs before the deletion drops the
 	 * profile's keys and its keyless sweep, under the lock every writer of the row holds, so it never
-	 * removes a selection another profile made meanwhile. Takes no `ProfileService` lock.
+	 * removes a selection another profile made meanwhile. Takes no `ProfileService` lock. Throws
+	 * when the lock's watchdog displaced it, so the deletion stops before the sweep and retries.
 	 */
 	public async purgeForProfile(profileId: string): Promise<void> {
 		await this.ensureInitialized()
 		await this.lock.withLock(async (isCurrent) => {
 			const raw = await this.selected.rawValue(SELECTED_ACCOUNT_ROW_ID)
-			if (namesProfile(raw, profileId) && isCurrent()) await this.selected.deleteStorageId(SELECTED_ACCOUNT_ROW_ID)
+			if (!isCurrent()) throw new Error("the selection purge lost its lock")
+			if (namesProfile(raw, profileId)) await this.selected.deleteStorageId(SELECTED_ACCOUNT_ROW_ID)
 		})
 	}
 

@@ -270,6 +270,46 @@ describe("the selected account", () => {
 		expect((await area.get(DEVICE))[DEVICE]).toBe("{not json")
 	})
 
+	test("a purge the lock's watchdog displaced throws and removes nothing, so the deletion stops before the sweep", async () => {
+		const memory = new MemoryStorageArea()
+		let releaseRead = () => {}
+		const stalled = new Promise<void>((resolve) => (releaseRead = resolve))
+		let stall = false
+		const local = {
+			get: async (keys?: string | string[]) => {
+				const got = await memory.get(keys)
+				if (stall && readsKey(keys, DEVICE)) {
+					stall = false
+					await stalled
+				}
+				return got
+			},
+			set: (items: Record<string, unknown>) => memory.set(items),
+			remove: (keys: string | string[]) => memory.remove(keys),
+		}
+		const { service, session } = await startUiPreferences(over(local))
+		await session.unlock("p")
+		await service.setSelectedAccount("p", A)
+		const stored = memory.data.get(DEVICE)
+
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		try {
+			stall = true
+			const purge = service.purgeForProfile("p")
+			const outcome = purge.then(
+				() => "resolved",
+				() => "threw",
+			)
+			await vi.advanceTimersByTimeAsync(5 * 60_000)
+			vi.useRealTimers()
+			releaseRead()
+			expect(await outcome).toBe("threw")
+		} finally {
+			vi.useRealTimers()
+		}
+		expect(memory.data.get(DEVICE)).toBe(stored)
+	})
+
 	test("a selection another profile makes while the purge holds the row survives it and the keyless sweep", async () => {
 		const memory = new MemoryStorageArea()
 		let stall: (() => Promise<void>) | undefined

@@ -32,7 +32,8 @@ export type Methods = {
 
 	/**
 	 * Records `address` as the device's last selection, made by `profileId`.
-	 * @throws InvalidWalletArgumentsError when `address` is not a string of at most 128 characters.
+	 * @throws InvalidWalletArgumentsError when `profileId` is not a string, or `address` is not a
+	 *   string of at most 128 characters.
 	 */
 	setSelectedAccount(profileId: string, address: string): boolean
 

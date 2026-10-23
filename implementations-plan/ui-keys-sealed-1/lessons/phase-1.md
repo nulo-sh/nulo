@@ -1,6 +1,6 @@
 # Phase 1: the service, the stores, the guard, the re-cut (the three maps)
 
-OA-1 and OA-2 were still open when the arc started, so P1 built the three maps and no pointer: no `uiSelectedAccount` shape, root, claim or purge. The re-cut below folds stamps 1-4 with the three map `.sealed` goldens; the pointer's part re-runs steps 3-5 on this branch once OA-1 is answered (A or B: three more ids; C: none).
+OA-1 and OA-2 were still open when the arc started, so P1 first built the three maps and no pointer. The first proof below is that maps-only re-cut (three added ids). After OA-1 A the pointer's part re-ran steps 3 to 5: the last section is the proof of the tree as it ships, six added ids.
 
 ## Attempts
 
@@ -99,3 +99,89 @@ The folded stamps' reasons (for the CLAUDE.md note):
 - stamp 2 (authRegistry, authRegistryEnabled, incomingArrivals, incomingBalanceOutbox, incomingPublicCursors, incomingTransfers, incomingTrust, tokenBalances): "tokenBalances, authRegistry, authRegistryEnabled and the five incoming roots are read through the dual read: a stored plaintext row still reads at its key and is sealed at its profile's next unlock, so every stored row reads as it did"
 - stamp 3 (uiGetStartedPrestoOpened): "a new per-profile Get started flag, prestoOpened; no stored row reads differently"
 - stamp 4 (accounts, dappRegistrations, fpcs, importedAccountKeys, networks, tokenSeeded, tokens): "accounts, imported keys, tokens, the seeder marker, networks, fee payers and dApp registration counts are sealed per row: a plaintext row still reads through the dual read and is sealed at its profile's next unlock"
+
+## § The gate change, steps 3 to 5 again, for the pointer's ids (OA-1 A, merge base `0514e413`)
+
+The branch's merge base with `dev` is now `a2f9e7d0`. Its `snapshot.json`, `goldens.json` and `pins.ts` are byte-identical to `0514e413`'s, and `dev` changed nothing under `src/wallet/storage` between them, so the comparison is the same against either base.
+
+After OA-1 A, the pointer's three goldens (`uiSelectedAccount.full` and `.minimal` plaintext, `.sealed` authored plaintext and sealed by the generator) were added by hand, `PINNED_STAMPS` emptied, `bun run baseline:storage -- --freeze` run (pin: stamp `66c69343…6ee9`, goldens `0d2ec784…3012`) and the pin pasted. The same proof with the pointer named (the script is the first proof's, plus `added_shape_names`):
+
+```text
+== merge base: 0514e4137a46f4202bcd0b5a6416f4a96c07dc8f (snapshot too large for --argjson's argv: --slurpfile, read as $x[0])
+== 1. version, zod and every shape record but the four named are equal; the three maps differ only in encoding, sealed, legacy; the one new shape is uiSelectedAccount
+{
+  "stamps_old": 5,
+  "stamps_new": 1,
+  "version_equal": true,
+  "zod_equal": true,
+  "other_shapes_equal": true,
+  "added_shape_names": [
+    "uiSelectedAccount"
+  ],
+  "removed_shape_names": [],
+  "maps_differ_only_in_encoding_sealed_legacy": true,
+  "maps_after": {
+    "uiPinnedTokens": {
+      "encoding": "json",
+      "sealed": true,
+      "legacy": "structured",
+      "read": "described"
+    },
+    "uiFeePicks": {
+      "encoding": "json",
+      "sealed": true,
+      "legacy": "structured",
+      "read": "described"
+    },
+    "uiSendFeePicks": {
+      "encoding": "json",
+      "sealed": true,
+      "legacy": "structured",
+      "read": "described"
+    }
+  },
+  "selected_account": {
+    "ref": {
+      "kind": "root",
+      "root": "nulo:ui:selectedAccount"
+    },
+    "encoding": "json",
+    "read": "codec",
+    "sealed": true,
+    "legacy": null
+  }
+}
+== 2. every old golden id keeps its decoded value
+{
+  "all_old_ids_decode_as_before": true,
+  "old_ids": 122,
+  "new_ids": 128,
+  "added_expected": [
+    "uiFeePicks.sealed",
+    "uiPinnedTokens.sealed",
+    "uiSelectedAccount.full",
+    "uiSelectedAccount.minimal",
+    "uiSelectedAccount.sealed",
+    "uiSendFeePicks.sealed"
+  ]
+}
+== 3. added golden ids exactly the six; none removed; every old golden record equal with stamp dropped; every stamp 0
+{
+  "added": [
+    "uiFeePicks.sealed",
+    "uiPinnedTokens.sealed",
+    "uiSelectedAccount.full",
+    "uiSelectedAccount.minimal",
+    "uiSelectedAccount.sealed",
+    "uiSendFeePicks.sealed"
+  ],
+  "removed": [],
+  "old_records_equal": true,
+  "every_stamp_zero": true
+}
+== 4. PINNED_BACKUPS and backups/ unchanged against the merge base
+0
+0
+```
+
+Step 6: `bun run baseline:storage` prints "stored shapes unchanged"; `src/wallet/storage` passes (10 files, 120 tests) with no rule edited.
