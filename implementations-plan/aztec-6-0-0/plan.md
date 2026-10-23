@@ -206,6 +206,7 @@ Decision page 85, signed 2026-10-23 13:40Z (`signoff-P85`, page head `4a357b7`),
 - **P85-01** (OA-1, the account contract on 6.0.0): **A**, "Rotate in place to regime nulo-v6.2; the first unlock offers the Testnet reset the chain move already forces."
 - **P85-02** (OA-2, the Testnet token list across the update): **A**, "Publish an empty Testnet list before the update; the new chain's list once unleashed's 6.0.0 generation exists."
 - **P85-03** (the 6.0.0 install past the npm age gate): **A**, "Install now with named excludes, as the skill prescribes."
+- **The paused-reset window** (relayed by the orchestrator after the implementation review): owner, 2026-10-23: "A: accept, ship tonight" (known limit, written down with its exact conditions). D14.
 
 ## Decision ledger
 
@@ -224,6 +225,7 @@ Decision page 85, signed 2026-10-23 13:40Z (`signoff-P85`, page head `4a357b7`),
 | D11 | M4.6-7: the in-place update scenarios move to the moved-chain and moved-addresses truth and run in P4, one candidate each | Codex 2, Opus 2, final Codex 1-2 | accepted |
 | D12 | Foundry 1.8.5's tarball adds `solar`: `install.sh` requires exactly the five attested regular files and still extracts the four tools | P1, `lessons/phase-1.md` | accepted: the installer copies four; an exact member set keeps the refusal |
 | D13 | M5 deviation: `lockfile-exception-diff.ts` keeps its `viem` carve-out, which reads a pre-6.x lock (this bump's base holds `@aztec/viem`); the residue check drops its own | P1, the tree | accepted |
+| D14 | A reset v0.31.0 paused, met by this rotation (#808's two paths: a Testnet journal on rc.3's chain refused on every resume, its imported keys unexportable; a Local or user-added address-only resume finishing under mixed regimes, the profile withheld): a known limit, no runtime change; #808 re-closed with the conditions (a reset paused in v0.31.0 and not resumed before the update lands; pre-1.0.0 testers; Testnet or the Local Network); reopen on a report from a person, or before the first Mainnet build | Codex implementation review rounds 1-2 | accepted: owner, 2026-10-23: "A: accept, ship tonight" (known limit, written down with its exact conditions) |
 
 ## Audit verdicts
 
