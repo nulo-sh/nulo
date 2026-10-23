@@ -244,25 +244,6 @@
 	},
 	{
 		"bundled": false,
-		"reason": "The test runner. The path traversal needs control of a test file or the vitest config, which already runs arbitrary code, and CI runs only this repository's tests. vitest 4.1.11 fixes it, but any test-runtime change must pass the soak matrix (CLAUDE.md), so it moves with the next vitest bump.",
-		"revisit": "the next vitest bump",
-		"advisories": [
-			{
-				"id": 1193684,
-				"package": "@vitest/mocker",
-				"severity": "moderate",
-				"vulnerable_versions": ">=2.1.0 <4.1.11"
-			},
-			{
-				"id": 1193683,
-				"package": "vitest",
-				"severity": "moderate",
-				"vulnerable_versions": ">=2.1.0 <4.1.11"
-			}
-		]
-	},
-	{
-		"bundled": false,
 		"reason": "No patched release exists. micromatch (vite-plugin-pages) and chokidar 3 (vite-plugin-static-copy) use it at build time to expand glob patterns this repository's own config writes; no outside input reaches it, and no extension zip contains it.",
 		"revisit": "a braces release that fixes it",
 		"advisories": [
