@@ -5,7 +5,7 @@ import type { Page } from "puppeteer"
 import { expect, test } from "vitest"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { feePicksKey, pinnedTokensKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
-import { ensureUnlocked } from "./fixtures/auth"
+import { ensureUnlocked, lockWallet } from "./fixtures/auth"
 import { BROWSER } from "./fixtures/browser"
 import { type ExtensionContext, launchExtension, openPopup, registerProfile, waitForHash } from "./fixtures/extension"
 import { addContact, getAccountAddress, navigateByHash, navigateToSettings, readActiveNetwork } from "./fixtures/helpers"
@@ -232,11 +232,14 @@ test("sealed storage: a new contact is written sealed, plaintext rows outlive a 
 		await seedPlaintext(page, profile.id, address, account)
 		const maps = preferenceMaps(account, address)
 		await seedPreferences(page, profile.id, maps)
-		await seedPreSealSelection(page, account)
 		await page.close()
 		const plaintextLoad = await listLoadMs(ctx, contactList, SEEDED + 1)
 		const plaintextActivity = await listLoadMs(ctx, activityList(profile.id), finished + JOURNAL_SEEDED)
 		const plaintextHome = await listLoadMs(ctx, homeBalances(account), held)
+		// An unlocked popup's boot moves a bare selection at its first read, so it is planted locked.
+		page = await openPopup(ctx)
+		await lockWallet(page)
+		await seedPreSealSelection(page, account)
 		await ctx.close()
 
 		ctx = await launchExtension({ userDataDir: profileDir })
