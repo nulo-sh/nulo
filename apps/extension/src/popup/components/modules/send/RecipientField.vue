@@ -175,7 +175,8 @@ const moveHighlight = (e, step) => {
 	document.getElementById(optionId(next))?.scrollIntoView({ block: "nearest" })
 }
 
-// With no row highlighted, Enter keeps its typed-name shortcut: the first suggestion.
+// With no row highlighted, Enter keeps its typed-name shortcut, the first suggestion, unless a list
+// change took the highlight.
 const pickHighlighted = (e) => {
 	if (e.repeat) return
 	e.preventDefault()
