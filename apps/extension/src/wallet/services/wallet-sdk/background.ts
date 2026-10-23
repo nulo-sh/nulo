@@ -98,21 +98,6 @@ import { LogLevel } from "@/wallet/logger"
 
 declare const __VERSION__: string
 
-/**
- * Feature flag to allow iframe (subframe) dApps to talk to
- * the wallet. Default `false` — Nulo's wrapper rejects content-script
- * messages from subframes. Override by setting
- * `VITE_NULO_ALLOW_IFRAME_DAPPS=1` at build time (rare; research found no
- * legitimate iframe-dApp use cases in the Nulo ecosystem). Even with it on,
- * a key exchange completes only from a frame of the origin the session is
- * credited to, the top frame's: a cross-origin subframe cannot connect.
- *
- * Why a build-time env flag (not a runtime config) — runtime config opens a
- * widening primitive that an attacker could try to flip via storage poisoning
- * or popup compromise. Build-time keeps the policy immutable per release.
- */
-const NULO_ALLOW_IFRAME_DAPPS: boolean = import.meta.env?.VITE_NULO_ALLOW_IFRAME_DAPPS === "1"
-
 /** A queued row's developer line when its call's session ended before the call ran. */
 const SESSION_NO_LONGER_VALID = "Session no longer valid — reconnect"
 
@@ -381,6 +366,18 @@ function admitContentMessage(
 	deps: ContentWrapperDeps,
 ): (message: unknown, sender: chrome.runtime.MessageSender) => undefined {
 	const { logger } = deps
+	// Feature flag to allow iframe (subframe) dApps to talk to the wallet. Default `false`: the
+	// wrapper rejects content-script messages from subframes. Override by setting
+	// `VITE_NULO_ALLOW_IFRAME_DAPPS=1` at build time (rare; research found no legitimate iframe-dApp
+	// use cases in the Nulo ecosystem). Even with it on, a key exchange completes only from a frame
+	// of the origin the session is credited to, the top frame's: a cross-origin subframe cannot
+	// connect.
+	//
+	// Why a build-time env flag (not a runtime config): runtime config opens a widening primitive
+	// that an attacker could try to flip via storage poisoning or popup compromise. Build-time keeps
+	// the policy immutable per release. Vite inlines the literal here as it would at module scope;
+	// read when the wrapper is built, a test can set it without re-evaluating this module.
+	const allowIframeDapps = import.meta.env?.VITE_NULO_ALLOW_IFRAME_DAPPS === "1"
 	return (message, sender) => {
 		// Subframe rejection. Upstream `BackgroundConnectionHandler`
 		// attributes origin via `sender.tab?.url` (top-frame URL), so an
@@ -393,7 +390,7 @@ function admitContentMessage(
 		// is the top frame; any other value (or undefined for
 		// non-tab senders) is a subframe.
 		//
-		// Feature flag: `NULO_ALLOW_IFRAME_DAPPS` (env / build-time)
+		// Feature flag: `allowIframeDapps` (env / build-time)
 		// disables this check. Default is "reject subframes" because
 		// research found NO legitimate iframe-dApp use cases in the
 		// Nulo ecosystem. If a counterexample surfaces, set the env
@@ -404,7 +401,7 @@ function admitContentMessage(
 		// in `BackgroundConnectionHandler`'s sendToTab signature —
 		// upstream's `(tabId, msg)` interface doesn't pass frameId
 		// through, so this remains an upstream coordination item.
-		if (NULO_ALLOW_IFRAME_DAPPS !== true && isSubframeSender(sender)) {
+		if (!allowIframeDapps && isSubframeSender(sender)) {
 			logger.log(
 				"wallet-sdk",
 				LogLevel.Debug,

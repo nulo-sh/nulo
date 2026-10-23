@@ -62,7 +62,7 @@ Alternatives not taken, besides the lane brief's bans (J: a raised timeout, long
 - (E) `>` in `reaper.ts`: it would fail a live record created in the cutoff's millisecond. (F) Spin until `Date.now()` moves, or (G) compute a cutoff from the records: neither states the model.
 - (H) `vi.useFakeTimers({ toFake: ["Date"] })`: the polls would advance the clock. (I) +1000 ms: it pins only one side of `>=`.
 
-## Phase 1 (arc 1): the flag is read where it is used
+## Phase 1 (arc 1): the flag is read where it is used ✓
 
 1. Branch `soak-flakes-1-a1` off `origin/dev` with the plan commit, and merge `origin/dev` (auto-continue).
 2. On base, run four builds and keep `sha256sum` of every `*.js` under `dist/<browser>`: `bun run --cwd apps/extension build` and `build:firefox`, each with the flag unset and with `VITE_NULO_ALLOW_IFRAME_DAPPS=1`.
