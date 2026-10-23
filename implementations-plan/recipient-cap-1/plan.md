@@ -1,7 +1,7 @@
 ---
 plan: recipient-cap-1
 tier: light
-status: planned, Codex approve (r3), Opus conditional approve (r1, all conditions folded in); awaiting the owner's pick (OWNER-ASKS.md) and the orchestrator's approval
+status: arc 1 built on the owner's pick (A, 50, the proposed line, today's order, exact names first; page 84); fix loop converged (Codex approve r2)
 issues: "#1037 (arc 1, the owner's pick)"
 driver: claude-code
 claude_model: opus
@@ -59,7 +59,7 @@ Five samples per cell at different loads do not prove the arms equal; this probe
 
 ## Architecture & Implementation (A, the recommendation)
 
-- `RecipientField.vue`: `MAX_SHOWN` (the owner's N) beside `filteredContacts`; `shownContacts = filteredContacts.slice(0, MAX_SHOWN)`, `moreCount`. `activeIndex`, the reset watcher, `moveHighlight` and `pickHighlighted` read `shownContacts`; `showSuggestions` reads the full matches. A highlighted row pushed past the cap (late contacts, a new term) loses the highlight, as a filtered-out row does today; Enter then picks row 0.
+- `RecipientField.vue`: `MAX_SHOWN` (the owner's N) beside `filteredContacts`; `shownContacts = filteredContacts.slice(0, MAX_SHOWN)`, `moreCount`. `activeIndex`, the reset watcher, `moveHighlight` and `pickHighlighted` read `shownContacts`; `showSuggestions` reads the full matches. A highlighted row pushed past the cap loses the highlight; after a new term Enter picks row 0, after a list change it picks nothing until an arrow or a keystroke (D9, built). Rows are keyed by candidate and address (D10, built).
 - The `<Transition>`'s `v-if` moves to a new wrapper `div` (testid `send-destination-popover`) with the position, border and background; the listbox keeps the scroller (`max-height: 156px`: 160 less its old 2 × 2 px border, `border-box`), id, role, testid, `tabindex="-1"`, and only options. After it, the line: `<Text variant="caption" color="tertiary" aria-hidden="true">`, testid `send-destination-more`.
 - One computed `moreSentence` (count `toLocaleString("en-US")`, "match"/"matches" by a ternary) feeds the line and a visually hidden `role="status" aria-live="polite" aria-atomic="true"` span mounted empty beside the input, outside the `<Transition>`, holding the sentence only while the list shows and more match.
 - With O5: `matchRecipients` returns whole-name matches (`contactNameKey(name) === key`) first, then the rest (initials and address matches included), each group in the given order; its doc comment says so.
@@ -110,6 +110,8 @@ Five samples per cell at different loads do not prove the arms equal; this probe
 | D6 | Grouped digits, a ternary plural | no plural helper exists; one string | a helper |
 | D7 | One segment added to the existing keyboard smoke scenario, both browsers | the line and the scroller share the box; a layout change that clips the revealed row N - 1 is invisible to jsdom; est. +4 s per browser, measured in Phase 2 | no smoke (Opus: the PR picture shows it once, but guards nothing later); a new scenario (more setup) |
 | D8 | Accessibility (delegated): a visually hidden polite status mounted empty beside the input; the visible line `aria-hidden` | a region created with its text may go unannounced (W3C ARIA22, the house rule at F8); one sentence, read once | `role="status"` on the line (created with its text); `aria-describedby` (a new `Input.vue` prop, and read on focus while the list is closed) |
+| D9 | Keyboard (delegated, arc 1 r1): a highlight a list change takes, not the person's typing, leaves Enter handled and picking nothing until an arrow or a term change; a closed list clears it | the planned "as a filtered-out row does today" did not hold: before the cap only typing removed a highlighted row, and with it a late contact load could hand Enter a contact the person never highlighted (Opus, traced; pinned by a test that fails without it) | Enter falls back to row 0 (redirects an aimed pick); a known limit (the fix is one local flag) |
+| D10 | Rows keyed `account:<address>` / `contact:<id>:<address>` (arc 1 r1) | unkeyed rows let a list that lands during a held press rebind the pressed row to another destination, at the base as with the cap (Codex, reproduced in the compiled component; pinned by a test) | key by id alone (an address change would still rebind); leave as is |
 
 ## Audit verdicts
 
@@ -117,6 +119,10 @@ Five samples per cell at different loads do not prove the arms equal; this probe
 - **Codex r2** (resumed `01a1643e`, verification): *conditional approve*. Accepted all three: promote whole names only, never initials (its reproduction, I1); qualify the below-cap and speed claims (I2, D1, D2, O1, O2, O5); Phase 0 requires both the record and the trimmed sibling plan. It no longer requires B as the recommendation.
 - **Codex r3** (resumed `01a1643e`): *approve*; the r2 conditions met, no regression.
 - **Opus r1** (Plan agent): *conditional approve*. Accepted: the fade wait (F1, D5); the status pattern (F2, D8); Enter after Up, a 1,051 fixture, a status test (F3); late contacts past the cap pinned (F4); the substring limit and O5 (F5); "no set order" (F2 above); the floor control (F7). Not taken: no smoke change (D7).
+- **Orchestrator** (2026-10-23): approved as committed, with the owner's page 84 answers (signoff-P84): A, 50, the proposed line, today's order, exact whole names first. Z1 resolved (list-perf-1 archived with #1037 moved here).
+- **Arc 1, Codex r1** (gpt-6.1-sol, high; session `01a16647`): *conditional approve*. Accepted: rows keyed (D10, a pre-existing rebinding it reproduced); a narrating fixture comment removed.
+- **Arc 1, Opus r1** (general-purpose, beside Codex r1): *sound*. Accepted: Enter after a taken highlight (D9); the search comment's overclaim; the cap's invariant line and the Tab-stop comment's place; the smoke row read through `aria-activedescendant`, not `children[49]`; the capped tests reuse the listbox helpers; the status test reads the same node after the term. Not taken: none.
+- **Arc 1, Codex r2** (resumed `01a16647`, verification): *approve*, no functional finding; its one comment nit (the Enter shortcut's comment) applied. Loop converged.
 
 ## Delivery
 
