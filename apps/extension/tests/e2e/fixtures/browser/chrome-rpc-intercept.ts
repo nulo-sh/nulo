@@ -72,12 +72,13 @@ export async function cdpInterceptRpc(
 		session.on("Fetch.requestPaused", (event: PausedRequest) => {
 			const url = new URL(event.request.url)
 			hits++
-			log(`${label}: ${mode.kind} ${url.pathname}`)
+			// The seed endpoint's path carries its provider key, so no log line or failure names it.
+			log(`${label}: ${mode.kind} ${origin}`)
 			const reply =
 				mode.kind === "refuse"
 					? session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "ConnectionRefused" })
 					: session.send("Fetch.continueRequest", { requestId: event.requestId, url: `${mode.to}${url.pathname}${url.search}` })
-			reply.catch((e) => failUnlessGone(`${label}: reply to ${url.pathname} failed`, e))
+			reply.catch((e) => failUnlessGone(`${label}: reply to a request for ${origin} failed`, e))
 		})
 		await session.send("Fetch.enable", { patterns: [{ urlPattern: `${origin}/*`, requestStage: "Request" }] })
 		if (isExtensionWorker(info)) armedServiceWorker = true

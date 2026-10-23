@@ -23,7 +23,7 @@
  */
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
-import { CHAIN_IDS } from "@/utils/chain-ids"
+import { CHAIN_IDS, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { BACKUP_MAC_FIELD } from "@/utils/full-backup-helpers"
 import { FPC_SERVICE_NAME } from "@/wallet/services/fpc/spec"
 import { INCOMING_TRANSFER_SERVICE_NAME, IncomingTransferRecordSchema } from "@/wallet/services/incoming-transfer/spec"
@@ -419,10 +419,10 @@ async function throughTheReset(ctx: ExtensionContext, page: Page, recording: Rec
 	await waitForHash(page, "#/popup/general", 30_000)
 
 	const testnet = await readNetwork(page, "testnet")
-	expect(testnet.chainId).toBe(CHAIN_IDS.TESTNET)
+	expect([testnet.chainId, testnet.l1ChainId]).toEqual([CHAIN_IDS.TESTNET, TESTNET_L1_CHAIN_ID])
 	const after = await readAccounts(page, CHAIN_IDS.TESTNET)
 	await expectFirstAccountSelected(page, CHAIN_IDS.TESTNET)
-	const expected = await rederive(page, derived(before), testnet.l1ChainId)
+	const expected = await rederive(page, derived(before), TESTNET_L1_CHAIN_ID)
 	expect(derived(after)).toEqual(expected)
 	const moved = expected.some((row, i) => row.address !== derived(before)[i]?.address)
 	expect(saidMoved).toBe(moved)

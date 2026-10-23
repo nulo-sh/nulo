@@ -1,7 +1,7 @@
 ---
 plan: aztec-6-0-0
 tier: mid
-status: planned; Codex final pass approve; waiting on OA-1 and OA-2
+status: in progress; OA-1 (a), OA-2 (a) and the age-gate install (a) answered on decision page 85, 2026-10-23
 issues: "Refs #864 (its first agent line); closes no issue"
 driver: claude-code
 claude_model: opus
@@ -199,12 +199,20 @@ Paths: `X/` is `apps/extension/src/`, `S/` is `X/wallet/services/`, `R/` is `pac
 - Canaries, prover-ON, per browser: presto-server 1.1.3 from its release asset, `sha256sum` equal to `_extension-network-e2e.yml`'s pins, started only if `ss -ltn 'sport = :59833'` shows the port free: `env -u BB_BINARY_PATH RUST_LOG=info PRESTO_ALLOW_ALL=1 PRESTO_HOME=$C/presto setsid presto-server > $C/presto.log 2>&1 &`, one warm-up prove once `api.github.com/rate_limit` has room; then `AZTEC_HOME=$AH VITE_NULO_PRESTO_REQUIRED=1 NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts`; at least one `Proving succeeded` in `presto.log` inside the run's window. Tear down its process group afterwards.
 - Pass: all green at retry 0; one rerun for a known flake, with its log. A red canary holds the line and is never answered with a pin. No e2e scenario is added; the PR body states each browser's suite wall-clock.
 
+## Owner answers
+
+Decision page 85, signed 2026-10-23 13:40Z (`signoff-P85`, page head `4a357b7`), relayed by the orchestrator; no owner notes on any item. Each answer is also the owner's sign-off on the surfaces its option names, which § UI impact lists.
+
+- **P85-01** (OA-1, the account contract on 6.0.0): **A**, "Rotate in place to regime nulo-v6.2; the first unlock offers the Testnet reset the chain move already forces."
+- **P85-02** (OA-2, the Testnet token list across the update): **A**, "Publish an empty Testnet list before the update; the new chain's list once unleashed's 6.0.0 generation exists."
+- **P85-03** (the 6.0.0 install past the npm age gate): **A**, "Install now with named excludes, as the skill prescribes."
+
 ## Decision ledger
 
 | # | Decision | Source | Status |
 |---|---|---|---|
 | D1 | Classify as Branch B plus a forced rotation; stop for OA-1 | Phase 0 | accepted: both reproduced the 32/33 split |
-| D2 | Rotate by appending `nulo-v6.2` from `@aztec-labs/accounts@6.0.0`, as rc.3 did | M4, F2-F4 | accepted, on OA-1 (a) |
+| D2 | Rotate by appending `nulo-v6.2` from `@aztec-labs/accounts@6.0.0`, as rc.3 did | M4, F2-F4 | accepted, on OA-1 (a) (P85-01, § Owner answers) |
 | D3 | Excludes: delete them in this PR once `bun.lock` is final (skill), not in a follow-up (lane brief); the reference project the same way, with no later re-resolve | M3, M4.4 | accepted: Codex and Opus (excludes match by name; no later PR of this bump re-resolves the root); the lane brief's "follow-up" claim did not hold |
 | D4 | Add the oracle-major detector as a `file_map` read in `artifact-freeze.test.ts` | recon finding 1 | accepted: Codex (ACVM version, proportionate), Opus (JSON read, no new dependency or wasm run); the simpler one wins |
 | D5 | One `viem`: swap the fixtures' fork for `viem` 2.57.1 | M5 | accepted |
