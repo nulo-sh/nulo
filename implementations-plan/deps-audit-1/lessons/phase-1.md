@@ -21,7 +21,7 @@ All commands from the repo root on branch `deps-audit-1-a1`, before 21:01Z, so b
   - `oxc-resolver` and its bindings go 11.24.2 → 11.21.2, storybook's exact pin; storybook is its only dependent.
 
   All 27 new integrity strings match the registry, and the four storybook packages carry SLSA provenance and no install script.
-- `bun pm diff <pkg>@<old> <new>` prints the lock's version on the `-` side here (Bun 1.4.2), so read the direction from the `"version"` line. In storybook 10.6.2 the new `child_process`/`net` uses are:
+- `bun pm diff <pkg>@<old> <new>`'s side order is not fixed (Bun 1.4.2): storybook printed 10.6.2 on the `-` side, while vitest later printed 4.1.10 there. Read the direction from the `"version"` line. In storybook 10.6.2 the new `child_process`/`net` uses are:
   - the CLI tools SDK's `fork` of its own child host;
   - host-validation middleware (`net.isIP`);
   - a 127.0.0.1 loopback listener;
@@ -31,3 +31,16 @@ All commands from the repo root on branch `deps-audit-1-a1`, before 21:01Z, so b
 - `typecheck:all` exit 0 covers the extension's 28 story files. Design's tsconfig excludes its stories and nothing checks `.storybook/*.ts`, so the build is their check.
 - `lint` exit 0. Unit suites, one worker: design 538/538 (28 s); extension 906 files plus 3 skipped, 14996 passed, 5 skipped, 7 todo (1537 s).
 - Codex r8: approve with fixes, records only.
+
+## OA-4 step 2: vitest 4.1.12 (2026-10-23)
+
+- `origin/dev` `0e4bec132` merged as `0fe71361a`: `index.md` is dev's file plus this lane's row, and dev's 21 commits change no dependency file, bunfig, vitest config or soak tool.
+- Pin-then-restore over the 14 manifests that declare `vitest` (`^4.1.9` → `4.1.12` → `^4.1.12`), with no age-gate refusal and no exclude. The lock moves vitest and `@vitest/{expect,mocker,pretty-format,runner,snapshot,spy,utils}` 4.1.10 → 4.1.12 and nothing else. All 8 integrity strings match the registry, all carry SLSA provenance, none has an install script, and no 4.1.10 copy is left. storybook keeps its own exact `@vitest/*` 3.2.4.
+- `bun pm diff`:
+  - vitest: chunk renames plus a browser-mode Chromium GC workaround these suites never run;
+  - `@vitest/mocker`: generated mock code escapes names with `JSON.stringify` (1242767), and a redirect must pass vite's `isFileLoadingAllowed` (1193683/1193684);
+  - `@vitest/runner`: concurrent tests are capped at `maxConcurrency`, which reaches `proverless-guard.test.ts`'s `describe.concurrent`;
+  - the rest: version only.
+- The vitest entry leaves `audit-acks.json` (5 entries, 39 advisories) and its row leaves `SECURITY.md`. Every `node_modules` removed, then `bun install --frozen-lockfile`: exit 0. The gate in enforce mode reads 39 / 0 / 0 / 0. Committed as `b8f5c22fe`.
+- The fixture-retry repro (e2e skill row 38) on 4.1.12 under Node fails both ways: the test-scoped retry reads `undefined`, and the file-scoped one rethrows the first error. #190 stays open (D14).
+- Codex r9: approve with fixes, records only (plan reconciled, D14).
