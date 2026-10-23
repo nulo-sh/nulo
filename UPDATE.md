@@ -4,7 +4,7 @@ The checklist for bumping the Aztec / Noir dependency line. **`@aztec-labs/*` an
 
 > **Convention:** any code that types against an Aztec package's shape (a PXE method signature, a wire type, an artifact field) MUST add an entry to **§ Types coupled to Aztec shapes** below, with `file:line`, so the next bump has a checklist.
 
-Current line: **`@aztec-labs/*` = 6.0.0**, with the `@aztec-foundation/*` toolchain at **6.0.0** (that scope numbers its releases apart, and did at 6.0.0-rc.3), and `@aztec-foundation/aztec-standards`, `@alejoamiras/private-fee-juice` and `@alejoamiras/presto` at 6.0.0 (Noir wasm packages `noir-acvm_js` / `noir-noirc_abi` carry Bun patches — see below). The 6.0.0-rc.1 → rc.3 bump followed a network reset and re-pinned the account artifact in place. The 5.2.0 → 6.0.0-rc.1 bump, a scope move with a network reset and a new address regime, is `implementations-plan/archive/nulo-v6/`.
+Current line: **`@aztec-labs/*` = 6.0.0**, with the `@aztec-foundation/*` toolchain at **6.0.0** (that scope numbers its releases apart, and did at 6.0.0-rc.3), and `@aztec-foundation/aztec-standards`, `@alejoamiras/private-fee-juice` and `@alejoamiras/presto` at 6.0.0 (Noir wasm packages `noir-acvm_js` / `noir-noirc_abi` carry Bun patches — see below). The 6.0.0-rc.3 → 6.0.0 bump followed a network reset and rotated the account artifact in place to regime `nulo-v6.2`, as rc.1 → rc.3 did to `nulo-v6.1`. The 5.2.0 → 6.0.0-rc.1 bump, a scope move with a network reset and a new address regime, is `implementations-plan/archive/nulo-v6/`.
 
 ## Before you bump
 1. Read the upstream `@aztec-labs/aztec.js` + `@aztec-labs/pxe` changelog for the target version — note any renamed/removed exports, PXE method signature changes, or artifact-format changes.
@@ -74,8 +74,7 @@ Current line: **`@aztec-labs/*` = 6.0.0**, with the `@aztec-foundation/*` toolch
   `EmbeddedWallet.createSchnorrAccount` derives a different address than the wallet does.
   `apps/extension/tests/e2e/fixtures/aztec.ts` supplies a `FrozenArtifactWallet` whose
   `AccountContractsProvider` serves the vendored artifact for schnorr. Production is immune
-  (no `createSchnorrAccount` call sites outside tests) — typecheck cannot see this, since
-  `tests/e2e` is outside the tsconfig graph.
+  (no `createSchnorrAccount` call sites outside tests).
 - **`BB_BINARY_PATH` is a footgun, not an optimization.** Presto's `find_bb` honours the
   variable before its versioned cache, so a version-mismatched seed proves every request with the
   wrong bb while the health body still says `bb_available: true`. CI runs the server unseeded.
@@ -91,7 +90,7 @@ Current line: **`@aztec-labs/*` = 6.0.0**, with the `@aztec-foundation/*` toolch
 
 - **Two scopes, two upstreams.** `@aztec-labs/*` is built from `aztec-labs-eng/aztec-node`;
   `@aztec-foundation/bb.js`, the noir wasm pair and `l1-artifacts` still come from
-  `AztecProtocol/aztec-packages`. `@aztec/viem` stays in the old scope. Both upstreams are the
+  `AztecProtocol/aztec-packages`. `@aztec/viem` stayed in the old scope until 6.0.0 replaced it with `viem`. Both upstreams are the
   compare targets on a bump and the licence sources in `packages/third-party-notices/src/policy.ts`.
 - **Sites keyed by package name, invisible to tsc**: the four version readers
   (`setup-aztec`, `docker-ci-like.sh`, `global-setup.ts` read the `@aztec-labs/aztec.js` pin;
@@ -136,6 +135,31 @@ Current line: **`@aztec-labs/*` = 6.0.0**, with the `@aztec-foundation/*` toolch
 - **Standard contracts on a fresh network.** Test environments seed them at genesis; a live network
   serves them only once someone publishes them (`getPublishableStandardContracts`), so a new
   Testnet can answer `null` for AuthRegistry, PublicChecks and HandshakeRegistry.
+
+## 6.0.0 couplings (the oracle major)
+
+- **One numbering again.** `@aztec-labs/*` and the `@aztec-foundation/*` toolchain are both
+  `6.0.0`; the residue check still keeps one line per numbering.
+- **The vendored account was the old oracle major.** 6.0.0's PXE runs oracle major 33 and refuses
+  rc.3's artifacts (32), the frozen SchnorrAccount included, so the account rotated in place to
+  regime `nulo-v6.2`: every derived address moved, and the first unlock offers the Testnet reset.
+  `artifact-freeze.test.ts` compares the vendored artifact's `ORACLE_VERSION_MAJOR` with the
+  installed PXE's; the PrivateFPC and the standards Token moved with their packages.
+- **`simulateAndProveTx` is a new public PXE method.** It reaches `#simulateTx` and
+  `#executePrivate`, so it syncs contracts. Nothing in Nulo or the upstream wallet libraries it runs
+  calls it; a `PxeService` method over it calls `assertScopesRegistered`
+  (`packages/aztec-runtime/src/pxe/scope-guard.ts`) as the six that sync do.
+- **`viem` replaces the `@aztec/viem` fork.** Upstream exact-pins `viem` 2.57.1 in `aztec.js`,
+  `ethereum`, `pxe`, `stdlib` and `telemetry-client`; the extension's devDependency and the e2e
+  fixtures follow, so one copy is locked. `scripts/lockfile-exception-diff.ts` keeps its carve-out
+  to read a pre-6.0.0 lock; the residue check refuses any `@aztec/*` package.
+- **The installer fetches a release lock.** `6.0.0/install`'s `install_aztec_packages` downloads
+  `packages.tar.gz` from `INSTALL_URI` (npm with `AZTEC_UP_SKIP_PACKAGE_LOCK=1`);
+  `setup-aztec/install.sh` replaces that function whole and installs from its own npm lockfile.
+- **Foundry 1.8.5 ships `solar`.** The release tarball holds five binaries; `install.sh` requires
+  exactly `FOUNDRY_MEMBERS` and extracts the four tools the installer copies.
+- **Bun applies a patch by line number** (the `aztec-update` skill, Gotchas): the pxe patch was
+  re-created with `bun patch` and diffed against the `npm pack` tarball.
 
 ## Bridge couplings — in `alejoamiras/unleashed`
 
