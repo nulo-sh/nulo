@@ -559,6 +559,11 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   dead worker's target beside its successor's, and an attach to the dead one never answers:
   `backgroundOrigin` reads every listed worker, while `evaluateInBackground` takes the first
   (`extension-restart.test.ts`, FIREFOX.md's restart row).
+- **An in-place update is an extension restart too.** The swap (`updateInPlace`) ends the release
+  build's targets, and with the launch's interception held, a node request reached the guard as it
+  ended an offscreen document still booting its PXE: the arrival suite's moved-Testnet case, which
+  swaps right after `registerProfile`, failed its close in 5 of 25 Chrome runs. The swap runs under
+  `withInterceptionsReleased`, as `waitForExtensionRestart` does: 0 of 15 after.
 - **Read `chrome.storage` from an extension page**, never through a session on the worker target:
   that attachment is exactly what parks the worker's DevTools host across a restart (§3), and a page
   outlives the worker. `openPopup`, or the blank popup inside `launchExtension`.

@@ -33,4 +33,14 @@
 ## The gate
 
 - `bun run --cwd packages/aztec-runtime test src/account src/pxe`: 333 pass. The extension slice (`account-integrity`, `account`, `AccountIntegrityBarrier.test.ts`, `profile`): 676 pass. Lint and `typecheck:all`: exit 0.
-- M4.6-7 (the update replay and the arrival suite) move after P3, which moves the chain they reset from; recorded in `lessons/phase-3.md`.
+- M4.6-7 (the update replay and the arrival suite) move after P3, which moves the chain they reset from.
+
+## The update scenarios (M4.6-7)
+
+- The replay at `6948a295` on the old expectations: case 1 timed out on "Your accounts kept their addresses." (`update-replay.test.ts:414`), the predicted red; case 2 skips once the seed has moved; case 3 passed.
+- Both files now read the ready toast's line as it shows (`readyToastSaysMoved`, `helpers/stale-network.ts`) and compare it to the truth: each derived account keeps its name, index, type and visibility at the address this build derives from the revealed phrase (`rederive`, through `deriveNuloAccountAddress`), and the toast says the addresses moved exactly when one did. The replay's imported key comes back at an address none of the recorded ones equal, and its re-export preview re-derives that address from the decrypted key. The arrival suite's first case meets the reset whenever the release's Testnet chain is not this build's, so its trace gains `takeover` and its Testnet row the new chainId.
+- The recording's custom network (chain 2267676295, L1 31337) classifies `addressesMoved` and stays quarantined, not active, so it shows no takeover; `otherNetworks` and `expectIdentity` read it unchanged across the Testnet reset.
+- Arrival case 1 stalled at its first `reopen` in 1 of 5 runs: `app.vue` renders no `RouterView` while the arrival is up, so `index.vue`'s push to `#/popup/general` runs only if the route rendered before the arrival (the stall sat at `#/popup` behind it). `reopen` no longer waits for the hash; each caller waits for the arrival or Home.
+- Arrival case 2 failed its close at the egress guard ("sent lb.drpc.live:443 to the guard 1 time(s) while the launch's stand-in held its origin") in 5 of 25 Chrome runs, never alone. Timestamps put the request inside `updateInPlace`'s swap, about 1 s after the release's offscreen document attached and as the swap ended it; no page target dialed the node. The swap is an extension restart, so it now runs under `withInterceptionsReleased`, as `waitForExtensionRestart` does: 15 of 15 after. Recorded in the `e2e-testing` skill and the README's stand-in paragraph.
+- Hazard: `NULO_E2E_INTERCEPT_LOG=1` prints each redirected path, and the Testnet endpoint's path carries its provider key. One debugging read printed it into the session; the scratch logs were redacted. Grep that log for counts, never print its lines (follow-up issue).
+- Chrome: the replay 2 passed, 1 skipped, case 1 33 s; the arrival suite both cases, 38 to 45 s.

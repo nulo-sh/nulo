@@ -16,17 +16,20 @@
  * whichever Aztec line the checkout is. The older Terms version and the moved Testnet are planted
  * after the update, while the candidate is still locked, as the replay moves its Testnet: what is
  * proven is the first unlock over them, not a candidate boot that found them already in place.
+ * Once the candidate's Testnet seed has moved, the release's own rows are the moved ones, so both
+ * cases meet the reset, and its accounts come back at the addresses the candidate derives.
  *
  * Runtime: estimated 3 min on Chrome, 5 min on Firefox; measured 38 s and 49 s, the release cached.
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { E2E_EXTRA_SEED } from "@/e2e/extra-seed"
-import { CHAIN_IDS } from "@/utils/chain-ids"
+import { readyToast } from "@/components/stale-network/copy"
+import { CHAIN_IDS, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import type { StoredShapeName } from "@/wallet/storage/stored-shapes"
 import { BROWSER, openScratchPage } from "./fixtures/browser"
 import { type ExtensionContext, clickByTestId, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
-import { createAccount, deleteNetworkRow, ensureUnlocked, navigateByHash, waitForToast, waitForToastGone } from "./fixtures/helpers"
+import { createAccount, deleteNetworkRow, ensureUnlocked, navigateByHash, waitForToastGone } from "./fixtures/helpers"
 import { inPlaceUpdate, readLocalStorage, type UpdateBuilds, updateBuilds } from "./fixtures/update/in-place"
 import { shapeOfKey } from "./fixtures/update/stored-rows"
 import { BARRIERS, TAKEOVER, updateProblems } from "./fixtures/update/verify"
@@ -35,7 +38,7 @@ import { FIRST_ACCOUNT_NAME, gotoAccounts } from "./helpers/account-io"
 import { pointerClick, waitForSheet } from "./helpers/legal-drivers"
 import { ARRIVAL, readSurfaceTrace, type Surfaces, traceSurfaces } from "./helpers/network-arrival"
 import { ACCOUNTS, accountRows, accountScope, readNetworkRows, storedEntries } from "./helpers/identity-rows"
-import { seedStaleNetwork, takeoverScreen } from "./helpers/stale-network"
+import { readyToastSaysMoved, rederive, seedStaleNetwork, takeoverScreen } from "./helpers/stale-network"
 
 const HOME = '[data-testid="tokens-menu-trigger"]'
 const SURFACES: Surfaces = {
@@ -96,6 +99,29 @@ async function readAccountsByChain(page: Page): Promise<Record<string, Row[]>> {
 	return byChain
 }
 
+/** The release's Testnet accounts, all derived, as this build holds them after the reset: on the
+ *  seed's chain, each at the address the build derives for its index, by address; and whether any
+ *  address moved. Leaves the popup on the recovery phrase. */
+async function carriedAccounts(page: Page, before: Entries): Promise<{ byChain: Record<string, Row[]>; moved: boolean }> {
+	const released = (accountsByChain(before)[String(chainOf(before, "testnet"))] ?? []) as Array<Row & { index: number; address: string }>
+	expect(released.map((row) => row.type)).toEqual(released.map(() => 0))
+	const rows = (await rederive(page, released, TESTNET_L1_CHAIN_ID)).sort((a, b) => a.address.localeCompare(b.address))
+	const moved = rows.some((row) => !released.some((old) => old.address === row.address))
+	return { byChain: { [CHAIN_IDS.TESTNET]: rows }, moved }
+}
+
+/** Drives the reset's takeover and returns whether its ready toast says the addresses moved, once
+ *  the toast is gone: the shell lays its toasts over the Terms sheet, and the toast closes itself. */
+async function throughTheReset(page: Page): Promise<boolean> {
+	expect(await takeoverScreen(page)).toBe("network-reset")
+	await clickByTestId(page, "stale-network-reset")
+	await page.waitForSelector('[data-testid="stale-confirm-submit"]', { visible: true, timeout: 10_000 })
+	await clickByTestId(page, "stale-confirm-submit")
+	const moved = await readyToastSaysMoved(page, "Testnet")
+	await waitForToastGone(page, readyToast("Testnet", moved).sub, 15_000)
+	return moved
+}
+
 type Identity = { name?: unknown; chainId?: unknown; l1ChainId?: unknown; kind?: unknown }
 const identity = ({ name, chainId, l1ChainId, kind }: Identity) => ({ name, chainId, l1ChainId, kind })
 
@@ -138,11 +164,12 @@ async function expectArrival(page: Page, current: string): Promise<void> {
 	expect(await textOf(page, "network-arrival-stay")).toBe(`STAY ON ${current.toUpperCase()}`)
 }
 
+/** The caller waits for what the popup shows, the arrival or Home: the shell renders no route while
+ *  the arrival is up, so the start route moves on to Home only if it rendered before the arrival. */
 async function reopen(ctx: ExtensionContext, page: Page): Promise<Page> {
 	await page.close()
 	const next = await openPopup(ctx)
 	await traceSurfaces(next, SURFACES)
-	await waitForHash(next, "#/popup/general", 30_000)
 	return next
 }
 
@@ -170,18 +197,23 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM)(
 				return before
 			},
 			verify: async (ctx, before) => {
+				const reset = chainOf(before, "testnet") !== CHAIN_IDS.TESTNET
 				let page = await openAndUnlock(ctx, (scratch) => seedLegalAcceptance(scratch, "stale"))
+				const saidMoved = reset && (await throughTheReset(page))
 				await acceptTerms(page)
 				await expectArrival(page, "Testnet")
-				expect(await readSurfaceTrace(page)).toEqual({ shown: ["sheet", "arrival"], arrivals: 1 })
+				expect(await readSurfaceTrace(page)).toEqual({ shown: [...(reset ? ["takeover"] : []), "sheet", "arrival"], arrivals: 1 })
 
 				const arrived = await readLocalStorage(ctx)
 				expect(offerRecords(arrived)).toEqual([ANNOUNCED])
 				const read = await readNetworks(page)
 				const added = read.filter((row) => row.kind === E2E_EXTRA_SEED.kind)
 				expect(added.map(identity)).toEqual([identity(E2E_EXTRA_SEED)])
-				// The deleted default stays deleted, and the release's own row is left as it was.
-				expect(read.filter((row) => row.kind !== E2E_EXTRA_SEED.kind)).toEqual(networks(before))
+				// The deleted default stays deleted, and the release's own row is left as it was, but for
+				// the chain the reset moves it to.
+				expect(read.filter((row) => row.kind !== E2E_EXTRA_SEED.kind)).toEqual(
+					networks(before).map((row) => ({ ...row, chainId: CHAIN_IDS.TESTNET })),
+				)
 
 				// Closed unanswered, it is back at the next open.
 				page = await reopen(ctx, page)
@@ -192,8 +224,10 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM)(
 				const answered = await readLocalStorage(ctx)
 				expect(offerRecords(answered)).toEqual([OFFERED])
 				expect(valuesOf(answered, "activeNetwork")).toEqual(valuesOf(before, "activeNetwork"))
-				expect(await readAccountsByChain(page)).toEqual(accountsByChain(before))
 				expect(await updateProblems(before, answered)).toEqual([])
+				const carried = await carriedAccounts(page, before)
+				expect(await readAccountsByChain(page)).toEqual(carried.byChain)
+				expect(saidMoved).toBe(carried.moved)
 				await navigateByHash(page, "#/popup/settings/networks", 15_000)
 				for (const name of [E2E_EXTRA_SEED.name, "Testnet"]) {
 					await page.waitForSelector(`[data-testid="network-row"][data-network-name="${name}"]`, {
@@ -237,13 +271,7 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM)(
 					if (releaseTestnet === CHAIN_IDS.TESTNET) await seedStaleNetwork(scratch, "network-reset")
 					await seedLegalAcceptance(scratch, "stale")
 				})
-				expect(await takeoverScreen(page)).toBe("network-reset")
-				await clickByTestId(page, "stale-network-reset")
-				await page.waitForSelector('[data-testid="stale-confirm-submit"]', { visible: true, timeout: 10_000 })
-				await clickByTestId(page, "stale-confirm-submit")
-				await waitForToast(page, "Your accounts kept their addresses.", 120_000, { kind: "success" })
-				// The shell lays its toasts over the Terms sheet; the ready toast closes itself.
-				await waitForToastGone(page, "Your accounts kept their addresses.", 15_000)
+				const saidMoved = await throughTheReset(page)
 				await acceptTerms(page)
 				await expectArrival(page, "Testnet")
 				expect(await readSurfaceTrace(page)).toEqual({ shown: ["takeover", "sheet", "arrival"], arrivals: 1 })
@@ -251,9 +279,11 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM)(
 				const arrived = await readLocalStorage(ctx)
 				expect(offerRecords(arrived)).toEqual([ANNOUNCED])
 				expect((await readNetworks(page)).find((row) => row.kind === "testnet")?.chainId).toBe(CHAIN_IDS.TESTNET)
-				expect(await readAccountsByChain(page)).toEqual({ [CHAIN_IDS.TESTNET]: accountsByChain(before)[String(releaseTestnet)] })
 				await stay(page)
 				expect(offerRecords(await readLocalStorage(ctx))).toEqual([OFFERED])
+				const carried = await carriedAccounts(page, before)
+				expect(await readAccountsByChain(page)).toEqual(carried.byChain)
+				expect(saidMoved).toBe(carried.moved)
 				await page.close()
 			},
 		})
