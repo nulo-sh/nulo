@@ -152,11 +152,13 @@ async function seedPreSealSelection(page: Page, account: string): Promise<void> 
 	)
 }
 
+/** The device row and the bare key, an absent one as `null` on both browsers: CDP returns an
+ *  `undefined` array slot as `null`, BiDi keeps it. */
 const storedSelection = (page: Page) =>
 	page.evaluate(
 		async (keys: string[]) => {
 			const all = await chrome.storage.local.get(keys)
-			return keys.map((key) => all[key])
+			return keys.map((key) => all[key] ?? null)
 		},
 		[SELECTED, BARE_SELECTED],
 	)
@@ -247,7 +249,7 @@ test("sealed storage: a new contact is written sealed, plaintext rows outlive a 
 		expect(await carriesMarker(page)).toBe(SEEDED + 1 + JOURNAL_SEEDED)
 		expect((await balanceRows(page)).plaintext).toBeGreaterThanOrEqual(BALANCES_SEEDED)
 		expect(await storedPreferences(page, profile.id)).toEqual([maps.pins, maps.app, maps.send])
-		expect(await storedSelection(page)).toEqual([undefined, account])
+		expect(await storedSelection(page)).toEqual([null, account])
 
 		await ensureUnlocked(page)
 		const unlocked = performance.now()
@@ -285,10 +287,10 @@ test("sealed storage: a new contact is written sealed, plaintext rows outlive a 
 		// Home's boot moves the bare selection into the sealed device row and opens on it.
 		const [sealedSelection, bareSelection] = await pollUntil(
 			() => storedSelection(page),
-			([sealed, bare]) => typeof sealed === "string" && bare === undefined,
+			([sealed, bare]) => typeof sealed === "string" && bare === null,
 			{ label: "the pre-seal selection moved into the sealed device row", timeoutMs: 60_000, intervalMs: 250 },
 		)
-		expect(bareSelection).toBeUndefined()
+		expect(bareSelection).toBeNull()
 		expect(String(sealedSelection).toLowerCase()).not.toContain(account.slice(2).toLowerCase())
 		expect(await callService(page, "ui-preference", "getSelectedAccount", [profile.id])).toBe(account)
 		expect((await balanceRows(page)).stored).toBeGreaterThanOrEqual(ownBalances + BALANCES_SEEDED)
