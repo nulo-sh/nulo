@@ -6,8 +6,8 @@
 export type TokenMetadataSlots = { symbol: number; decimals: number }
 
 export const TOKEN_METADATA_SLOTS: Readonly<Record<string, TokenMetadataSlots>> = {
-	// aztec-standards Token, 6.0.0-rc.3.
-	"0x163b2b247391083157f9fc30405e81810e6c08c58501fa2dd10de27d42be1d8a": { symbol: 3, decimals: 5 },
+	// aztec-standards Token, 6.0.0.
+	"0x2ff0939914ff64bd3f7979926dbe8cf3332bc2fee55928bf3cc9ca802568ea9f": { symbol: 3, decimals: 5 },
 }
 
 /**

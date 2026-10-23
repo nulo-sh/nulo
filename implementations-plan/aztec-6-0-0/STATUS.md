@@ -7,3 +7,4 @@
 - 2026-10-23: final fresh Codex pass (01a166f5): approve after two resumed rounds. Plan committed; arc 1 waits on OA-1 (rotation) and OA-2 (token list).
 - 2026-10-23 14:0xZ: P1 gate: lint, typecheck:all, lint:actions, test:ci-gating, residue check + 3 controls, the four builds pass; test:all 9 allowed reds (P3 pins, lessons/phase-1.md).
 - 2026-10-23 14:3xZ: P2 gate (rotation core): oracle detector red 32/33 then green; aztec-runtime account+pxe 333 pass; extension slice 676 pass; vectors twice identical; reference diffs empty; lint, typecheck pass. M4.6-7 follow P3.
+- 2026-10-23 15:0xZ: P3 gate: test:all reds only @nulo/token-list-host (tree.test.ts + one live-check case, both list.source.json; P0's #1103); lint, typecheck pass; preflight OK (lessons/phase-3.md).

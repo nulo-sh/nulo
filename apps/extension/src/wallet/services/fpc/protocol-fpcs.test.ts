@@ -14,7 +14,7 @@ import { derivePrivateFpc, deriveSponsoredFpc } from "./protocol-fpcs"
 const CANONICAL_PRIVATE_FPC = {
 	salt: "0x0000000000000000000000000000000000000000000000000000000000000001",
 	deployer: "0x0000000000000000000000000000000000000000000000000000000000000000",
-	address: "0x2e189d0c28cb86234a17951a94131e19620cda595fa8f9c5c10c24268ceb6db4",
+	address: "0x0516ebb4f9c7988eb3cf6dd9459a47556f7a92db06b17cfa47ffb37fd35c6915",
 }
 
 /** The SponsoredFPC deployed and funded on the testnet, the wallet's default fee sponsor. A red run
@@ -22,12 +22,12 @@ const CANONICAL_PRIVATE_FPC = {
 const CANONICAL_SPONSORED_FPC = {
 	salt: "0x0000000000000000000000000000000000000000000000000000000000000000",
 	deployer: "0x0000000000000000000000000000000000000000000000000000000000000000",
-	address: "0x2adfb70e860909f0db8268b3fec80bce52a94559963444f5c0341816b8412130",
+	address: "0x2d8fff82a3b0c15d0a89169e7d8d043e079ab94d52031f1de1e4972ebad169d3",
 }
 
 /** sha256 of the key-sorted `target/` artifact without its debug file map, as reviewed for
- *  `@alejoamiras/private-fee-juice@6.0.0-rc.3`. */
-const REVIEWED_PRIVATE_FPC_ARTIFACT = "eb15143e72540efe8c49c54de1b7c8f31299c503fce14ce2739d29e296e143e0"
+ *  `@alejoamiras/private-fee-juice@6.0.0`. */
+const REVIEWED_PRIVATE_FPC_ARTIFACT = "e527c5dd4b59a4c62dfbba2bc4f6abf24380a83befa8ef38d6ae65909cfd0369"
 
 function artifactWithoutDebugInfo(file: string): unknown {
 	const path = resolvePackageAsset("@alejoamiras/private-fee-juice", file, { from: import.meta.url })

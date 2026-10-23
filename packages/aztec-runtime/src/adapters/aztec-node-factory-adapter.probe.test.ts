@@ -15,7 +15,7 @@ const { AztecNodeFactoryAdapter } = await import("./aztec-node-factory-adapter")
 
 describe("AztecNodeFactoryAdapter.probeChainId", () => {
 	test.each([
-		{ l1ChainId: 11155111, rollupVersion: 3409706519, expected: 3415328944 },
+		{ l1ChainId: 11155111, rollupVersion: 679261766, expected: 685146337 },
 		{ l1ChainId: 1, rollupVersion: 2 ** 31, expected: 2147483649 },
 	])("($l1ChainId, $rollupVersion) probes as the unsigned composite $expected", async ({ l1ChainId, rollupVersion, expected }) => {
 		Object.assign(nodeInfo, { l1ChainId, rollupVersion })
