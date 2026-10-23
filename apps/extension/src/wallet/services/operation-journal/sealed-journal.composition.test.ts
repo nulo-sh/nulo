@@ -4,7 +4,7 @@
  * same storage stands for a restarted worker: strict mode keeps no session across it, so it holds
  * no row keys until an unlock. See `apps/extension/tests/COMPOSITION-TESTS.md`.
  */
-import { describe, expect, test } from "vitest"
+import { describe, expect, onTestFinished, test, vi } from "vitest"
 import type { JobError } from "@nulo/wallet-core/jobs"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
@@ -117,6 +117,12 @@ describe("the sealed journal — the real service graph", () => {
 	}, 60_000)
 
 	test("a restarted worker's boot sweep leaves sealed records alone; the unlock fails its profile's dead ones, and nothing else", async () => {
+		// A restart's cutoff is later than every record of the dead worker, which a real clock does
+		// not guarantee within a millisecond: the clock is held and moved once, by the least that holds.
+		vi.setSystemTime(Date.now())
+		onTestFinished(() => {
+			vi.useRealTimers()
+		})
 		const api = freshApi()
 		const first = await boot(api)
 		const p = await first.profiles.createProfile("P", PW)
@@ -127,12 +133,15 @@ describe("the sealed journal — the real service graph", () => {
 		const qDead = await atStage(first, q.id, "simulating")
 		const before = await rawJournal(api)
 
+		vi.setSystemTime(Date.now() + 1)
+		const restartedAt = Date.now()
 		const restarted = await boot(api)
 		expect(await rawJournal(api)).toEqual(before)
 
 		await restarted.profiles.unlockProfile(q.id, PW)
 		await expect.poll(async () => (await restarted.journal.getOperation(qDead))?.progress.stage).toBe("failed")
 		const qLive = await atStage(restarted, q.id, "simulating")
+		expect((await restarted.journal.getOperation(qLive))?.createdAt).toBe(restartedAt)
 
 		await restarted.profiles.unlockProfile(p.id, PW)
 		await expect.poll(async () => (await restarted.journal.getOperation(proving))?.progress.stage).toBe("failed")
@@ -141,7 +150,7 @@ describe("the sealed journal — the real service graph", () => {
 		expect((await restarted.journal.getOperation(proving))?.error?.kind).toBe("sw_restart_post_prove")
 		expect(await raw(api, done)).toBe(before[keyOf(done)])
 
-		// A replay of the held keys sweeps again; a record this worker created is live, never swept.
+		// A replay of the held keys sweeps again; a record from the cutoff's millisecond stays live.
 		restarted.profiles.replayRowKeysReady()
 		await restarted.reaper.reapUnlocked(q.id)
 		expect((await restarted.journal.getOperation(qLive))?.progress.stage).toBe("simulating")

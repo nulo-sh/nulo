@@ -76,7 +76,7 @@ Contention recipe (evidence only): `setsid sh -c 'echo $$ > $0; for i in $(seq 4
 
 Gate: `bun run lint` and `bun run typecheck:all` exit 0. `bun --no-install run --cwd apps/extension vitest run src/wallet/services/wallet-sdk` exits 0. Steps 3, 4, 6 and 7 hold, recorded in `lessons/phase-1.md`. Layers: lint, typecheck, unit, four production builds.
 
-## Phase 2 (arc 1): the restart comes one millisecond after the dead worker
+## Phase 2 (arc 1): the restart comes one millisecond after the dead worker ✓
 
 1. Add test 2's mocked `Date` without the +1 step, so the restart lands in the dead worker's millisecond. Run the file 3 times: test 2 must be red each time, at line 134, with `expected 'simulating' to be 'failed'`.
 2. Add the +1 step and the `createdAt` assertion. Run the file 3 times: 4 of 4 green each time.
@@ -122,6 +122,7 @@ Asks: none for the owner.
 | D2 | #1102: mock `Date` alone in test 2; restart at +1 ms; assert `qLive.createdAt` | E, F, G, H, I, J | States the restart's precondition; pins both sides of `>=` on every run |
 | D3 | No product change; KL-1 at close-out | E, a worker-identity scheme | Unmeasured clock conditions; the minute tick bounds the wait; identity adds persistent state |
 | D4 | Deterministic reproductions are the proof; soaks are smoke runs | soaks as proof | 30/30 passes 36% of the time with nothing fixed, at 1 red in 30 |
+| D5 | (implementation) `onTestFinished` restores the clock in place of `try`/`finally` | `try`/`finally` | Same guarantee; the test keeps its indentation ([lessons/phase-2.md](lessons/phase-2.md)) |
 
 ## Delivery
 
