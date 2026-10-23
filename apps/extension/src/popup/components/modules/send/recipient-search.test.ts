@@ -17,14 +17,17 @@ describe("matchRecipients", () => {
 	})
 
 	test("ignores case, spacing and invisible characters, on a partial query as on a whole one", () => {
-		for (const term of ["alice", "ALICE", "alice  ", "  Alice", "al\u200Bice", "\u2060ali\u00AD", "ali "]) {
+		for (const term of ["alice", "ALICE", "alice  ", "  Alice", "al\u200Bice"]) {
+			expect(names(term), JSON.stringify(term)).toEqual(["Alice", "Alice Smith"])
+		}
+		for (const term of ["\u2060ali\u00AD", "ali "]) {
 			expect(names(term), JSON.stringify(term)).toEqual(["Alice Smith", "Alice"])
 		}
 		expect(names("alice   SMITH")).toEqual(["Alice Smith"])
 	})
 
 	test("reads compatibility forms and composed letters as the plain name, on both sides", () => {
-		expect(names("\uFF21\uFF4C\uFF49\uFF43\uFF45")).toEqual(["Alice Smith", "Alice"])
+		expect(names("\uFF21\uFF4C\uFF49\uFF43\uFF45")).toEqual(["Alice", "Alice Smith"])
 		const zoe = { name: "Zoe\u0308", address: `0x${"d".repeat(64)}` }
 		expect(matchRecipients([zoe], "ZO\u00CB")).toEqual([zoe])
 	})
@@ -44,6 +47,23 @@ describe("matchRecipients", () => {
 		expect(names("bm")).toEqual(["Bob Marley"])
 		expect(names(" B\u200BM ")).toEqual(["Bob Marley"])
 		expect(matchRecipients([{ name: "Robert", address: bob.address, abbr: "BM" }], "m")).toEqual([])
+	})
+
+	test("a whole name comes first, ahead of every name holding it, so no cap can hide it", () => {
+		const decoys = Array.from({ length: 50 }, (_, i) => ({ name: `Account 1 ${String(i + 1).padStart(2, "0")}`, address: `0x${i}` }))
+		const found = matchRecipients([...decoys, account], "account 1")
+		expect(found).toHaveLength(51)
+		expect(found[0]).toBe(account)
+		expect(found.slice(1)).toEqual(decoys)
+	})
+
+	test("initials stay in the given order: distinct contacts share them, so they never jump a whole name", () => {
+		const longs = Array.from({ length: 50 }, (_, i) => ({ name: `Alice Long${i}`, address: `0x${i}`, abbr: "AL" }))
+		const al = { name: "Al", address: `0x${"e".repeat(64)}` }
+		const found = matchRecipients([...longs, al], "Al")
+		expect(found[0]).toBe(al)
+		expect(found.slice(1)).toEqual(longs)
+		expect(matchRecipients([...longs, alice], "al").at(-1)).toBe(alice)
 	})
 
 	test("matches an address whole, ignoring hex case only", () => {
