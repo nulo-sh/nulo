@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { readTokenList } from "@nulo/token-list"
 import { describe, expect, test } from "vitest"
+import { ENVELOPE, HOST_ROOT } from "../scripts/check"
 import { EXPECTED_HEADERS, LIST_PATH, TOKENS_HOST } from "./policy"
 
 // Black-box probe of the deployed host from outside, with no Cloudflare credentials: what a wallet
@@ -21,8 +24,13 @@ describe.skipIf(process.env.TOKEN_LIST_HOST_LIVE !== "1")("the deployed token-li
 			expect(res.headers.get("cf-mitigated")).toBeNull()
 			expect(res.headers.get("content-type")).toMatch(/^application\/json/)
 			for (const [name, value] of Object.entries(EXPECTED_HEADERS)) expect(res.headers.get(name)).toBe(value)
+			// The host serves the committed envelope or a newer one (a publish can land after this run
+			// fixed its revision): a list the source emptied on purpose is served empty, and a deploy
+			// that still serves an older list fails by its sequence.
+			const committed = await readTokenList(readFileSync(join(HOST_ROOT, ENVELOPE), "utf8"))
 			const list = await readTokenList(await res.text())
-			expect(list.entries.length).toBeGreaterThan(0)
+			expect(list.sequence).toBeGreaterThanOrEqual(committed.sequence)
+			if (list.sequence === committed.sequence) expect(list.entries).toEqual(committed.entries)
 		},
 		TEST_MS,
 	)
