@@ -260,7 +260,7 @@ Every gate also runs `bun run lint`, `bun run typecheck:all` and `bun run test` 
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `5c35ca93`. Specific here:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `5c35ca93`. Specific here:
 
 - **Loop placement:** single arc, once over the whole diff from the merge base, after P4. Codex: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; the Opus diff review (`Agent`, `model: "opus"`, `general-purpose`) beside round 1. Hard stop at three rounds.
 - **The ask adds:** the gate change by name; "attack the conversion and the pointer claim: a write between read and commit, a deletion or a switch meanwhile, the bare key claimed by the wrong profile".
