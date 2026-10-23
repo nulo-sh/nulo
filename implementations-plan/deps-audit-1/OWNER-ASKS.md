@@ -49,3 +49,18 @@
   - **C:** acknowledge both. Not compliant: storybook's fix has cleared the gate, and the policy is to fix before acknowledging.
 - **What ships now:** nothing. The branch is pushed at the merge, with no PR. #980, #987 and #1032 stay open. The orchestrator's window can be released.
 - **Answer:** A, the orchestrator's call, recorded on #1032. It runs in two steps (D13). Step 1, storybook, landed as `64d61e4bc` on one core while another lane's e2e held the host. Step 2, vitest 4.1.12, waits for the age gate at 2026-10-22T14:51Z and the orchestrator's window.
+
+## OA-5: the extension soak's third red ends arc 1; what runs next?
+
+- **Surface:** none a person sees. The ask is host time and the order of the next runs. Any further run needs a new arc.
+- **Why:**
+  - At `9b414dc39`, every other Phase 2-3 gate passed. The `apps/extension` Node leg failed 1 of its 30 runs: a 5000 ms timeout in `background.transport.test.ts` › `with VITE_NULO_ALLOW_IFRAME_DAPPS=1` › `a same-origin subframe completes a key exchange` (#1101).
+  - Nothing shows the vitest bump as the cause, and nothing shows host saturation. So no retry is allowed, and a test fix has no identified target.
+  - It is that step's third red, so the arc ends `ARC_FAILED` (D15, Codex r10).
+- **Options:**
+  - **A (recommended):** a matched control first, as a diagnostic and not a gate. Run the same 30-run Node soak of `apps/extension` at a detached `0fe71361a`, the commit just before the vitest bump: vite 8.2.4, storybook 10.6.2 and #987's fix are all there. It takes about 2 h on a quiet host, and each failing run's raw report is kept. Then:
+    - **The control goes red:** vitest 4.1.12 is not necessary for the red. #1101 needs its own fix (stalled step identified, no raised budget) before any candidate of this plan can pass. A new arc then merges `dev` and reruns Phases 2-3.
+    - **The control is clean, 30 of 30:** suspicion of 4.1.12 rises, but nothing is proven. The choice is then B or a #1101 diagnosis.
+  - **B:** a new arc that drops the vitest bump. It keeps vitest 4.1.10, acknowledges 1242767 (moderate, the test runner only) beside the existing vitest entry, as D7 acknowledged 4.1.11 until its own soak, and leaves that acknowledgement to the next vitest bump. Then Phases 2-3 rerun at that candidate. This adds an acknowledgement whose fix is past the age gate, so it is the orchestrator's call.
+  - **C:** an exception: open the PR with the red disclosed. Not recommended: CLAUDE.md's soak is fail-closed, and Codex r3 rejected the same for #987.
+- **What ships now:** nothing. The branch is pushed at the records, with no PR. #980, #987 and #1032 stay open, and #1101 is open. No run is in flight, so the window can be released.

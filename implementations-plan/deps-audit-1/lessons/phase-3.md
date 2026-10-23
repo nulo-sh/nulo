@@ -47,3 +47,24 @@ Candidate `57c35cec5` (`bun.lock` sha256 `7076bcbe…af2284`); `dev` had not mov
   - `storybook` 1242753, critical, fixed in 10.6.2, past the gate.
 
   Both were published after this plan. Filed #1032 after a dedupe search. The run stopped at that gate, so no build or test ran (OA-4).
+
+## Final candidate `9b414dc39`, 2026-10-23
+
+The candidate is `b8f5c22fe`'s code plus records: vite 8.2.4, follow-redirects 1.16.1, storybook 10.6.2, vitest 4.1.12, and #987's fix, on `origin/dev` `0e4bec132`. Its `bun.lock` sha256 is `c7578a98…cb6593`. The run started at 04:59:35Z, with load 102.5 / 88.7 / 77.9.
+
+- Fresh frozen install: the store holds vitest and every `@vitest/*` at 4.1.12, storybook 10.6.2, vite 8.2.4 and follow-redirects 1.16.1. The audit gate, enforce: 39 / 0 / 0 / 0.
+- Base counts: `test:all` at a detached `0e4bec132` exits 0 (185 s, 14 workspaces).
+- Phase 2:
+  - `audit:vue` passes (194 s), and so do `build:firefox`, landing, playground, Storybook and `test:ci-gating`.
+  - The artifact check: every grep exits 1 on both builds, and neither notices file names follow-redirects or axios.
+  - Smoke, retry 0, armed builds: Chrome 272 passed, 25 skipped, 0 failed in 1749 s; Firefox 276 passed, 21 skipped, 0 failed in 2661 s.
+- `pr-quick.yml` dispatch at `9b414dc39`: run 39903250011, success.
+- Soak: 12 compares exit 0 (06:21-06:49Z). That covers the 10 packages, `infra/token-list` and `apps/landing`.
+- The `apps/extension` Node leg failed 1 of 30, so it exits 1 at 08:39:01Z (6565 s). Every summary binds the candidate SHA, a clean tree and the candidate lockfile.
+  - The other 29 runs each passed 15148 tests, 5 skipped and 7 todo, in 195 to 243 s.
+  - Run 5 (243 s, about 07:05-07:09Z, load5 89-94, with no other lead's suite alive) failed `background.transport.test.ts` › `with VITE_NULO_ALLOW_IFRAME_DAPPS=1` › `a same-origin subframe completes a key exchange`.
+  - The error is `Error: STACK_TRACE_ERROR`, whose stack ends at the test's definition (line 362): vitest's timeout at 5000 ms.
+  - The run stopped there, as written, so the bun leg, the compare and `test:all` ×5 did not run.
+- Probe, no repo change: the file alone, ×5 under the Node launcher, passes. That test takes 371 to 447 ms, the slowest in a file that takes 2.0 to 2.3 s. It runs `vi.resetModules()`, then cold-imports `./background` inside its own body.
+- This test passed 30 of 30 at `57c35cec5`, and was never named at `dc82d009d`. No issue named it, so it is now #1101.
+- Codex r10: `ARC_FAILED + c`, high (plan, Review verdicts). The arc ends here (D15, OA-5).
