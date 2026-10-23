@@ -49,7 +49,7 @@ describe("matchRecipients", () => {
 		expect(matchRecipients([{ name: "Robert", address: bob.address, abbr: "BM" }], "m")).toEqual([])
 	})
 
-	test("a whole name comes first, ahead of every name holding it, so no cap can hide it", () => {
+	test("a whole name comes first, ahead of every name that only holds it", () => {
 		const decoys = Array.from({ length: 50 }, (_, i) => ({ name: `Account 1 ${String(i + 1).padStart(2, "0")}`, address: `0x${i}` }))
 		const found = matchRecipients([...decoys, account], "account 1")
 		expect(found).toHaveLength(51)

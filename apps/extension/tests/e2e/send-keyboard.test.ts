@@ -197,8 +197,12 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 	await page.keyboard.press("ArrowUp")
 	expect((await readSuggestionList(page)).active).toMatchObject({ row: 49, shown: true })
 	const lastDrawn = await page.$eval(
-		sel("send-destination-suggestions"),
-		(box, address: string) => box.children[49]?.querySelector(address)?.textContent?.trim(),
+		DESTINATION_INPUT,
+		(field, address: string) =>
+			document
+				.getElementById(field.getAttribute("aria-activedescendant") ?? "")
+				?.querySelector(address)
+				?.textContent?.trim(),
 		sel("recipient-suggestion-address"),
 	)
 	await page.keyboard.press("Enter")
