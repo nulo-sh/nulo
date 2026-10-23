@@ -36,6 +36,7 @@ vi.mock("@/utils/core", () => {
 		network: networkMock,
 		account: accountMock,
 		networkReset: networkResetMock,
+		uiPreference: { getSelectedAccount: vi.fn(async () => undefined), setSelectedAccount: vi.fn(async () => true) },
 	}
 	return {
 		managers,

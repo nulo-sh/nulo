@@ -32,6 +32,7 @@ import {
 	resetProfile,
 	switchToLocalNetwork,
 	waitForProfilePurged,
+	waitForSelectedAccount,
 } from "../fixtures/helpers"
 import {
 	LOCAL_L1_CHAIN_ID,
@@ -87,10 +88,7 @@ async function importAndSettle(ctx: Awaited<ReturnType<typeof launchExtension>>,
 	await importSeed(page, words.join(" "), TEST_PASSWORD, POPUP_IMPORT_SHELL)
 	await waitForHash(page, "#/popup/general", 30_000)
 	await switchToLocalNetwork(page)
-	await page.waitForFunction(async () => !!(await chrome.storage.local.get("nulo:ui:activeAccount"))["nulo:ui:activeAccount"], {
-		timeout: 240_000,
-		polling: 500,
-	})
+	await waitForSelectedAccount(page, (address) => !!address, "the reimported profile's account is selected", 240_000, 500)
 	return page
 }
 

@@ -116,9 +116,13 @@ vi.mock("@/wallet/services/transaction/client", async (importOriginal) => ({
 		return { connect: vi.fn(), disconnect: vi.fn(), onTransactionAdded: new EventHandler(), onTransactionUpdated: new EventHandler() }
 	}),
 }))
+const { readFeePicks } = await vi.hoisted(() => import("../../../tests/helpers/ui-preference-fake"))
 vi.mock("@/utils/core", () => ({
 	managers: {
-		profile: { saveFeePick: vi.fn(async () => true) },
+		uiPreference: {
+			getFeePicks: (profileId: string) => readFeePicks(chrome.storage.local, profileId),
+			saveFeePick: vi.fn(async () => true),
+		},
 		legal: {
 			onAcceptanceChanged: new EventHandler(),
 			onConnected: new EventHandler(),

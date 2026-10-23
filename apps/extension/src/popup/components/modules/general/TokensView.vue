@@ -15,6 +15,7 @@ import { OperationJournalServiceClient } from "@/wallet/services/operation-journ
 import { PriceServiceClient } from "@/wallet/services/price/client"
 
 /** Utils */
+import { managers } from "@/utils/core"
 import { journalRecordInScope } from "@/utils/activity-rows"
 import { stringCompare } from "@/utils/string"
 import { orderTokenRows } from "@/utils/token-order"
@@ -95,6 +96,7 @@ const prices = usePrices(priceService)
 const fiatOf = prices.fiatOfRow
 
 const pins = usePinnedTokens({
+	preferences: managers.uiPreference,
 	getScope: () => pinScopeOf(appStore.profile?.id, appStore.network?.chainId),
 	knownContracts: () => new Set(tokenBalances.value.map((tb) => tb.token.contract)),
 })

@@ -12,6 +12,7 @@ import {
 	waitForPgResult,
 } from "./playground"
 import { approveExecute, approveVerify, waitForExecuteContent, waitForPopup } from "./popups"
+import type { FeeMethodSubtitle } from "./transfers"
 
 /**
  * Reconnect a playground page whose origin the wallet remembers, and
@@ -50,9 +51,16 @@ export async function reconnectPlayground(
 export async function runApprovedPgCall(
 	ctx: ExtensionContext,
 	page: Page,
-	opts: { button: string; method: string; label: string; popupTimeoutMs?: number; contentTimeoutMs?: number },
+	opts: {
+		button: string
+		method: string
+		label: string
+		popupTimeoutMs?: number
+		contentTimeoutMs?: number
+		feeMethod?: FeeMethodSubtitle
+	},
 ): Promise<PgResult> {
-	const { button, method, label, popupTimeoutMs = 60_000, contentTimeoutMs = 60_000 } = opts
+	const { button, method, label, popupTimeoutMs = 60_000, contentTimeoutMs = 60_000, feeMethod } = opts
 	const seq = await snapshotResultSeq(page)
 	const popupP = waitForPopup(ctx, "execute", { timeout: popupTimeoutMs })
 	await clickByTestId(page, `pg-btn-${button}`)
@@ -66,7 +74,7 @@ export async function runApprovedPgCall(
 	})
 	const popup = await Promise.race([popupP, errorBeforeWindow])
 	await waitForExecuteContent(popup, contentTimeoutMs)
-	await approveExecute(popup, { approvableTimeoutMs: 120_000 })
+	await approveExecute(popup, { approvableTimeoutMs: 120_000, feeMethod })
 	const result = await waitForPgResult(page, method, seq, 300_000)
 	await assertPgOk(page, result, label)
 	return result

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { STORED_SHAPES } from "@/wallet/storage/stored-shapes"
-import { committedBaseline, signGoldens } from "@/wallet/storage/stored-shapes/baseline"
+import { committedBaseline, signGoldens, wire } from "@/wallet/storage/stored-shapes/baseline"
 import { REFUSALS, updateProblems } from "../../tests/e2e/fixtures/update/verify"
 
 /** Every committed golden of `variant`, as `chrome.storage.local` holds it, split into the boot's
@@ -8,14 +7,7 @@ import { REFUSALS, updateProblems } from "../../tests/e2e/fixtures/update/verify
 async function storedGoldens(variant: "full" | "minimal"): Promise<{ held: Record<string, unknown>; refusals: Record<string, unknown> }> {
 	const signed = (await signGoldens(committedBaseline().goldens)).filter((golden) => golden.id.endsWith(`.${variant}`))
 	const stored = (refusal: boolean) =>
-		Object.fromEntries(
-			signed
-				.filter((golden) => REFUSALS.has(golden.shape) === refusal)
-				.map((golden) => [
-					golden.key,
-					STORED_SHAPES[golden.shape].encoding === "json" ? JSON.stringify(golden.value) : golden.value,
-				]),
-		)
+		Object.fromEntries(signed.filter((golden) => REFUSALS.has(golden.shape) === refusal).map((golden) => [golden.key, wire(golden)]))
 	return { held: stored(false), refusals: stored(true) }
 }
 

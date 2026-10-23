@@ -75,6 +75,7 @@ import { TaskService } from "./services/task/service"
 import { TokenService } from "./services/token/service"
 import { TokenBalanceService } from "./services/token-balance/service"
 import { TransactionService } from "./services/transaction/service"
+import { UiPreferenceService } from "./services/ui-preference/service"
 import { IncomingTransferService } from "./services/incoming-transfer/service"
 import {
 	closeRestartEndedTabs,
@@ -526,6 +527,7 @@ function registerServices(
 	const windows = trackOpenWindows(browserApi.windows, browserApi.runtime, browserApi.runtime.getURL(POPUP_PAGE))
 	const windowManager = new WindowManager(windows, clock, logger)
 	services.add(new ContactService(logger, browserApi, restoreGate))
+	services.add(new UiPreferenceService(logger, browserApi))
 	services.add(new DappInteractionService(logger, windowManager))
 	services.add(new DappSessionService(logger, browserApi))
 	// E2E_PROVERLESS injects a chrome.storage-backed proof gate into the SW

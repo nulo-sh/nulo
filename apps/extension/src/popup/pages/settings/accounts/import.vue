@@ -23,7 +23,6 @@ import { sameStoredName } from "@/utils/account-name"
 import { OWN_WINDOW_ROUTES, closeOwnWindow, isCardWindow, leavePanelFor, ownWindowRoute, returnToPanel } from "@/utils/own-window"
 import { showSnack } from "@/utils/snack"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
-import { storageLocalSet } from "@/utils/storage"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
@@ -141,7 +140,7 @@ const handleConfirmImport = async () => {
 		// active-pointer persist is in flight.
 		if (isStale()) return
 		appStore.accounts.push(account)
-		await storageLocalSet({ "nulo:ui:activeAccount": account.address })
+		await managers.uiPreference.setSelectedAccount(profileId, account.address)
 		if (isStale()) return
 		const imported = { kind: "success", label: "Account imported" }
 		if (await returnToPanel("/popup/settings/accounts", { snack: imported, profileId })) return

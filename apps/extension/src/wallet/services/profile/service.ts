@@ -3,9 +3,7 @@ import { getErrorMessage } from "@nulo/wallet-core/utils"
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { toRestoreError } from "@/utils/restore-error"
 import type { BrowserApi, RuntimePort, StorageArea } from "@nulo/wallet-core/ports"
-import { feePicksKey, profileImportedKey, profileNotFirstKey, profileUiKeys, sendFeePicksKey } from "@/utils/profile-ui-keys"
-import { applyFeePickUpdate, type FeePickUpdate, parseFeePickUpdate } from "@/utils/fee-picks"
-import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
+import { profileImportedKey, profileNotFirstKey, profileUiKeys } from "@/utils/profile-ui-keys"
 import type { IConfig } from "@/wallet/config"
 import { LogLevel, type ILogger } from "@/wallet/logger"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
@@ -123,7 +121,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		"lockActiveProfile",
 		"refreshSession",
 		"changeProfileName",
-		"saveFeePick",
 		"changeProfilePassword",
 		"deleteProfile",
 		"importPasskey",
@@ -1143,25 +1140,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		return this.runExclusive(async () => {
 			await this.sessionManager.refresh()
-		})
-	}
-
-	/** The fee picks' one writer. Deletion reserves the id under this lock before its purge removes the
-	 *  keys, so a write either lands before the purge or is refused. A section the lock's watchdog has
-	 *  displaced issues no write: the check sits right before the call. */
-	public async saveFeePick(profileId: string, update: FeePickUpdate): Promise<boolean> {
-		await this.ensureInitialized()
-		const parsed = parseFeePickUpdate(update)
-		if (typeof profileId !== "string" || !parsed) throw InvalidWalletArgumentsError.forMethod("saveFeePick")
-		return this.runExclusive(async (isCurrent) => {
-			if (this.deletionState.isReserved(profileId) || !(await this.repo.get(profileId))) return false
-			const keys = { app: feePicksKey(profileId), send: sendFeePicksKey(profileId) }
-			const stored = await this.local.get([keys.app, keys.send])
-			const next = applyFeePickUpdate({ app: stored[keys.app], send: stored[keys.send] }, parsed)
-			const writes = { ...(next.app && { [keys.app]: next.app }), ...(next.send && { [keys.send]: next.send }) }
-			if (!isCurrent()) return false
-			await this.local.set(writes)
-			return true
 		})
 	}
 

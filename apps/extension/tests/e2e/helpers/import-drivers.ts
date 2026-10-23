@@ -25,6 +25,7 @@ import {
 	withTimeoutMessage,
 } from "../fixtures/dom"
 import type { ExtensionContext } from "../fixtures/extension"
+import { selectedAccount, waitForSelectedAccount } from "../fixtures/accounts"
 import { pollUntil } from "../fixtures/poll"
 import { expectNewProfileNamed, readProfileNames } from "../fixtures/profiles"
 import { openOnboarding, openPopup, waitForServiceReady } from "../fixtures/wallet-pages"
@@ -355,30 +356,20 @@ export async function importFullBackup(
 	}
 }
 
-/** Read the active account address the wallet writes after import settles. */
+/** Read the selected account the wallet records after import settles. */
 export async function readActiveAccount(page: Page): Promise<string> {
-	return await page.evaluate(async () => {
-		const r = await chrome.storage.local.get("nulo:ui:activeAccount")
-		return r["nulo:ui:activeAccount"] as string
-	})
+	return (await selectedAccount(page)) as string
 }
 
-/** Wait until the active-account pointer CONVERGES to `expected`. Post-import account setup runs
- *  against the active network's RPC, so the pointer can transit intermediate states first — a
+/** Wait until the selected account CONVERGES to `expected`. Post-import account setup runs
+ *  against the active network's RPC, so the selection can transit intermediate states first — a
  *  single-shot read races it (surfaced when the default network became Alpha mainnet, whose public
  *  RPC throttles CI). The budget is sized to the node client's DOCUMENTED stall envelope
  *  (aztec-runtime utils/fetch: 60s per-request abort × makeBackoff([1,2,3]) retries), so one
  *  timed-out request + its successful retry fits — a smaller budget loses to a single throttled
- *  request by design. Polls storage; throws on timeout. */
+ *  request by design. Polls the worker; throws on timeout. */
 export async function waitForActiveAccount(page: Page, expected: string, timeoutMs = 240_000): Promise<void> {
-	await page.waitForFunction(
-		async (want: string) => {
-			const r = await chrome.storage.local.get("nulo:ui:activeAccount")
-			return r["nulo:ui:activeAccount"] === want
-		},
-		{ timeout: timeoutMs, polling: 500 },
-		expected,
-	)
+	await waitForSelectedAccount(page, (addr) => addr === expected, `import: the selection is ${expected}`, timeoutMs, 500)
 }
 
 /** Anvil's fixed L1 chain id — the local network's derivation input under KDF v2. */
@@ -506,15 +497,16 @@ export interface RegisteredPasskey {
 
 /** The one passkey profile in storage, with the row of the active account. */
 export async function readRegisteredPasskey(page: Page): Promise<RegisteredPasskey> {
-	const { profile, active } = await page.evaluate(async () => {
+	const { profile } = await page.evaluate(async () => {
 		const all = await chrome.storage.local.get(null)
 		const profile = Object.entries(all)
 			.filter(([key]) => key.startsWith("nulo:core:profiles@"))
 			.map(([, raw]) => (typeof raw === "string" ? JSON.parse(raw) : raw))
 			.find((row) => row?.type === "passkey")
 		if (!profile) throw new Error("no passkey profile in storage")
-		return { profile: profile as { id: string; credentialId: string; dekSealed: string }, active: String(all["nulo:ui:activeAccount"]) }
+		return { profile: profile as { id: string; credentialId: string; dekSealed: string } }
 	})
+	const active = String(await selectedAccount(page))
 	const row = await findAccount(page, profile.id, active)
 	if (!row) throw new Error(`no account row for the active account ${active}`)
 	const { address, chainId, l1ChainId, index, type } = row

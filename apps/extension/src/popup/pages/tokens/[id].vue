@@ -33,6 +33,7 @@ const { openToast } = useToast()
 const { requestConfirm } = useConfirm()
 
 /** Utils */
+import { managers } from "@/utils/core"
 import { copyWithToast } from "@/utils/clipboard"
 import { dashIfBlank, isBlank } from "@/utils/string"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
@@ -129,6 +130,7 @@ const scope = () => pinScopeOf(appStore.profile?.id, appStore.network?.chainId)
 // still counts toward the cap and is never pruned.
 const pins = usePinnedTokens({
 	tokenService,
+	preferences: managers.uiPreference,
 	getScope: scope,
 	knownContracts: async () => {
 		const s = scope()

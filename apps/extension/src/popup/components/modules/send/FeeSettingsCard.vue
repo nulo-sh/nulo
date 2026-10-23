@@ -157,7 +157,8 @@ const selectionInput = {
 	verdicts,
 	knownFpcs,
 	methods,
-	saveFeePick: (profileId, update) => managers.profile.saveFeePick(profileId, update),
+	getFeePicks: (profileId) => managers.uiPreference.getFeePicks(profileId),
+	saveFeePick: (profileId, update) => managers.uiPreference.saveFeePick(profileId, update),
 }
 /** Chosen once: Send always passes an origin, the app windows never do. */
 const rules =

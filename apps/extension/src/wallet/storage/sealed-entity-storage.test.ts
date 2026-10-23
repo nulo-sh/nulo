@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { EntityStorage, type MinimalStorageArea } from "@nulo/wallet-core/storage"
+import { EntityStorage, MemoryStorageArea, type MinimalStorageArea } from "@nulo/wallet-core/storage"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { asMasterSecretBytes, deriveRowKeys, sealRow } from "@nulo/wallet-crypto"
 import { type Contact, ContactSchema } from "@/wallet/services/contact/spec"
@@ -262,6 +262,56 @@ describe("SealedEntityStorage", () => {
 			await expect(sealedEntityStorage("contacts", flaky, keys.source).sealLegacy("p", unlocked)).rejects.toThrow("quota")
 			expect(await store().sealLegacy("p", unlocked)).toBe(2)
 			expect(JSON.stringify(await raw(area))).not.toContain(MARKER)
+		})
+	})
+
+	describe("structured legacy rows (a popup preference root)", () => {
+		const PINS = "nulo:ui:pinnedTokens"
+		const pins = (source: RowKeysSource = keys.source, on: MinimalStorageArea = area) =>
+			sealedEntityStorage("uiPinnedTokens", on, source)
+		const unlocked = <R>(fn: (isCurrent: () => boolean) => Promise<R>) => fn(() => true)
+		const map = (marker = MARKER) => ({ "7": [`0x${"a1".repeat(32)}`], note: marker })
+
+		test("a structured row reads as its plaintext and seals in place; a JSON-text row too", async () => {
+			await area.set({ [`${PINS}@p`]: map(), [`${PINS}@q`]: JSON.stringify(map()) })
+			const optionless = new SealedEntityStorage(new EntityStorage(PINS, area), area, PINS, keys.source, {
+				ownerOf: (_row, id) => id,
+			})
+
+			expect(await pins().get("p")).toEqual(map())
+			expect(await optionless.get("p")).toBeUndefined()
+			expect(await pins().sealLegacy("p", unlocked)).toBe(1)
+			expect(await pins().sealLegacy("q", unlocked)).toBe(1)
+
+			const stored = await area.get()
+			for (const id of ["p", "q"]) {
+				expect(Object.keys(JSON.parse(stored[`${PINS}@${id}`] as string))).toEqual(["profileId", "sealed"])
+				expect(await pins().get(id)).toEqual(map())
+			}
+			expect(JSON.stringify(stored)).not.toContain(MARKER)
+			expect(await pins().sealLegacy("p", unlocked)).toBe(0)
+		})
+
+		test("a structured row changed after the scan is left for the next pass", async () => {
+			await area.set({ [`${PINS}@p`]: map() })
+			const newer = map("renamed")
+			const writerFirst = async <R>(fn: (isCurrent: () => boolean) => Promise<R>) => {
+				await area.set({ [`${PINS}@p`]: newer })
+				return fn(() => true)
+			}
+
+			expect(await pins().sealLegacy("p", writerFirst)).toBe(0)
+			expect((await area.get(`${PINS}@p`))[`${PINS}@p`]).toEqual(newer)
+			expect(await pins().sealLegacy("p", unlocked)).toBe(1)
+			expect(await pins().get("p")).toEqual(newer)
+		})
+
+		test("a structured value JSON cannot carry stays as stored and stops no other row's seal", async () => {
+			const memory = new MemoryStorageArea().seed({ [`${PINS}@p`]: 7n, [`${PINS}@q`]: map() })
+
+			expect(await pins(keys.source, memory).sealLegacy("p", unlocked)).toBe(0)
+			expect(await pins(keys.source, memory).sealLegacy("q", unlocked)).toBe(1)
+			expect(memory.data.get(`${PINS}@p`)).toBe(7n)
 		})
 	})
 

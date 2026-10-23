@@ -1,5 +1,6 @@
 import { inject, expect } from "vitest"
 import { getStartedFeeJuiceHeldKey } from "@/utils/profile-ui-keys"
+import type { FeePicks } from "@/wallet/services/ui-preference/spec"
 import { test, openPopup, waitForHash, replaceInputValue, clickByTestId } from "../fixtures/extension"
 import {
 	fillSendForm,
@@ -30,6 +31,7 @@ import {
 } from "../fixtures/send-page"
 import { pointerClick } from "../helpers/legal-drivers"
 import { coveredAt, tabAround, waitForFocus } from "../helpers/pointer-probes"
+import { savedFeePicks } from "../helpers/ui-preferences"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import type { Page } from "puppeteer"
 
@@ -257,13 +259,8 @@ async function clearSendPicks(page: Page): Promise<void> {
 	}, SEND_PICKS_PREFIX)
 }
 
-async function readSendPicks(page: Page): Promise<unknown> {
-	return page.evaluate(async (prefix: string) => {
-		const stored = await chrome.storage.local.get(null)
-		const keys = Object.keys(stored).filter((key) => key.startsWith(prefix))
-		if (keys.length > 1) throw new Error(`expected one profile's Send picks, found ${keys.length}`)
-		return keys.length ? stored[keys[0]] : undefined
-	}, SEND_PICKS_PREFIX)
+async function readSendPicks(page: Page): Promise<FeePicks["send"]> {
+	return (await savedFeePicks(page)).send
 }
 
 async function fillAndSubmit(page: Page, destination: string, amount: string, expect: SendAction): Promise<void> {
@@ -303,7 +300,7 @@ test.skipIf(!hasConfig)(
 		expect(publicOrigin).toMatchObject({ tag: null, action: "send", strip: { you: "public", to: "hidden", amount: "public" } })
 
 		// Nothing was picked, so nothing was remembered.
-		expect(await readSendPicks(page)).toBeUndefined()
+		expect(await readSendPicks(page)).toEqual({})
 
 		// A send nobody gated, reviewed anyway: the sheet opened from the strip is armed at once.
 		await setActiveSendType(page, "send-to-type", "public")
@@ -382,7 +379,7 @@ test.skipIf(!hasConfig)(
 				action: "review",
 				strip: { you: "exposed", to: "hidden", amount: "hidden" },
 			})
-			expect(await readSendPicks(page)).toBeUndefined()
+			expect(await readSendPicks(page)).toEqual({})
 			await shotSend(page, "tag-private-private", "send-fee-privacy-notice")
 			await shotSend(page, "strip-fee-payer")
 
