@@ -15,7 +15,7 @@ import {
 	openScratchPage,
 	stopBackground,
 } from "./browser"
-import { createAccount, getAccountAddress } from "./accounts"
+import { createAccount, getAccountAddress, waitForSelectedAccount } from "./accounts"
 import { clickByTestId, expectNoNameField, isFrameDetachError, patchPagePolling, typeIntoInput, waitForHash } from "./dom"
 import { switchToLocalNetwork } from "./networks"
 import { readLivenessBaseline, waitForWorkerLiveness } from "./session"
@@ -1012,16 +1012,9 @@ export const test = base.extend<{
 			// with the SAME address the script pre-funded.
 			await switchToLocalNetwork(page)
 
-			// Wait for nulo:ui:activeAccount to settle on the Local-chain address.
+			// Wait for the selection to settle on the Local-chain address.
 			const accountAddress = prefunded.accountAddress.toString()
-			await page.waitForFunction(
-				async (expected: string) => {
-					const r = await chrome.storage.local.get("nulo:ui:activeAccount")
-					return r["nulo:ui:activeAccount"] === expected
-				},
-				{ timeout: 30_000, polling: 500 },
-				accountAddress,
-			)
+			await waitForSelectedAccount(page, (addr) => addr === accountAddress, "the selection is the prefunded Local account", 30_000)
 			console.log(`[feeJuiceImported] extension account on Local: ${accountAddress}`)
 
 			// Trigger gas-balance-card render by visiting general; both balances

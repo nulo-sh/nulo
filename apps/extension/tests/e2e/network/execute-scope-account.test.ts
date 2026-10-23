@@ -3,7 +3,13 @@ import type { Page } from "puppeteer"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
-import { getAccountAddress, hasTxCardByHash, switchAccountByAddress, waitForTxCardByHash } from "../fixtures/helpers"
+import {
+	getAccountAddress,
+	hasTxCardByHash,
+	switchAccountByAddress,
+	waitForTxCardByHash,
+	waitForSelectedAccount,
+} from "../fixtures/helpers"
 import { readDappExecuteRecords } from "../fixtures/journal"
 import { SEALED_READ_MESSAGE } from "../fixtures/sealed-rows"
 import { type AztecTestConfig, mintPublicTokensForAccount, waitForTxMined } from "../fixtures/aztec"
@@ -37,14 +43,8 @@ async function gotoHistoryAs(page: Page, address: string): Promise<void> {
 }
 
 async function waitForActiveAccountPointer(page: Page, address: string, timeout = 30_000): Promise<void> {
-	await page.waitForFunction(
-		async (want: string) => {
-			const r = await chrome.storage.local.get("nulo:ui:activeAccount")
-			return typeof r["nulo:ui:activeAccount"] === "string" && r["nulo:ui:activeAccount"].toLowerCase() === want
-		},
-		{ timeout, polling: 200 },
-		lower(address),
-	)
+	const want = lower(address)
+	await waitForSelectedAccount(page, (observed) => lower(observed ?? "") === want, `the selection is ${address}`, timeout, 200)
 }
 
 /** A dApp record the wallet accepted after `knownIds` were snapshotted, past the queue. */

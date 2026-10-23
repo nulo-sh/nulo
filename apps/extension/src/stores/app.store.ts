@@ -382,10 +382,10 @@ interface AccountActionDeps extends ScopeRefs {
  *
  * Stale-activation fence: a monotonic activation epoch plus the (profile,
  * network) scope captured at entry, re-checked before EVERY account
- * assignment and the durable pointer write. A run superseded mid-await
+ * assignment and the durable selection write. A run superseded mid-await
  * (rapid profile switch, network flip) refuses instead of landing the
- * loser's account after the winner's — and instead of poisoning the global
- * `nulo:ui:activeAccount` key, which survives into the next bootstrap.
+ * loser's account after the winner's — and instead of recording it as the
+ * device's selection, which survives into the next bootstrap.
  * The epoch is the load-bearing half: scope IDs alone are ABA-unsafe (an
  * A→B→A flip makes the parked run's capture match again); any
  * LATER entry into this action supersedes every parked one. The id checks
@@ -400,9 +400,7 @@ function createAccountActions(deps: AccountActionDeps) {
 	const setupActiveAccount = (): Promise<boolean> => setupActiveAccountRun(deps, activation)
 	const selectAccount = async (acc: Account) => {
 		account.value = acc
-		await storageLocalSet({
-			"nulo:ui:activeAccount": acc.address,
-		})
+		await rememberSelection(profile.value?.id, acc.address)
 	}
 	const changeAccountVisibility = async (acc: Account, value: boolean): Promise<boolean> => {
 		if (!profile.value || !network.value) return false
@@ -422,9 +420,7 @@ function createAccountActions(deps: AccountActionDeps) {
 				account.value = next
 			})
 			if (!moved) return false
-			await storageLocalSet({
-				"nulo:ui:activeAccount": account.value?.address,
-			})
+			await rememberSelection(profile.value.id, account.value?.address)
 		}
 		return true
 	}
@@ -475,18 +471,15 @@ async function setupActiveAccountRun(deps: AccountActionDeps, activation: { epoc
 	const scopeNetworkId = network.value?.id
 	const superseded = () => activation.epoch !== myEpoch || profile.value?.id !== scopeProfileId || network.value?.id !== scopeNetworkId
 
-	const activeAccountResult = await storageLocalGet("nulo:ui:activeAccount")
+	const selection = scopeProfileId === undefined ? undefined : await managers.uiPreference.getSelectedAccount(scopeProfileId)
 	// INVARIANT: no await between this check and commitAccountTarget's
 	// synchronous fast-path assignment (an async call runs synchronously up
 	// to its first await) — that synchronous span is what lets the fast path
 	// skip its own superseded() re-check. Inserting an await in it (here or
 	// before the helper's fast-path check) reopens the race.
 	if (superseded()) return false
-	if ("nulo:ui:activeAccount" in activeAccountResult) {
-		const activeAccountAddress = activeAccountResult["nulo:ui:activeAccount"]
-		const remembered = accounts.value.find((a) => a.address === activeAccountAddress)
-		if (remembered) return (await commitAccountTarget(deps, remembered, superseded)) !== "refused"
-	}
+	const remembered = selection === undefined ? undefined : accounts.value.find((a) => a.address === selection)
+	if (remembered) return (await commitAccountTarget(deps, remembered, superseded)) !== "refused"
 
 	const first = accounts.value[0]
 	const outcome = await commitAccountTarget(deps, first, superseded)
@@ -495,12 +488,16 @@ async function setupActiveAccountRun(deps: AccountActionDeps, activation: { epoc
 	if (outcome === "refused") return false
 	// Re-check across the await boundary between the commit and the durable
 	// write: a supersede landing in that gap must not let the loser stamp the
-	// global pointer (it outlives this run — the next bootstrap reads it).
+	// device's selection (it outlives this run — the next bootstrap reads it).
 	if (superseded()) return false
-	await storageLocalSet({
-		"nulo:ui:activeAccount": account.value?.address,
-	})
+	await rememberSelection(scopeProfileId, account.value?.address)
 	return true
+}
+
+/** Records `address` as the device's last account selection, made by `profileId`. */
+async function rememberSelection(profileId: string | undefined, address: string | undefined): Promise<void> {
+	if (profileId === undefined || address === undefined) return
+	await managers.uiPreference.setSelectedAccount(profileId, address)
 }
 
 // ---------------------------------------------------------------------------------------------

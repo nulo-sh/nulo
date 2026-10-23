@@ -44,6 +44,7 @@ import {
 	switchAccountByAddress,
 	waitForFreshBalanceRow,
 	waitForTxConfirmation,
+	selectedAccount,
 } from "../fixtures/helpers"
 import { deliverWhileLocked, readIncomingPollStatus, releaseIncomingPoll, waitForIncomingPollPhase } from "../fixtures/incoming-poll-gate"
 import { readSealedRows } from "../fixtures/sealed-rows"
@@ -163,12 +164,12 @@ test.skipIf(!hasConfig)(
 )
 
 /** Resolve the active `(profileId, networkId, accountAddress)` triple the gate
- *  arms on, from the same persisted keys the harness test reads. Throws with
- *  the observed shape if any leg is missing. */
+ *  arms on, from the persisted keys the harness test reads and the worker's
+ *  selection. Throws with the observed shape if any leg is missing. */
 async function resolveActiveTriple(page: Page): Promise<{ profileId: string; networkId: string; account: string }> {
-	const triple = await page.evaluate(async () => {
+	const account = (await selectedAccount(page)) ?? null
+	const stored = await page.evaluate(async () => {
 		const profileId = (await chrome.storage.local.get("nulo:ui:lastActiveProfile"))["nulo:ui:lastActiveProfile"]
-		const account = (await chrome.storage.local.get("nulo:ui:activeAccount"))["nulo:ui:activeAccount"]
 		let networkId: string | null = null
 		if (typeof profileId === "string") {
 			const activeKey = `nulo:core:active-network@${profileId}`
@@ -177,10 +178,10 @@ async function resolveActiveTriple(page: Page): Promise<{ profileId: string; net
 		}
 		return {
 			profileId: typeof profileId === "string" ? profileId : null,
-			account: typeof account === "string" ? account : null,
 			networkId,
 		}
 	})
+	const triple = { ...stored, account }
 	if (!triple.profileId || !triple.networkId || !triple.account) {
 		throw new Error(`could not resolve active (profile, network, account): ${JSON.stringify(triple)}`)
 	}

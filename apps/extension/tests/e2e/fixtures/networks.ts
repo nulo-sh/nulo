@@ -1,5 +1,6 @@
 import type { Page } from "puppeteer"
 import { NETWORK_SERVICE_NAME, NETWORK_STORAGE_ROOT } from "@/wallet/services/network/spec"
+import { selectedAccount, waitForSelectedAccount } from "./accounts"
 import { clickByTestId } from "./dom"
 import { callService } from "./session"
 import { acceptConfirmPopup } from "./widgets"
@@ -66,10 +67,7 @@ export async function switchToNetwork(page: Page, networkName: string): Promise<
 		const btn = document.querySelector('[data-testid="network-button"]')
 		return (btn?.textContent ?? "").trim()
 	})
-	const beforeAccount = await page.evaluate(async () => {
-		const r = await chrome.storage.local.get("nulo:ui:activeAccount")
-		return (r["nulo:ui:activeAccount"] as string | undefined) ?? ""
-	})
+	const beforeAccount = (await selectedAccount(page)) ?? ""
 	// Exact match (not substring) on the trimmed header text. Substring
 	// matching collides when a custom network is renamed to contain another
 	// network's name (e.g., "Local Backup" would falsely look like a no-op
@@ -111,19 +109,15 @@ export async function switchToNetwork(page: Page, networkName: string): Promise<
 	)
 
 	// Then: wait for the network watcher's `setupActiveAccount` to land. On
-	// a real switch, `nulo:ui:activeAccount` flips away from `beforeAccount`
+	// a real switch, the selection flips away from `beforeAccount`
 	// because each chain derives its own address. On a repeat switch we just
 	// confirm the existing value is still set (the watcher may briefly clear
 	// the `account` ref while re-fetching).
-	await page.waitForFunction(
-		async ({ prev, real }: { prev: string; real: boolean }) => {
-			const r = await chrome.storage.local.get("nulo:ui:activeAccount")
-			const addr = r["nulo:ui:activeAccount"]
-			if (typeof addr !== "string" || addr.length === 0) return false
-			return real ? addr !== prev : true
-		},
-		{ timeout: 30_000, polling: 250 },
-		{ prev: beforeAccount, real: isRealSwitch },
+	await waitForSelectedAccount(
+		page,
+		(addr) => !!addr && (!isRealSwitch || addr !== beforeAccount),
+		`switch network: the selection settles on ${networkName}`,
+		30_000,
 	)
 }
 

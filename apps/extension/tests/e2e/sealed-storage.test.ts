@@ -9,6 +9,7 @@ import { ensureUnlocked } from "./fixtures/auth"
 import { BROWSER } from "./fixtures/browser"
 import { type ExtensionContext, launchExtension, openPopup, registerProfile, waitForHash } from "./fixtures/extension"
 import { addContact, getAccountAddress, navigateByHash, navigateToSettings } from "./fixtures/helpers"
+import { pollUntil } from "./fixtures/poll"
 import { callService } from "./fixtures/session"
 
 /**
@@ -135,6 +136,31 @@ async function seedPreferences(page: Page, profileId: string, maps: PreferenceMa
 	})
 }
 
+const SELECTED = "nulo:ui:selectedAccount@device"
+const BARE_SELECTED = "nulo:ui:activeAccount"
+
+/** The selection as a build that did not seal it stored it: a bare address, no device row. */
+async function seedPreSealSelection(page: Page, account: string): Promise<void> {
+	await page.evaluate(
+		async (sealed: string, bare: string, address: string) => {
+			await chrome.storage.local.remove(sealed)
+			await chrome.storage.local.set({ [bare]: address })
+		},
+		SELECTED,
+		BARE_SELECTED,
+		account,
+	)
+}
+
+const storedSelection = (page: Page) =>
+	page.evaluate(
+		async (keys: string[]) => {
+			const all = await chrome.storage.local.get(keys)
+			return keys.map((key) => all[key])
+		},
+		[SELECTED, BARE_SELECTED],
+	)
+
 const storedPreferences = (page: Page, profileId: string) =>
 	page.evaluate(async (keys: string[]) => {
 		const all = await chrome.storage.local.get(keys)
@@ -206,6 +232,7 @@ test("sealed storage: a new contact is written sealed, plaintext rows outlive a 
 		await seedPlaintext(page, profile.id, address, account)
 		const maps = preferenceMaps(account, address)
 		await seedPreferences(page, profile.id, maps)
+		await seedPreSealSelection(page, account)
 		await page.close()
 		const plaintextLoad = await listLoadMs(ctx, contactList, SEEDED + 1)
 		const plaintextActivity = await listLoadMs(ctx, activityList(profile.id), finished + JOURNAL_SEEDED)
@@ -217,6 +244,7 @@ test("sealed storage: a new contact is written sealed, plaintext rows outlive a 
 		expect(await carriesMarker(page)).toBe(SEEDED + 1 + JOURNAL_SEEDED)
 		expect((await balanceRows(page)).plaintext).toBeGreaterThanOrEqual(BALANCES_SEEDED)
 		expect(await storedPreferences(page, profile.id)).toEqual([maps.pins, maps.app, maps.send])
+		expect(await storedSelection(page)).toEqual([undefined, account])
 
 		await ensureUnlocked(page)
 		const unlocked = performance.now()
@@ -251,6 +279,15 @@ test("sealed storage: a new contact is written sealed, plaintext rows outlive a 
 		const conversion = performance.now() - unlocked
 		expect(await callService(page, "ui-preference", "getPinnedTokens", [profile.id])).toEqual(maps.pins)
 		expect(await callService(page, "ui-preference", "getFeePicks", [profile.id])).toEqual({ app: maps.app, send: maps.send })
+		// Home's boot moves the bare selection into the sealed device row and opens on it.
+		const [sealedSelection, bareSelection] = await pollUntil(
+			() => storedSelection(page),
+			([sealed, bare]) => typeof sealed === "string" && bare === undefined,
+			{ label: "the pre-seal selection moved into the sealed device row", timeoutMs: 60_000, intervalMs: 250 },
+		)
+		expect(bareSelection).toBeUndefined()
+		expect(String(sealedSelection).toLowerCase()).not.toContain(account.slice(2).toLowerCase())
+		expect(await callService(page, "ui-preference", "getSelectedAccount", [profile.id])).toBe(account)
 		expect((await balanceRows(page)).stored).toBeGreaterThanOrEqual(ownBalances + BALANCES_SEEDED)
 		await waitForHash(page, "#/popup/general", 30_000)
 

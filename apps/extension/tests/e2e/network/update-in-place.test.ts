@@ -24,6 +24,7 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { isValidAztecAddress } from "@/utils/aztec-address"
+import { LEGACY_SELECTED_ACCOUNT_KEY } from "@/wallet/services/ui-preference/spec"
 import { walletChainId } from "@nulo/wallet-core/chain-id"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { BROWSER } from "../fixtures/browser"
@@ -131,6 +132,14 @@ async function sandboxChainInfo(nodeUrl: string): Promise<ChainInfo> {
 	return { chainId: String(info.l1ChainId), version: String(info.rollupVersion) }
 }
 
+/** The release's selection: it stores it in plaintext and has no service to read it through. */
+async function releaseSelection(page: Page): Promise<string | undefined> {
+	return page.evaluate(
+		async (key: string) => (await chrome.storage.local.get(key))[key] as string | undefined,
+		LEGACY_SELECTED_ACCOUNT_KEY,
+	)
+}
+
 /** Adds the sandbox as a network, which activates it, and resolves with the account the switch
  *  derives there. */
 async function addSandboxNetwork(page: Page, nodeUrl: string, chainInfo: ChainInfo): Promise<string> {
@@ -145,7 +154,7 @@ async function addSandboxNetwork(page: Page, nodeUrl: string, chainInfo: ChainIn
 	const chainId = walletChainId(Number(chainInfo.chainId), Number(chainInfo.version))
 	return pollUntil(
 		async () => {
-			const active = await getAccountAddress(page)
+			const active = await releaseSelection(page)
 			const onSandbox = (await accountRows(page, chainId)).some((row) => row.address === active)
 			return onSandbox ? active : undefined
 		},
@@ -273,7 +282,8 @@ async function verify(ctx: ExtensionContext, populated: Populated): Promise<void
 	await ensureUnlocked(page)
 	await waitForHash(page, "#/popup/general", 30_000)
 	expect(await shownOverlays(page, BARRIERS)).toEqual([])
-	expect(await getAccountAddress(page)).toBe(populated.account)
+	expect(populated.before[LEGACY_SELECTED_ACCOUNT_KEY], "the release's selection").toBe(populated.account)
+	expect(await getAccountAddress(page)).toBe(populated.before[LEGACY_SELECTED_ACCOUNT_KEY])
 	await expectReleasePreferences(ctx, page, populated.before, await captureSoleProfileId(page))
 
 	await navigateToTokenDetail(page)

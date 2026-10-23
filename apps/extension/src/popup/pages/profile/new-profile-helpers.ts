@@ -6,7 +6,6 @@ import { isPopupSubmitKey } from "@/composables/usePopupEntity"
 import type { useAppStore } from "@/stores/app.store"
 import { initTransactionService, managers } from "@/utils/core"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
-import { storageLocalSet } from "@/utils/storage"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 
@@ -69,9 +68,7 @@ async function openCreatedProfile(profile: ProfileInfo, { appStore, router }: Cr
 
 	initTransactionService(appStore.onTxAdded, appStore.onTxUpdated)
 
-	await storageLocalSet({
-		"nulo:ui:activeAccount": appStore.account?.address,
-	})
+	if (appStore.account) await managers.uiPreference.setSelectedAccount(profile.id, appStore.account.address)
 	assertActive()
 
 	router.push("/popup/general")

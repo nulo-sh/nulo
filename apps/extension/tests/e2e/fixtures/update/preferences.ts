@@ -4,20 +4,11 @@ import { readAppPicks, readSendPicks } from "@/utils/fee-picks"
 import { sanitizePinMap } from "@/utils/pinned-tokens"
 import { feePicksKey, pinnedTokensKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { UI_PREFERENCE_SERVICE_NAME } from "@/wallet/services/ui-preference/spec"
-import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import type { ExtensionContext } from "../extension"
 import { pollUntil } from "../poll"
 import { callService } from "../session"
 import { readLocalStorage } from "./in-place"
-
-const isEnvelope = (raw: unknown): boolean => {
-	if (typeof raw !== "string") return false
-	try {
-		return parseEnvelope(JSON.parse(raw)) !== undefined
-	} catch {
-		return false
-	}
-}
+import { isEnvelope } from "./verify"
 
 /**
  * `profileId`'s pins and fee picks as the release stored them in `before`: once the unlock has
