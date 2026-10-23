@@ -10,6 +10,10 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 import { defineComponent, h, reactive } from "vue"
 
 const router = vi.hoisted(() => ({ push: vi.fn() }))
+vi.mock("@/utils/core", async (importOriginal) => {
+	const { chromeUiPreferences } = await import("../../../tests/helpers/ui-preference-fake")
+	return { ...(await importOriginal<typeof import("@/utils/core")>()), managers: { uiPreference: chromeUiPreferences() } }
+})
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({}) }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
@@ -93,6 +97,7 @@ function gasEntry(scope: BalanceScope) {
 const AZTEC_KEY = "nulo:ui:getStartedAztecOpened@p1"
 const HIDDEN = { "nulo:ui:getStartedHidden@p1": true }
 const FEE_JUICE_KEY = "nulo:ui:getStartedFeeJuiceHeld@p1"
+const PRESTO_KEY = "nulo:ui:getStartedPrestoOpened@p1"
 
 const wrappers: VueWrapper[] = []
 let storage: ChromeStorageMock
@@ -296,6 +301,23 @@ describe("Home — what the reminders do", () => {
 		expect(open).toHaveBeenCalledWith(HOW_AZTEC_WORKS_URL, "_blank", "noopener,noreferrer")
 	})
 
+	test("Make proofs faster opens Proving at once and marks the step once its write lands", async () => {
+		gas = ZERO
+		const w = await mountHome()
+		const write = Promise.withResolvers<void>()
+		storage.set.mockImplementationOnce(async (items: Record<string, unknown>) => {
+			await write.promise
+			Object.assign(storage.data, items)
+		})
+		await w.get('[data-testid="get-started-presto"]').trigger("click")
+		await flushPromises()
+		expect(router.push).toHaveBeenCalledWith("/popup/settings/proving")
+		expect(storage.data[PRESTO_KEY]).toBeUndefined()
+		write.resolve()
+		await flushPromises()
+		expect(storage.data[PRESTO_KEY]).toBe(true)
+	})
+
 	test("a flag write that fails still opens the link", async () => {
 		gas = ZERO
 		vi.spyOn(console, "debug").mockImplementation(() => {})
@@ -311,6 +333,8 @@ describe("Home — what the reminders do", () => {
 		gas = ZERO
 		const calm = await mountHome()
 		await calm.get('[data-testid="get-started-phrase"]').trigger("click")
+		await flushPromises()
+		expect(storage.data[PRESTO_KEY]).toBeUndefined()
 		tokenHoldings = "some"
 		const urgent = await mountHome("password", HIDDEN)
 		await urgent.get('[data-testid="backup-reminder-save"]').trigger("click")

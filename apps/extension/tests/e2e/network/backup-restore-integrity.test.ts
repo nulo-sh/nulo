@@ -37,7 +37,7 @@
  */
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
+import { join } from "node:path"
 import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { type ExtensionContext, launchExtension, openPopup, registerProfile, test } from "../fixtures/extension"
@@ -146,13 +146,9 @@ test.skipIf(!hasConfig)(
 			await importFullBackup(page2, filePath, TEST_PASSWORD, POPUP_IMPORT_SHELL)
 
 			// ── 4a. The token row holds the chain's metadata once the import ends ──
-			const restoredToken = await page2.evaluate(async (contract) => {
-				const all = await chrome.storage.local.get()
-				return Object.entries(all)
-					.filter(([k]) => k.startsWith("nulo:core:tokens@"))
-					.map(([, v]) => JSON.parse(v as string) as Record<string, unknown>)
-					.find((row) => String(row.contract).toLowerCase() === contract)
-			}, fundedToken)
+			const restoredToken = (await readSealedRows(page2, "tokens")).find(
+				({ row }) => String(row.contract).toLowerCase() === fundedToken,
+			)?.row
 			expect(restoredToken).toMatchObject(chainMetadata)
 
 			// ── 4. Provenance assertion over every stored tx row ────────────
@@ -167,19 +163,21 @@ test.skipIf(!hasConfig)(
 			expect(txAccounts).toContain(funded)
 			expect(txAccounts).not.toContain(FOREIGN_ACCOUNT)
 
-			// Authwit + token-balance provenance via RAW chrome.storage: a foreign
-			// account's auth/balance rows were dropped before restore wrote them.
-			const readAccounts = (prefix: string) =>
-				page2.evaluate(async (p) => {
-					const all = await chrome.storage.local.get()
-					return Object.entries(all)
-						.filter(([k]) => k.startsWith(p))
-						.map(([, v]) => (JSON.parse(v as string) as { account: string }).account)
-				}, prefix)
-			const authAccounts = await readAccounts("nulo:core:auth-registry@")
+			// Authwit + token-balance provenance: a foreign account's auth/balance rows were dropped
+			// before restore wrote them, and every stored row is one the wallet reads.
+			const readAccounts = async (root: "authRegistry" | "tokenBalances", prefix: string) => {
+				const accounts = (await readSealedRows<{ account: string }>(page2, root)).map(({ row }) => row.account)
+				const stored = await page2.evaluate(
+					async (p) => Object.keys(await chrome.storage.local.get()).filter((k) => k.startsWith(p)).length,
+					prefix,
+				)
+				expect(stored).toBe(accounts.length)
+				return accounts
+			}
+			const authAccounts = await readAccounts("authRegistry", "nulo:core:auth-registry@")
 			expect(authAccounts).toContain(funded)
 			expect(authAccounts).not.toContain(FOREIGN_ACCOUNT)
-			const balanceAccounts = await readAccounts("nulo:core:token-balances@")
+			const balanceAccounts = await readAccounts("tokenBalances", "nulo:core:token-balances@")
 			expect(balanceAccounts).not.toContain(FOREIGN_ACCOUNT)
 
 			// ── 5. On-chain functionality ───────────────────────────────────
@@ -251,12 +249,7 @@ test.skipIf(!hasConfig)(
 			try {
 				await ctx2?.close()
 			} finally {
-				try {
-					rmSync(profileDir, { recursive: true, force: true })
-				} finally {
-					// The doctored file embeds the wallet's REAL (local-chain test) master-key.
-					rmSync(dirname(filePath), { recursive: true, force: true })
-				}
+				rmSync(profileDir, { recursive: true, force: true })
 			}
 		}
 	},

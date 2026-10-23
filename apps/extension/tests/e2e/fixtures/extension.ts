@@ -15,7 +15,7 @@ import {
 	openScratchPage,
 	stopBackground,
 } from "./browser"
-import { createAccount, getAccountAddress } from "./accounts"
+import { createAccount, getAccountAddress, waitForSelectedAccount } from "./accounts"
 import { clickByTestId, expectNoNameField, isFrameDetachError, patchPagePolling, typeIntoInput, waitForHash } from "./dom"
 import { switchToLocalNetwork } from "./networks"
 import { readLivenessBaseline, waitForWorkerLiveness } from "./session"
@@ -38,6 +38,7 @@ import {
 	ownGuardedLaunch,
 } from "./egress-guard"
 import { holdNodeStub } from "./node-stub"
+import { readSealedRows } from "./sealed-rows"
 import { heldListStorage } from "./token-list"
 import { PollTimeoutError, pollUntil } from "./poll"
 
@@ -538,20 +539,15 @@ const pickFirstAccount = async (accountIds: (string | null)[]): Promise<string[]
 
 type TwoAccountDapp = ExtensionContext & { playgroundPage: Page; accountAddresses: string[] }
 
-/** Ground truth from the wallet's own storage — every account and network row, raw (values may
- *  be serialized strings) — so a "<2 accounts exposed" failure discriminates wrong-chain creation
- *  from popup-side filtering. */
-function dumpAccountAndNetworkRows(popup: Page): Promise<string> {
-	return popup.evaluate(async () => {
-		const all = await chrome.storage.local.get(null)
-		const out: string[] = []
-		for (const [k, v] of Object.entries(all)) {
-			if (k.startsWith("nulo:core:accounts") || k.startsWith("nulo:core:networks")) {
-				out.push(`${k} => ${(typeof v === "string" ? v : JSON.stringify(v)).slice(0, 400)}`)
-			}
-		}
-		return out.join(" ||| ")
-	})
+/** Ground truth from the wallet: every account row it reads and each network's chain, so a "<2
+ *  accounts exposed" failure discriminates wrong-chain creation from popup-side filtering. A network's
+ *  endpoints stay out: a node URL may carry a provider key. */
+async function dumpAccountAndNetworkRows(popup: Page): Promise<string> {
+	const accounts = (await readSealedRows(popup, "accounts").catch(() => [])).map(({ row }) => JSON.stringify(row))
+	const networks = (await readSealedRows<Record<string, unknown>>(popup, "networks").catch(() => [])).map(
+		({ row: { id, name, kind, chainId, profileId } }) => JSON.stringify({ id, name, kind, chainId, profileId }),
+	)
+	return [...accounts, ...networks].join(" ||| ")
 }
 
 /** The two-account dApp fixture body, shared by its `transaction` and `transaction-contracts`
@@ -573,13 +569,7 @@ function firstTwoAccountsFixture(label: string, bundle: "transaction" | "transac
 			// Persistence assertion: the row rendering proves only the optimistic
 			// appStore push; verify the SERVICE write landed before moving on.
 			await phase("assertSecondAccountPersisted", async () => {
-				postCreateDump = await setupPage.evaluate(async () => {
-					const all = await chrome.storage.local.get(null)
-					return Object.entries(all)
-						.filter(([k]) => k.startsWith("nulo:core:accounts"))
-						.map(([, v]) => (typeof v === "string" ? v : JSON.stringify(v)))
-						.join(" ||| ")
-				})
+				postCreateDump = (await readSealedRows(setupPage, "accounts")).map(({ row }) => JSON.stringify(row)).join(" ||| ")
 				if (!postCreateDump.includes('"Second"')) {
 					throw new Error(`account "Second" not in storage immediately after creation. Stored: ${postCreateDump.slice(0, 600)}`)
 				}
@@ -1022,16 +1012,9 @@ export const test = base.extend<{
 			// with the SAME address the script pre-funded.
 			await switchToLocalNetwork(page)
 
-			// Wait for nulo:ui:activeAccount to settle on the Local-chain address.
+			// Wait for the selection to settle on the Local-chain address.
 			const accountAddress = prefunded.accountAddress.toString()
-			await page.waitForFunction(
-				async (expected: string) => {
-					const r = await chrome.storage.local.get("nulo:ui:activeAccount")
-					return r["nulo:ui:activeAccount"] === expected
-				},
-				{ timeout: 30_000, polling: 500 },
-				accountAddress,
-			)
+			await waitForSelectedAccount(page, (addr) => addr === accountAddress, "the selection is the prefunded Local account", 30_000)
 			console.log(`[feeJuiceImported] extension account on Local: ${accountAddress}`)
 
 			// Trigger gas-balance-card render by visiting general; both balances

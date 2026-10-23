@@ -18,6 +18,7 @@ import {
 	IFACE,
 	KEY,
 	MARKER_KEY,
+	markerStore,
 	SEED,
 	disposeSeeders,
 	goodPreview,
@@ -212,7 +213,7 @@ describe("TokenSeeder — attempt cap + retry semantics", () => {
 			onStatusChanged: vi.fn(),
 		}
 		vi.useFakeTimers({ toFake: ["Date"] })
-		const seeder = trackSeeder(new TokenSeeder(deps, api.storage.local, logger, () => version))
+		const seeder = trackSeeder(new TokenSeeder(deps, markerStore(api.storage.local), logger, () => version))
 		for (let i = 0; i < SEED_ATTEMPT_CAP; i++) {
 			await seeder.run()
 			skipBackoff()

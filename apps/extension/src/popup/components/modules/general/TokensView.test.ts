@@ -51,6 +51,10 @@ const H = vi.hoisted(() => {
 	}
 })
 
+vi.mock("@/utils/core", async (importOriginal) => {
+	const { chromeUiPreferences } = await import("../../../../../tests/helpers/ui-preference-fake")
+	return { ...(await importOriginal<typeof import("@/utils/core")>()), managers: { uiPreference: chromeUiPreferences() } }
+})
 vi.mock("@/wallet/services/task/client", () => ({
 	TaskServiceClient: vi.fn(function () {
 		return {

@@ -17,9 +17,8 @@ import { getErrorMessage } from "@nulo/wallet-core/utils"
 /** Local utilities */
 import { uniqueSignerAccounts, uniqueSignerNetworks } from "./signers"
 import { resolveOperationScope, scopeBannerCopy, scopeBannerState } from "./scope-mismatch"
-import { createScopeFollow } from "./scope-follow"
-import { requireNetwork } from "@/utils/core"
-import { storageLocalSet } from "@/utils/storage"
+import { createScopeFollow, selectionWriter } from "./scope-follow"
+import { managers, requireNetwork } from "@/utils/core"
 import { carriesFeeSettings, isSelfPay } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
 import { type FeePayerPick, personPaysAppPayment, waitsForFeeFigure } from "./fee-figure"
@@ -551,7 +550,10 @@ const scopeFollow = createScopeFollow({
 	hasInFlightSend: () => appStore.hasInFlightSend,
 	getActiveNetworkId: async () => (await requireNetwork().getActiveNetwork())?.id,
 	setActiveNetwork: (networkId) => requireNetwork().setActiveNetwork(networkId),
-	writeActiveAccount: (address, unless) => storageLocalSet({ "nulo:ui:activeAccount": address }, { unless }),
+	writeActiveAccount: selectionWriter(
+		() => profile.value?.id,
+		(profileId, address) => managers.uiPreference.setSelectedAccount(profileId, address),
+	),
 })
 // Mirrors the `requiresFeeSelection` early-return inside approve(): a send-like op
 // with no chosen fee can't execute yet. Gating the Confirm button's disabled state

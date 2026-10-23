@@ -3,9 +3,10 @@
  * in `@nulo/aztec-runtime/pxe` and is Chrome-agnostic; this subclass
  * adds the MV3 offscreen-document bootstrap via `onReady`.
  */
-import { ensureOffscreenRunning, isOffscreenDocumentSender } from "@/wallet/utils/offscreen"
+import { ensureOffscreenRunning, isOffscreenDocumentSender, markOffscreenUnanswered, offscreenAnswer } from "@/wallet/utils/offscreen"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { ChainNotSupportedError, PxeScopeUnregisteredError, RecoveryModeError } from "@nulo/extension-messaging/errors"
+import type { TerminalRecord } from "@nulo/extension-messaging/offscreen"
 import { type Methods, PxeServiceClientBase, type ScopeRegistrar, type StoreKeyProvision } from "@nulo/aztec-runtime/pxe"
 
 /**
@@ -61,6 +62,9 @@ function isProfileBound(arg: unknown): arg is { profileId: string } {
 	return typeof arg === "object" && arg !== null && typeof (arg as { profileId?: unknown }).profileId === "string" && "chainId" in arg
 }
 
+/** The offscreen answer token current at the send, beside the base client's own tag. */
+type PxeRequestTag = { answer: number | undefined; inner: unknown }
+
 export class PxeServiceClient extends PxeServiceClientBase {
 	public constructor(logger: ILogger) {
 		super(logger)
@@ -85,6 +89,17 @@ export class PxeServiceClient extends PxeServiceClientBase {
 	/** Responses and events settle only from the offscreen document itself (exact URL). */
 	protected override isAcceptedSender(sender: chrome.runtime.MessageSender | undefined): boolean {
 		return isOffscreenDocumentSender(sender)
+	}
+
+	protected override requestTag(method: string): PxeRequestTag {
+		return { answer: offscreenAnswer(), inner: super.requestTag(method) }
+	}
+
+	/** A request that went unanswered (its deadline fired, or its send failed) is the only evidence
+	 *  that withdraws trust from the document it was sent to. */
+	protected override onTerminal(record: TerminalRecord, tag?: PxeRequestTag): void {
+		super.onTerminal(record, tag?.inner)
+		if (record.detail === "timeout_fired" || record.status === "send_failed") markOffscreenUnanswered(tag?.answer)
 	}
 
 	protected override async request<T extends keyof Methods>(

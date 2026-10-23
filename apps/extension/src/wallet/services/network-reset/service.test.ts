@@ -23,7 +23,7 @@ vi.mock("@nulo/aztec-runtime/account", async (importOriginal) => ({
 	},
 }))
 
-import { asImportedKeysDek, sealImportedSigningKeyV2, unsealImportedSigningKeyV2 } from "@nulo/wallet-crypto"
+import { asImportedKeysDek, sealImportedSigningKeyV2, unsealImportedSigningKeyV2, keyedSegment } from "@nulo/wallet-crypto"
 import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import type { RestoreGateHoldPoint } from "@/e2e/restore-gate"
@@ -48,6 +48,10 @@ import { svc } from "../composition-harness"
 import { recordWrites } from "../storage-write-log"
 import { NetworkResetService } from "./service"
 import type { ResetConfirmation, StaleNetworkChanged, StaleNetworkView } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 const OLD = 4321
 const NEW = CHAIN_IDS.TESTNET
@@ -83,6 +87,7 @@ async function harness(opts: { gate?: Gate; recovery?: () => boolean } = {}) {
 	const services = new ServiceCollection()
 	services.add(
 		svc(PROFILE_SERVICE_NAME, {
+			...ROW_KEY_FAKE,
 			onProfileDeleted: new EventHandler(),
 			onActiveProfileChanged: new EventHandler(),
 			getActiveProfile: async () => ({ id: "p1", name: "P", type: "password" }),
@@ -486,7 +491,10 @@ describe("NetworkResetService — admission and capture", () => {
 		}
 		expect(h.handedDeks.length).toBeGreaterThan(0)
 		for (const dek of h.handedDeks) expect(dek.every((b) => b === 0)).toBe(true)
+		// Every FakeBrowserApi shares one store: a run left going would purge the next test's rows.
+		const done = h.settled()
 		gate.release()
+		await done
 	})
 
 	test("the journal keeps the unmovable names, so the running view never reads as a never-opened network", async () => {
@@ -498,7 +506,9 @@ describe("NetworkResetService — admission and capture", () => {
 		await gate.reached
 		expect((await h.repo.getJournal("p1"))?.unmovable).toEqual(["Broken"])
 		expect(await h.reset.getStaleNetwork("tn")).toMatchObject({ unmovable: ["Broken"], reset: { running: true } })
+		const done = h.settled()
 		gate.release()
+		await done
 	})
 
 	test("a recovery-mode session refuses before anything changes", async () => {
@@ -1056,7 +1066,8 @@ describe("AccountService.recreateForReset", () => {
 		await h.account.recreateForReset("p1", NEW, entry, L1)
 		await h.account.recreateForReset("p1", NEW, entry, L1)
 		writes.restore()
-		const id = accountRowId("p1", NEW, address)
+		// Both roots seal the pair at one keyed id.
+		const id = accountRowId("p1", NEW, await keyedSegment(ROW_KEY_FAKE.rowKeys("p1")!, address))
 		expect(writes.log.filter((w) => w.includes(id))).toEqual([
 			`set:nulo:core:imported-account-keys@${id}`,
 			`set:nulo:core:accounts@${id}`,

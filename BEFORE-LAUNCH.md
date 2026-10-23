@@ -143,6 +143,30 @@ promote publishes it, so until then it reads `«FILL: effective date»`:
       AMO's Privacy policy field carries the 1.2.2 text (`apps/extension/store/listing.md` § Privacy
       policy text)
 
+**Due at the release that publishes privacy 1.2.3:** § 3 says which data is stored encrypted. The
+version is archived and in place, and its effective date, like 1.2.2's, is the day the promote
+publishes it. A promote that publishes both dates both, and the archived
+`legal/archive/privacy-1.2.2.md` with them, since it was archived before its date was known:
+
+- [ ] `legal/privacy.md` — the version line and the 1.2.3 history row, dated the day it is published
+- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.3 (now `null`), same date
+- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.3/` show no DRAFT banner, and
+      AMO's Privacy policy field carries the 1.2.3 text (`apps/extension/store/listing.md` § Privacy
+      policy text)
+- [ ] The Chrome Web Store's `storage` justification is re-pasted from `apps/extension/store/listing.md`
+      § Permissions, which now says the data is encrypted
+
+**Due at the release that publishes privacy 1.2.4:** § 3 drops pinned tokens, fee-payer choices
+and the last-selected account from its exceptions. Its effective date, like 1.2.3's, is the day the
+promote publishes it. A promote that publishes both dates both, and the archived
+`legal/archive/privacy-1.2.3.md` with them:
+
+- [ ] `legal/privacy.md` — the version line and the 1.2.4 history row, dated the day it is published
+- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.4 (now `null`), same date
+- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.4/` show no DRAFT banner, and
+      AMO's Privacy policy field carries the 1.2.4 text (`apps/extension/store/listing.md` § Privacy
+      policy text)
+
 **Due at the release that first uploads an Aztec 6.0.0-rc.3 build to a store** (owner's call,
 2026-10-14; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
 

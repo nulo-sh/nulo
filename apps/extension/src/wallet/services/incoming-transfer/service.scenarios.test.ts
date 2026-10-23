@@ -20,12 +20,11 @@
 
 import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
-import { flushPromises } from "@vue/test-utils"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { LoggerStore } from "@/wallet/logger"
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 // Static (module-scope) import: pays Vite's cold transform of this service +
 // its inlined @nulo/* graph during the file's import phase, NOT inside the first
@@ -52,17 +51,30 @@ import type {
 	PublicTransferPage,
 } from "@nulo/aztec-runtime/pxe/public-events"
 import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { rowKeysForEveryProfile, trackSubtleCrypto } from "@/wallet/storage/sealed-entity-storage.testing"
+import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 
 // ── Storage ─────────────────────────────────────────────────────────────
 
 // Every `FakeBrowserApi` in this file shares `@webext-core/fake-browser`'s one store, so this
 // repository reads and writes the rows of every service the suite boots.
 const suiteBrowser = new FakeBrowserApi()
-const repo = new IncomingTransferRepository(suiteBrowser)
+/** One key for every profile, as the profile stub holds it. */
+const { rowKeys: ROW_KEYS } = await rowKeysForEveryProfile()
+const repo = new IncomingTransferRepository(suiteBrowser, ROW_KEYS)
+// Every row is sealed, so a flush waits for the crypto behind the writes it lets run.
+const subtleCalls = trackSubtleCrypto()
+afterAll(() => subtleCalls.restore())
+const flushPromises = () => subtleCalls.settled()
+/** Advances the fake clock, then lets the sealed writes the timers started settle. */
+const advance = async (ms: number) => {
+	await vi.advanceTimersByTimeAsync(ms)
+	await subtleCalls.settled()
+}
 
 /** Writes `row` as given, `updatedAt` included, where `setTrust` would stamp the clock. */
-function seedTrustRow(row: IncomingTrustRecord): Promise<void> {
-	return repo.setArrivalFloor(row, { arrivalFloor: row.arrivalFloor, pending: row.arrivalFloorPending === true })
+async function seedTrustRow(row: IncomingTrustRecord): Promise<void> {
+	await repo.setArrivalFloor(row, { arrivalFloor: row.arrivalFloor, pending: row.arrivalFloorPending === true })
 }
 
 // Pass-through, so a test can observe when a clear builds its episode prefix.
@@ -92,6 +104,8 @@ function makeProfileStub(activeProfile: { id: string } | null = { id: "p1" }) {
 		dependencies: [],
 		onActiveProfileChanged: eh<void>(),
 		onProfileDeleted: eh<{ id: string }>(),
+		onRowKeysReady: eh<string>(),
+		rowKeys: ROW_KEYS,
 		getActiveProfile: vi.fn().mockImplementation(async () => {
 			const current = live()
 			return current ? { id: current.profileId } : null
@@ -900,17 +914,17 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 			// The deletion queues BEHIND the parked CS (its epoch bump is inside
 			// the same lock) — nothing has been wiped or written yet.
 			token.onTokenDeleted.invoke({ ...tokenA, profileId: "p1" })
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 			expect((await repo.listRecords()).length).toBe(0)
 
 			// The serviceLock watchdog fires → handoff → the deletion bumps the
 			// epoch and wipes the token's rows.
-			await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
+			await advance(5 * 60_000 + 1)
 
 			// The revoked CS resumes — its post-park re-check must stand down.
 			trustRead.release()
 			await scanP
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 
 			expect((await repo.listRecords()).length).toBe(0) // no resurrection
 			expect((await repo.listOutbox()).length).toBe(0) // no post-park outbox write
@@ -946,14 +960,14 @@ describe("IncomingTransferService — scanContract dedup + emit semantics", () =
 			const scanP = scan(service)
 			await untilReached(recordRead.held)
 			token.onTokenDeleted.invoke({ ...tokenA, profileId: "p1" })
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 
-			await vi.advanceTimersByTimeAsync(5 * 60_000 + 1) // handoff → wipe
+			await advance(5 * 60_000 + 1) // handoff → wipe
 			expect((await repo.listRecords()).length).toBe(0)
 
 			recordRead.release()
 			await scanP
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 
 			expect((await repo.listRecords()).length).toBe(0) // the backfill did not resurrect it
 		} finally {
@@ -2339,7 +2353,7 @@ describe("IncomingTransferService — lock-races (pins for the global serviceLoc
 				account: accountStub,
 				token: makeTokenStub([tokenA]),
 			})
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 			const s = service as never as {
 				schedulers: Map<string, unknown>
 				publicSchedulers: Map<string, unknown>
@@ -2378,7 +2392,7 @@ describe("IncomingTransferService — lock-races (pins for the global serviceLoc
 			const tokenStub = makeTokenStub([tokenA])
 			const profileStub = makeProfileStub({ id: "p1" })
 			const { service } = await bootService({ profile: profileStub, network: network(), account: accountStub, token: tokenStub })
-			await vi.advanceTimersByTimeAsync(0) // drain the bootstrap hydrate
+			await advance(0) // drain the bootstrap hydrate
 
 			// Poll is what a scheduler tick calls; spy AFTER boot so only later ticks count.
 			const pollSpy = vi.spyOn(service as never as { poll: (...a: unknown[]) => Promise<void> }, "poll").mockResolvedValue(undefined)
@@ -2387,10 +2401,10 @@ describe("IncomingTransferService — lock-races (pins for the global serviceLoc
 			// so it hasn't committed (the old scheduler is not yet torn down).
 			accountStub.getAccounts.mockImplementation(() => new Promise(() => {}))
 			void profileStub.onActiveProfileChanged.invoke()
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 
 			// Fire the OLD scheduler's periodic tick (installed at the pre-bump epoch).
-			await vi.advanceTimersByTimeAsync(1_000_000)
+			await advance(1_000_000)
 
 			// Its tick must bail on the creation-epoch guard: no scan under the bumped epoch.
 			expect(pollSpy).not.toHaveBeenCalled()
@@ -2947,8 +2961,8 @@ async function seedPublic(overrides: Partial<IncomingPublicEventRecord> = {}): P
 	return rec
 }
 
-function seedCursor(overrides: Partial<PublicScanCursor> = {}, contract = tokenA.contract): Promise<void> {
-	return repo.setCursor("p1", "n1", contract, {
+async function seedCursor(overrides: Partial<PublicScanCursor> = {}, contract = tokenA.contract): Promise<void> {
+	await repo.setCursor("p1", "n1", contract, {
 		cursor: null,
 		lastSyncedBlockHash: null,
 		lastScanFinalized: null,
@@ -4380,7 +4394,7 @@ describe("IncomingTransferService — public arm post-park epoch discipline", ()
 			tokenBalance.requestBalanceRefresh.mockImplementationOnce(async () => {
 				// Drain is parked here holding the lock. Fire its watchdog, then run
 				// the receipt writer under a REAL lock acquisition (ticket flips).
-				await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
+				await advance(5 * 60_000 + 1)
 				await (service as unknown as { withServiceLock: (fn: () => Promise<void>) => Promise<void> }).withServiceLock(async () => {
 					await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 100 })
 				})
@@ -4509,9 +4523,9 @@ describe("IncomingTransferService — seam pins (outbox order, trust order, fres
 			const getSpy = vi.spyOn(internals(service).repo, "getOutbox").mockImplementationOnce(() => parked as never)
 			try {
 				const drainP = drain(service) // parks inside getOutbox, serviceLock held
-				await vi.advanceTimersByTimeAsync(0)
+				await advance(0)
 				// Watchdog handoff → the parked CS's ticket is revoked.
-				await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
+				await advance(5 * 60_000 + 1)
 				releaseRow()
 				await drainP
 			} finally {
@@ -5180,7 +5194,12 @@ describe("IncomingTransferService — arrival floors", () => {
 	})
 
 	test("adding a token floors its history before the scan commits it", async () => {
-		const noteSvc = makeNoteStub({ [tokenB.contract]: [note({ contract: tokenB.contract, l2BlockNumber: 50 })] })
+		const noteSvc = makeNoteStub()
+		// Only 0xa is handed the note. A record id names no account and the first commit keeps it, so
+		// a note handed to both accounts would land on whichever account's scan committed first.
+		noteSvc.getNotesRaw.mockImplementation(async (_n: string, account: string, contract: string) =>
+			account === "0xa" && contract === tokenB.contract ? [note({ contract: tokenB.contract, l2BlockNumber: 50 })] : [],
+		)
 		const { service, token } = await bootArrivals(60, { note: noteSvc })
 		await repo.setArrivalRow("p1", "n1", "0xa", { sinceBlock: 10, played: [] })
 		token.getTokensRaw.mockResolvedValue([tokenA, tokenB])
@@ -5188,10 +5207,8 @@ describe("IncomingTransferService — arrival floors", () => {
 		await internals(service).onTokenAdded(tokenAdd(tokenB))
 		await flushPromises()
 
-		const history = (await repo.listRecords()).filter(
-			(r) => r.contract === tokenB.contract && r.networkId === "n1" && r.accountAddress === "0xa",
-		)
-		expect(history.length).toBeGreaterThan(0)
+		const history = (await repo.listRecords()).filter((r) => r.contract === tokenB.contract && r.networkId === "n1")
+		expect(history.map((r) => r.accountAddress)).toEqual(["0xa"])
 		const state = await service.getArrivalState("p1", "n1", "0xa")
 		expect(history.filter((r) => isArrivalEligible(r, state))).toEqual([])
 	})
@@ -5202,6 +5219,7 @@ describe("IncomingTransferService — arrival floors", () => {
 		const atReset: Array<Promise<ArrivalRow | undefined>> = []
 		vi.spyOn(internals(service).repo, "setCursor").mockImplementation(async () => {
 			atReset.push(repo.getArrivalRow("p1", "n1", "0xnew"))
+			return true
 		})
 
 		await internals(service).onAccountAdded({ chainId: 1, address: "0xnew" })
@@ -5257,6 +5275,26 @@ function holdCall(obj: object, method: string, nth: number, when: "after" | "bef
 	return { release: () => release(), held }
 }
 
+/** Holds an acceptance after its one write has landed, until `release`. */
+function holdAfterAcceptance(repo: object) {
+	const target = repo as IncomingTransferRepository
+	const prepare = target.prepareAcceptance.bind(target)
+	let release!: () => void
+	const gate = new Promise<void>((resolve) => {
+		release = resolve
+	})
+	const held = { reached: false }
+	vi.spyOn(target, "prepareAcceptance").mockImplementation(async (...args) => {
+		const commit = await prepare(...args)
+		return async () => {
+			await commit()
+			held.reached = true
+			await gate
+		}
+	})
+	return { release: () => release(), held }
+}
+
 type Booted = Awaited<ReturnType<typeof bootArrivals>>
 
 describe("IncomingTransferService — a token add displaced by the watchdog while its token is deleted", () => {
@@ -5274,15 +5312,15 @@ describe("IncomingTransferService — a token add displaced by the watchdog whil
 		vi.useFakeTimers()
 		try {
 			const add = internals(fixture.service).onTokenAdded(tokenAdd(tokenB))
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 			expect(held.reached).toBe(true)
 
 			registered = [tokenA]
 			void fixture.token.onTokenDeleted.invoke({ ...tokenB, profileId: "p1" } as never)
-			await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
+			await advance(5 * 60_000 + 1)
 			release()
 			await add
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 		} finally {
 			vi.useRealTimers()
 		}
@@ -5417,11 +5455,11 @@ describe("IncomingTransferService — a trust write lands only in its session an
 			vi.useFakeTimers()
 			try {
 				const call = run(f)
-				await vi.advanceTimersByTimeAsync(0)
+				await advance(0)
 				expect(registration.held.reached).toBe(true)
 
 				const successor = f.service.clearProfile("p1")
-				await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
+				await advance(5 * 60_000 + 1)
 				await successor
 				registration.release()
 
@@ -5441,11 +5479,11 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		vi.useFakeTimers()
 		try {
 			const call = allow(f)
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 			expect(read.held.reached).toBe(true)
 
 			const successor = reject(f)
-			await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
+			await advance(5 * 60_000 + 1)
 			expect(await successor).toBe(true)
 			read.release()
 
@@ -5469,10 +5507,10 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		vi.useFakeTimers()
 		try {
 			const call = allow(f)
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 			expect(read.held.reached).toBe(true)
 
-			await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
+			await advance(5 * 60_000 + 1)
 			read.release()
 
 			expect(await call).toBe(false)
@@ -5509,7 +5547,7 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		const f = await bootArrivals(100)
 		await seedPending()
 		const receipts = [await receipt(1, 40, { hidden: true }), await receipt(2, 41, { hidden: true })]
-		const write = holdCall(internals(f.service).repo, "commitAcceptance", 1, "after")
+		const write = holdAfterAcceptance(internals(f.service).repo)
 		const call = allow(f)
 		await flushPromises()
 		expect(write.held.reached).toBe(true)
@@ -5530,14 +5568,14 @@ describe("IncomingTransferService — a trust write lands only in its session an
 			await receipt(2, 141, { hidden: true, accountAddress: "0xb", owner: "0xb" }),
 		]
 		const repo = internals(f.service).repo as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>
-		const commit = vi.spyOn(repo, "commitAcceptance")
+		const prepare = vi.spyOn(repo, "prepareAcceptance")
 		const others = ["setTrust", "setArrivalFloor", "upsertRecord"].map((method) => vi.spyOn(repo, method))
 
 		expect(await allow(f)).toBe(true)
 
-		expect(commit).toHaveBeenCalledTimes(1)
-		expect(commit.mock.calls[0][0]).toMatchObject({ state: "trusted", arrivalFloor: 141 })
-		expect((commit.mock.calls[0][1] as IncomingTransferRecord[]).map((r) => [r.id, r.hidden])).toEqual(
+		expect(prepare).toHaveBeenCalledTimes(1)
+		expect(prepare.mock.calls[0][0]).toMatchObject({ state: "trusted", arrivalFloor: 141 })
+		expect((prepare.mock.calls[0][1] as IncomingTransferRecord[]).map((r) => [r.id, r.hidden])).toEqual(
 			receipts.map((r) => [r.id, false]),
 		)
 		for (const other of others) expect(other).not.toHaveBeenCalled()
@@ -5572,10 +5610,10 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		try {
 			const deleter = await displacedDeleter(f, "0xown")
 			const call = allow(f)
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 			await deleter.finish()
 			read.release()
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 			expect(await call).toBe(false)
 		} finally {
 			vi.useRealTimers()
@@ -5695,9 +5733,9 @@ describe("IncomingTransferService — claimArrivals", () => {
 		vi.useFakeTimers()
 		try {
 			const displaced = service.claimArrivals("p1", "n1", "0xa", [first.id])
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 			const successor = service.claimArrivals("p1", "n1", "0xa", [second.id])
-			await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
+			await advance(5 * 60_000 + 1)
 			expect(await successor).toEqual([second.id])
 
 			parked.resolve()
@@ -5820,7 +5858,7 @@ const WATCHDOG_MS = 5 * 60_000 + 1
 /** Advance fake time in zero steps until `reached` holds: each step drains the microtasks queued by
  *  the last. */
 async function untilReached(held: { reached: boolean }) {
-	for (let i = 0; i < 20 && !held.reached; i++) await vi.advanceTimersByTimeAsync(0)
+	for (let i = 0; i < 20 && !held.reached; i++) await advance(0)
 	expect(held.reached).toBe(true)
 }
 
@@ -5832,9 +5870,9 @@ async function runHandoff<T>(inst: ReturnType<typeof instrumentReceipt>, op: () 
 		const done = op()
 		await untilReached(inst.parked)
 		inst.log.push("HANDOFF")
-		await vi.advanceTimersByTimeAsync(WATCHDOG_MS)
+		await advance(WATCHDOG_MS)
 		inst.release()
-		await vi.advanceTimersByTimeAsync(0)
+		await advance(0)
 		return await done
 	} finally {
 		vi.useRealTimers()
@@ -6262,11 +6300,11 @@ async function displacedDeleter(f: ReceiptFixture, hash: string) {
 	const listing = holdCall(internals(f.service).repo, "listByTxHash", 1, "after")
 	const done = ownTxAdded(f.service, hash)
 	await untilReached(listing.held)
-	await vi.advanceTimersByTimeAsync(WATCHDOG_MS)
+	await advance(WATCHDOG_MS)
 	return {
 		finish: async () => {
 			listing.release()
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 			await done
 		},
 	}
@@ -6315,10 +6353,10 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 		try {
 			const displaced = scan(f.service)
 			await untilReached(trustRead.held)
-			await vi.advanceTimersByTimeAsync(WATCHDOG_MS)
+			await advance(WATCHDOG_MS)
 			expect(await f.service.setTrustAllow("p1", "n1", tokenA.contract)).toBe(true)
 			trustRead.release()
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 			await displaced
 		} finally {
 			vi.useRealTimers()
@@ -6342,9 +6380,9 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 		try {
 			const tick = scanPublic(f.service)
 			await untilReached(trustRead.held)
-			await vi.advanceTimersByTimeAsync(WATCHDOG_MS)
+			await advance(WATCHDOG_MS)
 			trustRead.release()
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 			first = await tick
 		} finally {
 			vi.useRealTimers()
@@ -6379,9 +6417,9 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 		try {
 			const tick = scanPublic(f.service)
 			await untilReached(recordRead.held)
-			await vi.advanceTimersByTimeAsync(WATCHDOG_MS)
+			await advance(WATCHDOG_MS)
 			recordRead.release()
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 			expect(await tick).toBe("no-progress")
 		} finally {
 			vi.useRealTimers()
@@ -6439,7 +6477,7 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 			const deleter = await displacedDeleter(f, ((await repo.getRecord(NOTE_ID)) as IncomingNoteRecord).txHash)
 			const inst = instrumentReceipt(f)
 			const receipt = scan(f.service)
-			await vi.advanceTimersByTimeAsync(0)
+			await advance(0)
 			await receipt
 			expect(inst.log).toEqual(["notes", "getRecord", "timestamp"])
 			await deleter.finish()
@@ -6473,13 +6511,13 @@ async function bootTicking(
 		{ account: makeAccountStub(accounts), token: makeTokenStub([tokenA]), ...stubs, note, publicReader: reader },
 		{ pollIntervalMs: undefined },
 	)
-	await vi.advanceTimersByTimeAsync(0)
+	await advance(0)
 	state.reset()
 	note.getNotesRaw.mockClear()
 	return { ...booted, reader, state, note }
 }
 
-const tick = () => vi.advanceTimersByTimeAsync(TICK_MS)
+const tick = () => advance(TICK_MS)
 const episodesOf = (service: unknown) => (service as { episodes: { has: (key: string) => boolean } }).episodes
 
 describe("IncomingTransferService — block-gated ticks", () => {
@@ -6493,9 +6531,9 @@ describe("IncomingTransferService — block-gated ticks", () => {
 	test("a default-built service ticks at the production 30 s, not before", async () => {
 		const { state } = await bootTicking()
 
-		await vi.advanceTimersByTimeAsync(29_999)
+		await advance(29_999)
 		expect(state.tipsCalls).toBe(0)
-		await vi.advanceTimersByTimeAsync(1)
+		await advance(1)
 		expect(state.tipsCalls).toBe(1)
 	})
 
@@ -6592,10 +6630,10 @@ describe("IncomingTransferService — block-gated ticks", () => {
 
 		f.account.getAccounts.mockResolvedValue([{ profileId: "p1", chainId: 1, address: "0xa" }])
 		await f.account.onAccountDeleted.invoke({ profileId: "p1", chainId: 1, address: "0xb" })
-		await vi.advanceTimersByTimeAsync(0)
+		await advance(0)
 		held.release()
 		await ticking
-		await vi.advanceTimersByTimeAsync(0)
+		await advance(0)
 
 		expect((await repo.listRecords()).filter((r) => r.accountAddress === "0xb")).toEqual([])
 	})
@@ -6610,10 +6648,10 @@ describe("IncomingTransferService — block-gated ticks", () => {
 
 		f.token.getTokensRaw.mockResolvedValue([])
 		await f.token.onTokenDeleted.invoke({ ...tokenA, profileId: "p1" } as never)
-		await vi.advanceTimersByTimeAsync(0)
+		await advance(0)
 		held.release()
 		await ticking
-		await vi.advanceTimersByTimeAsync(0)
+		await advance(0)
 
 		expect(await cursorFor()).toBeUndefined()
 	})
@@ -7280,9 +7318,9 @@ describe("IncomingTransferService — note rows reconciled against the PXE", () 
 			try {
 				const scan = f.run()
 				await untilReached(reread.held)
-				await vi.advanceTimersByTimeAsync(WATCHDOG_MS)
+				await advance(WATCHDOG_MS)
 				reread.release()
-				await vi.advanceTimersByTimeAsync(0)
+				await advance(0)
 				expect(await scan).toBe(false)
 			} finally {
 				vi.useRealTimers()
@@ -7352,5 +7390,52 @@ describe("IncomingTransferService — quarantined chain", () => {
 			await pollPublic.call(service, `n1|${tokenA.contract}`, true)
 			expect([quarantined, state.tipsCalls > 0, state.fetchArgs.length > 0]).toEqual([quarantined, !quarantined, !quarantined])
 		}
+	})
+})
+
+describe("IncomingTransferService — sealing at rest", () => {
+	/** A trusted token and one received note, stored as plaintext rows the way an earlier build wrote them. */
+	async function seedLegacy() {
+		const record = noteRecord({ contract: tokenA.contract, tokenId: tokenA.id })
+		const trust = { profileId: "p1", networkId: "n1", contract: tokenA.contract, state: "trusted", updatedAt: 1 }
+		await suiteBrowser.storage.local.set({
+			[`nulo:core:incoming-transfers@${record.id}`]: JSON.stringify(record),
+			[`nulo:core:incoming-trust@p1|n1|${tokenA.contract}`]: JSON.stringify(trust),
+		})
+		return { record, trust }
+	}
+	const incomingRows = async () =>
+		Object.entries(await suiteBrowser.storage.local.get()).filter(([key]) => key.startsWith("nulo:core:incoming-"))
+	const sealedCount = async () => (await incomingRows()).filter(([, value]) => parseEnvelope(JSON.parse(value as string))).length
+
+	test("the profile's row keys seal its plaintext rows, which read back unchanged", async () => {
+		const { record, trust } = await seedLegacy()
+		const { profile } = await bootService({ token: makeTokenStub([]) })
+		await flushPromises()
+		const before = (await incomingRows()).length
+
+		profile.onRowKeysReady.invoke("p1")
+		await flushPromises()
+
+		expect(await sealedCount()).toBe(before)
+		expect(await repo.getRecord(record.id)).toEqual(record)
+		expect(await repo.getTrust("p1", "n1", tokenA.contract)).toEqual(trust)
+	})
+
+	test("a conversion while a scope wipe runs commits nothing; the next one seals", async () => {
+		await seedLegacy()
+		const { service, profile } = await bootService({ token: makeTokenStub([]) })
+		await flushPromises()
+		const deleters = service as unknown as { deletersRunning: number }
+
+		deleters.deletersRunning += 1
+		profile.onRowKeysReady.invoke("p1")
+		await flushPromises()
+		expect(await sealedCount()).toBe(0)
+
+		deleters.deletersRunning -= 1
+		profile.onRowKeysReady.invoke("p1")
+		await flushPromises()
+		expect(await sealedCount()).toBe((await incomingRows()).length)
 	})
 })

@@ -3,6 +3,8 @@ import { describe, expect, test } from "vitest"
 import { z } from "zod"
 import { CONTACT_STORAGE_ROOT } from "@/wallet/services/contact/spec"
 import { DAPP_SESSION_STORAGE_ROOT } from "@/wallet/services/dapp-session/spec"
+import { RESTORE_PENDING_ROOT } from "@/wallet/services/profile/restore-pending-repository"
+import { PROFILE_TOMBSTONE_ROOT } from "@/wallet/services/profile/tombstone-repository"
 import { TOKEN_STORAGE_ROOT } from "@/wallet/services/token/spec"
 import { defineRowMapMigration } from "@/wallet/services/backup/row-map-migration"
 import {
@@ -17,6 +19,7 @@ import {
 	type ShapeRecord,
 	type Stamp,
 	currentShapes,
+	wire,
 	zodVersion,
 } from "./baseline"
 import { canonical, canonicalText, emitSchema, type Json } from "./emit"
@@ -29,13 +32,14 @@ const contactGolden: Golden = {
 	value: { id: "c1", profileId: "0a1b2c3d", name: "Ada", address: `0x${"ab".repeat(32)}`, abbr: "AD" },
 }
 
-/** A plain json row a migration may cover: `contacts` is sealed, which no migration may touch. */
-const tokenGolden: Golden = {
-	id: "tokens.full",
+/** A plain json row a migration may cover: every content root is sealed, which no migration may
+ *  touch, so the example is a deletion tombstone. */
+const tombstoneGolden: Golden = {
+	id: "profileTombstones.full",
 	stamp: 0,
-	shape: "tokens",
-	key: "nulo:core:tokens@1",
-	value: { id: 1, profileId: "0a1b2c3d", chainId: 1, contract: `0x${"cd".repeat(32)}`, name: "Ada Token", symbol: "ADA", decimals: 18 },
+	shape: "profileTombstones",
+	key: "nulo:core:profile-tombstones@0a1b2c3d",
+	value: { profileId: "0a1b2c3d", addresses: [], tokenIds: [1], networkIds: [], epoch: 3, pxeGeneration: "g" },
 }
 
 const stampOf = (shapes: Record<string, ShapeRecord>, extra: Partial<Stamp> = {}): Stamp => ({
@@ -177,15 +181,15 @@ describe("justify", () => {
 	})
 
 	test("a +1 step needs its registered migration, whose footprint covers each change", () => {
-		const shapes = withShape("tokens", widened)
+		const shapes = withShape("profileTombstones", widened)
 		const next = stampOf(shapes, { version: 2, migration: 2 })
 		expect(justify(base, next, [])).toEqual(["v2 names no registered migration 2"])
-		expect(justify(base, next, [migrationOver(2, TOKEN_STORAGE_ROOT)])).toEqual([])
-		expect(justify(base, next, [migrationOver(2, "nulo:core:networks")])[0]).toContain("footprint does not cover it")
+		expect(justify(base, next, [migrationOver(2, PROFILE_TOMBSTONE_ROOT)])).toEqual([])
+		expect(justify(base, next, [migrationOver(2, RESTORE_PENDING_ROOT)])[0]).toContain("footprint does not cover it")
 	})
 
 	test("no migration may change a structured, engine, authenticated or sealed shape", () => {
-		for (const name of ["uiPinnedTokens", "schemaBlocked", "dappSessions", "contacts"]) {
+		for (const name of ["uiRestoreOutcome", "schemaBlocked", "dappSessions", "contacts"]) {
 			const shapes = withShape(name, widened)
 			const ref = shapes[name]?.ref
 			const root = ref?.kind === "root" ? ref.root : (ref?.key ?? "")
@@ -212,6 +216,7 @@ describe("justify", () => {
 			["contacts", (r) => ({ ...r, read: "described" }), "contacts stops reading through its codec"],
 			["schemaVersion", ({ engine: _, ...r }) => r, "schemaVersion stops being engine state"],
 			["contacts", ({ sealed: _, ...r }) => r, "contacts drops its seal"],
+			["uiPinnedTokens", ({ legacy: _, ...r }) => r, "uiPinnedTokens stops reading its rows from before the seal"],
 		]
 		for (const [name, change, problem] of cases) {
 			const problems = justify(base, stampOf(withShape(name, change), { additive: { names: [name], reason: "test" } }), [])
@@ -226,20 +231,27 @@ describe("justify", () => {
 })
 
 describe("preservationProblems", () => {
-	const prev = stampOf(currentShapes(), { expected: { "tokens.full": { id: 1, name: "Ada Token" } } })
+	const prev = stampOf(currentShapes(), { expected: { "profileTombstones.full": { profileId: "0a1b2c3d", epoch: 3 } } })
 
 	test("an old row outside the migration's footprint keeps every value; new paths are allowed", () => {
-		const lost = stampOf(currentShapes(), { expected: { "tokens.full": { id: 1 } }, additive: { names: [], reason: "t" } })
-		expect(preservationProblems(prev, lost, [tokenGolden], [])).toEqual([
-			"golden tokens.full (tokens) changes /name with no migration covering it",
+		const lost = stampOf(currentShapes(), {
+			expected: { "profileTombstones.full": { profileId: "0a1b2c3d" } },
+			additive: { names: [], reason: "t" },
+		})
+		expect(preservationProblems(prev, lost, [tombstoneGolden], [])).toEqual([
+			"golden profileTombstones.full (profileTombstones) changes /epoch with no migration covering it",
 		])
-		const grown = stampOf(currentShapes(), { expected: { "tokens.full": { id: 1, name: "Ada Token", tag: "new" } } })
-		expect(preservationProblems(prev, grown, [tokenGolden], [])).toEqual([])
+		const grown = stampOf(currentShapes(), { expected: { "profileTombstones.full": { profileId: "0a1b2c3d", epoch: 3, tag: "new" } } })
+		expect(preservationProblems(prev, grown, [tombstoneGolden], [])).toEqual([])
 	})
 
 	test("a row the step's migration covers may change", () => {
-		const migrated = stampOf(currentShapes(), { version: 2, migration: 2, expected: { "tokens.full": { id: 1 } } })
-		expect(preservationProblems(prev, migrated, [tokenGolden], [migrationOver(2, TOKEN_STORAGE_ROOT)])).toEqual([])
+		const migrated = stampOf(currentShapes(), {
+			version: 2,
+			migration: 2,
+			expected: { "profileTombstones.full": { profileId: "0a1b2c3d" } },
+		})
+		expect(preservationProblems(prev, migrated, [tombstoneGolden], [migrationOver(2, PROFILE_TOMBSTONE_ROOT)])).toEqual([])
 	})
 
 	test("a sealed row never counts as covered: its old values must hold", () => {
@@ -252,6 +264,17 @@ describe("preservationProblems", () => {
 })
 
 describe("decodeGoldens", () => {
+	test("a pre-seal golden of a shape whose old rows were stored as is is seeded as is and reads to its value", async () => {
+		const value = { "7": [`0x${"a1".repeat(32)}`] }
+		const golden: Golden = { id: "uiPinnedTokens.full", stamp: 0, shape: "uiPinnedTokens", key: "nulo:ui:pinnedTokens@0a1b2c3d", value }
+		expect(wire(golden)).toBe(value)
+		expect(wire({ ...golden, sealed: true })).toBe(JSON.stringify(value))
+		expect(wire(contactGolden)).toBe(JSON.stringify(contactGolden.value))
+		const decoding = await decodeGoldens([golden], [{ version: 1 }], [])
+		expect(decoding.live[golden.id]).toEqual(value)
+		expect(decoding.stored[golden.id]).toEqual(value)
+	})
+
 	test("an acknowledged import-blocking migration refuses each backup-sliced golden; an unacknowledged one throws", async () => {
 		const goldens = committedBaseline().goldens.filter((golden) => golden.stamp === 0)
 		const imperative = migrationOver(2, CONTACT_STORAGE_ROOT)

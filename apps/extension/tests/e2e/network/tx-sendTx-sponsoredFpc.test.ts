@@ -1,11 +1,13 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
-import { feePicksKey } from "@/utils/profile-ui-keys"
 import { clickByTestId, openPopup, test } from "../fixtures/extension"
-import { captureSoleProfileId } from "../fixtures/helpers"
+import { captureSoleProfileId, readActiveNetwork } from "../fixtures/helpers"
+import { pollUntil } from "../fixtures/poll"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import { snapshotResultSeq } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { waitForDappExecuteWorked } from "../fixtures/journal"
+import { savedAppPick } from "../helpers/ui-preferences"
 import { getSponsoredFpcAddress, mintPublicTokensForAccount, type AztecTestConfig } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -15,31 +17,14 @@ const hasConfig = aztecConfig !== undefined
  *  chain under one address, so the address alone can name another network's row. */
 async function fpcIdAt(page: Page, address: string): Promise<string> {
 	const profileId = await captureSoleProfileId(page)
-	const id = await page.waitForFunction(
-		async (pid: string, want: string) => {
-			const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-			const network = all[`nulo:core:networks@${all[`nulo:core:active-network@${pid}`]}`]
-			const chainId = typeof network === "string" ? (JSON.parse(network) as { chainId?: number }).chainId : undefined
-			for (const [key, raw] of Object.entries(all)) {
-				if (!key.startsWith("nulo:core:fpcs@")) continue
-				const row = (typeof raw === "string" ? JSON.parse(raw) : raw) as Record<string, unknown>
-				if (row?.profileId === pid && row.chainId === chainId && String(row.address).toLowerCase() === want.toLowerCase())
-					return row.id
-			}
-			return false
-		},
-		{ timeout: 10_000, polling: 200 },
-		profileId,
-		address,
-	)
-	return (await id.jsonValue()) as string
-}
-
-/** The app windows' saved fee pick for `account`, or null; runs in an extension page. The card keys
- *  the map by the account's address, so the lookup ignores hex case. */
-async function savedFeePick(key: string, account: string): Promise<{ type?: string; fpc?: { id?: string } } | null> {
-	const saved = ((await chrome.storage.local.get(key))[key] ?? {}) as Record<string, { type?: string; fpc?: { id?: string } }>
-	return Object.entries(saved).find(([address]) => address.toLowerCase() === account.toLowerCase())?.[1] ?? null
+	const { chainId } = await readActiveNetwork(page)
+	const at = (row: Record<string, unknown>) =>
+		row.profileId === profileId && row.chainId === chainId && String(row.address).toLowerCase() === address.toLowerCase()
+	return (await pollUntil(
+		async () => (await readSealedRows(page, "fpcs")).find(({ row }) => at(row))?.row.id,
+		(id) => typeof id === "string",
+		{ label: `the active network's FPC row at ${address}`, timeoutMs: 10_000, intervalMs: 200 },
+	)) as string
 }
 
 /**
@@ -87,8 +72,7 @@ test.skipIf(!hasConfig)(
 
 		// Only an explicit pick saves, so an empty record here makes the readback below this pick's.
 		const sponsorFpcId = await fpcIdAt(execPopup, await getSponsoredFpcAddress())
-		const feeKey = feePicksKey(await captureSoleProfileId(execPopup))
-		expect(await execPopup.evaluate(savedFeePick, feeKey, accountAddress)).toBeNull()
+		expect(await savedAppPick(execPopup, accountAddress)).toBeNull()
 
 		// Use the existing FeeSettingsCard's send-fee-method-* testids via approveExecute.
 		// "sponsored" is the typical default + reasserted via the override flow.
@@ -102,7 +86,7 @@ test.skipIf(!hasConfig)(
 
 		// The confirm does not wait for the save, and the window closes on it: read it back here.
 		await expect
-			.poll(() => walletPopup.evaluate(savedFeePick, feeKey, accountAddress), { timeout: 10_000, interval: 200 })
+			.poll(() => savedAppPick(walletPopup, accountAddress), { timeout: 10_000, interval: 200 })
 			.toMatchObject({ type: "fpc", fpc: { id: sponsorFpcId } })
 	},
 )

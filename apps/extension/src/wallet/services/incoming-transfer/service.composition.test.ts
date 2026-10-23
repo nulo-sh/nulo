@@ -6,7 +6,7 @@
  * schedulers too and record each arm's reads by contract. See
  * `apps/extension/tests/COMPOSITION-TESTS.md`.
  */
-import { afterEach, describe, expect, test, vi } from "vitest"
+import { afterAll, afterEach, describe, expect, test, vi } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import type { ConfigProp, IConfig } from "@/wallet/config"
@@ -27,9 +27,20 @@ import { TaskService } from "@/wallet/services/task/service"
 import { PriceService } from "@/wallet/services/price/service"
 import type { RawNote } from "@/wallet/services/note/spec"
 import type { PublicEventReader } from "./public-event-indexer"
+import { rowKeysForEveryProfile, trackSubtleCrypto } from "@/wallet/storage/sealed-entity-storage.testing"
 import { IncomingTransferRepository } from "./repository"
 import { IncomingTransferService } from "./service"
 import { type IncomingNoteRecord, type IncomingPublicEventRecord, noteRecordId, publicRecordId } from "./spec"
+
+/** One key for every profile, as the profile fake holds it. */
+const { rowKeys: ROW_KEYS } = await rowKeysForEveryProfile()
+// Every row is sealed, so a fake-clock step waits for the crypto behind the writes it lets run.
+const subtleCalls = trackSubtleCrypto()
+afterAll(() => subtleCalls.restore())
+const advance = async (ms: number) => {
+	await vi.advanceTimersByTimeAsync(ms)
+	await subtleCalls.settled()
+}
 
 const CONTRACT = `0x${"c3".repeat(32)}`
 const TOKEN = { id: 7, profileId: "p1", chainId: 1, contract: CONTRACT, symbol: "TKA", decimals: 18 }
@@ -93,6 +104,8 @@ async function startService(api: FakeBrowserApi, notes: Record<string, unknown> 
 	collection.add(
 		svc(ProfileService.name, {
 			onActiveProfileChanged: new EventHandler<void>(),
+			onRowKeysReady: new EventHandler<string>(),
+			rowKeys: ROW_KEYS,
 			getActiveProfile: async () => ({ id: "p1" }),
 			getProfiles: async () => [{ id: "p1" }],
 			captureExecutionFence: async (): Promise<ExecutionFence> => ({ profileId: "p1", epoch: deletion.capture("p1"), session }),
@@ -153,7 +166,7 @@ async function makeHarness() {
 	api.reset()
 	const { service, visibility } = await startService(api)
 
-	const repo = new IncomingTransferRepository(api)
+	const repo = new IncomingTransferRepository(api, ROW_KEYS)
 	await repo.setTrust("p1", "n1", CONTRACT, "pending")
 	const receipts = [hiddenReceipt(1, "0xa", 40), hiddenReceipt(2, "0xb", 141)]
 	for (const r of receipts) await repo.upsertRecord(r)
@@ -200,12 +213,12 @@ describe("IncomingTransferService composition — the Allow, in-process", () => 
 		vi.useFakeTimers()
 		const { release, held } = parkVisibility()
 		const call = service.setTrustAllow("p1", "n1", CONTRACT)
-		for (let i = 0; i < 20 && !held.reached; i++) await vi.advanceTimersByTimeAsync(0)
+		for (let i = 0; i < 20 && !held.reached; i++) await advance(0)
 		expect(held.reached).toBe(true)
 
-		await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
+		await advance(5 * 60_000 + 1)
 		release()
-		await vi.advanceTimersByTimeAsync(0)
+		await advance(0)
 
 		expect(await call).toBe(false)
 		expect(await repo.getTrust("p1", "n1", CONTRACT)).toMatchObject({ state: "pending" })
@@ -246,10 +259,10 @@ describe("IncomingTransferService composition — a received note, scanned in-pr
 		return s.scanContract("p1", "n1", ACCOUNT, CONTRACT, s.serviceEpoch, tips)
 	}
 
-	test("no stored key, value or log line holds a note's nullifier, and discovery, settlement and a restart keep one settled row", async () => {
+	test("no stored key, value or log line holds a note's nullifier, no stored key or value its hash, account or token, and discovery, settlement and a restart keep one settled row", async () => {
 		const api = new FakeBrowserApi()
 		api.reset()
-		const repo = new IncomingTransferRepository(api)
+		const repo = new IncomingTransferRepository(api, ROW_KEYS)
 		await repo.setTrust("p1", "n1", CONTRACT, "trusted")
 		const loggers: LoggerStore[] = []
 		const start = async () => {
@@ -265,9 +278,10 @@ describe("IncomingTransferService composition — a received note, scanned in-pr
 				loggers.map((l) => l.get(10_000)),
 			]).toLowerCase()
 		const expectNoNullifier = async () => {
-			const written = await surfaces()
-			expect(written).toContain(UNIQUE_NOTE_HASH.slice(2))
-			expect(written).not.toContain(NULLIFIER.slice(2))
+			expect(await surfaces()).not.toContain(NULLIFIER.slice(2))
+			const atRest = JSON.stringify(await api.storage.local.get(null)).toLowerCase()
+			expect(atRest).toContain("nulo:core:incoming-transfers@note:p1|n1|")
+			for (const named of [UNIQUE_NOTE_HASH, ACCOUNT, CONTRACT]) expect(atRest).not.toContain(named.slice(2).toLowerCase())
 		}
 		const id = noteRecordId("p1", "n1", UNIQUE_NOTE_HASH)
 		const first = await start()
@@ -333,7 +347,7 @@ describe("IncomingTransferService composition — Block stops the token's scans"
 	async function fixture() {
 		const api = new FakeBrowserApi()
 		api.reset()
-		const repo = new IncomingTransferRepository(api)
+		const repo = new IncomingTransferRepository(api, ROW_KEYS)
 		await repo.setTrust("p1", "n1", CONTRACT, "pending")
 		await repo.setTrust("p1", "n1", OTHER.contract, "trusted")
 		return { api, repo }

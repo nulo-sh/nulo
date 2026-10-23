@@ -16,21 +16,22 @@ import {
 	SCHEMA_VERSION_KEY,
 } from "@nulo/wallet-core/migration"
 import type { BrowserApi, ClockPort } from "@nulo/wallet-core/ports"
-import { MemoryStorageArea } from "@nulo/wallet-core/storage"
+import { MemoryStorageArea, type MinimalStorageArea } from "@nulo/wallet-core/storage"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { fakeBrowser } from "@webext-core/fake-browser"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import type { z } from "zod"
-import { type PinMap, usePinnedTokens } from "@/composables/usePinnedTokens"
 import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
-import type { AppPick, SendSlots } from "@/utils/fee-picks"
+import type { AppPick, FeePickUpdate, SendSlots } from "@/utils/fee-picks"
+import type { PinMap } from "@/utils/pinned-tokens"
 import { markGetStarted } from "@/utils/get-started"
 import {
 	feePicksKey,
 	getStartedAztecOpenedKey,
 	getStartedBackupSavedKey,
 	getStartedFeeJuiceHeldKey,
+	getStartedPrestoOpenedKey,
 	getStartedHiddenKey,
 	getStartedPhraseSavedKey,
 	pinnedTokensKey,
@@ -61,6 +62,7 @@ import { PinMismatchError, type SeedMarkerState, type SeedPreview, SEED_ATTEMPT_
 import { CONTRACT, CHAIN_ID, disposeSeeders, makeSeeder, readMarker, skipBackoff } from "@/wallet/services/token/seeder.harness"
 import { type FetchLike, TokenListService, type TokenListStoredState } from "@/wallet/services/token-list/service"
 import { TOKEN_LIST_STORAGE_KEY } from "@/wallet/services/token-list/spec"
+import { startUiPreferences } from "@/wallet/services/ui-preference/service.harness"
 import {
 	BASELINE_VERSION,
 	type MigrationBlockedStatus,
@@ -70,15 +72,21 @@ import {
 	SCHEMA_RETRY_REQUESTED_KEY,
 } from "./migrations"
 import {
+	AppPicksSchema,
 	MigrationBlockedSchema,
 	MigrationDegradedSchema,
+	PinMapSchema,
 	PriceStateSchema,
 	ProfileRowSchema,
 	STORED_SHAPES,
 	SeedMarkersSchema,
+	SendPicksSchema,
 	type StoredShapeName,
 	TokenListStateSchema,
 } from "./stored-shapes"
+import { isSealedText } from "./sealed-entity-storage"
+import { sealedEntityStorage } from "./stores"
+import { rowKeysForEveryProfile } from "./sealed-entity-storage.testing"
 
 const bootMigrations = vi.hoisted((): Migration[] => [])
 vi.mock("./migrations", async (importOriginal) => ({
@@ -108,8 +116,9 @@ function expectDescribed(name: StoredShapeName, raw: unknown): void {
 	expect(schema.parse(stored)).toEqual(stored)
 }
 
-async function rawOf(api: FakeBrowserApi, key: string): Promise<unknown> {
-	return (await api.storage.local.get(key))[key]
+async function rawOf(api: FakeBrowserApi | MinimalStorageArea, key: string): Promise<unknown> {
+	const area = "storage" in api ? api.storage.local : api
+	return (await area.get(key))[key]
 }
 
 /** `chrome.storage.local` over memory, for the writers that reach the global. */
@@ -142,9 +151,9 @@ describe("described schemas match their writers' types", () => {
 			Equivalent<Variant<Out<typeof ProfileRowSchema>, "password">, Variant<Profile, "password">>,
 			Equivalent<Variant<Out<typeof ProfileRowSchema>, "passkey">, Variant<Profile, "passkey">>,
 			Equivalent<DeepReadonly<Registered<"legalAccepted">>, LegalAcceptanceRecord>,
-			Equivalent<Registered<"uiPinnedTokens">, PinMap>,
-			Equivalent<Registered<"uiFeePicks">, Record<string, AppPick>>,
-			Equivalent<Registered<"uiSendFeePicks">, Record<string, SendSlots>>,
+			Equivalent<Out<typeof PinMapSchema>, PinMap>,
+			Equivalent<Out<typeof AppPicksSchema>, Record<string, AppPick>>,
+			Equivalent<Out<typeof SendPicksSchema>, Record<string, SendSlots>>,
 			Equivalent<Registered<"uiRestoreOutcome">, RestoreOutcome>,
 			Equivalent<Out<typeof MigrationBlockedSchema>, MigrationBlockedStatus>,
 			Equivalent<Out<typeof MigrationDegradedSchema>, MigrationDegradedStatus>,
@@ -166,6 +175,9 @@ describe("described schemas match their writers' types", () => {
 		expect(STORED_SHAPES.tokenList.schema).toBe(TokenListStateSchema)
 		expect(STORED_SHAPES.tokenSeeded.schema).toBe(SeedMarkersSchema)
 		expect(STORED_SHAPES.dappRegistrations.schema).toBe(RegistrationCountsSchema)
+		expect(STORED_SHAPES.uiPinnedTokens.schema).toBe(PinMapSchema)
+		expect(STORED_SHAPES.uiFeePicks.schema).toBe(AppPicksSchema)
+		expect(STORED_SHAPES.uiSendFeePicks.schema).toBe(SendPicksSchema)
 		expect(STORED_SHAPES.profiles.schema).toBe(ProfileRowSchema)
 		expect(STORED_SHAPES.schemaBlocked.schema).toBe(MigrationBlockedSchema)
 		expect(STORED_SHAPES.schemaDegraded.schema).toBe(MigrationDegradedSchema)
@@ -296,9 +308,12 @@ describe("what each writer stores parses back to itself", () => {
 		for (const scenario of scenarios) {
 			await fakeBrowser.reset()
 			await scenario()
+			// Sealed at rest: the registered schema describes the opened row.
 			const raw = (await fakeBrowser.storage.local.get("nulo:core:token-seeded@p1"))["nulo:core:token-seeded@p1"]
-			expectDescribed("tokenSeeded", raw)
-			markers.push(await readMarker())
+			expect(isSealedText(raw)).toBe(true)
+			const marker = await readMarker()
+			expectDescribed("tokenSeeded", JSON.stringify(marker))
+			markers.push(marker)
 		}
 		const fields = new Set(markers.flatMap((m) => Object.values(m).flatMap((entry) => Object.keys(entry))))
 		expect([...fields].sort()).toEqual(
@@ -308,12 +323,14 @@ describe("what each writer stores parses back to itself", () => {
 
 	test("dappRegistrations: RegistrationAllowance.admit for two apps on two chains", async () => {
 		const area = new MemoryStorageArea()
-		const allowance = new RegistrationAllowance(area)
+		const rows = sealedEntityStorage("dappRegistrations", area, (await rowKeysForEveryProfile()).rowKeys)
+		const allowance = new RegistrationAllowance(rows)
 		await allowance.admit("p1", 1, "https://a.example")
 		await allowance.admit("p1", 1, "https://b.example")
 		await allowance.admit("p1", 2, "https://a.example")
-		const raw = (await area.get("nulo:core:dappRegistrations@p1"))["nulo:core:dappRegistrations@p1"]
-		expectDescribed("dappRegistrations", raw)
+		// Sealed at rest: the registered schema describes the opened row.
+		expect(isSealedText((await area.get("nulo:core:dappRegistrations@p1"))["nulo:core:dappRegistrations@p1"])).toBe(true)
+		expectDescribed("dappRegistrations", JSON.stringify(await rows.get("p1")))
 	})
 
 	test("activeNetwork: NetworkService.getOrInitNetworks points the profile at its primary seed", async () => {
@@ -324,6 +341,7 @@ describe("what each writer stores parses back to itself", () => {
 		Object.assign(service, {
 			initialized: true,
 			profileService: {
+				...(await rowKeysForEveryProfile()),
 				captureExecutionFence: async () => ({ profileId: "p1", epoch: deletion.capture("p1") }),
 				getDeletionState: () => deletion,
 			},
@@ -336,7 +354,7 @@ describe("what each writer stores parses back to itself", () => {
 		expectDescribed("activeNetwork", raw)
 	})
 
-	test("profiles, uiFeePicks, uiSendFeePicks: ProfileService create, createPasskey and saveFeePick", async () => {
+	test("profiles: ProfileService create and createPasskey", async () => {
 		const api = new FakeBrowserApi()
 		api.reset()
 		const log = logger()
@@ -366,32 +384,34 @@ describe("what each writer stores parses back to itself", () => {
 		expect(JSON.parse(passkeyRow as string)).toMatchObject({ type: "passkey" })
 		expectDescribed("profiles", passwordRow)
 		expectDescribed("profiles", passkeyRow)
+	}, 30_000)
 
+	test("uiFeePicks, uiSendFeePicks: UiPreferenceService.saveFeePick", async () => {
+		const { service, session, area } = await startUiPreferences()
+		await session.unlock("p1")
 		const address = `0x${"ab".repeat(32)}`
 		const other = `0x${"cd".repeat(32)}`
 		const fpc = { id: "fpc-1" }
-		expect(
-			await service.saveFeePick(password.id, {
-				kind: "app",
-				address,
-				pick: { type: "fpc", title: "Sponsored", subtitle: "FPC", fpc: { ...fpc, isProtocol: true } },
-			}),
-		).toBe(true)
-		await service.saveFeePick(password.id, { kind: "app", address: other, pick: { type: "private_fpc" } })
-		await service.saveFeePick(password.id, {
-			kind: "send",
-			address,
-			side: "private",
-			pick: { type: "fpc", fpc: { ...fpc, name: "Sponsor" } },
-		})
-		await service.saveFeePick(password.id, { kind: "send", address, side: "public", pick: { type: "fj" } })
-		const app = await rawOf(api, feePicksKey(password.id))
-		const send = await rawOf(api, sendFeePicksKey(password.id))
+		const picks: FeePickUpdate[] = [
+			{ kind: "app", address, pick: { type: "fpc", title: "Sponsored", subtitle: "FPC", fpc: { ...fpc, isProtocol: true } } },
+			{ kind: "app", address: other, pick: { type: "private_fpc" } },
+			{ kind: "send", address, side: "private", pick: { type: "fpc", fpc: { ...fpc, name: "Sponsor" } } },
+			{ kind: "send", address, side: "public", pick: { type: "fj" } },
+		]
+		for (const pick of picks) expect(await service.saveFeePick("p1", pick)).toBe(true)
+
+		const rows = sealedEntityStorage("uiFeePicks", area, session.rowKeys)
+		const sendRows = sealedEntityStorage("uiSendFeePicks", area, session.rowKeys)
+		// Sealed at rest: the registered schema describes the opened row.
+		expect(isSealedText(await rawOf(area, feePicksKey("p1")))).toBe(true)
+		expect(isSealedText(await rawOf(area, sendFeePicksKey("p1")))).toBe(true)
+		const app = await rows.get("p1")
+		const send = await sendRows.get("p1")
 		expect(app).toMatchObject({ [address]: { title: "Sponsored", fpc: { isProtocol: true } }, [other]: { type: "private_fpc" } })
 		expect(send).toMatchObject({ [address]: { private: { fpc: { name: "Sponsor" } }, public: { type: "fj" } } })
-		expectDescribed("uiFeePicks", app)
-		expectDescribed("uiSendFeePicks", send)
-	}, 30_000)
+		expectDescribed("uiFeePicks", JSON.stringify(app))
+		expectDescribed("uiSendFeePicks", JSON.stringify(send))
+	})
 
 	test("legalAccepted: LegalAcceptanceService.accept, twice so the history carries entries", async () => {
 		const api = new FakeBrowserApi()
@@ -404,18 +424,29 @@ describe("what each writer stores parses back to itself", () => {
 		expectDescribed("legalAccepted", raw)
 	})
 
-	test("uiPinnedTokens: usePinnedTokens.pin on two chains", async () => {
-		const local = stubChromeStorage()
-		const scope = { profileId: "p1", chainId: 7 }
-		const pins = usePinnedTokens({ getScope: () => scope, knownContracts: () => undefined })
-		await pins.pin(`0x${"a1".repeat(32)}`)
-		await pins.pin(`0x${"B2".repeat(32)}`)
-		scope.chainId = 9
-		await pins.pin(`0x${"c3".repeat(32)}`)
-		pins.dispose()
-		const raw = local.data.get(pinnedTokensKey("p1"))
-		expect(raw).toEqual({ "7": [`0x${"a1".repeat(32)}`, `0x${"b2".repeat(32)}`], "9": [`0x${"c3".repeat(32)}`] })
-		expectDescribed("uiPinnedTokens", raw)
+	test("uiPinnedTokens: UiPreferenceService.setPinnedTokens on two chains", async () => {
+		const { service, session, area } = await startUiPreferences()
+		await session.unlock("p1")
+		await service.setPinnedTokens("p1", { "7": [`0x${"a1".repeat(32)}`, `0x${"B2".repeat(32)}`], "9": [`0x${"c3".repeat(32)}`] })
+		expect(isSealedText(await rawOf(area, pinnedTokensKey("p1")))).toBe(true)
+		const row = await sealedEntityStorage("uiPinnedTokens", area, session.rowKeys).get("p1")
+		expect(row).toEqual({ "7": [`0x${"a1".repeat(32)}`, `0x${"b2".repeat(32)}`], "9": [`0x${"c3".repeat(32)}`] })
+		expectDescribed("uiPinnedTokens", JSON.stringify(row))
+	})
+
+	test("uiSelectedAccount: UiPreferenceService.setSelectedAccount; the pre-seal uiActiveAccount is only removed", async () => {
+		const address = `0x${"ab".repeat(32)}`
+		const area = new MemoryStorageArea().seed({ "nulo:ui:activeAccount": `0x${"cd".repeat(32)}` })
+		const { service, session } = await startUiPreferences({ storage: { local: area } } as unknown as BrowserApi)
+		await session.unlock("p1")
+		const set = vi.spyOn(area, "set")
+		expect(await service.setSelectedAccount("p1", address)).toBe(true)
+		expect(set.mock.calls.flatMap(([items]) => Object.keys(items))).toEqual(["nulo:ui:selectedAccount@device"])
+		expect(await rawOf(area, "nulo:ui:activeAccount")).toBeUndefined()
+		expect(isSealedText(await rawOf(area, "nulo:ui:selectedAccount@device"))).toBe(true)
+		const row = await sealedEntityStorage("uiSelectedAccount", area, session.rowKeys).get("device")
+		expect(row).toEqual({ profileId: "p1", address })
+		expectDescribed("uiSelectedAccount", JSON.stringify(row))
 	})
 
 	test("uiRestoreOutcome: armRestoreOutcome", async () => {
@@ -435,6 +466,7 @@ describe("what each writer stores parses back to itself", () => {
 			["aztecOpened", "uiGetStartedAztecOpened", getStartedAztecOpenedKey],
 			["hidden", "uiGetStartedHidden", getStartedHiddenKey],
 			["feeJuiceHeld", "uiGetStartedFeeJuiceHeld", getStartedFeeJuiceHeldKey],
+			["prestoOpened", "uiGetStartedPrestoOpened", getStartedPrestoOpenedKey],
 		] as const
 		for (const [flag, name, keyOf] of marks) {
 			await markGetStarted("p1", flag)

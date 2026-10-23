@@ -52,6 +52,20 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 				"The token-list and price requests bypass the browser's HTTP cache, and the price request carries no cookies and no referrer (§§ 5.2, 5.11).",
 			],
 		},
+		{
+			version: "1.2.3",
+			effective: null,
+			material: false,
+			changes: [
+				"Contacts, history, balances, accounts, tokens, networks and app permissions are now stored encrypted on your device, readable only after you unlock the profile.",
+			],
+		},
+		{
+			version: "1.2.4",
+			effective: null,
+			material: false,
+			changes: ["Pinned tokens, fee-payer choices and the last-selected account are now stored encrypted too."],
+		},
 	],
 }
 

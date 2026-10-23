@@ -2,17 +2,14 @@ import type { Pin } from "./baseline"
 
 /**
  * One pin per stamp of `snapshot.json`, added by hand from the line `bun run baseline:storage`
- * prints. Stamp 0 is the baseline 1.0.0 stores; the stamps are append-only, and a pin is never
- * edited or removed.
+ * prints. Stamp 0 is the baseline 1.0.0 stores, re-cut once before any stable release carried a
+ * later stamp (CLAUDE.md § Persisted-storage shape changes); the stamps are append-only, and a pin
+ * is never edited or removed.
  */
 export const PINNED_STAMPS: readonly Pin[] = [
 	{
-		stamp: "27dc0de69827668974b26630bcebd39383ab673fdb9682164102a083ab2c5c9f",
-		goldens: "ee9cf595a340013f09c090ffac14aae9a07b57ca8db91da595bfabadc3c80afd",
-	},
-	{
-		stamp: "c39893d8df581e4645ac55b047a67d16719cb2179053b82e6d673b79f2485fa9",
-		goldens: "8d66d1cc634f8110d5ef37b7abbf60e2b6ed8776e4654facedb6f73aa058026b",
+		stamp: "66c69343476e58580e406c8c59a19749aaa2d21671dccf6b6cfe639df9616ee9",
+		goldens: "0d2ec784d1a65acd569f9ac18b50ee9eb02b048f7acb89888868251d67113012",
 	},
 ]
 

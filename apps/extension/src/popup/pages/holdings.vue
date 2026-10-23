@@ -21,6 +21,7 @@ import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/clien
 import type { TokenBalanceInfo } from "@/wallet/services/token-balance/spec"
 
 /** Utils */
+import { managers } from "@/utils/core"
 import { aggregateFiat, awaitingFirstPriceAnswer, pricesUnavailable } from "@/utils/token-aggregate"
 import { fitHero } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
@@ -90,6 +91,7 @@ readConfig()
 configService.onConnected.add(readConfig)
 
 const pins = usePinnedTokens({
+	preferences: managers.uiPreference,
 	getScope: () => pinScopeOf(appStore.profile?.id, activeChainId()),
 	knownContracts: () => new Set(rows.value.map((tb) => tb.token.contract)),
 })

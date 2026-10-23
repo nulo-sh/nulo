@@ -35,10 +35,14 @@ import { BalanceRepository } from "./token-balance/balance-repository"
 import { TokenBalanceService } from "./token-balance/service"
 import type { TokenBalanceRaw } from "./token-balance/spec"
 import { TransactionService } from "./transaction/service"
+import { startUiPreferences } from "./ui-preference/service.harness"
 import { ExecutionService } from "./execution/service"
 import type { BackgroundTickerPort } from "@nulo/wallet-core/ports"
 import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import type { RowKeysSource } from "@/wallet/storage/sealed-entity-storage"
+
+/** One key for every profile, as the profile fakes hold it. */
+const { rowKeys: ROW_KEYS } = await rowKeysForEveryProfile()
 
 /**
  * Minimal ProfileService fake (golden reference: contact/service.test.ts). Carries
@@ -152,6 +156,33 @@ describe("cross-profile isolation (standing gate)", () => {
 		})
 	})
 
+	describe("ui-preference — every method answers the live session's profile only", () => {
+		test("with both profiles' keys held, p2's session neither reads nor writes p1's preferences", async () => {
+			const { service, session, area } = await startUiPreferences(api)
+			const contract = `0x${"a1".repeat(32)}`
+			await session.unlock(p1.id)
+			await service.setPinnedTokens(p1.id, { "7": [contract] })
+			await service.saveFeePick(p1.id, { kind: "send", address: "0xa", side: "public", pick: { type: "fj" } })
+			await service.setSelectedAccount(p1.id, contract)
+			const stored = await area.get()
+
+			await session.unlock(p2.id)
+			expect(await service.getPinnedTokens(p1.id)).toEqual({})
+			expect(await service.getFeePicks(p1.id)).toEqual({ app: {}, send: {} })
+			expect(await service.setPinnedTokens(p1.id, {})).toBe(false)
+			expect(await service.saveFeePick(p1.id, { kind: "forgetFpc", fpcId: "f" })).toBe(false)
+			expect(await service.getSelectedAccount(p1.id)).toBeUndefined()
+			expect(await service.setSelectedAccount(p1.id, "0xb")).toBe(false)
+			expect(await area.get()).toEqual(stored)
+			expect(await service.getPinnedTokens(p2.id)).toEqual({})
+			expect(await service.getSelectedAccount(p2.id)).toBeUndefined()
+
+			session.open(p1.id)
+			expect(await service.getPinnedTokens(p1.id)).toEqual({ "7": [contract] })
+			expect(await service.getSelectedAccount(p1.id)).toBe(contract)
+		})
+	})
+
 	describe("token — backup scoped; by-id getters reject foreign rows", () => {
 		let profile: FakeProfileService
 		let tokens: TokenService
@@ -226,7 +257,7 @@ describe("cross-profile isolation (standing gate)", () => {
 			profile = new FakeProfileService()
 			profile.rowKeys = (await rowKeysForEveryProfile()).rowKeys
 			profile.setActiveProfile(p1)
-			seedRepo = new BalanceRepository(api)
+			seedRepo = new BalanceRepository(api, ROW_KEYS)
 			const services = new ServiceCollection()
 			services.add(profile)
 			services.add(svc(NetworkService.name, {}))

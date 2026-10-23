@@ -13,7 +13,7 @@
  */
 import { expect } from "vitest"
 import { clickByTestId, launchExtension, openPopup, test, waitForHash } from "./fixtures/extension"
-import { readRecoveryWords } from "./fixtures/helpers"
+import { readRecoveryWords, selectedAccount } from "./fixtures/helpers"
 import {
 	buildSyntheticBackup,
 	CANONICAL_SEED_24,
@@ -110,10 +110,10 @@ test("full backup: fresh install → synthetic backup → /popup/general", async
 	expect(address.length).toBeGreaterThan(2)
 
 	const storage = await page.evaluate(async () => {
-		return await chrome.storage.local.get(["nulo:ui:lastActiveProfile", "nulo:ui:activeAccount"])
+		return await chrome.storage.local.get(["nulo:ui:lastActiveProfile"])
 	})
 	expect(storage["nulo:ui:lastActiveProfile"]).toBeTruthy()
-	expect(storage["nulo:ui:activeAccount"]).toBeTruthy()
+	expect(await selectedAccount(page)).toBeTruthy()
 
 	expect(freshExtensionPerTest.pageErrors).toEqual([])
 	await page.close()

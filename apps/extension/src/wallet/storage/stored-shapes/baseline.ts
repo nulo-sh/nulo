@@ -27,12 +27,10 @@ import { RestorePendingRepository } from "@/wallet/services/profile/restore-pend
 import { TombstoneRepository } from "@/wallet/services/profile/tombstone-repository"
 import { StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
 import { BASELINE_VERSION } from "../migrations"
-import { parseEnvelope, type RowKeysSource } from "../sealed-entity-storage"
+import { parseEnvelope, type RowKeysSource, type SealedRootOptions } from "../sealed-entity-storage"
 import { STORED_SHAPES, type StoredShape, type StoredShapeName } from "../stored-shapes"
 import {
-	type CodecStoreName,
 	entityStorage,
-	type PerProfileValueStoreName,
 	type PlainEntityStoreName,
 	type SealedStoreName,
 	STORES,
@@ -57,6 +55,7 @@ export type ShapeRecord = {
 	authenticated?: true
 	engine?: true
 	sealed?: true
+	legacy?: "structured"
 	schema: Json
 }
 
@@ -130,6 +129,7 @@ export function shapeRecord(name: StoredShapeName): ShapeRecord {
 		...(shape.authenticated ? { authenticated: true as const } : {}),
 		...(shape.engine ? { engine: true as const } : {}),
 		...(shape.sealed ? { sealed: true as const } : {}),
+		...(shape.legacy ? { legacy: shape.legacy } : {}),
 		schema: emitSchema(name, shape.schema),
 	}
 }
@@ -145,7 +145,13 @@ function idOf(shape: StoredShape, key: string): string {
 	return key.slice(shape.ref.root.length + 1)
 }
 
-const wire = (shape: StoredShape, value: Json): unknown => (shape.encoding === "json" ? JSON.stringify(value) : value)
+/** A golden as `chrome.storage.local` holds it: a json shape's row as its text, except a pre-seal
+ *  row of a shape whose rows before the seal were stored as is. */
+export function wire(golden: Pick<Golden, "shape" | "value" | "sealed">): unknown {
+	const shape: StoredShape = STORED_SHAPES[golden.shape]
+	const asIs = shape.encoding === "structured" || (shape.legacy === "structured" && !golden.sealed)
+	return asIs ? golden.value : JSON.stringify(golden.value)
+}
 const unwire = (shape: StoredShape, stored: unknown): Json =>
 	stored === undefined ? null : canonical(shape.encoding === "json" && typeof stored === "string" ? JSON.parse(stored) : stored)
 
@@ -199,18 +205,19 @@ export async function readStored(name: StoredShapeName, area: MinimalStorageArea
 	if (shape.engine) throw new Error(`${name} is the engine's own state: it has no goldens`)
 	const keys = shape.sealed ? await goldenKeysFor((await area.get(key))[key]) : () => undefined
 	if (shape.authenticated) return (await macStorage(area, keys)).get(idOf(shape, key))
-	if (shape.sealed) return (await sealedEntityStorage(name as SealedStoreName, area, keys).readStorageId(idOf(shape, key)))?.row
+	if (shape.sealed) {
+		const row = (await sealedEntityStorage(name as SealedStoreName, area, keys).readStorageId(idOf(shape, key)))?.row
+		return shape.read === "codec" || row === undefined ? row : shape.read(row, now)
+	}
 	const store = name in STORES ? STORES[name as keyof typeof STORES] : undefined
 	if (shape.read === "codec") {
-		if (store) return entityStorage(name as CodecStoreName, area).get(idOf(shape, key))
 		const reader = RAW_REPOSITORY_READS[name]
-		if (!reader) throw new Error(`${name} has a codec but neither a store nor a repository read`)
+		if (!reader) throw new Error(`${name} has a codec but neither a sealed store nor a repository read`)
 		return reader(repositoryArea(area), idOf(shape, key))
 	}
 	let value: unknown
 	if (store?.kind === "entity") value = await entityStorage<unknown>(name as PlainEntityStoreName, area).get(idOf(shape, key))
-	else if (store?.ref.kind === "value") value = await readOrAbsent(() => valueStorage(name as ValueStoreName, area).get())
-	else if (store) value = await readOrAbsent(() => valueStorage(name as PerProfileValueStoreName, area, idOf(shape, key)).get())
+	else if (store) value = await readOrAbsent(() => valueStorage(name as ValueStoreName, area).get())
 	else value = (await area.get(key))[key]
 	return shape.read(value, now)
 }
@@ -236,17 +243,25 @@ async function macGoldens(goldens: readonly Golden[]): Promise<Golden[]> {
 	)
 }
 
+/** The profile a sealed row belongs to, as its store reads it: the row's own, or its natural id's. */
+function sealedOwnerOf(name: SealedStoreName, row: Json, naturalId: string): string | undefined {
+	const ownerOf = (STORES[name] as { sealedRoot?: SealedRootOptions }).sealedRoot?.ownerOf
+	if (ownerOf) return ownerOf(row, naturalId)
+	const profileId = row !== null && typeof row === "object" && !Array.isArray(row) ? row.profileId : undefined
+	return typeof profileId === "string" ? profileId : undefined
+}
+
 async function sealGoldens(goldens: readonly Golden[]): Promise<Golden[]> {
 	return Promise.all(
 		goldens.map(async (golden) => {
 			if (!golden.sealed || isSealedForm(golden)) return golden
 			const shape: StoredShape = STORED_SHAPES[golden.shape]
-			const row = golden.value as Record<string, Json>
-			if (!shape.sealed || typeof row.profileId !== "string")
-				throw new Error(`${golden.id}: only a sealed shape's row with a profile seals`)
-			const keys = await goldenRowKeys(row.profileId)
+			const id = idOf(shape, golden.key)
+			const owner = shape.sealed ? sealedOwnerOf(golden.shape as SealedStoreName, golden.value, id) : undefined
+			if (owner === undefined) throw new Error(`${golden.id}: only a sealed shape's row with a profile seals`)
+			const keys = await goldenRowKeys(owner)
 			const area = new MemoryStorageArea()
-			await sealedEntityStorage(golden.shape as SealedStoreName, area, () => keys).set(idOf(shape, golden.key), row as never)
+			await sealedEntityStorage(golden.shape as SealedStoreName, area, () => keys).set(id, golden.value as never)
 			// A keyed root stores the row under its keyed id, not the natural key it was authored at.
 			const [[key, value]] = [...area.data]
 			return { ...golden, key, value: JSON.parse(value as string) as Json }
@@ -270,7 +285,7 @@ async function decodeLive(
 	migrations: Migration[],
 ): Promise<{ decoded: Decoded; keys: string[]; stored: Decoded }> {
 	const area = new MemoryStorageArea().seed({ [SCHEMA_VERSION_KEY]: version })
-	for (const golden of goldens) area.seed({ [golden.key]: wire(STORED_SHAPES[golden.shape], golden.value) })
+	for (const golden of goldens) area.seed({ [golden.key]: wire(golden) })
 	const run = async () => {
 		const result = await new Migrator({ store: area, migrations, baselineVersion: BASELINE_VERSION }).run()
 		if (result.kind !== "noop" && result.kind !== "migrated")
@@ -415,6 +430,7 @@ function downgradeOf(name: string, prev: ShapeRecord, cur: ShapeRecord): string 
 	if (prev.authenticated && !cur.authenticated) return `${name} drops its MAC check`
 	if (prev.engine && !cur.engine) return `${name} stops being engine state`
 	if (prev.sealed && !cur.sealed) return `${name} drops its seal`
+	if (prev.legacy && !cur.legacy) return `${name} stops reading its rows from before the seal`
 	if (prev.read === "codec" && cur.read === "described") return `${name} stops reading through its codec`
 	if (prev.encoding !== cur.encoding) return `${name} changes its encoding from ${prev.encoding} to ${cur.encoding}`
 	if (prev.options !== undefined && canonicalText(prev.options) !== canonicalText(cur.options ?? null))

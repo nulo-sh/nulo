@@ -12,6 +12,7 @@ import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import type { BalanceScope } from "@/stores/balances.store"
 import { type FeeSelection, type SelectionLoad, useAppFeeSelection, useSendFeeSelection } from "./useFeeSelection"
 import { useSponsorVerdicts } from "./useSponsorVerdicts"
+import { readFeePicks } from "../../tests/helpers/ui-preference-fake"
 
 const HELD = "1000000000000000000"
 const AT = `0x${"0a".repeat(32)}`
@@ -20,8 +21,15 @@ const SPONSOR: RegisteredFpc = { id: "s1", type: 1, name: "Sponsor", isProtocol:
 const HAND: RegisteredFpc = { id: "s2", type: 1, name: "Dev sponsor", isProtocol: false, address: `0x${"0b".repeat(32)}` }
 const SCOPE: BalanceScope = { profileId: "p1", networkId: "n1", chainId: 1, accountAddress: "0xa" }
 
-class ProfileClient {
+/** The preference client: picks read from `storage`, keyed as the service keys its rows; saves recorded. */
+class PreferenceClient {
 	readonly saved: Array<[string, FeePickUpdate]> = []
+	readonly getFeePicks = vi.fn((profileId: string) =>
+		readFeePicks(
+			{ get: async (keys) => Object.fromEntries(keys.filter((k) => k in storage).map((k) => [k, structuredClone(storage[k])])) },
+			profileId,
+		),
+	)
 	async saveFeePick(profileId: string, update: FeePickUpdate) {
 		this.saved.push([profileId, update])
 		return true
@@ -32,16 +40,6 @@ let storage: Record<string, unknown>
 
 beforeEach(() => {
 	storage = {}
-	// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
-	;(globalThis as any).chrome = {
-		// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
-		...(globalThis as any).chrome,
-		storage: {
-			local: {
-				get: vi.fn(async (key: string) => (key in storage ? { [key]: structuredClone(storage[key]) } : {})),
-			},
-		},
-	}
 })
 
 afterEach(() => {
@@ -70,7 +68,7 @@ function setup(mode: Mode, fpcs: RegisteredFpc[] = [PRIVATE_FPC, SPONSOR]) {
 		snapshotCommitted: computed(() => isInitComplete.value && scopeIsLiveIdentity(committedScope.value)),
 		scopeIsLiveIdentity,
 	}
-	const client = new ProfileClient()
+	const client = new PreferenceClient()
 	const scope = effectScope()
 	const built = scope.run(() => {
 		const verdicts = useSponsorVerdicts({ isEstimating: () => false })
@@ -87,6 +85,7 @@ function setup(mode: Mode, fpcs: RegisteredFpc[] = [PRIVATE_FPC, SPONSOR]) {
 			verdicts,
 			knownFpcs,
 			methods,
+			getFeePicks: (profileId: string) => client.getFeePicks(profileId),
 			saveFeePick: (profileId: string, update: FeePickUpdate) => client.saveFeePick(profileId, update),
 		}
 		const rules =
@@ -182,13 +181,12 @@ describe("Send's rule book", () => {
 
 	test("a recovery reads nothing, where the app windows' reads their saved picks", async () => {
 		const send = setup({ origin: "private" })
-		const get = vi.mocked(chrome.storage.local.get)
 		expect(await send.rules.reload(SCOPE)).toEqual({ saved: {}, baseline: null })
-		expect(get).not.toHaveBeenCalled()
+		expect(send.client.getFeePicks).not.toHaveBeenCalled()
 
 		const app = setup({})
 		await app.rules.reload(SCOPE)
-		expect(get).toHaveBeenCalledWith(feePicksKey("p1"))
+		expect(app.client.getFeePicks).toHaveBeenCalledWith("p1")
 		send.stop()
 		app.stop()
 	})

@@ -29,6 +29,7 @@ import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import type { Tx } from "@/wallet/services/transaction/spec"
 import { TransactionServiceClient } from "@/wallet/services/transaction/client"
+import { UiPreferenceServiceClient } from "@/wallet/services/ui-preference/client"
 
 /** Reactive: true once the background has said Ready on the profile port, false when that port drops. */
 export const isServiceReady = ref(false)
@@ -55,7 +56,7 @@ export function waitForServiceReady(ms: number): Promise<boolean> {
 }
 
 /**
- * Service-client container. `profile`, `contact`, `legal` and `networkReset` are populated eagerly by
+ * Service-client container. `profile`, `contact`, `legal`, `networkReset` and `uiPreference` are populated eagerly by
  * `initAppServiceContext()` (called at popup boot). `network`, `transaction`,
  * `account` are LAZY: `null` until the popup's unlock flow assigns them (after
  * `bootstrapActiveProfile()` resolves the active profile/network/account).
@@ -78,6 +79,7 @@ export interface AppServices {
 	contact: ContactServiceClient
 	legal: LegalAcceptanceServiceClient
 	networkReset: NetworkResetServiceClient
+	uiPreference: UiPreferenceServiceClient
 }
 
 let appServices: AppServices | undefined
@@ -104,6 +106,9 @@ function createAppServices(): AppServices {
 	const networkResetService = new NetworkResetServiceClient()
 	networkResetService.connect()
 
+	const uiPreferenceService = new UiPreferenceServiceClient()
+	uiPreferenceService.connect()
+
 	// `network`, `transaction`, `account` remain `null` until the popup's unlock
 	// flow sets them (see AppServices jsdoc + the require*/get* accessors).
 	return {
@@ -114,6 +119,7 @@ function createAppServices(): AppServices {
 		contact: contactService,
 		legal: legalService,
 		networkReset: networkResetService,
+		uiPreference: uiPreferenceService,
 	}
 }
 

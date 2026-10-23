@@ -1,6 +1,40 @@
 import type { Page } from "puppeteer"
+import { NETWORK_SERVICE_NAME, NETWORK_STORAGE_ROOT } from "@/wallet/services/network/spec"
+import { selectedAccount, waitForSelectedAccount } from "./accounts"
 import { clickByTestId } from "./dom"
+import { callService } from "./session"
 import { acceptConfirmPopup } from "./widgets"
+
+/** A network row as the wallet stores it, with the fields the specs edit. */
+export type StoredNetwork = {
+	id: string
+	name: string
+	kind?: string
+	chainId: number
+	primaryEndpointId: string
+	endpoints: { id: string; rpcUrl: string }[]
+}
+
+/** The active profile's active network, as the network service reads it. */
+export async function readActiveNetwork(page: Page): Promise<StoredNetwork> {
+	const network = await callService<StoredNetwork | null>(page, NETWORK_SERVICE_NAME, "getActiveNetwork")
+	if (!network) throw new Error("no active network")
+	return network
+}
+
+/** Rewrites the active network's row when `edit` changes it and says so, and returns the row it
+ *  stored. The replacement is plaintext at the row's own key, where it replaces the sealed copy and
+ *  the dual read serves it. */
+export async function rewriteActiveNetwork(page: Page, edit: (network: StoredNetwork) => boolean): Promise<StoredNetwork | undefined> {
+	const network = await readActiveNetwork(page)
+	if (!edit(network)) return undefined
+	await page.evaluate(
+		(key: string, value: string) => chrome.storage.local.set({ [key]: value }),
+		`${NETWORK_STORAGE_ROOT}@${network.id}`,
+		JSON.stringify(network),
+	)
+	return network
+}
 
 /**
  * Switch to a network by name. The header chip now routes to the Manage
@@ -33,10 +67,7 @@ export async function switchToNetwork(page: Page, networkName: string): Promise<
 		const btn = document.querySelector('[data-testid="network-button"]')
 		return (btn?.textContent ?? "").trim()
 	})
-	const beforeAccount = await page.evaluate(async () => {
-		const r = await chrome.storage.local.get("nulo:ui:activeAccount")
-		return (r["nulo:ui:activeAccount"] as string | undefined) ?? ""
-	})
+	const beforeAccount = (await selectedAccount(page)) ?? ""
 	// Exact match (not substring) on the trimmed header text. Substring
 	// matching collides when a custom network is renamed to contain another
 	// network's name (e.g., "Local Backup" would falsely look like a no-op
@@ -78,19 +109,15 @@ export async function switchToNetwork(page: Page, networkName: string): Promise<
 	)
 
 	// Then: wait for the network watcher's `setupActiveAccount` to land. On
-	// a real switch, `nulo:ui:activeAccount` flips away from `beforeAccount`
+	// a real switch, the selection flips away from `beforeAccount`
 	// because each chain derives its own address. On a repeat switch we just
 	// confirm the existing value is still set (the watcher may briefly clear
 	// the `account` ref while re-fetching).
-	await page.waitForFunction(
-		async ({ prev, real }: { prev: string; real: boolean }) => {
-			const r = await chrome.storage.local.get("nulo:ui:activeAccount")
-			const addr = r["nulo:ui:activeAccount"]
-			if (typeof addr !== "string" || addr.length === 0) return false
-			return real ? addr !== prev : true
-		},
-		{ timeout: 30_000, polling: 250 },
-		{ prev: beforeAccount, real: isRealSwitch },
+	await waitForSelectedAccount(
+		page,
+		(addr) => !!addr && (!isRealSwitch || addr !== beforeAccount),
+		`switch network: the selection settles on ${networkName}`,
+		30_000,
 	)
 }
 

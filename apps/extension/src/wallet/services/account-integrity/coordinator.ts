@@ -5,12 +5,13 @@ import { LogLevel } from "@/wallet/logger"
 import { type Account, AccountService, AccountType } from "@/wallet/services/account/service"
 import { NetworkService } from "@/wallet/services/network/service"
 import { ProfileService } from "@/wallet/services/profile/service"
+import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
 import { type ClassifiedAccount, classifyChains, type UnclassifiableMismatch } from "@/wallet/services/stale-network/classify"
 import { StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
 import type { StaleEntry } from "@/wallet/services/stale-network/types"
 import { AccountAddressInconsistencyError } from "@nulo/extension-messaging/errors"
 import { NuloAccount, V6_REGIME } from "@nulo/aztec-runtime/account"
-import { deriveAccountSeed, type MasterSecretBytes } from "@nulo/wallet-crypto"
+import { deriveAccountSeed, keyedSegment, type MasterSecretBytes } from "@nulo/wallet-crypto"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { AccountIntegrityBlockedRepository, AccountIntegrityVerifiedStampRepository } from "./blocked-repository"
 import { accountSetDigest } from "./types"
@@ -119,7 +120,7 @@ export class AccountIntegrityCoordinator implements IService, AccountIntegrityDe
 		if (
 			stamp?.walletVersion === walletVersion() &&
 			walletVersion() !== "unknown" &&
-			stamp.accountSetDigest === accountSetDigest(rows)
+			stamp.accountSetDigest === (await this.keyedDigest(active.id, rows))
 		) {
 			return
 		}
@@ -173,9 +174,10 @@ export class AccountIntegrityCoordinator implements IService, AccountIntegrityDe
 		// A clean chain, or accounts that changed before the merge, mean the caller derived a row that
 		// was since replaced (a reset finished, say): its operation is refused and nothing is written.
 		if (!entry) return true
-		const current = async () => accountSetDigest(await this.accounts.getAccountsRaw(profileId))
+		const current = async () => this.keyedDigest(profileId, await this.accounts.getAccountsRaw(profileId))
+		const digest = await this.keyedDigest(profileId, rows)
 		const merged = await this.profiles.persistIntegrityVerdictIfLive(profileId, () =>
-			this.staleNetworks.mergeEntry(profileId, entry, accountSetDigest(rows), current),
+			this.staleNetworks.mergeEntry(profileId, entry, digest, current),
 		)
 		if (merged === false) return true
 		if (merged) this.logger.log(this.name, LogLevel.Warn, "chain quarantined at operation time", { chainId })
@@ -196,7 +198,7 @@ export class AccountIntegrityCoordinator implements IService, AccountIntegrityDe
 			const networks = await this.networks.getNetworksRaw(profileId)
 			const { entries, unclassifiable } = classifyChains(networks, await this.deriveAll(master, accountRows, derived))
 			if (unclassifiable) await this.blockProfile(profileId, unclassifiable, writers.block)
-			const digest = accountSetDigest(accountRows)
+			const digest = await this.keyedDigest(profileId, accountRows)
 			if (await writers.verdict(() => this.writeVerdict(profileId, digest, entries))) return
 		}
 		throw new Error(`${ERR_ACCOUNTS_CHANGED}: the accounts changed while Nulo checked them. Try again.`)
@@ -222,8 +224,20 @@ export class AccountIntegrityCoordinator implements IService, AccountIntegrityDe
 		return out
 	}
 
+	/**
+	 * The digest a stamp or a stale-network record stores: the account set's identity keyed under
+	 * the profile's row keys, so the stored value names no address and still changes with every
+	 * account. A stamp a 1.0.x build wrote holds the plain digest, mismatches once and earns one
+	 * re-derivation. Refuses with no keys: the rows read would not be the whole set.
+	 */
+	private async keyedDigest(profileId: string, rows: Account[]): Promise<string> {
+		const keys = this.profiles.rowKeys(profileId)
+		if (!keys) throw new WalletLockedError()
+		return keyedSegment(keys, accountSetDigest(rows))
+	}
+
 	private async writeVerdict(profileId: string, digest: string, entries: StaleEntry[]): Promise<boolean> {
-		const current = async () => accountSetDigest(await this.accounts.getAccountsRaw(profileId))
+		const current = async () => this.keyedDigest(profileId, await this.accounts.getAccountsRaw(profileId))
 		if (!(await this.staleNetworks.compareAndSetRecord({ profileId, accountSetDigest: digest, entries }, current))) return false
 		await this.blocked.clear(profileId)
 		await this.stamps.set(profileId, { walletVersion: walletVersion(), accountSetDigest: digest })

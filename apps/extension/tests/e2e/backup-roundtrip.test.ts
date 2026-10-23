@@ -178,7 +178,7 @@ test("encrypted full backup: export → wrong password rejects → decrypt → r
 						hash: window.location.hash,
 						navTrace: (window as unknown as { __nuloImportNavTrace?: Array<{ t: number; hash: string }> }).__nuloImportNavTrace,
 						profileRows: keys.filter((k) => k.startsWith("nulo:core:profiles@")).length,
-						activeAccountPointer: !!all["nulo:ui:activeAccount"],
+						selectedAccountRow: "nulo:ui:selectedAccount@device" in all,
 						bodySnippet: (document.body.innerText ?? "").slice(0, 120),
 					}
 				})

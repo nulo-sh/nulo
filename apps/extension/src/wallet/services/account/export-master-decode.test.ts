@@ -46,6 +46,10 @@ import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { svc } from "../composition-harness"
 import { AccountService } from "./service"
 import { AccountType, accountRowId } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 /** 32 bytes whose canonical base64 uses `+`, `/` and `=`. */
 const MASTER_BYTES = new Uint8Array(32).map((_, i) => (i % 2 ? 0xfb : 0x0f))
@@ -60,6 +64,7 @@ async function makeService(): Promise<AccountService> {
 	const services = new ServiceCollection()
 	services.add(
 		svc(PROFILE_SERVICE_NAME, {
+			...ROW_KEY_FAKE,
 			onProfileDeleted: new EventHandler(),
 			getDeletionState: () => new ProfileDeletionState(),
 			exportPlain: async () => state.master,

@@ -10,7 +10,8 @@ const account = vi.hoisted(() => ({
 	previewImportAccount: vi.fn(async () => `0x${"0b".repeat(32)}`),
 	importAccount: vi.fn(async () => ({ address: `0x${"0b".repeat(32)}`, name: "Imported" })),
 }))
-vi.mock("@/utils/core", () => ({ managers: { account } }))
+const uiPreference = vi.hoisted(() => ({ setSelectedAccount: vi.fn(async () => true) }))
+vi.mock("@/utils/core", () => ({ managers: { account, uiPreference } }))
 vi.mock("@/utils", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils")>()),
 	pickFile: vi.fn(async () => ({ name: "account.json", text: async () => '{"type":"nulo-account"}' })),
@@ -21,11 +22,17 @@ vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast: vi.fn()
 const surface = vi.hoisted(() => ({
 	leavePanelFor: vi.fn(async (_route: string) => false),
 	ownRoute: vi.fn((): string | undefined => undefined),
+	cardWindow: false,
+	returnToPanel: vi.fn(async (..._args: unknown[]) => surface.cardWindow),
+	closeOwnWindow: vi.fn(async () => true),
 }))
 vi.mock("@/utils/own-window", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils/own-window")>()),
 	leavePanelFor: surface.leavePanelFor,
 	ownWindowRoute: surface.ownRoute,
+	isCardWindow: () => surface.cardWindow,
+	returnToPanel: surface.returnToPanel,
+	closeOwnWindow: surface.closeOwnWindow,
 }))
 
 import { pickFile } from "@/utils"
@@ -77,7 +84,7 @@ function mountImport({ realInput = false } = {}) {
 
 async function confirmStep() {
 	const w = mountImport()
-	await w.get('[data-testid="import-account-pick-file"]').trigger("click")
+	await w.get(surface.cardWindow ? '[data-testid="handoff-card-choose"]' : '[data-testid="import-account-pick-file"]').trigger("click")
 	await flushPromises()
 	await w.get('[data-testid="import-account-submit"]').trigger("click")
 	await flushPromises()
@@ -100,6 +107,7 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	surface.leavePanelFor.mockResolvedValue(false)
 	surface.ownRoute.mockReturnValue(undefined)
+	surface.cardWindow = false
 	installChromeStorage({}, { persist: false })
 })
 
@@ -166,5 +174,67 @@ describe("settings/accounts/import — Firefox's toolbar panel", () => {
 		} finally {
 			length.mockRestore()
 		}
+	})
+})
+
+describe("settings/accounts/import — the hand-off window", () => {
+	beforeEach(() => {
+		surface.cardWindow = true
+	})
+
+	test("shows only the card until a file is picked; a cancelled picker keeps it", async () => {
+		const w = mountImport()
+		expect(w.get('[data-testid="handoff-card"]').text()).toContain("Pick the account file")
+		expect(w.find('[data-testid="import-account-pick-file"]').exists()).toBe(false)
+
+		vi.mocked(pickFile).mockRejectedValueOnce(new Error("canceled"))
+		await w.get('[data-testid="handoff-card-choose"]').trigger("click")
+		await flushPromises()
+		expect(w.find('[data-testid="handoff-card"]').exists()).toBe(true)
+
+		await w.get('[data-testid="handoff-card-choose"]').trigger("click")
+		await flushPromises()
+		expect(surface.leavePanelFor).not.toHaveBeenCalled()
+		expect(w.find('[data-testid="handoff-card"]').exists()).toBe(false)
+		expect(w.get('[data-testid="import-account-submit"]').text()).toBe("Continue")
+	})
+
+	test("a refused file shows the page with its error and its own file row", async () => {
+		const { FileTooLargeError } = await import("@/utils")
+		vi.mocked(pickFile).mockRejectedValueOnce(new FileTooLargeError(256 * 1024))
+		const w = mountImport()
+		await w.get('[data-testid="handoff-card-choose"]').trigger("click")
+		await flushPromises()
+		expect(w.find('[data-testid="handoff-card"]').exists()).toBe(false)
+		expect(w.get('[data-testid="import-account-error"]').text()).toBe("Account file is too large.")
+		expect(w.find('[data-testid="import-account-pick-file"]').exists()).toBe(true)
+	})
+
+	test("an empty file shows the page with the file it named, as outside the window", async () => {
+		vi.mocked(pickFile).mockResolvedValueOnce({ name: "empty.json", text: async () => "  " } as never)
+		const w = mountImport()
+		await w.get('[data-testid="handoff-card-choose"]').trigger("click")
+		await flushPromises()
+		expect(w.find('[data-testid="handoff-card"]').exists()).toBe(false)
+		expect(w.find('[data-testid="import-account-pick-file"]').exists()).toBe(true)
+	})
+
+	test("the import hands 'Account imported' back to the account list, for the profile it imported into", async () => {
+		const w = await confirmStep()
+		await nameAndEnter(w, "Imported")
+		expect(surface.returnToPanel).toHaveBeenCalledWith("/popup/settings/accounts", {
+			snack: { kind: "success", label: "Account imported" },
+			profileId: "p1",
+		})
+		expect(router.replace).not.toHaveBeenCalled()
+		expect(router.back).not.toHaveBeenCalled()
+	})
+
+	test("Cancel closes the window through the own window's way back", async () => {
+		const w = mountImport()
+		await w.get('[data-testid="handoff-card-cancel"]').trigger("click")
+		await flushPromises()
+		expect(surface.closeOwnWindow).toHaveBeenCalledTimes(1)
+		expect(pickFile).not.toHaveBeenCalled()
 	})
 })

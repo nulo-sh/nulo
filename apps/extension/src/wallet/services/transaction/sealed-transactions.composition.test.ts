@@ -22,6 +22,7 @@ import { FPC_SERVICE_NAME } from "@/wallet/services/fpc/spec"
 import { INCOMING_TRANSFER_SERVICE_NAME } from "@/wallet/services/incoming-transfer/spec"
 import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
+import { UI_PREFERENCE_SERVICE_NAME } from "@/wallet/services/ui-preference/spec"
 import { PASSKEY_SERVICE_NAME } from "@/wallet/services/passkey/spec"
 import { ProfileDeletionCoordinator } from "@/wallet/services/profile-deletion/coordinator"
 import { ProfileService } from "@/wallet/services/profile/service"
@@ -99,6 +100,7 @@ async function boot(api: FakeBrowserApi, chain: Nodes = nodes()) {
 	services.add(svc(DAPP_SESSION_SERVICE_NAME, { purgeForProfile: noop }))
 	services.add(svc(FPC_SERVICE_NAME, { purgeForProfile: noop }))
 	services.add(svc(OPERATION_JOURNAL_SERVICE_NAME, { purgeForProfile: noop }))
+	services.add(svc(UI_PREFERENCE_SERVICE_NAME, { purgeForProfile: noop }))
 	services.add(new ProfileDeletionCoordinator(logger, api.storage.local))
 	await services.start()
 	return { profiles, txs, chain }

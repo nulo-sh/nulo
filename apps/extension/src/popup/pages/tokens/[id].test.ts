@@ -11,6 +11,8 @@ import { pinnedTokensKey } from "@/utils/profile-ui-keys"
 import { flaggedKeysOf } from "@/utils/token-flag"
 import { TEST_FLAGGED } from "@/wallet/services/token-list/list.fixture"
 
+const { pinStore } = await vi.hoisted(() => import("../../../../tests/helpers/ui-preference-fake"))
+
 const H = vi.hoisted(() => {
 	const makeEvent = () => {
 		const handlers = new Set<(x?: unknown) => void>()
@@ -74,6 +76,12 @@ vi.mock("@/wallet/services/price/client", async () => {
 		}),
 	}
 })
+// Each test installs a fresh `chrome.storage.local`, so the store reaches it at call time.
+vi.mock("@/utils/core", () => ({
+	managers: {
+		uiPreference: pinStore({ get: (keys) => chrome.storage.local.get(keys), set: (items) => chrome.storage.local.set(items) }),
+	},
+}))
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast: H.openToast }) }))
 vi.mock("@/stores/app.store", () => ({ useAppStore: () => H.store.current }))
 vi.mock("@/stores/cache.store", () => ({ useCacheStore: () => H.cache.current }))

@@ -24,7 +24,7 @@
 import { expect } from "vitest"
 import type { Page } from "puppeteer"
 import { clickByTestId, openPopup, waitForHash, test, waitForServiceReady } from "./fixtures/extension"
-import { confirmProfileReset } from "./fixtures/helpers"
+import { confirmProfileReset, selectedAccount } from "./fixtures/helpers"
 import { holdNextPasskeyRequest, registerPasskeyProfile, setupPasskeyVirtualAuth, stallNextPasskeyCeremony } from "./fixtures/passkey"
 import { shotSend } from "./fixtures/send-page"
 import { expectFitsNarrow } from "./fixtures/type-roles"
@@ -346,11 +346,11 @@ test("passkey full-backup: in-session round-trip (register → reset → import 
 		// Durable UI pointers populated post-import (same as the password
 		// round-trip test in import-paths.test.ts).
 		const storage = await page.evaluate(async () => {
-			const r = await chrome.storage.local.get(["nulo:ui:lastActiveProfile", "nulo:ui:activeAccount"])
+			const r = await chrome.storage.local.get(["nulo:ui:lastActiveProfile"])
 			return r
 		})
 		expect(storage["nulo:ui:lastActiveProfile"]).toBeTruthy()
-		expect(storage["nulo:ui:activeAccount"]).toBeTruthy()
+		expect(await selectedAccount(page)).toBeTruthy()
 
 		// Lock-cascade benign errors are the same shape as other Path A tests.
 		const nonBenign = freshExtensionPerTest.pageErrors.filter((e) => !e.message.includes("Client disconnected"))

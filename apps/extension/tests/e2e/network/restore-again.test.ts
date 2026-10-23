@@ -9,7 +9,7 @@
  */
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
+import { join } from "node:path"
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { restoreAgainDoneText, restoreAgainIntroText } from "@/components/composite/import/restore-warning"
@@ -148,8 +148,6 @@ test.skipIf(!hasConfig)(
 				await ctx?.close()
 			} finally {
 				rmSync(profileDir, { recursive: true, force: true })
-				// The doctored file embeds the wallet's real (local-chain test) master key.
-				rmSync(dirname(filePath), { recursive: true, force: true })
 			}
 		}
 	},

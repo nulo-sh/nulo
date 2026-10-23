@@ -24,13 +24,16 @@ import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { BACKUP_MAC_FIELD } from "@/utils/full-backup-helpers"
+import { FPC_SERVICE_NAME } from "@/wallet/services/fpc/spec"
+import { INCOMING_TRANSFER_SERVICE_NAME, IncomingTransferRecordSchema } from "@/wallet/services/incoming-transfer/spec"
 import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
+import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
 import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
 import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import { STORES } from "@/wallet/storage/stores"
 import { BROWSER } from "./fixtures/browser"
 import { type ExtensionContext, clickByTestId, launchExtension, openPopup, test, waitForHash } from "./fixtures/extension"
-import { contactRow, ensureUnlocked, navigateByHash, waitForToast } from "./fixtures/helpers"
+import { captureSoleProfileId, contactRow, ensureUnlocked, navigateByHash, waitForSelectedAccount, waitForToast } from "./fixtures/helpers"
 import { pollUntil } from "./fixtures/poll"
 import { callService } from "./fixtures/session"
 import { registerPasskeyProfile, setupPasskeyVirtualAuth } from "./fixtures/passkey"
@@ -42,15 +45,18 @@ import {
 	updateCandidate,
 	writeLocalStorage,
 } from "./fixtures/update/in-place"
+import { expectReleasePreferences } from "./fixtures/update/preferences"
 import { type PinnedBackup, type Recording, readRecording, writePinnedBackup } from "./fixtures/update/recording"
 import { unreadRows } from "./fixtures/update/stored-rows"
 import { BARRIERS, missingFamilies, shownOverlays, updateProblems } from "./fixtures/update/verify"
 import { exportImportedAccountBody, previewImport } from "./helpers/account-io"
+import { accountRows, accountScope, readNetworkRows } from "./helpers/identity-rows"
 import { downloadPlainPasskeyBackup, exportBackupFile, openEncryptedBackup } from "./helpers/backup-export"
 import { BACKUP_SLICE_REGISTRY } from "@/wallet/services/backup/backup-migration-registry"
 import { backupProblems } from "@/wallet/storage/stored-shapes/backups"
 import {
 	PREVIOUS_TESTNET_CHAIN_ID,
+	type ChainSnapshot,
 	type StoredAccount,
 	readAccounts,
 	readNetwork,
@@ -120,27 +126,35 @@ const recordedTestnet = (recording: Recording): number => {
 	return row.chainId as number
 }
 
+const testnetNetworkId = (recording: Recording): string => {
+	const row = rowsOf(recording.entries, "nulo:core:networks").find((network) => network.kind === "testnet")
+	if (!row) throw new Error(`the recording of ${recording.tag} holds no Testnet network`)
+	return row.id as string
+}
+
 const otherChains = (recording: Recording): Array<{ id: string; chainId: number }> =>
 	rowsOf(recording.entries, "nulo:core:networks")
 		.filter((network) => network.kind !== "testnet")
 		.map((network) => ({ id: network.id as string, chainId: network.chainId as number }))
 
-/** Every stored row of each network but Testnet: the rows naming its chain id, and the incoming
- *  rows, whose keys name its network id instead. A sealed root's rows are left out: the unlock seals
- *  them, which changes how they are stored, and {@link expectHistory} reads them back. */
-function otherNetworks(page: Page, recording: Recording): Promise<Array<Record<string, unknown>>> {
+/** What the wallet reads of each network but Testnet: its row and accounts as their services read
+ *  them, and every other stored row naming its chain id or, for the incoming roots, its network id.
+ *  A sealed root's stored rows are left out: the unlock seals them, which changes how they are
+ *  stored, and {@link expectHistory} reads them back. */
+function otherNetworks(page: Page, recording: Recording): Promise<ChainSnapshot[]> {
 	return Promise.all(
 		otherChains(recording).map(async ({ id, chainId }) => {
-			const rows = {
-				...(await snapshotChain(page, chainId, id)),
-				...(await page.evaluate(async (network: string) => {
-					const all = await chrome.storage.local.get(null)
-					return Object.fromEntries(
-						Object.entries(all).filter(([key]) => key.startsWith("nulo:core:incoming-") && key.includes(`|${network}|`)),
-					)
-				}, id)),
-			}
-			return Object.fromEntries(Object.entries(rows).filter(([key]) => !SEALED_ROOTS.some((root) => key.startsWith(`${root}@`))))
+			const { rows, ...read } = await snapshotChain(page, chainId, id)
+			const incoming = await page.evaluate(async (network: string) => {
+				const all = await chrome.storage.local.get(null)
+				return Object.fromEntries(
+					Object.entries(all).filter(([key]) => key.startsWith("nulo:core:incoming-") && key.includes(`|${network}|`)),
+				)
+			}, id)
+			const stored = Object.entries({ ...rows, ...incoming }).filter(
+				([key]) => !SEALED_ROOTS.some((root) => key.startsWith(`${root}@`)),
+			)
+			return { ...read, rows: Object.fromEntries(stored) as Record<string, string> }
 		}),
 	)
 }
@@ -174,6 +188,106 @@ async function expectHistory(ctx: ExtensionContext, page: Page, recording: Recor
 	for (const record of rowsOf(entries, STORES.journal.ref.root)) {
 		expect(await callService(page, OPERATION_JOURNAL_SERVICE_NAME, "getOperation", [record.id])).toEqual(record)
 	}
+}
+
+const PROJECTION_ROOTS = (
+	[
+		"tokenBalances",
+		"authRegistry",
+		"authRegistryEnabled",
+		"incomingTransfers",
+		"incomingTrust",
+		"incomingPublicCursors",
+		"incomingBalanceOutbox",
+		"incomingArrivals",
+	] as const
+).map((name) => STORES[name].ref.root)
+
+/** The 32-byte values a recorded projection row names: accounts, contracts, notes, transactions. */
+function namedHex(rows: Row[]): string[] {
+	const fields = ["account", "accountAddress", "owner", "from", "contract", "noteHash", "txHash"]
+	const values = rows.flatMap((row) => [...fields.map((field) => row[field]), String(row.id ?? "").split("|")[2]])
+	return [...new Set(values.filter((v): v is string => typeof v === "string" && /^0x[0-9a-f]{64}$/i.test(v)))].map((v) =>
+		v.slice(2).toLowerCase(),
+	)
+}
+
+/**
+ * The recorded balances, authorizations and incoming rows are stored sealed once the unlock has
+ * converted them, at keys that name none of their accounts, contracts, notes or transactions, and
+ * the recorded receipts and trust of every network the update kept read back through the wallet.
+ */
+async function expectProjections(ctx: ExtensionContext, page: Page, recording: Recording, resetNetwork?: string): Promise<void> {
+	const entries = offline(recording.entries)
+	const named = namedHex(PROJECTION_ROOTS.flatMap((root) => rowsOf(entries, root)))
+	expect(named).not.toEqual([])
+	await pollUntil(
+		() => readLocalStorage(ctx),
+		(all) =>
+			Object.entries(all).every(([key, raw]) => {
+				if (!PROJECTION_ROOTS.some((root) => key.startsWith(`${root}@`))) return true
+				const lower = key.toLowerCase()
+				return typeof raw === "string" && parseEnvelope(JSON.parse(raw)) !== undefined && !named.some((hex) => lower.includes(hex))
+			}),
+		{ label: "the recorded projections sealed", timeoutMs: 30_000, intervalMs: 500 },
+	)
+	const kept = (row: Row) => row.networkId !== resetNetwork
+	const records = rowsOf(entries, STORES.incomingTransfers.ref.root).filter(kept)
+	const trust = rowsOf(entries, STORES.incomingTrust.ref.root).filter(kept)
+	expect(records.length + trust.length).toBeGreaterThan(0)
+	for (const record of records) {
+		const read = await callService(page, INCOMING_TRANSFER_SERVICE_NAME, "getIncomingTransferById", [record.id])
+		expect(read).toEqual(IncomingTransferRecordSchema.parse(record))
+	}
+	for (const row of trust) {
+		const state = await callService(page, INCOMING_TRANSFER_SERVICE_NAME, "getTrustState", [row.profileId, row.networkId, row.contract])
+		expect(state).toBe(row.state)
+	}
+}
+
+const IDENTITY_ROOTS = (["accounts", "importedAccountKeys", "networks", "tokens", "fpcs"] as const).map((name) => STORES[name].ref.root)
+
+/**
+ * The recorded accounts, imported keys, networks, tokens and fee payers are stored sealed once the
+ * unlock has converted them, at keys that name no recorded account, and each of these roots stores
+ * as many rows as the wallet reads from it, so a plaintext twin the conversion left, or a row no key
+ * opens, shows as a difference. Every recorded network, and each recorded token and fee payer off
+ * `resetChain`, still reads.
+ */
+async function expectIdentity(ctx: ExtensionContext, page: Page, recording: Recording, resetChain?: number): Promise<void> {
+	const entries = offline(recording.entries)
+	const addresses = rowsOf(entries, STORES.accounts.ref.root).map((row) => (row.address as string).slice(2).toLowerCase())
+	expect(addresses).not.toEqual([])
+	const stored = await pollUntil(
+		() => readLocalStorage(ctx),
+		(all) =>
+			Object.entries(all).every(([key, raw]) => {
+				if (!IDENTITY_ROOTS.some((root) => key.startsWith(`${root}@`))) return true
+				const lower = key.toLowerCase()
+				return (
+					typeof raw === "string" && parseEnvelope(JSON.parse(raw)) !== undefined && !addresses.some((hex) => lower.includes(hex))
+				)
+			}),
+		{ label: "the recorded identity rows sealed", timeoutMs: 30_000, intervalMs: 500 },
+	)
+	const held = (name: (typeof IDENTITY_ROOTS)[number]) => Object.keys(stored).filter((key) => key.startsWith(`${name}@`)).length
+	const chains = [...new Set(Object.keys(stored).flatMap((key) => accountScope(key)?.chainId ?? []))]
+	const accounts = (await Promise.all(chains.map((chain) => accountRows(page, chain)))).flat()
+	const networks = await readNetworkRows(page)
+	const tokens = await callService<Row[]>(page, TOKEN_SERVICE_NAME, "getTokens")
+	const fpcs = await callService<Row[]>(page, FPC_SERVICE_NAME, "getFpcs")
+	expect(IDENTITY_ROOTS.map(held)).toEqual([
+		accounts.length,
+		accounts.filter((account) => account.type === 1).length,
+		networks.length,
+		tokens.length,
+		fpcs.length,
+	])
+	const ids = (rows: Row[]) => rows.map((row) => row.id)
+	const kept = (root: string) => ids(rowsOf(entries, root).filter((row) => row.chainId !== resetChain))
+	expect(ids(networks)).toEqual(expect.arrayContaining(ids(rowsOf(entries, STORES.networks.ref.root))))
+	expect(ids(tokens)).toEqual(expect.arrayContaining(kept(STORES.tokens.ref.root)))
+	expect(ids(fpcs)).toEqual(expect.arrayContaining(kept(STORES.fpcs.ref.root)))
 }
 
 const identity = ({ address, name, index, type, visible }: StoredAccount) => ({ address, name, index, type, visible })
@@ -251,6 +365,15 @@ async function expectContacts(page: Page, recording: Recording): Promise<void> {
 	}
 }
 
+/** The recording selected a sandbox account, which Testnet does not hold, so the popup opens on
+ *  Testnet's first account in the account list's order (index, then address), as before the seal. */
+async function expectFirstAccountSelected(page: Page, chain: number): Promise<void> {
+	const rows = await readAccounts(page, chain)
+	const [first] = [...rows].sort((a, b) => a.index - b.index || (a.address < b.address ? -1 : a.address > b.address ? 1 : 0))
+	const label = "the selection is Testnet's first account"
+	expect(await waitForSelectedAccount(page, (address) => address === first?.address, label, 30_000)).toBe(first?.address)
+}
+
 async function opensWithoutTakeover(ctx: ExtensionContext, page: Page, recording: Recording, stored: Record<string, unknown>) {
 	const chain = recordedTestnet(recording)
 	const before = await readAccounts(page, chain)
@@ -258,10 +381,14 @@ async function opensWithoutTakeover(ctx: ExtensionContext, page: Page, recording
 	await waitForHash(page, "#/popup/general", 30_000)
 	expect(await shownOverlays(page)).toEqual([])
 	expect((await readAccounts(page, chain)).map(identity)).toEqual(before.map(identity))
+	await expectFirstAccountSelected(page, chain)
 	await expectImportedKeyOpens(page, imported(before)[0] ?? "")
 	await expectConnectedApps(page, recording)
 	await expectContacts(page, recording)
 	await expectHistory(ctx, page, recording)
+	await expectProjections(ctx, page, recording)
+	await expectIdentity(ctx, page, recording)
+	await expectReleasePreferences(ctx, page, recording.entries, await captureSoleProfileId(page))
 	expect(await shownOverlays(page)).toEqual([])
 	expect(await updateProblems(stored, await readLocalStorage(ctx))).toEqual([])
 }
@@ -292,6 +419,7 @@ async function throughTheReset(ctx: ExtensionContext, page: Page, recording: Rec
 	expect(derived(after)).toEqual(derived(before))
 	expect(imported(after)).toEqual(importedOpens ? imported(before) : [])
 	expect(await readAccounts(page, oldChain)).toEqual([])
+	await expectFirstAccountSelected(page, CHAIN_IDS.TESTNET)
 	const keysLeft = await page.evaluate(async (chain: number) => {
 		const all = await chrome.storage.local.get(null)
 		return Object.keys(all).filter((key) => key.startsWith("nulo:core:imported-account-keys@") && key.includes(`,${chain},`))
@@ -302,6 +430,9 @@ async function throughTheReset(ctx: ExtensionContext, page: Page, recording: Rec
 	await expectConnectedApps(page, recording)
 	await expectContacts(page, recording)
 	await expectHistory(ctx, page, recording)
+	await expectProjections(ctx, page, recording, testnetNetworkId(recording))
+	await expectIdentity(ctx, page, recording, oldChain)
+	await expectReleasePreferences(ctx, page, recording.entries, await captureSoleProfileId(page))
 	expect(await shownOverlays(page)).toEqual([])
 	expect(await unreadRows(await readLocalStorage(ctx))).toEqual([])
 }

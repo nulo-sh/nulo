@@ -148,6 +148,14 @@ function makeOpts(rows: unknown[] = [TESTNET, LOCAL, OTHER]) {
 	}
 }
 
+const RESTORED = { kind: "success", label: "Testnet and Local Network restored" }
+
+/** The page left Home once, carrying `outcome`: only a full restore hands one on. */
+function expectLeft(leave: ReturnType<typeof vi.fn>, outcome?: unknown) {
+	expect(leave).toHaveBeenCalledOnce()
+	expect(leave.mock.calls[0]?.[0]).toEqual(outcome)
+}
+
 /** A mounted page over a reminder armed for `armed`, with `backup` picked. */
 async function open(armed: string[] = ["N1", "N2"], backup?: Record<string, unknown>) {
 	const original = await buildBackup()
@@ -329,8 +337,8 @@ describe("useRestoreAgain: outcomes", () => {
 		await page.restoreBackup()
 
 		expect(store.has(KEY)).toBe(false)
-		expect(opts.openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Testnet and Local Network restored" })
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expect(opts.openToast).toHaveBeenCalledExactlyOnceWith(RESTORED)
+		expectLeft(opts.leave, { snack: RESTORED, profileId: "p1" })
 	})
 
 	test("a network that ran out of time stays named, with the import's warning and Retry", async () => {
@@ -390,8 +398,8 @@ describe("useRestoreAgain: outcomes", () => {
 
 		await page.retryRestore()
 		expect(store.has(KEY)).toBe(false)
-		expect(opts.openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Testnet and Local Network restored" })
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expect(opts.openToast).toHaveBeenCalledExactlyOnceWith(RESTORED)
+		expectLeft(opts.leave, { snack: RESTORED, profileId: "p1" })
 	})
 
 	test("Continue returns Home and leaves the reminder as the run left it", async () => {
@@ -402,7 +410,7 @@ describe("useRestoreAgain: outcomes", () => {
 
 		page.continueHome()
 
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 		expect(store.get(KEY)).toEqual(left)
 	})
 })
@@ -414,7 +422,7 @@ describe("useRestoreAgain: races", () => {
 
 		await page.restoreBackup()
 
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 		expect(accountStateClient.restore).not.toHaveBeenCalled()
 		expect(store.has(KEY)).toBe(false)
 	})
@@ -426,7 +434,7 @@ describe("useRestoreAgain: races", () => {
 
 		await page.restoreBackup()
 
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 		expect(accountStateClient.restore).not.toHaveBeenCalled()
 		expect(store.get(KEY)).toEqual(other)
 	})
@@ -438,7 +446,7 @@ describe("useRestoreAgain: races", () => {
 
 		await page.restoreBackup()
 
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 		expect(accountStateClient.restore).not.toHaveBeenCalled()
 		expect(store.get(KEY)).toEqual(armed)
 		expect(opts.fillError).not.toHaveBeenCalled()
@@ -454,7 +462,7 @@ describe("useRestoreAgain: races", () => {
 
 		await page.retryRestore()
 
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 		expect(accountStateClient.restore).not.toHaveBeenCalled()
 		expect(store.get(KEY)).toEqual(left)
 		expect(page.isRetrying.value).toBe(false)
@@ -474,7 +482,7 @@ describe("useRestoreAgain: races", () => {
 
 		await page.retryRestore()
 
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 		expect(opts.openToast).not.toHaveBeenCalled()
 		// The Retry's admission renewed the lease, which runs out; the networks stay named.
 		expect(store.get(KEY)).toMatchObject({ run, networkIds: ["N2"] })
@@ -497,13 +505,13 @@ describe("useRestoreAgain: races", () => {
 		session.live = false
 		active.value = "p2"
 		await nextTick()
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 
 		release()
 		await restoring
 		expect(store.get(KEY)).toEqual(admitted)
 		expect(opts.openToast).not.toHaveBeenCalled()
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 	})
 
 	test.each([
@@ -516,7 +524,7 @@ describe("useRestoreAgain: races", () => {
 		const page = useRestoreAgain(opts)
 		await page.start()
 		await nextTick()
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 	})
 
 	test("a list still loading neither names nor leaves; the loaded list names the networks", async () => {

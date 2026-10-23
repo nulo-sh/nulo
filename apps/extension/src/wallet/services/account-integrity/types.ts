@@ -15,7 +15,8 @@ export type AccountIntegrityVerifiedStamp = z.infer<typeof VerifiedStampSchema>
 /**
  * Deterministic identity of a profile's account set — order-independent over the fields that feed
  * address derivation + the derived address itself. Pure string work (jsdom-safe, no crypto/bb);
- * it is an identity key, not a security digest.
+ * it is an identity key, not a security digest. It lists every address, so storage never holds it:
+ * the stamp and the stale-network record keep it keyed under the profile's row keys.
  */
 export function accountSetDigest(
 	rows: ReadonlyArray<{ chainId: number; l1ChainId: number; index: number; type: number; address: string }>,

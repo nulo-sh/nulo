@@ -129,12 +129,14 @@ onBeforeUnmount(() => {
 <template>
 	<OnboardingPhraseStep v-if="stage === 'phrase'" :words="words" @saved="onPhraseSaved" @later="onPhraseLater" />
 	<OnboardingPage v-else data-testid="onboarding-create-page" :data-name-field="nameFieldState">
-		<OnboardingBackLink testid="onboarding-create-back" />
-		<StepIndicator current="wallet" :path="authMethod" />
-		<header :class="$style.hero">
-			<BrutalistTitle main="Create" sub="Wallet" />
-			<div :class="$style.hero_bar" />
-		</header>
+		<OnboardingStepHeader
+			current="wallet"
+			:path="authMethod"
+			back="onboarding-create-back"
+			main="Create"
+			sub="Wallet"
+			:class="$style.hero"
+		/>
 
 		<form :class="$style.form" @submit.prevent="handleSubmit" @keydown.enter="refuseRepeatEnter">
 			<OnboardingProfileNameField
@@ -220,14 +222,7 @@ onBeforeUnmount(() => {
 
 <style module>
 .hero {
-	padding: 8px 0 16px;
-}
-
-.hero_bar {
-	width: 40px;
-	height: 2px;
-	background: var(--nulo-accent);
-	margin-top: 12px;
+	padding-bottom: 16px;
 }
 
 .form {

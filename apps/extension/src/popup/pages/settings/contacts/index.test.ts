@@ -6,10 +6,19 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import { nextTick, ref } from "vue"
 
-const fakes = vi.hoisted(() => ({ importContacts: vi.fn(), leavePanelFor: vi.fn(async (_route: string) => false) }))
+const fakes = vi.hoisted(() => ({
+	importContacts: vi.fn(),
+	leavePanelFor: vi.fn(async (_route: string) => false),
+	cardWindow: false,
+	returnToPanel: vi.fn(async (..._args: unknown[]) => true),
+	closeOwnWindow: vi.fn(async () => true),
+}))
 vi.mock("@/utils/own-window", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils/own-window")>()),
 	leavePanelFor: fakes.leavePanelFor,
+	isCardWindow: () => fakes.cardWindow,
+	returnToPanel: fakes.returnToPanel,
+	closeOwnWindow: fakes.closeOwnWindow,
 }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 const page = { contacts: ref<Array<{ id: string; name: string; address: string }>>([]), exporting: ref(false) }
@@ -33,6 +42,7 @@ vi.mock("@/wallet/services/account-state/client", () => ({
 	}),
 }))
 
+import HandoffCard from "@/components/composite/HandoffCard.vue"
 import DropdownItem from "@/components/ui/Dropdown/DropdownItem.vue"
 import { useAppStore } from "@/stores/app.store"
 import ContactsPage from "./index.vue"
@@ -41,6 +51,9 @@ beforeEach(() => {
 	installChromeStorage({}, { persist: false })
 	fakes.importContacts.mockReset()
 	fakes.leavePanelFor.mockReset().mockResolvedValue(false)
+	fakes.cardWindow = false
+	fakes.returnToPanel.mockClear()
+	fakes.closeOwnWindow.mockClear()
 	page.contacts.value = []
 	page.exporting.value = false
 })
@@ -123,5 +136,56 @@ describe("settings/contacts", () => {
 		await nextTick()
 		expect(card().exists()).toBe(false)
 		expect(item().attributes("aria-disabled")).toBeUndefined()
+	})
+})
+
+describe("settings/contacts in the hand-off window", () => {
+	const SNACK = { kind: "success", label: "Import completed successfully" }
+
+	beforeEach(() => {
+		fakes.cardWindow = true
+	})
+
+	test("shows only the card, which a running import keeps busy", async () => {
+		const w = await mountContacts()
+		expect(w.find('[data-testid="handoff-card"]').text()).toContain("Pick the contacts file")
+		expect(w.find('[data-testid="contacts-menu-trigger"]').exists()).toBe(false)
+		expect(w.find("section-label-stub").exists()).toBe(false)
+		expect(w.getComponent(HandoffCard).props("busy")).toBe(false)
+
+		const app = useAppStore() as unknown as { contactImports: ReadonlySet<symbol> }
+		app.contactImports = new Set([Symbol("running import")])
+		await nextTick()
+		expect(w.getComponent(HandoffCard).props("busy")).toBe(true)
+	})
+
+	test("Choose file picks here, and the import's end hands its snack and profile back to Contacts", async () => {
+		fakes.importContacts.mockResolvedValue({ snack: SNACK, profileId: "a1b2c3d4" })
+		const w = await mountContacts()
+		await w.get('[data-testid="handoff-card-choose"]').trigger("click")
+		await flushPromises()
+
+		expect(fakes.leavePanelFor).not.toHaveBeenCalled()
+		expect(fakes.returnToPanel).toHaveBeenCalledWith("/popup/settings/contacts", { snack: SNACK, profileId: "a1b2c3d4" })
+	})
+
+	test("a pick that ends before the selection keeps the card for another try", async () => {
+		fakes.importContacts.mockResolvedValue(undefined)
+		const w = await mountContacts()
+		await w.get('[data-testid="handoff-card-choose"]').trigger("click")
+		await flushPromises()
+
+		expect(fakes.importContacts).toHaveBeenCalledTimes(1)
+		expect(fakes.returnToPanel).not.toHaveBeenCalled()
+		expect(w.find('[data-testid="handoff-card"]').exists()).toBe(true)
+	})
+
+	test("Cancel closes the window through the own window's way back", async () => {
+		const w = await mountContacts()
+		await w.get('[data-testid="handoff-card-cancel"]').trigger("click")
+		await flushPromises()
+
+		expect(fakes.closeOwnWindow).toHaveBeenCalledTimes(1)
+		expect(fakes.importContacts).not.toHaveBeenCalled()
 	})
 })

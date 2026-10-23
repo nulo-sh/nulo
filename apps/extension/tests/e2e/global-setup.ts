@@ -29,11 +29,12 @@ import { markBootReady, markBootStarted } from "./sentinel"
 import { reapOrphanLaunches } from "./fixtures/browser/ownership"
 import { resolveBrowserKind } from "./fixtures/browser/selection"
 import { ANVIL_CHAIN_ID, probeAnvil } from "./anvil-probe"
-import { assertPackFree, claimedRunId, listenerIsOurs, mayAdopt, waitWhileAlive } from "./boot-guard"
+import { assertPackFree, claimedRunId, listenerIsOurs, mayAdopt, nodeStores, waitWhileAlive } from "./boot-guard"
 import { identityIsDead, launchEnv, newMarker, ownIdentity, readStartTime } from "./owned-processes"
 import {
 	createRunDir,
 	deletableRunDir,
+	nodeTmpDir,
 	plannedRunDir,
 	reapPriorRun,
 	stopService,
@@ -127,11 +128,11 @@ const AZTEC_P2P_PORT = Number(process.env.AZTEC_P2P_PORT ?? 40400)
 const PLAYGROUND_PORT = Number(process.env.PLAYGROUND_PORT ?? 5174)
 const PLAYGROUND_URL = process.env.PLAYGROUND_URL ?? `http://localhost:${PLAYGROUND_PORT}/`
 
-/** Per-run aztec run dir; the node's `--data-directory` is its `data` subdir. Mandatory even for
- *  in-memory mode because some aztec subsystems still write to ~/.aztec/data by default — two
- *  agents writing there at the same time will corrupt LMDB. On real disk (`E2E_DATA_ROOT`), NOT
- *  tmpfs. Recorded in the ownership lockfile so a future run — or `e2e:reap` — can clean it up if
- *  this run is killed before teardown. */
+/** Per-run aztec run dir: the node's `--data-directory` is its `data` subdir and its `TMPDIR` its
+ *  `tmp` subdir, where a local network opens every store. The flag stays because it names the run
+ *  dir on the node's command line, which the orphan dir sweep reads as liveness. On real disk
+ *  (`E2E_DATA_ROOT`), NOT tmpfs. Recorded in the ownership lockfile so a future run — or
+ *  `e2e:reap` — can clean it up if this run is killed before teardown. */
 let AZTEC_RUN_DIR = plannedRunDir()
 
 /** One launch marker per service, in its spawn environment and in the lock: the only identity
@@ -241,6 +242,9 @@ export async function setup(project: TestProject) {
 		return
 	}
 
+	// A run dir too long for the node's sockets is a usage error, so it is refused before the window.
+	nodeTmpDir(AZTEC_RUN_DIR)
+
 	// Sandbox bring-up begins here — this opens the boot-failure (exit 86)
 	// window. Manifest validation + orphan reap above are deliberately OUTSIDE
 	// it: a failure there is a build/env problem, not an infra-boot flake, so it
@@ -300,6 +304,19 @@ async function finishBoot(project: TestProject): Promise<void> {
 	// this closes the boot-failure (exit 86) window. Any failure from here on
 	// (fixture, import, test body) is a real failure, never an infra-boot flake.
 	markBootReady()
+	assertNodeStoresInRunDir()
+}
+
+/** Teardown and `e2e:reap` remove the run dir and nothing else, so a store the node opens outside
+ *  it escapes their cleanup. A scan that sees no store inside proves nothing and fails too. */
+function assertNodeStoresInRunDir(): void {
+	if (!weStartedNode || process.platform !== "linux") return
+	const { inside, outside, unreadable } = nodeStores(AZTEC_RUN_DIR, MARKERS.aztec)
+	const fail = (fault: string) => new Error(`[e2e-setup] FATAL: the local Aztec node ${fault} (run dir ${AZTEC_RUN_DIR})`)
+	if (outside.length > 0) throw fail(`holds ${outside.length} store files outside its run dir: ${outside.slice(0, 5).join(", ")}`)
+	if (unreadable.length > 0) throw fail(`has processes whose open files cannot be read: ${unreadable.join(", ")}`)
+	if (inside.length === 0) throw fail("holds no store under its run dir")
+	console.log(`[e2e-setup] node stores: ${inside.length} open, all inside ${AZTEC_RUN_DIR}`)
 }
 
 // ── Lockfile: reap orphans or take over a still-healthy pack ───────
@@ -476,9 +493,6 @@ async function ensureAztecNode(): Promise<"ready" | "skip"> {
 		return "skip"
 	}
 
-	// Mandatory --data-directory per agent: aztec writes to $HOME/.aztec/data
-	// by default for some subsystems, which would corrupt LMDB if two
-	// agents run concurrently with the default path.
 	const node = spawnAztecNode(createRunDir(AZTEC_RUN_DIR, MARKERS.aztec))
 
 	try {
@@ -527,7 +541,7 @@ function requirePinnedToolchainOrWarn(): void {
 
 /** Spawn the pinned aztec CLI as its own process group, own it (handle → flag → lock record, in
  *  that order), and pipe its logs. */
-function spawnAztecNode(dataDir: string): ChildProcess {
+function spawnAztecNode(dirs: { data: string; tmp: string }): ChildProcess {
 	const node = spawn(
 		AZTEC_BIN,
 		[
@@ -542,7 +556,7 @@ function spawnAztecNode(dataDir: string): ChildProcess {
 			"--l1-rpc-urls",
 			ANVIL_URL,
 			"--data-directory",
-			dataDir,
+			dirs.data,
 			"--disable-admin-api-key",
 		],
 		{
@@ -552,6 +566,8 @@ function spawnAztecNode(dataDir: string): ChildProcess {
 				...process.env,
 				...launchEnv(MARKERS.aztec),
 				PATH: `${AZTEC_INTERNAL_BIN}${path.delimiter}${process.env.PATH ?? ""}`,
+				// Inherited by every child the node spawns, so teardown and the reap remove what they write.
+				TMPDIR: dirs.tmp,
 				SEQ_MIN_TX_PER_BLOCK: "0",
 				ETHEREUM_HOSTS: ANVIL_URL,
 				// The CLI (scripts/aztec.sh) starts its own anvil on $ANVIL_PORT (8545 when unset);

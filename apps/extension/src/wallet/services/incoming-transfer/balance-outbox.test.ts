@@ -20,11 +20,14 @@ function makeOutbox(opts: { revokeOnReRead: boolean }) {
 			if (reads === 2 && opts.revokeOnReRead) current = false
 			return rows.get(balanceOutboxKey(p, n, a, t))
 		},
-		setOutbox: vi.fn(async (p: string, n: string, a: string, t: number, row: IncomingBalanceOutboxRow) => {
+		setOutbox: vi.fn(async (p: string, n: string, a: string, t: number, row: IncomingBalanceOutboxRow, fence?: () => boolean) => {
+			if (fence && !fence()) return false
 			rows.set(balanceOutboxKey(p, n, a, t), row)
+			return true
 		}),
-		deleteOutbox: async (p, n, a, t) => {
-			rows.delete(balanceOutboxKey(p, n, a, t))
+		deleteOutbox: async (p, n, a, t, fence) => {
+			if (fence && !fence()) return false
+			return rows.delete(balanceOutboxKey(p, n, a, t))
 		},
 		listOutbox: async () => [...rows],
 	}
@@ -55,5 +58,15 @@ describe("BalanceRefreshOutbox — the anchor's ticket check", () => {
 		await outbox.drain()
 
 		expect(rows.get(KEY)).toEqual({ dirtyAt: 100, pendingTaskId: "T1" })
+	})
+})
+
+describe("BalanceRefreshOutbox — the dirty mark's fence", () => {
+	test("a mark its caller's fence refuses writes nothing", async () => {
+		const { outbox, rows } = makeOutbox({ revokeOnReRead: false })
+
+		expect(await outbox.markDirty("p1", "n1", "0xa", 1, () => false)).toBe(false)
+
+		expect(rows.get(KEY)).toEqual({ dirtyAt: 100 })
 	})
 })

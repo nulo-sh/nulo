@@ -44,8 +44,10 @@ import {
 	switchAccountByAddress,
 	waitForFreshBalanceRow,
 	waitForTxConfirmation,
+	selectedAccount,
 } from "../fixtures/helpers"
 import { deliverWhileLocked, readIncomingPollStatus, releaseIncomingPoll, waitForIncomingPollPhase } from "../fixtures/incoming-poll-gate"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import type { Page } from "puppeteer"
 
@@ -74,27 +76,14 @@ const hasConfig = aztecConfig !== undefined
 /** Minimal projection of the persisted incoming record we correlate on. */
 type StoredIncomingRecord = { txHash?: string; accountAddress?: string; hidden?: boolean }
 
-/** Scan `chrome.storage.local` for the committed incoming record whose
- *  `txHash` matches. Returns null while none exists. Storage-level (not DOM)
- *  because the incoming card exposes no per-hash `data-testid` — correlating in
- *  the DOM would require a text-based selector, which the e2e selector rule
- *  forbids. The record's `txHash` is `note.txHash.toString()`, the SAME value
- *  the delivery helper returns, so the correlation is exact. */
+/** The committed incoming record whose `txHash` matches, as the wallet reads it; null while none
+ *  exists. Storage-level (not DOM) because the incoming card exposes no per-hash `data-testid` —
+ *  correlating in the DOM would require a text-based selector, which the e2e selector rule forbids.
+ *  The record's `txHash` is `note.txHash.toString()`, the SAME value the delivery helper returns, so
+ *  the correlation is exact. */
 async function findIncomingRecordByHash(page: Page, txHash: string): Promise<StoredIncomingRecord | null> {
-	return page.evaluate(async (want: string) => {
-		const all = await chrome.storage.local.get(null)
-		for (const [key, value] of Object.entries(all)) {
-			if (!key.startsWith("nulo:core:incoming-transfers@")) continue
-			if (typeof value !== "string") continue
-			try {
-				const rec = JSON.parse(value) as { txHash?: string; accountAddress?: string; hidden?: boolean }
-				if (rec && rec.txHash === want) return rec
-			} catch {
-				// Non-JSON value under this root — ignore.
-			}
-		}
-		return null
-	}, txHash)
+	const records = await readSealedRows<StoredIncomingRecord>(page, "incomingTransfers")
+	return records.find(({ row }) => row.txHash === txHash)?.row ?? null
 }
 
 test.skipIf(!hasConfig)(
@@ -175,12 +164,12 @@ test.skipIf(!hasConfig)(
 )
 
 /** Resolve the active `(profileId, networkId, accountAddress)` triple the gate
- *  arms on, from the same persisted keys the harness test reads. Throws with
- *  the observed shape if any leg is missing. */
+ *  arms on, from the persisted keys the harness test reads and the worker's
+ *  selection. Throws with the observed shape if any leg is missing. */
 async function resolveActiveTriple(page: Page): Promise<{ profileId: string; networkId: string; account: string }> {
-	const triple = await page.evaluate(async () => {
+	const account = (await selectedAccount(page)) ?? null
+	const stored = await page.evaluate(async () => {
 		const profileId = (await chrome.storage.local.get("nulo:ui:lastActiveProfile"))["nulo:ui:lastActiveProfile"]
-		const account = (await chrome.storage.local.get("nulo:ui:activeAccount"))["nulo:ui:activeAccount"]
 		let networkId: string | null = null
 		if (typeof profileId === "string") {
 			const activeKey = `nulo:core:active-network@${profileId}`
@@ -189,10 +178,10 @@ async function resolveActiveTriple(page: Page): Promise<{ profileId: string; net
 		}
 		return {
 			profileId: typeof profileId === "string" ? profileId : null,
-			account: typeof account === "string" ? account : null,
 			networkId,
 		}
 	})
+	const triple = { ...stored, account }
 	if (!triple.profileId || !triple.networkId || !triple.account) {
 		throw new Error(`could not resolve active (profile, network, account): ${JSON.stringify(triple)}`)
 	}

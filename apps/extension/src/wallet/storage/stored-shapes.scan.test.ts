@@ -35,6 +35,7 @@ const NOT_LOCAL_STORAGE: Record<string, { kind: NotLocalKind; reason: string; fi
 		reason: "prefix of the own-window ids, chrome.storage.session",
 		files: ["apps/extension/src/utils/own-window.ts"],
 	},
+	"nulo:own-window:handback": { kind: "session", reason: "the hand-back to the toolbar panel, chrome.storage.session" },
 	"nulo:theme": { kind: "local-storage", reason: "the pre-paint theme hint, window.localStorage" },
 	"nulo:scope-follow": { kind: "lock", reason: "a Web Lock name" },
 	"nulo:restoreOutcome@": {
@@ -48,6 +49,7 @@ const NOT_LOCAL_STORAGE: Record<string, { kind: NotLocalKind; reason: string; fi
 	"nulo:price:refresh": { kind: "alarm", reason: "the price refresh alarm" },
 	"nulo:token-list:refresh": { kind: "alarm", reason: "the token-list refresh alarm" },
 	"nulo:open-toolbar-popup": { kind: "message", reason: "a runtime message type" },
+	"nulo:return-to-panel": { kind: "message", reason: "a runtime message type" },
 	"nulo:full-backup:": {
 		kind: "file-tag",
 		reason: "the full-backup file tag family",

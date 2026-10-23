@@ -9,10 +9,11 @@ import type { Page } from "puppeteer"
 import { afterAll, beforeAll, describe, expect, inject, test } from "vitest"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
 import { BUNDLED_TOKEN_CLASS_IDS, readTokenList, type TokenListEntry } from "@nulo/token-list"
 import { openScratchPage } from "./fixtures/browser"
 import { type ExtensionContext, launchExtension, openPopup, waitForHash, withTimeoutMessage } from "./fixtures/extension"
-import { captureSoleProfileId } from "./fixtures/helpers"
+import { callService, captureSoleProfileId } from "./fixtures/helpers"
 import { createProfileAcceptingTerms } from "./helpers/legal-drivers"
 
 const PROBE_BUDGET_MS = 10_000
@@ -116,16 +117,8 @@ async function waitForSeedsToStop(page: Page, entries: readonly TokenListEntry[]
 
 async function storedTestnetTokens(page: Page): Promise<TokenTuple[]> {
 	const profileId = await captureSoleProfileId(page)
-	const rows = await page.evaluate(async () => {
-		const all = await chrome.storage.local.get(null)
-		return Object.entries(all)
-			.filter(([key]) => key.startsWith("nulo:core:tokens@"))
-			.map(([, value]) => JSON.parse(value as string) as { profileId: string; chainId: number } & TokenTuple)
-	})
-	return rows
-		.filter((row) => row.profileId === profileId && row.chainId === CHAIN_IDS.TESTNET)
-		.map(({ contract, symbol, decimals }) => ({ contract, symbol, decimals }))
-		.sort(byContract)
+	const rows = await callService<TokenTuple[]>(page, TOKEN_SERVICE_NAME, "getTokens", [profileId, CHAIN_IDS.TESTNET])
+	return rows.map(({ contract, symbol, decimals }) => ({ contract, symbol, decimals })).sort(byContract)
 }
 
 describe.skipIf(inject("liveLeg") !== true)("the shipped token list on the live Testnet", () => {

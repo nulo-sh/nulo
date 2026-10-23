@@ -87,7 +87,7 @@ import { seedAuthwits } from "./helpers/authwit-seeds"
 import { closeImportWith, contactsFiles, pickContactsFile, refuseTestnet } from "./helpers/contacts"
 import { seedFpcs, seedProtocolFpcs } from "./helpers/fpc-seeds"
 import { pressEscape } from "./helpers/pointer-probes"
-import { seedStaleNetwork, takeoverScreen } from "./helpers/stale-network"
+import { type NetworkRow, readNetworkRows, seedStaleNetwork, takeoverScreen } from "./helpers/stale-network"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const PROBE = "type-role-probe-"
@@ -848,8 +848,8 @@ async function expectAuthwits(page: Page, scope: ActivityScope): Promise<void> {
 }
 
 /** From the lock screen: Testnet's row moved as a network reset moves it, the takeover, and its reset confirmation. */
-async function expectStaleTakeover(page: Page): Promise<void> {
-	await seedStaleNetwork(page, "network-reset")
+async function expectStaleTakeover(page: Page, networks: NetworkRow[]): Promise<void> {
+	await seedStaleNetwork(page, "network-reset", { networks })
 	await ensureUnlocked(page)
 	expect(await takeoverScreen(page)).toBe("network-reset")
 	await openAndSweep(page, "stale-network-reset", "stale-confirm-account-address", "stale network confirmation", [
@@ -926,12 +926,13 @@ test("a seeded wallet's Home, Holdings, Activity, its tx, receipt and send detai
 		await expectWithoutExplorer(page, receipt)
 		await expectTxDebugPanel(page)
 		await expectAuthwits(page, scope)
+		const networks = await readNetworkRows(page)
 		await lockWallet(page)
 		await page.waitForSelector(sel("auth-submit"), VISIBLE)
 		await expectPageClean(page, "unlock")
 		await expectRoleAt(page, "auth-password-input", "input", true)
 		await expectButtons(page, "auth-submit")
-		await expectStaleTakeover(page)
+		await expectStaleTakeover(page, networks)
 	} finally {
 		await refusal.stop()
 	}

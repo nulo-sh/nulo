@@ -88,6 +88,7 @@ import { useToast } from "@/composables/toast"
 import { enterOn, nativeInput } from "../../../tests/helpers/credential-pins"
 import type { BackupSelection } from "@/utils/full-backup-helpers"
 import OnboardingProfileNameField from "../components/OnboardingProfileNameField.vue"
+import OnboardingStepHeader from "../components/OnboardingStepHeader.vue"
 import { doneRoute } from "../steps"
 import Import from "./import.vue"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
@@ -98,7 +99,7 @@ async function mountImport() {
 	const wrapper = mount(Import, {
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn })],
-			components: { BrutalistTitle, Flex, Input, OnboardingProfileNameField, Text },
+			components: { BrutalistTitle, Flex, Input, OnboardingProfileNameField, OnboardingStepHeader, Text },
 			stubs: {
 				OnboardingPage: { template: "<main><slot /></main>" },
 				OnboardingBackLink: true,

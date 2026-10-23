@@ -114,7 +114,7 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		private readonly projectionGate?: ProjectionGate,
 	) {
 		super(TOKEN_BALANCE_SERVICE_NAME, logger)
-		this.repo = new BalanceRepository(browserApi)
+		this.repo = new BalanceRepository(browserApi, (profileId) => this.profileService.rowKeys(profileId))
 	}
 
 	protected async init(services: ServiceCollection) {
@@ -161,6 +161,7 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		this.tokenService.onTokenDeleted.add(this.onTokenDeleted)
 		this.tokenService.onTokenUpdated.add(this.onTokenUpdated)
 		this.transactionService.onTransactionUpdated.add(this.onTransactionUpdated)
+		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
 
 		// Subscriptions are already live above, so a profile switch can land during
 		// these awaits: capture the generation first and commit only if it — and the
@@ -186,6 +187,22 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		}
 
 		this.queue.start()
+	}
+
+	/** Seals the profile's plaintext rows under the lock purges hold, one row per hold, skipping a
+	 *  fenced id: a purge waits for the row's commit and then deletes the sealed copy, so a purged
+	 *  row never comes back. The queue's unlocked writers can still lose one refresh to an older
+	 *  value in the read-to-commit window; the next refresh rewrites it. */
+	private async sealLegacyRows(profileId: string): Promise<void> {
+		try {
+			await this.repo.sealLegacy(
+				profileId,
+				(fn) => this.lock.withLock(fn),
+				(id) => this.invalidatedBalanceIds.has(id),
+			)
+		} catch (error) {
+			this.logWarn("sealing the profile's plaintext balances failed; the next worker retries", { error })
+		}
 	}
 
 	public async getTokenBalance(id: number): Promise<TokenBalanceInfo> {
@@ -280,14 +297,6 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 	 *  and the compiler is the caller-auditor that keeps new call sites honest. */
 	private async createTokenBalanceHoldingLock(token: Token, account: Account, gen: number): Promise<boolean> {
 		const id = await this.allocateUnfencedId()
-		// A profile switch during allocation makes this write belong to a departed
-		// context — skip it (the id isn't persisted, so it's reused by the next call).
-		if (gen !== this.profileGeneration) return false
-		// Token ids are `max+1`, so deleting the highest token frees its id for a
-		// successor: `tokens.has(id)` would pass for a DIFFERENT token. Compare the
-		// stable identity instead, so a creation for a token deleted mid-flight
-		// cannot attach to whatever now holds its id.
-		if (!this.isSameTokenLive(token)) return false
 		const tb: TokenBalanceRaw = {
 			id,
 			token: token.id,
@@ -299,7 +308,16 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 			publicBalance: "0",
 			updatedAt: 0,
 		}
-		await this.repo.set(tb)
+		const write = await this.repo.prepare(tb)
+		// A profile switch during allocation or sealing makes this write belong to a departed
+		// context — skip it (the id isn't persisted, so it's reused by the next call).
+		if (gen !== this.profileGeneration) return false
+		// Token ids are `max+1`, so deleting the highest token frees its id for a
+		// successor: `tokens.has(id)` would pass for a DIFFERENT token. Compare the
+		// stable identity instead, so a creation for a token deleted mid-flight
+		// cannot attach to whatever now holds its id.
+		if (!this.isSameTokenLive(token)) return false
+		await write.commit()
 		// A switch during the write must not emit a UI event or enqueue a sync under
 		// the new profile's context.
 		if (gen !== this.profileGeneration) return true
@@ -718,8 +736,9 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 					chainId: token.chainId,
 					contract: token.contract,
 				})
+				const write = await this.repo.prepare(row)
 				assertRestoreEpoch(deletion, epochs, profileId)
-				await this.repo.set(row)
+				await write.commit()
 				return row
 			})
 		})

@@ -24,6 +24,7 @@ import { FPC_SERVICE_NAME } from "@/wallet/services/fpc/spec"
 import { INCOMING_TRANSFER_SERVICE_NAME } from "@/wallet/services/incoming-transfer/spec"
 import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
+import { UI_PREFERENCE_SERVICE_NAME } from "@/wallet/services/ui-preference/spec"
 import { PASSKEY_SERVICE_NAME } from "@/wallet/services/passkey/spec"
 import { TOKEN_BALANCE_SERVICE_NAME } from "@/wallet/services/token-balance/spec"
 import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
@@ -67,6 +68,7 @@ async function boot(api: FakeBrowserApi) {
 	services.add(svc(INCOMING_TRANSFER_SERVICE_NAME, { clearProfile: noop }))
 	services.add(svc(FPC_SERVICE_NAME, { purgeForProfile: noop }))
 	services.add(svc(OPERATION_JOURNAL_SERVICE_NAME, { purgeForProfile: noop }))
+	services.add(svc(UI_PREFERENCE_SERVICE_NAME, { purgeForProfile: noop }))
 	const contacts = new ContactService(logger, api)
 	const sessions = new DappSessionService(logger, api)
 	services.add(contacts)

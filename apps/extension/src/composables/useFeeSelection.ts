@@ -14,10 +14,9 @@ import {
 	type SendSelection,
 	type TransferSide,
 } from "@/popup/components/modules/send/fee-privacy"
-import { type AppPick, type FeePickUpdate, readAppPicks, readSendSlots, type SendSlots } from "@/utils/fee-picks"
-import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
-import { storageLocalGet } from "@/utils/storage"
+import type { AppPick, FeePickUpdate, SendSlots } from "@/utils/fee-picks"
 import type { BalanceScope } from "@/stores/balances.store"
+import type { FeePicks } from "@/wallet/services/ui-preference/spec"
 import type { FeeSnapshot, SnapshotSelection } from "./useFeeSnapshot"
 import type { SponsorVerdicts } from "./useSponsorVerdicts"
 
@@ -61,18 +60,17 @@ export interface FeeSelectionInput {
 	verdicts: SponsorVerdicts
 	knownFpcs: Readonly<Ref<RegisteredFpc[]>>
 	methods: Readonly<Ref<FeeMethodOption[]>>
+	/** The profile's saved picks, each map re-parsed by the preference service. */
+	getFeePicks: (profileId: string) => Promise<FeePicks>
 	saveFeePick: (profileId: string, update: FeePickUpdate) => Promise<unknown>
 }
-
-const readStored = async (key: string) => (await storageLocalGet(key))[key]
-const readSavedFeeMethods = async (profileId: string) => readAppPicks(await readStored(feePicksKey(profileId)))
 
 const pickSlot = (profileId: string | undefined, address: string | undefined) => `${profileId}\n${address}`
 
 interface SendCtx extends FeeSelectionInput {
 	origin: () => TransferSide
-	/** Send's picks, `{ [slot]: { private?, public? } }`, one slot per profile and address: storage
-	 *  keeps each profile's picks apart, so an account held by two profiles has two picks. */
+	/** Send's picks, `{ [slot]: { private?, public? } }`, one slot per profile and address: each
+	 *  profile's picks are kept apart, so an account held by two profiles has two picks. */
 	sendPicks: Record<string, SendSlots>
 }
 
@@ -121,10 +119,10 @@ function pickForSend(c: SendCtx, m: FeeMethodOption) {
 	c.saveFeePick(profileId, update).catch((e) => console.error("Failed to save the send fee selection", { error: e }))
 }
 
-/** Send reads its own key into `sendPicks`, for the address it read for and under any pick already
- *  made in this mount (which is newer). */
+/** Send reads its own picks into `sendPicks`, for the address it read for and under any pick
+ *  already made in this mount (which is newer). */
 async function loadSend(c: SendCtx, { profileId, accountAddress: address }: BalanceScope, isCurrent: () => boolean) {
-	const slots = readSendSlots(await readStored(sendFeePicksKey(profileId)), address)
+	const slots = (await c.getFeePicks(profileId)).send[address] ?? {}
 	const slot = pickSlot(profileId, address)
 	c.sendPicks[slot] = { ...slots, ...c.sendPicks[slot] }
 	return isCurrent() ? { saved: {}, baseline: null } : null
@@ -221,7 +219,7 @@ function prefillSelection(c: AppCtx, saved: Record<string, AppPick>) {
 	c.chosenUnasked = false
 }
 
-/** Pre-fills from storage BEFORE the slow fetch, so the trigger shows the last-used method while it
+/** Pre-fills from the saved picks BEFORE the slow fetch, so the trigger shows the last-used method while it
  *  runs (the `isInitComplete` gate keeps the pre-fill out of settings derivation). Returns the saved
  *  map and the reconcile baseline, which a later pick moves off. A pick made during the read (an
  *  early sponsor row) is newer than anything saved, so nothing is pre-filled over it and the
@@ -229,7 +227,7 @@ function prefillSelection(c: AppCtx, saved: Record<string, AppPick>) {
  *  the pre-fill would clobber that run's reconcile. */
 async function loadApp(c: AppCtx, scope: BalanceScope, isCurrent: () => boolean): Promise<SelectionLoad | null> {
 	const beforeRead = { method: c.selectedMethod.value, pick: c.pickSeq }
-	const saved = await readSavedFeeMethods(scope.profileId)
+	const saved = (await c.getFeePicks(scope.profileId)).app
 	if (!isCurrent()) return null
 	if (touchedSince(c, beforeRead)) return { saved, baseline: beforeRead }
 	prefillSelection(c, saved)
@@ -238,11 +236,11 @@ async function loadApp(c: AppCtx, scope: BalanceScope, isCurrent: () => boolean)
 
 async function reloadApp(c: AppCtx, scope: BalanceScope): Promise<SelectionLoad> {
 	// Baseline BEFORE the await (same rule as the load): a user pick landing
-	// while the storage read is pending moves the selection off this
-	// baseline, so the reconcile keeps the pick instead of re-applying a
-	// stale storage snapshot over it.
+	// while the read is pending moves the selection off this baseline,
+	// so the reconcile keeps the pick instead of re-applying a stale
+	// snapshot over it.
 	const baseline = { method: c.selectedMethod.value, pick: c.pickSeq }
-	const saved = await readSavedFeeMethods(scope.profileId)
+	const saved = (await c.getFeePicks(scope.profileId)).app
 	return { saved, baseline }
 }
 
