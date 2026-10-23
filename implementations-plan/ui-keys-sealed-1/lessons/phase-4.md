@@ -20,3 +20,8 @@
   - Opus 3 (low): a read refused while the session leaves the profile and returns inside its round trip reads as empty, and the pin toggle or the boot's first-account write then replaces the stored value. Path verified; it needs a switch-and-return through an unlock inside one RPC, which the wallet does not support: closed `known-limit` #1097.
   - Comments: the claim's "one commit" (Codex 3, Opus 5) reworded; `rememberSelection`'s descriptive comment removed (Codex 3); the bare key's registry comment (Opus 5) and `setSelectedAccount`'s `@throws` (Opus 5) corrected.
 - **Round 2** (the round-1 Codex session resumed over `fddd3e4d..17b6e5b0`): **approve**, no new material finding. It checked the watchdog fix with an in-memory reproducer before and after, plus a normal-purge control, and found no new evidence to reopen #1097. The loop converged at round 2.
+
+## Close-out
+
+- Merged `dev` at `7c65d152` (#1099, Send's recipient field). The one conflict was `send-keyboard.test.ts`'s imports: this branch dropped `sendFeePicksKey`, and `dev` added `trimAddress`. `baseline:storage` is unchanged.
+- No promotion to `lessons.md`: it sits at its 8 KiB budget, and the arc's general gotcha is its `Lock` entry. The browser difference went to `FIREFOX.md`.

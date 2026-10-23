@@ -62,3 +62,39 @@ Within the 50 ms rule. Per-round ready spans 853 to 1109 ms on the base and 853 
 Chrome adds +5.6 s against the +5 s estimate. The Firefox pair ran at different loads, and the candidate's earlier run gave 84.3 s, so its +9 s is an upper reading.
 
 The full smoke suite, retry 0, at P2 (`c29ed290d`): Chrome 1845 s in 5 shards and Firefox 2777 s in 7. A base run of the full suite was not taken: only this file changed between P2 and P3, and P2 changed no smoke spec.
+
+## After OA-1 A: the pointer's gates (retry 0)
+
+- **Network**, the eight files through `agent.sh` with `NULO_E2E_PROVERLESS=1` (`account-switch-isolation` and `incoming-arrival` refuse a proving build without it): 26 tests green on each browser.
+
+  | file | Chrome | Firefox |
+  |---|---|---|
+  | `incoming-arrival` (7) | 160 s | 187 s |
+  | `fee-methods` (8) | 172 s | 217 s |
+  | `account-switch-isolation` (2) | 47 s | 60 s |
+  | `execute-scope-account` (1) | 44 s | 61 s |
+  | `incoming-transfers` (3) | 40 s | 53 s |
+  | `profile-reimport-matrix` (3) | 40 s | 52 s |
+  | `pin-to-home` (1) | 37 s | 44 s |
+  | `tx-sendTx-sponsoredFpc` (1) | 21 s | 29 s |
+  | the run, build and sandbox included | 662 s | 802 s |
+
+  Firefox's first run was at `fddd3e4d`, before the purge fix; its re-run on the merged head `2dac286e`, after the fix, was green again: 26 tests, 845 s (the run; `fee-methods` 225 s, `incoming-arrival` 175 s).
+- **The update**, `NULO_E2E_UPDATE_FROM=v0.31.0`. The candidates were built at `5390b1a9`; only `sealed-storage.test.ts` changed after it. The recording was not re-recorded, since the release's storage is unchanged.
+
+  | | Chrome | Firefox |
+  |---|---|---|
+  | `update-in-place.test.ts` (live) | 137 s | 178 s |
+  | `update-replay.test.ts` (3 cases) | 55 s | 62 s |
+  | `default-network-arrival-update.test.ts` (2 cases) | 32 s | 40 s |
+
+  The exact-pointer checks hold. The live update reads the release's bare value on the release side, and `getAccountAddress` equals it after the unlock, before the Testnet switch. The replay opens Testnet on its first account (`expectFirstAccountSelected`). Both pass `updateProblems` with the bare key moved: gone, and a sealed device row stored.
+- **Attempt:** the first arrival run failed in the smoke setup with "No chrome extension at …/dist/chrome". The `--extra-seed` candidate removes `dist/<browser>` on exit, and the README's armed rebuild between the two had been skipped. The run was green after the rebuild.
+- **The measurement**, against the merge base `a2f9e7d0`, built armed in the scratch worktree. Each round is the median of 5 opens after one unmeasured open, and rounds alternate which build goes first.
+
+  | medians of rounds, base → candidate | Chrome, 8 rounds, load1 88–103 | Firefox, 7 rounds, load1 32–98 |
+  |---|---|---|
+  | open to Home ready | 681 → 658 ms | 1165 → 1008 ms |
+  | first contentful paint | 476.5 → 472 ms | 481 → 430 ms |
+
+  Within the 50 ms rule on both browsers. The candidate's path adds one sealed-row open for the selection, where before it was a `chrome.storage.local.get`. Firefox's per-round ready spans 933 to 1624 ms on the base and 830 to 1649 ms on the candidate, so the host's noise exceeds any difference.

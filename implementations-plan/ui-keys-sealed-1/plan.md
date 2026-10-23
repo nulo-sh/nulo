@@ -13,6 +13,28 @@ issues: "#1051 (closes); #1062 (reopened on OA-1 A, closed by the PR); #1050 (st
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-23.
+- **Status:** closed with its one PR, #1093 (`worktree-ui-keys-sealed-1` → `dev`, `Closes #1051`, `Closes #1062`), which carries this close-out. The merge closes the plan.
+- **Shipped:** on the owner's page 84 answers (P84-06, OA-1 A; P84-07, OA-2 as drafted):
+  - **`UiPreferenceService`** serves the pinned tokens, the app and Send fee-pick maps and the selected account, sealed under the profile's row keys. Each write is one `set`, behind the session fence and the service lock. The popup and the dApp windows reach them only through its RPC, and `saveFeePick` moved here from `ProfileService`.
+  - **The maps:** one row per profile. The pre-seal structured maps convert in place through `SealedRootOptions.legacy: "structured"`.
+  - **The selection:** one device row, `nulo:ui:selectedAccount@device`, read only by the profile it names. The bare `nulo:ui:activeAccount` moves into it at the first read by a profile that holds that account. The deletion's `purgeForProfile` runs before the keyless sweep, and throws when the lock's watchdog displaced it.
+  - **The baseline re-cut, once.** Step 5 was equal for the maps and again for the pointer, with six added golden ids ([lessons/phase-1.md](lessons/phase-1.md)). CLAUDE.md records the re-cut.
+  - **Privacy Policy 1.2.4**, as approved.
+  - **Home open timing:** within 50 ms of the merge base on both browsers (Chrome 681 → 658 ms, Firefox 1165 → 1008 ms, ready; [lessons/phase-3.md](lessons/phase-3.md)).
+  - **Gates**, at retry 0 on both browsers: the full smoke suite, the eight network files, and the three update scenarios ([lessons/phase-2.md](lessons/phase-2.md), [lessons/phase-3.md](lessons/phase-3.md)).
+- **Dispositions:**
+  - OA-1 B (per-profile rows) and C (the pointer left plaintext) were not picked, and C's contract (§ Delivery) was not built.
+  - D12 built the maps first, in a draft PR, then the pointer on the same branch once the answers came.
+  - `scope-follow.core`'s send case was removed under KL-1, signed with P84-06.
+  - Review: Codex r1 and the Opus leg gave conditional approve, with every finding fixed or filed (#1097); Codex r2 approved ([lessons/phase-4.md](lessons/phase-4.md)).
+- **Lessons:** none promoted. `lessons.md` sits at its 8 KiB budget, and the arc's general gotcha, a holder that the lock's watchdog displaced, is already its `Lock` entry. The CDP-vs-BiDi `undefined` array slot went to `apps/extension/tests/e2e/FIREFOX.md`, which owns browser differences.
+- **Known limits:** #1096 (KL-1) and #1097. #1060, #1053, #1056 and #338 are unchanged.
+- **Open items:** none new. #1050 stays open by the owner's call (commented).
+- **Seeds retired:** the `/goal` and `/loop` below.
+
 # ui-keys-sealed-1: the popup's `nulo:ui:*` preferences behind the worker, sealed, and the stored-shape baseline re-cut once before 1.0.0
 
 One arc, one PR against `dev` (the orchestrator's D-orch-1), `Closes #1051` and, unless OA-1 is C, `Closes #1062`. A new worker service serves the pinned tokens, the two fee-pick maps and the selected account, sealed under the profile's row keys; the popup and the dApp windows reach them only through its RPC. The baseline is re-cut once (the one gate change, § The gate change). The PR merges only after the owner's recorded OA-1 and OA-2 sign-off. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
@@ -188,7 +210,7 @@ In the decision ledger. The competing outline B put each preference in its domai
 
 Every gate also runs `bun run lint`, `bun run typecheck:all` and `bun run test` from the worktree root.
 
-### P1: the service, the stores, the guard, the re-cut
+### P1: the service, the stores, the guard, the re-cut ✓
 
 - **Tests:**
   - `sealed-entity-storage.test.ts`: with the option, a structured row reads through the dual read, `sealLegacy` seals it in place, and a value changed between the read and the commit is not overwritten; without it, a structured row still reads as nothing (control).
@@ -197,14 +219,14 @@ Every gate also runs `bun run lint`, `bun run typecheck:all` and `bun run test` 
 - `ProfileService.saveFeePick` and its RPC stay until P2 moves their callers, so every caller compiles at this gate.
 - **Gate:** `bun run --cwd apps/extension test src/wallet/services/ui-preference src/wallet/storage src/wallet/services/profile`; § The gate change steps 5-6; `bun run test:all`. Pass: exit 0; step 5 equal.
 
-### P2: the popup and the windows through the RPC
+### P2: the popup and the windows through the RPC ✓
 
 - No popup or window code reads or writes these values through storage: `git grep` finds no `storageLocalGet`, `storageLocalSet` or `chrome.storage.local` call naming `nulo:ui:activeAccount`, `pinnedTokensKey`, `feePicksKey` or `sendFeePicksKey` outside the service, the registry and tests. The key names stay for `usePinnedTokens`' `onChanged` trigger and queue (D8). `ProfileService.saveFeePick` leaves with its callers.
 - The e2e helper and every raw read (recon § e2e) move here, each assertion's intent kept, since the smoke suite reads the bare pointer this build stops writing (`accounts.test.ts:70`, `fixtures/extension.ts:1029`); P3's network gate runs the network ones.
 - **Tests:** the colocated tests of `app.store.setup-active-account`, `usePinnedTokens`, `useFeeSelection`, `new-profile-helpers` and `scope-follow.core` move from storage stubs to a client stub with every assertion kept, except `scope-follow.core`'s three facade cases (`:242-286`), whose barrier the pointer no longer passes: the writer makes no call when `unless` holds at the call and one call when it does not; the lock or switch case moves to the service's commit fence (P1); the send case is KL-1, removed with the owner's OA-1 sign-off quoted in the PR, never silently.
 - **Gate:** `bun run --cwd apps/extension test src/stores src/composables src/popup`; `bun run test:all`; smoke: `cd apps/extension && bun run test:e2e -- --retry=0` and `NULO_E2E_BROWSER=firefox bun run test:e2e -- --retry=0`. Pass: exit 0 on both.
 
-### P3: e2e, the update, the measurement
+### P3: e2e, the update, the measurement ✓
 
 - `update-in-place.test.ts` populates a pin, a Send pick and an app pick through the release's UI. Failure mode: rows the release's own code wrote stop converting or reading; only an in-place update has them. Estimate +40 s Chrome, +60 s Firefox. Re-record the replay on Chrome (`NULO_E2E_UPDATE_RECORD=1`); `HELD` gains `uiPinnedTokens`, `uiFeePicks`, `uiSendFeePicks`.
 - `verify.ts` and the scenarios, per phase (Codex R2-2: both scenarios change the selection on purpose before their last check):
@@ -218,7 +240,7 @@ Every gate also runs `bun run lint`, `bun run typecheck:all` and `bun run test` 
   - the update: `bash apps/extension/scripts/e2e/build-update-candidate.sh <browser>`, then `update-in-place.test.ts` and `update-replay.test.ts`; `build-update-candidate.sh <browser> --extra-seed`, then `default-network-arrival-update.test.ts` (its release writes the bare pointer and its verify calls `updateProblems` after an unlock: Opus r2 U2); each with `NULO_E2E_UPDATE_FROM=v0.31.0` (or the latest stable tag then), as `tests/e2e/README.md` § In-place update gives them.
   - Pass: every file green; each suite's wall-clock before and after recorded.
 
-### P4: docs, legal, close
+### P4: docs, legal, close ✓
 
 - SECURITY.md § Storage privacy: the `nulo:ui:*` line keeps "per-profile Get Started flags and how the last restore ended", and the bare pre-seal pointer until its profile claims it or a selection overwrites it; the four join the sealed list. `ATTACK-SURFACE.md`: the four rows. `legal/privacy.md` § 3 per OA-2, 1.2.4, `legal/archive/privacy-1.2.3.md`, the manifest entry (`material: false`). CLAUDE.md, ARCHITECTURE.md § 5, the release skill: the sealed-roots lists and the re-cut note.
 - **Gate:** `bun run --cwd packages/legal test`; `bun run test:all`; `bun run test:ci-gating`; `bun run check:plans`. Pass: exit 0.

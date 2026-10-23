@@ -17,3 +17,14 @@ Pins and fee picks now go through `managers.uiPreference`. The pointer reads sta
   - Chrome, 5 shards: 354 + 362 + 329 + 347 + 453 = 1845 s;
   - Firefox, 7 shards: 429 + 371 + 383 + 328 + 362 + 383 + 521 = 2777 s.
   - Every file green, with load1 between 40 and 125.
+
+## After OA-1 A: the pointer through the RPC
+
+- The popup's boot reads `getSelectedAccount` for the profile it activates, before its superseded check, so the fence's "no await between the check and the commit" holds as before. Every selection writes through `rememberSelection` (switch, hide), `NewAccountPopup` (it captures the profile id before its await), the import and new-profile helpers, and the execute window's follow (`selectionWriter`).
+- `scope-follow.core.test.ts`: the three facade cases left with the facade. In their place: a writer test (no call when `unless` holds, one call when it does not) and a follow that lands. The send case is KL-1, which the owner signed with P84-06 (#1096). The lock and switch cases are the service's commit fence (`ui-preference/service.test.ts` § refusals).
+- e2e: `fixtures/accounts.ts` gains `selectedAccount`, `getAccountAddress` and `waitForSelectedAccount`, all through the service. Every raw read of `nulo:ui:activeAccount` in the smoke and network specs moved to them.
+- Attempts: `scope-follow.test.ts`'s `vi.mock` factory read a mock before its initialization (fixed with `vi.hoisted`); `useProfileBootstrap.test.ts` had 20 failures for a missing `managers.uiPreference` (stubbed); `NewAccountPopup` first read `account.profileId`, which the created account does not carry (it uses the captured id).
+- Smoke at retry 0 on the pointer's head (`17b6e5b0`; a later spec fix re-ran alone):
+  - Chrome, 5 shards: 348 + 389 + 347 + 401 + 397 = 1882 s;
+  - Firefox, 7 shards: 402 + 367 + 371 + 373 + 344 + 397 + 486 = 2740 s.
+  - The only red, on both browsers, was `sealed-storage.test.ts`, which has two causes. Its seed planted the bare selection on an unlocked wallet, and the list-load popups that came next claimed it at their boot, before the cold boot: correct service behavior, so the spec now locks first (`5390b1a9`). And Chrome returns an absent array slot from `page.evaluate` as `null` where Firefox keeps `undefined`, so the spec's read returns `null` for an absent key (`b5769757`; FIREFOX.md gains the row). It re-ran green alone: Chrome 33.7 s, Firefox 64.4 s.
