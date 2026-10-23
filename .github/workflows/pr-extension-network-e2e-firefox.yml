@@ -1,5 +1,5 @@
-# Firefox twin of pr-extension-network-e2e.yml: its aggregator is required on dev (advisory on main; promotion:
-# CLAUDE.md, "Staged-rollout switches"). scripts/ci-cd/behavior-gating.test.ts pins the parity.
+# Firefox twin of pr-extension-network-e2e.yml: its aggregator is required on dev and main (CLAUDE.md § Branching +
+# merging; the release skill's "Staged-rollout switches"). scripts/ci-cd/behavior-gating.test.ts pins the parity.
 name: Extension network e2e (Firefox)
 
 on:
