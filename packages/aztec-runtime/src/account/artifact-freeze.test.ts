@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import { getContractClassFromArtifact } from "@aztec-labs/stdlib/contract"
+import { resolvePackageAsset } from "@nulo/resolve-asset"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { describe, expect, test } from "vitest"
 import { V6_REGIME } from "./address-freeze"
@@ -12,6 +13,7 @@ import { FROZEN_DESCRIPTOR_DIGEST, FROZEN_INSTANTIATION_DESCRIPTOR } from "./ins
 import { NuloAccount } from "./nulo-account"
 
 const nullLogger: ILogger = { log: () => {} }
+const ARTIFACT_PATH = fileURLToPath(new URL("./artifacts/SchnorrAccount.json", import.meta.url))
 
 /**
  * Pins for the vendored account artifact. A red run here means the address-bearing artifact (or
@@ -21,9 +23,23 @@ const nullLogger: ILogger = { log: () => {} }
  */
 describe("frozen account artifact pins", () => {
 	test("vendored SchnorrAccount.json bytes match FROZEN_ARTIFACT_SHA256", () => {
-		const path = fileURLToPath(new URL("./artifacts/SchnorrAccount.json", import.meta.url))
-		const digest = createHash("sha256").update(readFileSync(path)).digest("hex")
+		const digest = createHash("sha256").update(readFileSync(ARTIFACT_PATH)).digest("hex")
 		expect(digest).toBe(FROZEN_ARTIFACT_SHA256)
+	})
+
+	// The PXE refuses a contract compiled for another oracle major on its first private execution,
+	// which no address or class-id pin sees. A tripwire only: the execution canaries prove the rest.
+	test("the vendored artifact's oracle major is the installed PXE's", () => {
+		const { file_map } = JSON.parse(readFileSync(ARTIFACT_PATH, "utf8")) as {
+			file_map: Record<string, { path: string; source: string }>
+		}
+		const versionFiles = Object.values(file_map).filter((file) => file.path.endsWith("/aztec/src/oracle/version.nr"))
+		expect(versionFiles).toHaveLength(1)
+		const contractMajor = versionFiles[0]?.source.match(/\bORACLE_VERSION_MAJOR: Field = (\d+);/)?.[1]
+		const pxeSource = readFileSync(resolvePackageAsset("@aztec-labs/pxe", "dest/oracle_version.js", { from: import.meta.url }), "utf8")
+		const pxeMajor = pxeSource.match(/\bexport const ORACLE_VERSION_MAJOR = (\d+);/)?.[1]
+		expect(contractMajor).toMatch(/^\d+$/)
+		expect(contractMajor).toBe(pxeMajor)
 	})
 
 	test("loaded artifact's contract class id matches FROZEN_ACCOUNT_CLASS_ID", async () => {
