@@ -1,8 +1,12 @@
 import { spawn } from "node:child_process"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { createServer, type ServerResponse } from "node:http"
 import type { AddressInfo } from "node:net"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { BUNDLED_TOKEN_CLASS_IDS, TOKEN_METADATA_SLOTS, type TokenListEntry } from "@nulo/token-list"
 import { describe, expect, test } from "vitest"
+import { canonical } from "../scripts/check"
 import { type LiveCheckIO, liveCheck } from "../scripts/live-check"
 import { REPO_ROOT } from "../scripts/summary"
 
@@ -259,10 +263,17 @@ describe("the live check script", () => {
 					JSON.stringify(result({ ...NODE_INFO, nodeVersion: HOSTILE })),
 				)
 		})
+		// The script's own source may list no token (between a reset and the next publish), so the
+		// child reads a one-token source of its own: the row it cannot check must exist to be reported.
+		const dir = mkdtempSync(join(tmpdir(), "live-check-"))
+		const source = join(dir, "list.source.json")
+		writeFileSync(source, canonical({ tokens: [token(1)] }))
 		try {
-			const child = spawn(process.execPath, ["infra/token-list/scripts/live-check.ts", `${origin}/hostile`, `${origin}/moved`], {
-				cwd: REPO_ROOT,
-			})
+			const child = spawn(
+				process.execPath,
+				["infra/token-list/scripts/live-check.ts", `--source=${source}`, `${origin}/hostile`, `${origin}/moved`],
+				{ cwd: REPO_ROOT },
+			)
 			let stdout = ""
 			let stderr = ""
 			child.stdout.on("data", (chunk) => {
@@ -282,6 +293,7 @@ describe("the live check script", () => {
 			}
 			expect(paths).toEqual(["/hostile", "/moved"])
 		} finally {
+			rmSync(dir, { recursive: true, force: true })
 			close()
 		}
 	}, 30_000)
