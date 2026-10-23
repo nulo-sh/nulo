@@ -1,6 +1,39 @@
 import type { Page } from "puppeteer"
+import { NETWORK_SERVICE_NAME, NETWORK_STORAGE_ROOT } from "@/wallet/services/network/spec"
 import { clickByTestId } from "./dom"
+import { callService } from "./session"
 import { acceptConfirmPopup } from "./widgets"
+
+/** A network row as the wallet stores it, with the fields the specs edit. */
+export type StoredNetwork = {
+	id: string
+	name: string
+	kind?: string
+	chainId: number
+	primaryEndpointId: string
+	endpoints: { id: string; rpcUrl: string }[]
+}
+
+/** The active profile's active network, as the network service reads it. */
+export async function readActiveNetwork(page: Page): Promise<StoredNetwork> {
+	const network = await callService<StoredNetwork | null>(page, NETWORK_SERVICE_NAME, "getActiveNetwork")
+	if (!network) throw new Error("no active network")
+	return network
+}
+
+/** Rewrites the active network's row when `edit` changes it and says so, and returns the row it
+ *  stored. The replacement is plaintext at the row's own key, where it replaces the sealed copy and
+ *  the dual read serves it. */
+export async function rewriteActiveNetwork(page: Page, edit: (network: StoredNetwork) => boolean): Promise<StoredNetwork | undefined> {
+	const network = await readActiveNetwork(page)
+	if (!edit(network)) return undefined
+	await page.evaluate(
+		(key: string, value: string) => chrome.storage.local.set({ [key]: value }),
+		`${NETWORK_STORAGE_ROOT}@${network.id}`,
+		JSON.stringify(network),
+	)
+	return network
+}
 
 /**
  * Switch to a network by name. The header chip now routes to the Manage

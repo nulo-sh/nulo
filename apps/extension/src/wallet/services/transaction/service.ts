@@ -188,7 +188,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 				for (const tx of await this.txs.getValues()) if (tx.profileId === profileId) this.arm(tx)
 			})
 		} catch (error) {
-			this.logWarn("sealing or arming the profile's transactions failed; the next unlock retries", { error })
+			this.logWarn("sealing or arming the profile's transactions failed; the next worker retries", { error })
 		}
 	}
 

@@ -29,6 +29,13 @@ export function parseEnvelope(parsed: unknown): SealedEnvelope | undefined {
 	return { profileId, sealed }
 }
 
+/** Whether a stored value is a seal envelope. A plaintext row of a keyed root sits at its natural
+ *  id; an envelope sits at the keyed id, whose hashed segments name nothing. */
+export function isSealedText(raw: unknown): boolean {
+	const parsed = tryParse(raw)
+	return parsed.ok && parseEnvelope(parsed.value) !== undefined
+}
+
 /** How a keyed root names a row: its storage id keeps the scope segments of the natural id and
  *  replaces each address or hash segment with the profile's keyed hash of it. */
 export type KeyedIds = { physicalId(naturalId: string, hash: (segment: string) => Promise<string>): Promise<string> }
@@ -71,9 +78,40 @@ export function commitSealedTogether(area: MinimalStorageArea, writes: readonly 
 	return removals.length > 0 ? written.then(() => area.remove(removals)) : written
 }
 
-/** A lock section for one row's conversion; `isCurrent` holds while the section still owns the
- *  lock, as `Lock.withLock` passes it. */
-export type ConversionLock = <R>(fn: (isCurrent: () => boolean) => Promise<R>) => Promise<R>
+/** A lock section for one row's conversion, given the row's natural id for a root whose writers
+ *  lock per row; `isCurrent` holds while the section still owns the lock, as `Lock.withLock`
+ *  passes it. */
+export type ConversionLock = <R>(fn: (isCurrent: () => boolean) => Promise<R>, naturalId: string) => Promise<R>
+
+/** One legacy row's conversion, prepared: the sealed copy to write (none when its sealed twin is
+ *  already stored), the plaintext key it reads from, the keys the commit removes, and whether a
+ *  stored value is still the one it was sealed from with the profile still holding its keys. */
+export type LegacySeal = { items: Record<string, string>; legacyKey: string; removals: string[]; current(stored: unknown): boolean }
+
+/** The legacy rows of other roots that convert in the same commit as the row at `naturalId`,
+ *  prepared inside its lock section. */
+export type Companions = (naturalId: string) => Promise<LegacySeal[]>
+
+/**
+ * Commits prepared legacy conversions, of any sealed roots, as one: only while every legacy key
+ * still holds the text it was sealed from, every profile its keys and `isCurrent()` holds, all
+ * read after the last read and before the dispatch. Then ONE `set` of every sealed copy and, once
+ * it lands, ONE `remove` of every plaintext key a keyed root leaves behind; a crash between leaves
+ * both forms of each row, which reads dedupe and the next pass finishes. Returns whether it did.
+ */
+export async function commitLegacyTogether(
+	area: MinimalStorageArea,
+	seals: readonly LegacySeal[],
+	isCurrent: () => boolean,
+): Promise<boolean> {
+	const stored = await area.get(seals.map((seal) => seal.legacyKey))
+	if (!isCurrent() || seals.some((seal) => !seal.current(stored[seal.legacyKey]))) return false
+	const items = Object.assign({}, ...seals.map((seal) => seal.items)) as Record<string, string>
+	const removals = seals.flatMap((seal) => seal.removals)
+	if (Object.keys(items).length > 0) await area.set(items)
+	if (removals.length > 0) await area.remove(removals)
+	return true
+}
 
 /** Where a readable row is stored: its storage id, the natural id it answers to, the profile it
  *  belongs to (none for an ownerless row) and whether it is sealed. */
@@ -255,16 +293,17 @@ export class SealedEntityStorage<T> {
 	}
 
 	/**
-	 * Every row of `profileId` with its storage id, sealed rows opened, for a maintenance delete
-	 * that filters on a row field. The rows are parsed JSON with no codec, as a raw enumeration
-	 * yields them, so a codec-invalid row of the profile is still found. The profile's sealed rows
-	 * whose fields such a caller cannot read come apart: `keyless` when the scan found no keys for
-	 * the profile, so which of them match is unknown; `unopened` when the keys refused them.
+	 * Every row of `profileId` with its storage id and the natural id it answers to, sealed rows
+	 * opened, for a maintenance delete that filters on a row field. The rows are parsed JSON with no
+	 * codec, as a raw enumeration yields them, so a codec-invalid row of the profile is still found.
+	 * The profile's sealed rows whose fields such a caller cannot read come apart: `keyless` when the
+	 * scan found no keys for the profile, so which of them match is unknown; `unopened` when the keys
+	 * refused them.
 	 */
 	public async rawRowsOf(
 		profileId: string,
-	): Promise<{ rows: Array<{ storageId: string; row: unknown }>; unopened: string[]; keyless: string[] }> {
-		const rows: Array<{ storageId: string; row: unknown }> = []
+	): Promise<{ rows: Array<{ storageId: string; naturalId: string; row: unknown }>; unopened: string[]; keyless: string[] }> {
+		const rows: Array<{ storageId: string; naturalId: string; row: unknown }> = []
 		const unopened: string[] = []
 		const keyless: string[] = []
 		for (const [key, storageId, raw] of prefixedEntries(await this.area.get(), this.prefix)) {
@@ -272,7 +311,7 @@ export class SealedEntityStorage<T> {
 			if (!parsed.ok) continue
 			const envelope = parseEnvelope(parsed.value)
 			if (!envelope) {
-				if (this.ownerOf(parsed.value, storageId) === profileId) rows.push({ storageId, row: parsed.value })
+				if (this.ownerOf(parsed.value, storageId) === profileId) rows.push({ storageId, naturalId: storageId, row: parsed.value })
 				continue
 			}
 			if (envelope.profileId !== profileId) continue
@@ -281,7 +320,7 @@ export class SealedEntityStorage<T> {
 				continue
 			}
 			const opened = await this.open(key, envelope)
-			if (opened) rows.push({ storageId, row: opened.inner })
+			if (opened) rows.push({ storageId, naturalId: opened.naturalId, row: opened.inner })
 			else unopened.push(storageId)
 		}
 		return { rows, unopened, keyless }
@@ -291,41 +330,58 @@ export class SealedEntityStorage<T> {
 	 * Converts `profileId`'s legacy rows, one `withLock` section per row so no lock is held for the
 	 * whole pass. Each row seals the exact stored text (a codec-invalid row too, so nothing stays
 	 * readable and nothing is lost) and commits only while its key still holds that text. A keyed
-	 * row is written under its sealed key and its legacy key removed in the same dispatch; a crash
-	 * between leaves both, which reads dedupe and the next pass finishes. A row commits only while
+	 * row is written under its sealed key first, then its legacy key is removed; a crash between
+	 * leaves both, which reads dedupe and the next pass finishes. A row commits only while
 	 * the profile still holds the keys the pass began with, so a pass outliving the profile's
 	 * deletion writes nothing after the deletion's keyless sweep. Returns the rows sealed.
 	 */
-	public async sealLegacy(profileId: string, withLock: ConversionLock, skip?: (naturalId: string) => boolean): Promise<number> {
+	public async sealLegacy(
+		profileId: string,
+		withLock: ConversionLock,
+		skip?: (naturalId: string) => boolean,
+		companions?: Companions,
+	): Promise<number> {
 		const keys = this.keysFor(profileId)
 		if (!keys) return 0
 		let converted = 0
 		for (const [storageId, text] of await this.inner.rawStringEntries()) {
 			const parsed = tryParse(text)
 			if (!parsed.ok || parseEnvelope(parsed.value) || this.ownerOf(parsed.value, storageId) !== profileId) continue
-			if (await withLock((isCurrent) => this.sealLegacyRow(keys, profileId, storageId, text, isCurrent, skip))) converted++
+			const sealRow = async (isCurrent: () => boolean) => {
+				const seal = await this.prepareLegacySeal(keys, profileId, storageId, text, skip)
+				const others = companions ? await companions(storageId) : []
+				return commitLegacyTogether(this.area, [seal, ...others], isCurrent)
+			}
+			if (await withLock(sealRow, storageId)) converted++
 		}
 		return converted
 	}
 
-	/** `isCurrent` and `skip` are asked after the row's last read, synchronously before its commit:
-	 *  a section the lock's watchdog displaced may have read the row before a purge deleted it. */
-	private async sealLegacyRow(
+	/** The conversion of `profileId`'s legacy row at `naturalId`, when it is stored there in
+	 *  plaintext and the profile holds its keys: for a caller that commits it with a row of another
+	 *  root, under the lock both rows' writers hold. */
+	public async prepareLegacyRow(profileId: string, naturalId: string): Promise<LegacySeal | undefined> {
+		const keys = this.keysFor(profileId)
+		const text = await this.inner.rawValue(naturalId)
+		const parsed = tryParse(text)
+		if (!keys || !parsed.ok || parseEnvelope(parsed.value) || this.ownerOf(parsed.value, naturalId) !== profileId) return undefined
+		return this.prepareLegacySeal(keys, profileId, naturalId, text as string)
+	}
+
+	/** Seals the exact stored text. `current` is asked after the row's last read, synchronously
+	 *  before the commit, with the lock's `isCurrent`: a section the lock's watchdog displaced may
+	 *  have read the row before a purge deleted it. */
+	private async prepareLegacySeal(
 		keys: RowKeys,
 		owner: string,
 		naturalId: string,
 		text: string,
-		isCurrent: () => boolean,
 		skip?: (naturalId: string) => boolean,
-	): Promise<boolean> {
+	): Promise<LegacySeal> {
 		const legacyKey = this.prefix + naturalId
-		// Checked in the continuation that dispatches the commit, with no await between.
-		const stillHeld = (stored: unknown) => stored === text && this.keysFor(owner) === keys && isCurrent() && !skip?.(naturalId)
+		const current = (stored: unknown) => stored === text && this.keysFor(owner) === keys && !skip?.(naturalId)
 		if (!this.options.keyed) {
-			const items = { [legacyKey]: await this.envelope(keys, owner, legacyKey, text) }
-			if (!stillHeld((await this.area.get(legacyKey))[legacyKey])) return false
-			await this.area.set(items)
-			return true
+			return { items: { [legacyKey]: await this.envelope(keys, owner, legacyKey, text) }, legacyKey, removals: [], current }
 		}
 		const sealedKey = this.prefix + (await this.physicalId(naturalId, owner, keys))
 		const twin = (await this.area.get(sealedKey))[sealedKey]
@@ -333,9 +389,23 @@ export class SealedEntityStorage<T> {
 			twin === undefined
 				? { [sealedKey]: await this.envelope(keys, owner, sealedKey, JSON.stringify({ k: naturalId, r: text })) }
 				: {}
-		if (!stillHeld((await this.area.get(legacyKey))[legacyKey])) return false
-		await this.commitWithRemovals(items, [legacyKey])
-		return true
+		return { items, legacyKey, removals: [legacyKey], current }
+	}
+
+	/** Whether any value is stored for `id`, readable or not: at its sealed key or, for a keyed
+	 *  root, at the natural id itself. A row its codec or its keys hide is still there. */
+	public async occupied(id: string, owner?: string): Promise<boolean> {
+		if (!this.options.keyed) return this.inner.contains(id)
+		if (await this.inner.contains(id)) return true
+		return this.inner.contains(await this.physicalId(id, this.requireOwner(id, owner)))
+	}
+
+	/** A deletion's removal of `id`: both forms while the owner's keys are held; with none, only the
+	 *  plaintext row, since no keyed id can be computed, and the deletion's keyless sweep removes
+	 *  the sealed one. */
+	public async purgeId(id: string, owner?: string): Promise<void> {
+		if (!this.options.keyed || this.keysFor(this.requireOwner(id, owner))) return this.delete(id, owner)
+		await this.area.remove(this.prefix + id)
 	}
 
 	/**

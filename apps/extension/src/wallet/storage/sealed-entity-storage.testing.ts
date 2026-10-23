@@ -102,3 +102,9 @@ export function trackSubtleCrypto(): { settled(): Promise<void>; restore(): void
 		},
 	}
 }
+
+/** Whether a `get` call names `key`, alone or in a list: a conversion re-reads its rows in one
+ *  `get`, of one key or of several. */
+export function readsKey(keys: unknown, key: string): boolean {
+	return keys === key || (Array.isArray(keys) && keys.includes(key))
+}

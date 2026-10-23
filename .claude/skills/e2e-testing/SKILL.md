@@ -83,6 +83,10 @@ trusted to run with `--slots-in-an-epoch 1`), which an `e2e:agent` run never doe
 - **Heavy suites run alone on the host.** A concurrent `audit:vue`, a proving run, or a second
   suite starves the sandbox and the browsers; the signature is timeouts across unrelated files.
   Rerun before triage. Shard for wall-clock (`--shard=N/M` across agents), never overlap.
+- **One browser's whole network suite can outlast an agent's command limit** (about 2 hours on a
+  loaded host; Claude Code stops a background command at 7,200 s, leaving the lock and the run
+  dir): shard it, or `bun run e2e:reap` and run the files it did not reach
+  (`implementations-plan/archive/e2e-stores-1/lessons/phase-3.md`).
 - **Offscreen sender shapes (Chrome, verified by probe)**: SW→offscreen `sender = { id, url: <getURL(manifest.background.service_worker)> }` (no `origin`, no `tab`); offscreen→SW `sender = { id, url: <getURL("src/offscreen/index.html")>, origin }`. A Chrome offscreen document has NO `chrome.runtime.getManifest` (fetch `manifest.json` by URL instead). When a sender predicate changes on either listener, probe the real shapes with a 30-second puppeteer script (pattern: `apps/extension/.playwright-mcp/sender-probe.mjs`) BEFORE the smoke run — the suite only shows the symptom (PXE timeouts, a profile reset stuck on its tombstone) three retries later. `MessageType` on the wire is numeric (`Event=1`, `Request=2`, `Response=3`).
 - **Sharding smoke on one host**: both `global-setup-smoke.ts` hooks `pkill -f "chrome.*--load-extension=<EXTENSION_PATH>"`, a PREFIX match — two `test:e2e --shard` halves need two dist dirs whose paths do not prefix each other (`dist/chrome` + a copy at `dist/smoke2`, NOT `dist/chrome-2`, which the first half's teardown kills mid-run with `ConnectionClosedError` at `openPopup`), each half pointed at its own via `EXTENSION_PATH`, and the armed-build env + `NULO_E2E_MIGRATION_FIXTURE=1` on both.
 - **Smoke builds nothing.** It loads `dist/<browser>`, or `EXTENSION_PATH`, which wins, and an
@@ -94,9 +98,10 @@ trusted to run with `--slots-in-an-epoch 1`), which an `e2e:agent` run never doe
   Rebuild armed (§ Build-armed tests) before the next run
   (`implementations-plan/archive/isolated-linker-store/plan.md#dev-server-dist`).
 - **Reap at session end**, not at the next run: `bun run e2e:reap`. Orphans hold their LMDB store
-  open; the data dir is on real disk (`~/.cache/nulo-e2e`, `lockfile.ts` `E2E_DATA_ROOT`), so RAM is
-  not pinned, but ports and CPU are. It stops only processes whose own environment names this
-  worktree's markers and a dead owner; a sandbox a live run holds or reused is left alone.
+  open; the run dir, where the node's `TMPDIR` puts every store, is on real disk
+  (`~/.cache/nulo-e2e`, `lockfile.ts` `E2E_DATA_ROOT`), so RAM is not pinned, but ports and CPU
+  are. It stops only processes whose own environment names this worktree's markers and a dead
+  owner; a sandbox a live run holds or reused is left alone.
 
 ### The agent runner — `apps/extension/scripts/e2e/agent.sh`
 
@@ -210,7 +215,7 @@ runtime env var can never arm a build-time flag.
 | `NULO_E2E_SHOT_DIR` | capture mode: `shotSend` writes light and dark PNGs there; CI never sets it. The shot page must be shown: Chrome's `newPage` opens a tab, which hides the tab before it, and a hidden page draws no frame, so `shotSend` refuses it; bring the page to front where the spec acts on it. A wallet whose token arrives untrusted (a backup import) opens the first-receive sheet over Home's middle, so a frame of Home's card comes from a fixture that imports its token through the UI (`tokenReadyExtension`) |
 | `NULO_E2E_ARTIFACT_RUN=1` | smoke against a built artifact (release/nightly): guarded with the node stand-in like a source run, skips the encrypted `backup-roundtrip` spec and the armed-dist check, and provides `liveLeg`, which runs `shipped-token-list.test.ts`, the one launch that reaches the live Testnet node; set for BOTH artifact paths, never keyed on bare `EXTENSION_PATH` |
 | `EXTENSION_PATH` | smoke: load this unpacked dir instead of `dist/chrome` |
-| `NULO_E2E_DATA_ROOT` | sandbox data-dir root (default `~/.cache/nulo-e2e`) |
+| `NULO_E2E_DATA_ROOT` | sandbox run-dir root (default `~/.cache/nulo-e2e`); short enough that `<run dir>/tmp` plus the node's 28-byte socket names fits `sun_path`, which setup checks |
 | `NULO_E2E_STAGE_LOG=1` (+`_OUT`) | append per-import stage-trajectory records (`helpers/import-stage-timing.ts`) |
 | `NULO_E2E_OPENPOPUP_LOG=1` | log `openPopup`'s fast-path/fallback timing |
 | `NULO_E2E_CONSOLE_PROBE=1`, `NULO_E2E_PROBE=1` | enable the two `_probe-*` files (skipped by default; probes, not gates) |
@@ -702,7 +707,9 @@ the pattern.
 - **The extension pages' CSP refuses `page.addStyleTag`** (`style-src-elem`; the CSP record then
   fails the launch), and so a `<style>` element a spec appends itself: its rule never applies, so a
   scratch control built on it stays green. Test CSS goes through CSSOM: `new CSSStyleSheet()`,
-  `replaceSync`, then `document.adoptedStyleSheets`. To stop a theme flip's transitions before a quick shot, `finish()` each of
+  `replaceSync`, then `document.adoptedStyleSheets`. A `style` attribute copied in the page fails it too
+  (`style-src-attr`): `cloneNode` of an element Vue styled records one, so a probe that lifts markup
+  builds it from the element's other attributes. To stop a theme flip's transitions before a quick shot, `finish()` each of
   `document.getAnimations()`; a looping one throws and is left alone. A popup's `document.body` can
   still be null when `waitForPopup` resolves: observe `document.documentElement`.
 - **A mouse drag can select nothing.** Chrome 152 starts no selection from a press between a

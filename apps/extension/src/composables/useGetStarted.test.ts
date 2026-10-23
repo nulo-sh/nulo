@@ -63,6 +63,7 @@ describe("useGetStarted", () => {
 			backupSaved: false,
 			aztecOpened: true,
 			feeJuiceHeld: false,
+			prestoOpened: false,
 			hidden: false,
 			imported: false,
 			notFirst: false,
@@ -132,7 +133,7 @@ describe("useGetStarted", () => {
 		holdReads = true
 		const { hook } = mountHook("p1")
 		await flushPromises()
-		fire({ [KEY("AztecOpened", "p1")]: true })
+		fire({ [KEY("AztecOpened", "p1")]: true, [KEY("PrestoOpened", "p1")]: true })
 		pendingReads[0].resolve()
 		await flushPromises()
 		expect(hook.flags.value).toEqual({
@@ -140,6 +141,7 @@ describe("useGetStarted", () => {
 			backupSaved: false,
 			aztecOpened: true,
 			feeJuiceHeld: false,
+			prestoOpened: true,
 			hidden: false,
 			imported: false,
 			notFirst: false,
@@ -182,6 +184,7 @@ describe("useGetStarted", () => {
 			backupSaved: false,
 			aztecOpened: false,
 			feeJuiceHeld: false,
+			prestoOpened: false,
 			hidden: false,
 			imported: false,
 			notFirst: false,

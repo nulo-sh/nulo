@@ -25,6 +25,7 @@ import {
 	GET_STARTED_FEE_JUICE_HELD_ROOT,
 	GET_STARTED_HIDDEN_ROOT,
 	GET_STARTED_PHRASE_SAVED_ROOT,
+	GET_STARTED_PRESTO_OPENED_ROOT,
 	PINNED_TOKENS_ROOT,
 	PROFILE_IMPORTED_ROOT,
 	PROFILE_NOT_FIRST_ROOT,
@@ -54,7 +55,7 @@ import {
 import { decodeSeedMarkers } from "@/wallet/services/token/seeder"
 import { decodeTokenListState } from "@/wallet/services/token-list/service"
 import { SCHEMA_BLOCKED_KEY, SCHEMA_DEGRADED_KEY, SCHEMA_RETRY_REQUESTED_KEY } from "./migrations"
-import { type CodecStoreName, type KeyIdentityOptions, type SealedStoreName, STORES, type StoreName } from "./stores"
+import { type KeyIdentityOptions, type SealedStoreName, STORES, type StoreName } from "./stores"
 
 /** How a stored value is read: `json` is a `JSON.stringify` string, `structured` an object or bare
  *  value written as is. The migration engine stages json only. */
@@ -84,17 +85,22 @@ export type StoredShape = {
 const root = (r: string): StorageRef => ({ kind: "root", root: r })
 const value = (key: string): StorageRef => ({ kind: "value", key })
 
-function fromStore(name: CodecStoreName | SealedStoreName): StoredShape {
+function fromStore(name: SealedStoreName): StoredShape {
 	const { ref, schema, ...rest } = STORES[name]
 	const options = "options" in rest ? rest.options : undefined
 	const sealed = "sealed" in rest && rest.sealed === true
 	return { ref, encoding: "json", schema, read: "codec", ...(options ? { options } : {}), ...(sealed ? { sealed: true as const } : {}) }
 }
 
-function described(name: Exclude<StoreName, CodecStoreName | SealedStoreName>, schema: z.ZodType, read: StoredDecoder): StoredShape {
+function described(name: Exclude<StoreName, SealedStoreName>, schema: z.ZodType, read: StoredDecoder): StoredShape {
 	const store = STORES[name]
 	const options = "options" in store ? store.options : undefined
 	return { ref: store.ref, encoding: "json", schema, read, ...(options ? { options } : {}) }
+}
+
+/** A sealed root whose service reads the opened row with its own decoder, not a codec. */
+function sealedDescribed(name: SealedStoreName, schema: z.ZodType, read: StoredDecoder): StoredShape {
+	return { ref: STORES[name].ref, encoding: "json", schema, read, sealed: true }
 }
 
 const rawRow = (r: string, schema: z.ZodType): StoredShape => ({ ref: root(r), encoding: "json", schema, read: "codec" })
@@ -229,8 +235,8 @@ export const STORED_SHAPES = {
 	config: described("config", ConfigSchema, (v) => decodeStoredConfig(v)),
 	tokenPrices: described("tokenPrices", PriceStateSchema, usableQuotes),
 	tokenList: described("tokenList", TokenListStateSchema, decodeTokenListState),
-	tokenSeeded: described("tokenSeeded", SeedMarkersSchema, decodeSeedMarkers),
-	dappRegistrations: described("dappRegistrations", RegistrationCountsSchema, decodeRegistrationCounts),
+	tokenSeeded: sealedDescribed("tokenSeeded", SeedMarkersSchema, decodeSeedMarkers),
+	dappRegistrations: sealedDescribed("dappRegistrations", RegistrationCountsSchema, decodeRegistrationCounts),
 
 	activeNetwork: { ref: root(ACTIVE_NETWORK_STORAGE_ROOT), encoding: "structured", schema: z.string(), read: decodeActiveNetworkId },
 	legalAccepted: { ref: value(LEGAL_ACCEPTANCE_KEY), encoding: "structured", schema: LegalAcceptanceSchema, read: parseAcceptanceRecord },
@@ -259,6 +265,7 @@ export const STORED_SHAPES = {
 	uiGetStartedAztecOpened: uiFlag(GET_STARTED_AZTEC_OPENED_ROOT),
 	uiGetStartedHidden: uiFlag(GET_STARTED_HIDDEN_ROOT),
 	uiGetStartedFeeJuiceHeld: uiFlag(GET_STARTED_FEE_JUICE_HELD_ROOT),
+	uiGetStartedPrestoOpened: uiFlag(GET_STARTED_PRESTO_OPENED_ROOT),
 	uiProfileImported: uiFlag(PROFILE_IMPORTED_ROOT),
 	uiProfileNotFirst: uiFlag(PROFILE_NOT_FIRST_ROOT),
 

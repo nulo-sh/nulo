@@ -174,7 +174,7 @@ async function extCtxEvaluate<A extends unknown[], F extends EvaluateFunc<A>>(
  * a build. At the authwits settings step it dumps the decisive bucket evidence
  * under `[authwit-measure]`:
  *   - the `nulo:core:auth-registry` rows the wallet reads (their `account` keys + hashes),
- *   - stored `nulo:core:accounts` rows (the address the page queries with),
+ *   - the `nulo:core:accounts` rows the wallet reads (the address the page queries with),
  *   - the authwits page render state + the revoke-all disabled state.
  * Classifies bucket A (rows exist but their `account` ≠ the queried address —
  * format mismatch) vs B/C (no rows after a grant) vs D (rows match the address
@@ -186,8 +186,7 @@ export async function dumpAuthwitMeasurement(page: Page, label: string): Promise
 		const storage = await extCtxEvaluate(
 			page,
 			async (message: string) => {
-				const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-				// Both authwit roots are sealed: read them as the wallet does, through the seam.
+				// The authwit roots and the accounts are sealed: read them as the wallet does, through the seam.
 				const sealed = async (root: string) =>
 					(((await chrome.runtime.sendMessage({ type: message, root })) ?? []) as { storageKey: string; row: unknown }[]).map(
 						({ storageKey, row }) => ({ key: storageKey, value: row }),
@@ -195,9 +194,7 @@ export async function dumpAuthwitMeasurement(page: Page, label: string): Promise
 				return {
 					authwits: await sealed("authRegistry"),
 					authwitsEnabled: await sealed("authRegistryEnabled"),
-					accounts: Object.entries(all)
-						.filter(([k]) => k.startsWith("nulo:core:accounts"))
-						.map(([key, value]) => ({ key, value })),
+					accounts: await sealed("accounts"),
 				}
 			},
 			SEALED_READ_MESSAGE,

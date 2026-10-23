@@ -12,10 +12,12 @@ const SCRIPT = join(import.meta.dir, "verify-provenance.sh")
 const PROBE = { spec: "@sigstore/core@3.0.0", repo: "sigstore/sigstore-js", workflow: ".github/workflows/release.yml" }
 
 describe.skipIf(!process.env.NULO_PROVENANCE_PROBE)(`verify-provenance.sh against ${PROBE.spec}`, () => {
-	const dir = mkdtempSync(join(tmpdir(), "nulo-provenance-"))
+	let dir = ""
 	let tarball = ""
 	afterAll(() => rmSync(dir, { recursive: true, force: true }))
 	beforeAll(() => {
+		// A skipped describe runs its body but no hook: the dir is made in one.
+		dir = mkdtempSync(join(tmpdir(), "nulo-provenance-"))
 		const pack = Bun.spawnSync(["npm", "pack", PROBE.spec, "--pack-destination", dir, "--json"], { stdout: "pipe", stderr: "pipe" })
 		const [info] = JSON.parse(pack.stdout.toString()) as { filename: string }[]
 		tarball = join(dir, info?.filename ?? "")

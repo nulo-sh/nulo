@@ -19,6 +19,7 @@ import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { PASSKEY_SERVICE_NAME } from "@/wallet/services/passkey/spec"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { svc } from "../composition-harness"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { ImportedKeysRepository } from "./imported-keys-repository"
 import { AccountService } from "./service"
 import {
@@ -27,6 +28,7 @@ import {
 	type Account,
 	AccountType,
 	IMPORTED_KEYS_SERVICE_NAME,
+	IMPORTED_KEYS_STORAGE_ROOT,
 	type ImportedAccountKey,
 	accountRowId,
 } from "./spec"
@@ -91,7 +93,7 @@ async function build(opts: { api?: FakeBrowserApi; networks?: ReturnType<typeof 
 	services.add(account)
 	await services.start()
 	profile.setDeletionDelegate({ snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }), runFor: async () => {} })
-	return { api, profile, account, keys: new ImportedKeysRepository(api.storage.local) }
+	return { api, profile, account, keys: new ImportedKeysRepository(api.storage.local, (id) => profile.rowKeys(id)) }
 }
 
 /** An imported account as `importAccount` leaves it: its row, and its key sealed under `dek`. */
@@ -103,7 +105,11 @@ async function seedImported(api: FakeBrowserApi, profileId: string, address: str
 		address,
 		encryptedSigningKey: await sealImportedSigningKeyV2(dek, chainId, address, signingKey),
 	}
-	await new ImportedKeysRepository(api.storage.local).set(row)
+	// Seeded plaintext, as a row written before the root was sealed: the dual read serves it.
+	await new EntityStorage<ImportedAccountKey>(IMPORTED_KEYS_STORAGE_ROOT, api.storage.local).set(
+		accountRowId(profileId, chainId, address),
+		row,
+	)
 	const accountRow: Account = {
 		profileId,
 		chainId,
@@ -311,7 +317,7 @@ describe("full-backup restore — an imported account on a network the new profi
 		const kept = await restarted.keys.backup(profileId)
 		expect(kept.map((row) => row.address)).toEqual([ADDR_A])
 		expect(await opened((await restarted.profile.getProfileDek(profileId))!, kept[0]!)).toEqual(Array(32).fill(0x2a))
-		const stored = await new EntityStorage<Account>(ACCOUNT_STORAGE_ROOT, fresh.api.storage.local).get(
+		const stored = await sealedEntityStorage("accounts", fresh.api.storage.local, (id) => restarted.profile.rowKeys(id)).get(
 			accountRowId(profileId, DEVNET, ADDR_A),
 		)
 		expect(stored).toEqual({ ...keys.accounts[0], profileId })

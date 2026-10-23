@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { afterAll, describe, expect, test } from "vitest"
+import { afterAll, beforeAll, describe, expect, test } from "vitest"
 import { withReconcileLock } from "../../tests/e2e/lockfile"
 import { ownIdentity } from "../../tests/e2e/owned-processes"
 
@@ -12,14 +12,20 @@ import { ownIdentity } from "../../tests/e2e/owned-processes"
 // extensionless relative import).
 const MODULE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../tests/e2e/lockfile.ts")
 const DEAD_HOLDER = "2000000000:1 0123456789abcdef"
-const DIR = mkdtempSync(path.join(tmpdir(), "nulo-reconcile-lock-test-"))
+let DIR = ""
 let n = 0
 const lockFile = () => path.join(DIR, `reconcile-${n++}.lock`)
 const tick = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-afterAll(() => rmSync(DIR, { recursive: true, force: true }))
-
 describe.skipIf(process.platform !== "linux")("worktree reconcile lock", () => {
+	// Made and removed by this block, so a host that skips it makes nothing.
+	beforeAll(() => {
+		DIR = mkdtempSync(path.join(tmpdir(), "nulo-reconcile-lock-test-"))
+	})
+	afterAll(() => {
+		if (DIR) rmSync(DIR, { recursive: true, force: true })
+	})
+
 	// The interleaving a lock read once cannot survive: a reaper that read a dead owner, and a bare
 	// run that adopts the same sandbox while the reaper is still sweeping.
 	test("a reap in progress holds off an adoption until it has finished, and the adopter then sees its result", async () => {

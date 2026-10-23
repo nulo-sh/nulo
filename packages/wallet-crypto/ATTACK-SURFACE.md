@@ -25,9 +25,10 @@ exists at all:
 - **The disk reader.** Has the ciphertexts, no password.
 - **The same-phrase sibling.** Legitimately owns a second profile created from the *same* recovery
   phrase, so they hold the same master, and want to reach the first profile's imported keys. The
-  row-seal key derives from the master alone, so they can read the first profile's contacts, dApp
-  sessions, history, balances, authwits and incoming receipts; they cannot forge a dApp grant,
-  whose MAC takes the DEK.
+  row-seal key derives from the master alone, so they can read every sealed row of the first
+  profile: its contacts, accounts, tokens, networks, fee payers, dApp sessions, history, balances,
+  authwits and incoming receipts. They cannot forge a dApp grant, whose MAC takes the DEK, nor open
+  an imported signing key, sealed again under it.
 
 Code execution inside the extension stays out of scope, with one consequence worth stating: a
 running service worker holds, even while locked, the row-seal keys of every profile it has opened,
@@ -44,8 +45,9 @@ until it ends or the profile is deleted. Never the master.
 | `profiles@<id>.envelopeMac` | HMAC-SHA256 over all four slots | keyed `HKDF(master ‖ dek)` |
 | `profiles@<id>.walletFingerprint` | `sha256("nulo:wallet-fingerprint:v1" ‖ master)` | **nothing — plaintext by design** |
 | `profiles@<id>.credentialId` | WebAuthn credential id (passkey profiles) | nothing — it is a public identifier |
-| imported-key rows | an external account's Grumpkin signing key | AES-256-GCM under `HKDF(dek, chainId ‖ address)` |
-| contact, dApp-session, journal, transaction, balance, authwit and incoming rows | the row, as `{ profileId, sealed }`: names, addresses, origins, grants, amounts, balances, fees, errors, hashes | AES-256-GCM under `HKDF(master, profileId ‖ pxeGeneration)`, the AAD binding root, storage key and profile; a transaction row's key is the HMAC of its hash, and an incoming or authwit-flag key the HMAC of what follows its scope, under the same derivation's index key; a session also keeps its `HKDF(master ‖ dek)` MAC inside |
+| imported-key rows | an external account's Grumpkin signing key, inside the row seal below | AES-256-GCM under `HKDF(dek, chainId ‖ address)` |
+| contact, dApp-session and registration-count, journal, transaction, account, imported-key, token and seeder-marker, network, fee-payer, balance, authwit and incoming rows | the row, as `{ profileId, sealed }`: names, addresses, origins, grants, amounts, balances, fees, endpoints, errors, hashes | AES-256-GCM under `HKDF(master, profileId ‖ pxeGeneration)`, the AAD binding root, storage key and profile; a transaction row's key is the HMAC of its hash, an account or imported-key key the HMAC of its address, and an incoming or authwit-flag key the HMAC of what follows its scope, under the same derivation's index key; a session also keeps its `HKDF(master ‖ dek)` MAC inside |
+| account-integrity stamp, stale-network record | the account set's digest, never its addresses | `HMAC(K_idx, accountSetDigest)` under the same index key |
 | `storage.session` bearer | `master ‖ dek` **and** the random token that unwraps it | nothing, jointly — see below |
 | password full backup file | the master, the entropy, and a key made for this backup alone, under which its imported-key rows open (never the profile's DEK) | the profile's password at export time (a later password change does not touch the file) |
 | passkey full backup file | the credential id, the profile's own DEK sealed under the passkey's wrap key, the imported-key rows | the keys open only with the passkey; without the optional password, everything but the keys is readable |

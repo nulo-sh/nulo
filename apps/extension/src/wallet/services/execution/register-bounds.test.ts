@@ -22,7 +22,12 @@ import { LoggerStore } from "@/wallet/logger"
 import { AccountStateService } from "@/wallet/services/account-state/service"
 import { APP_REGISTRATIONS_PER_CHAIN, RegistrationAllowance } from "@/wallet/services/dapp-session/registration-allowance"
 import { toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { ExecutionService } from "./service"
+
+/** One key for every profile, as an unlocked worker holds it. */
+const ROW_KEYS = await rowKeysForEveryProfile()
 
 const noopLogger: ILogger = { log: () => {} }
 const NETWORK = { id: "net1", profileId: "p1", chainId: 1, primaryEndpointId: "ep1", endpoints: [{ id: "ep1", rpcUrl: "http://fake" }] }
@@ -85,7 +90,7 @@ function makeService(senders: AztecAddress[], accounts: AztecAddress[]) {
 		executeAztecRegisterSender(op: unknown, registrant: unknown): Promise<unknown>
 		executeAztecRegisterContract(op: unknown, registrant: unknown): Promise<unknown>
 	}
-	const allowance = new RegistrationAllowance(new MemoryStorageArea())
+	const allowance = new RegistrationAllowance(sealedEntityStorage("dappRegistrations", new MemoryStorageArea(), ROW_KEYS.rowKeys))
 	internals.networkService = { getNetwork: async () => NETWORK }
 	internals.dappSessionService = {
 		admitDappRegistration: (origin: string, fence: { profileId: string }, chainId: number) =>

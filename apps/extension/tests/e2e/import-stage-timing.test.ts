@@ -9,8 +9,7 @@
  * entry; disabled logging performs zero filesystem writes; a write failure
  * never throws.
  */
-import { existsSync, mkdtempSync, readFileSync, readdirSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { afterEach, describe, expect, test } from "vitest"
 import {
@@ -26,6 +25,7 @@ import {
 	stageLogEnabled,
 	stageLogPath,
 } from "./helpers/import-stage-timing"
+import { testTempDir } from "./helpers/test-temp-dir"
 
 const SUCCESS_HASH = "#/popup/general"
 
@@ -201,7 +201,7 @@ describe("records + persistence", () => {
 
 	test("disabled ⇒ zero filesystem writes", () => {
 		delete process.env.NULO_E2E_STAGE_LOG
-		const dir = mkdtempSync(join(tmpdir(), "nulo-stage-log-"))
+		const dir = testTempDir("nulo-stage-log-")
 		process.env.NULO_E2E_STAGE_LOG_OUT = dir
 		expect(stageLogEnabled()).toBe(false)
 		const result = appendImportRecord(buildImportRecord({ ...attribution, final: makeFinal(HAPPY_EVENTS), outcome: "success" }))
@@ -211,7 +211,7 @@ describe("records + persistence", () => {
 
 	test("enabled ⇒ one JSON line per import in the per-run file", () => {
 		process.env.NULO_E2E_STAGE_LOG = "1"
-		const dir = mkdtempSync(join(tmpdir(), "nulo-stage-log-"))
+		const dir = testTempDir("nulo-stage-log-")
 		process.env.NULO_E2E_STAGE_LOG_OUT = dir
 		const record = buildImportRecord({ ...attribution, final: makeFinal(HAPPY_EVENTS), outcome: "success" })
 		expect(appendImportRecord(record)).toBe("appended")
@@ -228,7 +228,7 @@ describe("records + persistence", () => {
 	test("a write failure degrades to a status, never a throw", () => {
 		process.env.NULO_E2E_STAGE_LOG = "1"
 		// An output dir whose nested parents don't exist — appendFileSync ENOENTs.
-		const dir = mkdtempSync(join(tmpdir(), "nulo-stage-log-"))
+		const dir = testTempDir("nulo-stage-log-")
 		process.env.NULO_E2E_STAGE_LOG_OUT = join(dir, "definitely", "missing", "nested")
 		const record = buildImportRecord({ ...attribution, final: makeFinal(HAPPY_EVENTS), outcome: "timeout" })
 		expect(() => appendImportRecord(record)).not.toThrow()

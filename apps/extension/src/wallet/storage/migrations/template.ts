@@ -58,10 +58,12 @@
  * A `root` is an EntityStorage namespace (rows keyed `${root}@${id}`); a `value`
  * is a single ValueStorage key. NEVER migrate the encrypted secret / KDF here —
  * the migrator runs pre-unlock and has no password (see wallet-crypto/README.md).
+ * Nor a sealed root (`STORES` entries marked `sealed`): the registry refuses it, and
+ * its rows convert at the profile's unlock instead.
  */
 import { defineMigration } from "@nulo/wallet-core/migration"
 import { defineRowMapMigration } from "@/wallet/services/backup/row-map-migration"
-import { ACCOUNT_STORAGE_ROOT } from "@/wallet/services/account/spec"
+import { PROFILE_TOMBSTONE_ROOT } from "@/wallet/services/profile/tombstone-repository"
 
 /** PREFERRED: the backup-safe declarative form. Finite data-only clauses
  *  (`rename` / `drop` / `retype` / `remapValues` / `addDefault`), applied per
@@ -70,9 +72,9 @@ import { ACCOUNT_STORAGE_ROOT } from "@/wallet/services/account/spec"
  *  idempotency is inherent (and still harness-verified). */
 export const exampleRowMapMigration = defineRowMapMigration({
 	version: 2,
-	description: "example: add a default `pinned` flag to every account row",
+	description: "example: add a default `attempts` count to every deletion tombstone",
 	rowMaps: {
-		[ACCOUNT_STORAGE_ROOT]: { addDefault: { pinned: false } },
+		[PROFILE_TOMBSTONE_ROOT]: { addDefault: { attempts: 0 } },
 	},
 })
 
@@ -81,18 +83,18 @@ export const exampleRowMapMigration = defineRowMapMigration({
  *  per the hostile-input rule. */
 export const exampleMigration = defineMigration({
 	version: 2,
-	description: "example: add a default `pinned` flag to every account row",
-	reads: [{ kind: "root", root: "nulo:core:accounts" }],
-	writes: [{ kind: "root", root: "nulo:core:accounts" }],
+	description: "example: add a default `attempts` count to every deletion tombstone",
+	reads: [{ kind: "root", root: "nulo:core:profile-tombstones" }],
+	writes: [{ kind: "root", root: "nulo:core:profile-tombstones" }],
 	up: async (ctx) => {
 		// Declare the PRE-migration shape once via the type parameter. It is an
 		// assertion over untrusted JSON, not a validation — keep field access
 		// guarded (spread + default below is presence-safe and idempotent).
-		type AccountRow = { pinned?: boolean; [k: string]: unknown }
-		const rows = await ctx.local.rows<AccountRow>("nulo:core:accounts")
-		await ctx.local.setRows<AccountRow>(
-			"nulo:core:accounts",
-			rows.map(([id, row]) => [id, { pinned: false, ...row }]),
+		type TombstoneRow = { attempts?: number; [k: string]: unknown }
+		const rows = await ctx.local.rows<TombstoneRow>("nulo:core:profile-tombstones")
+		await ctx.local.setRows<TombstoneRow>(
+			"nulo:core:profile-tombstones",
+			rows.map(([id, row]) => [id, { attempts: 0, ...row }]),
 		)
 	},
 })
