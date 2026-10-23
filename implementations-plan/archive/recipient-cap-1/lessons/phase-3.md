@@ -1,0 +1,9 @@
+# recipient-cap-1, the fix loop (arc 1)
+
+Diff under review: `2c0c30d98...HEAD` (apps only). Codex gpt-6.1-sol at high, read-only, session `01a16647`; an Opus general-purpose review beside round 1.
+
+- **Codex r1**, *conditional approve*. P2, demonstrated in the compiled component: the unkeyed `v-for` rebinds a pressed row when a list lands during a held press (type "acc" with only the own account loaded, press it, contacts land ahead of it, release picks contact 0). Present at the base too. Fix: key rows by candidate and address (D10). Low: a fixture comment narrated its array. Both applied in `b7393e451`.
+- **Opus r1**, *sound*. Low, traced: a late contact load pushes a highlighted own account past the cap, the watcher clears the highlight, and Enter fell back to row 0, a contact. The plan's premise ("as a filtered-out row does today") was wrong: before the cap only typing removed a highlighted row. Fix: a plain flag, set when the reset watcher clears a highlight with the list open and the term unchanged in that flush; Enter, handled, then picks nothing until an arrow or a term change (D9). Nits: the search comment's "never" overclaimed (50 exact namesakes); an invariant line on the cap; the Tab-stop comment two elements from its `tabindex`; `children[49]` in the smoke segment (DOM structure, against the selector rule); duplicated test harness; an unused `live` handle. All applied in `b7393e451`.
+- **Codex r2** (resumed), *approve*: keys, watcher old values and flush order, the flag's exits (arrow, term, close) and both new tests verified by ten in-memory checks; one comment nit (the Enter shortcut's comment) applied in `3e5848325`. No new material finding: converged.
+
+Mutation checks: the keyed-row test fails without `:key`; the taken-highlight test fails without the flag's early return; the four capped-list tests fail with the cap lifted; the Up case fails with the arrows reading every match.
