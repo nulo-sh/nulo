@@ -9,7 +9,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 5c35ca93; the arc branches from dev once encryption-at-rest-1 A4 and #1027 have merged
 trunk: dev
-issues: "#1051 (closes); #1062 (OA-1 A or B: reopened at delivery, closed by the PR; C: narrowed, referenced); #1050 (stays open, the owner's call)"
+issues: "#1051 (closes); #1062 (reopened on OA-1 A, closed by the PR); #1050 (stays open, the owner's call); #1096 and #1097 (closed known limits)"
 post_implementation_hardening: not scheduled
 ---
 
@@ -20,6 +20,11 @@ One arc, one PR against `dev` (the orchestrator's D-orch-1), `Closes #1051` and,
 ## The owner's decision
 
 The owner, 2026-10-22, in chat: "I'd leave #1050 for now open, and actually, since we have some spare room on our crew... wouldn't it make sense to do #1051 and re-shape, or 're-reset' (I don't know the term) of #865 since we haven't actually done any release nor the 'final shape' has hit any users yet?" The orchestrator's reading, which the owner can overrule at this plan's sign-off: no stable release carries the stamps #938's freeze and its successors appended, so the baseline is re-cut once, instead of building a retirement path for a structured shape. #1050 stays open.
+
+The owner's page 84 answers, signed 2026-10-23:
+
+- **P84-06 (OA-1): A.** "One last selection, as today. Every case looks as today except two profiles sharing an account: profile A selects the shared account, a switch to profile B opens B on its own first account."
+- **P84-07 (OA-2): approved as drafted.** The change note "Pinned tokens, fee-payer choices and the last-selected account are now stored encrypted too." and § 3's exception paragraph as [OWNER-ASKS.md](OWNER-ASKS.md) drafts it.
 
 ## The claims and what did not hold
 
@@ -47,8 +52,9 @@ The visible budget is the lane brief's record: SECURITY.md § Storage privacy an
 
 - **Home, Holdings, a token page, the token picker, Send, the fee card, Settings → Fee payers, the accounts list, the execute window: none.** Same values, through the service.
 - **The lock screen and the profile picker: none.** They read none of these keys, before or after.
-- **Which account a profile opens on after a profile switch: changed, asked (OA-1).** Two profiles that hold the same account (one phrase twice, or one imported account in both): today profile B opens on the account A last selected; with OA-1 A it opens on its own first account. OA-1 B makes every profile reopen on its own last account. With A or B, KL-1: a dApp window's account follow that meets a wallet send starting at the same moment is no longer dropped, so the next popup opens on the followed account. Nothing ships until the owner answers: the PR does not merge before OA-1, and OA-1 C removes the pointer's part (§ Delivery).
-- **Privacy Policy § 3 and its version: changed, within the brief's record.** The exception list loses "pinned tokens, fee-payer choices and the last-selected account"; version 1.2.4; Settings → About shows its existing privacy-update notice with the one sentence (OA-2).
+- **Which account a profile opens on after a profile switch: changed, signed (P84-06, OA-1 A).** Two profiles that hold the same account (one phrase twice, or one imported account in both): today profile B opens on the account A last selected; now it opens on its own first account. KL-1: a dApp window's account follow that meets a wallet send starting at the same moment is no longer dropped, so the next popup opens on the followed account.
+- **Privacy Policy § 3 and its version: changed, signed (P84-07, OA-2 as drafted).** The exception list loses "pinned tokens, fee-payer choices and the last-selected account"; version 1.2.4; Settings → About shows its existing privacy-update notice with the one sentence.
+- **Developer Mode → logs, the source filter: gains two rows** (`ui-preference`, `ui-preference-client`; D16).
 
 ## Architecture & Implementation
 
@@ -145,7 +151,7 @@ In the decision ledger. The competing outline B put each preference in its domai
 | D9 | e2e | no new scenario: the live update populates the three maps, the replay is re-recorded, `sealed-storage.test.ts` seeds all four | a new smoke spec |
 | D10 | A planted non-envelope JSON string at a map root | the dual read serves it and the unlock seals it, as at every sealed root (#1053) | unreadable (Codex F1: a second legacy rule for three roots; a planted structured map is read today, so the writer gains nothing) |
 | D11 | The follow's `unless` | checked right before the call, which the client's request deadline bounds; the worker's session fence; KL-1, signed with OA-1 | a worker-side journal check or a cancel message (a new contract and coordination for one caller); waiting for `onConnected` before the call (plan r1: no request exists yet, so no deadline fires and an approved window can hang: Codex R2-3) |
-| D12 | Building before OA-1 and OA-2 are answered | the three maps, P1 to P3, and the privacy text as drafted, in a draft PR. The pointer waits, and so do the re-run of § The gate change steps 3 to 5 for its ids, its network files and the exact-pointer update checks (the orchestrator's placeholder rule) | waiting for the answers with the maps unbuilt |
+| D12 | Building before OA-1 and OA-2 are answered | the three maps, P1 to P3, and the privacy text as drafted, in a draft PR. The pointer waits, and so do the re-run of § The gate change steps 3 to 5 for its ids, its network files and the exact-pointer update checks (the orchestrator's placeholder rule). Resolved by P84-06 and P84-07: the pointer was built in layout A on the same branch and every gate re-ran over it | waiting for the answers with the maps unbuilt |
 | D13 | The Home timing | an opt-in second case of `sealed-storage.test.ts` (`NULO_E2E_HOME_TIMING=1`), run on both builds through `EXTENSION_PATH` | timing inside the conversion case on every smoke run: about 30 s per browser per PR for a printout that proves no failure mode, and the base build cannot pass that case |
 | D14 | Step 5's reader | `jq --slurpfile`, read as `$x[0]` | `--argjson`, which fails with "argument list too long" on the base snapshot |
 | D15 | `usePinnedTokens`' two migration-barrier pins | replaced by "a write the worker refuses reports stale"; the refusal itself is pinned in the service's tests | kept: the composable no longer goes through the storage facade, so the barrier they held is not on its path |
@@ -176,7 +182,7 @@ In the decision ledger. The competing outline B put each preference in its domai
   - Chrome and Firefox fire `storage.onChanged` when a structured map is replaced by an envelope string.
   - The release's UI can pin a token and save a Send and an app fee pick inside the live scenario without release-side fixtures.
   - A4's and #1027's stamps fold with every `expected` value unchanged (step 5 proves it or stops the arc).
-- **Asks:** OA-1 [none assumed: the PR waits]; OA-2 [the draft].
+- **Asks:** OA-1 [A, P84-06]; OA-2 [approved as drafted, P84-07].
 
 ## Phases and gates
 
@@ -247,9 +253,11 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 - **Opus r2** (Plan agent, beside Codex r3): conditional approve, U1-U5; F1-F10 verified resolved, the device row held every attack, D11's removed send case judged an owner-gated change, not a loosening. Adopted all: U1 (demonstrated: `uiSelectedAccount`'s `.full`/`.minimal` plaintext plus a `.sealed`, six added ids), U2 (`default-network-arrival-update.test.ts` in P3's gate), U3 (the C variant's gate deltas), U4 (the map records may differ only in `encoding`, `sealed`, `legacy`; `--argjson`), U5 (OA-1's wording).
 - **Codex final** (fresh session, gpt-6.1-sol, high): **conditional approve** (with conditions: fix F1-F3; record explicit OA-1 and OA-2 sign-off before delivery). No new architectural blocker; R3-1's purge verified. Adopted all: F1 (demonstrated: P2's smoke gate reads the bare pointer P2 stops writing, so the e2e raw reads move into P2, and `saveFeePick` leaves with its callers in P2); F2 (P2's grep bans storage I/O, not the key names D8 keeps); F3 (the seed, the issue references and the re-cut note follow OA-1); the sign-off condition (§ Delivery, OA-2's "what ships now"). Noted: the deadline bounds the window's wait, not a request the worker took (item 6); `ContactService`'s reads lack the final re-check (item 3).
 
+- **Implementation review** (the diff `a2f9e7d0..HEAD`, after P4): Codex r1 (gpt-6.1-sol, high) and the Opus leg beside it both **conditional approve**. Adopted: the selection purge throws when the lock's watchdog displaced it, so the deletion keeps its tombstone (Codex 1 = Opus 4, demonstrated in memory, a regression case added); the Home timing case reads the first account through RPCs the base also serves (Codex 2 = Opus 1); the pointer's re-cut proof in `lessons/phase-1.md` (Opus 2); four comment fixes. Filed: Opus 3, a read refused by a switch-and-return inside one RPC, as closed `known-limit` #1097. Codex r2 (resumed): **approve**, no new material finding. Log: [lessons/phase-4.md](lessons/phase-4.md).
+
 ## Known limits
 
-- **KL-1 (new, with OA-1 A or B; signed with OA-1, filed closed at delivery):** a follow's pointer write is not dropped when a wallet send in the window's scope begins after the page's `unless` check (the request's wait for the connection or the worker, if any, the lock wait and the seal); today it is dropped up to the storage dispatch. Consequence: the next popup opens on the account the person just confirmed a payload for; the send's own account is unchanged, and the popup's scope guard still refuses moving a live popup during a send. Reopen on a report of the popup opening on another account during a send, or a reader of the pointer that acts during a send.
+- **KL-1 (signed with P84-06; closed `known-limit` #1096):** a follow's pointer write is not dropped when a wallet send in the window's scope begins after the page's `unless` check (the request's wait for the connection or the worker, if any, the lock wait and the seal); today it is dropped up to the storage dispatch. Consequence: the next popup opens on the account the person just confirmed a payload for; the send's own account is unchanged, and the popup's scope guard still refuses moving a live popup during a send. Reopen on a report of the popup opening on another account during a send, or a reader of the pointer that acts during a send.
 - Unchanged and still true: #338, #1053, #1056, #1060.
 
 ## Seeds
