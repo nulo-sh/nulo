@@ -27,6 +27,7 @@ import { ProfileService } from "@/wallet/services/profile/service"
 import { TokenBalanceService } from "@/wallet/services/token-balance/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { TransactionService } from "@/wallet/services/transaction/service"
+import { UiPreferenceService } from "@/wallet/services/ui-preference/service"
 import { svc } from "../composition-harness"
 import { ProfileDeletionCoordinator } from "./coordinator"
 
@@ -70,6 +71,7 @@ const build = async (order: string[], storage: StorageArea = uiKeyStore(order).s
 	services.add(svc(AccountService.name, { purgeForProfile: rec("accounts") }))
 	services.add(svc(TokenService.name, { purgeForProfile: rec("tokens") }))
 	services.add(svc(NetworkService.name, { purgeForProfile: rec("networks") }))
+	services.add(svc(UiPreferenceService.name, { purgeForProfile: rec("preferences") }))
 	const coord = new ProfileDeletionCoordinator(new LoggerStore(new ConfigStore()), storage)
 	services.add(coord)
 	await services.start()
@@ -101,6 +103,7 @@ describe("ProfileDeletionCoordinator.purge — awaited order contract", () => {
 			"accounts",
 			"tokens",
 			"networks",
+			"preferences",
 			"dropKeys",
 			"sealedSweep",
 			"uiKeys",
@@ -136,7 +139,7 @@ describe("ProfileDeletionCoordinator.purge — awaited order contract", () => {
 		await coord.runFor("p1", SNAP)
 
 		expect([...store.keys]).toEqual(builders.map((key) => key("p10")))
-		expect(order.slice(-5)).toEqual(["networks", "dropKeys", "sealedSweep", "uiKeys", "pxe"])
+		expect(order.slice(-6)).toEqual(["networks", "preferences", "dropKeys", "sealedSweep", "uiKeys", "pxe"])
 	})
 
 	test("a failed UI-key removal propagates and the PXE clear does not run", async () => {

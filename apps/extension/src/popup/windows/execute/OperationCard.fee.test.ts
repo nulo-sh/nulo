@@ -22,7 +22,9 @@ const mocks = vi.hoisted(() => ({
 	saveFeePick: vi.fn(async () => true),
 }))
 
-vi.mock("@/utils/core", () => ({ managers: { profile: { saveFeePick: mocks.saveFeePick } } }))
+vi.mock("@/utils/core", () => ({
+	managers: { uiPreference: { getFeePicks: async () => ({ app: {}, send: {} }), saveFeePick: mocks.saveFeePick } },
+}))
 
 // Vitest 4 requires `function` expressions for mocks instantiated with `new`.
 vi.mock("@/wallet/services/execution/client", () => ({

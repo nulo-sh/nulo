@@ -24,17 +24,14 @@
 import { expect } from "vitest"
 import type { Page } from "puppeteer"
 import { clickByTestId, expectNoNameField, openPopup, waitForHash, test, waitForServiceReady } from "./fixtures/extension"
-import { confirmProfileReset } from "./fixtures/helpers"
+import { confirmProfileReset, selectedAccount } from "./fixtures/helpers"
 import { waitForHomeReminders } from "./fixtures/tokens"
 import { readPasskeySurface, registerPasskeyProfile, setupPasskeyVirtualAuth, watchPasskeySurface } from "./fixtures/passkey"
 
-/** Read the active account address from chrome.storage.local. The wallet
- *  writes this key after the post-register account derivation settles. */
+/** The selected account, which the wallet records after the post-register account derivation
+ *  settles. */
 async function readActiveAccount(page: Page): Promise<string> {
-	return await page.evaluate(async () => {
-		const r = await chrome.storage.local.get("nulo:ui:activeAccount")
-		return r["nulo:ui:activeAccount"] as string
-	})
+	return (await selectedAccount(page)) as string
 }
 
 const IN_PAGE = { cardMounted: true, windowsOpened: 0 }

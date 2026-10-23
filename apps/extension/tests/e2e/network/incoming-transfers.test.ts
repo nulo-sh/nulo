@@ -8,6 +8,7 @@ import {
 	readActiveNetwork,
 	switchToLocalNetwork,
 	unlockUntilIncomingRow,
+	selectedAccount,
 } from "../fixtures/helpers"
 import { readSealedRows } from "../fixtures/sealed-rows"
 
@@ -138,15 +139,14 @@ test.skipIf(!hasConfig)("C2 — trust prompt re-fires after popup close + reopen
 	const seedPage = await openPopup(registeredExtension)
 	await waitForHash(seedPage, "#/popup/general", 30_000)
 
-	// Read the active triple from chrome.storage so the pre-seed matches.
-	// Profile id is persisted under `nulo:ui:lastActiveProfile` (see
-	// `utils/lastActiveProfile.ts`); account address under
-	// `nulo:ui:activeAccount` (see `stores/app.store.ts`).
-	const triple = await seedPage.evaluate(async () => {
+	// Read the active triple so the pre-seed matches. Profile id is persisted
+	// under `nulo:ui:lastActiveProfile` (see `utils/lastActiveProfile.ts`); the
+	// account is the selection the worker answers (see `stores/app.store.ts`).
+	const stored = await seedPage.evaluate(async () => {
 		const profile = (await chrome.storage.local.get("nulo:ui:lastActiveProfile"))["nulo:ui:lastActiveProfile"]
-		const account = (await chrome.storage.local.get("nulo:ui:activeAccount"))["nulo:ui:activeAccount"]
-		return { profileId: typeof profile === "string" ? profile : null, account: typeof account === "string" ? account : null }
+		return { profileId: typeof profile === "string" ? profile : null }
 	})
+	const triple = { ...stored, account: (await selectedAccount(seedPage)) ?? null }
 	if (!triple.profileId || !triple.account) {
 		// Fallback — read appStore directly via window for fixtures that
 		// don't use the activeProfile storage shape.

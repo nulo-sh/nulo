@@ -34,6 +34,7 @@ import {
 	switchToLocalNetwork,
 	waitForHomeTotal,
 	waitForToast,
+	selectedAccount,
 } from "../fixtures/helpers"
 import { deliverWhileLocked, readIncomingPollStatus, releaseIncomingPoll, waitForIncomingPollPhase } from "../fixtures/incoming-poll-gate"
 import { pollUntil } from "../fixtures/poll"
@@ -99,13 +100,13 @@ function closeAtEnd(page: Page): Page {
 type Triple = { profileId: string; networkId: string; account: string }
 
 async function activeTriple(page: Page): Promise<Triple> {
-	const triple = await page.evaluate(async () => {
+	const stored = await page.evaluate(async () => {
 		const profileId = (await chrome.storage.local.get("nulo:ui:lastActiveProfile"))["nulo:ui:lastActiveProfile"]
-		const account = (await chrome.storage.local.get("nulo:ui:activeAccount"))["nulo:ui:activeAccount"]
 		const activeKey = `nulo:core:active-network@${profileId}`
 		const networkId = (await chrome.storage.local.get(activeKey))[activeKey]
-		return { profileId, account, networkId }
+		return { profileId, networkId }
 	})
+	const triple = { ...stored, account: await selectedAccount(page) }
 	const { profileId, networkId, account } = triple
 	if (typeof profileId !== "string" || typeof networkId !== "string" || typeof account !== "string") {
 		throw new Error(`could not resolve the active (profile, network, account): ${JSON.stringify(triple)}`)

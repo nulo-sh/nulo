@@ -15,6 +15,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 
 /** Utils */
+import { managers } from "@/utils/core"
 import { HOME_TOKEN_ROWS, orderTokenRows } from "@/utils/token-order"
 import { dashIfBlank } from "@/utils/string"
 import { matchesQuery } from "@/utils/token-search"
@@ -51,6 +52,7 @@ const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const fiatOf = prices.fiatOfRow
 const pins = usePinnedTokens({
+	preferences: managers.uiPreference,
 	getScope: () => pinScopeOf(appStore.profile?.id, appStore.network?.chainId),
 	knownContracts: () => new Set(rows.value.map((tb) => tb.token.contract)),
 })

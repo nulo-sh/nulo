@@ -89,7 +89,7 @@ const handleDelete = (fpc) => {
 		description: "By confirming this action, the selected FPC will be permanently deleted from your wallet",
 		callback: async () => {
 			await fpcService.deleteFpc(fpc.id)
-			await managers.profile.saveFeePick(fpc.profileId, { kind: "forgetFpc", fpcId: fpc.id })
+			await managers.uiPreference.saveFeePick(fpc.profileId, { kind: "forgetFpc", fpcId: fpc.id })
 			openToast({ kind: "success", label: "FPC is deleted" })
 		},
 	})

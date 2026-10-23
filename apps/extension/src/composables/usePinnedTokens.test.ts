@@ -1,13 +1,15 @@
 /**
- * Pin store over an in-memory `chrome.storage.local` with a working `onChanged`. Covers the hostile
+ * Pin store over a preference-client stub that keeps each profile's map, sanitized as the service
+ * keeps it, in an in-memory `chrome.storage.local` with a working `onChanged`. Covers the hostile
  * read path, the cap against the known token set, scope capture, deletion cleanup on another
- * profile, serialised writes, a write held at the migration barrier, and disposal.
+ * profile, serialised writes, a write the worker refuses, and disposal.
  */
-import { SCHEMA_RUNNING_KEY } from "@nulo/wallet-core/migration"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { nextTick, reactive } from "vue"
 import { pinnedTokensKey } from "@/utils/profile-ui-keys"
-import { PINNED_TOKENS_MAX_CHAINS, type PinScope, sanitizePinMap, type UsePinnedTokensDeps, usePinnedTokens } from "./usePinnedTokens"
+import { PINNED_TOKENS_MAX_CHAINS } from "@/utils/pinned-tokens"
+import { pinStore } from "../../tests/helpers/ui-preference-fake"
+import { type PinScope, type UsePinnedTokensDeps, usePinnedTokens } from "./usePinnedTokens"
 
 type Change = Record<string, { oldValue?: unknown; newValue?: unknown }>
 type Listener = (changes: Change, area: string) => void
@@ -69,15 +71,6 @@ function memoryStorage() {
 			data.set(key, value)
 			for (const l of [...listeners]) l({ [key]: { newValue: value } }, "local")
 		},
-		/** The boot migrator's running marker: facade calls from now on wait at the barrier. */
-		raiseMarker() {
-			data.set(SCHEMA_RUNNING_KEY, 2)
-		},
-		/** Clears the marker with the change event the barrier waits for. */
-		clearMarker() {
-			data.delete(SCHEMA_RUNNING_KEY)
-			for (const l of [...listeners]) l({ [SCHEMA_RUNNING_KEY]: { newValue: undefined } }, "local")
-		},
 	}
 }
 
@@ -99,11 +92,12 @@ const makeDeleted = () => {
 }
 
 let storage: ReturnType<typeof memoryStorage>
+let client: ReturnType<typeof pinStore>
 let deleted: ReturnType<typeof makeDeleted>
 const state = reactive({ scope: undefined as PinScope | undefined })
 let known: ReadonlySet<string> | undefined
 
-// Let the queued op run (each awaits two facade calls, so a few macrotask hops).
+// Let the queued op run (each awaits two client calls, so a few macrotask hops).
 const settle = async () => {
 	for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 0))
 }
@@ -111,40 +105,15 @@ const settle = async () => {
 function make(knownContracts: UsePinnedTokensDeps["knownContracts"] = () => known) {
 	return usePinnedTokens({
 		tokenService: { onTokenDeleted: deleted },
+		preferences: client,
 		getScope: () => state.scope,
 		knownContracts,
 	})
 }
 
-/**
- * Pins A on p1 with its write held at the migration barrier: the pin parks in `knownContracts`,
- * after its map read and scope check, the marker goes up, and `during` runs once the write waits.
- */
-async function pinAcrossMigration(during: () => void) {
-	let reached = false
-	let release = () => {}
-	const pins = make(() => {
-		reached = true
-		return new Promise((resolve) => {
-			release = () => resolve(new Set([A]))
-		})
-	})
-	await pins.refresh()
-	const op = pins.pin(A)
-	await vi.waitFor(() => expect(reached).toBe(true))
-	storage.raiseMarker()
-	release()
-	// The facade's barrier listener joins the composable's once the write waits there.
-	await vi.waitFor(() => expect(storage.listeners.size).toBe(2))
-	during()
-	storage.clearMarker()
-	const result = await op
-	pins.dispose()
-	return result
-}
-
 beforeEach(() => {
 	storage = memoryStorage()
+	client = pinStore(storage.local)
 	deleted = makeDeleted()
 	state.scope = { profileId: "p1", chainId: 7 }
 	known = new Set([A, B, C, D])
@@ -152,36 +121,6 @@ beforeEach(() => {
 	;(chrome.storage as any).local = storage.local
 	// biome-ignore lint/suspicious/noExplicitAny: chrome stub assignment
 	;(chrome.storage as any).onChanged = storage.onChanged
-})
-
-describe("sanitizePinMap", () => {
-	test("rejects every non-map root", () => {
-		for (const raw of [undefined, null, 3, "x", [], [A], [[A]]]) expect(sanitizePinMap(raw)).toEqual({})
-	})
-
-	test("drops non-canonical chain keys, non-array values, non-string and non-address entries", () => {
-		expect(
-			sanitizePinMap({
-				"00": [A],
-				"1e3": [A],
-				"-1": [A],
-				"12345678901234567": [A],
-				"9999999999999999": [A],
-				"7": "not-a-list",
-				"8": [1, null, "0xzz", `0x${"a".repeat(63)}`, A.toUpperCase(), A, B],
-			}),
-		).toEqual({ "8": [A, B] })
-	})
-
-	test("caps a list at three and the map at 32 chains; an empty list is dropped", () => {
-		const big: Record<string, string[]> = {}
-		for (let i = 1; i <= PINNED_TOKENS_MAX_CHAINS + 2; i++) big[String(i)] = [A]
-		big["999"] = []
-		const out = sanitizePinMap({ ...big, "5": [A, B, C, D] })
-		expect(Object.keys(out)).toHaveLength(PINNED_TOKENS_MAX_CHAINS)
-		expect(out["5"]).toEqual([A, B, C])
-		expect(out["999"]).toBeUndefined()
-	})
 })
 
 describe("usePinnedTokens", () => {
@@ -322,18 +261,16 @@ describe("usePinnedTokens", () => {
 		pins.dispose()
 	})
 
-	test("a pin whose scope changes while its write waits for a migration writes nothing", async () => {
-		const result = await pinAcrossMigration(() => {
-			state.scope = { profileId: "p2", chainId: 7 }
-		})
-		expect(result).toBe("stale")
+	test("a write the worker refuses reports stale and leaves the pins as they were; the next lands", async () => {
+		const pins = make()
+		await pins.refresh()
+		client.refuseNext()
+		expect(await pins.pin(A)).toBe("stale")
 		expect(storage.data.has(pinnedTokensKey("p1"))).toBe(false)
-		expect(storage.local.set).not.toHaveBeenCalled()
-	})
-
-	test("the same pin with its scope unchanged lands once the migration ends", async () => {
-		expect(await pinAcrossMigration(() => {})).toBe("pinned")
-		expect(storage.data.get(pinnedTokensKey("p1"))).toEqual({ "7": [A] })
+		expect(pins.pinnedContracts.value.size).toBe(0)
+		expect(await pins.pin(A)).toBe("pinned")
+		expect([...pins.pinnedContracts.value]).toEqual([A])
+		pins.dispose()
 	})
 
 	test("a deletion missed while disconnected is pruned by the next ordinary write", async () => {

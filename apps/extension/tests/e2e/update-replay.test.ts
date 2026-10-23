@@ -33,7 +33,7 @@ import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import { STORES } from "@/wallet/storage/stores"
 import { BROWSER } from "./fixtures/browser"
 import { type ExtensionContext, clickByTestId, launchExtension, openPopup, test, waitForHash } from "./fixtures/extension"
-import { contactRow, ensureUnlocked, navigateByHash, waitForToast } from "./fixtures/helpers"
+import { captureSoleProfileId, contactRow, ensureUnlocked, navigateByHash, waitForSelectedAccount, waitForToast } from "./fixtures/helpers"
 import { pollUntil } from "./fixtures/poll"
 import { callService } from "./fixtures/session"
 import { registerPasskeyProfile, setupPasskeyVirtualAuth } from "./fixtures/passkey"
@@ -45,6 +45,7 @@ import {
 	updateCandidate,
 	writeLocalStorage,
 } from "./fixtures/update/in-place"
+import { expectReleasePreferences } from "./fixtures/update/preferences"
 import { type PinnedBackup, type Recording, readRecording, writePinnedBackup } from "./fixtures/update/recording"
 import { unreadRows } from "./fixtures/update/stored-rows"
 import { BARRIERS, missingFamilies, shownOverlays, updateProblems } from "./fixtures/update/verify"
@@ -364,6 +365,15 @@ async function expectContacts(page: Page, recording: Recording): Promise<void> {
 	}
 }
 
+/** The recording selected a sandbox account, which Testnet does not hold, so the popup opens on
+ *  Testnet's first account in the account list's order (index, then address), as before the seal. */
+async function expectFirstAccountSelected(page: Page, chain: number): Promise<void> {
+	const rows = await readAccounts(page, chain)
+	const [first] = [...rows].sort((a, b) => a.index - b.index || (a.address < b.address ? -1 : a.address > b.address ? 1 : 0))
+	const label = "the selection is Testnet's first account"
+	expect(await waitForSelectedAccount(page, (address) => address === first?.address, label, 30_000)).toBe(first?.address)
+}
+
 async function opensWithoutTakeover(ctx: ExtensionContext, page: Page, recording: Recording, stored: Record<string, unknown>) {
 	const chain = recordedTestnet(recording)
 	const before = await readAccounts(page, chain)
@@ -371,12 +381,14 @@ async function opensWithoutTakeover(ctx: ExtensionContext, page: Page, recording
 	await waitForHash(page, "#/popup/general", 30_000)
 	expect(await shownOverlays(page)).toEqual([])
 	expect((await readAccounts(page, chain)).map(identity)).toEqual(before.map(identity))
+	await expectFirstAccountSelected(page, chain)
 	await expectImportedKeyOpens(page, imported(before)[0] ?? "")
 	await expectConnectedApps(page, recording)
 	await expectContacts(page, recording)
 	await expectHistory(ctx, page, recording)
 	await expectProjections(ctx, page, recording)
 	await expectIdentity(ctx, page, recording)
+	await expectReleasePreferences(ctx, page, recording.entries, await captureSoleProfileId(page))
 	expect(await shownOverlays(page)).toEqual([])
 	expect(await updateProblems(stored, await readLocalStorage(ctx))).toEqual([])
 }
@@ -407,6 +419,7 @@ async function throughTheReset(ctx: ExtensionContext, page: Page, recording: Rec
 	expect(derived(after)).toEqual(derived(before))
 	expect(imported(after)).toEqual(importedOpens ? imported(before) : [])
 	expect(await readAccounts(page, oldChain)).toEqual([])
+	await expectFirstAccountSelected(page, CHAIN_IDS.TESTNET)
 	const keysLeft = await page.evaluate(async (chain: number) => {
 		const all = await chrome.storage.local.get(null)
 		return Object.keys(all).filter((key) => key.startsWith("nulo:core:imported-account-keys@") && key.includes(`,${chain},`))
@@ -419,6 +432,7 @@ async function throughTheReset(ctx: ExtensionContext, page: Page, recording: Rec
 	await expectHistory(ctx, page, recording)
 	await expectProjections(ctx, page, recording, testnetNetworkId(recording))
 	await expectIdentity(ctx, page, recording, oldChain)
+	await expectReleasePreferences(ctx, page, recording.entries, await captureSoleProfileId(page))
 	expect(await shownOverlays(page)).toEqual([])
 	expect(await unreadRows(await readLocalStorage(ctx))).toEqual([])
 }

@@ -200,6 +200,7 @@
     "PinMap": true,
     "PinResult": true,
     "PinScope": true,
+    "PinStore": true,
     "PreflightOptions": true,
     "PreflightVerdict": true,
     "PrestoCheckConfig": true,

@@ -60,6 +60,12 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 				"Contacts, history, balances, accounts, tokens, networks and app permissions are now stored encrypted on your device, readable only after you unlock the profile.",
 			],
 		},
+		{
+			version: "1.2.4",
+			effective: null,
+			material: false,
+			changes: ["Pinned tokens, fee-payer choices and the last-selected account are now stored encrypted too."],
+		},
 	],
 }
 

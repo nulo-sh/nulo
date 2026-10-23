@@ -1,20 +1,10 @@
-import { type EventHandler, isRecord } from "@nulo/wallet-core/utils"
+import type { EventHandler } from "@nulo/wallet-core/utils"
 import { createRunFence } from "@/composables/runFence"
 import { type ComputedRef, computed, ref } from "vue"
 import { pinnedTokensKey } from "@/utils/profile-ui-keys"
-import { storageLocalGet, storageLocalSet } from "@/utils/storage"
-import { HOME_TOKEN_ROWS } from "@/utils/token-order"
+import { PINNED_TOKENS_MAX, PINNED_TOKENS_MAX_CHAINS, type PinMap } from "@/utils/pinned-tokens"
 import type { TokenDeleted } from "@/wallet/services/token/spec"
 
-/** Pins fill Home's row budget, never more. */
-export const PINNED_TOKENS_MAX = HOME_TOKEN_ROWS
-/** Chains a profile can hold pins for; other chains are evicted in key iteration order past it. */
-export const PINNED_TOKENS_MAX_CHAINS = 32
-
-const CONTRACT_RE = /^0x[0-9a-f]{64}$/
-
-/** Chain id (as a string) → lowercase contracts, at most `PINNED_TOKENS_MAX` each. */
-export type PinMap = Record<string, string[]>
 export type PinScope = { profileId: string; chainId: number }
 export type PinResult = "pinned" | "full" | "already" | "stale"
 
@@ -22,41 +12,10 @@ export type PinResult = "pinned" | "full" | "already" | "stale"
 export const pinScopeOf = (profileId: string | undefined, chainId: number | undefined): PinScope | undefined =>
 	profileId !== undefined && chainId !== undefined ? { profileId, chainId } : undefined
 
-/** A chain key is the canonical decimal form of a safe integer: no sign, no leading zero, no exponent. */
-const isChainKey = (key: string) => {
-	const n = Number(key)
-	return Number.isSafeInteger(n) && n >= 0 && String(n) === key
-}
-
-function sanitizeContracts(value: unknown): string[] {
-	if (!Array.isArray(value)) return []
-	const contracts: string[] = []
-	for (const entry of value) {
-		if (contracts.length >= PINNED_TOKENS_MAX) break
-		if (typeof entry !== "string") continue
-		const c = entry.toLowerCase()
-		if (CONTRACT_RE.test(c) && !contracts.includes(c)) contracts.push(c)
-	}
-	return contracts
-}
-
-/** The stored map is untrusted bytes (a backup import or another context wrote it): rebuild it on every read. */
-export function sanitizePinMap(raw: unknown): PinMap {
-	if (!isRecord(raw)) return {}
-	const out: PinMap = {}
-	for (const [key, value] of Object.entries(raw)) {
-		if (Object.keys(out).length >= PINNED_TOKENS_MAX_CHAINS) break
-		if (!isChainKey(key)) continue
-		const contracts = sanitizeContracts(value)
-		if (contracts.length > 0) out[key] = contracts
-	}
-	return out
-}
-
-const readPinMap = async (profileId: string): Promise<PinMap> => {
-	const key = pinnedTokensKey(profileId)
-	const result = await storageLocalGet([key])
-	return sanitizePinMap(result[key])
+/** The pin I/O the parent's preference client serves: each map is sanitized by the service. */
+export type PinStore = {
+	getPinnedTokens(profileId: string): Promise<PinMap>
+	setPinnedTokens(profileId: string, map: PinMap): Promise<boolean>
 }
 
 /** The chain's list with dangling contracts dropped when the token set is known. */
@@ -101,6 +60,7 @@ const enqueue = <T>(key: string, op: () => Promise<T>): Promise<T> => {
 
 type WriteCtx = {
 	scope: PinScope
+	read: () => Promise<PinMap>
 	live: () => boolean
 	known: () => Promise<ReadonlySet<string> | undefined>
 	write: (next: PinMap, unless: () => boolean) => Promise<boolean>
@@ -110,7 +70,7 @@ async function pinOp(ctx: WriteCtx, contract: string): Promise<PinResult> {
 	if (!ctx.live()) return "stale"
 	const c = contract.toLowerCase()
 	const chainKey = String(ctx.scope.chainId)
-	const next = await readPinMap(ctx.scope.profileId)
+	const next = await ctx.read()
 	if (!ctx.live()) return "stale"
 	const stored = next[chainKey] ?? []
 	if (stored.includes(c)) return "already"
@@ -127,7 +87,7 @@ async function unpinOp(ctx: WriteCtx, contract: string): Promise<void> {
 	if (!ctx.live()) return
 	const c = contract.toLowerCase()
 	const chainKey = String(ctx.scope.chainId)
-	const next = await readPinMap(ctx.scope.profileId)
+	const next = await ctx.read()
 	if (!ctx.live()) return
 	const stored = next[chainKey] ?? []
 	const known = await ctx.known()
@@ -145,6 +105,8 @@ export interface UsePinnedTokensDeps {
 	 * next write, so read-only surfaces may omit it.
 	 */
 	tokenService?: { onTokenDeleted: Pick<EventHandler<TokenDeleted>, "add" | "remove"> }
+	/** The parent's connected preference client. */
+	preferences: PinStore
 	getScope: () => PinScope | undefined
 	/**
 	 * The current chain's token contracts (any case), read at WRITE time so a token added elsewhere
@@ -155,12 +117,12 @@ export interface UsePinnedTokensDeps {
 }
 
 /**
- * Per-profile "Pin to Home" state behind the storage facade. Every write captures its scope and
- * requires it to equal the store's at each checkpoint after an await (so a scope that changed and
- * changed back still lands, on the scope it captured); after `dispose()` an ordinary write stops at
- * its next checkpoint, while a queued deletion cleanup may still finish. Two contexts writing at
- * once are last-writer-wins on the whole map (accepted). The parent calls `refresh()` on a profile
- * switch and `dispose()` on unmount.
+ * Per-profile "Pin to Home" state, kept by the worker's preference service. Every write captures
+ * its scope and requires it to equal the store's at each checkpoint after an await (so a scope that
+ * changed and changed back still lands, on the scope it captured); after `dispose()` an ordinary
+ * write stops at its next checkpoint, while a queued deletion cleanup may still finish. Two contexts
+ * writing at once are last-writer-wins on the whole map (accepted). The parent calls `refresh()` on
+ * a profile switch and `dispose()` on unmount.
  */
 export function usePinnedTokens(deps: UsePinnedTokensDeps) {
 	const map = ref<PinMap>({})
@@ -173,9 +135,10 @@ export function usePinnedTokens(deps: UsePinnedTokensDeps) {
 		return scope !== undefined && now !== undefined && now.profileId === scope.profileId && now.chainId === scope.chainId
 	}
 
-	/** `unless` is read once the migration barrier clears, just before the write; `false` = skipped. */
+	/** `unless` is read right before the call; `false` = skipped or refused. */
 	const writeMap = async (profileId: string, next: PinMap, unless?: () => boolean) => {
-		const written = await storageLocalSet({ [pinnedTokensKey(profileId)]: next }, { unless })
+		if (unless?.()) return false
+		const written = await deps.preferences.setPinnedTokens(profileId, next)
 		if (written && !disposed && loadedProfile.value === profileId) map.value = next
 		return written
 	}
@@ -197,7 +160,7 @@ export function usePinnedTokens(deps: UsePinnedTokensDeps) {
 			loadedProfile.value = undefined
 			return
 		}
-		const next = await readPinMap(scope.profileId)
+		const next = await deps.preferences.getPinnedTokens(scope.profileId)
 		if (disposed || !isCurrent() || deps.getScope()?.profileId !== scope.profileId) return
 		map.value = next
 		loadedProfile.value = scope.profileId
@@ -205,6 +168,7 @@ export function usePinnedTokens(deps: UsePinnedTokensDeps) {
 
 	const writeCtx = (scope: PinScope): WriteCtx => ({
 		scope,
+		read: () => deps.preferences.getPinnedTokens(scope.profileId),
 		live: () => !disposed && scopeStillIs(scope),
 		known: async () => deps.knownContracts(),
 		write: (next, unless) => writeMap(scope.profileId, next, unless),
@@ -227,7 +191,7 @@ export function usePinnedTokens(deps: UsePinnedTokensDeps) {
 		void enqueue(pinnedTokensKey(token.profileId), async () => {
 			const c = token.contract.toLowerCase()
 			const chainKey = String(token.chainId)
-			const next = await readPinMap(token.profileId)
+			const next = await deps.preferences.getPinnedTokens(token.profileId)
 			const list = next[chainKey]
 			if (!list?.includes(c)) return
 			await writeMap(

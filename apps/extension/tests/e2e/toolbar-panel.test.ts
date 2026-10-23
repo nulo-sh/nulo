@@ -28,7 +28,7 @@ import {
 	waitForHash,
 	withTimeoutMessage,
 } from "./fixtures/extension"
-import { navigateByHash, readProfileNames, readSessionRow } from "./fixtures/helpers"
+import { navigateByHash, readProfileNames, readSessionRow, waitForSelectedAccount } from "./fixtures/helpers"
 import { waitForMainFrame, waitForPopupClosed } from "./fixtures/popups"
 import { PollTimeoutError, pollUntil } from "./fixtures/poll"
 import { refusePasskeyStep, registerPasskeyProfile } from "./fixtures/passkey"
@@ -230,15 +230,14 @@ async function createPasskeyProfile(page: Page): Promise<string> {
 	for (const testid of NEW_PROFILE_FROM_LOCK_SCREEN) await clickByTestId(page, testid, 15_000)
 	await clickByTestId(page, "register-submit-btn")
 	await waitForHash(page, "#/popup/general", 60_000)
-	const handle = await page.waitForFunction(
-		async (previous: string) => {
-			const account = (await chrome.storage.local.get("nulo:ui:activeAccount"))["nulo:ui:activeAccount"]
-			return typeof account === "string" && account !== previous ? account : null
-		},
-		{ timeout: 30_000, polling: 250 },
-		before,
+	const account = await waitForSelectedAccount(
+		page,
+		(address) => !!address && address !== before,
+		"the new passkey profile's account is selected",
+		30_000,
+		250,
 	)
-	return (await handle.jsonValue()) as string
+	return account as string
 }
 
 async function waitForEnabled(page: Page, testid: string, timeoutMs: number): Promise<void> {

@@ -10,7 +10,8 @@ const account = vi.hoisted(() => ({
 	previewImportAccount: vi.fn(async () => `0x${"0b".repeat(32)}`),
 	importAccount: vi.fn(async () => ({ address: `0x${"0b".repeat(32)}`, name: "Imported" })),
 }))
-vi.mock("@/utils/core", () => ({ managers: { account } }))
+const uiPreference = vi.hoisted(() => ({ setSelectedAccount: vi.fn(async () => true) }))
+vi.mock("@/utils/core", () => ({ managers: { account, uiPreference } }))
 vi.mock("@/utils", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils")>()),
 	pickFile: vi.fn(async () => ({ name: "account.json", text: async () => '{"type":"nulo-account"}' })),

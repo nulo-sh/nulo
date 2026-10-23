@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.2.3 — effective «FILL: effective date»**
+**Version 1.2.4 — effective «FILL: effective date»**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -79,10 +79,9 @@ described in § 5.
 | Diagnostic logs | In memory; written to session storage only if you turn on Developer Mode | See § 8 |
 
 A profile's data is converted to this form the first time it is unlocked after the update.
-Exceptions: profile names; pinned tokens, fee-payer choices and the last-selected account; a profile
-not yet unlocked since the update; older transaction entries the wallet cannot attribute to one
-profile; and records kept while a deletion, a network reset or an account-integrity block is in
-progress.
+Exceptions: profile names; a profile not yet unlocked since the update; older transaction entries
+the wallet cannot attribute to one profile; and records kept while a deletion, a network reset or an
+account-integrity block is in progress.
 
 **Deleting it.** Uninstalling or clearing the extension's storage removes its local browser-managed
 data through the browser's deletion mechanisms. It does not delete exports, device backups,
@@ -459,3 +458,4 @@ described in § 5.
 | 1.2.1 | 15 October 2026 | The explorer is disabled in Settings → Privacy, not Settings → Advanced (§ 5.3). |
 | 1.2.2 | «FILL: effective date» | The token-list and price requests bypass the browser's HTTP cache, and the price request carries no cookies and no referrer (§§ 5.2, 5.11). |
 | 1.2.3 | «FILL: effective date» | Contacts, history, balances, accounts, tokens, networks and app permissions are now stored encrypted on your device, readable only after you unlock the profile. |
+| 1.2.4 | «FILL: effective date» | Pinned tokens, fee-payer choices and the last-selected account are now stored encrypted too. |
