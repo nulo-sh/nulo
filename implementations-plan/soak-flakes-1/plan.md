@@ -83,7 +83,7 @@ Gate: `bun run lint` and `bun run typecheck:all` exit 0. `bun --no-install run -
 
 Gate: lint and typecheck exit 0. `bun --no-install run --cwd apps/extension vitest run src/wallet/services/operation-journal` exits 0. Steps 1 and 2 hold, recorded in `lessons/phase-2.md`. Layers: lint, typecheck, unit and composition.
 
-## Phase 3 (arc 1): acceptance at the delivered head, after the Codex loop
+## Phase 3 (arc 1): acceptance at the delivered head, after the Codex loop ✓
 
 Run these on a clean tree at the final commit. A later executable change reruns them. Keep load5 samples (one a minute) under `~/.cache/nulo-backlog/soak-flakes-1/`, and summarize them in `lessons/phase-3.md`.
 1. `bun scripts/ci-cd/test-soak/cli.ts soak --cwd apps/extension --runtime node --runs 100 --out ~/.cache/nulo-backlog/soak-flakes-1/files-100.json -- src/wallet/services/wallet-sdk/background.transport.test.ts src/wallet/services/operation-journal/sealed-journal.composition.test.ts`: exit 0, `failedRuns=0`.
