@@ -2750,6 +2750,29 @@
 						"type": "object"
 					}
 				},
+				"uiSelectedAccount": {
+					"ref": {
+						"kind": "root",
+						"root": "nulo:ui:selectedAccount"
+					},
+					"encoding": "json",
+					"read": "codec",
+					"sealed": true,
+					"schema": {
+						"$schema": "https://json-schema.org/draft/2020-12/schema",
+						"properties": {
+							"address": {
+								"maxLength": 128,
+								"type": "string"
+							},
+							"profileId": {
+								"type": "string"
+							}
+						},
+						"required": ["address", "profileId"],
+						"type": "object"
+					}
+				},
 				"uiSendFeePicks": {
 					"ref": {
 						"kind": "root",
@@ -4265,6 +4288,10 @@
 						}
 					}
 				},
+				"uiSelectedAccount.full": {
+					"address": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
+					"profileId": "3f9a2c71"
+				},
 				"uiRestoreOutcome.full": {
 					"backup": "30e76e214c6e366e226b77b64a46ccb89e70e6d787dbf51bbb89be4202372e41",
 					"leaseUntil": 1790812830000,
@@ -4365,7 +4392,15 @@
 				"uiActiveAccount.full": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458",
 				"uiLastActiveProfile.full": "3f9a2c71",
 				"uiLoggerWindowId.full": 1847,
-				"onboardingCompleted.full": true
+				"onboardingCompleted.full": true,
+				"uiSelectedAccount.minimal": {
+					"address": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab",
+					"profileId": "b04e6d18"
+				},
+				"uiSelectedAccount.sealed": {
+					"address": "0x099cf1c135d4e6eab726059e8d0595f1ceebd141e0963fd29e772f3984ceab6e",
+					"profileId": "5c8e1f27"
+				}
 			}
 		}
 	]

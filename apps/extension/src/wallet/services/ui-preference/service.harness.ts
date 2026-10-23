@@ -4,6 +4,7 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { ConfigStore } from "@/wallet/config"
 import { ServiceCollection } from "@/wallet/base"
 import { LoggerStore } from "@/wallet/logger"
+import { ACCOUNT_SERVICE_NAME } from "@/wallet/services/account/spec"
 import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
@@ -59,14 +60,29 @@ export class FakeSession {
 	}
 }
 
+/** The account addresses each profile holds, as `AccountService.getAccountsRaw` lists them. */
+export class FakeAccounts {
+	public readonly name = ACCOUNT_SERVICE_NAME
+	public readonly dependencies = []
+	public readonly held = new Map<string, string[]>()
+
+	public async start(): Promise<void> {}
+
+	public async getAccountsRaw(profileId: string): Promise<Array<{ profileId: string; address: string }>> {
+		return (this.held.get(profileId) ?? []).map((address) => ({ profileId, address }))
+	}
+}
+
 /** A started `UiPreferenceService` over `api`'s local area (by default an emptied fake browser's,
- *  which every `FakeBrowserApi` shares) and a fresh {@link FakeSession}. */
+ *  which every `FakeBrowserApi` shares), a fresh {@link FakeSession} and {@link FakeAccounts}. */
 export async function startUiPreferences(api: BrowserApi = emptiedFakeBrowser()) {
 	const session = new FakeSession()
+	const accounts = new FakeAccounts()
 	const service = new UiPreferenceService(new LoggerStore(new ConfigStore()), api)
 	const services = new ServiceCollection()
 	services.add(session as never)
+	services.add(accounts as never)
 	services.add(service)
 	await services.start()
-	return { service, session, area: api.storage.local }
+	return { service, session, accounts, area: api.storage.local }
 }

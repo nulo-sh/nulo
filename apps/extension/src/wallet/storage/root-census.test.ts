@@ -9,7 +9,6 @@ import { describe, expect, test } from "vitest"
 import { STORED_SHAPES, type StoredShapeName } from "./stored-shapes"
 import { SEALED_ROOTS } from "./stores"
 
-const KL_12 = "a structured popup preference the stored-shape guard lets no migration move: known limit #1062"
 const ENGINE = "the migration engine's own state, read before any unlock"
 const UI_FLAG = "a per-profile flag of the popup, no content"
 
@@ -28,7 +27,7 @@ const PLAINTEXT: Partial<Record<StoredShapeName, string>> = {
 	tokenList: "the signed public token list",
 	activeNetwork: "a random network id, meaningless without its sealed row, read by the pre-unlock gates",
 	legalAccepted: "device-wide terms acceptance, read before unlock and never in a backup",
-	uiActiveAccount: KL_12,
+	uiActiveAccount: "the pre-seal pointer, kept until its profile claims it or a selection overwrites it",
 	uiLastActiveProfile: "the profile id the lock screen opens on",
 	uiLoggerWindowId: "the log viewer's window id",
 	onboardingCompleted: "a device-wide flag",

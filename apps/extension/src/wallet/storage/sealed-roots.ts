@@ -2,7 +2,8 @@ import { type MinimalStorageArea, prefixedEntries } from "@nulo/wallet-core/stor
 import { parseEnvelope } from "./sealed-entity-storage"
 import { SEALED_ROOTS } from "./stores"
 
-function namesProfile(raw: unknown, profileId: string): boolean {
+/** Whether a stored value, an envelope or a plaintext row, names `profileId`; read with no key. */
+export function namesProfile(raw: unknown, profileId: string): boolean {
 	if (typeof raw !== "string") return false
 	let parsed: unknown
 	try {

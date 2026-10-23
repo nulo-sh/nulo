@@ -13,6 +13,8 @@ export class UiPreferenceServiceClient extends ServiceClient<Methods, Events> im
 	}
 }
 definePassthroughsExhaustive<Methods>()(UiPreferenceServiceClient.prototype, [
+	"getSelectedAccount",
+	"setSelectedAccount",
 	"getPinnedTokens",
 	"setPinnedTokens",
 	"getFeePicks",

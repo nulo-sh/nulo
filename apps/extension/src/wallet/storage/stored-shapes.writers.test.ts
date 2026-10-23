@@ -434,6 +434,21 @@ describe("what each writer stores parses back to itself", () => {
 		expectDescribed("uiPinnedTokens", JSON.stringify(row))
 	})
 
+	test("uiSelectedAccount: UiPreferenceService.setSelectedAccount; the pre-seal uiActiveAccount is only removed", async () => {
+		const address = `0x${"ab".repeat(32)}`
+		const area = new MemoryStorageArea().seed({ "nulo:ui:activeAccount": `0x${"cd".repeat(32)}` })
+		const { service, session } = await startUiPreferences({ storage: { local: area } } as unknown as BrowserApi)
+		await session.unlock("p1")
+		const set = vi.spyOn(area, "set")
+		expect(await service.setSelectedAccount("p1", address)).toBe(true)
+		expect(set.mock.calls.flatMap(([items]) => Object.keys(items))).toEqual(["nulo:ui:selectedAccount@device"])
+		expect(await rawOf(area, "nulo:ui:activeAccount")).toBeUndefined()
+		expect(isSealedText(await rawOf(area, "nulo:ui:selectedAccount@device"))).toBe(true)
+		const row = await sealedEntityStorage("uiSelectedAccount", area, session.rowKeys).get("device")
+		expect(row).toEqual({ profileId: "p1", address })
+		expectDescribed("uiSelectedAccount", JSON.stringify(row))
+	})
+
 	test("uiRestoreOutcome: armRestoreOutcome", async () => {
 		const local = stubChromeStorage()
 		vi.stubGlobal("navigator", { locks: { request: (_name: string, fn: () => Promise<unknown>) => fn() } })

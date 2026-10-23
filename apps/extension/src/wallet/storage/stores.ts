@@ -55,7 +55,7 @@ import { SeedMarkerRowSchema, TOKEN_SEEDED_STORAGE_ROOT, TOKEN_STORAGE_ROOT, Tok
 import { TOKEN_BALANCE_STORAGE_ROOT, TokenBalanceRawSchema } from "@/wallet/services/token-balance/spec"
 import { TOKEN_LIST_STORAGE_KEY } from "@/wallet/services/token-list/spec"
 import { TRANSACTION_STORAGE_ROOT, TxSchema } from "@/wallet/services/transaction/spec"
-import { PreferenceRowSchema } from "@/wallet/services/ui-preference/spec"
+import { PreferenceRowSchema, SELECTED_ACCOUNT_ROOT, SelectedAccountRowSchema } from "@/wallet/services/ui-preference/spec"
 import { type RowKeysSource, SealedEntityStorage, type SealedRootOptions } from "./sealed-entity-storage"
 
 export type KeyIdentityOptions = { requireKeyIdentityMatch: true; keyIdentityMode?: "numeric" }
@@ -218,6 +218,7 @@ export const STORES = {
 	uiPinnedTokens: sealedCodec(PINNED_TOKENS_ROOT, PreferenceRowSchema, PREFERENCE_LAYOUT),
 	uiFeePicks: sealedCodec(FEE_PICKS_ROOT, PreferenceRowSchema, PREFERENCE_LAYOUT),
 	uiSendFeePicks: sealedCodec(SEND_FEE_PICKS_ROOT, PreferenceRowSchema, PREFERENCE_LAYOUT),
+	uiSelectedAccount: sealedCodec(SELECTED_ACCOUNT_ROOT, SelectedAccountRowSchema),
 	// Every sealed-slot, MAC and fingerprint decision trusts the row fetched by its id.
 	profiles: plainEntity(PROFILE_STORAGE_ROOT, { requireKeyIdentityMatch: true }),
 	config: value(CONFIG_STORAGE_KEY),

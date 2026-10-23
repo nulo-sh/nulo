@@ -1794,6 +1794,37 @@
 			"sealed": true
 		},
 		{
+			"id": "uiSelectedAccount.full",
+			"stamp": 0,
+			"shape": "uiSelectedAccount",
+			"key": "nulo:ui:selectedAccount@device",
+			"value": {
+				"profileId": "3f9a2c71",
+				"address": "0x0841ca68be1d1beae937cd48f0792a74c2fc18a14c15e7056beeba87978d6458"
+			}
+		},
+		{
+			"id": "uiSelectedAccount.minimal",
+			"stamp": 0,
+			"shape": "uiSelectedAccount",
+			"key": "nulo:ui:selectedAccount@device",
+			"value": {
+				"profileId": "b04e6d18",
+				"address": "0x1cd6c85bdc6570f7f2e196ee4d114302be794f5e9a5d06f7c4068627aea4a9ab"
+			}
+		},
+		{
+			"id": "uiSelectedAccount.sealed",
+			"stamp": 0,
+			"shape": "uiSelectedAccount",
+			"key": "nulo:ui:selectedAccount@device",
+			"value": {
+				"profileId": "5c8e1f27",
+				"sealed": "AerhU4eiiQm5sAQsqhLGCTjsgg/KJCycL7oaWdqWOTsUU5UcHkgAw36B5Rtc16Sk5zpmOwZ2cfapGeSkMx6Bfal6B7+Tye3USRzTiFgk6/pH7lScsrumNTa3KYUYy1msotrYmwKSWVqzJJravFvLuXvoOhIqEBUCbLwYSsCjYBzXeNsi"
+			},
+			"sealed": true
+		},
+		{
 			"id": "uiRestoreOutcome.full",
 			"stamp": 0,
 			"shape": "uiRestoreOutcome",

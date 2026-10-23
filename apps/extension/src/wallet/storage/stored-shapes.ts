@@ -51,6 +51,7 @@ import {
 } from "@/wallet/services/stale-network/types"
 import { decodeSeedMarkers } from "@/wallet/services/token/seeder"
 import { decodeTokenListState } from "@/wallet/services/token-list/service"
+import { LEGACY_SELECTED_ACCOUNT_KEY } from "@/wallet/services/ui-preference/spec"
 import { SCHEMA_BLOCKED_KEY, SCHEMA_DEGRADED_KEY, SCHEMA_RETRY_REQUESTED_KEY } from "./migrations"
 import type { SealedRootOptions } from "./sealed-entity-storage"
 import { type KeyIdentityOptions, type SealedStoreName, STORES, type StoreName } from "./stores"
@@ -255,8 +256,8 @@ export const STORED_SHAPES = {
 
 	activeNetwork: { ref: root(ACTIVE_NETWORK_STORAGE_ROOT), encoding: "structured", schema: z.string(), read: decodeActiveNetworkId },
 	legalAccepted: { ref: value(LEGAL_ACCEPTANCE_KEY), encoding: "structured", schema: LegalAcceptanceSchema, read: parseAcceptanceRecord },
-	// The popup compares the stored address with its accounts; anything else matches none.
-	uiActiveAccount: { ref: value("nulo:ui:activeAccount"), encoding: "structured", schema: z.string(), read: asStored },
+	// No build writes it any more: the worker moves it into a profile holding that account.
+	uiActiveAccount: { ref: value(LEGACY_SELECTED_ACCOUNT_KEY), encoding: "structured", schema: z.string(), read: asStored },
 	uiLastActiveProfile: { ref: value(LAST_ACTIVE_PROFILE_KEY), encoding: "structured", schema: z.string(), read: asStored },
 	// `useSyncedRef("loggerWindowId")`: the log viewer's window id, or null with none open.
 	uiLoggerWindowId: { ref: value("nulo:ui:loggerWindowId"), encoding: "structured", schema: z.number().nullable(), read: asStored },
@@ -269,6 +270,7 @@ export const STORED_SHAPES = {
 	uiPinnedTokens: sealedDescribed("uiPinnedTokens", PinMapSchema, sanitizePinMap),
 	uiFeePicks: sealedDescribed("uiFeePicks", AppPicksSchema, readAppPicks),
 	uiSendFeePicks: sealedDescribed("uiSendFeePicks", SendPicksSchema, readSendPicks),
+	uiSelectedAccount: fromStore("uiSelectedAccount"),
 	uiRestoreOutcome: { ref: root(RESTORE_OUTCOME_ROOT), encoding: "structured", schema: RestoreOutcomeSchema, read: decodeRestoreOutcome },
 	uiGetStartedPhraseSaved: uiFlag(GET_STARTED_PHRASE_SAVED_ROOT),
 	uiGetStartedBackupSaved: uiFlag(GET_STARTED_BACKUP_SAVED_ROOT),

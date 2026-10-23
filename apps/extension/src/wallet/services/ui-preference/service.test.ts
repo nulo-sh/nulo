@@ -1,22 +1,34 @@
 /**
  * `UiPreferenceService` over a real sealed store and real row keys: the unlock's conversion of the
- * pre-seal maps, and every class of refusal (another profile, a lock, a session that moved during
- * a read or before a write's commit, a deletion begun).
+ * pre-seal maps, the move of the pre-seal selection, the deletion's purge of the device's
+ * selection, and every class of refusal (another profile, a lock, a session that moved during a
+ * read or before a write's commit, a deletion begun).
  */
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { type MinimalStorageArea, MemoryStorageArea } from "@nulo/wallet-core/storage"
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { feePicksKey, pinnedTokensKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
-import { isSealedText } from "@/wallet/storage/sealed-entity-storage"
-import { readsKey } from "@/wallet/storage/sealed-entity-storage.testing"
+import { isSealedText, parseEnvelope, SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import { readsKey, trackSubtleCrypto } from "@/wallet/storage/sealed-entity-storage.testing"
+import { purgeSealedRowsOf } from "@/wallet/storage/sealed-roots"
 import { startUiPreferences } from "./service.harness"
+
+type Harness = Awaited<ReturnType<typeof startUiPreferences>>
 
 const A = `0x${"a1".repeat(32)}`
 const B = `0x${"b2".repeat(32)}`
 const ACCOUNT = `0x${"cd".repeat(32)}`
 const APP = { [ACCOUNT]: { type: "fpc", title: "Sponsored", fpc: { id: "fpc-1", isProtocol: true } } }
 const SEND = { [ACCOUNT]: { private: { type: "fpc", fpc: { id: "fpc-1", name: "Sponsor" } }, public: { type: "fj" } } }
+const DEVICE = "nulo:ui:selectedAccount@device"
+const BARE = "nulo:ui:activeAccount"
+
+const subtle = trackSubtleCrypto()
+afterAll(() => subtle.restore())
+
+const over = (local: unknown) => ({ storage: { local } }) as unknown as BrowserApi
+const ownerOf = (raw: unknown) => parseEnvelope(JSON.parse(raw as string))?.profileId
 
 /** `area` behind a `BrowserApi`; `arm` runs a hook once, after the next read naming `key`. */
 function hooked(area: MinimalStorageArea): { api: BrowserApi; arm(key: string, hook: () => void): void } {
@@ -170,26 +182,156 @@ describe("concurrent writers", () => {
 	})
 })
 
+describe("the selected account", () => {
+	test("the device's one selection answers only the profile that made it, with both profiles' keys held", async () => {
+		const { service, session, area } = await startUiPreferences()
+		await session.keys.unlock("q")
+		await session.unlock("p")
+		expect(await service.setSelectedAccount("p", A)).toBe(true)
+		const stored = (await area.get(DEVICE))[DEVICE]
+		expect(isSealedText(stored)).toBe(true)
+		expect(ownerOf(stored)).toBe("p")
+		expect(String(stored)).not.toContain(A.slice(2))
+		expect(await service.getSelectedAccount("p")).toBe(A)
+
+		session.open("q")
+		expect(await service.getSelectedAccount("q")).toBeUndefined()
+		expect(await service.setSelectedAccount("q", B)).toBe(true)
+		expect(await service.getSelectedAccount("q")).toBe(B)
+		session.open("p")
+		expect(await service.getSelectedAccount("p")).toBeUndefined()
+	})
+
+	test("the pre-seal selection moves into the profile holding that account, on any chain, and is left for any other", async () => {
+		const area = new MemoryStorageArea().seed({ [BARE]: A })
+		const { service, session, accounts } = await startUiPreferences(over(area))
+		accounts.held.set("p", [B, A]).set("q", [B])
+		await session.unlock("q")
+		expect(await service.getSelectedAccount("q")).toBeUndefined()
+		expect(area.data.get(BARE)).toBe(A)
+
+		await session.unlock("p")
+		expect(await service.getSelectedAccount("p")).toBe(A)
+		expect(area.data.has(BARE)).toBe(false)
+		expect(ownerOf(area.data.get(DEVICE))).toBe("p")
+		session.open("q")
+		expect(await service.getSelectedAccount("q")).toBeUndefined()
+	})
+
+	test("a pre-seal selection beside a stored one is removed unread, so a stop between a move's seal and its removal converges", async () => {
+		const memory = new MemoryStorageArea().seed({ [BARE]: A })
+		let stop = true
+		const local = {
+			get: (keys?: string | string[]) => memory.get(keys),
+			set: (items: Record<string, unknown>) => memory.set(items),
+			remove: async (keys: string | string[]) => {
+				if (stop) {
+					stop = false
+					throw new Error("worker stopped")
+				}
+				await memory.remove(keys)
+			},
+		}
+		const { service, session, accounts } = await startUiPreferences(over(local))
+		accounts.held.set("p", [A]).set("q", [A])
+		await session.unlock("p")
+		await expect(service.getSelectedAccount("p")).rejects.toThrow("worker stopped")
+		expect(memory.data.get(BARE)).toBe(A)
+
+		await session.unlock("q")
+		expect(await service.getSelectedAccount("q")).toBeUndefined()
+		expect(memory.data.has(BARE)).toBe(false)
+		session.open("p")
+		expect(await service.getSelectedAccount("p")).toBe(A)
+	})
+
+	test("an address that is not a string of at most 128 characters is refused as invalid arguments", async () => {
+		const { service, session } = await startUiPreferences()
+		await session.unlock("p")
+
+		for (const address of [`0x${"a".repeat(127)}`, 7])
+			await expect(service.setSelectedAccount("p", address as never)).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+		expect(await service.setSelectedAccount("p", `0x${"a".repeat(126)}`)).toBe(true)
+	})
+
+	test("a deletion's purge removes the selection its profile made with no keys held, and keeps another's and one naming nobody", async () => {
+		const { service, session, area } = await startUiPreferences()
+		await session.unlock("p")
+		await service.setSelectedAccount("p", A)
+		session.lock()
+		session.keys.drop("p")
+
+		await service.purgeForProfile("q")
+		expect(ownerOf((await area.get(DEVICE))[DEVICE])).toBe("p")
+		await service.purgeForProfile("p")
+		expect(await area.get(DEVICE)).toEqual({})
+		await area.set({ [DEVICE]: "{not json" })
+		await service.purgeForProfile("p")
+		expect((await area.get(DEVICE))[DEVICE]).toBe("{not json")
+	})
+
+	test("a selection another profile makes while the purge holds the row survives it and the keyless sweep", async () => {
+		const memory = new MemoryStorageArea()
+		let stall: (() => Promise<void>) | undefined
+		const local = {
+			get: async (keys?: string | string[]) => {
+				const got = await memory.get(keys)
+				const hook = stall && readsKey(keys, DEVICE) ? stall : undefined
+				stall = hook ? undefined : stall
+				await hook?.()
+				return got
+			},
+			set: (items: Record<string, unknown>) => memory.set(items),
+			remove: (keys: string | string[]) => memory.remove(keys),
+		}
+		const { service, session } = await startUiPreferences(over(local))
+		await session.keys.unlock("q")
+		await session.unlock("p")
+		await service.setSelectedAccount("p", A)
+		session.open("q")
+		session.deletion.beginDeletion("p")
+		let other: Promise<boolean> | undefined
+		stall = async () => {
+			other = service.setSelectedAccount("q", B)
+			await subtle.settled()
+		}
+
+		await service.purgeForProfile("p")
+		expect(await other).toBe(true)
+		session.keys.drop("p")
+		await purgeSealedRowsOf(memory, "p")
+		expect(ownerOf(memory.data.get(DEVICE))).toBe("q")
+		expect(await service.getSelectedAccount("q")).toBe(B)
+	})
+})
+
 describe("refusals", () => {
-	const write = (service: Awaited<ReturnType<typeof startUiPreferences>>["service"]) =>
-		Promise.all([service.setPinnedTokens("p", { "7": [A] }), service.saveFeePick("p", { kind: "forgetFpc", fpcId: "f" })])
+	const write = (service: Harness["service"]) =>
+		Promise.all([
+			service.setPinnedTokens("p", { "7": [A] }),
+			service.saveFeePick("p", { kind: "forgetFpc", fpcId: "f" }),
+			service.setSelectedAccount("p", B),
+		])
+	const reads = (service: Harness["service"]) => Promise.all([service.getPinnedTokens("p"), service.getSelectedAccount("p")])
 
 	test("another profile's, a locked wallet's and a reserved profile's reads are empty and their writes write nothing", async () => {
 		const { service, session, area } = await startUiPreferences()
 		await session.unlock("p")
 		await service.setPinnedTokens("p", { "7": [A] })
+		await service.setSelectedAccount("p", A)
 		const stored = await area.get()
 
 		await session.unlock("q")
-		expect(await service.getPinnedTokens("p")).toEqual({})
-		expect(await write(service)).toEqual([false, false])
+		expect(await reads(service)).toEqual([{}, undefined])
+		expect(await write(service)).toEqual([false, false, false])
 		session.lock()
 		expect(await service.getFeePicks("p")).toEqual({ app: {}, send: {} })
-		expect(await write(service)).toEqual([false, false])
+		expect(await reads(service)).toEqual([{}, undefined])
+		expect(await write(service)).toEqual([false, false, false])
 		await session.unlock("p")
 		session.deletion.beginDeletion("p")
-		expect(await service.getPinnedTokens("p")).toEqual({})
-		expect(await write(service)).toEqual([false, false])
+		expect(await reads(service)).toEqual([{}, undefined])
+		expect(await write(service)).toEqual([false, false, false])
 
 		expect(await area.get()).toEqual(stored)
 	})
@@ -206,13 +348,21 @@ describe("refusals", () => {
 		expect(await harness.service.getPinnedTokens("p")).toEqual({})
 		await harness.session.unlock("p")
 		expect(await harness.service.getPinnedTokens("p")).toEqual({ "7": [A] })
+
+		await harness.service.setSelectedAccount("p", A)
+		arm(DEVICE, () => harness.session.lock())
+		expect(await harness.service.getSelectedAccount("p")).toBeUndefined()
+		await harness.session.unlock("p")
+		expect(await harness.service.getSelectedAccount("p")).toBe(A)
 	})
 
-	test.each([
-		["a switch", (h: Awaited<ReturnType<typeof startUiPreferences>>) => h.session.open("q")],
-		["a lock", (h: Awaited<ReturnType<typeof startUiPreferences>>) => h.session.lock()],
-		["a deletion", (h: Awaited<ReturnType<typeof startUiPreferences>>) => void h.session.deletion.beginDeletion("p")],
-	])("%s between a write's reads and its commit writes nothing", async (_name, interrupt) => {
+	const interrupts = [
+		["a switch", (h: Harness) => h.session.open("q")],
+		["a lock", (h: Harness) => h.session.lock()],
+		["a deletion", (h: Harness) => void h.session.deletion.beginDeletion("p")],
+	] as const
+
+	test.each(interrupts)("%s between a write's reads and its commit writes nothing", async (_name, interrupt) => {
 		const memory = new MemoryStorageArea().seed({ [feePicksKey("p")]: APP })
 		const { api, arm } = hooked(memory)
 		const harness = await startUiPreferences(api)
@@ -224,5 +374,29 @@ describe("refusals", () => {
 
 		expect(await harness.service.saveFeePick("p", { kind: "forgetFpc", fpcId: "fpc-1" })).toBe(false)
 		expect([...memory.data]).toEqual(before)
+	})
+
+	test.each(interrupts)("%s between a selection's seal and its commit writes nothing, a move's included", async (_name, interrupt) => {
+		for (const call of [(h: Harness) => h.service.getSelectedAccount("p"), (h: Harness) => h.service.setSelectedAccount("p", B)]) {
+			const memory = new MemoryStorageArea().seed({ [BARE]: A })
+			const harness = await startUiPreferences(over(memory))
+			harness.accounts.held.set("p", [A])
+			await harness.session.keys.unlock("q")
+			await harness.session.unlock("p")
+			const prepare = SealedEntityStorage.prototype.prepare
+			const spy = vi.spyOn(SealedEntityStorage.prototype, "prepare").mockImplementationOnce(async function (
+				this: SealedEntityStorage<unknown>,
+				id,
+				row,
+			) {
+				const write = await prepare.call(this, id, row)
+				interrupt(harness)
+				return write
+			})
+
+			expect([undefined, false]).toContain(await call(harness))
+			expect([...memory.data]).toEqual([[BARE, A]])
+			spy.mockRestore()
+		}
 	})
 })
