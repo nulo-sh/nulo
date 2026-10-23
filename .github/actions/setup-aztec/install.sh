@@ -79,16 +79,19 @@ mkdir "$WORK/noir-bin"
 tar -xzf "$WORK/noir/$NOIR_VERSION/$NOIR_ASSET" -C "$WORK/noir-bin" ./nargo ./noir-profiler
 
 FOUNDRY_TOOLS="anvil cast chisel forge"
+# The release also ships the solar compiler, which the installer never copies.
+FOUNDRY_MEMBERS="anvil cast chisel forge solar"
 FOUNDRY_ASSET="foundry_v${FOUNDRY_VERSION}_linux_amd64.tar.gz"
 fetch "foundry/$FOUNDRY_VERSION/$FOUNDRY_ASSET" \
 	"https://github.com/foundry-rs/foundry/releases/download/v$FOUNDRY_VERSION/$FOUNDRY_ASSET"
-# Exactly the four tools, each a regular file (`-`): a link, a duplicate or an extra entry could
+# Exactly these members, each a regular file (`-`): a link, a duplicate or an extra entry could
 # plant a file or redirect a hashed path.
 tar -tvzf "$WORK/foundry/$FOUNDRY_VERSION/$FOUNDRY_ASSET" > "$WORK/foundry-members.txt"
+# shellcheck disable=SC2086 # the five names are fixed words.
 if [ "$(awk '{ print substr($1, 1, 1), $NF }' "$WORK/foundry-members.txt" | sort | tr '\n' ' ')" \
-	!= "- anvil - cast - chisel - forge " ]; then
+	!= "$(printf -- '- %s ' $FOUNDRY_MEMBERS)" ]; then
 	cat "$WORK/foundry-members.txt" >&2
-	fail "the Foundry tarball must hold exactly the regular files $FOUNDRY_TOOLS."
+	fail "the Foundry tarball must hold exactly the regular files $FOUNDRY_MEMBERS."
 fi
 mkdir "$WORK/foundry-bin"
 # shellcheck disable=SC2086 # the four names are fixed words.

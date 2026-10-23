@@ -214,6 +214,8 @@ Paths: `X/` is `apps/extension/src/`, `S/` is `X/wallet/services/`, `R/` is `pac
 | D9 | P0 ships as its own PR before arc 1's final gate; the bump never edits `list.source.json` | F8, OA-2 | accepted: both confirmed the deadlock |
 | D10 | Opus's OA-3 (a blocking ask on bypassing the unattested scope): not blocking; recorded in OWNER-ASKS with the wait alternative | F10 | accepted in part: its premise that rc.3 never bypassed the labs scope did not hold (`AGE-GATE: bypass-all`) |
 | D11 | M4.6-7: the in-place update scenarios move to the moved-chain and moved-addresses truth and run in P4, one candidate each | Codex 2, Opus 2, final Codex 1-2 | accepted |
+| D12 | Foundry 1.8.5's tarball adds `solar`: `install.sh` requires exactly the five attested regular files and still extracts the four tools | P1, `lessons/phase-1.md` | accepted: the installer copies four; an exact member set keeps the refusal |
+| D13 | M5 deviation: `lockfile-exception-diff.ts` keeps its `viem` carve-out, which reads a pre-6.x lock (this bump's base holds `@aztec/viem`); the residue check drops its own | P1, the tree | accepted |
 
 ## Audit verdicts
 

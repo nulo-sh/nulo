@@ -12,9 +12,9 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@aztec-labs/accounts": "6.0.0-rc.3",
-		"@aztec-labs/constants": "6.0.0-rc.3",
-		"@aztec-labs/foundation": "6.0.0-rc.3",
+		"@aztec-labs/accounts": "6.0.0",
+		"@aztec-labs/constants": "6.0.0",
+		"@aztec-labs/foundation": "6.0.0",
 		"@nulo/wallet-core": "workspace:*"
 	},
 	"devDependencies": {

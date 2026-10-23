@@ -13,11 +13,11 @@
 		"test": "bun --bun vitest run"
 	},
 	"dependencies": {
-		"@aztec-labs/aztec.js": "6.0.0-rc.3",
-		"@aztec-labs/foundation": "6.0.0-rc.3",
-		"@aztec-labs/standard-contracts": "6.0.0-rc.3",
-		"@aztec-labs/stdlib": "6.0.0-rc.3",
-		"@aztec-labs/wallet-sdk": "6.0.0-rc.3",
+		"@aztec-labs/aztec.js": "6.0.0",
+		"@aztec-labs/foundation": "6.0.0",
+		"@aztec-labs/standard-contracts": "6.0.0",
+		"@aztec-labs/stdlib": "6.0.0",
+		"@aztec-labs/wallet-sdk": "6.0.0",
 		"@nulo/extension-messaging": "workspace:*",
 		"@nulo/wallet-core": "workspace:*",
 		"@nulo/wallet-sdk-schema-patch": "workspace:*"

@@ -5,9 +5,9 @@
  */
 const PACKAGE = /.*node_modules\/((?:@[^/]+\/)?[^/]+)\/(.+)$/
 
-/** Package-name prefixes of the proving, simulation and contract stack: what makes the offscreen
- *  page's bundle tens of MB. `@aztec/viem` is the one package the Aztec line keeps in its old scope. */
-const HEAVY_PREFIXES = ["@aztec-labs/", "@aztec-foundation/", "@aztec/viem", "@noir-lang/", "@alejoamiras/"]
+/** Package-name prefixes of the proving, simulation and contract stack and the L1 client it
+ *  depends on: what makes the offscreen page's bundle tens of MB. */
+const HEAVY_PREFIXES = ["@aztec-labs/", "@aztec-foundation/", "viem", "@noir-lang/", "@alejoamiras/"]
 
 /**
  * The content script reaches `@aztec-labs/wallet-sdk` and must stay one self-contained file
