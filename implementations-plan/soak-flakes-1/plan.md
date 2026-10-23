@@ -1,7 +1,7 @@
 ---
 plan: soak-flakes-1
 tier: light
-status: planned, Codex approve
+status: completed (delivered as #1105)
 issues: "#1101, #1102 (arc 1 closes both)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 0e4bec132
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-23.
+- **Status:** delivered as one ready PR against `dev`, #1105, which carries this close-out; its merge closes the plan.
+- **Shipped:** `admitContentMessage` reads the iframe flag when the wrapper is built, and the transport tests stub it with no re-import; every bundle is byte-identical to base. The sealed-journal test's restart comes 1 ms after the dead worker, on a held `Date`, which pins both sides of the reaper's `>=`. Two comments corrected along the way.
+- **Dropped or rejected:** alternatives B to J (§ Architecture), the reaper's `>=` kept (D3), and the busy-loop contention run kept as evidence only, the fetch-delay probe being the deterministic proof (D4).
+- **Lessons:** nothing promoted. `lessons.md` sits at 8192 of its 8192 B and nothing there is superseded. Both gotchas stay here: fake timers advance `Date` inside `expect.poll` and `vi.waitFor` ([lessons/phase-0.md](lessons/phase-0.md) § Consults), and a `vi.resetModules()` re-import inside a test body times the whole graph's evaluation ([recon.md](recon.md)).
+- **Known limits:** #1106 (KL-1).
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # soak-flakes-1: take the re-import and the zero-gap restart out of two soak-red tests
 
@@ -120,7 +131,7 @@ Asks: none for the owner.
 |---|---|---|---|
 | D1 | #1101: the flag is read in `admitContentMessage`; tests stub it with no re-import | B, C, J; a read per message (more reads, same result) | Removes the re-evaluation instead of moving it; bundles byte-identical |
 | D2 | #1102: mock `Date` alone in test 2; restart at +1 ms; assert `qLive.createdAt` | E, F, G, H, I, J | States the restart's precondition; pins both sides of `>=` on every run |
-| D3 | No product change; KL-1 at close-out | E, a worker-identity scheme | Unmeasured clock conditions; the minute tick bounds the wait; identity adds persistent state |
+| D3 | No product change; KL-1 (#1106) at close-out | E, a worker-identity scheme | Unmeasured clock conditions; the minute tick bounds the wait; identity adds persistent state |
 | D4 | Deterministic reproductions are the proof; soaks are smoke runs | soaks as proof | 30/30 passes 36% of the time with nothing fixed, at 1 red in 30 |
 | D5 | (implementation) `onTestFinished` restores the clock in place of `try`/`finally` | `try`/`finally` | Same guarantee; the test keeps its indentation ([lessons/phase-2.md](lessons/phase-2.md)) |
 
