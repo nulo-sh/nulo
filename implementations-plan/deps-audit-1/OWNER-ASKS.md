@@ -64,3 +64,9 @@
   - **B:** a new arc that drops the vitest bump. It keeps vitest 4.1.10, acknowledges 1242767 (moderate, the test runner only) beside the existing vitest entry, as D7 acknowledged 4.1.11 until its own soak, and leaves that acknowledgement to the next vitest bump. Then Phases 2-3 rerun at that candidate. This adds an acknowledgement whose fix is past the age gate, so it is the orchestrator's call.
   - **C:** an exception: open the PR with the red disclosed. Not recommended: CLAUDE.md's soak is fail-closed, and Codex r3 rejected the same for #987.
 - **What ships now:** nothing. The branch is pushed at the records, with no PR. #980, #987 and #1032 stay open, and #1101 is open. No run is in flight, so the window can be released.
+- **Answer:** A, granted by the orchestrator: the matched control, diagnostic only, on a window with no other lead alive.
+- **Run:**
+  - Same command as the candidate, at a detached `0fe71361a` (vitest 4.1.10), after a fresh frozen install, from 08:55Z to 10:50Z. Same 15148-test inventory.
+  - Failed runs: 1 of 30. #1101's test passed every run. Run 28 failed `sealed-journal.composition.test.ts`'s boot-sweep test on an `expect.poll` at 1000 ms (#1102), at load5 76-89.
+  - The load rule never fired (load5 66-152, one sample over 150).
+- **Reading (Codex r11, ii):** the control is red, so the red-control branch holds. vitest 4.1.12 is not necessary for a red in this soak, and #1101 is not shown to be pre-existing. The next arc is a bounded suite-level diagnosis of both reds (#1101's stalled step, and #1102's poll or same-millisecond cutoff) before any candidate. No budget, config or bar changes as a pass route.

@@ -68,3 +68,22 @@ The candidate is `b8f5c22fe`'s code plus records: vite 8.2.4, follow-redirects 1
 - Probe, no repo change: the file alone, ×5 under the Node launcher, passes. That test takes 371 to 447 ms, the slowest in a file that takes 2.0 to 2.3 s. It runs `vi.resetModules()`, then cold-imports `./background` inside its own body.
 - This test passed 30 of 30 at `57c35cec5`, and was never named at `dc82d009d`. No issue named it, so it is now #1101.
 - Codex r10: `ARC_FAILED + c`, high (plan, Review verdicts). The arc ends here (D15, OA-5).
+
+## OA-5 control at `0fe71361a`, 2026-10-23
+
+The control ran on the orchestrator's window, diagnostic only, with no other lead alive.
+
+- **Setup.** Detached at `0fe71361a` from a clean tree at 08:55:27Z: the commit before the vitest bump, so vitest and `@vitest/*` 4.1.10, with vite 8.2.4, storybook 10.6.2 and #987's fix.
+  - Every `node_modules` was removed, then `bun install --frozen-lockfile` ran (lock `8464ded0…`); the store holds exactly those versions.
+  - The command was the candidate's: `soak --cwd apps/extension --runtime node --runs 30`, retry 0, from 08:55:40Z to 10:50:07Z (6867 s).
+  - The summary binds `0fe71361a` with a clean tree, and the tree was clean after. The inventory is the candidate's exactly: 15148 tests, zero names differ.
+- **Result: failed runs 1, exit 1.** The other 29 runs passed in 192 to 272 s each. #1101's test passed every run.
+- **Run 28** (10:37:35-10:41:19Z, 224 s, load5 76-89) failed `sealed-journal.composition.test.ts` › `the sealed journal — the real service graph` › `a restarted worker's boot sweep leaves sealed records alone; the unlock fails its profile's dead ones, and nothing else`.
+  - Line 134 failed with `expected 'simulating' to be 'failed'`: an `expect.poll` at its default 1000 ms, after `unlockProfile(q.id)`.
+  - The test took 2128 ms; its three siblings took 738 to 781 ms.
+  - The watcher kept the raw report. The test passed 30 of 30 at `9b414dc39`. Filed as #1102.
+- **Load.** One sample a minute, 115 in all: load5 ranged 66 to 152. One sample was over 150 (10:21:42Z), never three in a row, so the rule never fired. Two process snapshots, at 09:35Z and 09:45Z, found no group but this soak's above half a core; the soak held about 55 cores at the first.
+- **Codex r11:** `ii` (plan, Review verdicts).
+  - vitest 4.1.12 is not necessary for a red in this soak, but #1101 is not shown to be pre-existing.
+  - The journal red may be the restart's same-millisecond `bootCutoff`, not timing (unverified).
+- **Afterwards.** Returned to `deps-audit-1-a1` and ran a fresh frozen install there. Commented the result on #1101.
