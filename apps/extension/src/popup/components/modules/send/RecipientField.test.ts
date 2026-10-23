@@ -368,6 +368,111 @@ describe("modules/send/RecipientField", () => {
 		})
 	})
 
+	describe("a long list draws the first 50 matches, and says how many more match", () => {
+		const SHOWN = 50
+		// 1,051 contacts that "contact" all matches, numbered in the order they are given.
+		const contacts = Array.from({ length: SHOWN + 1_001 }, (_, i) => ({
+			id: `c${i}`,
+			name: `Contact ${String(i).padStart(5, "0")}`,
+			address: `0x${(i + 1).toString(16).padStart(64, "0")}`,
+		}))
+		const ONE_THOUSAND_ONE_MORE = "Keep typing to narrow 1,001 more matches."
+		const mounted: ReturnType<typeof mount>[] = []
+		const open = async (candidates: unknown[], searchTerm = "contact") => {
+			const w = mount(RecipientField, { props: { candidates, searchTerm }, global: { stubs: STUBS }, attachTo: document.body })
+			mounted.push(w)
+			await w.get("input").trigger("focus")
+			return w
+		}
+		const press = async (w: ReturnType<typeof mount>, key: string) => {
+			const e = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
+			w.get("input").element.dispatchEvent(e)
+			await nextTick()
+			return e.defaultPrevented
+		}
+		const options = (w: ReturnType<typeof mount>) => w.findAll('[role="option"]')
+		const active = (w: ReturnType<typeof mount>) => w.get("input").attributes("aria-activedescendant")
+		const line = (w: ReturnType<typeof mount>) => w.find('[data-testid="send-destination-more"]')
+		const status = (w: ReturnType<typeof mount>) => w.get('[data-testid="send-destination-more-live"]').text()
+		let scrolled: Element[]
+
+		beforeEach(() => {
+			scrolled = []
+			Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+				scrolled.push(this)
+			})
+		})
+		afterEach(() => {
+			for (const w of mounted.splice(0)) w.unmount()
+			document.body.innerHTML = ""
+			Reflect.deleteProperty(Element.prototype, "scrollIntoView")
+		})
+
+		test("the listbox holds 50 options and nothing else; the line under it and the status name the rest", async () => {
+			const w = await open(contacts, "")
+			const live = w.get('[data-testid="send-destination-more-live"]')
+			expect(live.attributes()).toMatchObject({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
+			expect(status(w)).toBe("")
+
+			await w.setProps({ searchTerm: "contact" })
+			const list = w.get('[role="listbox"]').element
+			expect([...list.children].map((c) => c.getAttribute("role"))).toEqual(Array(SHOWN).fill("option"))
+			expect(w.findAll('[data-testid="stub-avatar"]').map((a) => a.attributes("data-address"))).toEqual(
+				contacts.slice(0, SHOWN).map((c) => c.address),
+			)
+			expect(line(w).text()).toBe(ONE_THOUSAND_ONE_MORE)
+			expect(line(w).attributes("aria-hidden")).toBe("true")
+			expect(list.contains(line(w).element)).toBe(false)
+			expect(w.get('[data-testid="send-destination-popover"]').element.contains(line(w).element)).toBe(true)
+			expect(status(w)).toBe(ONE_THOUSAND_ONE_MORE)
+		})
+
+		test("one match past the cap is one more match; at 50 or fewer, or once closed, no line and an empty status", async () => {
+			const w = await open(contacts.slice(0, SHOWN + 1))
+			expect(line(w).text()).toBe("Keep typing to narrow 1 more match.")
+			expect(status(w)).toBe("Keep typing to narrow 1 more match.")
+
+			const full = await open(contacts.slice(0, SHOWN))
+			expect(options(full)).toHaveLength(SHOWN)
+			expect([line(full).exists(), status(full)]).toEqual([false, ""])
+
+			const narrowed = await open(contacts)
+			await narrowed.setProps({ searchTerm: "contact 0000" })
+			expect(options(narrowed)).toHaveLength(10)
+			expect([line(narrowed).exists(), status(narrowed)]).toEqual([false, ""])
+
+			const closed = await open(contacts)
+			expect(status(closed)).toBe(ONE_THOUSAND_ONE_MORE)
+			await press(closed, "Escape")
+			expect([line(closed).exists(), status(closed)]).toEqual([false, ""])
+		})
+
+		test("Up from no highlight goes to the last drawn row and scrolls it into view; Down wraps; Enter picks it", async () => {
+			const w = await open(contacts)
+			const last = options(w)[SHOWN - 1]
+			await press(w, "ArrowUp")
+			expect(active(w)).toBe(last.attributes("id"))
+			expect(scrolled.at(-1)).toBe(last.element)
+			await press(w, "ArrowDown")
+			expect(active(w)).toBe(options(w)[0].attributes("id"))
+			await press(w, "ArrowUp")
+			expect(active(w)).toBe(last.attributes("id"))
+			expect(await press(w, "Enter")).toBe(true)
+			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([contacts[SHOWN - 1]])
+		})
+
+		test("a highlighted row that new candidates push past the cap loses the highlight; Enter then picks the first row", async () => {
+			const w = await open(contacts)
+			await press(w, "ArrowUp")
+			const early = { id: "early", name: "Contact early", address: `0x${"e".repeat(64)}` }
+			await w.setProps({ candidates: [early, ...contacts] })
+			expect(active(w)).toBeUndefined()
+			expect(options(w).filter((o) => o.attributes("aria-selected") === "true")).toHaveLength(0)
+			await press(w, "Enter")
+			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([early])
+		})
+	})
+
 	describe("a mouse press that takes the focus from the field: the card waits for the press to end", () => {
 		const namesake = { id: "5", name: "0xaaaa fan", address: "0xcccc" }
 		const mounted: ReturnType<typeof mount>[] = []

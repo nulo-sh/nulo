@@ -48,9 +48,17 @@ let closeTimer
 let releaseTimer
 
 const filteredContacts = computed(() => matchRecipients(props.candidates, searchTerm.value))
+/** Every drawn row renders again on each keystroke, so a long contact list draws this many and counts the rest. */
+const MAX_SHOWN = 50
+const shownContacts = computed(() => filteredContacts.value.slice(0, MAX_SHOWN))
+const moreCount = computed(() => filteredContacts.value.length - shownContacts.value.length)
+const moreSentence = computed(() => {
+	const n = moreCount.value
+	return `Keep typing to narrow ${n.toLocaleString("en-US")} more ${n === 1 ? "match" : "matches"}.`
+})
 
 const showSuggestions = computed(() => Boolean(filteredContacts.value?.length && isSearchInputFocused.value && !dismissed.value))
-const activeIndex = computed(() => (showSuggestions.value ? filteredContacts.value.indexOf(activeRow.value) : -1))
+const activeIndex = computed(() => (showSuggestions.value ? shownContacts.value.indexOf(activeRow.value) : -1))
 const activeId = computed(() => (activeIndex.value >= 0 ? optionId(activeIndex.value) : undefined))
 const showInvalidHint = computed(() => !isSearchInputFocused.value && !isValidAztecAddress(searchTerm.value) && searchTerm.value.length > 0)
 
@@ -144,7 +152,7 @@ watch(
 	},
 )
 
-watch([filteredContacts, showSuggestions], () => {
+watch([shownContacts, showSuggestions], () => {
 	if (activeIndex.value < 0) activeRow.value = null
 })
 
@@ -152,7 +160,7 @@ const ARROW_STEPS = { ArrowDown: 1, ArrowUp: -1 }
 
 const moveHighlight = (e, step) => {
 	e.preventDefault()
-	const rows = filteredContacts.value
+	const rows = shownContacts.value
 	const at = activeIndex.value
 	const next = at < 0 && step < 0 ? rows.length - 1 : (at + step + rows.length) % rows.length
 	activeRow.value = rows[next]
@@ -163,7 +171,7 @@ const moveHighlight = (e, step) => {
 const pickHighlighted = (e) => {
 	if (e.repeat) return
 	e.preventDefault()
-	handleSelectContact(filteredContacts.value[Math.max(activeIndex.value, 0)])
+	handleSelectContact(shownContacts.value[Math.max(activeIndex.value, 0)])
 	e.target.blur()
 	// The card replaces the field, which would leave the keyboard on the page's body.
 	nextTick(() => cardEl.value?.focusChange())
@@ -244,41 +252,50 @@ onBeforeUnmount(() => {
 
 				<!-- A list that scrolls is a Tab stop unless it opts out; the field keeps the keyboard. -->
 				<Transition name="fade">
-					<Flex
-						v-if="showSuggestions"
-						align="center"
-						direction="column"
-						wide
-						:class="$style.contacts_wrapper"
-						:id="listId"
-						role="listbox"
-						tabindex="-1"
-						:aria-labelledby="labelId"
-						data-testid="send-destination-suggestions"
-					>
+					<div v-if="showSuggestions" :class="$style.popover" data-testid="send-destination-popover">
 						<Flex
-							v-for="(c, i) in filteredContacts"
-							@click="handleSelectContact(c)"
 							align="center"
-							gap="10"
-							:class="[$style.contact, i === activeIndex && $style.active]"
+							direction="column"
 							wide
-							:id="optionId(i)"
-							role="option"
-							:aria-selected="i === activeIndex"
+							:class="$style.contacts_wrapper"
+							:id="listId"
+							role="listbox"
+							tabindex="-1"
+							:aria-labelledby="labelId"
+							data-testid="send-destination-suggestions"
 						>
-							<AccountAvatar :name="c.name" :address="c.address" :size="28" aria-hidden="true" />
+							<Flex
+								v-for="(c, i) in shownContacts"
+								@click="handleSelectContact(c)"
+								align="center"
+								gap="10"
+								:class="[$style.contact, i === activeIndex && $style.active]"
+								wide
+								:id="optionId(i)"
+								role="option"
+								:aria-selected="i === activeIndex"
+							>
+								<AccountAvatar :name="c.name" :address="c.address" :size="28" aria-hidden="true" />
 
-							<Flex direction="column" gap="4" wide>
-								<Text variant="name" color="primary" :class="[$style.title, $style.name_size]">{{ c.name }}</Text>
-								<Text variant="meta" color="tertiary" data-testid="recipient-suggestion-address" :class="$style.description">
-									{{ trimAddress(c.address) }}
-								</Text>
+								<Flex direction="column" gap="4" wide>
+									<Text variant="name" color="primary" :class="[$style.title, $style.name_size]">{{ c.name }}</Text>
+									<Text variant="meta" color="tertiary" data-testid="recipient-suggestion-address" :class="$style.description">
+										{{ trimAddress(c.address) }}
+									</Text>
+								</Flex>
 							</Flex>
 						</Flex>
-					</Flex>
+						<Text v-if="moreCount" variant="caption" color="tertiary" aria-hidden="true" :class="$style.more" data-testid="send-destination-more">
+							{{ moreSentence }}
+						</Text>
+					</div>
 				</Transition>
 			</template>
+
+			<!-- Mounted with the field: a region created with its text in place may go unannounced. -->
+			<span role="status" aria-live="polite" aria-atomic="true" :class="$style.visually_hidden" data-testid="send-destination-more-live">
+				{{ showSuggestions && moreCount ? moreSentence : "" }}
+			</span>
 		</div>
 	</div>
 </template>
@@ -304,7 +321,7 @@ onBeforeUnmount(() => {
 	color: var(--txt-tertiary);
 }
 
-.contacts_wrapper {
+.popover {
 	position: absolute;
 	top: 100%;
 	left: 0;
@@ -313,8 +330,20 @@ onBeforeUnmount(() => {
 
 	border: 2px solid var(--nulo-outline);
 	background: var(--app-bg);
+}
 
-	max-height: 160px;
+.more {
+	display: block;
+	padding: 8px 14px;
+	border-top: 1px solid var(--nulo-outline);
+}
+
+.visually_hidden {
+	composes: visually_hidden from "./fee-shared.module.css";
+}
+
+.contacts_wrapper {
+	max-height: 156px;
 
 	overflow-y: auto;
 
