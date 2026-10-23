@@ -19,3 +19,4 @@ All at retry 0, Node launcher.
   4. "Moved once, by the least that holds" hid why the step must be exactly 1 ms. Accepted: the comment now says the dead worker's records sit one below the cutoff, and the restart's at it.
 
   Not a fix: if test 2 timed out before its +1 step, its orphaned body could re-mock `Date` after the cleanup. That needs a 60 s timeout in a run that is already red, and tests 3 and 4 need no moving clock. After the fixes: lint exit 0, typecheck exit 0, both files 29 of 29, and the four builds still byte-identical to base.
+- **Round 2** (resumed): Codex `clean`. All accepted fixes verified; no new finding. The loop converged.

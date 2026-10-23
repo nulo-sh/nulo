@@ -143,7 +143,7 @@ Follow `implementations-plan/README.md` § Post-implementation standard at `246c
 - Codex round 1 (gpt-6.1-sol, high): conditional approve, six findings, all accepted. The key one: fake timers advance `Date` in polls, so D2 moved to `vi.setSystemTime` alone. Detail: [lessons/phase-0.md](lessons/phase-0.md).
 - Opus Plan leg: conditional approve, nine findings, all accepted, with +1 ms (I) over +1000.
 - Codex round 2 (resumed): conditional approve; two diagnostic fixes accepted (the loops' pgid read from their own leader; one vitest invocation per timed-out probe). Round 3: **approve**.
-- Fix loop round 1: Codex `fix these: 2` and the Opus diff review `fix these: 2`, comments only; all four accepted ([lessons/phase-2.md](lessons/phase-2.md) § Fix loop).
+- Fix loop round 1: Codex `fix these: 2` and the Opus diff review `fix these: 2`, comments only; all four accepted ([lessons/phase-2.md](lessons/phase-2.md) § Fix loop). Round 2: Codex `clean`.
 
 ## Seeds
 
