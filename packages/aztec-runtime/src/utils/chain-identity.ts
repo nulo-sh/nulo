@@ -75,6 +75,24 @@ export function assertLiveChainIdentity(network: SelectedNetworkChainInfo, nodeI
 }
 
 /**
+ * Throws unless the live node serves `chainId`; run before a PXE store opens. A store keeps the
+ * rollup address it was first opened against and refuses every other, so one first opened against
+ * another chain's node never opens on its own. Chain 0 redeploys its rollup with every sandbox and
+ * has no composite to compare.
+ */
+export function assertNodeServesChain(chainId: number, nodeInfo: LiveNodeChainInfo): void {
+	if (chainId === 0) return
+	assertCanonicalL1ChainId(nodeInfo.l1ChainId)
+	const { rollupVersion } = nodeInfo
+	const canonical = Number.isSafeInteger(rollupVersion) && rollupVersion >= 0 && rollupVersion <= U32_MAX
+	if (!canonical || walletChainId(nodeInfo.l1ChainId, rollupVersion) !== chainId) {
+		throw new Error(
+			`Chain identity mismatch: network chainId=${chainId} but live node reports l1ChainId=${nodeInfo.l1ChainId}, rollupVersion=${rollupVersion}. Refusing to open its PXE store.`,
+		)
+	}
+}
+
+/**
  * Build the `ChainInfo` (Fr-encoded `l1ChainId` + `rollupVersion`) that the
  * account entrypoint commits to, from a live node's raw identity. On the
  * signing path the caller MUST pass a `nodeInfo` already checked with

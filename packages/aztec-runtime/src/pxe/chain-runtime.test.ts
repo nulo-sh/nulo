@@ -43,6 +43,7 @@ import {
 	type PxeFactory,
 } from "./chain-runtime"
 import type { NodeFactory } from "../ports/node-factory-port"
+import { openChainStore } from "./opfs-store"
 
 // The injected encrypted store is unit-mocked (real OPFS needs a browser; the production-build
 // spike is the empirical proof). The factory only needs open/close handles here.
@@ -53,7 +54,11 @@ vi.mock("./opfs-store", () => ({
 const createPXEMock = vi.mocked(createPXE)
 
 const fakeNodeFactory: NodeFactory = {
-	createNode: () => ({ getL1ContractAddresses: async () => ({ rollupAddress: undefined }) }) as never,
+	createNode: () =>
+		({
+			getNodeInfo: async () => ({ l1ChainId: 31337, rollupVersion: 0 }),
+			getL1ContractAddresses: async () => ({ rollupAddress: undefined }),
+		}) as never,
 	createSingleAttemptNode: () => ({}) as never,
 	probeChainId: async () => 0,
 	readPublicStorageOnce: async () => {
@@ -103,6 +108,28 @@ describe("ProductionPxeFactory default (production) mode", () => {
 		checkPrestoStatusMock.mockResolvedValue({ available: false, reason: "offline" })
 		const factory = new ProductionPxeFactory(fakeNodeFactory, { provingMode: "default" })
 		await expect(factory.createChainRuntime(fakeNetwork, fakeStoreKey)).resolves.toBeDefined()
+	})
+})
+
+describe("ProductionPxeFactory store identity gate", () => {
+	test("refuses a node serving another chain before its store opens", async () => {
+		vi.mocked(openChainStore).mockClear()
+		createPXEMock.mockClear()
+		const alpha = { getNodeInfo: async () => ({ l1ChainId: 1, rollupVersion: 4248422647 }), getL1ContractAddresses: vi.fn() }
+		const factory = new ProductionPxeFactory({ ...fakeNodeFactory, createNode: () => alpha as never })
+		const v6 = { ...fakeNetwork, chainId: (1 ^ 2070860440) >>> 0 }
+		await expect(factory.createChainRuntime(v6, fakeStoreKey)).rejects.toThrow(/Refusing to open its PXE store/)
+		expect(openChainStore).not.toHaveBeenCalled()
+		expect(alpha.getL1ContractAddresses).not.toHaveBeenCalled()
+		expect(createPXEMock).not.toHaveBeenCalled()
+	})
+
+	test("opens chain 0 without reading the node's identity", async () => {
+		const getNodeInfo = vi.fn()
+		const local = { getNodeInfo, getL1ContractAddresses: async () => ({ rollupAddress: undefined }) }
+		const factory = new ProductionPxeFactory({ ...fakeNodeFactory, createNode: () => local as never })
+		await expect(factory.createChainRuntime({ ...fakeNetwork, chainId: 0 }, fakeStoreKey)).resolves.toBeDefined()
+		expect(getNodeInfo).not.toHaveBeenCalled()
 	})
 })
 
