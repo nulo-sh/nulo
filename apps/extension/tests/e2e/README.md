@@ -95,6 +95,7 @@ What an e2e build does instead of each outside host:
 | Host | Tried by | With the guard |
 |---|---|---|
 | `lb.drpc.live` | the background's node-status read at popup start; the offscreen PXE on Home | answered by the stand-in node's 400 once the launch settles; refused at the guard before that, during a kill or under a spec's own interception, and a close failure at any other time before the close begins; direct in the live spec's launch; a spec that needs a node-read value seeds it (the fee picker's sponsors: `helpers/fpc-seeds.ts`) |
+| `aztec-mainnet.drpc.org` | the full backup export's and the contacts export's status read of every network | refused; each export reads Mainnet as inactive and opens no PXE for it |
 | `api.coingecko.com` | the price fetch | refused; a spec that needs a quote seeds one into storage |
 | the browser's own hosts | Chrome's updater and sign-in services, Firefox's remote settings | refused; listed per driver, so not a failure |
 | `crs.aztec-cdn.foundation`, `crs.aztec-labs.com` | bb.js's CRS download for a proof in the browser (a prover-ON network run without Presto) | direct on every guarded launch |
