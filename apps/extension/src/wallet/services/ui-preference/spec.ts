@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { boundedString } from "@/utils/bounded-string"
 import type { AppPick, FeePickUpdate, SendSlots } from "@/utils/fee-picks"
 import type { PinMap } from "@/utils/pinned-tokens"
 
@@ -19,7 +20,7 @@ export const LEGACY_SELECTED_ACCOUNT_KEY = "nulo:ui:activeAccount"
 
 export const MAX_SELECTED_ADDRESS_LENGTH = 128
 
-export const SelectedAccountRowSchema = z.object({ profileId: z.string(), address: z.string().max(MAX_SELECTED_ADDRESS_LENGTH) })
+export const SelectedAccountRowSchema = z.object({ profileId: z.string(), address: boundedString(MAX_SELECTED_ADDRESS_LENGTH) })
 
 /**
  * The popup's per-profile preferences, sealed under the profile's row keys. A method answers only

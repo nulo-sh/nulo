@@ -1,4 +1,8 @@
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { runInNewContext } from "node:vm"
+import * as puppeteer from "puppeteer"
 import { describe, expect, test, vi } from "vitest"
 import {
 	type BackgroundStopper,
@@ -15,6 +19,7 @@ import {
 	withInventory,
 } from "../../tests/e2e/fixtures/browser/firefox"
 import { trackContexts } from "../../tests/e2e/fixtures/browser/bidi-attach"
+import { E2E_FIREFOX_REVISION } from "../../tests/e2e/fixtures/browser/firefox-revision"
 import {
 	RELAY_HELPERS,
 	checkPageErrorRelay,
@@ -47,6 +52,7 @@ describe("egress guard prefs", () => {
 			"network.proxy.autoconfig_url": expect.stringMatching(/^data:text\/javascript,/),
 			"network.proxy.failover_direct": false,
 			"network.dns.localDomains": "egress-canary.test",
+			"browser.newtabpage.trainhopAddon.xpiBaseURL": "",
 		})
 	})
 
@@ -115,6 +121,33 @@ describe("firefox cache directory selection", () => {
 	test("a cache without the locked revision has no answer, so the caller can say what to install", () => {
 		expect(firefoxDirFor(["linux-stable_154.0.1"], "stable_153.0.4")).toBeUndefined()
 		expect(firefoxDirFor([], "stable_153.0.4")).toBeUndefined()
+	})
+})
+
+describe("the pinned Firefox", () => {
+	test("is the one launched, with Puppeteer's own revision installed beside it", () => {
+		const own = (puppeteer as unknown as { PUPPETEER_REVISIONS: { firefox: string } }).PUPPETEER_REVISIONS.firefox
+		const cache = mkdtempSync(path.join(tmpdir(), "nulo-firefox-pin-test-"))
+		try {
+			for (const revision of [E2E_FIREFOX_REVISION, own]) {
+				mkdirSync(path.join(cache, "firefox", `linux-${revision}`, "firefox"), { recursive: true })
+				writeFileSync(path.join(cache, "firefox", `linux-${revision}`, "firefox", "firefox"), "")
+			}
+			vi.stubEnv("FIREFOX_PATH", "")
+			vi.stubEnv("PUPPETEER_CACHE_DIR", cache)
+			const { binary } = capabilities({ profileDir: "profile", headless: true })["moz:firefoxOptions"] as { binary: string }
+			expect(binary).toBe(path.join(cache, "firefox", `linux-${E2E_FIREFOX_REVISION}`, "firefox", "firefox"))
+		} finally {
+			vi.unstubAllEnvs()
+			rmSync(cache, { recursive: true, force: true })
+		}
+	})
+
+	test("is what CI installs, and what its cache is keyed on", () => {
+		const action = readFileSync(path.join(import.meta.dirname, "../../../../.github/actions/setup-puppeteer/action.yml"), "utf8")
+		expect(action).toContain("run: bun scripts/e2e/install-firefox.ts")
+		expect(action).toContain("hashFiles('apps/extension/tests/e2e/fixtures/browser/firefox-revision.ts')")
+		expect(action).not.toMatch(/browsers install firefox/)
 	})
 })
 

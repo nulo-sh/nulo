@@ -194,6 +194,16 @@ describe("validateContentScriptMessage — a discovery request's content", () =>
 		expect(validateContentScriptMessage(envelope(atBounds, "s".repeat(128))).kind).toBe("valid")
 	})
 
+	it("admits every field at its bound in astral characters, counted in UTF-16 units (control)", () => {
+		const atBounds = {
+			...wire,
+			requestId: "😀".repeat(64),
+			appId: "😀".repeat(128),
+			chainInfo: { chainId: "😀".repeat(40), version: "😀".repeat(40) },
+		}
+		expect(validateContentScriptMessage(envelope(atBounds, "😀".repeat(64))).kind).toBe("valid")
+	})
+
 	it.each<[string, unknown]>([
 		["a content key the SDK does not send", { ...wire, appName: "x" }],
 		["a chainInfo key the SDK does not send", withChain({ extra: "1" })],
@@ -203,6 +213,10 @@ describe("validateContentScriptMessage — a discovery request's content", () =>
 		["an appId over 256 characters", { ...wire, appId: "a".repeat(257) }],
 		["a chainId over 80 characters", withChain({ chainId: "1".repeat(81) })],
 		["a version over 80 characters", withChain({ version: "1".repeat(81) })],
+		["a requestId of 65 astral characters, 130 UTF-16 units", { ...wire, requestId: "😀".repeat(65) }],
+		["an appId of 129 astral characters, 258 UTF-16 units", { ...wire, appId: "😀".repeat(129) }],
+		["a chainId of 41 astral characters, 82 UTF-16 units", withChain({ chainId: "😀".repeat(41) })],
+		["a version of 41 astral characters, 82 UTF-16 units", withChain({ version: "😀".repeat(41) })],
 		["another content type", { ...wire, type: "aztec-wallet-discovery-response" }],
 		["no content", undefined],
 	])("refuses %s", (_label, content) => {
@@ -212,6 +226,11 @@ describe("validateContentScriptMessage — a discovery request's content", () =>
 	it("refuses a session id over 128 characters on any envelope", () => {
 		expect(validateContentScriptMessage(envelope(wire, "s".repeat(129))).kind).toBe("invalid")
 		expect(validateContentScriptMessage({ origin: "content-script", type: "ping", sessionId: "s".repeat(129) }).kind).toBe("invalid")
+	})
+
+	it("refuses a session id of 65 astral characters, 130 UTF-16 units", () => {
+		expect(validateContentScriptMessage({ origin: "content-script", type: "ping", sessionId: "😀".repeat(64) }).kind).toBe("valid")
+		expect(validateContentScriptMessage({ origin: "content-script", type: "ping", sessionId: "😀".repeat(65) }).kind).toBe("invalid")
 	})
 })
 
@@ -223,6 +242,13 @@ describe("validateContentScriptMessage — a secure message's content", () => {
 		const atBudget = "A".repeat(MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS)
 		expect(validateContentScriptMessage(secure({ iv: IV, ciphertext: atBudget })).kind).toBe("valid")
 		expect(validateContentScriptMessage(secure({ iv: IV, ciphertext: `${atBudget}A` })).kind).toBe("invalid")
+	})
+
+	it("counts the iv and ciphertext budgets in UTF-16 units, so astral characters pass at half the count", () => {
+		const atBudget = "😀".repeat(MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS / 2)
+		expect(validateContentScriptMessage(secure({ iv: "😀".repeat(16), ciphertext: atBudget })).kind).toBe("valid")
+		expect(validateContentScriptMessage(secure({ iv: IV, ciphertext: `${atBudget}😀` })).kind).toBe("invalid")
+		expect(validateContentScriptMessage(secure({ iv: "😀".repeat(17), ciphertext: "" })).kind).toBe("invalid")
 	})
 
 	it.each<[string, unknown]>([
