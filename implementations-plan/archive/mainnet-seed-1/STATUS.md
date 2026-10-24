@@ -15,3 +15,7 @@
 - 2026-10-24 draft PR #1117 open; close-out (Outcome, archive) are its final commits.
 - 2026-10-24 owner answers OA-1..OA-7 applied (D10-D16): README, listing and legal README reworded; `getChainName` reads Mainnet; privacy 1.2.5; #808 closed again; #1119 filed and closed. OA-3 captured on both browsers from a one-off network-suite spec, removed after.
 - 2026-10-24 owner-answers batch gates: lint, typecheck:all, legal (59) and extension (15169) tests, check:plans green; Codex approve.
+- 2026-10-24 the owner's call (D17): merge before the live read and ship Mainnet in 1.0.0. L1 read reproduced: proposal 5 queued, executable 2026-10-26T04:41:35Z, adds rollup version 2070860440. Provenance comment rewritten to it.
+- 2026-10-24 canaries prover-ON at `b31199668`: Chrome 4/4 (267 s, 6 proofs), Firefox 4/4 (259 s, 6 proofs).
+- 2026-10-24 store gate (D18): a pre-flip Mainnet PXE op would stamp its store with the Alpha rollup and the store would refuse to open after the flip; `createChainRuntime` now refuses first. lint, typecheck:all, test:all green; Codex approve.
+- 2026-10-24 at `e535c3c38`, prover-ON, retry 0: canaries plus backup-import-stalled-network, Chrome 6/6 (514 s, 6 proofs), Firefox 6/6 (457 s, 6 proofs). PR marked ready.

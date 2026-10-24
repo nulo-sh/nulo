@@ -14,13 +14,13 @@ issues: "#80"
 ## Outcome
 
 - **Date:** 2026-10-24. Planned and implemented the same day.
-- **Status:** draft, held for the live pair: #1117 against `dev`, never marked ready by this lane. It merges only after its Before-merge list (the live `check:seeds` read, a timed export, the canaries, OA-1 to OA-7, the endpoint, the regime binding).
-- **Shipped:** the Mainnet seed (D1) and its explorer entry; the e2e test Mainnet retired, the helpers and update scenarios on the real seed (D5); `check:seeds` plus the advisory nightly job, reusing `assertLiveChainIdentity` and printing no node words (D2, fix round 1); the declared refusal and the arrival's no-dial assertion (D6); captures on both browsers (D8); the owner's answers to OA-1 to OA-7 (D10-D16), applied on the branch. Measured: 4 to 8 s per full backup export per browser.
+- **Status:** ready on the owner's call (D17): #1117 against `dev`, marked ready without the live read, which follows on 2026-10-26 once the v6 upgrade executes; the timed export moves to after the flip. The orchestrator merges.
+- **Shipped:** the Mainnet seed (D1) and its explorer entry; the e2e test Mainnet retired, the helpers and update scenarios on the real seed (D5); `check:seeds` plus the advisory nightly job, reusing `assertLiveChainIdentity` and printing no node words (D2, fix round 1); the declared refusal and the arrival's no-dial assertion (D6); captures on both browsers (D8); the owner's answers to OA-1 to OA-7 (D10-D16), applied on the branch; the PXE store gate (D18). Measured: 4 to 8 s per full backup export per browser.
 - **Dropped, rejected, superseded:** D9's skip of accountless chains (it would drop a dApp's registrations); a second stand-in node for Mainnet (D6); copy changes (D3, asked as OA-1).
 - **Known limits:** #1115 (an export dials a never-opened seeded network), #1116 (a custom network sharing a seeded chain id loses its imported account on restore), #1119 (a seeded Mainnet beside a custom network named Mainnet, OA-7); #808 closed again (OA-6). **Open items:** #80, open until #1117 merges. **Lessons:** none promoted (`lessons.md` is at its budget; the two arc gotchas are in [lessons/phase-1.md](lessons/phase-1.md) and the e2e README).
 - **Seeds retired:** the `/goal` and `/loop` seeds below are history, not instructions.
 
-# mainnet-seed-1: the Mainnet default network, a draft held for the live pair (#80)
+# mainnet-seed-1: the Mainnet default network (#80)
 
 One arc, one DRAFT pull request against `dev` that `Closes #80` (no stack: D-orch-1). It adds the Mainnet seed, its pin, its explorer and a live check of the pin, and retires the e2e-only test Mainnet. The PR merges only after the seeded endpoint reports the pinned pair on the live network (owner, #80, 2026-10-23). Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
@@ -84,6 +84,8 @@ One arc, one DRAFT pull request against `dev` that `Closes #80` (no stack: D-orc
 | D14 | OA-5, the export banner's count | The owner, 2026-10-24: "A: Accept, no change" | Imported accounts on Mainnet's chain leave the count, since a restore re-creates Mainnet. |
 | D15 | OA-6, #808 | The owner, 2026-10-24: "A: Close it again as a known limit" | #808 closed again with its trace; reopen on a person's report. |
 | D16 | OA-7, a duplicate "Mainnet" name | The owner, 2026-10-24: "B: Leave it, a known limit" | #1119, closed; reopen on a report of a profile showing two rows named Mainnet. |
+| D17 | Merge before the live read | The owner, 2026-10-24: "I want us to assume Mainnet is live (because it's going live on Monday) and publish to the stores with Mainnet enable." Then: "please drive this through, including the chrome uploads ... Please make sure everything will work correctly and as expected before uploading it." | The L1 read stands in for the node's: governance proposal 5 is queued, executable from 2026-10-26T04:41:35Z, and adds rollup `0xE37A2663Cc9c119BA41572C40fAb0bbb23a5402f` (version 2070860440, circuits equal to Testnet 6.0.0's) to the registry. Until the node serves it, every signing path refuses the node (`assertLiveChainIdentity`). |
+| D18 | A Mainnet PXE store opened before the flip | `createChainRuntime` refuses before the store opens unless the node serves the network's chain id; chain 0 skips the read | A store keeps the rollup address it first opened against and refuses every other, never wiping (`opfs-store.ts`), and nothing handles the refusal, so a first Mainnet PXE op before the flip would leave a store that never opens after it. Composite only: the PXE's `NetworkInfo` carries no L1. |
 
 ## Security & Adversarial Considerations
 
@@ -149,6 +151,7 @@ Steps 2-4 of `implementations-plan/README.md` § Post-implementation standard at
 - **Fix round 1, Opus** (general-purpose): no P0-P2; four P3, all taken: `seedStaleMainnet`'s doc and a guard; an assertion that the arrival never reaches the Mainnet node, since its refusal is global; OA-7 (a duplicate "Mainnet" name); `legal/README.md` under OA-1.
 - **Fix round 2, Codex** (resume): **approve**, no new material finding.
 - **Owner-answers batch, Codex** (gpt-6.1-sol, high, `01a16e40`): **approve**, no material finding: the new copy is true of the seed, 1.2.5 is correctly a patch (1.2.4 archived byte-identical), the `getChainName` case and its fallback use are right, and the ledger quotes match the asks.
+- **Store gate (D18), Codex** (gpt-6.1-sol, high, `01a17032`): **approve**, no material finding: the gate covers the one production `openChainStore` caller, on init and rebind alike; the Testnet reset purges without booting the old runtime; exports skip a mismatched network; both e2e stubs keyed on the RPC sequence stay compatible; the error carries numbers only.
 
 ## Seeds
 
