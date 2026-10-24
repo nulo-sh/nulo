@@ -73,19 +73,21 @@
 
 ## OA-6: zod 1243066 can be neither fixed nor acknowledged on this base
 
-- **Surface:** none a person sees. The ask is whether the Aztec line may run a zod outside its own declared range, or whether a bundled advisory may be acknowledged.
+- **Surface:** none a person sees. The ask is whether the Aztec line may run a zod outside its declared range, or whether a bundled advisory may be acknowledged.
 - **Why:**
-  - `bun audit` added [1243066](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) (high, zod `<4.6.6`) after arc 1. Every other advisory on this branch is fixed or acknowledged: the gate reads 41 / 1 / 0 / 0 (D18).
-  - Five Aztec packages pin `zod ~4.4.3` on 6.0.0-rc.3 and on 6.0.0 alike (D19). The wallet's own zod must be the instance those schemas use.
-  - Puppeteer 25.8.0's chromium-bidi 17.0.2 keeps a zod 3.25.76, and no 3.x release has the fix.
-  - zod is in both extension zips, so `SECURITY.md` allows no acknowledgement without a reason the extension cannot reach it. No such reason is shown.
+  - `bun audit` added [1243066](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) (high, zod `<4.6.6`) after arc 1. Every other advisory on this branch is fixed or acknowledged, and the gate reads 41 / 1 / 0 / 0 (D18).
+  - Six Aztec packages pin `zod ~4.4.3`, including `aztec.js`, which exports `WalletSchema`. The pin holds on 6.0.0-rc.3, 6.0.0, rc.4 and the 6.1.0 nightly (D19).
+  - Puppeteer 25.8.0's chromium-bidi 17.0.2 adds a zod 3.25.76, and no 3.x release has the fix.
+  - zod is in both extension zips. `SECURITY.md` allows no acknowledgement without a reason the extension cannot reach it, and no such reason is shown.
   - This PR changes dependency files, so the gate runs in enforce mode and `quality-status` stays red until zod is settled. #1107 meets the same advisory.
 - **Options:**
-  - **A (recommended):** a root `overrides.zod` at a fixed 4.6.x past the age gate (4.6.6 or 4.6.7), landed pin-then-restore. It moves every copy: the wallet's, the five Aztec packages' (outside their `~4.4.3`) and chromium-bidi's (outside its `^3.24.1`).
-    - It is validated by this arc's Phases 2-3 at the new candidate, plus the network lanes and their canaries in CI.
-    - It leaves when an Aztec release admits ≥ 4.6.6 and Puppeteer moves chromium-bidi to zod 4, whichever comes last.
-    - The cost: the Aztec packages and the e2e harness run a zod their authors did not declare.
+  - **A (recommended):** first puppeteer to 25.14.0, whose chromium-bidi 157.0.8090-0 declares `zod ^4.6.5`; then an exact root `overrides.zod: "4.6.7"` (the latest, past the gate, SLSA provenance), landed pin-then-restore.
+    - Every copy becomes 4.6.7: the wallet's own (the workspaces declare `^4.4.3`, or `^4`), chromium-bidi's (inside its range), and the six Aztec packages' (outside their `~4.4.3`).
+    - zod 4.6.6's release notes disclose six malicious commits on its `main`, since reverted, so `bun pm diff zod@4.4.3 4.6.7` is read in full.
+    - Puppeteer's diff and its browser revision are reviewed too, then validated by this arc's Phases 2-3 at the new candidate, both browsers' smoke, and the network lanes and canaries in CI.
+    - The override leaves when an Aztec release admits ≥ 4.6.6. A scoped override cannot widen Aztec's range, and it would write a new lockfile format.
+    - The cost: the Aztec packages run a zod their authors did not declare, and the e2e harness moves with puppeteer.
   - **B:** acknowledge 1243066 as an owner exception to `SECURITY.md`'s bundled rule (`bundled: true`), reopening at the Aztec release that admits the fix. No code moves. Not recommended while the advisory's reach in the wallet is unassessed.
-  - **C:** hold this PR until Aztec widens its range. The other fifteen advisories keep blocking every dependency PR, #1107 included.
-- **What ships now:** nothing. `deps-audit-1-a2` is pushed with the bumps, #987's fix, the acknowledgements and the CLAUDE.md rule, and no PR is open. Phases 2-3 have not run, since A would move their candidate.
-- **Timing:** fast-uri 3.1.9 clears the age gate at 2026-10-26T23:05Z. Until then, an install that re-resolves the root workspace, A's included, needs the local, uncommitted exclude D18 describes.
+  - **C:** hold this PR until Aztec widens its range. No Aztec line in sight does, and the other fifteen advisories keep blocking every dependency PR, #1107 included.
+- **What ships now:** nothing. `deps-audit-1-a2` is pushed with the bumps, #987's fix, the acknowledgements and the CLAUDE.md rule, and no PR is open. Phases 2-3 have not run, since A would move their candidate. The base reference for Phase 3 is collected.
+- **Timing:** fast-uri 3.1.9 clears the age gate at 2026-10-26T23:05:26Z. Until then, an install that re-resolves the root workspace, A's included, needs the local, uncommitted exclude D18 describes. A run after that time needs none.

@@ -19,21 +19,21 @@ post_implementation_hardening: not scheduled
 
 One arc, one PR against `dev`, closing #980, #987 and #1032. No screen changes. The runbook is `SECURITY.md` § Dependency policy; this plan keeps only what is specific to this arc. Over the light target (150 lines): the arc absorbed four asks and two later advisories, and the ledger keeps each call.
 
-After the arc, `bun audit` reports 39 acknowledged advisories and nothing else, and the gate in enforce mode says 39 acknowledged, 0 unacknowledged, 0 stale, 0 unreadable. #980's five are **fixed**, none acknowledged: vite 8.2.1 → 8.2.4 and follow-redirects 1.16.0 → 1.16.1. #1032's two are fixed by storybook 10.6.2 and vitest 4.1.12 (D13), and vitest 4.1.12 also retires the two acknowledged vitest advisories. Because vite 8.2.4 and vitest 4.1.12 change the test runtime, the arc runs the soak matrix once at its final candidate (D6, D13).
+Arc 1's bar, now historical: after the arc, `bun audit` reports 39 acknowledged advisories and nothing else, and the gate in enforce mode says 39 acknowledged, 0 unacknowledged, 0 stale, 0 unreadable. #980's five are **fixed**, none acknowledged: vite 8.2.1 → 8.2.4 and follow-redirects 1.16.0 → 1.16.1. #1032's two are fixed by storybook 10.6.2 and vitest 4.1.12 (D13), and vitest 4.1.12 also retires the two acknowledged vitest advisories. Because vite 8.2.4 and vitest 4.1.12 change the test runtime, the arc runs the soak matrix once at its final candidate (D6, D13).
 
 **Arc 2** (D17-D19) starts fresh off `dev` `e0faa7267`, after #1105 fixed the two tests behind arc 1's reds. It lands arc 1's lockfile, byte for byte, plus two entries (D18), and #987's fix. It also handles the advisories published since:
 - three more vite and one more storybook, which the same bumps fix;
 - fast-uri, through the age-gate runbook;
 - jsdom's undici, fixed, and miniflare's exact undici pin, acknowledged;
-- three stale entries out.
+- the braces entry, stale since its advisory's withdrawal, out, and the vitest entry the bump retires.
 
-It passes the owner's same-engine bar (D17), which CLAUDE.md now states. The gate's bar is 41 / 0 / 0 / 0 once zod 1243066 is settled (D19, OA-6).
+Its bar, still to run, is the owner's same-engine bar (D17), which CLAUDE.md now states. The gate's bar is 41 / 0 / 0 / 0 once zod 1243066 is settled (D19, OA-6).
 
 ## Outcome & Quality Bar
 
 - **For whom:** every contributor whose PR changes a dependency file, which `quality-status` blocks today; the people who run the dev servers and the Node-side tooling.
 - **Excellent:** (1) the lock moves only the bumped packages and their own trees, and every other entry is byte-identical; (2) the unit suites stay flake-free on the new runner (the soak), and the PR's own `quality-status` runs the gate in enforce mode and is green.
-- **Good enough:** the other 39 acknowledgements stay as they are.
+- **Good enough:** the other acknowledgements stay as they are (39 in arc 1; 41 in arc 2, D18).
 
 ## Assumptions
 
@@ -103,23 +103,34 @@ None. The arc changes dependency files only; no screen, copy or layout.
 
 ### Phase 3: the same-engine bar at the candidate (D17; arc 1 ran the soak matrix, D6, D15, D16)
 - **Warning:** change no file in the repo and make no commit while it runs. Start only when `git status --porcelain` is empty, and keep every output in `<scratch>`.
-- **The reference, at the base.**
-  1. Detach at `e0faa7267` with a clean tree, remove every `node_modules`, and run `bun install --frozen-lockfile`.
-  2. For each of the 14 workspaces `test:all` runs (the 13 `bun --bun vitest run` workspaces and `packages/resolve-asset`), run `bun scripts/ci-cd/test-soak/cli.ts soak --cwd <ws> --runtime script --runs 1 --out <scratch>/base/<ws>.json`.
-  3. Return to the branch and run a fresh frozen install.
-- **The candidate.**
-  - The same 14 one-run summaries into `<scratch>/cand/<ws>.json`.
-  - Then `bun run test:all` three times. No unit config sets `retry`, so each run is at retry 0.
-- **The inventory compare.** `cli.ts compare` refuses a pair whose SHA, lockfile or vitest version differ, which is the point here, so a scratch script compares the summaries and the tool stays untouched. For each workspace:
-  - both summaries have a clean tree and 0 failed runs, and bind the base or candidate SHA;
-  - their inventory ids are the same set, and each id has the same status kinds;
-  - any difference is a test the arc adds or renames, listed in the PR. This arc adds or renames none.
-- Push `deps-audit-1-a2` and run `gh workflow run pr-quick.yml --ref deps-audit-1-a2`. That run's head SHA is the candidate, and it is green.
+- **Scope:** the 15 workspaces `test:all` runs, each on the runner its `test` script names:
+  - 13 run `bun --bun vitest run`;
+  - `packages/resolve-asset` runs plain `vitest run`, on Node;
+  - `infra/passkey-rp` runs `bun test`.
+- **The reference, at the base.** In a scratch worktree detached at `e0faa7267`, after a fresh frozen install (every `node_modules` removed first: Bun 1.4.2 does not prune):
+  - for the 14 vitest workspaces, `bun scripts/ci-cd/test-soak/cli.ts soak --cwd <ws> --runtime script --runs 1 --out <scratch>/inv-base/<ws>.json`;
+  - for passkey-rp, `bun test --reporter=junit --reporter-outfile=<scratch>/inv-base/passkey-rp.junit.xml`, with no live-test variable set on either side.
+
+  The script is `<scratch>/inv-collect.sh`.
+- **The candidate, in the lane's worktree.**
+  - Remove every `node_modules` and run a fresh frozen install.
+  - Collect the same 15 records into `<scratch>/inv-cand/`.
+  - Then run `bun run test:all` three times. No unit config sets `retry`, so each run is at retry 0.
+- **The inventory compare** is `<scratch>/inv-compare.ts`, a scratch script. The tool stays untouched: `cli.ts compare` and `checkSide` refuse this pairing by design. For each vitest workspace:
+  - both summaries have a clean tree, one run row and the expected SHA;
+  - the failure state is re-derived with `isFailedRun`, not read from `failedRuns`;
+  - cwd, script and filters (none) agree;
+  - the engine is Bun, or Node for resolve-asset;
+  - there is no `BUN_ONLY_FILES` exclusion, since both sides run the same runner;
+  - the id sets are identical, every id's entry is identical (statuses, observations, failures), and the collected / passed / failed / skipped / todo totals agree.
+
+  For passkey-rp, every JUnit case (file, suite, name) and its status agree, and none failed. A test the arc adds or renames would be the only allowed difference, listed in the PR; this arc has none. The script fails on a dropped id and on a renamed case: both self-tests went red as expected.
+- **pr-quick.** Push `deps-audit-1-a2` and run `gh workflow run pr-quick.yml --ref deps-audit-1-a2`. That run's head SHA is the candidate, and it is green.
 - **Pass criteria:**
-  - the three `test:all` runs exit 0, with every workspace's counts equal to the reference's;
-  - every inventory compare passes;
+  - the three `test:all` runs exit 0, and each workspace's counts equal the candidate summary's;
+  - the inventory compare exits 0;
   - the dispatch ran at the candidate SHA and is green.
-- **A red run is a finding, never a retry.** Diagnose it, then run the same command at the base. If it reproduces there, it is pre-existing: file it after a dedupe search, and it does not block. If it does not, fix its cause and rerun the bar at the fixed commit.
+- **Every red run is filed and diagnosed, never retried.** Run the same command at the base. If the red reproduces there, it is pre-existing and does not block. If it does not, fix its cause and rerun the bar at the fixed commit.
 - After Phase 3, `git diff <candidate>` may touch only `implementations-plan/**`, except a close-out merge of `origin/dev`. If that merge touches a dependency file, `bunfig.toml` or a vitest config (`vitest.base.mts`, `**/vitest*.config.*`), the merged HEAD becomes a new candidate and reruns Phases 2-3. Other code a merge brings ran on its own PR's CI and runs again on this PR's.
 
 ### Phase 4: final gate
@@ -152,14 +163,14 @@ None. The arc changes dependency files only; no screen, copy or layout.
   - This is a reviewed gate change made on the owner's recorded decision, not a lead's narrowing.
 - **D18 The advisories published after arc 1, each handled where it lies.**
   - **Fixed by the planned bumps:** vite 1242727, 1242733 and 1242736 (`>=8.2.0 <=8.2.3`, so 8.2.4 fixes them), and storybook 1242874 (`<10.6.2`).
-  - **fast-uri** 1243098, 1243101, 1243104 and 1243107, through ajv from commitlint, a root dev tool. 3.1.9 was published 2026-10-19T23:05Z (SLSA provenance) and clears the gate at 2026-10-26T23:05Z. Fixed under `SECURITY.md`'s CVE runbook: `bun update fast-uri` with a scratch copy of `bunfig.toml` plus one exclude line, passed as `--config=`, as D4 did. The tracked file never changed. The cost, until 10-26T23:05Z: a re-resolve of the root workspace re-gates fast-uri and needs the same local, uncommitted exclude.
+  - **fast-uri** 1243098, 1243101, 1243104 and 1243107, through ajv from commitlint, a root dev tool. 3.1.9 was published 2026-10-19T23:05:26Z (SLSA provenance) and clears the gate at 2026-10-26T23:05:26Z. Fixed under `SECURITY.md`'s CVE runbook: `bun update fast-uri` with a scratch copy of `bunfig.toml` plus one exclude line, passed as `--config=`, as D4 did. The tracked file never changed. The cost, until then: a re-resolve of the root workspace re-gates fast-uri and needs the same local, uncommitted exclude.
   - **undici** 1243078, 1243081 and 1243113 (`<7.30.1`). jsdom's copy moves 7.29.1 → 7.30.1 (past the gate, attested) through `bun update undici`, lockfile only. Miniflare pins 7.29.0 exactly, and the newest miniflare past the gate (5.20261012.1-beta, wrangler 4.151.1) pins 7.29.1. So the three ids join the miniflare entry (`bundled: false`, the next wrangler bump).
-  - **Stale:** the braces entry, which `bun audit` stopped reporting, and the vitest entry that 4.1.12 retires.
+  - **Stale:** the braces entry, whose advisory was withdrawn on 2026-10-23, and the vitest entry that 4.1.12 retires.
   - The gate then reads 41 / 1 / 0 / 0: zod alone (D19).
 - **D19 zod 1243066 (high) cannot be fixed on this base, and cannot be acknowledged under `SECURITY.md` (OA-6).**
-  - Five Aztec packages pin `zod ~4.4.3`: foundation, stdlib, entrypoints, ethereum and world-state, on 6.0.0-rc.3 and on 6.0.0 alike. The fix is 4.6.6.
-  - The wallet's own zod must stay the instance the Aztec schemas use, and the wallet parses with those schemas (`WalletSchema` and its patch). A workspace bump alone would split zod and leave 4.4.3 in the tree.
-  - Puppeteer's chromium-bidi keeps a zod 3.25.76, which no 3.x release fixes.
+  - Six Aztec packages pin `zod ~4.4.3`: aztec.js (which exports `WalletSchema`), foundation, stdlib, entrypoints, ethereum and world-state. The pin holds on 6.0.0-rc.3, 6.0.0, rc.4 and the 6.1.0 nightly. The fix is 4.6.6.
+  - A workspace bump alone would leave 4.4.3 in the tree, under the Aztec schemas the wallet parses with (`WalletSchema` and its patch). Keeping one zod instance is prudent, but the vulnerable Aztec copies settle the question on their own.
+  - Puppeteer 25.8.0's chromium-bidi 17.0.2 keeps a zod 3.25.76, which no 3.x release fixes. Puppeteer 25.14.0 (past the gate, inside `^25.1.0`) ships chromium-bidi 157.0.8090-0, which declares `zod ^4.6.5`.
   - zod is in both extension zips. `SECURITY.md` refuses to acknowledge a bundled advisory unless a reason shows the extension cannot reach it, and none is shown.
   - Overriding the Aztec range, or an exception, is the owner's call. The arc stops before Phases 2-3, whose candidate an override would move.
 
@@ -188,6 +199,15 @@ None. The arc changes dependency files only; no screen, copy or layout.
   - Next: a bounded suite-level diagnosis covering both paths. Measure the forks' real concurrency, event-loop delay and resource pressure, not the load average. A reduced-concurrency experiment is evidence, never a pass route or a config change.
   - The journal red may not be timing. The restart's `bootCutoff = Date.now()` and the reaper's `createdAt >= bootCutoff` skip would leave a same-millisecond record unswept (unverified).
   - Separate linked issues. Accepted in full (D16, #1102).
+- **Arc 2, round 1, Codex (gpt-6.1-sol high, a fresh session) and Opus (`general-purpose`): `approve with fixes` from both, confidence high on the diff.**
+  - Both verified the delta against arc 1's lock (two entries), and both reran the audit gate: 41 / 1 / 0 / 0, zod alone.
+  - Accepted and applied:
+    1. Phase 3 covers all 15 `test:all` scripts, passkey-rp's `bun test` included, with the exact checks it now lists.
+    2. CLAUDE.md files every red, scopes the pre-existing exception to the same-engine tier, and names each workspace's own runner.
+    3. D19 and OA-6 name six Aztec packages, not five, and the puppeteer 25.14.0 route.
+    4. The records' stale numbers, the miniflare reason's third workspace, and the package-diff scopes.
+  - The add-or-rename carve-out stays, as the orchestrator's brief worded the bar, tightened to "every test both commits hold matches exactly".
+  - Phases 2-3 wait for OA-6.
 
 ## Delivery
 
