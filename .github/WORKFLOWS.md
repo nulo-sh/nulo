@@ -51,7 +51,7 @@ Composite actions live in `.github/actions/` and are shared step fragments used 
 |---|---|
 | `setup-bun` | bun + install cache (`cache: "false"` skips it) + `bun install --frozen-lockfile`; the caller checks out first |
 | `setup-aztec` | Foundry + Aztec CLI matching the `@aztec-labs/aztec.js` version, through `install.sh`: the installer, its `versions` manifest and the noir and Foundry tarballs are SHA-256-pinned in the action (`installer-pins.sha256`), and the CLI's npm tree comes from the committed `cli/package-lock.json` with install scripts off. See [SECURITY.md](../SECURITY.md#binary-dependencies). |
-| `setup-puppeteer` | warm `~/.cache/puppeteer` (Chrome); with `browser: firefox`, install + cache the Firefox revision the locked Puppeteer pins, under a key that shares no prefix with Chrome's |
+| `setup-puppeteer` | warm `~/.cache/puppeteer` (Chrome); with `browser: firefox`, install + cache the e2e suite's pinned Firefox (`apps/extension/scripts/e2e/install-firefox.ts`, apart from Puppeteer's), under a key that shares no prefix with Chrome's |
 | `setup-geckodriver` | download + verify (tarball and extracted-binary SHA-256 pins, single-member archive) + install `geckodriver` for the Firefox lanes; the pins live in the action. See [SECURITY.md](../SECURITY.md#binary-dependencies). |
 | `setup-presto-server` | download + verify (tarball and extracted-binary SHA-256 pins, single-member archive) + install the headless `presto-server` binary (Linux x86_64) for CI proving. Used by `_extension-network-e2e.yml`. See [CI.md](../CI.md#presto-in-ci). |
 
