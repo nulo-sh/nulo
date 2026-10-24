@@ -119,7 +119,7 @@
   - Not run yet: Phases 2-3 and the PR. A moves the candidate; under B, the new tests do.
 - **Answer:** the orchestrator, 2026-10-24, for the owner: "OA-7 A: keep the UTF-16 budgets; one shared helper at the nine caps; astral boundary tests; additive stamp". It is a non-UI fix that keeps today's refusal boundary exactly. Landed as D25.
 
-## OA-8: Firefox 158 refuses two puppeteer commands on extension pages; which Firefox do the e2e lanes run?
+## OA-8: Firefox 158 refuses two puppeteer commands on extension pages; which Firefox do the e2e lanes run? (answered: A)
 
 - **Surface:** none a person sees. This is the e2e harness's Firefox only.
 - **Why:**
@@ -149,3 +149,4 @@
   - On the branch at `9c377c88c`: OA-7 A (D25) and the two harness fixes. pr-quick was green at `023458c12`.
   - Phase 2 ran green through every build, artifact and store check, then went red at Chrome smoke on the redirector, which is now fixed.
   - Not run at a candidate: either browser's smoke, the network specs, Phase 3 and the PR.
+- **Answer:** the orchestrator, 2026-10-24, for the owner: "OA-8 A: pin the e2e Firefox to stable_153.0.4 apart from puppeteer; file B as an issue". It is a test-harness choice with no UI impact that keeps today's tested Firefox. Landed as D26; B is #1111.

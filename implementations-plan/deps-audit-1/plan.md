@@ -1,7 +1,7 @@
 ---
 plan: deps-audit-1
 tier: light
-status: arc 2 on `deps-audit-1-a2` off `e0faa7267`; OA-6 answered A (zod forced to 4.6.7, D21); OA-7 answered A (UTF-16 caps kept, D25); held on OA-8 (Firefox 158, D26); arc 1 ARC_FAILED on two soak reds since fixed by #1105
+status: arc 2 on `deps-audit-1-a2` off `e0faa7267`; OA-6 answered A (zod forced to 4.6.7, D21); OA-7 answered A (UTF-16 caps kept, D25); OA-8 answered A (e2e Firefox pinned to 153.0.4, D26); arc 1 ARC_FAILED on two soak reds since fixed by #1105
 issues: "#980, #987, #1032 (closed by this plan's PR); #1110 (zod, OA-6, closed on the decision)"
 driver: claude-code
 claude_model: opus
@@ -65,9 +65,10 @@ Its bar is the owner's same-engine bar (D17), which CLAUDE.md now states. The ga
 - `apps/extension/package.json`'s `puppeteer` floor `^25.14.0`, the root `overrides.zod` `"4.6.7"`, the eleven `bun.lock` entries they move, and one pin-surface line in the `aztec-update` skill (D21);
 - `apps/extension/src/wallet/services/network/spec.ts` and its test: `RpcUrlSchema`'s hidden-character check moves ahead of `.url()` (D22);
 - `apps/extension/src/wallet/storage/stored-shapes/snapshot.json` and `pins.ts`: stamp 1, an additive mark for zod's emitter (D23), and stamp 2 for the UTF-16 refinements (D25);
-- `apps/extension/src/utils/bounded-string.ts`, its test, and its ten call sites in `wallet-sdk/content-script-validator.ts`, `operation-journal/spec.ts`, `incoming-transfer/arrival-state.ts` and `ui-preference/spec.ts`, with paired astral tests beside each (D25).
+- `apps/extension/src/utils/bounded-string.ts`, its test, and its ten call sites in `wallet-sdk/content-script-validator.ts`, `operation-journal/spec.ts`, `incoming-transfer/arrival-state.ts` and `ui-preference/spec.ts`, with paired astral tests beside each (D25);
+- the e2e harness: the two browser egress fixes in `fixtures/browser/{chrome,firefox}.ts`; the Firefox pin `fixtures/browser/firefox-revision.ts`, read by `firefox.ts`, `scripts/e2e/install-firefox.ts` and the `setup-puppeteer` composite action; their two tests and the docs that name the install (D26).
 
-No workflow file. The source changes are D22's and D25's only. `bunfig.toml` ends unchanged.
+No workflow file; one composite action (D26). The product source changes are D22's and D25's only. `bunfig.toml` ends unchanged.
 - **follow-redirects:** `bun update follow-redirects` writes the lockfile entry only (axios's `^1.16.0` admits 1.16.1).
 - **vite, exactly 8.2.4:** with the override a range, `bun update vite[@8.2.4]` resolves 8.3.4. So pin first, then restore the ranges: override `8.2.4`, install; override and the three floors `^8.2.4`, install. The lock keeps 8.2.4, which satisfies `^8.2.4`.
 - **The re-gate (F5):** while either package is inside the gate, both installs run with `--config=<scratch bunfig.toml>`, a fresh copy of the tracked file plus one `minimumReleaseAgeExcludes` line for the two names, outside the repo. After 21:01Z the installs run with the tracked file.
@@ -105,7 +106,7 @@ None. The arc changes dependency files, plus one schema-order fix (D22) that lea
 - First, merge `origin/dev` if it moved, then repeat Phase 1's fresh install and audit gate. This HEAD is the **candidate**: record its SHA and the `bun.lock` sha256.
 - **Commands:** `bun run audit:vue` (its `build` is the Chrome build); `bun run build:firefox`; `bun run --cwd apps/landing build`; `bun run --cwd apps/playground build`; `bun run --cwd apps/extension build-storybook`; `bun run test:ci-gating`.
 - **Artifact check**, both production builds, from the repo root: `apps/extension/dist/{chrome,firefox}/THIRD-PARTY-NOTICES.txt` names no `follow-redirects`; `grep -rlF` over `apps/extension/dist/chrome` and `apps/extension/dist/firefox` for follow-redirects' `Maximum number of redirects exceeded` and launch-editor's `UNC paths are not supported on Windows` (and vite's `__open-in-editor` route) exits 1 for each. Exit 0 or 2 fails the check. Record whether `axios` is listed. Arc 2 adds zod: each notices file names `zod` once, at 4.6.7, and the store holds one `zod@` directory.
-- **Smoke e2e, both browsers, one after the other:** build armed (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:chrome`), then `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- --retry=0`. Repeat with `build:firefox` and `NULO_E2E_BROWSER=firefox`. Poll each log in one bounded `until` loop; record each wall-clock.
+- **Smoke e2e, both browsers, one after the other:** build armed (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:chrome`), then `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- --retry=0`. Repeat with `build:firefox` and `NULO_E2E_BROWSER=firefox`, on the pinned Firefox stable_153.0.4 (D26). Poll each log in one bounded `until` loop; record each wall-clock.
 - **dApp-facing network specs, arc 2, both browsers:** zod moved under the schemas the wallet parses dApp calls and node replies with, so one proverless `NULO_E2E_PROVERLESS=1 bun run e2e:agent <files> --retry=0` per browser. It runs one spec per RPC family under `tests/e2e/network/`: `cap-request-basic`, `connect-dapp`, `contracts-register`, `data-registerSender`, `meta-getChainInfo`, `meta-getAccounts`, `sim-methods`, `tx-sendTx-default`, `tx-sendTx-multicall`, `authwit-lifecycle`, `register-token`, `err-scope-and-cap`, `batch-mixed`, `wait-for-tx-mined`. The full network suites and the prover-ON canaries run in CI.
 - **Pass criteria:** every command exits 0; the artifact check finds nothing; smoke and the dApp-facing specs have no failure on either browser. The full network e2e runs in CI (all four lanes trip on `bun.lock`).
 
@@ -231,11 +232,23 @@ None. The arc changes dependency files, plus one schema-order fix (D22) that lea
     - The validator's comment now gives the reason that holds on both versions: the object schema drops an undeclared key.
   - **Inventory:** the change adds exactly 14 test ids, all in `apps/extension`, and Phase 3's compare allows those and no others. 4 are in `utils/bounded-string.test.ts`, 7 in `content-script-validator.test.ts`, and one each in the journal, arrival and selected-account tests. The PR lists them.
 
-- **D26 Held on OA-8: Firefox 158 refuses `activate` and `setViewport` on extension pages.** Phase 2 at `023458c12` passed every build, artifact and store check.
-  - Chrome smoke went red: 79 of 297, all at the egress guard on `redirector.gvt1.com`. Chrome 155 reaches it with or without `--disable-component-update`, so it joins `CHROME_OWN_HOSTS`.
-  - The Firefox dev check then hit `archive.mozilla.org`: New Tab's train-hop update, which an empty `browser.newtabpage.trainhopAddon.xpiBaseURL` switches off at its source, set with the guard's prefs. Both landed in `9c377c88c`.
-  - Under that fix, Firefox 157+'s privileged-context check refuses `page.bringToFront()` and `page.setViewport()` on every wallet page. The harness runs puppeteer's Firefox, and every zod-4 puppeteer pins 157 or later. Firefox 153.0.4 under puppeteer 25.14.0 passes the same 22 tests.
-  - The fix either adds a pin or changes the driver contract, so the arc stops (OA-8).
+- **D26 OA-8 A: the e2e Firefox is pinned to stable_153.0.4, apart from puppeteer.**
+  - **Finding.** Phase 2 at `023458c12` passed every build, artifact and store check. Then three browser changes from puppeteer 25.14.0's revisions (Chrome 152 → 155, Firefox 153.0.4 → 158.0) went red:
+    - Chrome smoke: 79 of 297 failed at the egress guard on `redirector.gvt1.com`. Chrome 155 reaches it with or without `--disable-component-update`, so it joins `CHROME_OWN_HOSTS`.
+    - Firefox 158 fetched New Tab's train-hop update from `archive.mozilla.org`. An empty `browser.newtabpage.trainhopAddon.xpiBaseURL` switches it off at its source, and it is set with the guard's prefs. Both landed in `9c377c88c`, by the e2e README's routes.
+    - From Firefox 157, the Remote Agent treats an `extension`-process page as privileged. It refuses BiDi `activate` and `setViewport` there, which are `page.bringToFront()` and `page.setViewport()`, on every wallet page. `navigation` and `legal-acceptance` failed 4 of 22 on 158.0 and passed 22 of 22 on 153.0.4 under puppeteer 25.14.0. Every zod-4 puppeteer past the gate pins 157 or later (25.13.0: 157.0.1).
+  - **Options (OA-8):**
+    - A: pin the e2e Firefox to 153.0.4 apart from puppeteer, and file B as an issue.
+    - B: a `BrowserDriver` seam for both calls, through the privileged scope, across 27 spec files.
+    - C: reopen OA-6.
+  - **The call:** the orchestrator, 2026-10-24, for the owner: "OA-8 A: pin the e2e Firefox to stable_153.0.4 apart from puppeteer; file B as an issue". Its reason: it is a test-harness choice with no UI impact, and it keeps the Firefox the lanes test today.
+  - **One pin, read by all:** `E2E_FIREFOX_REVISION` in `apps/extension/tests/e2e/fixtures/browser/firefox-revision.ts`.
+    - The driver resolves it in place of `PUPPETEER_REVISIONS.firefox`, and `FIREFOX_PATH` still overrides it. Both suites and the agent runner launch through that one function.
+    - `apps/extension/scripts/e2e/install-firefox.ts` installs it with the installed puppeteer launcher, run by path.
+    - `.github/actions/setup-puppeteer` runs that script and keys its Firefox cache on the pin's file.
+    - FIREFOX.md § Which Firefox the suite runs gives the reason. README, CLAUDE.md, SECURITY.md and the `chrome-extension-debug` skill name the script.
+  - **Tests:** two in `scripts/e2e/firefox-driver.test.ts`, both red on the old code. One checks that the pinned binary launches with puppeteer's own revision installed beside it. The other checks that the action installs through the script and keys on the pin. Phase 3's allowlist grows to 16 ids.
+  - **The reopening condition:** #1111, the driver seam. The pin moves only after it lands, never with a puppeteer bump alone.
 
 ## Review verdicts
 
