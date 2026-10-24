@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.2.4 — effective «FILL: effective date»**
+**Version 1.2.5 — effective «FILL: effective date»**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -125,8 +125,8 @@ yourself. **Pending transactions may continue to be checked through the endpoint
 them, including after you change or remove that endpoint.** Changing an endpoint does not withdraw
 information already disclosed.
 
-**What the Developer can see:** the default endpoint uses a provider account belonging to the
-Developer. Information available to the Developer through that account is aggregate usage
+**What the Developer can see:** the default Testnet endpoint uses a provider account belonging to
+the Developer. Information available to the Developer through that account is aggregate usage
 statistics — request counts, compute units and cost by network, method, key and request type, and
 average latency — over selectable periods, and an error log that groups failed requests from the
 past 3 days by error, method and network.
@@ -459,3 +459,4 @@ described in § 5.
 | 1.2.2 | «FILL: effective date» | The token-list and price requests bypass the browser's HTTP cache, and the price request carries no cookies and no referrer (§§ 5.2, 5.11). |
 | 1.2.3 | «FILL: effective date» | Contacts, history, balances, accounts, tokens, networks and app permissions are now stored encrypted on your device, readable only after you unlock the profile. |
 | 1.2.4 | «FILL: effective date» | Pinned tokens, fee-payer choices and the last-selected account are now stored encrypted too. |
+| 1.2.5 | «FILL: effective date» | Only the default Testnet endpoint uses the Developer's provider account (§ 5.1). |
