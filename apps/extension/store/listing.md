@@ -216,8 +216,8 @@ The block between the two markers is sent as `approval_notes` with every version
 
 <!-- reviewer-notes:start -->
 Testing without funds: install, choose "Create profile", set a password. The wallet opens on the
-Aztec testnet, its only public network, with a zero balance. Every screen is reachable without a
-transaction.
+Aztec testnet with a zero balance. Aztec Mainnet is also listed under Networks. Every screen is
+reachable without a transaction.
 
 Build: the add-on is bundled (Vite). Source is attached to this version as a `git archive` of the
 tagged commit. `apps/extension/store/SOURCE-BUILD.md` inside it names the exact Bun version and the
