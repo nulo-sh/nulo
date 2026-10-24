@@ -41,12 +41,13 @@ describe("egress guard prefs", () => {
 	const prefs = egressGuardPrefs(4321)
 	const findProxy = findProxyOf(prefs)
 
-	test("route by PAC with no fail-over to direct, and resolve only the canary name locally", () => {
+	test("route by PAC with no fail-over to direct, resolve only the canary name locally, and switch off New Tab's train-hop download", () => {
 		expect(prefs).toEqual({
 			"network.proxy.type": 2,
 			"network.proxy.autoconfig_url": expect.stringMatching(/^data:text\/javascript,/),
 			"network.proxy.failover_direct": false,
 			"network.dns.localDomains": "egress-canary.test",
+			"browser.newtabpage.trainhopAddon.xpiBaseURL": "",
 		})
 	})
 

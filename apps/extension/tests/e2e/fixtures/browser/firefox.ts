@@ -271,8 +271,10 @@ export const FIREFOX_LAUNCH_PREFS = {
  * Every request for a host other than loopback goes to the guard, with no `DIRECT` after it and no
  * fail-over, so a dead guard fails a request rather than sending it out. The canary name resolves to
  * loopback, which only a direct path would use. Each live host, compared exactly, goes direct and
- * resolves as usual. All prefs, since `failover_direct` and `localDomains` have no capability form,
- * and kept out of `FIREFOX_LAUNCH_PREFS`, which holds what users run with.
+ * resolves as usual. An empty train-hop base URL is New Tab's off state for the add-on update a Nimbus
+ * enrollment names, which Firefox 158 fetches from archive.mozilla.org on a fresh profile. All prefs,
+ * since `failover_direct` and `localDomains` have no capability form, and kept out of
+ * `FIREFOX_LAUNCH_PREFS`, which holds what users run with.
  */
 export function egressGuardPrefs(guardPort: number, liveHosts: readonly string[] = []): Record<string, string | number | boolean> {
 	const live = liveHosts.map((host) => `\n\tif (host === ${JSON.stringify(host)}) return "DIRECT";`).join("")
@@ -285,6 +287,7 @@ export function egressGuardPrefs(guardPort: number, liveHosts: readonly string[]
 		"network.proxy.autoconfig_url": `data:text/javascript,${encodeURIComponent(pac)}`,
 		"network.proxy.failover_direct": false,
 		"network.dns.localDomains": EGRESS_CANARY_HOST,
+		"browser.newtabpage.trainhopAddon.xpiBaseURL": "",
 	}
 }
 
