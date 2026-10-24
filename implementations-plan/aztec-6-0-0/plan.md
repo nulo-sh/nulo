@@ -1,7 +1,7 @@
 ---
 plan: aztec-6-0-0
 tier: mid
-status: in progress; OA-1 (a), OA-2 (a) and the age-gate install (a) answered on decision page 85, 2026-10-23
+status: completed (P0 delivered as #1103, arc 1 as #1107)
 issues: "Refs #864 (its first agent line); closes no issue"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,24 @@ base: origin/dev at 95da7744
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-24. Planned and implemented 2026-10-23.
+- **Status:** delivered in two PRs against `dev`: #1103 (P0, the empty Testnet list; published by #1104) and #1107 (arc 1, P1-P4 and this close-out). Merging #1107 closes the plan.
+- **Shipped:**
+  - Aztec `6.0.0` for `@aztec-labs/*` and the `@aztec-foundation/*` toolchain, with presto, aztec-standards and private-fee-juice at `6.0.0`; one `viem` (2.57.1) for the fork; the pxe patch re-created and proven against the tarball; Foundry 1.8.5 with an exact member set (D12).
+  - Regime `nulo-v6.2`, appended and bound in place (P85-01): the 6.0.0 `SchnorrAccount.json`, vectors from `reference/nulo-v6.2`, and the oracle-major detector (D4).
+  - The reset Testnet: rollup `679261766`, chainId `685146337`; SponsoredFPC, PrivateFPC, AuthRegistry and the Token class re-pinned from their sources.
+  - The in-place update scenarios on the moved-chain and moved-addresses truth, and the in-place swap with its interceptions released (D11); the Chrome interception logs name origins only.
+  - The age-gate excludes removed in the same PR (D3); audit acknowledgements re-judged.
+  - Docs: the `aztec-update` skill and `UPDATE.md` (D6); the `e2e-testing` skill's in-place swap lesson; `lessons.md`'s rc.3 line replaced by the 6.0.0 oracle and `bun patch` line.
+  - Gates at retry 0 on both browsers: smoke, the in-place pair, network proverless, both canaries prover-ON ([lessons/phase-4.md](lessons/phase-4.md)).
+- **Owner steps:** dispatch `publish-packages.yml` once #1109 prepares the release; the live Testnet send from the 1.0.0 candidate (#864). `BEFORE-LAUNCH.md`'s rc.3 store item asks for a send on the rc.3 Testnet, which no longer exists: rewording it is the owner's call.
+- **Dropped, rejected, superseded:** holding the line and a new extension major (OA-1 (b), (c)); keeping the old list (OA-2 (b)); an excludes follow-up (D3, the lane brief's claim did not hold); waiting out the age gate (D8, Codex's dissent recorded); a recovery policy for a prior build's reset journal (D14).
+- **Known limits:** #808 (D14).
+- **Open items:** #1108 (Testnet default tokens and the PrivateFPC agreement, `blocked:external` on unleashed's 6.0.0 generation), #1109 (the `@nulo-sh/*` release on the 6.0.0 peers); `quality-status` red on `dev`'s 11 advisories until #980 and #1032 land.
+- **Seeds retired:** the `/goal` and `/loop` drafts are removed; this plan is a record, not a task list.
 
 # aztec-6-0-0: Aztec 6.0.0, the reset Testnet, an in-place account rotation
 
@@ -288,13 +306,3 @@ Follow [`implementations-plan/README.md` § Post-implementation standard](../REA
 - Approval boundaries (stop for the orchestrator): a pin moved without its evidence; a held package; any edit to an earlier `REGIMES` entry; a regime field; a stored-shape change; any change to what a screen shows beyond § UI impact.
 - Close-out as arc 1's final commits: merge `origin/dev`, read `index.md` and `lessons.md`, write the Outcome, promote lessons (Bun's line-number patch apply; the oracle detector), file the follow-ups, comment on #864, delete `STATUS.md`, `git mv` into `archive/` in its own commit, `bun run check:plans` green. Then report and wait.
 - Teardown after the merge: once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/aztec-6-0-0/plan.md` succeeds, `agent-worktree done aztec-6-0-0 --merged`. A `/loop` session checks on every firing; a `/goal` session arms one background wait after its wrap-up report.
-
-## Seeds (drafts; the orchestrator runs no seed from here)
-
-```
-/goal Every phase of implementations-plan/aztec-6-0-0/plan.md marked ✓, each backed by its validation gate reported passing in the transcript; LESSONS_FILE printed per phase; code_review is off and /code-review was not run; the Codex fix loop converged on arc 1 (a resumed pass with no new material finding, quoted); the list PR and the arc 1 PR exist against dev, opened only after the loop; the close-out's archive-move commit shown with git show --stat; bun run test:all and bun run lint exit 0.
-```
-
-```
-/loop 15m Drive implementations-plan/aztec-6-0-0 forward per its plan.md: reality check (plan, lessons, git status, PR checks), next pending step, the phase gate as written, Codex for decisions, never past an owner ask or an approval boundary, never merge.
-```
