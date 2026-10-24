@@ -299,7 +299,7 @@ Trunk `dev`. `code_review` is `off`. No stack: one PR per row, each against `dev
 
 ## Post-implementation
 
-Follow [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `95da7744`. Plan-specific settings:
+Follow [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `95da7744`. Plan-specific settings:
 
 - Step 1 is absent (`code_review: off`).
 - Step 2, once over arc 1's diff after P4 is green: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus review (`Agent`, `model: "opus"`, `general-purpose`) beside round 1. Hard stop at three rounds.

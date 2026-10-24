@@ -225,7 +225,7 @@ Then Branch A's delivery gates.
   be the only difference, and `bun patch` re-creates it when it is not. And Bun reuses a store
   directory with the same patch suffix, so a tree that ran a trial patch is not a pristine base:
   delete that `node_modules/.bun/<name>@<v>+<hash>` entry before `bun patch`
-  (`implementations-plan/aztec-6-0-0/lessons/phase-1.md`).
+  (`implementations-plan/archive/aztec-6-0-0/lessons/phase-1.md`).
 - **Clear `<app>/node_modules/.vite` after a dependency-line swap**, before the first e2e run.
   Stale dep-optimizer caches make dev-served apps fail with `.vite/deps/*.js does not exist`,
   which surfaces as a page that never loads and a test that times out far from the cause.
