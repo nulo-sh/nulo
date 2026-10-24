@@ -19,7 +19,7 @@ post_implementation_hardening: not scheduled
 
 - **Date:** 2026-10-24.
 - **Status:** closed. Arc 1 ended `ARC_FAILED` on two soak reds and opened no PR (D15, D16); #1105 fixed both. Arc 2 lands with this plan's PR, at candidate `9867ff523`, and the merge that lands it closes the plan.
-- **Shipped (arc 2):**
+- **Shipped:** arc 2, in this plan's PR.
   - **Sixteen advisories fixed, none newly acknowledged**, and the gate in enforce mode reads 41 / 0 / 0 / 0:
     - vite 8.2.1 → 8.2.4 fixes six;
     - follow-redirects 1.16.0 → 1.16.1 fixes two;
