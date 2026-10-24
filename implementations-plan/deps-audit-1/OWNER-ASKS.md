@@ -95,3 +95,25 @@
   - The owner, 2026-10-24: "B: acknowledge". The reason given: no schema a dApp reaches has a size-bounded collection. The lead's trace refuted that before anything was written, so B was withdrawn (D20).
   - Then, on the corrected facts, the owner, 2026-10-24: "A: override zod to 4.6.7". That is puppeteer 25.14.0, then an exact root override, so every package runs one zod 4.6.7. The gates prove the Aztec schemas still behave, and the override is dropped when the Aztec line moves its zod constraint.
   - Landed as D21, and #1110 closed on the decision.
+
+## OA-7: zod 4.6.7 counts string length in code points; keep the UTF-16 caps?
+
+- **Surface:** none a person sees. These caps are size bounds, not text limits shown on a screen.
+- **Why:**
+  - zod 4.6's string `.min` / `.max` / `.length` count Unicode code points, not UTF-16 units. This is hardwired in `checks.js`; no config restores the old count.
+  - The wallet's nine string caps are size bounds written in UTF-16 units:
+    - `wallet-sdk/content-script-validator.ts`, the page-to-extension boundary: `sessionId` and `requestId` (128), `appId` (256), `chainId` and `version` (80), `iv`, `ciphertext`;
+    - `operation-journal/spec.ts`'s `normalizedRaw` (4096, documented in UTF-16 units at `packages/wallet-core/src/jobs/types.ts`);
+    - `incoming-transfer/arrival-state.ts`'s played id;
+    - `ui-preference/spec.ts`'s selected address.
+  - Under 4.6.7, a string of astral characters (emoji) passes with up to twice the units. Codex probed it: 65 emoji pass a 128 cap that 4.4.3 refused.
+  - A stored row over its cap read as absent before and reads now. The wallet's own writers stay inside the caps; the arrival and selected-account setters keep their own `.length` guards.
+  - Alongside it, a tightening: the strict `authorizationsWithoutAsking` in a dApp session row now refuses an own `__proto__` key, so such a row reads as absent. No writer produces one, so it is recorded and kept. `content-script-validator.ts`'s comment saying `strictObject` skips that key is stale under 4.6.7.
+- **Options:**
+  - **A (recommended):** keep the UTF-16 budgets. One shared helper checks `string.length` at the nine caps, with astral boundary tests and the stale comment fixed. That restores 4.4.3's verdicts at those sites. The refinement labels change, so the storage gate needs its additive stamp again. These are size bounds, and a UTF-16 unit is what they meter.
+  - **B:** accept code points. Record the nine deltas, change the `jobs/types.ts` contract to code points, add astral boundary tests that pin the new verdicts, and fix the comment.
+  - **C:** drop the override and reopen OA-6.
+- **What ships now:** nothing.
+  - On the branch: the RPC URL fix (D22) and stamp 1 (D23).
+  - A pre-candidate `test:all` is green.
+  - Not run yet: Phases 2-3 and the PR. A moves the candidate; under B, the new tests do.

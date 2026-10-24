@@ -1,7 +1,7 @@
 ---
 plan: deps-audit-1
 tier: light
-status: arc 2 on `deps-audit-1-a2` off `e0faa7267`, reviewed (Codex converged in 3 rounds); OA-6 answered A (zod forced to 4.6.7, D21); arc 1 ARC_FAILED on two soak reds since fixed by #1105
+status: arc 2 on `deps-audit-1-a2` off `e0faa7267`; OA-6 answered A (zod forced to 4.6.7, D21); held on OA-7 (code-point string caps, D24) before the candidate; arc 1 ARC_FAILED on two soak reds since fixed by #1105
 issues: "#980, #987, #1032 (closed by this plan's PR); #1110 (zod, OA-6, closed on the decision)"
 driver: claude-code
 claude_model: opus
@@ -211,9 +211,10 @@ None. The arc changes dependency files, plus one schema-order fix (D22) that lea
   - The five diffs are spelling only:
     - a nullable primitive becomes `type: [X, "null"]` instead of `anyOf`, in `incomingPublicCursors`, `journal`, `tokenPrices` and `uiLoggerWindowId`;
     - a fixed 2-tuple now states `minItems`, `maxItems` and `items: false`, in `incomingArrivals` and `incomingPublicCursors`.
-  - R3 (every golden) and R5 (both pinned backups) pass unchanged, so every stored row reads as before.
+  - R3 (every golden) and R5 (both pinned backups) pass unchanged. That shows the goldens and backups read as before, not every possible row. Codex r5 found two read changes they do not exercise (OA-7): string caps now count code points, and the strict `authorizationsWithoutAsking` now refuses an own `__proto__` key.
   - `bun run baseline:storage -- --additive "<reason>"` appended stamp 1 (v1, zod 4.6.7), and `PINNED_STAMPS[1]` is the pin it printed. The storage suite then passes, 120 of 120.
-  - This was a gate red, diagnosed as no schema behaviour change, and closed by the gate's own procedure.
+  - This was a gate red, diagnosed as an emitter spelling change and closed by the gate's own procedure. Codex r5 confirmed the stamp mechanically: stamp 0 preserved, both pins verify, exactly five emissions differ.
+- **D24 Held: zod 4.6.7's code-point string caps (OA-7).** Codex r5, with old/new probes: nine string caps in four files count code points now, not UTF-16 units. zod hardwires this, with no option. The arc stops before the candidate (OA-7).
 
 ## Review verdicts
 
