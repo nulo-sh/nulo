@@ -16,6 +16,10 @@ describe("getTransactionExplorerUrl", () => {
 		expect(getTransactionExplorerUrl(CHAIN_IDS.TESTNET, "aztecscan", TX)).toBe(`https://testnet.aztecscan.xyz/tx-effects/${TX}`)
 	})
 
+	test("mainnet → aztecscan's mainnet host, never the testnet one", () => {
+		expect(getTransactionExplorerUrl(CHAIN_IDS.MAINNET, "aztecscan", TX)).toBe(`https://aztecscan.xyz/tx-effects/${TX}`)
+	})
+
 	test("sandbox (chainId 0) → null (no base URL → copy-hash fallback)", () => {
 		expect(getTransactionExplorerUrl(CHAIN_IDS.SANDBOX, "aztecscan", TX)).toBeNull()
 	})
