@@ -1,2 +1,5 @@
 /** The Testnet seed's RPC endpoint. Its path carries the dRPC key, so print its origin only. */
 export const TESTNET_RPC_URL = "https://lb.drpc.live/aztec-testnet/Ak_eT5HA2kbyqamqGTF702frWR_Kv18R8bthLtu1AWF8"
+
+/** dRPC's keyless public endpoint for Aztec Mainnet. */
+export const MAINNET_RPC_URL = "https://aztec-mainnet.drpc.org"

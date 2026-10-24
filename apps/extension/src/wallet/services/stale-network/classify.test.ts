@@ -100,11 +100,16 @@ describe("classifyChains", () => {
 	})
 
 	test("Mainnet with every address moved is recorded, never blocked, and has no network cause", () => {
-		const mainnet: ClassifiedNetwork = { id: "mn", chainId: 42, l1ChainId: MAINNET_L1_CHAIN_ID, kind: "mainnet" }
+		const mainnet: ClassifiedNetwork = { id: "mn", chainId: CHAIN_IDS.MAINNET, l1ChainId: MAINNET_L1_CHAIN_ID, kind: "mainnet" }
 		expect(hasNetworkCause(mainnet)).toBe(false)
-		expect(classifyChains([mainnet], [nulo(42, MAINNET_L1_CHAIN_ID, 0, true)]).entries).toEqual([
-			{ networkId: "mn", chainId: 42, networkReset: false, addressesMoved: true },
+		expect(classifyChains([mainnet], [nulo(CHAIN_IDS.MAINNET, MAINNET_L1_CHAIN_ID, 0, true)]).entries).toEqual([
+			{ networkId: "mn", chainId: CHAIN_IDS.MAINNET, networkReset: false, addressesMoved: true },
 		])
+	})
+
+	test("a Mainnet row off the seed's chain, as a stale pin leaves it, has a network cause", () => {
+		const stale: ClassifiedNetwork = { id: "mn", chainId: 42, l1ChainId: MAINNET_L1_CHAIN_ID, kind: "mainnet" }
+		expect(classifyChains([stale], []).entries).toEqual([{ networkId: "mn", chainId: 42, networkReset: true, addressesMoved: false }])
 	})
 
 	test("a chain with some addresses moved blocks the profile, Mainnet included", () => {

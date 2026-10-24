@@ -315,16 +315,16 @@ describe("AccountIntegrityCoordinator — chain-aware verdicts", () => {
 	})
 
 	test("Mainnet with every address moved writes a record, not a block", async () => {
-		const mainnet: Network = { ...TESTNET_ROW, id: "mn", chainId: 42, l1ChainId: 1, kind: "mainnet" }
+		const mainnet: Network = { ...TESTNET_ROW, id: "mn", chainId: CHAIN_IDS.MAINNET, l1ChainId: 1, kind: "mainnet" }
 		const { coordinator, repo, stale } = await build({
-			rows: [row({ chainId: 42, l1ChainId: 1 })],
+			rows: [row({ chainId: CHAIN_IDS.MAINNET, l1ChainId: 1 })],
 			networks: [mainnet],
 			derive: async () => "0xmoved",
 		})
 		await coordinator.verifyBeforeSessionOpen("p1", MASTER)
 		expect(await repo.isBlocked("p1")).toBe(false)
 		expect((await stale.getRecord("p1"))?.entries).toEqual([
-			{ networkId: "mn", chainId: 42, networkReset: false, addressesMoved: true },
+			{ networkId: "mn", chainId: CHAIN_IDS.MAINNET, networkReset: false, addressesMoved: true },
 		])
 	})
 

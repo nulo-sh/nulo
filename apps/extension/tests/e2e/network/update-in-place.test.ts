@@ -78,6 +78,7 @@ import {
 	previewImport,
 } from "../helpers/account-io"
 import { accountRows } from "../helpers/identity-rows"
+import { answerArrival } from "../helpers/network-arrival"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 
@@ -282,6 +283,7 @@ async function verify(ctx: ExtensionContext, populated: Populated): Promise<void
 	await ensureUnlocked(page)
 	await waitForHash(page, "#/popup/general", 30_000)
 	expect(await shownOverlays(page, BARRIERS)).toEqual([])
+	await answerArrival(page, populated.before)
 	expect(populated.before[LEGACY_SELECTED_ACCOUNT_KEY], "the release's selection").toBe(populated.account)
 	expect(await getAccountAddress(page)).toBe(populated.before[LEGACY_SELECTED_ACCOUNT_KEY])
 	await expectReleasePreferences(ctx, page, populated.before, await captureSoleProfileId(page))

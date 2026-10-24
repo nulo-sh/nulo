@@ -11,7 +11,7 @@
 import { randomBytes } from "node:crypto"
 import type { Page } from "puppeteer"
 import { readyToast } from "@/components/stale-network/copy"
-import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { CHAIN_IDS, LOCAL_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { TEST_PASSWORD } from "../fixtures/constants"
 import { revealSeedPhrase, waitForToast } from "../fixtures/helpers"
 import {
@@ -35,8 +35,6 @@ export { type NetworkRow, readNetworkRows } from "./identity-rows"
 
 /** A chainId no seed carries: the Testnet before its last reset, as a stored row remembers it. */
 export const PREVIOUS_TESTNET_CHAIN_ID = (CHAIN_IDS.TESTNET ^ 1) >>> 0
-/** A Mainnet chain under this build's Mainnet L1. */
-export const E2E_MAINNET_CHAIN_ID = 2070860441
 /** A closed loopback port: a node that never answers, and no host the egress guard records. */
 export const DEAD_NODE = "http://127.0.0.1:9"
 
@@ -229,36 +227,44 @@ export async function addNetwork(page: Page, network: AddedNetwork, networks?: N
 			kind: network.kind,
 		}),
 	}
-	if (network.movedAccount) {
-		const account = (await accountRows(page, testnet.chainId)).find(
-			(row) => row.profileId === testnet.profileId && row.type === 0 && row.index === 0,
-		)
-		if (!account) throw new Error("addNetwork: the Testnet network has no first derived account to copy")
-		const moved = { ...account, chainId: network.chainId, l1ChainId: network.l1ChainId, address: `0x${"5a".repeat(32)}` }
-		writes[plaintextKey(ACCOUNTS, moved)] = JSON.stringify(moved)
-	}
+	if (network.movedAccount) Object.assign(writes, await movedFirstAccount(page, testnet, network))
 	if (network.active) writes[`nulo:core:active-network@${testnet.profileId}`] = networkId
 	await storeRows(page, writes)
 	return { networkId }
 }
 
+/** The Testnet's first derived account copied onto `chain` at a moved address, as a row write. */
+async function movedFirstAccount(
+	page: Page,
+	testnet: NetworkRow,
+	chain: { chainId: number; l1ChainId: number },
+): Promise<Record<string, string>> {
+	const account = (await accountRows(page, testnet.chainId)).find(
+		(row) => row.profileId === testnet.profileId && row.type === 0 && row.index === 0,
+	)
+	if (!account) throw new Error("the Testnet network has no first derived account to copy")
+	const moved = { ...account, chainId: chain.chainId, l1ChainId: chain.l1ChainId, address: `0x${"5a".repeat(32)}` }
+	return { [plaintextKey(ACCOUNTS, moved)]: JSON.stringify(moved) }
+}
+
 /**
- * Adds a Mainnet network whose one derived account sits at a moved address, and makes it the
- * active network. Run it locked.
+ * An address change on the seeded Mainnet of a profile that never opened it: every endpoint at
+ * {@link DEAD_NODE}, one derived account at a moved address, and the active network. Refuses a
+ * profile with Mainnet accounts, beside which the moved copy reads unclassifiable. Run it locked.
  */
 export async function seedStaleMainnet(page: Page, networks?: NetworkRow[]): Promise<{ networkId: string }> {
-	return addNetwork(
-		page,
-		{
-			name: "Mainnet",
-			kind: "mainnet",
-			chainId: E2E_MAINNET_CHAIN_ID,
-			l1ChainId: MAINNET_L1_CHAIN_ID,
-			movedAccount: true,
-			active: true,
-		},
-		networks,
-	)
+	const rows = await networkRows(page, networks)
+	const mainnet = rows.find((row) => row.kind === "mainnet")
+	const testnet = rows.find((row) => row.kind === "testnet")
+	if (!mainnet || !testnet) throw new Error("seedStaleMainnet: no Mainnet or Testnet network the wallet reads")
+	if ((await accountRows(page, CHAIN_IDS.MAINNET)).length > 0) throw new Error("the profile already opened Mainnet")
+	const endpoints = mainnet.endpoints.map((endpoint) => ({ ...endpoint, rpcUrl: DEAD_NODE }))
+	await storeRows(page, {
+		[`${NETWORKS}${mainnet.id}`]: JSON.stringify({ ...mainnet, endpoints }),
+		...(await movedFirstAccount(page, testnet, { chainId: CHAIN_IDS.MAINNET, l1ChainId: mainnet.l1ChainId })),
+		[`nulo:core:active-network@${mainnet.profileId}`]: mainnet.id,
+	})
+	return { networkId: mainnet.id }
 }
 
 export const TAKEOVER = '[data-testid="stale-network-takeover"]'

@@ -8,7 +8,7 @@
  */
 import { randomBytes } from "node:crypto"
 import { type Server, type Socket, createServer } from "node:net"
-import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { MAINNET_RPC_URL, TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { TOKEN_LIST_URL } from "@/wallet/services/token-list/spec"
 import { HOW_AZTEC_WORKS_URL } from "@/utils/get-started"
 import { reservePort } from "../../../scripts/e2e/resolve-ports"
@@ -70,6 +70,8 @@ export const MALFORMED = "<malformed>"
  * a network boundary.
  */
 export const LIVE_NODE_HOST = new URL(TESTNET_RPC_URL).hostname
+/** The default Mainnet node's host, which no launch answers. */
+export const MAINNET_NODE_HOST = new URL(MAINNET_RPC_URL).hostname
 /** The published token list's host, which the live launch also sends direct. */
 export const LIVE_LIST_HOST = new URL(TOKEN_LIST_URL).hostname
 
@@ -85,6 +87,10 @@ export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
 	[
 		LIVE_NODE_HOST,
 		"the default Testnet node: the background reads its status at popup start, the offscreen PXE on Home. The launch's stand-in answers it once settled; a request from before that, from a background kill or while a spec's own interception has the origin is refused here, and one that arrives while the stand-in holds the origin, before the close begins, fails the close",
+	],
+	[
+		MAINNET_NODE_HOST,
+		"the default Mainnet node: a full backup export and a contacts export read every network's status, and each reads a refused one as inactive",
 	],
 	["api.coingecko.com", "the price fetch on profile create, unlock, popup open with an incomplete cache, and every 3 min"],
 	[

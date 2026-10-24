@@ -95,6 +95,7 @@ What an e2e build does instead of each outside host:
 | Host | Tried by | With the guard |
 |---|---|---|
 | `lb.drpc.live` | the background's node-status read at popup start; the offscreen PXE on Home | answered by the stand-in node's 400 once the launch settles; refused at the guard before that, during a kill or under a spec's own interception, and a close failure at any other time before the close begins; direct in the live spec's launch; a spec that needs a node-read value seeds it (the fee picker's sponsors: `helpers/fpc-seeds.ts`) |
+| `aztec-mainnet.drpc.org` | the full backup export's and the contacts export's status read of every network | refused; each export reads Mainnet as inactive and opens no PXE for it |
 | `api.coingecko.com` | the price fetch | refused; a spec that needs a quote seeds one into storage |
 | the browser's own hosts | Chrome's updater and sign-in services, Firefox's remote settings | refused; listed per driver, so not a failure |
 | `crs.aztec-cdn.foundation`, `crs.aztec-labs.com` | bb.js's CRS download for a proof in the browser (a prover-ON network run without Presto) | direct on every guarded launch |
@@ -174,15 +175,13 @@ uncommitted changes a build reads, is refused, so commit before you build it.
   replaced.
 - The live scenario needs a sandbox on the release's Aztec line, so once `dev` moves off it only
   the replay runs.
-- `tests/e2e/default-network-arrival-update.test.ts` updates into a candidate that seeds one more
-  default network, a test Mainnet (`src/e2e/extra-seed.ts`), which `build-update-candidate.sh
-  <browser> --extra-seed` arms for its own build only, writing `<browser>-extra-seed/` and removing
-  `dist/<browser>` on exit. The release's UI populates Testnet, a second account and a deleted Local
-  Network, node-free. Its first case meets the arrival after the Terms sheet and never after Stay;
-  its second moves Testnet first, so the reset's takeover goes ahead of both. The candidate records
-  its kind in `update-candidate.json`, and each scenario refuses the other kind, so run this one by
-  file. `agent.sh`, the smoke setup and the release marker step each refuse a bundle with the extra
-  seed's stamp.
+- `tests/e2e/default-network-arrival-update.test.ts` updates into the same candidate, which seeds
+  Mainnet, a default the release predates. The release's UI populates Testnet, a second account and
+  a deleted Local Network, node-free. Its first case meets the arrival after the Terms sheet and
+  never after Stay; its second moves Testnet first, so the reset's takeover goes ahead of both. It
+  proves the promote that first ships Mainnet: from a release that seeds Mainnet, its precondition
+  fails, as no seedable kind is left to arrive. The replay and the live scenario answer the arrival
+  only when the release they update holds no Mainnet.
 
 ```bash
 bash apps/extension/scripts/e2e/build-update-candidate.sh chrome   # writes .e2e-state/update-candidate/chrome
@@ -193,9 +192,7 @@ cd apps/extension && NULO_E2E_ARTIFACT_RUN=1 NULO_E2E_UPDATE_FROM=v0.31.0 \
 ```
 
 ```bash
-bash apps/extension/scripts/e2e/build-update-candidate.sh chrome --extra-seed   # writes .e2e-state/update-candidate/chrome-extra-seed
-VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome
-cd apps/extension && NULO_E2E_UPDATE_FROM=v0.31.0 NULO_E2E_UPDATE_TO=$PWD/.e2e-state/update-candidate/chrome-extra-seed \
+cd apps/extension && NULO_E2E_ARTIFACT_RUN=1 NULO_E2E_UPDATE_FROM=v0.31.0 NULO_E2E_UPDATE_TO=$PWD/.e2e-state/update-candidate/chrome \
   bun run test:e2e -- tests/e2e/default-network-arrival-update.test.ts --retry=0
 ```
 

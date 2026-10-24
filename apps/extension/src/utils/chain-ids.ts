@@ -16,9 +16,12 @@ import { LOCAL_L1_CHAIN_ID, walletChainId } from "@nulo/wallet-core/chain-id"
  *  time) so profile creation stays offline-safe; key derivation consumes it. */
 export { LOCAL_L1_CHAIN_ID, walletChainId }
 
-/** Ethereum mainnet's L1 id: the trust root a stored `mainnet`-kind network row is checked against.
- *  No mainnet network is seeded on the V6 line. */
+/** Ethereum mainnet's L1 id: the trust root a stored `mainnet`-kind network row is checked against. */
 export const MAINNET_L1_CHAIN_ID = 1
+
+/** Mainnet v6's rollup version as the Aztec Foundation gave it (via the owner, 2026-10-23); NOT yet
+ *  read from a live node. `bun run --cwd apps/extension check:seeds` must pass before a build ships it. */
+export const MAINNET_ROLLUP_VERSION = 2070860440
 
 /** Testnet identity (live-verified via node_getNodeInfo: nodeVersion 6.0.0, after its reset) —
  *  the L1/rollup pair behind CHAIN_IDS.TESTNET. The bridge keeps its own copy; nothing checks that
@@ -28,5 +31,6 @@ export const TESTNET_ROLLUP_VERSION = 679261766
 
 export const CHAIN_IDS = {
 	TESTNET: walletChainId(TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION), // 685146337
+	MAINNET: walletChainId(MAINNET_L1_CHAIN_ID, MAINNET_ROLLUP_VERSION), // 2070860441
 	SANDBOX: 0, // localhost:8080
 } as const

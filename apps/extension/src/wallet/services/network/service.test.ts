@@ -15,14 +15,14 @@
  * test against the production adapter.
  */
 
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { beforeEach, describe, expect, test, vi } from "vitest"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { recordWrites } from "../storage-write-log"
 import { rowKeysForEveryProfile, storedText } from "@/wallet/storage/sealed-entity-storage.testing"
 import { sealedEntityStorage } from "@/wallet/storage/stores"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
-import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { LoggerStore } from "@/wallet/logger"
@@ -45,7 +45,7 @@ import {
 import type { Network, NetworkEndpoint } from "./spec"
 import { classifyChains } from "@/wallet/services/stale-network/classify"
 import { seedOffersKey } from "./seed-offers"
-import { DEFAULT_SEEDS, type DefaultSeed, seedForKind } from "./seeds"
+import { DEFAULT_SEEDS, seedForKind } from "./seeds"
 
 /** One key for every profile, as the profile fakes hold it. */
 const ROW_KEY_FAKE = await rowKeysForEveryProfile()
@@ -1420,42 +1420,42 @@ describe("NetworkService liveness reads overlapped by a reservation", () => {
 	})
 })
 
+const MAINNET = seedForKind("mainnet")!
+
+/** Runs `open` as a build that predates the Mainnet seed: the defaults every released build seeded. */
+async function asEarlierBuild<T>(open: () => Promise<T>): Promise<T> {
+	const at = DEFAULT_SEEDS.indexOf(MAINNET)
+	DEFAULT_SEEDS.splice(at, 1)
+	try {
+		return await open()
+	} finally {
+		DEFAULT_SEEDS.splice(at, 0, MAINNET)
+	}
+}
+
 describe("NetworkService default seeding", () => {
-	test("seeds Testnet and Local Network only; the dRPC endpoint carries the 'dRPC' label", async () => {
+	test("seeds Testnet, Local Network and Mainnet; each dRPC endpoint carries the 'dRPC' label", async () => {
 		// Settings renders `endpoint.label || endpoint.rpcUrl` as the row title — the label is what
 		// keeps the raw provider URL out of the UI. Local Network is not dRPC-backed, so no label.
 		const { service } = setupServiceWithStorage({})
 		const networks = await service.getOrInitNetworks()
 		const byName = new Map(networks.map((n) => [n.name, n]))
-		expect([...byName.keys()].sort()).toEqual(["Local Network", "Testnet"])
+		expect([...byName.keys()].sort()).toEqual(["Local Network", "Mainnet", "Testnet"])
 		expect(byName.get("Testnet")?.endpoints[0]?.label).toBe("dRPC")
+		expect(byName.get("Mainnet")?.endpoints[0]?.label).toBe("dRPC")
 		expect(byName.get("Local Network")?.endpoints[0]?.label).toBeUndefined()
 	})
 })
 
-describe("NetworkService — a default network a later build adds", () => {
-	const EXTRA: DefaultSeed = {
-		name: "Extra Default",
-		rpcUrl: "https://rpc.extra.example",
-		chainId: 424242,
-		l1ChainId: MAINNET_L1_CHAIN_ID,
-		kind: "mainnet",
-		isPrimaryActive: false,
-	}
+describe("NetworkService — Mainnet, the default this build adds", () => {
 	const OFFERS_KEY = seedOffersKey("p1")
 	type Harness = ReturnType<typeof setupServiceWithStorage>
 
-	afterEach(() => {
-		const at = DEFAULT_SEEDS.indexOf(EXTRA)
-		if (at >= 0) DEFAULT_SEEDS.splice(at, 1)
-	})
-
-	/** A profile an earlier build seeded (Testnet and Local Network, no offer record), now opened by a
-	 *  build whose defaults add `EXTRA`. */
+	/** A profile an earlier build seeded (Testnet and Local Network, no offer record), now opened by
+	 *  this build. */
 	async function seededByEarlierBuild(h: Harness): Promise<Network[]> {
-		const rows = await h.service.getOrInitNetworks()
+		const rows = await asEarlierBuild(() => h.service.getOrInitNetworks())
 		h.local.store.delete(OFFERS_KEY)
-		DEFAULT_SEEDS.push(EXTRA)
 		return rows
 	}
 	const extraRows = async (h: Harness) => (await h.service.getNetworksRaw("p1")).filter((n) => n.kind === "mainnet")
@@ -1470,8 +1470,8 @@ describe("NetworkService — a default network a later build adds", () => {
 
 		const [extra, ...twins] = await extraRows(h)
 		expect(twins).toEqual([])
-		expect(extra).toMatchObject({ chainId: EXTRA.chainId, l1ChainId: EXTRA.l1ChainId, name: EXTRA.name, kind: "mainnet" })
-		expect(findPrimaryEndpoint(extra!)?.rpcUrl).toBe(EXTRA.rpcUrl)
+		expect(extra).toMatchObject({ chainId: MAINNET.chainId, l1ChainId: MAINNET.l1ChainId, name: MAINNET.name, kind: "mainnet" })
+		expect(findPrimaryEndpoint(extra!)?.rpcUrl).toBe(MAINNET.rpcUrl)
 		for (const [key, value] of before) expect(h.local.store.get(key), key).toBe(value)
 		expect(offered(h)).toEqual(["local", "mainnet", "testnet"])
 
@@ -1547,7 +1547,7 @@ describe("NetworkService — a default network a later build adds", () => {
 		const h = setupServiceWithStorage({})
 		const [testnet] = await seededByEarlierBuild(h)
 		const staleKey = "nulo:core:stale-networks@p1"
-		const entry = { networkId: testnet!.id, chainId: EXTRA.chainId, networkReset: true, addressesMoved: false }
+		const entry = { networkId: testnet!.id, chainId: MAINNET.chainId, networkReset: true, addressesMoved: false }
 		h.local.store.set(staleKey, JSON.stringify({ profileId: "p1", accountSetDigest: "d", entries: [entry] }))
 
 		await h.service.getOrInitNetworks()
@@ -1611,13 +1611,13 @@ describe("NetworkService — a default network a later build adds", () => {
 	test("a dApp is served the new default's chain before the open, and refused it once offered and deleted", async () => {
 		const h = setupServiceWithStorage({})
 		await seededByEarlierBuild(h)
-		expect(await h.service.servesChain("p1", EXTRA.chainId)).toBe(true)
+		expect(await h.service.servesChain("p1", MAINNET.chainId)).toBe(true)
 
 		await h.service.getOrInitNetworks()
 		const [extra] = await extraRows(h)
 		await h.service.deleteNetwork(extra!.id)
 
-		expect(await h.service.servesChain("p1", EXTRA.chainId)).toBe(false)
+		expect(await h.service.servesChain("p1", MAINNET.chainId)).toBe(false)
 	})
 
 	test("a dApp check parked between its reads while a whole open commits is still served", async () => {
@@ -1637,7 +1637,7 @@ describe("NetworkService — a default network a later build adds", () => {
 			return result
 		}
 
-		const serves = h.service.servesChain("p1", EXTRA.chainId)
+		const serves = h.service.servesChain("p1", MAINNET.chainId)
 		await vi.waitFor(() => expect(parked).toBeDefined())
 		await h.service.getOrInitNetworks()
 		expect(offered(h)).toContain("mainnet")
@@ -1666,7 +1666,7 @@ describe("NetworkService — a default network a later build adds", () => {
 		const custom = {
 			id: "cm",
 			profileId: "p1",
-			chainId: EXTRA.chainId,
+			chainId: MAINNET.chainId,
 			l1ChainId: 7,
 			name: "Mine",
 			kind: "custom",
@@ -1674,9 +1674,9 @@ describe("NetworkService — a default network a later build adds", () => {
 			endpoints: [{ id: "cm-ep0", rpcUrl: "https://rpc.mine.example/" }],
 		}
 		h.local.store.set("nulo:core:networks@cm", JSON.stringify(custom))
-		const accounts = [{ chainId: EXTRA.chainId, l1ChainId: 7, index: 0, address: "0x0a", derivedAddress: "0x0b" }]
+		const accounts = [{ chainId: MAINNET.chainId, l1ChainId: 7, index: 0, address: "0x0a", derivedAddress: "0x0b" }]
 		const before = classifyChains(await h.service.getNetworksRaw("p1"), accounts)
-		expect(before.entries).toEqual([{ networkId: "cm", chainId: EXTRA.chainId, networkReset: false, addressesMoved: true }])
+		expect(before.entries).toEqual([{ networkId: "cm", chainId: MAINNET.chainId, networkReset: false, addressesMoved: true }])
 
 		await h.service.getOrInitNetworks()
 
@@ -1689,8 +1689,8 @@ describe("NetworkService — a default network a later build adds", () => {
 		const kindRow = (id: string, kind: "mainnet" | "custom") => ({
 			id,
 			profileId: "p1",
-			chainId: EXTRA.chainId,
-			l1ChainId: EXTRA.l1ChainId,
+			chainId: MAINNET.chainId,
+			l1ChainId: MAINNET.l1ChainId,
 			name: id,
 			kind,
 			primaryEndpointId: `${id}-ep0`,
@@ -1710,7 +1710,6 @@ describe("NetworkService — a default network a later build adds", () => {
 		})
 
 		test("a new profile and a restored one announce nothing", async () => {
-			DEFAULT_SEEDS.push(EXTRA)
 			const h = setupServiceWithStorage({})
 			await h.service.getOrInitNetworks()
 			expect(await extraRows(h)).toHaveLength(1)
@@ -1813,16 +1812,19 @@ describe("NetworkService — a default network a later build adds", () => {
 describe("NetworkService — this build's defaults on an existing profile", () => {
 	test("a profile that deleted Local Network gets nothing back and serves no chain 0", async () => {
 		const h = setupServiceWithStorage({})
-		const rows = await h.service.getOrInitNetworks()
+		const rows = await asEarlierBuild(() => h.service.getOrInitNetworks())
 		h.local.store.delete(seedOffersKey("p1"))
 		await h.service.deleteNetwork(rows.find((n) => n.kind === "local")!.id)
 
 		const after = await h.service.getOrInitNetworks()
 
 		// A build that adds a default edits this test, never `KINDS_SEEDED_BEFORE_RECORD`.
-		expect(after.map((n) => n.kind)).toEqual(["testnet"])
+		expect(after.map((n) => n.kind)).toEqual(["testnet", "mainnet"])
 		expect(await h.service.servesChain("p1", 0)).toBe(false)
-		expect(JSON.parse(h.local.store.get(seedOffersKey("p1")) as string)).toEqual({ offered: ["local", "testnet"] })
+		expect(JSON.parse(h.local.store.get(seedOffersKey("p1")) as string)).toEqual({
+			offered: ["local", "mainnet", "testnet"],
+			announce: ["mainnet"],
+		})
 	})
 })
 
@@ -1833,6 +1835,7 @@ describe("NetworkService.servesChain (a dApp asking to connect)", () => {
 		const { service } = setupServiceWithStorage({})
 
 		expect(await service.servesChain("p1", CHAIN_IDS.TESTNET)).toBe(true)
+		expect(await service.servesChain("p1", CHAIN_IDS.MAINNET)).toBe(true)
 		expect(await service.servesChain("p1", 0)).toBe(true)
 		expect(await service.servesChain("p1", V5_TESTNET_CHAIN)).toBe(false)
 	})

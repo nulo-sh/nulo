@@ -397,17 +397,6 @@
 											"./wallet-clocks.*"
 										],
 										"message": "only src/e2e/config.ts reads the e2e wallet clocks; their release-gate stamp travels with its flag"
-									},
-									{
-										"group": [
-											"@/e2e/extra-seed",
-											"@/e2e/extra-seed.*",
-											"**/extra-seed",
-											"**/extra-seed.*",
-											"./extra-seed",
-											"./extra-seed.*"
-										],
-										"message": "only src/e2e/config.ts reads the e2e extra default network; its release-gate stamp travels with its flag"
 									}
 								]
 							}
@@ -448,17 +437,6 @@
 										"message": "only src/e2e/config.ts reads the e2e wallet clocks; their release-gate stamp travels with its flag"
 									},
 									{
-										"group": [
-											"@/e2e/extra-seed",
-											"@/e2e/extra-seed.*",
-											"**/extra-seed",
-											"**/extra-seed.*",
-											"./extra-seed",
-											"./extra-seed.*"
-										],
-										"message": "only src/e2e/config.ts reads the e2e extra default network; its release-gate stamp travels with its flag"
-									},
-									{
 										"group": ["@/wallet/services/*/client"],
 										"message": "UI primitives cannot import any *Service client"
 									},
@@ -495,17 +473,6 @@
 										"message": "only src/e2e/config.ts reads the e2e wallet clocks; their release-gate stamp travels with its flag"
 									},
 									{
-										"group": [
-											"@/e2e/extra-seed",
-											"@/e2e/extra-seed.*",
-											"**/extra-seed",
-											"**/extra-seed.*",
-											"./extra-seed",
-											"./extra-seed.*"
-										],
-										"message": "only src/e2e/config.ts reads the e2e extra default network; its release-gate stamp travels with its flag"
-									},
-									{
 										"group": ["@/popup/pages/*", "@/popup/pages/**"],
 										"message": "L4 modules (popup/components/modules/**) cannot import from L5 pages — pages depend on modules, not the other way around"
 									},
@@ -539,17 +506,6 @@
 											"./wallet-clocks.*"
 										],
 										"message": "only src/e2e/config.ts reads the e2e wallet clocks; their release-gate stamp travels with its flag"
-									},
-									{
-										"group": [
-											"@/e2e/extra-seed",
-											"@/e2e/extra-seed.*",
-											"**/extra-seed",
-											"**/extra-seed.*",
-											"./extra-seed",
-											"./extra-seed.*"
-										],
-										"message": "only src/e2e/config.ts reads the e2e extra default network; its release-gate stamp travels with its flag"
 									},
 									{
 										"group": ["@/popup/pages/*", "@/popup/pages/**"],

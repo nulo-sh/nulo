@@ -53,6 +53,7 @@ import { BARRIERS, missingFamilies, shownOverlays, updateProblems } from "./fixt
 import { exportImportedAccountBody, previewImport } from "./helpers/account-io"
 import { accountRows, accountScope, readNetworkRows } from "./helpers/identity-rows"
 import { downloadPlainPasskeyBackup, exportBackupFile, openEncryptedBackup } from "./helpers/backup-export"
+import { answerArrival } from "./helpers/network-arrival"
 import { BACKUP_SLICE_REGISTRY } from "@/wallet/services/backup/backup-migration-registry"
 import { backupProblems } from "@/wallet/storage/stored-shapes/backups"
 import {
@@ -383,6 +384,7 @@ async function opensWithoutTakeover(ctx: ExtensionContext, page: Page, recording
 	await ensureUnlocked(page)
 	await waitForHash(page, "#/popup/general", 30_000)
 	expect(await shownOverlays(page)).toEqual([])
+	await answerArrival(page, recording.entries)
 	expect((await readAccounts(page, chain)).map(identity)).toEqual(before.map(identity))
 	await expectFirstAccountSelected(page, chain)
 	await expectImportedKeyOpens(page, imported(before)[0] ?? "")
@@ -417,6 +419,7 @@ async function throughTheReset(ctx: ExtensionContext, page: Page, recording: Rec
 	await clickByTestId(page, "stale-confirm-submit")
 	const saidMoved = await readyToastSaysMoved(page, "Testnet")
 	await waitForHash(page, "#/popup/general", 30_000)
+	await answerArrival(page, recording.entries)
 
 	const testnet = await readNetwork(page, "testnet")
 	expect([testnet.chainId, testnet.l1ChainId]).toEqual([CHAIN_IDS.TESTNET, TESTNET_L1_CHAIN_ID])

@@ -34,7 +34,6 @@ import {
 import { confirmImport, exportAccountBody, exportImportedAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "./helpers/account-io"
 import {
 	addNetwork,
-	E2E_MAINNET_CHAIN_ID,
 	PREVIOUS_TESTNET_CHAIN_ID,
 	readAccounts,
 	readNetwork,
@@ -187,7 +186,7 @@ describe("stale network", () => {
 		const networks = await readNetworkRows(page)
 		await lockWallet(page)
 		const { networkId } = await seedStaleMainnet(page, networks)
-		const mainnetBefore = await snapshotChain(page, E2E_MAINNET_CHAIN_ID, networkId)
+		const mainnetBefore = await snapshotChain(page, CHAIN_IDS.MAINNET, networkId)
 		await ensureUnlocked(page)
 
 		expect(await takeoverScreen(page)).toBe("blocked")
@@ -197,7 +196,7 @@ describe("stale network", () => {
 		await switchFromTakeover(page, "Testnet")
 		await page.waitForSelector('[data-testid="account-address-copy"]', { visible: true, timeout: 60_000 })
 		expect(await page.$(TAKEOVER)).toBeNull()
-		expect(await snapshotChain(page, E2E_MAINNET_CHAIN_ID, networkId)).toEqual(mainnetBefore)
+		expect(await snapshotChain(page, CHAIN_IDS.MAINNET, networkId)).toEqual(mainnetBefore)
 	})
 
 	test("S1d R2: deleting the network that holds the new chain, from Networks, brings back A1's reset", {

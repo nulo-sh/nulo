@@ -56,10 +56,6 @@ export async function setup(project: TestProject) {
 	const scripts = fs.readdirSync(EXTENSION_PATH, { recursive: true, encoding: "utf8" }).filter((file) => file.endsWith(".js"))
 	const texts = scripts.map((file) => fs.readFileSync(path.join(EXTENSION_PATH, file), "utf8"))
 	const stamped = (stamp: string) => texts.some((text) => text.includes(stamp))
-	// A third default would change what every fresh profile holds: it is the update candidate's alone.
-	if (stamped("NULO_E2E_EXTRA_SEED_BUILD_STAMP")) {
-		throw new Error(`${EXTENSION_PATH} seeds the update candidate's extra default network. Rebuild it with:\n  ${ARMED_BUILD}`)
-	}
 	if (!liveLeg) assertArmedSmokeBuild(stamped)
 	project.provide("extensionPath", EXTENSION_PATH)
 	project.provide("egressGuard", true)
