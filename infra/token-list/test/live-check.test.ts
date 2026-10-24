@@ -269,8 +269,9 @@ describe("the live check script", () => {
 		const source = join(dir, "list.source.json")
 		writeFileSync(source, canonical({ tokens: [token(1)] }))
 		try {
+			// `bun`, as CI runs it: under a Node runner `process.execPath` cannot load the script's TypeScript.
 			const child = spawn(
-				process.execPath,
+				"bun",
 				["infra/token-list/scripts/live-check.ts", `--source=${source}`, `${origin}/hostile`, `${origin}/moved`],
 				{ cwd: REPO_ROOT },
 			)

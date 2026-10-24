@@ -360,6 +360,7 @@
     "awaitingFirstPriceAnswer": true,
     "backCtaBlocked": true,
     "balanceFormatted": true,
+    "boundedString": true,
     "browser": true,
     "buildActivityRows": true,
     "buildIncomingCardProps": true,

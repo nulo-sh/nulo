@@ -61,4 +61,9 @@ describe("ArrivalRowSchema", () => {
 	])("rejects %s", (_name, row) => {
 		expect(ArrivalRowSchema.safeParse(row).success).toBe(false)
 	})
+
+	test("an id's cap counts UTF-16 units: 100 astral characters pass, 101 do not", () => {
+		expect(ArrivalRowSchema.safeParse({ sinceBlock: 1, played: [["😀".repeat(100), 1]] }).success).toBe(true)
+		expect(ArrivalRowSchema.safeParse({ sinceBlock: 1, played: [["😀".repeat(101), 1]] }).success).toBe(false)
+	})
 })

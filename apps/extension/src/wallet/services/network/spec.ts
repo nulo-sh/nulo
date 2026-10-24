@@ -153,7 +153,8 @@ const ERR_RPC_URL_TRANSPORT = "RPC URL must use https:// or http://localhost / h
  * An RPC URL the wallet may treat as its chain authority: no hidden character
  * inside it, then the transport rule (`rpcTransportVerdict`), userinfo refused.
  * zod's `.url()` returns the trimmed string, so a caller stores the parsed value,
- * never its own argument.
+ * never its own argument. It also drops tab, CR and LF from that value, so the
+ * hidden-character check reads the raw string before it.
  *
  * Runs on every input URL: the params of the popup client (`network/client.ts`)
  * and of the service. A stored URL is never re-judged by it (see `NetworkSchema`);
@@ -161,8 +162,8 @@ const ERR_RPC_URL_TRANSPORT = "RPC URL must use https:// or http://localhost / h
  */
 export const RpcUrlSchema = z
 	.string()
-	.url()
 	.refine((url) => !hasHiddenUrlCharacter(url), { message: ERR_RPC_URL_HIDDEN_CHARACTERS, abort: true })
+	.url()
 	.superRefine((url, ctx) => {
 		let parsed: URL
 		try {

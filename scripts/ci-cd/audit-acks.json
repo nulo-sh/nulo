@@ -63,7 +63,7 @@
 	},
 	{
 		"bundled": false,
-		"reason": "Exact pins inside miniflare 5.20260907.0-alpha, the local Workers simulator of wrangler 4.129.1, a dev dependency of apps/landing and infra/passkey-rp. They run in a developer's `wrangler dev`; no deployed Worker and no extension zip contains them.",
+		"reason": "Exact pins inside miniflare 5.20260907.0-alpha, the local Workers simulator of wrangler 4.129.1, a dev dependency of apps/landing, infra/passkey-rp and infra/token-list. They run in a developer's `wrangler dev`; no deployed Worker and no extension zip contains them.",
 		"revisit": "the next wrangler bump",
 		"advisories": [
 			{
@@ -137,25 +137,24 @@
 				"package": "undici",
 				"severity": "moderate",
 				"vulnerable_versions": ">=7.0.0 <7.29.1"
-			}
-		]
-	},
-	{
-		"bundled": false,
-		"reason": "The test runner. The path traversal needs control of a test file or the vitest config, which already runs arbitrary code, and CI runs only this repository's tests. vitest 4.1.11 fixes it, but any test-runtime change must pass the soak matrix (CLAUDE.md), so it moves with the next vitest bump.",
-		"revisit": "the next vitest bump",
-		"advisories": [
-			{
-				"id": 1193684,
-				"package": "@vitest/mocker",
-				"severity": "moderate",
-				"vulnerable_versions": ">=2.1.0 <4.1.11"
 			},
 			{
-				"id": 1193683,
-				"package": "vitest",
+				"id": 1243078,
+				"package": "undici",
 				"severity": "moderate",
-				"vulnerable_versions": ">=2.1.0 <4.1.11"
+				"vulnerable_versions": ">=7.0.0 <7.30.1"
+			},
+			{
+				"id": 1243081,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": ">=7.15.0 <7.30.1"
+			},
+			{
+				"id": 1243113,
+				"package": "undici",
+				"severity": "high",
+				"vulnerable_versions": ">=7.18.0 <7.30.1"
 			}
 		]
 	},

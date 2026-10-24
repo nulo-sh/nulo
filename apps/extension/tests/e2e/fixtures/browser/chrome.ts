@@ -263,11 +263,15 @@ async function discoverExtensionId(browser: Browser): Promise<string> {
 	return new URL(worker.url()).hostname
 }
 
-/** Seen at the egress guard on every launch, with or without `--disable-component-update`. */
+/**
+ * Seen at the egress guard with or without `--disable-component-update`, all but the download
+ * redirector on every launch.
+ */
 export const CHROME_OWN_HOSTS: ReadonlyMap<string, string> = new Map([
 	["accounts.google.com", "account sign-in state"],
 	["android.clients.google.com", "device check-in"],
 	["clients2.google.com", "extension and component update checks"],
+	["redirector.gvt1.com", "the component updater's download redirector"],
 	["update.googleapis.com", "the component updater"],
 	["www.google.com", "the default search provider's preconnect"],
 ])

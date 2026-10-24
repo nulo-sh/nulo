@@ -21,7 +21,7 @@ bun run e2e:agent tests/e2e/network/transfers.test.ts # filter to one file
 bun run e2e:agent --shard=5/5                        # shard 5 of the whole suite (CI's pool: see "CI sharding")
 ```
 
-Both suites run on Chrome by default and on Firefox with `NULO_E2E_BROWSER=firefox` (`bun run test:e2e` for smoke, `bun run e2e:agent …` for network). One run drives one browser: the agent builds `dist/<browser>`, greps that bundle and loads that extension. Firefox needs `geckodriver` (on `PATH` or at `$GECKODRIVER`) and `bun x puppeteer browsers install firefox`. How it is driven, what behaves differently and the rule for absorbing a difference: [`FIREFOX.md`](./FIREFOX.md).
+Both suites run on Chrome by default and on Firefox with `NULO_E2E_BROWSER=firefox` (`bun run test:e2e` for smoke, `bun run e2e:agent …` for network). One run drives one browser: the agent builds `dist/<browser>`, greps that bundle and loads that extension. Firefox needs `geckodriver` (on `PATH` or at `$GECKODRIVER`) and its pinned revision, `bun scripts/e2e/install-firefox.ts` from `apps/extension`. How it is driven, what behaves differently and the rule for absorbing a difference: [`FIREFOX.md`](./FIREFOX.md).
 
 Internally `scripts/e2e/agent.sh`:
 
