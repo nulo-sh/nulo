@@ -1,6 +1,6 @@
 # Terms of Use
 
-**Version 1.1 — effective «FILL: effective date»**
+**Version 1.1 — effective 26 October 2026**
 
 These Terms are a binding agreement between you and the developer of Nulo. Read them before you
 install or use Nulo. If you do not agree, do not install or use it.
@@ -576,4 +576,4 @@ public feedback forms.
 | Version | Effective | Change |
 |---|---|---|
 | 1.0 | Never in effect | A draft, replaced by 1.1 before it took effect. |
-| 1.1 | «FILL: effective date» | First version in effect. |
+| 1.1 | 26 October 2026 | First version in effect. |

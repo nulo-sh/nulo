@@ -17,7 +17,7 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 		{ version: "1.0", effective: null, material: true, changes: ["First published version."] },
 		{
 			version: "1.1",
-			effective: null,
+			effective: "26 October 2026",
 			material: true,
 			changes: ["You accepted a draft of these Terms. This version is the one in effect."],
 		},
