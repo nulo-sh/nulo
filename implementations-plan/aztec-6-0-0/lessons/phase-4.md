@@ -22,7 +22,7 @@ Each at `6.0.0`, read 2026-10-23:
 
 - `bun.lock`'s integrity equals npm's `dist.integrity` for all 44.
 - A scratch `npm install --ignore-scripts --force` of the 44 (431 packages): `npm audit signatures` verifies every registry signature, 102 attestations, 0 invalid, 0 missing.
-- SLSA v1 provenance, verified, for 21: the 19 `@aztec-foundation/*` toolchain names from `AztecProtocol/aztec-packages` `ci3.yml@refs/tags/v6.0.0`; `aztec-standards` from `AztecProtocol/aztec-standards` `release.yml@refs/tags/v6.0.0`; `@alejoamiras/presto` from `alejoamiras/presto` `release-sdk.yml@refs/heads/main`; `@alejoamiras/private-fee-juice` from `alejoamiras/ecosystem-tooling` `release.yml@refs/heads/main`.
+- SLSA v1 provenance, verified, for 21: the 18 `@aztec-foundation/*` toolchain names from `AztecProtocol/aztec-packages` `ci3.yml@refs/tags/v6.0.0`; `aztec-standards` from `AztecProtocol/aztec-standards` `release.yml@refs/tags/v6.0.0`; `@alejoamiras/presto` from `alejoamiras/presto` `release-sdk.yml@refs/heads/main`; `@alejoamiras/private-fee-juice` from `alejoamiras/ecosystem-tooling` `release.yml@refs/heads/main`.
 - The 23 `@aztec-labs/*` names carry no attestation (as at rc.3): trusted on the registry signature and the publisher, `charlielye`, published 2026-10-22 between 10:22 and 10:30Z.
 
 ## The gate
