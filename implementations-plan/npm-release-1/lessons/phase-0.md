@@ -17,7 +17,7 @@
   3. After a `dev` merge, the net diff from the plan's commit includes `dev`'s commits. Accepted: review `origin/dev...HEAD`.
   4. `Closes #1109` closes the issue before publication; #481 used `Refs`. Accepted in part (D7): `Closes` stays, as the lane brief and the program rule require; checklist step 6 comments the `verify` run and reopens #1109 on a failed dispatch.
   5. The control's staging was unspecified. Same fix as Codex #2.
-  6. Nits, accepted: `resolve-asset` has no peers to check; the `@aztec-labs/*` peers clear the gate around 2026-10-29 10:30Z (`npm view ... time`: 10:22-10:24Z), not 10-30; the plan was over 150 lines.
+  6. Nits, accepted: `resolve-asset` has no peers to check; the `@aztec-labs/*` peers clear the gate around 2026-10-29 10:30Z (`npm view ... time`: 10:22-10:30Z; `@aztec-labs/stdlib` at 10:29:41Z), not 10-30; the plan was over 150 lines.
 - Opus held D4's "no note"; Codex's argument (the repository's override and its test tree say nothing about a consumer's) is the stronger one, and a factual sentence adds no obligation.
 
 ## Plan audit, round 2 (final Codex pass)
