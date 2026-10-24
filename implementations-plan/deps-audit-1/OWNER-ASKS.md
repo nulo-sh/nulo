@@ -71,7 +71,7 @@
   - The load rule never fired (load5 66-152, one sample over 150).
 - **Reading (Codex r11, ii):** the control is red, so the red-control branch holds. vitest 4.1.12 is not necessary for a red in this soak, and #1101 is not shown to be pre-existing. The next arc is a bounded suite-level diagnosis of both reds (#1101's stalled step, and #1102's poll or same-millisecond cutoff) before any candidate. No budget, config or bar changes as a pass route.
 
-## OA-6: zod 1243066 can be neither fixed nor acknowledged on this base (#1110)
+## OA-6: zod 1243066 can be neither fixed nor acknowledged on this base (#1110) (answered: A, after B was withdrawn)
 
 - **Surface:** none a person sees. The ask is whether the Aztec line may run a zod outside its declared range, or whether a bundled advisory may be acknowledged.
 - **Why:**
@@ -91,3 +91,7 @@
   - **C:** hold this PR until Aztec widens its range. No Aztec line in sight does, and the other fifteen advisories keep blocking every dependency PR, #1107 included.
 - **What ships now:** nothing. `deps-audit-1-a2` is pushed with the bumps, #987's fix, the acknowledgements and the CLAUDE.md rule, and no PR is open. Phases 2-3 have not run, since A would move their candidate. The base reference for Phase 3 is collected.
 - **Timing:** fast-uri 3.1.9 clears the age gate at 2026-10-26T23:05:26Z. Until then, an install that re-resolves the root workspace, A's included, needs the local, uncommitted exclude D18 describes. A run after that time needs none.
+- **Answer:**
+  - The owner, 2026-10-24: "B: acknowledge". The reason given: no schema a dApp reaches has a size-bounded collection. The lead's trace refuted that before anything was written, so B was withdrawn (D20).
+  - Then, on the corrected facts, the owner, 2026-10-24: "A: override zod to 4.6.7". That is puppeteer 25.14.0, then an exact root override, so every package runs one zod 4.6.7. The gates prove the Aztec schemas still behave, and the override is dropped when the Aztec line moves its zod constraint.
+  - Landed as D21, and #1110 closed on the decision.

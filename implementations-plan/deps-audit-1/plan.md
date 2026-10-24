@@ -1,8 +1,8 @@
 ---
 plan: deps-audit-1
 tier: light
-status: arc 2 on `deps-audit-1-a2` off `e0faa7267`, reviewed (Codex converged in 3 rounds), held on zod 1243066 (OA-6, #1110); arc 1 ARC_FAILED on two soak reds since fixed by #1105
-issues: "#980, #987, #1032 (closed by this plan's PR); #1110 (zod, OA-6)"
+status: arc 2 on `deps-audit-1-a2` off `e0faa7267`, reviewed (Codex converged in 3 rounds); OA-6 answered A (zod forced to 4.6.7, D21); arc 1 ARC_FAILED on two soak reds since fixed by #1105
+issues: "#980, #987, #1032 (closed by this plan's PR); #1110 (zod, OA-6, closed on the decision)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -21,13 +21,14 @@ One arc, one PR against `dev`, closing #980, #987 and #1032. No screen changes. 
 
 Arc 1's bar, now historical: after the arc, `bun audit` reports 39 acknowledged advisories and nothing else, and the gate in enforce mode says 39 acknowledged, 0 unacknowledged, 0 stale, 0 unreadable. #980's five are **fixed**, none acknowledged: vite 8.2.1 → 8.2.4 and follow-redirects 1.16.0 → 1.16.1. #1032's two are fixed by storybook 10.6.2 and vitest 4.1.12 (D13), and vitest 4.1.12 also retires the two acknowledged vitest advisories. Because vite 8.2.4 and vitest 4.1.12 change the test runtime, the arc runs the soak matrix once at its final candidate (D6, D13).
 
-**Arc 2** (D17-D19) starts fresh off `dev` `e0faa7267`, after #1105 fixed the two tests behind arc 1's reds. It lands arc 1's lockfile, byte for byte, plus two entries (D18), and #987's fix. It also handles the advisories published since:
+**Arc 2** (D17-D21) starts fresh off `dev` `e0faa7267`, after #1105 fixed the two tests behind arc 1's reds. It lands arc 1's lockfile, byte for byte, plus two entries (D18), and #987's fix. It also handles the advisories published since:
 - three more vite and one more storybook, which the same bumps fix;
 - fast-uri, through the age-gate runbook;
 - jsdom's undici, fixed, and miniflare's exact undici pin, acknowledged;
-- the braces entry, stale since its advisory's withdrawal, out, and the vitest entry the bump retires.
+- the braces entry, stale since its advisory's withdrawal, out, and the vitest entry the bump retires;
+- zod 1243066, fixed by puppeteer 25.14.0 and an exact root `overrides.zod: "4.6.7"`, so the tree holds one zod (D21).
 
-Its bar, still to run, is the owner's same-engine bar (D17), which CLAUDE.md now states. The gate's bar is 41 / 0 / 0 / 0 once zod 1243066 is settled (D19, OA-6).
+Its bar is the owner's same-engine bar (D17), which CLAUDE.md now states. The gate's bar is 41 / 0 / 0 / 0 (D18, D21).
 
 ## Outcome & Quality Bar
 
@@ -60,7 +61,8 @@ Its bar, still to run, is the owner's same-engine bar (D17), which CLAUDE.md now
 - **Where:** `bun.lock`; the `vite` line in `package.json` (`overrides`), `apps/extension/package.json`, `apps/landing/package.json`, `apps/playground/package.json`; the storybook lines (D13); the `vitest` line in its 14 manifests (D13); the vitest entry out of `scripts/ci-cd/audit-acks.json` and its row out of `SECURITY.md` (D8); `infra/token-list/test/live-check.test.ts` (D11). Arc 2 adds:
 - `bun.lock`'s `fast-uri` and `jsdom/undici` entries;
 - in the ack file and `SECURITY.md`'s table, the braces entry removed and three undici ids added to the miniflare entry (D18);
-- `CLAUDE.md`'s soak sentence (D17).
+- `CLAUDE.md`'s soak sentence (D17);
+- `apps/extension/package.json`'s `puppeteer` floor `^25.14.0`, the root `overrides.zod` `"4.6.7"`, the eleven `bun.lock` entries they move, and one pin-surface line in the `aztec-update` skill (D21).
 
 No source or workflow file. `bunfig.toml` ends unchanged.
 - **follow-redirects:** `bun update follow-redirects` writes the lockfile entry only (axios's `^1.16.0` admits 1.16.1).
@@ -72,6 +74,8 @@ No source or workflow file. `bunfig.toml` ends unchanged.
 - **follow-redirects (2 high):** on a cross-origin redirect, a credential header passed in array form, or named by a `sensitiveHeaders` pattern holding `^` or `|`, reaches the new host. It runs only in Node and Bun (axios's http adapter): tests, the e2e harness, scripts that use the Aztec client. Exploitability here: unknown; the fix removes it.
 - **launch-editor in vite (3):** command or flag injection on Windows and WSL, and a Windows existence-check bypass, through the dev server's open-in-editor middleware. Reachable on a Windows or WSL host through vite's `/__open-in-editor` dev-server route (`apps/extension` `dev`, landing, playground). No `vite build`, so no shipped artifact, serves it.
 - **Supply chain:** the age gate holds for every new version (F4). The exclude names packages, not versions: it is safe here only because both names stay exact pins whose lock entries do not change, and Phase 1 checks both. A matching `dist.integrity` proves byte consistency with the registry, not publisher innocence; the controls are the age gate, the full `bun pm diff` read (bundled changes included, F8), vite's provenance, and the byte-identical rest of the lockfile. Compromised build tooling could alter shipped code: that is the residual every build carries, not new here.
+- **zod 1243066 (high), arc 2:** the public advisory's own path, fixed by moving every copy to 4.6.7 (D21). Forcing a version outside Aztec's `~4.4.3` is the residual risk: the Aztec schemas run on a zod their authors did not declare. The unit suites, both smoke runs, the local dApp-facing network specs and CI's network lanes and canaries are what show they still behave. Supply chain: 4.6.7's npm provenance names `b500a2ee` on zod's `main` (signature verified, the tag points at it, after the 2026-09-21 reverts), and its whole `bun pm diff` was read.
+- **puppeteer 25.14.0, arc 2:** dev-only; it never ships. chromium-bidi 157.0.8090-0 is published by Google's `chrome-devtools-npm` account with no provenance, where 17.0.2 carried SLSA provenance. puppeteer-core 25.14.0, which is attested, pins it exactly. Its whole diff was read.
 - **Least privilege, crypto:** N/A; no workflow, token or crypto change.
 
 ## UI impact
@@ -97,9 +101,10 @@ None. The arc changes dependency files only; no screen, copy or layout.
 ### Phase 2: builds, artifacts, smoke (passed at the final candidate `9b414dc39`, as at `57c35cec5` and `dc82d009d`)
 - First, merge `origin/dev` if it moved, then repeat Phase 1's fresh install and audit gate. This HEAD is the **candidate**: record its SHA and the `bun.lock` sha256.
 - **Commands:** `bun run audit:vue` (its `build` is the Chrome build); `bun run build:firefox`; `bun run --cwd apps/landing build`; `bun run --cwd apps/playground build`; `bun run --cwd apps/extension build-storybook`; `bun run test:ci-gating`.
-- **Artifact check**, both production builds, from the repo root: `apps/extension/dist/{chrome,firefox}/THIRD-PARTY-NOTICES.txt` names no `follow-redirects`; `grep -rlF` over `apps/extension/dist/chrome` and `apps/extension/dist/firefox` for follow-redirects' `Maximum number of redirects exceeded` and launch-editor's `UNC paths are not supported on Windows` (and vite's `__open-in-editor` route) exits 1 for each. Exit 0 or 2 fails the check. Record whether `axios` is listed.
+- **Artifact check**, both production builds, from the repo root: `apps/extension/dist/{chrome,firefox}/THIRD-PARTY-NOTICES.txt` names no `follow-redirects`; `grep -rlF` over `apps/extension/dist/chrome` and `apps/extension/dist/firefox` for follow-redirects' `Maximum number of redirects exceeded` and launch-editor's `UNC paths are not supported on Windows` (and vite's `__open-in-editor` route) exits 1 for each. Exit 0 or 2 fails the check. Record whether `axios` is listed. Arc 2 adds zod: each notices file names `zod` once, at 4.6.7, and the store holds one `zod@` directory.
 - **Smoke e2e, both browsers, one after the other:** build armed (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:chrome`), then `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- --retry=0`. Repeat with `build:firefox` and `NULO_E2E_BROWSER=firefox`. Poll each log in one bounded `until` loop; record each wall-clock.
-- **Pass criteria:** every command exits 0; the artifact check finds nothing; smoke has no failure on either browser. Network e2e runs in CI (all four lanes trip on `bun.lock`).
+- **dApp-facing network specs, arc 2, both browsers:** zod moved under the schemas the wallet parses dApp calls and node replies with, so one proverless `NULO_E2E_PROVERLESS=1 bun run e2e:agent <files> --retry=0` per browser. It runs one spec per RPC family under `tests/e2e/network/`: `cap-request-basic`, `connect-dapp`, `contracts-register`, `data-registerSender`, `meta-getChainInfo`, `meta-getAccounts`, `sim-methods`, `tx-sendTx-default`, `tx-sendTx-multicall`, `authwit-lifecycle`, `register-token`, `err-scope-and-cap`, `batch-mixed`, `wait-for-tx-mined`. The full network suites and the prover-ON canaries run in CI.
+- **Pass criteria:** every command exits 0; the artifact check finds nothing; smoke and the dApp-facing specs have no failure on either browser. The full network e2e runs in CI (all four lanes trip on `bun.lock`).
 
 ### Phase 3: the same-engine bar at the candidate (D17; arc 1 ran the soak matrix, D6, D15, D16)
 - **Warning:** change no file in the repo and make no commit while it runs. Start only when `git status --porcelain` is empty, and keep every output in `<scratch>`.
@@ -136,7 +141,7 @@ None. The arc changes dependency files only; no screen, copy or layout.
 - After Phase 3, `git diff <candidate>` may touch only `implementations-plan/**`, except a close-out merge of `origin/dev`. If that merge touches a dependency file, `bunfig.toml` or a vitest config (`vitest.base.mts`, `**/vitest*.config.*`), the merged HEAD becomes a new candidate and reruns Phases 2-3. Other code a merge brings ran on its own PR's CI and runs again on this PR's.
 
 ### Phase 4: final gate
-- **Commands:** the Phase 1 audit gate, now expecting 41 / 0 / 0 / 0 (D18, D19); `bun run lint`; `bun run check:plans` after staging; `git diff origin/dev --stat`.
+- **Commands:** the Phase 1 audit gate, now expecting 41 / 0 / 0 / 0 (D18, D21); `bun run lint`; `bun run check:plans` after staging; `git diff origin/dev --stat`.
 - **Pass criteria:** each exits 0; the diff touches only the files under Architecture's **Where**, `implementations-plan/index.md` and this plan's directory.
 
 ## Decision ledger
@@ -175,6 +180,25 @@ None. The arc changes dependency files only; no screen, copy or layout.
   - Puppeteer 25.8.0's chromium-bidi 17.0.2 keeps a zod 3.25.76, which no 3.x release fixes. Puppeteer 25.14.0 (past the gate, inside `^25.1.0`) ships chromium-bidi 157.0.8090-0, which declares `zod ^4.6.5`.
   - zod is in both extension zips. `SECURITY.md` refuses to acknowledge a bundled advisory unless a reason shows the extension cannot reach it, and none is shown.
   - Overriding the Aztec range, or an exception, is the owner's call. The arc stops before Phases 2-3, whose candidate an override would move.
+- **D20 OA-6's first answer, B, is withdrawn: its premise did not hold.**
+  - The owner, 2026-10-24: "B: acknowledge". The reason given: the advisory's path needs a size-bounded collection, and no schema a dApp reaches has one, so 4.6.6 changes nothing for the wallet. It would reopen when a dApp-facing schema gains a bound, or when the Aztec line moves zod.
+  - The lead's trace, before any write, found a size-bounded collection in a schema the wallet parses dApp input with, and one in a node-reply schema. So 4.6.6 changes what the wallet's parse does, and the can't-reach reason `SECURITY.md` requires could not be written truthfully. Codex (resumed): stop and report, confidence high.
+  - Nothing was written on B. The owner re-decided on the corrected facts (D21).
+- **D21 zod is forced to 4.6.7 everywhere, under the Aztec pin (OA-6 A).**
+  - The owner, 2026-10-24: "A: override zod to 4.6.7". That is puppeteer 25.14.0, then an exact root override, so every package runs one zod 4.6.7; the gates prove the Aztec schemas still behave; the override is dropped when the Aztec line moves its zod constraint.
+  - **Landed:**
+    - `apps/extension`'s `puppeteer` floor goes to `^25.14.0`. Its exact chromium-bidi 157.0.8090-0 declares `zod ^4.6.5`, so 3.25.76 leaves. 25.15.0 and later are inside the gate.
+    - Then root `overrides.zod` `"4.6.7"`, beside the vite override. It stays exact, not a range, so no later resolve drifts.
+    - One install with the D18 scratch config (fast-uri is still inside the gate until 2026-10-26T23:05:26Z). The tracked `bunfig.toml` is unchanged, and the frozen `--force` install from an empty tree passes. The store holds `zod@4.6.7` alone.
+  - **The lock moves eleven entries:**
+    - zod 4.4.3 → 4.6.7, and `chromium-bidi/zod` out;
+    - puppeteer and puppeteer-core 25.8.0 → 25.14.0, @puppeteer/browsers 3.2.1 → 3.2.5, chromium-bidi 17.0.2 → 157.0.8090-0;
+    - devtools-protocol 0.0.1666840 → 0.0.1696802, webdriver-bidi-protocol 0.4.2 → 1.0.1, modern-tar 0.8.4 → 0.8.6, typed-query-selector 2.12.2 → 2.12.3;
+    - a new `puppeteer-core/ws` 8.22.0, since puppeteer-core asks `^8.22.0` and the root keeps 8.21.3.
+  - **Browsers:** Chrome and chrome-headless-shell 152.0.7977.42 → 155.0.8059.79, from Puppeteer's postinstall; Firefox stable_153.0.4 → stable_158.0, from `bun x puppeteer browsers install firefox`. The harness reads `PUPPETEER_REVISIONS.firefox` and finds the new directory.
+  - **Out of scope:** `.github/actions/setup-aztec/cli/package-lock.json` keeps zod 4.4.3. It is the Aztec sandbox and CLI that CI's network lanes boot, an npm tree `bun audit` does not read and no artifact ships. The `aztec-update` skill regenerates it with each Aztec bump.
+  - **Removal:** the `aztec-update` skill's pin surface now names the override. It is dropped once all six zod-declaring Aztec packages admit ≥ 4.6.6.
+  - The audit gate reads 41 / 0 / 0 / 0 with no new acknowledgement.
 
 ## Review verdicts
 
@@ -218,14 +242,15 @@ None. The arc changes dependency files only; no screen, copy or layout.
 ## Delivery
 
 - **Arc 1** = Phases 1-4, one PR against `dev` (the orchestrator's D-orch-1: no stack), ready, not a draft. Title: `fix(deps): vite, follow-redirects, storybook and vitest for seven new advisories` (80 characters; it was the five-advisory title before D13). Body: the seven ids with links; each bump's `bun pm diff` and provenance; why none is acknowledged and which acknowledgement leaves; the local exclude and the frozen-install proof; the soak, smoke and build results; `Closes #980`, `Closes #987`, `Closes #1032`. No label: `bun.lock` trips every e2e lane.
-- **Arc 2** = the same four phases on `deps-audit-1-a2`, one ready PR against `dev`; arc 1 opened none. Title: `fix(deps): vite, follow-redirects, storybook, vitest and fast-uri for fifteen advisories` (88 characters). The body is arc 1's plus:
+- **Arc 2** = the same four phases on `deps-audit-1-a2`, one ready PR against `dev`; arc 1 opened none. Title: `fix(deps): vite, follow-redirects, storybook, vitest, fast-uri, zod for sixteen advisories` (90 characters, 98 with GitHub's ` (#NNNN)`). The body is arc 1's plus:
   - the advisories D18 adds, and the undici acknowledgement;
   - D17's two quotes, and the CLAUDE.md sentence they rewrite;
   - the fast-uri exclude and the frozen-install proof;
   - the inventory compare;
-  - OA-6's answer.
+  - OA-6's answer: puppeteer 25.14.0 and `overrides.zod`, with the override's reason and removal condition (`package.json` takes no comment), both diffs, 4.6.7's provenance, and the browser revisions;
+  - #1107 merges `dev` after this PR, and needs the local fast-uri exclude until 2026-10-26T23:05:26Z.
 
-  `Closes #980`, `Closes #987`, `Closes #1032`.
+  `Closes #980`, `Closes #987`, `Closes #1032`; `Refs #1110` (closed on the decision).
 
 ## Post-implementation
 

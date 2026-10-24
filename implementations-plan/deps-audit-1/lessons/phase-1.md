@@ -57,3 +57,20 @@ All commands from the repo root on branch `deps-audit-1-a1`, before 21:01Z, so b
 - #987's one-liner on dev's new call site (it gained `--source=` with #1103). The original test, under the Node launcher: 1 failed, 23 passed. The fix: 24/24 on node ×3 and on bun ×3.
 - The frozen proof, with the tracked `bunfig.toml`: every `node_modules` removed, then `bun install --frozen-lockfile --force`. Exit 0, 996 packages; the store holds fast-uri 3.1.9 and undici 7.30.1. Then lint, `typecheck:all`, `test:ci-gating` (687 pass) and the token-list host tests (85 passed, 3 skipped) all exit 0.
 - Review round 1: Codex (fresh session `01a16b57`) and Opus both `approve with fixes` (plan, Review verdicts). The Phase 3 base reference was collected in a scratch worktree at `e0faa7267`: 14 one-run summaries and passkey-rp's JUnit, all exit 0, tree clean. Codex r2 found the first scripts too lax: no exact workspace set, no provenance or per-summary consistency checks, and a collector that could leave stale passing output. Both were hardened. The base was re-collected into `inv-base2/`: DONE, clean, at `e0faa7267`, 14 summaries plus passkey-rp's 5 passed and 6 skipped. Self-tests: base against base passes, and nine seeded faults all fail.
+
+## Arc 2: OA-6, zod forced to 4.6.7 (2026-10-24)
+
+- **B withdrawn (D20).** The owner's first answer, B, carried a reason. The trace refuted it before any write: a schema the wallet parses dApp input with, and a node-reply schema, each hold a size-bounded collection. Codex (resumed `01a16b57`): stop and report, high. LEAD_BLOCKED to the orchestrator; the owner then chose A.
+- **puppeteer `^25.14.0`, then root `overrides.zod` `"4.6.7"`.** One `bun install --config=<scratch>`, with the D18 fast-uri exclude, since fast-uri is still inside the gate. It moved eleven lock entries (D21). 25.14.0 is the newest puppeteer past the gate (25.15.0 is from 2026-10-20). Then every `node_modules` removed and `bun install --frozen-lockfile --force` with the tracked `bunfig.toml`: exit 0, 996 packages, the store holds `zod@4.6.7` alone. The gate reads 41 / 0 / 0 / 0. Lint and `typecheck:all` exit 0.
+- **zod 4.6.7's provenance.**
+  - The attested sha512 equals `bun.lock`'s integrity, and `npm audit signatures` (in a scratch project) verifies both the registry signature and the attestation.
+  - The SLSA build ran `release.yml` on `refs/heads/main` at `b500a2ee`. That commit is GitHub-verified, the tag `v4.6.7` points at it, and it sits on today's `main`.
+  - 4.6.6's notes say the six 2026-09-21 commits were reverted and removed from `main`'s history. 4.6.0-4.6.5 were published before they were pushed.
+- **`bun pm diff` side order flips:**
+  - `zod@4.4.3 4.6.7` printed 4.4.3 on the `-` side; all six puppeteer-family diffs printed the new version there.
+  - `ws@8.21.3 8.22.0` compared the root's 8.21.3 with itself ("No differences"), because the new copy is nested (`puppeteer-core/ws`). Swapping the sides gave the real diff.
+  - Read the direction from each `"version"` line.
+- **The full reads**, six Opus readers over 64,698 zod lines and every executed puppeteer-family line: all clean, high confidence.
+  - chromium-bidi 157 has no provenance: Google's `chrome-devtools-npm` publishes it from the Chromium tree, per its README. puppeteer-core 25.14.0, which is attested, pins it exactly, and 157 drops 17.0.2's `bidiServer` and `prepare` script.
+  - zod's allowsEval probe is unchanged, and the extension's jitless pre-seed still applies.
+- **Browsers.** Puppeteer's postinstall brought Chrome 155.0.8059.79. `bun x puppeteer browsers install firefox` brought stable_158.0. `PUPPETEER_REVISIONS` (namespace import, as `firefox.ts` reads it) names both.
