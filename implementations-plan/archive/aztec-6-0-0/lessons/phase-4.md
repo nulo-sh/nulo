@@ -27,7 +27,7 @@ Each at `6.0.0`, read 2026-10-23:
 
 ## The gate
 
-All at retry 0. The unit gates and Chrome smoke ran at `c57b3b4c`; Firefox smoke and every run after it at `0ef8a3dd`, whose changes are e2e-only (the replay's L1 check, the Chrome interception's log text, the README) and pass lint and the e2e typecheck:
+All at retry 0. The unit gates and Chrome smoke ran at `c57b3b4c`; Firefox smoke and every run after it at `0ef8a3dd` (the replay's L1 check, the Chrome interception's log text, the README). Those changes were taken as e2e-only and the unit gates were not rerun, but `apps/extension/scripts/e2e/chrome-rpc-intercept.test.ts`, a unit test, pinned the old failure text: PR CI's `Unit tests` caught it, the expectation now names the origin, and `test:all`, `lint` and `typecheck:all` pass at the fix. Rerun the unit gates after any commit, e2e fixtures included:
 
 - `bun run audit:vue`: exit 0 in 181 s (15148 tests); `test:all`: exit 0 in 158 s; `test:ci-gating`: 687 pass; `test:release`: 341 pass; `check:plans`: exit 0 once the skill's citation named the live plan path (the gate reads HEAD, so the archive path fails until the move).
 - Smoke from the armed build: Chrome 61 files passed, 9 skipped, 272 tests, 1967 s; Firefox 65 passed, 5 skipped, 276 tests, 2721 s.

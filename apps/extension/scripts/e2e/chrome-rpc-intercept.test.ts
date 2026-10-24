@@ -97,5 +97,5 @@ test("a reply Chrome refuses for any other reason is a failure", async () => {
 	const refusal = "Protocol error (Fetch.continueRequest): Invalid state for continueInterceptedRequest"
 	const { failures, replies } = await replyRefused("redirect", refusal)
 	expect(replies).toEqual([REPLIES.redirect])
-	expect(failures).toEqual([`service_worker:x/sw.js: reply to /aztec-testnet/key failed: ProtocolError: ${refusal}`])
+	expect(failures).toEqual([`service_worker:x/sw.js: reply to a request for ${NODE} failed: ProtocolError: ${refusal}`])
 })
