@@ -9,9 +9,18 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at dda72e321
 trunk: dev
-issues: "Closes #1109 (arc 1)"
+issues: "Closes #1109 (#1114)"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-24. Planned and implemented the same day.
+- **Status:** delivered in one PR against `dev`, #1114 (P1, P2 and this close-out). Merging it closes the plan; the publication is the orchestrator's dispatch checklist (Delivery), not an item here.
+- **Shipped:** the two READMEs' Aztec line at `6.0.0`, a `0.3.0` entry in all three (Changes sections for `wallet-crypto` and `resolve-asset`, with `0.2.0`), the schema patch's zod note (D4); the `"0.3.0"` digests, rehearsed twice, the control refused, reproduced by the Opus review and by the digest gate on the PR head ([lessons/phase-2.md](lessons/phase-2.md)).
+- **Dropped, rejected, superseded:** a zod range change (D4: a `package.json` edit, outside the lane; a consumer picks a patched zod once the Aztec line admits ≥ 4.6.6); a PR-time drift check (D5); a fresh-clone second pass (D6); `Refs #1109` (D7); the plan audit's "the owner approves in the UI" (superseded by the owner's recorded instruction). `scripts/publish/README.md`'s drift list omits `tsconfig.json`, `bun.lock` and `stage.ts`; the dry run refuses drift regardless, so it stays.
+- **Known limits:** none. **Open items:** none. **Lessons:** none promoted; nothing here is a cross-task gotcha `lessons.md` lacks.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are history, not instructions.
 
 # npm-release-1: prepare `@nulo-sh/*` 0.3.0 on the Aztec 6.0.0 peers
 
@@ -69,8 +78,6 @@ One arc, one PR against `dev` (no stack: the orchestrator's D-orch-1). It moves 
 - `wallet-sdk-schema-patch.md`, Requirements, replacing `- \`zod\` is a dependency.`: `- \`zod\` is a dependency. The Aztec peers declare \`zod ~4.4.3\`, below the fix for [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) (zod before 4.6.6). The Nulo wallet overrides zod to \`4.6.7\` and tests this package on it; your install does not inherit that override.`
 - `wallet-sdk-schema-patch.md`, Changes: `- **0.3.0**: the peers move to the Aztec \`6.0.0\` line. The patch is unchanged and adds the same four methods to \`6.0.0\`'s \`WalletSchema\`.`
 - `resolve-asset.md`, `## Changes`: `- **0.3.0**, **0.2.0**: no code change; the version moves in lockstep.`
-
-**Flow.** README commit → merge `origin/dev` → pass 1 → digest commit → pass 2 and `check-digests.ts` → control → review loop → digest gate → PR → close-out (digest gate again) → orchestrator: dry run, `dry_run=false`, approval, `verify`.
 
 ## Phases
 
