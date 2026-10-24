@@ -118,3 +118,34 @@
   - A pre-candidate `test:all` is green.
   - Not run yet: Phases 2-3 and the PR. A moves the candidate; under B, the new tests do.
 - **Answer:** the orchestrator, 2026-10-24, for the owner: "OA-7 A: keep the UTF-16 budgets; one shared helper at the nine caps; astral boundary tests; additive stamp". It is a non-UI fix that keeps today's refusal boundary exactly. Landed as D25.
+
+## OA-8: Firefox 158 refuses two puppeteer commands on extension pages; which Firefox do the e2e lanes run?
+
+- **Surface:** none a person sees. This is the e2e harness's Firefox only.
+- **Why:**
+  - Puppeteer's revision pins move with OA-6 A's puppeteer 25.14.0: Chrome 152 → 155, Firefox 153.0.4 → 158.0. The harness runs the Firefox puppeteer pins (`lockedFirefoxRevision()`), locally and in CI's `setup-puppeteer` action.
+  - From Firefox 157, the Remote Agent classes a page in the `extension` process as a privileged context. On such a context, `browsingContext.activate` and `browsingContext.setViewport` throw "The command does not support browsing contexts in privileged scope", even with `--allow-system-access`.
+    - The check is in `RootBiDiModule.sys.mjs` `_getNavigable`, with `isPrivilegedContext` in `BrowsingContextUtils.sys.mjs`. It is present in 157.0.1 and 158.0, and absent from 153.0.4.
+    - Puppeteer's `page.bringToFront()` and `page.setViewport()` are exactly those commands. Every wallet page is an extension page.
+  - Reach:
+    - 27 spec files call one of them directly or through `atWidth`, and the driver's own `prepareKeys` focus loop calls `bringToFront`.
+    - `prepareClick` swallows the error, so a click there would lose its focus step silently.
+    - Seen: `navigation` failed 2 of 8 tests and `legal-acceptance` 2 of 14, every failure this refusal.
+  - Every puppeteer past the age gate whose chromium-bidi declares zod 4 brings Firefox 157 or later: that is 25.13.0 (Firefox 157.0.1) and 25.14.0. So no puppeteer choice keeps both OA-6 A and Firefox 153.
+  - The same files on Firefox 153.0.4, under puppeteer 25.14.0, through the harness's `FIREFOX_PATH`: 22 of 22 pass.
+  - Two smaller browser changes are fixed on the branch at `9c377c88c`, by the routes the e2e README gives:
+    - Chrome 155 reaches `redirector.gvt1.com` with or without `--disable-component-update`, so it is declared in `CHROME_OWN_HOSTS`.
+    - Firefox 158 fetches a New Tab add-on update from `archive.mozilla.org`. Its documented off state, an empty `browser.newtabpage.trainhopAddon.xpiBaseURL`, is set with the guard's prefs.
+- **Options:**
+  - **A (recommended):** pin the e2e Firefox to stable_153.0.4, the revision dev's lanes run today, apart from puppeteer.
+    - `lockedFirefoxRevision()` reads one repo constant, and `setup-puppeteer` installs `firefox@<it>`. A unit test holds the two to one value.
+    - An issue tracks B, which lifts the pin.
+    - The Firefox lanes then test exactly what they test on dev today, and the advisory still closes. The cost is one hand-bumped pin.
+  - **B:** move both commands behind the browser driver, `BrowserDriver.bringToFront` and `setViewport`. Firefox would do them from the privileged scope (`chromeScript`): select the tab and focus its window, and size the window for the viewport.
+    - 27 spec files, `prepareKeys` and `atWidth` move to the seam, and FIREFOX.md gains a row.
+    - The lanes would then run the Firefox users have. It is a harness design change inside a dependency lane, and both browsers' smoke reruns in full.
+  - **C:** reopen OA-6. puppeteer goes back to 25.8.0 and the override is dropped, and zod 3.25.76 (dev-only, in chromium-bidi 17.0.2) is acknowledged in `audit-acks.json` with its reopening event.
+- **What ships now:** nothing.
+  - On the branch at `9c377c88c`: OA-7 A (D25) and the two harness fixes. pr-quick was green at `023458c12`.
+  - Phase 2 ran green through every build, artifact and store check, then went red at Chrome smoke on the redirector, which is now fixed.
+  - Not run at a candidate: either browser's smoke, the network specs, Phase 3 and the PR.

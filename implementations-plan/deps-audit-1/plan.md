@@ -1,7 +1,7 @@
 ---
 plan: deps-audit-1
 tier: light
-status: arc 2 on `deps-audit-1-a2` off `e0faa7267`; OA-6 answered A (zod forced to 4.6.7, D21); OA-7 answered A (UTF-16 caps kept, D25); arc 1 ARC_FAILED on two soak reds since fixed by #1105
+status: arc 2 on `deps-audit-1-a2` off `e0faa7267`; OA-6 answered A (zod forced to 4.6.7, D21); OA-7 answered A (UTF-16 caps kept, D25); held on OA-8 (Firefox 158, D26); arc 1 ARC_FAILED on two soak reds since fixed by #1105
 issues: "#980, #987, #1032 (closed by this plan's PR); #1110 (zod, OA-6, closed on the decision)"
 driver: claude-code
 claude_model: opus
@@ -230,6 +230,12 @@ None. The arc changes dependency files, plus one schema-order fix (D22) that lea
     - The `__proto__` tightening stays and is recorded (D23). Its one writer, `dapp-session/service.ts`, builds a fresh `{ broad }` object, so none carries the key.
     - The validator's comment now gives the reason that holds on both versions: the object schema drops an undeclared key.
   - **Inventory:** the change adds exactly 14 test ids, all in `apps/extension`, and Phase 3's compare allows those and no others. 4 are in `utils/bounded-string.test.ts`, 7 in `content-script-validator.test.ts`, and one each in the journal, arrival and selected-account tests. The PR lists them.
+
+- **D26 Held on OA-8: Firefox 158 refuses `activate` and `setViewport` on extension pages.** Phase 2 at `023458c12` passed every build, artifact and store check.
+  - Chrome smoke went red: 79 of 297, all at the egress guard on `redirector.gvt1.com`. Chrome 155 reaches it with or without `--disable-component-update`, so it joins `CHROME_OWN_HOSTS`.
+  - The Firefox dev check then hit `archive.mozilla.org`: New Tab's train-hop update, which an empty `browser.newtabpage.trainhopAddon.xpiBaseURL` switches off at its source, set with the guard's prefs. Both landed in `9c377c88c`.
+  - Under that fix, Firefox 157+'s privileged-context check refuses `page.bringToFront()` and `page.setViewport()` on every wallet page. The harness runs puppeteer's Firefox, and every zod-4 puppeteer pins 157 or later. Firefox 153.0.4 under puppeteer 25.14.0 passes the same 22 tests.
+  - The fix either adds a pin or changes the driver contract, so the arc stops (OA-8).
 
 ## Review verdicts
 
