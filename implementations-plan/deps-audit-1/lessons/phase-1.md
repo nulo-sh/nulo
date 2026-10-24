@@ -44,3 +44,14 @@ All commands from the repo root on branch `deps-audit-1-a1`, before 21:01Z, so b
 - The vitest entry leaves `audit-acks.json` (5 entries, 39 advisories) and its row leaves `SECURITY.md`. Every `node_modules` removed, then `bun install --frozen-lockfile`: exit 0. The gate in enforce mode reads 39 / 0 / 0 / 0. Committed as `b8f5c22fe`.
 - The fixture-retry repro (e2e skill row 38) on 4.1.12 under Node fails both ways: the test-scoped retry reads `undefined`, and the file-scoped one rethrows the first error. #190 stays open (D14).
 - Codex r9: approve with fixes, records only (plan reconciled, D14).
+
+## Arc 2: the bumps on `e0faa7267` (2026-10-24)
+
+- The base's frozen install passed. Its audit read 40 / 19 / 1 / 0. New since arc 1: vite 1242727/1242733/1242736, storybook 1242874, undici 1243078/1243081/1243113, fast-uri ×4 and zod 1243066. braces 1240992 is stale: no longer reported.
+- Arc 1's manifest edits, replayed pin-then-restore (vite, storybook, vitest), plus `bun update follow-redirects`.
+  - No install was re-gated: the Aztec rc.3 pins are past the age gate, so no exclude was needed for them.
+  - `bun.lock` came out byte-identical to arc 1's reviewed candidate (sha256 `c7578a98…cb6593`), and every manifest equals arc 1's. So arc 1's `bun pm diff` reviews and integrity checks hold unchanged.
+- `bun update undici` moved only `jsdom/undici` 7.29.1 → 7.30.1. Its `bun pm diff` (scratch `pmdiff-undici.txt`) touches `lib/` and docs only; the manifest changes only `"version"`; the release is attested. It printed "undici 5.29.0 -> 7.30.1"; the lock shows only jsdom's entry moved, and no manifest gained a line.
+- fast-uri 3.1.9 is younger than the gate, so it went through the CVE runbook. A scratch copy of the tracked `bunfig.toml` plus `minimumReleaseAgeExcludes = ["fast-uri"]`, passed as `--config=` to `bun update fast-uri`. Only its lock entry moved; the integrity equals the registry's; SLSA provenance; no install script; its diff touches `index.js`, `lib/utils.js` and tests. The tracked `bunfig.toml` never changed.
+- The ack file: the vitest and braces entries removed; undici 1243078/1243081/1243113 added to the miniflare entry, the only copy left in their ranges. The gate reads 41 / 1 / 0 / 0, zod alone (D19, OA-6).
+- #987's one-liner on dev's new call site (it gained `--source=` with #1103). The original test, under the Node launcher: 1 failed, 23 passed. The fix: 24/24 on node ×3 and on bun ×3.

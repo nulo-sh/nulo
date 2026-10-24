@@ -1,7 +1,7 @@
 ---
 plan: deps-audit-1
 tier: light
-status: arc 1 ARC_FAILED at its final candidate `9b414dc39`, the extension soak's Node leg red 1 of 30 (#1101); the vitest 4.1.10 control red 1 of 30 too (#1102); no PR
+status: arc 2 on `deps-audit-1-a2` off `e0faa7267`, held on zod 1243066 (OA-6); arc 1 ARC_FAILED on two soak reds since fixed by #1105
 issues: "#980, #987, #1032 (closed by arc 1)"
 driver: claude-code
 claude_model: opus
@@ -10,7 +10,7 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 budget: recon 1 explorer (sonnet); one Codex audit round-trip (gpt-6.1-sol high) plus one Opus Plan leg
-base: origin/dev at ef5336bbc
+base: origin/dev at ef5336bbc (arc 1), e0faa7267 (arc 2)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
@@ -20,6 +20,14 @@ post_implementation_hardening: not scheduled
 One arc, one PR against `dev`, closing #980, #987 and #1032. No screen changes. The runbook is `SECURITY.md` § Dependency policy; this plan keeps only what is specific to this arc. Over the light target (150 lines): the arc absorbed four asks and two later advisories, and the ledger keeps each call.
 
 After the arc, `bun audit` reports 39 acknowledged advisories and nothing else, and the gate in enforce mode says 39 acknowledged, 0 unacknowledged, 0 stale, 0 unreadable. #980's five are **fixed**, none acknowledged: vite 8.2.1 → 8.2.4 and follow-redirects 1.16.0 → 1.16.1. #1032's two are fixed by storybook 10.6.2 and vitest 4.1.12 (D13), and vitest 4.1.12 also retires the two acknowledged vitest advisories. Because vite 8.2.4 and vitest 4.1.12 change the test runtime, the arc runs the soak matrix once at its final candidate (D6, D13).
+
+**Arc 2** (D17-D19) starts fresh off `dev` `e0faa7267`, after #1105 fixed the two tests behind arc 1's reds. It lands arc 1's lockfile, byte for byte, plus two entries (D18), and #987's fix. It also handles the advisories published since:
+- three more vite and one more storybook, which the same bumps fix;
+- fast-uri, through the age-gate runbook;
+- jsdom's undici, fixed, and miniflare's exact undici pin, acknowledged;
+- three stale entries out.
+
+It passes the owner's same-engine bar (D17), which CLAUDE.md now states. The gate's bar is 41 / 0 / 0 / 0 once zod 1243066 is settled (D19, OA-6).
 
 ## Outcome & Quality Bar
 
@@ -49,7 +57,12 @@ After the arc, `bun audit` reports 39 acknowledged advisories and nothing else, 
 
 ## Architecture & Implementation
 
-- **Where:** `bun.lock`; the `vite` line in `package.json` (`overrides`), `apps/extension/package.json`, `apps/landing/package.json`, `apps/playground/package.json`; the storybook lines (D13); the `vitest` line in its 14 manifests (D13); the vitest entry out of `scripts/ci-cd/audit-acks.json` and its row out of `SECURITY.md` (D8); `infra/token-list/test/live-check.test.ts` (D11). No source or workflow file. `bunfig.toml` ends unchanged.
+- **Where:** `bun.lock`; the `vite` line in `package.json` (`overrides`), `apps/extension/package.json`, `apps/landing/package.json`, `apps/playground/package.json`; the storybook lines (D13); the `vitest` line in its 14 manifests (D13); the vitest entry out of `scripts/ci-cd/audit-acks.json` and its row out of `SECURITY.md` (D8); `infra/token-list/test/live-check.test.ts` (D11). Arc 2 adds:
+- `bun.lock`'s `fast-uri` and `jsdom/undici` entries;
+- in the ack file and `SECURITY.md`'s table, the braces entry removed and three undici ids added to the miniflare entry (D18);
+- `CLAUDE.md`'s soak sentence (D17).
+
+No source or workflow file. `bunfig.toml` ends unchanged.
 - **follow-redirects:** `bun update follow-redirects` writes the lockfile entry only (axios's `^1.16.0` admits 1.16.1).
 - **vite, exactly 8.2.4:** with the override a range, `bun update vite[@8.2.4]` resolves 8.3.4. So pin first, then restore the ranges: override `8.2.4`, install; override and the three floors `^8.2.4`, install. The lock keeps 8.2.4, which satisfies `^8.2.4`.
 - **The re-gate (F5):** while either package is inside the gate, both installs run with `--config=<scratch bunfig.toml>`, a fresh copy of the tracked file plus one `minimumReleaseAgeExcludes` line for the two names, outside the repo. After 21:01Z the installs run with the tracked file.
@@ -65,7 +78,7 @@ After the arc, `bun audit` reports 39 acknowledged advisories and nothing else, 
 
 None. The arc changes dependency files only; no screen, copy or layout.
 
-## Phases (arc 1, branch `deps-audit-1-a1` off `origin/dev`, this plan's commit cherry-picked first)
+## Phases (arc 1, branch `deps-audit-1-a1` off `origin/dev`, this plan's commit cherry-picked first; arc 2, branch `deps-audit-1-a2` off `origin/dev` `e0faa7267`, with this directory brought over by file)
 
 ### Phase 1: the two bumps ✓
 - First, on the base: `bun run test:all`; record each workspace's pass count.
@@ -88,16 +101,29 @@ None. The arc changes dependency files only; no screen, copy or layout.
 - **Smoke e2e, both browsers, one after the other:** build armed (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:chrome`), then `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- --retry=0`. Repeat with `build:firefox` and `NULO_E2E_BROWSER=firefox`. Poll each log in one bounded `until` loop; record each wall-clock.
 - **Pass criteria:** every command exits 0; the artifact check finds nothing; smoke has no failure on either browser. Network e2e runs in CI (all four lanes trip on `bun.lock`).
 
-### Phase 3: the soak matrix at the candidate (failed at the final candidate: 12 of 13 compares exit 0, the extension pair red, D15)
-- **Warning:** change no file in the repo and make no commit while it runs. Each `soak` call snapshots HEAD, the dirty state and the lockfile hash once, and `compare` checks agreement within its pair only. Keep every output and log in `<scratch>`. Start only when `git status --porcelain` is empty.
-- For each workspace whose `test` is `bun --bun vitest run …` (13: `apps/extension`, `apps/landing`, `infra/token-list`, and `packages/{aztec-runtime,design,extension-messaging,legal,third-party-notices,token-list,wallet-bridge,wallet-core,wallet-crypto,wallet-sdk-schema-patch}`): `bun scripts/ci-cd/test-soak/cli.ts soak --cwd <ws> --runtime node --runs 30 --out <scratch>/<ws>-node.json`, the same with `--runtime script` into `<ws>-bun.json`, then `cli.ts compare` on the pair. Run them in sequence from one background script; poll its log in bounded `until` loops under two hours each.
-- `bun run test:all` five times; each exits 0 with the Phase 1 base counts.
-- Push `deps-audit-1-a1` and `gh workflow run pr-quick.yml --ref deps-audit-1-a1`; that run's head SHA is the soak commit, and it is green.
-- **Pass criteria:** every `compare` exits 0 (no failed run, an exact inventory but `BUN_ONLY_FILES`); all 26 summaries record the candidate SHA, a clean tree and the candidate lockfile hash; the dispatch ran at the candidate SHA and is green; the five `test:all` runs are green. A red run is read, never retried away (no raised timeout, no skip).
+### Phase 3: the same-engine bar at the candidate (D17; arc 1 ran the soak matrix, D6, D15, D16)
+- **Warning:** change no file in the repo and make no commit while it runs. Start only when `git status --porcelain` is empty, and keep every output in `<scratch>`.
+- **The reference, at the base.**
+  1. Detach at `e0faa7267` with a clean tree, remove every `node_modules`, and run `bun install --frozen-lockfile`.
+  2. For each of the 14 workspaces `test:all` runs (the 13 `bun --bun vitest run` workspaces and `packages/resolve-asset`), run `bun scripts/ci-cd/test-soak/cli.ts soak --cwd <ws> --runtime script --runs 1 --out <scratch>/base/<ws>.json`.
+  3. Return to the branch and run a fresh frozen install.
+- **The candidate.**
+  - The same 14 one-run summaries into `<scratch>/cand/<ws>.json`.
+  - Then `bun run test:all` three times. No unit config sets `retry`, so each run is at retry 0.
+- **The inventory compare.** `cli.ts compare` refuses a pair whose SHA, lockfile or vitest version differ, which is the point here, so a scratch script compares the summaries and the tool stays untouched. For each workspace:
+  - both summaries have a clean tree and 0 failed runs, and bind the base or candidate SHA;
+  - their inventory ids are the same set, and each id has the same status kinds;
+  - any difference is a test the arc adds or renames, listed in the PR. This arc adds or renames none.
+- Push `deps-audit-1-a2` and run `gh workflow run pr-quick.yml --ref deps-audit-1-a2`. That run's head SHA is the candidate, and it is green.
+- **Pass criteria:**
+  - the three `test:all` runs exit 0, with every workspace's counts equal to the reference's;
+  - every inventory compare passes;
+  - the dispatch ran at the candidate SHA and is green.
+- **A red run is a finding, never a retry.** Diagnose it, then run the same command at the base. If it reproduces there, it is pre-existing: file it after a dedupe search, and it does not block. If it does not, fix its cause and rerun the bar at the fixed commit.
 - After Phase 3, `git diff <candidate>` may touch only `implementations-plan/**`, except a close-out merge of `origin/dev`. If that merge touches a dependency file, `bunfig.toml` or a vitest config (`vitest.base.mts`, `**/vitest*.config.*`), the merged HEAD becomes a new candidate and reruns Phases 2-3. Other code a merge brings ran on its own PR's CI and runs again on this PR's.
 
 ### Phase 4: final gate
-- **Commands:** the Phase 1 audit gate, now expecting 39 / 0 / 0 / 0; `bun run lint`; `bun run check:plans` after staging; `git diff origin/dev --stat`.
+- **Commands:** the Phase 1 audit gate, now expecting 41 / 0 / 0 / 0 (D18, D19); `bun run lint`; `bun run check:plans` after staging; `git diff origin/dev --stat`.
 - **Pass criteria:** each exits 0; the diff touches only the files under Architecture's **Where**, `implementations-plan/index.md` and this plan's directory.
 
 ## Decision ledger
@@ -118,6 +144,24 @@ None. The arc changes dependency files only; no screen, copy or layout.
 - **D14 The e2e skill's fixture-retry check on this vitest bump: the defect stays, and so does #190.** Row 38 asks every vitest bump for a fixture-retry repro. On 4.1.12 under Node, a retried test still reads its test-scoped fixture as `undefined` after the first setup threw, and a file-scoped fixture rethrows the first error. The fix (vitest-dev/vitest#11238) is not in 4.1.12; `@vitest/runner`'s only change is the concurrency limiter. No workaround.
 - **D15 Arc 1 ends `ARC_FAILED` at its final candidate.** At `9b414dc39`, Phase 2 passed and 12 of 13 compares exit 0. The `apps/extension` Node leg failed run 5 of 30: `background.transport.test.ts` › `with VITE_NULO_ALLOW_IFRAME_DAPPS=1` › `a same-origin subframe completes a key exchange` timed out at 5000 ms, while load5 was 89-94 and no other lead was running. Alone, the test takes 371-447 ms. Nothing shows vitest 4.1.12 as the cause, and nothing shows saturation. This is the extension soak step's third red, after two at `dc82d009d`, so the common brief's three-failure rule ends the arc. Rejected: a retry, because "clearly host saturation" is unshown (Codex r10), and a test fix, because the stalled step is unidentified and a moved import would be a raised timeout. Filed as #1101 after a dedupe search. The bun leg, the extension compare and `test:all` ×5 did not run (OA-5).
 - **D16 The matched control is red too, on another test (OA-5 A).** The same 30-run Node soak ran at a detached `0fe71361a`, the commit before the vitest bump (vitest 4.1.10, the same 15148-test inventory). #1101's test passed every run. Run 28 failed `sealed-journal.composition.test.ts`'s boot-sweep test on an `expect.poll` at its default 1000 ms (#1102). So vitest 4.1.12 is not necessary for a red in this soak. That does not show #1101 is pre-existing. The next arc diagnoses both before any candidate (Codex r11).
+- **D17 A same-engine dependency bump passes a lighter bar; the soak matrix stays for an engine change.**
+  - The owner, after arc 1: "That sounds extreme and unreal to be honest. Maybe (and most probably) we really need to modify that rule."
+  - The pick, option A of the orchestrator's question, on 2026-10-23: "keep the 30x2 matrix only for an engine change (a Bun bump, a Node/Bun flip, retiring the interop stopgap). A same-engine dependency bump (vite, vitest, plugins) gets: one clean commit, frozen install, test:all x3 on Bun all green with an inventory-exact compare against the base commit, plus the pr-quick dispatch. A red is filed; if it reproduces at the base commit it is pre-existing and does not block."
+  - This arc's bumps change no engine, so Phase 3 is the new bar. CLAUDE.md's soak sentence states both tiers.
+  - The vitest acknowledgement that waited "until its own soak" leaves with the bump (D8), so `SECURITY.md` keeps no soak wording.
+  - This is a reviewed gate change made on the owner's recorded decision, not a lead's narrowing.
+- **D18 The advisories published after arc 1, each handled where it lies.**
+  - **Fixed by the planned bumps:** vite 1242727, 1242733 and 1242736 (`>=8.2.0 <=8.2.3`, so 8.2.4 fixes them), and storybook 1242874 (`<10.6.2`).
+  - **fast-uri** 1243098, 1243101, 1243104 and 1243107, through ajv from commitlint, a root dev tool. 3.1.9 was published 2026-10-19T23:05Z (SLSA provenance) and clears the gate at 2026-10-26T23:05Z. Fixed under `SECURITY.md`'s CVE runbook: `bun update fast-uri` with a scratch copy of `bunfig.toml` plus one exclude line, passed as `--config=`, as D4 did. The tracked file never changed. The cost, until 10-26T23:05Z: a re-resolve of the root workspace re-gates fast-uri and needs the same local, uncommitted exclude.
+  - **undici** 1243078, 1243081 and 1243113 (`<7.30.1`). jsdom's copy moves 7.29.1 → 7.30.1 (past the gate, attested) through `bun update undici`, lockfile only. Miniflare pins 7.29.0 exactly, and the newest miniflare past the gate (5.20261012.1-beta, wrangler 4.151.1) pins 7.29.1. So the three ids join the miniflare entry (`bundled: false`, the next wrangler bump).
+  - **Stale:** the braces entry, which `bun audit` stopped reporting, and the vitest entry that 4.1.12 retires.
+  - The gate then reads 41 / 1 / 0 / 0: zod alone (D19).
+- **D19 zod 1243066 (high) cannot be fixed on this base, and cannot be acknowledged under `SECURITY.md` (OA-6).**
+  - Five Aztec packages pin `zod ~4.4.3`: foundation, stdlib, entrypoints, ethereum and world-state, on 6.0.0-rc.3 and on 6.0.0 alike. The fix is 4.6.6.
+  - The wallet's own zod must stay the instance the Aztec schemas use, and the wallet parses with those schemas (`WalletSchema` and its patch). A workspace bump alone would split zod and leave 4.4.3 in the tree.
+  - Puppeteer's chromium-bidi keeps a zod 3.25.76, which no 3.x release fixes.
+  - zod is in both extension zips. `SECURITY.md` refuses to acknowledge a bundled advisory unless a reason shows the extension cannot reach it, and none is shown.
+  - Overriding the Aztec range, or an exception, is the owner's call. The arc stops before Phases 2-3, whose candidate an override would move.
 
 ## Review verdicts
 
@@ -148,6 +192,14 @@ None. The arc changes dependency files only; no screen, copy or layout.
 ## Delivery
 
 - **Arc 1** = Phases 1-4, one PR against `dev` (the orchestrator's D-orch-1: no stack), ready, not a draft. Title: `fix(deps): vite, follow-redirects, storybook and vitest for seven new advisories` (80 characters; it was the five-advisory title before D13). Body: the seven ids with links; each bump's `bun pm diff` and provenance; why none is acknowledged and which acknowledgement leaves; the local exclude and the frozen-install proof; the soak, smoke and build results; `Closes #980`, `Closes #987`, `Closes #1032`. No label: `bun.lock` trips every e2e lane.
+- **Arc 2** = the same four phases on `deps-audit-1-a2`, one ready PR against `dev`; arc 1 opened none. Title: `fix(deps): vite, follow-redirects, storybook, vitest and fast-uri for fifteen advisories` (88 characters). The body is arc 1's plus:
+  - the advisories D18 adds, and the undici acknowledgement;
+  - D17's two quotes, and the CLAUDE.md sentence they rewrite;
+  - the fast-uri exclude and the frozen-install proof;
+  - the inventory compare;
+  - OA-6's answer.
+
+  `Closes #980`, `Closes #987`, `Closes #1032`.
 
 ## Post-implementation
 
