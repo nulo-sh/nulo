@@ -89,19 +89,20 @@ set, § 2). Terms 1.0 never takes effect: it was a draft, replaced by 1.1, which
 It appears in three places, two in `legal/terms.md` (tests hold the version line to the manifest,
 not the history row's date), so change them together:
 
-- [ ] `legal/terms.md` — the version line at the top, and the 1.1 row of the history table
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.1 (currently `null`; 1.0 stays
+- [x] `legal/terms.md` — the version line at the top, and the 1.1 row of the history table
+- [x] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.1 (26 October 2026; 1.0 stays
       `null`)
-- [ ] `legal/privacy.md` + its manifest entries — 1.0 and 1.1 already dated, confirm unchanged;
+- [x] `legal/privacy.md` + its manifest entries — 1.0 and 1.1 already dated, confirm unchanged;
       1.1.1 per § 4
 
 Then:
 
-- [ ] `git grep -n "«FILL" -- legal/terms.md legal/privacy.md` prints nothing (`legal/README.md`
+- [x] `git grep -n "«FILL" -- legal/terms.md legal/privacy.md` prints nothing (`legal/README.md`
       names the placeholder in prose). The `launch-legal` check refuses the 1.0.0 Release PR until it does
-- [ ] Both listing URLs in `legal/terms.md` § 1 open the live listings (a store serves an item's
-      public page only once it has published it). Both did on 2026-10-19; check again on the day
-- [ ] `bun run --cwd packages/legal test` and `bun run --cwd apps/landing test` are green
+- [x] Both listing URLs in `legal/terms.md` § 1 open the live listings (a store serves an item's
+      public page only once it has published it). Both did on 2026-10-19 and on 2026-10-24 (AMO's
+      page answers a script with a challenge; its API reads the add-on public)
+- [x] `bun run --cwd packages/legal test` and `bun run --cwd apps/landing test` are green
 - [ ] After the deploy and before the Release PR merges, `nulo.sh/terms` shows **no DRAFT banner**
       and no `noindex` meta, and the current version's permalink (`nulo.sh/terms/v<version>/`)
       shows no DRAFT banner. A permalink always carries `noindex`: it duplicates the canonical page
@@ -145,8 +146,8 @@ version before that release reaches users (procedure above):
 token-list requests carry. The version is archived and in place; its effective date is the day the
 promote publishes it, so until then it reads `«FILL: effective date»`:
 
-- [ ] `legal/privacy.md` — the version line and the 1.2.2 history row, dated the day it is published
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.2 (now `null`), same date
+- [x] `legal/privacy.md` — the version line and the 1.2.2 history row, dated the day it is published
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.2 (25 October 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.2/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.2 text (`apps/extension/store/listing.md` § Privacy
       policy text)
@@ -156,8 +157,8 @@ version is archived and in place, and its effective date, like 1.2.2's, is the d
 publishes it. A promote that publishes both dates both, and the archived
 `legal/archive/privacy-1.2.2.md` with them, since it was archived before its date was known:
 
-- [ ] `legal/privacy.md` — the version line and the 1.2.3 history row, dated the day it is published
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.3 (now `null`), same date
+- [x] `legal/privacy.md` — the version line and the 1.2.3 history row, dated the day it is published
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.3 (25 October 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.3/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.3 text (`apps/extension/store/listing.md` § Privacy
       policy text)
@@ -169,8 +170,8 @@ and the last-selected account from its exceptions. Its effective date, like 1.2.
 promote publishes it. A promote that publishes both dates both, and the archived
 `legal/archive/privacy-1.2.3.md` with them:
 
-- [ ] `legal/privacy.md` — the version line and the 1.2.4 history row, dated the day it is published
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.4 (now `null`), same date
+- [x] `legal/privacy.md` — the version line and the 1.2.4 history row, dated the day it is published
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.4 (25 October 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.4/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.4 text (`apps/extension/store/listing.md` § Privacy
       policy text)

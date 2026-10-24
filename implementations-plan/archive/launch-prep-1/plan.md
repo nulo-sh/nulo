@@ -16,15 +16,16 @@ post_implementation_hardening: not scheduled
 ## Outcome
 
 - **Date:** 2026-10-19.
-- **Status:** A1 merged as #888. A2 is a draft PR against `dev` carrying this close-out; the owner signed the sheet's line and the banner on decision page 69 (2026-10-20), and A2 merges right before the 1.0.0 promote, which closes the plan.
+- **Status:** A1 merged as #888. A2 is the PR against `dev` carrying this close-out; the owner signed the sheet's line and the banner on decision page 69 (2026-10-20), and A2 merges right before the 1.0.0 promote, which closes the plan.
 - **Shipped:** A1: the `BEFORE-LAUNCH.md` boxes the re-fetched evidence meets, the owner's page-62 store calls, two checks made passable, `legal/README.md`'s Mainnet line. A2: Terms 1.1, material, with one `changes` line (P69-02 C, replacing P68-01 B); 1.0 archived byte-exact and listed as never in effect (P68-02 A); the README banner (P68-03 A plus the preview-build bullet, as drawn: P69-03 A); § 4's live-Testnet box moved to a § 3 step before the promote (P68-04 B); the legal README's decline line; the how-aztec-works footer.
 - **Review loop:** the plan took Codex reject, Opus conditional approve, Codex conditional approve, then Codex approve. A1 took Codex clean, Opus three P3 (fixed), Codex clean. A2 took Codex one P2 (half accepted), Opus four P3 (fixed), Codex one P3 (fixed), then Codex clean; after page 69, Codex clean again.
-- **Gates at the head:** after merging `origin/dev` at `817cce9d`: lint, `typecheck:all`, `test:all`, `test:ci-gating`, `check:plans` exit 0; with line C, the legal and landing tests and the legal-acceptance e2e (14/14 at retry 0) on the armed Chrome build.
+- **Dates:** set by the orchestrator on the owner's delegation of the launch (2026-10-24): Terms 1.1 effective 26 October 2026, the day the 1.0 listing is planned to go live; privacy 1.2.2, 1.2.3 and 1.2.4 effective 25 October 2026, the day the promote publishes them, in `legal/privacy.md`, the manifest and the archived 1.2.2 and 1.2.3 copies.
+- **Gates at the head:** after merging `origin/dev` at `a7062ab68`: lint, `typecheck:all`, `test:all`, `test:ci-gating`, `check:plans` exit 0; with line C, the legal and landing tests and the legal-acceptance e2e (14/14 at retry 0) on the armed Chrome build.
 - **Deviations:** A2's commit type is `feat(legal)` (D9); no A3, both asks being signed together (D1); the how-aztec-works footer came from A2's review.
 - **Dispositions:** #372, #385, #684 and #775 stay closed known limits with corrected conditions (§ Dispositions), posted by the orchestrator; the owner accepted #385's window by name (P68-05 A).
 - **Dropped:** owner dispositions for #372, #684 and #775 (D2); trimming #385's row (A2 Codex r1).
 - **Known limits:** none filed.
-- **Open items:** `BEFORE-LAUNCH.md` § 3: the owner's send from the 1.0.0 candidate on the new Testnet; Terms 1.1's effective date in three places; Chrome Public before the store dispatch; AMO's experimental flag. #864 closes at the release.
+- **Open items:** `BEFORE-LAUNCH.md` § 3: the owner's send from the 1.0.0 candidate on the new Testnet; the post-deploy checks of `nulo.sh/terms` and the privacy permalinks; Chrome Public before the store dispatch; AMO's experimental flag; the Chrome `storage` justification re-pasted (§ 4). #864 closes at the release.
 - **Lessons:** none promoted; the checklist-wording lesson stays in [lessons/phase-1.md](lessons/phase-1.md).
 - **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 

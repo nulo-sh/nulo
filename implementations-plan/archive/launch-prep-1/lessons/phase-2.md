@@ -31,3 +31,7 @@
   (208 s); the sheet shot with C in both themes lists that one line only.
 - 2026-10-20 Codex r4 (resumed `01a15635`): clean. At the head: lint, `typecheck:all`,
   `test:all`, `test:ci-gating`, `check:plans` exit 0.
+- 2026-10-24 launch: `origin/dev` merged (Aztec 6.0.0 and its token list; the plan index the only
+  conflict). Terms 1.1 dated 26 October 2026, privacy 1.2.2 to 1.2.4 dated 25 October 2026, the
+  orchestrator's call on the owner's delegation; `launchBlanks("1.0.0")` on the documents is `[]`.
+  Both listings re-fetched (AMO's page challenges a script; its API reads the add-on public).
