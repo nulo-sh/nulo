@@ -22,6 +22,7 @@ import { type JobError, type JobProgress, type JobStage, NORMALIZED_RAW_MAX_CHAR
 import { isFieldAddress } from "@nulo/wallet-bridge"
 import { z } from "zod"
 import { isFeeAmount } from "@nulo/wallet-core/jobs"
+import { boundedString } from "@/utils/bounded-string"
 import { TransferType } from "@/wallet/services/transaction/spec"
 
 export const OPERATION_JOURNAL_SERVICE_NAME = "operation-journal"
@@ -316,7 +317,7 @@ const InitialStageSchema = z.discriminatedUnion("stage", [
 export const JobErrorSchema: z.ZodType<JobError> = z.object({
 	kind: z.string().min(1),
 	message: z.string(),
-	normalizedRaw: z.string().max(NORMALIZED_RAW_MAX_CHARS).nullable(),
+	normalizedRaw: boundedString(NORMALIZED_RAW_MAX_CHARS).nullable(),
 })
 
 const journalMetadataShape = {
