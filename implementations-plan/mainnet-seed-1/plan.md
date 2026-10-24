@@ -134,3 +134,6 @@ Steps 2-4 of `implementations-plan/README.md` § Post-implementation standard at
 
 - `/goal` Phases 1-4 ✓ in implementations-plan/mainnet-seed-1/plan.md with each gate's output in the transcript; Codex loop converged; draft PR `feat(network): seed aztec mainnet beside testnet, held for the live pair` open against `dev`, never ready, never merged.
 - `/loop` Read implementations-plan/mainnet-seed-1/plan.md and STATUS.md; run the next unticked phase to its gate; stop after three failures on one step; once Phase 4 is ✓, run Post-implementation; never mark the PR ready.
+- **Fix round 1, Codex** (gpt-6.1-sol, high, `01a16d97`): conditional approve, two P2. Accepted: `check:seeds` printed a node's error text, which can echo a path or credential; it now prints fixed lines, with a redaction test. Settled as a known limit with Codex (round 2): an imported account on a custom network sharing a seeded chain id is refused on restore, a class Testnet already had (#1116).
+- **Fix round 1, Opus** (general-purpose): no P0-P2; four P3, all taken: `seedStaleMainnet`'s doc and a guard; an assertion that the arrival never reaches the Mainnet node, since its refusal is global; OA-7 (a duplicate "Mainnet" name); `legal/README.md` under OA-1.
+- **Fix round 2, Codex** (resume): **approve**, no new material finding.

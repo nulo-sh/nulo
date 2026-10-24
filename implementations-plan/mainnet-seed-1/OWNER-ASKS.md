@@ -4,7 +4,7 @@ The arc ships without any of these: each "ships now" line is what the draft PR c
 
 ## OA-1: README and store-listing wording once Mainnet is seeded
 
-- **Surfaces.** `README.md:8` on GitHub (the banner's network bullet), and `apps/extension/store/listing.md:218-220`, the reviewer note sent to Firefox Add-ons with every version.
+- **Surfaces.** `README.md:8` on GitHub (the banner's network bullet), and `apps/extension/store/listing.md:218-220`, the reviewer note sent to Firefox Add-ons with every version. Also `legal/README.md:77-79`, which says 1.0.0 seeds "no Mainnet, which arrives in a later 1.x": false if this merges before 1.0.0, and edited with whichever answer lands.
 - **Ships now:** both unchanged. README: "**The Aztec testnet is the default network.** Its assets are for testing; a mainnet network you add may carry real value. Use only what you can afford to lose entirely. Treat any key material you import as compromised." Listing: "The wallet opens on the Aztec testnet, its only public network, with a zero balance." With the seed, "its only public network" is false.
 - **A (recommended).** README: "**The Aztec testnet is the default network.** Its assets are for testing. Aztec Mainnet is also built in, and its assets, like those on any mainnet network you add, may carry real value. Use only what you can afford to lose entirely. Treat any key material you import as compromised." Listing: "The wallet opens on the Aztec testnet with a zero balance. Aztec Mainnet is also listed under Networks."
 - **B.** The listing change only; the README line stays, since #893 (launch-prep-1, draft) replaces the whole banner and its Mainnet sentence ("Mainnet comes in a later 1.x release") then needs the same edit.
@@ -47,3 +47,11 @@ The arc ships without any of these: each "ships now" line is what the draft PR c
 - **A (recommended).** Renew the known limit as written and close it again; reopen on a person's report.
 - **B.** A plan of its own for journal reconciliation: a recovery policy with its own obligations, not this lane's.
 - **What ships now.** No runtime change; the PR's merge list names this answer.
+
+## OA-7: a seeded "Mainnet" beside a network the person already named "Mainnet"
+
+- **Surface.** Settings → Networks, the switcher and the arrival. Seeding skips the per-profile name check that adding and renaming enforce (`network/service.ts:581`, `seedOneNetworkLocked` from `:321`).
+- **Who meets it.** A Developer Mode person who added a custom network named "Mainnet" on another chain (Alpha's 4248422646, say): the update adds the seed beside it, and the arrival names it. Their own row keeps its name; renaming it away frees the name for good.
+- **Ships now:** two rows named "Mainnet", on different chains.
+- **A (recommended).** Name the seeded row "Aztec Mainnet" when "Mainnet" is taken in the profile; the arrival then names it so.
+- **B.** As ships now, a known limit.
