@@ -70,10 +70,10 @@ type Deliver = (message: unknown, from?: MessageSender) => void
 /** The SDK's own listener, wrapped so forwarding is observed rather than inferred from silence. */
 let sdkListener: ReturnType<typeof vi.fn<Listener>> | undefined
 
-function boot(init: typeof initWalletSdkHandler = initWalletSdkHandler): { handler: BackgroundConnectionHandler; deliver: Deliver } {
+function boot(): { handler: BackgroundConnectionHandler; deliver: Deliver } {
 	attached = undefined
-	const handler = init(fakeSdkServices({ remembered: true }).services, noopLogger, fakeSdkPorts())
-	// `init` assigned it through the mock; the control-flow analysis cannot see that.
+	const handler = initWalletSdkHandler(fakeSdkServices({ remembered: true }).services, noopLogger, fakeSdkPorts())
+	// `initWalletSdkHandler` assigned it through the mock; the control-flow analysis cannot see that.
 	const wrapper = attached as Listener | undefined
 	if (!wrapper) throw new Error("the wrapper was not attached to the relay")
 	return { handler, deliver: (message, from = sender(TAB)) => wrapper(message, from) }
@@ -353,20 +353,19 @@ describe("a key exchange, admitted only from its discovery's tab and document or
 })
 
 describe("with VITE_NULO_ALLOW_IFRAME_DAPPS=1", () => {
-	const withFlag = async () => {
+	const withFlag = () => {
 		vi.stubEnv("VITE_NULO_ALLOW_IFRAME_DAPPS", "1")
-		vi.resetModules()
-		return boot((await import("./background")).initWalletSdkHandler)
+		return boot()
 	}
 
 	test("a same-origin subframe completes a key exchange", async () => {
-		const { handler, deliver } = await withFlag()
+		const { handler, deliver } = withFlag()
 		await establish(deliver, "f1", TAB, sender(TAB, 3))
 		expect(handler.getSession("f1")).toBeDefined()
 	})
 
 	test("a cross-origin subframe is refused, though its discovery is credited to the top frame's origin", async () => {
-		const { handler, deliver } = await withFlag()
+		const { handler, deliver } = withFlag()
 		const frame = sender(TAB, 3, "https://embedded.example")
 		await approve(deliver, "f2", frame)
 		expect(handler.getPendingDiscovery("f2")?.origin).toBe(FAKE_DAPP_ORIGIN)
@@ -374,10 +373,7 @@ describe("with VITE_NULO_ALLOW_IFRAME_DAPPS=1", () => {
 	})
 
 	test("a subframe's message is forwarded, and its dead session is answered in the sender's tab only", async () => {
-		vi.stubEnv("VITE_NULO_ALLOW_IFRAME_DAPPS", "1")
-		vi.resetModules()
-		const { initWalletSdkHandler: init } = await import("./background")
-		const { deliver } = boot(init)
+		const { deliver } = withFlag()
 		deliver(ping("ghost"), sender(TAB, 3))
 		await flush()
 		expect(sendMessage).toHaveBeenCalledTimes(1)
