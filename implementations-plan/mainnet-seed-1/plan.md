@@ -11,6 +11,15 @@ base: dda72e321
 issues: "#80"
 ---
 
+## Outcome
+
+- **Date:** 2026-10-24. Planned and implemented the same day.
+- **Status:** draft, held for the live pair: #1117 against `dev`, never marked ready by this lane. It merges only after its Before-merge list (the live `check:seeds` read, a timed export, the canaries, OA-1 to OA-7, the endpoint, the regime binding).
+- **Shipped:** the Mainnet seed (D1) and its explorer entry; the e2e test Mainnet retired, the helpers and update scenarios on the real seed (D5); `check:seeds` plus the advisory nightly job, reusing `assertLiveChainIdentity` and printing no node words (D2, fix round 1); the declared refusal and the arrival's no-dial assertion (D6); captures on both browsers (D8). Measured: 4 to 8 s per full backup export per browser.
+- **Dropped, rejected, superseded:** D9's skip of accountless chains (it would drop a dApp's registrations); a second stand-in node for Mainnet (D6); copy changes (D3, asked as OA-1).
+- **Known limits:** #1115 (an export dials a never-opened seeded network), #1116 (a custom network sharing a seeded chain id loses its imported account on restore). **Open items:** #80, open until #1117 merges; #808, reopened for the owner (OA-6). **Lessons:** none promoted (`lessons.md` is at its budget; the two arc gotchas are in [lessons/phase-1.md](lessons/phase-1.md) and the e2e README).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are history, not instructions.
+
 # mainnet-seed-1: the Mainnet default network, a draft held for the live pair (#80)
 
 One arc, one DRAFT pull request against `dev` that `Closes #80` (no stack: D-orch-1). It adds the Mainnet seed, its pin, its explorer and a live check of the pin, and retires the e2e-only test Mainnet. The PR merges only after the seeded endpoint reports the pinned pair on the live network (owner, #80, 2026-10-23). Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
