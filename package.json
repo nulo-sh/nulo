@@ -51,7 +51,8 @@
   "version": "0.31.0",
   "license": "Apache-2.0",
   "overrides": {
-    "vite": "^8.2.4"
+    "vite": "^8.2.4",
+    "zod": "4.6.7"
   },
   "patchedDependencies": {
     "@aztec-foundation/noir-acvm_js@6.0.0-rc.6": "patches/@aztec-foundation%2Fnoir-acvm_js@6.0.0-rc.6.patch",
