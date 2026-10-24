@@ -564,10 +564,10 @@ describe("chainInfoToChainId", () => {
 		{ name: "the local network as the SDK sends it", chainInfo: { chainId: field(0n), version: field(0n) }, expected: 0 },
 		{
 			name: "testnet as the SDK sends it",
-			chainInfo: { chainId: field(11155111n), version: field(3409706519n) },
-			expected: 3415328944,
+			chainInfo: { chainId: field(11155111n), version: field(679261766n) },
+			expected: 685146337,
 		},
-		{ name: "short hex strings", chainInfo: { chainId: "0xaa36a7", version: "0xcb3bfe17" }, expected: 3415328944 },
+		{ name: "short hex strings", chainInfo: { chainId: "0xaa36a7", version: "0x287cb646" }, expected: 685146337 },
 		{ name: "the high bit", chainInfo: { chainId: field(1n), version: field(2n ** 31n) }, expected: 2147483649 },
 		{ name: "chainId at the u32 bound", chainInfo: { chainId: field(U32_MAX), version: field(1n) }, expected: 4294967294 },
 		{ name: "version at the u32 bound", chainInfo: { chainId: field(1n), version: field(U32_MAX) }, expected: 4294967294 },

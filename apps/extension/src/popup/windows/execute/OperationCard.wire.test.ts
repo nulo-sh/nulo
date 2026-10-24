@@ -43,7 +43,7 @@ const field = (n: bigint): string => `0x${n.toString(16).padStart(64, "0")}`
 const USDC = { id: 1, chainId: 1, contract: TOKEN, name: "USD Coin", symbol: "USDC", decimals: 6 } as TokenInfo
 const TOKEN_ARTIFACT = loadContractArtifact(WonderlandTokenJson as never)
 
-/** Real selectors at 6.0.0-rc.3: the standard Token's, pinned against the real hash by
+/** Real selectors at 6.0.0: the standard Token's, pinned against the real hash by
  *  `token-transfer-vocabulary.real.test.ts`, and TokenBridge's public exit to L1. bb.js's poseidon2
  *  cannot run under jsdom, so the hash is stood in. */
 const SELECTORS = new Map([

@@ -580,12 +580,10 @@ rather than a clean result.
   user is acknowledged, in a reviewed PR. A bundled one needs a reason that
   says why the extension cannot reach it; without one it is not acknowledged.
 
-What is acknowledged today (41 advisories; the ack file holds each one):
+What is acknowledged today (24 advisories; the ack file holds each one):
 
 | Package | Advisories | Comes in through | Reopens at |
 |---|---|---|---|
-| `undici` 5.29.0, `@fastify/busboy` 2.1.1 | 15 (4 high) | `@aztec-labs/foundation` | the next Aztec bump |
-| `ws` 8.18.3 | 2 (1 high) | `@aztec/viem` 2.38.3, an exact pin | the next Aztec bump |
 | `uuid` 9.0.1 | 1 | `@aztec-labs/stdlib`'s Google Cloud Storage client | the next Aztec bump |
 | `@opentelemetry/core`, `@opentelemetry/propagator-jaeger` 1.x, `systeminformation` 5.23.8 | 7 (6 high) | `@aztec-labs/telemetry-client`, which nothing here imports | the next Aztec bump |
 | `undici` 7.29.0, `sharp` 0.35.2 | 15 (5 high) | miniflare, wrangler's local simulator (`apps/landing`, `infra/passkey-rp`, `infra/token-list`) | the next wrangler bump |

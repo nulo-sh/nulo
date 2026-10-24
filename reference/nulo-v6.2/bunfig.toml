@@ -1,0 +1,6 @@
+# This project sits outside the root workspace, so it states the repo's 7-day release-age gate
+# itself. Its @aztec-labs/* and @aztec-foundation/* entries (the 6.0.0 line) were resolved with
+# those names excluded, before their seven days; their provenance is in the PR that added this
+# project. Every other version in bun.lock was at least 7 days old when it was resolved.
+[install]
+minimumReleaseAge = 604800

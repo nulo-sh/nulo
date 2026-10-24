@@ -10,7 +10,10 @@
  */
 import { randomBytes } from "node:crypto"
 import type { Page } from "puppeteer"
+import { readyToast } from "@/components/stale-network/copy"
 import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { TEST_PASSWORD } from "../fixtures/constants"
+import { revealSeedPhrase, waitForToast } from "../fixtures/helpers"
 import {
 	ACCOUNTS,
 	type AccountRow,
@@ -25,6 +28,8 @@ import {
 	storeRows,
 	UNOPENABLE_SIGNING_KEY,
 } from "./identity-rows"
+
+import { deriveNuloAccountAddress } from "./import-drivers"
 
 export { type NetworkRow, readNetworkRows } from "./identity-rows"
 
@@ -42,6 +47,24 @@ export async function readAccounts(page: Page, chainId: number): Promise<StoredA
 	return (await accountRows(page, chainId))
 		.map(({ address, name, index, type, visible }) => ({ address, name, index, type, visible }))
 		.sort((a, b) => a.index - b.index || a.type - b.type || a.address.localeCompare(b.address))
+}
+
+/** Each of `rows`, derived accounts, at the address this build derives for its index on
+ *  `l1ChainId` from the profile's revealed recovery phrase. Leaves the popup on the phrase. */
+export async function rederive<T extends { index: number; address: string }>(page: Page, rows: T[], l1ChainId: number): Promise<T[]> {
+	const { deriveMasterFromMnemonic } = await import("@nulo/wallet-crypto")
+	const master = Buffer.from(await deriveMasterFromMnemonic(await revealSeedPhrase(page, TEST_PASSWORD))).toString("base64")
+	return Promise.all(rows.map(async (row) => ({ ...row, address: await deriveNuloAccountAddress(master, l1ChainId, row.index) })))
+}
+
+/** Waits for the reset's ready toast for `network` and returns whether it says the addresses
+ *  moved, read as it shows: a success closes itself after 2 s. Throws on any other wording. */
+export async function readyToastSaysMoved(page: Page, network: string, timeout = 120_000): Promise<boolean> {
+	const card = await waitForToast(page, readyToast(network, false).label, timeout, { kind: "success" })
+	const sub = await card.evaluate((el) => el.querySelector('[data-testid="snackbar-sub"]')?.textContent?.trim())
+	const said = [false, true].find((moved) => readyToast(network, moved).sub === sub)
+	if (said === undefined) throw new Error(`the ready toast for ${network} says "${sub}"`)
+	return said
 }
 
 /** The network row of `kind` the wallet reads. */

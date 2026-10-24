@@ -949,7 +949,7 @@ describe("DappInteractionService — the capability window's known contracts", (
 			{ address: `0x${"0".repeat(63)}3`, name: "Fee Juice" },
 			{ address: SPONSORED, name: "Sponsored fee payer" },
 			{ address: PRIVATE, name: "Private fee payer" },
-			{ address: "0x2ba8714679fbee823f108f366f878ce3249861637de705b0ac7cfbd0f81b3a9c", name: "Auth registry" },
+			{ address: "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83", name: "Auth registry" },
 			{ address: TEST_TOKENS.USDC, name: "Test USDC" },
 			{ address: TEST_TOKENS.USDT, name: "Test USDT" },
 			{ address: TEST_TOKENS.EURC, name: "Test EURC" },

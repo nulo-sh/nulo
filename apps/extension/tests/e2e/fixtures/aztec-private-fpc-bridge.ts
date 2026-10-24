@@ -22,7 +22,7 @@ import { FeeJuicePortalAbi } from "@aztec-foundation/l1-artifacts/FeeJuicePortal
 import { computeSecretHash } from "@aztec-labs/stdlib/hash"
 import { poseidon2HashBytes, poseidon2HashWithSeparator } from "@aztec-labs/foundation/crypto/sync"
 import { createLogger } from "@aztec-labs/foundation/log"
-import { getContract } from "@aztec/viem"
+import { getContract } from "viem"
 import { createFixtureL1Client } from "./l1-signer"
 
 /**

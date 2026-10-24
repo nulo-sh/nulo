@@ -1,5 +1,5 @@
 import { createExtendedL1Client } from "@aztec-labs/ethereum/client"
-import type { Chain } from "@aztec/viem"
+import type { Chain } from "viem"
 
 /** Anvil's dev mnemonic; anvil funds the first ten accounts it derives. */
 const ANVIL_MNEMONIC = "test test test test test test test test test test test junk"

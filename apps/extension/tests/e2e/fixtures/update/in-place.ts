@@ -1,7 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import type { Page } from "puppeteer"
-import { type BrowserKind, openScratchPage, reinstallExtension } from "../browser"
+import { type BrowserKind, openScratchPage, reinstallExtension, withInterceptionsReleased } from "../browser"
 import { type ExtensionContext, launchExtension } from "../extension"
 import { pollUntil } from "../poll"
 import { E2E_STATE_DIR } from "../../lockfile"
@@ -159,7 +159,9 @@ async function runningBuild(page: Page): Promise<Running> {
 export async function updateInPlace(ctx: ExtensionContext, from: string, to: string): Promise<void> {
 	const version = manifestVersion(to)
 	const swapping: Running = { version: "", live: false }
-	await reinstallExtension(ctx.browser, stageWithProbe(to))
+	// The swap is an extension restart: it ends `from`'s targets mid-request, which no interception
+	// follows, so the launch's interceptions are let go for it, as `waitForExtensionRestart` does.
+	await withInterceptionsReleased(ctx, () => reinstallExtension(ctx.browser, stageWithProbe(to)))
 	const running = await pollUntil(
 		async () => {
 			// The extension's pages refuse to open while the browser swaps it.

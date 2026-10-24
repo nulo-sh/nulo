@@ -20,13 +20,13 @@ export { LOCAL_L1_CHAIN_ID, walletChainId }
  *  No mainnet network is seeded on the V6 line. */
 export const MAINNET_L1_CHAIN_ID = 1
 
-/** Testnet identity (live-verified via node_getNodeInfo: nodeVersion 6.0.0-rc.3, after its reset) —
+/** Testnet identity (live-verified via node_getNodeInfo: nodeVersion 6.0.0, after its reset) —
  *  the L1/rollup pair behind CHAIN_IDS.TESTNET. The bridge keeps its own copy; nothing checks that
  *  the two agree. */
 export const TESTNET_L1_CHAIN_ID = 11155111
-export const TESTNET_ROLLUP_VERSION = 3409706519
+export const TESTNET_ROLLUP_VERSION = 679261766
 
 export const CHAIN_IDS = {
-	TESTNET: walletChainId(TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION), // 3415328944
+	TESTNET: walletChainId(TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION), // 685146337
 	SANDBOX: 0, // localhost:8080
 } as const

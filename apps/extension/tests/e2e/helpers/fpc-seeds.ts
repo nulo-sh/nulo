@@ -6,8 +6,8 @@ const FPC_KEY_PREFIX = `${FPC_STORAGE_ROOT}@`
 
 /** The canonical protocol FPC addresses `src/wallet/services/fpc/protocol-fpcs.test.ts` pins. */
 const PROTOCOL_FPCS = [
-	{ type: 1, name: "Sponsored", address: "0x2adfb70e860909f0db8268b3fec80bce52a94559963444f5c0341816b8412130" },
-	{ type: 2, name: "Private Fee Juice", address: "0x2e189d0c28cb86234a17951a94131e19620cda595fa8f9c5c10c24268ceb6db4" },
+	{ type: 1, name: "Sponsored", address: "0x2d8fff82a3b0c15d0a89169e7d8d043e079ab94d52031f1de1e4972ebad169d3" },
+	{ type: 2, name: "Private Fee Juice", address: "0x0516ebb4f9c7988eb3cf6dd9459a47556f7a92db06b17cfa47ffb37fd35c6915" },
 ] as const
 
 const seededId = (type: number) => `e2e-protocol-fpc-${type}`

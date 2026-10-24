@@ -4,7 +4,8 @@
  * `NULO_E2E_UPDATE_FROM=<tag>` with `NULO_E2E_UPDATE_TO=<candidate>`.
  *
  * Failure mode: once the candidate's Testnet seed has moved, release rows meet the network reset
- * through the real boot and the reset does not carry them over. Only a recording can show it: a
+ * through the real boot and the reset does not carry them over, or, where the candidate binds
+ * another address regime, does not re-create them at the addresses it derives. Only a recording can show it: a
  * sandbox on the candidate's Aztec line cannot serve the release build, so no live run populates a
  * release install there. While the seed has not moved, the update must open with no takeover.
  *
@@ -22,7 +23,7 @@
  */
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
-import { CHAIN_IDS } from "@/utils/chain-ids"
+import { CHAIN_IDS, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { BACKUP_MAC_FIELD } from "@/utils/full-backup-helpers"
 import { FPC_SERVICE_NAME } from "@/wallet/services/fpc/spec"
 import { INCOMING_TRANSFER_SERVICE_NAME, IncomingTransferRecordSchema } from "@/wallet/services/incoming-transfer/spec"
@@ -33,7 +34,7 @@ import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import { STORES } from "@/wallet/storage/stores"
 import { BROWSER } from "./fixtures/browser"
 import { type ExtensionContext, clickByTestId, launchExtension, openPopup, test, waitForHash } from "./fixtures/extension"
-import { captureSoleProfileId, contactRow, ensureUnlocked, navigateByHash, waitForSelectedAccount, waitForToast } from "./fixtures/helpers"
+import { captureSoleProfileId, contactRow, ensureUnlocked, navigateByHash, waitForSelectedAccount } from "./fixtures/helpers"
 import { pollUntil } from "./fixtures/poll"
 import { callService } from "./fixtures/session"
 import { registerPasskeyProfile, setupPasskeyVirtualAuth } from "./fixtures/passkey"
@@ -60,6 +61,8 @@ import {
 	type StoredAccount,
 	readAccounts,
 	readNetwork,
+	readyToastSaysMoved,
+	rederive,
 	seedStaleNetwork,
 	snapshotChain,
 	storeActiveNetwork,
@@ -395,8 +398,9 @@ async function opensWithoutTakeover(ctx: ExtensionContext, page: Page, recording
 
 /**
  * Drives the takeover's reset from `oldChain` and checks it carried every derived account at its
- * name, index and address, the imported one too when its key opens, left nothing on `oldChain`, and
- * left every other chain's rows as they were.
+ * name, index and visibility to the address this build derives for it, the imported one too when its
+ * key opens, at the address its key derives, left nothing on `oldChain`, and left every other
+ * chain's rows as they were. The ready toast says the addresses moved exactly when one did.
  */
 async function throughTheReset(ctx: ExtensionContext, page: Page, recording: Recording, oldChain: number, importedOpens: boolean) {
 	const before = await readAccounts(page, oldChain)
@@ -411,22 +415,27 @@ async function throughTheReset(ctx: ExtensionContext, page: Page, recording: Rec
 	await page.waitForSelector('[data-testid="stale-confirm-submit"]', { visible: true, timeout: 10_000 })
 	expect(await page.$('[data-testid="stale-confirm-unmovable"]')).toEqual(importedOpens ? null : expect.anything())
 	await clickByTestId(page, "stale-confirm-submit")
-	await waitForToast(page, "Your accounts kept their addresses.", 120_000, { kind: "success" })
+	const saidMoved = await readyToastSaysMoved(page, "Testnet")
 	await waitForHash(page, "#/popup/general", 30_000)
 
-	expect((await readNetwork(page, "testnet")).chainId).toBe(CHAIN_IDS.TESTNET)
+	const testnet = await readNetwork(page, "testnet")
+	expect([testnet.chainId, testnet.l1ChainId]).toEqual([CHAIN_IDS.TESTNET, TESTNET_L1_CHAIN_ID])
 	const after = await readAccounts(page, CHAIN_IDS.TESTNET)
-	expect(derived(after)).toEqual(derived(before))
-	expect(imported(after)).toEqual(importedOpens ? imported(before) : [])
-	expect(await readAccounts(page, oldChain)).toEqual([])
 	await expectFirstAccountSelected(page, CHAIN_IDS.TESTNET)
+	const expected = await rederive(page, derived(before), TESTNET_L1_CHAIN_ID)
+	expect(derived(after)).toEqual(expected)
+	const moved = expected.some((row, i) => row.address !== derived(before)[i]?.address)
+	expect(saidMoved).toBe(moved)
+	expect(imported(after)).toHaveLength(importedOpens ? imported(before).length : 0)
+	expect(imported(after).filter((address) => imported(before).includes(address))).toEqual(moved ? [] : imported(after))
+	expect(await readAccounts(page, oldChain)).toEqual([])
 	const keysLeft = await page.evaluate(async (chain: number) => {
 		const all = await chrome.storage.local.get(null)
 		return Object.keys(all).filter((key) => key.startsWith("nulo:core:imported-account-keys@") && key.includes(`,${chain},`))
 	}, oldChain)
 	expect(keysLeft).toEqual([])
 	expect(await otherNetworks(page, recording)).toEqual(others)
-	if (importedOpens) await expectImportedKeyOpens(page, imported(before)[0] ?? "")
+	if (importedOpens) await expectImportedKeyOpens(page, imported(after)[0] ?? "")
 	await expectConnectedApps(page, recording)
 	await expectContacts(page, recording)
 	await expectHistory(ctx, page, recording)

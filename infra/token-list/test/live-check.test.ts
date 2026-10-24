@@ -10,9 +10,9 @@ import { canonical } from "../scripts/check"
 import { type LiveCheckIO, liveCheck } from "../scripts/live-check"
 import { REPO_ROOT } from "../scripts/summary"
 
-// Wire shapes as `https://aztec-testnet.drpc.org` sends them (6.0.0-rc.3): chain 3415328944.
-const NODE_INFO = { nodeVersion: "6.0.0-rc.3", l1ChainId: 11155111, rollupVersion: 3409706519, enr: "enr:-NK4QCUw" }
-const CHAIN = 3415328944
+// Wire shapes as `https://aztec-testnet.drpc.org` sends them (6.0.0): chain 685146337.
+const NODE_INFO = { nodeVersion: "6.0.0", l1ChainId: 11155111, rollupVersion: 679261766, enr: "enr:-My4QPYl" }
+const CHAIN = 685146337
 const BLOCK = 4926
 const CLASS = BUNDLED_TOKEN_CLASS_IDS[0]
 const OTHER_CLASS = `0x${"2".repeat(64)}`
@@ -109,7 +109,7 @@ describe("the live check", () => {
 		expect(results).toEqual(["matches", "matches"])
 		expect(ok).toBe(true)
 		expect(text).toContain(
-			"- https\\:\\/\\/node\\.example: l1ChainId 11155111, rollupVersion 3409706519, version 6.0.0-rc.3, block 4926: chain 3415328944",
+			"- https\\:\\/\\/node\\.example: l1ChainId 11155111, rollupVersion 679261766, version 6.0.0, block 4926: chain 685146337",
 		)
 		const reads = n.calls.filter((c) => c.method === "aztec_getContract" || c.method === "aztec_getPublicStorageAt")
 		expect(reads.map((c) => (c.method === "aztec_getContract" ? c.params[1] : c.params[0]))).toEqual(Array(6).fill(BLOCK))
