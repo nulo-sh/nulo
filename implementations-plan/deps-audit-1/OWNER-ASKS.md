@@ -96,7 +96,7 @@
   - Then, on the corrected facts, the owner, 2026-10-24: "A: override zod to 4.6.7". That is puppeteer 25.14.0, then an exact root override, so every package runs one zod 4.6.7. The gates prove the Aztec schemas still behave, and the override is dropped when the Aztec line moves its zod constraint.
   - Landed as D21, and #1110 closed on the decision.
 
-## OA-7: zod 4.6.7 counts string length in code points; keep the UTF-16 caps?
+## OA-7: zod 4.6.7 counts string length in code points; keep the UTF-16 caps? (answered: A)
 
 - **Surface:** none a person sees. These caps are size bounds, not text limits shown on a screen.
 - **Why:**
@@ -117,3 +117,4 @@
   - On the branch: the RPC URL fix (D22) and stamp 1 (D23).
   - A pre-candidate `test:all` is green.
   - Not run yet: Phases 2-3 and the PR. A moves the candidate; under B, the new tests do.
+- **Answer:** the orchestrator, 2026-10-24, for the owner: "OA-7 A: keep the UTF-16 budgets; one shared helper at the nine caps; astral boundary tests; additive stamp". It is a non-UI fix that keeps today's refusal boundary exactly. Landed as D25.

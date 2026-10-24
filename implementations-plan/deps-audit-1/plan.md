@@ -1,7 +1,7 @@
 ---
 plan: deps-audit-1
 tier: light
-status: arc 2 on `deps-audit-1-a2` off `e0faa7267`; OA-6 answered A (zod forced to 4.6.7, D21); held on OA-7 (code-point string caps, D24) before the candidate; arc 1 ARC_FAILED on two soak reds since fixed by #1105
+status: arc 2 on `deps-audit-1-a2` off `e0faa7267`; OA-6 answered A (zod forced to 4.6.7, D21); OA-7 answered A (UTF-16 caps kept, D25); arc 1 ARC_FAILED on two soak reds since fixed by #1105
 issues: "#980, #987, #1032 (closed by this plan's PR); #1110 (zod, OA-6, closed on the decision)"
 driver: claude-code
 claude_model: opus
@@ -64,9 +64,10 @@ Its bar is the owner's same-engine bar (D17), which CLAUDE.md now states. The ga
 - `CLAUDE.md`'s soak sentence (D17);
 - `apps/extension/package.json`'s `puppeteer` floor `^25.14.0`, the root `overrides.zod` `"4.6.7"`, the eleven `bun.lock` entries they move, and one pin-surface line in the `aztec-update` skill (D21);
 - `apps/extension/src/wallet/services/network/spec.ts` and its test: `RpcUrlSchema`'s hidden-character check moves ahead of `.url()` (D22);
-- `apps/extension/src/wallet/storage/stored-shapes/snapshot.json` and `pins.ts`: stamp 1, an additive mark for zod's emitter (D23).
+- `apps/extension/src/wallet/storage/stored-shapes/snapshot.json` and `pins.ts`: stamp 1, an additive mark for zod's emitter (D23), and stamp 2 for the UTF-16 refinements (D25);
+- `apps/extension/src/utils/bounded-string.ts`, its test, and its ten call sites in `wallet-sdk/content-script-validator.ts`, `operation-journal/spec.ts`, `incoming-transfer/arrival-state.ts` and `ui-preference/spec.ts`, with paired astral tests beside each (D25).
 
-No workflow file; that one source change only. `bunfig.toml` ends unchanged.
+No workflow file. The source changes are D22's and D25's only. `bunfig.toml` ends unchanged.
 - **follow-redirects:** `bun update follow-redirects` writes the lockfile entry only (axios's `^1.16.0` admits 1.16.1).
 - **vite, exactly 8.2.4:** with the override a range, `bun update vite[@8.2.4]` resolves 8.3.4. So pin first, then restore the ranges: override `8.2.4`, install; override and the three floors `^8.2.4`, install. The lock keeps 8.2.4, which satisfies `^8.2.4`.
 - **The re-gate (F5):** while either package is inside the gate, both installs run with `--config=<scratch bunfig.toml>`, a fresh copy of the tracked file plus one `minimumReleaseAgeExcludes` line for the two names, outside the repo. After 21:01Z the installs run with the tracked file.
@@ -133,7 +134,7 @@ None. The arc changes dependency files, plus one schema-order fix (D22) that lea
   - there is no `BUN_ONLY_FILES` exclusion, since both sides run the same runner;
   - the id sets are identical, every id's entry is identical (statuses, observations, failures), and the collected / passed / failed / skipped / todo totals agree.
 
-  For passkey-rp, every JUnit case (file, suite, name) and its status agree, and none failed. A test the arc adds or renames would be the only allowed difference, listed in the PR; this arc has none. Self-tests: base against base passes. Every seeded fault fails: a dropped id, a renamed case, an omitted workspace, a wrong lock or vitest version, zero observations, a failed or unfinished collection, a wrong SHA.
+  For passkey-rp, every JUnit case (file, suite, name) and its status agree, and none failed. A test the arc adds or renames is the only allowed difference, listed in the PR. This arc adds 14 and renames none (D25). The compare takes them as an exact allowlist: each must appear at the candidate and pass, and the candidate's totals are compared less them. Five allowlist faults all fail: no allowlist, a missing id, an extra id, a failed added test, and unadjusted totals. Self-tests: base against base passes. Every seeded fault fails: a dropped id, a renamed case, an omitted workspace, a wrong lock or vitest version, zero observations, a failed or unfinished collection, a wrong SHA.
 - **pr-quick.** Push `deps-audit-1-a2` and run `gh workflow run pr-quick.yml --ref deps-audit-1-a2`. That run's head SHA is the candidate, and it is green.
 - **Pass criteria:**
   - the three `test:all` runs exit 0, and each workspace's counts equal the candidate summary's;
@@ -214,7 +215,21 @@ None. The arc changes dependency files, plus one schema-order fix (D22) that lea
   - R3 (every golden) and R5 (both pinned backups) pass unchanged. That shows the goldens and backups read as before, not every possible row. Codex r5 found two read changes they do not exercise (OA-7): string caps now count code points, and the strict `authorizationsWithoutAsking` now refuses an own `__proto__` key.
   - `bun run baseline:storage -- --additive "<reason>"` appended stamp 1 (v1, zod 4.6.7), and `PINNED_STAMPS[1]` is the pin it printed. The storage suite then passes, 120 of 120.
   - This was a gate red, diagnosed as an emitter spelling change and closed by the gate's own procedure. Codex r5 confirmed the stamp mechanically: stamp 0 preserved, both pins verify, exactly five emissions differ.
-- **D24 Held: zod 4.6.7's code-point string caps (OA-7).** Codex r5, with old/new probes: nine string caps in four files count code points now, not UTF-16 units. zod hardwires this, with no option. The arc stops before the candidate (OA-7).
+- **D24 Held, then settled by D25: zod 4.6.7's code-point string caps (OA-7).** Codex r5, with old/new probes: nine string caps in four files count code points now, not UTF-16 units. zod hardwires this, with no option. The arc stops before the candidate (OA-7).
+
+- **D25 OA-7 A: the UTF-16 budgets are kept at the ten capped fields.**
+  - The orchestrator, 2026-10-24, for the owner: "OA-7 A: keep the UTF-16 budgets; one shared helper at the nine caps; astral boundary tests; additive stamp". Its reason: a non-UI fix that keeps today's refusal boundary exactly. B would loosen a trust boundary, and C would reverse the owner's OA-6 A.
+  - **The helper:** `boundedString(maxUnits)`, in `apps/extension/src/utils/bounded-string.ts`.
+    - `.max(maxUnits, { abort: true })` runs first, then a labelled `superRefine` that adds zod's own `too_big` issue when `string.length` exceeds the budget.
+    - It is used at the ten fields on the nine cap lines: the content-script validator's seven (`sessionId`, `requestId`, `appId`, `chainId`, `version`, `iv`, `ciphertext`), the journal's `normalizedRaw`, an arrival's played id, and the selected address.
+  - **Proof:**
+    - A scratch differential probe ran 44,000 random strings over eleven caps. The strings mix ASCII, BMP and astral characters, lone surrogates, spaces and zero-width characters. Each got the same verdict and the same issues (code, maximum, message) as zod 4.4.3's `.max()`.
+    - Ten paired astral tests: a string within the cap in code points but over it in units is refused, and its control at the cap passes. All ten go red with the refinement disabled.
+  - **Stamp 2:** the three stored fields gain a `description` and an `x-refine` label, and `maxLength` is unchanged. Each field's writer caps it by `string.length` (`jobs/error.ts`, `incoming-transfer/service.ts`, `ui-preference/service.ts`), so every stored row still reads. Generated with `baseline:storage -- --additive`; the storage suite passes 120 of 120.
+  - **Codex r5's other two:**
+    - The `__proto__` tightening stays and is recorded (D23). Its one writer, `dapp-session/service.ts`, builds a fresh `{ broad }` object, so none carries the key.
+    - The validator's comment now gives the reason that holds on both versions: the object schema drops an undeclared key.
+  - **Inventory:** the change adds exactly 14 test ids, all in `apps/extension`, and Phase 3's compare allows those and no others. 4 are in `utils/bounded-string.test.ts`, 7 in `content-script-validator.test.ts`, and one each in the journal, arrival and selected-account tests. The PR lists them.
 
 ## Review verdicts
 
