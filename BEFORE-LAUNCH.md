@@ -167,8 +167,8 @@ promote publishes it. A promote that publishes both dates both, and the archived
       AMO's Privacy policy field carries the 1.2.4 text (`apps/extension/store/listing.md` § Privacy
       policy text)
 
-**Due at the release that first uploads an Aztec 6.0.0-rc.3 build to a store** (owner's call,
-2026-10-14; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
+**Due at the release that first uploads an Aztec 6.0.0 build to a store** (owner's call,
+2026-10-14, for the rc.3 line, carried to 6.0.0 on 2026-10-24; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
 
 - [x] The wallet's in-place reset of a stale network (planned as `stale-network-reset`) is on `dev`:
       until it is, an rc.3 update shows a store-installed V6 account the integrity barrier. #485,
