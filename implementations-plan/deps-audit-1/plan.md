@@ -1,8 +1,8 @@
 ---
 plan: deps-audit-1
 tier: light
-status: arc 2 on `deps-audit-1-a2` off `e0faa7267`, held on zod 1243066 (OA-6); arc 1 ARC_FAILED on two soak reds since fixed by #1105
-issues: "#980, #987, #1032 (closed by arc 1)"
+status: arc 2 on `deps-audit-1-a2` off `e0faa7267`, reviewed (Codex converged in 3 rounds), held on zod 1243066 (OA-6, #1110); arc 1 ARC_FAILED on two soak reds since fixed by #1105
+issues: "#980, #987, #1032 (closed by this plan's PR); #1110 (zod, OA-6)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -213,6 +213,7 @@ None. The arc changes dependency files only; no screen, copy or layout.
 - **Arc 2, round 2, Codex resumed: `fixes needed`, confidence high.**
   - Passed: CLAUDE.md, the ack reason, and OA-6's recommendation. It verified all 24 zod constraints: six packages across four Aztec versions. Keep the override exact.
   - Fixed: the scratch gate's exact workspace set, provenance, per-summary consistency, and a collector that refuses stale output and propagates failures; the `checkSide` explanation; the scoped-override wording.
+- **Arc 2, round 3, Codex resumed: `converged`, confidence high.** No remaining defect at `b4fcd5ddf`. The scripts and Phase 3 implement the settled procedure, and the re-collected base passes all 15 workspaces with verified SHA and lock provenance.
 
 ## Delivery
 

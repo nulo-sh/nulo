@@ -71,7 +71,7 @@
   - The load rule never fired (load5 66-152, one sample over 150).
 - **Reading (Codex r11, ii):** the control is red, so the red-control branch holds. vitest 4.1.12 is not necessary for a red in this soak, and #1101 is not shown to be pre-existing. The next arc is a bounded suite-level diagnosis of both reds (#1101's stalled step, and #1102's poll or same-millisecond cutoff) before any candidate. No budget, config or bar changes as a pass route.
 
-## OA-6: zod 1243066 can be neither fixed nor acknowledged on this base
+## OA-6: zod 1243066 can be neither fixed nor acknowledged on this base (#1110)
 
 - **Surface:** none a person sees. The ask is whether the Aztec line may run a zod outside its declared range, or whether a bundled advisory may be acknowledged.
 - **Why:**
