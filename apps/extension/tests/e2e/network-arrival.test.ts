@@ -1,7 +1,8 @@
 /**
  * The arrival of a new default network in the real popup shell, whose boot no cheaper layer runs:
  * the Terms sheet goes first and the arrival waits for it, the arrival comes back at every open until
- * it is answered, and an answered one stays answered when the popup opens again.
+ * it is answered, and an answered one stays answered when the popup opens again, none of it with a
+ * request to the new network's node.
  *
  * `NETWORK_ARRIVAL_CAPTURES=1` instead writes the arrival over Home, dark and light, into
  * `tests/e2e/.captures/` (Chrome only).
@@ -9,6 +10,7 @@
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { isFirefox } from "./fixtures/browser"
+import { MAINNET_NODE_HOST } from "./fixtures/egress-guard"
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "./fixtures/extension"
 import { pointerClick, reloadWithLegalState, waitForSheet } from "./helpers/legal-drivers"
 import { ARRIVAL, readSeedOffers, readSurfaceTrace, seedNetworkArrival, traceSurfaces } from "./helpers/network-arrival"
@@ -58,6 +60,7 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 		await page.waitForSelector(HOME, { visible: true, timeout: 15_000 })
 		expect(await readSurfaceTrace(page)).toEqual({ shown: [], arrivals: 0 })
 		await page.close()
+		expect(extension.egress?.guard.attempts().filter(({ host }) => host === MAINNET_NODE_HOST)).toEqual([])
 	}, 180_000)
 })
 

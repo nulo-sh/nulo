@@ -248,14 +248,16 @@ async function movedFirstAccount(
 }
 
 /**
- * The seeded Mainnet as a moved pin leaves it on a profile that opened it: every endpoint at
- * {@link DEAD_NODE}, one derived account at a moved address, and the active network. Run it locked.
+ * An address change on the seeded Mainnet of a profile that never opened it: every endpoint at
+ * {@link DEAD_NODE}, one derived account at a moved address, and the active network. Refuses a
+ * profile with Mainnet accounts, beside which the moved copy reads unclassifiable. Run it locked.
  */
 export async function seedStaleMainnet(page: Page, networks?: NetworkRow[]): Promise<{ networkId: string }> {
 	const rows = await networkRows(page, networks)
 	const mainnet = rows.find((row) => row.kind === "mainnet")
 	const testnet = rows.find((row) => row.kind === "testnet")
 	if (!mainnet || !testnet) throw new Error("seedStaleMainnet: no Mainnet or Testnet network the wallet reads")
+	if ((await accountRows(page, CHAIN_IDS.MAINNET)).length > 0) throw new Error("the profile already opened Mainnet")
 	const endpoints = mainnet.endpoints.map((endpoint) => ({ ...endpoint, rpcUrl: DEAD_NODE }))
 	await storeRows(page, {
 		[`${NETWORKS}${mainnet.id}`]: JSON.stringify({ ...mainnet, endpoints }),
