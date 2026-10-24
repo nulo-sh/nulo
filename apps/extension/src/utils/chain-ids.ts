@@ -19,8 +19,10 @@ export { LOCAL_L1_CHAIN_ID, walletChainId }
 /** Ethereum mainnet's L1 id: the trust root a stored `mainnet`-kind network row is checked against. */
 export const MAINNET_L1_CHAIN_ID = 1
 
-/** Mainnet v6's rollup version as the Aztec Foundation gave it (via the owner, 2026-10-23); NOT yet
- *  read from a live node. `bun run --cwd apps/extension check:seeds` must pass before a build ships it. */
+/** `getVersion()` of L1 rollup 0xe37a2663cc9c119ba41572c40fab0bbb23a5402f, which governance
+ *  0x1102471eb3378fee427121c9efcea452e4b6b75e's queued proposal 5 (executable from 2026-10-26) adds
+ *  to registry 0x35b22e09ee0390539439e24f06da43d83f90e298, read on L1 on 2026-10-24. The node read,
+ *  `bun run --cwd apps/extension check:seeds`, passes only once the Mainnet node serves that rollup. */
 export const MAINNET_ROLLUP_VERSION = 2070860440
 
 /** Testnet identity (live-verified via node_getNodeInfo: nodeVersion 6.0.0, after its reset) —
