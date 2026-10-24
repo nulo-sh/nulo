@@ -85,7 +85,7 @@
     - Every copy becomes 4.6.7: the wallet's own (the workspaces declare `^4.4.3`, or `^4`), chromium-bidi's (inside its range), and the six Aztec packages' (outside their `~4.4.3`).
     - zod 4.6.6's release notes disclose six malicious commits on its `main`, since reverted, so `bun pm diff zod@4.4.3 4.6.7` is read in full.
     - Puppeteer's diff and its browser revision are reviewed too, then validated by this arc's Phases 2-3 at the new candidate, both browsers' smoke, and the network lanes and canaries in CI.
-    - The override leaves when an Aztec release admits ≥ 4.6.6. A scoped override cannot widen Aztec's range, and it would write a new lockfile format.
+    - The override leaves when an Aztec release admits ≥ 4.6.6. A scoped override would still force a version outside Aztec's declared range, and it writes a new lockfile format.
     - The cost: the Aztec packages run a zod their authors did not declare, and the e2e harness moves with puppeteer.
   - **B:** acknowledge 1243066 as an owner exception to `SECURITY.md`'s bundled rule (`bundled: true`), reopening at the Aztec release that admits the fix. No code moves. Not recommended while the advisory's reach in the wallet is unassessed.
   - **C:** hold this PR until Aztec widens its range. No Aztec line in sight does, and the other fifteen advisories keep blocking every dependency PR, #1107 included.

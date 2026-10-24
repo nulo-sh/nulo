@@ -111,20 +111,22 @@ None. The arc changes dependency files only; no screen, copy or layout.
   - for the 14 vitest workspaces, `bun scripts/ci-cd/test-soak/cli.ts soak --cwd <ws> --runtime script --runs 1 --out <scratch>/inv-base/<ws>.json`;
   - for passkey-rp, `bun test --reporter=junit --reporter-outfile=<scratch>/inv-base/passkey-rp.junit.xml`, with no live-test variable set on either side.
 
-  The script is `<scratch>/inv-collect.sh`.
+  The collector is `<scratch>/inv-collect.sh`. It unsets `RP_HOST_LIVE`, refuses an output directory that already exists, and records the SHA it ran at. A failed command, a moved HEAD or a dirty tree ends it on `FAILED`, never `DONE`. The reference is `<scratch>/inv-base2/`.
 - **The candidate, in the lane's worktree.**
   - Remove every `node_modules` and run a fresh frozen install.
   - Collect the same 15 records into `<scratch>/inv-cand/`.
   - Then run `bun run test:all` three times. No unit config sets `retry`, so each run is at retry 0.
-- **The inventory compare** is `<scratch>/inv-compare.ts`, a scratch script. The tool stays untouched: `cli.ts compare` and `checkSide` refuse this pairing by design. For each vitest workspace:
-  - both summaries have a clean tree, one run row and the expected SHA;
+- **The inventory compare** is `<scratch>/inv-compare.ts`, a scratch script. The tool stays untouched: `cli.ts compare` refuses this pairing by design, through `checkMeta`'s cross-engine roles and matching provenance. Each side's collection must have ended `DONE` on a clean tree at its expected SHA, with exactly the 14 expected summaries. For each vitest workspace:
+  - both summaries have a clean tree, one run row, the expected SHA, the expected lockfile hash and the expected vitest version (4.1.10 at the base, 4.1.12 at the candidate);
   - the failure state is re-derived with `isFailedRun`, not read from `failedRuns`;
   - cwd, script and filters (none) agree;
-  - the engine is Bun, or Node for resolve-asset;
+  - the engine is Bun, or Node for resolve-asset, and one engine version per kind across both sides;
+  - each summary agrees with itself: every id observed once, with one status and no failure, and the inventory's counts equal the run row's;
+  - pool and maxWorkers are reported for review, not failed;
   - there is no `BUN_ONLY_FILES` exclusion, since both sides run the same runner;
   - the id sets are identical, every id's entry is identical (statuses, observations, failures), and the collected / passed / failed / skipped / todo totals agree.
 
-  For passkey-rp, every JUnit case (file, suite, name) and its status agree, and none failed. A test the arc adds or renames would be the only allowed difference, listed in the PR; this arc has none. The script fails on a dropped id and on a renamed case: both self-tests went red as expected.
+  For passkey-rp, every JUnit case (file, suite, name) and its status agree, and none failed. A test the arc adds or renames would be the only allowed difference, listed in the PR; this arc has none. Self-tests: base against base passes. Every seeded fault fails: a dropped id, a renamed case, an omitted workspace, a wrong lock or vitest version, zero observations, a failed or unfinished collection, a wrong SHA.
 - **pr-quick.** Push `deps-audit-1-a2` and run `gh workflow run pr-quick.yml --ref deps-audit-1-a2`. That run's head SHA is the candidate, and it is green.
 - **Pass criteria:**
   - the three `test:all` runs exit 0, and each workspace's counts equal the candidate summary's;
@@ -208,6 +210,9 @@ None. The arc changes dependency files only; no screen, copy or layout.
     4. The records' stale numbers, the miniflare reason's third workspace, and the package-diff scopes.
   - The add-or-rename carve-out stays, as the orchestrator's brief worded the bar, tightened to "every test both commits hold matches exactly".
   - Phases 2-3 wait for OA-6.
+- **Arc 2, round 2, Codex resumed: `fixes needed`, confidence high.**
+  - Passed: CLAUDE.md, the ack reason, and OA-6's recommendation. It verified all 24 zod constraints: six packages across four Aztec versions. Keep the override exact.
+  - Fixed: the scratch gate's exact workspace set, provenance, per-summary consistency, and a collector that refuses stale output and propagates failures; the `checkSide` explanation; the scoped-override wording.
 
 ## Delivery
 
