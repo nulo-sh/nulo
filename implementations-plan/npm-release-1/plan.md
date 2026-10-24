@@ -74,7 +74,7 @@ One arc, one PR against `dev` (no stack: the orchestrator's D-orch-1). It moves 
 
 ## Phases
 
-### P1. READMEs
+### P1. READMEs ✓
 
 1. Apply the README edits above, byte for byte. Commit `docs(publish): name the aztec 6.0.0 line and the 0.3.0 changes in the npm readmes`.
 

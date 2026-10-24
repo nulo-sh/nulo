@@ -18,10 +18,15 @@ Nothing else from the wallet's crypto layer is published.
 ## Requirements
 
 - ESM only.
-- Aztec line: `@aztec-labs/*` `6.0.0-rc.3`.
+- Aztec line: `@aztec-labs/*` `6.0.0`.
 - The `@aztec-labs/*` packages are exact **peer dependencies**. Install the same versions, and make sure a single copy of each is installed: `Fr` and `GrumpkinScalar` values are only interchangeable within one copy.
 - WebCrypto (`globalThis.crypto.subtle`): current browsers, Node 20 or later, and Bun.
 - TypeScript 5.7 or later for the declarations.
+
+## Changes
+
+- **0.3.0**: the peers move to the Aztec `6.0.0` line. The code is unchanged and derives the same keys from the same seed. The Nulo wallet's `6.0.0` account artifact changes account addresses, not these keys.
+- **0.2.0**: the peers move to the Aztec `6.0.0-rc.3` line.
 
 ## Provenance
 
