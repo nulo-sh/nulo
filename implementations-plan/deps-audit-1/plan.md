@@ -1,7 +1,7 @@
 ---
 plan: deps-audit-1
 tier: light
-status: arc 2 on `deps-audit-1-a2` off `e0faa7267`; OA-6 answered A (zod forced to 4.6.7, D21); OA-7 answered A (UTF-16 caps kept, D25); OA-8 answered A (e2e Firefox pinned to 153.0.4, D26); arc 1 ARC_FAILED on two soak reds since fixed by #1105
+status: completed (arc 2 carries this close-out; arc 1 ARC_FAILED and opened no PR)
 issues: "#980, #987, #1032 (closed by this plan's PR); #1110 (zod, OA-6, closed on the decision)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,42 @@ base: origin/dev at ef5336bbc (arc 1), e0faa7267 (arc 2)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-24.
+- **Status:** closed. Arc 1 ended `ARC_FAILED` on two soak reds and opened no PR (D15, D16); #1105 fixed both. Arc 2 lands with this plan's PR, at candidate `9867ff523`, and the merge that lands it closes the plan.
+- **Shipped (arc 2):**
+  - **Sixteen advisories fixed, none newly acknowledged**, and the gate in enforce mode reads 41 / 0 / 0 / 0:
+    - vite 8.2.1 → 8.2.4 fixes six;
+    - follow-redirects 1.16.0 → 1.16.1 fixes two;
+    - storybook 10.5.8 → 10.6.2 fixes two;
+    - vitest 4.1.10 → 4.1.12 fixes one and retires the acknowledged vitest entry;
+    - fast-uri 3.1.8 → 3.1.9 fixes four, installed under the CVE runbook (D18);
+    - zod 4.4.3 → 4.6.7 everywhere fixes one, through puppeteer 25.14.0 and an exact root `overrides.zod` (D21).
+
+    undici's three ids are fixed in jsdom's copy and join miniflare's entry. The braces entry is out.
+  - #987's fix (D11) and CLAUDE.md's two-tier test-runtime bar (D17).
+  - zod 4.6.7's behaviour changes under the wallet:
+    - `RpcUrlSchema`'s check order (D22);
+    - stored-shape stamps 1 and 2 (D23, D25);
+    - `boundedString` at the ten UTF-16 caps (D25).
+  - The e2e browsers that moved with puppeteer (D26): Chrome 155's download redirector is declared, Firefox's New Tab train-hop is off at its source, and the e2e Firefox is pinned to stable_153.0.4, apart from puppeteer.
+- **Known limits:** none.
+- **Open items:**
+  - #1111: the `BrowserDriver` seam for `bringToFront` / `setViewport` on Firefox 157+, which is the Firefox pin's reopening condition.
+  - #1112: two source-scan tests past the 5 s default under host load (D27).
+  - #190: the fixture-retry defect, unchanged on vitest 4.1.12 (D14). It stays open.
+- **Dropped:**
+  - OA-6 B, withdrawn on a refuted premise (D20).
+  - OA-7 B and C (D25), and OA-8 B and C (D26).
+  - Arc 1's soak-matrix bar, replaced by the owner's same-engine bar (D17).
+- **Lessons:** none promoted. `lessons.md` is at its 8 KiB budget, and this arc's gotchas sit where the next reader meets them:
+  - zod 4.6's code-point counting, in `apps/extension/src/utils/bounded-string.ts`;
+  - `.url()`'s stripping, at `RpcUrlSchema`;
+  - Firefox 157+'s privileged extension pages, in `apps/extension/tests/e2e/FIREFOX.md` § Which Firefox the suite runs;
+  - the root-normalized inventory compare, in this plan's D27.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # deps-audit-1: fix the five new advisories (#980)
 
@@ -102,7 +138,7 @@ None. The arc changes dependency files, plus one schema-order fix (D22) that lea
   - `bun audit --audit-level=low --json > <scratch>/a.json; bun scripts/ci-cd/audit-gate.ts <scratch>/a.json --exit-code <its code> --mode enforce` exits 0 and prints `41 acknowledged, 0 unacknowledged, 0 stale, 0 unreadable`.
   - `bun run lint`, `bun run typecheck:all` exit 0. Layers: typecheck, lint, supply chain.
 
-### Phase 2: builds, artifacts, smoke (passed at the final candidate `9b414dc39`, as at `57c35cec5` and `dc82d009d`)
+### Phase 2: builds, artifacts, smoke (arc 2: passed at the final candidate `9867ff523`, D27; arc 1: at `9b414dc39`, as at `57c35cec5` and `dc82d009d`)
 - First, merge `origin/dev` if it moved, then repeat Phase 1's fresh install and audit gate. This HEAD is the **candidate**: record its SHA and the `bun.lock` sha256.
 - **Commands:** `bun run audit:vue` (its `build` is the Chrome build); `bun run build:firefox`; `bun run --cwd apps/landing build`; `bun run --cwd apps/playground build`; `bun run --cwd apps/extension build-storybook`; `bun run test:ci-gating`.
 - **Artifact check**, both production builds, from the repo root: `apps/extension/dist/{chrome,firefox}/THIRD-PARTY-NOTICES.txt` names no `follow-redirects`; `grep -rlF` over `apps/extension/dist/chrome` and `apps/extension/dist/firefox` for follow-redirects' `Maximum number of redirects exceeded` and launch-editor's `UNC paths are not supported on Windows` (and vite's `__open-in-editor` route) exits 1 for each. Exit 0 or 2 fails the check. Record whether `axios` is listed. Arc 2 adds zod: each notices file names `zod` once, at 4.6.7, and the store holds one `zod@` directory.
@@ -110,7 +146,7 @@ None. The arc changes dependency files, plus one schema-order fix (D22) that lea
 - **dApp-facing network specs, arc 2, both browsers:** zod moved under the schemas the wallet parses dApp calls and node replies with, so one proverless `NULO_E2E_PROVERLESS=1 bun run e2e:agent <files> --retry=0` per browser. It runs one spec per RPC family under `tests/e2e/network/`: `cap-request-basic`, `connect-dapp`, `contracts-register`, `data-registerSender`, `meta-getChainInfo`, `meta-getAccounts`, `sim-methods`, `tx-sendTx-default`, `tx-sendTx-multicall`, `authwit-lifecycle`, `register-token`, `err-scope-and-cap`, `batch-mixed`, `wait-for-tx-mined`. The full network suites and the prover-ON canaries run in CI.
 - **Pass criteria:** every command exits 0; the artifact check finds nothing; smoke and the dApp-facing specs have no failure on either browser. The full network e2e runs in CI (all four lanes trip on `bun.lock`).
 
-### Phase 3: the same-engine bar at the candidate (D17; arc 1 ran the soak matrix, D6, D15, D16)
+### Phase 3: the same-engine bar at the candidate (arc 2: passed at `9867ff523`, D27; D17; arc 1 ran the soak matrix, D6, D15, D16)
 - **Warning:** change no file in the repo and make no commit while it runs. Start only when `git status --porcelain` is empty, and keep every output in `<scratch>`.
 - **Scope:** the 15 workspaces `test:all` runs, each on the runner its `test` script names:
   - 13 run `bun --bun vitest run`;
@@ -199,7 +235,7 @@ None. The arc changes dependency files, plus one schema-order fix (D22) that lea
     - puppeteer and puppeteer-core 25.8.0 → 25.14.0, @puppeteer/browsers 3.2.1 → 3.2.5, chromium-bidi 17.0.2 → 157.0.8090-0;
     - devtools-protocol 0.0.1666840 → 0.0.1696802, webdriver-bidi-protocol 0.4.2 → 1.0.1, modern-tar 0.8.4 → 0.8.6, typed-query-selector 2.12.2 → 2.12.3;
     - a new `puppeteer-core/ws` 8.22.0, since puppeteer-core asks `^8.22.0` and the root keeps 8.21.3.
-  - **Browsers:** Chrome and chrome-headless-shell 152.0.7977.42 → 155.0.8059.79, from Puppeteer's postinstall; Firefox stable_153.0.4 → stable_158.0, from `bun x puppeteer browsers install firefox`. The harness reads `PUPPETEER_REVISIONS.firefox` and finds the new directory.
+  - **Browsers:** Chrome and chrome-headless-shell 152.0.7977.42 → 155.0.8059.79, from Puppeteer's postinstall. Puppeteer's own Firefox moves stable_153.0.4 → stable_158.0, but the e2e suite stays on 153.0.4, pinned apart from it (D26).
   - **Out of scope:** `.github/actions/setup-aztec/cli/package-lock.json` keeps zod 4.4.3. It is the Aztec sandbox and CLI that CI's network lanes boot, an npm tree `bun audit` does not read and no artifact ships. The `aztec-update` skill regenerates it with each Aztec bump.
   - **Removal:** the `aztec-update` skill's pin surface now names the override. It is dropped once the six zod-declaring Aztec constraints admit one common patched zod (≥ 4.6.6), then a reinstall shows one patched copy and a clean audit (Codex r4).
   - The audit gate reads 41 / 0 / 0 / 0 with no new acknowledgement.
@@ -250,6 +286,29 @@ None. The arc changes dependency files, plus one schema-order fix (D22) that lea
   - **Tests:** two in `scripts/e2e/firefox-driver.test.ts`, both red on the old code. One checks that the pinned binary launches with puppeteer's own revision installed beside it. The other checks that the action installs through the script and keys on the pin. Phase 3's allowlist grows to 16 ids.
   - **The reopening condition:** #1111, the driver seam. The pin moves only after it lands, never with a puppeteer bump alone.
 
+- **D27 Phases 2-3 at `9867ff523`: passed, after one load rerun and one compare fix.**
+  - **The candidate:** `9867ff523` (`bun.lock` `bfa0ee06…336c11`). The `pr-quick` dispatch 40064722042 ran at it, green. `dev` stayed at `e0faa7267` throughout.
+  - **Phase 2's first run went red** at `audit:vue` on two timeouts and nothing else, at load 250-320:
+    - `css-v-bind-ban.test.ts` ran 5933 ms and `amount.callers.test.ts` ran 5030 ms, against vitest's 5000 ms default. Both are static scans that walk and parse the source tree. The candidate's diff touches only e2e harness files and docs.
+    - The orchestrator's brief allows one rerun of a timeouts-only red with no code cause, after load falls. The full Phase 2 reran once at load5 around 150, green. Filed as #1112.
+  - **Phase 2's rerun:**
+    - the frozen install, the pinned Firefox install, a store holding one zod 4.6.7, and the gate at 41 / 0 / 0 / 0;
+    - `audit:vue`: 15164 passed, 1 expected fail, 5 skipped, 7 todo;
+    - the Firefox, landing, playground and Storybook builds, the artifact check (one zod 4.6.7 per notices file, no follow-redirects or launch-editor fingerprint), and `test:ci-gating`.
+  - **Smoke at retry 0:**
+    - Chrome 155: 272 passed, 25 skipped, 0 failed, in 1677 s;
+    - Firefox 153.0.4: 276 passed, 21 skipped, 0 failed, in 2765 s.
+
+    The dApp-facing network specs, proverless: 14 files and 22 tests on each browser, in 777 s on Chrome and 673 s on Firefox.
+  - **Phase 3:**
+    - The fresh frozen install and the 15 inventories ended `DONE` on a clean tree.
+    - `bun run test:all` passed three times, each in about 157 s at load around 100. Every workspace's counts were the same on every run, and equal to its summary's.
+  - **The compare first failed on 12 problems, one cause.** `scripts/strip-artifact-debug-info.test.ts` names six tests by resolved artifact paths. The base was collected in a scratch worktree, so those six read as removed plus added.
+    - The scratch compare now takes each side's checkout root and rewrites it to `<repo>` in that side's ids, the soak tool's own token in meta. It fails on an id that collides after the rewrite, still names either root, or already held `<repo>/` in its test name.
+    - The last check is Codex r8's: without it, a literal `<repo>/` could pass for a rewritten root and hide a rename.
+    - The compare then exits 0. `apps/extension` reads 15161 vs 15177 ids, 0 differing, exactly the 16 allowed additions; every other workspace is identical, and passkey-rp has 11 of 11 cases.
+    - 16 self-test cases behave as expected, the seeded literal rename included.
+
 ## Review verdicts
 
 - **Round 1, Codex (gpt-6.1-sol high, session 01a15c31): `conditional approve`, confidence high.** Accepted: (1) F5 narrowed to the planned edits and the two expiry times; (2) bundled magic-string and shell-quote added (F8); (3) six lockfile lines, D3 narrowed to the commands tested, A3's reference; (4) the advisory descriptions corrected, extension `dev` added; (5) I2 was false: rewritten (F9, I2) and the soak added (D6, Phase 3); (6) the artifact check records the names directly; (7) D4 bound to unchanged exact constraints and entries.
@@ -288,6 +347,19 @@ None. The arc changes dependency files, plus one schema-order fix (D22) that lea
   - Passed: CLAUDE.md, the ack reason, and OA-6's recommendation. It verified all 24 zod constraints: six packages across four Aztec versions. Keep the override exact.
   - Fixed: the scratch gate's exact workspace set, provenance, per-summary consistency, and a collector that refuses stale output and propagates failures; the `checkSide` explanation; the scoped-override wording.
 - **Arc 2, round 3, Codex resumed: `converged`, confidence high.** No remaining defect at `b4fcd5ddf`. The scripts and Phase 3 implement the settled procedure, and the re-collected base passes all 15 workspaces with verified SHA and lock provenance.
+- **Arc 2, round 4, Codex resumed (on OA-6 A): `fixes needed`, confidence high.**
+  - zod 4.6's `.url()` stripping turned `RpcUrlSchema`'s hidden-character check into a silent accept. The check moved first (D22).
+  - The override's removal wording was corrected.
+- **Arc 2, round 5, Codex resumed: `fixes needed`, confidence high.**
+  - Old/new probes found nine string caps counting code points (D24). The arc held on OA-7.
+  - The `__proto__` tightening and a stale comment were folded into D25.
+- **Arc 2, round 6, Codex resumed (on OA-7 A): `approve`, confidence high, no findings.**
+- **Arc 2, round 7, Codex resumed (on OA-8 A and the egress fixes): `approve with fixes`, confidence high.**
+  - It found no remaining path that installs or launches Puppeteer's own Firefox, and checked the cache key, the train-hop off state and the exact-name declaration.
+  - Folded: `CI.md` and `.github/WORKFLOWS.md` name the pin, and Phase 3's count is 16.
+- **Arc 2, round 8, Codex resumed (on the compare's root rewrite): `approve with fixes`, confidence high.**
+  - The rewrite is a faithful local representation fix, not a gate exception.
+  - Folded: a test name already holding `<repo>/` fails, with a seeded self-test (D27).
 
 ## Delivery
 
@@ -299,6 +371,8 @@ None. The arc changes dependency files, plus one schema-order fix (D22) that lea
   - the inventory compare;
   - OA-6's answer: puppeteer 25.14.0 and `overrides.zod`, with the override's reason and removal condition (`package.json` takes no comment), both diffs, 4.6.7's provenance, and the browser revisions;
   - #1107 merges `dev` after this PR, and needs the local fast-uri exclude until 2026-10-26T23:05:26Z.
+  - the Firefox pin, which is independent of puppeteer, and #1111, which lifts it (D26);
+  - Phases 2-3's one load rerun (#1112) and the compare's root rewrite (D27).
 
   `Closes #980`, `Closes #987`, `Closes #1032`; `Refs #1110` (closed on the decision).
 
