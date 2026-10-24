@@ -80,7 +80,7 @@ One arc, one PR against `dev` (no stack: the orchestrator's D-orch-1). It moves 
 
 **Validation gate.** `bun run lint`; `bun run test:release`; `rg -n '6\.0\.0-rc\.3' scripts/publish/readme`. Pass: both exit 0 (`stage.test.ts` green: its method rows and key-derivation vectors); `rg` prints exactly the two `0.2.0` entries. Layers: lint, unit.
 
-### P2. Rehearsal and digests
+### P2. Rehearsal and digests ✓
 
 Warning: run every step from the worktree root with `PATH=~/.nvm/versions/node/v24.12.0/bin:$PATH`; first check `node --version` is `v24.12.0`, `npm --version` is `11.6.2` and `bun --version` is `1.4.2`. `C` is `~/.cache/nulo-backlog/npm-release-1`.
 
