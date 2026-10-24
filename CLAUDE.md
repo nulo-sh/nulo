@@ -490,7 +490,7 @@ No file in this repository holds a backlog. Open work lives in GitHub issues; a 
 | Before opening any UI PR | `bun run audit:vue` (typecheck ∥ unit + component tests ∥ lint, then build). |
 | When editing the popup, contracts, or anything user-visible | `bun run test:e2e` (smoke; no Aztec sandbox). |
 | When touching dApp / network / PXE behavior | `bun run e2e:agent` (network suite; owns anvil + aztec + playground per worktree — parallel-safe). |
-| When touching `tests/e2e/fixtures/**` or anything a browser could disagree on (focus, user activation, WebAuthn, window handling) | The same two suites on Firefox: `NULO_E2E_BROWSER=firefox bun run test:e2e` / `NULO_E2E_BROWSER=firefox bun run e2e:agent` (needs `geckodriver` + `bun x puppeteer browsers install firefox`; see [`FIREFOX.md`](./apps/extension/tests/e2e/FIREFOX.md)). |
+| When touching `tests/e2e/fixtures/**` or anything a browser could disagree on (focus, user activation, WebAuthn, window handling) | The same two suites on Firefox: `NULO_E2E_BROWSER=firefox bun run test:e2e` / `NULO_E2E_BROWSER=firefox bun run e2e:agent` (needs `geckodriver` + the pinned Firefox, `bun scripts/e2e/install-firefox.ts` from `apps/extension`; see [`FIREFOX.md`](./apps/extension/tests/e2e/FIREFOX.md)). |
 | When editing Storybook stories or component visuals | `bun run --cwd apps/extension build-storybook`. |
 
 `audit:vue` excludes e2e tests (the `tests/e2e/**` entry in `apps/extension/vitest.config.ts`'s `exclude`). Smoke and network e2e are separate gates.

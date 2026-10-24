@@ -76,8 +76,8 @@ Playwright cannot load extensions into Firefox. The e2e suite drives it as a hyb
 (WebDriver classic) owns the session — launch, add-on install, `moz-extension://` navigation,
 WebAuthn, window handles — and Puppeteer attaches to the same session over BiDi for the rest.
 `NULO_E2E_BROWSER=firefox bun run test:e2e` (smoke) and `NULO_E2E_BROWSER=firefox bun run e2e:agent`
-(network) run on it. It needs geckodriver (`GECKODRIVER`, or on `PATH`) and the Firefox the locked
-Puppeteer pins (`bun x puppeteer browsers install firefox`, or `FIREFOX_PATH`). The full account —
+(network) run on it. It needs geckodriver (`GECKODRIVER`, or on `PATH`) and the suite's pinned Firefox
+(`bun scripts/e2e/install-firefox.ts` from `apps/extension`, or `FIREFOX_PATH`). The full account —
 every behaviour that differs and the debugging order — is `apps/extension/tests/e2e/FIREFOX.md`.
 
 What differs from Chrome when probing by hand:

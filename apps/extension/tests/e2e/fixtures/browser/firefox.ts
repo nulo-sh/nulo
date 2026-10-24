@@ -2,12 +2,12 @@ import { type ChildProcess, spawn } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
-import * as puppeteer from "puppeteer"
 import type { Browser, ElementHandle, Page, Target } from "puppeteer"
 import { reservePort } from "../../../../scripts/e2e/resolve-ports"
 import { registeredPorts } from "../../port-registry"
 import { type BiDiAttachment, attachPuppeteerOverBiDi } from "./bidi-attach"
 import { LOCATE_BACKGROUND_PAGE, evaluateViaFrameScript } from "./firefox-frame-script"
+import { E2E_FIREFOX_REVISION } from "./firefox-revision"
 import { armPageErrorRelay, checkPageErrorRelay } from "./firefox-page-errors"
 import { observeAndIntercept } from "./firefox-rpc-intercept"
 import type { BrowserDriver, LaunchOptions, LaunchedBrowser, OpenedTab, PxeHostState, VirtualAuthenticator } from "./index"
@@ -223,15 +223,6 @@ function geckodriverPath(): string {
 export const firefoxDirFor = (dirs: readonly string[], revision: string): string | undefined =>
 	dirs.find((dir) => dir.endsWith(`-${revision}`))
 
-/** The revision the locked Puppeteer installs. Exported at runtime but absent from the typings,
- *  so an upgrade that moves it fails here by name rather than as "no Firefox installed". */
-function lockedFirefoxRevision(): string {
-	const revision = (puppeteer as unknown as { PUPPETEER_REVISIONS?: { firefox?: string } }).PUPPETEER_REVISIONS?.firefox
-	if (!revision)
-		throw new Error("puppeteer no longer exports PUPPETEER_REVISIONS.firefox — set FIREFOX_PATH, or update lockedFirefoxRevision")
-	return revision
-}
-
 /**
  * Puppeteer's `executablePath({ browser: "firefox" })` builds the path from the CHROME build id,
  * so it names a directory that was never installed and geckodriver rejects it as "not a Firefox
@@ -245,11 +236,10 @@ function resolveFirefoxBinary(): string {
 	}
 	const root = path.join(process.env.PUPPETEER_CACHE_DIR ?? path.join(homedir(), ".cache", "puppeteer"), "firefox")
 	const installed = (existsSync(root) ? readdirSync(root) : []).filter((dir) => existsSync(path.join(root, dir, "firefox", "firefox")))
-	const revision = lockedFirefoxRevision()
-	const pinned = firefoxDirFor(installed, revision)
+	const pinned = firefoxDirFor(installed, E2E_FIREFOX_REVISION)
 	if (!pinned) {
 		throw new Error(
-			`Firefox ${revision} is not installed under ${root} — run \`bun x puppeteer browsers install firefox\` from apps/extension, or set FIREFOX_PATH`,
+			`Firefox ${E2E_FIREFOX_REVISION} is not installed under ${root} — run \`bun scripts/e2e/install-firefox.ts\` from apps/extension, or set FIREFOX_PATH`,
 		)
 	}
 	return path.join(root, pinned, "firefox", "firefox")

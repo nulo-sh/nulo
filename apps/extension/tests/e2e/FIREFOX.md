@@ -2,7 +2,7 @@
 
 What is different about driving the wallet on Firefox, why each difference exists, and where the suite absorbs it. Read this before touching `fixtures/browser/` or debugging a test that is red on Firefox only.
 
-Run it: `NULO_E2E_BROWSER=firefox bun run e2e:agent …` (network; builds `dist/firefox` itself) or `NULO_E2E_BROWSER=firefox bun run test:e2e` (smoke). **Smoke does not build**: it loads whatever `apps/extension/dist/firefox` holds, so build first with the flags CI's smoke job uses — `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:firefox` — and run with `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1` (`_extension-smoke-e2e.yml` is the authority for both). Needs `geckodriver` on `PATH` or at `$GECKODRIVER`, and the Firefox that the locked Puppeteer pins: `bun x puppeteer browsers install firefox` from `apps/extension` (or `FIREFOX_PATH`). The driver runs exactly that revision — the Puppeteer cache is shared by every checkout on the host, so "newest installed" would let another worktree change this one's browser — and the launch fails below Firefox 153, the manifest's own floor. **Linux only**: launch ownership reads `/proc/<pid>/environ`.
+Run it: `NULO_E2E_BROWSER=firefox bun run e2e:agent …` (network; builds `dist/firefox` itself) or `NULO_E2E_BROWSER=firefox bun run test:e2e` (smoke). **Smoke does not build**: it loads whatever `apps/extension/dist/firefox` holds, so build first with the flags CI's smoke job uses — `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:firefox` — and run with `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1` (`_extension-smoke-e2e.yml` is the authority for both). Needs `geckodriver` on `PATH` or at `$GECKODRIVER`, and the suite's pinned Firefox (§ [Which Firefox the suite runs](#which-firefox-the-suite-runs)): `bun scripts/e2e/install-firefox.ts` from `apps/extension` (or `FIREFOX_PATH`). The driver runs exactly that revision — the Puppeteer cache is shared by every checkout on the host, so "newest installed" would let another worktree change this one's browser — and the launch fails below Firefox 153, the manifest's own floor. **Linux only**: launch ownership reads `/proc/<pid>/environ`.
 
 ## The one rule
 
@@ -24,6 +24,20 @@ Both geckodriver ports come from `reservePort` (`scripts/e2e/resolve-ports.ts`),
 A classic window handle and a BiDi browsing-context id are the same string in Firefox, which is what lets a Puppeteer `Page` be addressed on the classic channel. The id is read from Puppeteer's internal `Frame._id` (`contextIdOf` in `firefox.ts`); it throws by name if a Puppeteer upgrade moves it. **A Puppeteer bump is the one routine change that can break the Firefox driver wholesale** — run the Firefox smoke on it.
 
 `--allow-system-access` is passed to geckodriver because Firefox otherwise refuses remote navigation to `moz-extension://` on both channels. It lets the automation session reach privileged contexts; acceptable on a single-user dev host and a single-tenant CI runner, and nowhere else.
+
+## Which Firefox the suite runs
+
+One pin: `E2E_FIREFOX_REVISION` in `fixtures/browser/firefox-revision.ts`. It is set apart from the revision Puppeteer pins, and everything reads it:
+
+- the driver launches it, unless `FIREFOX_PATH` overrides;
+- `bun scripts/e2e/install-firefox.ts`, run from `apps/extension`, installs it into Puppeteer's cache through the installed launcher;
+- CI's `setup-puppeteer` action runs that script and keys its Firefox cache on the pin's file.
+
+It holds stable_153.0.4. From Firefox 157, the Remote Agent treats a page in the `extension` process as a privileged context. On such a page, BiDi `browsingContext.activate` and `browsingContext.setViewport` throw "The command does not support browsing contexts in privileged scope", even under `--allow-system-access`. Those are Puppeteer's `page.bringToFront()` and `page.setViewport()`, and every wallet page is an extension page.
+
+The evidence, under Puppeteer 25.14.0: on Firefox 158.0, `navigation` and `legal-acceptance` failed 4 of 22, every failure that refusal. On 153.0.4, the same files pass 22 of 22.
+
+The pin moves once both calls go through a `BrowserDriver` seam ([#1111](https://github.com/nulo-sh/nulo/issues/1111)). It never moves with a Puppeteer bump alone.
 
 ## What Firefox does differently, and where it is absorbed
 

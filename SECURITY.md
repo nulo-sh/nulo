@@ -775,8 +775,9 @@ both reusable e2e workflows install it and one bump must reach each; the bump
 commands are in the action's description. Mozilla publishes a detached `.asc`
 signature rather than a checksum sidecar, and the lanes do not verify it, so
 the pins are the integrity check. Firefox itself is
-not pinned by hash: the lanes run the revision the locked `puppeteer` pins
-(`bun x puppeteer browsers install firefox`), fetched over HTTPS from
+not pinned by hash: the lanes run the e2e suite's pinned revision, apart
+from `puppeteer`'s (`apps/extension/scripts/e2e/install-firefox.ts`),
+fetched over HTTPS from
 Mozilla's archive — the same trust as the Chrome that `puppeteer` downloads
 for the required lanes — and the suite refuses to launch below the
 manifest's `strict_min_version`.
