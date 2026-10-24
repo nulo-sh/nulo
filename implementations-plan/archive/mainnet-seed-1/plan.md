@@ -15,9 +15,9 @@ issues: "#80"
 
 - **Date:** 2026-10-24. Planned and implemented the same day.
 - **Status:** draft, held for the live pair: #1117 against `dev`, never marked ready by this lane. It merges only after its Before-merge list (the live `check:seeds` read, a timed export, the canaries, OA-1 to OA-7, the endpoint, the regime binding).
-- **Shipped:** the Mainnet seed (D1) and its explorer entry; the e2e test Mainnet retired, the helpers and update scenarios on the real seed (D5); `check:seeds` plus the advisory nightly job, reusing `assertLiveChainIdentity` and printing no node words (D2, fix round 1); the declared refusal and the arrival's no-dial assertion (D6); captures on both browsers (D8). Measured: 4 to 8 s per full backup export per browser.
+- **Shipped:** the Mainnet seed (D1) and its explorer entry; the e2e test Mainnet retired, the helpers and update scenarios on the real seed (D5); `check:seeds` plus the advisory nightly job, reusing `assertLiveChainIdentity` and printing no node words (D2, fix round 1); the declared refusal and the arrival's no-dial assertion (D6); captures on both browsers (D8); the owner's answers to OA-1 to OA-7 (D10-D16), applied on the branch. Measured: 4 to 8 s per full backup export per browser.
 - **Dropped, rejected, superseded:** D9's skip of accountless chains (it would drop a dApp's registrations); a second stand-in node for Mainnet (D6); copy changes (D3, asked as OA-1).
-- **Known limits:** #1115 (an export dials a never-opened seeded network), #1116 (a custom network sharing a seeded chain id loses its imported account on restore). **Open items:** #80, open until #1117 merges; #808, reopened for the owner (OA-6). **Lessons:** none promoted (`lessons.md` is at its budget; the two arc gotchas are in [lessons/phase-1.md](lessons/phase-1.md) and the e2e README).
+- **Known limits:** #1115 (an export dials a never-opened seeded network), #1116 (a custom network sharing a seeded chain id loses its imported account on restore), #1119 (a seeded Mainnet beside a custom network named Mainnet, OA-7); #808 closed again (OA-6). **Open items:** #80, open until #1117 merges. **Lessons:** none promoted (`lessons.md` is at its budget; the two arc gotchas are in [lessons/phase-1.md](lessons/phase-1.md) and the e2e README).
 - **Seeds retired:** the `/goal` and `/loop` seeds below are history, not instructions.
 
 # mainnet-seed-1: the Mainnet default network, a draft held for the live pair (#80)
@@ -77,6 +77,13 @@ One arc, one DRAFT pull request against `dev` that `Closes #80` (no stack: D-orc
 | D7 | #808's reopening condition | Reopen it with the trace; the disposition is the owner's (OA-6) | Its condition is the owner's own; Mainnet refuses capture and resume, but the non-Mainnet mixed-regime path still stands (`network-reset/service.ts:561`). |
 | D8 | Screenshots | Arrival on both browsers; the get-gas row; markdown as before/after text | The capture skips Firefox (`network-arrival.test.ts:64`): a local edit lifts it for one run, reverted. The link and words take no chain input (`fee-helpers.ts:333`, `FeeSettingsCard.vue:454-466`). |
 | D9 | Exports and never-used networks | No change; a closed known limit with the timed export as its verification step | Skipping chains with no account would drop a dApp's senders and contracts registered without one (F6). Asking the PXE whether a store exists would add a cross-process contract, a plan change for the owner. The cost, a Mainnet PXE built inside the popup's 60 s call (`extension-messaging/src/background/client.ts:17`) and a dial to its node, is unmeasured until v6 is live. |
+| D10 | OA-1, README, listing and legal README | The owner, 2026-10-24: "A: Reword both now" | Proposal A's words in `README.md:8` and the reviewer note in `listing.md`; `legal/README.md` says the build seeds Mainnet beside the default Testnet. |
+| D11 | OA-2, the get-gas link on Mainnet | The owner, 2026-10-24: "B: Keep it" | No change: a Mainnet person is sent to the Testnet bridge until a Mainnet bridge exists. |
+| D12 | OA-3, the chain label in dApp windows | The owner, 2026-10-24: "A: 'MAINNET'" | One `getChainName` case, read as TESTNET is (upper-cased by its callers), with a unit test. |
+| D13 | OA-4, Privacy § 5.1 | The owner, 2026-10-24: "B: Say 'Testnet' in the sentence" | Privacy 1.2.5, a patch (not material, nobody re-accepts): § 5.1 names the Testnet endpoint as the one on the Developer's provider account. 1.2.4 archived, a BEFORE-LAUNCH block for the new date. |
+| D14 | OA-5, the export banner's count | The owner, 2026-10-24: "A: Accept, no change" | Imported accounts on Mainnet's chain leave the count, since a restore re-creates Mainnet. |
+| D15 | OA-6, #808 | The owner, 2026-10-24: "A: Close it again as a known limit" | #808 closed again with its trace; reopen on a person's report. |
+| D16 | OA-7, a duplicate "Mainnet" name | The owner, 2026-10-24: "B: Leave it, a known limit" | #1119, closed; reopen on a report of a profile showing two rows named Mainnet. |
 
 ## Security & Adversarial Considerations
 

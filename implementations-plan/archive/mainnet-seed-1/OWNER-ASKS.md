@@ -1,6 +1,6 @@
 # mainnet-seed-1: owner asks
 
-The arc ships without any of these: each "ships now" line is what the draft PR carries. Every answer is applied on the PR's branch before the merge, which waits for the live pair anyway. Pictures are attached to the PR.
+The arc shipped without any of these: each "ships now" line is what the draft PR first carried. The owner answered all seven on 2026-10-24; each answer is quoted under its ask and applied on the PR's branch (decision ledger D10-D16). Pictures are attached to the PR.
 
 ## OA-1: README and store-listing wording once Mainnet is seeded
 
@@ -9,6 +9,7 @@ The arc ships without any of these: each "ships now" line is what the draft PR c
 - **A (recommended).** README: "**The Aztec testnet is the default network.** Its assets are for testing. Aztec Mainnet is also built in, and its assets, like those on any mainnet network you add, may carry real value. Use only what you can afford to lose entirely. Treat any key material you import as compromised." Listing: "The wallet opens on the Aztec testnet with a zero balance. Aztec Mainnet is also listed under Networks."
 - **B.** The listing change only; the README line stays, since #893 (launch-prep-1, draft) replaces the whole banner and its Mainnet sentence ("Mainnet comes in a later 1.x release") then needs the same edit.
 - **Note.** If #893 lands first, A's README sentence replaces #893's "Mainnet comes in a later 1.x release."
+- **Answered 2026-10-24:** "A: Reword both now". Applied: proposal A in `README.md:8` and `listing.md`, and the `legal/README.md` line.
 
 ## OA-2: the get-gas link on Mainnet
 
@@ -17,6 +18,7 @@ The arc ships without any of these: each "ships now" line is what the draft PR c
 - **A.** Hide the link and the Get started row on Mainnet until unleashed has a Mainnet bridge; the nudge keeps its words without the link.
 - **B (recommended until a Mainnet bridge exists).** Keep it, as today's owner call ("on every network").
 - **C.** A Mainnet bridge URL the owner names.
+- **Answered 2026-10-24:** "B: Keep it". No change.
 
 ## OA-3: a Mainnet account's chain label in dApp windows
 
@@ -24,6 +26,7 @@ The arc ships without any of these: each "ships now" line is what the draft PR c
 - **Ships now:** "AZTEC:2070860441" for a Mainnet account (the switch knows Testnet and Sandbox only).
 - **A (recommended).** "MAINNET", one case in `getChainName`, as "TESTNET" reads today.
 - **B.** As ships now.
+- **Answered 2026-10-24:** "A: 'MAINNET'". Applied: one `getChainName` case, with a unit test.
 
 ## OA-4: Privacy § 5.1 beside a keyless Mainnet endpoint
 
@@ -33,12 +36,14 @@ The arc ships without any of these: each "ships now" line is what the draft PR c
 - **B.** Keep the keyless endpoint and name Testnet in the sentence: a patch bump of the Privacy Policy (not material: it narrows what the Developer sees).
 - **C.** As ships now.
 - **Recommendation.** A if the owner wants usage statistics for Mainnet; otherwise B.
+- **Answered 2026-10-24:** "B: Say 'Testnet' in the sentence". Applied: Privacy 1.2.5, a patch.
 
 ## OA-5: the full export's network banner once Mainnet is a default
 
 - **Surface.** Settings → Security → Export → Full backup, the warning "Some imported accounts need their network": "N imported accounts are on networks you added. A restore re-creates only the default networks, so add those networks again to restore them." (`export/full.vue:68-72,256-266`).
 - **Ships now (a consequence of the seed, not a code change):** imported accounts on Mainnet's chain (2070860441) leave the count, because a restore now re-creates Mainnet (`useFullBackupExport.ts:121`, `isSeedChain`). Only a person who added that chain by hand before this build, in Developer Mode, sees a lower count or no banner. The banner's words are unchanged and stay true.
 - **B.** Keep counting them: a special case that would tell a person a restore does not bring back a network it does. Not recommended.
+- **Answered 2026-10-24:** "A: Accept, no change". No change.
 
 ## OA-6: #808's renewed disposition before the first Mainnet build
 
@@ -47,6 +52,7 @@ The arc ships without any of these: each "ships now" line is what the draft PR c
 - **A (recommended).** Renew the known limit as written and close it again; reopen on a person's report.
 - **B.** A plan of its own for journal reconciliation: a recovery policy with its own obligations, not this lane's.
 - **What ships now.** No runtime change; the PR's merge list names this answer.
+- **Answered 2026-10-24:** "A: Close it again as a known limit". #808 closed again; reopen on a person's report.
 
 ## OA-7: a seeded "Mainnet" beside a network the person already named "Mainnet"
 
@@ -55,3 +61,4 @@ The arc ships without any of these: each "ships now" line is what the draft PR c
 - **Ships now:** two rows named "Mainnet", on different chains.
 - **A (recommended).** Name the seeded row "Aztec Mainnet" when "Mainnet" is taken in the profile; the arrival then names it so.
 - **B.** As ships now, a known limit.
+- **Answered 2026-10-24:** "B: Leave it, a known limit". Filed and closed as #1119; reopen on a report of a profile showing two rows named Mainnet.

@@ -13,3 +13,4 @@
 - 2026-10-24 Phase 4: arrival and Mainnet Home captured on both browsers (`screenshots/`), capture-only edit reverted. Base update scenarios: replay 43 → 64 s Chrome, 54 → 69 s Firefox (two full backup exports, one arrival Stay); arrival update 46 → 44 s, 75 → 58 s.
 - 2026-10-24 fix loop: Codex r1 conditional (2 P2: `check:seeds` error text fixed; chain id collision → #1116), Opus 4 P3 fixed or recorded (OA-7, OA-1 extended), Codex r2 approve. Arrival and stale smoke rerun green on both browsers.
 - 2026-10-24 draft PR #1117 open; close-out (Outcome, archive) are its final commits.
+- 2026-10-24 owner answers OA-1..OA-7 applied (D10-D16): README, listing and legal README reworded; `getChainName` reads Mainnet; privacy 1.2.5; #808 closed again; #1119 filed and closed. OA-3 captured on both browsers from a one-off network-suite spec, removed after.
