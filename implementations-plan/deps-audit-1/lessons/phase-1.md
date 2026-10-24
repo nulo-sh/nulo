@@ -74,3 +74,8 @@ All commands from the repo root on branch `deps-audit-1-a1`, before 21:01Z, so b
   - chromium-bidi 157 has no provenance: Google's `chrome-devtools-npm` publishes it from the Chromium tree, per its README. puppeteer-core 25.14.0, which is attested, pins it exactly, and 157 drops 17.0.2's `bidiServer` and `prepare` script.
   - zod's allowsEval probe is unchanged, and the extension's jitless pre-seed still applies.
 - **Browsers.** Puppeteer's postinstall brought Chrome 155.0.8059.79. `bun x puppeteer browsers install firefox` brought stable_158.0. `PUPPETEER_REVISIONS` (namespace import, as `firefox.ts` reads it) names both.
+- **Codex r4: fixes needed (two).**
+  - zod 4.6's `.url()` strips tab, CR and LF from its value. That turned `RpcUrlSchema`'s later hidden-character check into a silent accept, so the check now runs first (D22). A scratch probe ran 15 inputs: the same verdict and popup line as on 4.4.3.
+  - The override's removal condition is now "the six constraints admit one common patched zod", in the skill and D21.
+- **R1 went red under 4.6.7.** The stamp pins the installed zod, so every zod bump appends a stamp. The five emitted-shape diffs were spelling (nullable `anyOf` → a type array; tuples state their length); R3 and R5 passed. `baseline:storage -- --additive` appended stamp 1, plus its pin (D23). Then a full `test:all` passed on every workspace (extension 15148 passed), before the candidate.
+- **Signing hung on a stale `SSH_AUTH_SOCK`** (machine.md's gotcha). Commits and pushes now run under `env -u SSH_AUTH_SOCK`.

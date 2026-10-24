@@ -62,9 +62,11 @@ Its bar is the owner's same-engine bar (D17), which CLAUDE.md now states. The ga
 - `bun.lock`'s `fast-uri` and `jsdom/undici` entries;
 - in the ack file and `SECURITY.md`'s table, the braces entry removed and three undici ids added to the miniflare entry (D18);
 - `CLAUDE.md`'s soak sentence (D17);
-- `apps/extension/package.json`'s `puppeteer` floor `^25.14.0`, the root `overrides.zod` `"4.6.7"`, the eleven `bun.lock` entries they move, and one pin-surface line in the `aztec-update` skill (D21).
+- `apps/extension/package.json`'s `puppeteer` floor `^25.14.0`, the root `overrides.zod` `"4.6.7"`, the eleven `bun.lock` entries they move, and one pin-surface line in the `aztec-update` skill (D21);
+- `apps/extension/src/wallet/services/network/spec.ts` and its test: `RpcUrlSchema`'s hidden-character check moves ahead of `.url()` (D22);
+- `apps/extension/src/wallet/storage/stored-shapes/snapshot.json` and `pins.ts`: stamp 1, an additive mark for zod's emitter (D23).
 
-No source or workflow file. `bunfig.toml` ends unchanged.
+No workflow file; that one source change only. `bunfig.toml` ends unchanged.
 - **follow-redirects:** `bun update follow-redirects` writes the lockfile entry only (axios's `^1.16.0` admits 1.16.1).
 - **vite, exactly 8.2.4:** with the override a range, `bun update vite[@8.2.4]` resolves 8.3.4. So pin first, then restore the ranges: override `8.2.4`, install; override and the three floors `^8.2.4`, install. The lock keeps 8.2.4, which satisfies `^8.2.4`.
 - **The re-gate (F5):** while either package is inside the gate, both installs run with `--config=<scratch bunfig.toml>`, a fresh copy of the tracked file plus one `minimumReleaseAgeExcludes` line for the two names, outside the repo. After 21:01Z the installs run with the tracked file.
@@ -80,7 +82,7 @@ No source or workflow file. `bunfig.toml` ends unchanged.
 
 ## UI impact
 
-None. The arc changes dependency files only; no screen, copy or layout.
+None. The arc changes dependency files, plus one schema-order fix (D22) that leaves every probed RPC URL with the same popup line it had on zod 4.4.3; no screen, copy or layout.
 
 ## Phases (arc 1, branch `deps-audit-1-a1` off `origin/dev`, this plan's commit cherry-picked first; arc 2, branch `deps-audit-1-a2` off `origin/dev` `e0faa7267`, with this directory brought over by file)
 
@@ -197,8 +199,21 @@ None. The arc changes dependency files only; no screen, copy or layout.
     - a new `puppeteer-core/ws` 8.22.0, since puppeteer-core asks `^8.22.0` and the root keeps 8.21.3.
   - **Browsers:** Chrome and chrome-headless-shell 152.0.7977.42 → 155.0.8059.79, from Puppeteer's postinstall; Firefox stable_153.0.4 → stable_158.0, from `bun x puppeteer browsers install firefox`. The harness reads `PUPPETEER_REVISIONS.firefox` and finds the new directory.
   - **Out of scope:** `.github/actions/setup-aztec/cli/package-lock.json` keeps zod 4.4.3. It is the Aztec sandbox and CLI that CI's network lanes boot, an npm tree `bun audit` does not read and no artifact ships. The `aztec-update` skill regenerates it with each Aztec bump.
-  - **Removal:** the `aztec-update` skill's pin surface now names the override. It is dropped once all six zod-declaring Aztec packages admit ≥ 4.6.6.
+  - **Removal:** the `aztec-update` skill's pin surface now names the override. It is dropped once the six zod-declaring Aztec constraints admit one common patched zod (≥ 4.6.6), then a reinstall shows one patched copy and a clean audit (Codex r4).
   - The audit gate reads 41 / 0 / 0 / 0 with no new acknowledgement.
+- **D22 `RpcUrlSchema` reads the raw string before `.url()` (Codex r4).**
+  - zod 4.6's `.url()` returns its value with tab, CR and LF removed. The hidden-character check ran after it, so under 4.6.7 `https://rpc.exa\tmple.test/path` was accepted as `https://rpc.example.test/path`. That breaks the contract at `spec.ts` and `rpc-url.ts`: what a person reads must be what is dialed.
+  - The fix moves the check ahead of `.url()`. The hidden-character test's loop gains the three characters: red on the old order, green on the new.
+  - A scratch probe ran 15 inputs on 4.4.3 with the old order and on 4.6.7 with the new. Each one gets the same verdict and the same matched popup line (`endpoint-error-text.ts`). The only difference is that three malformed inputs no longer also carry zod's own "Invalid URL" issue, which no screen shows.
+  - This is a schema behaviour change found in review, and it is reported here and in the PR. Gate reds stay findings, never patches (Phase 3).
+- **D23 Stamp 1: an additive mark for zod 4.6.7's emitter.**
+  - Under 4.6.7, `stored-shapes/snapshot.test.ts` R1 went red. Five registered shapes emit differently, and the stamp's `zod` field must equal the installed version, so every zod bump appends a stamp by design.
+  - The five diffs are spelling only:
+    - a nullable primitive becomes `type: [X, "null"]` instead of `anyOf`, in `incomingPublicCursors`, `journal`, `tokenPrices` and `uiLoggerWindowId`;
+    - a fixed 2-tuple now states `minItems`, `maxItems` and `items: false`, in `incomingArrivals` and `incomingPublicCursors`.
+  - R3 (every golden) and R5 (both pinned backups) pass unchanged, so every stored row reads as before.
+  - `bun run baseline:storage -- --additive "<reason>"` appended stamp 1 (v1, zod 4.6.7), and `PINNED_STAMPS[1]` is the pin it printed. The storage suite then passes, 120 of 120.
+  - This was a gate red, diagnosed as no schema behaviour change, and closed by the gate's own procedure.
 
 ## Review verdicts
 
