@@ -173,11 +173,12 @@ closing the window answers this envelope. No wider manifest fixes it: the call
 itself must name the function its selector runs.
 
 `registerSender`, and `registerContract` with a secret key, add a sender or an
-account to the chain's PXE. Apps may grow a chain's distinct senders and
-accounts, the person's own included, to 128; past that, a registration of an
-address the chain does not hold yet answers this envelope and writes nothing,
-neither the account nor its contract. No wider manifest fixes it. A keyless
-`registerContract` adds no sender or account and is never refused for this.
+account to the chain's PXE. Each app may make 32 of them on a profile's chain,
+and all apps together 128; every admitted call counts, a repeat included. Once
+either count is used up, every such call answers this envelope, whatever the
+address, and writes nothing, neither the account nor its contract. No wider
+manifest fixes it. A keyless `registerContract` and the person's own
+registrations are not counted and never refused for this.
 
 The authorization registry's grant functions (`set_authorized`, `set_reject_all`,
 `set_authorized_private`) answer only the wallet's own authorization action, so
@@ -408,7 +409,7 @@ patch does NOT restore them):
 
 If a future Aztec.js version ships its own `registerToken`, the patch's
 signature-drift guard throws at SW init (`expected 2 params, found N`). Pin the
-`@aztec-labs/wallet-sdk` version exactly (`6.0.0-rc.3` today) so the patch's
+`@aztec-labs/wallet-sdk` version exactly (`6.0.0` today) so the patch's
 assumptions are stable across upgrades.
 
 ### Not in `batch`

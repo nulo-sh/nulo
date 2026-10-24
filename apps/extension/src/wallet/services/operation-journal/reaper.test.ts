@@ -19,6 +19,7 @@ import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { JOURNAL_REAPER_ALARM_NAME, JournalReaper } from "./reaper"
+import { profileKeysStub } from "../composition-harness"
 import { OperationJournalService } from "./service"
 import type { NewOperationInput } from "./spec"
 
@@ -34,6 +35,7 @@ async function started(): Promise<{ api: FakeBrowserApi; service: OperationJourn
 	const logger = new LoggerStore(new ConfigStore())
 	const service = new OperationJournalService(logger, api)
 	const services = new ServiceCollection()
+	services.add(await profileKeysStub("profile-a", "profile-b", "p1", "p2"))
 	services.add(service)
 	await services.start()
 	return { api, service, logger }
@@ -361,10 +363,8 @@ describe("JournalReaper.start", () => {
 			periodInMinutes: 1,
 		} as chrome.alarms.Alarm)
 
-		// Let the fire-and-forget reap complete.
-		await new Promise((r) => setTimeout(r, 10))
-
-		expect((await service.getOperation(rec2.id))?.progress.stage).toBe("failed")
+		// The reap is fire-and-forget, and its sealed reads settle past any fixed delay.
+		await vi.waitFor(async () => expect((await service.getOperation(rec2.id))?.progress.stage).toBe("failed"))
 		await reaper.stop()
 	})
 

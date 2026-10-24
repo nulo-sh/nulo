@@ -11,7 +11,7 @@ const VERIFIED = {
 }
 const FPCS = { sponsored: `0x${"AB".repeat(32)}`, private: `0x${"CD".repeat(32)}` }
 const FEE_JUICE = `0x${"0".repeat(63)}3`
-const AUTH_REGISTRY = "0x2ba8714679fbee823f108f366f878ce3249861637de705b0ac7cfbd0f81b3a9c"
+const AUTH_REGISTRY = "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83"
 
 describe("knownContracts", () => {
 	test("the protocol contracts carry the drawn role names, in the drawn order, lower-cased", () => {

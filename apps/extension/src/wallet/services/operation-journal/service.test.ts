@@ -16,6 +16,8 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
+import { openStoredText, rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { profileKeysStub } from "../composition-harness"
 import { OperationJournalService } from "./service"
 import {
 	type JournalMetadata,
@@ -38,6 +40,7 @@ async function started(): Promise<{ api: FakeBrowserApi; service: OperationJourn
 	const logger = new LoggerStore(new ConfigStore())
 	const service = new OperationJournalService(logger, api)
 	const services = new ServiceCollection()
+	services.add(await profileKeysStub("p", "p-a", "p-b", "p1", "profile-a", "profile-b"))
 	services.add(service)
 	await services.start()
 	return { api, service }
@@ -105,7 +108,7 @@ describe("OperationJournalService", () => {
 		const rec = await service.createOperation({ ...VALID_INPUT, ...metadata, profileEpoch: 3, initialStage: { stage: "pending" } })
 
 		const key = `nulo:journal@${rec.id}`
-		const stored = JSON.parse((await api.storage.local.get(key))[key] as string)
+		const stored = JSON.parse(await openStoredText(api.storage.local, key, (await rowKeysForEveryProfile()).rowKeys))
 		expect(await service.getOperation(rec.id)).toMatchObject(metadata)
 		expect(stored).toMatchObject(metadata)
 		expect(stored).not.toHaveProperty("profileEpoch")
@@ -143,6 +146,7 @@ describe("OperationJournalService", () => {
 		// A fresh instance re-parses the stored row: a schema that dropped the field would lose it here.
 		const reread = new OperationJournalService(new LoggerStore(new ConfigStore()), api)
 		const services = new ServiceCollection()
+		services.add(await profileKeysStub("p", "p-a", "p-b", "p1", "profile-a", "profile-b"))
 		services.add(reread)
 		await services.start()
 		expect((await reread.getOperation(op.id))?.progress).toEqual({ stage: "proving", enteredProveAt: 5, backend: "presto" })
@@ -411,6 +415,7 @@ describe("OperationJournalService", () => {
 		const logger = new LoggerStore(new ConfigStore())
 		const fresh = new OperationJournalService(logger, api)
 		const services = new ServiceCollection()
+		services.add(await profileKeysStub("p", "p-a", "p-b", "p1", "profile-a", "profile-b"))
 		services.add(fresh)
 		await services.start()
 
@@ -469,6 +474,7 @@ describe("OperationJournalService", () => {
 			name: "profile",
 			dependencies: [],
 			getProfiles: async () => profiles,
+			...(await rowKeysForEveryProfile()),
 			async start() {},
 		}
 		const collection = new ServiceCollection()
@@ -496,6 +502,7 @@ describe("OperationJournalService", () => {
 			dependencies: [],
 			getProfiles: async () => [{ id: "profile-a" }],
 			getDeletionState: () => ({ isCurrent: (_id: string, captured: number) => captured === epoch }),
+			...(await rowKeysForEveryProfile()),
 			async start() {},
 		}
 		const collection = new ServiceCollection()
@@ -526,6 +533,7 @@ describe("OperationJournalService", () => {
 		const svc = new OperationJournalService(new LoggerStore(new ConfigStore()), api)
 		collection.add(svc)
 		collection.add(networkStub as never)
+		collection.add(await profileKeysStub("p", "p-a", "p-b", "p1", "profile-a", "profile-b"))
 		await collection.start()
 
 		await svc.createOperation({ ...VALID_INPUT, networkId: "net-live" })
@@ -890,6 +898,53 @@ describe("a failed send's record: the carry, the answer, the predicates", () => 
 		expect((await service.getOperation(without))?.progress).toMatchObject({ check: "unconfirmed" })
 	})
 
+	test("refused is recorded bare, only on a row never answered, and gives way to a mined answer, or to expired with an expiry", async () => {
+		const id = await failedFromSubmitting(EXPIRY)
+		const block = { block: 5, hash: `0x${"01".repeat(32)}` }
+		const set = (expected: SendCheckState, next: SendCheckState) => service.setSendCheck(id, HASH, expected, next, live)
+		expect(await set({}, { check: "refused", inclusion: block })).toBe(false)
+		expect(await set({}, { check: "refused", checkSince: 1 })).toBe(false)
+		expect(await set({}, { check: "refused" })).toBe(true)
+		expect((await service.getOperation(id))?.progress).toEqual({
+			stage: "failed",
+			from: "submitting",
+			txHash: HASH,
+			submittedEndpointUrl: URL,
+			expiry: EXPIRY,
+			check: "refused",
+		})
+		const moves = [
+			{ check: "unconfirmed" },
+			{ check: "expired", inclusion: block },
+			{ check: "refused" },
+			{ checkSince: 1 },
+			{},
+		] as const
+		for (const next of moves) expect(await set({ check: "refused" }, next)).toBe(false)
+		expect(await set({ check: "refused" }, { check: "sent", inclusion: block })).toBe(true)
+		expect((await service.getOperation(id))?.progress).toMatchObject({ check: "sent", inclusion: block })
+
+		const reverted = await failedFromSubmitting()
+		expect(await service.setSendCheck(reverted, HASH, {}, { check: "refused" }, live)).toBe(true)
+		expect(await service.setSendCheck(reverted, HASH, { check: "refused" }, { check: "expired" }, live)).toBe(false)
+		expect(await service.setSendCheck(reverted, HASH, { check: "refused" }, { check: "reverted" }, live)).toBe(true)
+
+		const expired = await failedFromSubmitting(EXPIRY)
+		expect(await service.setSendCheck(expired, HASH, {}, { check: "refused" }, live)).toBe(true)
+		expect(await service.setSendCheck(expired, HASH, { check: "refused" }, { check: "expired" }, live)).toBe(true)
+		expect((await service.getOperation(expired))?.progress).toMatchObject({ expiry: EXPIRY, check: "expired" })
+	})
+
+	test("a row whose mined answer was pruned is never refused; its window still ends unconfirmed", async () => {
+		const id = await failedFromSubmitting()
+		const block = { block: 5, hash: `0x${"01".repeat(32)}` }
+		const set = (expected: SendCheckState, next: SendCheckState) => service.setSendCheck(id, HASH, expected, next, live)
+		expect(await set({}, { check: "sent", inclusion: block })).toBe(true)
+		expect(await set({ check: "sent", inclusion: block }, { checkSince: 1_234 })).toBe(true)
+		expect(await set({}, { check: "refused" })).toBe(false)
+		expect(await set({}, { check: "unconfirmed" })).toBe(true)
+	})
+
 	test("a mined answer's block moves only to final, another block or pruned, each over the block the caller read", async () => {
 		const id = await failedFromSubmitting()
 		const first = { block: 5, hash: `0x${"01".repeat(32)}` }
@@ -1077,7 +1132,11 @@ describe("a dApp record's call: one schema at every writer and the reader", () =
 
 		await service.setOperationMeta(id, { title: "transfer_in_public", call: { contract: TOKEN, argCount: 4, classId: CLASS } })
 		const key = `nulo:journal@${id}`
-		expect(JSON.parse((await api.storage.local.get(key))[key] as string).call).toEqual({ contract: TOKEN, argCount: 4, classId: CLASS })
+		expect(JSON.parse(await openStoredText(api.storage.local, key, (await rowKeysForEveryProfile()).rowKeys)).call).toEqual({
+			contract: TOKEN,
+			argCount: 4,
+			classId: CLASS,
+		})
 		expect((await service.getOperation(id))?.call).toEqual({ contract: TOKEN, argCount: 4, classId: CLASS })
 	})
 

@@ -8,8 +8,9 @@
  *
  * The proof gate parks a real send at `proving` — after the record is journaled,
  * before the proof completes — which is precisely the window the guard exists
- * to cover. Requires a PROVERLESS build (`NULO_E2E_PROVERLESS=1`): that is the
- * only build where the gate is compiled in. Run zero-retry
+ * to cover; while it is parked, its row is also laid out at 240 px. Requires a
+ * PROVERLESS build (`NULO_E2E_PROVERLESS=1`): that is the only build where the
+ * gate is compiled in. Run zero-retry
  * (`NULO_E2E_RETRY=0`) — the file mutates on-chain and PXE state, so a retry
  * would re-run against a half-consumed sandbox.
  */
@@ -19,6 +20,8 @@ import type { AztecTestConfig } from "../fixtures/aztec"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { createSecondAccount, getAccountAddress, refreshBalances, sendTransfer, switchAccountByAddress } from "../fixtures/helpers"
 import { holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
+import { SEALED_READ_MESSAGE } from "../fixtures/sealed-rows"
+import { expectFitsNarrow } from "../fixtures/type-roles"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -34,19 +37,15 @@ async function activeAccount(page: Page): Promise<string> {
 /** True once the profile has a journaled send that has not reached a terminal stage. */
 async function waitForInFlightSend(page: Page, timeout = 60_000): Promise<void> {
 	await page.waitForFunction(
-		(stages: string[]) =>
-			chrome.storage.local.get(null).then((all: Record<string, unknown>) =>
-				Object.entries(all).some(([key, value]) => {
-					if (!key.startsWith("nulo:journal@")) return false
-					try {
-						const row = JSON.parse(String(value)) as { kind?: string; progress?: { stage?: string } }
-						return (row.kind === "transfer" || row.kind === "dapp_execute") && stages.includes(String(row.progress?.stage))
-					} catch {
-						return false
-					}
-				}),
-			),
+		async (message: string, stages: string[]) => {
+			type Row = { kind?: string; progress?: { stage?: string } }
+			const rows = ((await chrome.runtime.sendMessage({ type: message, root: "journal" })) ?? []) as { row: Row }[]
+			return rows.some(
+				({ row }) => (row.kind === "transfer" || row.kind === "dapp_execute") && stages.includes(String(row.progress?.stage)),
+			)
+		},
 		{ timeout, polling: 250 },
+		SEALED_READ_MESSAGE,
 		IN_FLIGHT_STAGES,
 	)
 }
@@ -121,6 +120,11 @@ test.skipIf(!hasConfig)(
 		)
 		try {
 			await step("wait for an in-flight send", () => waitForInFlightSend(page))
+			// A parked Send is the row with one action: at 240 px it must leave the row's chips whole.
+			await step("the in-flight row at 240 px", async () => {
+				await page.waitForSelector('[data-testid="tx-awaiting-cancel"]', { visible: true, timeout: 30_000 })
+				await expectFitsNarrow(page, "an in-flight send with its Cancel")
+			})
 
 			// The guard refuses the switch; the header still shows the sender.
 			expect(await step("attempt the blocked switch", () => attemptSwitch(page, other))).toBe(false)
@@ -133,20 +137,19 @@ test.skipIf(!hasConfig)(
 		// Once nothing is in flight the same switch goes through, so the guard
 		// gates on the send rather than disabling switching outright.
 		await page.waitForFunction(
-			(stages: string[]) =>
-				chrome.storage.local.get(null).then((all: Record<string, unknown>) =>
-					Object.entries(all).every(([key, value]) => {
-						if (!key.startsWith("nulo:journal@")) return true
-						try {
-							const row = JSON.parse(String(value)) as { kind?: string; progress?: { stage?: string } }
-							if (row.kind !== "transfer" && row.kind !== "dapp_execute") return true
-							return !stages.includes(String(row.progress?.stage))
-						} catch {
-							return true
-						}
-					}),
-				),
+			async (message: string, stages: string[]) => {
+				type Row = { kind?: string; progress?: { stage?: string } }
+				const rows = (await chrome.runtime.sendMessage({ type: message, root: "journal" })) as { row: Row }[] | undefined
+				return (
+					Array.isArray(rows) &&
+					rows.every(
+						({ row }) =>
+							(row.kind !== "transfer" && row.kind !== "dapp_execute") || !stages.includes(String(row.progress?.stage)),
+					)
+				)
+			},
 			{ timeout: 180_000, polling: 500 },
+			SEALED_READ_MESSAGE,
 			IN_FLIGHT_STAGES,
 		)
 

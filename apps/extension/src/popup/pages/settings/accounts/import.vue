@@ -12,6 +12,7 @@
 /** Components */
 import { FieldWarning } from "@nulo/design"
 import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
+import HandoffCard from "@/components/composite/HandoffCard.vue"
 
 /** Services */
 import { managers } from "@/utils/core"
@@ -19,8 +20,9 @@ import { managers } from "@/utils/core"
 /** Utils */
 import { FileTooLargeError, pickFile } from "@/utils"
 import { sameStoredName } from "@/utils/account-name"
+import { OWN_WINDOW_ROUTES, closeOwnWindow, isCardWindow, leavePanelFor, ownWindowRoute, returnToPanel } from "@/utils/own-window"
+import { showSnack } from "@/utils/snack"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
-import { storageLocalSet } from "@/utils/storage"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
@@ -50,6 +52,10 @@ let generation = 0
  *  needs the password it was exported with. */
 const isProtectedFile = computed(() => fileBody.value.trim().length > 0 && !fileBody.value.trim().startsWith("{"))
 const needsConfirm = computed(() => previewAddress.value.length > 0)
+/** The hand-off window shows only the card until a file is picked or refused; the page then shows the
+ *  file, or the refusal with its own file row. */
+const cardWindow = isCardWindow()
+const showCard = computed(() => cardWindow && !fileName.value && !fileBody.value && !error.value)
 /** Another account's name: the account this page imports, once in the list, is not another. */
 const nameTaken = computed(() =>
 	appStore.accounts.some((a) => !sameFieldAddress(a.address, previewAddress.value) && sameStoredName(a.name, accountName.value)),
@@ -58,6 +64,12 @@ const nameTaken = computed(() =>
 // Coarse pre-read byte gate (×4 headroom over the service's authoritative
 // 64 KiB string-length check, covering UTF-8-bytes vs UTF-16-units skew).
 const MAX_ACCOUNT_FILE_BYTES = 256 * 1024
+
+/** From Firefox's toolbar panel the pick moves to this page's own window, where a second press picks. */
+const handleChooseFile = async () => {
+	if (await leavePanelFor(OWN_WINDOW_ROUTES.accountImport)) return
+	await handlePickFile()
+}
 
 const handlePickFile = async () => {
 	const gen = generation
@@ -128,12 +140,15 @@ const handleConfirmImport = async () => {
 		// active-pointer persist is in flight.
 		if (isStale()) return
 		appStore.accounts.push(account)
-		await storageLocalSet({ "nulo:ui:activeAccount": account.address })
+		await managers.uiPreference.setSelectedAccount(profileId, account.address)
 		if (isStale()) return
-		openToast({ kind: "success", label: "Account imported" })
+		const imported = { kind: "success", label: "Account imported" }
+		if (await returnToPanel("/popup/settings/accounts", { snack: imported, profileId })) return
+		showSnack(openToast, imported)
 		// History-aware return (the SubPageHeader back arrow is history-first): a push would leave
-		// this page one Back away from the account list it just finished with.
-		if (window.history.length > 1) router.back()
+		// this page one Back away from the account list it just finished with. An own window has no
+		// list behind it, only the lock screen it may have opened on.
+		if (ownWindowRoute() === undefined && window.history.length > 1) router.back()
 		else router.replace("/popup/settings/accounts")
 	} catch (err) {
 		if (isStale()) return
@@ -182,7 +197,8 @@ const collapsingLabel = "Import Account"
 </script>
 
 <template>
-	<CollapsingHeroLayout heroMain="Import" heroSub="Account" :collapsingLabel="collapsingLabel" backTo="/popup/settings/accounts">
+	<HandoffCard v-if="showCard" title="Pick the account file" @choose="handlePickFile" @cancel="closeOwnWindow" />
+	<CollapsingHeroLayout v-else heroMain="Import" heroSub="Account" :collapsingLabel="collapsingLabel" backTo="/popup/settings/accounts">
 		<!-- Step 1: the file (the full-backup restore's picker pattern). The section divider only
 		     exists when the password section actually follows — `export_section`'s border-bottom
 		     separates it from a NEXT section, and a plain file has none. -->
@@ -191,7 +207,7 @@ const collapsingLabel = "Import Account"
 				<span class="export_section_label type--label-section">Account file</span>
 				<ItemsContainer flat>
 					<SettingItem
-						@click="handlePickFile"
+						@click="handleChooseFile"
 						title="Choose an account file"
 						:description="fileName || 'Select a .json or .txt file'"
 						chevron

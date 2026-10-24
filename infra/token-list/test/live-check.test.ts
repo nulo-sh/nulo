@@ -1,14 +1,18 @@
 import { spawn } from "node:child_process"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { createServer, type ServerResponse } from "node:http"
 import type { AddressInfo } from "node:net"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { BUNDLED_TOKEN_CLASS_IDS, TOKEN_METADATA_SLOTS, type TokenListEntry } from "@nulo/token-list"
 import { describe, expect, test } from "vitest"
+import { canonical } from "../scripts/check"
 import { type LiveCheckIO, liveCheck } from "../scripts/live-check"
 import { REPO_ROOT } from "../scripts/summary"
 
-// Wire shapes as `https://aztec-testnet.drpc.org` sends them (6.0.0-rc.3): chain 3415328944.
-const NODE_INFO = { nodeVersion: "6.0.0-rc.3", l1ChainId: 11155111, rollupVersion: 3409706519, enr: "enr:-NK4QCUw" }
-const CHAIN = 3415328944
+// Wire shapes as `https://aztec-testnet.drpc.org` sends them (6.0.0): chain 685146337.
+const NODE_INFO = { nodeVersion: "6.0.0", l1ChainId: 11155111, rollupVersion: 679261766, enr: "enr:-My4QPYl" }
+const CHAIN = 685146337
 const BLOCK = 4926
 const CLASS = BUNDLED_TOKEN_CLASS_IDS[0]
 const OTHER_CLASS = `0x${"2".repeat(64)}`
@@ -105,7 +109,7 @@ describe("the live check", () => {
 		expect(results).toEqual(["matches", "matches"])
 		expect(ok).toBe(true)
 		expect(text).toContain(
-			"- https\\:\\/\\/node\\.example: l1ChainId 11155111, rollupVersion 3409706519, version 6.0.0-rc.3, block 4926: chain 3415328944",
+			"- https\\:\\/\\/node\\.example: l1ChainId 11155111, rollupVersion 679261766, version 6.0.0, block 4926: chain 685146337",
 		)
 		const reads = n.calls.filter((c) => c.method === "aztec_getContract" || c.method === "aztec_getPublicStorageAt")
 		expect(reads.map((c) => (c.method === "aztec_getContract" ? c.params[1] : c.params[0]))).toEqual(Array(6).fill(BLOCK))
@@ -259,10 +263,18 @@ describe("the live check script", () => {
 					JSON.stringify(result({ ...NODE_INFO, nodeVersion: HOSTILE })),
 				)
 		})
+		// The script's own source may list no token (between a reset and the next publish), so the
+		// child reads a one-token source of its own: the row it cannot check must exist to be reported.
+		const dir = mkdtempSync(join(tmpdir(), "live-check-"))
+		const source = join(dir, "list.source.json")
+		writeFileSync(source, canonical({ tokens: [token(1)] }))
 		try {
-			const child = spawn(process.execPath, ["infra/token-list/scripts/live-check.ts", `${origin}/hostile`, `${origin}/moved`], {
-				cwd: REPO_ROOT,
-			})
+			// `bun`, as CI runs it: under a Node runner `process.execPath` cannot load the script's TypeScript.
+			const child = spawn(
+				"bun",
+				["infra/token-list/scripts/live-check.ts", `--source=${source}`, `${origin}/hostile`, `${origin}/moved`],
+				{ cwd: REPO_ROOT },
+			)
 			let stdout = ""
 			let stderr = ""
 			child.stdout.on("data", (chunk) => {
@@ -282,6 +294,7 @@ describe("the live check script", () => {
 			}
 			expect(paths).toEqual(["/hostile", "/moved"])
 		} finally {
+			rmSync(dir, { recursive: true, force: true })
 			close()
 		}
 	}, 30_000)

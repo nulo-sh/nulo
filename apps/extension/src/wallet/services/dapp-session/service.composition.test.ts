@@ -20,6 +20,8 @@ import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion
 import { svc } from "@/wallet/services/composition-harness"
 import { DappSessionService } from "./service"
 import { AccessLevel, type GrantedCapabilityRecord } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 
 const _waitFor = async (pred: () => Promise<boolean>, ms = 1000) => {
 	const deadline = Date.now() + ms
@@ -47,6 +49,7 @@ async function makeHarness() {
 			getActiveProfile: async () => ({ id: "p1" }),
 			onProfileDeleted,
 			deriveDappSessionMacKey: async () => macKey,
+			...(await rowKeysForEveryProfile()),
 			getDeletionState: () => deletionState,
 			captureExecutionFence: async () => ({ profileId: "p1", epoch: deletionState.capture("p1") }),
 		}),
@@ -54,7 +57,9 @@ async function makeHarness() {
 	const service = new DappSessionService(logger, api)
 	collection.add(service)
 	await collection.start()
-	return { service, onProfileDeleted }
+	const rowKeys = (await rowKeysForEveryProfile()).rowKeys
+	const registrations = (profileId: string) => sealedEntityStorage("dappRegistrations", api.storage.local, rowKeys).get(profileId)
+	return { service, onProfileDeleted, registrations }
 }
 
 const ORIGIN = "https://dapp.xyz"
@@ -105,6 +110,19 @@ describe("DappSessionService composition — in-process, no sandbox", () => {
 		void onProfileDeleted
 		await service.purgeForProfile("p1")
 		expect(await service.getDappSessions()).toHaveLength(0)
+	})
+})
+
+describe("an app's registration counts go with the chain's sessions and with the profile", () => {
+	test("purgeForChain clears that chain's counts; purgeForProfile clears the profile's", async () => {
+		const { service, registrations } = await makeHarness()
+		const fence = { profileId: "p1", epoch: 0, session: 1 }
+		await service.admitDappRegistration(ORIGIN, fence, 1)
+		await service.admitDappRegistration(ORIGIN, fence, 2)
+		await service.purgeForChain("p1", 1)
+		expect(await registrations("p1")).toEqual({ "2": { total: 1, apps: { [ORIGIN]: 1 } } })
+		await service.purgeForProfile("p1")
+		expect(await registrations("p1")).toBeUndefined()
 	})
 })
 

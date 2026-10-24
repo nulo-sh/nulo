@@ -2,6 +2,7 @@ import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import { glyphs } from "./glyphs"
 import Icon from "./Icon.vue"
+import iconSource from "./Icon.vue?raw"
 
 const render = (props: Record<string, unknown>) => mount(Icon, { props: props as { name: "close" } })
 
@@ -9,9 +10,15 @@ describe("Icon", () => {
 	test("strokes render unfilled at Tabler's 2 units at every size, with round ends", () => {
 		const big = render({ name: "close", size: 24 })
 		const small = render({ name: "close", size: 9 })
-		expect(big.findAll("path").map((p) => p.attributes("fill"))).toEqual(["none", "none"])
+		expect(big.findAll("path").map((p) => p.attributes("fill"))).toEqual(["none"])
 		expect([big.attributes("stroke-width"), small.attributes("stroke-width")]).toEqual(["2", "2"])
 		expect([big.attributes("stroke-linecap"), big.attributes("stroke-linejoin")]).toEqual(["round", "round"])
+	})
+
+	test("a glyph's strokes are one path, its paths joined in order, so a translucent colour paints each spot once", () => {
+		const paths = render({ name: "settings" }).findAll("path")
+		expect(glyphs.settings.s.length).toBeGreaterThan(1)
+		expect(paths.map((p) => p.attributes("d"))).toEqual([glyphs.settings.s.join(" ")])
 	})
 
 	test("a filled glyph's paths take the root's fill, unstroked, under the default fill rule", () => {
@@ -36,10 +43,20 @@ describe("Icon", () => {
 		const [priv, pub] = [render({ name: "private" }).findAll("path"), render({ name: "public" }).findAll("path")]
 		expect(priv).toHaveLength(1)
 		expect(priv[0]?.attributes("stroke")).toBe("none")
-		expect(pub.length).toBeGreaterThan(1)
-		for (const p of pub) expect(p.attributes("fill")).toBe("none")
+		expect(glyphs.public.s.length).toBeGreaterThan(1)
+		expect(pub.map((p) => [p.attributes("d"), p.attributes("fill")])).toEqual([[glyphs.public.s.join(" "), "none"]])
 		expect([glyphs.private, glyphs.public]).not.toContainEqual(glyphs.lock)
 		expect([glyphs.private, glyphs.public]).not.toContainEqual(glyphs["network-edit"])
+	})
+
+	test("a hover colour is the hovered class over the inline --icon-hover its rule reads; no hover colour sets neither", () => {
+		const hovered = render({ name: "close", hoverColor: "primary" })
+		const plain = render({ name: "close" })
+		expect(hovered.classes()).toContainEqual(expect.stringMatching(/hovered/))
+		expect((hovered.element as SVGElement).style.getPropertyValue("--icon-hover")).toBe("var(--txt-primary)")
+		expect(plain.classes()).not.toContainEqual(expect.stringMatching(/hovered/))
+		expect(plain.attributes("style")).not.toContain("--icon-hover")
+		expect(iconSource).toContain("color: var(--icon-hover);")
 	})
 
 	test("rotate turns the glyph about its centre", () => {

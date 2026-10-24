@@ -250,6 +250,14 @@ const amountValidation = computed(() =>
 	}),
 )
 
+/** The line under the amount names only a balance the wallet read: a row never synced holds a zero
+ *  placeholder, which the token card draws as loading. */
+const exceedsBalance = computed(() => amountValidation.value.reason === "exceedsBalance" && tokenBalance.value?.updatedAt !== 0)
+
+/** The estimate watch's source for validity, a boolean: `amountValidation` is a new object on every
+ *  balance recompute, and a deep watch runs on any change it subscribes to, so only a flip re-asks. */
+const amountSendable = computed(() => amountValidation.value.valid)
+
 /** C3 live pricing. The card freezes a session quote when fiat mode starts;
  *  the SUBMIT GATE lives here (this page owns handleSend) and fails closed. */
 const priceService = new PriceServiceClient()
@@ -496,6 +504,8 @@ function snapshotTransfer() {
 	// cancel) for the full TTL.
 	const feeCap = queueCap.value?.cap
 	const precomputedEstimateId = feeCap ? undefined : feeEstimate.value?.estimateId
+	// A send the person pays is held to the figure the page showed: the queued cap, or the estimate.
+	const shownFee = feeCap || feePayerOf(payer.value) !== "self" ? undefined : feeEstimate.value?.maxFee
 	if (precomputedEstimateId) handoffFeeEstimate()
 	return {
 		networkId: appStore.network.id,
@@ -507,6 +517,7 @@ function snapshotTransfer() {
 		feeSettings: feeSettings.value,
 		precomputedEstimateId,
 		feeCap,
+		shownFee,
 		contract: activeToken.value.contract,
 		symbol: activeToken.value.symbol,
 		decimals: activeToken.value.decimals,
@@ -607,10 +618,12 @@ function requestEstimate() {
 }
 
 // Every input the estimate is asked with is a source here, so a landed estimate is always the
-// current input's: each change re-asks (clearing the result) or cancels.
+// current input's: each change re-asks (clearing the result) or cancels. A balance that starts or
+// stops covering the amount counts as a change.
 watch(
 	[
 		amountTerm,
+		amountSendable,
 		searchTerm,
 		selectedSendType,
 		selectedReceiverType,
@@ -623,16 +636,6 @@ watch(
 	],
 	requestEstimate,
 	{ deep: true },
-)
-
-// A balance update can make the typed amount sendable while no source above changes. Kept out of
-// the deep watch, where reading `amountValidation` (a new object per recompute) would re-ask
-// whenever the balance moves; here only a flip to sendable asks.
-watch(
-	() => amountValidation.value.valid,
-	(valid) => {
-		if (valid) requestEstimate()
-	},
 )
 
 // The contact travels in the URL so a row opened in a new tab preselects it too. Applied after each
@@ -826,6 +829,7 @@ onBeforeUnmount(() => {
 						:balanceRawByType="balanceRaw ?? null"
 						:liveQuote
 						:proxyTicker
+						:exceedsBalance
 					/>
 					<Flex v-if="fiatNeedsRequote" align="center" gap="6" :class="$style.requote_notice">
 						<Icon name="warning" size="12" color="tertiary" />

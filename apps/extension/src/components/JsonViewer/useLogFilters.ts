@@ -33,6 +33,7 @@ export const LOG_SOURCES: string[] = [
 	"legal-acceptance",
 	"token-list",
 	"network-reset",
+	"ui-preference",
 ]
 	.flatMap((x) => (NO_CLIENT.has(x) ? [x] : [x, `${x}-client`]))
 	.concat(["account-integrity-coordinator", "profile-deletion-coordinator", "wallet", "ui"])

@@ -216,12 +216,14 @@ export class BalanceJobQueue {
 			...current,
 			syncFailure: { at, message: boundSyncFailureMessage(message) },
 		}
+		// Sealed before the fences, so none of them is separated from the write by an await.
+		const write = await this.repo.prepare(updated)
 		// Fence check with NO await between it and the write dispatch.
 		if (this.callbacks.isBalanceInvalidated?.(id)) return
 		// Generation fence: silent return, not failTask — this helper holds no
 		// taskId; both callers have already failed the task before writing.
 		if (gen !== this.callbacks.getGeneration()) return
-		await this.repo.set(updated)
+		await write.commit()
 		const undo = this.deleteIfInvalidated(id)
 		if (undo) return await undo
 		// Re-check AFTER the awaited write: a token deleted during the await must
@@ -340,7 +342,7 @@ export class BalanceJobQueue {
 		return true
 	}
 
-	/** One successful projection's commit, in the frozen order: re-read → the
+	/** One successful projection's commit, in the frozen order: re-read → seal → the
 	 *  sync fence ladder (deletion, ownership, generation — NO await between any
 	 *  fence and the write dispatch) → write → deletion re-check → task
 	 *  completion → ownership re-check → emit, the last four in the tick the
@@ -370,6 +372,8 @@ export class BalanceJobQueue {
 			// (JSON-serialization drops the undefined key).
 			syncFailure: undefined,
 		}
+		// Sealed before the fences, so none of them is separated from the write by an await.
+		const write = await this.repo.prepare(updated)
 		// Fence check with NO await between it and the write dispatch
 		// (a delete interleaving since the re-read must win).
 		if (this.callbacks.isBalanceInvalidated?.(result.id)) {
@@ -389,7 +393,7 @@ export class BalanceJobQueue {
 			this.tasks.failTask(taskId, "Profile changed mid-sync")
 			return
 		}
-		await this.repo.set(updated)
+		await write.commit()
 		const undo = this.deleteIfInvalidated(result.id)
 		if (undo) {
 			this.tasks.failTask(taskId, "Balance record deleted mid-sync")

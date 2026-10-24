@@ -114,7 +114,6 @@ definePassthroughsExhaustive<Methods>()(ProfileServiceClient.prototype, [
 	"lockActiveProfile",
 	"refreshSession",
 	"changeProfileName",
-	"saveFeePick",
 	"changeProfilePassword",
 	"deleteProfile",
 	"importMnemonic",

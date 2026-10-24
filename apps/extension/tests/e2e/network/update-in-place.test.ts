@@ -12,8 +12,11 @@
  * Testnet is the stand-in node, so it holds only what a person can hold there without one: derived
  * and imported accounts. Everything that needs a chain lives on a network added on the run's sandbox.
  *
- * Not populated: fee picks, pinned tokens, the auth registry, a deleted profile, a restore, and the
- * token list and prices (the egress guard blocks both).
+ * On the sandbox it also pins the token, picks a Send fee payer and an app window's fee payer, so
+ * the release's own maps meet the candidate's unlock, which seals them in place.
+ *
+ * Not populated: the auth registry, a deleted profile, a restore, and the token list and prices
+ * (the egress guard blocks both).
  *
  * Runtime: estimated 6 min on Chrome, 9 min on Firefox; measured 102 to 162 s and 182 to 186 s, the
  * release's real proof of the account's deployment included.
@@ -21,6 +24,7 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { isValidAztecAddress } from "@/utils/aztec-address"
+import { LEGACY_SELECTED_ACCOUNT_KEY } from "@/wallet/services/ui-preference/spec"
 import { walletChainId } from "@nulo/wallet-core/chain-id"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { BROWSER } from "../fixtures/browser"
@@ -39,6 +43,7 @@ import {
 import {
 	addContact,
 	captureBalanceBaseline,
+	captureSoleProfileId,
 	closeStuckPopup,
 	contactRow,
 	createAccount,
@@ -48,16 +53,21 @@ import {
 	importToken,
 	navigateByHash,
 	navigateToTokenDetail,
+	pinFromTokenPage,
+	selectFeeMethod,
 	setDeveloperMode,
 	switchToNetwork,
 	waitForFreshBalanceRow,
 	waitForToast,
 } from "../fixtures/helpers"
 import { openPlayground, setPgInputs, txHashOf } from "../fixtures/playground"
+import { openSend } from "../fixtures/send-page"
 import { pollUntil } from "../fixtures/poll"
 import { reconnectPlayground, runApprovedPgCall } from "../fixtures/send"
 import { inPlaceUpdate, readLocalStorage, updateBuilds } from "../fixtures/update/in-place"
+import { expectReleasePreferences } from "../fixtures/update/preferences"
 import { writeRecording } from "../fixtures/update/recording"
+import { approveReleaseConnect } from "../fixtures/update/release-ui"
 import { BARRIERS, missingFamilies, shownOverlays, updateProblems } from "../fixtures/update/verify"
 import {
 	confirmImport,
@@ -67,6 +77,7 @@ import {
 	gotoAccounts,
 	previewImport,
 } from "../helpers/account-io"
+import { accountRows } from "../helpers/identity-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 
@@ -121,6 +132,14 @@ async function sandboxChainInfo(nodeUrl: string): Promise<ChainInfo> {
 	return { chainId: String(info.l1ChainId), version: String(info.rollupVersion) }
 }
 
+/** The release's selection: it stores it in plaintext and has no service to read it through. */
+async function releaseSelection(page: Page): Promise<string | undefined> {
+	return page.evaluate(
+		async (key: string) => (await chrome.storage.local.get(key))[key] as string | undefined,
+		LEGACY_SELECTED_ACCOUNT_KEY,
+	)
+}
+
 /** Adds the sandbox as a network, which activates it, and resolves with the account the switch
  *  derives there. */
 async function addSandboxNetwork(page: Page, nodeUrl: string, chainInfo: ChainInfo): Promise<string> {
@@ -135,9 +154,8 @@ async function addSandboxNetwork(page: Page, nodeUrl: string, chainInfo: ChainIn
 	const chainId = walletChainId(Number(chainInfo.chainId), Number(chainInfo.version))
 	return pollUntil(
 		async () => {
-			const active = await getAccountAddress(page)
-			const keys = Object.keys(await page.evaluate(() => chrome.storage.local.get(null)))
-			const onSandbox = keys.some((key) => key.startsWith("nulo:core:accounts@") && key.includes(`,${chainId},"${active}"]`))
+			const active = await releaseSelection(page)
+			const onSandbox = (await accountRows(page, chainId)).some((row) => row.address === active)
 			return onSandbox ? active : undefined
 		},
 		(address) => address !== undefined,
@@ -192,9 +210,10 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 		timeoutMs: 180_000,
 	})
 	const incoming = await incomingCards(page, 2)
+	await pickPreferences(page)
 	await page.close()
 
-	const dapp = await connectPlayground(ctx, { chainInfo })
+	const dapp = await connectPlayground(ctx, { chainInfo }, approveReleaseConnect)
 	await grantCapBundle(ctx, dapp, "transaction", async (ids) => {
 		if (!ids.includes(account)) throw new Error(`the capabilities window offers ${ids.join(", ")}, not ${account}`)
 		return [account]
@@ -206,7 +225,20 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 	return { before, chainInfo, account, imported, incoming }
 }
 
-/** The account's first send, which deploys it and leaves the wallet's transaction row. */
+/** Pins the sandbox token and picks Send's fee payer for a private send, each through the release's
+ *  own UI, which saves both maps; the app window's pick is the send's below. */
+async function pickPreferences(page: Page): Promise<void> {
+	await navigateByHash(page, "#/popup/general", 15_000)
+	await navigateToTokenDetail(page)
+	await pinFromTokenPage(page)
+	await navigateByHash(page, "#/popup/general", 15_000)
+	await openSend(page)
+	await selectFeeMethod(page, "sponsored")
+	await navigateByHash(page, "#/popup/general", 15_000)
+}
+
+/** The account's first send, which deploys it and leaves the wallet's transaction row; its fee
+ *  payer is picked by hand, which saves the app window's pick. */
 async function sendFromWallet(ctx: ExtensionContext, dapp: Page, cfg: AztecTestConfig, account: string): Promise<void> {
 	const popup = await openPopup(ctx)
 	await waitForHash(popup, "#/popup/general", 30_000)
@@ -218,6 +250,7 @@ async function sendFromWallet(ctx: ExtensionContext, dapp: Page, cfg: AztecTestC
 		method: "sendTx",
 		label: "update-in-place:send",
 		popupTimeoutMs: 180_000,
+		feeMethod: "sponsored",
 	})
 	const { waitForTxMined } = await import("../fixtures/aztec")
 	await waitForTxMined(cfg, txHashOf(sent.resultJson), 300_000)
@@ -249,7 +282,9 @@ async function verify(ctx: ExtensionContext, populated: Populated): Promise<void
 	await ensureUnlocked(page)
 	await waitForHash(page, "#/popup/general", 30_000)
 	expect(await shownOverlays(page, BARRIERS)).toEqual([])
-	expect(await getAccountAddress(page)).toBe(populated.account)
+	expect(populated.before[LEGACY_SELECTED_ACCOUNT_KEY], "the release's selection").toBe(populated.account)
+	expect(await getAccountAddress(page)).toBe(populated.before[LEGACY_SELECTED_ACCOUNT_KEY])
+	await expectReleasePreferences(ctx, page, populated.before, await captureSoleProfileId(page))
 
 	await navigateToTokenDetail(page)
 	const balances = await getTokenDetailBalances(page)

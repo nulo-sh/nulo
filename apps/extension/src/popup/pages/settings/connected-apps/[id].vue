@@ -238,7 +238,7 @@ onBeforeUnmount(() => {
 				<Text variant="name" color="primary" :class="$style.name_size">
 					{{ session.dappMetadata.name ?? "Unknown dapp" }}
 				</Text>
-				<Text variant="data-lead" color="tertiary" selectable>
+				<Text variant="data-lead" color="tertiary" selectable :class="$style.url">
 					{{ session.dappMetadata.url }}
 				</Text>
 				<Text v-if="expiryFormatted" variant="time" color="tertiary">
@@ -246,6 +246,18 @@ onBeforeUnmount(() => {
 				</Text>
 			</Flex>
 		</Flex>
+
+		<!-- Establishment writes the hash, so a row without one was allowed and never connected. -->
+		<Text
+			v-if="!session.verificationHash"
+			data-testid="connected-app-not-connected"
+			variant="body"
+			color="secondary"
+			:style="{ lineHeight: '1.4' }"
+		>
+			You allowed this app, but it has not finished connecting. Nothing is shared with it. Its next connection
+			starts with the emoji check.
+		</Text>
 
 		<!-- Shared accounts -->
 		<Flex direction="column" gap="10" wide>
@@ -357,6 +369,13 @@ onBeforeUnmount(() => {
 
 .name_size {
 	font-size: 14px;
+}
+
+/* Below the popup's width an app's address breaks anywhere rather than run past the view. */
+@media (width < 359px) {
+	.url {
+		overflow-wrap: anywhere;
+	}
 }
 
 .icon_btn {

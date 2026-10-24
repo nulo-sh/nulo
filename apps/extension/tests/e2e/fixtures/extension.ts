@@ -15,12 +15,12 @@ import {
 	openScratchPage,
 	stopBackground,
 } from "./browser"
-import { createAccount, getAccountAddress } from "./accounts"
+import { createAccount, getAccountAddress, waitForSelectedAccount } from "./accounts"
 import { clickByTestId, expectNoNameField, isFrameDetachError, patchPagePolling, typeIntoInput, waitForHash } from "./dom"
 import { switchToLocalNetwork } from "./networks"
 import { readLivenessBaseline, waitForWorkerLiveness } from "./session"
 import { importTokenAndWaitForBalance } from "./tokens"
-import { openPopup, seedLegalAcceptance, waitForServiceReady } from "./wallet-pages"
+import { closeConfirmed, openPopup, seedLegalAcceptance, waitForServiceReady } from "./wallet-pages"
 import { assertPgOk, openPlayground, type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
 import { approveCapabilities, approveConnect, approveVerify, waitForPopup, waitForPopupClosed } from "./popups"
 import { TEST_PASSWORD } from "./constants"
@@ -38,6 +38,7 @@ import {
 	ownGuardedLaunch,
 } from "./egress-guard"
 import { holdNodeStub } from "./node-stub"
+import { readSealedRows } from "./sealed-rows"
 import { heldListStorage } from "./token-list"
 import { PollTimeoutError, pollUntil } from "./poll"
 
@@ -108,9 +109,9 @@ export async function launchExtension(
 	const { userDataDir, waitForLiveness = true, fixedWindowSize, grantPermissionRequests, installInSession } = opts
 	const extensionPath = opts.extensionPath ?? inject("extensionPath")
 	const cspArmed = CSP_REPORT_ARMED && opts.cspRecorder !== false
-	// Read before Chrome writes the profile: `onInstalled` fires with reason "install" — the only
-	// reason that opens the first-run tab — exactly when the profile has never held the extension.
-	// A caller's freshly created empty `userDataDir` is therefore a fresh install, not a reuse.
+	// Read before the browser writes the profile. An absent or empty directory has never held the
+	// wallet, so its onboarding cannot be complete: the launch requires its first-run tab and defaults
+	// to seeding the current Terms.
 	const freshProfile = !userDataDir || !existsSync(userDataDir) || readdirSync(userDataDir).length === 0
 
 	// HEADLESS=0 flips to windowed mode for local debugging.
@@ -229,8 +230,8 @@ async function fireCanary(browser: Browser, extensionId: string, url: string, re
 	}
 }
 
-/** Discover the extension id, wait for the worker, close the first-run tab and mark onboarding
- *  complete. Returns the extension id. */
+/** Discover the extension id, wait for the worker, close the first-run tab (or the window it became)
+ *  and mark onboarding complete. Returns the extension id. */
 async function settleLaunchedExtension(
 	browser: Browser,
 	{
@@ -277,34 +278,11 @@ async function settleLaunchedExtension(
 					return false
 				}
 			},
-			{ timeout: 30_000, polling: 500 },
+			{ timeout: 30_000 },
 		)
 	}
 
-	// `onInstalled` opens the extension's first-run tab and stores its id in session storage. Nothing
-	// in the worker's boot awaits that open, so the id can land after liveness; on a fresh profile
-	// the install is certain, so the id is REQUIRED — a launch that cannot find it would hand the
-	// test an untracked extension page, and that is a setup failure, not a warning. A reused profile
-	// was installed by an earlier launch and opens no tab; there the poll is only a courtesy. Close
-	// the tab BEFORE marking onboarding complete: an onboarding page that mounts and reads the
-	// completed flag replaces itself with a popup window and drops the tracked id. Every e2e drives
-	// the popup flows directly; the tab-flow specs open their own tab.
-	const firstRunTabClosed = await blankPage.evaluate(async () => {
-		const key = "nulo:onboarding:tab-id"
-		for (let attempt = 0; attempt < 20; attempt++) {
-			const id = (await chrome.storage.session.get(key))[key]
-			if (typeof id === "number") {
-				await chrome.tabs.remove(id).catch(() => {})
-				await chrome.storage.session.remove(key)
-				return true
-			}
-			await new Promise((r) => setTimeout(r, 250))
-		}
-		return false
-	})
-	if (!firstRunTabClosed && freshProfile) {
-		throw new Error("launchExtension: the first-run onboarding tab never registered its id within 5s of liveness")
-	}
+	await closeFirstRunSurface(browser, blankPage, extensionId, freshProfile)
 
 	// Default: bypass the new onboarding tab flow for all e2e tests. Existing
 	// tests (registration, import-paths, passkey-paths, etc.) drive the
@@ -322,6 +300,39 @@ async function settleLaunchedExtension(
 	await blankPage.close()
 
 	return extensionId
+}
+
+/**
+ * Chrome's `--load-extension` and Firefox's temporary add-on report `install` on every launch, so the
+ * first-run tab opens each time and its id can land after liveness; over a completed onboarding the
+ * page turns into a popup window instead, often before the first read. Close whichever is left; fail
+ * on neither. A fresh profile cannot convert until the caller sets the flag, so there the id is
+ * required. An id read while the page is creating its window can still leave that window.
+ */
+async function closeFirstRunSurface(browser: Browser, page: Page, extensionId: string, freshProfile: boolean): Promise<void> {
+	// `chrome.windows` hides the window's tab URL without the `tabs` permission; its page target does not.
+	const popupDocument = extensionUrl(extensionId, "/src/popup/index.html")
+	await pollUntil(
+		async () => {
+			const tabClosed = await page.evaluate(async () => {
+				const key = "nulo:onboarding:tab-id"
+				const id = (await chrome.storage.session.get(key))[key]
+				if (typeof id !== "number") return false
+				await chrome.tabs.remove(id).catch(() => {})
+				await chrome.storage.session.remove(key)
+				return true
+			})
+			const converted = freshProfile ? [] : browser.targets().filter((t) => t.type() === "page" && t.url().startsWith(popupDocument))
+			for (const target of converted) await closeConfirmed(await target.asPage(), "launchExtension: the first-run popup window")
+			return tabClosed || converted.length > 0
+		},
+		(settled) => settled,
+		{
+			label: freshProfile ? "launchExtension: the first-run tab's id" : "launchExtension: the first-run tab's id or its popup window",
+			timeoutMs: 5_000,
+			intervalMs: 250,
+		},
+	)
 }
 
 /**
@@ -371,6 +382,8 @@ export async function registerProfile(ctx: ExtensionContext): Promise<void> {
 	// A fresh install's first profile has no name field; it is created as "Main".
 	await expectNoNameField(page, "register-page", "register-name-input")
 
+	// New profile opens on Passkey.
+	await clickByTestId(page, "register-method-password")
 	await page.waitForSelector('input[placeholder="Strong password"]', {
 		visible: true,
 		timeout: 30_000,
@@ -392,16 +405,22 @@ export async function registerProfile(ctx: ExtensionContext): Promise<void> {
  *   1) Open the playground (?test=1 disables HMR + persistence), on `opts.chainInfo`'s chain if given
  *   2) Click `pg-btn-connect` — fires `WalletManager.getAvailableWallets`
  *   3) Approve at `/windows/discover` (testid `discover-allow-btn`)
- *   4) After ECDH key exchange, approve the emoji check the same window shows
+ *   4) After ECDH key exchange, approve the emoji check, which opens in its own window as the
+ *      connect window closes
  *   5) Wait for the playground status pill to flip to `connected`
  *
  * Returns the dApp Page so the caller can keep driving it; the caller is
- * responsible for closing it (or letting the browser teardown handle it).
+ * responsible for closing it (or letting the browser teardown handle it). `approve` is step 3 and
+ * resolves with the check's page; a release build whose check opens elsewhere passes its own.
  *
  * Exported alongside `registerProfile` so a cold-shard warm-up tap
  * can perform the same setup without going through the fixture pipeline.
  */
-export async function connectPlayground(ctx: ExtensionContext, opts: Parameters<typeof openPlayground>[1] = {}): Promise<Page> {
+export async function connectPlayground(
+	ctx: ExtensionContext,
+	opts: Parameters<typeof openPlayground>[1] = {},
+	approve: (discoverPage: Page) => Promise<Page> = (discoverPage) => approveConnect(ctx, discoverPage),
+): Promise<Page> {
 	// Internal phase-tag so the outer `[dappConnectedExtensionPerTest:connectPlayground]`
 	// error tells us WHICH step inside this function fails. Without this we
 	// only know "30s timeout somewhere in here" — useless for triage.
@@ -428,7 +447,7 @@ export async function connectPlayground(ctx: ExtensionContext, opts: Parameters<
 	await step("clickConnect", () => clickByTestId(dappPage, "pg-btn-connect"))
 
 	const discoverPage = await step("awaitDiscoverPopup", () => discoverP)
-	const verifyPage = await step("approveConnect", () => approveConnect(ctx, discoverPage))
+	const verifyPage = await step("approveConnect", () => approve(discoverPage))
 	await step("approveVerify", () => approveVerify(verifyPage))
 
 	await step("waitForConnectedStatus", () =>
@@ -520,20 +539,15 @@ const pickFirstAccount = async (accountIds: (string | null)[]): Promise<string[]
 
 type TwoAccountDapp = ExtensionContext & { playgroundPage: Page; accountAddresses: string[] }
 
-/** Ground truth from the wallet's own storage — every account and network row, raw (values may
- *  be serialized strings) — so a "<2 accounts exposed" failure discriminates wrong-chain creation
- *  from popup-side filtering. */
-function dumpAccountAndNetworkRows(popup: Page): Promise<string> {
-	return popup.evaluate(async () => {
-		const all = await chrome.storage.local.get(null)
-		const out: string[] = []
-		for (const [k, v] of Object.entries(all)) {
-			if (k.startsWith("nulo:core:accounts") || k.startsWith("nulo:core:networks")) {
-				out.push(`${k} => ${(typeof v === "string" ? v : JSON.stringify(v)).slice(0, 400)}`)
-			}
-		}
-		return out.join(" ||| ")
-	})
+/** Ground truth from the wallet: every account row it reads and each network's chain, so a "<2
+ *  accounts exposed" failure discriminates wrong-chain creation from popup-side filtering. A network's
+ *  endpoints stay out: a node URL may carry a provider key. */
+async function dumpAccountAndNetworkRows(popup: Page): Promise<string> {
+	const accounts = (await readSealedRows(popup, "accounts").catch(() => [])).map(({ row }) => JSON.stringify(row))
+	const networks = (await readSealedRows<Record<string, unknown>>(popup, "networks").catch(() => [])).map(
+		({ row: { id, name, kind, chainId, profileId } }) => JSON.stringify({ id, name, kind, chainId, profileId }),
+	)
+	return [...accounts, ...networks].join(" ||| ")
 }
 
 /** The two-account dApp fixture body, shared by its `transaction` and `transaction-contracts`
@@ -555,13 +569,7 @@ function firstTwoAccountsFixture(label: string, bundle: "transaction" | "transac
 			// Persistence assertion: the row rendering proves only the optimistic
 			// appStore push; verify the SERVICE write landed before moving on.
 			await phase("assertSecondAccountPersisted", async () => {
-				postCreateDump = await setupPage.evaluate(async () => {
-					const all = await chrome.storage.local.get(null)
-					return Object.entries(all)
-						.filter(([k]) => k.startsWith("nulo:core:accounts"))
-						.map(([, v]) => (typeof v === "string" ? v : JSON.stringify(v)))
-						.join(" ||| ")
-				})
+				postCreateDump = (await readSealedRows(setupPage, "accounts")).map(({ row }) => JSON.stringify(row)).join(" ||| ")
 				if (!postCreateDump.includes('"Second"')) {
 					throw new Error(`account "Second" not in storage immediately after creation. Stored: ${postCreateDump.slice(0, 600)}`)
 				}
@@ -1004,16 +1012,9 @@ export const test = base.extend<{
 			// with the SAME address the script pre-funded.
 			await switchToLocalNetwork(page)
 
-			// Wait for nulo:ui:activeAccount to settle on the Local-chain address.
+			// Wait for the selection to settle on the Local-chain address.
 			const accountAddress = prefunded.accountAddress.toString()
-			await page.waitForFunction(
-				async (expected: string) => {
-					const r = await chrome.storage.local.get("nulo:ui:activeAccount")
-					return r["nulo:ui:activeAccount"] === expected
-				},
-				{ timeout: 30_000, polling: 500 },
-				accountAddress,
-			)
+			await waitForSelectedAccount(page, (addr) => addr === accountAddress, "the selection is the prefunded Local account", 30_000)
 			console.log(`[feeJuiceImported] extension account on Local: ${accountAddress}`)
 
 			// Trigger gas-balance-card render by visiting general; both balances

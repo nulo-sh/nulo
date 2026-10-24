@@ -1,12 +1,12 @@
 /**
  * Stale-activation fence for `setupActiveAccount`.
  *
- * The race: `setupActiveAccount` suspends (storage read; `commitScopeChange`'s
+ * The race: `setupActiveAccount` suspends (the selection read; `commitScopeChange`'s
  * `refreshInFlight` journal RPC) with its account choice already computed from
  * the THEN-current profile's list. A profile activation that supersedes it
  * mid-await completes fully; the parked run then resumes and lands the LOSER's
- * account after the winner's — and stamps the loser's address into the global
- * durable `nulo:ui:activeAccount` key, which survives into the next bootstrap.
+ * account after the winner's — and records the loser's address as the device's
+ * selection, which survives into the next bootstrap.
  * `commitScopeChange` can't catch this: it guards in-flight sends, not
  * superseded activations.
  *
@@ -42,27 +42,21 @@ const asNetwork = (chainId: number, id = `net-${chainId}`) => ({ id, chainId }) 
 /** Macrotask flush — lets watchers + parked awaits settle. */
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
-/** What the keyed chrome.storage.local.get stub serves for the activeAccount
- *  key (keyed by request so migration-facade reads can't consume it). */
-let activeAccountStorage: Record<string, unknown> = {}
+/** The selection the worker answers per profile. */
+let selections: Record<string, string> = {}
 let setSpy: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
 	setActivePinia(createPinia())
 	mockGetOperations.mockReset()
-	activeAccountStorage = {}
-	vi.stubGlobal("managers", { transaction: { getTransactions: vi.fn() } })
-	setSpy = vi.fn(async (_items: Record<string, unknown>) => {})
+	selections = {}
+	setSpy = vi.fn(async (_profileId: string, _address: string) => true)
+	vi.stubGlobal("managers", {
+		transaction: { getTransactions: vi.fn() },
+		uiPreference: { getSelectedAccount: vi.fn(async (profileId: string) => selections[profileId]), setSelectedAccount: setSpy },
+	})
 	// biome-ignore lint/suspicious/noExplicitAny: chrome stub assignment
-	;(chrome.storage as any).local = {
-		get: vi.fn(async (keys?: string | string[]) => {
-			if (keys === "nulo:ui:activeAccount" || (Array.isArray(keys) && keys.includes("nulo:ui:activeAccount"))) {
-				return activeAccountStorage
-			}
-			return {}
-		}),
-		set: setSpy,
-	}
+	;(chrome.storage as any).local = { get: vi.fn(async () => ({})), set: vi.fn(async () => {}) }
 	// biome-ignore lint/suspicious/noExplicitAny: chrome stub assignment
 	;(chrome.storage as any).onChanged = {
 		addListener: vi.fn(),
@@ -115,13 +109,13 @@ describe("app.store.setupActiveAccount — stale-activation fence", () => {
 
 		expect(store.account?.address).toBe("0xB") // loser's 0xA must not land after the winner
 		expect(result).toBe(false)
-		expect(setSpy).not.toHaveBeenCalled() // loser must not poison nulo:ui:activeAccount
+		expect(setSpy).not.toHaveBeenCalled() // the loser must not record its account as the selection
 	})
 
 	test("a superseded run (remembered-account branch) must NOT land its account", async () => {
 		const store = useAppStore()
 		await scopeToProfileA(store)
-		activeAccountStorage = { "nulo:ui:activeAccount": "0xA" } // remembered = A's account
+		selections = { "profile-a": "0xA" } // remembered = A's account
 
 		const release = armJournalGate()
 		const runA = store.setupActiveAccount() // remembered found → guarded commit branch
@@ -181,7 +175,7 @@ describe("app.store.setupActiveAccount — stale-activation fence", () => {
 		await expect(store.setupActiveAccount()).resolves.toBe(true)
 
 		expect(store.account?.address).toBe("0xA")
-		expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({ "nulo:ui:activeAccount": "0xA" }))
+		expect(setSpy).toHaveBeenCalledWith("profile-a", "0xA")
 	})
 
 	test("an un-superseded run still lands the remembered account (fence must not over-refuse)", async () => {
@@ -191,7 +185,7 @@ describe("app.store.setupActiveAccount — stale-activation fence", () => {
 		store.network = asNetwork(1)
 		store.accounts = [asAccount("0xA"), asAccount("0xA2")] as never
 		await flush()
-		activeAccountStorage = { "nulo:ui:activeAccount": "0xA2" }
+		selections = { "profile-a": "0xA2" }
 		mockGetOperations.mockResolvedValueOnce([]) // run's own commitScopeChange read
 
 		await expect(store.setupActiveAccount()).resolves.toBe(true)

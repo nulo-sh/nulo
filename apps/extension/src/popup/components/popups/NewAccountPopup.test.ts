@@ -10,7 +10,7 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 
 const createAccountMock = vi.fn()
 const commitScopeChangeMock = vi.fn()
-const storageLocalSetMock = vi.fn()
+const setSelectedAccountMock = vi.fn()
 const openToastMock = vi.fn()
 
 const appStoreState: {
@@ -35,10 +35,8 @@ const appStoreState: {
 vi.mock("@/utils/core", () => ({
 	managers: {
 		account: { createAccount: (...args: unknown[]) => createAccountMock(...args) },
+		uiPreference: { setSelectedAccount: (...args: unknown[]) => setSelectedAccountMock(...args) },
 	},
-}))
-vi.mock("@/utils/storage", () => ({
-	storageLocalSet: (...args: unknown[]) => storageLocalSetMock(...args),
 }))
 vi.mock("@/wallet/services/account/client", () => ({
 	AccountType: { Nulo_v1: "nulo_v1" },
@@ -102,7 +100,7 @@ beforeEach(() => {
 	appStoreState.hasInFlightSend = false
 	createAccountMock.mockResolvedValue({ name: "Account 1", address: "0xacct" })
 	commitScopeChangeMock.mockResolvedValue(true)
-	storageLocalSetMock.mockResolvedValue(undefined)
+	setSelectedAccountMock.mockResolvedValue(true)
 })
 
 afterEach(() => {

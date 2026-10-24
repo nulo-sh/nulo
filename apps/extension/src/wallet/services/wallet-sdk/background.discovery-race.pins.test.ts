@@ -53,7 +53,11 @@ function makeServices(popup: Promise<{ approved: boolean }>, timedLookup: Promis
 		network: { servesChain: async () => true, servesLiveChain: async () => true },
 		account: {},
 		execution: {},
-		profile: { onActiveProfileChanged: new EventHandler<unknown>(), getActiveProfile: async () => ({ id: "p1" }) },
+		profile: {
+			onActiveProfileChanged: new EventHandler<unknown>(),
+			getActiveProfile: async () => ({ id: "p1" }),
+			setRestartPreparation: () => {},
+		},
 		"dapp-interaction": {
 			discover: () => {
 				log.push("discover")

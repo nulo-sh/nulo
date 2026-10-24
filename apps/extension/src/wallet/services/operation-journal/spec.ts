@@ -22,6 +22,7 @@ import { type JobError, type JobProgress, type JobStage, NORMALIZED_RAW_MAX_CHAR
 import { isFieldAddress } from "@nulo/wallet-bridge"
 import { z } from "zod"
 import { isFeeAmount } from "@nulo/wallet-core/jobs"
+import { boundedString } from "@/utils/bounded-string"
 import { TransferType } from "@/wallet/services/transaction/spec"
 
 export const OPERATION_JOURNAL_SERVICE_NAME = "operation-journal"
@@ -239,7 +240,7 @@ export const JobProgressSchema: z.ZodType<JobProgress> = z.discriminatedUnion("s
 		txHash: z.string().optional(),
 		submittedEndpointUrl: z.string().optional(),
 		expiry: SendExpirySchema.optional(),
-		check: z.enum(["sent", "reverted", "unconfirmed", "expired"]).optional(),
+		check: z.enum(["sent", "reverted", "unconfirmed", "expired", "refused"]).optional(),
 		inclusion: z.object({ block: z.number(), hash: z.string() }).optional(),
 		checkSince: z.number().optional(),
 	}),
@@ -253,7 +254,11 @@ export type SendCheckState = Pick<FailedProgress, "check" | "inclusion" | "check
 
 /**
  * The answers the send check may record over what a row holds:
- * - none: `sent` or `reverted` (with the block, unless already final), or `unconfirmed`;
+ * - none: `sent` or `reverted` (with the block, unless already final), or `unconfirmed`; or
+ *   `refused` alone, only on a row never answered before (no `checkSince`): a row once mined
+ *   proves its refusal answered a send that had landed;
+ * - `refused`: `sent` or `reverted` (with the block, unless already final), or, on a row with a
+ *   recorded expiry, `expired`;
  * - `unconfirmed`, on a row with a recorded expiry: `expired`, or `sent` (with the block, unless
  *   already final) once its expiry nullifier is spent and its own receipt is a mined success;
  * - `sent` or `reverted` with a block not yet final: final (the block cleared), included in
@@ -262,13 +267,25 @@ export type SendCheckState = Pick<FailedProgress, "check" | "inclusion" | "check
  */
 export function isSendCheckMove(from: FailedProgress, to: SendCheckState): boolean {
 	const mined = to.check === "sent" || to.check === "reverted"
-	if (from.check === undefined) return mined || (to.check === "unconfirmed" && to.inclusion === undefined)
-	if (from.check === "unconfirmed") {
-		return from.expiry !== undefined && (to.check === "sent" || (to.check === "expired" && to.inclusion === undefined))
+	switch (from.check) {
+		case undefined:
+			return mined || (to.inclusion === undefined && isFirstVerdict(from, to))
+		case "refused":
+			return mined || (from.expiry !== undefined && to.check === "expired" && to.inclusion === undefined)
+		case "unconfirmed":
+			return from.expiry !== undefined && (to.check === "sent" || (to.check === "expired" && to.inclusion === undefined))
+		case "expired":
+			return false
+		default:
+			if (from.inclusion === undefined) return false
+			if (to.check === undefined) return to.inclusion === undefined && to.checkSince !== undefined
+			return mined && to.inclusion?.hash !== from.inclusion.hash
 	}
-	if (from.inclusion === undefined || from.check === "expired") return false
-	if (to.check === undefined) return to.inclusion === undefined && to.checkSince !== undefined
-	return mined && to.inclusion?.hash !== from.inclusion.hash
+}
+
+function isFirstVerdict(from: FailedProgress, to: SendCheckState): boolean {
+	if (to.check === "unconfirmed") return true
+	return to.check === "refused" && to.checkSince === undefined && from.checkSince === undefined
 }
 
 /** May have reached the node: it failed at `submitting` with a hash, and not at the send line's
@@ -300,7 +317,7 @@ const InitialStageSchema = z.discriminatedUnion("stage", [
 export const JobErrorSchema: z.ZodType<JobError> = z.object({
 	kind: z.string().min(1),
 	message: z.string(),
-	normalizedRaw: z.string().max(NORMALIZED_RAW_MAX_CHARS).nullable(),
+	normalizedRaw: boundedString(NORMALIZED_RAW_MAX_CHARS).nullable(),
 })
 
 const journalMetadataShape = {

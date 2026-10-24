@@ -13,6 +13,7 @@
  */
 import { expect } from "vitest"
 import { clickByTestId, launchExtension, openPopup, test, waitForHash } from "./fixtures/extension"
+import { readRecoveryWords, selectedAccount } from "./fixtures/helpers"
 import {
 	buildSyntheticBackup,
 	CANONICAL_SEED_24,
@@ -74,13 +75,9 @@ test("round-trip: register → export recovery phrase → import in fresh ext �
 	}, TEST_PASSWORD)
 	await clickByTestId(page1, "unlock-submit-btn")
 
-	// The seed page renders the 24-word phrase as a single space-separated string.
-	await page1.waitForSelector('[data-testid="reveal-content"] input', { visible: true, timeout: 10_000 })
-	const seed = await page1.evaluate(() => {
-		const input = document.querySelector<HTMLInputElement>('[data-testid="reveal-content"] input')
-		return input?.value ?? ""
-	})
-	expect(seed.split(" ").length).toBe(24)
+	const words = await readRecoveryWords(page1)
+	expect(words).toHaveLength(24)
+	const seed = words.join(" ")
 	await page1.close()
 
 	const ctx2 = await launchExtension()
@@ -113,10 +110,10 @@ test("full backup: fresh install → synthetic backup → /popup/general", async
 	expect(address.length).toBeGreaterThan(2)
 
 	const storage = await page.evaluate(async () => {
-		return await chrome.storage.local.get(["nulo:ui:lastActiveProfile", "nulo:ui:activeAccount"])
+		return await chrome.storage.local.get(["nulo:ui:lastActiveProfile"])
 	})
 	expect(storage["nulo:ui:lastActiveProfile"]).toBeTruthy()
-	expect(storage["nulo:ui:activeAccount"]).toBeTruthy()
+	expect(await selectedAccount(page)).toBeTruthy()
 
 	expect(freshExtensionPerTest.pageErrors).toEqual([])
 	await page.close()

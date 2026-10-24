@@ -64,7 +64,7 @@ function makeFacade(rows: Tx[] = [], feeSpender?: string) {
 		profileService: { getActiveProfile: async () => ({ id: "p1" }) },
 		lane,
 		estimateCancel: { admit, settle: vi.fn() },
-		transactionService: { getTransactions: vi.fn(async () => rows) },
+		transactionService: { transactionsOf: vi.fn(async () => rows) },
 	}) as ExecutionService
 	const estimateWith = (feeSettings: FeeSettings) =>
 		facade.estimateTransferFee("net-1", "0xme", 1, TOKEN_CONTRACT, TransferType.Private, "0xyou", 5n, feeSettings, "tok-1")
@@ -162,13 +162,8 @@ describe("ExecutionService.estimateTransferFee while a send holds the transfer's
 	})
 })
 
-describe("ExecutionService.executeTransfer's fee cap", () => {
-	test.each([
-		["a number", 1000],
-		["a decimal point", "1000.5"],
-		["a leading zero", "01000"],
-		["40 digits", "1".repeat(40)],
-	])("refuses %s before the Terms check, so no proof starts", async (_name, feeCap) => {
+describe("ExecutionService.executeTransfer's fee figure", () => {
+	function makeFacade() {
 		const assertCurrent = vi.fn(async () => {})
 		const execute = vi.fn(async () => "0xhash")
 		const facade = Object.assign(Object.create(ExecutionService.prototype), {
@@ -177,7 +172,7 @@ describe("ExecutionService.executeTransfer's fee cap", () => {
 			captureFence: async () => ({ profileId: "p1", epoch: 0, session: 1 }),
 			transferExecutor: { execute },
 		}) as ExecutionService
-		const send = (cap: unknown) =>
+		const send = (feeCap: unknown, shownFee: unknown) =>
 			facade.executeTransfer(
 				"net-1",
 				"0xme",
@@ -188,12 +183,42 @@ describe("ExecutionService.executeTransfer's fee cap", () => {
 				5n,
 				{} as never,
 				undefined,
-				cap as string,
+				feeCap as string,
+				shownFee as string,
 			)
-		await expect(send(feeCap)).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+		return { send, assertCurrent, execute }
+	}
+
+	test.each([
+		["a number", 1000],
+		["a decimal point", "1000.5"],
+		["a leading zero", "01000"],
+		["40 digits", "1".repeat(40)],
+	])("refuses %s as either figure before the Terms check, so no proof starts", async (_name, fee) => {
+		const { send, assertCurrent, execute } = makeFacade()
+		await expect(send(fee, undefined)).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+		await expect(send(undefined, fee)).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
 		expect(assertCurrent).not.toHaveBeenCalled()
-		await send("1000")
-		expect(execute).toHaveBeenCalledWith(expect.anything(), undefined, expect.anything(), "1000")
+		expect(execute).not.toHaveBeenCalled()
+	})
+
+	test("refuses a cap and a shown fee together: a send is held to one figure", async () => {
+		const { send, assertCurrent, execute } = makeFacade()
+		await expect(send("1000", "1000")).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+		expect(assertCurrent).not.toHaveBeenCalled()
+		expect(execute).not.toHaveBeenCalled()
+	})
+
+	test("holds a cap to the cap rule and a shown fee to the estimate rule", async () => {
+		const { send, execute } = makeFacade()
+		await send("1000", undefined)
+		await send(undefined, "1000")
+		await send(undefined, undefined)
+		expect(execute.mock.calls.map((c) => (c as unknown[])[3])).toEqual([
+			{ fee: "1000", rule: "cap" },
+			{ fee: "1000", rule: "estimate" },
+			undefined,
+		])
 	})
 })
 

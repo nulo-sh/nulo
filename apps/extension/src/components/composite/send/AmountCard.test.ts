@@ -408,6 +408,41 @@ describe("composite/AmountCard — swap button + empty state", () => {
 		expect(derived.exists()).toBe(true)
 		expect(derived.text()).toBe("1 cUSD ≈ $1.00")
 	})
+
+	test("in USD mode the switch's title names the symbol", () => {
+		const w = mountPriced({ fiatMode: true, fiatGuard: { frozenUsd: QUOTE.usd, frozenAt: Date.now(), converting: false } })
+		expect(w.find("[data-testid='send-amount-fiat-toggle']").attributes("title")).toBe("Type in cUSD")
+	})
+})
+
+describe("composite/AmountCard — a symbol of spaces reads as a noun", () => {
+	const BLANK = { symbol: "   ", decimals: 6 }
+	const QUOTE = { usd: 1, fetchedAt: Date.now() }
+	const GUARD = { frozenUsd: 1, frozenAt: Date.now(), converting: false }
+
+	test("the clamp hint, while the balance corner keeps the raw symbol after its amount", async () => {
+		const w = mountCard({ token: BLANK, modelValue: "", tokenBalanceByType: 1.5, balanceRawByType: "1500000" })
+		await w.find("input[data-testid='send-amount-input']").setValue("1.1234567")
+		expect(w.find("[data-testid='send-amount-clamp-hint']").text()).toBe("Token supports 6 decimals")
+		expect(w.find("[data-testid='send-amount-balance']").element.textContent).toBe("1.5    ")
+	})
+
+	test("the rate line and the unit switch", () => {
+		const w = mountCard({ token: BLANK, liveQuote: QUOTE, modelValue: "" })
+		expect(w.find("[data-testid='send-amount-fiat-label']").text()).toBe("1 token ≈ $1.00")
+		expect(w.find("[data-testid='send-amount-fiat-toggle']").text().replace(/\s+/g, "")).toBe("Token/USD")
+	})
+
+	test("in USD mode, the rate line and the switch's title", () => {
+		const w = mountCard({ token: BLANK, liveQuote: QUOTE, modelValue: "", fiatMode: true, fiatGuard: GUARD })
+		expect(w.find("[data-testid='send-amount-derived']").text()).toBe("1 token ≈ $1.00")
+		expect(w.find("[data-testid='send-amount-fiat-toggle']").attributes("title")).toBe("Type in token")
+	})
+
+	test("in USD mode the derived amount keeps the raw symbol after its amount", () => {
+		const w = mountCard({ token: BLANK, liveQuote: QUOTE, modelValue: "2", fiatMode: true, fiatGuard: GUARD })
+		expect(w.find("[data-testid='send-amount-derived']").element.textContent).toBe("≈ 2    ")
+	})
 })
 
 describe("composite/AmountCard — code-review fixes", () => {
@@ -1012,5 +1047,57 @@ describe("composite/AmountCard — the unit switch and Max by keyboard", () => {
 		focus.mockClear()
 		;(w.vm as unknown as { focusAmount: () => void }).focusAmount()
 		expect(focus.mock.contexts).toEqual([w.get("[data-testid='send-amount-fiat-input']").element])
+	})
+})
+
+describe("composite/AmountCard — an amount over the balance", () => {
+	const TOKEN = { symbol: "TST", decimals: 6 }
+	const QUOTE = { usd: 1, fetchedAt: Date.now() }
+	const mountOver = (props: Record<string, unknown> = {}) =>
+		mountCard({
+			token: TOKEN,
+			tokenBalanceByType: 500,
+			balanceRawByType: "500000000",
+			modelValue: "600",
+			exceedsBalance: true,
+			...props,
+		})
+	const line = (w: ReturnType<typeof mountCard>) => w.find("[data-testid='send-amount-over-balance']")
+
+	test("says so under the amount in the danger text colour, as an alert the field names", () => {
+		const w = mountOver()
+		expect(line(w).text()).toBe("More than your balance")
+		expect(line(w).attributes("color")).toBe("txt-danger")
+		expect(line(w).attributes("role")).toBe("alert")
+		const input = w.get("[data-testid='send-amount-input']")
+		expect(input.attributes("aria-invalid")).toBe("true")
+		expect(line(w).attributes("id")).toBeTruthy()
+		expect(input.attributes("aria-describedby")).toBe(line(w).attributes("id"))
+	})
+
+	test("an amount the balance covers has no line, and the field is valid and names nothing", () => {
+		const w = mountOver({ modelValue: "400", exceedsBalance: false })
+		expect(line(w).exists()).toBe(false)
+		const input = w.get("[data-testid='send-amount-input']")
+		expect(input.attributes("aria-invalid")).toBe("false")
+		expect(input.attributes("aria-describedby")).toBeUndefined()
+	})
+
+	test("the USD field carries the same wiring", () => {
+		const w = mountOver({
+			liveQuote: QUOTE,
+			fiatMode: true,
+			fiatGuard: { frozenUsd: QUOTE.usd, frozenAt: Date.now(), converting: false },
+		})
+		const input = w.get("[data-testid='send-amount-fiat-input']")
+		expect(input.attributes("aria-invalid")).toBe("true")
+		expect(input.attributes("aria-describedby")).toBe(line(w).attributes("id"))
+	})
+
+	test("an amount cut to the token's decimals and over the balance shows the hint, then the line", async () => {
+		const w = mountOver({ modelValue: "" })
+		await w.get("[data-testid='send-amount-input']").setValue("600.1234567")
+		const hint = w.get("[data-testid='send-amount-clamp-hint']")
+		expect(hint.element.compareDocumentPosition(line(w).element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 	})
 })

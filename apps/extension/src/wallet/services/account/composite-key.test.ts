@@ -25,6 +25,10 @@ import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { svc } from "../composition-harness"
 import { AccountService } from "./service"
 import { accountRowId, parseAccountRowId } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 const CHAIN = 1
 /** The address both same-mnemonic profiles derive at index 0. */
@@ -52,7 +56,11 @@ describe("AccountService — composite storage key", () => {
 		api.reset()
 		const services = new ServiceCollection()
 		services.add(
-			svc(PROFILE_SERVICE_NAME, { onProfileDeleted: new EventHandler(), getDeletionState: () => new ProfileDeletionState() }),
+			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
+				onProfileDeleted: new EventHandler(),
+				getDeletionState: () => new ProfileDeletionState(),
+			}),
 		)
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {

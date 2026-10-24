@@ -20,6 +20,15 @@ const mocks = vi.hoisted(() => ({
 	getFpcs: vi.fn(),
 }))
 
+const { readFeePicks } = await vi.hoisted(() => import("../../../../tests/helpers/ui-preference-fake"))
+vi.mock("@/utils/core", () => ({
+	managers: {
+		uiPreference: {
+			getFeePicks: (profileId: string) => readFeePicks(chrome.storage.local, profileId),
+			saveFeePick: async () => true,
+		},
+	},
+}))
 vi.mock("@/wallet/services/execution/client", () => ({
 	ExecutionServiceClient: vi.fn(function () {
 		return {

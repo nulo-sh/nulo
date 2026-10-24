@@ -260,34 +260,41 @@ describe("LogsViewer auto-scroll around the search panel", () => {
 	})
 })
 
-describe("LogsViewer follow after a hold", () => {
+/** A viewer following at its end, 400px over 1,000px of lines. The stub scroller moves only when a
+ *  test sets it, so a scroll's landing and its event can be separated. */
+async function followingAtEnd() {
 	const t = Date.now()
 	const log = (id: number): LogEntry => ({ id, timestamp: t, source: "ui", level: 1, data: [`log ${id}`] })
+	H.getLogs.mockResolvedValueOnce([log(1)]).mockResolvedValue([])
+	const wrapper = mountViewer()
+	await vi.advanceTimersByTimeAsync(0)
+	const view = H.editors[0] as StubView & {
+		scrollDOM: { scrollTop: number; scrollHeight: number; clientHeight: number; addEventListener: ReturnType<typeof vi.fn> }
+	}
+	const el = view.scrollDOM
+	const onScroll = el.addEventListener.mock.calls.find(([type]) => type === "scroll")?.[1] as () => void
+	const scrollTo = (top: number, height = el.scrollHeight) => {
+		Object.assign(el, { scrollTop: top, scrollHeight: height })
+		onScroll()
+	}
+	el.clientHeight = 400
+	scrollTo(600, 1_000)
+	let next = 2
+	const followsNext = () => {
+		view.dispatch.mockClear()
+		H.onLog.invoke(log(next++))
+		return view.dispatch.mock.calls.some(([spec]) => spec.effects?.scrollTo)
+	}
+	return { wrapper, el, onScroll, scrollTo, followsNext, button: () => wrapper.find('[data-testid="logs-scroll-btn"]') }
+}
 
+describe("LogsViewer follow after a hold", () => {
 	/** A viewer at its end, then held by a person scrolling 300px up: the scroll button shows. */
 	async function held() {
-		H.getLogs.mockResolvedValueOnce([log(1)]).mockResolvedValue([])
-		const wrapper = mountViewer()
-		await vi.advanceTimersByTimeAsync(0)
-		const view = H.editors[0] as StubView & {
-			scrollDOM: { scrollTop: number; scrollHeight: number; clientHeight: number; addEventListener: ReturnType<typeof vi.fn> }
-		}
-		const el = view.scrollDOM
-		const onScroll = el.addEventListener.mock.calls.find(([type]) => type === "scroll")?.[1] as () => void
-		const scrollTo = (top: number, height = el.scrollHeight) => {
-			Object.assign(el, { scrollTop: top, scrollHeight: height })
-			onScroll()
-		}
-		el.clientHeight = 400
-		scrollTo(600, 1_000)
-		scrollTo(300)
-		await wrapper.vm.$nextTick()
-		const followsNext = () => {
-			view.dispatch.mockClear()
-			H.onLog.invoke(log(2))
-			return view.dispatch.mock.calls.some(([spec]) => spec.effects?.scrollTo)
-		}
-		return { wrapper, scrollTo, followsNext, button: () => wrapper.find('[data-testid="logs-scroll-btn"]') }
+		const viewer = await followingAtEnd()
+		viewer.scrollTo(300)
+		await viewer.wrapper.vm.$nextTick()
+		return viewer
 	}
 
 	test("a scroll that moves the view up into the end band, as a trim's restore does, keeps the hold", async () => {
@@ -309,6 +316,159 @@ describe("LogsViewer follow after a hold", () => {
 		scrollTo(200, 619)
 		await wrapper.vm.$nextTick()
 		await button().trigger("click")
+		expect(followsNext()).toBe(true)
+		wrapper.unmount()
+	})
+})
+
+describe("LogsViewer follow stopped by a selection", () => {
+	function selectInEditor() {
+		vi.spyOn(document, "getSelection").mockReturnValue({ isCollapsed: false } as Selection)
+		document.dispatchEvent(new Event("selectionchange"))
+	}
+
+	/** A line grows the document 18px while following, and a selection stops the follow with that
+	 *  line's scroll event still due; a scaled display lands it a fraction past the rounded end. */
+	test.each([618, 618.4])("the follow's own scroll, landing at %s, keeps the hold", async (top) => {
+		const { wrapper, el, onScroll, followsNext, button } = await followingAtEnd()
+		el.scrollHeight = 1_018
+		expect(followsNext()).toBe(true)
+		selectInEditor()
+		el.scrollTop = top
+		onScroll()
+		expect(followsNext()).toBe(false)
+		await wrapper.vm.$nextTick()
+		expect(button().exists()).toBe(true)
+		wrapper.unmount()
+	})
+
+	test("the follow's own sub-pixel scroll, in a document a line overflows by under a pixel, keeps the hold", async () => {
+		const { wrapper, el, onScroll, scrollTo, followsNext } = await followingAtEnd()
+		scrollTo(0, 400)
+		expect(followsNext()).toBe(true)
+		selectInEditor()
+		el.scrollTop = 0.4
+		onScroll()
+		expect(followsNext()).toBe(false)
+		wrapper.unmount()
+	})
+
+	test("a reader's scroll down into the end band still resumes it", async () => {
+		const { wrapper, el, onScroll, scrollTo, followsNext } = await followingAtEnd()
+		el.scrollHeight = 1_018
+		followsNext()
+		selectInEditor()
+		el.scrollTop = 618
+		onScroll()
+		scrollTo(300)
+		scrollTo(610)
+		expect(followsNext()).toBe(true)
+		wrapper.unmount()
+	})
+
+	test("a held line whose snapshot replaces the follow still due leaves the reader's next scroll down free", async () => {
+		const { wrapper, el, scrollTo, followsNext } = await followingAtEnd()
+		el.scrollHeight = 1_018
+		followsNext()
+		selectInEditor()
+		el.scrollHeight = 1_036
+		expect(followsNext()).toBe(false)
+		scrollTo(617)
+		expect(followsNext()).toBe(true)
+		wrapper.unmount()
+	})
+
+	test("after a follow with nothing to travel, the reader's second scroll down resumes it", async () => {
+		const { wrapper, el, scrollTo, followsNext } = await followingAtEnd()
+		scrollTo(0, 400)
+		followsNext()
+		selectInEditor()
+		el.scrollHeight = 418
+		scrollTo(0.4)
+		scrollTo(0.8)
+		expect(followsNext()).toBe(true)
+		wrapper.unmount()
+	})
+})
+
+describe("LogsViewer opened at a log", () => {
+	const t = Date.now()
+	const log = (id: number): LogEntry => ({ id, timestamp: t, source: "ui", level: 1, data: [`log ${id}`] })
+	const home = window.location.href
+	afterEach(() => window.history.replaceState(null, "", home))
+
+	/** The window opened at log 3 of 3, 400px over 1,000px of lines: CodeMirror centres it as far as
+	 *  the end lets it, so the target lands in the end band. */
+	async function openedAtLatest(loaded = [log(1), log(2), log(3)]) {
+		window.history.replaceState(null, "", "?logId=3")
+		H.getLogs.mockResolvedValueOnce(loaded).mockResolvedValue([])
+		const wrapper = mountViewer()
+		await vi.advanceTimersByTimeAsync(0)
+		const view = H.editors[0] as StubView & {
+			requestMeasure: ReturnType<typeof vi.fn>
+			scrollDOM: { scrollTop: number; scrollHeight: number; clientHeight: number; addEventListener: ReturnType<typeof vi.fn> }
+		}
+		const el = view.scrollDOM
+		const onScroll = el.addEventListener.mock.calls.find(([type]) => type === "scroll")?.[1] as () => void
+		const scrollTo = (top: number) => {
+			el.scrollTop = top
+			onScroll()
+		}
+		Object.assign(el, { clientHeight: 400, scrollHeight: 1_000 })
+		const target = view.dispatch.mock.calls.find(([spec]) => spec.effects?.scrollTo && spec.selection)?.[0]
+		const measure = () => {
+			for (const [request] of view.requestMeasure.mock.calls) request.read()
+			view.requestMeasure.mockClear()
+		}
+		let next = 4
+		const nextLineDispatches = (effect: "scrollTo" | "snapshot") => {
+			view.dispatch.mockClear()
+			H.onLog.invoke(log(next++))
+			return view.dispatch.mock.calls.some(([spec]) => spec.effects?.[effect])
+		}
+		const followsNext = () => nextLineDispatches("scrollTo")
+		const snapshotsNext = () => nextLineDispatches("snapshot")
+		return {
+			wrapper,
+			targetAnchor: (target?.selection as { anchor: number } | undefined)?.anchor,
+			lineStart: (n: number) => view.state.doc.line(n).from,
+			measure,
+			scrollTo,
+			followsNext,
+			snapshotsNext,
+			button: () => wrapper.find('[data-testid="logs-scroll-btn"]'),
+		}
+	}
+
+	test("the target is its log's first character, past an earlier log's CRLF", async () => {
+		const { wrapper, targetAnchor, lineStart } = await openedAtLatest([{ ...log(1), data: ["first\r\nsecond"] }, log(2), log(3)])
+		expect(targetAnchor).toBe(lineStart(4))
+		wrapper.unmount()
+	})
+
+	test("a line before CodeMirror's first measure leaves the target pending", async () => {
+		const { wrapper, targetAnchor, measure, snapshotsNext } = await openedAtLatest()
+		expect(targetAnchor).toBeDefined()
+		expect(snapshotsNext()).toBe(false)
+		measure()
+		expect(snapshotsNext()).toBe(true)
+		wrapper.unmount()
+	})
+
+	test("the target's own scroll into the end band keeps the hold", async () => {
+		const { wrapper, scrollTo, followsNext, button } = await openedAtLatest()
+		scrollTo(590)
+		expect(followsNext()).toBe(false)
+		await wrapper.vm.$nextTick()
+		expect(button().exists()).toBe(true)
+		wrapper.unmount()
+	})
+
+	test("a reader's scroll down into the end band after it still resumes the follow", async () => {
+		const { wrapper, scrollTo, followsNext } = await openedAtLatest()
+		scrollTo(590)
+		scrollTo(300)
+		scrollTo(600)
 		expect(followsNext()).toBe(true)
 		wrapper.unmount()
 	})

@@ -93,3 +93,91 @@ describe("e2e-token-seeds config (layer-1 fail-closed guard)", () => {
 		await expect(import("./config")).rejects.toThrow(/both are required|double opt-in/i)
 	})
 })
+
+/**
+ * The wallet clocks: a build without the flag gets no e2e values and no stamp, so its services keep
+ * their production defaults and the release grep has nothing to find.
+ */
+describe("e2e-wallet-clocks config", () => {
+	beforeEach(() => {
+		vi.resetModules()
+	})
+	afterEach(() => {
+		vi.unstubAllEnvs()
+		vi.resetModules()
+	})
+
+	test("unset → no e2e values, no build stamp", async () => {
+		vi.stubEnv("VITE_NULO_E2E_WALLET_CLOCKS", "")
+		const mod = await import("./config")
+		expect(mod.E2E_WALLET_CLOCKS).toBeNull()
+		expect(mod.E2E_WALLET_CLOCKS_BUILD_STAMP).toBeNull()
+	})
+
+	test("0, as the prover-ON build passes it → no e2e values, no build stamp", async () => {
+		vi.stubEnv("VITE_NULO_E2E_WALLET_CLOCKS", "0")
+		const mod = await import("./config")
+		expect(mod.E2E_WALLET_CLOCKS).toBeNull()
+		expect(mod.E2E_WALLET_CLOCKS_BUILD_STAMP).toBeNull()
+	})
+
+	test("1 → the e2e values and the build stamp", async () => {
+		vi.stubEnv("VITE_NULO_E2E_WALLET_CLOCKS", "1")
+		const mod = await import("./config")
+		expect(mod.E2E_WALLET_CLOCKS).toEqual({ incomingPollMs: 10_000, finalityReadMs: 10_000 })
+		expect(mod.E2E_WALLET_CLOCKS_BUILD_STAMP).toBe("NULO_E2E_WALLET_CLOCKS_BUILD_STAMP")
+	})
+})
+
+/**
+ * The extra default network: an armed build offers it to every person, so it takes both flags and
+ * exactly one fails closed, like the token-seed source.
+ */
+describe("e2e-extra-seed config (layer-1 fail-closed guard)", () => {
+	beforeEach(() => {
+		vi.resetModules()
+	})
+	afterEach(() => {
+		vi.unstubAllEnvs()
+		vi.resetModules()
+	})
+
+	test("default (neither flag) → no extra seed, no build stamp", async () => {
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED", "")
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED_CONFIRM", "")
+		const mod = await import("./config")
+		expect(mod.E2E_EXTRA_SEED).toBeNull()
+		expect(mod.E2E_EXTRA_SEED_BUILD_STAMP).toBeNull()
+	})
+
+	test("both flags set → the extra seed and the build stamp", async () => {
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED", "1")
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED_CONFIRM", "1")
+		const mod = await import("./config")
+		const { E2E_EXTRA_SEED } = await import("./extra-seed")
+		expect(mod.E2E_EXTRA_SEED).toEqual(E2E_EXTRA_SEED)
+		expect(mod.E2E_EXTRA_SEED_BUILD_STAMP).toBe("NULO_E2E_EXTRA_SEED_BUILD_STAMP")
+	})
+
+	test("only the primary flag → throws (fail-closed)", async () => {
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED", "1")
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED_CONFIRM", "")
+		await expect(import("./config")).rejects.toThrow(/both are required|double opt-in/i)
+	})
+
+	test("only the confirm flag → throws (fail-closed)", async () => {
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED", "")
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED_CONFIRM", "1")
+		await expect(import("./config")).rejects.toThrow(/both are required|double opt-in/i)
+	})
+
+	test("no shipped seed has the extra seed's kind or chainId", async () => {
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED", "")
+		vi.stubEnv("VITE_NULO_E2E_EXTRA_SEED_CONFIRM", "")
+		const { DEFAULT_SEEDS } = await import("@/wallet/services/network/seeds")
+		const { E2E_EXTRA_SEED } = await import("./extra-seed")
+		// It stands in for a default no shipped build seeds yet. Once one ships with its kind, an armed
+		// build would seed two of that kind: retire the arm, or give it a kind no shipped seed has.
+		expect(DEFAULT_SEEDS.filter(({ kind, chainId }) => kind === E2E_EXTRA_SEED.kind || chainId === E2E_EXTRA_SEED.chainId)).toEqual([])
+	})
+})

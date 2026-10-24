@@ -107,7 +107,7 @@ call.
 
 ## What this bears on
 
-`legal/privacy.md` says in § 13 "The extension loads no remote code" (`legal/privacy.md:391-392`).
+`legal/privacy.md` says in § 13 "The extension loads no remote code" (`legal/privacy.md:401-402`).
 That sentence is true under the reading above — code is what the browser executes as script or
 WASM, and the package bundles all of it. § 2 credits the content security policy only with what it
 delivers, "forbids loading remote scripts" (`legal/privacy.md:51-52`): `script-src 'self'` forbids

@@ -97,7 +97,7 @@ function newPortRegistry(): PortRegistry {
 	return { listeners: createListenerBag(), ports: new Map() }
 }
 
-function linkedPortPair(name: string): { client: MessagePortLike; server: MessagePortLike } {
+function linkedPortPair(name: string, sender?: MessageSender): { client: MessagePortLike; server: MessagePortLike } {
 	const clientMsgListeners = createListenerBag<(msg: unknown) => void>()
 	const serverMsgListeners = createListenerBag<(msg: unknown) => void>()
 	const clientDisconnectListeners = createListenerBag<() => void>()
@@ -129,6 +129,7 @@ function linkedPortPair(name: string): { client: MessagePortLike; server: Messag
 
 	const server: MessagePortLike = {
 		name,
+		sender,
 		postMessage: (m) => {
 			if (!disconnected) for (const l of clientMsgListeners.items) l(m)
 		},
@@ -166,8 +167,9 @@ class FakeRuntimeAdapter implements RuntimePort {
 		return () => fakeBrowser.runtime.onMessage.removeListener(wrapped)
 	}
 
-	public connect(options: { name: string }): MessagePortLike {
-		const pair = linkedPortPair(options.name)
+	/** `sender` is test-only: what the background's side of the port reports as its opener. */
+	public connect(options: { name: string }, sender?: MessageSender): MessagePortLike {
+		const pair = linkedPortPair(options.name, sender)
 		// Notify any onConnect listeners (in creation order).
 		for (const l of this.portRegistry.listeners.items) l(pair.server)
 		return pair.client
@@ -193,6 +195,10 @@ class FakeRuntimeAdapter implements RuntimePort {
 		return this.lastErrorSlot
 	}
 
+	public reload(): void {
+		// No-op in tests.
+	}
+
 	public async setUninstallURL(_url: string): Promise<void> {
 		// No-op in tests.
 	}
@@ -203,32 +209,31 @@ class FakeRuntimeAdapter implements RuntimePort {
 
 class FakeWindowsAdapter implements WindowPort {
 	private nextId = 1000
-	private readonly live = new Set<number>()
+	private readonly live = new Map<number, CreateWindowOptions["type"]>()
 	private readonly removedListeners = createListenerBag<(id: number) => void>()
 	/** Test-only: every `create` call's options, in order. */
 	public readonly creates: CreateWindowOptions[] = []
 	/** Test-only: every `update` call, in order. */
 	public readonly updates: Array<{ windowId: number; options: UpdateWindowOptions }> = []
-	/** Test-only: every `navigate` call on a live window, in order. */
-	public readonly navigates: Array<{ windowId: number; url: string }> = []
 	/** Test-only: what `getLastFocused` returns. */
 	public lastFocused: WindowBounds | undefined
+	/** Test-only: every `closeTab` call, in order. The fake models no tabs, so no window closes. */
+	public readonly closedTabs: number[] = []
 
 	public async create(options: CreateWindowOptions): Promise<CreatedWindow> {
 		this.creates.push(options)
 		const id = this.nextId++
-		this.live.add(id)
+		this.live.set(id, options.type)
 		return { id }
+	}
+
+	public async isPopup(windowId: number): Promise<boolean> {
+		return this.live.get(windowId) === "popup"
 	}
 
 	public async update(windowId: number, options: UpdateWindowOptions): Promise<void> {
 		if (!this.live.has(windowId)) throw new Error(`No window with id: ${windowId}.`)
 		this.updates.push({ windowId, options })
-	}
-
-	public async navigate(windowId: number, url: string): Promise<void> {
-		if (!this.live.has(windowId)) throw new Error(`No window with id: ${windowId}.`)
-		this.navigates.push({ windowId, url })
 	}
 
 	public async getLastFocused(): Promise<WindowBounds | undefined> {
@@ -246,6 +251,10 @@ class FakeWindowsAdapter implements WindowPort {
 		}
 	}
 
+	public async closeTab(tabId: number): Promise<void> {
+		this.closedTabs.push(tabId)
+	}
+
 	/** Test-only: fire onRemoved for `windowId` as if the user closed it. */
 	public closeByUser(windowId: number): void {
 		if (this.live.delete(windowId)) {
@@ -258,7 +267,7 @@ class FakeWindowsAdapter implements WindowPort {
 		this.removedListeners.items.length = 0
 		this.creates.length = 0
 		this.updates.length = 0
-		this.navigates.length = 0
+		this.closedTabs.length = 0
 		this.lastFocused = undefined
 	}
 }

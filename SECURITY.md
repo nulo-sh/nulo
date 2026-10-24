@@ -73,6 +73,18 @@ existing keys and profiles.
   - Forks repurposing this extension under a different domain MUST
     change BOTH the constant and the manifest entry atomically. There
     is no migration path for WebAuthn credentials.
+- **Row-seal labels, frame and AAD** — every sealed row (§ Storage privacy)
+  is `{ profileId, sealed }`, `sealed` being the AES-256-GCM frame
+  `[1 version byte = 1][12 byte IV][ciphertext ‖ tag]`, base64, that the
+  DEK-rooted imported-key boxes share (`packages/wallet-crypto/src/aes-gcm-frame.ts`).
+  Its key and the keyed-id HMAC key are HKDF-SHA256 over the 32-byte master,
+  salt the JSON `["nulo:row-seal:v1", profileId, pxeGeneration]`, info
+  `nulo:row-seal:aead:v1` and `nulo:row-seal:index:v1`; its AAD is the JSON
+  `["nulo:row:v1", root, storageKey, profileId]`
+  (`packages/wallet-crypto/src/row-seal.ts`). Pinned by V12 and the DEK-rooted
+  boxes by V13 (`apps/extension/src/wallet/crypto/key-vectors.test.ts`).
+  Changing any of them hides every sealed row of every profile, and the
+  pre-unlock migrator cannot re-seal: a change converts at unlock.
 - **The Schnorr account artifact** — vendored byte-exact at
   `packages/aztec-runtime/src/account/artifacts/SchnorrAccount.json` and pinned by digest +
   class id, precisely so that bumping `@aztec-labs/accounts` (which rebuilds its own copy on any
@@ -247,7 +259,8 @@ sits at the SW seam where content-script messages arrive:
 The background sets `chrome.storage.local` to trusted contexts at every start
 (`src/wallet/utils/storage-access.ts`): the extension's pages and workers read it, a content script
 does not, and Chrome keeps the level across restarts. Firefox has no such setting, so there the
-area keeps the browser's default access.
+area keeps the browser's default access, and a compromised content script is a writer with storage
+access in the sense of § Storage privacy.
 
 ## Authorization enforcement
 
@@ -374,18 +387,102 @@ explicit and per-Network.
 Encrypted at rest:
 - `profile.secret` — master secret (AES-GCM)
 - `profile.guard` — password verification sentinel (AES-GCM)
+- Every profile-scoped root but the profile row itself: contacts, dApp
+  sessions and registration counts, the operation journal, the transaction
+  history, accounts and imported keys, tokens and the default-token seeder's
+  marker, networks, fee payers, token balances, the authwit registry and its
+  enable flags, incoming receipts with their trust, scan cursors,
+  balance-refresh outbox and arrival rows, the popup's pinned tokens and
+  fee-payer picks (one row per profile each), and the device's last account
+  selection (one row, naming the profile that made it) — sealed per row under the
+  profile's row-seal key (§ Crypto-bound invariants). The envelope names the
+  profile; the row, its names, addresses, origins, grants, amounts, balances,
+  fees, endpoints, errors and hashes are ciphertext. An imported key's
+  signing key is sealed again inside it, under the password-derived key.
+- Storage keys name no address or hash. A transaction row is stored at the
+  keyed id of its hash, so two profiles holding one hash keep two rows. An
+  account and its imported key keep their profile and chain and replace the
+  address with its keyed hash, one id in both roots. An incoming key keeps
+  its profile and network and replaces the note, transaction, account or
+  contract it named with its keyed hash, so a profile or network wipe still
+  deletes by prefix with no key; an enable flag's key keeps its profile and
+  chain and hashes the account.
+- The AAD binds each row to its root, its storage key, its profile and,
+  through the key, the profile's incarnation: a row moved, swapped between
+  profiles or kept from a deleted profile whose id is reused never opens. A
+  row that fails to open reads as absent and is kept; the log names a fixed
+  category (`sealed-authentication`, `sealed-format`, `sealed-identity`),
+  never the row.
+- The account-integrity stamp and the stale-network record keep a keyed
+  digest of the account set, `HMAC(K_idx, accountSetDigest)`, never the
+  address list.
 
-Plaintext at rest (`chrome.storage.local`):
-- Profile metadata, networks, accounts, contacts, dApp sessions, tokens,
-  token balances, tx history, auth registry state, FPC definitions,
-  config, storage version.
-- Incoming receipts: account, token, amount, transaction hash and, for a
-  private one, the note's hashes. A note's nullifier is never stored; it stays
-  in the PXE's encrypted store.
+Plaintext at rest (`chrome.storage.local`), each family with the reason it is
+read without a row key in `apps/extension/src/wallet/storage/root-census.test.ts`,
+which fails on a family that is neither sealed nor reviewed:
+- Profile rows (name, type, the sealed master and its supporting key
+  material), config, the storage version and the migration engine's state,
+  cached prices, the signed token list, the Terms-acceptance record.
+- Per-profile records the pre-unlock gates read: the active network's id, the
+  default network kinds a profile was offered, the stale-network record and
+  the integrity stamp (network and chain ids and the keyed digest), and the
+  torn-restore gate.
+- Records that name accounts only while their work runs: a profile deletion's
+  tombstone (addresses, token and network ids), the network-reset journal
+  (accounts and the probed endpoint) and an account-integrity block.
+- The popup's `nulo:ui:*` preferences: per-profile Get Started flags and how
+  the last restore ended. A pin or fee-pick map an earlier build stored is
+  plaintext until its profile's next unlock seals it in place, and the
+  selected account an earlier build stored (`nulo:ui:activeAccount`, an
+  address) until a profile holding that account claims it or a selection
+  overwrites it.
+- A note's nullifier is never stored; it stays in the PXE's encrypted store.
 
-Expanding the encrypted boundary to cover profile-scoped metadata (contacts,
-dApp sessions, tx history) is not done: a large refactor, not a near-term
-patch.
+What sealing does not hide or prevent:
+- Root names, row ids, the `profileId` in each envelope (so per-profile row
+  counts, and which profile made the device's last account selection),
+  ciphertext length and write times. A balance or authwit row's id
+  is a local sequence number; an account, imported-key or authwit-flag key
+  shows its profile and chain (so per-chain account counts), an incoming key
+  its profile and network (so per-network row counts) and an outbox key its
+  local token id (known limit #1056).
+- A profile's rows written before this build stay plaintext until that
+  profile's next unlock seals them; until then they read as before (known
+  limit #1060). The browser may keep the replaced plaintext in its storage
+  files until it compacts them (#1058). A build from before the seal reads
+  none of them (#1059).
+- A transaction row written before this build that names no profile stays
+  plaintext at its hash, served to every profile, until a profile that alone
+  holds its account on its chain adopts and seals it at unlock. One whose
+  account two profiles hold, or whose ownership a locked profile's unreadable
+  accounts leave unknown, stays plaintext (known limit #1057).
+- An offline writer can delete a sealed row, roll it back to an earlier
+  sealed value at the same key, or plant a plaintext row, which the wallet
+  reads and seals at the next unlock. dApp sessions are the exception: each
+  keeps its HMAC (keyed `HKDF(master ‖ dek)`) inside the seal, so a planted or
+  edited grant is dropped on read (known limits #1052, #1053).
+- The row-seal keys come from the master alone, so a same-phrase sibling
+  profile, or anyone holding the recovery phrase and a copy of the disk, can
+  open the rows; neither can forge a dApp grant (known limit #1054).
+- The service worker holds the row-seal keys of every profile it has opened
+  until it ends or the profile is deleted, a lock included, so work that lands
+  after a lock still seals. Code running inside the extension can use them,
+  never the master (`packages/wallet-crypto/ATTACK-SURFACE.md`, known limit #1055).
+
+Each dApp-session row carries a MAC keyed from the profile's keys: it stops a
+forged row and a row replayed under another id or profile, not a writer with
+storage access putting back an earlier authentic row under the same key
+(known limit #967).
+
+Who reads what, by capability:
+
+| | Attacker | What it gets from the sealed roots |
+|---|---|---|
+| T1 | Reads storage: a disk image, a synced browser profile, an extension with storage access | Ciphertext. Its work factor is the password, as for the master; a passkey profile has no offline path |
+| T2 | A same-phrase sibling profile, or anyone with the recovery phrase and a copy of the disk | Every sealed row of every profile that phrase made, since the row keys come from the master alone. Never a dApp grant it could forge, nor an imported signing key, sealed again under the profile's DEK |
+| T3 | Writes storage offline | Deletes, rollbacks to an earlier value at the same key, and planted plaintext rows, as above. Never a row moved across keys, roots, profiles or incarnations, nor a forged one |
+| T4 | Runs code inside the extension | Out of scope (`packages/wallet-crypto/ATTACK-SURFACE.md`). On a locked, live worker: the row keys of every profile opened in its lifetime, never the master |
+| T5 | A Firefox content script sharing `storage.local` | Ciphertext, as T1 |
 
 ### External price feed (CoinGecko)
 
@@ -483,17 +580,13 @@ rather than a clean result.
   user is acknowledged, in a reviewed PR. A bundled one needs a reason that
   says why the extension cannot reach it; without one it is not acknowledged.
 
-What is acknowledged today (41 advisories; the ack file holds each one):
+What is acknowledged today (24 advisories; the ack file holds each one):
 
 | Package | Advisories | Comes in through | Reopens at |
 |---|---|---|---|
-| `undici` 5.29.0, `@fastify/busboy` 2.1.1 | 15 (4 high) | `@aztec-labs/foundation` | the next Aztec bump |
-| `ws` 8.18.3 | 2 (1 high) | `@aztec/viem` 2.38.3, an exact pin | the next Aztec bump |
 | `uuid` 9.0.1 | 1 | `@aztec-labs/stdlib`'s Google Cloud Storage client | the next Aztec bump |
 | `@opentelemetry/core`, `@opentelemetry/propagator-jaeger` 1.x, `systeminformation` 5.23.8 | 7 (6 high) | `@aztec-labs/telemetry-client`, which nothing here imports | the next Aztec bump |
-| `undici` 7.29.0, `sharp` 0.35.2 | 12 (4 high) | miniflare, wrangler's local simulator (`apps/landing`, `infra/passkey-rp`) | the next wrangler bump |
-| `vitest`, `@vitest/mocker` 4.1.10 | 2 | the test runner; 4.1.11 needs the soak matrix | the next vitest bump |
-| `braces` 3.0.3 | 1 (high) | build-time globbing (micromatch, chokidar 3) | a fixed release (none exists) |
+| `undici` 7.29.0, `sharp` 0.35.2 | 15 (5 high) | miniflare, wrangler's local simulator (`apps/landing`, `infra/passkey-rp`, `infra/token-list`) | the next wrangler bump |
 | `elliptic` 6.6.1 | 1 (low) | `vite-plugin-node-polyfills`' crypto-browserify | a fixed release (none exists) |
 
 None of them is in either extension zip.
@@ -569,11 +662,11 @@ One path makes an extension release: `release.yml`'s `attach-assets` job, and `n
   A nightly names `nightly.yml`. `--signer-workflow` matches that workflow on any ref; `--source-digest` is what pins the commit. An attestation proves where and from which commit a zip was built, not that the commit is benign: a malicious commit merged to `main` gets a valid one. Releases published before this path existed (`v0.30.2` and its nightlies) carry none, so a store submission through the workflow refuses them.
 - **Digest read-back.** The first read-back keeps a draft that changed after upload from being published. The second reports a change that another holder of `contents: write` made between that check and the publish; GitHub has no compare-and-publish call, so it cannot prevent one.
 - **Store submissions ship the published bytes.** A dispatch on a published release downloads its assets, checks them against `SHASUMS256.txt` and their attestation, and hands those bytes to the store jobs. A rebuild that differs is only a warning: zip bytes depend on the runner's `zip`.
-- **Tags.** `auto-unstick` is the only workflow that creates a stable tag, through the REST API with its own App token, and only at the merge commit of the Release PR the run was triggered by; release-please runs with `skip-github-release: true`. One tag ruleset (`release tags: no deletion or update`, no bypass actor) stops anyone from deleting or moving a `v*` tag, and a second (`release tags: creation by the release app only`, whose one bypass actor is the release App) stops anyone else from creating a stable or rc tag; nightly tags are outside both. An rc tag, or a stable tag pushed by hand, goes through `scripts/release/tag-by-hand-run.ts`, which adds the owner as a bypass actor for that one push and puts the App back alone after it, whether or not the push succeeded; only a killed helper or an unreachable GitHub leaves that close to the owner by hand. Neither stops an admin, who can edit or disable them, or a stolen owner credential.
+- **Tags.** `auto-unstick` is the only workflow that creates a stable tag, through the REST API with its own App token, and only at the merge commit of the Release PR the run was triggered by; release-please runs with `skip-github-release: true`. One tag ruleset (`release tags: no deletion or update`, no bypass actor) stops anyone from deleting or moving a `v*` tag, and a second (`release tags: creation by the release app only`, whose one bypass actor is the release App) stops anyone else from creating a stable or rc tag; nightly tags are outside both. The App's id and private key are secrets of the `release-app` environment, whose deployment branches are `main` and `dev` and which has no reviewer, so `auto-unstick` and the sync PR never wait. GitHub opens the environment only to runs from those branches, so only workflow code that has reached `main` or `dev` can mint the App token; `release-integrity.test.ts` keeps the environment on exactly the jobs that mint it, a repository check rather than a GitHub rule. An rc tag, or a stable tag pushed by hand, goes through `scripts/release/tag-by-hand-run.ts`, which adds the owner as a bypass actor for that one push and puts the App back alone after it, whether or not the push succeeded; only a killed helper or an unreachable GitHub leaves that close to the owner by hand. Neither stops an admin, who can edit or disable them, or a stolen owner credential.
 - **Store copies are compared with the release.** `verify-store-copies.yml` (weekly, and on dispatch) downloads what the Chrome Web Store and Firefox Add-ons serve to the public, takes the version from its `manifest.json`, verifies that version's release zip and `SHASUMS256.txt` through the publish path's own digest and attestation checks, and compares the two file for file. Each store may add only its own exact entries (Chrome's `_metadata/verified_contents.json` and `update_url`, AMO's `META-INF/` signature); anything else, a missing copy, a served version with no release, or a failed check, reds the run. `v0.30.2` predates attestations and is checked by digest and `SHASUMS256.txt` only. It samples what a store serves once a week; it cannot see what one served to a single user.
 
 - **Immutable releases** are planned but not yet applied. Once on, a published release's assets and tag can no longer change, and each release gets a GitHub release attestation, checked with `gh release verify vX.Y.Z --repo nulo-sh/nulo`; no release carries one yet. Titles and notes stay editable, which is why the check is the attestation and not the notes.
-- **The jobs that tag or publish** install no dependency, check out the workflow's own revision without persisted credentials, set `GH_TOKEN` per step and run no third-party action but `oven-sh/setup-bun`, which gets no token; git-cliff, whose action downloads its binary at run time, runs in read-only notes jobs. Every App token names its permission set, so a permission later granted to the App reaches no token. `scripts/ci-cd/release-integrity.test.ts` pins all of it. Accepted residuals: a compromised `oven-sh/setup-bun`; `GITHUB_TOKEN` keeps `contents: write` in the two publish jobs; and a release published before this path stays mutable, and a dispatch with such a tag as `--ref` runs that tag's old workflow, which replaces assets. Only accounts with write access can dispatch, and the runbook forbids it.
+- **The jobs that tag or publish** install no dependency, check out the workflow's own revision without persisted credentials, set `GH_TOKEN` per step and run no third-party action but `oven-sh/setup-bun`, which gets no token; git-cliff, whose action downloads its binary at run time, runs in read-only notes jobs. Every App token names its permission set, so a permission later granted to the App reaches no token, and is minted only in a job that declares `release-app`. `scripts/ci-cd/release-integrity.test.ts` pins all of it. Accepted residuals: a compromised `oven-sh/setup-bun`; a workflow change merged into `dev`, which needs no approving review, or into `main` runs with the App's key on its next run there; `GITHUB_TOKEN` keeps `contents: write` in the two publish jobs; and a release published before this path stays mutable, and a dispatch with such a tag as `--ref` runs that tag's old workflow, which replaces assets. Only accounts with write access can dispatch, and the runbook forbids it.
 
 ## Token list signing
 
@@ -583,8 +676,8 @@ The wallet's default tokens come from `https://tokens.nulo.sh/v1/list.json`, an 
 - **Custody.** Both keys are 32-byte seeds generated by 1Password in `Keyed-Runs/Nulo-TokenList` and installed by a keyed run (`infra/token-list/keys.env.example`): the CI seed becomes the `token-list` environment secret over stdin, and only public keys are printed. `nulo-recovery-1` never leaves 1Password. No agent and no file holds either. Keeping the CI key in an environment secret is an owner decision (2026-10-13) that bends the keyed-run rule.
 - **Signer code.** The `token-list` environment (owner reviewer, branch `dev`) approves a run, not its code, and `dev` needs no approving review, so a merged change to the workflow or the signer runs on the next approval. `publish-token-list.yml`'s `prepare` job shows, before that approval, a summary of the signing-relevant changes since the parent of the commit that first carried the list before the served one (a squash-merged publish's parent is the trunk at merge time, not the commit its run signed; a commit that restores or re-touches envelope bytes moves nothing; a first publish shows every such commit, and a shallow clone is refused). The summary is produced by the candidate revision and is informational only; GitHub's compare view of the range is the authoritative review. The tree check holds the envelope to the signer's exact key order; `sign` installs nothing, runs `bun --no-install` over a signer whose import closure `packages/token-list/src/import-closure.test.ts` pins, and holds the secret in one step; `scripts/ci-cd/release-integrity.test.ts` counts any job that reads a custom secret as credentialed and pins it, and `behavior-gating.test.ts` pins the command. The trust root is the owner's GitHub account and that approval, as for the store-publish environments.
 - **Rotation.** Delete the `TOKEN_LIST_SIGNING_KEY` secret; sign the current source with the recovery key as a keyed run (`infra/token-list/recovery.env.example`) and publish it; install a new CI key; release the wallet with the leaked key removed from `keys.ts`. A stored list signed by a key no longer pinned is discarded at the next start, so a forged maximum sequence cannot freeze updates after that release. **Until the release, the leaked key verifies.**
-- **Rollback and freeze.** Sequences are the signing time in seconds, so two signings never share one. Each release compiles a floor, `packages/token-list/src/floor.json`: the sequence of the last list that delisted or flagged a token. A wallet refuses any list below it, fetched or stored, so on a release built after a delisting or a flag no older list restores the token or drops the flag. Accepted limits: a host that serves the last good list forever withholds corrections; a release built before a delisting or a flag does not know its floor; and the floor moves only for delistings and flags (owner decision, 2026-10-15), so a fresh install served an older list at or above the floor can still get an entry's earlier fields (a `priceId`), a flag removed since, or a list without a token added since.
-- **The floor's writer.** `publish-pr`'s App token writes `floor.json` beside the envelope when the list delists or flags, and the owner merges that PR; every build enforces the file. The tree check refuses a floor below 1 or above the committed list's sequence, so a floor can never refuse the served list; lowering it only weakens it, and is a reviewed source change, like an edit to `keys.ts`. A recovery-key publish skips `publish-pr` and sets the floor by hand (`infra/token-list/README.md`).
+- **Rollback and freeze.** Sequences are the signing time in seconds, so two signings never share one. Each release compiles a floor, `packages/token-list/src/floor.json`: the sequence of the last list that delisted or flagged a token against the served list or against a list at a publish PR or branch head signed since the floor, so such a list, signed but never served, is retired as a served one would be. A wallet refuses any list below it, fetched or stored, so on a release built after a delisting or a flag no older list restores the token or drops the flag. Accepted limits: a host that serves the last good list forever withholds corrections; a release built before a delisting or a flag does not know its floor; and the floor moves only for delistings and flags (owner decision, 2026-10-15), so a fresh install served an older list at or above the floor can still get an entry's earlier fields (a `priceId`), a flag removed since, or a list without a token added since; and a list signed by a publish run that stopped before its publish branch had a commit is read by no floor decision (#1001).
+- **The floor's writer.** `publish-pr`'s App token writes `floor.json` beside the envelope when the list delists or flags against one of those lists, or one of them cannot be read, and the owner merges that PR; every build enforces the file. The tree check refuses a floor below 1 or above the committed list's sequence, so a floor can never refuse the served list; lowering it only weakens it, and is a reviewed source change, like an edit to `keys.ts`. A recovery-key publish skips `publish-pr` and sets the floor by hand (`infra/token-list/README.md`).
 
 ## Binary dependencies
 
@@ -680,8 +773,9 @@ both reusable e2e workflows install it and one bump must reach each; the bump
 commands are in the action's description. Mozilla publishes a detached `.asc`
 signature rather than a checksum sidecar, and the lanes do not verify it, so
 the pins are the integrity check. Firefox itself is
-not pinned by hash: the lanes run the revision the locked `puppeteer` pins
-(`bun x puppeteer browsers install firefox`), fetched over HTTPS from
+not pinned by hash: the lanes run the e2e suite's pinned revision, apart
+from `puppeteer`'s (`apps/extension/scripts/e2e/install-firefox.ts`),
+fetched over HTTPS from
 Mozilla's archive — the same trust as the Chrome that `puppeteer` downloads
 for the required lanes — and the suite refuses to launch below the
 manifest's `strict_min_version`.

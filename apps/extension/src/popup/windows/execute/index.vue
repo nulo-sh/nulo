@@ -17,9 +17,8 @@ import { getErrorMessage } from "@nulo/wallet-core/utils"
 /** Local utilities */
 import { uniqueSignerAccounts, uniqueSignerNetworks } from "./signers"
 import { resolveOperationScope, scopeBannerCopy, scopeBannerState } from "./scope-mismatch"
-import { createScopeFollow } from "./scope-follow"
-import { requireNetwork } from "@/utils/core"
-import { storageLocalSet } from "@/utils/storage"
+import { createScopeFollow, selectionWriter } from "./scope-follow"
+import { managers, requireNetwork } from "@/utils/core"
 import { carriesFeeSettings, isSelfPay } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
 import { type FeePayerPick, personPaysAppPayment, waitsForFeeFigure } from "./fee-figure"
@@ -43,6 +42,7 @@ import {
 	type TransferFeeEstimate,
 } from "@/wallet/services/execution/client"
 import { type TokenInfo, TokenServiceClient } from "@/wallet/services/token/client"
+import { PriceServiceClient } from "@/wallet/services/price/client"
 import {
 	DappInteractionServiceClient,
 	type ExecutionPayload,
@@ -56,6 +56,7 @@ import type { DappMetadata } from "@/wallet/services/dapp-session/client"
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 import { useFeeEstimationMap } from "@/composables/useFeeEstimationMap"
+import { useTokenFlags } from "@/composables/usePrices"
 import { useToast } from "@/composables/toast"
 
 const { openToast } = useToast()
@@ -113,6 +114,32 @@ const tokenMetadataUnread = computed(() =>
 	operations.value.some((op) => op.kind === "register_token" && !tokenMetadata.value.has(op.address)),
 )
 
+/** The signed list's flags, from the snapshot the token page reads, with no price fetch. */
+const priceService = new PriceServiceClient()
+const tokenFlags = useTokenFlags(priceService)
+
+const isFlaggedAdd = (op: UIOperation): boolean =>
+	op.kind === "register_token" && tokenFlags.isFlagged({ chainId: op.network?.chainId, contract: op.address })
+
+/** The flagged token adds the person ticked, by operation index: empty at every mount, never stored. */
+const flagAcknowledged = ref(new Set<number>())
+const acknowledgeTokenFlag = (index: number, on: boolean) => {
+	const next = new Set(flagAcknowledged.value)
+	if (on) next.add(index)
+	else next.delete(index)
+	flagAcknowledged.value = next
+}
+
+/** A token add waits for the list's first answer, and a flagged one for its tick; a list that flags
+ *  the token while the window is open holds Confirm again. */
+const tokenFlagHold = computed(() =>
+	operations.value.some(
+		(op, i) =>
+			op.kind === "register_token" &&
+			(!tokenFlags.mapped.value || (isFlaggedAdd(op as UIOperation) && !flagAcknowledged.value.has(i))),
+	),
+)
+
 /**
  * Display-only decodings the card renders: per operation index for its calls,
  * per message hash for a discovered authorization. An entry is absent while
@@ -156,14 +183,13 @@ const {
 	handoffAll: handoffFeeEstimates,
 	rearm: rearmFeeEstimates,
 	cancelAll: cancelAllFeeEstimates,
+	dispose: disposeFeeEstimates,
 } = useFeeEstimationMap<number, { index: number; feeSettings: FeeSettings }, TransferFeeEstimate>({
 	// By reference: the SW re-materializes the stored request at this index and
 	// applies the fee choice itself — the popup never hands it an operation.
 	estimate: ({ index, feeSettings }, estimateToken, flowKey) =>
 		executionService.estimateOperationFee(requestId.value!, index, feeSettings, estimateToken, flowKey),
-	cancelRemote: (estimateToken) => {
-		executionService.cancelEstimate(estimateToken).catch(() => {})
-	},
+	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 500,
 	onError: (key, err) => {
 		if (holdRefusal(err)) return
@@ -216,12 +242,11 @@ const {
 	handoffAll: handoffAuthwitPreviews,
 	rearm: rearmAuthwitPreviews,
 	cancelAll: cancelAllAuthwitPreviews,
+	dispose: disposeAuthwitPreviews,
 } = useFeeEstimationMap<number, { index: number }, OperationAuthwitPreview>({
 	estimate: ({ index }, estimateToken, flowKey) =>
 		executionService.previewOperationAuthwits(requestId.value!, index, estimateToken, flowKey),
-	cancelRemote: (estimateToken) => {
-		executionService.cancelEstimate(estimateToken).catch(() => {})
-	},
+	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 0,
 	onError: (key, err) => {
 		if (holdRefusal(err)) return
@@ -250,12 +275,15 @@ const {
 		profileService.connect()
 		interactionService.connect()
 		tokenService.connect()
+		priceService.connect()
 	},
 	disconnectServices: () => {
 		profileService.disconnect()
 		interactionService.disconnect()
 		executionService.disconnect()
 		tokenService.disconnect()
+		priceService.disconnect()
+		tokenFlags.dispose()
 	},
 	init: () => init(),
 	// A request of another profile than the active one was ended by that lock or switch, not by the
@@ -428,14 +456,13 @@ const approve = async () => {
 		setError("Validation error", "Select a fee payment method for each transaction", "warning")
 		return
 	}
-	if (payerShort.value || awaitsFeeFigure.value) return
+	if (payerShort.value || awaitsFeeFigure.value || tokenFlagHold.value) return
 	if (grantsPending.value || grantRefusal.value || refusal.value) return
 	try {
 		isLoading.value = true
-		// Ownership handoff: approval transfers the estimates and previews to the
-		// execution path — the window's unmount cleanup must NOT remote-cancel
-		// them, or the eviction would race the fire-and-forget execution out of
-		// its reuse hits and its preview snapshots.
+		// Ownership handoff: approval transfers the completed estimates and previews to
+		// the execution path, so the disposal below must NOT remote-cancel them, or the
+		// eviction would race the execution out of its reuse hits and preview snapshots.
 		handoffFeeEstimates()
 		handoffAuthwitPreviews()
 		// The SW executes the dApp's stored request; per operation the popup
@@ -454,9 +481,12 @@ const approve = async () => {
 		})
 		const stillOurs = scopeFollow.capture()
 		await interactionService.approveInteraction(requestId.value!, deltas)
+		// A removed window runs no unmount, so the approval itself ends every estimate it did not
+		// hand over, and the window closes once the worker has taken those cancels.
+		const estimatesEnded = Promise.all([disposeFeeEstimates(), disposeAuthwitPreviews()])
 		// Never throws, so a failed follow cannot turn the approval into an error below.
 		await scopeFollow.follow(scopeView.value, followDeclined.value, stillOurs)
-		closeWindow(true)
+		await endAndClose(() => estimatesEnded)
 	} catch (error) {
 		// The execution path never took ownership — re-arm so a later
 		// reject/unmount can still cancel + evict the handed-off estimates.
@@ -520,7 +550,10 @@ const scopeFollow = createScopeFollow({
 	hasInFlightSend: () => appStore.hasInFlightSend,
 	getActiveNetworkId: async () => (await requireNetwork().getActiveNetwork())?.id,
 	setActiveNetwork: (networkId) => requireNetwork().setActiveNetwork(networkId),
-	writeActiveAccount: (address, unless) => storageLocalSet({ "nulo:ui:activeAccount": address }, { unless }),
+	writeActiveAccount: selectionWriter(
+		() => profile.value?.id,
+		(profileId, address) => managers.uiPreference.setSelectedAccount(profileId, address),
+	),
 })
 // Mirrors the `requiresFeeSelection` early-return inside approve(): a send-like op
 // with no chosen fee can't execute yet. Gating the Confirm button's disabled state
@@ -629,9 +662,12 @@ onUnmounted(() => {
 						:tokenMetadata="op.kind === 'register_token' ? tokenMetadata.get((op as { address: string }).address) : undefined"
 						:tokenMetadataError="op.kind === 'register_token' ? tokenMetadataError.get((op as { address: string }).address) : undefined"
 						:tokenMetadataLoading="op.kind === 'register_token' && tokenMetadataLoading"
+						:tokenFlagged="isFlaggedAdd(op as UIOperation)"
+						:tokenFlagAcknowledged="flagAcknowledged.has(i)"
 						:refused="refusal !== undefined"
 						@updateFeeSettings="handleFeeUpdate"
 						@updatePayer="(index: number, payer: FeePayerPick | null) => (feePayers[index] = payer)"
+						@acknowledgeTokenFlag="acknowledgeTokenFlag"
 					>
 						<template v-if="refusal" #fee>
 							<Flex
@@ -672,6 +708,7 @@ onUnmounted(() => {
 				needsFeeSelection ||
 				payerShort ||
 				awaitsFeeFigure ||
+				tokenFlagHold ||
 				grantsPending ||
 				grantRefusal !== undefined ||
 				isInteractionCancelled

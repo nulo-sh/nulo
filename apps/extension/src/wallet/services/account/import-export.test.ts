@@ -41,6 +41,10 @@ import { EXECUTION_SERVICE_NAME } from "@/wallet/services/execution/spec"
 import { TASK_SERVICE_NAME } from "@/wallet/services/task/spec"
 import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
 import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const { rowKeys: ROW_KEYS } = await rowKeysForEveryProfile()
 
 const MASTER_B64 = Buffer.from(new Uint8Array(32).fill(9)).toString("base64")
 const dekOf = (fill: number) => asImportedKeysDek(new Uint8Array(32).fill(fill) as Uint8Array<ArrayBuffer>)
@@ -56,6 +60,8 @@ async function build(withBalances = false) {
 	let currentDekFill = 0x11
 	services.add(
 		svc(PROFILE_SERVICE_NAME, {
+			rowKeys: ROW_KEYS,
+			onRowKeysReady: new EventHandler<string>(),
 			onProfileDeleted: new EventHandler(),
 			onActiveProfileChanged: new EventHandler(),
 			getDeletionState: () => new ProfileDeletionState(),
@@ -283,7 +289,7 @@ describe("AccountService import/export", () => {
 	test("(composition) through the REAL registered graph, a keyless import's balance rows are purged with the account", async () => {
 		const { api, account } = await build(true)
 		await account.importAccount("p1", CHAIN, exportFile(), addrFor(SK), "")
-		const repo = new BalanceRepository(api)
+		const repo = new BalanceRepository(api, ROW_KEYS)
 		await repo.set({
 			id: 9,
 			token: 1,

@@ -17,9 +17,9 @@ import type { NoirCompiledContract } from "@aztec-labs/stdlib/noir"
 import SchnorrAccountJson from "./artifacts/SchnorrAccount.json"
 
 /** sha256 of the vendored `artifacts/SchnorrAccount.json` bytes. */
-export const FROZEN_ARTIFACT_SHA256 = "9aebda2a0b8cf96e833dba4379bef6a2ed0f93e975e9689afaa26ac71203cdc8"
+export const FROZEN_ARTIFACT_SHA256 = "f701e393d933a3229ada1e121113a540c9906d0cc9b1cd4450252888b29ab9f9"
 
 /** Contract class id of the loaded artifact — the address-visible identity of the account code. */
-export const FROZEN_ACCOUNT_CLASS_ID = "0x2a5784fa8315d0150f36a1fba87b41cdb9cd8ebea611ceaa80c7a787e83efa60"
+export const FROZEN_ACCOUNT_CLASS_ID = "0x2f7d07db78643da21eefb63ee07d28d1cc23dd86ec9b3a9fa29323bf17269d15"
 
 export const FrozenSchnorrAccountArtifact: ContractArtifact = loadContractArtifact(SchnorrAccountJson as unknown as NoirCompiledContract)

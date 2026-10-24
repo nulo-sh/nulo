@@ -7,10 +7,12 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
+import { isValidAztecAddress } from "@/utils/aztec-address"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { type ArmedInterception, interceptRpc, pickFile } from "../fixtures/browser"
 import { clickByTestId, clickSelector, type ExtensionContext, withTimeoutMessage } from "../fixtures/extension"
 import { contactRow, senderChip } from "../fixtures/helpers"
+import { callService } from "../fixtures/session"
 import { settleClosedPopup } from "../fixtures/popup-leave"
 import { armDownloadCapture, readCapturedDownload } from "./download-capture"
 
@@ -30,6 +32,35 @@ export function contactsFiles(): { write: (content: unknown) => string; cleanup:
 		cleanup: () => rmSync(dir, { recursive: true, force: true }),
 	}
 }
+
+/** `count` distinct on-curve addresses from a fixed seed, so every run imports the same file. */
+function onCurveAddresses(count: number): string[] {
+	let state = 0x9e3779b9
+	const next = () => {
+		state ^= state << 13
+		state ^= state >>> 17
+		state ^= state << 5
+		return state >>> 0
+	}
+	const found = new Set<string>()
+	while (found.size < count) {
+		// A leading zero byte keeps the value below the field modulus.
+		const address = `0x00${Array.from({ length: 8 }, () => next().toString(16).padStart(8, "0"))
+			.join("")
+			.slice(2)}`
+		if (isValidAztecAddress(address)) found.add(address)
+	}
+	return [...found]
+}
+
+/** Enough rows that an import is still writing seconds after its first row is stored. */
+export const LONG_IMPORT_ROWS = 500
+
+/** The same version-2 file on every run: `LONG_IMPORT_ROWS` named, on-curve contacts. */
+export const longImportContacts = () => ({
+	version: 2,
+	contacts: onCurveAddresses(LONG_IMPORT_ROWS).map((address, i) => ({ name: `Contact ${String(i + 1).padStart(3, "0")}`, address })),
+})
 
 /** Refuses the Testnet RPC for the rest of the launch: the Contacts page asks every network's PXE
  *  for its senders, and the export probes every network, so a run would otherwise depend on the
@@ -227,14 +258,20 @@ export async function shownToast(page: Page, text: string, timeout = 15_000): Pr
 
 export type StoredContact = { id: string; profileId: string; name: string; address: string; abbr: string }
 
-/** Every stored contact row, ordered by id. */
-export function storedContacts(page: Page): Promise<StoredContact[]> {
+/** Every contact the active profile stores, as the wallet reads them (rows are sealed at rest),
+ *  ordered by id. */
+export async function storedContacts(page: Page): Promise<StoredContact[]> {
+	const contacts = await callService<StoredContact[]>(page, "contact", "getContacts")
+	return contacts.sort((x, y) => x.id.localeCompare(y.id))
+}
+
+/** Every stored contact row as the raw string an at-rest reader of storage sees. */
+export function rawContactRows(page: Page): Promise<string[]> {
 	return page.evaluate(async () => {
 		const all = await chrome.storage.local.get()
 		return Object.entries(all)
 			.filter(([key]) => key.startsWith("nulo:core:contacts@"))
-			.map(([, value]) => JSON.parse(value as string) as StoredContact)
-			.sort((x, y) => x.id.localeCompare(y.id))
+			.map(([, value]) => String(value))
 	})
 }
 

@@ -24,7 +24,7 @@
  */
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
+import { join } from "node:path"
 import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { type ExtensionContext, launchExtension, test } from "../fixtures/extension"
@@ -38,6 +38,7 @@ import {
 } from "../fixtures/helpers"
 import { accountChainId, exportBackupContent, keepChainAccountState } from "../helpers/backup-export"
 import { sealPlainBackup } from "../helpers/backup-seal"
+import { rawContactRows, storedContacts } from "../helpers/contacts"
 import { gotoPopupImport, importFullBackup, POPUP_IMPORT_SHELL, TEST_PASSWORD, writeBackupToTemp } from "../helpers/import-drivers"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -90,15 +91,12 @@ test.skipIf(!hasConfig || !HAS_FIXTURE)(
 
 			// The migration ran BEFORE restore: the contact row landed in the
 			// CURRENT shape (v9001 renamed legacyName → name).
-			const contacts = await page2.evaluate(async () => {
-				const all = await chrome.storage.local.get()
-				return Object.entries(all)
-					.filter(([k]) => k.startsWith("nulo:core:contacts@"))
-					.map(([, v]) => JSON.parse(v as string) as Record<string, unknown>)
-			})
+			const contacts = await storedContacts(page2)
 			expect(contacts).toHaveLength(1)
 			expect(contacts[0].name).toBe("Roundtrip Ali")
 			expect(contacts[0]).not.toHaveProperty("legacyName")
+			// Restore sealed the row: its name never reaches storage in the clear.
+			expect((await rawContactRows(page2)).some((raw) => raw.includes("Roundtrip Ali"))).toBe(false)
 
 			// ── 4. On-chain functionality ──────────────────────────────────
 			// Restore preserved the profile id, so key derivation reproduces
@@ -146,13 +144,7 @@ test.skipIf(!hasConfig || !HAS_FIXTURE)(
 			try {
 				await ctx2?.close()
 			} finally {
-				try {
-					rmSync(profileDir, { recursive: true, force: true })
-				} finally {
-					// The doctored file embeds the wallet's REAL (local-chain test)
-					// master-key — never leave it in the temp dir.
-					rmSync(dirname(filePath), { recursive: true, force: true })
-				}
+				rmSync(profileDir, { recursive: true, force: true })
 			}
 		}
 	},

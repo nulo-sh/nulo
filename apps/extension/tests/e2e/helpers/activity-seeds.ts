@@ -6,6 +6,8 @@
 import type { Page } from "puppeteer"
 import type { TokenListEntry } from "@nulo/token-list"
 import { captureSoleProfileId, getAccountAddress } from "../fixtures/helpers"
+import { readActiveNetwork } from "../fixtures/networks"
+import { SEALED_READ_MESSAGE } from "../fixtures/sealed-rows"
 import { E2E_LIST_TOKENS, heldListEntries } from "../fixtures/token-list"
 
 /** Writes `value` under `key` as the wallet's storage layer does, JSON-encoded. */
@@ -29,13 +31,8 @@ export type ActivityScope = {
 export async function readScopeIdentity(page: Page): Promise<Omit<ActivityScope, "token">> {
 	const profileId = await captureSoleProfileId(page)
 	const account = await getAccountAddress(page)
-	const { networkId, chainId } = await page.evaluate(async (pid: string) => {
-		const all = await chrome.storage.local.get(null)
-		const networkId = all[`nulo:core:active-network@${pid}`] as string
-		const network = JSON.parse(all[`nulo:core:networks@${networkId}`] as string) as { chainId: number }
-		return { networkId, chainId: network.chainId }
-	}, profileId)
-	return { profileId, networkId, chainId, account }
+	const network = await readActiveNetwork(page)
+	return { profileId, networkId: network.id, chainId: network.chainId, account }
 }
 
 /**
@@ -182,26 +179,37 @@ export async function seedPendingTrust(
 	scope: Omit<ActivityScope, "token">,
 	token: { id: number; contract: string },
 ): Promise<void> {
-	const key = `nulo:core:incoming-trust@${scope.profileId}|${scope.networkId}|${token.contract}`
+	const naturalId = `${scope.profileId}|${scope.networkId}|${token.contract}`
 	// An added token is trusted, then given its arrival floor, by two writes that land after the add;
-	// the second rewrites the state it read, so a seed before it would be overwritten.
-	await page.waitForFunction(
-		async (k: string) => {
-			const raw = (await chrome.storage.local.get(k))[k]
-			if (typeof raw !== "string") return false
-			const row = JSON.parse(raw) as { state?: string; arrivalFloor?: number; arrivalFloorPending?: boolean }
-			return row.state === "trusted" && (row.arrivalFloor !== undefined || row.arrivalFloorPending === true)
+	// the second rewrites the state it read, so a seed before it would be overwritten. The trust row
+	// is sealed at a keyed id, so it is found through the e2e reader by the id it answers to.
+	const sealedAt = await page.waitForFunction(
+		async (message: string, id: string) => {
+			type Row = {
+				naturalId: string
+				storageKey: string
+				row: { state?: string; arrivalFloor?: number; arrivalFloorPending?: boolean }
+			}
+			const rows = ((await chrome.runtime.sendMessage({ type: message, root: "incomingTrust" })) ?? []) as Row[]
+			const found = rows.find((r) => r.naturalId === id)
+			const settled =
+				found?.row.state === "trusted" && (found.row.arrivalFloor !== undefined || found.row.arrivalFloorPending === true)
+			return settled ? found.storageKey : false
 		},
 		{ timeout: 15_000, polling: 200 },
-		key,
+		SEALED_READ_MESSAGE,
+		naturalId,
 	)
-	await storeRow(page, key, {
+	// A keyed root prefers its sealed copy, so the plaintext replacement lands first and the sealed
+	// row it replaces goes after it.
+	await storeRow(page, `nulo:core:incoming-trust@${naturalId}`, {
 		profileId: scope.profileId,
 		networkId: scope.networkId,
 		contract: token.contract,
 		state: "pending",
 		updatedAt: Date.now(),
 	})
+	await page.evaluate((key: string) => chrome.storage.local.remove(key), (await sealedAt.jsonValue()) as string)
 	await storeNoteReceipt(page, scope, {
 		tokenId: token.id,
 		amount: "100",

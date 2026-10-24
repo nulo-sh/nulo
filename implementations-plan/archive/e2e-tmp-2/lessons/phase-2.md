@@ -1,0 +1,5 @@
+# e2e-tmp-2 phase 2: the smoke gates
+
+- 2026-10-22: both runs at `425b8a1a8`, retry 0, each under its own scratch `TMPDIR` in `~/.cache/nulo-backlog/e2e-tmp-2/`. Chrome: 61 passed, 9 skipped, 1903 s. Firefox: 65 passed, 5 skipped, 3309 s, at load1 110-150. Neither left a `nulo-stage-log-*` or `nulo-e2e-backup-*` dir. No red, so the flake rule was not used.
+- 2026-10-22: the A1 review ran beside the Chrome run (read-only, so it could not disturb it); it was clean, so nothing reran.
+- 2026-10-22, after merging `origin/dev` (#1072, #1081) at `1081d80b0`: lint and `typecheck:all` green. `test:all` failed once in `send-order.composition.test.ts` ("a silent-path record reads queued while it waits": `expected 'pending' to be 'queued'`) at load1 about 140; the file passed 3 of 3 alone and the rerun of `test:all` passed. The lane touches no file that test reaches; the trace (the slot is handed on before the requeue's journal write) is #1083. The armed Chrome build rebuilt; `import-stage-timing.test.ts` 17 passed, 0 dirs left; the self-test green.

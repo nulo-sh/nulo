@@ -13,6 +13,14 @@ export const DAPP_SESSION_SERVICE_NAME = "dapp-session"
 /** EntityStorage root for dApp session rows. Frozen: renaming detaches every connected session. */
 export const DAPP_SESSION_STORAGE_ROOT = "nulo:core:dappSessions"
 
+/** Sealed root, one row per profile at the profile's id: the registrations dApps have made on each
+ *  chain (`registration-allowance.ts`). */
+export const DAPP_REGISTRATIONS_STORAGE_ROOT = "nulo:core:dappRegistrations"
+
+/** A profile's registration counts as their sealed root reads them: any JSON. The allowance's own
+ *  decoder is its read, so a chain's entry that does not parse drops only itself. */
+export const RegistrationCountsRowSchema = z.unknown()
+
 /**
  * Capability + scope types + AccessLevel + DappPermissions live in
  * `@nulo/wallet-bridge` (they belong to the wallet-sdk dispatcher layer,

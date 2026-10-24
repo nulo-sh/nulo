@@ -13,6 +13,7 @@ import { useLockWallet } from "@/composables/useLockWallet"
 import { managers } from "@/utils/core"
 import { copyAddressToClipboard } from "./header-copy-address"
 import { endsSelection } from "@/utils/selection"
+import { isCardWindow } from "@/utils/own-window"
 import { accountStateOf } from "./header-account"
 
 /** Store */
@@ -168,7 +169,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<header v-if="!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader" :class="$style.wrapper">
+	<header v-if="!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader && !isCardWindow()" :class="$style.wrapper">
 		<!-- The switcher owns TWO explicit affordances (avatar + name) while the address is a
 		     one-click copy target — no popup detour. `account-selector` stays on the name button so
 		     every existing e2e switching flow passes unchanged (testid-preservation contract). -->
@@ -454,6 +455,23 @@ onBeforeUnmount(() => {
 .lock_label {
 	composes: type--label-section from global;
 	color: var(--nulo-secondary);
+}
+
+/* Below the popup's width the row tightens and the Lock chip keeps only its icon, its name still "Lock
+ * wallet", so the address stays whole and both chips stay inside the row. */
+@media (width < 359px) {
+	.wrapper {
+		gap: 8px;
+		padding: 0 12px 0 16px;
+	}
+
+	.lock_chip {
+		padding: 0 6px;
+	}
+
+	.lock_label {
+		display: none;
+	}
 }
 
 .status_dot {

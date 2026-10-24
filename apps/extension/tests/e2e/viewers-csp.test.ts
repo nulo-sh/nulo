@@ -3,7 +3,8 @@
  * shadow root, new lines are followed, and a selection or focus inside the root holds the view where
  * it rests while lines arrive, a line that trims the log included; the toolbar's three triggers are Tab
  * stops that Enter and Space open and Escape closes, focus back on each; the more menu opens, and
- * its Clear empties the log, which keeps taking lines. The launch's CSP recorder fails the
+ * its Clear empties the log, which keeps taking lines; at 240 px the toolbar sits above the log and
+ * its panels and menu open inside the view. The launch's CSP recorder fails the
  * file on a blocked style. The wallet logs its own lines into the window at any time, so a test waits
  * for its own lines by a nonce. A hold is read off where a shown line lands, measured once the follow
  * pending at the viewer's stop has landed, and off the viewer's scroll-to-end button.
@@ -13,9 +14,10 @@ import type { KeyInput, Page } from "puppeteer"
 import { expect } from "vitest"
 import { extensionUrl, gotoExtensionPage, newPage, prepareClick } from "./fixtures/browser"
 import { readEditorStyles } from "./fixtures/code-editor"
-import { type ExtensionContext, test } from "./fixtures/extension"
+import { clickByTestId, type ExtensionContext, test } from "./fixtures/extension"
 import { pollUntil } from "./fixtures/poll"
 import { shotSend } from "./fixtures/send-page"
+import { atWidth, expectFits, NARROW_WIDTH } from "./fixtures/type-roles"
 import { pointerClick } from "./helpers/legal-drivers"
 import { focusRing, pressEscape, SPACE, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
@@ -396,18 +398,26 @@ test("the search panel open at the end holds the view while lines arrive", async
 		{ timeout: 5_000, polling: 50 },
 		HOST,
 	)
-	// The panel lifts the view off the end; scrolling back there resumes the follow, and going back
-	// into the search field holds it again, at the end.
+	// The panel's focus stopped the follow, so a line is held below the view. The button resumes the
+	// follow at the end through the viewer itself, where a wallet line is followed too, so the gap is
+	// read there; going back into the search field stops the follow again.
 	await page.evaluate((id) => {
-		const root = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot
-		const field = root?.activeElement
-		const el = root?.querySelector(".cm-scroller")
-		if (!(field instanceof HTMLElement) || !(el instanceof HTMLElement)) throw new Error("the search field is not focused")
-		el.scrollTop = el.scrollHeight
+		const field = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.activeElement
+		if (!(field instanceof HTMLElement)) throw new Error("the search field is not focused")
 		field.blur()
-		return new Promise<void>((r) => requestAnimationFrame(() => r(field.focus())))
 	}, HOST)
+	await logLines(page, 1)
+	expect(await page.$('[data-testid="logs-scroll-btn"]')).not.toBeNull()
+	await clickByTestId(page, "logs-scroll-btn")
 	expect(await gapToEnd(page)).toBeLessThan(AT_END)
+	// A follow due at the stop lands in CodeMirror's next measure and its scroll is judged the frame
+	// after, so the hold is measured from two frames on; a move inside that span is not covered.
+	await page.evaluate((id) => {
+		const field = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelector(".cm-search .cm-textfield")
+		if (!(field instanceof HTMLElement)) throw new Error("the search panel has no field")
+		field.focus()
+		return new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))
+	}, HOST)
 	const line = await middleLine(page)
 	await logLines(page, 2)
 	await expectHeld(page, line)
@@ -594,5 +604,47 @@ test("the more menu offers the CSV export and Clear logs, which empties the log 
 	await settle(page, 0, 100 * line)
 	await waitForShownLine(page, marker, false)
 	await logLines(page, 1)
+	await page.close()
+})
+
+/** The view's width, the toolbar's lowest edge and the box of the log's scroller, read inside its shadow root. */
+async function logLayout(
+	page: Page,
+): Promise<{ view: number; toolbarBottom: number; log: { left: number; right: number; top: number; width: number; height: number } }> {
+	return page.evaluate((id) => {
+		const bottoms = ["logs-filter-source", "logs-filter-level", "logs-more-trigger"].map(
+			(testid) => document.querySelector(`[data-testid="${testid}"]`)?.getBoundingClientRect().bottom ?? Number.NaN,
+		)
+		const el = document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelector(".cm-scroller")
+		if (!(el instanceof HTMLElement)) throw new Error("the logs editor has no scroller")
+		const { left, right, top, width, height } = el.getBoundingClientRect()
+		return { view: document.documentElement.clientWidth, toolbarBottom: Math.max(...bottoms), log: { left, right, top, width, height } }
+	}, HOST)
+}
+
+test("at 240 px the toolbar sits above the log, and its panels and menu open inside the view", async ({ registeredExtension: ctx }) => {
+	const page = await openLogs(ctx)
+	await atWidth(page, NARROW_WIDTH, async () => {
+		await expectFits(page, "the logs window")
+		// The page's checks stop at the editor's shadow root, so the log's own box is read inside it; a
+		// long line scrolls inside that box.
+		const { view, toolbarBottom, log } = await logLayout(page)
+		expect(log.left, "the log's left edge").toBeGreaterThanOrEqual(-0.5)
+		expect(log.right, "the log's right edge").toBeLessThanOrEqual(view + 0.5)
+		expect(log.width, "the log's width").toBeGreaterThan(view / 2)
+		expect(log.height, "the log's height").toBeGreaterThan(100)
+		expect(toolbarBottom, "the toolbar's bottom against the log's top").toBeLessThanOrEqual(log.top)
+		for (const [trigger, opened] of [
+			["logs-filter-source", "logs-filter-source-panel"],
+			["logs-filter-level", "logs-filter-level-panel"],
+			["logs-more-trigger", "logs-export-csv"],
+		]) {
+			await pointerClick(page, trigger)
+			await page.waitForSelector(sel(opened), { visible: true, timeout: 5_000 })
+			await expectFits(page, `the logs window, ${opened} open`)
+			expect(await pressEscape(page)).toBe(true)
+			await page.waitForSelector(sel(opened), { hidden: true, timeout: 5_000 })
+		}
+	})
 	await page.close()
 })

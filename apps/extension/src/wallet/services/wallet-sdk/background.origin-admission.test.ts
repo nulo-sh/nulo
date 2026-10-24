@@ -41,8 +41,14 @@ vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 vi.mock("./content-message-relay", () => ({ attachContentListener: () => {} }))
 vi.mock("./tab-lifecycle", () => ({ wireTabLifecycle: () => {} }))
 vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
+vi.mock("./discovery-flow", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("./discovery-flow")>()
+	return { ...actual, handleDiscovery: vi.fn(actual.handleDiscovery) }
+})
 
 import { initWalletSdkHandler } from "./background"
+import { handleDiscovery } from "./discovery-flow"
+import { discoveryRun } from "./discovery-run.harness"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN, fakeSdkServices } from "./test-services"
 
@@ -76,6 +82,7 @@ function boot(activeProfile?: () => Promise<{ id: string } | undefined>) {
 	return { discover, reads, rows: fake.rows, onActiveProfileChanged: fake.onActiveProfileChanged }
 }
 
+/** Turns after a decision settles, in which an effect a regression defers past it can surface. */
 const flush = async () => {
 	for (let i = 0; i < 30; i++) await Promise.resolve()
 }
@@ -86,6 +93,7 @@ beforeEach(() => {
 	handlerCalls.length = 0
 	pending.clear()
 	captured = undefined
+	vi.mocked(handleDiscovery).mockClear()
 	vi.stubGlobal("chrome", {
 		runtime: { getURL: (p: string) => p },
 		tabs: { sendMessage: () => {} },
@@ -104,6 +112,7 @@ describe("discovery admits secure origins only", () => {
 
 		discover("d1", PLAIN_HTTP_ORIGIN)
 		expect(rejected()).toEqual(["d1"])
+		await discoveryRun("d1")
 		await flush()
 
 		for (const read of Object.values(reads)) expect(read).not.toHaveBeenCalled()
@@ -116,6 +125,7 @@ describe("discovery admits secure origins only", () => {
 
 		discover("d1", FAKE_DAPP_ORIGIN)
 		expect(rejected()).toEqual([])
+		await discoveryRun("d1")
 		await flush()
 
 		expect(reads.resetRun).toHaveBeenCalledTimes(1)
@@ -130,16 +140,20 @@ describe("discovery admits secure origins only", () => {
 		["an https origin is queued while locked and opens the window on unlock (control)", FAKE_DAPP_ORIGIN, true],
 	])("%s", async (_label, origin, admitted) => {
 		const enqueue = vi.spyOn(DiscoveryQueue.prototype, "enqueue")
+		const drain = vi.spyOn(DiscoveryQueue.prototype, "drain")
 		let unlocked = false
 		const { discover, reads, onActiveProfileChanged } = boot(async () => (unlocked ? { id: "p1" } : undefined))
 
 		discover("d1", origin)
 		expect(rejected()).toEqual(admitted ? [] : ["d1"])
+		await discoveryRun("d1")
 		await flush()
 		expect(enqueue).toHaveBeenCalledTimes(admitted ? 1 : 0)
 
 		unlocked = true
 		onActiveProfileChanged.invoke({ id: "p1" })
+		// The unlock's one drain of the locked queue, which runs each queued discovery to its end.
+		await drain.mock.results[0]?.value
 		await flush()
 		expect(reads.popup).toHaveBeenCalledTimes(admitted ? 1 : 0)
 		expect(approved()).toEqual(admitted ? ["d1"] : [])
@@ -154,6 +168,7 @@ describe("discovery admits secure origins only", () => {
 
 		discover("d1", origin)
 		expect(rejected()).toEqual(admitted ? [] : ["d1"])
+		await discoveryRun("d1")
 		await flush()
 
 		expect(approved()).toEqual(admitted ? ["d1"] : [])

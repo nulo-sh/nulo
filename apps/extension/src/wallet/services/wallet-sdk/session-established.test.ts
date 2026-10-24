@@ -5,8 +5,8 @@
  * hash is passed per-session via the window URL, not read from the shared row.
  * The callback is fail-closed — any failure terminates the session and leaves a new
  * connection's pending-verification marker a tombstone; only a successful establishment spends it.
- * The check opens against the slot admission reserved at discovery, in the connect window
- * waiting on it or in a window of its own, and the slot is held until that window is removed.
+ * The check opens in a window of its own against the slot admission reserved at discovery, and the
+ * slot is held until that window is removed.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { deferred } from "@nulo/wallet-core/utils"
@@ -43,12 +43,7 @@ function reserved(
 	id = "sess-1",
 	markers = new Map<string, PendingVerificationEntry>(),
 ): { gate: VerifyAdmissionGate; reservation: WindowReservation } {
-	const gate = new VerifyAdmissionGate(clock, {
-		closeWindow: () => {},
-		navigateWindow: async () => {},
-		expired: (rid) => cancelPendingVerification(markers, rid),
-		released: (rid) => cancelPendingVerification(markers, rid),
-	})
+	const gate = new VerifyAdmissionGate(clock, { released: (rid) => cancelPendingVerification(markers, rid) })
 	let reservation: WindowReservation | undefined
 	gate.admit(
 		{ id, origin: ORIGIN, deadline: Date.now() + 55_000, consumesToken: false },
@@ -69,8 +64,6 @@ function makeDeps(over: Partial<SessionEstablishedDeps> = {}) {
 	const create = vi.fn().mockResolvedValue({ id: 99 })
 	const remove = vi.fn().mockResolvedValue(undefined)
 	const getLastFocused = vi.fn<() => Promise<WindowBounds | undefined>>().mockResolvedValue(ANCHOR)
-	const navigate = vi.fn<(windowId: number, url: string) => Promise<void>>().mockResolvedValue(undefined)
-	const update = vi.fn().mockResolvedValue(undefined)
 	const pendingVerification = over.pendingVerification ?? new Map<string, PendingVerificationEntry>()
 	const { gate, reservation } = reserved("sess-1", pendingVerification)
 	let live = true
@@ -88,7 +81,7 @@ function makeDeps(over: Partial<SessionEstablishedDeps> = {}) {
 		pendingVerification,
 		stampSessionProfile: stamp,
 		isSessionLive: () => live,
-		windows: { create, remove, getLastFocused, navigate, update },
+		windows: { create, remove, getLastFocused },
 		reservations: gate,
 		logger: noopLogger,
 		...over,
@@ -100,8 +93,6 @@ function makeDeps(over: Partial<SessionEstablishedDeps> = {}) {
 		create,
 		remove,
 		getLastFocused,
-		navigate,
-		update,
 		gate,
 		reservation,
 		endSession,
@@ -164,6 +155,7 @@ describe("handleSessionEstablished — verify-window reservation", () => {
 	test("opens against the held reservation and keeps the slot until that window is removed", async () => {
 		const { deps, gate, reservation, endSession } = makeDeps()
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(true)
+		expect(deps.dappSessionService.setVerificationHash).toHaveBeenCalledWith("dapp-1", makeSession().verificationHash)
 		expect(reservation.status).toBe("opened")
 		expect(gate.windowsHeld(ORIGIN)).toBe(1)
 		endSession()
@@ -172,10 +164,11 @@ describe("handleSessionEstablished — verify-window reservation", () => {
 		expect(gate.windowsHeld(ORIGIN)).toBe(0)
 	})
 
-	test("a window that needs opening without a reservation terminates the session", async () => {
+	test("a window that needs opening without a reservation terminates the session and leaves the row unconnected", async () => {
 		const { deps, terminate, create } = makeDeps({ reservations: { reservation: () => undefined } })
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
 		expect(create).not.toHaveBeenCalled()
+		expect(deps.dappSessionService.setVerificationHash).not.toHaveBeenCalled()
 		expect(terminate).toHaveBeenCalledWith("sess-1")
 	})
 
@@ -488,144 +481,62 @@ describe("handleSessionEstablished — the approval ends while establishment wai
 	)
 })
 
-describe("handleSessionEstablished — the check in the waiting connect window", () => {
-	/** A new connection whose connect window 41 waits on standby, as the approval leaves it. */
-	function standby(over: Partial<SessionEstablishedDeps> = {}) {
-		const h = makeDeps({ pendingVerification: new Map([["sess-1", marker()]]), ...over })
-		h.reservation.attach(41)
-		return h
-	}
-
-	test("(PER-SESSION HASH PIN) navigates the standby window to THIS session's hash, then focuses it, and creates nothing", async () => {
-		const { deps, navigate, update, create, reservation, gate, pendingVerification } = standby()
-		expect(await handleSessionEstablished(makeSession({ verificationHash: "CAFEBABE" }), deps)).toBe(true)
-		expect(create).not.toHaveBeenCalled()
-		expect(navigate).toHaveBeenCalledTimes(1)
-		const [windowId, url] = navigate.mock.calls[0]
-		expect(windowId).toBe(41)
-		expect(url).toContain("sessionId=dapp-1&verificationHash=CAFEBABE&isReconnect=false")
-		expect(update).toHaveBeenCalledWith(41, { focused: true })
-		expect(navigate.mock.invocationCallOrder[0]).toBeLessThan(update.mock.invocationCallOrder[0])
-		expect(reservation.status).toBe("opened")
-		expect(gate.windowsHeld(ORIGIN)).toBe(1)
-		expect(pendingVerification.has("sess-1")).toBe(false)
+describe("handleSessionEstablished — a new connection's failed check", () => {
+	test("a stamped channel whose check cannot open still ends after a discovery reused its id", async () => {
+		const h = makeDeps({ pendingVerification: new Map([["sess-1", marker("prof-A")]]) })
+		const anchor = deferred<WindowBounds | undefined>()
+		h.getLastFocused.mockReturnValueOnce(anchor.promise)
+		const establishing = handleSessionEstablished(makeSession(), h.deps)
+		await vi.waitFor(() => expect(h.getLastFocused).toHaveBeenCalledTimes(1))
+		expect(h.stamp).toHaveBeenCalledWith("sess-1", "prof-A")
+		h.reservation.releaseIfUnstarted()
+		admitReplacement(h.gate, h.pendingVerification)
+		anchor.resolve(ANCHOR)
+		expect(await establishing).toBe(false)
+		expect(h.create).not.toHaveBeenCalled()
+		expect(h.terminate).toHaveBeenCalledWith("sess-1")
 	})
 
-	test("a failed navigation terminates, closes the window, frees the slot on its removal, and logs no URL part", async () => {
-		const calls: unknown[][] = []
-		const logger = { log: (...args: unknown[]) => calls.push(args) } as unknown as ILogger
-		const { deps, navigate, remove, terminate, gate, pendingVerification } = standby({ logger })
-		navigate.mockRejectedValueOnce(
-			new Error("No tab: chrome-extension://abc/src/popup/index.html#/windows/verify?sessionId=dapp-1&verificationHash=SENTINELHASH"),
-		)
-		expect(await handleSessionEstablished(makeSession({ verificationHash: "SENTINELHASH" }), deps)).toBe(false)
-		expect(terminate).toHaveBeenCalledWith("sess-1")
-		expect(remove).toHaveBeenCalledWith(41)
-		expect(pendingVerification.get("sess-1")?.cancelled).toBe(true)
-		expect(gate.windowsHeld(ORIGIN)).toBe(1)
-		gate.windowRemoved(41)
-		expect(gate.windowsHeld(ORIGIN)).toBe(0)
-		expect(calls.flat().filter((a) => a instanceof Error)).toEqual([new Error("verify window could not be shown")])
-		const logged = logText(calls)
-		for (const part of ["SENTINELHASH", "dapp-1", "chrome-extension://"]) expect(logged).not.toContain(part)
-	})
-
-	test("a window closed while it navigates frees its slot at once and leaves a tombstone, not a fresh marker", async () => {
-		const { deps, navigate, gate, terminate, pendingVerification } = standby()
-		navigate.mockImplementationOnce(async () => {
-			gate.windowRemoved(41)
-			throw new Error("No tab with id: 314.")
-		})
-		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
-		expect(terminate).toHaveBeenCalledWith("sess-1")
-		expect(gate.windowsHeld(ORIGIN)).toBe(0)
-		expect(pendingVerification.get("sess-1")?.cancelled).toBe(true)
-	})
-
-	test("a stamped channel whose check cannot load still ends after a discovery reused its id", async () => {
-		const { deps, navigate, gate, stamp, terminate, pendingVerification } = standby()
-		navigate.mockImplementationOnce(async () => {
-			gate.windowRemoved(41)
-			admitReplacement(gate, pendingVerification)
-			throw new Error("No tab with id: 314.")
-		})
-		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
-		expect(stamp).toHaveBeenCalledWith("sess-1", "prof-A")
-		expect(terminate).toHaveBeenCalledWith("sess-1")
-	})
-
-	test("a failed establishment leaves a tombstone, so the replay of its restored discovery terminates", async () => {
-		const { deps, gate, terminate, stamp, navigate, create, pendingVerification } = standby({
+	test("a failed establishment frees its slot and leaves a tombstone, so the replay of its restored discovery terminates", async () => {
+		const { deps, gate, terminate, stamp, create, pendingVerification } = makeDeps({
+			pendingVerification: new Map([["sess-1", marker()]]),
 			dappSessionService: {
 				tryGetDappSessionByOriginAndChain: vi.fn().mockResolvedValue({ id: "dapp-1", profileId: "prof-A" }),
 				setVerificationHash: vi.fn().mockRejectedValueOnce(new Error("QuotaExceededError")).mockResolvedValue(undefined),
 			},
 		})
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
-		// The standby window's removal reaches the gate only after establishment has settled.
-		gate.windowRemoved(41)
 		expect(gate.windowsHeld(ORIGIN)).toBe(0)
 
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
 		expect(terminate).toHaveBeenCalledTimes(2)
 		expect(stamp).not.toHaveBeenCalled()
-		expect(navigate).not.toHaveBeenCalled()
 		expect(create).not.toHaveBeenCalled()
 		expect(pendingVerification.get("sess-1")?.cancelled).toBe(true)
-	})
-
-	test("a standby window closed while establishment waits leaves nothing to claim: the session terminates", async () => {
-		let persisted!: () => void
-		const setVerificationHash = vi.fn(() => new Promise<void>((r) => (persisted = r)))
-		const { deps, navigate, create, terminate, gate, pendingVerification } = standby({
-			dappSessionService: {
-				tryGetDappSessionByOriginAndChain: vi.fn().mockResolvedValue({ id: "dapp-1", profileId: "prof-A" }),
-				setVerificationHash,
-			},
-		})
-		const establishing = handleSessionEstablished(makeSession(), deps)
-		await vi.waitFor(() => expect(setVerificationHash).toHaveBeenCalledTimes(1))
-		gate.windowRemoved(41)
-		persisted()
-		expect(await establishing).toBe(false)
-		expect(terminate).toHaveBeenCalledWith("sess-1")
-		expect(navigate).not.toHaveBeenCalled()
-		expect(create).not.toHaveBeenCalled()
-		expect(pendingVerification.get("sess-1")?.cancelled).toBe(true)
-	})
-
-	test("the session ending during the navigation closes the adopted window and returns false", async () => {
-		const { deps, navigate, remove, gate, endSession } = standby()
-		let navigated!: () => void
-		navigate.mockReturnValueOnce(new Promise<void>((r) => (navigated = r)))
-		const establishing = handleSessionEstablished(makeSession(), deps)
-		await vi.waitFor(() => expect(navigate).toHaveBeenCalledTimes(1))
-		endSession()
-		navigated()
-		expect(await establishing).toBe(false)
-		expect(remove).toHaveBeenCalledWith(41)
-		expect(gate.windowsHeld(ORIGIN)).toBe(1)
-		gate.windowRemoved(41)
-		expect(gate.windowsHeld(ORIGIN)).toBe(0)
 	})
 
 	test("a cancelled marker terminates, and establishment keeps it for a retry", async () => {
 		const pendingVerification = new Map([["sess-1", marker("prof-A", { cancelled: true })]])
-		const { deps, terminate, stamp, create, navigate } = makeDeps({ pendingVerification })
+		const { deps, terminate, stamp, create } = makeDeps({ pendingVerification })
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
 		expect(terminate).toHaveBeenCalledTimes(2)
 		expect(stamp).not.toHaveBeenCalled()
 		expect(create).not.toHaveBeenCalled()
-		expect(navigate).not.toHaveBeenCalled()
 		expect(pendingVerification.get("sess-1")?.cancelled).toBe(true)
 	})
 })
 
 describe("handleSessionEstablished — the check on every connection", () => {
-	/** A remembered row, with or without a stored `trustedVerification: true`. */
-	const remembered = (trustedVerification: boolean) => ({
-		tryGetDappSessionByOriginAndChain: vi.fn().mockResolvedValue({ id: "dapp-1", profileId: "prof-A", trustedVerification }),
+	/** A remembered row an earlier connection reached, or one none did (no `verificationHash`), with
+	 *  or without a stored `trustedVerification: true`. */
+	const remembered = (trustedVerification: boolean, reached = true) => ({
+		tryGetDappSessionByOriginAndChain: vi.fn().mockResolvedValue({
+			id: "dapp-1",
+			profileId: "prof-A",
+			trustedVerification,
+			...(reached ? { verificationHash: "a".repeat(64) } : {}),
+		}),
 		setVerificationHash: vi.fn().mockResolvedValue(undefined),
 	})
 
@@ -633,6 +544,7 @@ describe("handleSessionEstablished — the check on every connection", () => {
 		["a new connection", () => makeDeps({ pendingVerification: new Map([["sess-1", marker()]]) }), "false"],
 		["a reconnect", () => makeDeps({ dappSessionService: remembered(false) }), "true"],
 		["a reconnect whose row stores trustedVerification: true", () => makeDeps({ dappSessionService: remembered(true) }), "true"],
+		["a reconnect to a row no connection reached", () => makeDeps({ dappSessionService: remembered(false, false) }), "false"],
 	])("%s shows the check", async (_, made, isReconnect) => {
 		const { deps, create, terminate } = made()
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(true)
@@ -652,10 +564,10 @@ describe("chainInfoToChainId", () => {
 		{ name: "the local network as the SDK sends it", chainInfo: { chainId: field(0n), version: field(0n) }, expected: 0 },
 		{
 			name: "testnet as the SDK sends it",
-			chainInfo: { chainId: field(11155111n), version: field(3409706519n) },
-			expected: 3415328944,
+			chainInfo: { chainId: field(11155111n), version: field(679261766n) },
+			expected: 685146337,
 		},
-		{ name: "short hex strings", chainInfo: { chainId: "0xaa36a7", version: "0xcb3bfe17" }, expected: 3415328944 },
+		{ name: "short hex strings", chainInfo: { chainId: "0xaa36a7", version: "0x287cb646" }, expected: 685146337 },
 		{ name: "the high bit", chainInfo: { chainId: field(1n), version: field(2n ** 31n) }, expected: 2147483649 },
 		{ name: "chainId at the u32 bound", chainInfo: { chainId: field(U32_MAX), version: field(1n) }, expected: 4294967294 },
 		{ name: "version at the u32 bound", chainInfo: { chainId: field(1n), version: field(U32_MAX) }, expected: 4294967294 },

@@ -1,4 +1,5 @@
 import puppeteer, { type Browser } from "puppeteer"
+import NodeWebSocket from "ws"
 import type { SessionCapabilities } from "./webdriver-classic"
 
 export interface BiDiAttachment {
@@ -112,7 +113,13 @@ function openShimmedTransport(
 	deliver: (message: string) => string[],
 ): Promise<ShimTransport> {
 	return new Promise((resolve, reject) => {
-		const ws = new WebSocket(capabilities.webSocketUrl)
+		// The client and options of Puppeteer's own BiDi transport. Node's built-in WebSocket has lost this
+		// connection on a CI runner with no close frame from either end while Firefox stayed up.
+		const ws = new NodeWebSocket(capabilities.webSocketUrl, {
+			perMessageDeflate: false,
+			allowSynchronousEvents: false,
+			maxPayload: 256 * 1024 * 1024,
+		})
 		const transport: ShimTransport = {
 			send(message: string) {
 				const { id, method } = JSON.parse(message) as { id: number; method: string }
@@ -127,7 +134,7 @@ function openShimmedTransport(
 			},
 			close: () => ws.close(),
 		}
-		ws.onmessage = (event: MessageEvent) => {
+		ws.onmessage = (event) => {
 			for (const message of deliver(String(event.data))) transport.onmessage?.(message)
 		}
 		ws.onclose = () => transport.onclose?.()

@@ -24,8 +24,8 @@ import { chainInfoToChainId } from "./session-established"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
 
-/** A connect window, with the profile it opened under, or the network-unavailable notice, open for
- *  one `(origin, chainId)` pair. */
+/** A connect attempt, with the profile its window opened under, from that window until its Allow is
+ *  written or refused; or the network-unavailable notice. One per `(origin, chainId)` pair. */
 export type PendingWindow = { kind: "connect"; profileId: string; settled: Promise<void> } | { kind: "notice"; settled: Promise<void> }
 
 export function dedupeKeyOf(origin: string, chainId: string): string {
@@ -37,8 +37,8 @@ export function isOriginKey(key: string, origin: string): boolean {
 	return key.startsWith(`${origin}|`)
 }
 
-/** A row of `profileId` found while its connect window for the pair is open is the one that window
- *  is writing, not a remembered app. */
+/** A row of `profileId` found while a connect attempt for the pair is pending is the one that
+ *  attempt is writing, not a remembered app. */
 function isRowInFlight(pendingWindow: PendingWindow | undefined, profileId: string): boolean {
 	return pendingWindow?.kind === "connect" && pendingWindow.profileId === profileId
 }
@@ -56,8 +56,6 @@ export type DiscoveryDeps = {
 	resetRun: ResetRunGate
 	admission: VerifyAdmissionGate
 	dedupeWaiters: Map<string, number>
-	handedOver: Map<string, { tabId: number; windowId: number }>
-	closeWindow: (windowId: number) => void
 	switchEpoch: ProfileSwitchEpoch
 	logger: ILogger
 }
@@ -365,8 +363,7 @@ function checkDiscoveryPopupCaps(discovery: PendingDiscovery, deps: DiscoveryDep
 /** New dApp → show discovery popup (Allow/Deny), then persist + approve. The
  *  dedupe registration, the durable writes and the `finally` release are one
  *  unit: no await separates registering the popup promise from creating it.
- *  An Allow hands its connect window over to show the emoji check: this function
- *  closes it on every exit until a verify-window reservation takes it. */
+ *  An Allow closes the connect window, so what follows it answers only the app. */
 async function runDiscoveryPopup(
 	discovery: PendingDiscovery,
 	chainId: string,
@@ -381,7 +378,6 @@ async function runDiscoveryPopup(
 	// discoveries can await it.
 	const { promise: popupPromise, resolve: resolvePopup } = deferred()
 	pendingDiscoveryPromises.set(dedupeKey, { kind: "connect", profileId, settled: popupPromise })
-	let waitingWindow: number | undefined
 
 	try {
 		const result = await deps.dappInteractionService.discover(params, discovery.requestId)
@@ -389,10 +385,6 @@ async function runDiscoveryPopup(
 			handler.rejectDiscovery(discovery.requestId)
 			logger.log("wallet-sdk", LogLevel.Info, `Discovery denied: request ${describeExternalId(discovery.requestId)}`)
 			return
-		}
-		waitingWindow = result.windowId
-		if (waitingWindow !== undefined) {
-			deps.handedOver.set(discovery.requestId, { tabId: discovery.tabId, windowId: waitingWindow })
 		}
 
 		// The user may have taken longer than the dApp's 60s window to
@@ -405,18 +397,8 @@ async function runDiscoveryPopup(
 		// that is still queued for its slot.
 		const admitted = await admitVerifyWindow(discovery, deps)
 		if (rejectIfNotAdmitted(discovery, deps, admitted)) return
-		if (waitingWindow !== undefined) {
-			// A window closed while its Allow was queued fails the attach: its removal was buffered.
-			if (!admitted.attach(waitingWindow, result.expiredUrl)) {
-				rejectThrottled(discovery, deps, "its connect window closed while waiting for a verify-window slot")
-				return
-			}
-			waitingWindow = undefined
-		}
 		await persistAndApprove(discovery, chainId, params, profileId, admitted, deps)
 	} finally {
-		deps.handedOver.delete(discovery.requestId)
-		if (waitingWindow !== undefined) deps.closeWindow(waitingWindow)
 		resolvePopup()
 		pendingDiscoveryPromises.delete(dedupeKey)
 	}
@@ -501,11 +483,11 @@ async function persistAndApprove(
 	const deleteSession = (id: string) => dappSessionService.deleteDappSession(id)
 	let approved = false
 	try {
-		// The connect window opened on a served chain, and its network can be removed while it is up:
+		// The connect window opened on a served chain, whose network can be removed before the write:
 		// a row written then could only serve refusals. Removal after the write is the 4901 case.
 		// Read before the profile check, which must stay the last await ahead of the write.
 		if (!(await deps.networkService.servesLiveChain(profileId, Number(chainId)))) {
-			rejectThrottled(discovery, deps, "its chain lost its network while the connect window was open")
+			rejectThrottled(discovery, deps, "its chain lost its network before the connection was saved")
 			return
 		}
 		// The Allow was given under `profileId`. A switch during the admission wait is refused here,

@@ -33,7 +33,9 @@ const { openToast } = useToast()
 const { requestConfirm } = useConfirm()
 
 /** Utils */
+import { managers } from "@/utils/core"
 import { copyWithToast } from "@/utils/clipboard"
+import { dashIfBlank, isBlank } from "@/utils/string"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 
 /** Store */
@@ -128,6 +130,7 @@ const scope = () => pinScopeOf(appStore.profile?.id, appStore.network?.chainId)
 // still counts toward the cap and is never pruned.
 const pins = usePinnedTokens({
 	tokenService,
+	preferences: managers.uiPreference,
 	getScope: scope,
 	knownContracts: async () => {
 		const s = scope()
@@ -150,12 +153,12 @@ const showHomeFull = async () => {
 	const still = scope()
 	if (unmounted || token.value !== subject || still?.profileId !== s.profileId || still.chainId !== s.chainId) return
 	if (popupStore.isOpened("confirm")) return
-	const symbolOf = new Map(tokens.map((t) => [t.contract.toLowerCase(), sanitizeWireString(t.symbol, 32)]))
+	const symbolOf = new Map(tokens.map((t) => [t.contract.toLowerCase(), dashIfBlank(sanitizeWireString(t.symbol, 32))]))
 	const pinned = [...pins.pinnedContracts.value].map((c) => symbolOf.get(c)).filter((x) => x !== undefined)
 	requestConfirm({
 		single: true,
 		title: "Home is full",
-		description: `Home shows up to 3 pinned tokens. Unpin one of these to pin ${sanitizeWireString(subject.symbol, 32)}: ${pinned.join(", ")}`,
+		description: `Home shows up to 3 pinned tokens. Unpin one of these to pin ${isBlank(subject.symbol) ? "this token" : sanitizeWireString(subject.symbol, 32)}: ${pinned.join(", ")}`,
 		confirm_text: "Got it",
 	})
 }
@@ -220,7 +223,7 @@ onBeforeUnmount(() => {
 	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper">
 		<div :class="$style.hero" data-testid="token-hero">
 			<SubPageHeader
-				:title="token?.symbol || ''"
+				:title="token ? dashIfBlank(token.symbol) : ''"
 				:backTo="'/popup/general'"
 				leadingIcon="holdings"
 			>

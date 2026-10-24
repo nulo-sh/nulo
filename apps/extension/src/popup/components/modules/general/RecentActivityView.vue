@@ -28,6 +28,7 @@ import { useJournalMirror } from "@/composables/useJournalMirror"
 import { usePrices } from "@/composables/usePrices"
 import { balanceFormatted } from "@/utils/amount.js"
 import { knownDecimals } from "@/utils/token-amount"
+import { dashIfBlank, isBlank } from "@/utils/string"
 import { stageSubtitle } from "@/utils/card-subtitle"
 import { activityRowRoute, journalRecordInScope, txOnToken } from "@/utils/activity-rows"
 import {
@@ -181,7 +182,7 @@ const executingProgressTitle = computed(() => {
 	if (!executingTask.value) return ""
 	if (isUiTransfer.value) {
 		const token = tokenById(executingTask.value.content.tokenId)
-		return token?.symbol || "Transfer"
+		return dashIfBlank(token?.symbol || "Transfer")
 	}
 	// Dapp path: title is the method name only — the dApp identity rides
 	// in the secondary-row chip (originLabel) so the title position stays
@@ -827,7 +828,7 @@ onBeforeUnmount(() => {
 		:data-active-account="appStore.account?.address"
 		:data-fee-quote="feeQuoteState"
 	>
-		<Flex align="end" justify="between">
+		<Flex align="end" justify="between" :class="$style.section_header">
 			<SectionLabel label="Recent activity" />
 			<RouterLink :to="historyRoute" :class="$style.archive_link" data-testid="activity-view-all">View history</RouterLink>
 		</Flex>
@@ -913,7 +914,7 @@ onBeforeUnmount(() => {
 
 		<div :class="$style.empty_state">
 			<span :class="$style.empty_headline">NOTHING HERE YET</span>
-			<span :class="$style.empty_sub">Send or receive {{ token.symbol }} to see activity here.</span>
+			<span :class="$style.empty_sub">Send or receive {{ isBlank(token.symbol) ? "this token" : token.symbol }} to see activity here.</span>
 		</div>
 	</Flex>
 	<SendReviewSheet
@@ -937,6 +938,13 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
+@media (width < 359px) {
+	.section_header {
+		flex-wrap: wrap;
+		gap: 4px 12px;
+	}
+}
+
 .archive_link {
 	composes: type--label-section from global;
 	user-select: none;

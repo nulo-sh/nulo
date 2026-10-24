@@ -4,7 +4,8 @@
  *  that fails once its record is written offers Details, which opens that record. */
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
-import { TRANSACTION_STORAGE_ROOT, type Tx, TxStatus } from "@/wallet/services/transaction/spec"
+import { type Tx, TxStatus } from "@/wallet/services/transaction/spec"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import {
 	type AztecTestConfig,
 	createSponsoredFeeOptions,
@@ -14,9 +15,11 @@ import {
 	spendPublicAuthwit,
 	waitForTxMined,
 } from "../fixtures/aztec"
+import { TEST_PASSWORD } from "../fixtures/constants"
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
 import {
 	captureBalanceBaseline,
+	clearGetStarted,
 	enterSendForm,
 	fillSendForm,
 	importToken,
@@ -220,13 +223,12 @@ async function placementsAtRestAndScrolled(page: Page, testid: string): Promise<
 type DrainCtx = ExtensionContext & { playgroundPage: Page; accountAddress: string }
 
 const DRAINED = 10n * 10n ** 18n
-/** Two of the worker's once-a-minute finality reads, each a single attempt that can fail, and margin. */
+/** Two finality reads at the production minute, each a single attempt that can fail, and margin, so
+ *  the bound holds on a build without the e2e clocks. */
 const FINAL_READ_MS = 180_000
 
-async function storedValue<T>(page: Page, key: string): Promise<T | undefined> {
-	const raw = await page.evaluate(async (k: string) => (await chrome.storage.local.get(k))[k], key)
-	if (raw === undefined) return undefined
-	return (typeof raw === "string" ? JSON.parse(raw) : raw) as T
+async function storedTx(page: Page, hash: string): Promise<Tx | undefined> {
+	return (await readSealedRows<Tx>(page, "txs")).find((tx) => tx.naturalId === hash)?.row
 }
 
 async function waitFor(what: string, done: () => Promise<boolean>, timeoutMs = 120_000): Promise<void> {
@@ -236,11 +238,12 @@ async function waitFor(what: string, done: () => Promise<boolean>, timeoutMs = 1
 /** The wallet acted on the public receipt `txHash`: its record exists and no balance refresh it
  *  asked for is still owed. */
 async function receiptSettled(page: Page, txHash: string): Promise<boolean> {
-	return page.evaluate(async (hash: string) => {
-		const keys = Object.keys(await chrome.storage.local.get(null))
-		const recorded = keys.some((k) => k.startsWith("nulo:core:incoming-transfers@pub:") && k.includes(hash))
-		return recorded && !keys.some((k) => k.startsWith("nulo:core:incoming-balance-outbox@"))
-	}, txHash)
+	const records = await readSealedRows<{ kind?: string; txHash?: string }>(page, "incomingTransfers")
+	const recorded = records.some(({ row }) => row.kind === "public-event" && row.txHash === txHash)
+	const owed = await page.evaluate(async () =>
+		Object.keys(await chrome.storage.local.get(null)).some((k) => k.startsWith("nulo:core:incoming-balance-outbox@")),
+	)
+	return recorded && !owed
 }
 
 /** Waits, without asking for a refresh, for the balance row's next write to carry `expectedRaw`, then
@@ -277,7 +280,7 @@ async function grantSpender(ctx: DrainCtx, page: Page, spender: string, nonce: b
 	const grantHash = String(granted.resultJson).replace(/^"(.*)"$/, "$1")
 	await waitForTxMined(config, grantHash)
 	await waitFor("the wallet never saw its grant mined", async () => {
-		const tx = await storedValue<Tx>(page, `${TRANSACTION_STORAGE_ROOT}@${grantHash}`)
+		const tx = await storedTx(page, grantHash)
 		return tx !== undefined && tx.status !== TxStatus.Pending
 	})
 	return grantHash
@@ -286,15 +289,7 @@ async function grantSpender(ctx: DrainCtx, page: Page, spender: string, nonce: b
 type TxNode = Awaited<ReturnType<typeof createTestWallet>>["node"]
 
 async function accountTxRows(page: Page, account: string): Promise<Tx[]> {
-	const raws = await page.evaluate(async (root: string) => {
-		const all = await chrome.storage.local.get(null)
-		return Object.entries(all)
-			.filter(([k]) => k.startsWith(`${root}@`))
-			.map(([, v]) => v)
-	}, TRANSACTION_STORAGE_ROOT)
-	return raws
-		.map((v) => (typeof v === "string" ? JSON.parse(v) : v) as Tx)
-		.filter((tx) => tx.account?.toLowerCase() === account.toLowerCase())
+	return (await readSealedRows<Tx>(page, "txs")).map(({ row }) => row).filter((tx) => tx.account?.toLowerCase() === account.toLowerCase())
 }
 
 /** The account's rows, which must be exactly the grant: any other row could owe a write of its own. */
@@ -561,6 +556,11 @@ test.skipIf(!hasConfig)(
 		const ctx = dappConnectedExtensionWithTransactionCap
 		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
+		// Where Home rests, the Get started card would hold the awaiting row below the fold.
+		const setup = await openPopup(ctx)
+		await waitForHash(setup, "#/popup/general", 30_000)
+		await clearGetStarted(setup, TEST_PASSWORD)
+		await setup.close()
 		const page = await balanceDrainedBehindTheWallet(ctx, estimateOnSend)
 		await confirmDrainedSend(page)
 		await waitForHash(page, "#/popup/general", 10_000)

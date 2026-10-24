@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config"
+import { shardSequencer } from "./tests/e2e/shard-sequencer.ts"
 import { e2eIsolation, e2eRetry, networkRunner, noirAliases, srcDir } from "./vite.shared.ts"
 
 export default defineConfig({
@@ -17,6 +18,8 @@ export default defineConfig({
 		// an outside host.
 		include: ["tests/e2e/network/**/*.test.ts", "tests/e2e/egress-guard.test.ts"],
 		globalSetup: "./tests/e2e/global-setup.ts",
+		// `--shard=i/n` splits by each file's recorded time, not by vitest's path hash.
+		sequence: { sequencer: shardSequencer("network") },
 		// Per-worker: marks `.e2e-state/tests-started` so the boot-failure
 		// classifier never misclassifies a run that reached test execution as an
 		// infra-boot failure (exit 86).

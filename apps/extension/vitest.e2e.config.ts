@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config"
+import { shardSequencer } from "./tests/e2e/shard-sequencer.ts"
 import { e2eIsolation, e2eReporters, e2eRetry, srcDir } from "./vite.shared.ts"
 
 export default defineConfig({
@@ -12,6 +13,8 @@ export default defineConfig({
 		include: ["tests/e2e/*.test.ts"],
 		exclude: ["tests/e2e/network/**"],
 		globalSetup: "./tests/e2e/global-setup-smoke.ts",
+		// `--shard=i/n` splits by each file's recorded time, not by vitest's path hash.
+		sequence: { sequencer: shardSequencer("smoke") },
 		// Hosted GitHub Actions runners are consistently 3-5x slower than local
 		// for multi-step user flows (change-password, backup-export, etc.).
 		// 60s lets those breathe without masking real bugs (a deadlock will

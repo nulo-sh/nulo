@@ -1,11 +1,10 @@
 /**
  * Presto status → what a Nulo surface shows. Pure: the SDK status comes in,
  * a state plus copy comes out. The state names are the banner package's own
- * (`stateFromStatus`), so the `<presto-banner>` card and Nulo's status card
- * always agree on which situation the user is in. Titles are Presto's
- * canonical strings, extended with Nulo's numbered recovery steps, except
- * the pitch states (`idle`, `detecting`, `offline`), a remembered denial and
- * the settings page's compact `permission-blocked` title, which are Nulo's own.
+ * (`stateFromStatus`), so Nulo classifies a status exactly as Presto's own
+ * surfaces do. Titles are Presto's canonical strings, extended with Nulo's
+ * numbered recovery steps, except the pitch states (`idle`, `detecting`,
+ * `offline`), a remembered denial and `permission-blocked`, which are Nulo's own.
  */
 import { type BannerState, STRINGS, stateFromStatus } from "@alejoamiras/presto-banners"
 import type { PrestoStatus, SecureConnectionDiagnosis } from "@alejoamiras/presto-core"
@@ -36,9 +35,6 @@ export interface PrestoCopy {
 	steps?: string[]
 	retry?: "Retry" | "Re-test" | "Check for Presto" | "Check again"
 }
-
-/** The onboarding step has room for the full recovery copy; the settings page is compact. */
-export type PrestoSurface = "onboarding" | "settings"
 
 export function uiStateFromStatus(status: PrestoStatus): PrestoUiState {
 	const kind = stateFromStatus(status)
@@ -88,21 +84,10 @@ const SECURE_CONNECTION_COPY: Record<SecureConnectionDiagnosis, { detail: string
 	},
 }
 
-const PERMISSION_BLOCKED_COPY: Record<PrestoSurface, Omit<PrestoCopy, "tone" | "retry">> = {
-	onboarding: {
-		title: STRINGS["permission-blocked"].title,
-		detail: "Allow local network access for Nulo, then retry.",
-		steps: [
-			"Click the site-permissions icon at the left of the address bar.",
-			"Set Local network (Chrome 145+: Loopback network) to Allow.",
-			"Come back here and press Retry.",
-		],
-	},
-	settings: {
-		title: "Browser blocked local access",
-		detail: "Proofs run in your browser until it's allowed.",
-		steps: ["Open Nulo's site permissions from the address bar.", "Set Local network to Allow.", "Press Retry."],
-	},
+const PERMISSION_BLOCKED_COPY: Omit<PrestoCopy, "tone" | "retry"> = {
+	title: "Browser blocked local access",
+	detail: "Proofs run in your browser until it's allowed.",
+	steps: ["Open Nulo's site permissions from the address bar.", "Set Local network to Allow.", "Press Retry."],
 }
 
 type ProbeKind = "idle" | "detecting" | "offline"
@@ -150,23 +135,13 @@ const PROBE_COPY: Record<ProbeKind, PrestoCopy> = {
 	},
 }
 
-function connectedDetail(info: PrestoInfo, surface: PrestoSurface): string {
-	// The settings page lists the versions and the connection in its Details rows.
-	if (surface === "settings") return "Proving natively"
-	const parts = ["Proving natively"]
-	if (info.appVersion) parts.push(`Presto ${info.appVersion}`)
-	if (info.nativeAztecVersion) parts.push(`Aztec ${info.nativeAztecVersion}`)
-	if (info.protocol === "https") parts.push("encrypted")
-	return parts.join(" · ")
-}
-
 /**
  * Copy for a state. `last` is the SW's memory of the latest prove attempt:
  * a remembered denial overlays `available`, because health alone cannot see
  * that Presto's per-origin prompt was declined. The overlay says "declined
  * earlier" — it is history, not a statement about approval now.
  */
-export function copyFor(state: PrestoUiState, last?: LastProveOutcome | null, surface: PrestoSurface = "onboarding"): PrestoCopy {
+export function copyFor(state: PrestoUiState, last?: LastProveOutcome | null): PrestoCopy {
 	if (isPitchKind(state.kind)) return PROBE_COPY[state.kind]
 	switch (state.kind) {
 		case "available":
@@ -179,7 +154,8 @@ export function copyFor(state: PrestoUiState, last?: LastProveOutcome | null, su
 					retry: "Re-test",
 				}
 			}
-			return { tone: "go", title: STRINGS.available.title, detail: connectedDetail(state.info, surface), retry: "Re-test" }
+			// The versions and the connection belong in the Details rows.
+			return { tone: "go", title: STRINGS.available.title, detail: "Proving natively", retry: "Re-test" }
 		case "downloading":
 			return {
 				tone: "accent",
@@ -188,7 +164,7 @@ export function copyFor(state: PrestoUiState, last?: LastProveOutcome | null, su
 				retry: "Re-test",
 			}
 		case "permission-blocked":
-			return { tone: "warn", ...PERMISSION_BLOCKED_COPY[surface], retry: "Retry" }
+			return { tone: "warn", ...PERMISSION_BLOCKED_COPY, retry: "Retry" }
 		case "secure-connection-unavailable": {
 			const { detail, steps } = SECURE_CONNECTION_COPY[state.diagnosis ?? "presto-reachable"]
 			return { tone: "warn", title: STRINGS["secure-connection-unavailable"].title, detail, steps, retry: "Retry" }

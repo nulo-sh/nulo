@@ -7,9 +7,16 @@
 import { vSnackFooter } from "@/composables/snackInset"
 
 /** Utils */
+import { donePath } from "../steps"
 import { clearOnboardingTabTracking, OPEN_TOOLBAR_POPUP, type OpenToolbarPopupAnswer } from "@/wallet/utils/onboarding-tab"
 
+/** Stores */
+import { useAppStore } from "@/stores/app.store"
+
 const appStore = useAppStore()
+
+// Only a reload outside Import lands here with no path: the wallet's type says which.
+const path = computed(() => donePath(window.history.state) ?? (appStore.profile?.type === "password" ? "password" : "passkey"))
 
 // Detected on mount so the pin-tip only shows for users who actually need
 // it. chrome.action.getUserSettings exists from Chrome 91+; we fall back
@@ -62,17 +69,14 @@ async function openWallet() {
 
 <template>
 	<OnboardingPage align="center" :gap="40">
-		<StepIndicator :current="6" />
-		<Flex direction="column" align="center" gap="16" :class="$style.hero">
-			<BrutalistTitle main="You're" sub="In" align="center" />
-			<div :class="$style.hero_bar" />
+		<OnboardingStepHeader current="ready" :path="path" main="You're" sub="In" align="center" :class="$style.hero">
 			<Text variant="body" color="secondary" height="150" align="center" :class="$style.subhead">
 				Access the private coordination internet layer.
 			</Text>
 			<Text variant="body" color="secondary" height="150" align="center" :class="$style.tagline">
 				Private by default. Sovereign by design.
 			</Text>
-		</Flex>
+		</OnboardingStepHeader>
 
 		<Flex
 			v-if="!isPinned"
@@ -86,8 +90,7 @@ async function openWallet() {
 				<Text variant="label-section" color="secondary">Pro tip</Text>
 			</Flex>
 			<Text variant="body" color="secondary" height="150">
-				Click the puzzle icon in your browser's toolbar, then pin Nulo for
-				quick access. That's how you'll open the wallet from now on.
+				Click the puzzle icon in your browser's toolbar, then pin Nulo for quick access.
 			</Text>
 		</Flex>
 
@@ -105,17 +108,7 @@ async function openWallet() {
 
 <style module>
 .hero {
-	/* `padding-top: 48px` keeps the final celebration screen's roomier top
-	 * rhythm: the unified OnboardingPage margin-top is 24 px (down from done's
-	 * previous 48 px); compensating with 48 px of hero padding-top restores
-	 * the original 72 px top-of-shell distance. */
-	padding: 48px 0 24px;
-}
-
-.hero_bar {
-	width: 56px;
-	height: 2px;
-	background: var(--nulo-accent);
+	padding-bottom: 24px;
 }
 
 .subhead {

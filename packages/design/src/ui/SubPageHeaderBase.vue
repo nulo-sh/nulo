@@ -52,7 +52,7 @@ defineExpose({ focusTitle: () => titleEl.value?.focus() })
 		<Flex align="center" justify="center" gap="8" :class="$style.title_wrapper">
 			<slot name="title">
 				<Icon v-if="leadingIcon && title" :name="leadingIcon" :size="18" :color="leadingIconColor" />
-				<span v-if="title" ref="titleEl" tabindex="-1" :class="$style.title">{{ title }}</span>
+				<span v-if="title" ref="titleEl" tabindex="-1" :class="$style.title" data-testid="subpage-title">{{ title }}</span>
 			</slot>
 		</Flex>
 
@@ -131,5 +131,18 @@ defineExpose({ focusTitle: () => titleEl.value?.focus() })
 	gap: 4px;
 	min-width: 40px;
 	flex-shrink: 0;
+}
+
+/* Below the popup's width the sides tighten and a title wraps rather than being cut. */
+@media (width < 359px) {
+	.wrapper {
+		padding: 0 12px;
+	}
+
+	.title {
+		white-space: normal;
+		overflow-wrap: break-word;
+		text-align: center;
+	}
 }
 </style>

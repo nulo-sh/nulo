@@ -95,8 +95,7 @@ export default defineConfig({
 		parseLimitGuard(),
 		chunkCycleGuard(),
 		bbFetchCodeShim(),
-		// `<presto-banner>` is a custom element from @alejoamiras/presto-banners, not a Vue component.
-		vue({ template: { compilerOptions: { isCustomElement: (tag) => tag.startsWith("presto-") } } }),
+		vue(),
 
 		usePages(PAGES_OPTIONS),
 

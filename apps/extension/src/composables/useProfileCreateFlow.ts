@@ -4,7 +4,7 @@ import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 import { useProfileNameDefault } from "@/composables/useProfileNameDefault"
 import { useProfileNameField } from "@/composables/useProfileNameField"
 import { managers } from "@/utils/core"
-import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { classifyPasskeyFailure, handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
 import { createPasskeyProfileWithRetry, type SavedPasskeyCredential } from "@/wallet/utils/create-passkey-profile"
 import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
@@ -46,7 +46,7 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 
 	const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onReject: onCeremonyReject } = usePasskeyCeremony()
 
-	const authMethod = ref<"password" | "passkey">("password")
+	const authMethod = ref<"password" | "passkey">("passkey")
 	const password = ref("")
 	const repeatedPassword = ref("")
 	const isCreating = ref(false)
@@ -69,7 +69,7 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 	// SW. Retries ONCE on ProfileIdConflictError via the shared helper. In Firefox's
 	// toolbar panel the background picks the id and runs the ceremony in its own window.
 	function createPasskeyProfile(name: string) {
-		if (passkeyNeedsOwnWindow()) return managers.profile.createPasskeyProfile(name)
+		if (closesOnFocusLoss()) return managers.profile.createPasskeyProfile(name)
 		return createPasskeyProfileWithRetry(
 			name,
 			{

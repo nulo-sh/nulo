@@ -18,11 +18,13 @@ import {
 	setDeveloperMode,
 	setTheme,
 	unlockAfterBackgroundDeath,
+	waitForHomeReminders,
 } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
 import { shotSend } from "./fixtures/send-page"
 import { waitForPopup } from "./fixtures/popups"
 import { e2eSigner, serveTokenList, signTestList, skipUnlessListPrices } from "./fixtures/token-list"
+import { expectFitsNarrow } from "./fixtures/type-roles"
 import { readActivityScope, seedJournalRecord, seedReceipt, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
 import { createProfileAcceptingTerms, pointerClick } from "./helpers/legal-drivers"
 import { coveredAt, pressEscape, SPACE, tabAround, waitForFocus } from "./helpers/pointer-probes"
@@ -92,6 +94,7 @@ async function openHomeWithRow(ctx: ExtensionContext, { priced = true } = {}): P
 	await seedUsdQuoteAndReload(page, scope.token.priceId)
 	await page.waitForSelector(sel("tx-card"), { visible: true, timeout: 15_000 })
 	await waitForSettledTokens(page, TOKENS_LAND_MS)
+	await waitForHomeReminders(page)
 	await page.bringToFront()
 	return page
 }
@@ -116,6 +119,9 @@ async function shiftTab(page: Page): Promise<void> {
  *  the next Space keydown was handled — a handled keydown has no default action, so no page scroll.
  *  All on the page, armed before the key or click that is measured. */
 async function armNavigationProbe(page: Page): Promise<void> {
+	// Tab scrolls a row below the fold into view, and that scroll's event is dispatched on the next
+	// frame: let it pass, so the probe counts only scrolls the pressed key causes.
+	await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
 	await page.evaluate(() => {
 		const w = window as unknown as Probe
 		w.__pushes = 0
@@ -183,6 +189,7 @@ async function backToHome(page: Page): Promise<void> {
 	await waitForHash(page, "#/popup/general", 10_000)
 	await page.waitForSelector(sel("tx-card"), { visible: true, timeout: 15_000 })
 	await waitForSettledTokens(page)
+	await waitForHomeReminders(page)
 }
 
 /** Records the named control each click lands in, at `window` capture, and how many clicks bubble up
@@ -852,6 +859,9 @@ const LONG_METHOD = "swap_exact_tokens_for_tokens_supporting_fee_on_transfer_tok
 const UNBREAKABLE_METHOD = "swapexacttokensfortokenssupportingfeeontransfertokens"
 const NAMED_RECORD = "d1".repeat(8)
 const NAMELESS_RECORD = "d2".repeat(8)
+/** A name one line holds beside its app chip at the popup's width, and a 240 px row does not. */
+const MEDIUM_RECORD = "d3".repeat(8)
+const MEDIUM_METHOD = "transfer_in_private_now"
 const LONG_HOST = "staging-nemi-interface.nemi-e65.workers.dev"
 /** A dApp's name with no break opportunity anywhere, 42 characters. */
 const JOURNAL_HOST = "verylongsubdomainwithoutbreaks.example.com"
@@ -886,6 +896,7 @@ async function readDappRows(page: Page): Promise<NamedRows> {
 	const rows = {
 		terminal: journalRow(NAMED_RECORD),
 		nameless: journalRow(NAMELESS_RECORD),
+		medium: journalRow(MEDIUM_RECORD),
 		call: `${sel("tx-card")}[data-tx-hash="${DAPP_CALL_HASH}"]`,
 		transfer: `${sel("tx-card")}[data-tx-hash="${DAPP_TRANSFER_HASH}"]`,
 	}
@@ -1023,7 +1034,7 @@ async function readMethodRow(page: Page, shot: string, text: string): Promise<Me
 	return row
 }
 
-test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol and direction whole with its app chip cut beside them; the App value of the transaction and journal pages breaks anywhere against the box's right edge; the journal page's Method value wraps 16px clear of its label", async ({
+test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol and direction whole with its app chip cut beside them, and at 240px no row's text is hidden or newly cut; the App value of the transaction and journal pages breaks anywhere against the box's right edge; the journal page's Method value wraps 16px clear of its label", async ({
 	listedExtensionPerTest,
 }) => {
 	const page = await openPopup(listedExtensionPerTest)
@@ -1046,6 +1057,14 @@ test("a dApp's long function name and host never widen Home or History, named or
 		progress: { stage: "cancelled" },
 		at: now - 500,
 	})
+	await seedJournalRecord(page, scope, {
+		id: MEDIUM_RECORD,
+		kind: "dapp_execute",
+		title: MEDIUM_METHOD,
+		subtitle: "a.io",
+		progress: { stage: "cancelled" },
+		at: now - 750,
+	})
 	await seedTransaction(page, scope, { hash: DAPP_CALL_HASH, amount: "0", method: LONG_METHOD, dapp: SHORT_APP, at: now - 1_000 })
 	await seedTransaction(page, scope, { hash: DAPP_TRANSFER_HASH, amount: "2500000", transferType: 2, dapp: LONG_HOST, at: now - 2_000 })
 	await seedUsdQuoteAndReload(page)
@@ -1061,6 +1080,7 @@ test("a dApp's long function name and host never widen Home or History, named or
 		expect(overflowing, surface.name).toEqual([])
 		for (const key of ["terminal", "nameless", "call"])
 			expect(rows[key], `${surface.name}, ${key}`).toMatchObject({ lines: 1, cut: true, ellipsis: true })
+		expect(rows.medium, `${surface.name}, medium`).toMatchObject({ lines: 1, cut: false })
 		expect(rows.nameless.chip).toMatchObject({ text: "dApp", cut: false, below: false })
 		expect(rows.terminal.chip).toMatchObject({ cut: true, width: expect.closeTo(APP_CHIP_CAP, 0) })
 		expect(rows.call.chip).toMatchObject({ cut: false, below: false })
@@ -1073,6 +1093,8 @@ test("a dApp's long function name and host never widen Home or History, named or
 		expect(rows.transfer.type).toEqual({ direction: "10px 600 0.8px", chip: "10px 600 0.8px" })
 		expect(rows.call.type).toEqual({ direction: null, chip: "11px 700 1.1px" })
 		expect(rows.nameless.type).toEqual(rows.call.type)
+		// Below the popup's width a function's name takes a second line, so one whole here stays whole.
+		await expectFitsNarrow(page, `${surface.name}, dApp rows`)
 	}
 
 	await navigateByHash(page, `#/popup/tx/${DAPP_TRANSFER_HASH}`)
@@ -1237,6 +1259,7 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 	await seedTokenRow(page, scope, TOKEN_PAGE_ID)
 	await seedUsdQuoteAndReload(page, scope.token.priceId)
 	await page.bringToFront()
+	await waitForHomeReminders(page)
 	await settledRows(page, HOME_ROWS.length)
 
 	const rest = await scrollPinned(page, "home", 0, "0")

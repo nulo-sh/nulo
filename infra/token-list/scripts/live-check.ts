@@ -179,13 +179,16 @@ export async function liveCheck(
 }
 
 if (import.meta.main) {
-	const urls = process.argv.slice(2)
+	const SOURCE_FLAG = "--source="
+	const args = process.argv.slice(2)
+	const urls = args.filter((arg) => !arg.startsWith(SOURCE_FLAG))
+	const source = args.find((arg) => arg.startsWith(SOURCE_FLAG))?.slice(SOURCE_FLAG.length) ?? join(HOST_ROOT, SOURCE)
 	if (urls.length === 0) {
-		console.error("usage: bun infra/token-list/scripts/live-check.ts <nodeUrl>...")
+		console.error("usage: bun infra/token-list/scripts/live-check.ts [--source=<list.source.json>] <nodeUrl>...")
 		process.exit(1)
 	}
 	try {
-		const { tokens } = checkSource(JSON.parse(readFileSync(join(HOST_ROOT, SOURCE), "utf8")))
+		const { tokens } = checkSource(JSON.parse(readFileSync(source, "utf8")))
 		const { text, ok } = await liveCheck(tokens, urls, { fetch, deadline: AbortSignal.timeout(BUDGET_MS) })
 		process.stdout.write(text)
 		process.exitCode = ok ? 0 : 1

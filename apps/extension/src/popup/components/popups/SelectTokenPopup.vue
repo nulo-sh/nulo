@@ -15,7 +15,9 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 
 /** Utils */
+import { managers } from "@/utils/core"
 import { HOME_TOKEN_ROWS, orderTokenRows } from "@/utils/token-order"
+import { dashIfBlank } from "@/utils/string"
 import { matchesQuery } from "@/utils/token-search"
 
 /** Composables */
@@ -50,6 +52,7 @@ const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const fiatOf = prices.fiatOfRow
 const pins = usePinnedTokens({
+	preferences: managers.uiPreference,
 	getScope: () => pinScopeOf(appStore.profile?.id, appStore.network?.chainId),
 	knownContracts: () => new Set(rows.value.map((tb) => tb.token.contract)),
 })
@@ -152,7 +155,7 @@ onBeforeUnmount(() => {
 						v-for="tb in listed"
 						:key="tb.id"
 						@click="handleSelectToken(tb.token.id)"
-						:title="tb.token.symbol"
+						:title="dashIfBlank(tb.token.symbol)"
 						:icon="tb.token.id === cacheStore.activeTokenIdx ? 'square-check' : 'square'"
 						:iconFillColor="tb.token.id === cacheStore.activeTokenIdx ? 'primary' : 'tertiary'"
 						iconBgColor="transparent"

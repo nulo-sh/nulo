@@ -5,6 +5,7 @@
 import type { Page } from "puppeteer"
 import { withTimeoutMessage } from "./dom"
 import { navigateByHash } from "./helpers"
+import { readSealedRows } from "./sealed-rows"
 import { shotSend } from "./send-page"
 
 const DETAIL_FIELDS = [
@@ -34,11 +35,8 @@ export async function readJournalDetail(page: Page, id: string, shot?: string): 
 
 /** The stored error kind of journal record `id`: the send-record view carries none. */
 export async function readErrorKind(page: Page, id: string): Promise<string | undefined> {
-	return page.evaluate(async (key: string) => {
-		const raw = (await chrome.storage.local.get(key))[key]
-		const record = (typeof raw === "string" ? JSON.parse(raw) : raw) as { error?: { kind?: string } | null } | undefined
-		return record?.error?.kind
-	}, `nulo:journal@${id}`)
+	const records = await readSealedRows<{ error?: { kind?: string } | null }>(page, "journal")
+	return records.find((record) => record.naturalId === id)?.row.error?.kind ?? undefined
 }
 
 const CARD = '[data-testid="tx-terminal-card"]'

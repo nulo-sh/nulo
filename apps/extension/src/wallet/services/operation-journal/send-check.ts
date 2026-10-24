@@ -12,6 +12,7 @@ import { FINALITY_READ_INTERVAL_MS, proveExpired, proveFinal } from "@/wallet/se
 import { MINED_STATUSES, executionResultFromReceipt, txStatusFromReceipt } from "@/wallet/services/transaction/receipt-status"
 import { DROPPED_RECHECK_INTERVAL_MS, DROPPED_RESURRECTION_WINDOW_MS } from "@/wallet/services/transaction/service"
 import { TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
+import { isFinalRefusal } from "./final-refusal"
 import { isSendCheckable, type OperationJournalService, type OperationRecord, type SendCheckState } from "./service"
 import { OPERATION_JOURNAL_SERVICE_NAME } from "./spec"
 
@@ -24,7 +25,7 @@ const LOG_SOURCE = OPERATION_JOURNAL_SERVICE_NAME
 export type SendCheckDeps = {
 	journal: Pick<OperationJournalService, "getOperation" | "getOperations" | "setSendCheck" | "onOperationUpdated" | "onOperationDeleted">
 	network: Pick<NetworkService, "getSingleAttemptNodeForUrl">
-	profile: Pick<ProfileService, "captureExecutionFence" | "isFenceLive">
+	profile: Pick<ProfileService, "captureExecutionFence" | "isFenceLive" | "onRowKeysReady">
 	balances: Pick<TokenBalanceService, "refreshAccountBalances">
 	logger: ILogger
 	clock: ClockPort
@@ -38,10 +39,13 @@ type Watch = {
 }
 
 /** A row whose answer can still change: one with none yet, read against the window that starts at
- *  `since`; an `unconfirmed` one whose expiry can still prove it went through or never will; or a
- *  mined one whose block is not yet final. */
+ *  `since` (`refusal`: the node refused it for a reason a later block rarely lifts); a `refused`
+ *  one, read in that window for a send that landed after all, then at its expiry; an
+ *  `unconfirmed` one whose expiry can still prove it went through or never will; or a mined one
+ *  whose block is not yet final. */
 type OpenRow =
-	| { kind: "unanswered"; txHash: string; url: string | undefined; since: number }
+	| { kind: "unanswered"; txHash: string; url: string | undefined; since: number; refusal: boolean }
+	| { kind: "refused"; txHash: string; url: string; since: number; expiry: SendExpiry | undefined }
 	| { kind: "expiring"; txHash: string; url: string; expiry: SendExpiry }
 	| { kind: "including"; txHash: string; url: string; check: "sent" | "reverted"; inclusion: SendInclusion }
 
@@ -50,7 +54,7 @@ type Answer = { next: SendCheckState; refresh: boolean }
 
 /**
  * Records on a failed send's journal row what became of it: mined or not, then whether a mined
- * block became final or was pruned, and whether an unconfirmed send's expiry passed. A row is read
+ * block became final or was pruned, and whether an unconfirmed or refused send's expiry passed. A row is read
  * one read at a time, only on the endpoint it was sent through and only while its profile is
  * unlocked; only the answer is persisted, so a restart resumes every open row.
  */
@@ -70,8 +74,21 @@ export class SendCheck {
 		const generation = this.generation
 		journal.onOperationUpdated.add(this.onUpdated)
 		journal.onOperationDeleted.add(this.onDeleted)
+		this.deps.profile.onRowKeysReady.add(this.onRowKeysReady)
 		this.timer = clock.setInterval(() => void this.tick(), SEND_CHECK_TICK_MS)
-		const failed = await journal.getOperations({ stage: "failed" })
+		await this.watchFailed(generation)
+	}
+
+	/** A profile's sealed rows read only once its keys are in this worker, so its open rows are
+	 *  found then. */
+	private readonly onRowKeysReady = (profileId: string): void => {
+		void this.watchFailed(this.generation, profileId).catch(() => {
+			this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check scan failed", { stage: "scan-error" })
+		})
+	}
+
+	private async watchFailed(generation: number, profileId?: string): Promise<void> {
+		const failed = await this.deps.journal.getOperations({ stage: "failed", ...(profileId === undefined ? {} : { profileId }) })
 		if (generation !== this.generation) return
 		for (const op of failed) this.watch(op)
 	}
@@ -83,6 +100,7 @@ export class SendCheck {
 		this.timer = undefined
 		journal.onOperationUpdated.remove(this.onUpdated)
 		journal.onOperationDeleted.remove(this.onDeleted)
+		this.deps.profile.onRowKeysReady.remove(this.onRowKeysReady)
 		this.watches.clear()
 	}
 
@@ -156,6 +174,8 @@ export class SendCheck {
 		switch (row.kind) {
 			case "unanswered":
 				return this.firstAnswer(watch, row, live, now)
+			case "refused":
+				return this.refusedAnswer(watch, row, live, now)
 			case "expiring":
 				return this.expiryAnswer(watch, row, live, now)
 			default:
@@ -169,10 +189,39 @@ export class SendCheck {
 		live: () => boolean,
 		now: number,
 	): Promise<Answer | undefined> {
-		const verdict = row.url === undefined ? undefined : await this.minedVerdict(watch, row.txHash, row.url, live)
+		const receipt = row.url === undefined ? undefined : await this.receiptOf(watch, row.txHash, row.url, live)
+		const verdict = receipt === undefined ? undefined : verdictOf(receipt)
 		if (verdict !== undefined) return { next: verdict, refresh: true }
 		if (row.url === undefined || now - row.since >= DROPPED_RESURRECTION_WINDOW_MS)
 			return { next: { check: "unconfirmed" }, refresh: false }
+		// The clock is read again: a read that settles past the window's end refuses nothing.
+		if (
+			row.refusal &&
+			receipt !== undefined &&
+			isDropped(receipt) &&
+			this.deps.clock.now() - row.since < DROPPED_RESURRECTION_WINDOW_MS
+		)
+			return { next: { check: "refused" }, refresh: false }
+		watch.nextAt = nextReadAt(row.since, now)
+		return undefined
+	}
+
+	/** Read as an unanswered row is, so a send that landed after all is still found; past the window
+	 *  its expiry is read as an unconfirmed row's is, and with none recorded the watch ends unread. */
+	private async refusedAnswer(
+		watch: Watch,
+		row: Extract<OpenRow, { kind: "refused" }>,
+		live: () => boolean,
+		now: number,
+	): Promise<Answer | undefined> {
+		if (now - row.since >= DROPPED_RESURRECTION_WINDOW_MS) {
+			if (row.expiry !== undefined) return this.expiryAnswer(watch, { ...row, expiry: row.expiry }, live, now)
+			this.unwatch(watch)
+			return undefined
+		}
+		const receipt = await this.receiptOf(watch, row.txHash, row.url, live)
+		const verdict = receipt === undefined ? undefined : verdictOf(receipt)
+		if (verdict !== undefined) return { next: verdict, refresh: true }
 		watch.nextAt = nextReadAt(row.since, now)
 		return undefined
 	}
@@ -181,7 +230,7 @@ export class SendCheck {
 	 *  does. A nullifier that chain holds sends the read on to the row's own receipt. */
 	private async expiryAnswer(
 		watch: Watch,
-		row: Extract<OpenRow, { kind: "expiring" }>,
+		row: { txHash: string; url: string; expiry: SendExpiry },
 		live: () => boolean,
 		now: number,
 	): Promise<Answer | undefined> {
@@ -210,7 +259,7 @@ export class SendCheck {
 	/** A spent expiry nullifier proves only that some transaction spent it, a replacement included,
 	 *  so the row's own receipt decides: a mined success is `sent`. Any other receipt ends the watch
 	 *  for this run, unrecorded, so a restart asks once more; a read that fails keeps the slow
-	 *  watch, as a failed expiry read does. Read through `node` itself: `minedVerdict` folds a
+	 *  watch, as a failed expiry read does. Read through `node` itself: `receiptOf` folds a
 	 *  failed read into no answer. */
 	private async presentAnswer(watch: Watch, txHash: string, node: AztecNode, live: () => boolean): Promise<Answer | undefined> {
 		if (!live()) return undefined
@@ -251,11 +300,11 @@ export class SendCheck {
 		return moved === undefined ? undefined : { next: moved, refresh: true }
 	}
 
-	private async minedVerdict(watch: Watch, txHash: string, url: string, live: () => boolean): Promise<SendCheckState | undefined> {
+	private async receiptOf(watch: Watch, txHash: string, url: string, live: () => boolean): Promise<TxReceipt | undefined> {
 		const node = await this.nodeFor(url, live)
 		if (!node) return undefined
 		try {
-			return verdictOf(await node.getTxReceipt(TxHash.fromString(txHash)))
+			return await node.getTxReceipt(TxHash.fromString(txHash))
 		} catch {
 			this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check receipt failed", { journalId: watch.id, stage: "receipt-error" })
 			return undefined
@@ -273,9 +322,15 @@ export class SendCheck {
 function openRow(op: OperationRecord): OpenRow | undefined {
 	const { progress } = op
 	if (progress.stage !== "failed" || !progress.txHash || !isSendCheckable(op)) return undefined
-	const { txHash, submittedEndpointUrl: url, check, expiry, inclusion } = progress
-	if (check === undefined) return { kind: "unanswered", txHash, url, since: progress.checkSince ?? op.terminalAt ?? op.updatedAt }
+	const { txHash, submittedEndpointUrl: url, check, expiry, inclusion, checkSince } = progress
+	const since = checkSince ?? op.terminalAt ?? op.updatedAt
+	if (check === undefined) {
+		// Mirrors `isSendCheckMove`: a write it refuses would re-read the row every tick.
+		const refusal = checkSince === undefined && isFinalRefusal(op.error?.message)
+		return { kind: "unanswered", txHash, url, since, refusal }
+	}
 	if (url === undefined) return undefined
+	if (check === "refused") return { kind: "refused", txHash, url, since, expiry }
 	if (check === "unconfirmed" && expiry !== undefined) return { kind: "expiring", txHash, url, expiry }
 	if ((check === "sent" || check === "reverted") && inclusion !== undefined) return { kind: "including", txHash, url, check, inclusion }
 	return undefined
@@ -283,6 +338,7 @@ function openRow(op: OperationRecord): OpenRow | undefined {
 
 function expectedOf(row: OpenRow): SendCheckState {
 	if (row.kind === "unanswered") return {}
+	if (row.kind === "refused") return { check: "refused" }
 	if (row.kind === "expiring") return { check: "unconfirmed" }
 	return { check: row.check, inclusion: row.inclusion }
 }
@@ -302,6 +358,14 @@ function verdictOf(receipt: Pick<TxReceipt, "status" | "executionResult" | "bloc
 	const { blockNumber, blockHash } = receipt
 	if (blockNumber === undefined || blockHash === undefined) return undefined
 	return { check, inclusion: { block: blockNumber, hash: blockHash.toString() } }
+}
+
+function isDropped(receipt: Pick<TxReceipt, "status">): boolean {
+	try {
+		return txStatusFromReceipt(receipt.status) === TxStatus.Dropped
+	} catch {
+		return false
+	}
 }
 
 function nextReadAt(since: number, now: number): number {

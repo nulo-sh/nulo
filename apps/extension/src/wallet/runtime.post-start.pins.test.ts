@@ -56,7 +56,7 @@ import { armPostStartWork, type RuntimeState, stopRuntime } from "./runtime"
 const noopLogger = { log: () => {} } as never
 
 describe("runtime post-start seam", () => {
-	test("resume → reaper new/start → check new/start → gc new/start → probe, all before the caller's next microtask", async () => {
+	test("resume → reaper new/start + unlock reap → check new/start → row-key replay → gc new/start → probe, all before the caller's next microtask", async () => {
 		log.length = 0
 		const services = {
 			get: () => ({
@@ -64,6 +64,14 @@ describe("runtime post-start seam", () => {
 				resumeSeeding: () => {
 					log.push("seed:resume")
 					return Promise.resolve()
+				},
+				replayRowKeysReady: () => {
+					log.push("rowKeys:replay")
+				},
+				onRowKeysReady: {
+					add: () => {
+						log.push("rowKeys:reap")
+					},
 				},
 			}),
 		} as never
@@ -94,8 +102,10 @@ describe("runtime post-start seam", () => {
 			"resume:4242",
 			"reaper:new",
 			"reaper:start",
+			"rowKeys:reap",
 			"check:new",
 			"check:start",
+			"rowKeys:replay",
 			"gc:new",
 			"gc:start",
 			"probe:get",

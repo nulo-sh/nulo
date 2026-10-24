@@ -19,13 +19,14 @@ import { BACKUP_SCHEMA_VERSION_FIELD, COMPAT_EPOCH_FIELD, CURRENT_COMPAT_EPOCH }
 import { CURRENT_BACKUP_SCHEMA_VERSION } from "@/wallet/services/backup/backup-migrator"
 import { downloadFile, profileFileNameSegment } from "@/utils"
 import { MAX_BACKUP_FILE_BYTES, assembleFullBackup, passkeyBackupAuthenticator, sealFullBackupText } from "@/utils/full-backup-helpers"
+import { markGetStarted } from "@/utils/get-started"
 import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
 import { createRunFence, type RunFence } from "@/composables/runFence"
 import { useToast } from "@/composables/toast.js"
 import { useConfirm } from "@/composables/useConfirm"
 import { useAppStore } from "@/stores/app.store"
 
-type BackupStatus = "" | "progress" | "finished" | "encrypting" | "encrypted"
+type BackupStatus = "" | "progress" | "finished" | "encrypting" | "encrypted" | "downloaded"
 type BackupClient = { backup(): Promise<unknown>; disconnect(): void }
 type NamedClient = { name: string; client: BackupClient }
 type HeldSlices = Record<string, unknown>
@@ -77,6 +78,8 @@ interface ExportState {
 	/** The file's imported accounts with a key in it, on chains a restore does not re-create; a key
 	 *  that did not open counts too. None when a replaced DEK has its own warning. */
 	importsOnAddedNetworks: Ref<AddedNetworkImports>
+	/** The saved file is a passkey profile's plain file, which no password opens. */
+	savedPlain: Ref<boolean>
 }
 
 interface ExportCtx {
@@ -421,14 +424,24 @@ async function runDownload(ctx: ExportCtx, isEncrypted: boolean) {
 	if (!fileContent) return
 	state.isDownloading.value = true
 	const isCurrent = ctx.runs.snapshot()
+	// A profile switch discards the run, so the active profile is the one this file backs up.
+	const profileId = ctx.profile().id
 	let filename = `_${profileFileNameSegment(ctx.profile().name)}_${Math.floor(Date.now() / 1000)}`
 	filename = isEncrypted ? `NuloEncryptedBackup${filename}.txt` : `NuloBackup${filename}.json`
 
 	try {
-		// A file already requested still lands after a scrub; only its toast is fenced.
+		// A file already requested still lands after a scrub; its toast and Home's flag are fenced.
 		await downloadFile({ data: fileContent, filename, compressionFormat: "gzip" })
 		if (!isCurrent()) return
+		void markGetStarted(profileId, "backupSaved")
 		ctx.openToast({ kind: "success", label: "Backup downloaded successfully" })
+		// A saved file is the run's last step, so its plaintext and passwords go now. The latch clears
+		// first: the discard invalidates the fence the `finally` below checks.
+		state.backupStatus.value = "downloaded"
+		state.savedPlain.value = !isEncrypted
+		state.showRecommendation.value = false
+		state.isDownloading.value = false
+		discardRun(ctx)
 	} catch (err) {
 		if (!isCurrent()) return
 		console.error("Download failed:", { error: err })
@@ -488,6 +501,7 @@ function resetFlow(ctx: ExportCtx) {
 	state.unopenedImportedKeys.value = 0
 	state.importsOnAddedNetworks.value = noAddedNetworkImports()
 	state.chainStateOmitted.value = false
+	state.savedPlain.value = false
 }
 
 function createExportState(): ExportState {
@@ -505,6 +519,7 @@ function createExportState(): ExportState {
 		chainStateOmitted: ref(false),
 		unopenedImportedKeys: ref(0),
 		importsOnAddedNetworks: ref(noAddedNetworkImports()),
+		savedPlain: ref(false),
 	}
 }
 

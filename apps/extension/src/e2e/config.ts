@@ -26,6 +26,10 @@
  * `ProductionPxeFactory`'s `proverless` option and the injected `ProofGate`.
  */
 
+import type { DefaultSeed } from "@/wallet/services/network/seeds"
+import { E2E_EXTRA_SEED as EXTRA_SEED_VALUE } from "./extra-seed"
+import { E2E_WALLET_CLOCK_VALUES } from "./wallet-clocks"
+
 const PROVERLESS = (import.meta.env.VITE_NULO_E2E_PROVERLESS ?? "") === "1"
 const PROVERLESS_CONFIRM = (import.meta.env.VITE_NULO_E2E_PROVERLESS_CONFIRM ?? "") === "1"
 
@@ -106,4 +110,40 @@ export const E2E_TOKEN_LIST = E2E_TOKEN_SEEDS
 
 export const E2E_TOKEN_LIST_BUILD_STAMP: "NULO_E2E_TOKEN_LIST_BUILD_STAMP" | null = E2E_TOKEN_LIST
 	? "NULO_E2E_TOKEN_LIST_BUILD_STAMP"
+	: null
+
+/**
+ * E2E-only wallet clocks. A single flag, like the migration fixture: shipped values would cost node
+ * traffic, not funds, and the stamp below fails the release grep.
+ */
+const WALLET_CLOCKS = (import.meta.env.VITE_NULO_E2E_WALLET_CLOCKS ?? "") === "1"
+
+export const E2E_WALLET_CLOCKS: typeof E2E_WALLET_CLOCK_VALUES | null = WALLET_CLOCKS ? E2E_WALLET_CLOCK_VALUES : null
+
+/** Build-time marker, pinned as live data in `wallet/runtime.ts` beside the values it travels with. */
+export const E2E_WALLET_CLOCKS_BUILD_STAMP: "NULO_E2E_WALLET_CLOCKS_BUILD_STAMP" | null = WALLET_CLOCKS
+	? "NULO_E2E_WALLET_CLOCKS_BUILD_STAMP"
+	: null
+
+/**
+ * E2E-only extra default network, for the update candidate the in-place update scenarios run.
+ * Double opt-in, like the token-seed source: a seed is offered to every person who opens the
+ * wallet, so a stray single flag would not be inert, it would ship a network nobody runs.
+ */
+const EXTRA_SEED = (import.meta.env.VITE_NULO_E2E_EXTRA_SEED ?? "") === "1"
+const EXTRA_SEED_CONFIRM = (import.meta.env.VITE_NULO_E2E_EXTRA_SEED_CONFIRM ?? "") === "1"
+
+if (EXTRA_SEED !== EXTRA_SEED_CONFIRM) {
+	throw new Error(
+		"[e2e-extra-seed] exactly one of VITE_NULO_E2E_EXTRA_SEED / " +
+			"VITE_NULO_E2E_EXTRA_SEED_CONFIRM is set. Both are required to arm " +
+			"the extra default network (fail-closed double opt-in). Set both, or neither.",
+	)
+}
+
+export const E2E_EXTRA_SEED: DefaultSeed | null = EXTRA_SEED && EXTRA_SEED_CONFIRM ? EXTRA_SEED_VALUE : null
+
+/** Build-time marker, pinned as live data in `wallet/runtime.ts`. */
+export const E2E_EXTRA_SEED_BUILD_STAMP: "NULO_E2E_EXTRA_SEED_BUILD_STAMP" | null = E2E_EXTRA_SEED
+	? "NULO_E2E_EXTRA_SEED_BUILD_STAMP"
 	: null

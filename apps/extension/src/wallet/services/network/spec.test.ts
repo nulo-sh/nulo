@@ -66,7 +66,13 @@ describe("RpcUrlSchema", () => {
 	})
 
 	test("a hidden character inside the URL carries its own line, never the transport message", () => {
-		for (const url of ["https://rpc.example/p\u00A0q", "https://rpc .example/"]) {
+		for (const url of [
+			"https://rpc.example/p\u00A0q",
+			"https://rpc .example/",
+			"https://rpc.exa\tmple/",
+			"https://rpc.example/a\rb",
+			"https://rpc.example/a\nb",
+		]) {
 			const result = RpcUrlSchema.safeParse(url)
 			expect(result.success).toBe(false)
 			expect(result.error?.issues.map((i) => i.message)).toContain(ERR_RPC_URL_HIDDEN_CHARACTERS)

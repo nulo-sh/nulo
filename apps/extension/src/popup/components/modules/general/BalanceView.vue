@@ -49,6 +49,7 @@ const props = defineProps({
 		default: null,
 	},
 })
+const emit = defineEmits(["holdings"])
 
 const PRIVATE_BALANCE_LABEL = "Private balance: only you can see it"
 const PUBLIC_BALANCE_LABEL = "Public balance: anyone can see it"
@@ -185,6 +186,13 @@ const heroPending = computed(() => (isTotalUnsettled.value || awaitingQuotes.val
 /** After the cap one question decides the figure: did ANY snapshot succeed for this scope? A loaded
  *  empty list is a real $0.00; a list that never loaded is unknown. */
 const isTotalKnown = computed(() => balancesState.value === "loaded")
+/** Home's reminders: any positive row holds funds, priced or not; none is known only once the
+ *  total settles or the cap passes. The token page answers nothing. */
+const holdings = computed(() => {
+	if (tokenToDisplay.value) return undefined
+	if (tokenBalances.value.some((tb) => (parseRawBalance(tb) ?? 0n) > 0n)) return "some"
+	return isTotalUnsettled.value && !capElapsed.value ? "unknown" : "none"
+})
 
 const tokenBalanceService = new TokenBalanceServiceClient()
 const {
@@ -231,6 +239,7 @@ watch(
 		balanceCount.arrive(chipCalm.value)
 	},
 )
+watch(holdings, (value) => value && emit("holdings", value), { immediate: true })
 // After the render, so the ruler holds the new forms, and before the paint.
 watch([heroCandidates, () => tokenToDisplay.value?.symbol], fitHeroToLine, { flush: "post" })
 onMounted(async () => {

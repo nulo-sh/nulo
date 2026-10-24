@@ -6,7 +6,7 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { BUNDLED_TOKEN_CLASS_IDS } from "@nulo/token-list"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { nextTick, reactive } from "vue"
 
@@ -116,9 +116,13 @@ vi.mock("@/wallet/services/transaction/client", async (importOriginal) => ({
 		return { connect: vi.fn(), disconnect: vi.fn(), onTransactionAdded: new EventHandler(), onTransactionUpdated: new EventHandler() }
 	}),
 }))
+const { readFeePicks } = await vi.hoisted(() => import("../../../tests/helpers/ui-preference-fake"))
 vi.mock("@/utils/core", () => ({
 	managers: {
-		profile: { saveFeePick: vi.fn(async () => true) },
+		uiPreference: {
+			getFeePicks: (profileId: string) => readFeePicks(chrome.storage.local, profileId),
+			saveFeePick: vi.fn(async () => true),
+		},
 		legal: {
 			onAcceptanceChanged: new EventHandler(),
 			onConnected: new EventHandler(),
@@ -170,7 +174,17 @@ const STUBS = {
 	},
 	AmountCard: {
 		template: '<input data-testid="stub-amount" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
-		props: ["modelValue", "fiatMode", "fiatGuard", "token", "tokenBalanceByType", "balanceRawByType", "liveQuote", "proxyTicker"],
+		props: [
+			"modelValue",
+			"fiatMode",
+			"fiatGuard",
+			"token",
+			"tokenBalanceByType",
+			"balanceRawByType",
+			"liveQuote",
+			"proxyTicker",
+			"exceedsBalance",
+		],
 		emits: ["update:modelValue", "update:fiatMode", "update:fiatGuard"],
 		methods: { refreezeQuote() {} },
 	},
@@ -222,15 +236,6 @@ const FUNDING = {
 	},
 } satisfies Record<string, Funding>
 
-type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void }
-function deferred<T>(): Deferred<T> {
-	let resolve!: (v: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
-}
-
 /** What a landed estimate answers when a test names none. */
 const LANDED = { maxFee: "1000", gasDetails: {} }
 
@@ -240,7 +245,10 @@ async function estimateLands() {
 	await flushPromises()
 }
 
-async function mountSend(funding: Funding, opts: { storage?: Record<string, unknown>; holdGas?: boolean; realTokenCard?: boolean } = {}) {
+async function mountSend(
+	funding: Funding,
+	opts: { storage?: Record<string, unknown>; holdGas?: boolean; realTokenCard?: boolean; realFeeRow?: boolean } = {},
+) {
 	vi.useFakeTimers()
 	installChromeStorage(opts.storage ?? funding.storage ?? {})
 	mocks.getFpcs.mockResolvedValue(funding.fpcs)
@@ -259,7 +267,7 @@ async function mountSend(funding: Funding, opts: { storage?: Record<string, unkn
 		attachTo: document.body,
 		global: {
 			plugins: [pinia],
-			stubs: opts.realTokenCard ? { ...STUBS, SelectTokenCard: false } : STUBS,
+			stubs: { ...STUBS, ...(opts.realTokenCard && { SelectTokenCard: false }), ...(opts.realFeeRow && { FeeCostReadout: false }) },
 		},
 	})
 	await flushPromises()
@@ -293,7 +301,16 @@ function settled(w: W) {
 	return { action, you, to: strip(w).attributes("data-to"), amount: strip(w).attributes("data-amount") }
 }
 
+function balanceUpdated() {
+	const client = vi.mocked(TokenBalanceServiceClient).mock.results.at(-1)?.value as unknown as {
+		onTokenBalanceUpdated: EventHandler<unknown>
+	}
+	return client.onTokenBalanceUpdated
+}
+
 const submittedFee = () => (mocks.executeTransfer.mock.calls[0]?.[7] as { paymentMethod: unknown } | undefined)?.paymentMethod
+/** The submitted estimate id, queued cap and shown fee, in their positions. */
+const submittedFigures = () => mocks.executeTransfer.mock.calls[0]?.slice(8)
 
 beforeEach(() => {
 	document.body.innerHTML = '<div id="popup"></div>'
@@ -360,6 +377,9 @@ describe.each(SWEEP)("send page with the real fee card — %s, %s origin", (fund
 		} else {
 			expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
 			expect(submittedFee()).toMatchObject(fee)
+			// Only a fee the person pays (Fee Juice, or the PrivateFPC `p1`) is held to the figure shown.
+			const ownFee = fee.kind === "fj" || fee.fpcId === "p1"
+			expect(submittedFigures()).toEqual([undefined, undefined, ownFee ? LANDED.maxFee : undefined])
 			expect(sheetOpen(w)).toBe(false)
 		}
 		w.unmount()
@@ -564,6 +584,21 @@ describe("send page with the real fee card — transitions", () => {
 		w.unmount()
 	})
 
+	test("a send the person pays that was not queued carries its estimate id and the fee the estimate showed", async () => {
+		vi.useFakeTimers()
+		mocks.estimateTransferFee.mockResolvedValue({ ...LANDED, estimateId: "est-9" })
+		const { w } = await mountSend(FUNDING["public Fee Juice only"])
+		await fillForm(w)
+		await estimateLands()
+		await submit(w).trigger("click")
+		vi.advanceTimersByTime(REVIEW_ARM_MS)
+		await nextTick()
+		await w.get('[data-testid="send-review-submit"]').trigger("click")
+		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
+		expect(submittedFigures()).toEqual(["est-9", undefined, LANDED.maxFee])
+		w.unmount()
+	})
+
 	test("an account switch while the sheet is open closes it, and its send event then sends nothing", async () => {
 		vi.useFakeTimers()
 		const { w, appStore } = await mountSend(FUNDING["public Fee Juice only"])
@@ -657,6 +692,20 @@ describe("send page with the real fee card — a sponsor that can't cover the fe
 		expect(notice(w).exists()).toBe(false)
 		expect(offered(w, "sponsored")).toBe(true)
 		expect(offered(w, "public")).toBe(true)
+		w.unmount()
+	})
+})
+
+describe("send page with the real fee card — its price reads", () => {
+	test("the page and its fee card each ask for a stale-on-connect refresh, at mount and after a reconnect", async () => {
+		const { w } = await mountSend(FUNDING["public Fee Juice only"])
+		const clients = vi.mocked(PriceServiceClient).mock.results.map(({ value }) => value)
+		const refreshes = () => clients.map((client) => vi.mocked(client.refreshIfStale).mock.calls.length)
+		// The page's own client, then the card's.
+		expect(refreshes()).toEqual([1, 1])
+		for (const client of clients) client.onConnected.invoke()
+		await flushPromises()
+		expect(refreshes()).toEqual([2, 2])
 		w.unmount()
 	})
 })
@@ -765,6 +814,7 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		const args = mocks.executeTransfer.mock.calls[0] as unknown[]
 		expect(args[8]).toBeUndefined()
 		expect(args[9]).toBe("4472280000000000000")
+		expect(args[10]).toBeUndefined()
 		w.unmount()
 	})
 
@@ -786,6 +836,7 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		expect(args[7]).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
 		expect(args[8]).toBeUndefined()
 		expect(args[9]).toBeUndefined()
+		expect(args[10]).toBeUndefined()
 		w.unmount()
 	})
 
@@ -902,15 +953,31 @@ describe("send page — Confirm waits for the current input's estimate", () => {
 		expect(mocks.estimateTransferFee).not.toHaveBeenCalled()
 		expect(sendDisabled(w)).toBe(true)
 
-		const balances = vi.mocked(TokenBalanceServiceClient).mock.results.at(-1)?.value as unknown as {
-			onTokenBalanceUpdated: EventHandler<unknown>
-		}
-		balances.onTokenBalanceUpdated.invoke({ ...BALANCE, privateBalance: "10000000", updatedAt: 2 })
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "10000000", updatedAt: 2 })
 		await flushPromises()
 		await estimateLands()
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
 		expect(mocks.estimateTransferFee.mock.calls[0]?.[6]).toBe(6_000_000n)
 		expect(sendDisabled(w)).toBe(false)
+		w.unmount()
+	})
+
+	test("the fee row reads the same hint for an amount typed over the balance and for a landed amount the balance falls below", async () => {
+		const { w } = await mountSend(FUNDING["no gas, a sponsor"], { realFeeRow: true })
+		const row = () => w.getComponent({ name: "FeeCostReadout" })
+		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		await w.get('[data-testid="stub-amount"]').setValue("6")
+		await estimateLands()
+		expect(row().text()).toBe("Fee estimated after simulation")
+
+		await w.get('[data-testid="stub-amount"]').setValue("1.5")
+		await estimateLands()
+		expect(row().find('[data-testid="fee-estimate"]').exists()).toBe(true)
+
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "1000000", updatedAt: 2 })
+		await flushPromises()
+		expect(row().find('[data-testid="fee-estimate"]').exists()).toBe(false)
+		expect(row().text()).toBe("Fee estimated after simulation")
 		w.unmount()
 	})
 

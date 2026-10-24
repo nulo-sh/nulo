@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { JobProgressSchema } from "./spec"
+import { JobErrorSchema, JobProgressSchema } from "./spec"
 
 describe("JobProgressSchema: a queued send's fee question", () => {
 	const reask = {
@@ -19,5 +19,13 @@ describe("JobProgressSchema: a queued send's fee question", () => {
 		["an unknown payer", { ...reask, payer: { type: "sponsor", isProtocol: true } }],
 	])("refuses %s", (_name, bad) => {
 		expect(JobProgressSchema.safeParse({ stage: "queued", reask: bad }).success).toBe(false)
+	})
+})
+
+describe("JobErrorSchema", () => {
+	test("normalizedRaw's cap counts UTF-16 units: 2048 astral characters pass, 2049 do not", () => {
+		const error = (normalizedRaw: string) => ({ kind: "k", message: "m", normalizedRaw })
+		expect(JobErrorSchema.safeParse(error("😀".repeat(2048))).success).toBe(true)
+		expect(JobErrorSchema.safeParse(error("😀".repeat(2049))).success).toBe(false)
 	})
 })

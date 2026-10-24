@@ -20,6 +20,10 @@ ESM only. Node or Bun: it imports `node:fs`, `node:module`, `node:path` and `nod
 
 No Aztec dependency, so any Aztec line works. Its version moves in lockstep with the other `@nulo-sh/*` packages, so a release may change nothing here.
 
+## Changes
+
+- **0.3.0**, **0.2.0**: no code change; the version moves in lockstep.
+
 ## Provenance
 
 Built from `packages/resolve-asset` in [nulo-sh/nulo](https://github.com/nulo-sh/nulo) by `.github/workflows/publish-packages.yml` and published with npm provenance. `npm audit signatures` verifies the attestation.

@@ -151,7 +151,11 @@ onBeforeUnmount(() => {
 
 					<Flex direction="column" gap="2" wide :class="$style.row_text">
 						<span :id="`${rowIdBase}-${i}`" :class="$style.row_name">{{ ds.dappMetadata.name }}</span>
-						<span v-if="ds.capabilityGrants?.length" :class="$style.row_grants">
+						<!-- Establishment writes the hash, so a row without one was allowed and never connected. -->
+						<span v-if="!ds.verificationHash" data-testid="connected-app-row-not-connected" :class="$style.row_grants">
+							Allowed. Not connected yet.
+						</span>
+						<span v-else-if="ds.capabilityGrants?.length" :class="$style.row_grants">
 							{{ formatGrantSummary(ds.capabilityGrants) }}
 						</span>
 					</Flex>
@@ -212,6 +216,15 @@ onBeforeUnmount(() => {
 
 .actions {
 	composes: row_actions from "../../../../components/ui/Settings/settings-row.module.css";
+}
+
+/* Below the popup's width an app's name and its grants wrap rather than being cut. */
+@media (width < 359px) {
+	.row .row_name,
+	.row .row_grants {
+		white-space: normal;
+		overflow-wrap: break-word;
+	}
 }
 
 .action_danger {

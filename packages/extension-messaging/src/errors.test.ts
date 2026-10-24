@@ -21,11 +21,11 @@ import {
 	JobCancelledError,
 	OperationNotRecordedError,
 	OwnAccountIntentRefusalError,
+	PasskeyProfileExistsError,
 	ProfileIdConflictError,
 	PxeStaleAnchorError,
 	PxeStoreKeyMissingError,
 	PxeScopeUnregisteredError,
-	PxeTaggingSourcesFullError,
 	remoteErrorFromResponseContent,
 	RpcConnectError,
 	RpcDisconnectedError,
@@ -264,13 +264,6 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			rebuild: { kind: "constant", message: "The wallet has not finished loading this account. Try again." },
 		},
 		{
-			ctor: PxeTaggingSourcesFullError,
-			make: () => new PxeTaggingSourcesFullError(),
-			name: "PxeTaggingSourcesFullError",
-			code: "PXE_TAGGING_SOURCES_FULL",
-			rebuild: { kind: "constant", message: "This network holds as many senders and accounts as an app may add." },
-		},
-		{
 			ctor: TermsAcceptanceRequiredError,
 			make: () => new TermsAcceptanceRequiredError(),
 			name: "TermsAcceptanceRequiredError",
@@ -319,6 +312,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			make: () => new DuplicateWalletError(),
 			name: "DuplicateWalletError",
 			code: "DUPLICATE_WALLET",
+			rebuild: pass,
+		},
+		{
+			ctor: PasskeyProfileExistsError,
+			make: () => new PasskeyProfileExistsError(undefined, { existingProfileName: "Daily" }),
+			name: "PasskeyProfileExistsError",
+			code: "PASSKEY_PROFILE_EXISTS",
 			rebuild: pass,
 		},
 		{ ctor: RecoveryModeError, make: () => new RecoveryModeError(), name: "RecoveryModeError", code: "RECOVERY_MODE", rebuild: pass },
@@ -408,6 +408,7 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			() => new ProfileIdConflictError(),
 			"Profile id was claimed during WebAuthn prompt; retry with a new id.",
 		],
+		["PasskeyProfileExistsError", () => new PasskeyProfileExistsError(), "Passkey profile already exists"],
 	])("%s keeps its default message", (_name, make, message) => {
 		expect(make().message).toBe(message)
 	})

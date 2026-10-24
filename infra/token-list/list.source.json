@@ -1,36 +1,36 @@
 {
 	"tokens": [
 		{
-			"chainId": 3415328944,
-			"address": "0x1d753361e33e8ceb41e07f621785a1db2297e29c6507a35af2cf4e5a5210e6db",
-			"classId": "0x163b2b247391083157f9fc30405e81810e6c08c58501fa2dd10de27d42be1d8a",
+			"chainId": 685146337,
+			"address": "0x249038d2cc0a301b8cc7d2d87da06c5861112b983060405dcaa75240d5837f32",
+			"classId": "0x2ff0939914ff64bd3f7979926dbe8cf3332bc2fee55928bf3cc9ca802568ea9f",
 			"symbol": "USDC",
 			"decimals": 6,
 			"name": "Test USDC",
 			"priceId": "usd-coin"
 		},
 		{
-			"chainId": 3415328944,
-			"address": "0x16d70d782cc2c94f5aad3461dd3d0272d037a143ac6f6db77f3541d8154116c5",
-			"classId": "0x163b2b247391083157f9fc30405e81810e6c08c58501fa2dd10de27d42be1d8a",
+			"chainId": 685146337,
+			"address": "0x09273f734ea96c47a1eccf4bfc9ee08dab36fe11fad44af6a1b8a1867324c505",
+			"classId": "0x2ff0939914ff64bd3f7979926dbe8cf3332bc2fee55928bf3cc9ca802568ea9f",
 			"symbol": "USDT",
 			"decimals": 6,
 			"name": "Test USDT",
 			"priceId": "tether"
 		},
 		{
-			"chainId": 3415328944,
-			"address": "0x1d7cf5ef4a2ed63584d4c915e94268a4ffb2c95cd91e2f2940d9a16a0ddb4813",
-			"classId": "0x163b2b247391083157f9fc30405e81810e6c08c58501fa2dd10de27d42be1d8a",
+			"chainId": 685146337,
+			"address": "0x10b4653676004b7c5dd4d10d7a582b5968f350d71e1d6db1a5e792d5d455649d",
+			"classId": "0x2ff0939914ff64bd3f7979926dbe8cf3332bc2fee55928bf3cc9ca802568ea9f",
 			"symbol": "EURC",
 			"decimals": 6,
 			"name": "Test EURC",
 			"priceId": "euro-coin"
 		},
 		{
-			"chainId": 3415328944,
-			"address": "0x0e2d0bbe86f69fe27272cb09539952cb055e83088d1419afbeda64da05e67cb5",
-			"classId": "0x163b2b247391083157f9fc30405e81810e6c08c58501fa2dd10de27d42be1d8a",
+			"chainId": 685146337,
+			"address": "0x28af9cb09c9bd7cc9a01781c00893b5eea2de716cf49ce9c654cb154224ef06a",
+			"classId": "0x2ff0939914ff64bd3f7979926dbe8cf3332bc2fee55928bf3cc9ca802568ea9f",
 			"symbol": "GBPC",
 			"decimals": 6,
 			"name": "Test GBPC"

@@ -11,7 +11,7 @@
  * registers the account, so the loss only shows on a node slow enough to let a scan in first. The
  * projection gate makes that order deterministic: it parks the receiver's projections after they
  * register the token and before they register the receiver, while the incoming-transfer scheduler
- * scans every visible account every 30 s. The note must be discovered INSIDE the hold, which only
+ * scans every visible account each tick. The note must be discovered INSIDE the hold, which only
  * a scan that registers the receiver itself can do; a scan that merely refuses finds it later.
  */
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
@@ -49,6 +49,7 @@ import {
 import { type PasskeyAuthSetup, registerPasskeyProfile, setupPasskeyVirtualAuth } from "../fixtures/passkey"
 import { holdAccountRegistration, isAccountRegistrationHeld, releaseAccountRegistration } from "../fixtures/projection-gate"
 import { pollUntil } from "../fixtures/poll"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import {
 	accountChainId,
 	downloadEncryptedBackup,
@@ -61,7 +62,7 @@ import { importFullBackup, POPUP_IMPORT_SHELL, readPasskeyPrf, submitPasskeyFull
 
 const AMOUNT = 25n * 10n ** 18n
 const OTHER_PASSWORD = "OtherProfilePw123!"
-/** Several incoming-transfer poll intervals (30 s each). */
+/** Five incoming-transfer ticks at the production 30 s, so the bound holds on any build. */
 const DISCOVERY_TIMEOUT_MS = 150_000
 
 export type Credential = "password" | "passkey"
@@ -243,19 +244,11 @@ export async function waitForHeldProjection(page: Page): Promise<void> {
 	)
 }
 
-/** The incoming-transfer scan's committed record of the note, read from storage: the card has no per-hash testid. */
+/** The incoming-transfer scan's committed record of the note, as the wallet reads it: the card has no per-hash testid. */
 async function waitForIncomingRecord(page: Page, account: string, txHash: string): Promise<void> {
-	const found = () =>
-		page.evaluate(
-			async (want: { account: string; txHash: string }) => {
-				for (const [key, value] of Object.entries(await chrome.storage.local.get(null))) {
-					if (!key.startsWith("nulo:core:incoming-transfers@") || typeof value !== "string") continue
-					const rec = JSON.parse(value) as { txHash?: string; accountAddress?: string }
-					if (rec.txHash === want.txHash && rec.accountAddress === want.account) return true
-				}
-				return false
-			},
-			{ account, txHash },
+	const found = async () =>
+		(await readSealedRows<{ txHash?: string; accountAddress?: string }>(page, "incomingTransfers")).some(
+			({ row }) => row.txHash === txHash && row.accountAddress === account,
 		)
 	await pollUntil(found, (seen) => seen, {
 		label: "the incoming-transfer scan discovering the receiver's note while its projections are held",

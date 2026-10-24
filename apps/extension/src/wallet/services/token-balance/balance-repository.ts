@@ -4,24 +4,32 @@
  * Frozen invariants:
  * - Storage key `nulo:core:token-balances`.
  * - Injected `browserApi.storage.local` (the chrome.storage.local adapter in prod).
+ * - Rows are sealed under their profile's row keys; a plaintext row still reads until its
+ *   profile's next unlock seals it.
  * - IDs are numeric; `allocateId()` delegates to `nextNumericId`, which
  *   allocates max(allocatable ids) + 1 with hostile keys excluded (canonical
  *   round-trip + safe-integer bound; the candidate itself safe and free) —
  *   identical to the old `array_max(map(+)) + 1` on every legitimate store.
  */
 
-import type { EntityStorage } from "@/wallet/storage"
-import { entityStorage } from "@/wallet/storage/stores"
+import {
+	type ConversionLock,
+	type PreparedWrite,
+	parseEnvelope,
+	type RowKeysSource,
+	type SealedEntityStorage,
+} from "@/wallet/storage/sealed-entity-storage"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { type NumericIdBatch, nextNumericId, numericIdBatch } from "@/wallet/services/id-allocators"
-import { purgeMalformedRows } from "@/wallet/services/purge-rows"
+import { canonicalNumericStorageId, purgeMalformedRows } from "@/wallet/services/purge-rows"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { TokenBalanceRaw } from "./spec"
 
 export class BalanceRepository {
-	private readonly storage: EntityStorage<TokenBalanceRaw>
+	private readonly storage: SealedEntityStorage<TokenBalanceRaw>
 
-	public constructor(browserApi: BrowserApi) {
-		this.storage = entityStorage("tokenBalances", browserApi.storage.local)
+	public constructor(browserApi: BrowserApi, rowKeys: RowKeysSource) {
+		this.storage = sealedEntityStorage("tokenBalances", browserApi.storage.local, rowKeys)
 	}
 
 	public async get(id: number): Promise<TokenBalanceRaw | undefined> {
@@ -34,6 +42,20 @@ export class BalanceRepository {
 
 	public async set(balance: TokenBalanceRaw): Promise<void> {
 		await this.storage.set(`${balance.id}`, balance)
+	}
+
+	/** Seals the row now; the caller runs its fences and then commits with no await between. */
+	public prepare(balance: TokenBalanceRaw): Promise<PreparedWrite> {
+		return this.storage.prepare(`${balance.id}`, balance)
+	}
+
+	/** Seals the profile's plaintext rows, one `withLock` section per row; a row `skip` names at
+	 *  its commit is left as it is. */
+	public sealLegacy(profileId: string, withLock: ConversionLock, skip: (id: number) => boolean): Promise<number> {
+		return this.storage.sealLegacy(profileId, withLock, (storageId) => {
+			const id = canonicalNumericStorageId(storageId)
+			return id !== undefined && skip(id)
+		})
 	}
 
 	public async delete(id: number): Promise<void> {
@@ -65,13 +87,14 @@ export class BalanceRepository {
 		return numericIdBatch(await this.storage.getKeys())
 	}
 
-	/** Raw second pass over the balance rows — the codec-hidden complement
-	 *  of `delete`, kept here so storage stays repository-private. */
+	/** Raw second pass over the plaintext balance rows — the codec-hidden complement
+	 *  of `delete`, kept here so storage stays repository-private. A sealed row is never matched:
+	 *  its envelope names only its profile, and the profile's deletion removes it by that. */
 	public async purgeMalformed(
 		matchesRaw: (raw: Record<string, unknown>, storageId: string) => boolean,
 		onPurged?: (storageId: string) => void,
 		onMatch?: (storageId: string) => void,
 	): Promise<number> {
-		return purgeMalformedRows(this.storage, matchesRaw, onPurged, onMatch)
+		return purgeMalformedRows(this.storage, (raw, storageId) => !parseEnvelope(raw) && matchesRaw(raw, storageId), onPurged, onMatch)
 	}
 }

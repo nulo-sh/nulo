@@ -22,7 +22,7 @@ import { useToast } from "@/composables/toast"
 const { openToast } = useToast()
 
 /** Logs helpers */
-import { droppedPrefixLength, formatLogs, formatSingleLog, logsDocument } from "./logs-format"
+import { droppedPrefixLength, formatSingleLog, logsDocument } from "./logs-format"
 import { buildLogsCsv } from "./logs-csv"
 import { logDecorationsField } from "./logs-decoration"
 import { useLogFilters } from "./useLogFilters"
@@ -82,6 +82,8 @@ function holdPlace(changes) {
 	if (shouldAutoScroll.value || snapshotPending) return []
 	snapshotPending = true
 	view.requestMeasure({ read: () => (snapshotPending = false) })
+	// The snapshot replaces a follow still due, whose scroll then never comes to lower the reference.
+	lastScrollTop = Math.min(lastScrollTop, view.scrollDOM.scrollTop)
 	return view.scrollSnapshot().map(changes)
 }
 
@@ -123,6 +125,10 @@ function scrollToBottom() {
 	enableAutoScroll()
 	const lastLine = view.state.doc.line(view.state.doc.lines)
 	view.dispatch({ effects: EditorView.scrollIntoView(lastLine.from, { y: "end" }) })
+	// The follow's own landing must not read as the reader moving down: no scroll does until the next
+	// scroll event resets this, once CodeMirror's listener, registered first, has landed every follow
+	// still due. Reading the end instead would force a layout per line.
+	lastScrollTop = Number.POSITIVE_INFINITY
 	showScrollBtn.value = false
 }
 
@@ -144,11 +150,19 @@ function scrollToTargetLog(targetLogId) {
 	if (!view) return
 	const idx = logs.value.findIndex((l) => l.id === targetLogId)
 	if (idx === -1) return
-	const pos = formatLogs(logs.value.slice(0, idx)).length + 1
+	// The editor stores every line break as "\n": measure the logs before it as the editor holds them.
+	const pos = view.state.toText(logsDocument(logs.value.slice(0, idx))).length
 	view.dispatch({
 		effects: EditorView.scrollIntoView(pos, { y: "center" }),
 		selection: { anchor: pos },
 	})
+	// A held line must not replace the pending target with its snapshot: CodeMirror maps a pending
+	// target through later changes, but a later scroll effect replaces it, and it runs this read in the
+	// measure that applies the target, before applying it. The target's landing is the viewer's own
+	// scroll, which must not read as the reader moving down.
+	snapshotPending = true
+	view.requestMeasure({ read: () => (snapshotPending = false) })
+	lastScrollTop = Number.POSITIVE_INFINITY
 }
 
 const handleToggleFilter = (kind, value) => {
@@ -324,6 +338,13 @@ onBeforeUnmount(() => {
 	display: flex;
 	flex: 1 1 auto;
 	overflow: hidden;
+}
+
+/* The view's width runs a pixel past the window's border; below the popup's width the log takes the box it sits in. */
+@media (width < 359px) {
+	.wrapper {
+		width: 100%;
+	}
 }
 
 .scroll_btn {

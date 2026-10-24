@@ -1,5 +1,7 @@
 import { EventHandler } from "@nulo/wallet-core/utils"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { TOKEN_LIST_SERVICE_NAME, type TokenListSnapshot } from "@/wallet/services/token-list/spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 
 /**
  * Shared test-only helper for `*.composition.test.ts` harnesses.
@@ -13,6 +15,16 @@ import { TOKEN_LIST_SERVICE_NAME, type TokenListSnapshot } from "@/wallet/servic
  */
 export function svc(name: string, methods: Record<string, unknown>) {
 	return { name, dependencies: [], async start() {}, ...methods } as never
+}
+
+/** A `ProfileService` stand-in for a service that needs only its profile list and row keys:
+ *  these profiles exist, every one is unlocked, and none is active. */
+export async function profileKeysStub(...ids: string[]) {
+	return svc(PROFILE_SERVICE_NAME, {
+		getProfiles: async () => ids.map((id) => ({ id })),
+		getActiveProfile: async () => undefined,
+		...(await rowKeysForEveryProfile()),
+	})
 }
 
 /** A `TokenListService` stand-in serving one fixed snapshot (none by default). */

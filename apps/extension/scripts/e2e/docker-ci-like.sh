@@ -24,8 +24,8 @@
 #   nulo-bun-cache    — preserves bun's npm cache across runs (~few minutes saved)
 #   nulo-aztec        — preserves aztec CLI install (~5 minutes saved)
 #
-# Arg 1: vitest --shard expression (e.g. "5/5"). Default "5/5" (the shard that
-#        hits the connectPlayground:awaitVerifyPopup failure deterministically).
+# Arg 1: vitest --shard expression (e.g. "5/5") over the whole network suite;
+#        CI's pool shards also exclude the dedicated jobs' files. Default "5/5".
 
 set -euo pipefail
 
@@ -51,7 +51,7 @@ if [ "$(uname -m)" != x86_64 ]; then
 	exit 1
 fi
 BUN_VERSION=1.4.2
-# Aztec's installer requires Node >= 24.12.0.
+# Aztec's installer requires Node >= 24.15.0.
 NODE_VERSION=v24.16.0
 PINS="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/docker-ci-like.pins.sha256"
 TOOLS=/opt/docker-ci-like

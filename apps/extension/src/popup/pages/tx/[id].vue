@@ -29,7 +29,7 @@ import { balanceFormatted } from "@/utils/amount.js"
 import { displaySymbol, txAmount } from "@/utils/tx-amount"
 import { copyWithToast } from "@/utils/clipboard"
 import { endsSelection } from "@/utils/selection"
-import { trimAddress } from "@/utils/string"
+import { isBlank, trimAddress } from "@/utils/string"
 import {
 	getTxCategory,
 	getTxTitle,
@@ -82,7 +82,11 @@ const transferTypeLabel = computed(() => {
 	return formatTransferType(transfer.value.type)
 })
 const token = computed(() => tokens.value.find((t) => call.value?.contract === t.contract))
-const transferSymbol = computed(() => displaySymbol(transfer.value?.token?.symbol))
+// Blank is judged before `displaySymbol`'s cap, which ends a long run of spaces in "…".
+const missingTitle = computed(() => {
+	const symbol = transfer.value?.token?.symbol
+	return typeof symbol !== "string" || isBlank(symbol) ? "This token is missing" : `${displaySymbol(symbol)} is missing`
+})
 
 const amount = computed(() => txAmount(tx.value?.calls, tokens.value))
 const formattedAmount = computed(() =>
@@ -204,7 +208,7 @@ onBeforeUnmount(() => {
 				:action="{ name: 'Copy token address', callback: () => handleCopy(call.contract) }"
 				wide
 			>
-				<template #title> {{ transferSymbol }} is missing </template>
+				<template #title> {{ missingTitle }} </template>
 				<template #description> This token not found in your token list </template>
 			</Banner>
 
@@ -213,7 +217,7 @@ onBeforeUnmount(() => {
 					{{ transferTypeLabel }}
 				</div>
 
-				<Flex wide gap="8">
+				<Flex wide gap="8" :class="$style.address_pair">
 					<Flex
 						wide
 						direction="column"
@@ -385,6 +389,10 @@ onBeforeUnmount(() => {
 
 .transfer_type_chip {
 	composes: type_chip from "../detail-page.module.css";
+}
+
+.address_pair {
+	composes: address_pair from "../detail-page.module.css";
 }
 
 .address_card {

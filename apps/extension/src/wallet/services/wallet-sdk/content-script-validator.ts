@@ -28,6 +28,7 @@
 
 import { WalletMessageType } from "@aztec-labs/wallet-sdk/types"
 import { z } from "zod"
+import { boundedString } from "@/utils/bounded-string"
 
 /**
  * Content-script-originated message shapes the SW expects to receive.
@@ -66,8 +67,8 @@ const SECURE_MESSAGE_CONTENT_KEYS: ReadonlySet<string> = new Set(["iv", "ciphert
 const DISCOVERY_CONTENT_KEYS: ReadonlySet<string> = new Set(["type", "requestId", "appId", "chainInfo"])
 const CHAIN_INFO_KEYS: ReadonlySet<string> = new Set(["chainId", "version"])
 
-/** Keys are read from the raw value: zod's object parse skips an own `__proto__` key, even under
- *  `strictObject`, and a page's `JSON.parse` makes one an own key. */
+/** Keys are read from the raw value: a page's `JSON.parse` makes `__proto__` an own key, and the
+ *  object schema below drops it, as it drops every key it does not declare. */
 const onlyOwnKeys =
 	(keys: ReadonlySet<string>) =>
 	(value: unknown): boolean =>
@@ -78,7 +79,7 @@ const MAX_REQUEST_ID_CHARS = 128
 
 const EnvelopeSchema = z.object({
 	origin: z.literal("content-script"),
-	sessionId: z.string().max(MAX_REQUEST_ID_CHARS).optional(),
+	sessionId: boundedString(MAX_REQUEST_ID_CHARS).optional(),
 })
 
 const ContentScriptMessageSchema = z.discriminatedUnion("type", [
@@ -88,8 +89,8 @@ const ContentScriptMessageSchema = z.discriminatedUnion("type", [
 		// data past the bound.
 		content: z.custom<object>(onlyOwnKeys(SECURE_MESSAGE_CONTENT_KEYS)).pipe(
 			z.object({
-				iv: z.string().max(MAX_SECURE_MESSAGE_IV_CHARS),
-				ciphertext: z.string().max(MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS),
+				iv: boundedString(MAX_SECURE_MESSAGE_IV_CHARS),
+				ciphertext: boundedString(MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS),
 			}),
 		),
 	}),
@@ -101,11 +102,11 @@ const ContentScriptMessageSchema = z.discriminatedUnion("type", [
 		content: z.custom<object>(onlyOwnKeys(DISCOVERY_CONTENT_KEYS)).pipe(
 			z.object({
 				type: z.literal(WalletMessageType.DISCOVERY),
-				requestId: z.string().max(MAX_REQUEST_ID_CHARS),
-				appId: z.string().max(256),
+				requestId: boundedString(MAX_REQUEST_ID_CHARS),
+				appId: boundedString(256),
 				chainInfo: z
 					.custom<object>(onlyOwnKeys(CHAIN_INFO_KEYS))
-					.pipe(z.object({ chainId: z.string().max(80), version: z.string().max(80) })),
+					.pipe(z.object({ chainId: boundedString(80), version: boundedString(80) })),
 			}),
 		),
 	}),

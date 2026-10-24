@@ -28,10 +28,12 @@ import {
 	waitForPopup,
 	waitForPopupClosed,
 } from "../fixtures/popups"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import { serializeInstance } from "../fixtures/selfpay-phase"
 import { trimAddress } from "@/utils/string"
 import {
 	coverageOf,
+	expectFitsNarrow,
 	expectLaidOut,
 	expectSitesClean,
 	expectSweepClean,
@@ -93,6 +95,7 @@ async function sweepWindow(win: Page, surface: string, states: readonly string[]
 	for (const state of states) await waitForStateSites(win, surface, state)
 	expectSweepClean(await sweepTypeRoles(win), surface)
 	await expectLaidOut(win, surface)
+	await expectFitsNarrow(win, surface)
 	const observations: IdentifierObservation[] = []
 	for (const state of states) observations.push(await observeState(win, surface, state))
 	// A name is judged as `name`, never the site's mono role. Each one shown is pressed to its address
@@ -374,11 +377,21 @@ async function openExecute(ctx: Connected, { button, inputs, ready, details }: R
 			await openExecuteDetails(win)
 		}
 		await win.waitForSelector(ready, { visible: true, timeout: 60_000 })
+		// The fee readout swaps its rows when the estimate lands, which the narrow pass would read as text
+		// gone: the sweep starts once it has landed or failed.
+		await win.waitForFunction(feeSettled, { timeout: 60_000, polling: 200 })
 	} catch (err) {
 		await dismiss(win, rejectExecute)
 		throw err
 	}
 	return win
+}
+
+/** No fee card, its estimate or its Fee Juice nudge shown, or the page's "Couldn't estimate fee" snack. */
+function feeSettled(): boolean {
+	const card = document.querySelector('[data-testid="fee-settings-card"]')
+	if (!card || card.querySelector('[data-testid="fee-estimate"], [data-testid="send-fee-nudge"]')) return true
+	return [...document.querySelectorAll('[data-testid="snackbar"]')].some((snack) => /estimate fee/i.test(snack.textContent ?? ""))
 }
 
 async function runRequest(ctx: Connected, request: Request, shown: Set<string>): Promise<void> {
@@ -457,15 +470,11 @@ async function rigDelegatedSend(ctx: Connected): Promise<Rig> {
 }
 
 async function tokenRowOf(page: Page, contract: string): Promise<{ id: number; contract: string }> {
-	return page.evaluate(async (target: string) => {
-		const all = await chrome.storage.local.get(null)
-		const row = Object.entries(all)
-			.filter(([key]) => key.startsWith("nulo:core:tokens@"))
-			.map(([, value]) => JSON.parse(value as string) as { id: number; contract: string })
-			.find((r) => r.contract.toLowerCase() === target.toLowerCase())
-		if (!row) throw new Error(`no token row for ${target}`)
-		return { id: row.id, contract: row.contract }
-	}, contract)
+	const row = (await readSealedRows<{ id: number; contract: string }>(page, "tokens")).find(
+		(r) => r.row.contract.toLowerCase() === contract.toLowerCase(),
+	)?.row
+	if (!row) throw new Error(`no token row for ${contract}`)
+	return { id: row.id, contract: row.contract }
 }
 
 test.skipIf(!hasConfig)(

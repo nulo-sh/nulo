@@ -8,6 +8,7 @@ import { clickByTestId, replaceInputValue } from "./extension"
 import { type FeeMethodSubtitle, selectFeeMethod, selectSendToken, setActiveSendType } from "./helpers"
 import { openSend, readSendView, submitSend, waitForSendGone } from "./send-page"
 import { PollTimeoutError, pollUntil } from "./poll"
+import { readSealedRows } from "./sealed-rows"
 
 export type Side = "public" | "private"
 
@@ -133,14 +134,10 @@ const TERMINAL = new Set(["succeeded", "failed", "cancelled"])
 
 /** Popup transfer rows of the journal, oldest first. */
 export async function readTransferRows(page: Page): Promise<TransferRow[]> {
-	const raws = await page.evaluate(async () => {
-		const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-		return Object.entries(all).flatMap(([key, raw]) => (key.startsWith("nulo:journal@") ? [raw] : []))
-	})
+	const records = await readSealedRows(page, "journal")
 	const rows: TransferRow[] = []
-	for (const raw of raws) {
+	for (const { row } of records) {
 		try {
-			const row = (typeof raw === "string" ? JSON.parse(raw) : raw) as Record<string, unknown>
 			if (row.kind !== "transfer") continue
 			const progress = row.progress as { stage?: string; txHash?: string; reask?: { fee: string; cap: string } } | undefined
 			const error = row.error as { message?: string } | null | undefined
@@ -203,17 +200,13 @@ export async function waitForTransfersTerminal(page: Page, timeout = 300_000): P
 
 /** The wallet's tx record status per hash (TxStatus: 0 Pending, 1 Dropped, 2+ in a block); `null` before it is recorded. */
 export async function readTxStatuses(page: Page, hashes: readonly string[]): Promise<Record<string, number | null>> {
-	return page.evaluate(async (hs: string[]) => {
-		const keys = hs.map((h) => `nulo:core:txs@${h}`)
-		const got = (await chrome.storage.local.get(keys)) as Record<string, unknown>
-		const out: Record<string, number | null> = {}
-		for (const h of hs) {
-			const value = got[`nulo:core:txs@${h}`]
-			const row = (typeof value === "string" ? JSON.parse(value) : value) as { status?: number } | undefined
-			out[h] = typeof row?.status === "number" ? row.status : null
-		}
-		return out
-	}, hashes as string[])
+	const rows = await readSealedRows<{ status?: number }>(page, "txs")
+	return Object.fromEntries(
+		hashes.map((hash) => {
+			const status = rows.find((tx) => tx.naturalId === hash)?.row.status
+			return [hash, typeof status === "number" ? status : null]
+		}),
+	)
 }
 
 /** Waits until the wallet's tx record for each hash is in a block. */

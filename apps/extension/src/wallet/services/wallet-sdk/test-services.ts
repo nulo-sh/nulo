@@ -16,6 +16,8 @@ export type FakeDappSessionRow = {
 	chainId: string
 	/** Read by no wallet path. */
 	trustedVerification?: boolean
+	/** Written by establishment; absent on a row no key exchange has reached. */
+	verificationHash?: string
 	accounts?: string[]
 	capabilityGrants?: Array<{ capability: { type: string } }>
 }
@@ -24,7 +26,7 @@ export function fakeSdkServices(
 	opts: {
 		/** A row for the origin on chain 0 (the `{ chainId: "1", version: "1" }` the tests discover with). */
 		remembered?: boolean
-		popup?: (params: unknown, requestId: string) => Promise<{ approved: boolean; windowId?: number }>
+		popup?: (params: unknown, requestId: string) => Promise<{ approved: boolean }>
 		/** The network-unavailable notice; settles at once by default. */
 		notice?: (params: { dappMetadata: { name: string; url: string } }) => Promise<void>
 		/** Whether the profile has a network for a chain; every chain by default. */
@@ -44,6 +46,8 @@ export function fakeSdkServices(
 		operationJournal?: Record<string, unknown>
 		/** A dApp-session service in place of the row map, which then stays empty. */
 		dappSession?: unknown
+		/** Receives the restart preparation the handler registers. */
+		setRestartPreparation?: (prepare: () => void) => void
 	} = {},
 ): {
 	services: never
@@ -82,6 +86,7 @@ export function fakeSdkServices(
 					onActiveProfileChanged,
 					getActiveProfile,
 					getDeletionState: () => ({ capture: () => 0 }),
+					setRestartPreparation: opts.setRestartPreparation ?? (() => {}),
 					captureExecutionFence: async () => {
 						const profile = await getActiveProfile()
 						if (!profile) throw new Error("Wallet locked")
@@ -106,7 +111,11 @@ export function fakeSdkServices(
 					deleteDappSession: async (id: string) => {
 						for (const [key, row] of rows) if (row.id === id) rows.delete(key)
 					},
-					setVerificationHash: opts.setVerificationHash ?? (async () => undefined),
+					setVerificationHash:
+						opts.setVerificationHash ??
+						(async (id: string, hash: string) => {
+							for (const row of rows.values()) if (row.id === id) row.verificationHash = hash
+						}),
 				},
 				"operation-journal": opts.operationJournal ?? {},
 				token: { getTokens: async () => [] },

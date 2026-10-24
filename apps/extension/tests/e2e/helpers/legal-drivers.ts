@@ -4,6 +4,7 @@ import { TEST_PASSWORD } from "../fixtures/constants"
 import { clickByTestId, replaceInputValue, waitForHash } from "../fixtures/dom"
 import type { ExtensionContext } from "../fixtures/extension"
 import { openOnboarding, seedLegalAcceptance } from "../fixtures/wallet-pages"
+import { PollTimeoutError, pollUntil } from "../fixtures/poll"
 import { LEGAL_ACCEPTANCE_KEY, type LegalSeed } from "../fixtures/legal"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -132,18 +133,22 @@ export async function acceptOnboardingTerms(page: Page, resumesAt: "create" | "i
 }
 
 /**
- * A first run's own path, from no acceptance: the Terms gate, then a password, ending unlocked with
- * onboarding marked complete so the popup opens on Home. The acceptance is the event the worker's
- * token list fetches on; a launch's seeded acceptance is a storage write that no listener hears.
+ * A first run's own path, from no acceptance: the Terms gate, then a password and "Do it later" on
+ * the recovery phrase, ending unlocked with onboarding marked complete so the popup opens on Home.
+ * The acceptance is the event the worker's token list fetches on; a launch's seeded acceptance is a
+ * storage write that no listener hears.
  */
 export async function createProfileAcceptingTerms(ctx: ExtensionContext): Promise<void> {
 	const page = await openOnboarding(ctx, { legal: "missing" })
 	await clickByTestId(page, "onboarding-welcome-create")
 	await acceptOnboardingTerms(page, "create")
+	await clickByTestId(page, "onboarding-method-password")
 	await replaceInputValue(page, '[data-testid="onboarding-password-input"]', TEST_PASSWORD)
 	await replaceInputValue(page, '[data-testid="onboarding-password-confirm"]', TEST_PASSWORD)
 	await clickByTestId(page, "onboarding-submit-create")
-	await waitForHash(page, "#/onboarding/learn", 60_000)
+	await page.waitForSelector('[data-testid="onboarding-phrase-later"]', { visible: true, timeout: 60_000 })
+	await clickByTestId(page, "onboarding-phrase-later")
+	await waitForHash(page, "#/onboarding/done", 10_000)
 	await page.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": true }))
 	await page.close()
 }
@@ -225,17 +230,20 @@ async function waitUntilStill(page: Page, selector: string, last: boolean): Prom
 			selector,
 			last,
 		)
-	const deadline = Date.now() + 5_000
-	let previous = await read()
+	let previous: Awaited<ReturnType<typeof read>> | undefined
 	let unchanged = 0
-	while (unchanged < 2 || previous.pending) {
-		if (Date.now() > deadline) {
-			if (unchanged >= 2) return
-			throw new Error(`${selector} was still moving after 5s (last box ${previous.box})`)
-		}
-		await new Promise((resolve) => setTimeout(resolve, 50))
+	const sample = async () => {
 		const now = await read()
-		unchanged = now.box === previous.box && now.pending === previous.pending ? unchanged + 1 : 0
+		unchanged = previous && now.box === previous.box && now.pending === previous.pending ? unchanged + 1 : 0
 		previous = now
+		return { ...now, unchanged }
+	}
+	try {
+		await pollUntil(sample, (s) => s.unchanged >= 2 && !s.pending, { label: `${selector} still`, timeoutMs: 5_000, intervalMs: 50 })
+	} catch (error) {
+		if (!(error instanceof PollTimeoutError)) throw error
+		const seen = error.last as Awaited<ReturnType<typeof sample>>
+		if (seen.unchanged >= 2) return
+		throw new Error(`${selector} was still moving after 5s (last box ${seen.box})`)
 	}
 }

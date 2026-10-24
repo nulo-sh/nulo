@@ -336,6 +336,86 @@ describe("useContactImportExport — import sender semantics (adds-only)", () =>
 	})
 })
 
+describe("useContactImportExport — the outcome an import resolves", () => {
+	/** Runs to the selection, settles it with `settle`, and returns what the import resolved. */
+	async function settleSelection(settle: (slot: NonNullable<typeof cacheStoreState.importPromise>) => void) {
+		const done = useContactImportExport({
+			contacts: ref([]),
+			accountStateService: makeServices().accountStateService,
+		} as never).importContacts()
+		await vi.waitFor(() => {
+			if (!cacheStoreState.importPromise) throw new Error("selection gate not reached")
+		})
+		if (cacheStoreState.importPromise) settle(cacheStoreState.importPromise)
+		return done
+	}
+
+	/** The snack the outcome carries is the last one the import showed. */
+	function expectShown(outcome: unknown, kind: string, label: string) {
+		expect(outcome).toEqual({ snack: { kind, label }, profileId: RUN_FENCE.profileId })
+		expect(openToastMock).toHaveBeenLastCalledWith({ kind, label })
+	}
+
+	test("nothing before the selection settles: a cancelled pick, a file too large or holding no contacts", async () => {
+		const { FilePickCanceledError } = await import("@/utils")
+		const api = useContactImportExport({ contacts: ref([]), accountStateService: makeServices().accountStateService } as never)
+		pickFileMock.mockRejectedValueOnce(new FilePickCanceledError())
+		expect(await api.importContacts()).toBeUndefined()
+		pickFileMock.mockResolvedValueOnce({ size: 2_000_000, text: async () => "" })
+		expect(await api.importContacts()).toBeUndefined()
+		fileWith({ version: 2, contacts: [] })
+		expect(await api.importContacts()).toBeUndefined()
+		fileWith("{")
+		expect(await api.importContacts()).toBeUndefined()
+		expect(openToastMock.mock.calls.map(([options]) => options.label)).toEqual([
+			"Contacts file is too large",
+			"No contacts found in file",
+			"Error occurred during import",
+		])
+	})
+
+	test("an import that writes its rows resolves its snack and the run's profile", async () => {
+		fileWith([{ name: "A", address: ADDR_A }])
+		expectShown(
+			await settleSelection((slot) => slot.resolve(reviewed(cacheStoreState.importContacts))),
+			"success",
+			"Import completed successfully",
+		)
+	})
+
+	test("a cancelled or an empty selection resolves its snack", async () => {
+		fileWith([{ name: "A", address: ADDR_A }])
+		expectShown(await settleSelection((slot) => slot.reject(new Error("canceled"))), "success", "Contact import canceled")
+		fileWith([{ name: "A", address: ADDR_A }])
+		expectShown(await settleSelection((slot) => slot.resolve([])), "error", "No contacts selected for import")
+	})
+
+	test("a write that throws resolves the error snack; a stopped run its incomplete one", async () => {
+		fileWith([{ name: "A", address: ADDR_A }])
+		const done = settleSelection((slot) => slot.resolve(reviewed(cacheStoreState.importContacts)))
+		vi.mocked(importClients.contact as { getContacts: ReturnType<typeof vi.fn> }).getContacts.mockRejectedValue(
+			new Error("port closed"),
+		)
+		expectShown(await done, "error", "Error occurred during import")
+
+		const { ProfileServiceClient } = await import("@/wallet/services/profile/client")
+		vi.mocked(ProfileServiceClient).mockImplementationOnce(function () {
+			return {
+				connect: vi.fn(),
+				disconnect: vi.fn(),
+				captureRunFence: vi.fn().mockResolvedValue(RUN_FENCE),
+				assertRunFence: vi.fn().mockRejectedValue(new Error("session ended")),
+			} as never
+		})
+		fileWith([{ name: "A", address: ADDR_A }])
+		const stopped = settleSelection((slot) => slot.resolve(reviewed(cacheStoreState.importContacts)))
+		vi.mocked(importClients.contact as { getContacts: ReturnType<typeof vi.fn> }).getContacts.mockRejectedValue(
+			new Error("port closed"),
+		)
+		expectShown(await stopped, "error", "Import incomplete · 0 of 1 contact written")
+	})
+})
+
 describe("useContactImportExport — export", () => {
 	test("a mixed-case stored contact still exports isSender:true (canonical union compare)", async () => {
 		const { accountStateService } = makeServices()
@@ -410,6 +490,52 @@ describe("useContactImportExport — export", () => {
 			{ name: "A", address: ADDR_A, isSender: true },
 			{ name: "B", address: ADDR_B, isSender: false },
 		])
+	})
+})
+
+describe("useContactImportExport — the running export", () => {
+	test("is exporting from the press until the file is handed over, after a success and after a failure", async () => {
+		const { accountStateService } = makeServices()
+		const { downloadFile } = await import("@/utils")
+		const api = useContactImportExport({ contacts: ref([{ id: "c1", name: "A", address: ADDR_A }]), accountStateService } as never)
+		expect(api.exporting.value).toBe(false)
+
+		const done = api.exportContacts()
+		expect(api.exporting.value).toBe(true)
+		await done
+		expect(api.exporting.value).toBe(false)
+
+		vi.mocked(downloadFile).mockRejectedValueOnce(new Error("refused"))
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			const failing = api.exportContacts()
+			expect(api.exporting.value).toBe(true)
+			await failing
+		} finally {
+			logged.mockRestore()
+		}
+		expect(api.exporting.value).toBe(false)
+	})
+
+	test("a stalled sender read keeps it exporting, and a second press downloads nothing", async () => {
+		const { accountStateService } = makeServices()
+		const { downloadFile } = await import("@/utils")
+		const held = deferred<string[]>()
+		accountStateService.getSendersAcrossActiveNetworks.mockReturnValueOnce(held.promise)
+		const api = useContactImportExport({ contacts: ref([{ id: "c1", name: "A", address: ADDR_A }]), accountStateService } as never)
+		const calls = vi.mocked(downloadFile).mock.calls.length
+
+		const first = api.exportContacts()
+		await vi.waitFor(() => expect(accountStateService.getSendersAcrossActiveNetworks).toHaveBeenCalledOnce())
+		await api.exportContacts()
+		expect(api.exporting.value).toBe(true)
+		expect(accountStateService.getSendersAcrossActiveNetworks).toHaveBeenCalledOnce()
+		expect(vi.mocked(downloadFile).mock.calls.length).toBe(calls)
+
+		held.resolve([])
+		await first
+		expect(vi.mocked(downloadFile).mock.calls.length).toBe(calls + 1)
+		expect(api.exporting.value).toBe(false)
 	})
 })
 

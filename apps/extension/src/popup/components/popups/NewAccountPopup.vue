@@ -5,7 +5,6 @@ import { FieldWarning } from "@nulo/design"
 import { AccountType } from "@/wallet/services/account/client"
 import { nextAccountName, sameStoredName, storedNameKey } from "@/utils/account-name"
 import { managers } from "@/utils/core"
-import { storageLocalSet } from "@/utils/storage"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -63,13 +62,9 @@ const handleCreateAccount = async () => {
 	}
 
 	isCreatingAccount.value = true
+	const profileId = appStore.profile.id
 	try {
-		const account = await managers.account.createAccount(
-			appStore.profile.id,
-			appStore.network.chainId,
-			AccountType.Nulo_v1,
-			name.value.trim(),
-		)
+		const account = await managers.account.createAccount(profileId, appStore.network.chainId, AccountType.Nulo_v1, name.value.trim())
 
 		// The account is created either way; only SELECTING it moves the scope, so
 		// that part is re-checked after the creation RPC.
@@ -83,9 +78,7 @@ const handleCreateAccount = async () => {
 			return
 		}
 
-		await storageLocalSet({
-			"nulo:ui:activeAccount": account.address,
-		})
+		await managers.uiPreference.setSelectedAccount(profileId, account.address)
 
 		emit("onClose")
 	} finally {

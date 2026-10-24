@@ -12,7 +12,7 @@ import { FROZEN_DESCRIPTOR_DIGEST, NULO_DESCRIPTOR_VERSION } from "./instantiati
  * rotation appends a new one, on the owner's recorded decision (CLAUDE.md "Account-address
  * freeze"). (The nulo-v5 baseline was redefined in place twice inside the pre-launch carve-out
  * window `address-freeze.ts` describes, owner-ratified both times; that window closed at V5's
- * first store build, and nulo-v6's closes at its own.)
+ * first store build, and nulo-v6's by 0.30.2, which both stores served.)
  */
 const EXPECTED_KDF_DIGEST = "29eca1a04b7acde8bb95905a2ac630b29f1edcf04d584274e90fd9f81736166d"
 
@@ -69,6 +69,25 @@ const EXPECTED_REGIMES: Record<string, Record<string, unknown>> = {
 			"on the owner's recorded decision; changing any of these inputs rotates all derived addresses " +
 			"and ships only as a new appended regime entry.",
 	},
+	"nulo-v6.2": {
+		id: "nulo-v6.2",
+		artifactSha256: "f701e393d933a3229ada1e121113a540c9906d0cc9b1cd4450252888b29ab9f9",
+		classId: "0x2f7d07db78643da21eefb63ee07d28d1cc23dd86ec9b3a9fa29323bf17269d15",
+		descriptorVersion: 1,
+		descriptorDigest: "3883065f0d6603d1be25db42348ec25b7a9dc29746d85b925b09efbd2a460605",
+		kdf: "nulo-account-kdf-v2",
+		kdfDigest: EXPECTED_KDF_DIGEST,
+		ack:
+			"I acknowledge that regime nulo-v6.2 (artifact sha256 " +
+			"f701e393d933a3229ada1e121113a540c9906d0cc9b1cd4450252888b29ab9f9, class id " +
+			"0x2f7d07db78643da21eefb63ee07d28d1cc23dd86ec9b3a9fa29323bf17269d15, descriptor v1 " +
+			"digest 3883065f0d6603d1be25db42348ec25b7a9dc29746d85b925b09efbd2a460605, kdf " +
+			`nulo-account-kdf-v2 digest ${EXPECTED_KDF_DIGEST}) fixes every account address a ` +
+			"Nulo V6 build bound to it derives. It supersedes nulo-v6.1 in place, a non-Mainnet rotation " +
+			"on the owner's recorded decision; changing any of these inputs rotates all derived addresses " +
+			"and ships only as a new appended regime entry, and once a Mainnet-serving build binds it, " +
+			"only as a new extension major.",
+	},
 }
 
 describe("address-freeze regime record", () => {
@@ -118,21 +137,21 @@ describe("address-freeze regime record", () => {
 		}
 	})
 
-	test("the nulo-v6.1 entry is consistent with the live freeze modules", () => {
-		const bound = REGIMES["nulo-v6.1"]
+	test("the nulo-v6.2 entry is consistent with the live freeze modules", () => {
+		const bound = REGIMES["nulo-v6.2"]
 		expect(bound.artifactSha256).toBe(FROZEN_ARTIFACT_SHA256)
 		expect(bound.classId).toBe(FROZEN_ACCOUNT_CLASS_ID)
 		expect(bound.descriptorVersion).toBe(NULO_DESCRIPTOR_VERSION)
 		expect(bound.descriptorDigest).toBe(FROZEN_DESCRIPTOR_DIGEST)
 	})
 
-	test("this build binds to exactly the nulo-v6.1 regime", () => {
-		expect(V6_REGIME).toBe(REGIMES["nulo-v6.1"])
+	test("this build binds to exactly the nulo-v6.2 regime", () => {
+		expect(V6_REGIME).toBe(REGIMES["nulo-v6.2"])
 	})
 
 	test("the bound regime is the last entry, so no build binds an earlier one", () => {
 		const ids = Object.keys(REGIMES)
-		expect(ids).toEqual(["nulo-v5", "nulo-v6", "nulo-v6.1"])
+		expect(ids).toEqual(["nulo-v5", "nulo-v6", "nulo-v6.1", "nulo-v6.2"])
 		expect(V6_REGIME).toBe(REGIMES[ids[ids.length - 1] as keyof typeof REGIMES])
 	})
 })

@@ -10,7 +10,6 @@ import type {
 } from "@nulo/wallet-crypto"
 import type { Restored } from "@/wallet/base"
 import type { ExecutionFence } from "./profile-deletion-state"
-import type { FeePickUpdate } from "@/utils/fee-picks"
 
 export const PROFILE_SERVICE_NAME = "profile"
 
@@ -300,12 +299,6 @@ export type Methods = {
 	changeProfileName(id: string, newName: string): ProfileInfo
 
 	/**
-	 * Saves one fee-method pick, or drops every pick naming a deleted FPC, in the profile's own keys.
-	 * Resolves `false`, writing nothing, once the profile is gone or its deletion has begun.
-	 */
-	saveFeePick(profileId: string, update: FeePickUpdate): boolean
-
-	/**
 	 * Changes profile password and returns the updated profile.
 	 * @param id Profile id.
 	 * @param oldPassword Old password, to decrypt storage.
@@ -320,7 +313,8 @@ export type Methods = {
 	deleteProfile(id: string): ProfileInfo
 
 	/**
-	 * Imports a passkey-backed profile using an existing credential and signs in.
+	 * Imports a passkey-backed profile using an existing credential and signs in. Throws
+	 * `PasskeyProfileExistsError` (naming it) when a live profile here already holds the credential.
 	 *
 	 * @param name Display name.
 	 * @param credentialData OPTIONAL — PATH A. See `createPasskeyProfile` for

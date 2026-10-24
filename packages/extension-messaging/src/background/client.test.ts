@@ -482,6 +482,27 @@ describe("port disconnect race", () => {
 		await expect(client.echo("ping")).rejects.toBeInstanceOf(RpcDisconnectedError)
 	})
 
+	test("a port whose send throws stops reading as connected at once, fails its other requests, and reopens", async () => {
+		portRegistry().holdReady = true
+		const client = newClient()
+		const posted = client.echo("posted").catch((e: unknown) => e)
+		portRegistry().ready(SERVICE)
+		await postedRequestId()
+		const disconnected = vi.fn()
+		client.onDisconnected.add(disconnected)
+
+		capturePortMessage(SERVICE).mockImplementationOnce(() => {
+			throw new Error("Attempting to use a disconnected port object")
+		})
+		const failed = client.echo("ping")
+		expect(client.isConnected).toBe(false)
+		await expect(failed).rejects.toBeInstanceOf(RpcDisconnectedError)
+		expect(await posted).toBeInstanceOf(Error)
+		expect(disconnected).toHaveBeenCalledTimes(1)
+		expect(connectMock()).toHaveBeenCalledTimes(2)
+		client.disconnect()
+	})
+
 	test("RpcDisconnectedError carries methodName, requestId, and the underlying cause", async () => {
 		const client = newClient()
 		await client.connect()
@@ -793,6 +814,26 @@ describe("Ready handshake", () => {
 		emitPortMessage(SERVICE, responseMessage(await postedRequestId(), "late"))
 		await expect(promise).resolves.toBe("late")
 		expect(posted()).toBe(1)
+	})
+
+	test("`isConnected` holds from Ready until the port drops, and a request made while it holds posts before it returns", async () => {
+		portRegistry().holdReady = true
+		const client = newClient()
+		const early = client.echo("early")
+		expect(client.isConnected).toBe(false)
+
+		portRegistry().ready(SERVICE)
+		emitPortMessage(SERVICE, responseMessage(await postedRequestId(), "ok"))
+		await early
+		expect(client.isConnected).toBe(true)
+		const before = posted()
+		const now = client.echo("now").catch((e: unknown) => e)
+		expect(posted()).toBe(before + 1)
+
+		emitPortDisconnect(SERVICE)
+		expect(client.isConnected).toBe(false)
+		expect(await now).toBeInstanceOf(Error)
+		client.disconnect()
 	})
 
 	test("closes before Ready reject nothing, fire nothing, and reopen after the delay; disconnect cancels a pending reopen", async () => {

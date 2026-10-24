@@ -55,35 +55,15 @@ describe("ChromeWindowsAdapter", () => {
 		await windows.update(42, { focused: true, drawAttention: true, state: "normal" })
 		expect(update).toHaveBeenCalledWith(42, { focused: true, drawAttention: true, state: "normal" })
 	})
-})
 
-describe("ChromeWindowsAdapter.navigate", () => {
-	const URL = "chrome-extension://abc/src/popup/index.html#/windows/verify?sessionId=row-1&verificationHash=SENTINELHASH"
-
-	function stubTabs(tabs: Array<{ id?: number }>) {
-		const query = vi.fn<Stub>(async () => tabs)
-		const update = vi.fn<Stub>(async () => ({}))
-		const base = (globalThis as { chrome?: object }).chrome
-		vi.stubGlobal("chrome", { ...base, tabs: { query, update } })
-		return { query, update, windows: new RealChromeBrowserApi().windows }
-	}
-
-	test("loads the URL in the window's tab", async () => {
-		const { query, update, windows } = stubTabs([{ id: 314 }])
-
-		await windows.navigate(41, URL)
-		expect(query).toHaveBeenCalledWith({ windowId: 41 })
-		expect(update).toHaveBeenCalledWith(314, { url: URL })
-	})
-
-	test("a window with no tab rejects, and the adapter's own error carries no URL", async () => {
-		const { update, windows } = stubTabs([])
-
-		const error = await windows.navigate(41, URL).catch((e: unknown) => e)
-		expect(error).toBeInstanceOf(Error)
-		expect((error as Error).message).not.toContain("SENTINELHASH")
-		expect((error as Error).message).not.toContain("chrome-extension://")
-		expect(update).not.toHaveBeenCalled()
+	test("isPopup reads the window's type and answers false for a window that is gone", async () => {
+		const { windows } = stubWindows({
+			get: async (id: unknown) => {
+				if (id === 3) throw new Error("No window with id: 3.")
+				return { id, type: id === 1 ? "popup" : "normal" }
+			},
+		})
+		expect([await windows.isPopup(1), await windows.isPopup(2), await windows.isPopup(3)]).toEqual([true, false, false])
 	})
 })
 

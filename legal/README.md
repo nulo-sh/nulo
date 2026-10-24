@@ -47,7 +47,7 @@ These are **not** fixed by editing the documents.
 
    Blockers 1–3 are recorded in `implementations-plan/archive/legal-terms/`.
 4. ~~**Verify the Presto MIT relicense reached the bundled artifacts.**~~ — done. The lockfile
-   resolves MIT versions (`@alejoamiras/presto@6.0.0-rc.3`, `presto-core@1.2.1` and
+   resolves MIT versions (`@alejoamiras/presto@6.0.0`, `presto-core@1.2.1` and
    `presto-banners@1.2.0`), `apps/extension/src/presto/presto-licence.test.ts` reds if a bump pulls an
    AGPL-declared version back in, and every build emits `THIRD-PARTY-NOTICES.txt` into the
    extension root, carrying each bundled component's own copyright and permission notice

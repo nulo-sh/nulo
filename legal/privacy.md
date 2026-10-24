@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.2.1 — effective 15 October 2026**
+**Version 1.2.4 — effective «FILL: effective date»**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -66,15 +66,22 @@ described in § 5.
 | Password-profile recovery entropy and master secret | Extension local storage | AES-GCM encryption under password-derived protection |
 | Passkey profile | Credential identifier and sealed supporting key material in extension local storage | Master secret re-derived from the credential's PRF output; **no recovery phrase exists** |
 | Separately imported signing keys | Extension local storage | Encrypted using profile-specific key material |
-| Account addresses, profile names, settings, contacts | Extension local storage | Stored without application-level encryption |
-| Tracked tokens, cached balances, cached prices | Extension local storage | Stored without application-level encryption |
+| Contacts, account names and addresses | Extension local storage | Encrypted with a key derived from the profile's master secret, readable only after unlock |
+| Profile names and settings | Extension local storage | Stored without application-level encryption |
+| Tracked tokens and cached balances | Extension local storage | Encrypted as above |
+| Cached prices | Extension local storage | Public data, stored without application-level encryption |
 | The token list (default tokens and their price identifiers) | Extension local storage, shared by every profile; not included in backups | Public data, checked against its signature; stored without application-level encryption |
-| Transaction history, activity records, networks, granted app permissions | Extension local storage | Stored without application-level encryption |
+| Transaction history, activity records, networks, granted app permissions | Extension local storage | Encrypted as above |
 | Private execution database (notes, proving state) | Browser Origin Private File System, using SQLite | Encrypted with a profile-specific database key |
 | Public proving-parameter cache | Browser cache / IndexedDB | Public parameters; not wallet-secret storage |
 | Terms acceptance record (version accepted, time, which screen) and the Privacy Policy version shown | Extension local storage; never transmitted, not included in backups | Stored without application-level encryption |
 | Session state | Extension session storage and process memory | Strict mode requires fresh authentication after worker loss; disabling it permits a locally stored credential capable of restoring the password-profile session |
 | Diagnostic logs | In memory; written to session storage only if you turn on Developer Mode | See § 8 |
+
+A profile's data is converted to this form the first time it is unlocked after the update.
+Exceptions: profile names; a profile not yet unlocked since the update; older transaction entries
+the wallet cannot attribute to one profile; and records kept while a deletion, a network reset or an
+account-integrity block is in progress.
 
 **Deleting it.** Uninstalling or clearing the extension's storage removes its local browser-managed
 data through the browser's deletion mechanisms. It does not delete exports, device backups,
@@ -130,7 +137,8 @@ past 3 days by error, method and network.
 that extension version.
 
 **What it reveals:** the list is not selected from your holdings, and requests do not include your
-balances, account addresses or transaction contents. CoinGecko still receives ordinary request
+balances, account addresses or transaction contents. The request carries no cookies and no
+referrer, and bypasses the browser's HTTP cache. CoinGecko still receives ordinary request
 metadata and may infer application use from timing or other information.
 
 **When:** refreshes are scheduled approximately every three minutes during unlocked use, and may
@@ -279,7 +287,8 @@ It keeps a list only if the signature checks out against a key built into the ex
 is newer than the one it holds; otherwise it keeps what it had.
 
 **What it reveals:** every wallet requests the same file. The request carries no account address,
-balance, network, token or other wallet data, no cookies and no referrer. Cloudflare, Inc., which hosts
+balance, network, token or other wallet data, no cookies and no referrer. The request bypasses the
+browser's HTTP cache, so it carries no cached copy's validator. Cloudflare, Inc., which hosts
 the file, receives your IP address, the time and ordinary browser headers such as the user agent, and
 can infer from them that you use Nulo. Depending on the browser, the request may also carry an
 `Origin` header naming the extension; in Firefox that name is unique to your installation, and the
@@ -447,3 +456,6 @@ described in § 5.
 | 1.1.1 | 6 October 2026 | Updated the address for reporting security vulnerabilities. |
 | 1.2 | 13 October 2026 | The wallet downloads its list of default tokens from `tokens.nulo.sh` (§ 5.11). |
 | 1.2.1 | 15 October 2026 | The explorer is disabled in Settings → Privacy, not Settings → Advanced (§ 5.3). |
+| 1.2.2 | «FILL: effective date» | The token-list and price requests bypass the browser's HTTP cache, and the price request carries no cookies and no referrer (§§ 5.2, 5.11). |
+| 1.2.3 | «FILL: effective date» | Contacts, history, balances, accounts, tokens, networks and app permissions are now stored encrypted on your device, readable only after you unlock the profile. |
+| 1.2.4 | «FILL: effective date» | Pinned tokens, fee-payer choices and the last-selected account are now stored encrypted too. |

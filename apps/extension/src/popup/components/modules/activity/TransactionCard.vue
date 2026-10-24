@@ -21,6 +21,7 @@ import { type Tx, TxStatus, TxExecutionResult } from "@/wallet/services/transact
 import { STATUS_ICON_FILL } from "@/components/composite/activity/status-icon-fill"
 import { balanceFormatted } from "@/utils/amount.js"
 import { txAmount } from "@/utils/tx-amount"
+import { dashIfBlank } from "@/utils/string"
 import { knownDecimals } from "@/utils/token-amount"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { usePrices } from "@/composables/usePrices"
@@ -98,7 +99,7 @@ const txStatusAttr = computed(() => {
 })
 
 const title = computed(() => {
-	if (type.value === "transfer" && amount.value?.symbol) return amount.value.symbol
+	if (type.value === "transfer" && amount.value?.symbol) return dashIfBlank(amount.value.symbol)
 	return getTxTitle(props.tx.calls, props.tokens)
 })
 
@@ -177,7 +178,7 @@ onBeforeUnmount(() => {
 			     call shape and `originLabel` from `tx.origin`. A
 			     dApp-initiated transfer sets both — render both so the
 			     dApp identity isn't silently dropped. -->
-			<span :class="$style.title_sep">·</span>
+			<span :class="$style.title_sep" data-testid="activity-title-sep">·</span>
 			<span v-if="transferTypeLabel && originLabel" :class="$style.chips">
 				<span :class="$style.chip" data-testid="activity-direction-chip">{{ transferTypeLabel }}</span>
 				<span :class="$style.app_slot">

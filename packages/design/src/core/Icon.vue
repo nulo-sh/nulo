@@ -16,6 +16,9 @@ const props = defineProps({
 
 // A glyph paints only through `color`: the root sets stroke and fill to currentColor.
 const glyph = computed<Glyph>(() => (Object.hasOwn(glyphs, props.name) ? glyphs[props.name] : {}))
+// One element strokes every path: an element's stroke is painted once, so where two of a glyph's
+// strokes cross, a translucent colour is not laid down twice. Each path opens with an absolute M.
+const strokes = computed(() => glyph.value.s?.join(" "))
 
 const styles = computed<CSSProperties>(() => ({
 	minWidth: `${props.size}px`,
@@ -23,9 +26,9 @@ const styles = computed<CSSProperties>(() => ({
 	transformBox: "view-box",
 	transformOrigin: "center center",
 	transform: props.rotate ? `rotate(${props.rotate}deg)` : "",
+	// Inline, never a CSS `v-bind`, which costs every icon a document-wide query on each render.
+	...(props.hoverColor ? { "--icon-hover": `var(--txt-${props.hoverColor})` } : {}),
 }))
-
-const hoverColorVar = computed(() => `var(--txt-${props.hoverColor})`)
 </script>
 
 <template>
@@ -42,7 +45,7 @@ const hoverColorVar = computed(() => `var(--txt-${props.hoverColor})`)
 		stroke-linecap="round"
 		stroke-linejoin="round"
 	>
-		<path v-for="d in glyph.s" :key="`s${d}`" :d="d" fill="none" />
+		<path v-if="strokes" :d="strokes" fill="none" />
 		<path v-for="d in glyph.f" :key="`f${d}`" :d="d" stroke="none" />
 	</svg>
 </template>
@@ -52,7 +55,7 @@ const hoverColorVar = computed(() => `var(--txt-${props.hoverColor})`)
 	transition: all 0.3s var(--bezier);
 
 	&:hover {
-		color: v-bind(hoverColorVar);
+		color: var(--icon-hover);
 	}
 }
 

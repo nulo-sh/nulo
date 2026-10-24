@@ -78,8 +78,8 @@ export const FONT_ASSET = /\.(woff2?|ttf|otf|eot)$/i
 
 export const FONT_ALLOWED: ReadonlySet<string> = new Set(["OFL-1.1", "Apache-2.0"])
 
-const AZTEC_NODE_TAG = "https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.3"
-const AZTEC_PACKAGES_TAG = "https://github.com/AztecProtocol/aztec-packages/blob/v6.0.0-rc.6"
+const AZTEC_NODE_TAG = "https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0"
+const AZTEC_PACKAGES_TAG = "https://github.com/AztecProtocol/aztec-packages/blob/v6.0.0"
 const NOIR_COMMIT = "https://github.com/noir-lang/noir/blob/5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 const SQLITE3MC_TAG = "https://github.com/utelle/SQLite3MultipleCiphers/blob/v2.3.5"
 
@@ -89,7 +89,7 @@ const SQLITE3MC_NOTE =
 const SQLITE3MC_TEXTS = ["sqlite3mc.MIT.txt", "sqlite-wasm-bundle-header.txt", "emscripten.MIT.txt", "musl.MIT.txt"] as const
 
 const AZTEC_NODE_LICENCE = {
-	reviewedVersion: "6.0.0-rc.3",
+	reviewedVersion: "6.0.0",
 	license: "Apache-2.0",
 	source: `${AZTEC_NODE_TAG}/LICENSE`,
 	texts: ["aztec-node.Apache-2.0.txt"],
@@ -126,7 +126,7 @@ export const OVERRIDES: readonly Override[] = [
 	},
 	{
 		names: ["@aztec-foundation/bb.js"],
-		reviewedVersion: "6.0.0-rc.6",
+		reviewedVersion: "6.0.0",
 		license: "Apache-2.0",
 		declared: "MIT",
 		source: `${AZTEC_PACKAGES_TAG}/barretenberg/LICENSE`,
@@ -135,7 +135,7 @@ export const OVERRIDES: readonly Override[] = [
 	},
 	{
 		names: ["@aztec-foundation/l1-artifacts"],
-		reviewedVersion: "6.0.0-rc.6",
+		reviewedVersion: "6.0.0",
 		license: "Apache-2.0",
 		source: `${AZTEC_PACKAGES_TAG}/LICENSE`,
 		texts: ["aztec-packages.Apache-2.0.txt"],
@@ -143,23 +143,23 @@ export const OVERRIDES: readonly Override[] = [
 	},
 	{
 		names: ["@aztec-foundation/noir-acvm_js"],
-		reviewedVersion: "6.0.0-rc.6",
+		reviewedVersion: "6.0.0",
 		license: "MIT",
 		source: `${NOIR_COMMIT}/LICENSE-MIT`,
 		texts: ["noir.MIT.txt"],
-		note: "Built from the noir submodule commit aztec-packages v6.0.0-rc.6 pins; the package ships no licence file. The wasm binary is attributed to this project as a whole: the third-party components compiled into it are not itemised here, because upstream publishes no inventory of them.",
+		note: "Built from the noir submodule commit aztec-packages v6.0.0 pins; the package ships no licence file. The wasm binary is attributed to this project as a whole: the third-party components compiled into it are not itemised here, because upstream publishes no inventory of them.",
 	},
 	{
 		names: ["@aztec-foundation/noir-noirc_abi"],
-		reviewedVersion: "6.0.0-rc.6",
+		reviewedVersion: "6.0.0",
 		license: "(MIT OR Apache-2.0)",
 		source: `${NOIR_COMMIT}/LICENSE-MIT`,
 		texts: ["noir.MIT.txt", "noir.Apache-2.0.txt"],
-		note: "Built from the noir submodule commit aztec-packages v6.0.0-rc.6 pins; the package ships no licence file. The wasm binary is attributed to this project as a whole: the third-party components compiled into it are not itemised here, because upstream publishes no inventory of them.",
+		note: "Built from the noir submodule commit aztec-packages v6.0.0 pins; the package ships no licence file. The wasm binary is attributed to this project as a whole: the third-party components compiled into it are not itemised here, because upstream publishes no inventory of them.",
 	},
 	{
 		names: ["@aztec-labs/sqlite3mc-wasm"],
-		reviewedVersion: "6.0.0-rc.3",
+		reviewedVersion: "6.0.0",
 		license: "MIT",
 		source: `${SQLITE3MC_TAG}/LICENSE`,
 		texts: SQLITE3MC_TEXTS,
@@ -204,7 +204,7 @@ export const VENDORED: readonly Vendored[] = [
 		],
 	},
 	{
-		trigger: { package: "@aztec-foundation/l1-artifacts", reviewedVersion: "6.0.0-rc.6" },
+		trigger: { package: "@aztec-foundation/l1-artifacts", reviewedVersion: "6.0.0" },
 		components: [
 			{
 				name: "@aztec/l1-contracts",

@@ -1,7 +1,7 @@
 import { CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { describe, expect, test } from "vitest"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
-import { waitsForFeeFigure } from "./fee-figure"
+import { paysFromPrivateFeeJuice, waitsForFeeFigure } from "./fee-figure"
 import type { DraftUIOperation } from "./types"
 
 const OWNER = `0x${"0a".repeat(32)}`
@@ -53,5 +53,18 @@ describe("waitsForFeeFigure", () => {
 		expect(waitsForFeeFigure(picked, { type: "fpc" })).toBe(false)
 		const capped = sendTx({ calls: [] }, { fee: { gasSettings: { maxFeesPerGas: {} } } })
 		expect(waitsForFeeFigure(capped, { type: "fpc" })).toBe(true)
+	})
+})
+
+describe("paysFromPrivateFeeJuice", () => {
+	test("only a send naming the PrivateFPC as payer, in either case", () => {
+		expect(paysFromPrivateFeeJuice(sendTx({ calls: [], feePayer: PRIVATE_FPC_ADDRESS }))).toBe(true)
+		expect(paysFromPrivateFeeJuice(sendTx({ calls: [], feePayer: PRIVATE_FPC_ADDRESS.toUpperCase().replace("0X", "0x") }))).toBe(true)
+		expect(paysFromPrivateFeeJuice(sendTx({ calls: [], feePayer: APP_FPC }))).toBe(false)
+		expect(paysFromPrivateFeeJuice(sendTx({ calls: [CLAIM], feePayer: OWNER }))).toBe(false)
+		expect(paysFromPrivateFeeJuice(sendTx({ calls: [] }))).toBe(false)
+		expect(
+			paysFromPrivateFeeJuice({ kind: "send_transaction", fee: { embeddedFeePayment: "fpc" } } as unknown as DraftUIOperation),
+		).toBe(false)
 	})
 })

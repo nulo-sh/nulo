@@ -44,8 +44,10 @@ import {
 	switchAccountByAddress,
 	waitForFreshBalanceRow,
 	waitForTxConfirmation,
+	selectedAccount,
 } from "../fixtures/helpers"
-import { holdIncomingPoll, readIncomingPollStatus, releaseIncomingPoll, waitForIncomingPollPhase } from "../fixtures/incoming-poll-gate"
+import { deliverWhileLocked, readIncomingPollStatus, releaseIncomingPoll, waitForIncomingPollPhase } from "../fixtures/incoming-poll-gate"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import type { Page } from "puppeteer"
 
@@ -74,27 +76,14 @@ const hasConfig = aztecConfig !== undefined
 /** Minimal projection of the persisted incoming record we correlate on. */
 type StoredIncomingRecord = { txHash?: string; accountAddress?: string; hidden?: boolean }
 
-/** Scan `chrome.storage.local` for the committed incoming record whose
- *  `txHash` matches. Returns null while none exists. Storage-level (not DOM)
- *  because the incoming card exposes no per-hash `data-testid` — correlating in
- *  the DOM would require a text-based selector, which the e2e selector rule
- *  forbids. The record's `txHash` is `note.txHash.toString()`, the SAME value
- *  the delivery helper returns, so the correlation is exact. */
+/** The committed incoming record whose `txHash` matches, as the wallet reads it; null while none
+ *  exists. Storage-level (not DOM) because the incoming card exposes no per-hash `data-testid` —
+ *  correlating in the DOM would require a text-based selector, which the e2e selector rule forbids.
+ *  The record's `txHash` is `note.txHash.toString()`, the SAME value the delivery helper returns, so
+ *  the correlation is exact. */
 async function findIncomingRecordByHash(page: Page, txHash: string): Promise<StoredIncomingRecord | null> {
-	return page.evaluate(async (want: string) => {
-		const all = await chrome.storage.local.get(null)
-		for (const [key, value] of Object.entries(all)) {
-			if (!key.startsWith("nulo:core:incoming-transfers@")) continue
-			if (typeof value !== "string") continue
-			try {
-				const rec = JSON.parse(value) as { txHash?: string; accountAddress?: string; hidden?: boolean }
-				if (rec && rec.txHash === want) return rec
-			} catch {
-				// Non-JSON value under this root — ignore.
-			}
-		}
-		return null
-	}, txHash)
+	const records = await readSealedRows<StoredIncomingRecord>(page, "incomingTransfers")
+	return records.find(({ row }) => row.txHash === txHash)?.row ?? null
 }
 
 test.skipIf(!hasConfig)(
@@ -116,39 +105,33 @@ test.skipIf(!hasConfig)(
 		expect(triple.account).toBe(accountA)
 		const contract = aztecConfig.tokenAddress
 
-		// ── Deliver a real private note to A from an independent EmbeddedWallet
-		//    and capture the mined tx hash. The token was imported (and thus
-		//    auto-trusted) by the `tokenReadyExtension` fixture, so once the scan
-		//    commits, the record persists visible.
+		// ── While locked, deliver a real private note to A from an independent
+		//    EmbeddedWallet and arm the gate for its mined tx hash: the first scan of
+		//    (profile, network, A, contract) that DISCOVERS it parks after discovery,
+		//    before the locked commit. The token was imported (and thus auto-trusted)
+		//    by the `tokenReadyExtension` fixture, so once the scan commits, the
+		//    record persists visible.
 		const AMOUNT = 25n * 10n ** 18n
 		const { createTestWallet, createSponsoredFeeOptions, mintPrivateTokens } = await import("../fixtures/aztec")
-		let txHash: string
-		const { wallet, node, cleanup } = await createTestWallet(aztecConfig.nodeUrl)
-		try {
-			const feeOptions = await createSponsoredFeeOptions(wallet)
-			txHash = await mintPrivateTokens(wallet, node, contract, accountA, AMOUNT, aztecConfig.minterAddress, feeOptions)
-		} finally {
-			await cleanup()
-		}
+		const txHash = await deliverWhileLocked(
+			page,
+			{ profileId: triple.profileId, networkId: triple.networkId, accountAddress: accountA, contract },
+			async () => {
+				const { wallet, node, cleanup } = await createTestWallet(aztecConfig.nodeUrl)
+				try {
+					const feeOptions = await createSponsoredFeeOptions(wallet)
+					return await mintPrivateTokens(wallet, node, contract, accountA, AMOUNT, aztecConfig.minterAddress, feeOptions)
+				} finally {
+					await cleanup()
+				}
+			},
+		)
 		expect(txHash).toMatch(/^0x[0-9a-fA-F]+$/)
 		console.log(`✓ Delivered private note to A (${accountA.slice(0, 10)}…) in tx ${txHash}`)
 
-		// ── Arm the gate BEFORE the extension PXE has synced the note. The next
-		//    scan of (profile, network, A, contract) that DISCOVERS a note
-		//    carrying this txHash parks after discovery, before the locked commit.
-		await holdIncomingPoll(page, {
-			profileId: triple.profileId,
-			networkId: triple.networkId,
-			accountAddress: accountA,
-			contract,
-			txHash,
-		})
-
-		// ── Drive the extension PXE forward until a scan discovers the note and
-		//    parks at the gate. `refreshBalances` advances the popup PXE sync
-		//    (each fires a simulateTx); the incoming scheduler (30s cadence) then
-		//    discovers the just-synced note and — because the gate is armed for
-		//    exactly this note — parks in `scanContract`.
+		// ── The unlock's scan discovers the note and parks at the gate; a tick or a
+		//    `refreshBalances` (each advances the popup PXE sync) covers a scan that
+		//    ran before the PXE held it.
 		expect(await driveScanUntilHeld(page, txHash)).toBe(true)
 		// Belt-and-suspenders: the fixture wait confirms the exact phase+hash.
 		await waitForIncomingPollPhase(page, "discovery-held", txHash, 5_000)
@@ -181,12 +164,12 @@ test.skipIf(!hasConfig)(
 )
 
 /** Resolve the active `(profileId, networkId, accountAddress)` triple the gate
- *  arms on, from the same persisted keys the harness test reads. Throws with
- *  the observed shape if any leg is missing. */
+ *  arms on, from the persisted keys the harness test reads and the worker's
+ *  selection. Throws with the observed shape if any leg is missing. */
 async function resolveActiveTriple(page: Page): Promise<{ profileId: string; networkId: string; account: string }> {
-	const triple = await page.evaluate(async () => {
+	const account = (await selectedAccount(page)) ?? null
+	const stored = await page.evaluate(async () => {
 		const profileId = (await chrome.storage.local.get("nulo:ui:lastActiveProfile"))["nulo:ui:lastActiveProfile"]
-		const account = (await chrome.storage.local.get("nulo:ui:activeAccount"))["nulo:ui:activeAccount"]
 		let networkId: string | null = null
 		if (typeof profileId === "string") {
 			const activeKey = `nulo:core:active-network@${profileId}`
@@ -195,10 +178,10 @@ async function resolveActiveTriple(page: Page): Promise<{ profileId: string; net
 		}
 		return {
 			profileId: typeof profileId === "string" ? profileId : null,
-			account: typeof account === "string" ? account : null,
 			networkId,
 		}
 	})
+	const triple = { ...stored, account }
 	if (!triple.profileId || !triple.networkId || !triple.account) {
 		throw new Error(`could not resolve active (profile, network, account): ${JSON.stringify(triple)}`)
 	}
@@ -356,17 +339,13 @@ test.skipIf(!hasConfig)(
 		expect(triple.account).toBe(accountA)
 
 		const AMOUNT = 31n * 10n ** 18n
-		const txHash = await deliverPrivateNoteTo(aztecConfig.nodeUrl, contract, accountA, AMOUNT, aztecConfig.minterAddress)
+		const txHash = await deliverWhileLocked(
+			page,
+			{ profileId: triple.profileId, networkId: triple.networkId, accountAddress: accountA, contract },
+			() => deliverPrivateNoteTo(aztecConfig.nodeUrl, contract, accountA, AMOUNT, aztecConfig.minterAddress),
+		)
 		expect(txHash).toMatch(/^0x[0-9a-fA-F]+$/)
 		console.log(`✓ Delivered private note to A in tx ${txHash}`)
-
-		await holdIncomingPoll(page, {
-			profileId: triple.profileId,
-			networkId: triple.networkId,
-			accountAddress: accountA,
-			contract,
-			txHash,
-		})
 
 		expect(await driveScanUntilHeld(page, txHash)).toBe(true)
 		await waitForIncomingPollPhase(page, "discovery-held", txHash, 5_000)

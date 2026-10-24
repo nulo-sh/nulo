@@ -17,7 +17,9 @@ import {
 import { LOCAL_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { interceptRpc, type RpcInterception } from "./fixtures/browser"
 import { clickByTestId, type ExtensionContext, launchExtension, openPopup, pickFileByTestId, test, waitForHash } from "./fixtures/extension"
+import { expectFitsNarrow } from "./fixtures/type-roles"
 import { ensureUnlocked, readSessionRow } from "./fixtures/helpers"
+import { readNetworkRows } from "./helpers/identity-rows"
 import {
 	buildSyntheticBackup,
 	deriveNuloAccountAddress,
@@ -105,17 +107,10 @@ async function activeProfileId(page: Page): Promise<string> {
 	return profile
 }
 
-/** The active profile's networks as stored, by id and name. */
+/** The active profile's networks, by id and name. */
 async function profileNetworks(page: Page): Promise<Array<{ id: string; name: string }>> {
-	const profileId = await activeProfileId(page)
-	return page.evaluate(async (pid) => {
-		const all = await chrome.storage.local.get(null)
-		return Object.entries(all)
-			.filter(([key]) => key.startsWith("nulo:core:networks@"))
-			.map(([, raw]) => JSON.parse(raw as string) as { id: string; name: string; profileId: string })
-			.filter((network) => network.profileId === pid)
-			.map(({ id, name }) => ({ id, name }))
-	}, profileId)
+	await activeProfileId(page)
+	return (await readNetworkRows(page)).map(({ id, name }) => ({ id, name }))
 }
 
 async function readRecord(page: Page, profileId: string): Promise<StoredRecord | undefined> {
@@ -190,6 +185,7 @@ test("SE1: the banner follows renames and other pages; Restore again refuses ano
 		await renameNetwork(page, "Testnet", "Old Testnet")
 		await waitForText(page, "restore-outcome-banner", "Old Testnet")
 		expect(await bannerNames()).not.toMatch(/(?<!Old )Testnet/)
+		await expectFitsNarrow(page, "the restore outcome banner")
 
 		const second = await openPopup(ctx)
 		await waitForText(second, "restore-outcome-banner", "Old Testnet")
@@ -209,6 +205,7 @@ test("SE1: the banner follows renames and other pages; Restore again refuses ano
 				["Old Testnet", "Local Network"],
 			].map(restoreAgainIntroText),
 		).toContain(intro)
+		await expectFitsNarrow(page, "Restore again")
 
 		await restoreAgainWith(page, writeBackupToTemp(await backupJson({ profileName: "Other" }), "other.json"))
 		await waitForText(page, "import-full-backup-error", RESTORE_AGAIN_OTHER_BACKUP.title)

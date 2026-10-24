@@ -15,6 +15,7 @@ import { useToast } from "@/composables/toast"
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { passkeyImportFailedNotice } from "@/utils/profile-flow-notices"
+import { doneRoute } from "../steps"
 import { restoreNoticeText, retryResultText } from "@/components/composite/import/restore-warning"
 
 /** Stores */
@@ -49,7 +50,7 @@ async function completeImport(profile: unknown) {
 		},
 		recover: async () => (await hydrateKnownProfile())?.id === p.id && appStore.isLogined,
 	})
-	router.push("/onboarding/learn")
+	router.push(doneRoute("import"))
 }
 
 const {
@@ -110,7 +111,7 @@ const {
 			},
 		})
 	},
-	notifyImportFailed: () => notificationStore.create(passkeyImportFailedNotice()),
+	notifyImportFailed: (err) => notificationStore.create(passkeyImportFailedNotice(err)),
 	openToast,
 })
 
@@ -133,13 +134,9 @@ onBeforeUnmount(() => {
 
 <template>
 	<OnboardingPage :gap="24" data-testid="onboarding-import-page" :data-name-field="nameFieldState" :data-restore-stage="restoreStage">
-		<OnboardingBackLink testid="onboarding-import-back" />
-		<StepIndicator :current="2" />
-		<header :class="$style.hero">
-			<BrutalistTitle main="Import" sub="Wallet" />
-			<div :class="$style.hero_bar" />
+		<OnboardingStepHeader current="wallet" path="import" back="onboarding-import-back" main="Import" sub="Wallet" :class="$style.hero">
 			<Text variant="body" color="secondary" height="150">Restore from a recovery phrase, passkey, or full backup.</Text>
-		</header>
+		</OnboardingStepHeader>
 
 		<OnboardingProfileNameField
 			v-if="nameFieldState === 'shown'"
@@ -286,16 +283,7 @@ onBeforeUnmount(() => {
 
 <style module>
 .hero {
-	padding: 8px 0 16px;
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-}
-
-.hero_bar {
-	width: 40px;
-	height: 2px;
-	background: var(--nulo-accent);
+	padding-bottom: 16px;
 }
 
 .ctas {

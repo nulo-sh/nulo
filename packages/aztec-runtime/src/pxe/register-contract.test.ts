@@ -86,6 +86,16 @@ describe("PxeService.registerContract derives the address before writing", () =>
 		expect(writes).toEqual([])
 	})
 
+	test("a current class id other than the original is rejected with NO write", async () => {
+		const { service, writes } = makeHarness()
+		const instance = await genuineInstance()
+		const otherClass = { ...instance, currentContractClassId: new Fr(7n).toString() }
+		await expect(service.registerContract(network, { instance: otherClass as never, artifact: WIRE_ARTIFACT })).rejects.toThrow(
+			/registerContract class mismatch/,
+		)
+		expect(writes).toEqual([])
+	})
+
 	test("a tampered preimage field under the genuine address is rejected with NO write", async () => {
 		const { service, writes } = makeHarness()
 		const instance = await genuineInstance()

@@ -236,6 +236,24 @@ async function evaluateInBackground<T>(browser: Browser, extensionId: string, bo
 	}
 }
 
+async function backgroundOrigin(browser: Browser, extensionId: string): Promise<number | undefined> {
+	const workers = browser.targets().filter(isServiceWorkerOf(extensionId))
+	const origins = await Promise.all(workers.map((t) => readWorkerTimeOrigin(t, WORKER_PROBE_BUDGET_MS).catch(() => undefined)))
+	const answered = origins.filter((origin): origin is number => origin !== undefined)
+	return answered.length > 0 ? Math.max(...answered) : undefined
+}
+
+/** Developer mode is a profile setting with no launch flag; the extensions page's own API sets it. */
+async function allowSelfRestart(browser: Browser): Promise<void> {
+	const page = await browser.newPage()
+	try {
+		await page.goto("chrome://extensions", { waitUntil: "domcontentloaded" })
+		await page.evaluate("chrome.developerPrivate.updateProfileConfiguration({ inDeveloperMode: true })")
+	} finally {
+		await page.close()
+	}
+}
+
 /** The MV3 service worker is the first extension context Chrome starts, and its URL carries the id. */
 async function discoverExtensionId(browser: Browser): Promise<string> {
 	const worker = await browser.waitForTarget(
@@ -245,11 +263,15 @@ async function discoverExtensionId(browser: Browser): Promise<string> {
 	return new URL(worker.url()).hostname
 }
 
-/** Seen at the egress guard on every launch, with or without `--disable-component-update`. */
+/**
+ * Seen at the egress guard with or without `--disable-component-update`, all but the download
+ * redirector on every launch.
+ */
 export const CHROME_OWN_HOSTS: ReadonlyMap<string, string> = new Map([
 	["accounts.google.com", "account sign-in state"],
 	["android.clients.google.com", "device check-in"],
 	["clients2.google.com", "extension and component update checks"],
+	["redirector.gvt1.com", "the component updater's download redirector"],
 	["update.googleapis.com", "the component updater"],
 	["www.google.com", "the default search provider's preconnect"],
 ])
@@ -308,6 +330,8 @@ export const chromeDriver: BrowserDriver = {
 	pxeHostState,
 	closePxeHost: (page) => page.evaluate(() => chrome.offscreen.closeDocument()),
 	stopBackground,
+	allowSelfRestart,
+	backgroundOrigin,
 	backgroundAlive,
 	evaluateInBackground,
 	openScratchPage: async (browser, extensionId) => {

@@ -18,9 +18,11 @@
  * refuse-and-preserve flip (5.0.0's `initStoreForRollupAndSchemaVersion` WIPED; 5.0.1 does not) and
  * the decision that the store holds user-owned state and the rollupAddress input is
  * node-derived, so wiping on it would let a lying RPC loop-destroy local stores). A mismatch throws
- * `PxeStoreVersionMismatch` and the caller fails chain-init; pre-production remediation = profile
- * purge. `PXE_DATA_SCHEMA_VERSION_PIN` mirrors upstream's non-exported constant; `opfs-store.test.ts`
- * asserts it against the installed package so a silent upstream bump fails the build.
+ * `PxeStoreVersionMismatch` and the caller fails chain-init. Every chain's store checks the one pin,
+ * and a network reset purges only its own chain's, so an update must not move the pin while any
+ * other chain holds a store. `PXE_DATA_SCHEMA_VERSION_PIN`
+ * mirrors upstream's non-exported constant; `opfs-store.test.ts` asserts it against the installed
+ * package so a silent upstream bump fails the build.
  * A wrong store key surfaces as `SqliteEncryptionError` from upstream — mapped to a typed
  * `WrongStoreKeyError` (never confused with corruption or absence).
  */
@@ -197,7 +199,7 @@ const UNPARSEABLE_STAMP = "stamp failed to parse"
  * REFUSE-and-preserve (`initStoreForRollupAndSchemaVersion` no longer clears), and the flip is right
  * here: the store holds user state whose backup is optional, and the rollupAddress input is node-derived (a lying RPC could wipe-loop). So
  * on a schema/rollup/parse mismatch we THROW `PxeStoreVersionMismatch` (the caller closes the store
- * and fails chain-init; pre-production remediation = profile purge) — NEVER `store.clear()`.
+ * and fails chain-init) — NEVER `store.clear()`.
  */
 export async function initStoreVersionStamp(store: AztecSQLiteOPFSStore, rollupAddress: string | undefined, log: Logger): Promise<void> {
 	const target = new DatabaseVersion(PXE_DATA_SCHEMA_VERSION_PIN, rollupAddress ? EthAddress.fromString(rollupAddress) : EthAddress.ZERO)

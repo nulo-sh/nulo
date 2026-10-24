@@ -12,7 +12,7 @@ import { FileTooLargeError, pickFile } from "@/utils"
 import { copyWithToast } from "@/utils/clipboard"
 import { MAX_BACKUP_FILE_BYTES } from "@/utils/full-backup-helpers"
 import { managers } from "@/utils/core"
-import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import { isNewPasswordValid } from "@/utils/password"
@@ -45,8 +45,9 @@ export interface UseProfileImportFlowOptions {
 	completeImport: (profile: unknown) => Promise<void> | void
 	/** Per-shell restore-error surface (popup = data-viewer overlay; onboarding = notification). */
 	showErrorLog: (errors: Record<string, unknown[]>, networks: RestoreErrorNetworks) => void
-	/** Per-shell passkey-import failure notification (page owns `notificationStore.create`). */
-	notifyImportFailed: () => void
+	/** Per-shell passkey-import failure notification (page owns `notificationStore.create`); gets the
+	 *  failure so a profile already here reads as itself. */
+	notifyImportFailed: (err: unknown) => void
 	/** The page's toast: the copy-error affordance, and a passkey prompt that was not confirmed. */
 	openToast: (toast: ToastOptions) => void
 }
@@ -201,16 +202,14 @@ function createImportHandlers(deps: ImportHandlerDeps) {
 			if (name === null) return
 			// Discovery `get` — no allowedCredentials; the user picks from their
 			// available passkeys. In Firefox's toolbar panel the background runs it in its own window.
-			const credData = passkeyNeedsOwnWindow()
-				? undefined
-				: await deps.runCeremony({ mode: "get", step: "import", profileName: name })
+			const credData = closesOnFocusLoss() ? undefined : await deps.runCeremony({ mode: "get", step: "import", profileName: name })
 			// PATH A reuses this credential on the confirm-retry, so no second ceremony runs.
 			const profile = await deps.withDuplicateConfirm(() => managers.profile.importPasskey(name, credData, deps.allowDuplicate.value))
 			if (!profile) return
 			await deps.completeImport(profile)
 		} catch (err) {
 			if (handleCancelOrUnconfirmed(err, deps.openToast)) return
-			deps.notifyImportFailed()
+			deps.notifyImportFailed(err)
 			console.error("Failed to import profile:", err)
 		} finally {
 			deps.isImporting.value = false

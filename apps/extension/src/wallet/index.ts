@@ -23,7 +23,8 @@ import { PRICE_REFRESH_ALARM_NAME, PriceService } from "./services/price/service
 import { TOKEN_LIST_REFRESH_ALARM_NAME, TokenListService } from "./services/token-list/service"
 import { isClientDisconnectRejection, isReceiverGoneRejection } from "@nulo/extension-messaging/errors"
 import { openOrFocusOnboardingTab } from "./utils/onboarding-tab"
-import { armPopupReturn, registerToolbarPopupMessage } from "./utils/toolbar-popup"
+import { armPopupReturn, registerPanelReturnMessage, registerToolbarPopupMessage } from "./utils/toolbar-popup"
+import { registerToolbarSidebar } from "./utils/toolbar-sidebar"
 import { restrictToTrustedContexts } from "./utils/storage-access"
 import { recordCspViolationsInBackground } from "@/e2e/csp-report"
 
@@ -40,6 +41,7 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
 })
 
 registerToolbarPopupMessage()
+registerPanelReturnMessage()
 
 // MV3: when a content-script message WAKES the SW, only listeners registered
 // synchronously at module scope receive the triggering event — the wallet-sdk
@@ -52,6 +54,7 @@ registerContentMessageRelay()
 void restrictToTrustedContexts(chrome.storage.local)
 
 const config = new ConfigStore()
+registerToolbarSidebar(config)
 const logger = new LoggerStore(config)
 const browserApi = new RealChromeBrowserApi()
 const clock = new SystemClock()

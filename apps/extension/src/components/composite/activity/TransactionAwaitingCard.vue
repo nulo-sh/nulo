@@ -79,7 +79,7 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 			</template>
 
 			<template v-if="transferTypeLabel || originLabel" #title-trailing>
-				<span :class="$style.title_sep">·</span>
+				<span :class="$style.title_sep" data-testid="activity-title-sep">·</span>
 				<span v-if="transferTypeLabel" :class="$style.transfer_chip">{{ transferTypeLabel }}</span>
 				<span v-else :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
 			</template>
@@ -164,6 +164,5 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 .action_btn:focus-visible {
 	outline: 2px solid var(--nulo-accent);
 	outline-offset: -2px;
-	border-radius: 4px;
 }
 </style>

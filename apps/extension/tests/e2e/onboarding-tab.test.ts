@@ -1,54 +1,28 @@
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { extensionUrl, gotoExtensionPage, isFirefox, newPage, openScratchPage, prepareKeys, waitForTarget } from "./fixtures/browser"
-import {
-	withTimeoutMessage,
-	clickByTestId,
-	expectNoNameField,
-	openOnboarding,
-	replaceInputValue,
-	test,
-	waitForHash,
-} from "./fixtures/extension"
-import { readProfileNames } from "./fixtures/helpers"
+import { waitForOpenPanel } from "./fixtures/browser/firefox-action-popup"
+import { clickByTestId, expectNoNameField, openOnboarding, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
+import { readProfileNames, readRecoveryWords, revealSeedPhrase } from "./fixtures/helpers"
 import { waitForPopupClosed } from "./fixtures/popups"
 import { shotSend } from "./fixtures/send-page"
-import { focusRing, tokenColor, waitForFocus } from "./helpers/pointer-probes"
-import { gotoPrestoStep } from "./helpers/presto-step"
-import {
-	interceptHealth,
-	PRESTO_DETAILED_HEALTH,
-	PRESTO_HTTP_HEALTH_URL,
-	PRESTO_HTTPS_HEALTH_URL,
-	PRESTO_MINIMAL_HEALTH,
-} from "./fixtures/presto"
+import { focusRing, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
+import { interceptHealth, PRESTO_HTTPS_HEALTH_URL, PRESTO_MINIMAL_HEALTH } from "./fixtures/presto"
 
 const TEST_PASSWORD = "OnboardingTest_!23"
-
-/** The step probes only on a click, so a test that wants a probe result has to ask for one. */
-async function gotoPrestoStepAndCheck(page: Page): Promise<void> {
-	await gotoPrestoStep(page)
-	await clickByTestId(page, "onboarding-presto-retry")
-}
-
-const statusCardSelector = (status: string) => `[data-testid="onboarding-presto-status"][data-status="${status}"]`
 
 const tabsInWindow = (page: Page) =>
 	page.evaluate(async () => (await chrome.tabs.query({ windowId: (await chrome.windows.getCurrent()).id })).length)
 
+const phraseSavedFlags = (page: Page) =>
+	page.evaluate(async () =>
+		Object.entries(await chrome.storage.local.get(null))
+			.filter(([key]) => key.startsWith("nulo:ui:getStartedPhraseSaved@"))
+			.map(([, value]) => value),
+	)
+
 const onboardingCompleted = (control: Page) =>
 	control.evaluate(async () => (await chrome.storage.local.get("nulo:onboarding:completed"))["nulo:onboarding:completed"])
-
-/** Read from another extension page, which moves no focus, as reading inside the panel would. Firefox
- *  loads the popup's document before the panel opens, and only the open panel gives it focus. */
-const waitForOpenPanel = (control: Page) =>
-	control.waitForFunction(
-		() => {
-			const views = chrome.extension.getViews({ type: "popup" })
-			return views.length === 1 && views[0].document.hasFocus()
-		},
-		{ timeout: 10_000, polling: 100 },
-	)
 
 describe("onboarding tab", () => {
 	test("welcome screen renders both CTAs", async ({ freshExtensionPerTest: extension }) => {
@@ -65,28 +39,25 @@ describe("onboarding tab", () => {
 		await page.close()
 	})
 
-	test("the focused method tab shows a ring in the page colour inside its fill, and ArrowRight carries it to Passkey", async ({
+	test("the focused method tab shows a ring in the page colour inside its fill, and ArrowRight carries it to Password", async ({
 		freshExtensionPerTest: extension,
 	}) => {
 		const page = await openOnboarding(extension)
 		await clickByTestId(page, "onboarding-welcome-create")
 		await waitForHash(page, "#/onboarding/create", 10_000)
-		await page.waitForSelector('[data-testid="onboarding-method-password"]', { visible: true })
+		await page.waitForSelector('[data-testid="onboarding-method-passkey"]', { visible: true })
 
-		// The page focuses the password field, and a walk forward from it leaves the document on Firefox.
+		// Passkey comes first and is selected, so it holds the tablist's one tab stop.
 		await prepareKeys(page)
-		await page.keyboard.down("Shift")
-		await page.keyboard.press("Tab")
-		await page.keyboard.up("Shift")
-		await waitForFocus(page, "onboarding-method-password")
-		await shotSend(page, "onboarding-method-password-focused", "onboarding-method-password")
+		await tabTo(page, "onboarding-method-passkey")
+		await shotSend(page, "onboarding-method-passkey-focused", "onboarding-method-passkey")
 		const ring = { ring: "solid 2px -5px", color: await tokenColor(page, "--app-bg") }
-		expect(await focusRing(page, "onboarding-method-password")).toEqual(ring)
+		expect(await focusRing(page, "onboarding-method-passkey")).toEqual(ring)
 
 		await page.keyboard.press("ArrowRight")
-		await waitForFocus(page, "onboarding-method-passkey")
-		await shotSend(page, "onboarding-method-passkey-focused", "onboarding-method-passkey")
-		expect(await focusRing(page, "onboarding-method-passkey")).toEqual(ring)
+		await waitForFocus(page, "onboarding-method-password")
+		await shotSend(page, "onboarding-method-password-focused", "onboarding-method-password")
+		expect(await focusRing(page, "onboarding-method-password")).toEqual(ring)
 
 		await page.close()
 	})
@@ -105,6 +76,7 @@ describe("onboarding tab", () => {
 
 		// A first run asks only how to unlock: no name field.
 		await expectNoNameField(page, "onboarding-create-page", "onboarding-name-input")
+		await clickByTestId(page, "onboarding-method-password")
 		await replaceInputValue(page, '[data-testid="onboarding-password-input"]', TEST_PASSWORD)
 		await replaceInputValue(page, '[data-testid="onboarding-password-confirm"]', TEST_PASSWORD)
 		const scrolled = await page.evaluate(() => {
@@ -116,52 +88,19 @@ describe("onboarding tab", () => {
 
 		await clickByTestId(page, "onboarding-submit-create")
 
-		// Wait for the bootstrap to finish + route to /learn
-		await waitForHash(page, "#/onboarding/learn", 30_000)
-		await page.waitForSelector('[data-testid="onboarding-learn-continue"]', { visible: true, timeout: 10_000 })
+		// A password wallet sees its words before Ready, from the top of the step.
+		await page.waitForSelector('[data-testid="onboarding-phrase-saved"]', { visible: true, timeout: 30_000 })
 		expect(await page.evaluate(() => document.scrollingElement?.scrollTop)).toBe(0)
 		if (viewport) await page.setViewport(viewport)
 		expect(await readProfileNames(page)).toEqual(["Main"])
+		const words = await readRecoveryWords(page, "onboarding-phrase")
+		expect(words).toHaveLength(24)
 
-		// Continue from learn routes into the fee-juice explainer step. Skip on
-		// learn routes straight to /presto — covered by the dedicated skip test below.
-		await clickByTestId(page, "onboarding-learn-continue")
-		await waitForHash(page, "#/onboarding/fees", 10_000)
-
-		// Continue from /fees → /presto. Skip on /fees routes to the same
-		// destination (the explainer is short; no value in a dedicated
-		// skip-to-done shortcut).
-		await clickByTestId(page, "onboarding-fees-continue")
-		await waitForHash(page, "#/onboarding/presto", 10_000)
-
-		// The step rests until asked. After the check it settles on a terminal status; Continue
-		// only renders when proving can go native, otherwise Skip routes directly to /done.
-		await clickByTestId(page, "onboarding-presto-retry")
-		const settled = await withTimeoutMessage(
-			page
-				.waitForFunction(
-					() => {
-						const s = document.querySelector('[data-testid="onboarding-presto-status"]')?.getAttribute("data-status")
-						return s && s !== "idle" && s !== "detecting" ? s : null
-					},
-					{ timeout: 20_000, polling: 200 },
-				)
-				.then((handle) => handle.jsonValue()),
-			async () => {
-				const seen = await page
-					.evaluate(
-						() => document.querySelector('[data-testid="onboarding-presto-status"]')?.getAttribute("data-status") ?? "<absent>",
-					)
-					.catch(() => "<unreadable>")
-				return `onboarding presto step never settled within 20s (last: ${seen})`
-			},
-		)
-		if (settled === "available" || settled === "downloading") {
-			await clickByTestId(page, "onboarding-presto-continue")
-		} else {
-			await clickByTestId(page, "onboarding-presto-skip")
-		}
+		await clickByTestId(page, "onboarding-phrase-saved")
 		await waitForHash(page, "#/onboarding/done", 10_000)
+		await page.waitForSelector('[data-testid="onboarding-done-open"]', { visible: true, timeout: 10_000 })
+		// Read before any Settings reveal, which sets the same flag.
+		expect(await phraseSavedFlags(page)).toEqual([true])
 
 		// Onboarding opens beside a person's own tabs, so Open wallet closes it, then opens the popup.
 		const control = await openScratchPage(extension.browser, extension.extensionId)
@@ -177,6 +116,15 @@ describe("onboarding tab", () => {
 		expect(await onboardingCompleted(control)).toBe(true)
 		// A toolbar popup in headless Chrome is beyond what a test can find.
 		if (isFirefox) await waitForOpenPanel(control)
+
+		// "I saved it" reached Home: its card opens with the phrase step checked.
+		const popup = await openPopup(extension)
+		await waitForHash(popup, "#/popup/general", 15_000)
+		await popup.waitForSelector('[data-testid="get-started-aztec"]', { visible: true, timeout: 30_000 })
+		expect(await popup.$eval('[data-testid="get-started-phrase"]', (el) => el.getAttribute("data-done"))).toBe("true")
+
+		// The step showed the wallet's own words: Settings reveals the same ones.
+		expect(await revealSeedPhrase(popup, TEST_PASSWORD)).toEqual(words)
 	})
 
 	test("Open wallet keeps a tab that is its window's last, and opens the popup over it", async ({ freshExtensionPerTest: extension }) => {
@@ -210,130 +158,6 @@ describe("onboarding tab", () => {
 		await interceptHealth(page, { https: { status: 200, body: PRESTO_MINIMAL_HEALTH }, http: "refused" })
 		const body = await page.evaluate(async (url) => (await fetch(url)).json(), PRESTO_HTTPS_HEALTH_URL)
 		expect(body).toEqual(PRESTO_MINIMAL_HEALTH)
-		await page.close()
-	})
-
-	test("presto available renders the connected card and an enabled Continue", async ({ freshExtensionPerTest: extension }) => {
-		const page = await openOnboarding(extension)
-		// A healthy HTTPS Presto whose cached versions include the wallet's Aztec line.
-		await interceptHealth(page, { https: { status: 200, body: PRESTO_DETAILED_HEALTH }, http: "refused" })
-		await gotoPrestoStepAndCheck(page)
-
-		await page.waitForSelector(statusCardSelector("available"), { visible: true, timeout: 10_000 })
-		const state = await page.evaluate(() => {
-			const btn = document.querySelector<HTMLButtonElement>('[data-testid="onboarding-presto-continue"]')
-			return {
-				rendered: !!btn,
-				disabled: btn?.disabled ?? null,
-				skip: !!document.querySelector('[data-testid="onboarding-presto-skip"]'),
-			}
-		})
-		expect(state).toEqual({ rendered: true, disabled: false, skip: false })
-
-		await page.close()
-	})
-
-	test("skip links on /learn and /fees both route to /presto (split-handler pin)", async ({ freshExtensionPerTest: extension }) => {
-		// Drive the two skip buttons directly: each skip is its own handler routing to
-		// /presto (not /done). Without this pin, a future refactor that consolidates
-		// handlers could silently fan one of them to the wrong target.
-		const page = await openOnboarding(extension)
-
-		await page.evaluate(() => {
-			window.location.hash = "#/onboarding/learn"
-		})
-		await waitForHash(page, "#/onboarding/learn", 10_000)
-		await clickByTestId(page, "onboarding-learn-skip")
-		await waitForHash(page, "#/onboarding/presto", 10_000)
-
-		await page.evaluate(() => {
-			window.location.hash = "#/onboarding/fees"
-		})
-		await waitForHash(page, "#/onboarding/fees", 10_000)
-		await clickByTestId(page, "onboarding-fees-skip")
-		await waitForHash(page, "#/onboarding/presto", 10_000)
-
-		await page.close()
-	})
-
-	test("the step rests on the pitch without probing; a check that finds nothing keeps the pitch; Skip routes to /done", async ({
-		freshExtensionPerTest: extension,
-	}) => {
-		const page = await openOnboarding(extension)
-		// Both probes refused is what an uninstalled Presto looks like to the page.
-		await interceptHealth(page, { https: "refused", http: "refused" })
-		let probes = 0
-		page.on("request", (req) => {
-			if (req.url() === PRESTO_HTTPS_HEALTH_URL || req.url() === PRESTO_HTTP_HEALTH_URL) probes++
-		})
-		// A pitch dismissed in an earlier onboarding outlives a reset; the step must show it again.
-		await page.evaluate(() => localStorage.setItem("presto:banner:card:offline", JSON.stringify({ until: "never" })))
-		await gotoPrestoStep(page)
-
-		await page.waitForSelector('[data-testid="onboarding-presto-pitch"]', { visible: true, timeout: 10_000 })
-		// The card reads `detecting` for the moment it takes to learn that no earlier check reached Presto.
-		await page.waitForSelector(statusCardSelector("idle"), { visible: true, timeout: 10_000 })
-		const readState = () =>
-			page.evaluate(() => {
-				const banner = document.querySelector('[data-testid="onboarding-presto-pitch"] presto-banner')
-				return {
-					// The element renders its default ribbon whenever the variant attribute is missing.
-					variant: banner?.getAttribute("variant"),
-					cardRendered: !!banner?.shadowRoot?.querySelector(".root-card .card"),
-					status: document.querySelector('[data-testid="onboarding-presto-status"]')?.getAttribute("data-status"),
-					continue: !!document.querySelector('[data-testid="onboarding-presto-continue"]'),
-					skip: !!document.querySelector('[data-testid="onboarding-presto-skip"]'),
-				}
-			})
-		// A probe can raise the browser's local-network prompt, so arriving must not send one.
-		expect(await readState()).toEqual({ variant: "card", cardRendered: true, status: "idle", continue: false, skip: true })
-		expect(probes).toBe(0)
-
-		await clickByTestId(page, "onboarding-presto-retry")
-		await page.waitForSelector(statusCardSelector("offline"), { visible: true, timeout: 10_000 })
-		expect(probes).toBeGreaterThan(0)
-		expect(await readState()).toEqual({ variant: "card", cardRendered: true, status: "offline", continue: false, skip: true })
-
-		await clickByTestId(page, "onboarding-presto-skip")
-		await waitForHash(page, "#/onboarding/done", 5_000)
-
-		await page.close()
-	})
-
-	test("HTTPS refused + a detailed HTTP body without https_port is the encrypted-connection card (https-disabled)", async ({
-		freshExtensionPerTest: extension,
-	}) => {
-		const page = await openOnboarding(extension)
-		const { https_port: _omitted, ...withoutHttpsPort } = PRESTO_DETAILED_HEALTH
-		await interceptHealth(page, { https: "refused", http: { status: 200, body: withoutHttpsPort } })
-		await gotoPrestoStepAndCheck(page)
-
-		await page.waitForSelector(statusCardSelector("secure-connection-unavailable"), { visible: true, timeout: 10_000 })
-		const state = await page.evaluate(() => {
-			const card = document.querySelector('[data-testid="onboarding-presto-status"]')
-			return {
-				diagnosis: card?.getAttribute("data-diagnosis"),
-				steps: card?.querySelectorAll("li").length,
-				continue: !!document.querySelector('[data-testid="onboarding-presto-continue"]'),
-				skip: !!document.querySelector('[data-testid="onboarding-presto-skip"]'),
-			}
-		})
-		expect(state).toEqual({ diagnosis: "https-disabled", steps: 3, continue: false, skip: true })
-
-		await page.close()
-	})
-
-	test("HTTPS refused + the minimal HTTP body is the presto-reachable copy", async ({ freshExtensionPerTest: extension }) => {
-		const page = await openOnboarding(extension)
-		await interceptHealth(page, { https: "refused", http: { status: 200, body: PRESTO_MINIMAL_HEALTH } })
-		await gotoPrestoStepAndCheck(page)
-
-		await page.waitForSelector(statusCardSelector("secure-connection-unavailable"), { visible: true, timeout: 10_000 })
-		const diagnosis = await page.evaluate(
-			() => document.querySelector('[data-testid="onboarding-presto-status"]')?.getAttribute("data-diagnosis") ?? null,
-		)
-		expect(diagnosis).toBe("presto-reachable")
-
 		await page.close()
 	})
 

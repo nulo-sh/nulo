@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { boundedString } from "@/utils/bounded-string"
 import type { IncomingTransferRecord, IncomingTrustRecord } from "./spec"
 
 /**
@@ -32,7 +33,7 @@ const blockSchema = z.number().int().nonnegative()
 /** A row that fails to parse reads as missing: it is rebaselined, never trusted. */
 export const ArrivalRowSchema: z.ZodType<ArrivalRow> = z.object({
 	sinceBlock: blockSchema,
-	played: z.array(z.tuple([z.string().max(ARRIVAL_ID_MAX), blockSchema])).max(ARRIVAL_PLAYED_CAP),
+	played: z.array(z.tuple([boundedString(ARRIVAL_ID_MAX), blockSchema])).max(ARRIVAL_PLAYED_CAP),
 })
 
 type ArrivalCandidate = Pick<IncomingTransferRecord, "id" | "contract" | "l2BlockNumber" | "amountRaw">

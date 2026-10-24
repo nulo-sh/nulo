@@ -1,4 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { stripWireControl } from "@/wallet/services/dapp-session/capability-meta"
+
 export const capitalize = (s: string): string => {
 	if (!s) return ""
 	return s.charAt(0).toUpperCase() + s.slice(1)
@@ -47,6 +49,12 @@ export function sanitizeString(s: string, length = 0): string {
 export function sentenceName(name: string, fallback: string): string {
 	return sanitizeString(name, 32).trim() || fallback
 }
+
+/** Absent, or only whitespace once the wire sanitizer's strip has run. */
+export const isBlank = (s: string | null | undefined): boolean => stripWireControl(s ?? "").trim() === ""
+
+/** The empty-value "—" for a blank name, title or label; any other value exactly as given. */
+export const dashIfBlank = (s: string | null | undefined): string => (isBlank(s) ? "—" : (s as string))
 
 export function stringCompare(a: string, b: string): number {
 	return (a || "").localeCompare(b || "", undefined, { sensitivity: "base", numeric: true })

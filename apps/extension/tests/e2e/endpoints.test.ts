@@ -1,7 +1,7 @@
 import { expect } from "vitest"
 import type { Page } from "puppeteer"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
-import { captureSoleProfileId, navigateToSettings, openNetworkDetail } from "./fixtures/helpers"
+import { navigateToSettings, openNetworkDetail, rewriteActiveNetwork } from "./fixtures/helpers"
 import { shotSend } from "./fixtures/send-page"
 
 // Scope note: `addEndpoint` / `updateEndpoint` probe the candidate URL
@@ -182,28 +182,19 @@ test("seeded dRPC endpoint row is titled 'dRPC', never the raw provider URL", as
 test("a saved http://[::1] node URL leaves the popup starting and the endpoint listed", async ({ registeredExtensionPerTest }) => {
 	const first = await openPopup(registeredExtensionPerTest)
 	await waitForHash(first, "#/popup/general")
-	const profileId = await captureSoleProfileId(first)
-	const rewritten = await first.evaluate(async (pid: string) => {
-		const all = await chrome.storage.local.get(null)
-		const key = `nulo:core:networks@${all[`nulo:core:active-network@${pid}`]}`
-		const row = JSON.parse(all[key] as string) as {
-			name: string
-			primaryEndpointId: string
-			endpoints: { id: string; rpcUrl: string }[]
-		}
+	const rewritten = await rewriteActiveNetwork(first, (row) => {
 		const primary = row.endpoints.find((e) => e.id === row.primaryEndpointId)
-		if (!primary) return null
+		if (!primary) return false
 		primary.rpcUrl = "http://[::1]:8080"
-		await chrome.storage.local.set({ [key]: JSON.stringify(row) })
-		return row.name
-	}, profileId)
-	expect(rewritten).toBeTruthy()
+		return true
+	})
+	expect(rewritten?.name).toBeTruthy()
 	await first.close()
 
 	const page = await openPopup(registeredExtensionPerTest)
 	await waitForHash(page, "#/popup/general")
 	await navigateToSettings(page, "networks")
-	await openNetworkDetail(page, rewritten as string)
+	await openNetworkDetail(page, rewritten?.name as string)
 	await page.waitForSelector('[data-testid="endpoint-row"]', { visible: true, timeout: 5_000 })
 	const rows = await page.evaluate(() => [...document.querySelectorAll('[data-testid="endpoint-row"]')].map((r) => r.textContent ?? ""))
 	expect(rows.some((text) => text.includes("http://[::1]:8080"))).toBe(true)

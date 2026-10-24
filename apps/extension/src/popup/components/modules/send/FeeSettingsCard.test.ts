@@ -15,23 +15,29 @@ import { config, flushPromises, mount } from "@vue/test-utils"
 import { createPinia } from "pinia"
 import { reactive } from "vue"
 import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
+import { type Deferred, deferred } from "@nulo/wallet-core/utils"
 
 const mocks = vi.hoisted(() => ({
 	getGasBalances: vi.fn(),
 	getTokenBalances: vi.fn(),
 	getFpcs: vi.fn(),
+	getFeePicks: vi.fn(),
 	saveFeePick: vi.fn(),
 }))
 
-// The real `saveFeePick` is a client method, so the card must call it on `managers.profile`.
+// The real methods are client methods, so the card must call them on `managers.uiPreference`.
 vi.mock("@/utils/core", () => {
-	const profile = {
+	const uiPreference = {
+		getFeePicks(this: unknown, ...args: unknown[]) {
+			if (this !== uiPreference) throw new Error("getFeePicks called off managers.uiPreference")
+			return mocks.getFeePicks(...args)
+		},
 		saveFeePick(this: unknown, ...args: unknown[]) {
-			if (this !== profile) throw new Error("saveFeePick called off managers.profile")
+			if (this !== uiPreference) throw new Error("saveFeePick called off managers.uiPreference")
 			return mocks.saveFeePick(...args)
 		},
 	}
-	return { managers: { profile } }
+	return { managers: { uiPreference } }
 })
 
 // Vitest 4 requires `function` expressions (not arrow functions) for mocks
@@ -93,6 +99,7 @@ vi.mock("@/stores/app.store", () => ({
 
 import FeeSettingsCard from "./FeeSettingsCard.vue"
 import { applyFeePickUpdate, type FeePickUpdate } from "@/utils/fee-picks"
+import { readFeePicks } from "../../../../../tests/helpers/ui-preference-fake"
 import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { INIT_FETCH_TIMEOUT_MS, INIT_RETRY_BACKOFF_MS, useBalancesStore } from "@/stores/balances.store"
 
@@ -193,22 +200,6 @@ function stubChromeStorage() {
 	}
 }
 
-/**
- * Helpers to control the deferred SW promises per test. We default to
- * resolved values; tests that need to drive the timing precisely
- * override before mounting and resolve manually.
- */
-type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void }
-function deferred<T>(): Deferred<T> {
-	let resolve!: (v: T) => void
-	let reject!: (e: unknown) => void
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
-}
-
 beforeEach(() => {
 	// A FRESH pinia is INJECTED into every mount via the global config:
 	// `setActivePinia` does not isolate component suites here — the SFC's
@@ -222,8 +213,11 @@ beforeEach(() => {
 	mocks.getGasBalances.mockReset()
 	mocks.getTokenBalances.mockReset()
 	mocks.getFpcs.mockReset()
+	mocks.getFeePicks.mockReset()
 	mocks.saveFeePick.mockReset()
-	// The profile service's writer, over this suite's storage: the real reducer, no lock.
+	// The preference service's reader and writer, over this suite's storage: the real parsers and
+	// reducer, no lock and no seal.
+	mocks.getFeePicks.mockImplementation((profileId: string) => readFeePicks(chrome.storage.local, profileId))
 	mocks.saveFeePick.mockImplementation(async (profileId: string, update: FeePickUpdate) => {
 		const keys = { app: feePicksKey(profileId), send: sendFeePicksKey(profileId) }
 		const next = applyFeePickUpdate({ app: storageBacking[keys.app], send: storageBacking[keys.send] }, update)
@@ -629,9 +623,8 @@ describe("FeeSettingsCard — the saved pick, outside Send", () => {
 			await pickSponsor(w, fpc.id)
 			await flushPromises()
 
-			// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
-			const savedReads = vi.spyOn((globalThis as any).chrome.storage.local, "get")
 			const before = {
+				picks: mocks.getFeePicks.mock.calls.length,
 				gas: mocks.getGasBalances.mock.calls.length,
 				fpcs: mocks.getFpcs.mock.calls.length,
 				payers: w.emitted("update:payer")?.length ?? 0,
@@ -642,7 +635,7 @@ describe("FeeSettingsCard — the saved pick, outside Send", () => {
 			mocks.getFpcs.mockReturnValueOnce(fpcs.promise)
 			await w.setProps({ profile: { ...profile } })
 			await flushPromises()
-			expect(savedReads.mock.calls.filter(([keys]) => keys === FEE_METHOD_LS_KEY)).toHaveLength(1)
+			expect(mocks.getFeePicks.mock.calls.length).toBe(before.picks + 1)
 			expect(mocks.getGasBalances.mock.calls.length).toBe(before.gas + 1)
 			expect(mocks.getFpcs.mock.calls.length).toBe(before.fpcs + 1)
 			expect(w.emitted("update:payer")?.length ?? 0).toBeGreaterThan(before.payers)
@@ -820,22 +813,16 @@ describe("FeeSettingsCard — rows while the read is in flight", () => {
 			checking: b.attributes("data-checking") === "true",
 			spend: b.attributes("data-spend") ?? null,
 		}))
-	/** Holds the card's next read of its saved selection until the returned release. The value is
-	 *  read before the hold and handed back as a clone, as chrome does. */
+	/** Holds the card's next read of its saved picks until the returned release. The value is read
+	 *  before the hold. */
 	const holdSavedSelectionRead = () => {
 		const gate = deferred<void>()
-		// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
-		const local = (globalThis as any).chrome.storage.local
-		const plainGet = local.get
-		let held = false
-		local.get = async (keys: string | string[] | null | undefined) => {
-			const value = structuredClone(await plainGet(keys))
-			if (keys === FEE_METHOD_LS_KEY && !held) {
-				held = true
-				await gate.promise
-			}
+		const read = mocks.getFeePicks.getMockImplementation() as (profileId: string) => Promise<unknown>
+		mocks.getFeePicks.mockImplementationOnce(async (profileId: string) => {
+			const value = await read(profileId)
+			await gate.promise
 			return value
-		}
+		})
 		return () => gate.resolve()
 	}
 	const SAVED_FJ = { type: "fj", title: "Public Fee Juice", subtitle: "public" }
@@ -2067,13 +2054,12 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 				expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
 				expect(degradedText(w)).toBe("Couldn't load fee data. Retrying in the background.")
 
-				// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
-				const reads = vi.spyOn((globalThis as any).chrome.storage.local, "get")
+				const picksRead = mocks.getFeePicks.mock.calls.length
 				storageGate = deferred<void>()
 				await vi.advanceTimersByTimeAsync(INIT_RETRY_BACKOFF_MS[0])
 				await w.setProps({ originPrivacy: "public" })
 				await vi.advanceTimersByTimeAsync(0)
-				expect(reads.mock.calls.flat(2)).not.toContain(FEE_METHOD_LS_KEY)
+				expect(mocks.getFeePicks.mock.calls.length).toBe(picksRead)
 				expect(degradedText(w)).toBeNull()
 				expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
 				storageGate.resolve()

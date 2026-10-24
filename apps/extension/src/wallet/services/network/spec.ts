@@ -69,7 +69,8 @@ const networkShape = {
 	chainId: z.number(),
 	// Key-derivation chain input: canonical u32, REQUIRED even in the lax row codec — a row
 	// without it cannot participate in account derivation, and a silent default would collapse
-	// the chain separation the field exists to provide (pre-production baseline, no migration).
+	// the chain separation the field exists to provide (required since the first release, so no
+	// stored row lacks it).
 	l1ChainId: z.number().int().nonnegative().max(0xffffffff),
 	name: z.string(),
 	primaryEndpointId: z.string(),
@@ -152,7 +153,8 @@ const ERR_RPC_URL_TRANSPORT = "RPC URL must use https:// or http://localhost / h
  * An RPC URL the wallet may treat as its chain authority: no hidden character
  * inside it, then the transport rule (`rpcTransportVerdict`), userinfo refused.
  * zod's `.url()` returns the trimmed string, so a caller stores the parsed value,
- * never its own argument.
+ * never its own argument. It also drops tab, CR and LF from that value, so the
+ * hidden-character check reads the raw string before it.
  *
  * Runs on every input URL: the params of the popup client (`network/client.ts`)
  * and of the service. A stored URL is never re-judged by it (see `NetworkSchema`);
@@ -160,8 +162,8 @@ const ERR_RPC_URL_TRANSPORT = "RPC URL must use https:// or http://localhost / h
  */
 export const RpcUrlSchema = z
 	.string()
-	.url()
 	.refine((url) => !hasHiddenUrlCharacter(url), { message: ERR_RPC_URL_HIDDEN_CHARACTERS, abort: true })
+	.url()
 	.superRefine((url, ctx) => {
 		let parsed: URL
 		try {
@@ -230,6 +232,14 @@ export const NetworkMethodSchemas = {
 	getPrimaryNetwork: {
 		params: z.tuple([]),
 		result: NetworkSchema.nullable(),
+	},
+	getNetworkArrival: {
+		params: z.tuple([]),
+		result: NetworkSchema.nullable(),
+	},
+	answerNetworkArrival: {
+		params: z.tuple([z.string().min(1)]),
+		result: z.void(),
 	},
 	setActiveForProfile: {
 		params: z.tuple([z.string().min(1), z.string().min(1)]),
@@ -308,6 +318,14 @@ export type Methods = {
 	 * `DEFAULT_SEEDS` (a hardcoded `kind` check in the composable would break the e2e flag).
 	 */
 	getPrimaryNetwork(): Network | null
+	/**
+	 * A default network a later build added to this profile after it had networks, until the person
+	 * answers its arrival; null when there is none. Answered by {@link answerNetworkArrival} or by
+	 * making that network active.
+	 */
+	getNetworkArrival(): Network | null
+	/** Answers the arrival of `networkId` without switching to it; a network not announced is a no-op. */
+	answerNetworkArrival(networkId: string): void
 	/**
 	 * Writes the active-network pointer for a SPECIFIC profile without requiring it to be the active
 	 * session — used by full-backup import to restore the user's active-network selection BEFORE

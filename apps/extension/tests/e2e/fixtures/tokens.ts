@@ -2,6 +2,8 @@ import type { Page } from "puppeteer"
 import { pinnedTokensKey } from "@/utils/profile-ui-keys"
 import { reloadExtensionPage } from "./browser"
 import { clickByTestId, replaceInputValue, withTimeoutMessage } from "./dom"
+import { PollTimeoutError, pollUntil } from "./poll"
+import { readRowsOnAnyBuild } from "./sealed-rows"
 import { dropdownDiagnostic, openDropdown, waitForToast } from "./widgets"
 
 // ── Token ──────────────────────────────────────────────────────────────
@@ -110,6 +112,20 @@ export async function navigateToTokenDetail(page: Page, symbol?: string): Promis
 export async function waitForHomeTotal(page: Page): Promise<void> {
 	await page.waitForSelector('[data-testid="balance-amount"]', { visible: true, timeout: 15_000 })
 	await page.waitForFunction(() => !document.querySelector('[data-testid="balance-hero-loading"]'), { timeout: 20_000 })
+}
+
+/** Home's Get started card and backup banner mount once their reads settle, which can be after the
+ *  rows have: a spec that measures or scrolls the middle waits for this first. */
+export async function waitForHomeReminders(page: Page): Promise<void> {
+	await page.waitForSelector('[data-testid="home-scroller"][data-reminders-settled="true"]', { timeout: 30_000 })
+}
+
+/** The Get started card's steps in order, a done one suffixed " done"; Hide and the count aside. */
+export async function getStartedRows(page: Page): Promise<string[]> {
+	return await page.$$eval(
+		'[data-testid^="get-started-"]:not([data-testid="get-started-hide"]):not([data-testid="get-started-count"])',
+		(els) => els.map((el) => `${el.getAttribute("data-testid")}${el.getAttribute("data-done") === "true" ? " done" : ""}`),
+	)
 }
 
 /** Import a token from Home and wait for its projected balance row to carry `expectedPublicRaw`
@@ -223,30 +239,16 @@ export async function captureBalanceBaseline(page: Page, account: string, tokenC
 	return max
 }
 
-const TOKEN_ROWS_PREFIX = "nulo:core:tokens@"
-
-const BALANCE_ROWS_PREFIX = "nulo:core:token-balances@"
-
 type BalanceRow = { account?: string; token?: number; publicBalance?: string; privateBalance?: string; updatedAt?: number }
 
-/** Runs IN THE PAGE (Puppeteer serializes it, so it must not reference module scope): the raw
- *  `chrome.storage.local` values under each prefix, all from ONE snapshot, decoded by nothing —
- *  the hostile rows are parsed on the Node side by the same guarded loops that used to run here. */
-async function readStorageValuesByPrefixes({ prefixes }: { prefixes: string[] }): Promise<unknown[][]> {
-	const all = await chrome.storage.local.get(null)
-	const entries = Object.entries(all)
-	return prefixes.map((prefix) => entries.filter(([k]) => k.startsWith(prefix)).map(([, v]) => v))
-}
-
-/** Numeric ids of the token rows bound to `contract` (case-insensitive). Each raw value is decoded
- *  inside its own try: a malformed row, or one whose shape makes the predicate throw, is skipped —
- *  hostile-input discipline, never fatal. */
-function tokenIdsForContract(tokenValues: unknown[], contract: string): Set<number> {
+/** Numeric ids of the token rows bound to `contract` (case-insensitive). A row whose shape makes
+ *  the predicate throw is skipped: hostile-input discipline, never fatal. */
+function tokenIdsForContract(tokenRows: unknown[], contract: string): Set<number> {
 	const tokenIds = new Set<number>()
-	for (const v of tokenValues) {
+	for (const row of tokenRows) {
 		try {
-			const row = JSON.parse(v as string) as { id?: number; contract?: string }
-			if (typeof row.id === "number" && row.contract?.toLowerCase() === contract.toLowerCase()) tokenIds.add(row.id)
+			const { id, contract: bound } = row as { id?: number; contract?: string }
+			if (typeof id === "number" && bound?.toLowerCase() === contract.toLowerCase()) tokenIds.add(id)
 		} catch {
 			// Malformed row: skip.
 		}
@@ -254,29 +256,20 @@ function tokenIdsForContract(tokenValues: unknown[], contract: string): Set<numb
 	return tokenIds
 }
 
-/** Balance rows for exactly `account` × `tokenIds`, raw (no field normalization — the callers'
- *  comparisons keep coercing as they always did). Same per-row try discipline as the token scan. */
-function balanceRowsFor(balanceValues: unknown[], account: string, tokenIds: Set<number>): BalanceRow[] {
-	const rows: BalanceRow[] = []
-	for (const v of balanceValues) {
-		try {
-			const row = JSON.parse(v as string) as BalanceRow
-			if (row.account === account && typeof row.token === "number" && tokenIds.has(row.token)) rows.push(row)
-		} catch {
-			// Malformed row: skip.
-		}
-	}
-	return rows
+/** Balance rows for exactly `account` × `tokenIds`, as the wallet reads them (no field
+ *  normalization — the callers' comparisons keep coercing as they always did). */
+function balanceRowsFor(balanceRows: BalanceRow[], account: string, tokenIds: Set<number>): BalanceRow[] {
+	return balanceRows.filter((row) => row.account === account && typeof row.token === "number" && tokenIds.has(row.token))
 }
 
-/** The exact (account, token) join both balance waits share, re-resolved from one storage snapshot
- *  per call: another token's row with the same raw value must never satisfy a freshness/value
- *  acceptance, and after a restore the token row itself can land later than the first read. */
+/** The exact (account, token) join both balance waits share, re-resolved per call: another token's
+ *  row with the same raw value must never satisfy a freshness/value acceptance, and after a restore
+ *  the token row itself can land later than the first read. Tokens are read before balances, so a
+ *  balance whose token lands between the two reads waits for the next poll. */
 async function readScopedBalanceRows(page: Page, account: string, tokenContract: string): Promise<BalanceRow[]> {
-	const [tokenValues, balanceValues] = await page.evaluate(readStorageValuesByPrefixes, {
-		prefixes: [TOKEN_ROWS_PREFIX, BALANCE_ROWS_PREFIX],
-	})
-	return balanceRowsFor(balanceValues, account, tokenIdsForContract(tokenValues, tokenContract))
+	const tokenRows = (await readRowsOnAnyBuild(page, "tokens")).map(({ row }) => row)
+	const balanceRows = (await readRowsOnAnyBuild<BalanceRow>(page, "tokenBalances")).map(({ row }) => row)
+	return balanceRowsFor(balanceRows, account, tokenIdsForContract(tokenRows, tokenContract))
 }
 
 /** Wait for a balance row for `account` that is both FRESH (`updatedAt` past the
@@ -323,55 +316,62 @@ export async function waitForFreshBalanceRow(
 	const MIN_REFRESH_SPACING_MS = 2_000
 	const { account, tokenContract, expectedPublicRaw, expectedPrivateRaw, baselineUpdatedAt, timeoutMs = 120_000 } = opts
 	const maxRefreshes = opts.maxRefreshes ?? Math.ceil(timeoutMs / MIN_REFRESH_SPACING_MS)
-	const deadline = Date.now() + timeoutMs
-	// The (account, token) join re-resolves EVERY poll (audit condition) — see `readScopedBalanceRows`.
-	const readRows = (): Promise<BalanceRow[]> => readScopedBalanceRows(page, account, tokenContract)
 
 	let refreshes = 0
 	let lastRefreshAt = 0
 	let rows: BalanceRow[] = []
-	while (Date.now() < deadline) {
-		rows = await readRows()
-		if (
-			rows.some(
-				(r) =>
-					(r.updatedAt ?? 0) > baselineUpdatedAt &&
-					r.publicBalance === expectedPublicRaw &&
-					(expectedPrivateRaw === undefined || r.privateBalance === expectedPrivateRaw),
-			)
+	try {
+		await pollUntil(
+			// The (account, token) join re-resolves EVERY poll (audit condition) — see `readScopedBalanceRows`.
+			async () => {
+				rows = await readScopedBalanceRows(page, account, tokenContract)
+				return rows
+			},
+			(read) =>
+				read.some(
+					(r) =>
+						(r.updatedAt ?? 0) > baselineUpdatedAt &&
+						r.publicBalance === expectedPublicRaw &&
+						(expectedPrivateRaw === undefined || r.privateBalance === expectedPrivateRaw),
+				),
+			{
+				label: "waitForFreshBalanceRow",
+				timeoutMs,
+				intervalMs: 1_000,
+				between: async () => {
+					const attemptFinished =
+						refreshes === 0 ||
+						rows.some((r) => (r.updatedAt ?? 0) >= lastRefreshAt) ||
+						Date.now() - lastRefreshAt >= REFRESH_ENVELOPE_MS
+					const spaced = refreshes === 0 || Date.now() - lastRefreshAt >= MIN_REFRESH_SPACING_MS
+					if (attemptFinished && spaced && refreshes < maxRefreshes) {
+						lastRefreshAt = Date.now()
+						refreshes++
+						await refreshBalances(page)
+					}
+				},
+			},
 		)
-			return
-		const attemptFinished =
-			refreshes === 0 || rows.some((r) => (r.updatedAt ?? 0) >= lastRefreshAt) || Date.now() - lastRefreshAt >= REFRESH_ENVELOPE_MS
-		const spaced = refreshes === 0 || Date.now() - lastRefreshAt >= MIN_REFRESH_SPACING_MS
-		if (attemptFinished && spaced && refreshes < maxRefreshes) {
-			lastRefreshAt = Date.now()
-			refreshes++
-			await refreshBalances(page)
-		}
-		await new Promise((r) => setTimeout(r, 1_000))
+		return
+	} catch (error) {
+		if (!(error instanceof PollTimeoutError)) throw error
 	}
 	// Census across roots, account-agnostic: distinguishes "the account's rows are
 	// keyed differently" from "the token/balance slices are simply absent" — the
 	// latter points at restore-slice loss, a product condition, not a wait problem.
 	const census = await page
 		.evaluate(async () => {
-			const all = await chrome.storage.local.get(null)
-			const keys = Object.keys(all)
+			const keys = Object.keys(await chrome.storage.local.get(null))
 			const grab = (p: string) => keys.filter((k) => k.startsWith(p))
-			return {
-				tokenRows: grab("nulo:core:tokens@").length,
-				balanceRows: grab("nulo:core:token-balances@").map((k) => {
-					try {
-						const r = JSON.parse(all[k] as string) as { account?: string; updatedAt?: number }
-						return { account: `${r.account?.slice(0, 10)}…`, updatedAt: r.updatedAt }
-					} catch {
-						return { account: "unparseable", updatedAt: -1 }
-					}
-				}),
-				accountRows: grab("nulo:core:accounts@").length,
-			}
+			return { tokenRows: grab("nulo:core:tokens@").length, accountRows: grab("nulo:core:accounts@").length }
 		})
+		.then(async (counts) => ({
+			...counts,
+			balanceRows: (await readRowsOnAnyBuild<BalanceRow>(page, "tokenBalances")).map(({ row }) => ({
+				account: `${row.account?.slice(0, 10)}…`,
+				updatedAt: row.updatedAt,
+			})),
+		}))
 		.catch((e) => ({ censusFailed: String(e) }))
 	throw new Error(
 		`waitForFreshBalanceRow: no (${account}, ${tokenContract}) row with publicBalance=${expectedPublicRaw}${expectedPrivateRaw !== undefined ? ` privateBalance=${expectedPrivateRaw}` : ""} and updatedAt>${baselineUpdatedAt} after ${refreshes} refresh(es); rows: ${JSON.stringify(rows)}; census: ${JSON.stringify(census)}`,

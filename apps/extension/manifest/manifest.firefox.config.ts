@@ -9,11 +9,13 @@ import ManifestConfig from "./manifest.config.ts"
 //   offscreen.ts`, chosen at runtime via `hasOffscreenApi()`). Including
 //   the permission would emit a manifest warning at install time without
 //   any benefit.
-// - "sidePanel": Chrome-only; Firefox's equivalent is `sidebar_action`.
-//   AMO's validator rejects it outright ("Invalid permissions"). Every
-//   call site is already feature-gated on `chrome.sidePanel`, so the
-//   panel simply stays absent.
+// - "sidePanel": Chrome-only; AMO's validator rejects it outright
+//   ("Invalid permissions"). Every call site is feature-gated on
+//   `chrome.sidePanel`. Firefox's counterpart is the `sidebar_action`
+//   below, which needs no permission.
 const FIREFOX_INCOMPATIBLE_PERMISSIONS = new Set(["background", "offscreen", "sidePanel"])
+
+const { side_panel, icons } = ManifestConfig as { side_panel: { default_path: string }; icons: Record<string, string> }
 
 // @ts-expect-error ManifestConfig provides all required fields
 export default defineManifest((_env) => ({
@@ -37,6 +39,15 @@ export default defineManifest((_env) => ({
 			// cannot run there.
 			strict_min_version: "153.0",
 		},
+	},
+	// The page Chrome's side panel loads. A step run there is not in a `popup` view, so a passkey
+	// ceremony runs in place, where the toolbar panel hands it to a window of its own. Firefox
+	// titles the sidebar with the add-on's name, but draws a generic puzzle piece unless given an
+	// icon, and opens it only when asked.
+	sidebar_action: {
+		default_panel: side_panel.default_path,
+		default_icon: icons,
+		open_at_install: false,
 	},
 	background: {
 		scripts: ["src/wallet/index.ts"],

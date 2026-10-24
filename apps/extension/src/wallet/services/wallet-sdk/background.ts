@@ -88,6 +88,8 @@ import { createSessionBaton } from "./session-baton"
 import { chainInfoToChainId, handleSessionEstablished } from "./session-established"
 import { wireSessionTeardown } from "./session-revocation"
 import { wireTabLifecycle } from "./tab-lifecycle"
+import { wireRestartPreparation } from "./restart-preparation"
+import type { TrackedWindowPort } from "@/wallet/services/window-manager/restart-ended-windows"
 import { bindLiveSession, type LiveSession } from "./live-session"
 import { MAX_PENDING_PER_SESSION, type VerificationHold, wireVerificationHold } from "./verification-hold"
 import { SessionHolders } from "./session-holders"
@@ -95,21 +97,6 @@ import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
 
 declare const __VERSION__: string
-
-/**
- * Feature flag to allow iframe (subframe) dApps to talk to
- * the wallet. Default `false` — Nulo's wrapper rejects content-script
- * messages from subframes. Override by setting
- * `VITE_NULO_ALLOW_IFRAME_DAPPS=1` at build time (rare; research found no
- * legitimate iframe-dApp use cases in the Nulo ecosystem). Even with it on,
- * a key exchange completes only from a frame of the origin the session is
- * credited to, the top frame's: a cross-origin subframe cannot connect.
- *
- * Why a build-time env flag (not a runtime config) — runtime config opens a
- * widening primitive that an attacker could try to flip via storage poisoning
- * or popup compromise. Build-time keeps the policy immutable per release.
- */
-const NULO_ALLOW_IFRAME_DAPPS: boolean = import.meta.env?.VITE_NULO_ALLOW_IFRAME_DAPPS === "1"
 
 /** A queued row's developer line when its call's session ended before the call ran. */
 const SESSION_NO_LONGER_VALID = "Session no longer valid — reconnect"
@@ -123,7 +110,7 @@ const SESSION_NO_LONGER_VALID = "Session no longer valid — reconnect"
 export function initWalletSdkHandler(
 	services: ServiceCollection,
 	logger: ILogger,
-	ports: { windows: WindowPort; clock: ClockPort },
+	ports: { windows: TrackedWindowPort; clock: ClockPort },
 ): BackgroundConnectionHandler {
 	const deps = resolveSdkDeps(services, logger)
 	const state = createSdkHandlerState(ports)
@@ -185,6 +172,7 @@ export function initWalletSdkHandler(
 		logger,
 	})
 	wireDiscoveryDrain(deps, state)
+	wireRestartPreparation({ profileService: deps.profileService, handler, endSession, windows: ports.windows, logger })
 
 	// Tab lifecycle (close + cross-origin navigation → session termination)
 	// lives in `tab-lifecycle.ts`; it MUST stay registered before
@@ -299,11 +287,6 @@ type SdkHandlerState = {
 	admission: VerifyAdmissionGate
 	/** Handshakes currently waiting on another popup for the same `(origin, chainId)`, bounded. */
 	dedupeWaiters: Map<string, number>
-	/** Request id → the connect window its Allow handed over, until `runDiscoveryPopup` settles: a
-	 *  closed tab finds it here while the Allow still waits for a slot and no marker exists. */
-	handedOver: Map<string, { tabId: number; windowId: number }>
-	/** Best effort: a window already gone rejects, and its removal is what frees anything it held. */
-	closeWindow: (windowId: number) => void
 	/**
 	 * Bound right after the handler is constructed, before `initialize()`
 	 * attaches any listener; callbacks read these at call time, never earlier.
@@ -313,22 +296,15 @@ type SdkHandlerState = {
 
 export function createSdkHandlerState(ports: { windows: WindowPort; clock: ClockPort }): SdkHandlerState {
 	const pendingVerification = new Map<string, PendingVerificationEntry>()
-	const closeWindow = (windowId: number) => void ports.windows.remove(windowId).catch(() => undefined)
 	return {
 		pendingVerification,
 		sessions: new SessionHolders(),
 		pendingDiscoveryPromises: new Map(),
 		admission: new VerifyAdmissionGate(ports.clock, {
-			closeWindow,
-			navigateWindow: (windowId, url) => ports.windows.navigate(windowId, url),
-			// A marker still waiting when its slot is given back, or when its reservation expires with the
-			// window kept open, is tombstoned: that id can no longer establish.
-			expired: (id) => cancelPendingVerification(pendingVerification, id),
+			// A marker still waiting when its slot is given back is tombstoned: that id can no longer establish.
 			released: (id) => cancelPendingVerification(pendingVerification, id),
 		}),
 		dedupeWaiters: new Map(),
-		handedOver: new Map(),
-		closeWindow,
 		late: {},
 	}
 }
@@ -337,7 +313,6 @@ export function createSdkHandlerState(ports: { windows: WindowPort; clock: Clock
  *  safe because the SDK has already dropped the tab's discoveries, so none of their ids can
  *  establish. */
 function tearDownTabAttempts(state: SdkHandlerState, tabId: number): void {
-	for (const waiting of state.handedOver.values()) if (waiting.tabId === tabId) state.closeWindow(waiting.windowId)
 	for (const [id, marker] of state.pendingVerification) if (marker.tabId === tabId) state.admission.onSessionGone(id)
 	deletePendingVerificationForTab(state.pendingVerification, tabId)
 }
@@ -391,6 +366,12 @@ function admitContentMessage(
 	deps: ContentWrapperDeps,
 ): (message: unknown, sender: chrome.runtime.MessageSender) => undefined {
 	const { logger } = deps
+	// Build-time, immutable per release: a runtime config would be a widening primitive an attacker
+	// could try to flip by storage poisoning or popup compromise. Vite inlines the literal here as at
+	// module scope; it is read when the wrapper is built, so a test can set it without re-evaluating
+	// this module. Even on, a key exchange completes only from a frame of the origin its session is
+	// credited to, the top frame's: a cross-origin subframe cannot connect.
+	const allowIframeDapps = import.meta.env?.VITE_NULO_ALLOW_IFRAME_DAPPS === "1"
 	return (message, sender) => {
 		// Subframe rejection. Upstream `BackgroundConnectionHandler`
 		// attributes origin via `sender.tab?.url` (top-frame URL), so an
@@ -400,12 +381,12 @@ function admitContentMessage(
 		//
 		// Nulo-side defense-in-depth: reject content-script messages
 		// from subframes at the wrapper layer. `sender.frameId === 0`
-		// is the top frame; any other value (or undefined for
-		// non-tab senders) is a subframe.
+		// is the top frame; a tab sender with any other defined
+		// `frameId` is a subframe.
 		//
-		// Feature flag: `NULO_ALLOW_IFRAME_DAPPS` (env / build-time)
-		// disables this check. Default is "reject subframes" because
-		// research found NO legitimate iframe-dApp use cases in the
+		// Feature flag: `allowIframeDapps` (`VITE_NULO_ALLOW_IFRAME_DAPPS=1`
+		// at build time) disables this check. Default is "reject subframes"
+		// because research found NO legitimate iframe-dApp use cases in the
 		// Nulo ecosystem. If a counterexample surfaces, set the env
 		// var rather than removing this check.
 		//
@@ -414,7 +395,7 @@ function admitContentMessage(
 		// in `BackgroundConnectionHandler`'s sendToTab signature —
 		// upstream's `(tabId, msg)` interface doesn't pass frameId
 		// through, so this remains an upstream coordination item.
-		if (NULO_ALLOW_IFRAME_DAPPS !== true && isSubframeSender(sender)) {
+		if (!allowIframeDapps && isSubframeSender(sender)) {
 			logger.log(
 				"wallet-sdk",
 				LogLevel.Debug,
@@ -816,8 +797,6 @@ function discoveryDeps(deps: SdkDeps, state: SdkHandlerState): DiscoveryDeps {
 		resetRun: deps.resetRun,
 		admission: state.admission,
 		dedupeWaiters: state.dedupeWaiters,
-		handedOver: state.handedOver,
-		closeWindow: state.closeWindow,
 		switchEpoch: state.late.switchEpoch!,
 		logger: deps.logger,
 	}
