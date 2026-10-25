@@ -9,7 +9,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at face80099
 trunk: dev
-status: planned (awaiting approval)
+status: approved; A1 in progress
 issues: "#1127 (Closes, A4)"
 post_implementation_hardening: not scheduled
 ---
@@ -73,7 +73,7 @@ Paths are relative to `apps/extension/src/` unless they start with `packages/`, 
 - I2. The 0.31.0 build can create a passkey profile offline in the update replay before the update (A2). If it cannot, the plan stops and records why: no hand-written row in a recorded fixture.
 - I3. Create, the confirming assertion and unlock all succeed on both browsers' virtual authenticators with a random 32-byte input, including Firefox's create that reports PRF enabled without an output and gets it from the confirming assertion, as today's tests model (A2, smoke e2e).
 
-**Asks** (the owner, through the orchestrator; the working assumption is each ask's recommendation): OA-1 to OA-12. No arc after A1 starts before its asks are answered.
+**Asks** (the owner, through the orchestrator): OA-1 to OA-12, all answered on decision page 86 (records P86-01 to P86-23, quoted per ask in OWNER-ASKS.md). Where a record departs from an ask's recommendation: OA-2 (P86-02, a restored backup opens the unlock choice on the method it was made with), OA-7 (P86-12, the second sentence is in).
 
 ## Decision ledger
 
@@ -232,7 +232,7 @@ Gate: every file green on both browsers; the PR gives each suite's wall-clock be
 - A2: `/onboarding/create`, the phrase stage, `/onboarding/import`, `/popup/import`, `/popup/profile/new`, `/popup/auth`, the "Lost your password?" popup, `/popup/settings/security/reset`, Home Get started and banner, `/popup/settings/security/export`, `.../seed`, `.../full`, the passkey card's tags, `MigrationBarrier`, the backup refusal. OWNER-ASKS OA-1, 2, 3a, 3b, 3d, 4, 5, 7, 12; FLOWS.md.
 - A3: the import forms, `.../export/account`, `/popup/settings/accounts`, under OA-5 C the passkey tabs, under OA-6 and OA-10 `/popup/settings`, `/popup/settings/lock` and the unlock-method page. OA-2, 3c, 5, 6, 10.
 - A4: the Terms acceptance sheet. OA-11.
-- Sign-off: the orchestrator's signed decision page, quoted in each PR body.
+- Sign-off: decision page 86, signed by the owner on 2026-10-25 (signoff-P86), records P86-01 to P86-23 on #1127 under "## Decision", mapped per ask in OWNER-ASKS.md; each PR body quotes the records it builds. Approval: the owner, 2026-10-25, "Start A1 now"; the orchestrator approves the plan as committed.
 
 ## Delivery
 

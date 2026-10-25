@@ -2,6 +2,8 @@
 
 A passkey profile gets a recovery phrase, kept encrypted in the wallet, and the passkey unlocks it as a password does. Every screen below changes only on your answer. Arc A1 changes nothing you see and does not wait. Arcs A2 to A4 wait for this page; each ask names the arc that builds it.
 
+**Signed.** The owner signed decision page 86 on 2026-10-25 (signoff-P86). Each record is on #1127 under "## Decision" as P86-01 to P86-23, and each ask below quotes the records that decide it. P86-02 and P86-05 were owner notes the orchestrator settled in chat; #1127 records the settlement.
+
 How to read a screen spec: **Route** · **Title** (as the page draws it, two lines where it has two) · **Body**, word for word · **Controls**, in order, with what each does. "Today" quotes the current screen. Copy follows the house rules: no em dash between clauses, error text in the danger colour, "recovery phrase", never "seed". [FLOWS.md](FLOWS.md) shows every flow as a numbered screen sequence and lists every screen.
 
 **Two rules every option below uses, so they are stated once:**
@@ -11,6 +13,8 @@ How to read a screen spec: **Route** · **Title** (as the page draws it, two lin
 ## OA-1. Creating a profile with a passkey: the recovery phrase
 
 **Flow:** F1. **Arc:** A2.
+
+**Decided, P86-01:** "the recovery phrase when a passkey profile is created: **option A**. The password profile's phrase stage, with "Do it later"."
 
 **Today.** Onboarding, `/onboarding/create`, Passkey tab: the step row reads Terms · Create · Ready. "Create with passkey" opens the passkey card, then goes straight to `/onboarding/done`. A password profile instead sees the phrase stage (below) between Create and Ready. In the popup (`/popup/profile/new`) neither method shows a phrase stage; a password profile gets Home's "Save your recovery phrase" step.
 
@@ -35,6 +39,8 @@ How to read a screen spec: **Route** · **Title** (as the page draws it, two lin
 ## OA-2. Importing: a recovery phrase or a backup, then how to unlock
 
 **Flows:** F4, F5, F8, F13. **Arc:** A2 for the picker row; A3 for the unlock choice.
+
+**Decided, P86-02:** "Importing: the recovery phrase or a backup brings the wallet back, then you choose how to unlock: **a note instead of an option**." The owner's note: "Shouldn't a back-up kinda set what it used to have as an option to unlock? Password, or Passkey? Or you think the best UX would be to let them re-choose?" Recorded: "Option A, and restoring a full backup opens the unlock choice on the method the backup was made with (still switchable); importing a recovery phrase opens on Passkey, as Create does."
 
 **Today.** `/onboarding/import` (title "Import" / "Wallet", subtitle "Restore from a recovery phrase, passkey, or full backup.") and `/popup/import` (hero "Import Profile"). The picker "Import with" lists "Full Backup", "Recovery Phrase", "Passkey". "Passkey" brings back an existing passkey profile. A phrase import always makes a password profile ("New Password" section). A full backup restores with the method it was made with: a password backup asks a new password, a passkey backup asks the passkey.
 
@@ -64,24 +70,24 @@ After this change a passkey no longer brings a wallet back by itself. A2 removes
 
 **Today.** `/popup/settings/security/export` (title "Backup"): a passkey profile sees "Profile" with its name, the sentence "To access your profile on a new device, the Passkey must be synced with it or available on another device you own.", and one row, "Full Backup". A password profile sees "Profile to backup" and three rows: "Full Backup", "Recovery Phrase", "Account". The account list's export icon is hidden for passkey profiles. A passkey full backup may be saved without a password.
 
-**3a. The Backup menu.**
+**3a. The Backup menu.** **Decided, P86-03:** "the Backup menu of a passkey profile: **option A**. The password profile's three rows for both; the passkey sentence goes."
 - **A:** the password profile's menu for both: "Profile to backup", then "Full Backup", "Recovery Phrase", "Account". The passkey sentence goes.
 - **B:** as A, with one sentence under the profile name for passkey profiles: "Your recovery phrase brings this profile back on any device. Your passkey only unlocks it here."
 - **Recommendation: A.** The two menus become one, and the sentence says what the Recovery Phrase row already shows.
 
-**3b. Revealing the recovery phrase** (`/popup/settings/security/export/seed`, hero "Recovery Phrase").
+**3b. Revealing the recovery phrase** (`/popup/settings/security/export/seed`, hero "Recovery Phrase"). **Decided, P86-04:** "revealing a passkey profile's recovery phrase: **option A**. "Reveal with passkey" after the agreement."
 - Today (password): the agreement "Before you continue" (three sentences, unchanged), "Agree & Continue", then "Unlock" with "Enter password" and "Reveal Recovery Phrase".
 - **A:** same agreement; then one button "Reveal with passkey". It opens the passkey card (tag "Recovery phrase"); on success the words show as for a password profile, with "Keep in mind" and the closing countdown. Cancelled: the button stays, nothing shows.
 - **B:** the words show after "Agree & Continue" with no passkey prompt. Not buildable without a revised plan: the wallet keeps the words sealed even while it is unlocked, so showing them needs the passkey, as it needs the password today.
 - **Recommendation: A.** The same step a password profile takes, with the passkey in the password's place.
 
-**3c. The account file** (`/popup/settings/security/export/account`, hero "Account Backup").
+**3c. The account file** (`/popup/settings/security/export/account`, hero "Account Backup"). **Decided, P86-05:** "A passkey profile's account file, protected with a password of its own: **a note instead of an option**." The owner's note: "Can't it use the passkey to encrypt it?" Recorded: "Option A: a passkey profile's account file is protected with a file password of its own, and the passkey approves making it. A backup has to open after the passkey is lost."
 - Today (password): select the account; agreement "This file gives full control of one account." / "Anyone holding the plain file can spend from this account. Store it as carefully as your recovery phrase." / "By continuing you accept these risks."; unlock with the password; "Protect your account file"; "Your profile password will be required to import this account."
 - **A:** select the account; the same agreement; "Confirm with passkey" (passkey card, tag "Account file"); then a section "File password" with the file-password rule above; button "Save account file". Below it: "This password will be required to import this account." The account list shows the export icon for passkey profiles too.
 - **B:** the account file stays unavailable for passkey profiles (the icon stays hidden; the menu has no "Account" row).
 - **Recommendation: A.** The file needs a password of its own, since nothing the passkey makes may open a file outside the wallet.
 
-**3d. The full backup** (`/popup/settings/security/export/full`). The file of a passkey profile now holds the recovery phrase, so it is always protected with a password. There is no plain download. Words to sign:
+**3d. The full backup** (`/popup/settings/security/export/full`). The file of a passkey profile now holds the recovery phrase, so it is always protected with a password. There is no plain download. **Decided, P86-06:** "the file password on a passkey profile's full backup: **approved as drafted**." The owner's note: "Asked whether the passkey could protect the file; kept as drafted in chat on 2026-10-25, since a backup has to open after the passkey is lost." Words to sign:
 - After "Agree & Continue", the passkey card (tag "Backup"), then the banner "Backup is ready" / "Choose a password for this file. You'll need it to restore the backup."
 - Section "File password" with the file-password rule above (today the page takes any non-empty matching pair).
 - Controls: "Protect with Password" (disabled until the rule is met), then "Download Backup". The confirmation for a plain download goes.
@@ -91,6 +97,8 @@ After this change a passkey no longer brings a wallet back by itself. A2 removes
 ## OA-4. Get started on Home
 
 **Flow:** F3. **Arc:** A2.
+
+**Decided, P86-07:** "Get started for passkey profiles: **option A**. The password profile's card and banner for every profile."
 
 **Today.** A passkey profile's card lists "Back up this wallet" / "Sync your passkey or save a backup file" (done when a backup file is saved), then "How Aztec works", "Get Fee Juice", "Make proofs faster". A password profile's card lists "Save your recovery phrase" / "The 24 words that restore this wallet" first. That step cannot be hidden, and once Hide put the card away, a funded wallet without a saved phrase shows "Your funds have no backup" with "Save phrase".
 
@@ -102,6 +110,8 @@ After this change a passkey no longer brings a wallet back by itself. A2 removes
 ## OA-5. The passkey's name, and one passkey for several profiles
 
 **Flows:** F1, F4, F5, F11. **Arc:** A2 for the name; A3 for C.
+
+**Decided, P86-08:** "the passkey's name, and one passkey for several profiles: **option C**. "Nulo wallet", and one passkey may unlock several profiles."
 
 **Today.** Each passkey profile creates its own passkey. Your password manager lists it as `nulo-{profile name}-{8-character id}`, for example `nulo-main-3f9a2c71`; the site shows as "Nulo". The name is synced to your password manager's cloud.
 
@@ -117,6 +127,8 @@ After this change a passkey no longer brings a wallet back by itself. A2 removes
 ## OA-6. Adding or changing the unlock method
 
 **Flow:** F10. **Arc:** A3, only if you put it in scope.
+
+**Decided, P86-09:** "changing a profile's unlock method: **option B**. An "Unlock method" page, both directions, in A3."
 
 **Today.** Settings → Safety has "Change password" for password profiles; passkey profiles have nothing.
 
@@ -136,7 +148,7 @@ After this change a passkey no longer brings a wallet back by itself. A2 removes
 
 A passkey profile made with 0.31.0 or earlier (or a sideloaded 1.0.0) cannot be opened by this version: it has no recovery phrase, and its accounts cannot be moved onto one. A password profile is not affected.
 
-**Passkey profiles from before the update:**
+**Passkey profiles from before the update:** **Decided, P86-11:** "passkey profiles made before the update: **option A**. Kept, marked "Set up again", deletable." **P86-12:** "the second sentence on "Set up again": **option B**. With "What it held stays on the network, out of this version's reach."" (the optional second sentence below is in.)
 - **A: kept, marked, deletable.** The profile stays in the profile list and in the profile picker. Choosing it on the lock screen (`/popup/auth`) shows, in place of "Passkey required" / "Use your passkey to continue" and the "Continue" button:
   - Title: "Set up" / "again".
   - Body: "This profile was made with an earlier version of Nulo and can't be opened in this version. Delete it, then create or import a profile."
@@ -149,12 +161,12 @@ A passkey profile made with 0.31.0 or earlier (or a sideloaded 1.0.0) cannot be 
 - **C: removed at the update.** The update deletes them and shows once: "A passkey profile from an earlier version was removed. Create or import a profile." Not buildable without a revised plan: a deletion at update time is a storage migration with its own recovery story.
 - **Recommendation: A.** B keeps alive the very unlock this change retires; C deletes without asking.
 
-**A backup made by such a profile** (a passkey backup from 0.31.0 or earlier): Restore refuses it as soon as the file is read (after its "Decryption Password", if it has one), before any other step. Restore again (Settings) refuses it the same way.
+**A backup made by such a profile** (a passkey backup from 0.31.0 or earlier): Restore refuses it as soon as the file is read (after its "Decryption Password", if it has one), before any other step. Restore again (Settings) refuses it the same way. **Decided, P86-13:** "the refusal of a backup made by an old passkey profile: **approved as drafted**."
 - Shown in the file's error box, as other unreadable files are: the tag "Error", the title "Backup from an earlier version", the text "This backup was made by a passkey profile on an earlier version of Nulo, and this version can't restore it."
 - Controls: the file row (choose another file), then "Back to methods" on Import, or the page's back arrow (to Home) on Restore again.
 - **Recommendation:** these words.
 
-**Password profiles from before the update:**
+**Password profiles from before the update:** **Decided, P86-14:** "password profiles from before the update: **approved as drafted**." (option A, carried over.)
 - **A: carried over.** Nothing changes for them.
 - **B: clean break.** Every profile from before the update is marked as above. Not buildable without a revised plan: a password profile from before the update is stored exactly like a new one, so the wallet cannot tell them apart.
 - **Recommendation: A.** Their storage does not change, so a break would cost people their profiles for nothing.
@@ -163,23 +175,24 @@ A passkey profile made with 0.31.0 or earlier (or a sideloaded 1.0.0) cannot be 
 
 **Arc:** A4 writes what you pick into the repository files; the store text and the messages are yours to post. Browsers update extensions on their own, so only 8e reaches people before the update.
 
-**8a. What a 0.3x user sees on update.** Password profiles: nothing. Passkey profiles: the OA-7 screen. **Recommendation:** no extra notice; the lock screen says it where it matters. (A one-time Home notice is possible but not buildable without a revised plan: it needs a stored dismissal of its own.)
+**8a. What a 0.3x user sees on update.** Password profiles: nothing. Passkey profiles: the OA-7 screen. **Recommendation:** no extra notice; the lock screen says it where it matters. (A one-time Home notice is possible but not buildable without a revised plan: it needs a stored dismissal of its own.) **Decided, P86-17:** "no extra notice on update: **approved as drafted**."
 
-**8b. Release notes** (the GitHub release, written above the generated list).
+**8b. Release notes** (the GitHub release, written above the generated list). **Decided, P86-18:** "the release notes: **option A**. Three sentences: what changed, and what an old passkey profile's owner does."
 - **A:** "Passkey profiles now have a recovery phrase. Your passkey unlocks Nulo on this device, and your recovery phrase brings your wallet back on any device, with a password or a passkey. A passkey profile made with an earlier version can't be opened in this version: delete it, then create or import a profile."
 - **B:** "Every profile now has a recovery phrase, passkey profiles included. Passkey profiles from earlier versions need to be set up again."
 - **Recommendation: A.** It says what changed and what the affected group does next.
 
-**8c. Firefox Add-ons "Release notes" and the Chrome Web Store description.**
+**8c. Firefox Add-ons "Release notes" and the Chrome Web Store description.** **Decided, P86-19:** "the Firefox release notes: **option A**. Two sentences naming the group that has to act."
 - **A:** "Passkey profiles now keep a recovery phrase. A passkey profile made with an earlier version needs to be set up again."
 - **B:** 8b A, shortened to its first two sentences.
 - **Recommendation: A** on Firefox. Chrome has no release-notes field; its description stays as it is ("Your keys stay on your device, behind your password or passkey." is still true).
 
-**8d. README.** One paragraph under the install section: "Every profile has a 24-word recovery phrase. You unlock Nulo with a password or a passkey; the recovery phrase brings your wallet back on any device." **Recommendation:** this paragraph.
+**8d. README.** One paragraph under the install section: "Every profile has a 24-word recovery phrase. You unlock Nulo with a password or a passkey; the recovery phrase brings your wallet back on any device." **Recommendation:** this paragraph. **Decided, P86-20:** "the README paragraph: **approved as drafted**."
 
 **8e. People you know who use a passkey profile** (a message you send).
 - "Heads-up: the next Nulo update gives passkey profiles a recovery phrase. A passkey profile made with the current version can't be opened after the update, and browsers install updates on their own. If it holds anything you want to keep, send it to a password profile now. After the update, create a new profile; you can unlock it with your passkey again."
 - **Recommendation:** this message, sent before the store release.
+- **Decided, P86-21:** "the message to known passkey users: **approved as drafted**."
 
 ## OA-9. The version number
 
@@ -189,10 +202,13 @@ A passkey profile made with 0.31.0 or earlier (or a sideloaded 1.0.0) cannot be 
 - **B: 2.0.0.** The last arc's commit carries `!`.
 - **C: a number you name**, through a `Release-As:` footer on the last arc.
 - **Recommendation: A.** The stores never served 1.0.0, so 1.1.0 is the first 1.x they serve; a major would announce a break against a version nobody installed from a store.
+- **Decided, P86-22:** "the version number: **option A**. 1.1.0." The page also asked about the published `v1.0.0` GitHub release, which no ask here covers; **P86-23:** "the v1.0.0 GitHub release: **option A**. A one-line notice at the top of its notes." (the orchestrator's step, no arc's.)
 
 ## OA-10. Staying unlocked when the wallet's background restarts
 
 **Flow:** F6. **Arc:** A3, if you pick B.
+
+**Decided, P86-10:** "strict security mode for passkey profiles: **option B**. Passkey profiles follow Strict security mode, with the reworded texts."
 
 **Today.** The browser stops the wallet's background when it is idle and starts it again on the next use. A password profile with "Strict security mode" off stays unlocked through that until its auto-lock time; with it on (the default) it asks for the password again. A passkey profile always asks again. After the browser itself restarts, every profile asks again, in either mode, so today's confirmation text ("Skip password re-entry across browser restarts.") describes the background, not the browser. Settings → Lock hides the toggle for passkey profiles.
 
@@ -203,6 +219,8 @@ A passkey profile made with 0.31.0 or earlier (or a sideloaded 1.0.0) cannot be 
 ## OA-11. Legal documents and the store's data list
 
 **Arc:** A4. Legal copy is yours to sign; drafts below.
+
+**Decided, P86-16:** "Terms 1.2 and Privacy 1.2.6: **approved as drafted**." (OA-5 C holds, so § 5.4 and the listing take the "Nulo wallet" wording.)
 
 **Version rule.** A material change is a minor version in both the document and `@nulo/legal`, with a "changes" list that the re-acceptance sheet shows; a patch never asks again. The Privacy Policy never blocks. Terms 1.1 takes effect on 26 October 2026.
 
@@ -227,6 +245,8 @@ A passkey profile made with 0.31.0 or earlier (or a sideloaded 1.0.0) cannot be 
 ## OA-12. Sentences the change makes untrue
 
 **Arc:** A2. Each is a word swap; the recommendation is the new text.
+
+**Decided, P86-15:** "the word swaps: **approved as drafted**." (the optional delete-page footer included.)
 
 | Surface | Today | Recommended |
 |---|---|---|

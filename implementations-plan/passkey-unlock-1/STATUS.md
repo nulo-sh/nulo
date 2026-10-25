@@ -5,3 +5,4 @@
 - 2026-10-25 · plan drafted; dual review started.
 - 2026-10-25 · review round 1: Codex reject, Opus conditional approve; every point dispositioned in `plan.md` § Review verdicts; plan, asks and flows revised.
 - 2026-10-25 · final fresh Codex pass: conditional approve; conditions applied; resumed round: four wording corrections, applied. Plan ready for the orchestrator's approval.
+- 2026-10-25 · A1 started: owner "Start A1 now"; page 86 signed (P86-01 to P86-23) and recorded in OWNER-ASKS.md; merged origin/dev 67cae683b.
