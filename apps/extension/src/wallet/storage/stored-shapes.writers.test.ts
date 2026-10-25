@@ -57,6 +57,7 @@ import { PASSKEY_SERVICE_NAME } from "@/wallet/services/passkey/spec"
 import { PriceService, type PriceState, TOKEN_PRICES_STORAGE_KEY } from "@/wallet/services/price/service"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { ProfileService } from "@/wallet/services/profile/service"
+import { ProfileRowSchema } from "@/wallet/services/profile/profile-row"
 import { PROFILE_SERVICE_NAME, PROFILE_STORAGE_ROOT, type Profile } from "@/wallet/services/profile/spec"
 import { PinMismatchError, type SeedMarkerState, type SeedPreview, SEED_ATTEMPT_CAP } from "@/wallet/services/token/seeder"
 import { CONTRACT, CHAIN_ID, disposeSeeders, makeSeeder, readMarker, skipBackoff } from "@/wallet/services/token/seeder.harness"
@@ -77,7 +78,6 @@ import {
 	MigrationDegradedSchema,
 	PinMapSchema,
 	PriceStateSchema,
-	ProfileRowSchema,
 	STORED_SHAPES,
 	SeedMarkersSchema,
 	SendPicksSchema,

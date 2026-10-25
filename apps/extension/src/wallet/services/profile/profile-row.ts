@@ -1,7 +1,43 @@
 import { computeEnvelopeMacV3, type ImportedKeysDek, type MacEnvelopeV3, type MasterSecretBytes } from "@nulo/wallet-crypto"
+import { z } from "zod"
 import { mintPxeGeneration, type Profile } from "./spec"
 
 type SealedSlots = { guard: string; secret: string; entropy: string }
+
+const profileBase = { id: z.string(), name: z.string(), pxeGeneration: z.string(), dekSealed: z.string(), walletFingerprint: z.string() }
+const PasswordRow = z.object({
+	...profileBase,
+	type: z.literal("password"),
+	guard: z.string(),
+	secret: z.string(),
+	entropy: z.string(),
+	envelopeMac: z.string(),
+})
+const PasskeyRow = z.object({ ...profileBase, type: z.literal("passkey"), credentialId: z.string() })
+/** Every profile row a build writes, as the stored-shape registry records it. */
+export const ProfileRowSchema = z.discriminatedUnion("type", [PasswordRow, PasskeyRow])
+
+// Only the fields that decide which unlock opens a row. The envelope MAC, the DEK slot and the
+// fingerprint are checked at open, where a failure opens derived-only, so a row damaged in one of
+// them must still classify.
+const PasswordUnlock = PasswordRow.pick({ type: true, guard: true, secret: true, entropy: true })
+const PasskeyUnlock = PasskeyRow.pick({ type: true, credentialId: true })
+
+/** A stored row sorted by the unlock that may open it, with only the fields that sorting checked.
+ *  `unreadable` matches no unlock; it does not mean hidden. */
+export type ClassifiedProfileRow =
+	| { kind: "password"; slots: SealedSlots }
+	| { kind: "passkey"; credentialId: string }
+	| { kind: "unreadable" }
+
+/** Sorts a decoded row before any of its sealed fields is read; never throws. */
+export function classifyProfileRow(raw: unknown): ClassifiedProfileRow {
+	const password = PasswordUnlock.safeParse(raw)
+	if (password.success) return { kind: "password", slots: password.data }
+	const passkey = PasskeyUnlock.safeParse(raw)
+	if (passkey.success) return { kind: "passkey", credentialId: passkey.data.credentialId }
+	return { kind: "unreadable" }
+}
 
 /** What a password row's envelope MAC binds: the row's storage key plus its sealed fields. */
 export type EnvelopeFields = { id: string; slots: SealedSlots; dekSealed: string; walletFingerprint: string }
