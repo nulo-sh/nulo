@@ -76,7 +76,7 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 		},
 		{
 			version: "1.2.5",
-			effective: null,
+			effective: "25 October 2026",
 			material: false,
 			changes: ["Only the default Testnet endpoint uses the Developer's provider account (§ 5.1)."],
 		},
