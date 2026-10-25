@@ -98,7 +98,7 @@ describe("the password slot opener", () => {
 			}
 			expect(unseal).not.toHaveBeenCalled()
 
-			// Success control: the row as stored opens on the same path.
+			// Success control: the row as stored opens again; the integration suite opens every path.
 			await write(stored)
 			await expect(service.exportMnemonic(id, PASSWORD)).resolves.toHaveLength(24)
 			expect(unseal).toHaveBeenCalledOnce()
@@ -119,7 +119,7 @@ describe("the words-to-master pairing check", () => {
 		}
 		expect(await read(id)).toStrictEqual({ ...stored, entropy: other.entropy })
 
-		// Success control: the row's own entropy opens on the same path.
+		// Success control: the row's own entropy opens again; the integration suite opens every path.
 		await write(stored)
 		await expect(service.exportMnemonic(id, PASSWORD)).resolves.toHaveLength(24)
 	}, 60_000)

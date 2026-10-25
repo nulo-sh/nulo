@@ -87,8 +87,8 @@ export async function openProfileSlots(
 			return null
 		}
 		secret = await tryOpen(cipher, encrypted.secret, PROFILE_AAD.secret)
-		// The guard opened, so the key is right: a null from here on is a corrupted slot or one
-		// moved between slots, which the facade reports as "Profile storage corrupted".
+		// The guard opened, so the key is right: a null from here on is a slot corrupted or moved
+		// between slots, which the caller receives as the same null a wrong key gives.
 		if (!secret) return null
 		const entropy = await tryOpen(cipher, encrypted.entropy, PROFILE_AAD.entropy)
 		if (!entropy) return null
