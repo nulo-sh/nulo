@@ -34,7 +34,14 @@ import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import { STORES } from "@/wallet/storage/stores"
 import { BROWSER } from "./fixtures/browser"
 import { type ExtensionContext, clickByTestId, launchExtension, openPopup, test, waitForHash } from "./fixtures/extension"
-import { captureSoleProfileId, contactRow, ensureUnlocked, navigateByHash, waitForSelectedAccount } from "./fixtures/helpers"
+import {
+	captureSoleProfileId,
+	contactRow,
+	ensureUnlocked,
+	navigateByHash,
+	waitForSelectedAccount,
+	waitForToastGone,
+} from "./fixtures/helpers"
 import { pollUntil } from "./fixtures/poll"
 import { callService } from "./fixtures/session"
 import { registerPasskeyProfile, setupPasskeyVirtualAuth } from "./fixtures/passkey"
@@ -53,6 +60,8 @@ import { BARRIERS, missingFamilies, shownOverlays, updateProblems } from "./fixt
 import { exportImportedAccountBody, previewImport } from "./helpers/account-io"
 import { accountRows, accountScope, readNetworkRows } from "./helpers/identity-rows"
 import { downloadPlainPasskeyBackup, exportBackupFile, openEncryptedBackup } from "./helpers/backup-export"
+import { answerUpdatedTerms } from "./helpers/legal-drivers"
+import { readyToast } from "@/components/stale-network/copy"
 import { answerArrival } from "./helpers/network-arrival"
 import { BACKUP_SLICE_REGISTRY } from "@/wallet/services/backup/backup-migration-registry"
 import { backupProblems } from "@/wallet/storage/stored-shapes/backups"
@@ -384,6 +393,7 @@ async function opensWithoutTakeover(ctx: ExtensionContext, page: Page, recording
 	await ensureUnlocked(page)
 	await waitForHash(page, "#/popup/general", 30_000)
 	expect(await shownOverlays(page)).toEqual([])
+	await answerUpdatedTerms(page, recording.entries)
 	await answerArrival(page, recording.entries)
 	expect((await readAccounts(page, chain)).map(identity)).toEqual(before.map(identity))
 	await expectFirstAccountSelected(page, chain)
@@ -419,6 +429,9 @@ async function throughTheReset(ctx: ExtensionContext, page: Page, recording: Rec
 	await clickByTestId(page, "stale-confirm-submit")
 	const saidMoved = await readyToastSaysMoved(page, "Testnet")
 	await waitForHash(page, "#/popup/general", 30_000)
+	// The shell lays its toasts over the Terms sheet.
+	await waitForToastGone(page, readyToast("Testnet", saidMoved).sub, 15_000)
+	await answerUpdatedTerms(page, recording.entries)
 	await answerArrival(page, recording.entries)
 
 	const testnet = await readNetwork(page, "testnet")
